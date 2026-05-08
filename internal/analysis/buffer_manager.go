@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
@@ -30,12 +31,13 @@ type monitorConfig struct {
 
 // BufferManager handles the lifecycle of analysis buffer monitors
 type BufferManager struct {
-	monitors  sync.Map // keyed by monitorKey → chan struct{}
+	monitors  sync.Map // keyed by monitorKey -> chan struct{}
 	bn        *classifier.Orchestrator
 	bufferMgr *buffer.Manager
 	quitChan  chan struct{}
 	wg        *sync.WaitGroup
 	logger    logger.Logger
+	tickCount atomic.Int64
 }
 
 // NewBufferManager creates a new buffer manager with validation.
@@ -459,8 +461,6 @@ func (m *BufferManager) processMonitorTick(
 			logger.String("source_id", cfg.sourceID),
 			logger.String("model_id", cfg.modelID),
 			logger.Error(readErr))
-		// Backoff one second, but exit immediately if the goroutine is
-		// told to shut down during the sleep.
 		select {
 		case <-time.After(1 * time.Second):
 			return true, hasReadBuffer
@@ -469,15 +469,23 @@ func (m *BufferManager) processMonitorTick(
 		}
 	}
 
-	// Exact equality is required: AnalysisBuffer.Read returns overlapSize +
-	// readSize bytes or nil. A partial read means the buffer has not yet
-	// accumulated enough data.
 	if len(data) != analysisWindowBytes {
+		if m.tickCount.Add(1)%300 == 0 {
+			m.logger.Debug("buffer monitor polling",
+				logger.String("source_id", cfg.sourceID),
+				logger.String("model_id", cfg.modelID),
+				logger.Int("data_len", len(data)),
+				logger.Int("expected", analysisWindowBytes))
+		}
 		return true, hasReadBuffer
 	}
 
+	m.logger.Debug("buffer monitor dispatching to ProcessData",
+		logger.String("source_id", cfg.sourceID),
+		logger.String("model_id", cfg.modelID),
+		logger.Int("window_bytes", len(data)))
+
 	audioCapturedAt := time.Now()
-	// Calculate the offset dynamically to pick up runtime configuration changes.
 	beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
 	startTime := time.Now().Add(-beginTimeOffset)
 
@@ -497,7 +505,7 @@ func (m *BufferManager) processMonitorTick(
 func buildMonitorConfig(sourceID string, info *classifier.ModelInfo) monitorConfig {
 	spec := info.Spec
 	clipLenSec := int(spec.ClipLength.Seconds())
-	readSize := spec.SampleRate * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
+	readSize := spec.EffectiveSampleRate() * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
 
 	return monitorConfig{
 		sourceID: sourceID,

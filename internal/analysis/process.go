@@ -216,6 +216,13 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 			Build()
 	}
 
+	log.Debug("ProcessData inference complete",
+		logger.String("source", source),
+		logger.String("model_id", modelID),
+		logger.Int("result_count", len(results)),
+		logger.Duration("inference_duration", inferenceDuration),
+		logger.Int("sample_bytes", len(data)))
+
 	// get elapsed time (includes conversion + inference for overrun check)
 	elapsedTime := time.Since(predictStart)
 
@@ -308,6 +315,10 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 	// must not mutate it after the send.
 	select {
 	case classifier.ResultsQueue <- resultsMessage:
+		log.Debug("ProcessData queued results",
+			logger.String("source", source),
+			logger.String("model_id", modelID),
+			logger.Int("result_count", len(results)))
 		if pm != nil {
 			pm.RecordAudioQueueOperation(source, "enqueue", "success")
 		}
