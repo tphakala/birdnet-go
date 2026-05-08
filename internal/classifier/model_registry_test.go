@@ -269,3 +269,17 @@ func TestDetectionModelInfoForID_Unknown(t *testing.T) {
 	got := DetectionModelInfoForID("Unknown_Model")
 	assert.Equal(t, detection.DefaultModelInfo(), got)
 }
+
+func TestModelRegistry_BatEntry(t *testing.T) {
+	t.Parallel()
+
+	info, exists := ModelRegistry["Bat"]
+	require.True(t, exists, "ModelRegistry should contain Bat")
+	assert.Equal(t, "Bat", info.ID)
+	assert.Equal(t, "Bat Classifier", info.Name)
+	assert.Equal(t, BackendONNX, info.Backend)
+	assert.Equal(t, 48000, info.Spec.SampleRate)
+	assert.Equal(t, 3*time.Second, info.Spec.ClipLength)
+	assert.Equal(t, 256000, info.Spec.RawSampleRate, "bat model expects 256kHz raw audio")
+	assert.Equal(t, 256000, info.Spec.EffectiveSampleRate())
+}

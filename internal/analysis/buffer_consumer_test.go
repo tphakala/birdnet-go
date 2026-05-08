@@ -483,3 +483,75 @@ func TestBufferConsumer_Close_ClosesResamplers(t *testing.T) {
 	}
 	assert.ErrorIs(t, consumer.Write(frame), audiocore.ErrConsumerClosed)
 }
+
+func TestBufferConsumer_FanOut_256kHz_BatAndBirdModels(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID   = "bat-mic-256k"
+		batModel   = "Bat"
+		birdModel  = "BirdNET_V2.4"
+		sourceRate = 256000
+		batRate    = 256000 // RawSampleRate: no resampling
+		birdRate   = 48000  // SampleRate: resample 256k -> 48k
+		// Use small readSizes so a single frame triggers a read.
+		readSizeBat  = 5120 // small readSize for bat
+		readSizeBird = 4800 // small readSize for birdnet
+		bufCapacity  = 288000
+	)
+
+	mgr := buffer.NewManager(logger.Global().Module("test"))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, batModel, bufCapacity, 0, readSizeBat))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, birdModel, bufCapacity, 0, readSizeBird))
+	require.NoError(t, mgr.AllocateCapture(sourceID, 10, sourceRate, 2))
+
+	targets := []ModelTarget{
+		{ModelID: batModel, SampleRate: batRate},
+		{ModelID: birdModel, SampleRate: birdRate},
+	}
+
+	consumer, err := NewBufferConsumer("bat-consumer", mgr, sourceRate, 16, 1, targets)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = consumer.Close() })
+
+	// Bat target at source rate should NOT create a resampler.
+	// Bird target at 48kHz should create a resampler from 256kHz.
+	assert.Len(t, consumer.resamplers, 1, "only birdnet needs a resampler")
+	assert.Contains(t, consumer.resamplers, birdRate, "resampler should exist for 48kHz")
+	assert.NotContains(t, consumer.resamplers, batRate, "no resampler for bat (native rate)")
+
+	// Write a large frame (enough for both readSizes after resampling).
+	// 51200 bytes at 256kHz = 25600 samples.
+	// Resampled to 48kHz: 25600 * (48000/256000) = 4800 samples = 9600 bytes.
+	frameSize := 51200
+	frame := audiocore.AudioFrame{
+		SourceID:   sourceID,
+		SourceName: "Bat Microphone",
+		Data:       make([]byte, frameSize),
+		SampleRate: sourceRate,
+		BitDepth:   16,
+		Channels:   1,
+		Timestamp:  time.Now(),
+	}
+	require.NoError(t, consumer.Write(frame))
+
+	// Bat buffer should have received raw 256kHz data.
+	abBat, err := mgr.AnalysisBuffer(sourceID, batModel)
+	require.NoError(t, err)
+	dataBat, releaseBat, readErr := abBat.Read()
+	defer releaseBat()
+	require.NoError(t, readErr)
+	require.NotNil(t, dataBat, "bat buffer should have raw 256kHz data")
+
+	// Bird buffer should have received resampled 48kHz data.
+	abBird, err := mgr.AnalysisBuffer(sourceID, birdModel)
+	require.NoError(t, err)
+	dataBird, releaseBird, readErr := abBird.Read()
+	defer releaseBird()
+	require.NoError(t, readErr)
+	require.NotNil(t, dataBird, "bird buffer should have resampled 48kHz data")
+
+	// Resampled data should be much smaller than raw data.
+	assert.Less(t, len(dataBird), len(dataBat),
+		"48kHz resampled data should be smaller than 256kHz raw data")
+}

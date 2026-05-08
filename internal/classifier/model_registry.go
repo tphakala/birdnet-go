@@ -102,7 +102,7 @@ var ModelRegistry = map[string]ModelInfo{
 		DetectionName:    "BattyBirdNET",
 		DetectionVersion: "1.0",
 		Description:      "Bat species detection using BirdNET v2.4 embeddings",
-		Spec:             ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+		Spec:             ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second, RawSampleRate: 256000},
 		ConfigAliases:    []string{conf.ModelIDBat},
 	},
 }

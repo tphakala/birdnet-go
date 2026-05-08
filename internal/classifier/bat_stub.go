@@ -15,6 +15,7 @@ type BatModelConfig struct {
 	ClassifierLabelPath string
 	ONNXRuntimePath     string
 	Threads             int
+	Threshold           float64
 }
 
 // NewBat returns an error when built without ONNX support.
