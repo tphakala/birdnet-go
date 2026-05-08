@@ -129,10 +129,14 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 			Build()
 	}
 
+	chunkLen := 0
+	if len(sample) > 0 {
+		chunkLen = len(sample[0])
+	}
 	log.Debug("PredictModel dispatching",
 		logger.String("model_id", modelID),
 		logger.Int("sample_chunks", len(sample)),
-		logger.Int("chunk_len", len(sample[0])))
+		logger.Int("chunk_len", chunkLen))
 
 	start := time.Now()
 	results, err := entry.instance.Predict(ctx, sample)
