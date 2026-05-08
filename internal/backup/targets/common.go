@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/backup"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // Common constants for file operations and limits
@@ -349,7 +350,7 @@ func (p *SettingsParser) HasErrors() bool {
 
 // DefaultKnownHostsFile returns the default SSH known_hosts file path
 func DefaultKnownHostsFile() string {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := conf.GetUserHomeDir()
 	if err != nil {
 		return ""
 	}

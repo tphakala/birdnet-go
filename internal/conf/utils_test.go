@@ -3,7 +3,9 @@ package conf
 import (
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -307,4 +309,73 @@ func TestGetFfmpegVersionFrom_WithInvalidPath(t *testing.T) {
 	assert.Empty(t, version)
 	assert.Zero(t, major)
 	assert.Zero(t, minor)
+}
+
+func TestGetUserHomeDir(t *testing.T) {
+	t.Run("returns a non-empty directory", func(t *testing.T) {
+		homeDir, err := GetUserHomeDir()
+		require.NoError(t, err)
+		assert.NotEmpty(t, homeDir)
+		assert.DirExists(t, homeDir)
+	})
+
+	t.Run("result is cached", func(t *testing.T) {
+		first, err1 := GetUserHomeDir()
+		require.NoError(t, err1)
+		second, err2 := GetUserHomeDir()
+		require.NoError(t, err2)
+		assert.Equal(t, first, second)
+	})
+}
+
+func TestResolveHomeDir(t *testing.T) {
+	t.Run("resolves without HOME set", func(t *testing.T) {
+		if _, err := user.Current(); err != nil {
+			t.Skip("skipping: os/user.Current() unavailable (minimal container without /etc/passwd)")
+		}
+
+		origHome := os.Getenv("HOME")
+		t.Cleanup(func() { _ = os.Setenv("HOME", origHome) })
+		require.NoError(t, os.Unsetenv("HOME"))
+
+		homeDir, err := resolveHomeDir()
+		require.NoError(t, err, "resolveHomeDir must succeed without $HOME via os/user.Current()")
+		assert.NotEmpty(t, homeDir)
+		assert.DirExists(t, homeDir)
+	})
+}
+
+func TestExpandTildePath(t *testing.T) {
+	t.Run("expands tilde prefix", func(t *testing.T) {
+		result, err := ExpandTildePath("~/models/bird.tflite")
+		require.NoError(t, err)
+		assert.NotContains(t, result, "~")
+		assert.True(t, filepath.IsAbs(result))
+		assert.True(t, strings.HasSuffix(result, filepath.Join("models", "bird.tflite")))
+	})
+
+	t.Run("returns non-tilde path unchanged", func(t *testing.T) {
+		result, err := ExpandTildePath("/usr/share/models/bird.tflite")
+		require.NoError(t, err)
+		assert.Equal(t, "/usr/share/models/bird.tflite", result)
+	})
+
+	t.Run("returns relative path unchanged", func(t *testing.T) {
+		result, err := ExpandTildePath("models/bird.tflite")
+		require.NoError(t, err)
+		assert.Equal(t, "models/bird.tflite", result)
+	})
+
+	t.Run("handles bare tilde", func(t *testing.T) {
+		result, err := ExpandTildePath("~")
+		require.NoError(t, err)
+		assert.NotEqual(t, "~", result)
+		assert.DirExists(t, result)
+	})
+
+	t.Run("returns empty path unchanged", func(t *testing.T) {
+		result, err := ExpandTildePath("")
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
 }

@@ -38,12 +38,11 @@ var (
 // GetTLSManager returns the global TLS manager instance
 func GetTLSManager() *TLSManager {
 	tlsManagerOnce.Do(func() {
-		configPaths, _ := GetDefaultConfigPaths()
-		if len(configPaths) > 0 {
+		configPaths, err := GetDefaultConfigPaths()
+		if err == nil && len(configPaths) > 0 {
 			globalTLSManager = NewTLSManager(configPaths[0])
 		} else {
-			// Use a default path or panic to fail fast
-			globalTLSManager = NewTLSManager("./config")
+			globalTLSManager = NewTLSManager(filepath.Join(".", "config"))
 		}
 	})
 	return globalTLSManager
