@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -96,6 +97,8 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 
 // Predict runs the two-stage bat detection pipeline: embedding extraction then bat classification.
 func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Results, error) {
+	log := GetLogger()
+
 	if len(samples) == 0 || len(samples[0]) == 0 {
 		return nil, errors.Newf("empty audio sample").
 			Category(errors.CategoryValidation).
@@ -111,8 +114,17 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 			Build()
 	}
 
+	log.Debug("bat predict starting",
+		logger.Int("sample_len", len(samples[0])),
+		logger.Int("chunks", len(samples)))
+
+	embStart := time.Now()
 	_, embeddings, err := b.embeddingExtractor.PredictWithEmbeddings(samples[0])
+	embDuration := time.Since(embStart)
 	if err != nil {
+		log.Error("bat embedding extraction failed",
+			logger.Error(err),
+			logger.Duration("duration", embDuration))
 		return nil, errors.New(err).
 			Category(errors.CategoryAudio).
 			Context("model", "Bat").
@@ -121,14 +133,24 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 	}
 
 	if embeddings == nil {
+		log.Error("bat embedding model produced nil embeddings")
 		return nil, errors.Newf("embedding model did not produce embeddings").
 			Category(errors.CategoryModelInit).
 			Context("model", "Bat").
 			Build()
 	}
 
+	log.Debug("bat embeddings extracted",
+		logger.Int("embedding_dim", len(embeddings)),
+		logger.Duration("duration", embDuration))
+
+	classStart := time.Now()
 	scores, err := b.batClassifier.PredictEmbedding(embeddings)
+	classDuration := time.Since(classStart)
 	if err != nil {
+		log.Error("bat classification failed",
+			logger.Error(err),
+			logger.Duration("duration", classDuration))
 		return nil, errors.New(err).
 			Category(errors.CategoryAudio).
 			Context("model", "Bat").
@@ -136,12 +158,17 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 			Build()
 	}
 
+	log.Debug("bat classification complete",
+		logger.Int("score_count", len(scores)),
+		logger.Duration("duration", classDuration))
+
 	results, err := pairLabelsAndConfidence(b.batClassifier.Labels(), scores)
 	if err != nil {
 		return nil, err
 	}
 
 	threshold := conf.Setting().Bat.Threshold
+	preFilterCount := len(results)
 	if threshold > 0 {
 		filtered := make([]datastore.Results, 0, len(results))
 		for i := range results {
@@ -150,6 +177,21 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 			}
 		}
 		results = filtered
+	}
+
+	if len(results) > 0 {
+		log.Debug("bat detections after threshold",
+			logger.Int("pre_filter", preFilterCount),
+			logger.Int("post_filter", len(results)),
+			logger.Float64("threshold", threshold),
+			logger.String("top_species", results[0].Species),
+			logger.Float64("top_confidence", float64(results[0].Confidence)),
+			logger.Duration("total_duration", embDuration+classDuration))
+	} else {
+		log.Debug("bat no detections above threshold",
+			logger.Int("pre_filter", preFilterCount),
+			logger.Float64("threshold", threshold),
+			logger.Duration("total_duration", embDuration+classDuration))
 	}
 
 	return getTopKResults(results, 10), nil

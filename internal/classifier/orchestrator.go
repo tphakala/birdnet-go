@@ -103,12 +103,15 @@ func (o *Orchestrator) Predict(ctx context.Context, sample [][]float32) ([]datas
 // the entry (fast), then a per-model lock for inference (slow). The map lock is
 // released before acquiring the model lock to prevent deadlocks with ReloadModel.
 func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error) {
-	// Step 1: fetch entry under read lock (fast)
+	log := GetLogger()
+
 	o.mu.RLock()
 	entry, ok := o.models[modelID]
-	o.mu.RUnlock() // release BEFORE acquiring model lock
+	o.mu.RUnlock()
 
 	if !ok {
+		log.Error("PredictModel unknown model",
+			logger.String("model_id", modelID))
 		return nil, errors.Newf("unknown model: %s", modelID).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
@@ -116,8 +119,6 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 			Build()
 	}
 
-	// Step 2: acquire per-model lock for inference (slow).
-	// Guard against Delete having closed the instance between RUnlock and Lock.
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 	if entry.instance == nil {
@@ -127,7 +128,33 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 			Context("model_id", modelID).
 			Build()
 	}
-	return entry.instance.Predict(ctx, sample)
+
+	chunkLen := 0
+	if len(sample) > 0 {
+		chunkLen = len(sample[0])
+	}
+	log.Debug("PredictModel dispatching",
+		logger.String("model_id", modelID),
+		logger.Int("sample_chunks", len(sample)),
+		logger.Int("chunk_len", chunkLen))
+
+	start := time.Now()
+	results, err := entry.instance.Predict(ctx, sample)
+	duration := time.Since(start)
+
+	if err != nil {
+		log.Error("PredictModel inference failed",
+			logger.String("model_id", modelID),
+			logger.Error(err),
+			logger.Duration("duration", duration))
+	} else {
+		log.Debug("PredictModel complete",
+			logger.String("model_id", modelID),
+			logger.Int("result_count", len(results)),
+			logger.Duration("duration", duration))
+	}
+
+	return results, err
 }
 
 // ResolveName walks the resolver chain and returns the first non-empty

@@ -702,7 +702,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				continue
 			}
 			spec := modelInfos[i].Spec
-			clipBytes := spec.SampleRate * int(spec.ClipLength.Seconds()) * conf.NumChannels * (conf.BitDepth / 8)
+			clipBytes := spec.EffectiveSampleRate() * int(spec.ClipLength.Seconds()) * conf.NumChannels * (conf.BitDepth / 8)
 			overlapBytes := clipBytes / 2 // 50% overlap, matching primary model ratio
 			readSize := clipBytes - overlapBytes
 			if allocErr := bufMgr.AllocateAnalysis(sid, modelInfos[i].ID, clipBytes, overlapBytes, readSize); allocErr != nil {
@@ -953,12 +953,16 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 		if src.Device == "" {
 			continue
 		}
+		sampleRate := conf.SampleRate
+		if src.SampleRate > 0 {
+			sampleRate = src.SampleRate
+		}
 		result = append(result, sourceConfigWithModels{
 			config: &audiocore.SourceConfig{
 				DisplayName:      src.Name,
 				Type:             audiocore.SourceTypeAudioCard,
 				ConnectionString: src.Device,
-				SampleRate:       conf.SampleRate,
+				SampleRate:       sampleRate,
 				BitDepth:         conf.BitDepth,
 				Channels:         1,
 				Gain:             src.Gain,
@@ -1004,7 +1008,7 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 		for i := range infos {
 			spec := infos[i].Spec
 			clipLenSec := int(spec.ClipLength.Seconds())
-			readSize := spec.SampleRate * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
+			readSize := spec.EffectiveSampleRate() * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
 			configs[i] = monitorConfig{
 				sourceID: sid,
 				modelID:  infos[i].ID,

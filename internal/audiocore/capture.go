@@ -14,6 +14,7 @@ import (
 
 	"github.com/gen2brain/malgo"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -246,6 +247,9 @@ func startCapture(
 	deviceCfg.SampleRate = uint32(cfg.SampleRate)
 	deviceCfg.Alsa.NoMMap = 1
 	deviceCfg.Capture.DeviceID = selectedInfo.ID.Pointer()
+	if cfg.SampleRate > conf.SampleRate {
+		deviceCfg.Capture.Format = malgo.FormatS32
+	}
 
 	var captureDevice *malgo.Device
 	var formatType malgo.FormatType
@@ -344,8 +348,10 @@ func startCapture(
 	log.Info("malgo capture device started",
 		logger.String("source_id", sourceID),
 		logger.String("device", selectedDevInfo.Name),
-		logger.Int("sample_rate", cfg.SampleRate),
-		logger.Int("channels", cfg.Channels))
+		logger.Int("requested_rate", cfg.SampleRate),
+		logger.Int("actual_rate", int(captureDevice.SampleRate())),
+		logger.Int("channels", int(captureDevice.CaptureChannels())),
+		logger.Int("format", int(formatType)))
 
 	// done is closed when the capture goroutine exits, allowing callers to
 	// wait for graceful device teardown.

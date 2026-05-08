@@ -13,6 +13,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+const bufferMonitorDebugEveryTicks = 300
+
 // monitorKey identifies a unique monitor (one per source x model).
 type monitorKey struct {
 	sourceID string
@@ -30,7 +32,7 @@ type monitorConfig struct {
 
 // BufferManager handles the lifecycle of analysis buffer monitors
 type BufferManager struct {
-	monitors  sync.Map // keyed by monitorKey → chan struct{}
+	monitors  sync.Map // keyed by monitorKey -> chan struct{}
 	bn        *classifier.Orchestrator
 	bufferMgr *buffer.Manager
 	quitChan  chan struct{}
@@ -385,21 +387,12 @@ func (m *BufferManager) UpdateMonitors(sourceModels map[string][]monitorConfig) 
 // analysisBufferMonitor reads from the audiocore analysis buffer and feeds
 // audio chunks to the BirdNET analysis pipeline.
 func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monitorConfig) {
-	// The detection offset compensates for the age of audio in the analysis
-	// window at read time. Audio is written continuously; when Read() returns
-	// a full window, the oldest sample is approximately ClipLength old. Using
-	// the model's clip length keeps the offset accurate across different models
-	// (3s for BirdNET v2.4, 5s for v3.0/Perch).
 	detectionOffset := cfg.spec.ClipLength
 	const pollInterval = 100 * time.Millisecond
 
-	// Use the model-specific read size from the config instead of the
-	// hardcoded constant that assumed BirdNET v2.4 parameters.
 	analysisWindowBytes := cfg.readSize
-
-	// Track whether we ever successfully accessed the buffer to
-	// distinguish "never allocated" from "removed after use".
 	hasReadBuffer := false
+	var tickCount int64
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -409,7 +402,8 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 		case <-quitChan:
 			return
 		case <-ticker.C:
-			keepRunning, newHasReadBuffer := m.processMonitorTick(quitChan, cfg, analysisWindowBytes, detectionOffset, hasReadBuffer)
+			tickCount++
+			keepRunning, newHasReadBuffer := m.processMonitorTick(quitChan, cfg, analysisWindowBytes, detectionOffset, hasReadBuffer, tickCount)
 			hasReadBuffer = newHasReadBuffer
 			if !keepRunning {
 				return
@@ -436,6 +430,7 @@ func (m *BufferManager) processMonitorTick(
 	analysisWindowBytes int,
 	detectionOffset time.Duration,
 	hasReadBuffer bool,
+	tickCount int64,
 ) (keepRunning, updatedHasReadBuffer bool) {
 	ab, err := m.bufferMgr.AnalysisBuffer(cfg.sourceID, cfg.modelID)
 	if err != nil {
@@ -459,8 +454,6 @@ func (m *BufferManager) processMonitorTick(
 			logger.String("source_id", cfg.sourceID),
 			logger.String("model_id", cfg.modelID),
 			logger.Error(readErr))
-		// Backoff one second, but exit immediately if the goroutine is
-		// told to shut down during the sleep.
 		select {
 		case <-time.After(1 * time.Second):
 			return true, hasReadBuffer
@@ -469,15 +462,23 @@ func (m *BufferManager) processMonitorTick(
 		}
 	}
 
-	// Exact equality is required: AnalysisBuffer.Read returns overlapSize +
-	// readSize bytes or nil. A partial read means the buffer has not yet
-	// accumulated enough data.
 	if len(data) != analysisWindowBytes {
+		if tickCount%bufferMonitorDebugEveryTicks == 0 {
+			m.logger.Debug("buffer monitor polling",
+				logger.String("source_id", cfg.sourceID),
+				logger.String("model_id", cfg.modelID),
+				logger.Int("data_len", len(data)),
+				logger.Int("expected", analysisWindowBytes))
+		}
 		return true, hasReadBuffer
 	}
 
+	m.logger.Debug("buffer monitor dispatching to ProcessData",
+		logger.String("source_id", cfg.sourceID),
+		logger.String("model_id", cfg.modelID),
+		logger.Int("window_bytes", len(data)))
+
 	audioCapturedAt := time.Now()
-	// Calculate the offset dynamically to pick up runtime configuration changes.
 	beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
 	startTime := time.Now().Add(-beginTimeOffset)
 
@@ -497,7 +498,7 @@ func (m *BufferManager) processMonitorTick(
 func buildMonitorConfig(sourceID string, info *classifier.ModelInfo) monitorConfig {
 	spec := info.Spec
 	clipLenSec := int(spec.ClipLength.Seconds())
-	readSize := spec.SampleRate * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
+	readSize := spec.EffectiveSampleRate() * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
 
 	return monitorConfig{
 		sourceID: sourceID,
