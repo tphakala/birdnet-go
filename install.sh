@@ -1661,6 +1661,144 @@ check_directory() {
     fi
 }
 
+# Function to prevent running as root
+check_not_root() {
+    if [ "$(id -u)" -eq 0 ]; then
+        print_message "" "$NC"
+        print_message "❌ This script must not be run as root or with sudo" "$RED"
+        print_message "" "$NC"
+        print_message "Running as root places all data under /root/birdnet-go-app/," "$YELLOW"
+        print_message "which causes settings and recordings to become inaccessible" "$YELLOW"
+        print_message "if you later run the script as your regular user." "$YELLOW"
+        print_message "" "$NC"
+        print_message "Run the script as your regular user instead:" "$GREEN"
+        print_message "  ./install.sh" "$NC"
+        print_message "" "$NC"
+        print_message "The script uses sudo internally when elevated privileges are needed." "$YELLOW"
+        exit 1
+    fi
+}
+
+# Function to check for existing BirdNET-Go installation under a different user
+check_existing_installation_owner() {
+    local found_other_install=false
+    local other_user=""
+    local other_path=""
+
+    # Helper: given a home directory path, set other_user/other_path if it differs from $HOME
+    _check_install_home() {
+        local install_home="$1"
+        if [ -n "$install_home" ] && [ "$install_home" != "$HOME" ]; then
+            found_other_install=true
+            other_path="${install_home}/birdnet-go-app"
+            if [ "$install_home" = "/root" ]; then
+                other_user="root"
+            else
+                other_user=$(basename "$install_home")
+            fi
+        fi
+    }
+
+    # Method 1: Parse systemd service file for volume mounts pointing to another user's home
+    if detect_birdnet_service; then
+        local service_file=""
+        if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
+            service_file="/etc/systemd/system/birdnet-go.service"
+        elif [ -f "/lib/systemd/system/birdnet-go.service" ]; then
+            service_file="/lib/systemd/system/birdnet-go.service"
+        fi
+
+        if [ -n "$service_file" ]; then
+            local service_config_path
+            service_config_path=$(sed -n 's/.*-v \([^ ]*\):\/config.*/\1/p' "$service_file" 2>/dev/null | head -1)
+
+            if [ -n "$service_config_path" ]; then
+                _check_install_home "${service_config_path%/birdnet-go-app/config}"
+            fi
+        fi
+    fi
+
+    # Method 2: Check Docker container volume mounts
+    if [ "$found_other_install" = false ]; then
+        local container_mounts
+        container_mounts=$(safe_docker inspect --format '{{range .Mounts}}{{.Source}}:{{.Destination}} {{end}}' birdnet-go)
+
+        if [ -n "$container_mounts" ]; then
+            local config_mount
+            config_mount=$(echo "$container_mounts" | tr ' ' '\n' | grep ':/config$' | cut -d: -f1)
+
+            if [ -n "$config_mount" ] && [[ "$config_mount" == *"/birdnet-go-app/"* ]]; then
+                _check_install_home "${config_mount%/birdnet-go-app/*}"
+            fi
+        fi
+    fi
+
+    # Method 3: Scan other users' home directories for birdnet-go-app
+    if [ "$found_other_install" = false ]; then
+        for candidate in /home/*/birdnet-go-app; do
+            if [ -d "$candidate" ]; then
+                local candidate_home
+                candidate_home=$(dirname "$candidate")
+                if [ "$candidate_home" != "$HOME" ] && [ -f "${candidate}/config/config.yaml" ]; then
+                    found_other_install=true
+                    other_user=$(basename "$candidate_home")
+                    other_path="$candidate"
+                    break
+                fi
+            fi
+        done
+    fi
+
+    if [ "$found_other_install" = true ]; then
+        log_message "WARN" "Existing installation found at $other_path (user: $other_user)"
+
+        print_message "" "$NC"
+        print_message "⚠️  Existing BirdNET-Go Installation Detected" "$YELLOW"
+        print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$YELLOW"
+        print_message "" "$NC"
+        print_message "An existing BirdNET-Go installation was found at:" "$YELLOW"
+        print_message "  $other_path (user: $other_user)" "$NC"
+        print_message "" "$NC"
+        print_message "You are running as: $USER ($HOME)" "$NC"
+        print_message "This would create a separate installation at:" "$NC"
+        print_message "  $HOME/birdnet-go-app" "$NC"
+        print_message "" "$NC"
+        print_message "⚠️  Installing as a different user will NOT migrate your" "$YELLOW"
+        print_message "existing settings, recordings, or database." "$YELLOW"
+        print_message "" "$NC"
+
+        if [ "$other_user" = "root" ]; then
+            print_message "💡 To migrate your existing data to your user account:" "$GREEN"
+            print_message "  sudo cp -a /root/birdnet-go-app/ $HOME/birdnet-go-app/" "$NC"
+            print_message "  sudo chown -R \$USER:\$USER $HOME/birdnet-go-app/" "$NC"
+            print_message "  sudo systemctl stop birdnet-go.service" "$NC"
+            print_message "  Then run: ./install.sh" "$NC"
+        else
+            print_message "💡 To use your existing installation, log in as '$other_user'" "$GREEN"
+            print_message "and run: ./install.sh" "$NC"
+        fi
+
+        if [ "$SILENT_MODE" = "true" ]; then
+            print_message "" "$NC"
+            print_message "❌ Silent mode: refusing to create a second installation" "$RED"
+            send_telemetry_event "error" "Duplicate installation detected in silent mode" "error" "step=check_owner,other_user=$other_user"
+            exit 1
+        fi
+
+        print_message "" "$NC"
+        print_message "❓ Proceed with a NEW installation as $USER? (y/n): " "$YELLOW" "nonewline"
+        read -r -t 60 proceed || proceed="n"
+
+        if [[ ! "$proceed" =~ ^[Yy]$ ]]; then
+            print_message "Installation cancelled." "$NC"
+            exit 0
+        fi
+
+        print_message "" "$NC"
+        log_message "WARN" "User chose to proceed with new installation despite existing install at $other_path"
+    fi
+}
+
 # Telemetry Configuration
 TELEMETRY_ENABLED=false
 TELEMETRY_INSTALL_ID=""
@@ -4850,6 +4988,9 @@ parse_arguments() {
 # Parse command line arguments first
 parse_arguments "$@"
 
+# Prevent running as root (must be before $HOME-dependent path setup)
+check_not_root
+
 # Default paths
 CONFIG_DIR="$HOME/birdnet-go-app/config"
 DATA_DIR="$HOME/birdnet-go-app/data"
@@ -4863,6 +5004,9 @@ FRESH_INSTALL="false"
 # Configured timezone (will be set during configuration)
 CONFIGURED_TZ=""
 
+
+# Check for existing installations under a different user
+check_existing_installation_owner
 
 # Load telemetry configuration if it exists
 load_telemetry_config
