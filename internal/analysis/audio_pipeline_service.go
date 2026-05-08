@@ -702,7 +702,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				continue
 			}
 			spec := modelInfos[i].Spec
-			clipBytes := spec.EffectiveSampleRate() * int(spec.ClipLength.Seconds()) * conf.NumChannels * (conf.BitDepth / 8)
+			clipBytes := spec.SampleRate * int(spec.ClipLength.Seconds()) * conf.NumChannels * (conf.BitDepth / 8)
 			overlapBytes := clipBytes / 2 // 50% overlap, matching primary model ratio
 			readSize := clipBytes - overlapBytes
 			if allocErr := bufMgr.AllocateAnalysis(sid, modelInfos[i].ID, clipBytes, overlapBytes, readSize); allocErr != nil {
@@ -1008,7 +1008,7 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 		for i := range infos {
 			spec := infos[i].Spec
 			clipLenSec := int(spec.ClipLength.Seconds())
-			readSize := spec.EffectiveSampleRate() * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
+			readSize := spec.SampleRate * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
 			configs[i] = monitorConfig{
 				sourceID: sid,
 				modelID:  infos[i].ID,

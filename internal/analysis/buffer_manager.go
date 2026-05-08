@@ -498,7 +498,7 @@ func (m *BufferManager) processMonitorTick(
 func buildMonitorConfig(sourceID string, info *classifier.ModelInfo) monitorConfig {
 	spec := info.Spec
 	clipLenSec := int(spec.ClipLength.Seconds())
-	readSize := spec.EffectiveSampleRate() * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
+	readSize := spec.SampleRate * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
 
 	return monitorConfig{
 		sourceID: sourceID,

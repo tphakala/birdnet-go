@@ -861,8 +861,8 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 		return true, confidenceThreshold
 	}
 
-	// Check species inclusion filter
-	if !settings.IsSpeciesIncluded(result.Species) {
+	// Range filter applies only to BirdNET; Bat/Perch have independent species sets.
+	if strings.HasPrefix(modelID, detection.DefaultModelName) && !settings.IsSpeciesIncluded(result.Species) {
 		if settings.Debug {
 			GetLogger().Debug("species not on included list",
 				logger.String("species", result.Species),
