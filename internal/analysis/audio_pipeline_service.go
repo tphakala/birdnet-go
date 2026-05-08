@@ -720,14 +720,20 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 		targets := make([]ModelTarget, 0, len(modelInfos))
 		for i := range modelInfos {
 			if allocatedModels[modelInfos[i].ID] {
-				targets = append(targets, ModelTarget{ModelID: modelInfos[i].ID, SampleRate: modelInfos[i].Spec.SampleRate})
+				targets = append(targets, ModelTarget{ModelID: modelInfos[i].ID, SampleRate: modelInfos[i].Spec.EffectiveSampleRate()})
 			}
+		}
+
+		// Use per-source sample rate when available; fall back to global constant.
+		sourceSampleRate := conf.SampleRate
+		if src != nil && src.SampleRate > 0 {
+			sourceSampleRate = src.SampleRate
 		}
 
 		bc, bcErr := NewBufferConsumer(
 			fmt.Sprintf("buffer_%s", sid),
 			p.engine.BufferManager(),
-			conf.SampleRate, conf.BitDepth, 1,
+			sourceSampleRate, conf.BitDepth, 1,
 			targets,
 		)
 		if bcErr != nil {
@@ -735,15 +741,15 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				logger.String("source_id", sid), logger.Error(bcErr), logger.String("operation", operation))
 			continue
 		}
-		bcChain := equalizer.BuildFilterChainWithOverride(eqOverride, audioSettings.Equalizer, sourceName, conf.SampleRate)
-		if routeErr := p.engine.Router().AddRoute(sid, bc, conf.SampleRate, gainDB, bcChain); routeErr != nil {
+		bcChain := equalizer.BuildFilterChainWithOverride(eqOverride, audioSettings.Equalizer, sourceName, sourceSampleRate)
+		if routeErr := p.engine.Router().AddRoute(sid, bc, sourceSampleRate, gainDB, bcChain); routeErr != nil {
 			log.Warn("failed to add buffer route",
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 		}
 
-		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, conf.SampleRate, conf.BitDepth, 1)
-		alcChain := equalizer.BuildFilterChainWithOverride(eqOverride, audioSettings.Equalizer, sourceName, conf.SampleRate)
-		if routeErr := p.engine.Router().AddRoute(sid, alc, conf.SampleRate, gainDB, alcChain); routeErr != nil {
+		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, sourceSampleRate, conf.BitDepth, 1)
+		alcChain := equalizer.BuildFilterChainWithOverride(eqOverride, audioSettings.Equalizer, sourceName, sourceSampleRate)
+		if routeErr := p.engine.Router().AddRoute(sid, alc, sourceSampleRate, gainDB, alcChain); routeErr != nil {
 			log.Warn("failed to add audio level route",
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 			continue
