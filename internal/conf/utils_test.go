@@ -3,6 +3,7 @@ package conf
 import (
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -329,6 +330,10 @@ func TestGetUserHomeDir(t *testing.T) {
 
 func TestResolveHomeDir(t *testing.T) {
 	t.Run("resolves without HOME set", func(t *testing.T) {
+		if _, err := user.Current(); err != nil {
+			t.Skip("skipping: os/user.Current() unavailable (minimal container without /etc/passwd)")
+		}
+
 		origHome := os.Getenv("HOME")
 		t.Cleanup(func() { _ = os.Setenv("HOME", origHome) })
 		require.NoError(t, os.Unsetenv("HOME"))
