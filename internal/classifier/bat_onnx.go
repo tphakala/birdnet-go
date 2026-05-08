@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -80,13 +79,9 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 	}
 
 	batLabels := batCC.Labels()
-	info := ModelInfo{
-		ID:          "Bat",
-		Name:        "Bat Classifier",
-		Description: fmt.Sprintf("Bat species detection with %d species", len(batLabels)),
-		Spec:        ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
-		NumSpecies:  len(batLabels),
-	}
+	info := ModelRegistry["Bat"]
+	info.Description = fmt.Sprintf("Bat species detection with %d species", len(batLabels))
+	info.NumSpecies = len(batLabels)
 
 	log.Info("Bat detection model initialized",
 		logger.String("embedding_model", cfg.EmbeddingModelPath),

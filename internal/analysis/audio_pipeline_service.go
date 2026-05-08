@@ -477,9 +477,16 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 			sourceName = src.DisplayName
 		}
 		override := settings.ResolveEQOverride(sourceName)
-		eqChain := equalizer.BuildFilterChainWithOverride(override, audioSettings.Equalizer, sourceName, conf.SampleRate)
 
-		slProc, slErr := soundlevel.NewProcessor(sid, sid, conf.SampleRate, slInterval)
+		// Use per-source sample rate when available; fall back to global constant.
+		sourceSampleRate := conf.SampleRate
+		if src != nil && src.SampleRate > 0 {
+			sourceSampleRate = src.SampleRate
+		}
+
+		eqChain := equalizer.BuildFilterChainWithOverride(override, audioSettings.Equalizer, sourceName, sourceSampleRate)
+
+		slProc, slErr := soundlevel.NewProcessor(sid, sid, sourceSampleRate, slInterval)
 		if slErr != nil {
 			log.Warn("failed to create sound level processor",
 				logger.String("source_id", sid),
@@ -488,7 +495,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 			continue
 		}
 		consumerID := "soundlevel_" + sid
-		slc, slOutCh, slcErr := NewSoundLevelConsumer(consumerID, slProc, conf.SampleRate, conf.BitDepth, 1)
+		slc, slOutCh, slcErr := NewSoundLevelConsumer(consumerID, slProc, sourceSampleRate, conf.BitDepth, 1)
 		if slcErr != nil {
 			log.Warn("failed to create sound level consumer",
 				logger.String("source_id", sid),
@@ -496,7 +503,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 				logger.String("operation", operation))
 			continue
 		}
-		if routeErr := p.engine.Router().AddRoute(sid, slc, conf.SampleRate, gainDB, eqChain); routeErr != nil {
+		if routeErr := p.engine.Router().AddRoute(sid, slc, sourceSampleRate, gainDB, eqChain); routeErr != nil {
 			log.Warn("failed to add sound level route",
 				logger.String("source_id", sid),
 				logger.Error(routeErr),
