@@ -9,11 +9,23 @@ import (
 )
 
 // ModelSpec describes a model's fixed audio requirements.
-// Overlap is NOT included — it comes from user configuration
+// Overlap is NOT included - it comes from user configuration
 // (the false positive filter has multiple levels with specific overlap values).
 type ModelSpec struct {
-	SampleRate int           // Hz: 48000 (BirdNET v2.4), 32000 (v3.0, Perch)
-	ClipLength time.Duration // 3s (BirdNET v2.4), 5s (v3.0, Perch)
+	SampleRate    int           // Hz: 48000 (BirdNET v2.4), 32000 (v3.0, Perch)
+	ClipLength    time.Duration // 3s (BirdNET v2.4), 5s (v3.0, Perch)
+	RawSampleRate int           // Hz: when non-zero, the model expects raw audio at this rate (e.g. 256000 for bat detection)
+}
+
+// EffectiveSampleRate returns the sample rate the model expects to receive
+// audio at. When RawSampleRate is set, the model needs raw audio at that
+// rate (e.g. 256kHz bat audio fed without resampling). Otherwise, the
+// standard SampleRate is used.
+func (s ModelSpec) EffectiveSampleRate() int {
+	if s.RawSampleRate > 0 {
+		return s.RawSampleRate
+	}
+	return s.SampleRate
 }
 
 // ModelInstance represents a loaded model that can run inference.
