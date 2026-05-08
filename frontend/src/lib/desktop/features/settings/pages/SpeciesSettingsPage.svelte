@@ -620,8 +620,8 @@
       ): boolean =>
         nameSet.has(commonName.toLowerCase()) || nameSet.has(scientificName.toLowerCase());
 
-      const includeSet = new Set(currentInclude.map(s => s.toLowerCase()));
-      const configKeys = new Set(Object.keys(currentConfig).map(s => s.toLowerCase()));
+      const includeSet = new Set((currentInclude ?? []).map(s => s.toLowerCase()));
+      const configKeys = new Set(Object.keys(currentConfig ?? {}).map(s => s.toLowerCase()));
 
       // Filter species that pass the threshold OR are manually included
       const mappedSpecies: ActiveSpecies[] = response.species
