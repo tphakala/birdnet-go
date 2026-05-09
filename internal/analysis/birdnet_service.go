@@ -106,10 +106,19 @@ func (a *BirdNETAnalyzer) initModelManager(bn *classifier.Orchestrator) {
 	if modelsDir == "" {
 		configDir, err := os.UserConfigDir()
 		if err != nil {
-			log.Warn("could not determine user config directory; model gallery disabled",
+			homeDir, homeErr := conf.GetUserHomeDir()
+			if homeErr != nil {
+				log.Warn("could not determine config or home directory; model gallery disabled",
+					logger.Error(err),
+					logger.String("home_error", homeErr.Error()),
+					logger.String("service", birdNETAnalyzerName))
+				return
+			}
+			configDir = filepath.Join(homeDir, ".config")
+			log.Warn("UserConfigDir unavailable, falling back to home directory",
 				logger.Error(err),
+				logger.String("fallback", configDir),
 				logger.String("service", birdNETAnalyzerName))
-			return
 		}
 		modelsDir = filepath.Join(configDir, "birdnet-go", "models")
 	}
