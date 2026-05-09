@@ -45,8 +45,11 @@ jobs:
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: ffmpeg sox procps
-          version: 1.0
+          version: 1.1
           execute_install_scripts: true
+
+      - name: Refresh shared library cache
+        run: sudo ldconfig
 
       - name: Cache Go tools
         uses: actions/cache@v5
@@ -183,8 +186,11 @@ jobs:
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: ffmpeg sox
-          version: 1.0
+          version: 1.1
           execute_install_scripts: true
+
+      - name: Refresh shared library cache
+        run: sudo ldconfig
 
       - name: Run testcontainer integration tests
         run: |
