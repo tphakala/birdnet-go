@@ -227,6 +227,148 @@ func TestModelManager_DownloadFile_BadChecksum(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "destination file should not exist after checksum failure")
 }
 
+func TestModelManager_Install(t *testing.T) {
+	t.Parallel()
+
+	modelContent := []byte("fake-onnx-model-binary-data")
+	labelsContent := []byte("species_a\nspecies_b\nspecies_c\n")
+	modelChecksum := sha256Hex(modelContent)
+	labelsChecksum := sha256Hex(labelsContent)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/models/test.onnx":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(modelContent)
+		case "/models/labels.txt":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(labelsContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	entry := CatalogEntry{
+		ID:              "test-install-model",
+		Name:            "Test Model",
+		Version:         "1.0",
+		HuggingFaceRepo: "test/repo",
+		Files: []CatalogFile{
+			{RemotePath: "models/test.onnx", LocalName: "test.onnx", Role: RoleModel, SHA256: modelChecksum, SizeBytes: int64(len(modelContent))},
+			{RemotePath: "models/labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: labelsChecksum, SizeBytes: int64(len(labelsContent))},
+		},
+	}
+
+	modelsDir := t.TempDir()
+	mm := NewModelManager(modelsDir, nil)
+
+	progress := make(chan DownloadState, 100)
+	err := mm.Install(&entry, srv.URL, progress)
+	require.NoError(t, err)
+
+	// Verify installed.
+	assert.True(t, mm.IsInstalled("test-install-model"))
+
+	// Verify files exist with correct content.
+	gotModel, err := os.ReadFile(filepath.Join(modelsDir, "test-install-model", "test.onnx"))
+	require.NoError(t, err)
+	assert.Equal(t, modelContent, gotModel)
+
+	gotLabels, err := os.ReadFile(filepath.Join(modelsDir, "test-install-model", "labels.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, labelsContent, gotLabels)
+
+	// Verify final complete status was sent.
+	close(progress)
+	var foundComplete bool
+	for s := range progress {
+		if s.Status == "complete" {
+			foundComplete = true
+		}
+	}
+	assert.True(t, foundComplete, "expected a 'complete' progress status")
+}
+
+func TestModelManager_Install_AlreadyInstalled(t *testing.T) {
+	t.Parallel()
+
+	mm := NewModelManager(t.TempDir(), nil)
+
+	// Manually mark as installed.
+	mm.mu.Lock()
+	mm.installed["test-already"] = InstalledModel{
+		CatalogID: "test-already",
+		ModelPath: "/fake/path/model.onnx",
+	}
+	mm.mu.Unlock()
+
+	entry := CatalogEntry{
+		ID:   "test-already",
+		Name: "Already Installed",
+	}
+
+	err := mm.Install(&entry, "", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already installed")
+}
+
+func TestModelManager_Install_SharedEmbeddings(t *testing.T) {
+	t.Parallel()
+
+	modelContent := []byte("bat-model-data")
+	embeddingsContent := []byte("shared-embeddings-data")
+	modelChecksum := sha256Hex(modelContent)
+	embeddingsChecksum := sha256Hex(embeddingsContent)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/bat_model.onnx":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(modelContent)
+		case "/embeddings.onnx":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(embeddingsContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	entry := CatalogEntry{
+		ID:              "test-bat-shared",
+		Name:            "Test Bat Model",
+		Category:        CategoryBat,
+		Version:         "1.0",
+		HuggingFaceRepo: "test/bat-repo",
+		Files: []CatalogFile{
+			{RemotePath: "bat_model.onnx", LocalName: "bat_model.onnx", Role: RoleModel, SHA256: modelChecksum, SizeBytes: int64(len(modelContent))},
+			{RemotePath: "embeddings.onnx", LocalName: "embeddings.onnx", Role: RoleEmbeddings, SHA256: embeddingsChecksum, SizeBytes: int64(len(embeddingsContent))},
+		},
+	}
+
+	modelsDir := t.TempDir()
+	mm := NewModelManager(modelsDir, nil)
+
+	err := mm.Install(&entry, srv.URL, nil)
+	require.NoError(t, err)
+
+	// Embeddings should be in shared/, not in the model subdirectory.
+	sharedPath := filepath.Join(modelsDir, "shared", "embeddings.onnx")
+	_, err = os.Stat(sharedPath)
+	require.NoError(t, err, "embeddings file should exist in shared/ directory")
+
+	modelSubdirPath := filepath.Join(modelsDir, "test-bat-shared", "embeddings.onnx")
+	_, err = os.Stat(modelSubdirPath)
+	assert.True(t, os.IsNotExist(err), "embeddings file should NOT exist in model subdirectory")
+
+	// Model file should be in the model subdirectory.
+	modelPath := filepath.Join(modelsDir, "test-bat-shared", "bat_model.onnx")
+	gotModel, err := os.ReadFile(modelPath)
+	require.NoError(t, err)
+	assert.Equal(t, modelContent, gotModel)
+}
+
 func TestBuildHuggingFaceURL(t *testing.T) {
 	t.Parallel()
 

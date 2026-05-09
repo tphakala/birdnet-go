@@ -252,6 +252,149 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	return nil
 }
 
+// Install downloads all files for a catalog entry and records it as installed.
+// The baseURL parameter overrides the HuggingFace URL for testing; pass an
+// empty string to use the default HuggingFace URL constructed from the entry's
+// repo. Progress is reported via the channel if non-nil.
+func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
+	log := GetLogger()
+
+	// Check if already installed.
+	mm.mu.Lock()
+	if _, ok := mm.installed[entry.ID]; ok {
+		mm.mu.Unlock()
+		return errors.Newf("model %s is already installed", entry.ID).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("catalog_id", entry.ID).
+			Build()
+	}
+
+	// Record download as in-progress.
+	mm.downloading[entry.ID] = &DownloadState{
+		CatalogID: entry.ID,
+		Status:    "downloading",
+	}
+	mm.mu.Unlock()
+
+	// Create model subdirectory.
+	subdir := filepath.Join(mm.modelsDir, entry.ID)
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		mm.removeDownloading(entry.ID)
+		return errors.Newf("failed to create model directory %s: %v", subdir, err).
+			Component("classifier.model_manager").
+			Category(errors.CategoryFileIO).
+			Context("catalog_id", entry.ID).
+			Context("directory", subdir).
+			Build()
+	}
+
+	// Track files we downloaded so we can clean up on failure.
+	var downloadedFiles []string
+
+	cleanup := func() {
+		for _, f := range downloadedFiles {
+			_ = os.Remove(f)
+		}
+		mm.removeDownloading(entry.ID)
+	}
+
+	// Download each file.
+	var modelPath, labelsPath string
+	for _, f := range entry.Files {
+		// Determine destination path: embeddings go in shared/, others in the model subdir.
+		var destPath string
+		if f.Role == RoleEmbeddings {
+			destPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+		} else {
+			destPath = filepath.Join(subdir, f.LocalName)
+		}
+
+		// Skip download if file already exists (for shared embeddings).
+		if _, err := os.Stat(destPath); err == nil {
+			log.Debug("File already exists, skipping download",
+				logger.String("catalog_id", entry.ID),
+				logger.String("path", destPath))
+			// Still track paths for the installed record.
+			if f.Role == RoleModel {
+				modelPath = destPath
+			}
+			if f.Role == RoleLabels {
+				labelsPath = destPath
+			}
+			continue
+		}
+
+		// Build download URL.
+		var url string
+		if baseURL != "" {
+			url = baseURL + "/" + f.RemotePath
+		} else {
+			url = buildHuggingFaceURL(entry.HuggingFaceRepo, f.RemotePath)
+		}
+
+		// Update download state with current file info.
+		mm.mu.Lock()
+		if state, ok := mm.downloading[entry.ID]; ok {
+			state.TotalBytes = f.SizeBytes
+			state.DownloadedBytes = 0
+			state.Status = "downloading"
+		}
+		mm.mu.Unlock()
+
+		if err := mm.downloadFile(url, destPath, f.SHA256, f.SizeBytes, progress); err != nil {
+			log.Error("Failed to download file",
+				logger.String("catalog_id", entry.ID),
+				logger.String("url", url),
+				logger.Error(err))
+			cleanup()
+			return err
+		}
+
+		downloadedFiles = append(downloadedFiles, destPath)
+
+		if f.Role == RoleModel {
+			modelPath = destPath
+		}
+		if f.Role == RoleLabels {
+			labelsPath = destPath
+		}
+	}
+
+	// Record as installed.
+	mm.mu.Lock()
+	mm.installed[entry.ID] = InstalledModel{
+		CatalogID:   entry.ID,
+		ModelPath:   modelPath,
+		LabelsPath:  labelsPath,
+		InstalledAt: time.Now(),
+		Version:     entry.Version,
+	}
+	delete(mm.downloading, entry.ID)
+	mm.mu.Unlock()
+
+	// Send final complete status.
+	if progress != nil {
+		progress <- DownloadState{
+			CatalogID: entry.ID,
+			Status:    "complete",
+		}
+	}
+
+	log.Info("Model installed",
+		logger.String("catalog_id", entry.ID),
+		logger.String("model_path", modelPath))
+
+	return nil
+}
+
+// removeDownloading removes a catalog ID from the downloading map.
+func (mm *ModelManager) removeDownloading(catalogID string) {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	delete(mm.downloading, catalogID)
+}
+
 // progressInterval is the minimum number of bytes between progress reports
 // sent to the progress channel during a download.
 const progressInterval = 1 << 20 // 1 MiB
