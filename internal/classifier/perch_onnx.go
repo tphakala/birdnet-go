@@ -83,7 +83,7 @@ func NewPerch(cfg PerchConfig) (*Perch, error) {
 	}
 
 	info := ModelInfo{
-		ID:          "Perch_V2",
+		ID:          RegistryIDPerchV2,
 		Name:        ModelNamePerchV2,
 		Description: fmt.Sprintf("Perch v2 model with %d species", len(labels)),
 		Spec:        ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},

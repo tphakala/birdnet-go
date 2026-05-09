@@ -12,7 +12,7 @@ import (
 func TestModelRegistry_ContainsExpectedModels(t *testing.T) {
 	t.Parallel()
 
-	expectedIDs := []string{"BirdNET_V2.4", "BirdNET_V3.0", "Perch_V2"}
+	expectedIDs := []string{"BirdNET_V2.4", "BirdNET_V3.0", "Perch_V2", "BSG"}
 	for _, id := range expectedIDs {
 		info, exists := ModelRegistry[id]
 		require.True(t, exists, "ModelRegistry should contain %s", id)
@@ -85,35 +85,6 @@ func TestModelRegistry_PerchSpec(t *testing.T) {
 	assert.Contains(t, info.ConfigAliases, "perch_v2")
 }
 
-func TestKnownConfigIDs(t *testing.T) {
-	t.Parallel()
-
-	ids := KnownConfigIDs()
-	assert.True(t, ids["birdnet"])
-	assert.True(t, ids["birdnet_v3.0"])
-	assert.True(t, ids["perch_v2"])
-	assert.False(t, ids["unknown"])
-}
-
-func TestGetModelSpec(t *testing.T) {
-	t.Parallel()
-
-	spec, ok := GetModelSpec("BirdNET_V2.4")
-	require.True(t, ok)
-	assert.Equal(t, 48000, spec.SampleRate)
-
-	spec, ok = GetModelSpec("BirdNET_V3.0")
-	require.True(t, ok)
-	assert.Equal(t, 32000, spec.SampleRate)
-
-	spec, ok = GetModelSpec("Perch_V2")
-	require.True(t, ok)
-	assert.Equal(t, 32000, spec.SampleRate)
-
-	_, ok = GetModelSpec("nonexistent")
-	assert.False(t, ok)
-}
-
 func TestResolveBirdNETVersion(t *testing.T) {
 	t.Parallel()
 
@@ -168,36 +139,6 @@ func TestDetermineModelInfo_OnnxSupport(t *testing.T) {
 			info, err := DetermineModelInfo(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantID, info.ID)
-		})
-	}
-}
-
-func TestResolveConfigModelID(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name       string
-		configID   string
-		wantID     string
-		wantExists bool
-	}{
-		{"birdnet maps to registry ID", "birdnet", "BirdNET_V2.4", true},
-		{"birdnet_v3.0 maps to registry ID", "birdnet_v3.0", "BirdNET_V3.0", true},
-		{"perch_v2 maps to registry ID", "perch_v2", "Perch_V2", true},
-		{"unknown returns false", "unknown_model", "", false},
-		{"case insensitive", "BIRDNET", "BirdNET_V2.4", true},
-		{"case insensitive birdnet v3", "BIRDNET_V3.0", "BirdNET_V3.0", true},
-		{"case insensitive perch", "PERCH_V2", "Perch_V2", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			gotID, gotExists := ResolveConfigModelID(tt.configID)
-			assert.Equal(t, tt.wantExists, gotExists)
-			if gotExists {
-				assert.Equal(t, tt.wantID, gotID)
-			}
 		})
 	}
 }
@@ -257,13 +198,6 @@ func TestModelInfo_ToDetectionModelInfo_Perch(t *testing.T) {
 	}, got)
 }
 
-func TestDetectionModelInfoForID_Known(t *testing.T) {
-	t.Parallel()
-	got := DetectionModelInfoForID("Perch_V2")
-	assert.Equal(t, "Perch", got.Name)
-	assert.Equal(t, "V2", got.Version)
-}
-
 func TestDetectionModelInfoForID_Unknown(t *testing.T) {
 	t.Parallel()
 	got := DetectionModelInfoForID("Unknown_Model")
@@ -273,13 +207,200 @@ func TestDetectionModelInfoForID_Unknown(t *testing.T) {
 func TestModelRegistry_BatEntry(t *testing.T) {
 	t.Parallel()
 
-	info, exists := ModelRegistry["Bat"]
+	info, exists := ModelRegistry[RegistryIDBat]
 	require.True(t, exists, "ModelRegistry should contain Bat")
-	assert.Equal(t, "Bat", info.ID)
+	assert.Equal(t, RegistryIDBat, info.ID)
 	assert.Equal(t, "Bat Classifier", info.Name)
 	assert.Equal(t, BackendONNX, info.Backend)
 	assert.Equal(t, 48000, info.Spec.SampleRate)
 	assert.Equal(t, 3*time.Second, info.Spec.ClipLength)
 	assert.Equal(t, 256000, info.Spec.RawSampleRate, "bat model expects 256kHz raw audio")
 	assert.Equal(t, 256000, info.Spec.EffectiveSampleRate())
+}
+
+func TestModelRegistry_BSGEntry(t *testing.T) {
+	t.Parallel()
+
+	info, exists := ModelRegistry[RegistryIDBSG]
+	require.True(t, exists, "ModelRegistry should contain BSG")
+	assert.Equal(t, RegistryIDBSG, info.ID)
+	assert.Equal(t, "BSG Finland", info.Name)
+	assert.Equal(t, BackendONNX, info.Backend)
+	assert.Equal(t, "BSG", info.DetectionName)
+	assert.Equal(t, "4.4", info.DetectionVersion)
+	assert.Equal(t, 48000, info.Spec.SampleRate)
+	assert.Equal(t, 3*time.Second, info.Spec.ClipLength)
+	assert.Contains(t, info.ConfigAliases, "bsg")
+}
+
+func TestRegistryIDConstants_MatchRegistryKeys(t *testing.T) {
+	t.Parallel()
+
+	constants := map[string]string{
+		"RegistryIDBirdNETV3": RegistryIDBirdNETV3,
+		"RegistryIDBSG":       RegistryIDBSG,
+		"RegistryIDBat":       RegistryIDBat,
+		"RegistryIDPerchV2":   RegistryIDPerchV2,
+	}
+	for name, id := range constants {
+		_, exists := ModelRegistry[id]
+		assert.True(t, exists, "constant %s=%q must have a matching ModelRegistry entry", name, id)
+	}
+}
+
+func TestKnownConfigIDs_AllModels(t *testing.T) {
+	t.Parallel()
+
+	ids := KnownConfigIDs()
+	assert.True(t, ids["birdnet"], "birdnet config ID should be known")
+	assert.True(t, ids["birdnet_v3.0"], "birdnet_v3.0 config ID should be known")
+	assert.True(t, ids["perch_v2"], "perch_v2 config ID should be known")
+	assert.True(t, ids["bat"], "bat config ID should be known")
+	assert.True(t, ids["bsg"], "bsg config ID should be known")
+	assert.False(t, ids["unknown"], "unknown config ID should not be known")
+}
+
+func TestResolveConfigModelID_AllModels(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		configID   string
+		wantID     string
+		wantExists bool
+	}{
+		{"birdnet resolves", "birdnet", "BirdNET_V2.4", true},
+		{"birdnet_v3.0 resolves", "birdnet_v3.0", RegistryIDBirdNETV3, true},
+		{"perch_v2 resolves", "perch_v2", RegistryIDPerchV2, true},
+		{"bat resolves", "bat", RegistryIDBat, true},
+		{"bsg resolves", "bsg", RegistryIDBSG, true},
+		{"case insensitive bat", "BAT", RegistryIDBat, true},
+		{"case insensitive bsg", "BSG", RegistryIDBSG, true},
+		{"unknown returns false", "nonexistent", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotID, gotExists := ResolveConfigModelID(tt.configID)
+			assert.Equal(t, tt.wantExists, gotExists)
+			if gotExists {
+				assert.Equal(t, tt.wantID, gotID)
+			}
+		})
+	}
+}
+
+func TestGetModelSpec_AllModels(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		registryID     string
+		wantSampleRate int
+		wantClipLen    time.Duration
+	}{
+		{"BirdNET_V2.4", 48000, 3 * time.Second},
+		{RegistryIDBirdNETV3, 32000, 5 * time.Second},
+		{RegistryIDPerchV2, 32000, 5 * time.Second},
+		{RegistryIDBat, 48000, 3 * time.Second},
+		{RegistryIDBSG, 48000, 3 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.registryID, func(t *testing.T) {
+			t.Parallel()
+			spec, ok := GetModelSpec(tt.registryID)
+			require.True(t, ok, "GetModelSpec should find %s", tt.registryID)
+			assert.Equal(t, tt.wantSampleRate, spec.SampleRate)
+			assert.Equal(t, tt.wantClipLen, spec.ClipLength)
+		})
+	}
+}
+
+func TestDetermineModelInfo_BSGFilenamePatterns(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		input  string
+		wantID string
+	}{
+		{"bsg_finland pattern", "/path/to/bsg_finland_v4.4.onnx", RegistryIDBSG},
+		{"bsg-finland pattern", "/path/to/bsg-finland.onnx", RegistryIDBSG},
+		{"registry ID directly", RegistryIDBSG, RegistryIDBSG},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			info, err := DetermineModelInfo(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantID, info.ID)
+		})
+	}
+}
+
+func TestModelInfo_ToDetectionModelInfo_BSG(t *testing.T) {
+	t.Parallel()
+
+	info := ModelRegistry[RegistryIDBSG]
+	got := info.ToDetectionModelInfo()
+	assert.Equal(t, detection.ModelInfo{
+		Name:    "BSG",
+		Version: "4.4",
+		Variant: "default",
+	}, got)
+}
+
+func TestModelInfo_ToDetectionModelInfo_Bat(t *testing.T) {
+	t.Parallel()
+
+	info := ModelRegistry[RegistryIDBat]
+	got := info.ToDetectionModelInfo()
+	assert.Equal(t, detection.ModelInfo{
+		Name:    "BattyBirdNET",
+		Version: "1.0",
+		Variant: "default",
+	}, got)
+}
+
+func TestDetectionModelInfoForID_AllModels(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		registryID string
+		wantName   string
+	}{
+		{RegistryIDBirdNETV3, "BirdNET"},
+		{RegistryIDPerchV2, "Perch"},
+		{RegistryIDBSG, "BSG"},
+		{RegistryIDBat, "BattyBirdNET"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.registryID, func(t *testing.T) {
+			t.Parallel()
+			got := DetectionModelInfoForID(tt.registryID)
+			assert.Equal(t, tt.wantName, got.Name)
+		})
+	}
+}
+
+func TestModelInfo_ToDetectionModelInfo_CustomPath(t *testing.T) {
+	t.Parallel()
+
+	info := ModelRegistry[RegistryIDBSG]
+	info.CustomPath = "/custom/path/model.onnx"
+	got := info.ToDetectionModelInfo()
+	assert.Equal(t, "custom", got.Variant)
+	require.NotNil(t, got.ClassifierPath)
+	assert.Equal(t, "/custom/path/model.onnx", *got.ClassifierPath)
+}
+
+func TestModelInfo_ToDetectionModelInfo_EmptyDetectionName(t *testing.T) {
+	t.Parallel()
+
+	info := ModelInfo{ID: modelIDCustom, Name: "Custom"}
+	got := info.ToDetectionModelInfo()
+	assert.Equal(t, detection.DefaultModelInfo(), got)
 }
