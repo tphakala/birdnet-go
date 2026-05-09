@@ -6,6 +6,7 @@ const (
 	ModelIDBirdNET = "birdnet"
 	ModelIDPerchV2 = "perch_v2"
 	ModelIDBat     = "bat"
+	ModelIDBSG     = "bsg"
 
 	SampleRate     = 48000 // Sample rate of the audio fed to BirdNET Analyzer
 	BitDepth       = 16    // Bit depth of the audio fed to BirdNET Analyzer

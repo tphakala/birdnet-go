@@ -69,6 +69,7 @@ var ValidAudioModels = map[string]bool{
 	ModelIDBirdNET: true,
 	ModelIDPerchV2: true,
 	ModelIDBat:     true,
+	ModelIDBSG:     true,
 }
 
 // ValidationError represents a collection of validation errors

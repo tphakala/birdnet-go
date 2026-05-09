@@ -159,8 +159,8 @@ func (s *APIServerService) Start(_ context.Context) error {
 
 	// Create and start the HTTP API server.
 	GetLogger().Info("starting HTTP server")
-	apiServer, err := api.New(
-		s.settings,
+
+	serverOpts := []api.ServerOption{
 		api.WithDataStore(dataStore),
 		api.WithBirdImageCache(s.birdImageCache),
 		api.WithProcessor(s.proc),
@@ -171,6 +171,14 @@ func (s *APIServerService) Start(_ context.Context) error {
 		api.WithSunCalc(s.sunCalc),
 		api.WithV2Manager(s.dbService.V2Manager()),
 		api.WithAudioEngine(s.engine),
+	}
+	if mm := s.bnAnalyzer.ModelManager(); mm != nil {
+		serverOpts = append(serverOpts, api.WithModelManager(mm))
+	}
+
+	apiServer, err := api.New(
+		s.settings,
+		serverOpts...,
 	)
 	if err != nil {
 		return errors.New(err).

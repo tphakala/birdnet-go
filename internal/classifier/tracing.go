@@ -15,6 +15,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
+// tagKeyModel is the tracing tag key used to identify the model in spans.
+const tagKeyModel = "model"
+
 // TracingSpan represents a traced operation with minimal overhead
 type TracingSpan struct {
 	operation      string
@@ -100,7 +103,7 @@ func (s *TracingSpan) SetTag(key, value string) {
 	}
 
 	// Special handling for model tag
-	if key == "model" {
+	if key == tagKeyModel {
 		s.model = value
 	}
 

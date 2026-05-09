@@ -307,6 +307,144 @@ func (o *Orchestrator) Delete() {
 	o.models = nil
 }
 
+// LoadModel dynamically loads a model into the Orchestrator at runtime.
+// Called by ModelManager after a successful install. The method delegates
+// to the appropriate model loader (loadPerch, loadBat, etc.) based on
+// the registry ID. Thread-safe.
+//
+// The write lock is held for the entire load (including I/O-heavy ONNX
+// initialization, typically 1-3 seconds). This briefly blocks inference
+// via PredictModel but is acceptable because dynamic loading is rare
+// (user-initiated install only) and correctness requires the lock: the
+// loaders write directly to o.models, so concurrent map access without
+// the lock would be a data race.
+func (o *Orchestrator) LoadModel(registryID string) error {
+	log := GetLogger()
+
+	// Validate that the registry ID is known before acquiring locks.
+	if _, known := ModelRegistry[registryID]; !known {
+		return errors.Newf("unknown registry ID: %s", registryID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Context("registry_id", registryID).
+			Build()
+	}
+
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if o.models == nil {
+		return errors.Newf("orchestrator has been deleted, cannot load model").
+			Component("classifier.orchestrator").
+			Category(errors.CategorySystem).
+			Build()
+	}
+
+	if _, exists := o.models[registryID]; exists {
+		return errors.Newf("model %s is already loaded", registryID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Context("registry_id", registryID).
+			Build()
+	}
+
+	// Allocate a single thread for the new model. The thread count defaults
+	// to 1 because the primary model's thread allocation was computed at
+	// startup and should not be reduced by a dynamic load.
+	const dynamicThreads = 1
+
+	log.Info("Loading model dynamically",
+		logger.String("registry_id", registryID),
+		logger.Int("threads", dynamicThreads))
+
+	//nolint:staticcheck // SA4023: loaders always error in non-onnx build, but return nil in onnx build
+	var err error
+	switch registryID {
+	case "Perch_V2":
+		err = o.loadPerch(dynamicThreads)
+	case "Bat":
+		err = o.loadBat(dynamicThreads)
+	default:
+		return errors.Newf("no loader implemented for model %s", registryID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryModelInit).
+			Context("registry_id", registryID).
+			Build()
+	}
+
+	if err != nil {
+		return err
+	}
+
+	log.Info("Model loaded dynamically",
+		logger.String("registry_id", registryID))
+
+	return nil
+}
+
+// UnloadModel removes a model from the Orchestrator and releases its resources.
+// Called by ModelManager during uninstall. Refuses to unload the primary model.
+// Thread-safe.
+func (o *Orchestrator) UnloadModel(registryID string) error {
+	log := GetLogger()
+
+	o.mu.Lock()
+
+	if o.models == nil {
+		o.mu.Unlock()
+		return errors.Newf("orchestrator has been deleted, cannot unload model").
+			Component("classifier.orchestrator").
+			Category(errors.CategorySystem).
+			Build()
+	}
+
+	// Refuse to unload the primary model.
+	if o.primary != nil && o.primary.ModelInfo.ID == registryID {
+		o.mu.Unlock()
+		return errors.Newf("cannot unload the primary model %s", registryID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Context("registry_id", registryID).
+			Build()
+	}
+
+	entry, exists := o.models[registryID]
+	if !exists {
+		o.mu.Unlock()
+		return errors.Newf("model %s is not loaded", registryID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Context("registry_id", registryID).
+			Build()
+	}
+
+	// Remove from map while holding the write lock so no new PredictModel
+	// calls can obtain this entry.
+	delete(o.models, registryID)
+	o.mu.Unlock()
+
+	// Close the model instance outside the map lock. Acquire the per-model
+	// lock to wait for any in-flight inference to complete.
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+
+	if entry.instance != nil {
+		modelID := entry.instance.ModelID()
+		if err := entry.instance.Close(); err != nil {
+			log.Warn("failed to close model instance during unload",
+				logger.String("model_id", modelID),
+				logger.Error(err))
+		}
+		entry.instance = nil
+
+		log.Info("Model unloaded",
+			logger.String("registry_id", registryID),
+			logger.String("model_id", modelID))
+	}
+
+	return nil
+}
+
 // Debug prints debug messages if debug mode is enabled.
 func (o *Orchestrator) Debug(format string, v ...any) {
 	o.primary.Debug(format, v...)

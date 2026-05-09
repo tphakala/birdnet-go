@@ -114,6 +114,9 @@ type Controller struct {
 	insightsRepo repository.InsightsRepository
 	nameMaps     atomic.Value // stores *nameMaps; see internal/api/v2/insights.go
 
+	// Model gallery fields
+	ModelManager *classifier.ModelManager
+
 	// Audio processing fields
 	processingCache     *processingCache
 	processingSemaphore chan struct{}
@@ -176,6 +179,13 @@ func WithV2Manager(mgr datastoreV2.Manager) Option {
 func WithAudioEngine(e *engine.AudioEngine) Option {
 	return func(c *Controller) {
 		c.engine = e
+	}
+}
+
+// WithModelManager sets the ModelManager for model gallery operations.
+func WithModelManager(mm *classifier.ModelManager) Option {
+	return func(c *Controller) {
+		c.ModelManager = mm
 	}
 }
 

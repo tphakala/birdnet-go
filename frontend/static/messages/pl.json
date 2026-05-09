@@ -1616,6 +1616,7 @@
     "title": "Ustawienia - BirdNET-Go",
     "loading": "Ładowanie ustawień...",
     "sections": {
+      "analysis": "Analiza",
       "node": "Główne",
       "userinterface": "Interfejs",
       "audio": "Audio",
@@ -4460,6 +4461,72 @@
         "outro": "To podejście zapewnia jakość danych dla badań naukowych, jednocześnie maksymalizując naukę i przyjemność z obserwacji ptaków.",
         "acknowledge": "Rozumiem"
       }
+    }
+  },
+  "analysis": {
+    "title": "Analiza",
+    "detection": {
+      "title": "Ustawienia detekcji",
+      "description": "Skonfiguruj progi pewności dla klasyfikacji gatunków.",
+      "confidenceThreshold": {
+        "label": "Próg pewności",
+        "helpText": "Minimalny wynik pewności (0.0 - 1.0) wymagany do zarejestrowania detekcji."
+      }
+    },
+    "gallery": {
+      "title": "Galeria modeli",
+      "description": "Zarządzaj modelami klasyfikatorów do detekcji ptaków i nietoperzy.",
+      "tabs": {
+        "installed": "Zainstalowane",
+        "available": "Dostępne"
+      },
+      "loading": "Ładowanie modeli...",
+      "retry": "Ponów",
+      "builtIn": "Wbudowany",
+      "builtInDescription": "Wbudowany klasyfikator gatunków ptaków zespołu BirdNET.",
+      "species": "{count} gatunków",
+      "install": "Zainstaluj",
+      "installing": "Instalowanie...",
+      "remove": "Usuń",
+      "removing": "Usuwanie...",
+      "noInstalledModels": "Brak zainstalowanych dodatkowych modeli. Przejdź do karty Dostępne, aby dodać więcej klasyfikatorów.",
+      "noAvailableModels": "Brak dodatkowych modeli dostępnych dla Twojej platformy.",
+      "categories": {
+        "bird": "Klasyfikatory ptaków",
+        "bat": "Klasyfikatory nietoperzy"
+      },
+      "progress": {
+        "downloading": "Pobieranie...",
+        "verifying": "Weryfikacja...",
+        "loading": "Ładowanie...",
+        "complete": "Zakończono",
+        "failed": "Niepowodzenie"
+      },
+      "license": {
+        "title": "Umowa licencyjna",
+        "model": "Model",
+        "author": "Autor",
+        "license": "Licencja",
+        "commercialUse": "Użycie komercyjne",
+        "downloadSize": "Rozmiar pobierania",
+        "allowed": "Dozwolone",
+        "notAllowed": "Niedozwolone",
+        "commercialUseAllowed": "Użycie komercyjne dozwolone",
+        "nonCommercialOnly": "Tylko użycie niekomercyjne",
+        "nonCommercialWarning": "Ten model jest licencjonowany wyłącznie do użytku niekomercyjnego. Instalując go, zgadzasz się na warunki licencji.",
+        "acceptAndInstall": "Akceptuj i zainstaluj"
+      },
+      "removeDialog": {
+        "title": "Usunąć {name}?",
+        "confirmation": "Pliki modelu zostaną usunięte z dysku. Dane etykiet istniejących detekcji zostaną zachowane."
+      },
+      "errors": {
+        "catalogLoadFailed": "Nie udało się załadować katalogu modeli",
+        "installFailed": "Nie udało się rozpocząć instalacji modelu",
+        "removeFailed": "Nie udało się usunąć modelu"
+      },
+      "regionLabel": "Region",
+      "speciesLabel": "Gatunki"
     }
   },
   "restart": {

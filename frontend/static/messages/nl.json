@@ -1616,6 +1616,7 @@
     "title": "BirdNET-Go instellingen",
     "loading": "Instellingen inlezen ...",
     "sections": {
+      "analysis": "Analyse",
       "node": "Algemeen",
       "userinterface": "Interface",
       "audio": "Audio",
@@ -4460,6 +4461,72 @@
         "outro": "Deze aanpak waarborgt gegevenskwaliteit voor wetenschappelijk onderzoek en maximaliseert tegelijk je leerervaring en plezier bij het vogelen.",
         "acknowledge": "Ik begrijp het"
       }
+    }
+  },
+  "analysis": {
+    "title": "Analyse",
+    "detection": {
+      "title": "Detectie-instellingen",
+      "description": "Configureer betrouwbaarheidsdrempels voor soortclassificatie.",
+      "confidenceThreshold": {
+        "label": "Betrouwbaarheidsdrempel",
+        "helpText": "Minimale betrouwbaarheidsscore (0.0 - 1.0) vereist om een detectie vast te leggen."
+      }
+    },
+    "gallery": {
+      "title": "Modellengalerij",
+      "description": "Beheer classificatiemodellen voor vogel- en vleermuisdetectie.",
+      "tabs": {
+        "installed": "Geïnstalleerd",
+        "available": "Beschikbaar"
+      },
+      "loading": "Modellen laden...",
+      "retry": "Opnieuw proberen",
+      "builtIn": "Ingebouwd",
+      "builtInDescription": "Ingebouwde vogelsoortclassificator van het BirdNET-team.",
+      "species": "{count} soorten",
+      "install": "Installeren",
+      "installing": "Installeren...",
+      "remove": "Verwijderen",
+      "removing": "Verwijderen...",
+      "noInstalledModels": "Geen extra modellen geïnstalleerd. Blader door het tabblad Beschikbaar om meer classificatoren toe te voegen.",
+      "noAvailableModels": "Geen extra modellen beschikbaar voor uw platform.",
+      "categories": {
+        "bird": "Vogelclassificatoren",
+        "bat": "Vleermuisclassificatoren"
+      },
+      "progress": {
+        "downloading": "Downloaden...",
+        "verifying": "Verifiëren...",
+        "loading": "Laden...",
+        "complete": "Voltooid",
+        "failed": "Mislukt"
+      },
+      "license": {
+        "title": "Licentieovereenkomst",
+        "model": "Model",
+        "author": "Auteur",
+        "license": "Licentie",
+        "commercialUse": "Commercieel gebruik",
+        "downloadSize": "Downloadgrootte",
+        "allowed": "Toegestaan",
+        "notAllowed": "Niet toegestaan",
+        "commercialUseAllowed": "Commercieel gebruik toegestaan",
+        "nonCommercialOnly": "Alleen niet-commercieel gebruik",
+        "nonCommercialWarning": "Dit model is gelicentieerd voor alleen niet-commercieel gebruik. Door te installeren gaat u akkoord met de licentievoorwaarden.",
+        "acceptAndInstall": "Accepteren en installeren"
+      },
+      "removeDialog": {
+        "title": "{name} verwijderen?",
+        "confirmation": "De modelbestanden worden van de schijf verwijderd. Labelgegevens van bestaande detecties blijven behouden."
+      },
+      "errors": {
+        "catalogLoadFailed": "Kan modelcatalogus niet laden",
+        "installFailed": "Kan modelinstallatie niet starten",
+        "removeFailed": "Kan model niet verwijderen"
+      },
+      "regionLabel": "Regio",
+      "speciesLabel": "Soorten"
     }
   },
   "restart": {

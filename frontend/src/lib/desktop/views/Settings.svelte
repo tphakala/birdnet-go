@@ -18,11 +18,13 @@
   import SpeciesSettingsSection from '$lib/desktop/features/settings/pages/SpeciesSettingsPage.svelte';
   import NotificationsSettingsSection from '$lib/desktop/features/settings/pages/NotificationsSettingsPage.svelte';
   import UserInterfaceSettingsSection from '$lib/desktop/features/settings/pages/UserInterfaceSettingsPage.svelte';
+  import AnalysisSettingsSection from '$lib/desktop/features/settings/pages/AnalysisSettingsPage.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
 
   // Map URL paths to section names
   const sectionMap: Record<string, string> = {
+    analysis: 'analysis',
     main: 'node',
     userinterface: 'userinterface',
     audio: 'audio',
@@ -88,7 +90,9 @@
   {:else}
     <!-- Settings Content -->
     <div class="space-y-6">
-      {#if currentSection === 'node'}
+      {#if currentSection === 'analysis'}
+        <AnalysisSettingsSection />
+      {:else if currentSection === 'node'}
         <MainSettingsSection />
       {:else if currentSection === 'userinterface'}
         <UserInterfaceSettingsSection />
