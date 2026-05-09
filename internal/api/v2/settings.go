@@ -966,6 +966,8 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Output, nil
 	case "perch":
 		return &settings.Perch, nil
+	case "bat":
+		return &settings.Bat, nil
 	case "models":
 		return &settings.Models, nil
 	case "taxonomysynonyms":
