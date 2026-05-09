@@ -5,11 +5,11 @@
 
 import type { CatalogResponse, DownloadProgress, InstalledModel } from '$lib/types/models';
 import { api } from '$lib/utils/api';
-import { loggers } from '$lib/utils/logger';
+import { getLogger } from '$lib/utils/logger';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
 import ReconnectingEventSource from 'reconnecting-eventsource';
 
-const logger = loggers.api;
+const logger = getLogger('modelsApi');
 
 const BASE = '/api/v2/models';
 
@@ -55,7 +55,11 @@ export function subscribeInstallProgress(
     const messageEvent = event as MessageEvent;
     let data: DownloadProgress;
     try {
-      data = JSON.parse(messageEvent.data as string) as DownloadProgress;
+      const parsed: unknown = JSON.parse(messageEvent.data as string);
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('Event data is not an object');
+      }
+      data = parsed as DownloadProgress;
     } catch (error) {
       logger.warn('Failed to parse SSE progress event', error, { component: 'modelsApi' });
       return;
