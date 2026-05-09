@@ -1616,6 +1616,7 @@
     "title": "Paramètres - BirdNET-Go",
     "loading": "Chargement des paramètres...",
     "sections": {
+      "analysis": "Analyse",
       "node": "Général",
       "userinterface": "Interface",
       "audio": "Audio",
@@ -4459,6 +4460,70 @@
         "citizenPoint3": "Utilisez les détections IA comme point de départ pour vos propres observations",
         "outro": "Cette approche garantit la qualité des données pour la recherche scientifique tout en maximisant votre apprentissage et votre plaisir de l'observation des oiseaux.",
         "acknowledge": "Je comprends"
+      }
+    }
+  },
+  "analysis": {
+    "title": "Analyse",
+    "detection": {
+      "title": "Paramètres de détection",
+      "description": "Configurer les seuils de confiance pour la classification des espèces.",
+      "confidenceThreshold": {
+        "label": "Seuil de confiance",
+        "helpText": "Score de confiance minimum (0.0 - 1.0) requis pour qu'une détection soit enregistrée."
+      }
+    },
+    "gallery": {
+      "title": "Galerie de modèles",
+      "description": "Gérer les modèles classificateurs pour la détection des oiseaux et des chauves-souris.",
+      "tabs": {
+        "installed": "Installés",
+        "available": "Disponibles"
+      },
+      "loading": "Chargement des modèles...",
+      "retry": "Réessayer",
+      "builtIn": "Intégré",
+      "builtInDescription": "Classificateur d'espèces d'oiseaux intégré par l'équipe BirdNET.",
+      "species": "{count} espèces",
+      "install": "Installer",
+      "installing": "Installation...",
+      "remove": "Supprimer",
+      "removing": "Suppression...",
+      "noInstalledModels": "Aucun modèle supplémentaire installé. Parcourez l'onglet Disponibles pour ajouter des classificateurs.",
+      "noAvailableModels": "Aucun modèle supplémentaire disponible pour votre plateforme.",
+      "categories": {
+        "bird": "Classificateurs d'oiseaux",
+        "bat": "Classificateurs de chauves-souris"
+      },
+      "progress": {
+        "downloading": "Téléchargement...",
+        "verifying": "Vérification...",
+        "loading": "Chargement...",
+        "complete": "Terminé",
+        "failed": "Échoué"
+      },
+      "license": {
+        "title": "Accord de licence",
+        "model": "Modèle",
+        "author": "Auteur",
+        "license": "Licence",
+        "commercialUse": "Utilisation commerciale",
+        "downloadSize": "Taille du téléchargement",
+        "allowed": "Autorisée",
+        "notAllowed": "Non autorisée",
+        "commercialUseAllowed": "Utilisation commerciale autorisée",
+        "nonCommercialOnly": "Usage non commercial uniquement",
+        "nonCommercialWarning": "Ce modèle est licencié pour un usage non commercial uniquement. En l'installant, vous acceptez de respecter les termes de la licence.",
+        "acceptAndInstall": "Accepter et installer"
+      },
+      "removeDialog": {
+        "title": "Supprimer {name} ?",
+        "confirmation": "Les fichiers du modèle seront supprimés du disque. Les données d'étiquettes des détections existantes sont conservées."
+      },
+      "errors": {
+        "catalogLoadFailed": "Impossible de charger le catalogue de modèles",
+        "installFailed": "Impossible de démarrer l'installation du modèle",
+        "removeFailed": "Impossible de supprimer le modèle"
       }
     }
   },

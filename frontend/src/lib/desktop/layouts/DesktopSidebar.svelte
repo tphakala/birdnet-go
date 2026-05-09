@@ -821,7 +821,7 @@ Performance Optimizations:
                           : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
-                      <BrainCircuit class="size-4 shrink-0" />Analysis
+                      <BrainCircuit class="size-4 shrink-0" />{t('settings.sections.analysis')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.settingsMain)}
@@ -961,7 +961,7 @@ Performance Optimizations:
                         : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
-                    <BrainCircuit class="size-4 shrink-0" />Analysis
+                    <BrainCircuit class="size-4 shrink-0" />{t('settings.sections.analysis')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsMain)}

@@ -1616,6 +1616,7 @@
     "title": "Asetukset - BirdNET-Go",
     "loading": "Ladataan asetuksia...",
     "sections": {
+      "analysis": "Analyysi",
       "node": "Yleiset",
       "userinterface": "Käyttöliittymä",
       "audio": "Ääni",
@@ -4459,6 +4460,70 @@
         "citizenPoint3": "Käytä tekoälyhavaintoja omien havaintojesi lähtökohtana",
         "outro": "Tämä lähestymistapa varmistaa tiedon laadun tieteelliseen tutkimukseen ja maksimoi lintuharrastuksesi oppimisen ja nautinnon.",
         "acknowledge": "Ymmärrän"
+      }
+    }
+  },
+  "analysis": {
+    "title": "Analyysi",
+    "detection": {
+      "title": "Tunnistusasetukset",
+      "description": "Määritä luotettavuuskynnykset lajien luokitteluun.",
+      "confidenceThreshold": {
+        "label": "Luotettavuuskynnys",
+        "helpText": "Vähimmäisluotettavuuspisteet (0.0 - 1.0), joka vaaditaan tunnistuksen tallentamiseen."
+      }
+    },
+    "gallery": {
+      "title": "Malligalleria",
+      "description": "Hallitse lintu- ja lepakkotunnistuksen luokittelumalleja.",
+      "tabs": {
+        "installed": "Asennetut",
+        "available": "Saatavilla"
+      },
+      "loading": "Ladataan malleja...",
+      "retry": "Yritä uudelleen",
+      "builtIn": "Sisäänrakennettu",
+      "builtInDescription": "BirdNET-tiimin sisäänrakennettu lintulajien luokittelija.",
+      "species": "{count} lajia",
+      "install": "Asenna",
+      "installing": "Asennetaan...",
+      "remove": "Poista",
+      "removing": "Poistetaan...",
+      "noInstalledModels": "Ei asennettuja lisämalleja. Selaa Saatavilla-välilehteä lisätäksesi luokittelijoita.",
+      "noAvailableModels": "Ei lisämalleja saatavilla alustallesi.",
+      "categories": {
+        "bird": "Lintuluokittelijat",
+        "bat": "Lepakkoluokittelijat"
+      },
+      "progress": {
+        "downloading": "Ladataan...",
+        "verifying": "Tarkistetaan...",
+        "loading": "Ladataan...",
+        "complete": "Valmis",
+        "failed": "Epäonnistui"
+      },
+      "license": {
+        "title": "Lisenssisopimus",
+        "model": "Malli",
+        "author": "Tekijä",
+        "license": "Lisenssi",
+        "commercialUse": "Kaupallinen käyttö",
+        "downloadSize": "Latauskoko",
+        "allowed": "Sallittu",
+        "notAllowed": "Ei sallittu",
+        "commercialUseAllowed": "Kaupallinen käyttö sallittu",
+        "nonCommercialOnly": "Vain ei-kaupallinen käyttö",
+        "nonCommercialWarning": "Tämä malli on lisensoitu vain ei-kaupalliseen käyttöön. Asentamalla hyväksyt lisenssiehdot.",
+        "acceptAndInstall": "Hyväksy ja asenna"
+      },
+      "removeDialog": {
+        "title": "Poista {name}?",
+        "confirmation": "Tämä poistaa mallitiedostot levyltä. Olemassa olevien tunnistusten nimiötiedot säilytetään."
+      },
+      "errors": {
+        "catalogLoadFailed": "Malliluettelon lataaminen epäonnistui",
+        "installFailed": "Mallin asennuksen käynnistäminen epäonnistui",
+        "removeFailed": "Mallin poistaminen epäonnistui"
       }
     }
   },

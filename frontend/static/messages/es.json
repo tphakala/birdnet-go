@@ -1616,6 +1616,7 @@
     "title": "Configuración - BirdNET-Go",
     "loading": "Cargando configuración...",
     "sections": {
+      "analysis": "Análisis",
       "node": "Principal",
       "userinterface": "Interfaz",
       "audio": "Audio",
@@ -4459,6 +4460,70 @@
         "citizenPoint3": "Usa las detecciones de IA como punto de partida para tus propias observaciones",
         "outro": "Este enfoque garantiza la calidad de los datos para la investigación científica mientras maximiza tu aprendizaje y disfrute de las aves.",
         "acknowledge": "Entendido"
+      }
+    }
+  },
+  "analysis": {
+    "title": "Análisis",
+    "detection": {
+      "title": "Configuración de detección",
+      "description": "Configurar umbrales de confianza para la clasificación de especies.",
+      "confidenceThreshold": {
+        "label": "Umbral de confianza",
+        "helpText": "Puntuación mínima de confianza (0.0 - 1.0) requerida para registrar una detección."
+      }
+    },
+    "gallery": {
+      "title": "Galería de modelos",
+      "description": "Gestionar modelos clasificadores para la detección de aves y murciélagos.",
+      "tabs": {
+        "installed": "Instalados",
+        "available": "Disponibles"
+      },
+      "loading": "Cargando modelos...",
+      "retry": "Reintentar",
+      "builtIn": "Integrado",
+      "builtInDescription": "Clasificador de especies de aves integrado del equipo BirdNET.",
+      "species": "{count} especies",
+      "install": "Instalar",
+      "installing": "Instalando...",
+      "remove": "Eliminar",
+      "removing": "Eliminando...",
+      "noInstalledModels": "No hay modelos adicionales instalados. Explore la pestaña Disponibles para agregar más clasificadores.",
+      "noAvailableModels": "No hay modelos adicionales disponibles para su plataforma.",
+      "categories": {
+        "bird": "Clasificadores de aves",
+        "bat": "Clasificadores de murciélagos"
+      },
+      "progress": {
+        "downloading": "Descargando...",
+        "verifying": "Verificando...",
+        "loading": "Cargando...",
+        "complete": "Completado",
+        "failed": "Error"
+      },
+      "license": {
+        "title": "Acuerdo de licencia",
+        "model": "Modelo",
+        "author": "Autor",
+        "license": "Licencia",
+        "commercialUse": "Uso comercial",
+        "downloadSize": "Tamaño de descarga",
+        "allowed": "Permitido",
+        "notAllowed": "No permitido",
+        "commercialUseAllowed": "Uso comercial permitido",
+        "nonCommercialOnly": "Solo uso no comercial",
+        "nonCommercialWarning": "Este modelo está licenciado solo para uso no comercial. Al instalarlo, acepta cumplir con los términos de la licencia.",
+        "acceptAndInstall": "Aceptar e instalar"
+      },
+      "removeDialog": {
+        "title": "¿Eliminar {name}?",
+        "confirmation": "Esto eliminará los archivos del modelo del disco. Los datos de etiquetas de las detecciones existentes se conservarán."
+      },
+      "errors": {
+        "catalogLoadFailed": "No se pudo cargar el catálogo de modelos",
+        "installFailed": "No se pudo iniciar la instalación del modelo",
+        "removeFailed": "No se pudo eliminar el modelo"
       }
     }
   },

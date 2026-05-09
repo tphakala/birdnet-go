@@ -1616,6 +1616,7 @@
     "title": "Einstellungen - BirdNET-Go",
     "loading": "Einstellungen werden geladen...",
     "sections": {
+      "analysis": "Analyse",
       "node": "Allgemein",
       "userinterface": "Oberfläche",
       "audio": "Audio",
@@ -4459,6 +4460,70 @@
         "citizenPoint3": "Verwenden Sie KI-Erkennungen als Ausgangspunkt für Ihre eigenen Beobachtungen",
         "outro": "Dieser Ansatz gewährleistet die Datenqualität für die wissenschaftliche Forschung und maximiert gleichzeitig Ihr Lernen und Ihre Freude an Vögeln.",
         "acknowledge": "Ich verstehe"
+      }
+    }
+  },
+  "analysis": {
+    "title": "Analyse",
+    "detection": {
+      "title": "Erkennungseinstellungen",
+      "description": "Konfidenz-Schwellenwerte für die Artenklassifizierung konfigurieren.",
+      "confidenceThreshold": {
+        "label": "Konfidenz-Schwellenwert",
+        "helpText": "Mindest-Konfidenzwert (0.0 - 1.0), ab dem eine Erkennung aufgezeichnet wird."
+      }
+    },
+    "gallery": {
+      "title": "Modellgalerie",
+      "description": "Klassifikatormodelle für Vogel- und Fledermauskennungen verwalten.",
+      "tabs": {
+        "installed": "Installiert",
+        "available": "Verfügbar"
+      },
+      "loading": "Modelle werden geladen...",
+      "retry": "Wiederholen",
+      "builtIn": "Integriert",
+      "builtInDescription": "Integrierter Vogelartenklassifikator des BirdNET-Teams.",
+      "species": "{count} Arten",
+      "install": "Installieren",
+      "installing": "Wird installiert...",
+      "remove": "Entfernen",
+      "removing": "Wird entfernt...",
+      "noInstalledModels": "Keine zusätzlichen Modelle installiert. Durchsuchen Sie den Tab Verfügbar, um weitere Klassifikatoren hinzuzufügen.",
+      "noAvailableModels": "Keine zusätzlichen Modelle für Ihre Plattform verfügbar.",
+      "categories": {
+        "bird": "Vogelklassifikatoren",
+        "bat": "Fledermausklassifikatoren"
+      },
+      "progress": {
+        "downloading": "Wird heruntergeladen...",
+        "verifying": "Wird überprüft...",
+        "loading": "Wird geladen...",
+        "complete": "Abgeschlossen",
+        "failed": "Fehlgeschlagen"
+      },
+      "license": {
+        "title": "Lizenzvereinbarung",
+        "model": "Modell",
+        "author": "Autor",
+        "license": "Lizenz",
+        "commercialUse": "Kommerzielle Nutzung",
+        "downloadSize": "Downloadgröße",
+        "allowed": "Erlaubt",
+        "notAllowed": "Nicht erlaubt",
+        "commercialUseAllowed": "Kommerzielle Nutzung erlaubt",
+        "nonCommercialOnly": "Nur nichtkommerzielle Nutzung",
+        "nonCommercialWarning": "Dieses Modell ist nur für nichtkommerzielle Nutzung lizenziert. Mit der Installation stimmen Sie den Lizenzbedingungen zu.",
+        "acceptAndInstall": "Akzeptieren & Installieren"
+      },
+      "removeDialog": {
+        "title": "{name} entfernen?",
+        "confirmation": "Die Modelldateien werden von der Festplatte entfernt. Labeldaten bestehender Erkennungen bleiben erhalten."
+      },
+      "errors": {
+        "catalogLoadFailed": "Modellkatalog konnte nicht geladen werden",
+        "installFailed": "Modellinstallation konnte nicht gestartet werden",
+        "removeFailed": "Modell konnte nicht entfernt werden"
       }
     }
   },

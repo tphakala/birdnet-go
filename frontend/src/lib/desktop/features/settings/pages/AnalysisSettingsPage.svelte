@@ -32,6 +32,7 @@
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import { settingsStore, settingsActions, birdnetSettings } from '$lib/stores/settings';
   import { formatBytes } from '$lib/utils/formatters';
+  import { t } from '$lib/i18n';
   import {
     Download,
     Trash2,
@@ -83,13 +84,13 @@
   const galleryTabs: TabDefinition[] = $derived([
     {
       id: 'installed',
-      label: 'Installed',
+      label: t('analysis.gallery.tabs.installed'),
       icon: Package,
       content: installedTabContent,
     },
     {
       id: 'available',
-      label: 'Available',
+      label: t('analysis.gallery.tabs.available'),
       icon: Download,
       content: availableTabContent,
     },
@@ -114,7 +115,7 @@
       const response = await fetchCatalog();
       catalog = response.catalog;
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to load model catalog';
+      error = e instanceof Error ? e.message : t('analysis.gallery.errors.catalogLoadFailed');
     } finally {
       loading = false;
     }
@@ -162,7 +163,7 @@
         }
       );
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to start model installation';
+      error = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
       installingId = null;
     }
   }
@@ -187,7 +188,7 @@
       await uninstallModel(modelId);
       await loadCatalog();
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to remove model';
+      error = e instanceof Error ? e.message : t('analysis.gallery.errors.removeFailed');
     } finally {
       deletingId = null;
     }
@@ -210,15 +211,15 @@
   function statusLabel(status: DownloadProgress['status']): string {
     switch (status) {
       case 'downloading':
-        return 'Downloading...';
+        return t('analysis.gallery.progress.downloading');
       case 'verifying':
-        return 'Verifying...';
+        return t('analysis.gallery.progress.verifying');
       case 'loading':
-        return 'Loading...';
+        return t('analysis.gallery.progress.loading');
       case 'complete':
-        return 'Complete';
+        return t('analysis.gallery.progress.complete');
       case 'failed':
-        return 'Failed';
+        return t('analysis.gallery.progress.failed');
       default:
         return '';
     }
@@ -230,7 +231,9 @@
     {#if loading}
       <div class="flex items-center justify-center py-12">
         <Loader2 class="size-6 animate-spin text-[var(--color-primary)]" />
-        <span class="ml-3 text-sm text-[var(--color-base-content)]/70">Loading models...</span>
+        <span class="ml-3 text-sm text-[var(--color-base-content)]/70"
+          >{t('analysis.gallery.loading')}</span
+        >
       </div>
     {:else if error}
       <div
@@ -244,7 +247,7 @@
           class="ml-auto flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
         >
           <RefreshCw class="size-3.5" />
-          Retry
+          {t('analysis.gallery.retry')}
         </button>
       </div>
     {:else}
@@ -260,7 +263,7 @@
             <div class="min-w-0 flex-1">
               <h4 class="text-sm font-semibold text-[var(--color-base-content)]">BirdNET v2.4</h4>
               <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/70">
-                Built-in bird species classifier by the BirdNET team.
+                {t('analysis.gallery.builtInDescription')}
               </p>
               <p class="mt-1 text-xs text-[var(--color-base-content)]/60">
                 Cornell Lab of Ornithology / Chemnitz University
@@ -272,12 +275,12 @@
           >
             <div class="flex items-center gap-2 text-xs text-[var(--color-base-content)]/60">
               <span>v2.4</span>
-              <span>6,000+ species</span>
+              <span>{t('analysis.gallery.species', { count: '6,000+' })}</span>
             </div>
             <span
               class="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-primary)]"
             >
-              Built-in
+              {t('analysis.gallery.builtIn')}
             </span>
           </div>
         </div>
@@ -305,7 +308,7 @@
             >
               <div class="flex items-center gap-2 text-xs text-[var(--color-base-content)]/60">
                 <span>v{entry.version}</span>
-                <span>{entry.speciesCount} species</span>
+                <span>{t('analysis.gallery.species', { count: entry.speciesCount })}</span>
                 {#if entry.region}
                   <span>{entry.region}</span>
                 {/if}
@@ -314,14 +317,14 @@
                 onclick={() => openRemoveDialog(entry)}
                 disabled={isDeleting}
                 class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors disabled:opacity-50"
-                aria-label="Remove {entry.name}"
+                aria-label="{t('analysis.gallery.remove')} {entry.name}"
               >
                 {#if isDeleting}
                   <Loader2 class="size-3.5 animate-spin" />
-                  Removing...
+                  {t('analysis.gallery.removing')}
                 {:else}
                   <Trash2 class="size-3.5" />
-                  Remove
+                  {t('analysis.gallery.remove')}
                 {/if}
               </button>
             </div>
@@ -331,7 +334,7 @@
 
       {#if installedEntries.length === 0}
         <p class="py-4 text-center text-sm text-[var(--color-base-content)]/60">
-          No additional models installed. Browse the Available tab to add more classifiers.
+          {t('analysis.gallery.noInstalledModels')}
         </p>
       {/if}
     {/if}
@@ -343,7 +346,9 @@
     {#if loading}
       <div class="flex items-center justify-center py-12">
         <Loader2 class="size-6 animate-spin text-[var(--color-primary)]" />
-        <span class="ml-3 text-sm text-[var(--color-base-content)]/70">Loading models...</span>
+        <span class="ml-3 text-sm text-[var(--color-base-content)]/70"
+          >{t('analysis.gallery.loading')}</span
+        >
       </div>
     {:else if error}
       <div
@@ -357,7 +362,7 @@
           class="ml-auto flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
         >
           <RefreshCw class="size-3.5" />
-          Retry
+          {t('analysis.gallery.retry')}
         </button>
       </div>
     {:else}
@@ -367,7 +372,7 @@
           <h3
             class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/50"
           >
-            Bird Classifiers
+            {t('analysis.gallery.categories.bird')}
           </h3>
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {#each availableBirds as entry (entry.id)}
@@ -420,7 +425,7 @@
                 >
                   <div class="flex items-center gap-2 text-xs text-[var(--color-base-content)]/60">
                     <span>v{entry.version}</span>
-                    <span>{entry.speciesCount} species</span>
+                    <span>{t('analysis.gallery.species', { count: entry.speciesCount })}</span>
                     {#if entry.region}
                       <span>{entry.region}</span>
                     {/if}
@@ -430,7 +435,7 @@
                     {#if entry.commercialUse}
                       <span
                         class="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs text-[var(--color-success)]"
-                        title="Commercial use allowed"
+                        title={t('analysis.gallery.license.commercialUseAllowed')}
                       >
                         <Shield class="size-3" />
                         {entry.license}
@@ -438,7 +443,7 @@
                     {:else}
                       <span
                         class="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs text-[var(--color-warning)]"
-                        title="Non-commercial use only"
+                        title={t('analysis.gallery.license.nonCommercialOnly')}
                       >
                         <ShieldAlert class="size-3" />
                         {entry.license}
@@ -449,14 +454,14 @@
                       onclick={() => openLicenseDialog(entry)}
                       disabled={isInstalling || installingId !== null}
                       class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:opacity-50"
-                      aria-label="Install {entry.name}"
+                      aria-label="{t('analysis.gallery.install')} {entry.name}"
                     >
                       {#if isInstalling}
                         <Loader2 class="size-3.5 animate-spin" />
-                        Installing...
+                        {t('analysis.gallery.installing')}
                       {:else}
                         <Download class="size-3.5" />
-                        Install
+                        {t('analysis.gallery.install')}
                       {/if}
                     </button>
                   </div>
@@ -473,7 +478,7 @@
           <h3
             class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/50"
           >
-            Bat Classifiers
+            {t('analysis.gallery.categories.bat')}
           </h3>
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {#each availableBats as entry (entry.id)}
@@ -526,7 +531,7 @@
                 >
                   <div class="flex items-center gap-2 text-xs text-[var(--color-base-content)]/60">
                     <span>v{entry.version}</span>
-                    <span>{entry.speciesCount} species</span>
+                    <span>{t('analysis.gallery.species', { count: entry.speciesCount })}</span>
                     {#if entry.region}
                       <span>{entry.region}</span>
                     {/if}
@@ -536,7 +541,7 @@
                     {#if entry.commercialUse}
                       <span
                         class="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs text-[var(--color-success)]"
-                        title="Commercial use allowed"
+                        title={t('analysis.gallery.license.commercialUseAllowed')}
                       >
                         <Shield class="size-3" />
                         {entry.license}
@@ -544,7 +549,7 @@
                     {:else}
                       <span
                         class="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs text-[var(--color-warning)]"
-                        title="Non-commercial use only"
+                        title={t('analysis.gallery.license.nonCommercialOnly')}
                       >
                         <ShieldAlert class="size-3" />
                         {entry.license}
@@ -555,14 +560,14 @@
                       onclick={() => openLicenseDialog(entry)}
                       disabled={isInstalling || installingId !== null}
                       class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:opacity-50"
-                      aria-label="Install {entry.name}"
+                      aria-label="{t('analysis.gallery.install')} {entry.name}"
                     >
                       {#if isInstalling}
                         <Loader2 class="size-3.5 animate-spin" />
-                        Installing...
+                        {t('analysis.gallery.installing')}
                       {:else}
                         <Download class="size-3.5" />
-                        Install
+                        {t('analysis.gallery.install')}
                       {/if}
                     </button>
                   </div>
@@ -575,7 +580,7 @@
 
       {#if availableBirds.length === 0 && availableBats.length === 0}
         <p class="py-8 text-center text-sm text-[var(--color-base-content)]/60">
-          No additional models available for your platform.
+          {t('analysis.gallery.noAvailableModels')}
         </p>
       {/if}
     {/if}
@@ -586,21 +591,21 @@
 <main class="settings-page-content space-y-6" aria-label="Analysis settings configuration">
   <!-- Detection Settings Section -->
   <SettingsSection
-    title="Detection Settings"
-    description="Configure confidence thresholds for species classification."
+    title={t('analysis.detection.title')}
+    description={t('analysis.detection.description')}
     defaultOpen={true}
   >
     <div class="space-y-4">
       <div class="grid grid-cols-1 gap-x-6 md:grid-cols-2">
         <NumberField
-          label="Confidence Threshold"
+          label={t('analysis.detection.confidenceThreshold.label')}
           value={birdnet?.threshold ?? 0.3}
           onUpdate={updateThreshold}
           min={0}
           max={1}
           step={0.05}
           disabled={store.isLoading || store.isSaving}
-          helpText="Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+          helpText={t('analysis.detection.confidenceThreshold.helpText')}
         />
       </div>
     </div>
@@ -608,8 +613,8 @@
 
   <!-- Model Gallery Section -->
   <SettingsSection
-    title="Model Gallery"
-    description="Manage classifier models for bird and bat detection."
+    title={t('analysis.gallery.title')}
+    description={t('analysis.gallery.description')}
     defaultOpen={true}
   >
     <SettingsTabs tabs={galleryTabs} bind:activeTab={galleryTab} showActions={false} />
@@ -625,39 +630,49 @@
   {#if licenseModel}
     <div class="w-full max-w-lg p-6">
       <h3 id="license-dialog-title" class="text-lg font-semibold text-[var(--color-base-content)]">
-        License Agreement
+        {t('analysis.gallery.license.title')}
       </h3>
       <div class="mt-4 space-y-3">
         <div class="rounded-lg bg-[var(--color-base-200)] p-4 text-sm">
           <div class="space-y-2">
             <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/60">Model</span>
+              <span class="text-[var(--color-base-content)]/60"
+                >{t('analysis.gallery.license.model')}</span
+              >
               <span class="font-medium text-[var(--color-base-content)]">{licenseModel.name}</span>
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/60">Author</span>
+              <span class="text-[var(--color-base-content)]/60"
+                >{t('analysis.gallery.license.author')}</span
+              >
               <span class="text-[var(--color-base-content)]">{licenseModel.author}</span>
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/60">License</span>
+              <span class="text-[var(--color-base-content)]/60"
+                >{t('analysis.gallery.license.license')}</span
+              >
               <span class="text-[var(--color-base-content)]">{licenseModel.license}</span>
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/60">Commercial Use</span>
+              <span class="text-[var(--color-base-content)]/60"
+                >{t('analysis.gallery.license.commercialUse')}</span
+              >
               {#if licenseModel.commercialUse}
                 <span class="inline-flex items-center gap-1 text-[var(--color-success)]">
                   <Shield class="size-3.5" />
-                  Allowed
+                  {t('analysis.gallery.license.allowed')}
                 </span>
               {:else}
                 <span class="inline-flex items-center gap-1 text-[var(--color-warning)]">
                   <ShieldAlert class="size-3.5" />
-                  Not allowed
+                  {t('analysis.gallery.license.notAllowed')}
                 </span>
               {/if}
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/60">Download Size</span>
+              <span class="text-[var(--color-base-content)]/60"
+                >{t('analysis.gallery.license.downloadSize')}</span
+              >
               <span class="text-[var(--color-base-content)]"
                 >{formatBytes(licenseModel.totalSizeBytes)}</span
               >
@@ -671,8 +686,7 @@
           >
             <ShieldAlert class="mt-0.5 size-4 shrink-0 text-[var(--color-warning)]" />
             <p class="text-[var(--color-base-content)]">
-              This model is licensed for non-commercial use only. By installing, you agree to comply
-              with the license terms.
+              {t('analysis.gallery.license.nonCommercialWarning')}
             </p>
           </div>
         {/if}
@@ -683,14 +697,14 @@
           onclick={closeLicenseDialog}
           class="rounded-lg border border-[var(--color-base-300)] px-4 py-2 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           onclick={handleInstall}
           class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors"
         >
           <Download class="size-4" />
-          Accept & Install
+          {t('analysis.gallery.license.acceptAndInstall')}
         </button>
       </div>
     </div>
@@ -714,11 +728,10 @@
             id="remove-dialog-title"
             class="text-lg font-semibold text-[var(--color-base-content)]"
           >
-            Remove {removeConfirmModel.name}?
+            {t('analysis.gallery.removeDialog.title', { name: removeConfirmModel.name })}
           </h3>
           <p class="mt-2 text-sm text-[var(--color-base-content)]/70">
-            This will remove the model files from disk. Label data is retained for existing
-            detections.
+            {t('analysis.gallery.removeDialog.confirmation')}
           </p>
         </div>
       </div>
@@ -728,14 +741,14 @@
           onclick={closeRemoveDialog}
           class="rounded-lg border border-[var(--color-base-300)] px-4 py-2 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           onclick={handleUninstall}
           class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-error)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-error)]/80 transition-colors"
         >
           <Trash2 class="size-4" />
-          Remove
+          {t('analysis.gallery.remove')}
         </button>
       </div>
     </div>

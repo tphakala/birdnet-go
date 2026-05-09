@@ -1640,6 +1640,7 @@
     "title": "Settings - BirdNET-Go",
     "loading": "Loading settings...",
     "sections": {
+      "analysis": "Analysis",
       "node": "General",
       "userinterface": "Interface",
       "audio": "Audio",
@@ -4459,6 +4460,70 @@
         "citizenPoint3": "Use AI detections as a starting point for your own observations",
         "outro": "This approach ensures data quality for scientific research while maximizing your learning and enjoyment of birds.",
         "acknowledge": "I understand"
+      }
+    }
+  },
+  "analysis": {
+    "title": "Analysis",
+    "detection": {
+      "title": "Detection Settings",
+      "description": "Configure confidence thresholds for species classification.",
+      "confidenceThreshold": {
+        "label": "Confidence Threshold",
+        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+      }
+    },
+    "gallery": {
+      "title": "Model Gallery",
+      "description": "Manage classifier models for bird and bat detection.",
+      "tabs": {
+        "installed": "Installed",
+        "available": "Available"
+      },
+      "loading": "Loading models...",
+      "retry": "Retry",
+      "builtIn": "Built-in",
+      "builtInDescription": "Built-in bird species classifier by the BirdNET team.",
+      "species": "{count} species",
+      "install": "Install",
+      "installing": "Installing...",
+      "remove": "Remove",
+      "removing": "Removing...",
+      "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
+      "noAvailableModels": "No additional models available for your platform.",
+      "categories": {
+        "bird": "Bird Classifiers",
+        "bat": "Bat Classifiers"
+      },
+      "progress": {
+        "downloading": "Downloading...",
+        "verifying": "Verifying...",
+        "loading": "Loading...",
+        "complete": "Complete",
+        "failed": "Failed"
+      },
+      "license": {
+        "title": "License Agreement",
+        "model": "Model",
+        "author": "Author",
+        "license": "License",
+        "commercialUse": "Commercial Use",
+        "downloadSize": "Download Size",
+        "allowed": "Allowed",
+        "notAllowed": "Not allowed",
+        "commercialUseAllowed": "Commercial use allowed",
+        "nonCommercialOnly": "Non-commercial use only",
+        "nonCommercialWarning": "This model is licensed for non-commercial use only. By installing, you agree to comply with the license terms.",
+        "acceptAndInstall": "Accept & Install"
+      },
+      "removeDialog": {
+        "title": "Remove {name}?",
+        "confirmation": "This will remove the model files from disk. Label data is retained for existing detections."
+      },
+      "errors": {
+        "catalogLoadFailed": "Failed to load model catalog",
+        "installFailed": "Failed to start model installation",
+        "removeFailed": "Failed to remove model"
       }
     }
   },
