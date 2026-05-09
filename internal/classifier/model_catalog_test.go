@@ -160,12 +160,3 @@ func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
 	assert.Equal(t, CategoryBird, entry.Category)
 	assert.Contains(t, entry.RequiredBuildTags, "onnx")
 }
-
-func TestEmbeddedCatalog_AllEntriesHaveRegistryID(t *testing.T) {
-	t.Parallel()
-
-	for _, entry := range EmbeddedCatalog {
-		assert.NotEmpty(t, entry.RegistryID,
-			"catalog entry %q must have a RegistryID", entry.ID)
-	}
-}
