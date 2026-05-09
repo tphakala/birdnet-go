@@ -341,6 +341,94 @@
   </div>
 {/snippet}
 
+{#snippet modelCard(entry: CatalogEntry)}
+  {@const isInstalling = installingId === entry.id}
+  {@const progress = isInstalling ? downloadProgress : null}
+  <div class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4">
+    <div class="flex items-start gap-3">
+      <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
+        <BrainCircuit size={24} class="text-[var(--color-primary)]" />
+      </div>
+      <div class="min-w-0 flex-1">
+        <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
+          {entry.name}
+        </h4>
+        <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/70">
+          {entry.description}
+        </p>
+        <p class="mt-1 text-xs text-[var(--color-base-content)]/60">{entry.author}</p>
+      </div>
+    </div>
+
+    <!-- Progress bar (shown during install) -->
+    {#if progress}
+      <div class="mt-3 space-y-1.5">
+        <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--color-base-300)]">
+          <div
+            class="h-full rounded-full bg-[var(--color-primary)] transition-all duration-300"
+            style:width="{progressPercent(progress)}%"
+          ></div>
+        </div>
+        <div class="flex items-center justify-between text-xs text-[var(--color-base-content)]/60">
+          <span>{statusLabel(progress.status)}</span>
+          {#if progress.status === 'downloading' && progress.totalBytes > 0}
+            <span>
+              {formatBytes(progress.downloadedBytes)} / {formatBytes(progress.totalBytes)}
+            </span>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
+    <div
+      class="mt-3 flex items-center justify-between border-t border-[var(--color-base-300)] pt-3"
+    >
+      <div class="flex items-center gap-2 text-xs text-[var(--color-base-content)]/60">
+        <span>v{entry.version}</span>
+        <span>{t('analysis.gallery.species', { count: entry.speciesCount })}</span>
+        {#if entry.region}
+          <span>{entry.region}</span>
+        {/if}
+      </div>
+      <div class="flex items-center gap-1.5">
+        <!-- License badge -->
+        {#if entry.commercialUse}
+          <span
+            class="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs text-[var(--color-success)]"
+            title={t('analysis.gallery.license.commercialUseAllowed')}
+          >
+            <Shield class="size-3" />
+            {entry.license}
+          </span>
+        {:else}
+          <span
+            class="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs text-[var(--color-warning)]"
+            title={t('analysis.gallery.license.nonCommercialOnly')}
+          >
+            <ShieldAlert class="size-3" />
+            {entry.license}
+          </span>
+        {/if}
+        <!-- Install button -->
+        <button
+          onclick={() => openLicenseDialog(entry)}
+          disabled={isInstalling || installingId !== null}
+          class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:opacity-50"
+          aria-label="{t('analysis.gallery.install')} {entry.name}"
+        >
+          {#if isInstalling}
+            <Loader2 class="size-3.5 animate-spin" />
+            {t('analysis.gallery.installing')}
+          {:else}
+            <Download class="size-3.5" />
+            {t('analysis.gallery.install')}
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/snippet}
+
 {#snippet availableTabContent()}
   <div class="space-y-6">
     {#if loading}
@@ -376,97 +464,7 @@
           </h3>
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {#each availableBirds as entry (entry.id)}
-              {@const isInstalling = installingId === entry.id}
-              {@const progress = isInstalling ? downloadProgress : null}
-              <div
-                class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4"
-              >
-                <div class="flex items-start gap-3">
-                  <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-                    <BrainCircuit size={24} class="text-[var(--color-primary)]" />
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
-                      {entry.name}
-                    </h4>
-                    <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/70">
-                      {entry.description}
-                    </p>
-                    <p class="mt-1 text-xs text-[var(--color-base-content)]/60">{entry.author}</p>
-                  </div>
-                </div>
-
-                <!-- Progress bar (shown during install) -->
-                {#if progress}
-                  <div class="mt-3 space-y-1.5">
-                    <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--color-base-300)]">
-                      <div
-                        class="h-full rounded-full bg-[var(--color-primary)] transition-all duration-300"
-                        style:width="{progressPercent(progress)}%"
-                      ></div>
-                    </div>
-                    <div
-                      class="flex items-center justify-between text-xs text-[var(--color-base-content)]/60"
-                    >
-                      <span>{statusLabel(progress.status)}</span>
-                      {#if progress.status === 'downloading' && progress.totalBytes > 0}
-                        <span>
-                          {formatBytes(progress.downloadedBytes)} / {formatBytes(
-                            progress.totalBytes
-                          )}
-                        </span>
-                      {/if}
-                    </div>
-                  </div>
-                {/if}
-
-                <div
-                  class="mt-3 flex items-center justify-between border-t border-[var(--color-base-300)] pt-3"
-                >
-                  <div class="flex items-center gap-2 text-xs text-[var(--color-base-content)]/60">
-                    <span>v{entry.version}</span>
-                    <span>{t('analysis.gallery.species', { count: entry.speciesCount })}</span>
-                    {#if entry.region}
-                      <span>{entry.region}</span>
-                    {/if}
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <!-- License badge -->
-                    {#if entry.commercialUse}
-                      <span
-                        class="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs text-[var(--color-success)]"
-                        title={t('analysis.gallery.license.commercialUseAllowed')}
-                      >
-                        <Shield class="size-3" />
-                        {entry.license}
-                      </span>
-                    {:else}
-                      <span
-                        class="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs text-[var(--color-warning)]"
-                        title={t('analysis.gallery.license.nonCommercialOnly')}
-                      >
-                        <ShieldAlert class="size-3" />
-                        {entry.license}
-                      </span>
-                    {/if}
-                    <!-- Install button -->
-                    <button
-                      onclick={() => openLicenseDialog(entry)}
-                      disabled={isInstalling || installingId !== null}
-                      class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:opacity-50"
-                      aria-label="{t('analysis.gallery.install')} {entry.name}"
-                    >
-                      {#if isInstalling}
-                        <Loader2 class="size-3.5 animate-spin" />
-                        {t('analysis.gallery.installing')}
-                      {:else}
-                        <Download class="size-3.5" />
-                        {t('analysis.gallery.install')}
-                      {/if}
-                    </button>
-                  </div>
-                </div>
-              </div>
+              {@render modelCard(entry)}
             {/each}
           </div>
         </div>
@@ -482,97 +480,7 @@
           </h3>
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {#each availableBats as entry (entry.id)}
-              {@const isInstalling = installingId === entry.id}
-              {@const progress = isInstalling ? downloadProgress : null}
-              <div
-                class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4"
-              >
-                <div class="flex items-start gap-3">
-                  <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-                    <BrainCircuit size={24} class="text-[var(--color-primary)]" />
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
-                      {entry.name}
-                    </h4>
-                    <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/70">
-                      {entry.description}
-                    </p>
-                    <p class="mt-1 text-xs text-[var(--color-base-content)]/60">{entry.author}</p>
-                  </div>
-                </div>
-
-                <!-- Progress bar (shown during install) -->
-                {#if progress}
-                  <div class="mt-3 space-y-1.5">
-                    <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--color-base-300)]">
-                      <div
-                        class="h-full rounded-full bg-[var(--color-primary)] transition-all duration-300"
-                        style:width="{progressPercent(progress)}%"
-                      ></div>
-                    </div>
-                    <div
-                      class="flex items-center justify-between text-xs text-[var(--color-base-content)]/60"
-                    >
-                      <span>{statusLabel(progress.status)}</span>
-                      {#if progress.status === 'downloading' && progress.totalBytes > 0}
-                        <span>
-                          {formatBytes(progress.downloadedBytes)} / {formatBytes(
-                            progress.totalBytes
-                          )}
-                        </span>
-                      {/if}
-                    </div>
-                  </div>
-                {/if}
-
-                <div
-                  class="mt-3 flex items-center justify-between border-t border-[var(--color-base-300)] pt-3"
-                >
-                  <div class="flex items-center gap-2 text-xs text-[var(--color-base-content)]/60">
-                    <span>v{entry.version}</span>
-                    <span>{t('analysis.gallery.species', { count: entry.speciesCount })}</span>
-                    {#if entry.region}
-                      <span>{entry.region}</span>
-                    {/if}
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <!-- License badge -->
-                    {#if entry.commercialUse}
-                      <span
-                        class="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs text-[var(--color-success)]"
-                        title={t('analysis.gallery.license.commercialUseAllowed')}
-                      >
-                        <Shield class="size-3" />
-                        {entry.license}
-                      </span>
-                    {:else}
-                      <span
-                        class="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs text-[var(--color-warning)]"
-                        title={t('analysis.gallery.license.nonCommercialOnly')}
-                      >
-                        <ShieldAlert class="size-3" />
-                        {entry.license}
-                      </span>
-                    {/if}
-                    <!-- Install button -->
-                    <button
-                      onclick={() => openLicenseDialog(entry)}
-                      disabled={isInstalling || installingId !== null}
-                      class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:opacity-50"
-                      aria-label="{t('analysis.gallery.install')} {entry.name}"
-                    >
-                      {#if isInstalling}
-                        <Loader2 class="size-3.5 animate-spin" />
-                        {t('analysis.gallery.installing')}
-                      {:else}
-                        <Download class="size-3.5" />
-                        {t('analysis.gallery.install')}
-                      {/if}
-                    </button>
-                  </div>
-                </div>
-              </div>
+              {@render modelCard(entry)}
             {/each}
           </div>
         </div>

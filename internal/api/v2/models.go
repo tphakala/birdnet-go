@@ -161,7 +161,7 @@ func (c *Controller) InstallModel(ctx echo.Context) error {
 
 	return ctx.JSON(http.StatusAccepted, map[string]string{
 		"catalogId": catalogID,
-		"status":    "downloading",
+		"status":    classifier.StatusDownloading,
 	})
 }
 
@@ -236,7 +236,7 @@ func (c *Controller) StreamInstallProgress(ctx echo.Context) error {
 				if c.ModelManager.IsInstalled(catalogID) {
 					completeState := classifier.DownloadState{
 						CatalogID: catalogID,
-						Status:    "complete",
+						Status:    classifier.StatusComplete,
 					}
 					_ = writeSSEEvent(ctx, "progress", completeState)
 					flusher.Flush()
@@ -256,7 +256,7 @@ func (c *Controller) StreamInstallProgress(ctx echo.Context) error {
 			flusher.Flush()
 
 			// Terminal states end the stream.
-			if state.Status == "complete" || state.Status == "failed" {
+			if state.Status == classifier.StatusComplete || state.Status == classifier.StatusFailed {
 				return nil
 			}
 

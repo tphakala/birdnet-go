@@ -23,6 +23,15 @@ import (
 // that cannot be uninstalled.
 const permanentRegistryID = "BirdNET_V2.4"
 
+// Download status constants used in DownloadState.Status and SSE progress events.
+const (
+	StatusDownloading = "downloading"
+	StatusVerifying   = "verifying"
+	StatusLoading     = "loading"
+	StatusComplete    = "complete"
+	StatusFailed      = "failed"
+)
+
 // ModelManager handles the lifecycle of downloadable models.
 type ModelManager struct {
 	modelsDir    string
@@ -273,7 +282,7 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	// Record download as in-progress.
 	mm.downloading[entry.ID] = &DownloadState{
 		CatalogID: entry.ID,
-		Status:    "downloading",
+		Status:    StatusDownloading,
 	}
 	mm.mu.Unlock()
 
@@ -338,7 +347,7 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 		if state, ok := mm.downloading[entry.ID]; ok {
 			state.TotalBytes = f.SizeBytes
 			state.DownloadedBytes = 0
-			state.Status = "downloading"
+			state.Status = StatusDownloading
 		}
 		mm.mu.Unlock()
 
@@ -373,11 +382,14 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	delete(mm.downloading, entry.ID)
 	mm.mu.Unlock()
 
-	// Send final complete status.
+	// Send final complete status (non-blocking in case the consumer is gone).
 	if progress != nil {
-		progress <- DownloadState{
+		select {
+		case progress <- DownloadState{
 			CatalogID: entry.ID,
-			Status:    "complete",
+			Status:    StatusComplete,
+		}:
+		default:
 		}
 	}
 
@@ -470,12 +482,16 @@ func (mm *ModelManager) downloadFile(url, destPath, expectedSHA256 string, total
 			}
 			downloaded += int64(n)
 
-			// Report progress at intervals.
+			// Report progress at intervals (non-blocking to avoid stalling
+			// the download if the SSE consumer disconnects).
 			if progress != nil && (downloaded-lastReport >= progressInterval || readErr == io.EOF) {
-				progress <- DownloadState{
+				select {
+				case progress <- DownloadState{
 					TotalBytes:      totalBytes,
 					DownloadedBytes: downloaded,
-					Status:          "downloading",
+					Status:          StatusDownloading,
+				}:
+				default:
 				}
 				lastReport = downloaded
 			}

@@ -283,7 +283,7 @@ func TestModelManager_Install(t *testing.T) {
 	close(progress)
 	var foundComplete bool
 	for s := range progress {
-		if s.Status == "complete" {
+		if s.Status == StatusComplete {
 			foundComplete = true
 		}
 	}
