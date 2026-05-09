@@ -109,6 +109,12 @@ export interface RangeFilterSpeciesResult {
   species: RangeFilterSpeciesEntry[];
 }
 
+export interface BatSettings {
+  enabled: boolean;
+  threshold: number;
+  locale?: string;
+}
+
 export interface SQLiteSettings {
   enabled: boolean;
   path: string;
@@ -773,6 +779,7 @@ export interface SettingsFormData {
   systemId?: string;
   main: MainSettings;
   birdnet: BirdNetSettings;
+  bat?: BatSettings;
   input?: unknown; // Not exposed via JSON
   realtime?: RealtimeSettings;
   webServer?: WebServerSettings;
@@ -832,6 +839,10 @@ function createEmptySettings(): SettingsFormData {
         speciesCount: null,
         species: [],
       },
+    },
+    bat: {
+      enabled: false,
+      threshold: 0.5,
     },
     realtime: {
       interval: 15,
@@ -1063,6 +1074,8 @@ export const settingsDataLoaded = derived(settingsStore, $store => $store.dataLo
 export const mainSettings = derived(settingsStore, $store => $store.formData.main);
 
 export const birdnetSettings = derived(settingsStore, $store => $store.formData.birdnet);
+
+export const batSettings = derived(settingsStore, $store => $store.formData.bat);
 
 export const realtimeSettings = derived(settingsStore, $store => $store.formData.realtime);
 
