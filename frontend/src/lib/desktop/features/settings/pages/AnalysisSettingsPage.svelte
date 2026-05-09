@@ -789,6 +789,16 @@
       title={t('analysis.detection.title')}
       description={t('analysis.detection.description')}
       defaultOpen={true}
+      originalData={{
+        threshold: store.originalData.birdnet?.threshold,
+        locale: store.originalData.birdnet?.locale,
+        batThreshold: store.originalData.bat?.threshold,
+      }}
+      currentData={{
+        threshold: birdnet?.threshold,
+        locale: birdnet?.locale,
+        batThreshold: bat.threshold,
+      }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <NumberField
@@ -1050,6 +1060,16 @@
       title={t('analysis.advanced.title')}
       description={t('analysis.advanced.description')}
       defaultOpen={false}
+      originalData={{
+        threads: store.originalData.birdnet?.threads,
+        modelPath: store.originalData.birdnet?.modelPath,
+        labelPath: store.originalData.birdnet?.labelPath,
+      }}
+      currentData={{
+        threads: birdnet?.threads,
+        modelPath: birdnet?.modelPath,
+        labelPath: birdnet?.labelPath,
+      }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <NumberField
