@@ -71,7 +71,7 @@ Performance Optimizations:
     Shield,
     LifeBuoy,
     Paintbrush,
-    BrainCircuit,
+    Brain,
   } from '@lucide/svelte';
   import { flyout } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
@@ -854,7 +854,7 @@ Performance Optimizations:
                           : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
-                      <BrainCircuit class="size-4 shrink-0" />{t('settings.sections.analysis')}
+                      <Brain class="size-4 shrink-0" />{t('settings.sections.analysis')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.settingsSpecies)}
@@ -994,7 +994,7 @@ Performance Optimizations:
                         : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
-                    <BrainCircuit class="size-4 shrink-0" />{t('settings.sections.analysis')}
+                    <Brain class="size-4 shrink-0" />{t('settings.sections.analysis')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsSpecies)}

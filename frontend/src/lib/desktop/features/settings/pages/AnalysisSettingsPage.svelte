@@ -396,10 +396,12 @@
   let modalElement: HTMLElement | null = null;
 
   $effect(() => {
+    let focusTimer: ReturnType<typeof setTimeout> | undefined;
+
     if (rangeFilterState.showModal) {
       previouslyFocusedElement = document.activeElement as HTMLElement;
 
-      setTimeout(() => {
+      focusTimer = setTimeout(() => {
         const modal = document.querySelector(
           '[role="dialog"][aria-labelledby="modal-title"]'
         ) as HTMLElement;
@@ -422,6 +424,7 @@
     }
 
     return () => {
+      clearTimeout(focusTimer);
       if (modalElement && modalTrapHandler) {
         modalElement.removeEventListener('keydown', modalTrapHandler);
         modalElement = null;
@@ -507,12 +510,17 @@
     }
   }
 
-  // Reactive effect: re-test range filter when coordinates or threshold change
+  // Narrow derived values so the effect only fires when coordinates or threshold change
+  const rangeFilterLat = $derived($birdnetSettings?.latitude);
+  const rangeFilterLng = $derived($birdnetSettings?.longitude);
+  const rangeFilterThreshold = $derived($birdnetSettings?.rangeFilter?.threshold);
+  const rangeFilterConfigured = $derived($birdnetSettings?.locationConfigured);
+
   $effect(() => {
-    const _lat = birdnet?.latitude;
-    const _lng = birdnet?.longitude;
-    const _threshold = birdnet?.rangeFilter?.threshold;
-    const configured = birdnet?.locationConfigured;
+    const _lat = rangeFilterLat;
+    const _lng = rangeFilterLng;
+    const _threshold = rangeFilterThreshold;
+    const configured = rangeFilterConfigured;
 
     if (configured && _lat != null && _lng != null && _threshold != null) {
       debouncedTestRangeFilter();
@@ -597,14 +605,11 @@
   }
 
   function updateBatThreshold(value: number) {
-    settingsActions.updateSection('bat', { ...bat, threshold: value });
+    settingsActions.updateSection('bat', { threshold: value });
   }
 
   function updateThreshold(value: number) {
-    settingsActions.updateSection('birdnet', {
-      ...birdnet,
-      threshold: value,
-    });
+    settingsActions.updateSection('birdnet', { threshold: value });
   }
 
   // ── Gallery tab definitions ───────────────────────────────────────────
