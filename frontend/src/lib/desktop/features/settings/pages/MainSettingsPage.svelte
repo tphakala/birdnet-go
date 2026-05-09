@@ -2,14 +2,12 @@
   Main Settings Page Component
 
   Purpose: Main configuration settings for BirdNET-Go including node settings,
-  BirdNET parameters, database configuration, and location-based filtering.
+  database configuration, and location-based filtering.
 
   Features:
-  - Tabbed interface: General, Detection, Location, Database
+  - Tabbed interface: General, Location, Database
   - Node identification and settings
-  - BirdNET analysis parameters (sensitivity, threshold, overlap)
-  - Dynamic threshold configuration
-  - Range filter with interactive map (lazy loaded)
+  - Interactive map for station location (lazy loaded)
   - Database type selection (SQLite/MySQL)
 
   Props: None - This is a page component that uses global settings stores
@@ -18,7 +16,6 @@
   - Map lazy loading - only initialized when Location tab is active
   - Cached CSRF token with $derived to avoid repeated DOM queries
   - Reactive computed properties for change detection
-  - Async API loading for non-critical data
 
   @component
 -->
@@ -28,7 +25,6 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
-  import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import WeatherIcon, { type WeatherProvider } from '$lib/desktop/components/ui/WeatherIcon.svelte';
   import DatabaseIcon, { type DatabaseType } from '$lib/desktop/components/ui/DatabaseIcon.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
@@ -43,7 +39,6 @@
     settingsActions,
     mainSettings,
     birdnetSettings,
-    dynamicThresholdSettings,
     outputSettings,
     realtimeSettings,
   } from '$lib/stores/settings';
@@ -55,17 +50,7 @@
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
-  import {
-    Settings,
-    Radar,
-    MapPin,
-    Database,
-    XCircle,
-    X,
-    Maximize2,
-    Download,
-    RefreshCw,
-  } from '@lucide/svelte';
+  import { Settings, MapPin, Database, XCircle, X, Maximize2, RefreshCw } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
@@ -85,11 +70,6 @@
   // Extended option type for weather provider
   interface WeatherOption extends SelectOption {
     providerCode: WeatherProvider;
-  }
-
-  // Extended option type for BirdNET locale
-  interface BirdnetLocaleOption extends SelectOption {
-    localeCode: FlagLocale;
   }
 
   // Extended option type for database
@@ -119,16 +99,6 @@
       rangeFilter: {
         threshold: 0.01,
       },
-    },
-    dynamicThreshold: $dynamicThresholdSettings || {
-      enabled: false,
-      debug: false,
-      trigger: 0.8,
-      min: 0.3,
-      validHours: 24,
-    },
-    falsePositiveFilter: $realtimeSettings?.falsePositiveFilter ?? {
-      level: 0,
     },
     output: $outputSettings || {
       sqlite: {
@@ -174,40 +144,6 @@
       hasSettingsChanged(store.originalData.sentry, store.formData.sentry)
   );
 
-  // Detection tab includes BirdNET params, False Positive Filter, and Range Filter
-  let detectionTabHasChanges = $derived(
-    hasSettingsChanged(
-      {
-        sensitivity: store.originalData.birdnet?.sensitivity,
-        threshold: store.originalData.birdnet?.threshold,
-        overlap: store.originalData.birdnet?.overlap,
-        locale: store.originalData.birdnet?.locale,
-        threads: store.originalData.birdnet?.threads,
-        modelPath: store.originalData.birdnet?.modelPath,
-        labelPath: store.originalData.birdnet?.labelPath,
-        rangeFilter: store.originalData.birdnet?.rangeFilter,
-      },
-      {
-        sensitivity: store.formData.birdnet?.sensitivity,
-        threshold: store.formData.birdnet?.threshold,
-        overlap: store.formData.birdnet?.overlap,
-        locale: store.formData.birdnet?.locale,
-        threads: store.formData.birdnet?.threads,
-        modelPath: store.formData.birdnet?.modelPath,
-        labelPath: store.formData.birdnet?.labelPath,
-        rangeFilter: store.formData.birdnet?.rangeFilter,
-      }
-    ) ||
-      hasSettingsChanged(
-        store.originalData.realtime?.dynamicThreshold,
-        store.formData.realtime?.dynamicThreshold
-      ) ||
-      hasSettingsChanged(
-        store.originalData.realtime?.falsePositiveFilter,
-        store.formData.realtime?.falsePositiveFilter
-      )
-  );
-
   // Location tab includes station location and weather settings
   let locationTabHasChanges = $derived(
     hasSettingsChanged(
@@ -224,28 +160,6 @@
 
   let databaseTabHasChanges = $derived(
     hasSettingsChanged(store.originalData.output, store.formData.output)
-  );
-
-  // API State Management
-  interface ApiState<T> {
-    loading: boolean;
-    error: string | null;
-    data: T;
-  }
-
-  let birdnetLocales = $state<ApiState<Array<{ value: string; label: string }>>>({
-    loading: true,
-    error: null,
-    data: [],
-  });
-
-  // Transform birdnetLocales to include flag locale code
-  let birdnetLocaleOptions = $derived<BirdnetLocaleOption[]>(
-    birdnetLocales.data.map(locale => ({
-      value: locale.value,
-      label: locale.label,
-      localeCode: locale.value as FlagLocale,
-    }))
   );
 
   // Weather test state
@@ -278,115 +192,6 @@
     data: null,
   });
 
-  // Species type for range filter API responses
-  interface RangeFilterSpecies {
-    commonName?: string;
-    scientificName?: string;
-    label?: string;
-  }
-
-  // Range filter state
-  let rangeFilterState = $state<{
-    speciesCount: number | null;
-    loading: boolean;
-    testing: boolean;
-    downloading: boolean;
-    error: string | null;
-    showModal: boolean;
-    species: RangeFilterSpecies[];
-  }>({
-    speciesCount: null,
-    loading: false,
-    testing: false,
-    downloading: false,
-    error: null,
-    showModal: false,
-    species: [],
-  });
-
-  // Focus management for modal accessibility
-  let previouslyFocusedElement: HTMLElement | null = null;
-
-  function getFocusableElements(container: HTMLElement): HTMLElement[] {
-    const focusableSelectors = [
-      'button:not([disabled])',
-      'input:not([disabled])',
-      'select:not([disabled])',
-      'textarea:not([disabled])',
-      'a[href]',
-      '[tabindex]:not([tabindex="-1"])',
-    ];
-
-    const elements = container.querySelectorAll(focusableSelectors.join(', '));
-    return Array.from(elements).filter(el => {
-      const style = window.getComputedStyle(el as HTMLElement);
-      return style.display !== 'none' && style.visibility !== 'hidden';
-    }) as HTMLElement[];
-  }
-
-  function handleFocusTrap(event: KeyboardEvent, modal: HTMLElement) {
-    if (event.key !== 'Tab') return;
-
-    const focusableElements = getFocusableElements(modal);
-    if (focusableElements.length === 0) return;
-
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
-
-    if (event.shiftKey) {
-      if (document.activeElement === firstElement) {
-        event.preventDefault();
-        lastElement.focus();
-      }
-    } else {
-      if (document.activeElement === lastElement) {
-        event.preventDefault();
-        firstElement.focus();
-      }
-    }
-  }
-
-  // Store event handler reference for cleanup
-  let modalTrapHandler: ((_event: KeyboardEvent) => void) | null = null;
-  let modalElement: HTMLElement | null = null;
-
-  $effect(() => {
-    if (rangeFilterState.showModal) {
-      previouslyFocusedElement = document.activeElement as HTMLElement;
-
-      setTimeout(() => {
-        const modal = document.querySelector(
-          '[role="dialog"][aria-labelledby="modal-title"]'
-        ) as HTMLElement;
-        if (modal) {
-          const focusableElements = getFocusableElements(modal);
-          if (focusableElements.length > 0) {
-            focusableElements[0].focus();
-          } else {
-            modal.focus();
-          }
-
-          // Store references for cleanup
-          modalElement = modal;
-          modalTrapHandler = (event: KeyboardEvent) => handleFocusTrap(event, modal);
-          modal.addEventListener('keydown', modalTrapHandler);
-        }
-      }, 0);
-    } else if (previouslyFocusedElement) {
-      previouslyFocusedElement.focus();
-      previouslyFocusedElement = null;
-    }
-
-    // Cleanup function - properly removes the event listener
-    return () => {
-      if (modalElement && modalTrapHandler) {
-        modalElement.removeEventListener('keydown', modalTrapHandler);
-        modalElement = null;
-        modalTrapHandler = null;
-      }
-    };
-  });
-
   // Map state - LAZY LOADED when Location tab is active
   let mapElement: HTMLElement | undefined = $state();
   let modalMapElement: HTMLElement | undefined = $state();
@@ -407,11 +212,6 @@
   // NOT set this and naturally retry on the next reactive cycle.
   let mapLoadError = $state(false);
   let mapLibraryLoading = $state(false);
-
-  // Load initial data
-  $effect(() => {
-    loadInitialData();
-  });
 
   // LAZY LOADING: Initialize map only when Location tab becomes active.
   // The Location tab panel is conditionally rendered via `{#if isActive}` in
@@ -575,31 +375,6 @@
       }
     };
   });
-
-  async function loadInitialData() {
-    await Promise.all([loadBirdnetLocales(), loadRangeFilterCount()]);
-  }
-
-  async function loadBirdnetLocales() {
-    birdnetLocales.loading = true;
-    birdnetLocales.error = null;
-
-    try {
-      const localesData = await api.get<Record<string, string>>('/api/v2/settings/locales');
-      birdnetLocales.data = Object.entries(localesData || {}).map(([value, label]) => ({
-        value,
-        label: label as string,
-      }));
-    } catch (error) {
-      if (error instanceof ApiError) {
-        toastActions.warning(t('settings.main.errors.localesLoadFailed'));
-      }
-      birdnetLocales.error = t('settings.main.errors.localesLoadFailed');
-      birdnetLocales.data = [{ value: 'en', label: 'English' }];
-    } finally {
-      birdnetLocales.loading = false;
-    }
-  }
 
   // Load database statistics from the API
   async function loadDatabaseStats() {
@@ -772,7 +547,6 @@
     updateLocationSettings(roundedLat, roundedLng);
 
     updateMapView(roundedLat, roundedLng);
-    debouncedTestRangeFilter();
   }
 
   function updateMapView(lat: number, lng: number) {
@@ -827,8 +601,6 @@
               marker.setLngLat([roundedLng, roundedLat]);
             }
           }
-
-          debouncedTestRangeFilter();
         });
       }
     }
@@ -897,8 +669,6 @@
               marker.setLngLat([roundedLng, roundedLat]);
             }
           }
-
-          debouncedTestRangeFilter();
         });
       }
 
@@ -925,8 +695,6 @@
               marker.setLngLat([roundedLng, roundedLat]);
             }
           }
-
-          debouncedTestRangeFilter();
         });
       }
     } catch (error) {
@@ -956,96 +724,6 @@
     mapModalOpen = false;
   }
 
-  // Range filter functions
-  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
-  let loadingDelayTimer: ReturnType<typeof setTimeout> | undefined;
-
-  function debouncedTestRangeFilter() {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      testCurrentRangeFilter();
-    }, 150);
-  }
-
-  async function loadRangeFilterCount() {
-    try {
-      interface CountResponse {
-        count: number;
-      }
-      const data = await api.get<CountResponse>('/api/v2/range/species/count');
-      rangeFilterState.speciesCount = data.count;
-    } catch (error) {
-      logger.error('Failed to load range filter count:', error);
-      rangeFilterState.error = t('settings.main.errors.rangeFilterCountFailed');
-    }
-  }
-
-  async function testCurrentRangeFilter() {
-    if (rangeFilterState.testing || !settings.birdnet.locationConfigured) return;
-
-    clearTimeout(loadingDelayTimer);
-
-    loadingDelayTimer = setTimeout(() => {
-      rangeFilterState.testing = true;
-    }, 100);
-
-    rangeFilterState.error = null;
-
-    try {
-      const data = await api.post<{ count: number; species?: RangeFilterSpecies[] }>(
-        '/api/v2/range/species/test',
-        {
-          latitude: settings.birdnet.latitude,
-          longitude: settings.birdnet.longitude,
-          threshold: settings.birdnet.rangeFilter.threshold,
-        }
-      );
-
-      rangeFilterState.speciesCount = data.count;
-
-      if (rangeFilterState.showModal) {
-        rangeFilterState.species = data.species || [];
-      }
-    } catch (error) {
-      logger.error('Failed to test range filter:', error);
-      rangeFilterState.error = t('settings.main.errors.rangeFilterTestFailed');
-      rangeFilterState.speciesCount = null;
-    } finally {
-      clearTimeout(loadingDelayTimer);
-      rangeFilterState.testing = false;
-    }
-  }
-
-  async function loadRangeFilterSpecies() {
-    if (rangeFilterState.loading || !settings.birdnet.locationConfigured) return;
-
-    rangeFilterState.loading = true;
-    rangeFilterState.error = null;
-
-    try {
-      const data = await settingsActions.loadRangeFilterSpecies();
-      rangeFilterState.species = data.species;
-      rangeFilterState.speciesCount = data.count;
-    } catch (error) {
-      logger.error('Failed to load species list:', error);
-      rangeFilterState.error = t('settings.main.errors.rangeFilterLoadFailed');
-    } finally {
-      rangeFilterState.loading = false;
-    }
-  }
-
-  $effect(() => {
-    // Track coordinate and threshold changes as dependencies
-    const _lat = settings.birdnet.latitude;
-    const _lng = settings.birdnet.longitude;
-    const _threshold = settings.birdnet.rangeFilter.threshold;
-    const configured = settings.birdnet.locationConfigured;
-
-    if (configured && _lat != null && _lng != null && _threshold != null) {
-      debouncedTestRangeFilter();
-    }
-  });
-
   // Update handlers
   function updateMainName(name: string) {
     settingsActions.updateSection('main', { name });
@@ -1060,12 +738,6 @@
     } else {
       settingsActions.updateSection('birdnet', { [key]: value });
     }
-  }
-
-  function updateDynamicThreshold(key: string, value: number | boolean) {
-    settingsActions.updateSection('realtime', {
-      dynamicThreshold: { ...settings.dynamicThreshold, [key]: value },
-    });
   }
 
   function updateSQLiteSettings(updates: Partial<{ enabled: boolean; path: string }>) {
@@ -1105,155 +777,6 @@
       ...settings.sentry,
       enabled,
     });
-  }
-
-  // False Positive Filter helpers and update handler
-  // Tolerance for floating-point comparison (overlap values have 1 decimal precision)
-  const OVERLAP_COMPARISON_TOLERANCE = 0.001;
-
-  // Minimum overlap and threshold values must match backend:
-  // internal/analysis/processor/false_positive_filter.go
-  const falsePositiveFilterLevels = [
-    {
-      value: 0,
-      name: 'Off',
-      descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.off',
-      minOverlap: 0.0,
-      threshold: 0.0,
-    },
-    {
-      value: 1,
-      name: 'Lenient',
-      descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.lenient',
-      minOverlap: 2.0,
-      threshold: 0.2,
-    },
-    {
-      value: 2,
-      name: 'Moderate',
-      descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.moderate',
-      minOverlap: 2.2,
-      threshold: 0.3,
-    },
-    {
-      value: 3,
-      name: 'Balanced',
-      descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.balanced',
-      minOverlap: 2.4,
-      threshold: 0.5,
-    },
-    {
-      value: 4,
-      name: 'Strict',
-      descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.strict',
-      minOverlap: 2.7,
-      threshold: 0.6,
-    },
-    {
-      value: 5,
-      name: 'Maximum',
-      descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.maximum',
-      minOverlap: 2.8,
-      threshold: 0.7,
-    },
-  ];
-
-  // Constants matching backend: internal/analysis/processor/processor.go
-  const CHUNK_DURATION_SECONDS = 3.0;
-  const REFERENCE_WINDOW_SECONDS = 6.0;
-  const MIN_SEGMENT_LENGTH = 0.1;
-  const FLOAT_EPSILON = 1e-9;
-
-  // Calculates minimum required detections based on overlap and filter level.
-  // Must match backend: internal/analysis/processor/processor.go calculateMinDetectionsFromSettings()
-  function calculateMinDetections(level: number, overlap: number): number {
-    if (level === 0) return 1;
-
-    const levelData = safeArrayAccess(falsePositiveFilterLevels, level);
-    if (!levelData) return 1;
-
-    const segmentLength = Math.max(MIN_SEGMENT_LENGTH, CHUNK_DURATION_SECONDS - overlap);
-    const maxDetectionsIn6s = REFERENCE_WINDOW_SECONDS / segmentLength;
-    const required = maxDetectionsIn6s * levelData.threshold - FLOAT_EPSILON;
-    return Math.max(1, Math.ceil(required));
-  }
-
-  function getFalsePositiveFilterLevelName(level: number): string {
-    return safeArrayAccess(falsePositiveFilterLevels, level)?.name ?? 'Unknown';
-  }
-
-  function getFalsePositiveFilterDescription(level: number, overlap: number): string {
-    const levelData = safeArrayAccess(falsePositiveFilterLevels, level);
-    if (!levelData) return '';
-
-    const minDet = calculateMinDetections(level, overlap);
-    const baseDescription = t(levelData.descriptionKey);
-
-    if (level === 0) return baseDescription;
-
-    return t('settings.main.sections.falsePositiveFilter.detectionCount', {
-      count: minDet.toString(),
-      description: baseDescription,
-    });
-  }
-
-  function getMinimumOverlapForLevel(level: number): number {
-    return safeArrayAccess(falsePositiveFilterLevels, level)?.minOverlap ?? 0.0;
-  }
-
-  function getFalsePositiveFilterBadgeClass(level: number): string {
-    switch (level) {
-      case 1:
-        return 'bg-[var(--color-success)] text-[var(--color-success-content)]'; // Lenient - green (easy on resources)
-      case 2:
-        return 'bg-[var(--color-info)] text-[var(--color-info-content)]'; // Moderate - blue
-      case 3:
-        return 'bg-[var(--color-warning)] text-[var(--color-warning-content)]'; // Balanced - yellow/amber
-      case 4:
-      case 5:
-        return 'bg-[var(--color-error)] text-[var(--color-error-content)]'; // Strict/Maximum - red (requires RPi 4+)
-      case 0:
-      default:
-        return 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]'; // Off - muted/neutral
-    }
-  }
-
-  function updateFalsePositiveFilterLevel(newLevel: number) {
-    // Get the OLD level before updating
-    const oldLevel = settings.falsePositiveFilter.level;
-    const oldMinOverlap = getMinimumOverlapForLevel(oldLevel);
-
-    // Get minimum overlap required for the NEW level
-    const newMinOverlap = getMinimumOverlapForLevel(newLevel);
-    const currentOverlap = settings.birdnet.overlap;
-
-    // Update the filter level
-    settingsActions.updateSection('realtime', {
-      falsePositiveFilter: { level: newLevel },
-    });
-
-    // Auto-adjust overlap if current value is below minimum required (going UP)
-    if (currentOverlap < newMinOverlap) {
-      settingsActions.updateSection('birdnet', { overlap: newMinOverlap });
-      toastActions.info(
-        t('settings.main.sections.falsePositiveFilter.overlapAdjusted', {
-          overlap: newMinOverlap.toFixed(1),
-        })
-      );
-    }
-    // Auto-reduce overlap if going DOWN and overlap equals the old minimum
-    // (indicating it was set by the filter, not manually by the user)
-    else if (
-      newMinOverlap < oldMinOverlap &&
-      Math.abs(currentOverlap - oldMinOverlap) < OVERLAP_COMPARISON_TOLERANCE
-    ) {
-      settingsActions.updateSection('birdnet', { overlap: newMinOverlap });
-      toastActions.info(
-        t('settings.main.sections.falsePositiveFilter.overlapReduced', {
-          overlap: newMinOverlap.toFixed(1),
-        })
-      );
-    }
   }
 
   // Weather update handlers
@@ -1425,72 +948,6 @@
     }
   }
 
-  async function downloadSpeciesCSV() {
-    if (rangeFilterState.downloading || !settings.birdnet.locationConfigured) return;
-
-    try {
-      rangeFilterState.downloading = true;
-
-      const params = new URLSearchParams({
-        latitude: settings.birdnet.latitude.toString(),
-        longitude: settings.birdnet.longitude.toString(),
-        threshold: settings.birdnet.rangeFilter.threshold.toString(),
-      });
-
-      const response = await fetch(buildAppUrl(`/api/v2/range/species/csv?${params}`), {
-        headers: {
-          'X-CSRF-Token': getCsrfToken() || '',
-          Accept: 'text/csv',
-        },
-      });
-
-      if (!response.ok) {
-        let msg = t('settings.errors.csvDownloadFailed');
-        try {
-          const data = await response.clone().json();
-          if (data?.message) msg = data.message;
-        } catch {
-          // ignore
-        }
-        throw new Error(msg);
-      }
-
-      const cd =
-        response.headers.get('Content-Disposition') ||
-        response.headers.get('content-disposition') ||
-        '';
-      let filename = 'birdnet_species.csv';
-      const fnStar = cd.match(/filename\*\s*=\s*([^']*)''([^;]+)/i);
-      if (fnStar && fnStar[2]) {
-        try {
-          filename = decodeURIComponent(fnStar[2]);
-        } catch {
-          /* keep default */
-        }
-      } else {
-        const fn = cd.match(/filename\s*=\s*"([^"]+)"/i) || cd.match(/filename\s*=\s*([^;]+)/i);
-        if (fn && fn[1]) filename = fn[1].trim();
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-
-      toastActions.success(t('settings.main.sections.rangeFilter.csvDownloaded'));
-    } catch (error) {
-      logger.error('Failed to download species CSV:', error);
-      toastActions.error(t('settings.main.sections.rangeFilter.csvDownloadFailed'));
-    } finally {
-      rangeFilterState.downloading = false;
-    }
-  }
-
   // Tab definitions with content snippets
   let tabs: TabDefinition[] = $derived([
     {
@@ -1506,13 +963,6 @@
       icon: MapPin,
       hasChanges: locationTabHasChanges,
       content: locationTabContent,
-    },
-    {
-      id: 'detection',
-      label: t('settings.main.tabs.detection'),
-      icon: Radar,
-      hasChanges: detectionTabHasChanges,
-      content: detectionTabContent,
     },
     {
       id: 'database',
@@ -1575,342 +1025,6 @@
           onchange={enabled => updateTelemetryEnabled(enabled)}
         />
       </div>
-    </SettingsSection>
-  </div>
-{/snippet}
-
-{#snippet detectionTabContent()}
-  <div class="space-y-6">
-    <!-- BirdNET Parameters Card -->
-    <SettingsSection
-      title={t('settings.main.sections.birdnet.title')}
-      description={t('settings.main.sections.birdnet.description')}
-      originalData={{
-        sensitivity: store.originalData.birdnet?.sensitivity,
-        threshold: store.originalData.birdnet?.threshold,
-        overlap: store.originalData.birdnet?.overlap,
-        locale: store.originalData.birdnet?.locale,
-        threads: store.originalData.birdnet?.threads,
-      }}
-      currentData={{
-        sensitivity: settings.birdnet.sensitivity,
-        threshold: settings.birdnet.threshold,
-        overlap: settings.birdnet.overlap,
-        locale: settings.birdnet.locale,
-        threads: settings.birdnet.threads,
-      }}
-    >
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <NumberField
-          label={t('settings.main.fields.sensitivity.label')}
-          value={settings.birdnet.sensitivity}
-          onUpdate={value => updateBirdnetSetting('sensitivity', value)}
-          min={0.5}
-          max={1.5}
-          step={0.1}
-          helpText={t('settings.main.fields.sensitivity.helpText')}
-          disabled={store.isLoading || store.isSaving}
-        />
-
-        <NumberField
-          label={t('settings.main.fields.threshold.label')}
-          value={settings.birdnet.threshold}
-          onUpdate={value => updateBirdnetSetting('threshold', value)}
-          min={0.01}
-          max={0.99}
-          step={0.01}
-          helpText={t('settings.main.fields.threshold.helpText')}
-          disabled={store.isLoading || store.isSaving}
-        />
-
-        <NumberField
-          label={t('settings.main.fields.overlap.label')}
-          value={settings.birdnet.overlap}
-          onUpdate={value => updateBirdnetSetting('overlap', value)}
-          min={0.0}
-          max={2.9}
-          step={0.1}
-          helpText={t('settings.main.fields.overlap.helpText')}
-          disabled={store.isLoading || store.isSaving}
-        />
-
-        <SelectDropdown
-          options={birdnetLocaleOptions}
-          value={settings.birdnet.locale}
-          label={t('settings.main.fields.locale.label')}
-          helpText={t('settings.main.fields.locale.helpText')}
-          disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
-          variant="select"
-          groupBy={false}
-          searchable={true}
-          onChange={value => updateBirdnetSetting('locale', value as string)}
-        >
-          {#snippet renderOption(option)}
-            {@const localeOption = option as BirdnetLocaleOption}
-            <div class="flex items-center gap-2">
-              <FlagIcon locale={localeOption.localeCode} className="size-4" />
-              <span>{localeOption.label}</span>
-            </div>
-          {/snippet}
-          {#snippet renderSelected(options)}
-            {@const localeOption = options[0] as BirdnetLocaleOption}
-            <span class="flex items-center gap-2">
-              <FlagIcon locale={localeOption.localeCode} className="size-4" />
-              <span>{localeOption.label}</span>
-            </span>
-          {/snippet}
-        </SelectDropdown>
-
-        <NumberField
-          label={t('settings.main.fields.tensorflowThreads.label')}
-          value={settings.birdnet.threads}
-          onUpdate={value => updateBirdnetSetting('threads', value)}
-          min={0}
-          max={32}
-          step={1}
-          helpText={t('settings.main.fields.tensorflowThreads.helpText')}
-          disabled={store.isLoading || store.isSaving}
-        />
-      </div>
-    </SettingsSection>
-
-    <!-- False Positive Filter Card -->
-    <SettingsSection
-      title={t('settings.main.sections.falsePositiveFilter.title')}
-      description={t('settings.main.sections.falsePositiveFilter.description')}
-      originalData={store.originalData.realtime?.falsePositiveFilter}
-      currentData={store.formData.realtime?.falsePositiveFilter}
-    >
-      <div class="space-y-4">
-        <!-- Custom implementation with colored badge -->
-        <div class="min-w-0">
-          <label for="false-positive-filter-level" class="flex items-center justify-between mb-2">
-            <span class="text-sm font-medium text-[var(--color-base-content)]">
-              {t('settings.main.sections.falsePositiveFilter.level.label')}
-            </span>
-            <span
-              class={cn(
-                'inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full',
-                getFalsePositiveFilterBadgeClass(settings.falsePositiveFilter.level)
-              )}
-            >
-              {getFalsePositiveFilterLevelName(settings.falsePositiveFilter.level)}
-            </span>
-          </label>
-          <input
-            id="false-positive-filter-level"
-            type="range"
-            class="w-full h-2 bg-[var(--color-base-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
-            min={0}
-            max={5}
-            step={1}
-            value={settings.falsePositiveFilter.level}
-            oninput={e => updateFalsePositiveFilterLevel(parseInt(e.currentTarget.value))}
-            disabled={store.isLoading || store.isSaving}
-          />
-          <div class="mt-1">
-            <span class="text-xs text-[var(--color-base-content)] opacity-60">
-              {getFalsePositiveFilterDescription(
-                settings.falsePositiveFilter.level,
-                settings.birdnet.overlap
-              )}
-            </span>
-          </div>
-        </div>
-
-        <!-- Hardware note for strict/maximum levels -->
-        {#if settings.falsePositiveFilter.level >= 4}
-          <SettingsNote>
-            <span>{t('settings.main.sections.falsePositiveFilter.hardwareNote')}</span>
-          </SettingsNote>
-        {/if}
-      </div>
-    </SettingsSection>
-
-    <!-- Range Filter Card -->
-    <SettingsSection
-      title={t('settings.main.sections.rangeFilter.title')}
-      description={t('settings.main.sections.rangeFilter.description')}
-      originalData={store.originalData.birdnet?.rangeFilter}
-      currentData={settings.birdnet.rangeFilter}
-    >
-      <!-- Threshold and Species Count on same row -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- Threshold Setting -->
-        <NumberField
-          label={t('settings.main.sections.rangeFilter.threshold.label')}
-          value={settings.birdnet.rangeFilter.threshold}
-          onUpdate={value =>
-            settingsActions.updateSection('birdnet', {
-              rangeFilter: { ...settings.birdnet.rangeFilter, threshold: value },
-            })}
-          min={0.0}
-          max={0.99}
-          step={0.01}
-          helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
-          disabled={store.isLoading || store.isSaving}
-        />
-
-        <!-- Species Count Display -->
-        <div>
-          <div class="flex justify-start mb-1">
-            <span class="text-sm text-[var(--color-base-content)]"
-              >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
-            >
-          </div>
-          <div class="flex items-center gap-3">
-            <div
-              class="text-2xl font-bold text-[var(--color-primary)] tabular-nums"
-              class:opacity-60={rangeFilterState.testing}
-            >
-              {rangeFilterState.speciesCount !== null
-                ? rangeFilterState.speciesCount.toLocaleString()
-                : '—'}
-            </div>
-            {#if rangeFilterState.testing}
-              <span
-                class="inline-block w-4 h-4 border-2 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-              ></span>
-            {/if}
-          </div>
-          <div class="flex gap-2 mt-2">
-            <button
-              type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!rangeFilterState.speciesCount ||
-                rangeFilterState.loading ||
-                !settings.birdnet.locationConfigured}
-              onclick={() => {
-                rangeFilterState.showModal = true;
-                loadRangeFilterSpecies();
-              }}
-            >
-              {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!rangeFilterState.speciesCount ||
-                rangeFilterState.downloading ||
-                !settings.birdnet.locationConfigured}
-              onclick={downloadSpeciesCSV}
-              aria-label={t('common.aria.downloadCsv')}
-            >
-              <Download class="size-4" />
-              {t('analytics.filters.exportCsv')}
-            </button>
-          </div>
-          <span class="help-text mt-1">
-            {t('settings.main.sections.rangeFilter.speciesCount.helpText')}
-          </span>
-        </div>
-      </div>
-
-      {#if rangeFilterState.error}
-        <div
-          class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
-          role="alert"
-        >
-          <XCircle class="size-5 shrink-0" />
-          <span>{rangeFilterState.error}</span>
-          <button
-            type="button"
-            class="ml-auto inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-            onclick={() => (rangeFilterState.error = null)}
-          >
-            <X class="size-4" />
-          </button>
-        </div>
-      {/if}
-    </SettingsSection>
-
-    <!-- Custom BirdNET Classifier Card -->
-    <SettingsSection
-      title={t('settings.main.sections.customClassifier.title')}
-      description={t('settings.main.sections.customClassifier.description')}
-      originalData={{
-        modelPath: store.originalData.birdnet?.modelPath,
-        labelPath: store.originalData.birdnet?.labelPath,
-      }}
-      currentData={{
-        modelPath: settings.birdnet.modelPath,
-        labelPath: settings.birdnet.labelPath,
-      }}
-    >
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <TextInput
-          id="model-path"
-          value={settings.birdnet.modelPath ?? ''}
-          label={t('settings.main.sections.customClassifier.modelPath.label')}
-          placeholder={t('settings.main.sections.customClassifier.modelPath.placeholder')}
-          helpText={t('settings.main.sections.customClassifier.modelPath.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateBirdnetSetting('modelPath', value)}
-        />
-
-        <TextInput
-          id="label-path"
-          value={settings.birdnet.labelPath ?? ''}
-          label={t('settings.main.sections.customClassifier.labelPath.label')}
-          placeholder={t('settings.main.sections.customClassifier.labelPath.placeholder')}
-          helpText={t('settings.main.sections.customClassifier.labelPath.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateBirdnetSetting('labelPath', value)}
-        />
-      </div>
-    </SettingsSection>
-
-    <!-- Dynamic Threshold Card -->
-    <SettingsSection
-      title={t('settings.main.sections.dynamicThreshold.title')}
-      description={t('settings.main.sections.dynamicThreshold.description')}
-      originalData={store.originalData.realtime?.dynamicThreshold}
-      currentData={store.formData.realtime?.dynamicThreshold}
-    >
-      <Checkbox
-        checked={settings.dynamicThreshold.enabled}
-        label={t('settings.main.sections.dynamicThreshold.enable.label')}
-        helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={value => updateDynamicThreshold('enabled', value)}
-      />
-
-      {#if settings.dynamicThreshold.enabled}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.trigger.label')}
-            value={settings.dynamicThreshold.trigger}
-            onUpdate={value => updateDynamicThreshold('trigger', value)}
-            min={0.0}
-            max={1.0}
-            step={0.01}
-            helpText={t('settings.main.sections.dynamicThreshold.trigger.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.minimum.label')}
-            value={settings.dynamicThreshold.min}
-            onUpdate={value => updateDynamicThreshold('min', value)}
-            min={0.0}
-            max={0.99}
-            step={0.01}
-            helpText={t('settings.main.sections.dynamicThreshold.minimum.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.expireTime.label')}
-            value={settings.dynamicThreshold.validHours}
-            onUpdate={value => updateDynamicThreshold('validHours', value)}
-            min={0}
-            max={1000}
-            step={1}
-            helpText={t('settings.main.sections.dynamicThreshold.expireTime.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-        </div>
-      {/if}
     </SettingsSection>
   </div>
 {/snippet}
@@ -2540,137 +1654,6 @@
           onclick={closeMapModal}
         >
           {t('common.done')}
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
-
-<!-- Range Filter Species Modal -->
-{#if rangeFilterState.showModal}
-  <div
-    class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm"
-    style:z-index="9999"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="modal-title"
-    tabindex="-1"
-    onclick={e => e.target === e.currentTarget && (rangeFilterState.showModal = false)}
-    onkeydown={e => e.key === 'Escape' && (rangeFilterState.showModal = false)}
-  >
-    <div
-      class="bg-[var(--color-base-100)] rounded-2xl p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col shadow-2xl"
-      role="document"
-    >
-      <div class="flex justify-between items-center mb-4">
-        <h3 id="modal-title" class="text-xl font-semibold">
-          {t('settings.main.sections.rangeFilter.modal.title')}
-        </h3>
-        <button
-          type="button"
-          class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-          aria-label="Close modal"
-          onclick={() => (rangeFilterState.showModal = false)}
-        >
-          <X class="size-5" />
-        </button>
-      </div>
-
-      <div class="mb-4 p-3 bg-[var(--color-base-200)]/50 rounded-lg">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div>
-            <span class="text-[var(--color-base-content)] opacity-60"
-              >{t('settings.main.sections.rangeFilter.modal.speciesCount')}</span
-            >
-            <span class="font-medium ml-1">{rangeFilterState.speciesCount}</span>
-          </div>
-          <div>
-            <span class="text-[var(--color-base-content)] opacity-60"
-              >{t('settings.main.sections.rangeFilter.modal.threshold')}</span
-            >
-            <span class="font-medium ml-1">{settings.birdnet.rangeFilter.threshold}</span>
-          </div>
-          <div>
-            <span class="text-[var(--color-base-content)] opacity-60"
-              >{t('settings.main.sections.rangeFilter.modal.latitude')}</span
-            >
-            <span class="font-medium ml-1">{settings.birdnet.latitude}</span>
-          </div>
-          <div>
-            <span class="text-[var(--color-base-content)] opacity-60"
-              >{t('settings.main.sections.rangeFilter.modal.longitude')}</span
-            >
-            <span class="font-medium ml-1">{settings.birdnet.longitude}</span>
-          </div>
-        </div>
-      </div>
-
-      {#if rangeFilterState.error}
-        <div
-          class="flex items-start gap-3 p-4 rounded-lg mb-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
-          role="alert"
-        >
-          <XCircle class="size-5 shrink-0" />
-          <span>{rangeFilterState.error}</span>
-          <button
-            type="button"
-            class="ml-auto inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-            onclick={() => (rangeFilterState.error = null)}
-          >
-            <X class="size-4" />
-          </button>
-        </div>
-      {/if}
-
-      <div class="flex-1 overflow-auto">
-        {#if rangeFilterState.loading}
-          <div class="text-center py-12">
-            <span
-              class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-            ></span>
-            <p class="mt-3 text-[var(--color-base-content)] opacity-90">
-              {t('settings.main.sections.rangeFilter.modal.loadingSpecies')}
-            </p>
-          </div>
-        {:else if rangeFilterState.species.length > 0}
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {#each rangeFilterState.species as species, index (`${species.scientificName}_${species.commonName}_${index}`)}
-              <div class="p-3 rounded-lg hover:bg-[var(--color-base-200)]/50 transition-colors">
-                <div class="font-medium">{species.commonName}</div>
-                <div class="text-sm text-[var(--color-base-content)] opacity-60 italic">
-                  {species.scientificName}
-                </div>
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <div class="text-center py-12 text-[var(--color-base-content)] opacity-60">
-            {t('settings.main.sections.rangeFilter.modal.noSpeciesFound')}
-          </div>
-        {/if}
-      </div>
-
-      <div
-        class="flex justify-between items-center mt-4 pt-4 border-t border-[var(--color-base-200)]"
-      >
-        <button
-          type="button"
-          class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={downloadSpeciesCSV}
-          disabled={rangeFilterState.loading ||
-            rangeFilterState.downloading ||
-            !rangeFilterState.speciesCount}
-          aria-label={t('common.aria.downloadCsv')}
-        >
-          <Download class="size-4" />
-          {t('analytics.filters.exportCsv')}
-        </button>
-        <button
-          type="button"
-          class="inline-flex items-center justify-center h-10 px-4 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors"
-          onclick={() => (rangeFilterState.showModal = false)}
-        >
-          {t('settings.main.sections.rangeFilter.modal.close')}
         </button>
       </div>
     </div>
