@@ -249,7 +249,7 @@
     {#if loading}
       <div class="flex items-center justify-center py-12">
         <Loader2 class="size-6 animate-spin text-[var(--color-primary)]" />
-        <span class="ml-3 text-sm text-[var(--color-base-content)]/70"
+        <span class="ml-3 text-sm text-[var(--color-base-content)]/80"
           >{t('analysis.gallery.loading')}</span
         >
       </div>
@@ -278,10 +278,10 @@
             <img src={logoBirdnet} alt="" class="size-10 shrink-0 rounded-lg" />
             <div class="min-w-0 flex-1">
               <h4 class="text-sm font-semibold text-[var(--color-base-content)]">BirdNET v2.4</h4>
-              <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/70">
+              <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
                 {t('analysis.gallery.builtInDescription')}
               </p>
-              <p class="mt-1 text-xs text-[var(--color-base-content)]/60">
+              <p class="mt-1 text-xs text-[var(--color-base-content)]/80">
                 Cornell Lab of Ornithology / Chemnitz University
               </p>
             </div>
@@ -289,7 +289,7 @@
           <div
             class="mt-3 flex items-center justify-between border-t border-[var(--color-base-300)] pt-3"
           >
-            <div class="flex items-center gap-2 text-xs text-[var(--color-base-content)]/60">
+            <div class="flex items-center gap-2 text-xs text-[var(--color-base-content)]/80">
               <span>v2.4</span>
               <span>{t('analysis.gallery.species', { count: '6,000+' })}</span>
             </div>
@@ -322,10 +322,10 @@
               {/if}
               <div class="min-w-0 flex-1">
                 <h4 class="text-sm font-semibold text-[var(--color-base-content)]">{entry.name}</h4>
-                <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/70">
+                <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
                   {entry.description}
                 </p>
-                <p class="mt-1 text-xs text-[var(--color-base-content)]/60">{entry.author}</p>
+                <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
               </div>
             </div>
             <!-- Metadata grid -->
@@ -333,12 +333,12 @@
               class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
             >
               {#if entry.region}
-                <div class="text-[var(--color-base-content)]/50">
+                <div class="text-[var(--color-base-content)]/80">
                   {t('analysis.gallery.regionLabel')}
                 </div>
                 <div class="text-[var(--color-base-content)]/80">{entry.region}</div>
               {/if}
-              <div class="text-[var(--color-base-content)]/50">
+              <div class="text-[var(--color-base-content)]/80">
                 {t('analysis.gallery.speciesLabel')}
               </div>
               <div class="text-[var(--color-base-content)]/80">
@@ -347,7 +347,7 @@
             </div>
             <!-- Action footer -->
             <div class="mt-3 flex items-center justify-between">
-              <span class="text-xs text-[var(--color-base-content)]/40">v{entry.version}</span>
+              <span class="text-xs text-[var(--color-base-content)]/80">v{entry.version}</span>
               <button
                 onclick={() => openRemoveDialog(entry)}
                 disabled={isDeleting}
@@ -368,7 +368,7 @@
       </div>
 
       {#if installedEntries.length === 0}
-        <p class="py-4 text-center text-sm text-[var(--color-base-content)]/60">
+        <p class="py-4 text-center text-sm text-[var(--color-base-content)]/80">
           {t('analysis.gallery.noInstalledModels')}
         </p>
       {/if}
@@ -380,7 +380,10 @@
   {@const isInstalling = installingId === entry.id}
   {@const progress = isInstalling ? downloadProgress : null}
   {@const logo = getModelLogo(entry.id)}
-  <div class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4">
+  <div
+    class="flex h-full flex-col rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4"
+  >
+    <!-- Header: logo + name/description/author -->
     <div class="flex items-start gap-3">
       {#if logo}
         <img src={logo} alt="" class="size-10 shrink-0 rounded-lg" />
@@ -397,10 +400,10 @@
         <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
           {entry.name}
         </h4>
-        <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/70">
+        <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
           {entry.description}
         </p>
-        <p class="mt-1 text-xs text-[var(--color-base-content)]/60">{entry.author}</p>
+        <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
       </div>
     </div>
 
@@ -413,7 +416,7 @@
             style:width="{progressPercent(progress)}%"
           ></div>
         </div>
-        <div class="flex items-center justify-between text-xs text-[var(--color-base-content)]/60">
+        <div class="flex items-center justify-between text-xs text-[var(--color-base-content)]/80">
           <span>{statusLabel(progress.status)}</span>
           {#if progress.status === 'downloading' && progress.totalBytes > 0}
             <span>
@@ -429,14 +432,14 @@
       class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
     >
       {#if entry.region}
-        <div class="text-[var(--color-base-content)]/50">{t('analysis.gallery.regionLabel')}</div>
-        <div class="text-[var(--color-base-content)]/80">{entry.region}</div>
+        <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.regionLabel')}</div>
+        <div class="text-[var(--color-base-content)]">{entry.region}</div>
       {/if}
-      <div class="text-[var(--color-base-content)]/50">{t('analysis.gallery.speciesLabel')}</div>
-      <div class="text-[var(--color-base-content)]/80">
+      <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.speciesLabel')}</div>
+      <div class="text-[var(--color-base-content)]">
         {t('analysis.gallery.species', { count: entry.speciesCount })}
       </div>
-      <div class="text-[var(--color-base-content)]/50">{t('analysis.gallery.license.license')}</div>
+      <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.license.license')}</div>
       <div>
         {#if entry.commercialUse}
           <span
@@ -458,9 +461,9 @@
       </div>
     </div>
 
-    <!-- Action footer -->
-    <div class="mt-3 flex items-center justify-between">
-      <span class="text-xs text-[var(--color-base-content)]/40">v{entry.version}</span>
+    <!-- Action footer (pushed to bottom via mt-auto) -->
+    <div class="mt-auto flex items-center justify-between pt-3">
+      <span class="text-xs text-[var(--color-base-content)]/80">v{entry.version}</span>
       <button
         onclick={() => openLicenseDialog(entry)}
         disabled={isInstalling || installingId !== null}
@@ -484,7 +487,7 @@
     {#if loading}
       <div class="flex items-center justify-center py-12">
         <Loader2 class="size-6 animate-spin text-[var(--color-primary)]" />
-        <span class="ml-3 text-sm text-[var(--color-base-content)]/70"
+        <span class="ml-3 text-sm text-[var(--color-base-content)]/80"
           >{t('analysis.gallery.loading')}</span
         >
       </div>
@@ -508,7 +511,7 @@
       {#if availableBirds.length > 0}
         <div>
           <h3
-            class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/50"
+            class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
           >
             {t('analysis.gallery.categories.bird')}
           </h3>
@@ -524,7 +527,7 @@
       {#if availableBats.length > 0}
         <div>
           <h3
-            class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/50"
+            class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
           >
             {t('analysis.gallery.categories.bat')}
           </h3>
@@ -537,7 +540,7 @@
       {/if}
 
       {#if availableBirds.length === 0 && availableBats.length === 0}
-        <p class="py-8 text-center text-sm text-[var(--color-base-content)]/60">
+        <p class="py-8 text-center text-sm text-[var(--color-base-content)]/80">
           {t('analysis.gallery.noAvailableModels')}
         </p>
       {/if}
@@ -594,25 +597,25 @@
         <div class="rounded-lg bg-[var(--color-base-200)] p-4 text-sm">
           <div class="space-y-2">
             <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/60"
+              <span class="text-[var(--color-base-content)]/80"
                 >{t('analysis.gallery.license.model')}</span
               >
               <span class="font-medium text-[var(--color-base-content)]">{licenseModel.name}</span>
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/60"
+              <span class="text-[var(--color-base-content)]/80"
                 >{t('analysis.gallery.license.author')}</span
               >
               <span class="text-[var(--color-base-content)]">{licenseModel.author}</span>
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/60"
+              <span class="text-[var(--color-base-content)]/80"
                 >{t('analysis.gallery.license.license')}</span
               >
               <span class="text-[var(--color-base-content)]">{licenseModel.license}</span>
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/60"
+              <span class="text-[var(--color-base-content)]/80"
                 >{t('analysis.gallery.license.commercialUse')}</span
               >
               {#if licenseModel.commercialUse}
@@ -628,7 +631,7 @@
               {/if}
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/60"
+              <span class="text-[var(--color-base-content)]/80"
                 >{t('analysis.gallery.license.downloadSize')}</span
               >
               <span class="text-[var(--color-base-content)]"
@@ -688,7 +691,7 @@
           >
             {t('analysis.gallery.removeDialog.title', { name: removeConfirmModel.name })}
           </h3>
-          <p class="mt-2 text-sm text-[var(--color-base-content)]/70">
+          <p class="mt-2 text-sm text-[var(--color-base-content)]/80">
             {t('analysis.gallery.removeDialog.confirmation')}
           </p>
         </div>
