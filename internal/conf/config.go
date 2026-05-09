@@ -1176,6 +1176,7 @@ type PerchConfig struct {
 	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to Perch v2 ONNX model file
 	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to Perch v2 label CSV file
 	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
+	Locale    string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
 }
 
 // BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
@@ -1185,11 +1186,22 @@ type BatConfig struct {
 	ClassifierModel string  `yaml:"classifiermodel,omitempty" json:"classifierModel,omitempty"` // path to bat species classifier ONNX model
 	LabelPath       string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"`             // path to bat species labels file
 	Threshold       float64 `yaml:"threshold" json:"threshold"`                                 // confidence threshold for bat detections
+	Locale          string  `yaml:"locale,omitempty" json:"locale,omitempty"`                   // locale for species label translation
 }
 
-// ModelsConfig holds global model enablement settings.
+// BSGConfig holds configuration for BSG regional bird models.
+type BSGConfig struct {
+	Enabled   bool   `yaml:"enabled" json:"enabled"`                         // true to load BSG model at startup
+	ModelPath string `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BSG ONNX model file
+	LabelPath string `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BSG label file
+	Locale    string `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
+}
+
+// ModelsConfig holds global model enablement and management settings.
 type ModelsConfig struct {
-	Enabled []string `yaml:"enabled" json:"enabled"` // list of model IDs to load (e.g., "birdnet", "perch_v2")
+	Enabled   []string `yaml:"enabled" json:"enabled"`                         // list of model IDs to load (e.g., "birdnet", "perch_v2")
+	Directory string   `yaml:"directory,omitempty" json:"directory,omitempty"` // base directory for downloaded model files
+	Installed []string `yaml:"installed,omitempty" json:"installed,omitempty"` // list of installed model IDs managed by the model gallery
 }
 
 // BasicAuth holds settings for the password authentication
@@ -1509,7 +1521,8 @@ type Settings struct {
 	BirdNET BirdNETConfig `yaml:"birdnet" json:"birdnet"` // BirdNET configuration
 	Perch   PerchConfig   `yaml:"perch" json:"perch"`     // Perch v2 model configuration
 	Bat     BatConfig     `yaml:"bat" json:"bat"`         // Bat detection configuration
-	Models  ModelsConfig  `yaml:"models" json:"models"`   // Global model enablement
+	BSG     BSGConfig     `yaml:"bsg" json:"bsg"`         // BSG regional bird model configuration
+	Models  ModelsConfig  `yaml:"models" json:"models"`   // Global model enablement and management
 
 	TaxonomySynonyms map[string]string `yaml:"taxonomySynonyms" json:"taxonomySynonyms" mapstructure:"taxonomySynonyms"` // Optional scientific-name synonym overrides merged with built-ins
 
