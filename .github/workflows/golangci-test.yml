@@ -48,8 +48,21 @@ jobs:
           version: 1.1
           execute_install_scripts: true
 
-      - name: Refresh shared library cache
-        run: sudo ldconfig
+      - name: Refresh shared library cache and verify FFmpeg
+        run: |
+          sudo ldconfig
+          if ffmpeg -version > /dev/null 2>&1; then
+            echo "FFmpeg is working"
+          else
+            echo "::warning::FFmpeg broken after cache restore, diagnosing..."
+            echo "Missing libraries:"
+            ldd /usr/bin/ffmpeg 2>&1 | grep "not found" || echo "(binary not found or not ELF)"
+            echo "Reinstalling via apt..."
+            sudo apt-get update -qq
+            sudo apt-get install -y --fix-broken ffmpeg sox procps
+            sudo ldconfig
+            ffmpeg -version
+          fi
 
       - name: Cache Go tools
         uses: actions/cache@v5
@@ -189,8 +202,21 @@ jobs:
           version: 1.1
           execute_install_scripts: true
 
-      - name: Refresh shared library cache
-        run: sudo ldconfig
+      - name: Refresh shared library cache and verify FFmpeg
+        run: |
+          sudo ldconfig
+          if ffmpeg -version > /dev/null 2>&1; then
+            echo "FFmpeg is working"
+          else
+            echo "::warning::FFmpeg broken after cache restore, diagnosing..."
+            echo "Missing libraries:"
+            ldd /usr/bin/ffmpeg 2>&1 | grep "not found" || echo "(binary not found or not ELF)"
+            echo "Reinstalling via apt..."
+            sudo apt-get update -qq
+            sudo apt-get install -y --fix-broken ffmpeg sox
+            sudo ldconfig
+            ffmpeg -version
+          fi
 
       - name: Run testcontainer integration tests
         run: |
