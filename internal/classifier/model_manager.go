@@ -492,6 +492,25 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 	}
 
 	switch entry.RegistryID {
+	case RegistryIDBirdNETV3:
+		GetLogger().Info("BirdNET v3.0 config wiring not yet implemented",
+			logger.String("catalog_id", entry.ID))
+	case RegistryIDPerchV2:
+		mm.settings.Perch.Enabled = true
+		if modelPath != "" {
+			mm.settings.Perch.ModelPath = modelPath
+		}
+		if labelsPath != "" {
+			mm.settings.Perch.LabelPath = labelsPath
+		}
+	case RegistryIDBSG:
+		mm.settings.BSG.Enabled = true
+		if modelPath != "" {
+			mm.settings.BSG.ModelPath = modelPath
+		}
+		if labelsPath != "" {
+			mm.settings.BSG.LabelPath = labelsPath
+		}
 	case RegistryIDBat:
 		mm.settings.Bat.Enabled = true
 		if modelPath != "" {
@@ -502,14 +521,6 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 		}
 		if embeddingsPath != "" {
 			mm.settings.Bat.EmbeddingModel = embeddingsPath
-		}
-	case RegistryIDPerchV2:
-		mm.settings.Perch.Enabled = true
-		if modelPath != "" {
-			mm.settings.Perch.ModelPath = modelPath
-		}
-		if labelsPath != "" {
-			mm.settings.Perch.LabelPath = labelsPath
 		}
 	}
 
@@ -531,6 +542,17 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 	}
 
 	switch entry.RegistryID {
+	case RegistryIDBirdNETV3:
+		GetLogger().Info("BirdNET v3.0 config wiring not yet implemented",
+			logger.String("catalog_id", entry.ID))
+	case RegistryIDPerchV2:
+		mm.settings.Perch.Enabled = false
+		mm.settings.Perch.ModelPath = ""
+		mm.settings.Perch.LabelPath = ""
+	case RegistryIDBSG:
+		mm.settings.BSG.Enabled = false
+		mm.settings.BSG.ModelPath = ""
+		mm.settings.BSG.LabelPath = ""
 	case RegistryIDBat:
 		// Only disable if no other bat models remain installed.
 		otherBatInstalled := false
@@ -547,10 +569,6 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		mm.settings.Bat.ClassifierModel = ""
 		mm.settings.Bat.LabelPath = ""
 		mm.settings.Bat.EmbeddingModel = ""
-	case RegistryIDPerchV2:
-		mm.settings.Perch.Enabled = false
-		mm.settings.Perch.ModelPath = ""
-		mm.settings.Perch.LabelPath = ""
 	}
 
 	if err := conf.SaveSettings(); err != nil {

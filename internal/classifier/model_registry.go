@@ -30,8 +30,10 @@ const (
 
 // Registry ID constants for model identification across packages.
 const (
-	RegistryIDBat     = "Bat"
-	RegistryIDPerchV2 = "Perch_V2"
+	RegistryIDBirdNETV3 = "BirdNET_V3.0"
+	RegistryIDBSG       = "BSG"
+	RegistryIDBat       = "Bat"
+	RegistryIDPerchV2   = "Perch_V2"
 )
 
 // ModelInfo represents metadata about a classifier model.
@@ -76,8 +78,8 @@ var ModelRegistry = map[string]ModelInfo{
 		DefaultLocale: "en-uk",
 		NumSpecies:    6523,
 	},
-	"BirdNET_V3.0": {
-		ID:               "BirdNET_V3.0",
+	RegistryIDBirdNETV3: {
+		ID:               RegistryIDBirdNETV3,
 		Name:             ModelNameBirdNETv30,
 		Backend:          BackendONNX,
 		DetectionName:    "BirdNET",
@@ -111,12 +113,22 @@ var ModelRegistry = map[string]ModelInfo{
 		Spec:             ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second, RawSampleRate: 256000},
 		ConfigAliases:    []string{conf.ModelIDBat},
 	},
+	RegistryIDBSG: {
+		ID:               RegistryIDBSG,
+		Name:             "BSG Finland",
+		Backend:          BackendONNX,
+		DetectionName:    "BSG",
+		DetectionVersion: "4.4",
+		Description:      "Regional bird classifier optimized for Finnish bird species",
+		Spec:             ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+		ConfigAliases:    []string{conf.ModelIDBSG},
+	},
 }
 
 // birdnetVersionToRegistryID maps user-facing BirdNET version strings to registry IDs.
 var birdnetVersionToRegistryID = map[string]string{
 	"2.4": "BirdNET_V2.4",
-	"3.0": "BirdNET_V3.0",
+	"3.0": RegistryIDBirdNETV3,
 }
 
 // KnownConfigIDs collects all ConfigAliases from the registry.
@@ -160,12 +172,14 @@ var filenamePatterns = map[string]string{
 	"birdnet_v2.4":           "BirdNET_V2.4",
 	"birdnet-v2.4":           "BirdNET_V2.4",
 	"birdnet-go_classifier":  "BirdNET_V2.4", // custom-named classifier builds
-	"birdnet_global_v3.0":    "BirdNET_V3.0",
-	"birdnet-v30":            "BirdNET_V3.0",
-	"birdnet_v3.0":           "BirdNET_V3.0",
-	"birdnet-v3.0":           "BirdNET_V3.0",
+	"birdnet_global_v3.0":    RegistryIDBirdNETV3,
+	"birdnet-v30":            RegistryIDBirdNETV3,
+	"birdnet_v3.0":           RegistryIDBirdNETV3,
+	"birdnet-v3.0":           RegistryIDBirdNETV3,
 	"perch_v2":               RegistryIDPerchV2,
 	"perch-v2":               RegistryIDPerchV2,
+	"bsg_finland":            RegistryIDBSG,
+	"bsg-finland":            RegistryIDBSG,
 }
 
 // DetermineModelInfo identifies the model type from a file path or model identifier.

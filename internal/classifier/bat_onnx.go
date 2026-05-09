@@ -79,7 +79,7 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 	}
 
 	batLabels := batCC.Labels()
-	info := ModelRegistry["Bat"]
+	info := ModelRegistry[RegistryIDBat]
 	info.Description = fmt.Sprintf("Bat species detection with %d species", len(batLabels))
 	info.NumSpecies = len(batLabels)
 

@@ -21,11 +21,7 @@ func TestEmbeddedCatalog_ValidRegistryIDs(t *testing.T) {
 	t.Parallel()
 
 	for _, entry := range EmbeddedCatalog {
-		if entry.RegistryID == "" {
-			// Models without a registry mapping (e.g., BSG) are allowed
-			// to have an empty RegistryID until their loader is implemented.
-			continue
-		}
+		assert.NotEmpty(t, entry.RegistryID, "catalog entry %q must have a RegistryID", entry.ID)
 		_, exists := ModelRegistry[entry.RegistryID]
 		assert.True(t, exists, "catalog entry %q references unknown RegistryID %q", entry.ID, entry.RegistryID)
 	}
@@ -126,4 +122,42 @@ func TestEmbeddedCatalog_EntryCount(t *testing.T) {
 
 	// 3 bird entries (birdnet-v3.0, perch-v2, bsg-finland) + 11 bat entries = 14 total
 	assert.Len(t, EmbeddedCatalog, 14, "expected 14 total catalog entries")
+}
+
+func TestGetCatalogEntry_BSGFinland(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("bsg-finland")
+	require.True(t, ok, "expected to find catalog entry bsg-finland")
+	assert.Equal(t, "bsg-finland", entry.ID)
+	assert.Equal(t, "BSG Finland v4.4", entry.Name)
+	assert.Equal(t, CategoryBird, entry.Category)
+	assert.Equal(t, RegistryIDBSG, entry.RegistryID)
+	assert.Equal(t, "Finland", entry.Region)
+	assert.Contains(t, entry.RequiredBuildTags, "onnx")
+
+	hasModel := false
+	hasLabels := false
+	for _, f := range entry.Files {
+		switch f.Role {
+		case RoleModel:
+			hasModel = true
+		case RoleLabels:
+			hasLabels = true
+		}
+	}
+	assert.True(t, hasModel, "BSG entry must have a model file")
+	assert.True(t, hasLabels, "BSG entry must have a labels file")
+}
+
+func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("birdnet-v3.0")
+	require.True(t, ok, "expected to find catalog entry birdnet-v3.0")
+	assert.Equal(t, "birdnet-v3.0", entry.ID)
+	assert.Equal(t, "BirdNET v3.0", entry.Name)
+	assert.Equal(t, RegistryIDBirdNETV3, entry.RegistryID)
+	assert.Equal(t, CategoryBird, entry.Category)
+	assert.Contains(t, entry.RequiredBuildTags, "onnx")
 }
