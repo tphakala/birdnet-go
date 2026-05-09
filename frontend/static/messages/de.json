@@ -4524,7 +4524,9 @@
         "catalogLoadFailed": "Modellkatalog konnte nicht geladen werden",
         "installFailed": "Modellinstallation konnte nicht gestartet werden",
         "removeFailed": "Modell konnte nicht entfernt werden"
-      }
+      },
+      "regionLabel": "Region",
+      "speciesLabel": "Arten"
     }
   },
   "restart": {

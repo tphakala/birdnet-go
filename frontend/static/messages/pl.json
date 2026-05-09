@@ -4524,7 +4524,9 @@
         "catalogLoadFailed": "Nie udało się załadować katalogu modeli",
         "installFailed": "Nie udało się rozpocząć instalacji modelu",
         "removeFailed": "Nie udało się usunąć modelu"
-      }
+      },
+      "regionLabel": "Region",
+      "speciesLabel": "Gatunki"
     }
   },
   "restart": {

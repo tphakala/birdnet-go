@@ -4524,7 +4524,9 @@
         "catalogLoadFailed": "Impossible de charger le catalogue de modèles",
         "installFailed": "Impossible de démarrer l'installation du modèle",
         "removeFailed": "Impossible de supprimer le modèle"
-      }
+      },
+      "regionLabel": "Région",
+      "speciesLabel": "Espèces"
     }
   },
   "restart": {

@@ -4524,7 +4524,9 @@
         "catalogLoadFailed": "Falha ao carregar o catálogo de modelos",
         "installFailed": "Falha ao iniciar a instalação do modelo",
         "removeFailed": "Falha ao remover o modelo"
-      }
+      },
+      "regionLabel": "Região",
+      "speciesLabel": "Espécies"
     }
   },
   "restart": {

@@ -4524,7 +4524,9 @@
         "catalogLoadFailed": "Malliluettelon lataaminen epäonnistui",
         "installFailed": "Mallin asennuksen käynnistäminen epäonnistui",
         "removeFailed": "Mallin poistaminen epäonnistui"
-      }
+      },
+      "regionLabel": "Alue",
+      "speciesLabel": "Lajit"
     }
   },
   "restart": {

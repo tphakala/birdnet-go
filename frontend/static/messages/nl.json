@@ -4524,7 +4524,9 @@
         "catalogLoadFailed": "Kan modelcatalogus niet laden",
         "installFailed": "Kan modelinstallatie niet starten",
         "removeFailed": "Kan model niet verwijderen"
-      }
+      },
+      "regionLabel": "Regio",
+      "speciesLabel": "Soorten"
     }
   },
   "restart": {

@@ -43,7 +43,25 @@
     AlertTriangle,
     Loader2,
     RefreshCw,
+    Radar,
   } from '@lucide/svelte';
+
+  import logoBirdnet from '$lib/assets/logos/logo-birdnet.png';
+  import logoGoogle from '$lib/assets/logos/logo-google.png';
+  import logoJyu from '$lib/assets/logos/logo-jyu.jpeg';
+
+  const MODEL_LOGOS: Record<string, string> = {
+    birdnet: logoBirdnet,
+    perch: logoGoogle,
+    bsg: logoJyu,
+  };
+
+  function getModelLogo(id: string): string | null {
+    for (const [prefix, logo] of Object.entries(MODEL_LOGOS)) {
+      if (id.startsWith(prefix)) return logo;
+    }
+    return null;
+  }
 
   // Catalog state
   let catalog = $state<CatalogEntry[]>([]);
@@ -257,9 +275,7 @@
           class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4"
         >
           <div class="flex items-start gap-3">
-            <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-              <BrainCircuit size={24} class="text-[var(--color-primary)]" />
-            </div>
+            <img src={logoBirdnet} alt="" class="size-10 shrink-0 rounded-lg" />
             <div class="min-w-0 flex-1">
               <h4 class="text-sm font-semibold text-[var(--color-base-content)]">BirdNET v2.4</h4>
               <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/70">
@@ -288,13 +304,22 @@
         <!-- Installed additional models -->
         {#each installedEntries as entry (entry.id)}
           {@const isDeleting = deletingId === entry.id}
+          {@const logo = getModelLogo(entry.id)}
           <div
             class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4"
           >
             <div class="flex items-start gap-3">
-              <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-                <BrainCircuit size={24} class="text-[var(--color-primary)]" />
-              </div>
+              {#if logo}
+                <img src={logo} alt="" class="size-10 shrink-0 rounded-lg" />
+              {:else}
+                <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
+                  {#if entry.category === 'bat'}
+                    <Radar size={24} class="text-[var(--color-primary)]" />
+                  {:else}
+                    <BrainCircuit size={24} class="text-[var(--color-primary)]" />
+                  {/if}
+                </div>
+              {/if}
               <div class="min-w-0 flex-1">
                 <h4 class="text-sm font-semibold text-[var(--color-base-content)]">{entry.name}</h4>
                 <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/70">
@@ -303,16 +328,26 @@
                 <p class="mt-1 text-xs text-[var(--color-base-content)]/60">{entry.author}</p>
               </div>
             </div>
+            <!-- Metadata grid -->
             <div
-              class="mt-3 flex items-center justify-between border-t border-[var(--color-base-300)] pt-3"
+              class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
             >
-              <div class="flex items-center gap-2 text-xs text-[var(--color-base-content)]/60">
-                <span>v{entry.version}</span>
-                <span>{t('analysis.gallery.species', { count: entry.speciesCount })}</span>
-                {#if entry.region}
-                  <span>{entry.region}</span>
-                {/if}
+              {#if entry.region}
+                <div class="text-[var(--color-base-content)]/50">
+                  {t('analysis.gallery.regionLabel')}
+                </div>
+                <div class="text-[var(--color-base-content)]/80">{entry.region}</div>
+              {/if}
+              <div class="text-[var(--color-base-content)]/50">
+                {t('analysis.gallery.speciesLabel')}
               </div>
+              <div class="text-[var(--color-base-content)]/80">
+                {t('analysis.gallery.species', { count: entry.speciesCount })}
+              </div>
+            </div>
+            <!-- Action footer -->
+            <div class="mt-3 flex items-center justify-between">
+              <span class="text-xs text-[var(--color-base-content)]/40">v{entry.version}</span>
               <button
                 onclick={() => openRemoveDialog(entry)}
                 disabled={isDeleting}
@@ -344,11 +379,20 @@
 {#snippet modelCard(entry: CatalogEntry)}
   {@const isInstalling = installingId === entry.id}
   {@const progress = isInstalling ? downloadProgress : null}
+  {@const logo = getModelLogo(entry.id)}
   <div class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4">
     <div class="flex items-start gap-3">
-      <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-        <BrainCircuit size={24} class="text-[var(--color-primary)]" />
-      </div>
+      {#if logo}
+        <img src={logo} alt="" class="size-10 shrink-0 rounded-lg" />
+      {:else}
+        <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
+          {#if entry.category === 'bat'}
+            <Radar size={24} class="text-[var(--color-primary)]" />
+          {:else}
+            <BrainCircuit size={24} class="text-[var(--color-primary)]" />
+          {/if}
+        </div>
+      {/if}
       <div class="min-w-0 flex-1">
         <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
           {entry.name}
@@ -380,18 +424,20 @@
       </div>
     {/if}
 
+    <!-- Metadata grid -->
     <div
-      class="mt-3 flex items-center justify-between border-t border-[var(--color-base-300)] pt-3"
+      class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
     >
-      <div class="flex items-center gap-2 text-xs text-[var(--color-base-content)]/60">
-        <span>v{entry.version}</span>
-        <span>{t('analysis.gallery.species', { count: entry.speciesCount })}</span>
-        {#if entry.region}
-          <span>{entry.region}</span>
-        {/if}
+      {#if entry.region}
+        <div class="text-[var(--color-base-content)]/50">{t('analysis.gallery.regionLabel')}</div>
+        <div class="text-[var(--color-base-content)]/80">{entry.region}</div>
+      {/if}
+      <div class="text-[var(--color-base-content)]/50">{t('analysis.gallery.speciesLabel')}</div>
+      <div class="text-[var(--color-base-content)]/80">
+        {t('analysis.gallery.species', { count: entry.speciesCount })}
       </div>
-      <div class="flex items-center gap-1.5">
-        <!-- License badge -->
+      <div class="text-[var(--color-base-content)]/50">{t('analysis.gallery.license.license')}</div>
+      <div>
         {#if entry.commercialUse}
           <span
             class="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs text-[var(--color-success)]"
@@ -409,22 +455,26 @@
             {entry.license}
           </span>
         {/if}
-        <!-- Install button -->
-        <button
-          onclick={() => openLicenseDialog(entry)}
-          disabled={isInstalling || installingId !== null}
-          class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:opacity-50"
-          aria-label="{t('analysis.gallery.install')} {entry.name}"
-        >
-          {#if isInstalling}
-            <Loader2 class="size-3.5 animate-spin" />
-            {t('analysis.gallery.installing')}
-          {:else}
-            <Download class="size-3.5" />
-            {t('analysis.gallery.install')}
-          {/if}
-        </button>
       </div>
+    </div>
+
+    <!-- Action footer -->
+    <div class="mt-3 flex items-center justify-between">
+      <span class="text-xs text-[var(--color-base-content)]/40">v{entry.version}</span>
+      <button
+        onclick={() => openLicenseDialog(entry)}
+        disabled={isInstalling || installingId !== null}
+        class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:opacity-50"
+        aria-label="{t('analysis.gallery.install')} {entry.name}"
+      >
+        {#if isInstalling}
+          <Loader2 class="size-3.5 animate-spin" />
+          {t('analysis.gallery.installing')}
+        {:else}
+          <Download class="size-3.5" />
+          {t('analysis.gallery.install')}
+        {/if}
+      </button>
     </div>
   </div>
 {/snippet}

@@ -4524,7 +4524,9 @@
         "catalogLoadFailed": "Failed to load model catalog",
         "installFailed": "Failed to start model installation",
         "removeFailed": "Failed to remove model"
-      }
+      },
+      "regionLabel": "Region",
+      "speciesLabel": "Species"
     }
   },
   "restart": {
