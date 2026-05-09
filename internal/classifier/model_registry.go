@@ -28,6 +28,12 @@ const (
 	BackendONNX   = "ONNX"
 )
 
+// Registry ID constants for model identification across packages.
+const (
+	RegistryIDBat     = "Bat"
+	RegistryIDPerchV2 = "Perch_V2"
+)
+
 // ModelInfo represents metadata about a classifier model.
 type ModelInfo struct {
 	ID               string    // Unique registry identifier (e.g., "BirdNET_V2.4")

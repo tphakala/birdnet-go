@@ -114,7 +114,7 @@ func (a *BirdNETAnalyzer) initModelManager(bn *classifier.Orchestrator) {
 		modelsDir = filepath.Join(configDir, "birdnet-go", "models")
 	}
 
-	a.modelManager = classifier.NewModelManager(modelsDir, bn)
+	a.modelManager = classifier.NewModelManager(modelsDir, bn, a.settings)
 	a.modelManager.ScanInstalled()
 
 	log.Info("model manager initialized",

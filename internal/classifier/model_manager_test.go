@@ -44,7 +44,7 @@ func TestModelManager_ScanInstalled(t *testing.T) {
 	modelPath := filepath.Join(subdir, modelFileName)
 	require.NoError(t, os.WriteFile(modelPath, []byte("fake-onnx-data"), 0o644))
 
-	mm := NewModelManager(modelsDir, nil)
+	mm := NewModelManager(modelsDir, nil, nil)
 	mm.ScanInstalled()
 
 	assert.True(t, mm.IsInstalled(entry.ID), "expected %s to be detected as installed", entry.ID)
@@ -59,7 +59,7 @@ func TestModelManager_ScanInstalled(t *testing.T) {
 func TestModelManager_IsInstalled(t *testing.T) {
 	t.Parallel()
 
-	mm := NewModelManager(t.TempDir(), nil)
+	mm := NewModelManager(t.TempDir(), nil, nil)
 	assert.False(t, mm.IsInstalled("battybirdnet-eu"), "empty manager should report nothing installed")
 	assert.False(t, mm.IsInstalled("nonexistent"), "unknown ID should not be installed")
 }
@@ -67,7 +67,7 @@ func TestModelManager_IsInstalled(t *testing.T) {
 func TestModelManager_ListInstalled(t *testing.T) {
 	t.Parallel()
 
-	mm := NewModelManager(t.TempDir(), nil)
+	mm := NewModelManager(t.TempDir(), nil, nil)
 	installed := mm.ListInstalled()
 	assert.Empty(t, installed, "empty manager should return empty slice")
 	// Verify it returns a non-nil slice so JSON serialization produces [].
@@ -77,7 +77,7 @@ func TestModelManager_ListInstalled(t *testing.T) {
 func TestModelManager_UninstallRejectsPermanent(t *testing.T) {
 	t.Parallel()
 
-	mm := NewModelManager(t.TempDir(), nil)
+	mm := NewModelManager(t.TempDir(), nil, nil)
 
 	// Find a catalog entry whose RegistryID maps to BirdNET_V2.4.
 	var permanentID string
@@ -102,7 +102,7 @@ func TestModelManager_UninstallRejectsPermanent(t *testing.T) {
 func TestModelManager_UninstallNotInstalled(t *testing.T) {
 	t.Parallel()
 
-	mm := NewModelManager(t.TempDir(), nil)
+	mm := NewModelManager(t.TempDir(), nil, nil)
 
 	err := mm.Uninstall("battybirdnet-eu")
 	require.Error(t, err)
@@ -125,7 +125,7 @@ func TestModelManager_UninstallRemovesModelRetainsLabels(t *testing.T) {
 		require.NoError(t, os.WriteFile(path, []byte("data"), 0o644))
 	}
 
-	mm := NewModelManager(modelsDir, nil)
+	mm := NewModelManager(modelsDir, nil, nil)
 	mm.ScanInstalled()
 	require.True(t, mm.IsInstalled(entry.ID))
 
@@ -148,7 +148,7 @@ func TestModelManager_UninstallRemovesModelRetainsLabels(t *testing.T) {
 func TestModelManager_UninstallUnknownCatalogID(t *testing.T) {
 	t.Parallel()
 
-	mm := NewModelManager(t.TempDir(), nil)
+	mm := NewModelManager(t.TempDir(), nil, nil)
 	err := mm.Uninstall("completely-unknown-id")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown catalog ID")
@@ -157,7 +157,7 @@ func TestModelManager_UninstallUnknownCatalogID(t *testing.T) {
 func TestModelManager_GetDownloadState_Nil(t *testing.T) {
 	t.Parallel()
 
-	mm := NewModelManager(t.TempDir(), nil)
+	mm := NewModelManager(t.TempDir(), nil, nil)
 	state := mm.GetDownloadState("battybirdnet-eu")
 	assert.Nil(t, state, "should return nil when no download is in progress")
 }
@@ -174,11 +174,11 @@ func TestModelManager_DownloadFile(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	mm := NewModelManager(t.TempDir(), nil)
+	mm := NewModelManager(t.TempDir(), nil, nil)
 	destPath := filepath.Join(mm.modelsDir, "test-model", "model.onnx")
 
 	progress := make(chan DownloadState, 10)
-	err := mm.downloadFile(srv.URL+"/model.onnx", destPath, checksum, int64(len(content)), progress)
+	err := mm.downloadFile("test-download", srv.URL+"/model.onnx", destPath, checksum, int64(len(content)), progress)
 	require.NoError(t, err)
 
 	// Verify file was written with correct content.
@@ -211,10 +211,10 @@ func TestModelManager_DownloadFile_BadChecksum(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	mm := NewModelManager(t.TempDir(), nil)
+	mm := NewModelManager(t.TempDir(), nil, nil)
 	destPath := filepath.Join(mm.modelsDir, "bad-checksum", "model.onnx")
 
-	err := mm.downloadFile(srv.URL+"/model.onnx", destPath, wrongChecksum, int64(len(content)), nil)
+	err := mm.downloadFile("test-bad-checksum", srv.URL+"/model.onnx", destPath, wrongChecksum, int64(len(content)), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checksum")
 
@@ -261,7 +261,7 @@ func TestModelManager_Install(t *testing.T) {
 	}
 
 	modelsDir := t.TempDir()
-	mm := NewModelManager(modelsDir, nil)
+	mm := NewModelManager(modelsDir, nil, nil)
 
 	progress := make(chan DownloadState, 100)
 	err := mm.Install(&entry, srv.URL, progress)
@@ -293,7 +293,7 @@ func TestModelManager_Install(t *testing.T) {
 func TestModelManager_Install_AlreadyInstalled(t *testing.T) {
 	t.Parallel()
 
-	mm := NewModelManager(t.TempDir(), nil)
+	mm := NewModelManager(t.TempDir(), nil, nil)
 
 	// Manually mark as installed.
 	mm.mu.Lock()
@@ -348,7 +348,7 @@ func TestModelManager_Install_SharedEmbeddings(t *testing.T) {
 	}
 
 	modelsDir := t.TempDir()
-	mm := NewModelManager(modelsDir, nil)
+	mm := NewModelManager(modelsDir, nil, nil)
 
 	err := mm.Install(&entry, srv.URL, nil)
 	require.NoError(t, err)
@@ -367,6 +367,29 @@ func TestModelManager_Install_SharedEmbeddings(t *testing.T) {
 	gotModel, err := os.ReadFile(modelPath)
 	require.NoError(t, err)
 	assert.Equal(t, modelContent, gotModel)
+}
+
+func TestModelManager_Install_ConcurrentDownloadRejected(t *testing.T) {
+	t.Parallel()
+
+	mm := NewModelManager(t.TempDir(), nil, nil)
+
+	// Manually mark a model as currently downloading.
+	mm.mu.Lock()
+	mm.downloading["test-concurrent"] = &DownloadState{
+		CatalogID: "test-concurrent",
+		Status:    StatusDownloading,
+	}
+	mm.mu.Unlock()
+
+	entry := CatalogEntry{
+		ID:   "test-concurrent",
+		Name: "Concurrent Test",
+	}
+
+	err := mm.Install(&entry, "", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already being downloaded")
 }
 
 func TestBuildHuggingFaceURL(t *testing.T) {

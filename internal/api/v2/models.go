@@ -147,6 +147,14 @@ func (c *Controller) InstallModel(ctx echo.Context) error {
 	// Start async install in a background goroutine.
 	progressChan := make(chan classifier.DownloadState, 16)
 	c.wg.Go(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				c.logErrorIfEnabled("Panic during model install",
+					logger.String("catalog_id", catalogID),
+					logger.Any("panic", r),
+				)
+			}
+		}()
 		if err := c.ModelManager.Install(&entry, "", progressChan); err != nil {
 			c.logErrorIfEnabled("Model install failed",
 				logger.String("catalog_id", catalogID),
@@ -182,7 +190,7 @@ func (c *Controller) UninstallModel(ctx echo.Context) error {
 
 	return ctx.JSON(http.StatusOK, map[string]string{
 		"catalogId": catalogID,
-		"status":    "removed",
+		"status":    classifier.StatusRemoved,
 	})
 }
 

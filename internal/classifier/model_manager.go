@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -30,12 +31,14 @@ const (
 	StatusLoading     = "loading"
 	StatusComplete    = "complete"
 	StatusFailed      = "failed"
+	StatusRemoved     = "removed"
 )
 
 // ModelManager handles the lifecycle of downloadable models.
 type ModelManager struct {
 	modelsDir    string
 	orchestrator *Orchestrator
+	settings     *conf.Settings
 	mu           sync.RWMutex
 	installed    map[string]InstalledModel
 	downloading  map[string]*DownloadState
@@ -61,11 +64,14 @@ type DownloadState struct {
 
 // NewModelManager creates a ModelManager that manages downloadable models
 // stored under modelsDir. The orchestrator is used for coordinating with
-// running model instances during install/uninstall operations.
-func NewModelManager(modelsDir string, orchestrator *Orchestrator) *ModelManager {
+// running model instances during install/uninstall operations. The settings
+// parameter is used to update configuration after install/uninstall; it may
+// be nil for testing.
+func NewModelManager(modelsDir string, orchestrator *Orchestrator, settings *conf.Settings) *ModelManager {
 	return &ModelManager{
 		modelsDir:    modelsDir,
 		orchestrator: orchestrator,
+		settings:     settings,
 		installed:    make(map[string]InstalledModel),
 		downloading:  make(map[string]*DownloadState),
 	}
@@ -198,6 +204,15 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 			Build()
 	}
 
+	// Unload from orchestrator BEFORE deleting files to avoid crashes.
+	if mm.orchestrator != nil && entry.RegistryID != "" {
+		if err := mm.orchestrator.UnloadModel(entry.RegistryID); err != nil {
+			log.Warn("Failed to unload model from orchestrator",
+				logger.String("catalog_id", catalogID),
+				logger.Error(err))
+		}
+	}
+
 	subdir := filepath.Join(mm.modelsDir, catalogID)
 
 	// Delete model ONNX files.
@@ -255,6 +270,9 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	// Labels are intentionally retained on disk.
 
 	delete(mm.installed, catalogID)
+
+	mm.applyConfigForUninstall(&entry)
+
 	log.Info("Model uninstalled",
 		logger.String("catalog_id", catalogID))
 
@@ -268,11 +286,19 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
 	log := GetLogger()
 
-	// Check if already installed.
+	// Check if already installed or already downloading.
 	mm.mu.Lock()
 	if _, ok := mm.installed[entry.ID]; ok {
 		mm.mu.Unlock()
 		return errors.Newf("model %s is already installed", entry.ID).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("catalog_id", entry.ID).
+			Build()
+	}
+	if _, downloading := mm.downloading[entry.ID]; downloading {
+		mm.mu.Unlock()
+		return errors.Newf("model %s is already being downloaded", entry.ID).
 			Component("classifier.model_manager").
 			Category(errors.CategoryValidation).
 			Context("catalog_id", entry.ID).
@@ -351,7 +377,7 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 		}
 		mm.mu.Unlock()
 
-		if err := mm.downloadFile(url, destPath, f.SHA256, f.SizeBytes, progress); err != nil {
+		if err := mm.downloadFile(entry.ID, url, destPath, f.SHA256, f.SizeBytes, progress); err != nil {
 			log.Error("Failed to download file",
 				logger.String("catalog_id", entry.ID),
 				logger.String("url", url),
@@ -382,6 +408,25 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	delete(mm.downloading, entry.ID)
 	mm.mu.Unlock()
 
+	// Find embeddings path for bat models.
+	embeddingsPath := ""
+	for _, f := range entry.Files {
+		if f.Role == RoleEmbeddings {
+			embeddingsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			break
+		}
+	}
+	mm.applyConfigForInstall(entry, modelPath, labelsPath, embeddingsPath)
+
+	// Hot-load into orchestrator.
+	if mm.orchestrator != nil && entry.RegistryID != "" {
+		if err := mm.orchestrator.LoadModel(entry.RegistryID); err != nil {
+			log.Warn("Failed to hot-load model (will be available after restart)",
+				logger.String("catalog_id", entry.ID),
+				logger.Error(err))
+		}
+	}
+
 	// Send final complete status (non-blocking in case the consumer is gone).
 	if progress != nil {
 		select {
@@ -407,14 +452,83 @@ func (mm *ModelManager) removeDownloading(catalogID string) {
 	delete(mm.downloading, catalogID)
 }
 
+// applyConfigForInstall updates settings to reflect a newly installed model.
+// Only fields with non-empty paths are set. The caller must hold no locks.
+func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, labelsPath, embeddingsPath string) {
+	if mm.settings == nil {
+		return
+	}
+
+	switch entry.RegistryID {
+	case RegistryIDBat:
+		mm.settings.Bat.Enabled = true
+		if modelPath != "" {
+			mm.settings.Bat.ClassifierModel = modelPath
+		}
+		if labelsPath != "" {
+			mm.settings.Bat.LabelPath = labelsPath
+		}
+		if embeddingsPath != "" {
+			mm.settings.Bat.EmbeddingModel = embeddingsPath
+		}
+	case RegistryIDPerchV2:
+		mm.settings.Perch.Enabled = true
+		if modelPath != "" {
+			mm.settings.Perch.ModelPath = modelPath
+		}
+		if labelsPath != "" {
+			mm.settings.Perch.LabelPath = labelsPath
+		}
+	}
+}
+
+// applyConfigForUninstall updates settings to reflect a removed model.
+// For bat models, Enabled is only set to false when no other bat models
+// remain installed. The caller must hold mm.mu (at least RLock).
+func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
+	if mm.settings == nil {
+		return
+	}
+
+	switch entry.RegistryID {
+	case RegistryIDBat:
+		// Only disable if no other bat models remain installed.
+		otherBatInstalled := false
+		for id := range mm.installed {
+			other, found := GetCatalogEntry(id)
+			if found && other.Category == CategoryBat {
+				otherBatInstalled = true
+				break
+			}
+		}
+		if !otherBatInstalled {
+			mm.settings.Bat.Enabled = false
+		}
+		mm.settings.Bat.ClassifierModel = ""
+		mm.settings.Bat.LabelPath = ""
+		mm.settings.Bat.EmbeddingModel = ""
+	case RegistryIDPerchV2:
+		mm.settings.Perch.Enabled = false
+		mm.settings.Perch.ModelPath = ""
+		mm.settings.Perch.LabelPath = ""
+	}
+}
+
 // progressInterval is the minimum number of bytes between progress reports
 // sent to the progress channel during a download.
 const progressInterval = 1 << 20 // 1 MiB
 
+// downloadHTTPClient is used for model file downloads with a generous timeout
+// to accommodate large files on slow connections.
+var downloadHTTPClient = &http.Client{
+	Timeout: 30 * time.Minute,
+}
+
 // downloadFile downloads a file from url to destPath, verifying the SHA256
-// checksum. Progress is reported via the progress channel if non-nil.
+// checksum. The catalogID is used to update shared download state for SSE
+// polling. Progress is reported via the progress channel if non-nil.
 // On failure, any temporary file is cleaned up.
-func (mm *ModelManager) downloadFile(url, destPath, expectedSHA256 string, totalBytes int64, progress chan<- DownloadState) error {
+func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 string, totalBytes int64, progress chan<- DownloadState) error {
 	// Ensure parent directory exists.
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 		return errors.Newf("failed to create directory for %s: %v", destPath, err).
@@ -434,7 +548,7 @@ func (mm *ModelManager) downloadFile(url, destPath, expectedSHA256 string, total
 		}
 	}()
 
-	resp, err := http.Get(url) //nolint:gosec // URL is constructed from catalog metadata, not user input
+	resp, err := downloadHTTPClient.Get(url) //nolint:noctx // URL is constructed from catalog metadata, not user input
 	if err != nil {
 		return errors.Newf("HTTP request failed for %s: %v", url, err).
 			Component("classifier.model_manager").
@@ -484,14 +598,24 @@ func (mm *ModelManager) downloadFile(url, destPath, expectedSHA256 string, total
 
 			// Report progress at intervals (non-blocking to avoid stalling
 			// the download if the SSE consumer disconnects).
-			if progress != nil && (downloaded-lastReport >= progressInterval || readErr == io.EOF) {
-				select {
-				case progress <- DownloadState{
-					TotalBytes:      totalBytes,
-					DownloadedBytes: downloaded,
-					Status:          StatusDownloading,
-				}:
-				default:
+			if downloaded-lastReport >= progressInterval || readErr == io.EOF {
+				// Update shared download state for SSE polling.
+				mm.mu.Lock()
+				if state, ok := mm.downloading[catalogID]; ok {
+					state.DownloadedBytes = downloaded
+					state.TotalBytes = totalBytes
+				}
+				mm.mu.Unlock()
+
+				if progress != nil {
+					select {
+					case progress <- DownloadState{
+						TotalBytes:      totalBytes,
+						DownloadedBytes: downloaded,
+						Status:          StatusDownloading,
+					}:
+					default:
+					}
 				}
 				lastReport = downloaded
 			}
