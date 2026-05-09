@@ -525,6 +525,11 @@
     if (configured && _lat != null && _lng != null && _threshold != null) {
       debouncedTestRangeFilter();
     }
+
+    return () => {
+      clearTimeout(debounceTimer);
+      clearTimeout(loadingDelayTimer);
+    };
   });
 
   async function downloadSpeciesCSV() {
@@ -548,11 +553,20 @@
 
       if (!response.ok) {
         let msg = t('settings.errors.csvDownloadFailed');
-        try {
-          const data = await response.clone().json();
-          if (data?.message) msg = data.message;
-        } catch {
-          // ignore
+        if (response.headers.get('Content-Type')?.includes('application/json')) {
+          try {
+            const data: unknown = await response.clone().json();
+            if (
+              data &&
+              typeof data === 'object' &&
+              'message' in data &&
+              typeof (data as Record<string, unknown>).message === 'string'
+            ) {
+              msg = (data as Record<string, unknown>).message as string;
+            }
+          } catch {
+            // ignore parsing errors
+          }
         }
         throw new Error(msg);
       }
@@ -807,11 +821,15 @@
             </div>
           {/snippet}
           {#snippet renderSelected(options)}
-            {@const localeOption = options[0] as BirdnetLocaleOption}
-            <span class="flex items-center gap-2">
-              <FlagIcon locale={localeOption.localeCode} className="size-4" />
-              <span>{localeOption.label}</span>
-            </span>
+            {#if options[0]}
+              {@const localeOption = options[0] as BirdnetLocaleOption}
+              <span class="flex items-center gap-2">
+                <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                <span>{localeOption.label}</span>
+              </span>
+            {:else}
+              <span>{birdnet?.locale ?? 'en'}</span>
+            {/if}
           {/snippet}
         </SelectDropdown>
 
