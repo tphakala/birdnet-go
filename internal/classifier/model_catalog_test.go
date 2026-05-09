@@ -156,6 +156,7 @@ func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
 	entry, ok := GetCatalogEntry("birdnet-v3.0")
 	require.True(t, ok, "expected to find catalog entry birdnet-v3.0")
 	assert.Equal(t, "birdnet-v3.0", entry.ID)
+	assert.Equal(t, "BirdNET v3.0", entry.Name)
 	assert.Equal(t, RegistryIDBirdNETV3, entry.RegistryID)
 	assert.Equal(t, CategoryBird, entry.Category)
 	assert.Contains(t, entry.RequiredBuildTags, "onnx")
