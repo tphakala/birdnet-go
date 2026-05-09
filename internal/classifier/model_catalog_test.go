@@ -39,7 +39,7 @@ func TestEmbeddedCatalog_HasFilesWithModelRole(t *testing.T) {
 
 		hasModel := false
 		for _, f := range entry.Files {
-			if f.Role == "model" {
+			if f.Role == RoleModel {
 				hasModel = true
 				break
 			}
@@ -51,7 +51,7 @@ func TestEmbeddedCatalog_HasFilesWithModelRole(t *testing.T) {
 func TestEmbeddedCatalog_ValidCategories(t *testing.T) {
 	t.Parallel()
 
-	validCategories := map[string]bool{"bird": true, "bat": true}
+	validCategories := map[string]bool{CategoryBird: true, CategoryBat: true}
 	for _, entry := range EmbeddedCatalog {
 		assert.True(t, validCategories[entry.Category],
 			"catalog entry %q has invalid category %q (must be \"bird\" or \"bat\")", entry.ID, entry.Category)
@@ -65,7 +65,7 @@ func TestGetCatalogEntry_Found(t *testing.T) {
 	require.True(t, ok, "expected to find catalog entry battybirdnet-eu")
 	assert.Equal(t, "battybirdnet-eu", entry.ID)
 	assert.Equal(t, "BattyBirdNET EU", entry.Name)
-	assert.Equal(t, "bat", entry.Category)
+	assert.Equal(t, CategoryBat, entry.Category)
 	assert.Equal(t, "Bat", entry.RegistryID)
 }
 
@@ -82,35 +82,35 @@ func TestCatalogByCategory(t *testing.T) {
 	grouped := CatalogByCategory()
 
 	// Should have both bird and bat categories
-	require.Contains(t, grouped, "bird")
-	require.Contains(t, grouped, "bat")
+	require.Contains(t, grouped, CategoryBird)
+	require.Contains(t, grouped, CategoryBat)
 
-	// All bird entries should have category "bird"
-	for _, entry := range grouped["bird"] {
-		assert.Equal(t, "bird", entry.Category)
+	// All bird entries should have the bird category
+	for _, entry := range grouped[CategoryBird] {
+		assert.Equal(t, CategoryBird, entry.Category)
 	}
 
-	// All bat entries should have category "bat"
-	for _, entry := range grouped["bat"] {
-		assert.Equal(t, "bat", entry.Category)
+	// All bat entries should have the bat category
+	for _, entry := range grouped[CategoryBat] {
+		assert.Equal(t, CategoryBat, entry.Category)
 	}
 
 	// Verify expected counts (3 bird entries, 11 bat entries)
-	assert.Len(t, grouped["bird"], 3, "expected 3 bird catalog entries")
-	assert.Len(t, grouped["bat"], 11, "expected 11 bat catalog entries")
+	assert.Len(t, grouped[CategoryBird], 3, "expected 3 bird catalog entries")
+	assert.Len(t, grouped[CategoryBat], 11, "expected 11 bat catalog entries")
 }
 
 func TestEmbeddedCatalog_BatEntriesHaveEmbeddingsFile(t *testing.T) {
 	t.Parallel()
 
 	for _, entry := range EmbeddedCatalog {
-		if entry.Category != "bat" {
+		if entry.Category != CategoryBat {
 			continue
 		}
 
 		hasEmbeddings := false
 		for _, f := range entry.Files {
-			if f.Role == "embeddings" {
+			if f.Role == RoleEmbeddings {
 				hasEmbeddings = true
 				assert.Equal(t, "birdnet-v24-embeddings.onnx", f.LocalName,
 					"bat entry %q should use shared embeddings file", entry.ID)

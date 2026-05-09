@@ -3,6 +3,19 @@
 // key via RegistryID and provides download metadata for HuggingFace repos.
 package classifier
 
+// Catalog category constants.
+const (
+	CategoryBird = "bird"
+	CategoryBat  = "bat"
+)
+
+// CatalogFile role constants.
+const (
+	RoleModel      = "model"
+	RoleLabels     = "labels"
+	RoleEmbeddings = "embeddings"
+)
+
 // CatalogEntry describes a downloadable model available in the model gallery.
 type CatalogEntry struct {
 	ID                string        // unique catalog identifier (e.g., "battybirdnet-eu")
@@ -42,7 +55,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Author:            "BirdNET",
 		License:           "TBD",
 		CommercialUse:     false,
-		Category:          "bird",
+		Category:          CategoryBird,
 		Region:            "",
 		SpeciesCount:      0, // determined at runtime from label file
 		Version:           "3.0",
@@ -50,8 +63,8 @@ var EmbeddedCatalog = []CatalogEntry{
 		RequiredBuildTags: []string{"onnx"},
 		HuggingFaceRepo:   "tphakala/BirdNET-v3.0",
 		Files: []CatalogFile{
-			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: "model", SHA256: "placeholder", SizeBytes: 0},
-			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: "labels", SHA256: "placeholder", SizeBytes: 0},
+			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "placeholder", SizeBytes: 0},
+			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "placeholder", SizeBytes: 0},
 		},
 	},
 	{
@@ -61,7 +74,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Author:            "Google",
 		License:           "Apache-2.0",
 		CommercialUse:     true,
-		Category:          "bird",
+		Category:          CategoryBird,
 		Region:            "",
 		SpeciesCount:      14795,
 		Version:           "2",
@@ -69,8 +82,8 @@ var EmbeddedCatalog = []CatalogEntry{
 		RequiredBuildTags: []string{"onnx"},
 		HuggingFaceRepo:   "tphakala/Perch-v2",
 		Files: []CatalogFile{
-			{RemotePath: "perch_v2.onnx", LocalName: "perch_v2.onnx", Role: "model", SHA256: "placeholder", SizeBytes: 0},
-			{RemotePath: "labels.txt", LocalName: "perch_v2_labels.txt", Role: "labels", SHA256: "placeholder", SizeBytes: 0},
+			{RemotePath: "perch_v2.onnx", LocalName: "perch_v2.onnx", Role: RoleModel, SHA256: "placeholder", SizeBytes: 0},
+			{RemotePath: "labels.txt", LocalName: "perch_v2_labels.txt", Role: RoleLabels, SHA256: "placeholder", SizeBytes: 0},
 		},
 	},
 	{
@@ -80,7 +93,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Author:            "BSG",
 		License:           "Non-commercial",
 		CommercialUse:     false,
-		Category:          "bird",
+		Category:          CategoryBird,
 		Region:            "Finland",
 		SpeciesCount:      0,
 		Version:           "4.4",
@@ -88,8 +101,8 @@ var EmbeddedCatalog = []CatalogEntry{
 		RequiredBuildTags: []string{"onnx"},
 		HuggingFaceRepo:   "tphakala/BSG",
 		Files: []CatalogFile{
-			{RemotePath: "bsg_finland_v4.4.onnx", LocalName: "bsg_finland_v4.4.onnx", Role: "model", SHA256: "placeholder", SizeBytes: 0},
-			{RemotePath: "labels.txt", LocalName: "bsg_finland_v4.4_labels.txt", Role: "labels", SHA256: "placeholder", SizeBytes: 0},
+			{RemotePath: "bsg_finland_v4.4.onnx", LocalName: "bsg_finland_v4.4.onnx", Role: RoleModel, SHA256: "placeholder", SizeBytes: 0},
+			{RemotePath: "labels.txt", LocalName: "bsg_finland_v4.4_labels.txt", Role: RoleLabels, SHA256: "placeholder", SizeBytes: 0},
 		},
 	},
 
@@ -118,7 +131,7 @@ func batCatalogEntry(id, name, region string, speciesCount int, fileSuffix strin
 		Author:            "rdz-oss",
 		License:           "CC-BY-NC-SA-4.0",
 		CommercialUse:     false,
-		Category:          "bat",
+		Category:          CategoryBat,
 		Region:            region,
 		SpeciesCount:      speciesCount,
 		Version:           "1.0",
@@ -129,21 +142,21 @@ func batCatalogEntry(id, name, region string, speciesCount int, fileSuffix strin
 			{
 				RemotePath: "fp32/BattyBirdNET-" + fileSuffix + "-256kHz_fp32.onnx",
 				LocalName:  "BattyBirdNET-" + fileSuffix + "-256kHz_fp32.onnx",
-				Role:       "model",
+				Role:       RoleModel,
 				SHA256:     "placeholder",
 				SizeBytes:  0,
 			},
 			{
 				RemotePath: "labels/BattyBirdNET-" + fileSuffix + "-256kHz_Labels.txt",
 				LocalName:  "BattyBirdNET-" + fileSuffix + "-256kHz_Labels.txt",
-				Role:       "labels",
+				Role:       RoleLabels,
 				SHA256:     "placeholder",
 				SizeBytes:  0,
 			},
 			{
 				RemotePath: "birdnet-v24-embeddings.onnx",
 				LocalName:  "birdnet-v24-embeddings.onnx",
-				Role:       "embeddings",
+				Role:       RoleEmbeddings,
 				SHA256:     "placeholder",
 				SizeBytes:  0,
 			},
