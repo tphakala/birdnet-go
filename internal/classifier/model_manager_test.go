@@ -1,6 +1,10 @@
 package classifier
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// sha256Hex returns the hex-encoded SHA-256 hash of data.
+func sha256Hex(data []byte) string {
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:])
+}
 
 func TestModelManager_ScanInstalled(t *testing.T) {
 	t.Parallel()
@@ -150,4 +160,101 @@ func TestModelManager_GetDownloadState_Nil(t *testing.T) {
 	mm := NewModelManager(t.TempDir(), nil)
 	state := mm.GetDownloadState("battybirdnet-eu")
 	assert.Nil(t, state, "should return nil when no download is in progress")
+}
+
+func TestModelManager_DownloadFile(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("fake model data for download test")
+	checksum := sha256Hex(content)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(content)
+	}))
+	defer srv.Close()
+
+	mm := NewModelManager(t.TempDir(), nil)
+	destPath := filepath.Join(mm.modelsDir, "test-model", "model.onnx")
+
+	progress := make(chan DownloadState, 10)
+	err := mm.downloadFile(srv.URL+"/model.onnx", destPath, checksum, int64(len(content)), progress)
+	require.NoError(t, err)
+
+	// Verify file was written with correct content.
+	got, err := os.ReadFile(destPath)
+	require.NoError(t, err)
+	assert.Equal(t, content, got)
+
+	// Verify no temp file remains.
+	_, err = os.Stat(destPath + ".tmp")
+	assert.True(t, os.IsNotExist(err), "temp file should be removed after successful download")
+
+	// Verify at least one progress report was sent.
+	close(progress)
+	var reports []DownloadState
+	for s := range progress {
+		reports = append(reports, s)
+	}
+	assert.NotEmpty(t, reports, "expected at least one progress report")
+}
+
+func TestModelManager_DownloadFile_BadChecksum(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("some file content")
+	wrongChecksum := "0000000000000000000000000000000000000000000000000000000000000000"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(content)
+	}))
+	defer srv.Close()
+
+	mm := NewModelManager(t.TempDir(), nil)
+	destPath := filepath.Join(mm.modelsDir, "bad-checksum", "model.onnx")
+
+	err := mm.downloadFile(srv.URL+"/model.onnx", destPath, wrongChecksum, int64(len(content)), nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checksum")
+
+	// Verify temp file was cleaned up.
+	_, statErr := os.Stat(destPath + ".tmp")
+	assert.True(t, os.IsNotExist(statErr), "temp file should be cleaned up after checksum mismatch")
+
+	// Verify destination file was not created.
+	_, statErr = os.Stat(destPath)
+	assert.True(t, os.IsNotExist(statErr), "destination file should not exist after checksum failure")
+}
+
+func TestBuildHuggingFaceURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		repo     string
+		filePath string
+		want     string
+	}{
+		{
+			name:     "simple file",
+			repo:     "tphakala/BirdNET-v3.0",
+			filePath: "birdnet_v3.0.onnx",
+			want:     "https://huggingface.co/tphakala/BirdNET-v3.0/resolve/main/birdnet_v3.0.onnx",
+		},
+		{
+			name:     "nested path",
+			repo:     "tphakala/BattyBirdNET-onnx",
+			filePath: "fp32/BattyBirdNET-EU-256kHz_fp32.onnx",
+			want:     "https://huggingface.co/tphakala/BattyBirdNET-onnx/resolve/main/fp32/BattyBirdNET-EU-256kHz_fp32.onnx",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := buildHuggingFaceURL(tt.repo, tt.filePath)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

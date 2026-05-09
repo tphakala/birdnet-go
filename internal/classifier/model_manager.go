@@ -3,7 +3,12 @@
 package classifier
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
 	"maps"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -245,6 +250,142 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 		logger.String("catalog_id", catalogID))
 
 	return nil
+}
+
+// progressInterval is the minimum number of bytes between progress reports
+// sent to the progress channel during a download.
+const progressInterval = 1 << 20 // 1 MiB
+
+// downloadFile downloads a file from url to destPath, verifying the SHA256
+// checksum. Progress is reported via the progress channel if non-nil.
+// On failure, any temporary file is cleaned up.
+func (mm *ModelManager) downloadFile(url, destPath, expectedSHA256 string, totalBytes int64, progress chan<- DownloadState) error {
+	// Ensure parent directory exists.
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		return errors.Newf("failed to create directory for %s: %v", destPath, err).
+			Component("classifier.model_manager").
+			Category(errors.CategoryFileIO).
+			Context("dest_path", destPath).
+			Build()
+	}
+
+	tmpPath := destPath + ".tmp"
+
+	// Always attempt best-effort cleanup of the temp file on error.
+	success := false
+	defer func() {
+		if !success {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	resp, err := http.Get(url) //nolint:gosec // URL is constructed from catalog metadata, not user input
+	if err != nil {
+		return errors.Newf("HTTP request failed for %s: %v", url, err).
+			Component("classifier.model_manager").
+			Category(errors.CategoryNetwork).
+			Context("url", url).
+			Build()
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.Newf("HTTP %d for %s", resp.StatusCode, url).
+			Component("classifier.model_manager").
+			Category(errors.CategoryNetwork).
+			Context("url", url).
+			Context("status", fmt.Sprintf("%d", resp.StatusCode)).
+			Build()
+	}
+
+	outFile, err := os.Create(tmpPath)
+	if err != nil {
+		return errors.Newf("failed to create temp file %s: %v", tmpPath, err).
+			Component("classifier.model_manager").
+			Category(errors.CategoryFileIO).
+			Context("tmp_path", tmpPath).
+			Build()
+	}
+	defer func() { _ = outFile.Close() }()
+
+	hasher := sha256.New()
+	reader := io.TeeReader(resp.Body, hasher)
+
+	var downloaded int64
+	var lastReport int64
+	buf := make([]byte, 32*1024) // 32 KiB read buffer
+
+	for {
+		n, readErr := reader.Read(buf)
+		if n > 0 {
+			if _, writeErr := outFile.Write(buf[:n]); writeErr != nil {
+				return errors.Newf("failed to write to %s: %v", tmpPath, writeErr).
+					Component("classifier.model_manager").
+					Category(errors.CategoryFileIO).
+					Context("tmp_path", tmpPath).
+					Build()
+			}
+			downloaded += int64(n)
+
+			// Report progress at intervals.
+			if progress != nil && (downloaded-lastReport >= progressInterval || readErr == io.EOF) {
+				progress <- DownloadState{
+					TotalBytes:      totalBytes,
+					DownloadedBytes: downloaded,
+					Status:          "downloading",
+				}
+				lastReport = downloaded
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return errors.Newf("read error downloading %s: %v", url, readErr).
+				Component("classifier.model_manager").
+				Category(errors.CategoryNetwork).
+				Context("url", url).
+				Build()
+		}
+	}
+
+	// Verify checksum.
+	actualSHA256 := hex.EncodeToString(hasher.Sum(nil))
+	if actualSHA256 != expectedSHA256 {
+		return errors.Newf("checksum mismatch for %s: expected %s, got %s", destPath, expectedSHA256, actualSHA256).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("dest_path", destPath).
+			Context("expected_sha256", expectedSHA256).
+			Context("actual_sha256", actualSHA256).
+			Build()
+	}
+
+	// Close before rename so the file is flushed.
+	if err := outFile.Close(); err != nil {
+		return errors.Newf("failed to close temp file %s: %v", tmpPath, err).
+			Component("classifier.model_manager").
+			Category(errors.CategoryFileIO).
+			Context("tmp_path", tmpPath).
+			Build()
+	}
+
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		return errors.Newf("failed to rename %s to %s: %v", tmpPath, destPath, err).
+			Component("classifier.model_manager").
+			Category(errors.CategoryFileIO).
+			Context("tmp_path", tmpPath).
+			Context("dest_path", destPath).
+			Build()
+	}
+
+	success = true
+	return nil
+}
+
+// buildHuggingFaceURL constructs the download URL for a file in a HuggingFace repo.
+func buildHuggingFaceURL(repo, filePath string) string {
+	return "https://huggingface.co/" + repo + "/resolve/main/" + filePath
 }
 
 // fileModTime returns the modification time for a file, or the zero time on error.
