@@ -36,6 +36,7 @@ const browserGlobals = {
   HTMLAudioElement: 'readonly',
   HTMLImageElement: 'readonly',
   HTMLUListElement: 'readonly',
+  HTMLDialogElement: 'readonly',
   SVGSVGElement: 'readonly',
   SVGElement: 'readonly',
   MutationObserver: 'readonly',

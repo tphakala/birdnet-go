@@ -71,6 +71,7 @@ Performance Optimizations:
     Shield,
     LifeBuoy,
     Paintbrush,
+    BrainCircuit,
   } from '@lucide/svelte';
   import { flyout } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
@@ -219,6 +220,7 @@ Performance Optimizations:
     systemDatabase: actualRoute === '/ui/system/database',
     systemTerminal: actualRoute === '/ui/system/terminal',
     settings: actualRoute.startsWith('/ui/settings'),
+    settingsAnalysis: actualRoute === '/ui/settings/analysis',
     settingsMain: actualRoute === '/ui/settings/main',
     settingsAudio: actualRoute === '/ui/settings/audio',
     settingsSpecies: actualRoute === '/ui/settings/species',
@@ -261,6 +263,7 @@ Performance Optimizations:
     systemOverview: onNavigate ? '/system' : '/ui/system',
     systemDatabase: onNavigate ? '/system/database' : '/ui/system/database',
     systemTerminal: onNavigate ? '/system/terminal' : '/ui/system/terminal',
+    settingsAnalysis: onNavigate ? '/settings/analysis' : '/ui/settings/analysis',
     settingsMain: onNavigate ? '/settings/main' : '/ui/settings/main',
     settingsAudio: onNavigate ? '/settings/audio' : '/ui/settings/audio',
     settingsSpecies: onNavigate ? '/settings/species' : '/ui/settings/species',
@@ -810,6 +813,17 @@ Performance Optimizations:
                   </div>
                   <div class="p-1 max-h-[calc(100vh-8rem)] overflow-y-auto">
                     <button
+                      onclick={() => navigate(navigationUrls.settingsAnalysis)}
+                      class={cn(
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.settingsAnalysis
+                          ? 'menu-subitem-active'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                      )}
+                    >
+                      <BrainCircuit class="size-4 shrink-0" />Analysis
+                    </button>
+                    <button
                       onclick={() => navigate(navigationUrls.settingsMain)}
                       class={cn(
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
@@ -938,6 +952,17 @@ Performance Optimizations:
                   class="ml-4 pl-4 border-l-2 mt-1 flex flex-col gap-0.5"
                   style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
                 >
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsAnalysis)}
+                    class={cn(
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.settingsAnalysis
+                        ? 'menu-subitem-active'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                    )}
+                  >
+                    <BrainCircuit class="size-4 shrink-0" />Analysis
+                  </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsMain)}
                     class={cn(
