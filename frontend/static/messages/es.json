@@ -4465,13 +4465,32 @@
   },
   "analysis": {
     "title": "Análisis",
+    "tabs": {
+      "settings": "Settings",
+      "models": "Models"
+    },
     "detection": {
       "title": "Configuración de detección",
       "description": "Configurar umbrales de confianza para la clasificación de especies.",
       "confidenceThreshold": {
         "label": "Umbral de confianza",
         "helpText": "Puntuación mínima de confianza (0.0 - 1.0) requerida para registrar una detección."
+      },
+      "batThreshold": {
+        "label": "Bat Detection Threshold",
+        "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
+      },
+      "locale": {
+        "label": "Species Language",
+        "helpText": "Language used for species common names in the interface."
       }
+    },
+    "rangeFilter": {
+      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists."
+    },
+    "advanced": {
+      "title": "Advanced",
+      "description": "Processing and custom model configuration."
     },
     "gallery": {
       "title": "Galería de modelos",
