@@ -813,17 +813,6 @@ Performance Optimizations:
                   </div>
                   <div class="p-1 max-h-[calc(100vh-8rem)] overflow-y-auto">
                     <button
-                      onclick={() => navigate(navigationUrls.settingsAnalysis)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.settingsAnalysis
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <BrainCircuit class="size-4 shrink-0" />{t('settings.sections.analysis')}
-                    </button>
-                    <button
                       onclick={() => navigate(navigationUrls.settingsMain)}
                       class={cn(
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
@@ -855,6 +844,17 @@ Performance Optimizations:
                       )}
                     >
                       <Volume2 class="size-4 shrink-0" />{t('settings.sections.audio')}
+                    </button>
+                    <button
+                      onclick={() => navigate(navigationUrls.settingsAnalysis)}
+                      class={cn(
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.settingsAnalysis
+                          ? 'menu-subitem-active'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                      )}
+                    >
+                      <BrainCircuit class="size-4 shrink-0" />{t('settings.sections.analysis')}
                     </button>
                     <button
                       onclick={() => navigate(navigationUrls.settingsSpecies)}
@@ -953,17 +953,6 @@ Performance Optimizations:
                   style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
                 >
                   <button
-                    onclick={() => navigate(navigationUrls.settingsAnalysis)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.settingsAnalysis
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <BrainCircuit class="size-4 shrink-0" />{t('settings.sections.analysis')}
-                  </button>
-                  <button
                     onclick={() => navigate(navigationUrls.settingsMain)}
                     class={cn(
                       'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
@@ -995,6 +984,17 @@ Performance Optimizations:
                     )}
                   >
                     <Volume2 class="size-4 shrink-0" />{t('settings.sections.audio')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsAnalysis)}
+                    class={cn(
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.settingsAnalysis
+                        ? 'menu-subitem-active'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                    )}
+                  >
+                    <BrainCircuit class="size-4 shrink-0" />{t('settings.sections.analysis')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsSpecies)}
