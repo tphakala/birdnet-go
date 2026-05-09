@@ -31,6 +31,7 @@ type CatalogEntryResponse struct {
 	Region         string `json:"region"`
 	SpeciesCount   int    `json:"speciesCount"`
 	Version        string `json:"version"`
+	UpstreamURL    string `json:"upstreamUrl,omitempty"`
 	Installed      bool   `json:"installed"`
 	Compatible     bool   `json:"compatible"`
 	TotalSizeBytes int64  `json:"totalSizeBytes"`
@@ -107,6 +108,7 @@ func (c *Controller) GetModelCatalog(ctx echo.Context) error {
 			Region:         entry.Region,
 			SpeciesCount:   entry.SpeciesCount,
 			Version:        entry.Version,
+			UpstreamURL:    entry.UpstreamURL,
 			Installed:      installed,
 			Compatible:     true, // build tag check deferred to a later task
 			TotalSizeBytes: totalSize,

@@ -30,6 +30,7 @@ type CatalogEntry struct {
 	Version           string        // model version string
 	RegistryID        string        // maps to a ModelRegistry key; empty if loader not yet implemented
 	RequiredBuildTags []string      // build tags required for this model (e.g., ["onnx"])
+	UpstreamURL       string        // URL to the upstream project repository
 	HuggingFaceRepo   string        // HuggingFace repository path
 	Files             []CatalogFile // files to download for this model
 }
@@ -61,6 +62,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Version:           "3.0",
 		RegistryID:        "BirdNET_V3.0",
 		RequiredBuildTags: []string{"onnx"},
+		UpstreamURL:       "https://github.com/birdnet-team/BirdNET-Analyzer",
 		HuggingFaceRepo:   "tphakala/BirdNET-v3.0",
 		Files: []CatalogFile{
 			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "placeholder", SizeBytes: 0},
@@ -80,6 +82,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Version:           "2",
 		RegistryID:        "Perch_V2",
 		RequiredBuildTags: []string{"onnx"},
+		UpstreamURL:       "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
 		HuggingFaceRepo:   "tphakala/Perch-v2",
 		Files: []CatalogFile{
 			{RemotePath: "perch_v2.onnx", LocalName: "perch_v2.onnx", Role: RoleModel, SHA256: "placeholder", SizeBytes: 0},
@@ -99,6 +102,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Version:           "4.4",
 		RegistryID:        "", // BSG loader not yet implemented
 		RequiredBuildTags: []string{"onnx"},
+		UpstreamURL:       "https://github.com/luomus/BSG",
 		HuggingFaceRepo:   "tphakala/BSG",
 		Files: []CatalogFile{
 			{RemotePath: "bsg_finland_v4.4.onnx", LocalName: "bsg_finland_v4.4.onnx", Role: RoleModel, SHA256: "placeholder", SizeBytes: 0},
@@ -137,6 +141,7 @@ func batCatalogEntry(id, name, region string, speciesCount int, fileSuffix strin
 		Version:           "1.0",
 		RegistryID:        "Bat",
 		RequiredBuildTags: []string{"onnx"},
+		UpstreamURL:       "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
 		HuggingFaceRepo:   "tphakala/BattyBirdNET-onnx",
 		Files: []CatalogFile{
 			{

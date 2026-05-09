@@ -346,8 +346,7 @@
               </div>
             </div>
             <!-- Action footer -->
-            <div class="mt-3 flex items-center justify-between">
-              <span class="text-xs text-[var(--color-base-content)]/80">v{entry.version}</span>
+            <div class="mt-3 flex items-center justify-end">
               <button
                 onclick={() => openRemoveDialog(entry)}
                 disabled={isDeleting}
@@ -403,7 +402,18 @@
         <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
           {entry.description}
         </p>
-        <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
+        {#if entry.upstreamUrl}
+          <a
+            href={entry.upstreamUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="mt-1 inline-block text-xs text-[var(--color-primary)]/80 hover:text-[var(--color-primary)] transition-colors"
+          >
+            {entry.author}
+          </a>
+        {:else}
+          <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
+        {/if}
       </div>
     </div>
 
@@ -462,8 +472,7 @@
     </div>
 
     <!-- Action footer (pushed to bottom via mt-auto) -->
-    <div class="mt-auto flex items-center justify-between pt-3">
-      <span class="text-xs text-[var(--color-base-content)]/80">v{entry.version}</span>
+    <div class="mt-auto flex items-center justify-end pt-3">
       <button
         onclick={() => openLicenseDialog(entry)}
         disabled={isInstalling || installingId !== null}
@@ -585,7 +594,7 @@
 <!-- License Acceptance Dialog -->
 <dialog
   bind:this={licenseDialogRef}
-  class="rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 shadow-xl backdrop:bg-black/50"
+  class="m-auto rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 shadow-xl backdrop:bg-black/50"
   aria-labelledby="license-dialog-title"
 >
   {#if licenseModel}
@@ -675,7 +684,7 @@
 <!-- Remove Confirmation Dialog -->
 <dialog
   bind:this={removeDialogRef}
-  class="rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 shadow-xl backdrop:bg-black/50"
+  class="m-auto rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 shadow-xl backdrop:bg-black/50"
   aria-labelledby="remove-dialog-title"
 >
   {#if removeConfirmModel}

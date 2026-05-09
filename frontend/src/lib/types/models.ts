@@ -15,6 +15,7 @@ export interface CatalogEntry {
   region: string;
   speciesCount: number;
   version: string;
+  upstreamUrl?: string;
   installed: boolean;
   compatible: boolean;
   totalSizeBytes: number;
