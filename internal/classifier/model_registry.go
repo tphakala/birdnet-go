@@ -90,8 +90,8 @@ var ModelRegistry = map[string]ModelInfo{
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
 		DefaultLocale: "en-uk",
 	},
-	"Perch_V2": {
-		ID:               "Perch_V2",
+	RegistryIDPerchV2: {
+		ID:               RegistryIDPerchV2,
 		Name:             ModelNamePerchV2,
 		Backend:          BackendONNX,
 		DetectionName:    "Perch",
@@ -101,8 +101,8 @@ var ModelRegistry = map[string]ModelInfo{
 		ConfigAliases:    []string{conf.ModelIDPerchV2},
 		NumSpecies:       14795,
 	},
-	"Bat": {
-		ID:               "Bat",
+	RegistryIDBat: {
+		ID:               RegistryIDBat,
 		Name:             "Bat Classifier",
 		Backend:          BackendONNX,
 		DetectionName:    "BattyBirdNET",
@@ -164,8 +164,8 @@ var filenamePatterns = map[string]string{
 	"birdnet-v30":            "BirdNET_V3.0",
 	"birdnet_v3.0":           "BirdNET_V3.0",
 	"birdnet-v3.0":           "BirdNET_V3.0",
-	"perch_v2":               "Perch_V2",
-	"perch-v2":               "Perch_V2",
+	"perch_v2":               RegistryIDPerchV2,
+	"perch-v2":               RegistryIDPerchV2,
 }
 
 // DetermineModelInfo identifies the model type from a file path or model identifier.

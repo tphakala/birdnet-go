@@ -222,6 +222,12 @@ func (c *Controller) StreamInstallProgress(ctx echo.Context) error {
 
 	reqCtx := ctx.Request().Context()
 
+	// Track how long we see nil download state without the model being
+	// installed. If this exceeds a threshold, the install likely failed
+	// and the state was already cleaned up before we connected.
+	const maxNoStateIterations = 30000 // ~5 min at 10ms sleep
+	noStateCount := 0
+
 	for {
 		select {
 		case <-reqCtx.Done():
@@ -253,11 +259,27 @@ func (c *Controller) StreamInstallProgress(ctx echo.Context) error {
 					return nil
 				}
 
+				noStateCount++
+				if noStateCount > maxNoStateIterations {
+					// Timeout: no download state observed for too long.
+					failedState := classifier.DownloadState{
+						CatalogID: catalogID,
+						Status:    classifier.StatusFailed,
+						Error:     "install timed out or failed before progress could be tracked",
+					}
+					_ = writeSSEEvent(ctx, "progress", failedState)
+					flusher.Flush()
+					return nil
+				}
+
 				// No download and not installed: nothing to report yet.
 				// Wait briefly before re-checking.
 				time.Sleep(sseEventLoopSleep)
 				continue
 			}
+
+			// Reset counter when we have valid state.
+			noStateCount = 0
 
 			// Send current progress.
 			if err := writeSSEEvent(ctx, "progress", state); err != nil {

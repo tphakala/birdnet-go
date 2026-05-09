@@ -558,7 +558,7 @@
 {/snippet}
 
 <!-- Main Content -->
-<main class="settings-page-content space-y-6" aria-label="Analysis settings configuration">
+<main class="settings-page-content space-y-6" aria-label={t('analysis.title')}>
   <!-- Detection Settings Section -->
   <SettingsSection
     title={t('analysis.detection.title')}

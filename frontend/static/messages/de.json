@@ -4475,7 +4475,7 @@
     },
     "gallery": {
       "title": "Modellgalerie",
-      "description": "Klassifikatormodelle für Vogel- und Fledermauskennungen verwalten.",
+      "description": "Klassifikatormodelle für Vogel- und Fledermauserkennungen verwalten.",
       "tabs": {
         "installed": "Installiert",
         "available": "Verfügbar"

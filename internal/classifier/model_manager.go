@@ -315,13 +315,17 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	// Create model subdirectory.
 	subdir := filepath.Join(mm.modelsDir, entry.ID)
 	if err := os.MkdirAll(subdir, 0o755); err != nil {
-		mm.removeDownloading(entry.ID)
-		return errors.Newf("failed to create model directory %s: %v", subdir, err).
+		mkdirErr := errors.Newf("failed to create model directory %s: %v", subdir, err).
 			Component("classifier.model_manager").
 			Category(errors.CategoryFileIO).
 			Context("catalog_id", entry.ID).
 			Context("directory", subdir).
 			Build()
+		mm.markFailed(entry.ID, mkdirErr, progress)
+		time.AfterFunc(30*time.Second, func() {
+			mm.removeDownloading(entry.ID)
+		})
+		return mkdirErr
 	}
 
 	// Track files we downloaded so we can clean up on failure.
@@ -331,7 +335,10 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 		for _, f := range downloadedFiles {
 			_ = os.Remove(f)
 		}
-		mm.removeDownloading(entry.ID)
+		// Keep failed state briefly for SSE pollers, then clean up.
+		time.AfterFunc(30*time.Second, func() {
+			mm.removeDownloading(entry.ID)
+		})
 	}
 
 	// Download each file.
@@ -382,6 +389,7 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 				logger.String("catalog_id", entry.ID),
 				logger.String("url", url),
 				logger.Error(err))
+			mm.markFailed(entry.ID, err, progress)
 			cleanup()
 			return err
 		}
@@ -443,6 +451,28 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 		logger.String("model_path", modelPath))
 
 	return nil
+}
+
+// markFailed sets the download state to StatusFailed so SSE pollers can
+// observe the failure before the entry is cleaned up.
+func (mm *ModelManager) markFailed(catalogID string, err error, progress chan<- DownloadState) {
+	mm.mu.Lock()
+	if state, ok := mm.downloading[catalogID]; ok {
+		state.Status = StatusFailed
+		state.Error = err.Error()
+	}
+	mm.mu.Unlock()
+
+	if progress != nil {
+		select {
+		case progress <- DownloadState{
+			CatalogID: catalogID,
+			Status:    StatusFailed,
+			Error:     err.Error(),
+		}:
+		default:
+		}
+	}
 }
 
 // removeDownloading removes a catalog ID from the downloading map.

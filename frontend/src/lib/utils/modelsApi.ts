@@ -46,24 +46,31 @@ export function subscribeInstallProgress(
     max_retry_time: 5000,
   });
 
+  let terminalReceived = false;
+
   source.addEventListener('progress', (event: Event) => {
     const messageEvent = event as MessageEvent;
     const data = JSON.parse(messageEvent.data as string) as DownloadProgress;
     onProgress(data);
 
     if (data.status === 'complete') {
+      terminalReceived = true;
       onComplete();
       source.close();
     } else if (data.status === 'failed') {
+      terminalReceived = true;
       onError(data.error ?? 'Unknown error');
       source.close();
     }
   });
 
+  let errorCount = 0;
   source.onerror = () => {
-    // ReconnectingEventSource handles reconnection automatically.
-    // Only surface a user-visible error if the connection is permanently lost,
-    // which the caller can detect when progress stops arriving.
+    errorCount++;
+    if (!terminalReceived && errorCount > 3) {
+      onError('Connection to server lost');
+      source.close();
+    }
   };
 
   return () => source.close();
