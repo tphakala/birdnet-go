@@ -250,7 +250,7 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 		if !otherBatInstalled {
 			for _, f := range entry.Files {
 				if f.Role == RoleEmbeddings {
-					path := filepath.Join(subdir, f.LocalName)
+					path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
 					if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 						log.Warn("Failed to remove embeddings file",
 							logger.String("path", path),
@@ -454,6 +454,8 @@ func (mm *ModelManager) removeDownloading(catalogID string) {
 
 // applyConfigForInstall updates settings to reflect a newly installed model.
 // Only fields with non-empty paths are set. The caller must hold no locks.
+// Settings are persisted to disk via conf.SaveSettings so changes survive
+// restarts and are visible to concurrent readers through conf.Setting().
 func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, labelsPath, embeddingsPath string) {
 	if mm.settings == nil {
 		return
@@ -480,11 +482,19 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 			mm.settings.Perch.LabelPath = labelsPath
 		}
 	}
+
+	if err := conf.SaveSettings(); err != nil {
+		GetLogger().Warn("Failed to persist settings after model install",
+			logger.String("catalog_id", entry.ID),
+			logger.Error(err))
+	}
 }
 
 // applyConfigForUninstall updates settings to reflect a removed model.
 // For bat models, Enabled is only set to false when no other bat models
 // remain installed. The caller must hold mm.mu (at least RLock).
+// Settings are persisted to disk via conf.SaveSettings so changes survive
+// restarts and are visible to concurrent readers through conf.Setting().
 func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 	if mm.settings == nil {
 		return
@@ -511,6 +521,12 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		mm.settings.Perch.Enabled = false
 		mm.settings.Perch.ModelPath = ""
 		mm.settings.Perch.LabelPath = ""
+	}
+
+	if err := conf.SaveSettings(); err != nil {
+		GetLogger().Warn("Failed to persist settings after model uninstall",
+			logger.String("catalog_id", entry.ID),
+			logger.Error(err))
 	}
 }
 

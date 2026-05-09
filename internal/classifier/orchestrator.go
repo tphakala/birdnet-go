@@ -311,6 +311,13 @@ func (o *Orchestrator) Delete() {
 // Called by ModelManager after a successful install. The method delegates
 // to the appropriate model loader (loadPerch, loadBat, etc.) based on
 // the registry ID. Thread-safe.
+//
+// The write lock is held for the entire load (including I/O-heavy ONNX
+// initialization, typically 1-3 seconds). This briefly blocks inference
+// via PredictModel but is acceptable because dynamic loading is rare
+// (user-initiated install only) and correctness requires the lock: the
+// loaders write directly to o.models, so concurrent map access without
+// the lock would be a data race.
 func (o *Orchestrator) LoadModel(registryID string) error {
 	log := GetLogger()
 
