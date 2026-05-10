@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -546,6 +547,12 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 		}
 	}
 
+	// Add config alias to Models.Enabled so the model appears in source config.
+	alias := ConfigAliasForRegistry(entry.RegistryID)
+	if alias != "" && !slices.Contains(mm.settings.Models.Enabled, alias) {
+		mm.settings.Models.Enabled = append(mm.settings.Models.Enabled, alias)
+	}
+
 	if err := conf.SaveSettings(); err != nil {
 		GetLogger().Warn("Failed to persist settings after model install",
 			logger.String("catalog_id", entry.ID),
@@ -591,6 +598,25 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		mm.settings.Bat.ClassifierModel = ""
 		mm.settings.Bat.LabelPath = ""
 		mm.settings.Bat.EmbeddingModel = ""
+	}
+
+	// Remove config alias from Models.Enabled.
+	alias := ConfigAliasForRegistry(entry.RegistryID)
+	if alias != "" {
+		mm.settings.Models.Enabled = slices.DeleteFunc(mm.settings.Models.Enabled, func(id string) bool {
+			return strings.EqualFold(id, alias)
+		})
+	}
+
+	// Remove model from any audio source's Models[] that referenced it.
+	for i := range mm.settings.Realtime.Audio.Sources {
+		src := &mm.settings.Realtime.Audio.Sources[i]
+		src.Models = slices.DeleteFunc(src.Models, func(id string) bool {
+			return strings.EqualFold(id, alias)
+		})
+		if len(src.Models) == 0 {
+			src.Models = []string{conf.ModelIDBirdNET}
+		}
 	}
 
 	if err := conf.SaveSettings(); err != nil {

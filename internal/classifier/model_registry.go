@@ -143,6 +143,16 @@ func KnownConfigIDs() map[string]bool {
 	return ids
 }
 
+// ConfigAliasForRegistry returns the primary config alias for a registry ID.
+// Returns "" if the registry ID is unknown or has no aliases.
+func ConfigAliasForRegistry(registryID string) string {
+	info, ok := ModelRegistry[registryID]
+	if !ok || len(info.ConfigAliases) == 0 {
+		return ""
+	}
+	return info.ConfigAliases[0]
+}
+
 // GetModelSpec returns the ModelSpec for a registry ID.
 func GetModelSpec(registryID string) (ModelSpec, bool) {
 	info, ok := ModelRegistry[registryID]
