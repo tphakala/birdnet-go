@@ -215,20 +215,21 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 
 	subdir := filepath.Join(mm.modelsDir, catalogID)
 
-	// Delete model ONNX files.
+	// Delete model ONNX files and associated data files (calibration, distribution, etc.).
 	for _, f := range entry.Files {
-		if f.Role == RoleModel {
+		if f.Role == RoleModel || f.Role == RoleData {
 			path := filepath.Join(subdir, f.LocalName)
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				return errors.Newf("failed to remove model file %s: %v", path, err).
+				return errors.Newf("failed to remove file %s: %v", path, err).
 					Component("classifier.model_manager").
 					Category(errors.CategoryFileIO).
 					Context("catalog_id", catalogID).
 					Context("file", path).
 					Build()
 			}
-			log.Info("Removed model file",
+			log.Info("Removed file",
 				logger.String("catalog_id", catalogID),
+				logger.String("role", f.Role),
 				logger.String("path", path))
 		}
 	}
