@@ -133,6 +133,11 @@ func (mm *ModelManager) ScanInstalled() {
 
 	log.Info("Model scan complete",
 		logger.Int("installed_count", len(mm.installed)))
+
+	// Ensure BirdNET (the permanent built-in) is always in Models.Enabled.
+	if mm.settings != nil && !slices.Contains(mm.settings.Models.Enabled, conf.ModelIDBirdNET) {
+		mm.settings.Models.Enabled = append([]string{conf.ModelIDBirdNET}, mm.settings.Models.Enabled...)
+	}
 }
 
 // IsInstalled returns true if the model identified by catalogID is installed.
