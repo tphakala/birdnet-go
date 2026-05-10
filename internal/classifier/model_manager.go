@@ -637,9 +637,10 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 	}
 	tmpPath := tmpFile.Name()
 
-	// Always attempt best-effort cleanup of the temp file on error.
+	// Always close the temp file and clean it up on error.
 	success := false
 	defer func() {
+		_ = tmpFile.Close()
 		if !success {
 			_ = os.Remove(tmpPath)
 		}
@@ -664,9 +665,6 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 			Build()
 	}
 
-	outFile := tmpFile
-	defer func() { _ = outFile.Close() }()
-
 	hasher := sha256.New()
 	reader := io.TeeReader(resp.Body, hasher)
 
@@ -677,7 +675,7 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 	for {
 		n, readErr := reader.Read(buf)
 		if n > 0 {
-			if _, writeErr := outFile.Write(buf[:n]); writeErr != nil {
+			if _, writeErr := tmpFile.Write(buf[:n]); writeErr != nil {
 				return errors.Newf("failed to write to %s: %v", tmpPath, writeErr).
 					Component("classifier.model_manager").
 					Category(errors.CategoryFileIO).
@@ -724,7 +722,7 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 	}
 
 	// Close before rename so the file is flushed.
-	if err := outFile.Close(); err != nil {
+	if err := tmpFile.Close(); err != nil {
 		return errors.Newf("failed to close temp file %s: %v", tmpPath, err).
 			Component("classifier.model_manager").
 			Category(errors.CategoryFileIO).
