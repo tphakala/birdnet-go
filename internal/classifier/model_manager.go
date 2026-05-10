@@ -625,7 +625,17 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 			Build()
 	}
 
-	tmpPath := destPath + ".tmp"
+	// Use a unique temp file in the same directory to avoid collisions when
+	// multiple goroutines download the same shared file (e.g., embeddings).
+	tmpFile, err := os.CreateTemp(filepath.Dir(destPath), filepath.Base(destPath)+".*.tmp")
+	if err != nil {
+		return errors.Newf("failed to create temp file for %s: %v", destPath, err).
+			Component("classifier.model_manager").
+			Category(errors.CategoryFileIO).
+			Context("dest_path", destPath).
+			Build()
+	}
+	tmpPath := tmpFile.Name()
 
 	// Always attempt best-effort cleanup of the temp file on error.
 	success := false
@@ -654,14 +664,7 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 			Build()
 	}
 
-	outFile, err := os.Create(tmpPath)
-	if err != nil {
-		return errors.Newf("failed to create temp file %s: %v", tmpPath, err).
-			Component("classifier.model_manager").
-			Category(errors.CategoryFileIO).
-			Context("tmp_path", tmpPath).
-			Build()
-	}
+	outFile := tmpFile
 	defer func() { _ = outFile.Close() }()
 
 	hasher := sha256.New()
