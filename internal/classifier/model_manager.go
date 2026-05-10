@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -132,6 +133,56 @@ func (mm *ModelManager) ScanInstalled() {
 
 	log.Info("Model scan complete",
 		logger.Int("installed_count", len(mm.installed)))
+
+	// Sync Models.Enabled with installed/configured models so the model picker
+	// always reflects the actual system state.
+	if mm.settings != nil {
+		changed := false
+
+		// BirdNET is always present (permanent built-in).
+		if !slices.ContainsFunc(mm.settings.Models.Enabled, func(id string) bool {
+			return strings.EqualFold(id, conf.ModelIDBirdNET)
+		}) {
+			mm.settings.Models.Enabled = append([]string{conf.ModelIDBirdNET}, mm.settings.Models.Enabled...)
+			changed = true
+		}
+		addIfMissing := func(alias string) {
+			if alias != "" && !slices.ContainsFunc(mm.settings.Models.Enabled, func(id string) bool {
+				return strings.EqualFold(id, alias)
+			}) {
+				mm.settings.Models.Enabled = append(mm.settings.Models.Enabled, alias)
+				changed = true
+			}
+		}
+
+		// Add models found in the gallery models directory.
+		for catalogID := range mm.installed {
+			entry, found := GetCatalogEntry(catalogID)
+			if !found {
+				continue
+			}
+			addIfMissing(ConfigAliasForRegistry(entry.RegistryID))
+		}
+
+		// Also add models enabled via legacy per-model config flags.
+		if mm.settings.Bat.Enabled || mm.settings.Bat.ClassifierModel != "" {
+			addIfMissing(conf.ModelIDBat)
+		}
+		if mm.settings.Perch.Enabled || mm.settings.Perch.ModelPath != "" {
+			addIfMissing(conf.ModelIDPerchV2)
+		}
+		if mm.settings.BSG.Enabled || mm.settings.BSG.ModelPath != "" {
+			addIfMissing(conf.ModelIDBSG)
+		}
+
+		if changed {
+			conf.StoreSettings(mm.settings)
+			if err := conf.SaveSettings(); err != nil {
+				log.Warn("Failed to persist Models.Enabled sync",
+					logger.Error(err))
+			}
+		}
+	}
 }
 
 // IsInstalled returns true if the model identified by catalogID is installed.
@@ -546,6 +597,16 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 		}
 	}
 
+	// Add config alias to Models.Enabled so the model appears in source config.
+	alias := ConfigAliasForRegistry(entry.RegistryID)
+	if alias != "" && !slices.ContainsFunc(mm.settings.Models.Enabled, func(id string) bool {
+		return strings.EqualFold(id, alias)
+	}) {
+		mm.settings.Models.Enabled = append(mm.settings.Models.Enabled, alias)
+	}
+
+	// Publish the mutated settings so SaveSettings picks up our changes.
+	conf.StoreSettings(mm.settings)
 	if err := conf.SaveSettings(); err != nil {
 		GetLogger().Warn("Failed to persist settings after model install",
 			logger.String("catalog_id", entry.ID),
@@ -593,6 +654,38 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		mm.settings.Bat.EmbeddingModel = ""
 	}
 
+	// Remove config alias from Models.Enabled and from any source/stream that references it.
+	alias := ConfigAliasForRegistry(entry.RegistryID)
+	if alias != "" {
+		mm.settings.Models.Enabled = slices.DeleteFunc(mm.settings.Models.Enabled, func(id string) bool {
+			return strings.EqualFold(id, alias)
+		})
+
+		// Remove from sound card sources.
+		for i := range mm.settings.Realtime.Audio.Sources {
+			src := &mm.settings.Realtime.Audio.Sources[i]
+			src.Models = slices.DeleteFunc(src.Models, func(id string) bool {
+				return strings.EqualFold(id, alias)
+			})
+			if len(src.Models) == 0 {
+				src.Models = []string{conf.ModelIDBirdNET}
+			}
+		}
+
+		// Remove from RTSP/stream sources.
+		for i := range mm.settings.Realtime.RTSP.Streams {
+			stream := &mm.settings.Realtime.RTSP.Streams[i]
+			stream.Models = slices.DeleteFunc(stream.Models, func(id string) bool {
+				return strings.EqualFold(id, alias)
+			})
+			if len(stream.Models) == 0 {
+				stream.Models = []string{conf.ModelIDBirdNET}
+			}
+		}
+	}
+
+	// Publish the mutated settings so SaveSettings picks up our changes.
+	conf.StoreSettings(mm.settings)
 	if err := conf.SaveSettings(); err != nil {
 		GetLogger().Warn("Failed to persist settings after model uninstall",
 			logger.String("catalog_id", entry.ID),

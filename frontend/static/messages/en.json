@@ -2815,8 +2815,8 @@
         "devicePlaceholder": "Select an audio device",
         "gainLabel": "Gain (dB)",
         "gainHelp": "Audio input gain adjustment (-40 to +40 dB)",
-        "modelLabel": "Detection Model",
-        "modelHelp": "BirdNET model to use for this source",
+        "modelLabel": "Detection Models",
+        "modelHelp": "Select which AI models to run on this audio source",
         "deleteConfirm": "Remove this sound card source?",
         "emptyState": {
           "title": "No Sound Card Sources Configured",
@@ -2839,6 +2839,11 @@
           "deviceRequired": "Audio device is required",
           "duplicateName": "A source with this name already exists",
           "duplicateDevice": "This device is already configured"
+        },
+        "compatibility": {
+          "minSampleRate": "Requires at least {rate}kHz capture rate",
+          "recommendedSampleRate": "{rate}kHz recommended for best results",
+          "atLeastOneModel": "At least one model must be selected"
         }
       },
       "audioCapture": {

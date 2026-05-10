@@ -16,6 +16,7 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy, setContext } from 'svelte';
+  import { untrack } from 'svelte';
   import { Plus, Radio, RefreshCw } from '@lucide/svelte';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { t } from '$lib/i18n';
@@ -27,6 +28,7 @@
   import { toastActions } from '$lib/stores/toast';
   import { quietHoursStore } from '$lib/stores/quietHours.svelte';
   import StreamCard, { type StreamStatus } from './StreamCard.svelte';
+  import ModelCheckboxList from './ModelCheckboxList.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
@@ -36,6 +38,53 @@
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
 
   const logger = loggers.audio;
+
+  // Default model ID - BirdNET v2.4 is the built-in default
+  const DEFAULT_MODEL_ID = 'birdnet';
+
+  // Fetch available models from backend API
+  interface BackendModel {
+    id: string;
+    name: string;
+    category: string;
+    minSampleRate?: number;
+    recommendedSampleRate?: number;
+  }
+
+  const FALLBACK_MODELS: BackendModel[] = [
+    { id: DEFAULT_MODEL_ID, name: 'BirdNET v2.4 (TFLite)', category: 'bird' },
+  ];
+
+  let fetchedModels = $state<BackendModel[]>([]);
+  let availableModels = $derived(fetchedModels.length > 0 ? fetchedModels : FALLBACK_MODELS);
+
+  $effect(() => {
+    const controller = new AbortController();
+
+    untrack(() => {
+      api
+        .get<BackendModel[]>('/api/v2/models', { signal: controller.signal })
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            fetchedModels = data;
+          } else {
+            logger.warn('Fetched models response is empty or not an array', {
+              component: 'StreamManager',
+            });
+          }
+        })
+        .catch((err: unknown) => {
+          if (err instanceof Error && err.name !== 'AbortError') {
+            logger.error('Failed to fetch models', err, {
+              component: 'StreamManager',
+              action: 'fetchModels',
+            });
+          }
+        });
+    });
+
+    return () => controller.abort();
+  });
 
   // Maximum allowed URL length for stream configuration
   const MAX_STREAM_URL_LENGTH = 2048;
@@ -114,6 +163,7 @@
   let newUrl = $state('');
   let newTransport = $state<'tcp' | 'udp'>('tcp');
   let newStreamType = $state<StreamType>('rtsp');
+  let newModels = $state<string[]>([DEFAULT_MODEL_ID]);
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let nameError = $state<string | null>(null);
   let urlError = $state<string | null>(null);
@@ -389,6 +439,7 @@
       url: trimmedUrl,
       enabled: true,
       type: newStreamType,
+      models: newModels,
       ...(showTransportInAdd ? { transport: newTransport } : {}),
       quietHours: newQuietHours,
     } as StreamConfig;
@@ -402,6 +453,7 @@
     newUrl = '';
     newTransport = 'tcp';
     newStreamType = 'rtsp';
+    newModels = [DEFAULT_MODEL_ID];
     newQuietHours = { ...defaultQuietHoursConfig };
     clearErrors();
     showAddForm = false;
@@ -574,6 +626,7 @@
           {stream}
           {index}
           status={getStreamStatus(stream.url, stream)}
+          {availableModels}
           {disabled}
           onUpdate={updatedStream => updateStream(index, updatedStream)}
           onDelete={() => deleteStream(index)}
@@ -662,6 +715,14 @@
               {/if}
             </div>
 
+            <!-- Model Selection -->
+            <ModelCheckboxList
+              models={availableModels}
+              selectedModels={newModels}
+              {disabled}
+              onToggle={models => (newModels = models)}
+            />
+
             <!-- Quiet Hours -->
             <QuietHoursEditor
               config={newQuietHours}
@@ -681,6 +742,7 @@
                   newUrl = '';
                   newStreamType = 'rtsp';
                   newTransport = 'tcp';
+                  newModels = [DEFAULT_MODEL_ID];
                   newQuietHours = { ...defaultQuietHoursConfig };
                   clearErrors();
                 }}

@@ -2997,8 +2997,8 @@
         "devicePlaceholder": "Wybierz urządzenie audio",
         "gainLabel": "Wzmocnienie (dB)",
         "gainHelp": "Regulacja wzmocnienia wejścia audio (-40 do +40 dB)",
-        "modelLabel": "Model Detekcji",
-        "modelHelp": "Model BirdNET używany dla tego źródła",
+        "modelLabel": "Modele detekcji",
+        "modelHelp": "Wybierz modele AI dla tego źródła audio",
         "deleteConfirm": "Usunąć to źródło karty dźwiękowej?",
         "emptyState": {
           "title": "Brak Skonfigurowanych Źródeł Kart Dźwiękowych",
@@ -3021,6 +3021,11 @@
           "deviceRequired": "Urządzenie audio jest wymagane",
           "duplicateName": "Źródło o tej nazwie już istnieje",
           "duplicateDevice": "To urządzenie jest już skonfigurowane"
+        },
+        "compatibility": {
+          "minSampleRate": "Wymaga co najmniej {rate}kHz częstotliwości próbkowania",
+          "recommendedSampleRate": "{rate}kHz zalecane dla najlepszych wyników",
+          "atLeastOneModel": "Należy wybrać co najmniej jeden model"
         }
       },
       "rtspStreams": {

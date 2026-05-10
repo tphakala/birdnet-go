@@ -24,6 +24,7 @@
   import { loggers } from '$lib/utils/logger';
   import SelectDropdown from './SelectDropdown.svelte';
   import InlineSlider from './InlineSlider.svelte';
+  import ModelCheckboxList from './ModelCheckboxList.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
   import type {
@@ -65,6 +66,13 @@
     sources: AudioSourceConfig[];
     audioDevices: Array<{ index: number; name: string; id: string }>;
     modelOptions: Array<{ value: string; label: string }>;
+    availableModels: Array<{
+      id: string;
+      name: string;
+      category: string;
+      minSampleRate?: number;
+      recommendedSampleRate?: number;
+    }>;
     disabled?: boolean;
     onUpdate: (_source: AudioSourceConfig) => boolean;
     onDelete: () => void;
@@ -76,6 +84,7 @@
     sources,
     audioDevices,
     modelOptions,
+    availableModels,
     disabled = false,
     onUpdate,
     onDelete,
@@ -283,30 +292,26 @@
           menuSize="sm"
         />
 
-        <!-- Gain and Model Row -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <InlineSlider
-            label={t('settings.audio.soundCards.gainLabel')}
-            value={editGain}
-            onUpdate={value => (editGain = value)}
-            min={-40}
-            max={40}
-            step={1}
-            unit=" dB"
-            {disabled}
-            className="h-full [&>input]:my-auto"
-          />
+        <!-- Gain -->
+        <InlineSlider
+          label={t('settings.audio.soundCards.gainLabel')}
+          value={editGain}
+          onUpdate={value => (editGain = value)}
+          min={-40}
+          max={40}
+          step={1}
+          unit=" dB"
+          {disabled}
+        />
 
-          <SelectDropdown
-            value={editModels}
-            label={t('settings.audio.soundCards.modelLabel')}
-            options={modelOptions}
-            multiple={true}
-            onChange={value => (editModels = value as string[])}
-            groupBy={false}
-            menuSize="sm"
-          />
-        </div>
+        <!-- Model Selection -->
+        <ModelCheckboxList
+          models={availableModels}
+          selectedModels={editModels}
+          sourceSampleRate={source.sampleRate || 48000}
+          {disabled}
+          onToggle={models => (editModels = models)}
+        />
 
         <!-- Equalizer (expandable) -->
         <div>

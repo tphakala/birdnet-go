@@ -2991,8 +2991,8 @@
         "devicePlaceholder": "Audiogerät auswählen",
         "gainLabel": "Verstärkung (dB)",
         "gainHelp": "Einstellung der Eingangsverstärkung (-40 bis +40 dB)",
-        "modelLabel": "Erkennungsmodell",
-        "modelHelp": "BirdNET-Modell für diese Quelle",
+        "modelLabel": "Erkennungsmodelle",
+        "modelHelp": "KI-Modelle für diese Audioquelle auswählen",
         "deleteConfirm": "Diese Soundkartenquelle entfernen?",
         "emptyState": {
           "title": "Keine Soundkartenquellen konfiguriert",
@@ -3015,6 +3015,11 @@
           "deviceRequired": "Audiogerät ist erforderlich",
           "duplicateName": "Eine Quelle mit diesem Namen existiert bereits",
           "duplicateDevice": "Dieses Gerät ist bereits konfiguriert"
+        },
+        "compatibility": {
+          "minSampleRate": "Erfordert mindestens {rate}kHz Abtastrate",
+          "recommendedSampleRate": "{rate}kHz empfohlen für beste Ergebnisse",
+          "atLeastOneModel": "Mindestens ein Modell muss ausgewählt sein"
         }
       },
       "rtspStreams": {

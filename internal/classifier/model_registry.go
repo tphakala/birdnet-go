@@ -110,7 +110,7 @@ var ModelRegistry = map[string]ModelInfo{
 		DetectionName:    "BattyBirdNET",
 		DetectionVersion: "1.0",
 		Description:      "Bat species detection using BirdNET v2.4 embeddings",
-		Spec:             ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second, RawSampleRate: 256000},
+		Spec:             ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second, RawSampleRate: 256000, MinRawSampleRate: 96000, RecommendedSampleRate: 192000},
 		ConfigAliases:    []string{conf.ModelIDBat},
 	},
 	RegistryIDBSG: {
@@ -141,6 +141,16 @@ func KnownConfigIDs() map[string]bool {
 		}
 	}
 	return ids
+}
+
+// ConfigAliasForRegistry returns the primary config alias for a registry ID.
+// Returns "" if the registry ID is unknown or has no aliases.
+func ConfigAliasForRegistry(registryID string) string {
+	info, ok := ModelRegistry[registryID]
+	if !ok || len(info.ConfigAliases) == 0 {
+		return ""
+	}
+	return info.ConfigAliases[0]
 }
 
 // GetModelSpec returns the ModelSpec for a registry ID.

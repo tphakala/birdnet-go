@@ -2991,8 +2991,8 @@
         "devicePlaceholder": "Sélectionner un périphérique audio",
         "gainLabel": "Gain (dB)",
         "gainHelp": "Réglage du gain d'entrée audio (-40 à +40 dB)",
-        "modelLabel": "Modèle de Détection",
-        "modelHelp": "Modèle BirdNET à utiliser pour cette source",
+        "modelLabel": "Modèles de détection",
+        "modelHelp": "Sélectionner les modèles d'IA pour cette source audio",
         "deleteConfirm": "Supprimer cette source de carte son ?",
         "emptyState": {
           "title": "Aucune Source de Carte Son Configurée",
@@ -3015,6 +3015,11 @@
           "deviceRequired": "Le périphérique audio est requis",
           "duplicateName": "Une source avec ce nom existe déjà",
           "duplicateDevice": "Ce périphérique est déjà configuré"
+        },
+        "compatibility": {
+          "minSampleRate": "Nécessite au moins {rate}kHz de taux d'échantillonnage",
+          "recommendedSampleRate": "{rate}kHz recommandé pour de meilleurs résultats",
+          "atLeastOneModel": "Au moins un modèle doit être sélectionné"
         }
       },
       "rtspStreams": {

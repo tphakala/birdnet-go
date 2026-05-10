@@ -36,6 +36,7 @@
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import Checkbox from './Checkbox.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
+  import ModelCheckboxList from './ModelCheckboxList.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
   import type {
@@ -75,12 +76,27 @@
     stream: StreamConfig;
     index: number;
     status?: StreamStatus;
+    availableModels: Array<{
+      id: string;
+      name: string;
+      category: string;
+      minSampleRate?: number;
+      recommendedSampleRate?: number;
+    }>;
     disabled?: boolean;
     onUpdate: (_stream: StreamConfig) => boolean;
     onDelete: () => void;
   }
 
-  let { stream, index, status = 'unknown', disabled = false, onUpdate, onDelete }: Props = $props();
+  let {
+    stream,
+    index,
+    status = 'unknown',
+    availableModels,
+    disabled = false,
+    onUpdate,
+    onDelete,
+  }: Props = $props();
 
   // Get the stream health state from context - the $state object is passed directly
   // Mutations to this object are reactive and will trigger re-renders
@@ -156,6 +172,7 @@
   let editTransport = $state<'tcp' | 'udp'>('tcp');
   let editStreamType = $state<StreamType>('rtsp');
   let editEnabled = $state(true);
+  let editModels = $state<string[]>([]);
   let editEqualizer = $state<LocalEqualizerSettings>({ enabled: false, filters: [] });
   let editQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let showDeleteConfirm = $state(false);
@@ -293,6 +310,7 @@
     editTransport = stream.transport ?? 'tcp';
     editStreamType = stream.type;
     editEnabled = stream.enabled;
+    editModels = stream.models?.length ? [...stream.models] : ['birdnet'];
     editEqualizer = stream.equalizer
       ? { ...stream.equalizer, filters: [...stream.equalizer.filters] }
       : { enabled: false, filters: [] };
@@ -324,6 +342,7 @@
         url: editUrl.trim(),
         enabled: editEnabled,
         type: editStreamType,
+        models: editModels,
         // Use selected transport for RTSP/RTMP, omit for others
         ...(showTransportInEdit ? { transport: editTransport } : {}),
         equalizer: transformedEqualizer,
@@ -481,6 +500,14 @@
           label={t('settings.audio.streams.enabled')}
           {disabled}
           size="sm"
+        />
+
+        <!-- Model Selection -->
+        <ModelCheckboxList
+          models={availableModels}
+          selectedModels={editModels}
+          {disabled}
+          onToggle={models => (editModels = models)}
         />
 
         <!-- Equalizer (expandable) -->

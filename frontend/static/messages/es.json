@@ -2764,8 +2764,8 @@
         "devicePlaceholder": "Seleccionar un dispositivo de audio",
         "gainLabel": "Ganancia (dB)",
         "gainHelp": "Ajuste de ganancia de entrada de audio (-40 a +40 dB)",
-        "modelLabel": "Modelo de Detección",
-        "modelHelp": "Modelo BirdNET a usar para esta fuente",
+        "modelLabel": "Modelos de detección",
+        "modelHelp": "Seleccionar modelos de IA para esta fuente de audio",
         "deleteConfirm": "¿Eliminar esta fuente de tarjeta de sonido?",
         "emptyState": {
           "title": "No Hay Tarjetas de Sonido Configuradas",
@@ -2788,6 +2788,11 @@
           "deviceRequired": "El dispositivo de audio es obligatorio",
           "duplicateName": "Ya existe una fuente con este nombre",
           "duplicateDevice": "Este dispositivo ya está configurado"
+        },
+        "compatibility": {
+          "minSampleRate": "Requiere al menos {rate}kHz de frecuencia de muestreo",
+          "recommendedSampleRate": "{rate}kHz recomendado para mejores resultados",
+          "atLeastOneModel": "Se debe seleccionar al menos un modelo"
         }
       },
       "rtspStreams": {

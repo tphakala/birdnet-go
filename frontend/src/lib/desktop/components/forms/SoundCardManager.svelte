@@ -26,6 +26,7 @@
   import SelectDropdown from './SelectDropdown.svelte';
   import TextInput from './TextInput.svelte';
   import InlineSlider from './InlineSlider.svelte';
+  import ModelCheckboxList from './ModelCheckboxList.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
@@ -67,9 +68,17 @@
   interface BackendModel {
     id: string;
     name: string;
+    category: string;
+    minSampleRate?: number;
+    recommendedSampleRate?: number;
   }
 
-  let availableModels = $state<BackendModel[]>([]);
+  const FALLBACK_MODELS: BackendModel[] = [
+    { id: DEFAULT_MODEL_ID, name: 'BirdNET v2.4 (TFLite)', category: 'bird' },
+  ];
+
+  let fetchedModels = $state<BackendModel[]>([]);
+  let availableModels = $derived(fetchedModels.length > 0 ? fetchedModels : FALLBACK_MODELS);
 
   $effect(() => {
     const controller = new AbortController();
@@ -78,10 +87,10 @@
       api
         .get<BackendModel[]>('/api/v2/models', { signal: controller.signal })
         .then(data => {
-          if (Array.isArray(data)) {
-            availableModels = data;
+          if (Array.isArray(data) && data.length > 0) {
+            fetchedModels = data;
           } else {
-            logger.warn('Fetched models response is not an array', {
+            logger.warn('Fetched models response is empty or not an array', {
               component: 'SoundCardManager',
             });
           }
@@ -323,6 +332,7 @@
           {sources}
           {audioDevices}
           {modelOptions}
+          {availableModels}
           {disabled}
           onUpdate={updatedSource => updateSource(index, updatedSource)}
           onDelete={() => deleteSource(index)}
@@ -387,31 +397,25 @@
               {/if}
             </div>
 
-            <!-- Gain and Model -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InlineSlider
-                label={t('settings.audio.soundCards.gainLabel')}
-                value={newGain}
-                onUpdate={value => (newGain = value)}
-                min={-40}
-                max={40}
-                step={1}
-                unit=" dB"
-                {disabled}
-                className="h-full [&>input]:my-auto"
-              />
+            <!-- Gain -->
+            <InlineSlider
+              label={t('settings.audio.soundCards.gainLabel')}
+              value={newGain}
+              onUpdate={value => (newGain = value)}
+              min={-40}
+              max={40}
+              step={1}
+              unit=" dB"
+              {disabled}
+            />
 
-              <SelectDropdown
-                value={newModels}
-                label={t('settings.audio.soundCards.modelLabel')}
-                options={modelOptions}
-                multiple={true}
-                {disabled}
-                onChange={value => (newModels = value as string[])}
-                groupBy={false}
-                menuSize="sm"
-              />
-            </div>
+            <!-- Model Selection -->
+            <ModelCheckboxList
+              models={availableModels}
+              selectedModels={newModels}
+              {disabled}
+              onToggle={models => (newModels = models)}
+            />
 
             <!-- Equalizer (expandable) -->
             <div>
