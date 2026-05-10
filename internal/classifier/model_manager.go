@@ -173,6 +173,7 @@ func (mm *ModelManager) ScanInstalled() {
 		}
 
 		if changed {
+			conf.StoreSettings(mm.settings)
 			if err := conf.SaveSettings(); err != nil {
 				log.Warn("Failed to persist Models.Enabled sync",
 					logger.Error(err))
@@ -601,6 +602,8 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 		mm.settings.Models.Enabled = append(mm.settings.Models.Enabled, alias)
 	}
 
+	// Publish the mutated settings so SaveSettings picks up our changes.
+	conf.StoreSettings(mm.settings)
 	if err := conf.SaveSettings(); err != nil {
 		GetLogger().Warn("Failed to persist settings after model install",
 			logger.String("catalog_id", entry.ID),
@@ -678,6 +681,8 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		}
 	}
 
+	// Publish the mutated settings so SaveSettings picks up our changes.
+	conf.StoreSettings(mm.settings)
 	if err := conf.SaveSettings(); err != nil {
 		GetLogger().Warn("Failed to persist settings after model uninstall",
 			logger.String("catalog_id", entry.ID),

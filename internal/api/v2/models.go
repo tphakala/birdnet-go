@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -52,9 +53,13 @@ func (c *Controller) initModelRoutes() {
 
 // ListModels returns classifier models that are enabled in the configuration.
 func (c *Controller) ListModels(ctx echo.Context) error {
+	// Read from the live settings (atomic pointer) so that models added
+	// at runtime (via gallery install) are immediately visible.
+	settings := conf.GetSettings()
+
 	// Build a set of enabled model config IDs for fast lookup.
-	enabled := make(map[string]bool, len(c.Settings.Models.Enabled))
-	for _, id := range c.Settings.Models.Enabled {
+	enabled := make(map[string]bool, len(settings.Models.Enabled))
+	for _, id := range settings.Models.Enabled {
 		enabled[strings.ToLower(id)] = true
 	}
 
