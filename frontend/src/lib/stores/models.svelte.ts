@@ -34,9 +34,11 @@ export function fetchModels(): () => void {
     activeFetch = controller;
 
     untrack(() => {
-      api
-        .get<BackendModel[]>('/api/v2/models', { signal: controller.signal })
-        .then(data => {
+      void (async () => {
+        try {
+          const data = await api.get<BackendModel[]>('/api/v2/models', {
+            signal: controller.signal,
+          });
           if (controller.signal.aborted) return;
           if (Array.isArray(data) && data.length > 0) {
             fetchedModels = data;
@@ -45,20 +47,19 @@ export function fetchModels(): () => void {
               component: 'modelsStore',
             });
           }
-        })
-        .catch((err: unknown) => {
+        } catch (err: unknown) {
           if (err instanceof Error && err.name !== 'AbortError') {
             logger.error('Failed to fetch models', err, {
               component: 'modelsStore',
               action: 'fetchModels',
             });
           }
-        })
-        .finally(() => {
+        } finally {
           if (activeFetch === controller) {
             activeFetch = null;
           }
-        });
+        }
+      })();
     });
   }
 
