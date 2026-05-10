@@ -186,9 +186,9 @@ func TestModelManager_DownloadFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, content, got)
 
-	// Verify no temp file remains.
-	_, err = os.Stat(destPath + ".tmp")
-	assert.True(t, os.IsNotExist(err), "temp file should be removed after successful download")
+	// Verify no temp files remain.
+	matches, _ := filepath.Glob(destPath + ".*.tmp")
+	assert.Empty(t, matches, "temp files should be removed after successful download")
 
 	// Verify progress was updated in shared state.
 	state := mm.GetDownloadState("test-download")
@@ -216,13 +216,13 @@ func TestModelManager_DownloadFile_BadChecksum(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checksum")
 
-	// Verify temp file was cleaned up.
-	_, statErr := os.Stat(destPath + ".tmp")
-	assert.True(t, os.IsNotExist(statErr), "temp file should be cleaned up after checksum mismatch")
+	// Verify temp files were cleaned up.
+	matches, _ := filepath.Glob(destPath + ".*.tmp")
+	assert.Empty(t, matches, "temp files should be cleaned up after checksum mismatch")
 
 	// Verify destination file was not created.
-	_, statErr = os.Stat(destPath)
-	assert.True(t, os.IsNotExist(statErr), "destination file should not exist after checksum failure")
+	_, err = os.Stat(destPath)
+	assert.True(t, os.IsNotExist(err), "destination file should not exist after checksum failure")
 }
 
 func TestModelManager_Install(t *testing.T) {

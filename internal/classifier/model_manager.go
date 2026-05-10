@@ -625,11 +625,22 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 			Build()
 	}
 
-	tmpPath := destPath + ".tmp"
+	// Use a unique temp file in the same directory to avoid collisions when
+	// multiple goroutines download the same shared file (e.g., embeddings).
+	tmpFile, err := os.CreateTemp(filepath.Dir(destPath), filepath.Base(destPath)+".*.tmp")
+	if err != nil {
+		return errors.Newf("failed to create temp file for %s: %v", destPath, err).
+			Component("classifier.model_manager").
+			Category(errors.CategoryFileIO).
+			Context("dest_path", destPath).
+			Build()
+	}
+	tmpPath := tmpFile.Name()
 
-	// Always attempt best-effort cleanup of the temp file on error.
+	// Always close the temp file and clean it up on error.
 	success := false
 	defer func() {
+		_ = tmpFile.Close()
 		if !success {
 			_ = os.Remove(tmpPath)
 		}
@@ -654,16 +665,6 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 			Build()
 	}
 
-	outFile, err := os.Create(tmpPath)
-	if err != nil {
-		return errors.Newf("failed to create temp file %s: %v", tmpPath, err).
-			Component("classifier.model_manager").
-			Category(errors.CategoryFileIO).
-			Context("tmp_path", tmpPath).
-			Build()
-	}
-	defer func() { _ = outFile.Close() }()
-
 	hasher := sha256.New()
 	reader := io.TeeReader(resp.Body, hasher)
 
@@ -674,7 +675,7 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 	for {
 		n, readErr := reader.Read(buf)
 		if n > 0 {
-			if _, writeErr := outFile.Write(buf[:n]); writeErr != nil {
+			if _, writeErr := tmpFile.Write(buf[:n]); writeErr != nil {
 				return errors.Newf("failed to write to %s: %v", tmpPath, writeErr).
 					Component("classifier.model_manager").
 					Category(errors.CategoryFileIO).
@@ -721,7 +722,7 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 	}
 
 	// Close before rename so the file is flushed.
-	if err := outFile.Close(); err != nil {
+	if err := tmpFile.Close(); err != nil {
 		return errors.Newf("failed to close temp file %s: %v", tmpPath, err).
 			Component("classifier.model_manager").
 			Category(errors.CategoryFileIO).
