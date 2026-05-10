@@ -4516,6 +4516,7 @@
       "noInstalledModels": "Brak zainstalowanych dodatkowych modeli. Przejdź do karty Dostępne, aby dodać więcej klasyfikatorów.",
       "noAvailableModels": "Brak dodatkowych modeli dostępnych dla Twojej platformy.",
       "categories": {
+        "wildlife": "Klasyfikatory dzikiej przyrody",
         "bird": "Klasyfikatory ptaków",
         "bat": "Klasyfikatory nietoperzy"
       },

@@ -5,8 +5,9 @@ package classifier
 
 // Catalog category constants.
 const (
-	CategoryBird = "bird"
-	CategoryBat  = "bat"
+	CategoryWildlife = "wildlife"
+	CategoryBird     = "bird"
+	CategoryBat      = "bat"
 )
 
 // CatalogFile role constants.
@@ -25,7 +26,7 @@ type CatalogEntry struct {
 	Author            string        // model author or organization
 	License           string        // license identifier (e.g., "Apache-2.0")
 	CommercialUse     bool          // whether commercial use is permitted
-	Category          string        // "bird" or "bat"
+	Category          string        // "wildlife", "bird", or "bat"
 	Region            string        // geographic region, or empty for global models
 	SpeciesCount      int           // number of species the model can identify
 	Version           string        // model version string
@@ -49,15 +50,15 @@ type CatalogFile struct {
 // Each entry provides enough metadata for the gallery UI and enough file
 // information to drive the download process.
 var EmbeddedCatalog = []CatalogEntry{
-	// Bird models
+	// Wildlife models (multi-taxa classifiers)
 	{
 		ID:                "birdnet-v3.0",
 		Name:              "BirdNET v3.0",
-		Description:       "Global bird species classifier using BirdNET v3.0 architecture",
+		Description:       "Global wildlife classifier using BirdNET v3.0 architecture",
 		Author:            "Cornell Lab of Ornithology & Chemnitz University of Technology",
 		License:           "TBD",
 		CommercialUse:     false,
-		Category:          CategoryBird,
+		Category:          CategoryWildlife,
 		Region:            "",
 		SpeciesCount:      0, // determined at runtime from label file
 		Version:           "3.0",
@@ -77,7 +78,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Author:            "Google Research",
 		License:           "Apache-2.0",
 		CommercialUse:     true,
-		Category:          CategoryBird,
+		Category:          CategoryWildlife,
 		Region:            "",
 		SpeciesCount:      14795,
 		Version:           "2",

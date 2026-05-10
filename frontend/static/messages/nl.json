@@ -4516,6 +4516,7 @@
       "noInstalledModels": "Geen extra modellen geïnstalleerd. Blader door het tabblad Beschikbaar om meer classificatoren toe te voegen.",
       "noAvailableModels": "Geen extra modellen beschikbaar voor uw platform.",
       "categories": {
+        "wildlife": "Wildlifeclassificatoren",
         "bird": "Vogelclassificatoren",
         "bat": "Vleermuisclassificatoren"
       },

@@ -141,6 +141,9 @@
 
   // ── Derived catalog views ─────────────────────────────────────────────
   const installedEntries = $derived(catalog.filter(e => e.installed));
+  const availableWildlife = $derived(
+    catalog.filter(e => !e.installed && e.compatible && e.category === 'wildlife')
+  );
   const availableBirds = $derived(
     catalog.filter(e => !e.installed && e.compatible && e.category === 'bird')
   );
@@ -1425,6 +1428,22 @@
         </button>
       </div>
     {:else}
+      <!-- Wildlife Classifiers -->
+      {#if availableWildlife.length > 0}
+        <div>
+          <h3
+            class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
+          >
+            {t('analysis.gallery.categories.wildlife')}
+          </h3>
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {#each availableWildlife as entry (entry.id)}
+              {@render modelCard(entry)}
+            {/each}
+          </div>
+        </div>
+      {/if}
+
       <!-- Bird Classifiers -->
       {#if availableBirds.length > 0}
         <div>
@@ -1457,7 +1476,7 @@
         </div>
       {/if}
 
-      {#if availableBirds.length === 0 && availableBats.length === 0}
+      {#if availableWildlife.length === 0 && availableBirds.length === 0 && availableBats.length === 0}
         <p class="py-8 text-center text-sm text-[var(--color-base-content)]/80">
           {t('analysis.gallery.noAvailableModels')}
         </p>
@@ -1474,61 +1493,79 @@
 <!-- License Acceptance Dialog -->
 <dialog
   bind:this={licenseDialogRef}
-  class="m-auto rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 shadow-xl backdrop:bg-black/50"
+  class="m-auto w-full max-w-md rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 shadow-xl backdrop:bg-black/50"
   aria-labelledby="license-dialog-title"
 >
   {#if licenseModel}
-    <div class="w-full max-w-lg p-6">
+    <div class="p-6">
       <h3 id="license-dialog-title" class="text-lg font-semibold text-[var(--color-base-content)]">
         {t('analysis.gallery.license.title')}
       </h3>
       <div class="mt-4 space-y-3">
-        <div class="rounded-lg bg-[var(--color-base-200)] p-4 text-sm">
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/80"
-                >{t('analysis.gallery.license.model')}</span
+        <table class="w-full rounded-lg bg-[var(--color-base-200)] text-sm">
+          <tbody>
+            <tr>
+              <th
+                scope="row"
+                class="px-4 pt-4 pb-1 text-left font-normal align-top text-[var(--color-base-content)]/80"
+                >{t('analysis.gallery.license.model')}</th
               >
-              <span class="font-medium text-[var(--color-base-content)]">{licenseModel.name}</span>
-            </div>
-            <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/80"
-                >{t('analysis.gallery.license.author')}</span
+              <td class="px-4 pt-4 pb-1 text-right font-medium text-[var(--color-base-content)]"
+                >{licenseModel.name}</td
               >
-              <span class="text-[var(--color-base-content)]">{licenseModel.author}</span>
-            </div>
-            <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/80"
-                >{t('analysis.gallery.license.license')}</span
+            </tr>
+            <tr>
+              <th
+                scope="row"
+                class="px-4 py-1 text-left font-normal align-top text-[var(--color-base-content)]/80"
+                >{t('analysis.gallery.license.author')}</th
               >
-              <span class="text-[var(--color-base-content)]">{licenseModel.license}</span>
-            </div>
-            <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/80"
-                >{t('analysis.gallery.license.commercialUse')}</span
+              <td class="px-4 py-1 text-right text-[var(--color-base-content)]"
+                >{licenseModel.author}</td
               >
-              {#if licenseModel.commercialUse}
-                <span class="inline-flex items-center gap-1 text-[var(--color-success)]">
-                  <Shield class="size-3.5" />
-                  {t('analysis.gallery.license.allowed')}
-                </span>
-              {:else}
-                <span class="inline-flex items-center gap-1 text-[var(--color-warning)]">
-                  <ShieldAlert class="size-3.5" />
-                  {t('analysis.gallery.license.notAllowed')}
-                </span>
-              {/if}
-            </div>
-            <div class="flex items-center justify-between">
-              <span class="text-[var(--color-base-content)]/80"
-                >{t('analysis.gallery.license.downloadSize')}</span
+            </tr>
+            <tr>
+              <th
+                scope="row"
+                class="px-4 py-1 text-left font-normal align-top text-[var(--color-base-content)]/80"
+                >{t('analysis.gallery.license.license')}</th
               >
-              <span class="text-[var(--color-base-content)]"
-                >{formatBytes(licenseModel.totalSizeBytes)}</span
+              <td class="px-4 py-1 text-right text-[var(--color-base-content)]"
+                >{licenseModel.license}</td
               >
-            </div>
-          </div>
-        </div>
+            </tr>
+            <tr>
+              <th
+                scope="row"
+                class="px-4 py-1 text-left font-normal align-top text-[var(--color-base-content)]/80"
+                >{t('analysis.gallery.license.commercialUse')}</th
+              >
+              <td class="px-4 py-1 text-right">
+                {#if licenseModel.commercialUse}
+                  <span class="inline-flex items-center gap-1 text-[var(--color-success)]">
+                    <Shield class="size-3.5" />
+                    {t('analysis.gallery.license.allowed')}
+                  </span>
+                {:else}
+                  <span class="inline-flex items-center gap-1 text-[var(--color-warning)]">
+                    <ShieldAlert class="size-3.5" />
+                    {t('analysis.gallery.license.notAllowed')}
+                  </span>
+                {/if}
+              </td>
+            </tr>
+            <tr>
+              <th
+                scope="row"
+                class="px-4 pt-1 pb-4 text-left font-normal align-top text-[var(--color-base-content)]/80"
+                >{t('analysis.gallery.license.downloadSize')}</th
+              >
+              <td class="px-4 pt-1 pb-4 text-right text-[var(--color-base-content)]"
+                >{formatBytes(licenseModel.totalSizeBytes)}</td
+              >
+            </tr>
+          </tbody>
+        </table>
 
         {#if !licenseModel.commercialUse}
           <div

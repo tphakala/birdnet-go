@@ -4516,6 +4516,7 @@
       "noInstalledModels": "Keine zusätzlichen Modelle installiert. Durchsuchen Sie den Tab Verfügbar, um weitere Klassifikatoren hinzuzufügen.",
       "noAvailableModels": "Keine zusätzlichen Modelle für Ihre Plattform verfügbar.",
       "categories": {
+        "wildlife": "Wildtierklassifikatoren",
         "bird": "Vogelklassifikatoren",
         "bat": "Fledermausklassifikatoren"
       },

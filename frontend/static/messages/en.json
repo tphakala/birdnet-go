@@ -4516,6 +4516,7 @@
       "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
       "noAvailableModels": "No additional models available for your platform.",
       "categories": {
+        "wildlife": "Wildlife Classifiers",
         "bird": "Bird Classifiers",
         "bat": "Bat Classifiers"
       },
