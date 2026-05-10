@@ -3,7 +3,10 @@ package api
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	goerrors "errors"
 	"fmt"
 	"io"
 	"net"
@@ -405,6 +408,7 @@ func (c *Controller) initSystemRoutes() {
 	// Audio device routes (all protected)
 	audioGroup := protectedGroup.Group("/audio")
 	audioGroup.GET("/devices", c.GetAudioDevices)
+	audioGroup.GET("/devices/capabilities", c.GetDeviceCapabilities)
 	audioGroup.GET("/active", c.GetActiveAudioDevice)
 	audioGroup.GET("/equalizer/config", c.GetEqualizerConfig)
 	audioGroup.GET("/sources", c.ListAudioSources)
@@ -877,6 +881,42 @@ func (c *Controller) GetAudioDevices(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, apiDevices)
+}
+
+// GetDeviceCapabilities handles GET /api/v2/system/audio/devices/capabilities
+// Probes a specific audio device to discover supported sample rates.
+func (c *Controller) GetDeviceCapabilities(ctx echo.Context) error {
+	deviceID := ctx.QueryParam("deviceId")
+	if deviceID == "" {
+		return c.HandleError(ctx, nil, "deviceId query parameter is required", http.StatusBadRequest)
+	}
+
+	c.logInfoIfEnabled("Probing device capabilities",
+		logger.String("device_id", deviceID),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
+	)
+
+	caps, err := audiocore.ProbeDeviceCapabilities(deviceID, c.apiLogger)
+	if err != nil {
+		if goerrors.Is(err, audiocore.ErrDeviceNotFound) {
+			return c.HandleError(ctx, err, "Device not found", http.StatusNotFound)
+		}
+		c.logErrorIfEnabled("Failed to probe device capabilities",
+			logger.Error(err),
+			logger.String("device_id", deviceID),
+		)
+		return c.HandleError(ctx, err, "Failed to probe device capabilities", http.StatusInternalServerError)
+	}
+
+	c.logInfoIfEnabled("Device capabilities retrieved",
+		logger.String("device_id", caps.DeviceID),
+		logger.String("device_name", caps.DeviceName),
+		logger.Int("rate_count", len(caps.SampleRates)),
+		logger.Bool("verified", caps.Verified),
+	)
+
+	return ctx.JSON(http.StatusOK, caps)
 }
 
 // GetActiveAudioDevice handles GET /api/v2/system/audio/active
@@ -1752,9 +1792,15 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 		logger.String("free_space", formatBytesUint64(usage.Free)),
 		logger.String("required_space", formatBytesUint64(requiredSpace)))
 
-	// Create temp file path for VACUUM INTO
+	// Create temp file path for VACUUM INTO with random suffix to prevent
+	// predictable filenames (symlink attacks on shared /tmp).
 	timestamp := time.Now().Format("20060102-150405")
-	tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-%s-backup-%s.db", dbType, timestamp))
+	randomBytes := make([]byte, 8)
+	if _, randErr := cryptorand.Read(randomBytes); randErr != nil {
+		return c.HandleError(ctx, randErr, "Failed to generate secure backup filename", http.StatusInternalServerError)
+	}
+	randomSuffix := "-" + hex.EncodeToString(randomBytes)
+	tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-%s-backup-%s%s.db", dbType, timestamp, randomSuffix))
 	filename := fmt.Sprintf("birdnet-%s-backup-%s.db", dbType, timestamp)
 
 	// Set response headers BEFORE starting VACUUM to establish the connection.
@@ -1776,8 +1822,10 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 		logger.String("db_type", dbType),
 		logger.String("temp_path", tempPath))
 
-	// Execute VACUUM INTO for safe, consistent backup
-	vacuumSQL := fmt.Sprintf("VACUUM INTO '%s'", tempPath)
+	// Execute VACUUM INTO for safe, consistent backup.
+	// Escape single quotes in tempPath to prevent SQL injection via crafted temp paths.
+	escapedTempPath := strings.ReplaceAll(tempPath, "'", "''")
+	vacuumSQL := fmt.Sprintf("VACUUM INTO '%s'", escapedTempPath)
 	vacuumStart := time.Now()
 
 	vacuumErr := gormDB.Exec(vacuumSQL).Error

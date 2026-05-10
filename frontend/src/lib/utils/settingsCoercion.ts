@@ -269,14 +269,17 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
     coerced.bufferSize = coerceNumber(settings.bufferSize, 512, 67108864, 4096);
   }
 
-  // Sample rate: specific valid values
+  // Sample rate: accept candidate rates from 48kHz to 384kHz (0 means default)
   if ('sampleRate' in settings) {
-    const validRates = [16000, 22050, 24000, 44100, 48000];
-    const rate = coerceNumber(settings.sampleRate, 16000, 48000, 48000);
-    // Find closest valid rate
-    coerced.sampleRate = validRates.reduce((prev, curr) =>
-      Math.abs(curr - rate) < Math.abs(prev - rate) ? curr : prev
-    );
+    const validRates = [48000, 96000, 192000, 256000, 384000];
+    const rate = coerceNumber(settings.sampleRate, 0, 384000, 0);
+    if (rate === 0) {
+      delete coerced.sampleRate;
+    } else {
+      coerced.sampleRate = validRates.reduce((prev, curr) =>
+        Math.abs(curr - rate) < Math.abs(prev - rate) ? curr : prev
+      );
+    }
   }
 
   // Equalizer settings

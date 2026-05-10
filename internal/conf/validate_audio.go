@@ -303,6 +303,16 @@ func (a *AudioSourceConfig) Validate() error {
 		return fmt.Errorf("audio source '%s': gain %.1f dB out of range [%.0f, +%.0f]", a.Name, a.Gain, MinAudioGain, MaxAudioGain)
 	}
 
+	// Validate sample rate if specified (0 means use default 48000)
+	if a.SampleRate != 0 {
+		validRates := map[int]struct{}{
+			48000: {}, 96000: {}, 192000: {}, 256000: {}, 384000: {},
+		}
+		if _, ok := validRates[a.SampleRate]; !ok {
+			return fmt.Errorf("audio source '%s': sample rate %d Hz is not a supported value (valid: 48000, 96000, 192000, 256000, 384000)", a.Name, a.SampleRate)
+		}
+	}
+
 	// Validate model identifier
 	if !ValidAudioModels[a.Model] {
 		return fmt.Errorf("audio source '%s': unknown model '%s'", a.Name, a.Model)

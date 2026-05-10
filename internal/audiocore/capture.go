@@ -1,5 +1,5 @@
 // Package audiocore provides the core audio infrastructure for BirdNET-Go.
-// capture.go — per-device malgo capture initialisation and callback.
+// capture.go - per-device malgo capture initialisation and callback.
 package audiocore
 
 import (
@@ -246,7 +246,8 @@ func startCapture(
 	deviceCfg.Capture.Channels = uint32(cfg.Channels)
 	deviceCfg.SampleRate = uint32(cfg.SampleRate)
 	deviceCfg.Alsa.NoMMap = 1
-	deviceCfg.Capture.DeviceID = selectedInfo.ID.Pointer()
+	devIDPtr := selectedInfo.ID.Pointer()
+	deviceCfg.Capture.DeviceID = devIDPtr
 	if cfg.SampleRate > conf.SampleRate {
 		deviceCfg.Capture.Format = malgo.FormatS32
 	}
@@ -255,6 +256,13 @@ func startCapture(
 	var formatType malgo.FormatType
 
 	onReceiveFrames := func(_, pSamples []byte, _ uint32) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error("panic in capture callback",
+					logger.String("source_id", sourceID),
+					logger.Any("panic", r))
+			}
+		}()
 		if len(pSamples) == 0 {
 			return
 		}
@@ -318,7 +326,21 @@ func startCapture(
 	}
 
 	captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
+	if err != nil && cfg.SampleRate > conf.SampleRate {
+		log.Warn("capture init failed at configured rate, falling back to default",
+			logger.String("source_id", sourceID),
+			logger.String("device", selectedDevInfo.Name),
+			logger.Int("configured_rate", cfg.SampleRate),
+			logger.Int("fallback_rate", conf.SampleRate))
+		deviceCfg.SampleRate = uint32(conf.SampleRate)
+		deviceCfg.Capture.Format = malgo.FormatS16
+		captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
+		if err == nil {
+			cfg.SampleRate = conf.SampleRate
+		}
+	}
 	if err != nil {
+		freeDeviceIDPtr(devIDPtr)
 		uninitAndFreeContext(malgoCtx, log)
 		return DeviceInfo{}, nil, errors.New(err).
 			Component("audiocore.capture").
@@ -333,8 +355,8 @@ func startCapture(
 	formatType = captureDevice.CaptureFormat()
 
 	if err = captureDevice.Start(); err != nil {
-		// Device.Uninit() handles both ma_device_uninit and ma_free internally.
 		captureDevice.Uninit()
+		freeDeviceIDPtr(devIDPtr)
 		uninitAndFreeContext(malgoCtx, log)
 		return DeviceInfo{}, nil, errors.New(err).
 			Component("audiocore.capture").
@@ -389,6 +411,8 @@ func startCapture(
 					Build()
 			}
 			captureDevice.Uninit()
+			// Free C heap memory allocated by DeviceID.Pointer() (C.CBytes).
+			freeDeviceIDPtr(devIDPtr)
 			// Context requires explicit two-step teardown.
 			uninitAndFreeContext(malgoCtx, log)
 			log.Info("malgo capture device stopped",

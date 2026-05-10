@@ -17,7 +17,17 @@
   @component
 -->
 <script lang="ts">
-  import { Settings, Trash2, Check, X, AlertCircle, Mic, Moon, ChevronDown } from '@lucide/svelte';
+  import {
+    Settings,
+    Trash2,
+    Check,
+    X,
+    AlertCircle,
+    AlertTriangle,
+    Mic,
+    Moon,
+    ChevronDown,
+  } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
@@ -98,6 +108,13 @@
   let editQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let showDeleteConfirm = $state(false);
   let showEqualizer = $state(false);
+  let editSampleRate = $state(48000);
+  let sampleRateOptions = $state<Array<{ value: string; label: string }>>([
+    { value: '48000', label: '48 kHz' },
+  ]);
+  let sampleRateVerified = $state(true);
+  let sampleRateLoading = $state(false);
+  let fetchController: AbortController | null = $state(null);
 
   // Device display name lookup
   let deviceDisplayName = $derived(
@@ -122,6 +139,9 @@
   function startEdit() {
     editName = source.name;
     editDevice = source.device;
+    editSampleRate = source.sampleRate || 48000;
+    prevEditDevice = source.device;
+    fetchDeviceCapabilities(source.device);
     editGain = source.gain;
     editModels = (source.models?.length ?? 0) > 0 ? [...source.models] : getDefaultModels();
     editEqualizer = source.equalizer
@@ -152,7 +172,7 @@
             enabled: editEqualizer.enabled,
             filters: editEqualizer.filters.map(f => ({
               ...f,
-              id: f.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)),
+              id: f.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 11)),
             })),
           }
         : undefined;
@@ -160,6 +180,7 @@
     const updated: AudioSourceConfig = {
       name: trimmedName,
       device: editDevice,
+      sampleRate: editSampleRate,
       gain: editGain,
       models: editModels,
       equalizer: transformedEqualizer,
@@ -208,6 +229,75 @@
   function handleEqualizerUpdate(updated: LocalEqualizerSettings) {
     editEqualizer = updated;
   }
+
+  async function fetchDeviceCapabilities(deviceId: string) {
+    if (!deviceId) return;
+    fetchController?.abort();
+    fetchController = new AbortController();
+    sampleRateLoading = true;
+    try {
+      const response = await fetch(
+        `/api/v2/system/audio/devices/capabilities?deviceId=${encodeURIComponent(deviceId)}`,
+        { signal: fetchController.signal }
+      );
+      if (response.ok) {
+        const responseData: unknown = await response.json();
+        if (
+          !responseData ||
+          typeof responseData !== 'object' ||
+          !('sampleRates' in responseData) ||
+          !Array.isArray((responseData as Record<string, unknown>).sampleRates)
+        ) {
+          sampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
+            value: String(rate),
+            label: `${rate / 1000} kHz`,
+          }));
+          sampleRateVerified = false;
+          return;
+        }
+        const data = responseData as { sampleRates: number[]; verified: boolean };
+        if (data.sampleRates.length === 0) {
+          sampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
+            value: String(rate),
+            label: `${rate / 1000} kHz`,
+          }));
+          sampleRateVerified = false;
+          return;
+        }
+        sampleRateOptions = data.sampleRates.map(rate => ({
+          value: String(rate),
+          label: rate >= 1000 ? `${rate / 1000} kHz` : `${rate} Hz`,
+        }));
+        sampleRateVerified = data.verified;
+      } else {
+        sampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
+          value: String(rate),
+          label: `${rate / 1000} kHz`,
+        }));
+        sampleRateVerified = false;
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      sampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
+        value: String(rate),
+        label: `${rate / 1000} kHz`,
+      }));
+      sampleRateVerified = false;
+    } finally {
+      sampleRateLoading = false;
+    }
+  }
+
+  let prevEditDevice = '';
+  $effect(() => {
+    if (isEditing && editDevice && editDevice !== prevEditDevice) {
+      prevEditDevice = editDevice;
+      fetchDeviceCapabilities(editDevice);
+    }
+    return () => {
+      fetchController?.abort();
+    };
+  });
 </script>
 
 <div
@@ -290,6 +380,30 @@
           menuSize="sm"
         />
 
+        <!-- Sample Rate -->
+        <div>
+          <SelectDropdown
+            value={String(editSampleRate)}
+            label={t('settings.audio.soundCards.sampleRateLabel')}
+            options={sampleRateOptions}
+            {disabled}
+            onChange={value => (editSampleRate = Number(value))}
+            groupBy={false}
+            menuSize="sm"
+          />
+          {#if !sampleRateVerified && !sampleRateLoading}
+            <p class="flex items-center gap-1 text-xs text-[var(--color-warning)] mt-1">
+              <AlertTriangle class="size-3" />
+              {t('settings.audio.soundCards.sampleRateUnverified')}
+            </p>
+          {/if}
+          {#if sampleRateLoading}
+            <p class="text-xs text-[var(--color-base-content)]/60 mt-1 animate-pulse">
+              {t('settings.audio.soundCards.sampleRateProbing')}
+            </p>
+          {/if}
+        </div>
+
         <!-- Gain -->
         <InlineSlider
           label={t('settings.audio.soundCards.gainLabel')}
@@ -306,7 +420,7 @@
         <ModelCheckboxList
           models={availableModels}
           selectedModels={editModels}
-          sourceSampleRate={source.sampleRate || 48000}
+          sourceSampleRate={editSampleRate}
           {disabled}
           onToggle={models => (editModels = models)}
         />

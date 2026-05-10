@@ -14,7 +14,7 @@
   @component
 -->
 <script lang="ts">
-  import { Plus, Mic, RefreshCw, ChevronDown } from '@lucide/svelte';
+  import { Plus, Mic, RefreshCw, ChevronDown, AlertTriangle } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -91,6 +91,13 @@
   let newName = $state('');
   let newDevice = $state('');
   let newGain = $state(0);
+  let newSampleRate = $state(48000);
+  let newSampleRateOptions = $state<Array<{ value: string; label: string }>>([
+    { value: '48000', label: '48 kHz' },
+  ]);
+  let newSampleRateVerified = $state(true);
+  let newSampleRateLoading = $state(false);
+  let newFetchController: AbortController | null = $state(null);
   let newModels = $state<string[]>([]);
   let newEqualizer = $state<LocalEqualizerSettings>({ enabled: false, filters: [] });
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
@@ -116,6 +123,10 @@
     newName = '';
     newDevice = '';
     newGain = 0;
+    newSampleRate = 48000;
+    newSampleRateOptions = [{ value: '48000', label: '48 kHz' }];
+    newSampleRateVerified = true;
+    prevNewDevice = '';
     newModels = getDefaultModels();
     newEqualizer = { enabled: false, filters: [] };
     newQuietHours = { ...defaultQuietHoursConfig };
@@ -181,6 +192,7 @@
     const newSource: AudioSourceConfig = {
       name: trimmedName,
       device: newDevice,
+      sampleRate: newSampleRate,
       gain: newGain,
       models: newModels,
       equalizer: transformedEqualizer,
@@ -235,6 +247,75 @@
   function handleNewEqualizerUpdate(updated: LocalEqualizerSettings) {
     newEqualizer = { ...updated };
   }
+
+  async function fetchNewDeviceCapabilities(deviceId: string) {
+    if (!deviceId) return;
+    newFetchController?.abort();
+    newFetchController = new AbortController();
+    newSampleRateLoading = true;
+    try {
+      const response = await fetch(
+        `/api/v2/system/audio/devices/capabilities?deviceId=${encodeURIComponent(deviceId)}`,
+        { signal: newFetchController.signal }
+      );
+      if (response.ok) {
+        const responseData: unknown = await response.json();
+        if (
+          !responseData ||
+          typeof responseData !== 'object' ||
+          !('sampleRates' in responseData) ||
+          !Array.isArray((responseData as Record<string, unknown>).sampleRates)
+        ) {
+          newSampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
+            value: String(rate),
+            label: `${rate / 1000} kHz`,
+          }));
+          newSampleRateVerified = false;
+          return;
+        }
+        const data = responseData as { sampleRates: number[]; verified: boolean };
+        if (data.sampleRates.length === 0) {
+          newSampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
+            value: String(rate),
+            label: `${rate / 1000} kHz`,
+          }));
+          newSampleRateVerified = false;
+          return;
+        }
+        newSampleRateOptions = data.sampleRates.map(rate => ({
+          value: String(rate),
+          label: rate >= 1000 ? `${rate / 1000} kHz` : `${rate} Hz`,
+        }));
+        newSampleRateVerified = data.verified;
+      } else {
+        newSampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
+          value: String(rate),
+          label: `${rate / 1000} kHz`,
+        }));
+        newSampleRateVerified = false;
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      newSampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
+        value: String(rate),
+        label: `${rate / 1000} kHz`,
+      }));
+      newSampleRateVerified = false;
+    } finally {
+      newSampleRateLoading = false;
+    }
+  }
+
+  let prevNewDevice = '';
+  $effect(() => {
+    if (newDevice && newDevice !== prevNewDevice) {
+      prevNewDevice = newDevice;
+      fetchNewDeviceCapabilities(newDevice);
+    }
+    return () => {
+      newFetchController?.abort();
+    };
+  });
 </script>
 
 <div class="space-y-4">
@@ -354,6 +435,30 @@
               {/if}
             </div>
 
+            <!-- Sample Rate -->
+            <div>
+              <SelectDropdown
+                value={String(newSampleRate)}
+                label={t('settings.audio.soundCards.sampleRateLabel')}
+                options={newSampleRateOptions}
+                {disabled}
+                onChange={value => (newSampleRate = Number(value))}
+                groupBy={false}
+                menuSize="sm"
+              />
+              {#if !newSampleRateVerified && !newSampleRateLoading}
+                <p class="flex items-center gap-1 text-xs text-[var(--color-warning)] mt-1">
+                  <AlertTriangle class="size-3" />
+                  {t('settings.audio.soundCards.sampleRateUnverified')}
+                </p>
+              {/if}
+              {#if newSampleRateLoading}
+                <p class="text-xs text-[var(--color-base-content)]/60 mt-1 animate-pulse">
+                  {t('settings.audio.soundCards.sampleRateProbing')}
+                </p>
+              {/if}
+            </div>
+
             <!-- Gain -->
             <InlineSlider
               label={t('settings.audio.soundCards.gainLabel')}
@@ -370,6 +475,7 @@
             <ModelCheckboxList
               models={availableModels}
               selectedModels={newModels}
+              sourceSampleRate={newSampleRate}
               {disabled}
               onToggle={models => (newModels = models)}
             />
