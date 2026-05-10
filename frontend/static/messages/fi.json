@@ -4516,6 +4516,7 @@
       "noInstalledModels": "Ei asennettuja lisämalleja. Selaa Saatavilla-välilehteä lisätäksesi luokittelijoita.",
       "noAvailableModels": "Ei lisämalleja saatavilla alustallesi.",
       "categories": {
+        "wildlife": "Eläinluokittelijat",
         "bird": "Lintuluokittelijat",
         "bat": "Lepakkoluokittelijat"
       },

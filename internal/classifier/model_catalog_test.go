@@ -47,10 +47,10 @@ func TestEmbeddedCatalog_HasFilesWithModelRole(t *testing.T) {
 func TestEmbeddedCatalog_ValidCategories(t *testing.T) {
 	t.Parallel()
 
-	validCategories := map[string]bool{CategoryBird: true, CategoryBat: true}
+	validCategories := map[string]bool{CategoryWildlife: true, CategoryBird: true, CategoryBat: true}
 	for _, entry := range EmbeddedCatalog {
 		assert.True(t, validCategories[entry.Category],
-			"catalog entry %q has invalid category %q (must be \"bird\" or \"bat\")", entry.ID, entry.Category)
+			"catalog entry %q has invalid category %q (must be \"wildlife\", \"bird\", or \"bat\")", entry.ID, entry.Category)
 	}
 }
 
@@ -77,9 +77,15 @@ func TestCatalogByCategory(t *testing.T) {
 
 	grouped := CatalogByCategory()
 
-	// Should have both bird and bat categories
+	// Should have wildlife, bird, and bat categories
+	require.Contains(t, grouped, CategoryWildlife)
 	require.Contains(t, grouped, CategoryBird)
 	require.Contains(t, grouped, CategoryBat)
+
+	// All wildlife entries should have the wildlife category
+	for _, entry := range grouped[CategoryWildlife] {
+		assert.Equal(t, CategoryWildlife, entry.Category)
+	}
 
 	// All bird entries should have the bird category
 	for _, entry := range grouped[CategoryBird] {
@@ -91,8 +97,9 @@ func TestCatalogByCategory(t *testing.T) {
 		assert.Equal(t, CategoryBat, entry.Category)
 	}
 
-	// Verify expected counts (3 bird entries, 11 bat entries)
-	assert.Len(t, grouped[CategoryBird], 3, "expected 3 bird catalog entries")
+	// Verify expected counts (2 wildlife, 1 bird, 11 bat entries)
+	assert.Len(t, grouped[CategoryWildlife], 2, "expected 2 wildlife catalog entries")
+	assert.Len(t, grouped[CategoryBird], 1, "expected 1 bird catalog entry")
 	assert.Len(t, grouped[CategoryBat], 11, "expected 11 bat catalog entries")
 }
 
@@ -120,7 +127,7 @@ func TestEmbeddedCatalog_BatEntriesHaveEmbeddingsFile(t *testing.T) {
 func TestEmbeddedCatalog_EntryCount(t *testing.T) {
 	t.Parallel()
 
-	// 3 bird entries (birdnet-v3.0, perch-v2, bsg-finland) + 11 bat entries = 14 total
+	// 2 wildlife entries (birdnet-v3.0, perch-v2) + 1 bird entry (bsg-finland) + 11 bat entries = 14 total
 	assert.Len(t, EmbeddedCatalog, 14, "expected 14 total catalog entries")
 }
 
@@ -158,6 +165,6 @@ func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
 	assert.Equal(t, "birdnet-v3.0", entry.ID)
 	assert.Equal(t, "BirdNET v3.0", entry.Name)
 	assert.Equal(t, RegistryIDBirdNETV3, entry.RegistryID)
-	assert.Equal(t, CategoryBird, entry.Category)
+	assert.Equal(t, CategoryWildlife, entry.Category)
 	assert.Contains(t, entry.RequiredBuildTags, "onnx")
 }

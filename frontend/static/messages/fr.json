@@ -4516,6 +4516,7 @@
       "noInstalledModels": "Aucun modèle supplémentaire installé. Parcourez l'onglet Disponibles pour ajouter des classificateurs.",
       "noAvailableModels": "Aucun modèle supplémentaire disponible pour votre plateforme.",
       "categories": {
+        "wildlife": "Classificateurs de faune",
         "bird": "Classificateurs d'oiseaux",
         "bat": "Classificateurs de chauves-souris"
       },

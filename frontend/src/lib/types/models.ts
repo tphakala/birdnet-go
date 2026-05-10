@@ -11,7 +11,7 @@ export interface CatalogEntry {
   author: string;
   license: string;
   commercialUse: boolean;
-  category: 'bird' | 'bat';
+  category: 'wildlife' | 'bird' | 'bat';
   region: string;
   speciesCount: number;
   version: string;

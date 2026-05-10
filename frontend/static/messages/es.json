@@ -4516,6 +4516,7 @@
       "noInstalledModels": "No hay modelos adicionales instalados. Explore la pestaña Disponibles para agregar más clasificadores.",
       "noAvailableModels": "No hay modelos adicionales disponibles para su plataforma.",
       "categories": {
+        "wildlife": "Clasificadores de fauna",
         "bird": "Clasificadores de aves",
         "bat": "Clasificadores de murciélagos"
       },
