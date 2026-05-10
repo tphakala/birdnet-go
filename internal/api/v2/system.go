@@ -405,6 +405,7 @@ func (c *Controller) initSystemRoutes() {
 	// Audio device routes (all protected)
 	audioGroup := protectedGroup.Group("/audio")
 	audioGroup.GET("/devices", c.GetAudioDevices)
+	audioGroup.GET("/devices/capabilities", c.GetDeviceCapabilities)
 	audioGroup.GET("/active", c.GetActiveAudioDevice)
 	audioGroup.GET("/equalizer/config", c.GetEqualizerConfig)
 	audioGroup.GET("/sources", c.ListAudioSources)
@@ -877,6 +878,42 @@ func (c *Controller) GetAudioDevices(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, apiDevices)
+}
+
+// GetDeviceCapabilities handles GET /api/v2/system/audio/devices/capabilities
+// Probes a specific audio device to discover supported sample rates.
+func (c *Controller) GetDeviceCapabilities(ctx echo.Context) error {
+	deviceID := ctx.QueryParam("deviceId")
+	if deviceID == "" {
+		return c.HandleError(ctx, nil, "deviceId query parameter is required", http.StatusBadRequest)
+	}
+
+	c.logInfoIfEnabled("Probing device capabilities",
+		logger.String("device_id", deviceID),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
+	)
+
+	caps, err := audiocore.ProbeDeviceCapabilities(deviceID, c.apiLogger)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return c.HandleError(ctx, err, "Device not found", http.StatusNotFound)
+		}
+		c.logErrorIfEnabled("Failed to probe device capabilities",
+			logger.Error(err),
+			logger.String("device_id", deviceID),
+		)
+		return c.HandleError(ctx, err, "Failed to probe device capabilities", http.StatusInternalServerError)
+	}
+
+	c.logInfoIfEnabled("Device capabilities retrieved",
+		logger.String("device_id", caps.DeviceID),
+		logger.String("device_name", caps.DeviceName),
+		logger.Int("rate_count", len(caps.SampleRates)),
+		logger.Bool("verified", caps.Verified),
+	)
+
+	return ctx.JSON(http.StatusOK, caps)
 }
 
 // GetActiveAudioDevice handles GET /api/v2/system/audio/active
