@@ -1512,7 +1512,8 @@
                 class="px-4 pt-4 pb-1 text-left font-normal align-top text-[var(--color-base-content)]/80"
                 >{t('analysis.gallery.license.model')}</th
               >
-              <td class="px-4 pt-4 pb-1 text-right font-medium text-[var(--color-base-content)]"
+              <td
+                class="px-4 pt-4 pb-1 text-right align-top font-medium text-[var(--color-base-content)]"
                 >{licenseModel.name}</td
               >
             </tr>
@@ -1522,7 +1523,7 @@
                 class="px-4 py-1 text-left font-normal align-top text-[var(--color-base-content)]/80"
                 >{t('analysis.gallery.license.author')}</th
               >
-              <td class="px-4 py-1 text-right text-[var(--color-base-content)]"
+              <td class="px-4 py-1 text-right align-top text-[var(--color-base-content)]"
                 >{licenseModel.author}</td
               >
             </tr>
@@ -1532,7 +1533,7 @@
                 class="px-4 py-1 text-left font-normal align-top text-[var(--color-base-content)]/80"
                 >{t('analysis.gallery.license.license')}</th
               >
-              <td class="px-4 py-1 text-right text-[var(--color-base-content)]"
+              <td class="px-4 py-1 text-right align-top text-[var(--color-base-content)]"
                 >{licenseModel.license}</td
               >
             </tr>
@@ -1542,7 +1543,7 @@
                 class="px-4 py-1 text-left font-normal align-top text-[var(--color-base-content)]/80"
                 >{t('analysis.gallery.license.commercialUse')}</th
               >
-              <td class="px-4 py-1 text-right">
+              <td class="px-4 py-1 text-right align-top">
                 {#if licenseModel.commercialUse}
                   <span class="inline-flex items-center gap-1 text-[var(--color-success)]">
                     <Shield class="size-3.5" />
@@ -1562,7 +1563,7 @@
                 class="px-4 pt-1 pb-4 text-left font-normal align-top text-[var(--color-base-content)]/80"
                 >{t('analysis.gallery.license.downloadSize')}</th
               >
-              <td class="px-4 pt-1 pb-4 text-right text-[var(--color-base-content)]"
+              <td class="px-4 pt-1 pb-4 text-right align-top text-[var(--color-base-content)]"
                 >{formatBytes(licenseModel.totalSizeBytes)}</td
               >
             </tr>
