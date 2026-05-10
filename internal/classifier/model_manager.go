@@ -134,32 +134,44 @@ func (mm *ModelManager) ScanInstalled() {
 	log.Info("Model scan complete",
 		logger.Int("installed_count", len(mm.installed)))
 
-	// Sync Models.Enabled with installed models so pre-existing installations
-	// (installed before the auto-enable logic was added) appear in the model picker.
+	// Sync Models.Enabled with installed/configured models so the model picker
+	// always reflects the actual system state.
 	if mm.settings != nil {
 		// BirdNET is always present (permanent built-in).
 		if !slices.Contains(mm.settings.Models.Enabled, conf.ModelIDBirdNET) {
 			mm.settings.Models.Enabled = append([]string{conf.ModelIDBirdNET}, mm.settings.Models.Enabled...)
 		}
 
-		// Add any installed model whose alias is missing from Enabled.
 		changed := false
-		for catalogID := range mm.installed {
-			entry, found := GetCatalogEntry(catalogID)
-			if !found {
-				continue
-			}
-			alias := ConfigAliasForRegistry(entry.RegistryID)
-			if alias == "" {
-				continue
-			}
-			if !slices.ContainsFunc(mm.settings.Models.Enabled, func(id string) bool {
+		addIfMissing := func(alias string) {
+			if alias != "" && !slices.ContainsFunc(mm.settings.Models.Enabled, func(id string) bool {
 				return strings.EqualFold(id, alias)
 			}) {
 				mm.settings.Models.Enabled = append(mm.settings.Models.Enabled, alias)
 				changed = true
 			}
 		}
+
+		// Add models found in the gallery models directory.
+		for catalogID := range mm.installed {
+			entry, found := GetCatalogEntry(catalogID)
+			if !found {
+				continue
+			}
+			addIfMissing(ConfigAliasForRegistry(entry.RegistryID))
+		}
+
+		// Also add models enabled via legacy per-model config flags.
+		if mm.settings.Bat.Enabled || mm.settings.Bat.ClassifierModel != "" {
+			addIfMissing(conf.ModelIDBat)
+		}
+		if mm.settings.Perch.Enabled || mm.settings.Perch.ModelPath != "" {
+			addIfMissing(conf.ModelIDPerchV2)
+		}
+		if mm.settings.BSG.Enabled || mm.settings.BSG.ModelPath != "" {
+			addIfMissing(conf.ModelIDBSG)
+		}
+
 		if changed {
 			if err := conf.SaveSettings(); err != nil {
 				log.Warn("Failed to persist Models.Enabled sync",
