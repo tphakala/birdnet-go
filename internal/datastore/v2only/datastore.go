@@ -451,6 +451,9 @@ func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 
 // EnsureModelRegistered creates the model entry in ai_models if it doesn't exist.
 func (ds *Datastore) EnsureModelRegistered(info detection.ModelInfo) error {
+	if info.Name == "" {
+		info = detection.DefaultModelInfo()
+	}
 	ctx := context.Background()
 	_, err := ds.model.GetOrCreate(ctx, info.Name, info.Version, info.Variant, detection.ResolveModelType(info.Name, info.Version), info.ClassifierPath)
 	return err
