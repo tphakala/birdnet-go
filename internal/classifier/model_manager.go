@@ -554,7 +554,9 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 
 	// Add config alias to Models.Enabled so the model appears in source config.
 	alias := ConfigAliasForRegistry(entry.RegistryID)
-	if alias != "" && !slices.Contains(mm.settings.Models.Enabled, alias) {
+	if alias != "" && !slices.ContainsFunc(mm.settings.Models.Enabled, func(id string) bool {
+		return strings.EqualFold(id, alias)
+	}) {
 		mm.settings.Models.Enabled = append(mm.settings.Models.Enabled, alias)
 	}
 
@@ -605,22 +607,33 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		mm.settings.Bat.EmbeddingModel = ""
 	}
 
-	// Remove config alias from Models.Enabled.
+	// Remove config alias from Models.Enabled and from any source/stream that references it.
 	alias := ConfigAliasForRegistry(entry.RegistryID)
 	if alias != "" {
 		mm.settings.Models.Enabled = slices.DeleteFunc(mm.settings.Models.Enabled, func(id string) bool {
 			return strings.EqualFold(id, alias)
 		})
-	}
 
-	// Remove model from any audio source's Models[] that referenced it.
-	for i := range mm.settings.Realtime.Audio.Sources {
-		src := &mm.settings.Realtime.Audio.Sources[i]
-		src.Models = slices.DeleteFunc(src.Models, func(id string) bool {
-			return strings.EqualFold(id, alias)
-		})
-		if len(src.Models) == 0 {
-			src.Models = []string{conf.ModelIDBirdNET}
+		// Remove from sound card sources.
+		for i := range mm.settings.Realtime.Audio.Sources {
+			src := &mm.settings.Realtime.Audio.Sources[i]
+			src.Models = slices.DeleteFunc(src.Models, func(id string) bool {
+				return strings.EqualFold(id, alias)
+			})
+			if len(src.Models) == 0 {
+				src.Models = []string{conf.ModelIDBirdNET}
+			}
+		}
+
+		// Remove from RTSP/stream sources.
+		for i := range mm.settings.Realtime.RTSP.Streams {
+			stream := &mm.settings.Realtime.RTSP.Streams[i]
+			stream.Models = slices.DeleteFunc(stream.Models, func(id string) bool {
+				return strings.EqualFold(id, alias)
+			})
+			if len(stream.Models) == 0 {
+				stream.Models = []string{conf.ModelIDBirdNET}
+			}
 		}
 	}
 
