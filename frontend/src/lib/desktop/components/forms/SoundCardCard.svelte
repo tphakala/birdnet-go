@@ -114,6 +114,7 @@
   ]);
   let sampleRateVerified = $state(true);
   let sampleRateLoading = $state(false);
+  let fetchController: AbortController | null = $state(null);
 
   // Device display name lookup
   let deviceDisplayName = $derived(
@@ -171,7 +172,7 @@
             enabled: editEqualizer.enabled,
             filters: editEqualizer.filters.map(f => ({
               ...f,
-              id: f.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)),
+              id: f.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 11)),
             })),
           }
         : undefined;
@@ -231,10 +232,13 @@
 
   async function fetchDeviceCapabilities(deviceId: string) {
     if (!deviceId) return;
+    fetchController?.abort();
+    fetchController = new AbortController();
     sampleRateLoading = true;
     try {
       const response = await fetch(
-        `/api/v2/system/audio/devices/capabilities?deviceId=${encodeURIComponent(deviceId)}`
+        `/api/v2/system/audio/devices/capabilities?deviceId=${encodeURIComponent(deviceId)}`,
+        { signal: fetchController.signal }
       );
       if (response.ok) {
         const data: { sampleRates: number[]; verified: boolean } = await response.json();
@@ -250,7 +254,8 @@
         }));
         sampleRateVerified = false;
       }
-    } catch {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') return;
       sampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
         value: String(rate),
         label: `${rate / 1000} kHz`,

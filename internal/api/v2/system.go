@@ -3,6 +3,8 @@ package api
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	goerrors "errors"
 	"fmt"
@@ -1790,9 +1792,15 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 		logger.String("free_space", formatBytesUint64(usage.Free)),
 		logger.String("required_space", formatBytesUint64(requiredSpace)))
 
-	// Create temp file path for VACUUM INTO
+	// Create temp file path for VACUUM INTO with random suffix to prevent
+	// predictable filenames (symlink attacks on shared /tmp).
 	timestamp := time.Now().Format("20060102-150405")
-	tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-%s-backup-%s.db", dbType, timestamp))
+	randomBytes := make([]byte, 8)
+	randomSuffix := ""
+	if _, randErr := cryptorand.Read(randomBytes); randErr == nil {
+		randomSuffix = "-" + hex.EncodeToString(randomBytes)
+	}
+	tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-%s-backup-%s%s.db", dbType, timestamp, randomSuffix))
 	filename := fmt.Sprintf("birdnet-%s-backup-%s.db", dbType, timestamp)
 
 	// Set response headers BEFORE starting VACUUM to establish the connection.
@@ -1814,8 +1822,10 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 		logger.String("db_type", dbType),
 		logger.String("temp_path", tempPath))
 
-	// Execute VACUUM INTO for safe, consistent backup
-	vacuumSQL := fmt.Sprintf("VACUUM INTO '%s'", tempPath)
+	// Execute VACUUM INTO for safe, consistent backup.
+	// Escape single quotes in tempPath to prevent SQL injection via crafted temp paths.
+	escapedTempPath := strings.ReplaceAll(tempPath, "'", "''")
+	vacuumSQL := fmt.Sprintf("VACUUM INTO '%s'", escapedTempPath)
 	vacuumStart := time.Now()
 
 	vacuumErr := gormDB.Exec(vacuumSQL).Error

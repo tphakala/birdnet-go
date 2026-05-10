@@ -255,6 +255,13 @@ func startCapture(
 	var formatType malgo.FormatType
 
 	onReceiveFrames := func(_, pSamples []byte, _ uint32) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error("panic in capture callback",
+					logger.String("source_id", sourceID),
+					logger.Any("panic", r))
+			}
+		}()
 		if len(pSamples) == 0 {
 			return
 		}
@@ -402,6 +409,8 @@ func startCapture(
 					Build()
 			}
 			captureDevice.Uninit()
+			// Free C heap memory allocated by DeviceID.Pointer() (C.CBytes).
+			freeDeviceIDPtr(deviceCfg.Capture.DeviceID)
 			// Context requires explicit two-step teardown.
 			uninitAndFreeContext(malgoCtx, log)
 			log.Info("malgo capture device stopped",

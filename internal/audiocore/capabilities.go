@@ -161,6 +161,7 @@ func probeByInit(malgoCtx *malgo.AllocatedContext, deviceInfo *malgo.DeviceInfo,
 	// allocates on the C heap). Reusing a single allocation for all probe
 	// iterations avoids leaking one C block per candidate rate.
 	devIDPtr := deviceInfo.ID.Pointer()
+	defer freeDeviceIDPtr(devIDPtr)
 
 	for _, rate := range CandidateSampleRates {
 		deviceCfg := malgo.DefaultDeviceConfig(malgo.Capture)

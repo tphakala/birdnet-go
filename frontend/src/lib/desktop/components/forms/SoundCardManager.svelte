@@ -97,6 +97,7 @@
   ]);
   let newSampleRateVerified = $state(true);
   let newSampleRateLoading = $state(false);
+  let newFetchController: AbortController | null = $state(null);
   let newModels = $state<string[]>([]);
   let newEqualizer = $state<LocalEqualizerSettings>({ enabled: false, filters: [] });
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
@@ -249,10 +250,13 @@
 
   async function fetchNewDeviceCapabilities(deviceId: string) {
     if (!deviceId) return;
+    newFetchController?.abort();
+    newFetchController = new AbortController();
     newSampleRateLoading = true;
     try {
       const response = await fetch(
-        `/api/v2/system/audio/devices/capabilities?deviceId=${encodeURIComponent(deviceId)}`
+        `/api/v2/system/audio/devices/capabilities?deviceId=${encodeURIComponent(deviceId)}`,
+        { signal: newFetchController.signal }
       );
       if (response.ok) {
         const data: { sampleRates: number[]; verified: boolean } = await response.json();
@@ -268,7 +272,8 @@
         }));
         newSampleRateVerified = false;
       }
-    } catch {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') return;
       newSampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
         value: String(rate),
         label: `${rate / 1000} kHz`,
