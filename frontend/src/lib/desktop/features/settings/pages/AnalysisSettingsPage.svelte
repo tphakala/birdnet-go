@@ -722,9 +722,12 @@
             totalFiles: 0,
           };
           progressCleanup = null;
+          clearTimeout(completionTimer);
           completionTimer = setTimeout(() => {
-            installingId = null;
-            downloadProgress = null;
+            if (installingId === modelId) {
+              installingId = null;
+              downloadProgress = null;
+            }
             loadCatalog();
           }, 2000);
         },
