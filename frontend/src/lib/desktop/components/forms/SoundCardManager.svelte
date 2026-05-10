@@ -15,13 +15,12 @@
 -->
 <script lang="ts">
   import { Plus, Mic, RefreshCw, ChevronDown } from '@lucide/svelte';
-  import { untrack } from 'svelte';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { toastActions } from '$lib/stores/toast';
-  import { api } from '$lib/utils/api';
   import { cn } from '$lib/utils/cn';
+  import { getAvailableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
   import SoundCardCard from './SoundCardCard.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import TextInput from './TextInput.svelte';
@@ -54,8 +53,7 @@
 
   const logger = loggers.audio;
 
-  // Default model ID — BirdNET v2.4 is the built-in default
-  const DEFAULT_MODEL_ID = 'birdnet';
+  const availableModels = $derived(getAvailableModels());
 
   function getDefaultModels(): string[] {
     if (availableModels.some(m => m.id === DEFAULT_MODEL_ID)) {
@@ -64,51 +62,10 @@
     return availableModels.length > 0 ? [availableModels[0].id] : [DEFAULT_MODEL_ID];
   }
 
-  // Fetch available models from backend API
-  interface BackendModel {
-    id: string;
-    name: string;
-    category: string;
-    minSampleRate?: number;
-    recommendedSampleRate?: number;
-  }
-
-  const FALLBACK_MODELS: BackendModel[] = [
-    { id: DEFAULT_MODEL_ID, name: 'BirdNET v2.4 (TFLite)', category: 'bird' },
-  ];
-
-  let fetchedModels = $state<BackendModel[]>([]);
-  let availableModels = $derived(fetchedModels.length > 0 ? fetchedModels : FALLBACK_MODELS);
-
   $effect(() => {
-    const controller = new AbortController();
-
-    untrack(() => {
-      api
-        .get<BackendModel[]>('/api/v2/models', { signal: controller.signal })
-        .then(data => {
-          if (Array.isArray(data) && data.length > 0) {
-            fetchedModels = data;
-          } else {
-            logger.warn('Fetched models response is empty or not an array', {
-              component: 'SoundCardManager',
-            });
-          }
-        })
-        .catch((err: unknown) => {
-          if (err instanceof Error && err.name !== 'AbortError') {
-            logger.error('Failed to fetch models', err, {
-              component: 'SoundCardManager',
-              action: 'fetchModels',
-            });
-          }
-        });
-    });
-
-    return () => controller.abort();
+    return fetchModels();
   });
 
-  // Model options — dynamically loaded from enabled models in config
   const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: m.name })));
 
   interface Props {
@@ -216,7 +173,7 @@
             enabled: newEqualizer.enabled,
             filters: newEqualizer.filters.map(f => ({
               ...f,
-              id: f.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)),
+              id: f.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 11)),
             })),
           }
         : undefined;

@@ -32,6 +32,7 @@
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
+  import { DEFAULT_MODEL_ID } from '$lib/stores/models.svelte';
   import { maskUrlCredentials } from '$lib/utils/security';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import Checkbox from './Checkbox.svelte';
@@ -310,7 +311,7 @@
     editTransport = stream.transport ?? 'tcp';
     editStreamType = stream.type;
     editEnabled = stream.enabled;
-    editModels = stream.models?.length ? [...stream.models] : ['birdnet'];
+    editModels = stream.models?.length ? [...stream.models] : [DEFAULT_MODEL_ID];
     editEqualizer = stream.equalizer
       ? { ...stream.equalizer, filters: [...stream.equalizer.filters] }
       : { enabled: false, filters: [] };

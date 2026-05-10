@@ -22,6 +22,7 @@
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
+  import { DEFAULT_MODEL_ID } from '$lib/stores/models.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import InlineSlider from './InlineSlider.svelte';
   import ModelCheckboxList from './ModelCheckboxList.svelte';
@@ -50,9 +51,6 @@
   }
 
   const logger = loggers.audio;
-
-  // Default model ID — BirdNET v2.4 is the built-in default
-  const DEFAULT_MODEL_ID = 'birdnet';
 
   function getDefaultModels(): string[] {
     const defaultModel = modelOptions.find(m => m.value === DEFAULT_MODEL_ID);

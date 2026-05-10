@@ -39,8 +39,9 @@ const (
 type ModelManager struct {
 	modelsDir    string
 	orchestrator *Orchestrator
-	settings     *conf.Settings
+	settings     *conf.Settings // nil sentinel: non-nil means config sync is enabled
 	mu           sync.RWMutex
+	settingsMu   sync.Mutex // serializes clone-mutate-publish cycles on settings
 	installed    map[string]InstalledModel
 	downloading  map[string]*DownloadState
 }
@@ -135,22 +136,25 @@ func (mm *ModelManager) ScanInstalled() {
 		logger.Int("installed_count", len(mm.installed)))
 
 	// Sync Models.Enabled with installed/configured models so the model picker
-	// always reflects the actual system state.
+	// always reflects the actual system state. Use clone-mutate-publish to
+	// avoid mutating the shared settings snapshot in place.
 	if mm.settings != nil {
+		mm.settingsMu.Lock()
+		updated := conf.CloneSettings(conf.GetSettings())
 		changed := false
 
 		// BirdNET is always present (permanent built-in).
-		if !slices.ContainsFunc(mm.settings.Models.Enabled, func(id string) bool {
+		if !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
 			return strings.EqualFold(id, conf.ModelIDBirdNET)
 		}) {
-			mm.settings.Models.Enabled = append([]string{conf.ModelIDBirdNET}, mm.settings.Models.Enabled...)
+			updated.Models.Enabled = append([]string{conf.ModelIDBirdNET}, updated.Models.Enabled...)
 			changed = true
 		}
 		addIfMissing := func(alias string) {
-			if alias != "" && !slices.ContainsFunc(mm.settings.Models.Enabled, func(id string) bool {
+			if alias != "" && !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
 				return strings.EqualFold(id, alias)
 			}) {
-				mm.settings.Models.Enabled = append(mm.settings.Models.Enabled, alias)
+				updated.Models.Enabled = append(updated.Models.Enabled, alias)
 				changed = true
 			}
 		}
@@ -165,23 +169,24 @@ func (mm *ModelManager) ScanInstalled() {
 		}
 
 		// Also add models enabled via legacy per-model config flags.
-		if mm.settings.Bat.Enabled || mm.settings.Bat.ClassifierModel != "" {
+		if updated.Bat.Enabled || updated.Bat.ClassifierModel != "" {
 			addIfMissing(conf.ModelIDBat)
 		}
-		if mm.settings.Perch.Enabled || mm.settings.Perch.ModelPath != "" {
+		if updated.Perch.Enabled || updated.Perch.ModelPath != "" {
 			addIfMissing(conf.ModelIDPerchV2)
 		}
-		if mm.settings.BSG.Enabled || mm.settings.BSG.ModelPath != "" {
+		if updated.BSG.Enabled || updated.BSG.ModelPath != "" {
 			addIfMissing(conf.ModelIDBSG)
 		}
 
 		if changed {
-			conf.StoreSettings(mm.settings)
+			conf.StoreSettings(updated)
 			if err := conf.SaveSettings(); err != nil {
 				log.Warn("Failed to persist Models.Enabled sync",
 					logger.Error(err))
 			}
 		}
+		mm.settingsMu.Unlock()
 	}
 }
 
@@ -556,57 +561,63 @@ func (mm *ModelManager) removeDownloading(catalogID string) {
 }
 
 // applyConfigForInstall updates settings to reflect a newly installed model.
-// Only fields with non-empty paths are set. The caller must hold no locks.
-// Settings are persisted to disk via conf.SaveSettings so changes survive
-// restarts and are visible to concurrent readers through conf.Setting().
+// Only fields with non-empty paths are set. The caller must hold no locks
+// other than mm.settingsMu (acquired internally).
+// Uses clone-mutate-publish so the shared settings snapshot is never mutated
+// in place. Settings are persisted to disk via conf.SaveSettings so changes
+// survive restarts and are visible to concurrent readers through conf.Setting().
 func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, labelsPath, embeddingsPath string) {
 	if mm.settings == nil {
 		return
 	}
+
+	mm.settingsMu.Lock()
+	defer mm.settingsMu.Unlock()
+
+	updated := conf.CloneSettings(conf.GetSettings())
 
 	switch entry.RegistryID {
 	case RegistryIDBirdNETV3:
 		GetLogger().Info("BirdNET v3.0 config wiring not yet implemented",
 			logger.String("catalog_id", entry.ID))
 	case RegistryIDPerchV2:
-		mm.settings.Perch.Enabled = true
+		updated.Perch.Enabled = true
 		if modelPath != "" {
-			mm.settings.Perch.ModelPath = modelPath
+			updated.Perch.ModelPath = modelPath
 		}
 		if labelsPath != "" {
-			mm.settings.Perch.LabelPath = labelsPath
+			updated.Perch.LabelPath = labelsPath
 		}
 	case RegistryIDBSG:
-		mm.settings.BSG.Enabled = true
+		updated.BSG.Enabled = true
 		if modelPath != "" {
-			mm.settings.BSG.ModelPath = modelPath
+			updated.BSG.ModelPath = modelPath
 		}
 		if labelsPath != "" {
-			mm.settings.BSG.LabelPath = labelsPath
+			updated.BSG.LabelPath = labelsPath
 		}
 	case RegistryIDBat:
-		mm.settings.Bat.Enabled = true
+		updated.Bat.Enabled = true
 		if modelPath != "" {
-			mm.settings.Bat.ClassifierModel = modelPath
+			updated.Bat.ClassifierModel = modelPath
 		}
 		if labelsPath != "" {
-			mm.settings.Bat.LabelPath = labelsPath
+			updated.Bat.LabelPath = labelsPath
 		}
 		if embeddingsPath != "" {
-			mm.settings.Bat.EmbeddingModel = embeddingsPath
+			updated.Bat.EmbeddingModel = embeddingsPath
 		}
 	}
 
 	// Add config alias to Models.Enabled so the model appears in source config.
 	alias := ConfigAliasForRegistry(entry.RegistryID)
-	if alias != "" && !slices.ContainsFunc(mm.settings.Models.Enabled, func(id string) bool {
+	if alias != "" && !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
 		return strings.EqualFold(id, alias)
 	}) {
-		mm.settings.Models.Enabled = append(mm.settings.Models.Enabled, alias)
+		updated.Models.Enabled = append(updated.Models.Enabled, alias)
 	}
 
-	// Publish the mutated settings so SaveSettings picks up our changes.
-	conf.StoreSettings(mm.settings)
+	conf.StoreSettings(updated)
 	if err := conf.SaveSettings(); err != nil {
 		GetLogger().Warn("Failed to persist settings after model install",
 			logger.String("catalog_id", entry.ID),
@@ -616,54 +627,76 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 
 // applyConfigForUninstall updates settings to reflect a removed model.
 // For bat models, Enabled is only set to false when no other bat models
-// remain installed. The caller must hold mm.mu (at least RLock).
-// Settings are persisted to disk via conf.SaveSettings so changes survive
-// restarts and are visible to concurrent readers through conf.Setting().
+// remain installed; if another bat model exists, config is re-pointed to it.
+// The caller must hold mm.mu (at least RLock).
+// Uses clone-mutate-publish so the shared settings snapshot is never mutated
+// in place. Settings are persisted to disk via conf.SaveSettings so changes
+// survive restarts and are visible to concurrent readers through conf.Setting().
 func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 	if mm.settings == nil {
 		return
 	}
+
+	mm.settingsMu.Lock()
+	defer mm.settingsMu.Unlock()
+
+	updated := conf.CloneSettings(conf.GetSettings())
+	retainAlias := false
 
 	switch entry.RegistryID {
 	case RegistryIDBirdNETV3:
 		GetLogger().Info("BirdNET v3.0 config wiring not yet implemented",
 			logger.String("catalog_id", entry.ID))
 	case RegistryIDPerchV2:
-		mm.settings.Perch.Enabled = false
-		mm.settings.Perch.ModelPath = ""
-		mm.settings.Perch.LabelPath = ""
+		updated.Perch.Enabled = false
+		updated.Perch.ModelPath = ""
+		updated.Perch.LabelPath = ""
 	case RegistryIDBSG:
-		mm.settings.BSG.Enabled = false
-		mm.settings.BSG.ModelPath = ""
-		mm.settings.BSG.LabelPath = ""
+		updated.BSG.Enabled = false
+		updated.BSG.ModelPath = ""
+		updated.BSG.LabelPath = ""
 	case RegistryIDBat:
-		// Only disable if no other bat models remain installed.
-		otherBatInstalled := false
-		for id := range mm.installed {
+		// Find another installed bat model to re-point config to.
+		var replacement *InstalledModel
+		var replacementEntry CatalogEntry
+		for id, inst := range mm.installed {
 			other, found := GetCatalogEntry(id)
 			if found && other.Category == CategoryBat {
-				otherBatInstalled = true
+				replacement = &inst
+				replacementEntry = other
 				break
 			}
 		}
-		if !otherBatInstalled {
-			mm.settings.Bat.Enabled = false
+		if replacement == nil {
+			updated.Bat.Enabled = false
+			updated.Bat.ClassifierModel = ""
+			updated.Bat.LabelPath = ""
+			updated.Bat.EmbeddingModel = ""
+		} else {
+			retainAlias = true
+			updated.Bat.ClassifierModel = replacement.ModelPath
+			updated.Bat.LabelPath = replacement.LabelsPath
+			updated.Bat.EmbeddingModel = ""
+			for _, f := range replacementEntry.Files {
+				if f.Role == RoleEmbeddings {
+					updated.Bat.EmbeddingModel = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+					break
+				}
+			}
 		}
-		mm.settings.Bat.ClassifierModel = ""
-		mm.settings.Bat.LabelPath = ""
-		mm.settings.Bat.EmbeddingModel = ""
 	}
 
-	// Remove config alias from Models.Enabled and from any source/stream that references it.
+	// Remove config alias from Models.Enabled and from any source/stream that
+	// references it, but only when no replacement model of the same category exists.
 	alias := ConfigAliasForRegistry(entry.RegistryID)
-	if alias != "" {
-		mm.settings.Models.Enabled = slices.DeleteFunc(mm.settings.Models.Enabled, func(id string) bool {
+	if alias != "" && !retainAlias {
+		updated.Models.Enabled = slices.DeleteFunc(updated.Models.Enabled, func(id string) bool {
 			return strings.EqualFold(id, alias)
 		})
 
 		// Remove from sound card sources.
-		for i := range mm.settings.Realtime.Audio.Sources {
-			src := &mm.settings.Realtime.Audio.Sources[i]
+		for i := range updated.Realtime.Audio.Sources {
+			src := &updated.Realtime.Audio.Sources[i]
 			src.Models = slices.DeleteFunc(src.Models, func(id string) bool {
 				return strings.EqualFold(id, alias)
 			})
@@ -673,8 +706,8 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		}
 
 		// Remove from RTSP/stream sources.
-		for i := range mm.settings.Realtime.RTSP.Streams {
-			stream := &mm.settings.Realtime.RTSP.Streams[i]
+		for i := range updated.Realtime.RTSP.Streams {
+			stream := &updated.Realtime.RTSP.Streams[i]
 			stream.Models = slices.DeleteFunc(stream.Models, func(id string) bool {
 				return strings.EqualFold(id, alias)
 			})
@@ -684,8 +717,7 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		}
 	}
 
-	// Publish the mutated settings so SaveSettings picks up our changes.
-	conf.StoreSettings(mm.settings)
+	conf.StoreSettings(updated)
 	if err := conf.SaveSettings(); err != nil {
 		GetLogger().Warn("Failed to persist settings after model uninstall",
 			logger.String("catalog_id", entry.ID),
