@@ -267,13 +267,21 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 
 	sourceID := src.ID
 
-	// 2. Allocate analysis buffer.
+	// 2. Allocate analysis buffer scaled to source sample rate.
+	sampleRate := cfg.SampleRate
+	if sampleRate <= 0 {
+		sampleRate = defaultSampleRate
+	}
+	rateScale := sampleRate / defaultSampleRate
+	if rateScale < 1 {
+		rateScale = 1
+	}
 	if err := e.bufferMgr.AllocateAnalysis(
 		sourceID,
 		e.primaryModelID,
-		defaultAnalysisCapacity,
-		defaultAnalysisOverlap,
-		defaultAnalysisReadSize,
+		defaultAnalysisCapacity*rateScale,
+		defaultAnalysisOverlap*rateScale,
+		defaultAnalysisReadSize*rateScale,
 	); err != nil {
 		return errors.New(err).
 			Component("audiocore.engine").
@@ -284,10 +292,6 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 	}
 
 	// 3. Allocate capture buffer.
-	sampleRate := cfg.SampleRate
-	if sampleRate <= 0 {
-		sampleRate = defaultSampleRate
-	}
 	if err := e.bufferMgr.AllocateCapture(
 		sourceID,
 		e.captureBufferSeconds,
@@ -424,17 +428,21 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	// 2. Deallocate old buffers.
 	e.bufferMgr.DeallocateSource(sourceID)
 
-	// 3. Allocate new buffers.
+	// 3. Allocate new buffers scaled to source sample rate.
 	sampleRate := newCfg.SampleRate
 	if sampleRate <= 0 {
 		sampleRate = defaultSampleRate
 	}
+	rateScale := sampleRate / defaultSampleRate
+	if rateScale < 1 {
+		rateScale = 1
+	}
 	if err := e.bufferMgr.AllocateAnalysis(
 		sourceID,
 		e.primaryModelID,
-		defaultAnalysisCapacity,
-		defaultAnalysisOverlap,
-		defaultAnalysisReadSize,
+		defaultAnalysisCapacity*rateScale,
+		defaultAnalysisOverlap*rateScale,
+		defaultAnalysisReadSize*rateScale,
 	); err != nil {
 		return errors.New(err).
 			Component("audiocore.engine").
