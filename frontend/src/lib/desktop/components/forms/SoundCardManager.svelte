@@ -284,12 +284,15 @@
     }
   }
 
-  let prevNewDevice = $state('');
+  let prevNewDevice = '';
   $effect(() => {
     if (newDevice && newDevice !== prevNewDevice) {
       prevNewDevice = newDevice;
       fetchNewDeviceCapabilities(newDevice);
     }
+    return () => {
+      newFetchController?.abort();
+    };
   });
 </script>
 

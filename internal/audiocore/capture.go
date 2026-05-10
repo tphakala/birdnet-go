@@ -246,7 +246,8 @@ func startCapture(
 	deviceCfg.Capture.Channels = uint32(cfg.Channels)
 	deviceCfg.SampleRate = uint32(cfg.SampleRate)
 	deviceCfg.Alsa.NoMMap = 1
-	deviceCfg.Capture.DeviceID = selectedInfo.ID.Pointer()
+	devIDPtr := selectedInfo.ID.Pointer()
+	deviceCfg.Capture.DeviceID = devIDPtr
 	if cfg.SampleRate > conf.SampleRate {
 		deviceCfg.Capture.Format = malgo.FormatS32
 	}
@@ -339,6 +340,7 @@ func startCapture(
 		}
 	}
 	if err != nil {
+		freeDeviceIDPtr(devIDPtr)
 		uninitAndFreeContext(malgoCtx, log)
 		return DeviceInfo{}, nil, errors.New(err).
 			Component("audiocore.capture").
@@ -353,8 +355,8 @@ func startCapture(
 	formatType = captureDevice.CaptureFormat()
 
 	if err = captureDevice.Start(); err != nil {
-		// Device.Uninit() handles both ma_device_uninit and ma_free internally.
 		captureDevice.Uninit()
+		freeDeviceIDPtr(devIDPtr)
 		uninitAndFreeContext(malgoCtx, log)
 		return DeviceInfo{}, nil, errors.New(err).
 			Component("audiocore.capture").
@@ -410,7 +412,7 @@ func startCapture(
 			}
 			captureDevice.Uninit()
 			// Free C heap memory allocated by DeviceID.Pointer() (C.CBytes).
-			freeDeviceIDPtr(deviceCfg.Capture.DeviceID)
+			freeDeviceIDPtr(devIDPtr)
 			// Context requires explicit two-step teardown.
 			uninitAndFreeContext(malgoCtx, log)
 			log.Info("malgo capture device stopped",

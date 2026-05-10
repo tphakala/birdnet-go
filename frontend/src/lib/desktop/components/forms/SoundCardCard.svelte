@@ -266,12 +266,15 @@
     }
   }
 
-  let prevEditDevice = $state('');
+  let prevEditDevice = '';
   $effect(() => {
     if (isEditing && editDevice && editDevice !== prevEditDevice) {
       prevEditDevice = editDevice;
       fetchDeviceCapabilities(editDevice);
     }
+    return () => {
+      fetchController?.abort();
+    };
   });
 </script>
 
