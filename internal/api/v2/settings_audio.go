@@ -30,7 +30,8 @@ func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool
 	for i := range oldSources {
 		if oldSources[i].Device != newSources[i].Device ||
 			oldSources[i].Gain != newSources[i].Gain ||
-			oldSources[i].Model != newSources[i].Model {
+			oldSources[i].Model != newSources[i].Model ||
+			oldSources[i].SampleRate != newSources[i].SampleRate {
 			return true
 		}
 	}

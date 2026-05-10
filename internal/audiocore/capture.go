@@ -318,6 +318,19 @@ func startCapture(
 	}
 
 	captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
+	if err != nil && cfg.SampleRate > conf.SampleRate {
+		log.Warn("capture init failed at configured rate, falling back to default",
+			logger.String("source_id", sourceID),
+			logger.String("device", selectedDevInfo.Name),
+			logger.Int("configured_rate", cfg.SampleRate),
+			logger.Int("fallback_rate", conf.SampleRate))
+		deviceCfg.SampleRate = uint32(conf.SampleRate)
+		deviceCfg.Capture.Format = malgo.FormatS16
+		captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
+		if err == nil {
+			cfg.SampleRate = conf.SampleRate
+		}
+	}
 	if err != nil {
 		uninitAndFreeContext(malgoCtx, log)
 		return DeviceInfo{}, nil, errors.New(err).
