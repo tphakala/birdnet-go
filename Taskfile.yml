@@ -26,7 +26,13 @@ vars:
     sh: awk '/^go /{print $2; found=1} END{if(!found) exit 1}' go.mod
   # Common build flags
   CGO_FLAGS: CGO_ENABLED=1 CGO_CFLAGS="-I$HOME/src/tensorflow"
-  BUILD_FLAGS: -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}'"
+  EXTRA_BUILD_TAGS: '{{.EXTRA_BUILD_TAGS | default ""}}'
+  BUILD_TAGS_FLAG:
+    sh: |
+      if [ -n "{{.EXTRA_BUILD_TAGS}}" ]; then
+        echo "-tags {{.EXTRA_BUILD_TAGS}}"
+      fi
+  BUILD_FLAGS: '{{.BUILD_TAGS_FLAG}} -ldflags "-s -w -X ''main.buildDate={{.BUILD_DATE}}'' -X ''main.version={{.VERSION}}''"'
   # System paths
   SYSTEM_LIB_DIR_AMD64: /usr/lib
   SYSTEM_LIB_DIR_ARM64: /usr/aarch64-linux-gnu/lib
