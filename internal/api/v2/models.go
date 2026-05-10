@@ -15,8 +15,11 @@ import (
 
 // ModelListItem represents a model in the API response.
 type ModelListItem struct {
-	ID   string `json:"id"`   // Config alias (e.g., "birdnet", "perch_v2")
-	Name string `json:"name"` // Display name (e.g., "BirdNET v2.4 (TFLite)")
+	ID                    string `json:"id"`                              // Config alias (e.g., "birdnet", "perch_v2")
+	Name                  string `json:"name"`                            // Display name (e.g., "BirdNET v2.4 (TFLite)")
+	Category              string `json:"category"`                        // Model category (e.g., "bird", "bat")
+	MinSampleRate         int    `json:"minSampleRate,omitempty"`         // Minimum required sample rate in Hz
+	RecommendedSampleRate int    `json:"recommendedSampleRate,omitempty"` // Recommended sample rate in Hz
 }
 
 // CatalogEntryResponse represents a model in the catalog API response.
@@ -60,9 +63,21 @@ func (c *Controller) ListModels(ctx echo.Context) error {
 		info := classifier.ModelRegistry[id]
 		for _, alias := range info.ConfigAliases {
 			if enabled[strings.ToLower(alias)] {
+				// Determine category from catalog entry (if any), default to "bird".
+				category := "bird"
+				for i := range classifier.EmbeddedCatalog {
+					if classifier.EmbeddedCatalog[i].RegistryID == id {
+						category = classifier.EmbeddedCatalog[i].Category
+						break
+					}
+				}
+
 				models = append(models, ModelListItem{
-					ID:   alias,
-					Name: info.DisplayName(),
+					ID:                    alias,
+					Name:                  info.DisplayName(),
+					Category:              category,
+					MinSampleRate:         info.Spec.MinRawSampleRate,
+					RecommendedSampleRate: info.Spec.RecommendedSampleRate,
 				})
 				break // one entry per model
 			}
