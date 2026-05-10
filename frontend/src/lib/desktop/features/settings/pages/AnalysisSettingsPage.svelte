@@ -1502,7 +1502,9 @@
         {t('analysis.gallery.license.title')}
       </h3>
       <div class="mt-4 space-y-3">
-        <table class="w-full rounded-lg bg-[var(--color-base-200)] text-sm">
+        <table
+          class="w-full overflow-hidden rounded-lg border-separate border-spacing-0 bg-[var(--color-base-200)] text-sm"
+        >
           <tbody>
             <tr>
               <th
