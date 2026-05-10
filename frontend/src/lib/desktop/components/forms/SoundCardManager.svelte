@@ -258,10 +258,8 @@
       const result = await fetchCapabilities(deviceId, newFetchController.signal);
       newSampleRateOptions = result.options;
       newSampleRateVerified = result.verified;
-    } catch (error: unknown) {
-      if (error instanceof Error && error.name === 'AbortError') return;
-      newSampleRateOptions = [{ value: '48000', label: '48 kHz' }];
-      newSampleRateVerified = false;
+    } catch {
+      // Only AbortError reaches here (utility handles all other failures internally)
     } finally {
       newSampleRateLoading = false;
     }

@@ -25,41 +25,58 @@ function fallbackOptions(): SampleRateOption[] {
 /**
  * Fetch device sample rate capabilities from the backend API.
  * Returns supported rates with verified status.
- * On any failure, returns all candidate rates as unverified.
+ * On any failure (network, malformed JSON, invalid data), returns all
+ * candidate rates as unverified. Only AbortError is re-thrown so callers
+ * can detect request cancellation.
  */
 export async function fetchDeviceCapabilities(
   deviceId: string,
   signal?: AbortSignal
 ): Promise<DeviceCapabilitiesResult> {
-  const response = await fetch(
-    `/api/v2/system/audio/devices/capabilities?deviceId=${encodeURIComponent(deviceId)}`,
-    signal ? { signal } : undefined
-  );
+  try {
+    const response = await fetch(
+      `/api/v2/system/audio/devices/capabilities?deviceId=${encodeURIComponent(deviceId)}`,
+      signal ? { signal } : undefined
+    );
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return { options: fallbackOptions(), verified: false };
+    }
+
+    let responseData: unknown;
+    try {
+      responseData = await response.json();
+    } catch {
+      return { options: fallbackOptions(), verified: false };
+    }
+
+    if (
+      !responseData ||
+      typeof responseData !== 'object' ||
+      !('sampleRates' in responseData) ||
+      !Array.isArray((responseData as Record<string, unknown>).sampleRates)
+    ) {
+      return { options: fallbackOptions(), verified: false };
+    }
+
+    const raw = responseData as { sampleRates: unknown[]; verified?: unknown };
+    const rates = raw.sampleRates.filter(
+      (r): r is number => typeof r === 'number' && Number.isFinite(r)
+    );
+
+    if (rates.length === 0) {
+      return { options: fallbackOptions(), verified: false };
+    }
+
+    return {
+      options: rates.map(rate => ({
+        value: String(rate),
+        label: formatSampleRateLabel(rate),
+      })),
+      verified: typeof raw.verified === 'boolean' ? raw.verified : false,
+    };
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') throw error;
     return { options: fallbackOptions(), verified: false };
   }
-
-  const responseData: unknown = await response.json();
-  if (
-    !responseData ||
-    typeof responseData !== 'object' ||
-    !('sampleRates' in responseData) ||
-    !Array.isArray((responseData as Record<string, unknown>).sampleRates)
-  ) {
-    return { options: fallbackOptions(), verified: false };
-  }
-
-  const data = responseData as { sampleRates: number[]; verified: boolean };
-  if (data.sampleRates.length === 0) {
-    return { options: fallbackOptions(), verified: false };
-  }
-
-  return {
-    options: data.sampleRates.map(rate => ({
-      value: String(rate),
-      label: formatSampleRateLabel(rate),
-    })),
-    verified: data.verified,
-  };
 }
