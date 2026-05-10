@@ -14,6 +14,7 @@ const (
 	RoleModel      = "model"
 	RoleLabels     = "labels"
 	RoleEmbeddings = "embeddings"
+	RoleData       = "data"
 )
 
 // CatalogEntry describes a downloadable model available in the model gallery.
@@ -39,8 +40,8 @@ type CatalogEntry struct {
 type CatalogFile struct {
 	RemotePath string // path within the HuggingFace repo
 	LocalName  string // filename to use on disk
-	Role       string // file role: "model", "labels", or "embeddings"
-	SHA256     string // hex-encoded SHA-256 checksum (placeholder for now)
+	Role       string // file role: "model", "labels", "embeddings", or "data"
+	SHA256     string // hex-encoded SHA-256 checksum
 	SizeBytes  int64  // file size in bytes
 }
 
@@ -105,29 +106,65 @@ var EmbeddedCatalog = []CatalogEntry{
 		UpstreamURL:       "https://github.com/luomus/BSG",
 		HuggingFaceRepo:   "tphakala/BSG",
 		Files: []CatalogFile{
-			{RemotePath: "bsg_finland_v4.4.onnx", LocalName: "bsg_finland_v4.4.onnx", Role: RoleModel, SHA256: "placeholder", SizeBytes: 0},
-			{RemotePath: "labels.txt", LocalName: "bsg_finland_v4.4_labels.txt", Role: RoleLabels, SHA256: "placeholder", SizeBytes: 0},
+			{RemotePath: "BSG_birds_Finland_v4_4_fused_fp32.onnx", LocalName: "BSG_birds_Finland_v4_4_fused_fp32.onnx", Role: RoleModel, SHA256: "dd2b6b21c6b3d8adc5d72954f9e33c48b3d692dbbc647758340a69d68b203300", SizeBytes: 45446250},
+			{RemotePath: "BSG_birds_Finland_v4_4_labels_fi.txt", LocalName: "BSG_birds_Finland_v4_4_labels_fi.txt", Role: RoleLabels, SHA256: "01497fbec1bdba18625862ac8a5aedf372801eeb36dfde7a5dbce5353eeda308", SizeBytes: 7813},
+			{RemotePath: "BSG_birds_Finland_v4_4_calibration.csv", LocalName: "BSG_birds_Finland_v4_4_calibration.csv", Role: RoleData, SHA256: "b248ca8dac8205b427604ccc2832afdc2ab4672653c7e35ca78f44cc36ee5b28", SizeBytes: 6800},
+			{RemotePath: "BSG_birds_Finland_v4_4_distribution.bin", LocalName: "BSG_birds_Finland_v4_4_distribution.bin", Role: RoleData, SHA256: "0617f19f3eca7f7bc409e3d853d742a171a835464862dc3ced2f5b72ef3093f5", SizeBytes: 25828768},
+			{RemotePath: "BSG_birds_Finland_v4_4_migration.csv", LocalName: "BSG_birds_Finland_v4_4_migration.csv", Role: RoleData, SHA256: "a3fdbfc744645f6945def7fbfa3ee19e347c31d1b46ae78fba75e7059b54a86b", SizeBytes: 17054},
 		},
 	},
 
 	// Bat models (BattyBirdNET family by rdz-oss)
-	batCatalogEntry("battybirdnet-bavaria", "BattyBirdNET Bavaria", "Bavaria", 32, "Bavaria"),
-	batCatalogEntry("battybirdnet-bavaria-high", "BattyBirdNET Bavaria (High)", "Bavaria", 24, "Bavaria-High"),
-	batCatalogEntry("battybirdnet-eu", "BattyBirdNET EU", "Europe", 30, "EU"),
-	batCatalogEntry("battybirdnet-scotland", "BattyBirdNET Scotland", "Scotland", 11, "Scotland"),
-	batCatalogEntry("battybirdnet-southwales", "BattyBirdNET South Wales", "South Wales", 29, "SouthWales"),
-	batCatalogEntry("battybirdnet-sweden", "BattyBirdNET Sweden", "Sweden", 23, "Sweden"),
-	batCatalogEntry("battybirdnet-uk", "BattyBirdNET UK", "UK", 20, "UK"),
-	batCatalogEntry("battybirdnet-usa", "BattyBirdNET USA", "USA", 38, "USA"),
-	batCatalogEntry("battybirdnet-usa-east", "BattyBirdNET USA East", "USA East", 23, "USA-East"),
-	batCatalogEntry("battybirdnet-usa-east-high", "BattyBirdNET USA East (High)", "USA East", 17, "USA-East-High"),
-	batCatalogEntry("battybirdnet-usa-west", "BattyBirdNET USA West", "USA West", 28, "USA-West"),
+	batCatalogEntry("battybirdnet-bavaria", "BattyBirdNET Bavaria", "Bavaria", 32, "Bavaria", false,
+		batFileChecksums{"7ee3936621d180b9fe42f3732703339662b154135ce205f711797bca7daa44ea", 131827, "ff4a3f9a351f202c8712c807c6bb8b29df0b1c75ddab48e543ec76a88a42715c", 966}),
+	batCatalogEntry("battybirdnet-bavaria-high", "BattyBirdNET Bavaria (High)", "Bavaria", 24, "Bavaria", true,
+		batFileChecksums{"3d1d5bc174ed70bfc22a53439fe468a2a4aa317b755600d1e193cefbae307a30", 99026, "26bc12ecf6c5ca9ce8837cd1bebe6e1cb2ce95f0261355a827383c85a0dd9d96", 904}),
+	batCatalogEntry("battybirdnet-eu", "BattyBirdNET EU", "Europe", 30, "EU", false,
+		batFileChecksums{"f316073482ab95f48d65ca76e8b2aaa572019b3d286ab07a68ba57cea52d12f7", 123626, "9ad705d4bcd93040929a059854df968acebefee9f7513e97a558871c3997e65e", 1081}),
+	batCatalogEntry("battybirdnet-scotland", "BattyBirdNET Scotland", "Scotland", 11, "Scotland", false,
+		batFileChecksums{"003e3da16d3607d52dd5c963d71eec89fdfd58224dccc02bc6a27d58d21cbd85", 45725, "3dc657a38f691c20f351fa19e36b9919927aec2e30dc32f61ae9fd9bb319331b", 356}),
+	batCatalogEntry("battybirdnet-southwales", "BattyBirdNET South Wales", "South Wales", 29, "SouthWales", false,
+		batFileChecksums{"14534d34fc54b0bc267ba07a6eaddc10e360195b11d0c4b5f47460a4f1d5aea4", 119526, "fc7ed8bd55c28b66cdcecc8d8acb8ea05850d9301aa65467fd5d192ee00e8214", 1072}),
+	batCatalogEntry("battybirdnet-sweden", "BattyBirdNET Sweden", "Sweden", 23, "Sweden", false,
+		batFileChecksums{"85fe47431c275b5370e0c8d0aa9b049f54d32035f736afcec4ac5d62c1adb591", 94926, "c43042ebd458eed4cc7258fcd6526e0299a61e27146e3ca989300f696d1f2e02", 737}),
+	batCatalogEntry("battybirdnet-uk", "BattyBirdNET UK", "UK", 20, "UK", false,
+		batFileChecksums{"aa9d45a5e3e64b6c28a131d16a98346ee1095c2d4c9f4785e2ff1d5a6e4b27b6", 82625, "4cc63b7cfd0a8e4380857fc3f5d576e8ec48d80cbdc9060873abb20c4ef78740", 649}),
+	batCatalogEntry("battybirdnet-usa", "BattyBirdNET USA", "USA", 38, "USA", false,
+		batFileChecksums{"9230fb49c87b9953f311fa1d408eac8359a1c8761264204f51b796406bcfcc63", 156427, "3cf597702b5f0f558b227df3a01648da7eb52cc632ec70a148fd159763ba4399", 1222}),
+	batCatalogEntry("battybirdnet-usa-east", "BattyBirdNET USA East", "USA East", 23, "USA-EAST", false,
+		batFileChecksums{"403901ce25c3daecdbd4d83017da8ff54c802f0feb78fc66355677f5c8905241", 94926, "db88ade98f2680af786911f1de49e5c29425335bbbc814c4a40c1e71ef888713", 663}),
+	batCatalogEntry("battybirdnet-usa-east-high", "BattyBirdNET USA East (High)", "USA East", 17, "USA-EAST", true,
+		batFileChecksums{"cb3fd538fb8adc87f775fad4fe5f9b3e1f56e78c5c7acd9abed4da7034e39772", 70325, "438b01d917b3833f707cdf9e9d13f0b13eee2318ad23eeb34089b76b9f22e566", 613}),
+	batCatalogEntry("battybirdnet-usa-west", "BattyBirdNET USA West", "USA West", 28, "USA-WEST", false,
+		batFileChecksums{"d1d3573a379e9e8561a66dc27ab768342d7d3823268440ec9ab624b8fb4640fa", 115426, "f01a993b749f455636de5811e6ab9de96537f05dc191ec1919acf4365a6e6386", 867}),
+}
+
+// Shared BirdNET v2.4 embeddings model, used by all BattyBirdNET classifiers.
+const (
+	embeddingsSHA256          = "b6b8f24dc9c3d43f2deb14a6f2c7b5b233e7477b6baf1b52341291e714903fb0"
+	embeddingsSizeBytes int64 = 66932350
+)
+
+// batFileChecksums holds SHA256 and size for a BattyBirdNET model and its labels file.
+type batFileChecksums struct {
+	modelSHA256  string
+	modelSize    int64
+	labelsSHA256 string
+	labelsSize   int64
 }
 
 // batCatalogEntry constructs a CatalogEntry for a BattyBirdNET regional model.
-// The fileSuffix parameter is used to build HuggingFace file paths (e.g., "EU"
-// produces "BattyBirdNET-EU-256kHz_fp32.onnx").
-func batCatalogEntry(id, name, region string, speciesCount int, fileSuffix string) CatalogEntry {
+// fileRegion is used to build HuggingFace file paths (e.g., "EU" produces
+// "BattyBirdNET-EU-256kHz_fp32.onnx"). When highQuality is true, "-high" is
+// appended after "256kHz" (e.g., "BattyBirdNET-Bavaria-256kHz-high_fp32.onnx").
+func batCatalogEntry(id, name, region string, speciesCount int, fileRegion string, highQuality bool, checksums batFileChecksums) CatalogEntry {
+	quality := ""
+	if highQuality {
+		quality = "-high"
+	}
+	modelFile := "BattyBirdNET-" + fileRegion + "-256kHz" + quality + "_fp32.onnx"
+	labelsFile := "BattyBirdNET-" + fileRegion + "-256kHz" + quality + "_Labels.txt"
+
 	return CatalogEntry{
 		ID:                id,
 		Name:              name,
@@ -145,25 +182,25 @@ func batCatalogEntry(id, name, region string, speciesCount int, fileSuffix strin
 		HuggingFaceRepo:   "tphakala/BattyBirdNET-onnx",
 		Files: []CatalogFile{
 			{
-				RemotePath: "fp32/BattyBirdNET-" + fileSuffix + "-256kHz_fp32.onnx",
-				LocalName:  "BattyBirdNET-" + fileSuffix + "-256kHz_fp32.onnx",
+				RemotePath: "fp32/" + modelFile,
+				LocalName:  modelFile,
 				Role:       RoleModel,
-				SHA256:     "placeholder",
-				SizeBytes:  0,
+				SHA256:     checksums.modelSHA256,
+				SizeBytes:  checksums.modelSize,
 			},
 			{
-				RemotePath: "labels/BattyBirdNET-" + fileSuffix + "-256kHz_Labels.txt",
-				LocalName:  "BattyBirdNET-" + fileSuffix + "-256kHz_Labels.txt",
+				RemotePath: "labels/" + labelsFile,
+				LocalName:  labelsFile,
 				Role:       RoleLabels,
-				SHA256:     "placeholder",
-				SizeBytes:  0,
+				SHA256:     checksums.labelsSHA256,
+				SizeBytes:  checksums.labelsSize,
 			},
 			{
 				RemotePath: "birdnet-v24-embeddings.onnx",
 				LocalName:  "birdnet-v24-embeddings.onnx",
 				Role:       RoleEmbeddings,
-				SHA256:     "placeholder",
-				SizeBytes:  0,
+				SHA256:     embeddingsSHA256,
+				SizeBytes:  embeddingsSizeBytes,
 			},
 		},
 	}

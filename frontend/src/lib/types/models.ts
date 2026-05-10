@@ -41,5 +41,7 @@ export interface DownloadProgress {
   status: 'downloading' | 'verifying' | 'loading' | 'complete' | 'failed';
   downloadedBytes: number;
   totalBytes: number;
+  currentFile: number;
+  totalFiles: number;
   error?: string;
 }
