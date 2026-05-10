@@ -72,7 +72,12 @@
     recommendedSampleRate?: number;
   }
 
-  let availableModels = $state<BackendModel[]>([]);
+  const FALLBACK_MODELS: BackendModel[] = [
+    { id: DEFAULT_MODEL_ID, name: 'BirdNET v2.4 (TFLite)', category: 'bird' },
+  ];
+
+  let fetchedModels = $state<BackendModel[]>([]);
+  let availableModels = $derived(fetchedModels.length > 0 ? fetchedModels : FALLBACK_MODELS);
 
   $effect(() => {
     const controller = new AbortController();
@@ -81,10 +86,10 @@
       api
         .get<BackendModel[]>('/api/v2/models', { signal: controller.signal })
         .then(data => {
-          if (Array.isArray(data)) {
-            availableModels = data;
+          if (Array.isArray(data) && data.length > 0) {
+            fetchedModels = data;
           } else {
-            logger.warn('Fetched models response is not an array', {
+            logger.warn('Fetched models response is empty or not an array', {
               component: 'SoundCardManager',
             });
           }
