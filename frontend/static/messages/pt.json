@@ -4518,7 +4518,7 @@
         "downloading": "Baixando...",
         "verifying": "Verificando...",
         "loading": "Carregando...",
-        "complete": "Concluído",
+        "complete": "Instalado com sucesso",
         "failed": "Falhou"
       },
       "license": {

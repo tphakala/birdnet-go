@@ -58,6 +58,8 @@ type DownloadState struct {
 	CatalogID       string `json:"catalogId"`
 	TotalBytes      int64  `json:"totalBytes"`
 	DownloadedBytes int64  `json:"downloadedBytes"`
+	CurrentFile     int    `json:"currentFile"`
+	TotalFiles      int    `json:"totalFiles"`
 	Status          string `json:"status"`
 	Error           string `json:"error,omitempty"`
 }
@@ -308,8 +310,9 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 
 	// Record download as in-progress.
 	mm.downloading[entry.ID] = &DownloadState{
-		CatalogID: entry.ID,
-		Status:    StatusDownloading,
+		CatalogID:  entry.ID,
+		Status:     StatusDownloading,
+		TotalFiles: len(entry.Files),
 	}
 	mm.mu.Unlock()
 
@@ -342,8 +345,24 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 		})
 	}
 
+	// Compute cumulative totals for progress tracking across all files.
+	var totalAllBytes int64
+	filesToDownload := 0
+	for _, f := range entry.Files {
+		destPath := filepath.Join(subdir, f.LocalName)
+		if f.Role == RoleEmbeddings {
+			destPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+		}
+		if _, err := os.Stat(destPath); err != nil {
+			totalAllBytes += f.SizeBytes
+			filesToDownload++
+		}
+	}
+
 	// Download each file.
 	var modelPath, labelsPath string
+	var completedBytes int64
+	fileIndex := 0
 	for _, f := range entry.Files {
 		// Determine destination path: embeddings go in shared/, others in the model subdir.
 		var destPath string
@@ -376,16 +395,20 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 			url = buildHuggingFaceURL(entry.HuggingFaceRepo, f.RemotePath)
 		}
 
-		// Update download state with current file info.
+		fileIndex++
+
+		// Update download state with cumulative totals.
 		mm.mu.Lock()
 		if state, ok := mm.downloading[entry.ID]; ok {
-			state.TotalBytes = f.SizeBytes
-			state.DownloadedBytes = 0
+			state.TotalBytes = totalAllBytes
+			state.DownloadedBytes = completedBytes
+			state.CurrentFile = fileIndex
+			state.TotalFiles = filesToDownload
 			state.Status = StatusDownloading
 		}
 		mm.mu.Unlock()
 
-		if err := mm.downloadFile(entry.ID, url, destPath, f.SHA256, f.SizeBytes, progress); err != nil {
+		if err := mm.downloadFile(entry.ID, url, destPath, f.SHA256, f.SizeBytes, completedBytes); err != nil {
 			log.Error("Failed to download file",
 				logger.String("catalog_id", entry.ID),
 				logger.String("url", url),
@@ -395,6 +418,7 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 			return err
 		}
 
+		completedBytes += f.SizeBytes
 		downloadedFiles = append(downloadedFiles, destPath)
 
 		if f.Role == RoleModel {
@@ -591,9 +615,10 @@ var downloadHTTPClient = &http.Client{
 
 // downloadFile downloads a file from url to destPath, verifying the SHA256
 // checksum. The catalogID is used to update shared download state for SSE
-// polling. Progress is reported via the progress channel if non-nil.
+// polling. completedBytes is the cumulative size of previously downloaded
+// files, used so progress reflects total download, not just the current file.
 // On failure, any temporary file is cleaned up.
-func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 string, totalBytes int64, progress chan<- DownloadState) error {
+func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 string, totalBytes, completedBytes int64) error {
 	// Ensure parent directory exists.
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 		return errors.Newf("failed to create directory for %s: %v", destPath, err).
@@ -664,24 +689,13 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 			// Report progress at intervals (non-blocking to avoid stalling
 			// the download if the SSE consumer disconnects).
 			if downloaded-lastReport >= progressInterval || readErr == io.EOF {
-				// Update shared download state for SSE polling.
+				// Update shared download state with cumulative progress.
 				mm.mu.Lock()
 				if state, ok := mm.downloading[catalogID]; ok {
-					state.DownloadedBytes = downloaded
-					state.TotalBytes = totalBytes
+					state.DownloadedBytes = completedBytes + downloaded
 				}
 				mm.mu.Unlock()
 
-				if progress != nil {
-					select {
-					case progress <- DownloadState{
-						TotalBytes:      totalBytes,
-						DownloadedBytes: downloaded,
-						Status:          StatusDownloading,
-					}:
-					default:
-					}
-				}
 				lastReport = downloaded
 			}
 		}

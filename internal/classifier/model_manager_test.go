@@ -177,8 +177,8 @@ func TestModelManager_DownloadFile(t *testing.T) {
 	mm := NewModelManager(t.TempDir(), nil, nil)
 	destPath := filepath.Join(mm.modelsDir, "test-model", "model.onnx")
 
-	progress := make(chan DownloadState, 10)
-	err := mm.downloadFile("test-download", srv.URL+"/model.onnx", destPath, checksum, int64(len(content)), progress)
+	mm.downloading["test-download"] = &DownloadState{CatalogID: "test-download", Status: StatusDownloading}
+	err := mm.downloadFile("test-download", srv.URL+"/model.onnx", destPath, checksum, int64(len(content)), 0)
 	require.NoError(t, err)
 
 	// Verify file was written with correct content.
@@ -190,13 +190,10 @@ func TestModelManager_DownloadFile(t *testing.T) {
 	_, err = os.Stat(destPath + ".tmp")
 	assert.True(t, os.IsNotExist(err), "temp file should be removed after successful download")
 
-	// Verify at least one progress report was sent.
-	close(progress)
-	var reports []DownloadState
-	for s := range progress {
-		reports = append(reports, s)
-	}
-	assert.NotEmpty(t, reports, "expected at least one progress report")
+	// Verify progress was updated in shared state.
+	state := mm.GetDownloadState("test-download")
+	require.NotNil(t, state)
+	assert.Equal(t, int64(len(content)), state.DownloadedBytes)
 }
 
 func TestModelManager_DownloadFile_BadChecksum(t *testing.T) {
@@ -214,7 +211,8 @@ func TestModelManager_DownloadFile_BadChecksum(t *testing.T) {
 	mm := NewModelManager(t.TempDir(), nil, nil)
 	destPath := filepath.Join(mm.modelsDir, "bad-checksum", "model.onnx")
 
-	err := mm.downloadFile("test-bad-checksum", srv.URL+"/model.onnx", destPath, wrongChecksum, int64(len(content)), nil)
+	mm.downloading["test-bad-checksum"] = &DownloadState{CatalogID: "test-bad-checksum", Status: StatusDownloading}
+	err := mm.downloadFile("test-bad-checksum", srv.URL+"/model.onnx", destPath, wrongChecksum, int64(len(content)), 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checksum")
 

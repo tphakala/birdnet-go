@@ -73,6 +73,7 @@
     Radar,
     XCircle,
     X,
+    Check,
     Settings as SettingsIcon,
   } from '@lucide/svelte';
 
@@ -712,10 +713,20 @@
           downloadProgress = progress;
         },
         () => {
-          installingId = null;
-          downloadProgress = null;
+          downloadProgress = {
+            catalogId: modelId,
+            status: 'complete',
+            downloadedBytes: 0,
+            totalBytes: 0,
+            currentFile: 0,
+            totalFiles: 0,
+          };
           progressCleanup = null;
-          loadCatalog();
+          setTimeout(() => {
+            installingId = null;
+            downloadProgress = null;
+            loadCatalog();
+          }, 2000);
         },
         (err: string) => {
           error = err;
@@ -1297,20 +1308,35 @@
     <!-- Progress bar (shown during install) -->
     {#if progress}
       <div class="mt-3 space-y-1.5">
-        <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--color-base-300)]">
+        {#if progress.status === 'complete'}
+          <div class="flex items-center gap-2 text-sm font-medium text-[var(--color-success)]">
+            <Check class="h-4 w-4" />
+            <span>{t('analysis.gallery.progress.complete')}</span>
+          </div>
+        {:else}
+          <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--color-base-300)]">
+            <div
+              class="h-full rounded-full bg-[var(--color-primary)] transition-all duration-300"
+              style:width="{progressPercent(progress)}%"
+            ></div>
+          </div>
           <div
-            class="h-full rounded-full bg-[var(--color-primary)] transition-all duration-300"
-            style:width="{progressPercent(progress)}%"
-          ></div>
-        </div>
-        <div class="flex items-center justify-between text-xs text-[var(--color-base-content)]/80">
-          <span>{statusLabel(progress.status)}</span>
-          {#if progress.status === 'downloading' && progress.totalBytes > 0}
+            class="flex items-center justify-between text-xs text-[var(--color-base-content)]/80"
+          >
             <span>
-              {formatBytes(progress.downloadedBytes)} / {formatBytes(progress.totalBytes)}
+              {statusLabel(
+                progress.status
+              )}{#if progress.status === 'downloading' && progress.totalFiles > 1}
+                ({progress.currentFile}/{progress.totalFiles})
+              {/if}
             </span>
-          {/if}
-        </div>
+            {#if progress.status === 'downloading' && progress.totalBytes > 0}
+              <span>
+                {formatBytes(progress.downloadedBytes)} / {formatBytes(progress.totalBytes)}
+              </span>
+            {/if}
+          </div>
+        {/if}
       </div>
     {/if}
 
