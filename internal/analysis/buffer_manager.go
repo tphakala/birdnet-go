@@ -241,7 +241,7 @@ func (m *BufferManager) AddMonitors(source string, models []monitorConfig) error
 			}()
 
 			// Run the monitor using audiocore buffer manager
-			m.analysisBufferMonitor(monitorQuit, monitorCfg)
+			m.analysisBufferMonitor(monitorQuit, &monitorCfg)
 		})
 	}
 
@@ -386,7 +386,7 @@ func (m *BufferManager) UpdateMonitors(sourceModels map[string][]monitorConfig) 
 
 // analysisBufferMonitor reads from the audiocore analysis buffer and feeds
 // audio chunks to the BirdNET analysis pipeline.
-func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monitorConfig) {
+func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monitorConfig) {
 	detectionOffset := cfg.spec.ClipLength
 	const pollInterval = 100 * time.Millisecond
 
@@ -426,7 +426,7 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 // try-again-later (nil data), error, and partial-read branches releases.
 func (m *BufferManager) processMonitorTick(
 	quitChan <-chan struct{},
-	cfg monitorConfig,
+	cfg *monitorConfig,
 	analysisWindowBytes int,
 	detectionOffset time.Duration,
 	hasReadBuffer bool,
