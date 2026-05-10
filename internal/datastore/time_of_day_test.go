@@ -18,12 +18,35 @@ import (
 // The test is timezone-agnostic and works in any timezone (UTC, local, etc.) by
 // dynamically calculating test times based on actual sunrise/sunset for the test date.
 func TestNightFilterExcludesSunriseSunsetWindows(t *testing.T) {
-	// Setup test date and location
-	// Use time.Local to match whatever timezone the test is running in
-	// Use coordinates near the prime meridian to avoid sunset crossing midnight in UTC
-	testDate := time.Date(2025, 7, 15, 0, 0, 0, 0, time.Local)
-	latitude := 51.5074  // London, UK - near UTC meridian
-	longitude := -0.1278 // Avoids sunset crossing midnight in UTC timezone
+	// Setup test date and location.
+	//
+	// Two constraints to make the test truly timezone-agnostic:
+	//
+	// 1. **testDate must be UTC midnight, not Local.** The production filter
+	//    parses filters.DateStart with time.Parse(time.DateOnly, ...) which
+	//    returns UTC midnight. SunCalc caches by date.Equal() and
+	//    astral.julianday() does date.UTC() and uses the UTC calendar day
+	//    components. If the test passes a Local-midnight date, astral computes
+	//    sunrise/sunset for a different UTC calendar day than the filter does
+	//    (e.g. in NZST, Local-midnight is at noon UTC of the previous UTC day),
+	//    yielding sub-minute drift on sunrise/sunset and off-by-1-second
+	//    boundary failures.
+	//
+	// 2. **Longitude derived from local zone offset** so that solar noon at
+	//    the test location ≈ local-clock noon. This keeps the location's
+	//    sunrise and sunset both within the same local calendar day after
+	//    SunCalc's ConvertUTCToLocal, regardless of where the test runs. With
+	//    a fixed location far from the local timezone (e.g. London in CDT),
+	//    sunrise's local-time string can lex-compare against sunset's in a
+	//    way that breaks the filter's `time < sunriseStart OR time > sunsetEnd`
+	//    logic.
+	//
+	// Mid-latitude (45° N) keeps day length moderate and avoids polar edge
+	// cases (no sunrise/sunset in extreme latitudes around the solstices).
+	testDate := time.Date(2025, 7, 15, 0, 0, 0, 0, time.UTC)
+	_, offsetSec := time.Now().In(time.Local).Zone()
+	latitude := 45.0
+	longitude := float64(offsetSec) / 3600.0 * 15.0
 
 	// Create test database with location settings
 	settings := &conf.Settings{}
