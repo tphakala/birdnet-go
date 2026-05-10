@@ -65,6 +65,7 @@ export function subscribeInstallProgress(
       return;
     }
     onProgress(data);
+    errorCount = 0;
 
     if (data.status === 'complete') {
       terminalReceived = true;
