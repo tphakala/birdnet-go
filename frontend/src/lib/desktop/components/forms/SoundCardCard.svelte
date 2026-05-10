@@ -32,6 +32,7 @@
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
+  import { fetchDeviceCapabilities as fetchCapabilities } from '$lib/utils/audio/sampleRate';
   import { DEFAULT_MODEL_ID } from '$lib/stores/models.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import InlineSlider from './InlineSlider.svelte';
@@ -236,52 +237,12 @@
     fetchController = new AbortController();
     sampleRateLoading = true;
     try {
-      const response = await fetch(
-        `/api/v2/system/audio/devices/capabilities?deviceId=${encodeURIComponent(deviceId)}`,
-        { signal: fetchController.signal }
-      );
-      if (response.ok) {
-        const responseData: unknown = await response.json();
-        if (
-          !responseData ||
-          typeof responseData !== 'object' ||
-          !('sampleRates' in responseData) ||
-          !Array.isArray((responseData as Record<string, unknown>).sampleRates)
-        ) {
-          sampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
-            value: String(rate),
-            label: `${rate / 1000} kHz`,
-          }));
-          sampleRateVerified = false;
-          return;
-        }
-        const data = responseData as { sampleRates: number[]; verified: boolean };
-        if (data.sampleRates.length === 0) {
-          sampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
-            value: String(rate),
-            label: `${rate / 1000} kHz`,
-          }));
-          sampleRateVerified = false;
-          return;
-        }
-        sampleRateOptions = data.sampleRates.map(rate => ({
-          value: String(rate),
-          label: rate >= 1000 ? `${rate / 1000} kHz` : `${rate} Hz`,
-        }));
-        sampleRateVerified = data.verified;
-      } else {
-        sampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
-          value: String(rate),
-          label: `${rate / 1000} kHz`,
-        }));
-        sampleRateVerified = false;
-      }
+      const result = await fetchCapabilities(deviceId, fetchController.signal);
+      sampleRateOptions = result.options;
+      sampleRateVerified = result.verified;
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') return;
-      sampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
-        value: String(rate),
-        label: `${rate / 1000} kHz`,
-      }));
+      sampleRateOptions = [{ value: '48000', label: '48 kHz' }];
       sampleRateVerified = false;
     } finally {
       sampleRateLoading = false;

@@ -304,6 +304,7 @@ func (a *AudioSourceConfig) Validate() error {
 	}
 
 	// Validate sample rate if specified (0 means use default 48000)
+	// NOTE: These rates must stay in sync with audiocore.CandidateSampleRates.
 	if a.SampleRate != 0 {
 		validRates := map[int]struct{}{
 			48000: {}, 96000: {}, 192000: {}, 256000: {}, 384000: {},

@@ -5,6 +5,7 @@
  * Ensures settings values are always within valid ranges and of correct types.
  */
 
+import { CANDIDATE_SAMPLE_RATES } from '$lib/utils/audio/sampleRate';
 import type {
   BirdNetSettings,
   AudioSettings,
@@ -271,12 +272,11 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
 
   // Sample rate: accept candidate rates from 48kHz to 384kHz (0 means default)
   if ('sampleRate' in settings) {
-    const validRates = [48000, 96000, 192000, 256000, 384000];
     const rate = coerceNumber(settings.sampleRate, 0, 384000, 0);
     if (rate === 0) {
       delete coerced.sampleRate;
     } else {
-      coerced.sampleRate = validRates.reduce((prev, curr) =>
+      coerced.sampleRate = CANDIDATE_SAMPLE_RATES.reduce((prev, curr) =>
         Math.abs(curr - rate) < Math.abs(prev - rate) ? curr : prev
       );
     }
