@@ -32,7 +32,8 @@ vars:
       if [ -n "{{.EXTRA_BUILD_TAGS}}" ]; then
         echo "-tags {{.EXTRA_BUILD_TAGS}}"
       fi
-  BUILD_FLAGS: '{{.BUILD_TAGS_FLAG}} -ldflags "-s -w -X ''main.buildDate={{.BUILD_DATE}}'' -X ''main.version={{.VERSION}}''"'
+  LDFLAGS: -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}'"
+  BUILD_FLAGS: '{{.BUILD_TAGS_FLAG}} {{.LDFLAGS}}'
   # System paths
   SYSTEM_LIB_DIR_AMD64: /usr/lib
   SYSTEM_LIB_DIR_ARM64: /usr/aarch64-linux-gnu/lib
@@ -1109,7 +1110,7 @@ tasks:
         fi
         GOOS={{.GOOS}} GOARCH={{.GOARCH}} {{.CGO_FLAGS}} \
           CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
-          go build -trimpath -tags ${BUILD_TAGS} {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}
+          go build -trimpath -tags ${BUILD_TAGS} {{.LDFLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}
         echo "Built non-embedded binary: {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}"
         echo "Note: This binary requires external model files to run"
 

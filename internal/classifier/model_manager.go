@@ -138,7 +138,9 @@ func (mm *ModelManager) ScanInstalled() {
 	// always reflects the actual system state.
 	if mm.settings != nil {
 		// BirdNET is always present (permanent built-in).
-		if !slices.Contains(mm.settings.Models.Enabled, conf.ModelIDBirdNET) {
+		if !slices.ContainsFunc(mm.settings.Models.Enabled, func(id string) bool {
+			return strings.EqualFold(id, conf.ModelIDBirdNET)
+		}) {
 			mm.settings.Models.Enabled = append([]string{conf.ModelIDBirdNET}, mm.settings.Models.Enabled...)
 		}
 
