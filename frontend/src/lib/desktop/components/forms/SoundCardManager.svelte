@@ -20,7 +20,7 @@
   import { loggers } from '$lib/utils/logger';
   import { toastActions } from '$lib/stores/toast';
   import { cn } from '$lib/utils/cn';
-  import { availableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
+  import { getAvailableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
   import SoundCardCard from './SoundCardCard.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import TextInput from './TextInput.svelte';
@@ -53,6 +53,8 @@
 
   const logger = loggers.audio;
 
+  const availableModels = $derived(getAvailableModels());
+
   function getDefaultModels(): string[] {
     if (availableModels.some(m => m.id === DEFAULT_MODEL_ID)) {
       return [DEFAULT_MODEL_ID];
@@ -64,7 +66,6 @@
     return fetchModels();
   });
 
-  // Model options — dynamically loaded from enabled models in config
   const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: m.name })));
 
   interface Props {

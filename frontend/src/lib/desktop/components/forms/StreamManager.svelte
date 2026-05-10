@@ -26,7 +26,7 @@
   import { validateProtocolURL, sanitizeUrlForComparison } from '$lib/utils/security';
   import { toastActions } from '$lib/stores/toast';
   import { quietHoursStore } from '$lib/stores/quietHours.svelte';
-  import { availableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
+  import { getAvailableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
   import StreamCard, { type StreamStatus } from './StreamCard.svelte';
   import ModelCheckboxList from './ModelCheckboxList.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
@@ -38,6 +38,8 @@
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
 
   const logger = loggers.audio;
+
+  const availableModels = $derived(getAvailableModels());
 
   $effect(() => {
     return fetchModels();

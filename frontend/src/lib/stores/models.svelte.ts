@@ -20,41 +20,53 @@ const FALLBACK_MODELS: BackendModel[] = [
 
 let fetchedModels = $state<BackendModel[]>([]);
 let activeFetch: AbortController | null = null;
+let subscribers = 0;
 
-export const availableModels = $derived(fetchedModels.length > 0 ? fetchedModels : FALLBACK_MODELS);
+export function getAvailableModels(): BackendModel[] {
+  return fetchedModels.length > 0 ? fetchedModels : FALLBACK_MODELS;
+}
 
 export function fetchModels(): () => void {
-  if (fetchedModels.length > 0 || activeFetch) {
-    return () => {};
+  subscribers++;
+
+  if (fetchedModels.length === 0 && !activeFetch) {
+    const controller = new AbortController();
+    activeFetch = controller;
+
+    untrack(() => {
+      api
+        .get<BackendModel[]>('/api/v2/models', { signal: controller.signal })
+        .then(data => {
+          if (controller.signal.aborted) return;
+          if (Array.isArray(data) && data.length > 0) {
+            fetchedModels = data;
+          } else {
+            logger.warn('Fetched models response is empty or not an array', {
+              component: 'modelsStore',
+            });
+          }
+        })
+        .catch((err: unknown) => {
+          if (err instanceof Error && err.name !== 'AbortError') {
+            logger.error('Failed to fetch models', err, {
+              component: 'modelsStore',
+              action: 'fetchModels',
+            });
+          }
+        })
+        .finally(() => {
+          if (activeFetch === controller) {
+            activeFetch = null;
+          }
+        });
+    });
   }
 
-  const controller = new AbortController();
-  activeFetch = controller;
-
-  untrack(() => {
-    api
-      .get<BackendModel[]>('/api/v2/models', { signal: controller.signal })
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
-          fetchedModels = data;
-        } else {
-          logger.warn('Fetched models response is empty or not an array', {
-            component: 'modelsStore',
-          });
-        }
-      })
-      .catch((err: unknown) => {
-        if (err instanceof Error && err.name !== 'AbortError') {
-          logger.error('Failed to fetch models', err, {
-            component: 'modelsStore',
-            action: 'fetchModels',
-          });
-        }
-      })
-      .finally(() => {
-        activeFetch = null;
-      });
-  });
-
-  return () => controller.abort();
+  return () => {
+    subscribers--;
+    if (subscribers === 0 && activeFetch) {
+      activeFetch.abort();
+      activeFetch = null;
+    }
+  };
 }

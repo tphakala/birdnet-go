@@ -641,6 +641,7 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 	defer mm.settingsMu.Unlock()
 
 	updated := conf.CloneSettings(conf.GetSettings())
+	retainAlias := false
 
 	switch entry.RegistryID {
 	case RegistryIDBirdNETV3:
@@ -672,9 +673,9 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 			updated.Bat.LabelPath = ""
 			updated.Bat.EmbeddingModel = ""
 		} else {
+			retainAlias = true
 			updated.Bat.ClassifierModel = replacement.ModelPath
 			updated.Bat.LabelPath = replacement.LabelsPath
-			// Resolve embeddings path from the replacement's catalog files.
 			updated.Bat.EmbeddingModel = ""
 			for _, f := range replacementEntry.Files {
 				if f.Role == RoleEmbeddings {
@@ -685,9 +686,10 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		}
 	}
 
-	// Remove config alias from Models.Enabled and from any source/stream that references it.
+	// Remove config alias from Models.Enabled and from any source/stream that
+	// references it, but only when no replacement model of the same category exists.
 	alias := ConfigAliasForRegistry(entry.RegistryID)
-	if alias != "" {
+	if alias != "" && !retainAlias {
 		updated.Models.Enabled = slices.DeleteFunc(updated.Models.Enabled, func(id string) bool {
 			return strings.EqualFold(id, alias)
 		})
