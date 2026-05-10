@@ -34,6 +34,7 @@
     uninstallModel,
     subscribeInstallProgress,
   } from '$lib/utils/modelsApi';
+  import { invalidateModels } from '$lib/stores/models.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
@@ -728,6 +729,7 @@
               installingId = null;
               downloadProgress = null;
             }
+            invalidateModels();
             loadCatalog();
           }, 2000);
         },
@@ -762,6 +764,7 @@
 
     try {
       await uninstallModel(modelId);
+      invalidateModels();
       await loadCatalog();
     } catch (e) {
       error = e instanceof Error ? e.message : t('analysis.gallery.errors.removeFailed');

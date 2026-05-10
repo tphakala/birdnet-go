@@ -26,6 +26,14 @@ export function getAvailableModels(): BackendModel[] {
   return fetchedModels.length > 0 ? fetchedModels : FALLBACK_MODELS;
 }
 
+export function invalidateModels(): void {
+  if (activeFetch) {
+    activeFetch.abort();
+    activeFetch = null;
+  }
+  fetchedModels = [];
+}
+
 export function fetchModels(): () => void {
   subscribers++;
 
