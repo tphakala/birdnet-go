@@ -44,7 +44,7 @@ func TestNightFilterExcludesSunriseSunsetWindows(t *testing.T) {
 	// Mid-latitude (45° N) keeps day length moderate and avoids polar edge
 	// cases (no sunrise/sunset in extreme latitudes around the solstices).
 	testDate := time.Date(2025, 7, 15, 0, 0, 0, 0, time.UTC)
-	_, offsetSec := time.Now().In(time.Local).Zone()
+	_, offsetSec := testDate.In(time.Local).Zone()
 	latitude := 45.0
 	longitude := float64(offsetSec) / 3600.0 * 15.0
 
