@@ -134,9 +134,38 @@ func (mm *ModelManager) ScanInstalled() {
 	log.Info("Model scan complete",
 		logger.Int("installed_count", len(mm.installed)))
 
-	// Ensure BirdNET (the permanent built-in) is always in Models.Enabled.
-	if mm.settings != nil && !slices.Contains(mm.settings.Models.Enabled, conf.ModelIDBirdNET) {
-		mm.settings.Models.Enabled = append([]string{conf.ModelIDBirdNET}, mm.settings.Models.Enabled...)
+	// Sync Models.Enabled with installed models so pre-existing installations
+	// (installed before the auto-enable logic was added) appear in the model picker.
+	if mm.settings != nil {
+		// BirdNET is always present (permanent built-in).
+		if !slices.Contains(mm.settings.Models.Enabled, conf.ModelIDBirdNET) {
+			mm.settings.Models.Enabled = append([]string{conf.ModelIDBirdNET}, mm.settings.Models.Enabled...)
+		}
+
+		// Add any installed model whose alias is missing from Enabled.
+		changed := false
+		for catalogID := range mm.installed {
+			entry, found := GetCatalogEntry(catalogID)
+			if !found {
+				continue
+			}
+			alias := ConfigAliasForRegistry(entry.RegistryID)
+			if alias == "" {
+				continue
+			}
+			if !slices.ContainsFunc(mm.settings.Models.Enabled, func(id string) bool {
+				return strings.EqualFold(id, alias)
+			}) {
+				mm.settings.Models.Enabled = append(mm.settings.Models.Enabled, alias)
+				changed = true
+			}
+		}
+		if changed {
+			if err := conf.SaveSettings(); err != nil {
+				log.Warn("Failed to persist Models.Enabled sync",
+					logger.Error(err))
+			}
+		}
 	}
 }
 
