@@ -310,9 +310,8 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 
 	// Record download as in-progress.
 	mm.downloading[entry.ID] = &DownloadState{
-		CatalogID:  entry.ID,
-		Status:     StatusDownloading,
-		TotalFiles: len(entry.Files),
+		CatalogID: entry.ID,
+		Status:    StatusDownloading,
 	}
 	mm.mu.Unlock()
 
@@ -345,15 +344,19 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 		})
 	}
 
+	// fileDestPath returns the local destination for a catalog file.
+	fileDestPath := func(f CatalogFile) string {
+		if f.Role == RoleEmbeddings {
+			return filepath.Join(mm.modelsDir, "shared", f.LocalName)
+		}
+		return filepath.Join(subdir, f.LocalName)
+	}
+
 	// Compute cumulative totals for progress tracking across all files.
 	var totalAllBytes int64
 	filesToDownload := 0
 	for _, f := range entry.Files {
-		destPath := filepath.Join(subdir, f.LocalName)
-		if f.Role == RoleEmbeddings {
-			destPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
-		}
-		if _, err := os.Stat(destPath); err != nil {
+		if _, err := os.Stat(fileDestPath(f)); err != nil {
 			totalAllBytes += f.SizeBytes
 			filesToDownload++
 		}
@@ -364,13 +367,7 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	var completedBytes int64
 	fileIndex := 0
 	for _, f := range entry.Files {
-		// Determine destination path: embeddings go in shared/, others in the model subdir.
-		var destPath string
-		if f.Role == RoleEmbeddings {
-			destPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
-		} else {
-			destPath = filepath.Join(subdir, f.LocalName)
-		}
+		destPath := fileDestPath(f)
 
 		// Skip download if file already exists (for shared embeddings).
 		if _, err := os.Stat(destPath); err == nil {

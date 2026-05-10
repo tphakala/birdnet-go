@@ -108,6 +108,7 @@
   let installingId = $state<string | null>(null);
   let deletingId = $state<string | null>(null);
   let downloadProgress = $state<DownloadProgress | null>(null);
+  let completionTimer: ReturnType<typeof setTimeout> | undefined;
 
   let licenseModel = $state<CatalogEntry | null>(null);
   let removeConfirmModel = $state<CatalogEntry | null>(null);
@@ -667,9 +668,8 @@
     loadBirdnetLocales();
     loadRangeFilterCount();
     return () => {
-      if (progressCleanup) {
-        progressCleanup();
-      }
+      if (progressCleanup) progressCleanup();
+      clearTimeout(completionTimer);
     };
   });
 
@@ -722,7 +722,7 @@
             totalFiles: 0,
           };
           progressCleanup = null;
-          setTimeout(() => {
+          completionTimer = setTimeout(() => {
             installingId = null;
             downloadProgress = null;
             loadCatalog();
