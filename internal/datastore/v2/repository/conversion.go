@@ -42,7 +42,7 @@ func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *C
 		modelVariant = detection.DefaultModelVariant
 	}
 
-	model, err := deps.ModelRepo.GetOrCreate(ctx, modelName, modelVersion, modelVariant, entities.ModelTypeBird, result.Model.ClassifierPath)
+	model, err := deps.ModelRepo.GetOrCreate(ctx, modelName, modelVersion, modelVariant, detection.ResolveModelType(modelName, modelVersion), result.Model.ClassifierPath)
 	if err != nil {
 		return nil, fmt.Errorf("model resolution failed: %w", err)
 	}
