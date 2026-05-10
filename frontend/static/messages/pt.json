@@ -2764,8 +2764,8 @@
         "devicePlaceholder": "Selecionar um dispositivo de áudio",
         "gainLabel": "Ganho (dB)",
         "gainHelp": "Ajuste de ganho de entrada de áudio (-40 a +40 dB)",
-        "modelLabel": "Modelo de Detecção",
-        "modelHelp": "Modelo BirdNET a usar para esta fonte",
+        "modelLabel": "Modelos de deteção",
+        "modelHelp": "Selecionar modelos de IA para esta fonte de áudio",
         "deleteConfirm": "Remover esta fonte de placa de som?",
         "emptyState": {
           "title": "Nenhuma Fonte de Placa de Som Configurada",
@@ -2788,6 +2788,11 @@
           "deviceRequired": "O dispositivo de áudio é obrigatório",
           "duplicateName": "Já existe uma fonte com este nome",
           "duplicateDevice": "Este dispositivo já está configurado"
+        },
+        "compatibility": {
+          "minSampleRate": "Requer pelo menos {rate}kHz de taxa de amostragem",
+          "recommendedSampleRate": "{rate}kHz recomendado para melhores resultados",
+          "atLeastOneModel": "Pelo menos um modelo deve ser selecionado"
         }
       },
       "rtspStreams": {

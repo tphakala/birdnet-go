@@ -2991,8 +2991,8 @@
         "devicePlaceholder": "Selecteer een audioapparaat",
         "gainLabel": "Versterking (dB)",
         "gainHelp": "Aanpassing van de audio-ingangsversterking (-40 tot +40 dB)",
-        "modelLabel": "Detectiemodel",
-        "modelHelp": "BirdNET-model voor deze bron",
+        "modelLabel": "Detectiemodellen",
+        "modelHelp": "Selecteer AI-modellen voor deze audiobron",
         "deleteConfirm": "Deze geluidskaartbron verwijderen?",
         "emptyState": {
           "title": "Geen Geluidskaartbronnen Geconfigureerd",
@@ -3015,6 +3015,11 @@
           "deviceRequired": "Audioapparaat is verplicht",
           "duplicateName": "Er bestaat al een bron met deze naam",
           "duplicateDevice": "Dit apparaat is al geconfigureerd"
+        },
+        "compatibility": {
+          "minSampleRate": "Vereist minimaal {rate}kHz samplefrequentie",
+          "recommendedSampleRate": "{rate}kHz aanbevolen voor beste resultaten",
+          "atLeastOneModel": "Minimaal één model moet geselecteerd zijn"
         }
       },
       "rtspStreams": {
