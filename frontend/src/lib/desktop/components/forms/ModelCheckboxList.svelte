@@ -2,13 +2,15 @@
   Model Checkbox List Component
 
   Purpose: Reusable model selection with checkboxes and sample rate
-  compatibility badges. Used in sound card and stream source configuration.
+  compatibility badges. Uses the shared Checkbox component for visual
+  consistency. Used in sound card and stream source configuration.
 
   @component
 -->
 <script lang="ts">
   import { AlertTriangle } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import Checkbox from './Checkbox.svelte';
 
   interface ModelOption {
     id: string;
@@ -33,9 +35,17 @@
     disabled = false,
     onToggle,
   }: Props = $props();
+
+  function handleToggle(modelId: string, checked: boolean) {
+    if (checked) {
+      onToggle([...selectedModels, modelId]);
+    } else {
+      onToggle(selectedModels.filter(id => id !== modelId));
+    }
+  }
 </script>
 
-<fieldset class="space-y-1.5">
+<fieldset class="space-y-0.5">
   <legend class="text-xs font-medium text-[var(--color-base-content)] pb-1">
     {t('settings.audio.soundCards.modelLabel')}
   </legend>
@@ -47,44 +57,36 @@
       !belowMin &&
       (model.recommendedSampleRate ?? 0) > 0 &&
       sourceSampleRate < (model.recommendedSampleRate ?? 0)}
-    <label
-      class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors hover:bg-[var(--color-base-content)]/5 {isChecked
-        ? 'bg-[var(--color-primary)]/5'
-        : ''}"
+    <Checkbox
+      checked={isChecked}
+      disabled={disabled || (isChecked && selectedModels.length === 1)}
+      size="sm"
+      onchange={checked => handleToggle(model.id, checked)}
     >
-      <input
-        type="checkbox"
-        checked={isChecked}
-        disabled={disabled || (isChecked && selectedModels.length === 1)}
-        onchange={() => {
-          if (isChecked) {
-            onToggle(selectedModels.filter(id => id !== model.id));
-          } else {
-            onToggle([...selectedModels, model.id]);
-          }
-        }}
-        class="size-4 rounded border-[var(--border-200)] text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
-      />
-      <span class="text-sm text-[var(--color-base-content)]">{model.name}</span>
-      {#if belowMin}
-        <span
-          class="ml-auto inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--color-error)]/15 text-[var(--color-error)]"
-        >
-          <AlertTriangle class="size-3" />
-          {t('settings.audio.soundCards.compatibility.minSampleRate', {
-            rate: String((model.minSampleRate ?? 0) / 1000),
-          })}
+      {#snippet children()}
+        <span class="flex items-center gap-2 min-w-0">
+          <span class="text-sm text-[var(--color-base-content)]">{model.name}</span>
+          {#if belowMin}
+            <span
+              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-error)]/15 text-[var(--color-error)]"
+            >
+              <AlertTriangle class="size-3" />
+              {t('settings.audio.soundCards.compatibility.minSampleRate', {
+                rate: String((model.minSampleRate ?? 0) / 1000),
+              })}
+            </span>
+          {:else if belowRecommended}
+            <span
+              class="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-[var(--color-warning)]/15 text-[var(--color-warning)]"
+            >
+              <AlertTriangle class="size-3" />
+              {t('settings.audio.soundCards.compatibility.recommendedSampleRate', {
+                rate: String((model.recommendedSampleRate ?? 0) / 1000),
+              })}
+            </span>
+          {/if}
         </span>
-      {:else if belowRecommended}
-        <span
-          class="ml-auto inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--color-warning)]/15 text-[var(--color-warning)]"
-        >
-          <AlertTriangle class="size-3" />
-          {t('settings.audio.soundCards.compatibility.recommendedSampleRate', {
-            rate: String((model.recommendedSampleRate ?? 0) / 1000),
-          })}
-        </span>
-      {/if}
-    </label>
+      {/snippet}
+    </Checkbox>
   {/each}
 </fieldset>
