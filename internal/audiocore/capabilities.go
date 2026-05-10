@@ -127,8 +127,8 @@ func ProbeDeviceCapabilities(deviceID string, log logger.Logger) (*DeviceCapabil
 	return unverifiedFallback(deviceID, deviceName), nil
 }
 
-// extractSampleRates returns deduplicated, sorted sample rates >= MinCaptureSampleRate
-// from the device's native format list.
+// extractSampleRates returns deduplicated, sorted sample rates that appear in
+// CandidateSampleRates from the device's native format list.
 func extractSampleRates(formats []malgo.DataFormat) []int {
 	if len(formats) == 0 {
 		return nil
@@ -137,7 +137,7 @@ func extractSampleRates(formats []malgo.DataFormat) []int {
 	seen := make(map[int]struct{}, len(formats))
 	for i := range formats {
 		rate := int(formats[i].SampleRate)
-		if rate >= MinCaptureSampleRate {
+		if slices.Contains(CandidateSampleRates, rate) {
 			seen[rate] = struct{}{}
 		}
 	}

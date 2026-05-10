@@ -1796,10 +1796,10 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 	// predictable filenames (symlink attacks on shared /tmp).
 	timestamp := time.Now().Format("20060102-150405")
 	randomBytes := make([]byte, 8)
-	randomSuffix := ""
-	if _, randErr := cryptorand.Read(randomBytes); randErr == nil {
-		randomSuffix = "-" + hex.EncodeToString(randomBytes)
+	if _, randErr := cryptorand.Read(randomBytes); randErr != nil {
+		return c.HandleError(ctx, randErr, "Failed to generate secure backup filename", http.StatusInternalServerError)
 	}
+	randomSuffix := "-" + hex.EncodeToString(randomBytes)
 	tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-%s-backup-%s%s.db", dbType, timestamp, randomSuffix))
 	filename := fmt.Sprintf("birdnet-%s-backup-%s.db", dbType, timestamp)
 

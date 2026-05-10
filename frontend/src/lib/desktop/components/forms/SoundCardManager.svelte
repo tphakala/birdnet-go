@@ -259,7 +259,29 @@
         { signal: newFetchController.signal }
       );
       if (response.ok) {
-        const data: { sampleRates: number[]; verified: boolean } = await response.json();
+        const responseData: unknown = await response.json();
+        if (
+          !responseData ||
+          typeof responseData !== 'object' ||
+          !('sampleRates' in responseData) ||
+          !Array.isArray((responseData as Record<string, unknown>).sampleRates)
+        ) {
+          newSampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
+            value: String(rate),
+            label: `${rate / 1000} kHz`,
+          }));
+          newSampleRateVerified = false;
+          return;
+        }
+        const data = responseData as { sampleRates: number[]; verified: boolean };
+        if (data.sampleRates.length === 0) {
+          newSampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
+            value: String(rate),
+            label: `${rate / 1000} kHz`,
+          }));
+          newSampleRateVerified = false;
+          return;
+        }
         newSampleRateOptions = data.sampleRates.map(rate => ({
           value: String(rate),
           label: rate >= 1000 ? `${rate / 1000} kHz` : `${rate} Hz`,
