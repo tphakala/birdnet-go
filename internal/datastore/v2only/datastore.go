@@ -451,8 +451,11 @@ func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 
 // EnsureModelRegistered creates the model entry in ai_models if it doesn't exist.
 func (ds *Datastore) EnsureModelRegistered(info detection.ModelInfo) error {
+	if info.Name == "" {
+		info = detection.DefaultModelInfo()
+	}
 	ctx := context.Background()
-	_, err := ds.model.GetOrCreate(ctx, info.Name, info.Version, info.Variant, entities.ModelTypeBird, info.ClassifierPath)
+	_, err := ds.model.GetOrCreate(ctx, info.Name, info.Version, info.Variant, detection.ResolveModelType(info.Name, info.Version), info.ClassifierPath)
 	return err
 }
 
@@ -468,7 +471,7 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	if modelInfo.Name == "" {
 		modelInfo = detection.DefaultModelInfo()
 	}
-	model, err := ds.model.GetOrCreate(ctx, modelInfo.Name, modelInfo.Version, modelInfo.Variant, entities.ModelTypeBird, modelInfo.ClassifierPath)
+	model, err := ds.model.GetOrCreate(ctx, modelInfo.Name, modelInfo.Version, modelInfo.Variant, detection.ResolveModelType(modelInfo.Name, modelInfo.Version), modelInfo.ClassifierPath)
 	if err != nil {
 		return fmt.Errorf("failed to get/create model: %w", err)
 	}

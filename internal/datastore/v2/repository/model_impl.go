@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -46,6 +47,7 @@ func (r *modelRepository) labelsTable() string {
 
 // GetOrCreate retrieves an existing model or creates a new one.
 // Matches on name + version + variant combination.
+// If the model already exists but has a different ModelType, it is updated.
 func (r *modelRepository) GetOrCreate(ctx context.Context, name, version, variant string, modelType entities.ModelType, classifierPath *string) (*entities.AIModel, error) {
 	var model entities.AIModel
 
@@ -53,6 +55,15 @@ func (r *modelRepository) GetOrCreate(ctx context.Context, name, version, varian
 		Where("name = ? AND version = ? AND variant = ?", name, version, variant).
 		First(&model).Error
 	if err == nil {
+		if model.ModelType != modelType {
+			updateErr := r.db.WithContext(ctx).Table(r.tableName()).
+				Where("id = ?", model.ID).
+				Update("model_type", modelType).Error
+			if updateErr != nil {
+				return nil, fmt.Errorf("failed to update model type: %w", updateErr)
+			}
+			model.ModelType = modelType
+		}
 		return &model, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
