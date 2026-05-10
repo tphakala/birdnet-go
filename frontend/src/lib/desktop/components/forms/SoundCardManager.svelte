@@ -269,8 +269,11 @@
         newSampleRateVerified = false;
       }
     } catch {
-      newSampleRateOptions = [{ value: '48000', label: '48 kHz' }];
-      newSampleRateVerified = true;
+      newSampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
+        value: String(rate),
+        label: `${rate / 1000} kHz`,
+      }));
+      newSampleRateVerified = false;
     } finally {
       newSampleRateLoading = false;
     }

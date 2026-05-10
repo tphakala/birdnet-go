@@ -3,6 +3,7 @@
 package audiocore
 
 import (
+	"fmt"
 	"maps"
 	"runtime"
 	"slices"
@@ -22,6 +23,11 @@ const MinCaptureSampleRate = 48000
 
 // MaxCaptureSampleRate is the highest rate probed during capability discovery.
 const MaxCaptureSampleRate = 384000
+
+// ErrDeviceNotFound is returned when ProbeDeviceCapabilities cannot find a
+// device matching the requested ID.
+var ErrDeviceNotFound = errors.Newf("device not found").
+	Component("audiocore.capabilities").Category(errors.CategoryAudioSource).Build()
 
 // DeviceCapabilities describes the sample rates a capture device supports.
 type DeviceCapabilities struct {
@@ -79,12 +85,7 @@ func ProbeDeviceCapabilities(deviceID string, log logger.Logger) (*DeviceCapabil
 	}
 
 	if selectedInfo == nil {
-		return nil, errors.Newf("no device found matching %q", deviceID).
-			Component("audiocore.capabilities").
-			Category(errors.CategoryAudioSource).
-			Context("operation", "probe_find_device").
-			Context("device_id", deviceID).
-			Build()
+		return nil, fmt.Errorf("probe device %q: %w", deviceID, ErrDeviceNotFound)
 	}
 
 	// Fast path: extract rates from the device's native format list.
@@ -156,11 +157,16 @@ func extractSampleRates(formats []malgo.DataFormat) []int {
 func probeByInit(malgoCtx *malgo.AllocatedContext, deviceInfo *malgo.DeviceInfo, log logger.Logger) []int {
 	supported := make([]int, 0, len(CandidateSampleRates))
 
+	// Allocate the C device ID pointer once (ID.Pointer() calls C.CBytes which
+	// allocates on the C heap). Reusing a single allocation for all probe
+	// iterations avoids leaking one C block per candidate rate.
+	devIDPtr := deviceInfo.ID.Pointer()
+
 	for _, rate := range CandidateSampleRates {
 		deviceCfg := malgo.DefaultDeviceConfig(malgo.Capture)
 		deviceCfg.Capture.Channels = 1
 		deviceCfg.SampleRate = uint32(rate) //nolint:gosec // G115: rate is bounded by CandidateSampleRates
-		deviceCfg.Capture.DeviceID = deviceInfo.ID.Pointer()
+		deviceCfg.Capture.DeviceID = devIDPtr
 		deviceCfg.Alsa.NoMMap = 1
 
 		// Use S32 format for rates above the standard BirdNET rate.

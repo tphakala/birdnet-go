@@ -139,6 +139,7 @@
     editName = source.name;
     editDevice = source.device;
     editSampleRate = source.sampleRate || 48000;
+    prevEditDevice = source.device;
     fetchDeviceCapabilities(source.device);
     editGain = source.gain;
     editModels = (source.models?.length ?? 0) > 0 ? [...source.models] : getDefaultModels();
@@ -250,8 +251,11 @@
         sampleRateVerified = false;
       }
     } catch {
-      sampleRateOptions = [{ value: '48000', label: '48 kHz' }];
-      sampleRateVerified = true;
+      sampleRateOptions = [48000, 96000, 192000, 256000, 384000].map(rate => ({
+        value: String(rate),
+        label: `${rate / 1000} kHz`,
+      }));
+      sampleRateVerified = false;
     } finally {
       sampleRateLoading = false;
     }

@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	goerrors "errors"
 	"fmt"
 	"io"
 	"net"
@@ -896,7 +897,7 @@ func (c *Controller) GetDeviceCapabilities(ctx echo.Context) error {
 
 	caps, err := audiocore.ProbeDeviceCapabilities(deviceID, c.apiLogger)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if goerrors.Is(err, audiocore.ErrDeviceNotFound) {
 			return c.HandleError(ctx, err, "Device not found", http.StatusNotFound)
 		}
 		c.logErrorIfEnabled("Failed to probe device capabilities",

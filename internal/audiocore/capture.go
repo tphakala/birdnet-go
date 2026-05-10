@@ -1,5 +1,5 @@
 // Package audiocore provides the core audio infrastructure for BirdNET-Go.
-// capture.go — per-device malgo capture initialisation and callback.
+// capture.go - per-device malgo capture initialisation and callback.
 package audiocore
 
 import (
