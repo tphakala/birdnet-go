@@ -140,6 +140,7 @@ type Datastore struct {
 	defaultModelID     uint  // Model ID to use for new labels
 	speciesLabelTypeID uint  // "species" label type ID
 	avesClassID        *uint // "Aves" taxonomic class ID (optional)
+	chiropteraClassID  *uint // "Chiroptera" taxonomic class ID (optional)
 
 	// names holds the species name lookup maps behind an atomic.Pointer
 	// for lock-free reads and atomic swaps when locale changes.
@@ -180,6 +181,7 @@ type Config struct {
 	DefaultModelID     uint  // Model ID to use for new labels (typically default BirdNET)
 	SpeciesLabelTypeID uint  // "species" label type ID
 	AvesClassID        *uint // "Aves" taxonomic class ID (optional)
+	ChiropteraClassID  *uint // "Chiroptera" taxonomic class ID (optional)
 
 	// Labels provides species label mappings in "ScientificName_CommonName" format.
 	// Used to build speciesMap for GetThresholdEvents workaround. See issue #1907.
@@ -250,6 +252,16 @@ func New(cfg *Config) (*Datastore, error) {
 		avesClassID = &avesClass.ID
 	}
 
+	// Get or verify Chiroptera taxonomic class ID (optional, for bats)
+	chiropteraClassID := cfg.ChiropteraClassID
+	if chiropteraClassID == nil {
+		var chiropteraClass entities.TaxonomicClass
+		if err := db.Where("name = ?", "Chiroptera").FirstOrCreate(&chiropteraClass, entities.TaxonomicClass{Name: "Chiroptera"}).Error; err != nil {
+			return nil, fmt.Errorf("failed to get Chiroptera taxonomic class: %w", err)
+		}
+		chiropteraClassID = &chiropteraClass.ID
+	}
+
 	tz := cfg.Timezone
 	if tz == nil {
 		tz = time.Local
@@ -280,6 +292,7 @@ func New(cfg *Config) (*Datastore, error) {
 		defaultModelID:     defaultModelID,
 		speciesLabelTypeID: speciesLabelTypeID,
 		avesClassID:        avesClassID,
+		chiropteraClassID:  chiropteraClassID,
 		speciesCodeMap:     speciesCodeMap,
 		dbCounters:         dbCounters,
 	}
@@ -449,6 +462,20 @@ func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	return stats, nil
 }
 
+// taxonomicClassForModel returns the appropriate taxonomic class ID for label
+// creation based on the model type. Bird models use Aves, bat models use
+// Chiroptera, and multi-taxa models use nil (no default taxonomic class).
+func (ds *Datastore) taxonomicClassForModel(modelType entities.ModelType) *uint {
+	switch modelType {
+	case entities.ModelTypeBat:
+		return ds.chiropteraClassID
+	case entities.ModelTypeMulti:
+		return nil
+	default:
+		return ds.avesClassID
+	}
+}
+
 // EnsureModelRegistered creates the model entry in ai_models if it doesn't exist.
 func (ds *Datastore) EnsureModelRegistered(info detection.ModelInfo) error {
 	if info.Name == "" {
@@ -476,11 +503,14 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		return fmt.Errorf("failed to get/create model: %w", err)
 	}
 
+	// Resolve taxonomic class based on model type
+	taxonomicClassID := ds.taxonomicClassForModel(model.ModelType)
+
 	// NOTE: Label GetOrCreate calls are outside the transaction.
 	// If the detection save fails, orphaned reference data may persist.
 	// This is acceptable as they will be reused on subsequent saves.
 	// Extract scientific name in case it contains concatenated "ScientificName_CommonName" format.
-	label, err := ds.label.GetOrCreate(ctx, extractScientificName(note.ScientificName), model.ID, ds.speciesLabelTypeID, ds.avesClassID)
+	label, err := ds.label.GetOrCreate(ctx, extractScientificName(note.ScientificName), model.ID, ds.speciesLabelTypeID, taxonomicClassID)
 	if err != nil {
 		return fmt.Errorf("failed to get/create label: %w", err)
 	}
@@ -499,7 +529,7 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		}
 
 		// Batch resolve all labels (returns map[scientificName]*Label)
-		labelMap, err := ds.label.BatchGetOrCreate(ctx, speciesNames, model.ID, ds.speciesLabelTypeID, ds.avesClassID)
+		labelMap, err := ds.label.BatchGetOrCreate(ctx, speciesNames, model.ID, ds.speciesLabelTypeID, taxonomicClassID)
 		if err != nil {
 			return fmt.Errorf("failed to batch get/create prediction labels: %w", err)
 		}
