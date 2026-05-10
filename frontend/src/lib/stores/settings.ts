@@ -139,6 +139,7 @@ export interface AudioSourceConfig {
   name: string;
   device: string;
   gain: number;
+  sampleRate?: number; // capture sample rate in Hz; 0 or undefined means 48000
   models: string[]; // e.g. ["birdnet", "perch_v2"]
   equalizer?: EqualizerSettings;
   quietHours?: QuietHoursConfig;

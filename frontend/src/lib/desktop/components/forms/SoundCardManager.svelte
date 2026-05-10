@@ -14,7 +14,7 @@
   @component
 -->
 <script lang="ts">
-  import { Plus, Mic, RefreshCw, ChevronDown } from '@lucide/svelte';
+  import { Plus, Mic, RefreshCw, ChevronDown, AlertTriangle } from '@lucide/svelte';
   import { untrack } from 'svelte';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
@@ -67,6 +67,9 @@
   interface BackendModel {
     id: string;
     name: string;
+    category: string;
+    minSampleRate?: number;
+    recommendedSampleRate?: number;
   }
 
   let availableModels = $state<BackendModel[]>([]);
@@ -323,6 +326,7 @@
           {sources}
           {audioDevices}
           {modelOptions}
+          {availableModels}
           {disabled}
           onUpdate={updatedSource => updateSource(index, updatedSource)}
           onDelete={() => deleteSource(index)}
@@ -387,31 +391,73 @@
               {/if}
             </div>
 
-            <!-- Gain and Model -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InlineSlider
-                label={t('settings.audio.soundCards.gainLabel')}
-                value={newGain}
-                onUpdate={value => (newGain = value)}
-                min={-40}
-                max={40}
-                step={1}
-                unit=" dB"
-                {disabled}
-                className="h-full [&>input]:my-auto"
-              />
+            <!-- Gain -->
+            <InlineSlider
+              label={t('settings.audio.soundCards.gainLabel')}
+              value={newGain}
+              onUpdate={value => (newGain = value)}
+              min={-40}
+              max={40}
+              step={1}
+              unit=" dB"
+              {disabled}
+            />
 
-              <SelectDropdown
-                value={newModels}
-                label={t('settings.audio.soundCards.modelLabel')}
-                options={modelOptions}
-                multiple={true}
-                {disabled}
-                onChange={value => (newModels = value as string[])}
-                groupBy={false}
-                menuSize="sm"
-              />
-            </div>
+            <!-- Model Selection -->
+            <fieldset class="space-y-1.5">
+              <legend class="text-xs font-medium text-[var(--color-base-content)] pb-1">
+                {t('settings.audio.soundCards.modelLabel')}
+              </legend>
+              {#each availableModels as model (model.id)}
+                {@const isChecked = newModels.includes(model.id)}
+                {@const sourceSampleRate = 48000}
+                {@const belowMin =
+                  (model.minSampleRate ?? 0) > 0 && sourceSampleRate < (model.minSampleRate ?? 0)}
+                {@const belowRecommended =
+                  !belowMin &&
+                  (model.recommendedSampleRate ?? 0) > 0 &&
+                  sourceSampleRate < (model.recommendedSampleRate ?? 0)}
+                <label
+                  class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors hover:bg-[var(--color-base-content)]/5 {isChecked
+                    ? 'bg-[var(--color-primary)]/5'
+                    : ''}"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    disabled={disabled || (isChecked && newModels.length === 1)}
+                    onchange={() => {
+                      if (isChecked) {
+                        newModels = newModels.filter(id => id !== model.id);
+                      } else {
+                        newModels = [...newModels, model.id];
+                      }
+                    }}
+                    class="size-4 rounded border-[var(--border-200)] text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+                  />
+                  <span class="text-sm text-[var(--color-base-content)]">{model.name}</span>
+                  {#if belowMin}
+                    <span
+                      class="ml-auto inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--color-error)]/15 text-[var(--color-error)]"
+                    >
+                      <AlertTriangle class="size-3" />
+                      {t('settings.audio.soundCards.compatibility.minSampleRate', {
+                        rate: String((model.minSampleRate ?? 0) / 1000),
+                      })}
+                    </span>
+                  {:else if belowRecommended}
+                    <span
+                      class="ml-auto inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--color-warning)]/15 text-[var(--color-warning)]"
+                    >
+                      <AlertTriangle class="size-3" />
+                      {t('settings.audio.soundCards.compatibility.recommendedSampleRate', {
+                        rate: String((model.recommendedSampleRate ?? 0) / 1000),
+                      })}
+                    </span>
+                  {/if}
+                </label>
+              {/each}
+            </fieldset>
 
             <!-- Equalizer (expandable) -->
             <div>

@@ -24,6 +24,10 @@ describe('SoundCardCard defensive model guards', () => {
     { value: 'birdnet', label: 'BirdNET v2.4' },
     { value: 'perch_v2', label: 'Perch v2' },
   ];
+  const availableModels = [
+    { id: 'birdnet', name: 'BirdNET v2.4', category: 'bird' },
+    { id: 'perch_v2', name: 'Perch v2', category: 'bird' },
+  ];
 
   const baseSource: Omit<AudioSourceConfig, 'models'> = {
     name: 'Living room',
@@ -52,6 +56,7 @@ describe('SoundCardCard defensive model guards', () => {
         sources: [source],
         audioDevices,
         modelOptions,
+        availableModels,
         disabled: false,
         onUpdate: vi.fn(() => true),
         onDelete: vi.fn(),
