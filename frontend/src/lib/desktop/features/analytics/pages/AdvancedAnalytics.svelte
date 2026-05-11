@@ -85,6 +85,26 @@
     uniqueSpecies: number;
   }
 
+  // Audio source filter — response shape and aggregated picker option.
+  interface AnalyticsSourceApiEntry {
+    id: number;
+    displayName: string;
+    sourceUri?: string;
+    sourceType?: string;
+    nodeName?: string;
+    detectionCount: number;
+  }
+
+  interface AnalyticsSourceListResponse {
+    sources: AnalyticsSourceApiEntry[];
+  }
+
+  interface AudioSourceOption {
+    displayName: string;
+    ids: number[];
+    count: number;
+  }
+
   // Component state
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -93,6 +113,42 @@
   let dateRange = $state<'week' | 'month' | 'quarter' | 'year' | 'custom'>('month');
   let startDate = $state('');
   let endDate = $state('');
+
+  // Audio source filter state — empty array means "all sources".
+  let audioSources = $state<AudioSourceOption[]>([]);
+  let selectedSourceGroups = $state<string[]>([]);
+
+  // Resolve picker selection (display_names) back to comma-separated audio_sources.id list
+  // for the `source_id` query parameter. Empty when no source is selected.
+  let selectedSourceIdsParam = $derived.by(() => {
+    if (selectedSourceGroups.length === 0 || audioSources.length === 0) return '';
+    const byName = new Map(audioSources.map(s => [s.displayName, s.ids] as const));
+    const ids: number[] = [];
+    for (const name of selectedSourceGroups) {
+      const matched = byName.get(name);
+      if (matched) ids.push(...matched);
+    }
+    return ids.join(',');
+  });
+
+  // Apply source filter to a URLSearchParams instance. Single helper so all four
+  // chart fetches stay in lockstep with the same filter.
+  function applySourceFilter(params: URLSearchParams) {
+    if (selectedSourceIdsParam) {
+      params.set('source_id', selectedSourceIdsParam);
+    }
+  }
+
+  // Options for the source picker dropdown — built from audioSources, count is locale-formatted.
+  const sourceOptions = $derived(
+    audioSources.map(src => ({
+      value: src.displayName,
+      label: `${src.displayName} (${src.count.toLocaleString()})`,
+    }))
+  );
+
+  // Hide the picker when there's fewer than two sources to choose from.
+  const showSourcePicker = $derived(audioSources.length >= 2);
 
   // Species selection
   let availableSpecies = $state<Species[]>([]);
@@ -186,6 +242,7 @@
         end_date: formatDateForAPI(end),
         limit: '50', // Get top 50 species
       });
+      applySourceFilter(params);
 
       const response = await fetch(buildAppUrl(`/api/v2/analytics/species/summary?${params}`), {
         signal: speciesController.signal,
@@ -261,6 +318,7 @@
           params.append('species', species.scientificName);
         }
       });
+      applySourceFilter(params);
 
       const response = await fetch(buildAppUrl(`/api/v2/analytics/time/hourly/batch?${params}`), {
         signal: timeOfDayController.signal,
@@ -334,6 +392,7 @@
           params.append('species', species.scientificName);
         }
       });
+      applySourceFilter(params);
 
       const response = await fetch(buildAppUrl(`/api/v2/analytics/time/daily/batch?${params}`), {
         signal: dailyTrendController.signal,
@@ -414,6 +473,7 @@
         start_date: formatDateForAPI(start),
         end_date: formatDateForAPI(end),
       });
+      applySourceFilter(params);
 
       const response = await fetch(buildAppUrl(`/api/v2/analytics/species/diversity?${params}`), {
         signal: diversityController.signal,
@@ -481,6 +541,38 @@
     fetchAllData();
   }
 
+  // Fetch the historical audio source list aggregated by display_name for the picker.
+  async function fetchAudioSources() {
+    try {
+      const resp = await fetch(buildAppUrl('/api/v2/analytics/sources'));
+      if (!resp.ok) {
+        logger.warn('Failed to load analytics sources', { status: resp.status });
+        return;
+      }
+      const data: AnalyticsSourceListResponse = await resp.json();
+      const raw = Array.isArray(data?.sources) ? data.sources : [];
+      const aggregated = new Map<string, AudioSourceOption>();
+      for (const entry of raw) {
+        const name = entry.displayName || t('analytics.filters.audioSourceUnknown');
+        const existing = aggregated.get(name);
+        if (existing) {
+          existing.ids.push(entry.id);
+          existing.count += entry.detectionCount ?? 0;
+        } else {
+          aggregated.set(name, {
+            displayName: name,
+            ids: [entry.id],
+            count: entry.detectionCount ?? 0,
+          });
+        }
+      }
+      audioSources = Array.from(aggregated.values()).sort((a, b) => b.count - a.count);
+    } catch (err) {
+      logger.error('Error fetching analytics audio sources:', err);
+      audioSources = [];
+    }
+  }
+
   // Initialize default custom date inputs on mount
   onMount(() => {
     const today = new Date();
@@ -488,10 +580,16 @@
 
     startDate = formatDateForAPI(monthAgo);
     endDate = formatDateForAPI(today);
+
+    void fetchAudioSources();
   });
 
-  // Watch for changes that require data refresh
+  // Watch for changes that require data refresh.
+  // Reading selectedSourceIdsParam here registers it as a reactive dependency so the
+  // charts auto-refresh when the user changes the source picker (same UX as date range).
   $effect(() => {
+    // Touch selectedSourceIdsParam to register it as a dependency.
+    void selectedSourceIdsParam;
     // Only fetch if we have a valid date range and are not in the initial loading phase
     if (dateRange !== 'custom' || (dateRange === 'custom' && startDate && endDate)) {
       // Debounce multiple rapid changes
@@ -546,6 +644,24 @@
             size="sm"
             menuSize="sm"
           />
+
+          {#if showSourcePicker}
+            <!-- Audio Source Filter sits under the date range so both data-scoping
+                 controls live in the same column; hidden when fewer than 2 sources exist. -->
+            <div class="mt-2">
+              <SelectDropdown
+                bind:value={selectedSourceGroups}
+                options={sourceOptions}
+                multiple={true}
+                clearable={true}
+                label={t('analytics.filters.audioSource')}
+                placeholder={t('analytics.filters.audioSourceAll')}
+                variant="select"
+                size="sm"
+                menuSize="sm"
+              />
+            </div>
+          {/if}
 
           {#if dateRange === 'custom'}
             <div class="grid grid-cols-2 gap-2 mt-2">
