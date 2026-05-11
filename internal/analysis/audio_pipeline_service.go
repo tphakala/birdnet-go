@@ -811,6 +811,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	sourceModelMap := make(map[string][]string)
 	var newSourceIDs []string
 	var gainChangedIDs []string
+	var reconfiguredIDs []string
 	var keptCount int
 
 	for connStr, scm := range desired {
@@ -835,11 +836,17 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				if src.Gain != scm.config.Gain {
 					registry.UpdateGain(src.ID, scm.config.Gain)
 				}
+				// ReconfigureSource removes all routes; clear the sound level
+				// tracking entry so re-registration is not blocked by the
+				// idempotency check.
+				p.untrackSoundLevelConsumer(src.ID)
 				if err := p.engine.ReconfigureSource(src.ID, scm.config); err != nil {
 					log.Error("failed to reconfigure source",
 						logger.String("source_id", src.ID),
 						logger.Error(err),
 						logger.String("operation", "reconfigure_diff"))
+				} else {
+					reconfiguredIDs = append(reconfiguredIDs, src.ID)
 				}
 			} else if src.Gain != scm.config.Gain {
 				// Gain-only change: update registry and rebuild routes (no restart needed).
@@ -908,6 +915,13 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	if len(newSourceIDs) > 0 {
 		p.registerConsumersForSources(newSourceIDs, sourceModelMap, audioLevelChan, "reconfigure_diff")
 		p.registerSoundLevelConsumers(newSourceIDs, "reconfigure_diff")
+	}
+
+	// Rebuild routes for sources whose audio params changed. ReconfigureSource
+	// removed all routes and reallocated buffers; consumers must be re-created.
+	if len(reconfiguredIDs) > 0 {
+		p.registerConsumersForSources(reconfiguredIDs, sourceModelMap, audioLevelChan, "reconfigure_params")
+		p.registerSoundLevelConsumers(reconfiguredIDs, "reconfigure_params")
 	}
 
 	// Rebuild routes for sources whose gain changed. The capture device
