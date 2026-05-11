@@ -307,7 +307,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 		sampleRate = defaultSampleRate
 	}
 
-	e.logger.Debug("allocated primary analysis buffer",
+	e.logger.Info("allocated primary analysis buffer",
 		logger.String("source_id", sourceID),
 		logger.String("model_id", e.primaryModelID),
 		logger.Int("clip_bytes", e.primaryClipBytes),
@@ -493,7 +493,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			Context("source_id", sourceID).
 			Build()
 	}
-	e.logger.Debug("reallocated primary analysis buffer",
+	e.logger.Info("reallocated primary analysis buffer",
 		logger.String("source_id", sourceID),
 		logger.String("model_id", e.primaryModelID),
 		logger.Int("clip_bytes", e.primaryClipBytes),

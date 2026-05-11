@@ -713,7 +713,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				continue
 			}
 			allocatedModels[modelInfos[i].ID] = true
-			log.Debug("allocated analysis buffer for secondary model",
+			log.Info("allocated analysis buffer for secondary model",
 				logger.String("source_id", sid),
 				logger.String("model_id", modelInfos[i].ID),
 				logger.Int("clip_bytes", clipBytes),
