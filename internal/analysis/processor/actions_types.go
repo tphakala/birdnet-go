@@ -101,33 +101,36 @@ type SaveAudioAction struct {
 	// still writing the tail of the clip). Execute() reads from the capture
 	// buffer once readyAt has passed, and the job queue retries the action
 	// in the meantime.
-	bufferMgr     *buffer.Manager
-	sourceID      string
-	beginTime     time.Time
-	duration      int
-	readyAt       time.Time
-	NoteID        uint              // Note ID for correlation logging with pre-renderer
-	PreRenderer   PreRendererSubmit // Injected from processor
-	DetectionCtx  *DetectionContext // Shared context to signal ClipSaved to late consumers
-	EventTracker  *EventTracker
-	Description   string
-	CorrelationID string // Detection correlation ID for log tracking
+	bufferMgr        *buffer.Manager
+	sourceID         string
+	beginTime        time.Time
+	duration         int
+	readyAt          time.Time
+	sourceSampleRate int               // Actual source capture rate for correct export headers
+	NoteID           uint              // Note ID for correlation logging with pre-renderer
+	PreRenderer      PreRendererSubmit // Injected from processor
+	DetectionCtx     *DetectionContext // Shared context to signal ClipSaved to late consumers
+	EventTracker     *EventTracker
+	Description      string
+	CorrelationID    string // Detection correlation ID for log tracking
 }
 
 // PreRenderJob represents a spectrogram pre-rendering task.
 // This is a local DTO to avoid direct coupling to spectrogram package types.
 type PreRenderJob struct {
-	PCMData   []byte    // Raw PCM data from memory (s16le, 48kHz, mono)
-	ClipPath  string    // Full absolute path to audio clip file
-	NoteID    uint      // For logging correlation
-	Timestamp time.Time // Job submission time
+	PCMData    []byte    // Raw PCM data from memory (s16le, mono)
+	SampleRate int       // PCM sample rate in Hz
+	ClipPath   string    // Full absolute path to audio clip file
+	NoteID     uint      // For logging correlation
+	Timestamp  time.Time // Job submission time
 }
 
 // Methods to expose fields (allows prerenderer to access without importing processor)
-func (j PreRenderJob) GetPCMData() []byte      { return j.PCMData }
-func (j PreRenderJob) GetClipPath() string     { return j.ClipPath }
-func (j PreRenderJob) GetNoteID() uint         { return j.NoteID }
-func (j PreRenderJob) GetTimestamp() time.Time { return j.Timestamp }
+func (j *PreRenderJob) GetPCMData() []byte      { return j.PCMData }
+func (j *PreRenderJob) GetSampleRate() int      { return j.SampleRate }
+func (j *PreRenderJob) GetClipPath() string     { return j.ClipPath }
+func (j *PreRenderJob) GetNoteID() uint         { return j.NoteID }
+func (j *PreRenderJob) GetTimestamp() time.Time { return j.Timestamp }
 
 // PreRendererSubmit is an interface for submitting pre-render jobs.
 // Callers create PreRenderJob instances, and the implementation adapts them
@@ -135,6 +138,7 @@ func (j PreRenderJob) GetTimestamp() time.Time { return j.Timestamp }
 type PreRendererSubmit interface {
 	Submit(job interface {
 		GetPCMData() []byte
+		GetSampleRate() int
 		GetClipPath() string
 		GetNoteID() uint
 		GetTimestamp() time.Time

@@ -1993,17 +1993,18 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 	captureEndTime := det.Result.BeginTime.Add(time.Duration(captureLength) * time.Second)
 	if p.BufferMgr != nil && captureEndTime.After(time.Now()) {
 		return &SaveAudioAction{
-			Settings:      settings,
-			ClipName:      det.Result.ClipName,
-			bufferMgr:     p.BufferMgr,
-			sourceID:      det.Result.AudioSource.ID,
-			beginTime:     det.Result.BeginTime,
-			duration:      captureLength,
-			readyAt:       captureEndTime,
-			NoteID:        det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
-			PreRenderer:   p.preRenderer,
-			DetectionCtx:  detectionCtx,
-			CorrelationID: det.CorrelationID,
+			Settings:         settings,
+			ClipName:         det.Result.ClipName,
+			bufferMgr:        p.BufferMgr,
+			sourceID:         det.Result.AudioSource.ID,
+			beginTime:        det.Result.BeginTime,
+			duration:         captureLength,
+			readyAt:          captureEndTime,
+			sourceSampleRate: det.Result.AudioSource.SampleRate,
+			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
+			PreRenderer:      p.preRenderer,
+			DetectionCtx:     detectionCtx,
+			CorrelationID:    det.CorrelationID,
 		}
 	}
 
@@ -2022,23 +2023,25 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 			logger.String("operation", "capture_buffer_read_for_export"))
 		// Return an action with nil pcmData; Execute() will be a no-op
 		return &SaveAudioAction{
-			Settings:      settings,
-			ClipName:      det.Result.ClipName,
-			NoteID:        det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
-			PreRenderer:   p.preRenderer,
-			DetectionCtx:  detectionCtx,
-			CorrelationID: det.CorrelationID,
+			Settings:         settings,
+			ClipName:         det.Result.ClipName,
+			sourceSampleRate: det.Result.AudioSource.SampleRate,
+			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
+			PreRenderer:      p.preRenderer,
+			DetectionCtx:     detectionCtx,
+			CorrelationID:    det.CorrelationID,
 		}
 	}
 
 	return &SaveAudioAction{
-		Settings:      settings,
-		ClipName:      det.Result.ClipName,
-		pcmData:       pcmData,
-		NoteID:        det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
-		PreRenderer:   p.preRenderer,
-		DetectionCtx:  detectionCtx,
-		CorrelationID: det.CorrelationID,
+		Settings:         settings,
+		ClipName:         det.Result.ClipName,
+		pcmData:          pcmData,
+		sourceSampleRate: det.Result.AudioSource.SampleRate,
+		NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
+		PreRenderer:      p.preRenderer,
+		DetectionCtx:     detectionCtx,
+		CorrelationID:    det.CorrelationID,
 	}
 }
 

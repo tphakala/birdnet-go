@@ -378,8 +378,13 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		return err
 	}
 
+	exportRate := a.sourceSampleRate
+	if exportRate <= 0 {
+		exportRate = conf.SampleRate
+	}
+
 	if a.Settings.Realtime.Audio.Export.Type == "wav" {
-		if err := convert.SavePCMDataToWAV(outputPath, a.pcmData, conf.SampleRate, conf.BitDepth); err != nil {
+		if err := convert.SavePCMDataToWAV(outputPath, a.pcmData, exportRate, conf.BitDepth); err != nil {
 			return err
 		}
 	} else {
@@ -389,7 +394,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 			OutputPath: outputPath,
 			Format:     exportSettings.Type,
 			Bitrate:    exportSettings.Bitrate,
-			SampleRate: conf.SampleRate,
+			SampleRate: exportRate,
 			Channels:   conf.NumChannels,
 			BitDepth:   conf.BitDepth,
 			FFmpegPath: a.Settings.Realtime.Audio.FfmpegPath,
@@ -429,6 +434,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		logger.String("clip_path", a.ClipName),
 		logger.Int64("file_size_bytes", fileSize),
 		logger.String("format", a.Settings.Realtime.Audio.Export.Type),
+		logger.Int("sample_rate", exportRate),
 		logger.String("operation", "audio_export_success"))
 
 	// Signal that the clip file exists on disk. This is used by any late
@@ -441,14 +447,15 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	if a.Settings.Realtime.Dashboard.Spectrogram.Enabled && a.PreRenderer != nil {
 		// Create pre-render job using local DTO (avoids direct spectrogram dependency)
 		job := PreRenderJob{
-			PCMData:   a.pcmData,
-			ClipPath:  outputPath, // Use full path to audio file
-			NoteID:    a.NoteID,
-			Timestamp: time.Now(),
+			PCMData:    a.pcmData,
+			SampleRate: exportRate,
+			ClipPath:   outputPath, // Use full path to audio file
+			NoteID:     a.NoteID,
+			Timestamp:  time.Now(),
 		}
 
 		// Non-blocking submission - errors logged but don't fail action
-		if err := a.PreRenderer.Submit(job); err != nil {
+		if err := a.PreRenderer.Submit(&job); err != nil {
 			GetLogger().Warn("Failed to submit spectrogram pre-render job",
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
