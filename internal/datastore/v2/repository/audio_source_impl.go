@@ -193,14 +193,16 @@ func (r *audioSourceRepository) GetAllWithDetectionCount(ctx context.Context) ([
 	}
 
 	// Scan into an anonymous struct keyed on the underlying GORM column names; the entity
-	// fields would also work but this keeps the row layout local and explicit.
+	// fields would also work but this keeps the row layout local and explicit. Every column
+	// gets an explicit gorm tag so the raw-SQL projection (s.display_name with an alias)
+	// maps reliably without relying on GORM's snake-casing of the Go field name.
 	type row struct {
-		ID             uint   `gorm:"column:id"`
-		SourceURI      string `gorm:"column:source_uri"`
-		NodeName       string `gorm:"column:node_name"`
-		SourceType     string `gorm:"column:source_type"`
-		DisplayName    *string
-		DetectionCount int64 `gorm:"column:detection_count"`
+		ID             uint    `gorm:"column:id"`
+		SourceURI      string  `gorm:"column:source_uri"`
+		NodeName       string  `gorm:"column:node_name"`
+		SourceType     string  `gorm:"column:source_type"`
+		DisplayName    *string `gorm:"column:display_name"`
+		DetectionCount int64   `gorm:"column:detection_count"`
 	}
 
 	var rows []row

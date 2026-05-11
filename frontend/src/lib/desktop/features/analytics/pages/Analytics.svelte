@@ -184,17 +184,26 @@
   // Audio sources loaded once on mount; the picker is hidden when there are fewer than two.
   let audioSources = $state<AudioSourceOption[]>([]);
 
+  // Maximum source IDs accepted by the backend per request (see parseOptionalSourceIDs
+  // in internal/api/v2/utils.go). Clamp on the frontend too so we never send a request the
+  // backend will silently truncate.
+  const MAX_SOURCE_IDS_PER_REQUEST = 64;
+
   // Map selected display_names back to a comma-separated list of audio_sources.id values
   // suitable for the `source_id` query parameter. Empty when "all sources" is selected.
+  // Dedupe via Set (a display_name may share ids with another row through node_name moves)
+  // and clamp to the backend limit before joining.
   let selectedSourceIdsParam = $derived.by(() => {
     if (filters.sourceGroups.length === 0 || audioSources.length === 0) return '';
     const byName = new Map(audioSources.map(s => [s.displayName, s.ids] as const));
-    const ids: number[] = [];
+    const ids = new Set<number>();
     for (const name of filters.sourceGroups) {
       const matched = byName.get(name);
-      if (matched) ids.push(...matched);
+      if (matched) {
+        for (const id of matched) ids.add(id);
+      }
     }
-    return ids.join(',');
+    return Array.from(ids).slice(0, MAX_SOURCE_IDS_PER_REQUEST).join(',');
   });
 
   // Apply the source filter to a URLSearchParams instance when at least one source is selected.

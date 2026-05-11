@@ -118,17 +118,25 @@
   let audioSources = $state<AudioSourceOption[]>([]);
   let selectedSourceGroups = $state<string[]>([]);
 
+  // Maximum source IDs accepted by the backend per request (see parseOptionalSourceIDs
+  // in internal/api/v2/utils.go). Clamp on the frontend too so we never send a request
+  // the backend will silently truncate.
+  const MAX_SOURCE_IDS_PER_REQUEST = 64;
+
   // Resolve picker selection (display_names) back to comma-separated audio_sources.id list
   // for the `source_id` query parameter. Empty when no source is selected.
+  // Dedupe and clamp to the backend limit before joining.
   let selectedSourceIdsParam = $derived.by(() => {
     if (selectedSourceGroups.length === 0 || audioSources.length === 0) return '';
     const byName = new Map(audioSources.map(s => [s.displayName, s.ids] as const));
-    const ids: number[] = [];
+    const ids = new Set<number>();
     for (const name of selectedSourceGroups) {
       const matched = byName.get(name);
-      if (matched) ids.push(...matched);
+      if (matched) {
+        for (const id of matched) ids.add(id);
+      }
     }
-    return ids.join(',');
+    return Array.from(ids).slice(0, MAX_SOURCE_IDS_PER_REQUEST).join(',');
   });
 
   // Apply source filter to a URLSearchParams instance. Single helper so all four

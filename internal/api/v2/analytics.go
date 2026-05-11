@@ -1117,8 +1117,13 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 		return err
 	}
 
+	// Bound the DB query so a stuck or slow query doesn't tie up the request handler;
+	// matches the pattern used by other analytics handlers in this file.
+	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
+	defer cancel()
+
 	// Get hourly distribution data from the datastore
-	hourlyData, err := c.DS.GetHourlyDistribution(ctx.Request().Context(), startDate, endDate, speciesParam, sourceIDs...)
+	hourlyData, err := c.DS.GetHourlyDistribution(ctxWithTimeout, startDate, endDate, speciesParam, sourceIDs...)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get hourly distribution data", http.StatusInternalServerError)
 	}
@@ -1429,8 +1434,14 @@ func (c *Controller) validateBatchHourlyParams(ctx echo.Context, operation strin
 	return speciesParams, date, nil
 }
 
-// processHourlyBatchSpecies processes each species for batch hourly data
+// processHourlyBatchSpecies processes each species for batch hourly data.
+// All N per-species queries share the same analyticsQueryTimeout budget — that's the same
+// behavior other batch endpoints in this file rely on; per-call budgets would let a single
+// pathological species blow the request's total wall-clock.
 func (c *Controller) processHourlyBatchSpecies(ctx echo.Context, speciesParams []string, date string, sourceIDs []uint, ip, path string) (results map[string][]HourlyDistribution, processingErrors []string) {
+	queryCtx, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
+	defer cancel()
+
 	results = make(map[string][]HourlyDistribution)
 	processingErrors = make([]string, 0)
 	seen := make(map[string]bool)
@@ -1442,7 +1453,7 @@ func (c *Controller) processHourlyBatchSpecies(ctx echo.Context, speciesParams [
 		}
 		seen[speciesItem] = true
 
-		hourlyData, err := c.DS.GetHourlyAnalyticsData(ctx.Request().Context(), date, speciesItem, sourceIDs...)
+		hourlyData, err := c.DS.GetHourlyAnalyticsData(queryCtx, date, speciesItem, sourceIDs...)
 		if err != nil {
 			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get hourly data for species %s: %v", speciesItem, err))
 			c.logErrorIfEnabled("Error getting hourly data for species in batch request",
@@ -1543,13 +1554,18 @@ func (c *Controller) validateBatchDailyParams(ctx echo.Context, operation string
 	return speciesParams, uniqueSpecies, startDate, endDate, nil
 }
 
-// processDailyBatchSpecies processes each species for batch daily data
+// processDailyBatchSpecies processes each species for batch daily data.
+// Shares one analyticsQueryTimeout budget across all N per-species queries — matches the
+// hourly batch processor above and keeps total wall-clock bounded by the same constant.
 func (c *Controller) processDailyBatchSpecies(ctx echo.Context, uniqueSpecies []string, startDate, endDate string, sourceIDs []uint, ip, path string) (results map[string]SpeciesDailyData, processingErrors []string) {
+	queryCtx, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
+	defer cancel()
+
 	results = make(map[string]SpeciesDailyData)
 	processingErrors = make([]string, 0)
 
 	for _, speciesItem := range uniqueSpecies {
-		dailyData, err := c.DS.GetDailyAnalyticsData(ctx.Request().Context(), startDate, endDate, speciesItem, sourceIDs...)
+		dailyData, err := c.DS.GetDailyAnalyticsData(queryCtx, startDate, endDate, speciesItem, sourceIDs...)
 		if err != nil {
 			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get daily data for species %s: %v", speciesItem, err))
 			c.logErrorIfEnabled("Error getting daily data for species in batch request",
