@@ -15,6 +15,12 @@ func GetLogger() logger.Logger {
 	return logger.Global().Module("analysis")
 }
 
+// GetAudiocoreLogger returns the audiocore module logger for audio pipeline
+// events that should route to logs/audio.log instead of the analysis log.
+func GetAudiocoreLogger() logger.Logger {
+	return logger.Global().Module("audiocore")
+}
+
 // Sound level structured logging functions
 
 // LogSoundLevelMQTTPublished logs successful MQTT publication of sound level data
