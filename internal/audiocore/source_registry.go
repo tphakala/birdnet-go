@@ -109,9 +109,9 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 
 	r.mu.Lock()
 
-	// Deduplication: return existing source for the same connection string.
+	// Deduplication: return a safe copy of the existing source.
 	if existingID, ok := r.connectionMap[connStr]; ok {
-		existing := r.sources[existingID]
+		existing := r.copySource(r.sources[existingID])
 		r.mu.Unlock()
 		return existing, nil
 	}
@@ -156,7 +156,7 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 		logger.String("type", cfg.Type.String()))
 
 	r.notify(SourceEvent{Type: SourceAdded, SourceID: id, Source: snapshot})
-	return src, nil
+	return snapshot, nil
 }
 
 // Unregister removes the source with the given ID from the registry.
