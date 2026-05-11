@@ -326,13 +326,24 @@ func (r *detectionRepository) SaveBatch(ctx context.Context, dets []*entities.De
 	}, r.metrics)
 }
 
-// DeleteBatch removes multiple detections by ID.
+// DeleteBatch removes multiple detections by ID, skipping locked entries.
+// Chunks the ID list to stay within SQL parameter limits.
 func (r *detectionRepository) DeleteBatch(ctx context.Context, ids []uint) error {
 	if len(ids) == 0 {
 		return nil
 	}
 	return datastore.RetryOnLock(ctx, "v2_delete_detection_batch", func() error {
-		return r.db.WithContext(ctx).Table(r.tableName()).Delete(&entities.Detection{}, ids).Error
+		for i := 0; i < len(ids); i += batchQuerySize {
+			end := min(i+batchQuerySize, len(ids))
+			if err := r.db.WithContext(ctx).Table(r.tableName()).
+				Where("id IN ?", ids[i:end]).
+				Where(fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = %s.id)",
+					r.locksTable(), r.locksTable(), r.tableName())).
+				Delete(&entities.Detection{}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
 	}, r.metrics)
 }
 
@@ -1323,25 +1334,28 @@ func (r *detectionRepository) GetCommentsByDetectionIDs(ctx context.Context, det
 // ============================================================================
 
 // Lock prevents modification/deletion of a detection.
+// Uses an atomic INSERT...SELECT...WHERE NOT EXISTS to avoid TOCTOU races.
+// Idempotent: locking an already-locked detection succeeds silently.
+// Returns ErrDetectionNotFound only if the detection does not exist.
 func (r *detectionRepository) Lock(ctx context.Context, detectionID uint) error {
-	// Check if detection exists
-	exists, err := r.Exists(ctx, detectionID)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return ErrDetectionNotFound
-	}
-
-	// Check if already locked
-	locked, _ := r.IsLocked(ctx, detectionID)
-	if locked {
-		return nil // Already locked, idempotent
-	}
-
-	lock := entities.DetectionLock{DetectionID: detectionID}
 	return datastore.RetryOnLock(ctx, "v2_lock_detection", func() error {
-		return r.db.WithContext(ctx).Table(r.locksTable()).Create(&lock).Error
+		result := r.db.WithContext(ctx).Exec(
+			fmt.Sprintf("INSERT INTO %s (detection_id, locked_at) SELECT ?, CURRENT_TIMESTAMP FROM %s WHERE %s.id = ? AND NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = ?)",
+				r.locksTable(), r.tableName(), r.tableName(), r.locksTable(), r.locksTable()),
+			detectionID, detectionID, detectionID)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			exists, err := r.Exists(ctx, detectionID)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return ErrDetectionNotFound
+			}
+		}
+		return nil
 	}, r.metrics)
 }
 

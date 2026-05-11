@@ -63,6 +63,7 @@ type DualWriteRepository struct {
 	shutdownCh   chan struct{} // Signals shutdown to in-flight goroutines
 	shutdownOnce sync.Once     // Ensures shutdown is called only once
 
+	reconcileMu     sync.Mutex    // Protects reconcileTicker and reconcileDone
 	reconcileTicker *time.Ticker  // Periodic dirty ID reconciliation
 	reconcileDone   chan struct{} // Signals reconciliation goroutine has exited
 	reconcileOnce   sync.Once     // Ensures StartReconciliation is called only once
@@ -119,9 +120,14 @@ func (dw *DualWriteRepository) Shutdown() {
 		close(dw.shutdownCh)
 
 		// Stop reconciliation ticker and wait for goroutine to exit
-		if dw.reconcileTicker != nil {
-			dw.reconcileTicker.Stop()
-			<-dw.reconcileDone
+		dw.reconcileMu.Lock()
+		ticker := dw.reconcileTicker
+		done := dw.reconcileDone
+		dw.reconcileMu.Unlock()
+
+		if ticker != nil {
+			ticker.Stop()
+			<-done
 		}
 
 		// Wait for all in-flight goroutines to release the semaphore
@@ -139,16 +145,28 @@ func (dw *DualWriteRepository) Shutdown() {
 // synced to v2; if it was deleted from legacy, the v2 ghost is removed.
 func (dw *DualWriteRepository) StartReconciliation() {
 	dw.reconcileOnce.Do(func() {
-		dw.reconcileTicker = time.NewTicker(reconcileInterval)
-		dw.reconcileDone = make(chan struct{})
+		select {
+		case <-dw.shutdownCh:
+			return
+		default:
+		}
+
+		ticker := time.NewTicker(reconcileInterval)
+		done := make(chan struct{})
+
+		dw.reconcileMu.Lock()
+		dw.reconcileTicker = ticker
+		dw.reconcileDone = done
+		dw.reconcileMu.Unlock()
 
 		go func() {
-			defer close(dw.reconcileDone)
+			defer ticker.Stop()
+			defer close(done)
 			for {
 				select {
 				case <-dw.shutdownCh:
 					return
-				case <-dw.reconcileTicker.C:
+				case <-ticker.C:
 					dw.reconcileDirtyIDs()
 				}
 			}
@@ -563,21 +581,13 @@ func (dw *DualWriteRepository) GetBySpecies(ctx context.Context, species string,
 			return dw.legacy.GetBySpecies(ctx, species, filters)
 		}
 
-		limit := 100
-		offset := 0
-		if filters != nil {
-			if filters.Limit > 0 {
-				limit = filters.Limit
-			}
-			offset = filters.Offset
+		if filters == nil {
+			filters = &datastore.DetectionFilters{}
 		}
-
-		// Query across all label IDs for this species (multi-model support)
-		searchFilters := &SearchFilters{
-			LabelIDs: labelIDs,
-			Limit:    limit,
-			Offset:   offset,
-			SortDesc: true,
+		searchFilters := dw.convertFilters(filters)
+		searchFilters.LabelIDs = labelIDs
+		if searchFilters.Limit == 0 {
+			searchFilters.Limit = 100
 		}
 		dets, total, err := dw.v2.Search(ctx, searchFilters)
 		if err != nil {
@@ -640,8 +650,17 @@ func (dw *DualWriteRepository) GetHourly(ctx context.Context, date, hour string,
 			return dw.legacy.GetHourly(ctx, date, hour, duration, limit, offset)
 		}
 		hourStart := time.Date(t.Year(), t.Month(), t.Day(), hourInt, 0, 0, 0, time.Local)
+		hourEnd := hourStart.Add(time.Duration(duration) * time.Hour)
 
-		dets, total, err := dw.v2.GetByHour(ctx, hourStart.Unix(), limit, offset)
+		start := hourStart.Unix()
+		end := hourEnd.Unix()
+		dets, total, err := dw.v2.Search(ctx, &SearchFilters{
+			StartTime: &start,
+			EndTime:   &end,
+			Limit:     limit,
+			Offset:    offset,
+			SortDesc:  true,
+		})
 		if err != nil {
 			return nil, 0, err
 		}
