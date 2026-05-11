@@ -176,6 +176,11 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 	}, nil, log, bufMgr)
 	deviceMgr := audiocore.NewDeviceManager(router, bufMgr, log)
 
+	// Probe all device capabilities at startup, before any capture begins.
+	// Exclusive mode probing requires sole device access, so it must happen
+	// before sources are added and capture starts.
+	audiocore.ProbeAllDeviceCapabilities(log)
+
 	e := &AudioEngine{
 		registry:             audiocore.NewSourceRegistry(log),
 		router:               router,

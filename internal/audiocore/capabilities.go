@@ -7,11 +7,20 @@ import (
 	"maps"
 	"runtime"
 	"slices"
+	"strings"
+	"sync"
 
 	"github.com/gen2brain/malgo"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+)
+
+// capabilitiesCache stores probed device capabilities keyed by device name.
+// Populated at startup before capture begins, read by the API at runtime.
+var (
+	capabilitiesCache   = make(map[string]*DeviceCapabilities)
+	capabilitiesCacheMu sync.RWMutex
 )
 
 // CandidateSampleRates are the rates tested during device probing.
@@ -37,11 +46,67 @@ type DeviceCapabilities struct {
 	Verified    bool   `json:"verified"`
 }
 
-// ProbeDeviceCapabilities queries supported sample rates for a device.
-// Fast path: reads from the device's Formats array (nativeDataFormats).
-// Slow path (ALSA only): probes by attempting InitDevice at each candidate rate.
-// On non-ALSA backends (macOS/Windows), returns unverified candidates if Formats are unavailable.
+// ProbeAllDeviceCapabilities probes all available capture devices and populates
+// the capabilities cache. Call this at startup before capture begins so that
+// exclusive mode probing can access devices without contention.
+func ProbeAllDeviceCapabilities(log logger.Logger) {
+	devices, err := ListCaptureDevices()
+	if err != nil {
+		log.Warn("failed to list devices for capability probing", logger.Error(err))
+		return
+	}
+
+	for _, dev := range devices {
+		caps, err := probeDeviceCapabilitiesLive(dev.ID, log)
+		if err != nil {
+			log.Warn("failed to probe device capabilities",
+				logger.String("device", dev.Name),
+				logger.String("device_id", dev.ID),
+				logger.Error(err))
+			continue
+		}
+		capabilitiesCacheMu.Lock()
+		capabilitiesCache[dev.Name] = caps
+		capabilitiesCacheMu.Unlock()
+		log.Info("cached device capabilities",
+			logger.String("device", dev.Name),
+			logger.Any("sample_rates", caps.SampleRates),
+			logger.Bool("verified", caps.Verified))
+	}
+}
+
+// GetCachedCapabilities returns cached capabilities for a device, or nil if
+// the device was not probed at startup.
+func GetCachedCapabilities(deviceName string) *DeviceCapabilities {
+	capabilitiesCacheMu.RLock()
+	defer capabilitiesCacheMu.RUnlock()
+	return capabilitiesCache[deviceName]
+}
+
+// ProbeDeviceCapabilities returns cached capabilities if available, otherwise
+// probes the device live. The cache is populated at startup; live probing is
+// the fallback for devices plugged in after startup.
 func ProbeDeviceCapabilities(deviceID string, log logger.Logger) (*DeviceCapabilities, error) {
+	// Check cache first (covers devices probed at startup).
+	// Match by exact ID, exact name, or substring of name (same as matchesDevice).
+	capabilitiesCacheMu.RLock()
+	for _, caps := range capabilitiesCache {
+		if caps.DeviceID == deviceID || caps.DeviceName == deviceID ||
+			strings.Contains(caps.DeviceName, deviceID) {
+			capabilitiesCacheMu.RUnlock()
+			return caps, nil
+		}
+	}
+	capabilitiesCacheMu.RUnlock()
+
+	// Cache miss: probe live (device may have been plugged in after startup).
+	return probeDeviceCapabilitiesLive(deviceID, log)
+}
+
+// probeDeviceCapabilitiesLive queries supported sample rates for a device.
+// On Linux, always uses init-probing in exclusive mode to get accurate hardware rates.
+// On other platforms, reads from the device's native Formats array.
+func probeDeviceCapabilitiesLive(deviceID string, log logger.Logger) (*DeviceCapabilities, error) {
 	backend := platformBackend()
 
 	malgoCtx, err := malgo.InitContext([]malgo.Backend{backend}, malgo.ContextConfig{}, nil)
@@ -89,9 +154,12 @@ func ProbeDeviceCapabilities(deviceID string, log logger.Logger) (*DeviceCapabil
 	}
 
 	// Fast path: extract rates from the device's native format list.
+	// On Linux, skip the fast path entirely because ALSA's device info
+	// is queried through dsnoop (shared mode), which constrains the
+	// reported formats to 48kHz regardless of what the hardware supports.
 	rates := extractSampleRates(selectedInfo.Formats)
 
-	if len(rates) > 0 {
+	if len(rates) > 0 && runtime.GOOS != captureOSLinux {
 		log.Debug("device capabilities from native formats",
 			logger.String("device_id", deviceID),
 			logger.String("device_name", deviceName),
@@ -104,7 +172,8 @@ func ProbeDeviceCapabilities(deviceID string, log logger.Logger) (*DeviceCapabil
 		}, nil
 	}
 
-	// Slow path: formats are all zero or empty.
+	// On Linux, always probe by init because the fast path is unreliable.
+	// On other platforms, this is the fallback when formats are all zero.
 	if runtime.GOOS == captureOSLinux {
 		log.Info("probing device by init (ALSA zero-rate formats)",
 			logger.String("device_id", deviceID),
