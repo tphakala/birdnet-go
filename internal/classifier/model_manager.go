@@ -72,6 +72,9 @@ type DownloadState struct {
 // parameter is used to update configuration after install/uninstall; it may
 // be nil for testing.
 func NewModelManager(modelsDir string, orchestrator *Orchestrator, settings *conf.Settings) *ModelManager {
+	if orchestrator != nil {
+		orchestrator.SetModelsDir(modelsDir)
+	}
 	return &ModelManager{
 		modelsDir:    modelsDir,
 		orchestrator: orchestrator,
@@ -87,14 +90,13 @@ func NewModelManager(modelsDir string, orchestrator *Orchestrator, settings *con
 // recorded as installed.
 func (mm *ModelManager) ScanInstalled() {
 	log := GetLogger()
-	mm.mu.Lock()
-	defer mm.mu.Unlock()
 
+	// Phase 1: scan the filesystem under mm.mu.
+	mm.mu.Lock()
 	for i := range EmbeddedCatalog {
 		entry := &EmbeddedCatalog[i]
 		subdir := filepath.Join(mm.modelsDir, entry.ID)
 
-		// Find the model file (Role "model") in the catalog entry.
 		modelFile := ""
 		labelsFile := ""
 		for _, f := range entry.Files {
@@ -132,18 +134,17 @@ func (mm *ModelManager) ScanInstalled() {
 			logger.String("path", modelPath))
 	}
 
+	installedIDs := slices.Collect(maps.Keys(mm.installed))
 	log.Info("Model scan complete",
 		logger.Int("installed_count", len(mm.installed)))
+	mm.mu.Unlock()
 
-	// Sync Models.Enabled with installed/configured models so the model picker
-	// always reflects the actual system state. Use clone-mutate-publish to
-	// avoid mutating the shared settings snapshot in place.
+	// Phase 2: sync Models.Enabled and load models (lock-free).
 	if mm.settings != nil {
 		mm.settingsMu.Lock()
 		updated := conf.CloneSettings(conf.GetSettings())
 		changed := false
 
-		// BirdNET is always present (permanent built-in).
 		if !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
 			return strings.EqualFold(id, conf.ModelIDBirdNET)
 		}) {
@@ -159,8 +160,7 @@ func (mm *ModelManager) ScanInstalled() {
 			}
 		}
 
-		// Add models found in the gallery models directory.
-		for catalogID := range mm.installed {
+		for _, catalogID := range installedIDs {
 			entry, found := GetCatalogEntry(catalogID)
 			if !found {
 				continue
@@ -168,14 +168,13 @@ func (mm *ModelManager) ScanInstalled() {
 			addIfMissing(ConfigAliasForRegistry(entry.RegistryID))
 		}
 
-		// Also add models enabled via legacy per-model config flags.
-		if updated.Bat.Enabled || updated.Bat.ClassifierModel != "" {
+		if updated.Bat.ClassifierModel != "" {
 			addIfMissing(conf.ModelIDBat)
 		}
-		if updated.Perch.Enabled || updated.Perch.ModelPath != "" {
+		if updated.Perch.ModelPath != "" {
 			addIfMissing(conf.ModelIDPerchV2)
 		}
-		if updated.BSG.Enabled || updated.BSG.ModelPath != "" {
+		if updated.BSG.ModelPath != "" {
 			addIfMissing(conf.ModelIDBSG)
 		}
 
@@ -187,6 +186,32 @@ func (mm *ModelManager) ScanInstalled() {
 			}
 		}
 		mm.settingsMu.Unlock()
+
+		mm.loadInstalledModels(log, installedIDs)
+	}
+}
+
+// loadInstalledModels loads any installed models that are not yet loaded in
+// the orchestrator. The caller must provide the list of installed catalog IDs
+// (collected while holding mm.mu) so this method runs lock-free.
+func (mm *ModelManager) loadInstalledModels(log logger.Logger, installedIDs []string) {
+	if mm.orchestrator == nil {
+		return
+	}
+	for _, catalogID := range installedIDs {
+		entry, found := GetCatalogEntry(catalogID)
+		if !found || entry.RegistryID == "" {
+			continue
+		}
+		if mm.orchestrator.IsModelLoaded(entry.RegistryID) {
+			continue
+		}
+		if err := mm.orchestrator.LoadModel(entry.RegistryID); err != nil {
+			log.Warn("failed to load installed model at startup",
+				logger.String("catalog_id", catalogID),
+				logger.String("registry_id", entry.RegistryID),
+				logger.Error(err))
+		}
 	}
 }
 
@@ -581,7 +606,6 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 		GetLogger().Info("BirdNET v3.0 config wiring not yet implemented",
 			logger.String("catalog_id", entry.ID))
 	case RegistryIDPerchV2:
-		updated.Perch.Enabled = true
 		if modelPath != "" {
 			updated.Perch.ModelPath = modelPath
 		}
@@ -589,7 +613,6 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 			updated.Perch.LabelPath = labelsPath
 		}
 	case RegistryIDBSG:
-		updated.BSG.Enabled = true
 		if modelPath != "" {
 			updated.BSG.ModelPath = modelPath
 		}
@@ -597,7 +620,6 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 			updated.BSG.LabelPath = labelsPath
 		}
 	case RegistryIDBat:
-		updated.Bat.Enabled = true
 		if modelPath != "" {
 			updated.Bat.ClassifierModel = modelPath
 		}
@@ -648,11 +670,9 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		GetLogger().Info("BirdNET v3.0 config wiring not yet implemented",
 			logger.String("catalog_id", entry.ID))
 	case RegistryIDPerchV2:
-		updated.Perch.Enabled = false
 		updated.Perch.ModelPath = ""
 		updated.Perch.LabelPath = ""
 	case RegistryIDBSG:
-		updated.BSG.Enabled = false
 		updated.BSG.ModelPath = ""
 		updated.BSG.LabelPath = ""
 	case RegistryIDBat:
@@ -668,7 +688,6 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 			}
 		}
 		if replacement == nil {
-			updated.Bat.Enabled = false
 			updated.Bat.ClassifierModel = ""
 			updated.Bat.LabelPath = ""
 			updated.Bat.EmbeddingModel = ""

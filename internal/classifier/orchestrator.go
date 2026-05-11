@@ -4,6 +4,8 @@ package classifier
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -37,9 +39,10 @@ type Orchestrator struct {
 	// NOTE: models map is keyed by ModelInfo.ID at construction time. If ReloadModel
 	// changes the model ID, the key goes stale. Delete() iterates values so cleanup
 	// is unaffected. ReloadModel re-keys the map after reload.
-	mu      sync.RWMutex // protects the models map
-	models  map[string]*modelEntry
-	primary *BirdNET // direct access to the primary model
+	mu        sync.RWMutex // protects the models map
+	models    map[string]*modelEntry
+	primary   *BirdNET // direct access to the primary model
+	modelsDir string   // base directory for gallery-installed models
 }
 
 // NewOrchestrator creates a new Orchestrator with BirdNET as the primary model
@@ -90,6 +93,55 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	}
 
 	return o, nil
+}
+
+// SetModelsDir sets the base directory for gallery-installed models.
+// Called by ModelManager after creation so model loaders can resolve
+// paths from the installed models directory when config paths are empty.
+func (o *Orchestrator) SetModelsDir(dir string) {
+	o.modelsDir = dir
+}
+
+// resolveInstalledPaths looks up catalog entries for the given registry ID
+// and returns the absolute paths for the first installed model found on disk.
+// Returns empty strings if no installed model is found.
+func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labelsPath, embeddingsPath string) {
+	log := GetLogger()
+	if o.modelsDir == "" {
+		log.Debug("cannot resolve model paths: models directory not set",
+			logger.String("registry_id", registryID))
+		return "", "", ""
+	}
+	for i := range EmbeddedCatalog {
+		entry := &EmbeddedCatalog[i]
+		if entry.RegistryID != registryID {
+			continue
+		}
+		subdir := filepath.Join(o.modelsDir, entry.ID)
+		var mp, lp, ep string
+		for _, f := range entry.Files {
+			switch f.Role {
+			case RoleModel:
+				mp = filepath.Join(subdir, f.LocalName)
+			case RoleLabels:
+				lp = filepath.Join(subdir, f.LocalName)
+			case RoleEmbeddings:
+				ep = filepath.Join(o.modelsDir, "shared", f.LocalName)
+			}
+		}
+		if mp != "" {
+			if _, err := os.Stat(mp); err == nil {
+				log.Debug("resolved model paths from gallery",
+					logger.String("registry_id", registryID),
+					logger.String("model_path", mp))
+				return mp, lp, ep
+			}
+		}
+	}
+	log.Warn("model in models.enabled but not installed on disk",
+		logger.String("registry_id", registryID),
+		logger.String("models_dir", o.modelsDir))
+	return "", "", ""
 }
 
 // Predict runs inference using the primary model.
@@ -305,6 +357,18 @@ func (o *Orchestrator) Delete() {
 	// Nil out references to fail fast on use-after-delete.
 	o.primary = nil
 	o.models = nil
+}
+
+// IsModelLoaded returns true if a model with the given registry ID is
+// currently loaded in the orchestrator.
+func (o *Orchestrator) IsModelLoaded(registryID string) bool {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	if o.models == nil {
+		return false
+	}
+	_, exists := o.models[registryID]
+	return exists
 }
 
 // LoadModel dynamically loads a model into the Orchestrator at runtime.
@@ -549,26 +613,28 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 
 		threads := threadAlloc[registryID]
 
+		var loadErr error
 		switch registryID {
 		case RegistryIDBirdNETV3:
 			log.Warn("BirdNET v3.0 loader not yet implemented, skipping",
 				logger.String("registry_id", registryID))
 		case RegistryIDPerchV2:
 			//nolint:staticcheck // SA4023: loadPerch always errors in non-onnx build, but returns nil in onnx build
-			if err := o.loadPerch(threads); err != nil {
-				return err
-			}
+			loadErr = o.loadPerch(threads)
 		case RegistryIDBSG:
 			log.Warn("BSG loader not yet implemented, skipping",
 				logger.String("registry_id", registryID))
 		case RegistryIDBat:
 			//nolint:staticcheck // SA4023: loadBat always errors in non-onnx build, but returns nil in onnx build
-			if err := o.loadBat(threads); err != nil {
-				return err
-			}
+			loadErr = o.loadBat(threads)
 		default:
 			log.Warn("model registered but no loader implemented",
 				logger.String("registry_id", registryID))
+		}
+		if loadErr != nil {
+			log.Warn("optional model failed to load, will retry after gallery scan",
+				logger.String("registry_id", registryID),
+				logger.Error(loadErr))
 		}
 	}
 

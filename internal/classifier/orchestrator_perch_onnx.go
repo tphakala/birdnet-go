@@ -10,9 +10,23 @@ import (
 // loadPerch creates and registers a Perch v2 model instance from settings.
 func (o *Orchestrator) loadPerch(threads int) error {
 	log := GetLogger()
+
+	modelPath := o.Settings.Perch.ModelPath
+	labelPath := o.Settings.Perch.LabelPath
+
+	if modelPath == "" || labelPath == "" {
+		m, l, _ := o.resolveInstalledPaths(RegistryIDPerchV2)
+		if modelPath == "" {
+			modelPath = m
+		}
+		if labelPath == "" {
+			labelPath = l
+		}
+	}
+
 	cfg := PerchConfig{
-		ModelPath:       o.Settings.Perch.ModelPath,
-		LabelPath:       o.Settings.Perch.LabelPath,
+		ModelPath:       modelPath,
+		LabelPath:       labelPath,
 		ONNXRuntimePath: o.Settings.BirdNET.ONNXRuntimePath,
 		Threads:         threads,
 	}

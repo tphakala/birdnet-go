@@ -4,6 +4,8 @@ package inference
 
 import (
 	"fmt"
+	"os"
+	"runtime"
 	"sync"
 
 	ort "github.com/tphakala/birdnet-go/internal/inference/onnx"
@@ -218,7 +220,9 @@ func (r *onnxRangeFilter) Close() {
 }
 
 // InitONNXRuntime initializes the ONNX Runtime with the given shared library path.
-// Safe to call multiple times — skips if already initialized successfully.
+// When libraryPath is empty, searches standard system library paths for
+// libonnxruntime.so (Linux) or onnxruntime.dll (Windows).
+// Safe to call multiple times; skips if already initialized successfully.
 // On failure, allows retry with a corrected path (supports hot-reload recovery).
 func InitONNXRuntime(libraryPath string) (err error) {
 	ortInitMu.Lock()
@@ -226,6 +230,10 @@ func InitONNXRuntime(libraryPath string) (err error) {
 
 	if ortInitialized {
 		return nil
+	}
+
+	if libraryPath == "" {
+		libraryPath = findONNXRuntimeLibrary()
 	}
 
 	defer func() {
@@ -237,6 +245,30 @@ func InitONNXRuntime(libraryPath string) (err error) {
 	ort.MustInitORT(libraryPath)
 	ortInitialized = true
 	return nil
+}
+
+// findONNXRuntimeLibrary searches standard system paths for the ONNX Runtime
+// shared library. Returns the first path found, or "onnxruntime" as a
+// fallback for dlopen's default search.
+func findONNXRuntimeLibrary() string {
+	var candidates []string
+	if runtime.GOOS == "windows" {
+		candidates = []string{"onnxruntime.dll"}
+	} else {
+		candidates = []string{
+			"/usr/lib/libonnxruntime.so",
+			"/usr/local/lib/libonnxruntime.so",
+			"/usr/lib/aarch64-linux-gnu/libonnxruntime.so",
+			"/usr/lib/x86_64-linux-gnu/libonnxruntime.so",
+			"libonnxruntime.so",
+		}
+	}
+	for _, path := range candidates {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return "onnxruntime"
 }
 
 // DestroyONNXRuntime tears down the ONNX Runtime environment.

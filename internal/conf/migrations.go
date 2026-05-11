@@ -380,23 +380,6 @@ func (s *Settings) ValidateModelConfig(knownIDs map[string]bool) []string {
 		}
 	}
 
-	if enabledSet[ModelIDPerchV2] && !s.Perch.Enabled {
-		issues = append(issues, "error: "+ModelIDPerchV2+" in models.enabled but perch.enabled is false")
-	}
-
-	if s.Perch.Enabled && !enabledSet[ModelIDPerchV2] {
-		issues = append(issues, "warning: perch.enabled is true but '"+ModelIDPerchV2+"' is not in models.enabled")
-	}
-
-	if s.Perch.Enabled {
-		if s.Perch.ModelPath == "" {
-			issues = append(issues, "error: perch.enabled is true but perch.modelpath is empty")
-		}
-		if s.Perch.LabelPath == "" {
-			issues = append(issues, "error: perch.enabled is true but perch.labelpath is empty")
-		}
-	}
-
 	for i := range s.Realtime.Audio.Sources {
 		src := &s.Realtime.Audio.Sources[i]
 		for _, modelID := range src.Models {

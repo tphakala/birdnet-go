@@ -10,16 +10,29 @@ import (
 // loadBat creates and registers a bat detection model instance from settings.
 func (o *Orchestrator) loadBat(threads int) error {
 	log := GetLogger()
-	if !o.Settings.Bat.Enabled {
-		log.Debug("Bat model disabled by configuration")
-		return nil
+
+	classifierModel := o.Settings.Bat.ClassifierModel
+	labelPath := o.Settings.Bat.LabelPath
+	embeddingModel := o.Settings.Bat.EmbeddingModel
+
+	if classifierModel == "" || labelPath == "" || embeddingModel == "" {
+		m, l, e := o.resolveInstalledPaths(RegistryIDBat)
+		if classifierModel == "" {
+			classifierModel = m
+		}
+		if labelPath == "" {
+			labelPath = l
+		}
+		if embeddingModel == "" {
+			embeddingModel = e
+		}
 	}
 
 	cfg := BatModelConfig{
-		EmbeddingModelPath:  o.Settings.Bat.EmbeddingModel,
+		EmbeddingModelPath:  embeddingModel,
 		EmbeddingLabels:     o.Settings.BirdNET.Labels,
-		ClassifierModelPath: o.Settings.Bat.ClassifierModel,
-		ClassifierLabelPath: o.Settings.Bat.LabelPath,
+		ClassifierModelPath: classifierModel,
+		ClassifierLabelPath: labelPath,
 		ONNXRuntimePath:     o.Settings.BirdNET.ONNXRuntimePath,
 		Threads:             threads,
 	}
