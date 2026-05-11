@@ -46,8 +46,12 @@
 
 BirdNET-Go is an AI solution for continuous avian monitoring and identification
 
-- 24/7 realtime bird song analysis of soundcard capture, analysis output to log file, SQLite or MySQL
-- Utilizes BirdNET AI model trained with more than 6500 bird species
+- 24/7 realtime bird and bat sound analysis of soundcard capture, analysis output to log file, SQLite or MySQL
+- Built-in model gallery with multiple AI classifiers:
+  - **BirdNET v2.4** (6,500+ bird species, included by default)
+  - **Google Perch v2** (14,795 bird species)
+  - **BattyBirdNET** (11 regional bat classifiers covering Africa, Americas, East Asia, Europe, Middle East, South Asia, Southeast Asia, and USA)
+- Run multiple models simultaneously on separate audio sources
 - Local processing, Internet connectivity not required
 - Easy to use Web user interface for data visualisation
 - Supports over 40 languages for species names
@@ -120,6 +124,7 @@ Join our [Discord server](https://discord.gg/gcSCFGUtsd) for support, discussion
 
 - [BirdNET-Analyzer](https://github.com/birdnet-team/BirdNET-Analyzer) - Upstream project providing the BirdNET AI model for bird sound identification
 - [BirdNET-Go Classifiers](https://github.com/tphakala/birdnet-go-classifiers) - Enhanced BirdNET classifiers including additional species
+- [BattyBirdNET-Analyzer](https://github.com/rdz-oss/BattyBirdNET-Analyzer) - Bat classifier models for regional bat detection, installable via the model gallery
 
 ### System Integration
 
@@ -200,5 +205,7 @@ Contributions by Hampus Carlsson, Jan Vrska, @twt--, @aster1sk, @hoover67
 Please let me know if you are missing from contributors list!
 
 BirdNET AI model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology. Stefan Kahl, Connor Wood, Maximilian Eibl, Holger Klinck.
+
+Google Perch v2 ONNX conversion by [Justin Chuby](https://huggingface.co/justinchuby/BirdNET-onnx). BattyBirdNET bat classifier models by [R.D. Zinck](https://github.com/rdz-oss/BattyBirdNET-Analyzer).
 
 BirdNET label translations by Patrick Levin for BirdNET-Pi project by Patrick McGuire.

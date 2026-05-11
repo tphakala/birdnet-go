@@ -28,6 +28,9 @@ jobs:
       - name: Setup TensorFlow Lite
         uses: ./.github/actions/setup-tensorflow
 
+      - name: Setup ONNX Runtime
+        uses: ./.github/actions/setup-onnxruntime
+
       - name: golangci-lint
         id: golangci-lint
         uses: golangci/golangci-lint-action@v9

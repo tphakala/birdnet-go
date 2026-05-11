@@ -75,55 +75,20 @@ jobs:
           echo "BUILD_VERSION=${BUILD_VERSION}" >> ${GITHUB_ENV}
           echo "build_version=${BUILD_VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Download ONNX Runtime
-        env:
-          ONNXRUNTIME_VERSION: '1.25.1'
-        run: |
-          # Determine platform-specific archive name and library files
-          case "${{ matrix.goos }}-${{ matrix.goarch }}" in
-            linux-amd64)
-              ARCHIVE="onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz"
-              URL="https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/${ARCHIVE}"
-              curl -fsSL "$URL" -o /tmp/onnxruntime.tgz
-              mkdir -p /tmp/onnxruntime
-              tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
-              sudo cp /tmp/onnxruntime/lib/libonnxruntime*.so* /usr/lib/
-              sudo ldconfig
-              ;;
-            linux-arm64)
-              ARCHIVE="onnxruntime-linux-aarch64-${ONNXRUNTIME_VERSION}.tgz"
-              URL="https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/${ARCHIVE}"
-              curl -fsSL "$URL" -o /tmp/onnxruntime.tgz
-              mkdir -p /tmp/onnxruntime
-              tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
-              sudo cp /tmp/onnxruntime/lib/libonnxruntime*.so* /usr/aarch64-linux-gnu/lib/
-              ;;
-            windows-amd64)
-              ARCHIVE="onnxruntime-win-x64-${ONNXRUNTIME_VERSION}.zip"
-              URL="https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/${ARCHIVE}"
-              curl -fsSL "$URL" -o /tmp/onnxruntime.zip
-              mkdir -p /tmp/onnxruntime
-              unzip -q /tmp/onnxruntime.zip -d /tmp/onnxruntime
-              ;;
-            darwin-arm64)
-              ARCHIVE="onnxruntime-osx-arm64-${ONNXRUNTIME_VERSION}.tgz"
-              URL="https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/${ARCHIVE}"
-              curl -fsSL "$URL" -o /tmp/onnxruntime.tgz
-              mkdir -p /tmp/onnxruntime
-              tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime
-              ;;
-          esac
+      - name: Setup ONNX Runtime
+        uses: ./.github/actions/setup-onnxruntime
+        with:
+          target-platform: ${{ matrix.goos }}-${{ matrix.goarch }}
 
       - name: Build BirdNET-Go
         run: |
-          # Build the application with ONNX support
+          # Build the application
           task ${{ matrix.goos }}_${{ matrix.goarch }}
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
           BUILD_VERSION: ${{ env.BUILD_VERSION }}
-          EXTRA_BUILD_TAGS: onnx
           PUPPETEER_SKIP_DOWNLOAD: true
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
 
@@ -164,10 +129,10 @@ jobs:
             fi
           elif [ "${{ matrix.goos }}" = "windows" ]; then
             cp /usr/x86_64-w64-mingw32/lib/tensorflowlite_c.dll artifacts/
-            cp /tmp/onnxruntime/onnxruntime-win-x64-*/lib/*.dll artifacts/
+            cp /tmp/onnxruntime/lib/*.dll artifacts/
           elif [ "${{ matrix.goos }}" = "darwin" ]; then
             cp /opt/homebrew/lib/libtensorflowlite_c.dylib artifacts/
-            cp /tmp/onnxruntime/onnxruntime-osx-arm64-*/lib/libonnxruntime.dylib artifacts/
+            cp /tmp/onnxruntime/lib/libonnxruntime.dylib artifacts/
           fi
 
           # Create tarball

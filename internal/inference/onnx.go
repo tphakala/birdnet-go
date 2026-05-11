@@ -1,5 +1,3 @@
-//go:build onnx
-
 package inference
 
 import (

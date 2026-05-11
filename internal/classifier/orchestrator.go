@@ -425,7 +425,6 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 		logger.String("registry_id", registryID),
 		logger.Int("threads", dynamicThreads))
 
-	//nolint:staticcheck // SA4023: loaders always error in non-onnx build, but return nil in onnx build
 	var err error
 	switch registryID {
 	case RegistryIDBirdNETV3:
@@ -626,13 +625,11 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 			log.Warn("BirdNET v3.0 loader not yet implemented, skipping",
 				logger.String("registry_id", registryID))
 		case RegistryIDPerchV2:
-			//nolint:staticcheck // SA4023: loadPerch always errors in non-onnx build, but returns nil in onnx build
 			loadErr = o.loadPerch(threads)
 		case RegistryIDBSG:
 			log.Warn("BSG loader not yet implemented, skipping",
 				logger.String("registry_id", registryID))
 		case RegistryIDBat:
-			//nolint:staticcheck // SA4023: loadBat always errors in non-onnx build, but returns nil in onnx build
 			loadErr = o.loadBat(threads)
 		default:
 			log.Warn("model registered but no loader implemented",

@@ -1,5 +1,3 @@
-//go:build onnx
-
 package classifier
 
 import (

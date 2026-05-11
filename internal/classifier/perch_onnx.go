@@ -1,5 +1,3 @@
-//go:build onnx
-
 // perch_onnx.go provides Perch v2 model support using the ONNX backend.
 package classifier
 

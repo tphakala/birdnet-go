@@ -1,0 +1,75 @@
+name: 'Setup ONNX Runtime'
+description: 'Download, cache, and install ONNX Runtime library'
+
+inputs:
+  onnxruntime-version:
+    description: 'ONNX Runtime version'
+    required: false
+    default: '1.25.1'
+  target-platform:
+    description: 'Target platform: linux-amd64, linux-arm64, windows-amd64, darwin-arm64'
+    required: false
+    default: 'linux-amd64'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Cache ONNX Runtime
+      id: cache-onnxruntime
+      uses: actions/cache@v5
+      with:
+        path: /tmp/onnxruntime
+        key: onnxruntime-${{ inputs.target-platform }}-${{ inputs.onnxruntime-version }}
+
+    - name: Download ONNX Runtime
+      if: steps.cache-onnxruntime.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        VERSION="${{ inputs.onnxruntime-version }}"
+        mkdir -p /tmp/onnxruntime
+
+        case "${{ inputs.target-platform }}" in
+          linux-amd64)
+            curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-linux-x64-${VERSION}.tgz" \
+              -o /tmp/onnxruntime.tgz
+            tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
+            rm /tmp/onnxruntime.tgz
+            ;;
+          linux-arm64)
+            curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-linux-aarch64-${VERSION}.tgz" \
+              -o /tmp/onnxruntime.tgz
+            tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
+            rm /tmp/onnxruntime.tgz
+            ;;
+          windows-amd64)
+            curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-win-x64-${VERSION}.zip" \
+              -o /tmp/onnxruntime.zip
+            TMPDIR=$(mktemp -d)
+            unzip -q /tmp/onnxruntime.zip -d "$TMPDIR"
+            cp -r "$TMPDIR"/onnxruntime-*/* /tmp/onnxruntime/
+            rm -rf "$TMPDIR" /tmp/onnxruntime.zip
+            ;;
+          darwin-arm64)
+            curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-osx-arm64-${VERSION}.tgz" \
+              -o /tmp/onnxruntime.tgz
+            tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
+            rm /tmp/onnxruntime.tgz
+            ;;
+          *)
+            echo "::error::Unsupported platform: ${{ inputs.target-platform }}"
+            exit 1
+            ;;
+        esac
+
+    - name: Install ONNX Runtime to system path
+      shell: bash
+      run: |
+        case "${{ inputs.target-platform }}" in
+          linux-amd64)
+            sudo cp /tmp/onnxruntime/lib/libonnxruntime*.so* /usr/lib/
+            sudo ldconfig
+            ;;
+          linux-arm64)
+            sudo cp /tmp/onnxruntime/lib/libonnxruntime*.so* /usr/aarch64-linux-gnu/lib/
+            ;;
+        esac

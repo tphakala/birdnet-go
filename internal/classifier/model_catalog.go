@@ -20,22 +20,21 @@ const (
 
 // CatalogEntry describes a downloadable model available in the model gallery.
 type CatalogEntry struct {
-	ID                string        // unique catalog identifier (e.g., "battybirdnet-eu")
-	Name              string        // user-facing display name
-	Description       string        // short description of the model
-	Author            string        // model author or organization
-	License           string        // license identifier (e.g., "Apache-2.0")
-	CommercialUse     bool          // whether commercial use is permitted
-	Category          string        // "wildlife", "bird", or "bat"
-	Region            string        // geographic region, or empty for global models
-	SpeciesCount      int           // number of species the model can identify
-	Version           string        // model version string
-	RegistryID        string        // maps to a ModelRegistry key; empty if loader not yet implemented
-	Hidden            bool          // if true, entry is excluded from the gallery UI
-	RequiredBuildTags []string      // build tags required for this model (e.g., ["onnx"])
-	UpstreamURL       string        // URL to the upstream project repository
-	HuggingFaceRepo   string        // HuggingFace repository path
-	Files             []CatalogFile // files to download for this model
+	ID              string        // unique catalog identifier (e.g., "battybirdnet-eu")
+	Name            string        // user-facing display name
+	Description     string        // short description of the model
+	Author          string        // model author or organization
+	License         string        // license identifier (e.g., "Apache-2.0")
+	CommercialUse   bool          // whether commercial use is permitted
+	Category        string        // "wildlife", "bird", or "bat"
+	Region          string        // geographic region, or empty for global models
+	SpeciesCount    int           // number of species the model can identify
+	Version         string        // model version string
+	RegistryID      string        // maps to a ModelRegistry key; empty if loader not yet implemented
+	Hidden          bool          // if true, entry is excluded from the gallery UI
+	UpstreamURL     string        // URL to the upstream project repository
+	HuggingFaceRepo string        // HuggingFace repository path
+	Files           []CatalogFile // files to download for this model
 }
 
 // CatalogFile describes a single file within a model's HuggingFace repository.
@@ -53,62 +52,59 @@ type CatalogFile struct {
 var EmbeddedCatalog = []CatalogEntry{
 	// Wildlife models (multi-taxa classifiers)
 	{
-		ID:                "birdnet-v3.0",
-		Name:              "BirdNET v3.0",
-		Description:       "Global wildlife classifier using BirdNET v3.0 architecture",
-		Author:            "Cornell Lab of Ornithology & Chemnitz University of Technology",
-		License:           "TBD",
-		CommercialUse:     false,
-		Category:          CategoryWildlife,
-		Region:            "",
-		SpeciesCount:      0, // determined at runtime from label file
-		Version:           "3.0",
-		RegistryID:        RegistryIDBirdNETV3,
-		Hidden:            true,
-		RequiredBuildTags: []string{"onnx"},
-		UpstreamURL:       "https://github.com/birdnet-team/BirdNET-Analyzer",
-		HuggingFaceRepo:   "tphakala/BirdNET-v3.0",
+		ID:              "birdnet-v3.0",
+		Name:            "BirdNET v3.0",
+		Description:     "Global wildlife classifier using BirdNET v3.0 architecture",
+		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
+		License:         "TBD",
+		CommercialUse:   false,
+		Category:        CategoryWildlife,
+		Region:          "",
+		SpeciesCount:    0, // determined at runtime from label file
+		Version:         "3.0",
+		RegistryID:      RegistryIDBirdNETV3,
+		Hidden:          true,
+		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
+		HuggingFaceRepo: "tphakala/BirdNET-v3.0",
 		Files: []CatalogFile{
 			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "placeholder", SizeBytes: 0},
 			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "placeholder", SizeBytes: 0},
 		},
 	},
 	{
-		ID:                "perch-v2",
-		Name:              "Google Perch v2",
-		Description:       "Google Perch v2 classifier with approximately 14,795 species (scientific names only)",
-		Author:            "Google Research",
-		License:           "Apache-2.0",
-		CommercialUse:     true,
-		Category:          CategoryWildlife,
-		Region:            "",
-		SpeciesCount:      14795,
-		Version:           "2",
-		RegistryID:        RegistryIDPerchV2,
-		RequiredBuildTags: []string{"onnx"},
-		UpstreamURL:       "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
-		HuggingFaceRepo:   "tphakala/Perch-v2",
+		ID:              "perch-v2",
+		Name:            "Google Perch v2",
+		Description:     "Google Perch v2 classifier with approximately 14,795 species (scientific names only)",
+		Author:          "Google Research",
+		License:         "Apache-2.0",
+		CommercialUse:   true,
+		Category:        CategoryWildlife,
+		Region:          "",
+		SpeciesCount:    14795,
+		Version:         "2",
+		RegistryID:      RegistryIDPerchV2,
+		UpstreamURL:     "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
+		HuggingFaceRepo: "tphakala/Perch-v2",
 		Files: []CatalogFile{
 			{RemotePath: "perch_v2.onnx", LocalName: "perch_v2.onnx", Role: RoleModel, SHA256: "bf0c8467a924cb074663970ca4a0ab1e143602121930209657d0dff5d5cefa1f", SizeBytes: 409148616},
 			{RemotePath: "labels.txt", LocalName: "perch_v2_labels.txt", Role: RoleLabels, SHA256: "e4d5c0397d8fb08bf90c6b13a34810af53504faad927e472fcc567793c9de057", SizeBytes: 312716},
 		},
 	},
 	{
-		ID:                "bsg-finland",
-		Name:              "BSG Finland v4.4",
-		Description:       "Regional bird classifier optimized for Finnish bird species",
-		Author:            "University of Jyväskylä",
-		License:           "Non-commercial",
-		CommercialUse:     false,
-		Category:          CategoryBird,
-		Region:            "Finland",
-		SpeciesCount:      0,
-		Version:           "4.4",
-		RegistryID:        RegistryIDBSG,
-		Hidden:            true,
-		RequiredBuildTags: []string{"onnx"},
-		UpstreamURL:       "https://github.com/luomus/BSG",
-		HuggingFaceRepo:   "tphakala/BSG",
+		ID:              "bsg-finland",
+		Name:            "BSG Finland v4.4",
+		Description:     "Regional bird classifier optimized for Finnish bird species",
+		Author:          "University of Jyväskylä",
+		License:         "Non-commercial",
+		CommercialUse:   false,
+		Category:        CategoryBird,
+		Region:          "Finland",
+		SpeciesCount:    0,
+		Version:         "4.4",
+		RegistryID:      RegistryIDBSG,
+		Hidden:          true,
+		UpstreamURL:     "https://github.com/luomus/BSG",
+		HuggingFaceRepo: "tphakala/BSG",
 		Files: []CatalogFile{
 			{RemotePath: "BSG_birds_Finland_v4_4_fused_fp32.onnx", LocalName: "BSG_birds_Finland_v4_4_fused_fp32.onnx", Role: RoleModel, SHA256: "dd2b6b21c6b3d8adc5d72954f9e33c48b3d692dbbc647758340a69d68b203300", SizeBytes: 45446250},
 			{RemotePath: "BSG_birds_Finland_v4_4_labels_fi.txt", LocalName: "BSG_birds_Finland_v4_4_labels_fi.txt", Role: RoleLabels, SHA256: "01497fbec1bdba18625862ac8a5aedf372801eeb36dfde7a5dbce5353eeda308", SizeBytes: 7813},
@@ -170,20 +166,19 @@ func batCatalogEntry(id, name, region string, speciesCount int, fileRegion strin
 	labelsFile := "BattyBirdNET-" + fileRegion + "-256kHz" + quality + "_Labels.txt"
 
 	return CatalogEntry{
-		ID:                id,
-		Name:              name,
-		Description:       "Bat species detection for " + region + " using BirdNET v2.4 embeddings",
-		Author:            "R.D. Zinck",
-		License:           "CC-BY-NC-SA-4.0",
-		CommercialUse:     false,
-		Category:          CategoryBat,
-		Region:            region,
-		SpeciesCount:      speciesCount,
-		Version:           "1.0",
-		RegistryID:        RegistryIDBat,
-		RequiredBuildTags: []string{"onnx"},
-		UpstreamURL:       "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
-		HuggingFaceRepo:   "tphakala/BattyBirdNET-onnx",
+		ID:              id,
+		Name:            name,
+		Description:     "Bat species detection for " + region + " using BirdNET v2.4 embeddings",
+		Author:          "R.D. Zinck",
+		License:         "CC-BY-NC-SA-4.0",
+		CommercialUse:   false,
+		Category:        CategoryBat,
+		Region:          region,
+		SpeciesCount:    speciesCount,
+		Version:         "1.0",
+		RegistryID:      RegistryIDBat,
+		UpstreamURL:     "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+		HuggingFaceRepo: "tphakala/BattyBirdNET-onnx",
 		Files: []CatalogFile{
 			{
 				RemotePath: "fp32/" + modelFile,

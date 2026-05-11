@@ -1,5 +1,3 @@
-//go:build onnx
-
 package classifier
 
 import (
@@ -75,9 +73,4 @@ func (bn *BirdNET) initializeONNXMetaModel() error {
 
 	bn.rangeFilter = rangeFilter
 	return nil
-}
-
-// isONNXSupported returns true when the binary is built with ONNX support.
-func isONNXSupported() bool {
-	return true
 }

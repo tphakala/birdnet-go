@@ -1,5 +1,3 @@
-//go:build onnx
-
 package onnx
 
 // ModelType identifies which bird classification model is being used.
