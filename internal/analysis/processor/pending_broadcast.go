@@ -47,7 +47,6 @@ type SSEPendingDetection struct {
 	ModelContributions []SSEModelContribution `json:"modelContributions,omitempty"` // Per-model breakdown
 }
 
-// buildSSEModelContributions converts the internal ModelContributions map to an SSE-friendly slice.
 // buildSSEModelContributions converts the internal ModelContributions map to a sorted SSE-friendly slice.
 // Returns nil when only one model contributed (the common single-model case);
 // consumers should use BestModelID and HitCount for single-model detections.
