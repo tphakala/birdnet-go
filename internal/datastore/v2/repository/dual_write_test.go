@@ -1,12 +1,15 @@
 package repository
 
 import (
+	"io"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 func TestConvertFilters_PreservesAllFields(t *testing.T) {
@@ -86,4 +89,47 @@ func TestConvertFilters_ConfidenceOperators(t *testing.T) {
 			}
 		})
 	}
+}
+
+func testLogger() logger.Logger {
+	return logger.NewSlogLogger(io.Discard, logger.LogLevelError, nil)
+}
+
+func TestReconciliation_ConcurrentStartAndShutdown(t *testing.T) {
+	t.Parallel()
+
+	dw := &DualWriteRepository{
+		shutdownCh: make(chan struct{}),
+		semaphore:  make(chan struct{}, defaultMaxConcurrentWrites),
+		logger:     testLogger(),
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		dw.StartReconciliation()
+	}()
+
+	go func() {
+		defer wg.Done()
+		dw.Shutdown()
+	}()
+
+	wg.Wait()
+}
+
+func TestReconciliation_ShutdownWithoutStart(t *testing.T) {
+	t.Parallel()
+
+	dw := &DualWriteRepository{
+		shutdownCh: make(chan struct{}),
+		semaphore:  make(chan struct{}, defaultMaxConcurrentWrites),
+		logger:     testLogger(),
+	}
+
+	assert.NotPanics(t, func() {
+		dw.Shutdown()
+	})
 }

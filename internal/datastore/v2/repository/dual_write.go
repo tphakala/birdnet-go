@@ -63,6 +63,7 @@ type DualWriteRepository struct {
 	shutdownCh   chan struct{} // Signals shutdown to in-flight goroutines
 	shutdownOnce sync.Once     // Ensures shutdown is called only once
 
+	reconcileMu     sync.Mutex    // Protects reconcileTicker and reconcileDone
 	reconcileTicker *time.Ticker  // Periodic dirty ID reconciliation
 	reconcileDone   chan struct{} // Signals reconciliation goroutine has exited
 	reconcileOnce   sync.Once     // Ensures StartReconciliation is called only once
@@ -119,9 +120,14 @@ func (dw *DualWriteRepository) Shutdown() {
 		close(dw.shutdownCh)
 
 		// Stop reconciliation ticker and wait for goroutine to exit
-		if dw.reconcileTicker != nil {
-			dw.reconcileTicker.Stop()
-			<-dw.reconcileDone
+		dw.reconcileMu.Lock()
+		ticker := dw.reconcileTicker
+		done := dw.reconcileDone
+		dw.reconcileMu.Unlock()
+
+		if ticker != nil {
+			ticker.Stop()
+			<-done
 		}
 
 		// Wait for all in-flight goroutines to release the semaphore
@@ -139,16 +145,21 @@ func (dw *DualWriteRepository) Shutdown() {
 // synced to v2; if it was deleted from legacy, the v2 ghost is removed.
 func (dw *DualWriteRepository) StartReconciliation() {
 	dw.reconcileOnce.Do(func() {
-		dw.reconcileTicker = time.NewTicker(reconcileInterval)
-		dw.reconcileDone = make(chan struct{})
+		ticker := time.NewTicker(reconcileInterval)
+		done := make(chan struct{})
+
+		dw.reconcileMu.Lock()
+		dw.reconcileTicker = ticker
+		dw.reconcileDone = done
+		dw.reconcileMu.Unlock()
 
 		go func() {
-			defer close(dw.reconcileDone)
+			defer close(done)
 			for {
 				select {
 				case <-dw.shutdownCh:
 					return
-				case <-dw.reconcileTicker.C:
+				case <-ticker.C:
 					dw.reconcileDirtyIDs()
 				}
 			}
