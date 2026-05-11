@@ -98,7 +98,7 @@ jobs:
               URL="https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/${ARCHIVE}"
               curl -fsSL "$URL" -o /tmp/onnxruntime.tgz
               mkdir -p /tmp/onnxruntime
-              tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
+              tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime
               ;;
           esac
 
@@ -159,7 +159,7 @@ jobs:
             cp /tmp/onnxruntime/onnxruntime-win-x64-*/lib/*.dll artifacts/
           elif [ "${{ matrix.goos }}" = "darwin" ]; then
             cp /opt/homebrew/lib/libtensorflowlite_c.dylib artifacts/
-            cp /tmp/onnxruntime/lib/libonnxruntime.dylib artifacts/
+            cp /tmp/onnxruntime/onnxruntime-osx-arm64-*/lib/libonnxruntime.dylib artifacts/
           fi
           
           # Create tarball
