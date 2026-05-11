@@ -251,6 +251,7 @@ func (m *MySQLManager) Delete() error {
 		prefix + "detection_locks",
 		prefix + "detection_comments",
 		prefix + "detection_reviews",
+		prefix + "detection_model_contributions",
 		prefix + "detection_predictions",
 		prefix + "detections",
 		prefix + "audio_sources",
