@@ -2007,6 +2007,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 			duration:         captureLength,
 			readyAt:          captureEndTime,
 			sourceSampleRate: det.Result.AudioSource.SampleRate,
+			modelName:        det.Result.Model.Name,
 			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 			PreRenderer:      p.preRenderer,
 			DetectionCtx:     detectionCtx,
@@ -2032,6 +2033,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 			Settings:         settings,
 			ClipName:         det.Result.ClipName,
 			sourceSampleRate: det.Result.AudioSource.SampleRate,
+			modelName:        det.Result.Model.Name,
 			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 			PreRenderer:      p.preRenderer,
 			DetectionCtx:     detectionCtx,
@@ -2044,6 +2046,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 		ClipName:         det.Result.ClipName,
 		pcmData:          pcmData,
 		sourceSampleRate: det.Result.AudioSource.SampleRate,
+		modelName:        det.Result.Model.Name,
 		NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 		PreRenderer:      p.preRenderer,
 		DetectionCtx:     detectionCtx,

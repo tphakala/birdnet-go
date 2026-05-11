@@ -163,5 +163,30 @@ func (r *Resampler) Close() error {
 
 // String returns a human-readable description of the resampler for logging.
 func (r *Resampler) String() string {
-	return fmt.Sprintf("Resampler(%d→%d Hz)", r.fromRate, r.toRate)
+	return fmt.Sprintf("Resampler(%d->%d Hz)", r.fromRate, r.toRate)
+}
+
+// ResampleBytes is a one-shot convenience function that resamples raw 16-bit
+// PCM bytes from one sample rate to another. It creates a temporary Resampler,
+// processes the input, and returns an independent copy of the output.
+// Returns the input unchanged when fromRate == toRate.
+func ResampleBytes(pcm []byte, fromRate, toRate int) ([]byte, error) {
+	if fromRate == toRate {
+		return pcm, nil
+	}
+
+	r, err := NewResampler(fromRate, toRate)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = r.Close() }()
+
+	out, err := r.ResampleInto(pcm)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]byte, len(out))
+	copy(result, out)
+	return result, nil
 }

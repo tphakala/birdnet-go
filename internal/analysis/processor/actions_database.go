@@ -11,8 +11,10 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
@@ -378,12 +380,9 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		return err
 	}
 
-	exportRate := a.sourceSampleRate
-	if exportRate <= 0 {
-		exportRate = conf.SampleRate
-	}
+	exportRate, exportFormat, outputPath := a.resolveExportParams(outputPath)
 
-	if a.Settings.Realtime.Audio.Export.Type == "wav" {
+	if exportFormat == "wav" {
 		if err := convert.SavePCMDataToWAV(outputPath, a.pcmData, exportRate, conf.BitDepth); err != nil {
 			return err
 		}
@@ -392,7 +391,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		opts := &ffmpeg.ExportOptions{
 			PCMData:    a.pcmData,
 			OutputPath: outputPath,
-			Format:     exportSettings.Type,
+			Format:     exportFormat,
 			Bitrate:    exportSettings.Bitrate,
 			SampleRate: exportRate,
 			Channels:   conf.NumChannels,
@@ -433,7 +432,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		logger.String("detection_id", a.CorrelationID),
 		logger.String("clip_path", a.ClipName),
 		logger.Int64("file_size_bytes", fileSize),
-		logger.String("format", a.Settings.Realtime.Audio.Export.Type),
+		logger.String("format", exportFormat),
 		logger.Int("sample_rate", exportRate),
 		logger.String("operation", "audio_export_success"))
 
@@ -467,4 +466,54 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	}
 
 	return nil
+}
+
+// resolveExportParams determines the export sample rate, format, and output
+// path. Bird audio at rates above 48kHz is downsampled. Bat audio keeps the
+// native rate; if the configured format cannot carry it, the format is
+// silently switched to WAV.
+func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, format, path string) {
+	rate = a.sourceSampleRate
+	if rate <= 0 {
+		rate = conf.SampleRate
+	}
+
+	format = a.Settings.Realtime.Audio.Export.Type
+	path = outputPath
+	isBat := detection.ResolveModelType(a.modelName, "") == entities.ModelTypeBat
+
+	if rate > conf.SampleRate && !isBat {
+		resampled, err := resample.ResampleBytes(a.pcmData, rate, conf.SampleRate)
+		if err != nil {
+			GetLogger().Warn("Resampling failed, exporting at source rate",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.Int("source_rate", rate),
+				logger.Int("target_rate", conf.SampleRate),
+				logger.Error(err),
+				logger.String("operation", "audio_export_resample"))
+		} else {
+			a.pcmData = resampled
+			rate = conf.SampleRate
+		}
+	}
+
+	if isBat && rate > conf.SampleRate {
+		switch format {
+		case "mp3", "opus", "aac":
+			format = "wav"
+			path = replaceExtension(path, ".wav")
+		}
+	}
+
+	return rate, format, path
+}
+
+// replaceExtension swaps the file extension on path (e.g. ".mp3" -> ".wav").
+func replaceExtension(path, newExt string) string {
+	ext := filepath.Ext(path)
+	if ext == "" {
+		return path + newExt
+	}
+	return path[:len(path)-len(ext)] + newExt
 }
