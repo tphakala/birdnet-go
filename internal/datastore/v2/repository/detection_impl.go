@@ -1024,30 +1024,28 @@ func (r *detectionRepository) SavePredictions(ctx context.Context, detectionID u
 }
 
 // SaveModelContributions stores per-model contribution data for a detection.
-// Existing contributions for the detection are deleted first for idempotent reconciliation.
+// Existing contributions are deleted and new ones inserted atomically in a single
+// transaction for idempotent reconciliation.
 func (r *detectionRepository) SaveModelContributions(ctx context.Context, detectionID uint, contribs []*entities.DetectionModelContribution) error {
 	if len(contribs) == 0 {
 		return nil
 	}
 
-	if err := r.deleteModelContributions(ctx, detectionID); err != nil {
-		return err
-	}
-
-	for _, c := range contribs {
-		c.DetectionID = detectionID
-	}
-
 	return datastore.RetryOnLock(ctx, "v2_save_model_contributions", func() error {
-		return r.db.WithContext(ctx).Table(r.modelContributionsTable()).Create(&contribs).Error
-	}, r.metrics)
-}
+		return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := tx.Table(r.modelContributionsTable()).
+				Where("detection_id = ?", detectionID).
+				Delete(&entities.DetectionModelContribution{}).Error; err != nil {
+				return err
+			}
 
-func (r *detectionRepository) deleteModelContributions(ctx context.Context, detectionID uint) error {
-	return datastore.RetryOnLock(ctx, "v2_delete_model_contributions", func() error {
-		return r.db.WithContext(ctx).Table(r.modelContributionsTable()).
-			Where("detection_id = ?", detectionID).
-			Delete(&entities.DetectionModelContribution{}).Error
+			for _, c := range contribs {
+				c.ID = 0
+				c.DetectionID = detectionID
+			}
+
+			return tx.Table(r.modelContributionsTable()).Create(&contribs).Error
+		})
 	}, r.metrics)
 }
 
