@@ -95,6 +95,37 @@
     metrics: Record<string, MetricPoint[]>;
   }
 
+  interface ActiveModelResponse {
+    id: string;
+    name: string;
+    metric_key: string;
+    chunk_seconds: number;
+    sample_rate: number;
+  }
+
+  interface ModelMetrics {
+    id: string;
+    name: string;
+    metricKey: string;
+    chunkSeconds: number;
+    history: number[];
+    color: string;
+  }
+
+  const MODEL_COLORS: Record<string, string> = {
+    BirdNET: '#14b8a6',
+    Perch: '#f59e0b',
+    Bat: '#f43f5e',
+  };
+  const FALLBACK_COLORS = ['#6366f1', '#ec4899', '#84cc16', '#06b6d4'];
+
+  function assignModelColor(id: string, index: number): string {
+    for (const [prefix, color] of Object.entries(MODEL_COLORS)) {
+      if (id.startsWith(prefix)) return color;
+    }
+    return FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+  }
+
   interface ResourcesResponse {
     cpu_usage_percent: number;
     memory_total: number;
@@ -116,7 +147,7 @@
   let cpuHistory = $state<number[]>([]);
   let memoryHistory = $state<number[]>([]);
   let temperatureHistory = $state<number[]>([]);
-  let inferenceHistory = $state<number[]>([]);
+  let modelMetrics = $state<ModelMetrics[]>([]);
 
   // Toggle for showing all processes
   let showAllProcesses = $state(false);
@@ -155,19 +186,7 @@
     temperatureHistory.map(c => convertTemperature(c, temperatureUnit))
   );
 
-  // Inference sparkline derived values
-  let inferenceAvgMs = $derived(
-    inferenceHistory.length > 0 ? inferenceHistory[inferenceHistory.length - 1] : 0
-  );
-  let hasInferenceData = $derived(inferenceHistory.length > 0);
-
-  // BirdNET overlap setting — used to compute the inference threshold
-  // Threshold = (3.0 - overlap) * 1000 ms: inference must stay below this to keep up with real-time
-  const BIRDNET_CHUNK_SECONDS = 3.0;
-  let birdnetOverlap = $state<number | null>(null);
-  let inferenceThresholdMs = $derived(
-    birdnetOverlap != null ? (BIRDNET_CHUNK_SECONDS - birdnetOverlap) * 1000 : undefined
-  );
+  let birdnetOverlap = $state<number>(0);
 
   // Append a value to a history array, keeping it capped at MAX_HISTORY_POINTS
   function appendHistory(arr: number[], value: number): number[] {
@@ -175,13 +194,31 @@
     return next.length > MAX_HISTORY_POINTS ? next.slice(next.length - MAX_HISTORY_POINTS) : next;
   }
 
+  async function fetchActiveModels(): Promise<void> {
+    try {
+      const models = await api.get<ActiveModelResponse[]>('/api/v2/system/models');
+      modelMetrics = models.map((m, i) => ({
+        id: m.id,
+        name: m.name,
+        metricKey: m.metric_key,
+        chunkSeconds: m.chunk_seconds,
+        history: [],
+        color: assignModelColor(m.id, i),
+      }));
+    } catch {
+      logger.debug('Models endpoint not available');
+    }
+  }
+
   // Load initial metrics history for sparklines, then connect SSE if available.
   // Falls back to polling existing endpoints when metrics history isn't available.
   // The `active` flag prevents orphaned resources if the component unmounts mid-flight.
   async function loadMetricsHistory(active: { current: boolean }): Promise<void> {
     try {
+      const inferenceKeys = modelMetrics.map(m => m.metricKey).join(',');
+      const metricsParam = `cpu.total,memory.used_percent,cpu.temperature${inferenceKeys ? ',' + inferenceKeys : ''}`;
       const data = await api.get<MetricsHistoryResponse>(
-        `/api/v2/system/metrics/history?points=${MAX_HISTORY_POINTS}&metrics=cpu.total,memory.used_percent,cpu.temperature,birdnet.invoke_avg_ms`
+        `/api/v2/system/metrics/history?points=${MAX_HISTORY_POINTS}&metrics=${metricsParam}`
       );
 
       if (!active.current) return;
@@ -195,11 +232,12 @@
       if (data.metrics['cpu.temperature']) {
         temperatureHistory = data.metrics['cpu.temperature'].map((p: MetricPoint) => p.value);
       }
-      if (data.metrics['birdnet.invoke_avg_ms']) {
-        inferenceHistory = data.metrics['birdnet.invoke_avg_ms'].map((p: MetricPoint) => p.value);
+      for (const m of modelMetrics) {
+        if (data.metrics[m.metricKey]) {
+          m.history = data.metrics[m.metricKey].map((p: MetricPoint) => p.value);
+        }
       }
 
-      // Only connect SSE if the history endpoint succeeded and component is still mounted
       connectMetricsStream();
     } catch {
       if (!active.current) return;
@@ -279,8 +317,10 @@
 
   // Connect to metrics SSE stream for live updates
   function connectMetricsStream(): void {
+    const inferenceKeys = modelMetrics.map(m => m.metricKey).join(',');
+    const metricsParam = `cpu.total,memory.used_percent,cpu.temperature${inferenceKeys ? ',' + inferenceKeys : ''}`;
     metricsSSE = new ReconnectingEventSource(
-      '/api/v2/system/metrics/stream?metrics=cpu.total,memory.used_percent,cpu.temperature,birdnet.invoke_avg_ms',
+      `/api/v2/system/metrics/stream?metrics=${metricsParam}`,
       { max_retry_time: 30000 }
     );
 
@@ -299,14 +339,13 @@
         if (metrics['cpu.temperature']) {
           temperatureHistory = appendHistory(temperatureHistory, metrics['cpu.temperature'].value);
         }
-        if (metrics['birdnet.invoke_avg_ms']) {
-          inferenceHistory = appendHistory(
-            inferenceHistory,
-            metrics['birdnet.invoke_avg_ms'].value
-          );
+        for (const m of modelMetrics) {
+          if (metrics[m.metricKey]) {
+            m.history = appendHistory(m.history, metrics[m.metricKey].value);
+          }
         }
       } catch {
-        logger.debug('Failed to parse metrics SSE event');
+        // Ignore malformed events
       }
     });
   }
@@ -395,15 +434,12 @@
     }
   }
 
-  // Load BirdNET overlap setting for inference threshold calculation
   async function loadBirdnetOverlap(): Promise<void> {
     try {
       const data = await api.get<{ overlap?: number }>('/api/v2/settings/birdnet');
-      if (data.overlap != null) {
-        birdnetOverlap = data.overlap;
-      }
+      if (typeof data.overlap === 'number') birdnetOverlap = data.overlap;
     } catch {
-      // Settings may require auth or not be available — threshold just won't render
+      // Default overlap 0 is fine
     }
   }
 
@@ -456,8 +492,10 @@
   $effect(() => {
     componentActive.current = true;
 
-    // Load initial data, then load metrics history (which needs data for fallback seeding)
-    loadAllData().then(() => {
+    // Load initial data, fetch active models, then load metrics history
+    loadAllData().then(async () => {
+      if (!componentActive.current) return;
+      await fetchActiveModels();
       if (componentActive.current) {
         loadMetricsHistory(componentActive);
       }
@@ -519,10 +557,8 @@
       temperatureValue={temperatureDisplay}
       temperatureHistory={temperatureHistoryConverted}
       {tempSymbol}
-      {inferenceAvgMs}
-      {inferenceHistory}
-      {hasInferenceData}
-      {inferenceThresholdMs}
+      models={modelMetrics}
+      {birdnetOverlap}
     />
 
     <!-- System Details + Storage -->
