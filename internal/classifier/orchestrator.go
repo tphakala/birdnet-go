@@ -145,9 +145,12 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 }
 
 // Predict runs inference using the primary model.
-// Relies on BirdNET's internal locking.
+// Delegates to PredictModel for uniform locking and telemetry.
 func (o *Orchestrator) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
-	return o.primary.Predict(ctx, sample)
+	o.mu.RLock()
+	id := o.ModelInfo.ID
+	o.mu.RUnlock()
+	return o.PredictModel(ctx, id, sample)
 }
 
 // PredictModel runs inference on a specific model identified by modelID.
@@ -200,6 +203,7 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 			logger.Error(err),
 			logger.Duration("duration", duration))
 	} else {
+		globalInferenceCounters.RecordInvoke(modelID, duration.Microseconds())
 		log.Debug("PredictModel complete",
 			logger.String("model_id", modelID),
 			logger.Int("result_count", len(results)),
@@ -504,9 +508,12 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	o.mu.Unlock()
 
 	// Close the model instance outside the map lock. Acquire the per-model
-	// lock to wait for any in-flight inference to complete.
+	// lock to wait for any in-flight inference to complete before deleting
+	// the counter (prevents re-creation by in-flight RecordInvoke).
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
+
+	globalInferenceCounters.Delete(registryID)
 
 	if entry.instance != nil {
 		modelID := entry.instance.ModelID()

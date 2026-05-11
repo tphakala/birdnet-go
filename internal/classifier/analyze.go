@@ -89,9 +89,6 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		globalMetrics.RecordModelInvoke(bn.ModelInfo.ID, invokeDuration.Seconds())
 	}
 
-	// Record to atomic counters for ring buffer metrics
-	globalInferenceCounters.RecordInvoke(invokeDuration.Microseconds())
-
 	// Use optimized sigmoid function with buffer reuse
 	confidence := applySigmoidToPredictionsReuse(predictions, settings.BirdNET.Sensitivity, bn.confidenceBuffer)
 

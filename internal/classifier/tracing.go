@@ -38,12 +38,11 @@ var (
 	activeOperations int64
 )
 
-// globalInferenceCounters is always initialized and safe to use.
-// Tracks inference timing via lock-free atomics for the ring buffer metrics pipeline.
-var globalInferenceCounters = &inferencestats.Counters{}
+// globalInferenceCounters tracks per-model inference timing via lock-free atomics.
+var globalInferenceCounters = &inferencestats.CounterMap{}
 
-// GetInferenceCounters returns the shared inference counters for collector wiring.
-func GetInferenceCounters() *inferencestats.Counters {
+// GetInferenceCounters returns the shared per-model inference counters for collector wiring.
+func GetInferenceCounters() *inferencestats.CounterMap {
 	return globalInferenceCounters
 }
 

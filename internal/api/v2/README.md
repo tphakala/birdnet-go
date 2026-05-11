@@ -407,6 +407,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/system/audio/equalizer/config` | `GetEqualizerConfig`      | ✅   | Audio equalizer filter configuration |
 | GET    | `/system/audio/sources`          | `ListAudioSources`        | ✅   | Active audio sources (all types)     |
 | GET    | `/system/network-interfaces`     | `GetNetworkInterfaces`    | ✅   | IPv4 network interfaces for binding  |
+| GET    | `/system/models`                 | `GetActiveModels`         | ✅   | Active model metadata                |
 
 ### Events (`events.go`, `events_aggregation.go`)
 

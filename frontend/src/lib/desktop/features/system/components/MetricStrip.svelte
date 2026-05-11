@@ -3,6 +3,7 @@
   import { Cpu, MemoryStick, Thermometer, Brain } from '@lucide/svelte';
   import { formatBytesCompact } from '$lib/utils/formatters';
   import Sparkline from './Sparkline.svelte';
+  import type { ModelMetrics } from '$lib/desktop/features/system/types';
 
   interface Props {
     cpuPercent: number;
@@ -17,10 +18,8 @@
     temperatureValue: number;
     temperatureHistory: number[];
     tempSymbol: string;
-    inferenceAvgMs: number;
-    inferenceHistory: number[];
-    hasInferenceData: boolean;
-    inferenceThresholdMs?: number;
+    models: ModelMetrics[];
+    birdnetOverlap: number;
   }
 
   let {
@@ -36,28 +35,60 @@
     temperatureValue,
     temperatureHistory,
     tempSymbol,
-    inferenceAvgMs,
-    inferenceHistory,
-    hasInferenceData,
-    inferenceThresholdMs,
+    models,
+    birdnetOverlap,
   }: Props = $props();
 
   const sparklineColorCpu = '#3b82f6';
   const sparklineColorMemory = '#8b5cf6';
   const sparklineColorTemperature = '#f97316';
-  const sparklineColorInference = '#14b8a6';
 
   let hasTempHistory = $derived(temperatureHistory.length > 0);
   let tempMin = $derived(hasTempHistory ? Math.min(...temperatureHistory) : temperatureValue);
   let tempMax = $derived(hasTempHistory ? Math.max(...temperatureHistory) : temperatureValue);
 
-  // Inference status based on avg vs threshold: OK < 70%, WARNING 70-100%, CRITICAL >= 100%
-  let inferenceStatus = $derived.by(() => {
-    if (!hasInferenceData || inferenceThresholdMs == null) return null;
-    const ratio = inferenceAvgMs / inferenceThresholdMs;
-    if (ratio >= 1.0) return 'critical' as const;
-    if (ratio >= 0.7) return 'warning' as const;
-    return 'ok' as const;
+  let modelsWithData = $derived(models.filter(m => m.history.length > 0));
+  let hasInferenceData = $derived(modelsWithData.length > 0);
+
+  function getThresholdMs(model: ModelMetrics): number {
+    let seconds = model.chunkSeconds;
+    if (model.id.startsWith('BirdNET')) {
+      seconds = model.chunkSeconds - birdnetOverlap;
+    }
+    return Math.max(seconds, 0.001) * 1000;
+  }
+
+  type StatusLevel = 'ok' | 'warning' | 'critical';
+
+  function getModelStatus(model: ModelMetrics): StatusLevel | null {
+    if (model.history.length === 0) return null;
+    const avgMs = model.history[model.history.length - 1];
+    const threshold = getThresholdMs(model);
+    const ratio = avgMs / threshold;
+    if (ratio >= 1.0) return 'critical';
+    if (ratio >= 0.7) return 'warning';
+    return 'ok';
+  }
+
+  let worstStatus = $derived.by((): StatusLevel | null => {
+    const priority: Record<StatusLevel, number> = { ok: 0, warning: 1, critical: 2 };
+    let worst: StatusLevel | null = null;
+    for (const m of models) {
+      const s = getModelStatus(m);
+      if (s == null) continue;
+      if (worst == null || priority[s] > priority[worst]) worst = s;
+    }
+    return worst;
+  });
+
+  let inferenceDatasets = $derived(modelsWithData.map(m => ({ data: m.history, color: m.color })));
+
+  // Prefer BirdNET for the header display; fall back to first model with data
+  let primaryAvgMs = $derived.by(() => {
+    if (modelsWithData.length === 0) return 0;
+    const birdnet = modelsWithData.find(m => m.id.startsWith('BirdNET'));
+    const primary = birdnet ?? modelsWithData[0];
+    return primary.history[primary.history.length - 1];
   });
 </script>
 
@@ -121,7 +152,7 @@
         {#if temperatureAvailable}
           {temperatureValue.toFixed(1)}{tempSymbol}
         {:else}
-          —
+          -
         {/if}
       </span>
     </div>
@@ -152,37 +183,44 @@
         <span class="text-xs font-medium text-muted">{t('system.metrics.inference')}</span>
       </div>
       <div class="flex items-center gap-2">
-        {#if inferenceStatus === 'ok'}
+        {#if worstStatus === 'ok'}
           <span
             class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-success"
             >{t('system.metrics.statusOk')}</span
           >
-        {:else if inferenceStatus === 'warning'}
+        {:else if worstStatus === 'warning'}
           <span
             class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-warning"
             >{t('system.metrics.statusWarning')}</span
           >
-        {:else if inferenceStatus === 'critical'}
+        {:else if worstStatus === 'critical'}
           <span class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-error"
             >{t('system.metrics.statusCritical')}</span
           >
         {/if}
         <span class="font-mono tabular-nums text-lg font-semibold">
           {#if hasInferenceData}
-            {inferenceAvgMs.toFixed(0)}ms
+            {primaryAvgMs.toFixed(0)}ms
           {:else}
-            —
+            -
           {/if}
         </span>
       </div>
     </div>
     {#if hasInferenceData}
       <div class="flex-1 min-h-[28px]">
-        <Sparkline data={inferenceHistory} color={sparklineColorInference} />
+        <Sparkline datasets={inferenceDatasets} />
       </div>
-      <div class="flex justify-between mt-2 text-[10px] text-muted">
-        <span>{t('system.metrics.avgTime')} {inferenceAvgMs.toFixed(1)}ms</span>
-        <span>{inferenceHistory.length} {t('system.metrics.samples')}</span>
+      <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-[10px] text-muted">
+        {#each modelsWithData as m (m.id)}
+          <span class="flex items-center gap-1">
+            <span class="inline-block w-1.5 h-1.5 rounded-full" style:background={m.color}></span>
+            {m.name}
+            <span class="font-mono tabular-nums"
+              >{m.history[m.history.length - 1].toFixed(0)}ms</span
+            >
+          </span>
+        {/each}
       </div>
     {:else}
       <div class="flex-1 min-h-[28px] flex items-center">

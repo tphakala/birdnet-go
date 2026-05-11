@@ -84,6 +84,14 @@ func NewModelManager(modelsDir string, orchestrator *Orchestrator, settings *con
 	}
 }
 
+// ModelInfos returns ModelInfo for all currently loaded models.
+func (mm *ModelManager) ModelInfos() []ModelInfo {
+	if mm.orchestrator == nil {
+		return nil
+	}
+	return mm.orchestrator.ModelInfos()
+}
+
 // ScanInstalled scans modelsDir for subdirectories matching catalog IDs. For
 // each matching subdirectory, it checks whether the ONNX model file (the
 // CatalogFile with Role "model") exists on disk. If found, the model is
