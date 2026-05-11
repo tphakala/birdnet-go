@@ -316,6 +316,12 @@ func (cb *CaptureBuffer) extractSegment(startIdx, endIdx int) []byte {
 	return seg
 }
 
+// SampleRate returns the capture sample rate in Hz.
+// This value is immutable after construction.
+func (cb *CaptureBuffer) SampleRate() int {
+	return cb.sampleRate
+}
+
 // StartTime returns the wall-clock time corresponding to the first byte of the
 // buffer. Returns the zero time if no data has been written yet.
 //
