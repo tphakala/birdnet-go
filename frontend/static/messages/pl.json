@@ -3000,6 +3000,7 @@
         "sampleRateLabel": "Częstotliwość próbkowania",
         "sampleRateUnverified": "Nie można zweryfikować obsługiwanych częstotliwości dla tego urządzenia",
         "sampleRateProbing": "Wykrywanie obsługiwanych częstotliwości...",
+        "sampleRateExclusive": "Częstotliwości powyżej 48 kHz używają wyłącznego dostępu do urządzenia w systemie Linux, uniemożliwiając innym aplikacjom współdzielenie karty dźwiękowej",
         "modelLabel": "Modele detekcji",
         "modelHelp": "Wybierz modele AI dla tego źródła audio",
         "deleteConfirm": "Usunąć to źródło karty dźwiękowej?",

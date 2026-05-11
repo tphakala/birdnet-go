@@ -161,3 +161,5 @@ require (
 )
 
 replace github.com/markbates/goth => github.com/tphakala/goth v0.0.0-20260315123917-08c3db6a364a
+
+replace github.com/gen2brain/malgo => github.com/tphakala/malgo v0.11.25-birdnet.1

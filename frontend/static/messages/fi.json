@@ -2767,6 +2767,7 @@
         "sampleRateLabel": "Näytteenottotaajuus",
         "sampleRateUnverified": "Tuettuja taajuuksia ei voitu vahvistaa tälle laitteelle",
         "sampleRateProbing": "Tunnistetaan tuettuja taajuuksia...",
+        "sampleRateExclusive": "Yli 48 kHz näytteenottotaajuudet käyttävät yksinoikeudellista laitepääsyä Linuxissa, estäen muita sovelluksia jakamasta äänikorttia",
         "modelLabel": "Tunnistusmallit",
         "modelHelp": "Valitse tässä äänilähteessä käytettävät tekoälymallit",
         "deleteConfirm": "Poistetaanko tämä äänikorttilähtö?",

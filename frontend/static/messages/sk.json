@@ -2766,6 +2766,51 @@
           "refresh": "Obnoviť zariadenia"
         }
       },
+      "soundCards": {
+        "summary": "{count} zdroj(e/ov) zvukovej karty",
+        "addSource": "Pridať zvukovú kartu",
+        "nameLabel": "Názov zdroja",
+        "namePlaceholder": "napr. Mikrofón v prednej záhrade",
+        "nameHelp": "Popisný názov pre tento zvukový zdroj",
+        "deviceLabel": "Zvukové zariadenie",
+        "devicePlaceholder": "Vyberte zvukové zariadenie",
+        "gainLabel": "Zosilnenie (dB)",
+        "gainHelp": "Úprava zosilnenia zvukového vstupu (-40 až +40 dB)",
+        "sampleRateLabel": "Vzorkovacia frekvencia",
+        "sampleRateUnverified": "Podporované frekvencie nebolo možné overiť pre toto zariadenie",
+        "sampleRateProbing": "Zisťovanie podporovaných frekvencií...",
+        "sampleRateExclusive": "Frekvencie nad 48 kHz používajú výhradný prístup k zariadeniu v Linuxe, čím bránia iným aplikáciám zdieľať zvukovú kartu",
+        "modelLabel": "Detekčné modely",
+        "modelHelp": "Vyberte, ktoré AI modely sa majú spustiť na tomto zvukovom zdroji",
+        "deleteConfirm": "Odstrániť tento zdroj zvukovej karty?",
+        "emptyState": {
+          "title": "Nie sú nakonfigurované žiadne zdroje zvukovej karty",
+          "description": "Pridajte zdroj zvukovej karty pre začatie nahrávania zvuku na detekciu vtákov.",
+          "hintsTitle": "Začíname",
+          "hints": {
+            "device": "Vyberte z dostupných zvukových vstupných zariadení vo vašom systéme",
+            "multiple": "Môžete nakonfigurovať viacero zvukových kariet pre rôzne umiestnenia",
+            "model": "Každý zdroj môže používať iný detekčný model (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Predvolený)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Detekcia netopierov"
+        },
+        "errors": {
+          "nameRequired": "Názov zdroja je povinný",
+          "deviceRequired": "Zvukové zariadenie je povinné",
+          "duplicateName": "Zdroj s týmto názvom už existuje",
+          "duplicateDevice": "Toto zariadenie je už nakonfigurované"
+        },
+        "compatibility": {
+          "minSampleRate": "Vyžaduje minimálne {rate}kHz vzorkovaciu frekvenciu",
+          "recommendedSampleRate": "{rate}kHz odporúčané pre najlepšie výsledky",
+          "atLeastOneModel": "Musí byť vybraný aspoň jeden model"
+        }
+      },
       "noSources": {
         "warning": "Žiadne nakonfigurované zdroje zvuku",
         "description": "BirdNET-Go potrebuje zvukový vstup na detekciu vtákov. Nakonfigurujte aspoň jeden zdroj na karte Zvuková karta alebo Streamy."

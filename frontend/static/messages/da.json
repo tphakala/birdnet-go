@@ -2796,6 +2796,51 @@
           "refresh": "Opdater enheder"
         }
       },
+      "soundCards": {
+        "summary": "{count} lydkortkilde(r)",
+        "addSource": "Tilføj lydkort",
+        "nameLabel": "Kildenavn",
+        "namePlaceholder": "f.eks. Mikrofon i forhaven",
+        "nameHelp": "Et beskrivende navn til denne lydkilde",
+        "deviceLabel": "Lydenhed",
+        "devicePlaceholder": "Vælg en lydenhed",
+        "gainLabel": "Forstærkning (dB)",
+        "gainHelp": "Justering af lydindgangsforstærkning (-40 til +40 dB)",
+        "sampleRateLabel": "Samplingsfrekvens",
+        "sampleRateUnverified": "Understøttede frekvenser kunne ikke verificeres for denne enhed",
+        "sampleRateProbing": "Registrerer understøttede frekvenser...",
+        "sampleRateExclusive": "Frekvenser over 48 kHz bruger eksklusiv enhedsadgang på Linux, hvilket forhindrer andre programmer i at dele lydkortet",
+        "modelLabel": "Detektionsmodeller",
+        "modelHelp": "Vælg hvilke AI-modeller der skal køres på denne lydkilde",
+        "deleteConfirm": "Fjern denne lydkortkilde?",
+        "emptyState": {
+          "title": "Ingen lydkortkilder konfigureret",
+          "description": "Tilføj en lydkortkilde for at begynde at optage lyd til fugledetektering.",
+          "hintsTitle": "Kom i gang",
+          "hints": {
+            "device": "Vælg blandt tilgængelige lydindgangsenheder på dit system",
+            "multiple": "Du kan konfigurere flere lydkort til forskellige placeringer",
+            "model": "Hver kilde kan bruge en anden detektionsmodel (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Standard)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Flagermusdetektering"
+        },
+        "errors": {
+          "nameRequired": "Kildenavn er påkrævet",
+          "deviceRequired": "Lydenhed er påkrævet",
+          "duplicateName": "En kilde med dette navn findes allerede",
+          "duplicateDevice": "Denne enhed er allerede konfigureret"
+        },
+        "compatibility": {
+          "minSampleRate": "Kræver mindst {rate}kHz optagelsesfrekvens",
+          "recommendedSampleRate": "{rate}kHz anbefalet for bedste resultater",
+          "atLeastOneModel": "Mindst én model skal vælges"
+        }
+      },
       "noSources": {
         "warning": "Ingen lydkilder konfigureret",
         "description": "BirdNET-Go har brug for en lydindgang for at registrere fugle. Konfigurer venligst mindst én kilde under fanen Lydkort eller Strømme."

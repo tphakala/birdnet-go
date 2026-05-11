@@ -2766,6 +2766,51 @@
           "refresh": "Aggiorna Dispositivi"
         }
       },
+      "soundCards": {
+        "summary": "{count} sorgente/i scheda audio",
+        "addSource": "Aggiungi scheda audio",
+        "nameLabel": "Nome sorgente",
+        "namePlaceholder": "es. Microfono giardino anteriore",
+        "nameHelp": "Un nome descrittivo per questa sorgente audio",
+        "deviceLabel": "Dispositivo audio",
+        "devicePlaceholder": "Seleziona un dispositivo audio",
+        "gainLabel": "Guadagno (dB)",
+        "gainHelp": "Regolazione del guadagno dell'ingresso audio (da -40 a +40 dB)",
+        "sampleRateLabel": "Frequenza di campionamento",
+        "sampleRateUnverified": "Le frequenze supportate non possono essere verificate per questo dispositivo",
+        "sampleRateProbing": "Rilevamento frequenze supportate...",
+        "sampleRateExclusive": "Le frequenze superiori a 48 kHz utilizzano l'accesso esclusivo al dispositivo su Linux, impedendo ad altre applicazioni di condividere la scheda audio",
+        "modelLabel": "Modelli di rilevamento",
+        "modelHelp": "Seleziona quali modelli AI eseguire su questa sorgente audio",
+        "deleteConfirm": "Rimuovere questa sorgente scheda audio?",
+        "emptyState": {
+          "title": "Nessuna sorgente scheda audio configurata",
+          "description": "Aggiungi una sorgente scheda audio per iniziare a catturare l'audio per il rilevamento degli uccelli.",
+          "hintsTitle": "Per iniziare",
+          "hints": {
+            "device": "Seleziona tra i dispositivi di ingresso audio disponibili sul tuo sistema",
+            "multiple": "Puoi configurare più schede audio per posizioni diverse",
+            "model": "Ogni sorgente può utilizzare un modello di rilevamento diverso (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Predefinito)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Rilevamento pipistrelli"
+        },
+        "errors": {
+          "nameRequired": "Il nome della sorgente è obbligatorio",
+          "deviceRequired": "Il dispositivo audio è obbligatorio",
+          "duplicateName": "Esiste già una sorgente con questo nome",
+          "duplicateDevice": "Questo dispositivo è già configurato"
+        },
+        "compatibility": {
+          "minSampleRate": "Richiede almeno {rate}kHz di frequenza di campionamento",
+          "recommendedSampleRate": "{rate}kHz consigliato per i migliori risultati",
+          "atLeastOneModel": "È necessario selezionare almeno un modello"
+        }
+      },
       "noSources": {
         "warning": "Nessuna Sorgente Audio Configurata",
         "description": "BirdNET-Go necessita di un input audio per rilevare uccelli. Per favore configura almeno una sorgente nella scheda Scheda Audio o Flussi."

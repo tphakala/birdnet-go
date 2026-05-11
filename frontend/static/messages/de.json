@@ -2994,6 +2994,7 @@
         "sampleRateLabel": "Abtastrate",
         "sampleRateUnverified": "Unterstützte Raten konnten für dieses Gerät nicht überprüft werden",
         "sampleRateProbing": "Unterstützte Raten werden erkannt...",
+        "sampleRateExclusive": "Raten über 48 kHz verwenden exklusiven Gerätezugriff unter Linux, wodurch andere Anwendungen die Soundkarte nicht gemeinsam nutzen können",
         "modelLabel": "Erkennungsmodelle",
         "modelHelp": "KI-Modelle für diese Audioquelle auswählen",
         "deleteConfirm": "Diese Soundkartenquelle entfernen?",

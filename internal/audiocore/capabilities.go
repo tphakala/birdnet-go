@@ -173,6 +173,12 @@ func probeByInit(malgoCtx *malgo.AllocatedContext, deviceInfo *malgo.DeviceInfo,
 		// Use S32 format for rates above the standard BirdNET rate.
 		if rate > conf.SampleRate {
 			deviceCfg.Capture.Format = malgo.FormatS32
+			if runtime.GOOS == captureOSLinux {
+				deviceCfg.Capture.ShareMode = malgo.Exclusive
+				if nativeCh := nativeCaptureChannels(deviceInfo); nativeCh > 0 {
+					deviceCfg.Capture.Channels = nativeCh
+				}
+			}
 		}
 
 		callbacks := malgo.DeviceCallbacks{}
