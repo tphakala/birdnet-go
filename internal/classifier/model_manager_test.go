@@ -401,8 +401,7 @@ func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
 	subdir := filepath.Join(modelsDir, entry.ID)
 	require.NoError(t, os.MkdirAll(subdir, 0o755))
 
-	// Create model files on disk.
-	var modelPath string
+	// Create all catalog files on disk.
 	for _, f := range entry.Files {
 		var dir string
 		if f.Role == RoleEmbeddings {
@@ -411,11 +410,7 @@ func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
 			dir = subdir
 		}
 		require.NoError(t, os.MkdirAll(dir, 0o755))
-		path := filepath.Join(dir, f.LocalName)
-		require.NoError(t, os.WriteFile(path, []byte("data"), 0o644))
-		if f.Role == RoleModel {
-			modelPath = path
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("data"), 0o644))
 	}
 
 	// Orchestrator with empty models map: IsModelLoaded returns false,
@@ -432,9 +427,22 @@ func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
 	require.NoError(t, err, "Uninstall must succeed when model is not loaded")
 	assert.False(t, mm.IsInstalled(entry.ID), "model must be removed from installed map")
 
-	// Model file must be deleted; labels are retained by design.
-	_, statErr := os.Stat(modelPath)
-	assert.True(t, os.IsNotExist(statErr), "model ONNX file must be deleted after uninstall")
+	// Verify per-role file expectations after uninstall.
+	for _, f := range entry.Files {
+		var path string
+		if f.Role == RoleEmbeddings {
+			path = filepath.Join(modelsDir, "shared", f.LocalName)
+		} else {
+			path = filepath.Join(subdir, f.LocalName)
+		}
+		_, statErr := os.Stat(path)
+		switch f.Role {
+		case RoleModel, RoleData:
+			assert.True(t, os.IsNotExist(statErr), "%s file %s must be deleted after uninstall", f.Role, f.LocalName)
+		case RoleLabels:
+			assert.NoError(t, statErr, "labels file %s must be retained after uninstall", f.LocalName)
+		}
+	}
 }
 
 func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
