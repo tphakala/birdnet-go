@@ -390,6 +390,117 @@ func TestModelManager_Install_ConcurrentDownloadRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "already being downloaded")
 }
 
+func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok, "expected perch-v2 catalog entry to exist")
+	require.NotEmpty(t, entry.RegistryID, "perch-v2 must have a RegistryID for this test")
+
+	modelsDir := t.TempDir()
+	subdir := filepath.Join(modelsDir, entry.ID)
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+
+	// Create all catalog files on disk.
+	for _, f := range entry.Files {
+		var dir string
+		if f.Role == RoleEmbeddings {
+			dir = filepath.Join(modelsDir, "shared")
+		} else {
+			dir = subdir
+		}
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("data"), 0o644))
+	}
+
+	// Orchestrator with empty models map: IsModelLoaded returns false,
+	// so Uninstall skips the unload step and proceeds to delete files.
+	orch := &Orchestrator{
+		models: make(map[string]*modelEntry),
+	}
+
+	mm := NewModelManager(modelsDir, orch, nil)
+	mm.ScanInstalled()
+	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before uninstall")
+
+	err := mm.Uninstall(entry.ID)
+	require.NoError(t, err, "Uninstall must succeed when model is not loaded")
+	assert.False(t, mm.IsInstalled(entry.ID), "model must be removed from installed map")
+
+	// Verify per-role file expectations after uninstall.
+	for _, f := range entry.Files {
+		var path string
+		if f.Role == RoleEmbeddings {
+			path = filepath.Join(modelsDir, "shared", f.LocalName)
+		} else {
+			path = filepath.Join(subdir, f.LocalName)
+		}
+		_, statErr := os.Stat(path)
+		switch f.Role {
+		case RoleModel, RoleData:
+			assert.True(t, os.IsNotExist(statErr), "%s file %s must be deleted after uninstall", f.Role, f.LocalName)
+		case RoleLabels:
+			assert.NoError(t, statErr, "labels file %s must be retained after uninstall", f.LocalName)
+		}
+	}
+}
+
+func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok, "expected perch-v2 catalog entry to exist")
+	require.NotEmpty(t, entry.RegistryID, "perch-v2 must have a RegistryID for this test")
+
+	modelsDir := t.TempDir()
+	subdir := filepath.Join(modelsDir, entry.ID)
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+
+	for _, f := range entry.Files {
+		var dir string
+		if f.Role == RoleEmbeddings {
+			dir = filepath.Join(modelsDir, "shared")
+		} else {
+			dir = subdir
+		}
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("data"), 0o644))
+	}
+
+	// Orchestrator with the model present in the models map AND set as
+	// primary. IsModelLoaded returns true, but UnloadModel refuses to
+	// unload the primary model, simulating a "model still in use" failure.
+	primaryBN := &BirdNET{ModelInfo: ModelInfo{ID: entry.RegistryID}}
+	orch := &Orchestrator{
+		models: map[string]*modelEntry{
+			entry.RegistryID: {instance: primaryBN},
+		},
+		primary: primaryBN,
+	}
+
+	mm := NewModelManager(modelsDir, orch, nil)
+	mm.ScanInstalled()
+	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before uninstall attempt")
+
+	err := mm.Uninstall(entry.ID)
+	require.Error(t, err, "Uninstall must return an error when UnloadModel fails")
+	assert.Contains(t, err.Error(), "model still in use")
+
+	assert.True(t, mm.IsInstalled(entry.ID), "model must remain installed after failed uninstall")
+
+	// All files must still exist on disk.
+	for _, f := range entry.Files {
+		var path string
+		if f.Role == RoleEmbeddings {
+			path = filepath.Join(modelsDir, "shared", f.LocalName)
+		} else {
+			path = filepath.Join(subdir, f.LocalName)
+		}
+		_, statErr := os.Stat(path)
+		assert.NoError(t, statErr, "file %s must still exist after aborted uninstall", f.LocalName)
+	}
+}
+
 func TestBuildHuggingFaceURL(t *testing.T) {
 	t.Parallel()
 
