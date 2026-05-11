@@ -192,7 +192,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	sourceIDs := p.setupAudioSources(apiAudioLevelChan, "start")
 
 	if len(sourceIDs) == 0 {
-		GetLogger().Warn("starting without active audio sources",
+		audiocore.GetLogger().Warn("starting without active audio sources",
 			logger.Int("rtsp_streams", len(settings.Realtime.RTSP.Streams)),
 			logger.Int("audio_sources", len(settings.Realtime.Audio.Sources)),
 			logger.String("operation", "startup_audio_check"))
@@ -202,12 +202,12 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	// when the watchdog force-resets a stuck stream.
 	p.engine.FFmpegManager().SetOnStreamReset(func(newSourceID string) {
 		if err := p.bufferMgr.AddMonitor(newSourceID); err != nil {
-			GetLogger().Warn("failed to add monitor after watchdog stream reset",
+			audiocore.GetLogger().Warn("failed to add monitor after watchdog stream reset",
 				logger.String("source_id", newSourceID),
 				logger.Error(err),
 				logger.String("operation", "watchdog_add_monitor"))
 		} else {
-			GetLogger().Info("started analysis monitor after watchdog stream reset",
+			audiocore.GetLogger().Info("started analysis monitor after watchdog stream reset",
 				logger.String("source_id", newSourceID),
 				logger.String("operation", "watchdog_add_monitor"))
 		}
@@ -231,7 +231,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 
 	// RTSP health monitoring is built into the FFmpeg manager.
 	if len(settings.Realtime.RTSP.Streams) > 0 {
-		GetLogger().Info("RTSP streams will be monitored by FFmpeg manager",
+		audiocore.GetLogger().Info("RTSP streams will be monitored by FFmpeg manager",
 			logger.Int("stream_count", len(settings.Realtime.RTSP.Streams)),
 			logger.String("operation", "rtsp_monitoring_setup"))
 	}
@@ -355,7 +355,7 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 // restartAudioCapture restarts the audio capture by removing and re-adding
 // all sources via the AudioEngine.
 func (p *AudioPipelineService) restartAudioCapture() {
-	GetLogger().Info("restarting audio capture",
+	audiocore.GetLogger().Info("restarting audio capture",
 		logger.String("operation", "restart_audio_capture"))
 
 	// Remove all existing sources.
@@ -371,7 +371,7 @@ func (p *AudioPipelineService) restartAudioCapture() {
 func (p *AudioPipelineService) removeAllSources(operation string) {
 	for _, src := range p.engine.Registry().List() {
 		if err := p.engine.RemoveSource(src.ID); err != nil {
-			GetLogger().Warn("failed to remove source",
+			audiocore.GetLogger().Warn("failed to remove source",
 				logger.String("source_id", src.ID),
 				logger.Error(err),
 				logger.String("operation", operation))
@@ -390,7 +390,7 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 // The audioLevelChan receives bridged audio level data for the API SSE endpoint.
 // The operation parameter is used in log messages to distinguish callers.
 func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.AudioLevelData, operation string) []string {
-	log := GetLogger()
+	log := audiocore.GetLogger()
 
 	// Add audio sources via engine: this registers sources, allocates buffers,
 	// and starts capture (FFmpeg streams or device capture).
@@ -445,7 +445,7 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 // is also idempotent: sources that already have a tracked consumer are skipped,
 // so the caller may include previously registered source IDs.
 func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, operation string) {
-	log := GetLogger()
+	log := audiocore.GetLogger()
 	settings := conf.Setting()
 	if !settings.Realtime.Audio.SoundLevel.Enabled {
 		return
@@ -630,7 +630,7 @@ func (p *AudioPipelineService) removeAllSoundLevelConsumers(operation string) {
 	p.soundLevelConsumers = make(map[string]string)
 	p.soundLevelMu.Unlock()
 
-	log := GetLogger()
+	log := audiocore.GetLogger()
 	router := p.engine.Router()
 	for sid, cid := range toRemove {
 		router.RemoveRoute(sid, cid)
@@ -647,7 +647,7 @@ func (p *AudioPipelineService) removeAllSoundLevelConsumers(operation string) {
 // only the models assigned to that source. When a source has no configured
 // models (empty slice), the primary model is used as a fallback.
 func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, sourceModelMap map[string][]string, audioLevelChan chan audiocore.AudioLevelData, operation string) {
-	log := GetLogger()
+	log := audiocore.GetLogger()
 
 	// Build a lookup of all loaded model infos keyed by registry ID.
 	modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
