@@ -190,6 +190,34 @@ func (mm *ModelManager) ScanInstalled() {
 			}
 		}
 		mm.settingsMu.Unlock()
+
+		mm.loadInstalledModels(log)
+	}
+}
+
+// loadInstalledModels loads any installed models that are not yet loaded in
+// the orchestrator. Called after ScanInstalled syncs Models.Enabled, since
+// the orchestrator was created before the scan ran.
+func (mm *ModelManager) loadInstalledModels(log logger.Logger) {
+	if mm.orchestrator == nil {
+		return
+	}
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+	for catalogID := range mm.installed {
+		entry, found := GetCatalogEntry(catalogID)
+		if !found || entry.RegistryID == "" {
+			continue
+		}
+		if mm.orchestrator.IsModelLoaded(entry.RegistryID) {
+			continue
+		}
+		if err := mm.orchestrator.LoadModel(entry.RegistryID); err != nil {
+			log.Warn("failed to load installed model at startup",
+				logger.String("catalog_id", catalogID),
+				logger.String("registry_id", entry.RegistryID),
+				logger.Error(err))
+		}
 	}
 }
 

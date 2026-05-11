@@ -359,6 +359,18 @@ func (o *Orchestrator) Delete() {
 	o.models = nil
 }
 
+// IsModelLoaded returns true if a model with the given registry ID is
+// currently loaded in the orchestrator.
+func (o *Orchestrator) IsModelLoaded(registryID string) bool {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	if o.models == nil {
+		return false
+	}
+	_, exists := o.models[registryID]
+	return exists
+}
+
 // LoadModel dynamically loads a model into the Orchestrator at runtime.
 // Called by ModelManager after a successful install. The method delegates
 // to the appropriate model loader (loadPerch, loadBat, etc.) based on
