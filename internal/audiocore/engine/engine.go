@@ -423,6 +423,11 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		return fmt.Errorf("reconfigure source: %w: %s", audiocore.ErrSourceNotFound, sourceID)
 	}
 
+	e.logger.Info("reconfiguring audio source",
+		logger.String("source_id", sourceID),
+		logger.String("device", newCfg.ConnectionString),
+		logger.Int("sample_rate", newCfg.SampleRate))
+
 	// 1. Stop existing capture.
 	if isStreamType(src.Type) {
 		_ = e.ffmpegMgr.StopStream(sourceID)
