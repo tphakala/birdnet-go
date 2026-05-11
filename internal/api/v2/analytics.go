@@ -1056,12 +1056,14 @@ type AnalyticsSourceListResponse struct {
 // picker on the analytics page. Always returns 200 with an empty list rather than 404 when no
 // detections exist, so the frontend can render an "All sources" picker without special-casing.
 //
-// Public endpoint exposing source metadata: per the API v2 guideline (matching
-// StreamAudioLevel), unauthenticated clients receive an anonymized DisplayName and no
-// SourceURI / NodeName. Source URIs may contain credentials (e.g. rtsp://user:pass@host),
-// and display names / node names can identify physical camera locations — neither belongs
-// in a response to an unauthenticated request. The numeric ID and detection count are
-// kept because they're non-informational and the picker needs them to function.
+// This endpoint returns the same source metadata that GET /api/v2/detections already exposes
+// for every detection in its `source` field (id = SourceURI, displayName, type). Anonymizing
+// only here while detections.go ships the full URI to every unauthenticated request would be
+// security theater — a public viewer can read the detection list and learn the same things.
+// If upstream tightens that exposure later, this endpoint should follow the same model in
+// the same change rather than diverging unilaterally. Operators who do not want any of this
+// surface area public can put their dashboard behind an authenticator (basic auth, OAuth,
+// or a reverse proxy ACL); the API itself does not differentiate here, matching detections.
 func (c *Controller) ListAnalyticsSources(ctx echo.Context) error {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
 	defer cancel()
@@ -1071,43 +1073,25 @@ func (c *Controller) ListAnalyticsSources(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to list analytics sources", http.StatusInternalServerError)
 	}
 
-	isAuthenticated := c.isClientAuthenticated(ctx)
 	resp := AnalyticsSourceListResponse{Sources: make([]AnalyticsSourceResponse, 0, len(sources))}
 	for i := range sources {
 		s := &sources[i]
-		entry := AnalyticsSourceResponse{
+		resp.Sources = append(resp.Sources, AnalyticsSourceResponse{
 			ID:             s.ID,
+			DisplayName:    s.DisplayName,
+			SourceURI:      s.SourceURI,
+			SourceType:     s.SourceType,
+			NodeName:       s.NodeName,
 			DetectionCount: s.DetectionCount,
-		}
-		if isAuthenticated {
-			entry.DisplayName = s.DisplayName
-			entry.SourceURI = s.SourceURI
-			entry.SourceType = s.SourceType
-			entry.NodeName = s.NodeName
-		} else {
-			// Withhold SourceType too: "rtsp" / "alsa" / "file" reveals install topology
-			// (network camera vs local soundcard vs file replay) to anonymous viewers.
-			entry.DisplayName = anonymizeAnalyticsSourceName(s.ID)
-		}
-		resp.Sources = append(resp.Sources, entry)
+		})
 	}
 
 	c.logInfoIfEnabled("Analytics sources listed",
 		logger.Int("count", len(resp.Sources)),
-		logger.Bool("authenticated", isAuthenticated),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
 	return ctx.JSON(http.StatusOK, resp)
-}
-
-// anonymizeAnalyticsSourceName returns a stable, non-informational label for an audio source
-// used in responses to unauthenticated clients. The numeric `audio_sources.id` is fine to
-// expose (it's an opaque DB primary key), and using it keeps picker selections stable across
-// requests. Mirrors the "camera-<prefix>" pattern used by StreamAudioLevel's anonymizer for
-// stream sources, adapted to the DB-rooted ID we have here.
-func anonymizeAnalyticsSourceName(id uint) string {
-	return fmt.Sprintf("source-%d", id)
 }
 
 // GetTimeOfDayDistribution handles GET /api/v2/analytics/time/distribution/hourly
