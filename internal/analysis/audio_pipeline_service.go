@@ -785,7 +785,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 // changed are touched — unchanged streams keep their capture buffers and
 // source IDs intact.
 func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan audiocore.AudioLevelData) {
-	log := GetLogger()
+	log := GetAudiocoreLogger()
 
 	// Build desired config keyed by connection string, including model IDs.
 	desiredConfigs := p.buildSourceConfigsWithModels()
