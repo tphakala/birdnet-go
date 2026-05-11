@@ -3,62 +3,97 @@
   import { line, area, curveMonotoneX } from 'd3-shape';
   import { extent } from 'd3-array';
 
+  interface Dataset {
+    data: number[];
+    color: string;
+  }
+
   interface Props {
     data?: number[];
     color?: string;
-    /** Optional threshold value — renders a dashed horizontal line */
+    datasets?: Dataset[];
     threshold?: number;
-    /** Color for the threshold line */
     thresholdColor?: string;
-    /** Internal viewBox width for path calculations */
     viewWidth?: number;
-    /** Internal viewBox height for path calculations */
     viewHeight?: number;
   }
 
   let {
     data = [],
     color = 'var(--color-primary)',
+    datasets,
     threshold,
     thresholdColor = '#ef4444',
     viewWidth = 200,
     viewHeight = 40,
   }: Props = $props();
 
-  let paths = $derived.by(() => {
-    if (data.length < 2) return { line: '', area: '', thresholdY: undefined as number | undefined };
+  let effectiveDatasets = $derived.by((): Dataset[] => {
+    if (datasets && datasets.length > 0) return datasets;
+    if (data.length > 0) return [{ data, color }];
+    return [];
+  });
 
-    const padding = 2;
-    let [minVal, maxVal] = extent(data) as [number, number];
+  interface PathResult {
+    line: string;
+    area: string;
+    color: string;
+  }
 
-    // Extend domain to include threshold so the line is always visible
-    if (threshold != null) {
-      if (threshold > maxVal) maxVal = threshold;
-      if (threshold < minVal) minVal = threshold;
+  let rendered = $derived.by((): { paths: PathResult[]; thresholdY: number | undefined } => {
+    if (effectiveDatasets.length === 0) {
+      return { paths: [], thresholdY: undefined };
     }
 
-    const xScale = scaleLinear()
-      .domain([0, data.length - 1])
-      .range([0, viewWidth]);
+    const padding = 2;
+
+    let globalMin = Infinity;
+    let globalMax = -Infinity;
+    for (const ds of effectiveDatasets) {
+      if (ds.data.length < 2) continue;
+      const [mn, mx] = extent(ds.data) as [number, number];
+      if (mn < globalMin) globalMin = mn;
+      if (mx > globalMax) globalMax = mx;
+    }
+    if (threshold != null) {
+      if (threshold > globalMax) globalMax = threshold;
+      if (threshold < globalMin) globalMin = threshold;
+    }
+    if (!isFinite(globalMin)) globalMin = 0;
+    if (!isFinite(globalMax) || globalMax === globalMin) globalMax = globalMin + 1;
 
     const yScale = scaleLinear()
-      .domain([minVal, maxVal === minVal ? minVal + 1 : maxVal])
+      .domain([globalMin, globalMax])
       .range([viewHeight - padding, padding]);
 
-    const lineGenerator = line<number>()
-      .x((_, i) => xScale(i))
-      .y(d => yScale(d))
-      .curve(curveMonotoneX);
+    const paths: PathResult[] = [];
+    for (const ds of effectiveDatasets) {
+      if (ds.data.length < 2) continue;
 
-    const areaGenerator = area<number>()
-      .x((_, i) => xScale(i))
-      .y0(viewHeight)
-      .y1(d => yScale(d))
-      .curve(curveMonotoneX);
+      const xScale = scaleLinear()
+        .domain([0, ds.data.length - 1])
+        .range([0, viewWidth]);
+
+      const lineGenerator = line<number>()
+        .x((_, i) => xScale(i))
+        .y(d => yScale(d))
+        .curve(curveMonotoneX);
+
+      const areaGenerator = area<number>()
+        .x((_, i) => xScale(i))
+        .y0(viewHeight)
+        .y1(d => yScale(d))
+        .curve(curveMonotoneX);
+
+      paths.push({
+        line: lineGenerator(ds.data) ?? '',
+        area: areaGenerator(ds.data) ?? '',
+        color: ds.color,
+      });
+    }
 
     return {
-      line: lineGenerator(data) ?? '',
-      area: areaGenerator(data) ?? '',
+      paths,
       thresholdY: threshold != null ? yScale(threshold) : undefined,
     };
   });
@@ -71,29 +106,29 @@
   preserveAspectRatio="none"
   class="overflow-visible"
 >
-  {#if paths.line}
-    <path d={paths.area} fill={color} opacity="0.08" />
+  {#each rendered.paths as p}
+    <path d={p.area} fill={p.color} opacity="0.08" />
     <path
-      d={paths.line}
+      d={p.line}
       fill="none"
-      stroke={color}
+      stroke={p.color}
       stroke-width="1.5"
       stroke-linecap="round"
       stroke-linejoin="round"
       vector-effect="non-scaling-stroke"
     />
-    {#if paths.thresholdY != null}
-      <line
-        x1="0"
-        y1={paths.thresholdY}
-        x2={viewWidth}
-        y2={paths.thresholdY}
-        stroke={thresholdColor}
-        stroke-width="1"
-        stroke-dasharray="4 3"
-        opacity="0.6"
-        vector-effect="non-scaling-stroke"
-      />
-    {/if}
+  {/each}
+  {#if rendered.thresholdY != null}
+    <line
+      x1="0"
+      y1={rendered.thresholdY}
+      x2={viewWidth}
+      y2={rendered.thresholdY}
+      stroke={thresholdColor}
+      stroke-width="1"
+      stroke-dasharray="4 3"
+      opacity="0.6"
+      vector-effect="non-scaling-stroke"
+    />
   {/if}
 </svg>
