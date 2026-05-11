@@ -1035,7 +1035,7 @@ func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.A
 	}
 
 	if audioSource.SampleRate <= 0 && p.BufferMgr != nil {
-		if cb, err := p.BufferMgr.CaptureBuffer(source.ID); err == nil {
+		if cb, err := p.BufferMgr.CaptureBuffer(audioSource.ID); err == nil {
 			audioSource.SampleRate = cb.SampleRate()
 		}
 	}
