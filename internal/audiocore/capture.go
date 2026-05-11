@@ -401,8 +401,13 @@ func startCapture(
 			Build()
 	}
 
-	// Capture the actual format reported by the device after init.
+	// Capture the actual format and channel count reported by the device
+	// after init. The channel count may differ from cfg.Channels if the
+	// stereo retry path was taken for exclusive mode.
 	formatType = captureDevice.CaptureFormat()
+	if actualCh := int(captureDevice.CaptureChannels()); actualCh != cfg.Channels {
+		cfg.Channels = actualCh
+	}
 
 	if err = captureDevice.Start(); err != nil {
 		captureDevice.Uninit()

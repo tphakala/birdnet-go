@@ -46,6 +46,15 @@ type DeviceCapabilities struct {
 	Verified    bool   `json:"verified"`
 }
 
+func cloneCapabilities(c *DeviceCapabilities) *DeviceCapabilities {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	cp.SampleRates = slices.Clone(c.SampleRates)
+	return &cp
+}
+
 // ProbeAllDeviceCapabilities probes all available capture devices and populates
 // the capabilities cache. Call this at startup before capture begins so that
 // exclusive mode probing can access devices without contention.
@@ -66,7 +75,7 @@ func ProbeAllDeviceCapabilities(log logger.Logger) {
 			continue
 		}
 		capabilitiesCacheMu.Lock()
-		capabilitiesCache[dev.Name] = caps
+		capabilitiesCache[dev.ID] = caps
 		capabilitiesCacheMu.Unlock()
 		log.Info("cached device capabilities",
 			logger.String("device", dev.Name),
@@ -80,7 +89,12 @@ func ProbeAllDeviceCapabilities(log logger.Logger) {
 func GetCachedCapabilities(deviceName string) *DeviceCapabilities {
 	capabilitiesCacheMu.RLock()
 	defer capabilitiesCacheMu.RUnlock()
-	return capabilitiesCache[deviceName]
+	for _, caps := range capabilitiesCache {
+		if caps.DeviceName == deviceName {
+			return cloneCapabilities(caps)
+		}
+	}
+	return nil
 }
 
 // ProbeDeviceCapabilities returns cached capabilities if available, otherwise
@@ -88,13 +102,18 @@ func GetCachedCapabilities(deviceName string) *DeviceCapabilities {
 // the fallback for devices plugged in after startup.
 func ProbeDeviceCapabilities(deviceID string, log logger.Logger) (*DeviceCapabilities, error) {
 	// Check cache first (covers devices probed at startup).
-	// Match by exact ID, exact name, or substring of name (same as matchesDevice).
+	// Direct lookup by ID, then iterate for name/substring match
+	// (same matching logic as matchesDevice in capture.go).
 	capabilitiesCacheMu.RLock()
+	if caps, ok := capabilitiesCache[deviceID]; ok {
+		capabilitiesCacheMu.RUnlock()
+		return cloneCapabilities(caps), nil
+	}
 	for _, caps := range capabilitiesCache {
-		if caps.DeviceID == deviceID || caps.DeviceName == deviceID ||
+		if caps.DeviceName == deviceID ||
 			strings.Contains(caps.DeviceName, deviceID) {
 			capabilitiesCacheMu.RUnlock()
-			return caps, nil
+			return cloneCapabilities(caps), nil
 		}
 	}
 	capabilitiesCacheMu.RUnlock()
