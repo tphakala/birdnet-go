@@ -162,7 +162,7 @@ func TestGenerator_GenerateFromPCM_MissingBinary(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "test.png")
 	pcmData := []byte{0, 1, 2, 3}
 
-	err := gen.GenerateFromPCM(t.Context(), pcmData, outputPath, 400, false)
+	err := gen.GenerateFromPCM(t.Context(), pcmData, outputPath, 400, false, 0)
 	assert.Error(t, err, "GenerateFromPCM() should error when Sox binary not configured")
 }
 
@@ -488,7 +488,7 @@ func TestGenerateFromPCM_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := gen.GenerateFromPCM(t.Context(), tt.pcmData, tt.outputPath, tt.width, false)
+			err := gen.GenerateFromPCM(t.Context(), tt.pcmData, tt.outputPath, tt.width, false, 0)
 
 			if tt.wantErr {
 				require.Error(t, err, "expected error for invalid input")
@@ -658,7 +658,7 @@ func TestGenerateWithSoxPCM_MissingBinary(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "test.png")
 	pcmData := []byte{0, 1, 2, 3, 4, 5, 6, 7}
 
-	err := gen.generateWithSoxPCM(t.Context(), gen.currentSettings(), pcmData, outputPath, 400, false)
+	err := gen.generateWithSoxPCM(t.Context(), gen.currentSettings(), pcmData, outputPath, 400, false, 0)
 	require.Error(t, err, "should error when Sox binary not configured")
 	assert.Contains(t, err.Error(), "sox binary not configured", "error should mention sox binary")
 }
@@ -833,7 +833,7 @@ func TestOperationalErrors_SetLowPriority(t *testing.T) {
 			outputPath := filepath.Join(env.TempDir, "test_"+tt.name+".png")
 			pcmData := []byte{0, 1, 2, 3}
 
-			err := gen.GenerateFromPCM(ctx, pcmData, outputPath, 400, false)
+			err := gen.GenerateFromPCM(ctx, pcmData, outputPath, 400, false, 0)
 			require.Error(t, err, "expected error from cancelled/expired context")
 
 			var enhancedErr *errors.EnhancedError
@@ -857,7 +857,7 @@ func TestNonOperationalErrors_NoExplicitPriority(t *testing.T) {
 
 	// Use a valid (non-cancelled) context — the error will be "exec: /nonexistent/sox: not found"
 	// which is NOT an operational error
-	err := gen.GenerateFromPCM(t.Context(), pcmData, outputPath, 400, false)
+	err := gen.GenerateFromPCM(t.Context(), pcmData, outputPath, 400, false, 0)
 	require.Error(t, err, "expected error from missing binary execution")
 
 	var enhancedErr *errors.EnhancedError

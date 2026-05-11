@@ -488,6 +488,31 @@ func TestCaptureBuffer_MonotonicBaseOffset(t *testing.T) {
 	}
 }
 
+// TestCaptureBuffer_SampleRate verifies that SampleRate returns the value
+// passed to NewCaptureBuffer unchanged, across all expected sample rates.
+func TestCaptureBuffer_SampleRate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		sampleRate int
+	}{
+		{name: "standard 48kHz", sampleRate: 48000},
+		{name: "high 192kHz", sampleRate: 192000},
+		{name: "bat 256kHz", sampleRate: 256000},
+		{name: "max 384kHz", sampleRate: 384000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cb, err := buffer.NewCaptureBuffer(10, tt.sampleRate, 2, "test-source")
+			require.NoError(t, err)
+			assert.Equal(t, tt.sampleRate, cb.SampleRate())
+		})
+	}
+}
+
 // TestCaptureBuffer_AlignmentPaddedBaseOffset verifies that the base offset
 // calculation is correct when the backing buffer includes alignment padding.
 // With a sample rate that does NOT produce a buffer size evenly divisible by

@@ -10,6 +10,7 @@ type AudioSource struct {
 	Type        string // "rtsp", "alsa", "pulseaudio", "file"
 	DisplayName string // User-friendly name (e.g., "Front Yard Camera")
 	SafeString  string // Connection string with credentials removed (for logging)
+	SampleRate  int    // Source capture sample rate in Hz (0 = default 48kHz)
 }
 
 // NewAudioSource creates an AudioSource with the given ID.
@@ -23,12 +24,13 @@ func NewAudioSource(id string) AudioSource {
 }
 
 // NewAudioSourceWithDetails creates an AudioSource with full details.
-func NewAudioSourceWithDetails(id, sourceType, displayName, safeString string) AudioSource {
+func NewAudioSourceWithDetails(id, sourceType, displayName, safeString string, sampleRate int) AudioSource {
 	return AudioSource{
 		ID:          id,
 		Type:        sourceType,
 		DisplayName: displayName,
 		SafeString:  safeString,
+		SampleRate:  sampleRate,
 	}
 }
 

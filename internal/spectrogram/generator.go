@@ -348,14 +348,15 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 
 // GenerateFromPCM creates a spectrogram from in-memory PCM data.
 // Used by pre-renderer (background mode).
-// PCM format: s16le, 48kHz, mono
+// PCM format: s16le, mono. sampleRate is the source capture rate in Hz;
+// pass 0 to fall back to conf.SampleRate (48000 Hz).
 //
 // Context Timeout Behavior:
 // This function enforces a 60-second timeout for spectrogram generation.
 // The pre-renderer also sets its own timeout (see prerenderer.go:416), so the
 // effective timeout will be whichever is shorter. This layered approach ensures
 // both the pre-renderer and generator have safety limits.
-func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputPath string, width int, raw bool) error {
+func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputPath string, width int, raw bool, sampleRate int) error {
 	start := time.Now()
 	g.log().Debug("Starting spectrogram generation from PCM",
 		logger.String("output_path", outputPath),
@@ -410,7 +411,7 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 	defer cancel()
 
 	// Generate directly from PCM stdin (no FFmpeg needed)
-	if err := g.generateWithSoxPCM(ctx, settings, pcmData, outputPath, width, raw); err != nil {
+	if err := g.generateWithSoxPCM(ctx, settings, pcmData, outputPath, width, raw, sampleRate); err != nil {
 		return err
 	}
 
@@ -686,8 +687,9 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings 
 
 // generateWithSoxPCM generates a spectrogram by feeding PCM data directly to Sox stdin.
 // This bypasses FFmpeg entirely, reducing CPU overhead and memory usage.
-// PCM format: s16le, 48kHz, mono
-func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Settings, pcmData []byte, outputPath string, width int, raw bool) error {
+// PCM format: s16le, mono. sampleRate is the source capture rate in Hz;
+// pass 0 to fall back to conf.SampleRate (48000 Hz).
+func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Settings, pcmData []byte, outputPath string, width int, raw bool, sampleRate int) error {
 	soxBinary := settings.Realtime.Audio.SoxPath
 	if soxBinary == "" {
 		return errors.Newf("sox binary not configured").
@@ -697,11 +699,17 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 			Build()
 	}
 
+	// Use provided sample rate; fall back to default when caller passes 0
+	effectiveRate := sampleRate
+	if effectiveRate <= 0 {
+		effectiveRate = conf.SampleRate
+	}
+
 	// Build Sox arguments for PCM stdin
 	// PCM format parameters use constants from conf package for consistency
 	args := []string{
 		"-t", "raw", // Input type: raw/headerless PCM
-		"-r", strconv.Itoa(conf.SampleRate), // Sample rate: 48kHz
+		"-r", strconv.Itoa(effectiveRate), // Sample rate from source
 		"-e", "signed", // Encoding: signed integer
 		"-b", strconv.Itoa(conf.BitDepth), // Bit depth: 16-bit
 		"-c", strconv.Itoa(conf.NumChannels), // Channels: mono
