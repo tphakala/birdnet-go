@@ -907,14 +907,14 @@ func (dw *DualWriteRepository) convertFilters(filters *datastore.DetectionFilter
 		}
 		if filters.EndDate != "" {
 			if t, err := time.ParseInLocation(time.DateOnly, filters.EndDate, time.Local); err == nil {
-				end := t.Add(24 * time.Hour).Unix()
+				end := t.AddDate(0, 0, 1).Unix()
 				sf.EndTime = &end
 			}
 		}
 	} else if filters.Date != "" {
 		if t, err := time.ParseInLocation(time.DateOnly, filters.Date, time.Local); err == nil {
 			start := t.Unix()
-			end := t.Add(24 * time.Hour).Unix()
+			end := t.AddDate(0, 0, 1).Unix()
 			sf.StartTime = &start
 			sf.EndTime = &end
 		}
