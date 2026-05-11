@@ -4,6 +4,7 @@
 package inferencestats
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -53,4 +54,30 @@ func updateAtomicMax(addr *atomic.Int64, val int64) {
 			return
 		}
 	}
+}
+
+// CounterMap tracks per-model inference counters. Safe for concurrent use.
+type CounterMap struct {
+	models sync.Map // model ID (string) -> *Counters
+}
+
+// RecordInvoke records a single invocation duration for the given model ID.
+func (m *CounterMap) RecordInvoke(modelID string, durationUs int64) {
+	if v, ok := m.models.Load(modelID); ok {
+		v.(*Counters).RecordInvoke(durationUs)
+		return
+	}
+	c, _ := m.models.LoadOrStore(modelID, &Counters{})
+	c.(*Counters).RecordInvoke(durationUs)
+}
+
+// SnapshotAll returns a snapshot of all per-model counters. Each model's max
+// is reset on read, consistent with Counters.Snapshot behaviour.
+func (m *CounterMap) SnapshotAll() map[string]Snapshot {
+	result := make(map[string]Snapshot)
+	m.models.Range(func(key, value any) bool {
+		result[key.(string)] = value.(*Counters).Snapshot()
+		return true
+	})
+	return result
 }
