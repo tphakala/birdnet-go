@@ -98,13 +98,21 @@ const (
 	metricDBReadLatencyMax  = "db.read_latency_max_ms"
 	metricDBWriteLatencyMax = "db.write_latency_max_ms"
 	metricDBQueriesPerSec   = "db.queries_per_sec"
-	metricBirdNETInvokeAvg  = "birdnet.invoke_avg_ms"
-	metricBirdNETInvokeMax  = "birdnet.invoke_max_ms"
 
 	// maxValidCelsius is the upper bound for valid CPU temperature readings.
 	// 120°C captures overheating events before thermal shutdown while filtering bogus values.
 	maxValidCelsius = 120.0
 )
+
+func inferenceMetricKey(modelID string) string {
+	sanitized := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			return r
+		}
+		return '_'
+	}, modelID)
+	return "inference." + sanitized + ".avg_ms"
+}
 
 // collect gathers all system metrics and records them as a single batch.
 func (c *Collector) collect() {
@@ -264,43 +272,42 @@ func (c *Collector) SetInferenceCounters(counters *inferencestats.CounterMap) {
 	c.inferenceCounters = counters
 }
 
-// collectInference computes inference latency metrics from per-model atomic counter snapshots.
-// Aggregates across all models for the combined sparkline metrics.
-// When idle (no new invocations since last tick), avg is recorded as 0 to maintain
-// consistent sparkline time axis spacing.
 func (c *Collector) collectInference(points map[string]float64) {
 	if c.inferenceCounters == nil {
 		return
 	}
 
 	snaps := c.inferenceCounters.SnapshotAll()
+
 	if c.prevInferenceSnaps == nil {
 		c.prevInferenceSnaps = make(map[string]*inferencestats.Snapshot, len(snaps))
+		for modelID := range snaps {
+			snap := snaps[modelID]
+			c.prevInferenceSnaps[modelID] = &snap
+		}
+		return
 	}
 
-	var totalInvokes, totalUs, maxUs int64
-	hasPrev := false
 	for modelID, snap := range snaps {
-		prev := c.prevInferenceSnaps[modelID]
-		if prev != nil {
-			hasPrev = true
-			delta := snap.InvokeCount - prev.InvokeCount
-			totalInvokes += delta
-			totalUs += snap.InvokeTotalUs - prev.InvokeTotalUs
-		}
-		if snap.InvokeMaxUs > maxUs {
-			maxUs = snap.InvokeMaxUs
-		}
-		c.prevInferenceSnaps[modelID] = &snap
-	}
+		key := inferenceMetricKey(modelID)
+		prev, hasPrev := c.prevInferenceSnaps[modelID]
 
-	points[metricBirdNETInvokeMax] = float64(maxUs) / usToMs
-	if hasPrev {
-		if totalInvokes > 0 {
-			points[metricBirdNETInvokeAvg] = float64(totalUs) / float64(totalInvokes) / usToMs
-		} else {
-			points[metricBirdNETInvokeAvg] = 0
+		if !hasPrev {
+			s := snap
+			c.prevInferenceSnaps[modelID] = &s
+			continue
 		}
+
+		deltaInvokes := snap.InvokeCount - prev.InvokeCount
+		if deltaInvokes > 0 {
+			deltaUs := snap.InvokeTotalUs - prev.InvokeTotalUs
+			points[key] = float64(deltaUs) / float64(deltaInvokes) / usToMs
+		} else {
+			points[key] = 0
+		}
+
+		s := snap
+		c.prevInferenceSnaps[modelID] = &s
 	}
 }
 

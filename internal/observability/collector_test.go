@@ -183,48 +183,52 @@ func TestCollector_CollectsInferenceMetrics(t *testing.T) {
 	collector := NewCollector(store, 1*time.Second, func() float64 { return 0 })
 
 	counters := &inferencestats.CounterMap{}
-	counters.RecordInvoke("test-model", 5000)  // 5ms
-	counters.RecordInvoke("test-model", 15000) // 15ms
+	counters.RecordInvoke("BirdNET_V2.4", 5000)  // 5ms
+	counters.RecordInvoke("BirdNET_V2.4", 15000) // 15ms
+	counters.RecordInvoke("Perch_V2", 8000)      // 8ms
 	collector.SetInferenceCounters(counters)
 
-	// First tick: only max (no previous snapshot for avg)
+	// First tick: no avg yet (no previous snapshot)
 	collector.collect()
-	maxPts := store.Get("birdnet.invoke_max_ms", 1)
-	require.Len(t, maxPts, 1)
-	assert.InDelta(t, 15.0, maxPts[0].Value, 0.01)
-
-	// Avg should NOT be recorded on first tick (no prev snapshot)
-	avgPts := store.Get("birdnet.invoke_avg_ms", 10)
+	avgPts := store.Get("inference.BirdNET_V2_4.avg_ms", 10)
 	assert.Nil(t, avgPts, "avg should not be recorded on first tick")
 
 	// Record more data for second tick
-	counters.RecordInvoke("test-model", 8000) // 8ms
+	counters.RecordInvoke("BirdNET_V2.4", 10000) // 10ms
+	counters.RecordInvoke("Perch_V2", 6000)      // 6ms
 
-	// Second tick: should have avg
+	// Second tick: should have per-model avg
 	collector.collect()
-	avgPts = store.Get("birdnet.invoke_avg_ms", 10)
-	require.Len(t, avgPts, 1)
-	// 8ms total / 1 invoke = 8ms avg
-	assert.InDelta(t, 8.0, avgPts[0].Value, 0.01)
+
+	birdnetAvg := store.Get("inference.BirdNET_V2_4.avg_ms", 10)
+	require.Len(t, birdnetAvg, 1)
+	assert.InDelta(t, 10.0, birdnetAvg[0].Value, 0.01) // 10ms / 1 invoke
+
+	perchAvg := store.Get("inference.Perch_V2.avg_ms", 10)
+	require.Len(t, perchAvg, 1)
+	assert.InDelta(t, 6.0, perchAvg[0].Value, 0.01) // 6ms / 1 invoke
+
+	// Old metric keys should not exist
+	assert.Nil(t, store.Get("birdnet.invoke_avg_ms", 10))
+	assert.Nil(t, store.Get("birdnet.invoke_max_ms", 10))
 }
 
-func TestCollector_InferenceIdleRecordsZero(t *testing.T) {
+func TestCollector_InferenceIdlePeriod(t *testing.T) {
 	t.Parallel()
 	store := NewMemoryStore(10)
 	collector := NewCollector(store, 1*time.Second, func() float64 { return 0 })
 
 	counters := &inferencestats.CounterMap{}
-	counters.RecordInvoke("test-model", 5000)
+	counters.RecordInvoke("BirdNET_V2.4", 5000)
 	collector.SetInferenceCounters(counters)
 
-	// First tick: establishes baseline
+	// Two ticks with no new data between them
+	collector.collect()
 	collector.collect()
 
-	// Second tick: no new invocations — should record 0
-	collector.collect()
-	avgPts := store.Get("birdnet.invoke_avg_ms", 10)
+	avgPts := store.Get("inference.BirdNET_V2_4.avg_ms", 10)
 	require.Len(t, avgPts, 1)
-	assert.InDelta(t, 0.0, avgPts[0].Value, 0.01)
+	assert.InDelta(t, 0.0, avgPts[0].Value, 0.001, "idle period should record 0")
 }
 
 func TestReadThermalZone_OutOfRangeTemperature(t *testing.T) {
