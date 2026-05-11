@@ -12,7 +12,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
-	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -481,9 +480,13 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 
 	format = a.Settings.Realtime.Audio.Export.Type
 	path = outputPath
+
 	isBat := detection.ResolveModelType(a.modelName, "") == entities.ModelTypeBat
 
-	if rate > conf.SampleRate && !isBat {
+	if needsBatFormatFallback(a.modelName, "", rate, format) {
+		format = "wav"
+		path = replaceExtension(path, ".wav")
+	} else if rate > conf.SampleRate && !isBat {
 		resampled, err := resample.ResampleBytes(a.pcmData, rate, conf.SampleRate)
 		if err != nil {
 			GetLogger().Warn("Resampling failed, exporting at source rate",
@@ -496,14 +499,6 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 		} else {
 			a.pcmData = resampled
 			rate = conf.SampleRate
-		}
-	}
-
-	if isBat && rate > conf.SampleRate {
-		switch format {
-		case "mp3", "opus", "aac":
-			format = "wav"
-			path = replaceExtension(path, ".wav")
 		}
 	}
 
@@ -520,14 +515,13 @@ func replaceExtension(path, newExt string) string {
 }
 
 // needsBatFormatFallback returns true when the model is a bat classifier
-// and the configured export format cannot carry its high sample rate.
-func needsBatFormatFallback(modelID, exportFormat string) bool {
-	modelInfo := classifier.DetectionModelInfoForID(modelID)
-	if detection.ResolveModelType(modelInfo.Name, modelInfo.Version) != entities.ModelTypeBat {
+// and the actual source sample rate exceeds what the configured export
+// format can carry (MP3/Opus/AAC cap at 48kHz).
+func needsBatFormatFallback(modelName, modelVersion string, sourceRate int, exportFormat string) bool {
+	if detection.ResolveModelType(modelName, modelVersion) != entities.ModelTypeBat {
 		return false
 	}
-	spec, ok := classifier.GetModelSpec(modelID)
-	if !ok || spec.EffectiveSampleRate() <= conf.SampleRate {
+	if sourceRate <= conf.SampleRate {
 		return false
 	}
 	switch exportFormat {

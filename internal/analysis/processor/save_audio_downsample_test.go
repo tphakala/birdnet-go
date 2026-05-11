@@ -192,30 +192,32 @@ func TestSaveAudioAction_BatOpusFallsBackToWAV(t *testing.T) {
 }
 
 // TestNeedsBatFormatFallback verifies the bat format fallback logic using
-// the classifier model registry.
+// model name, source rate, and export format.
 func TestNeedsBatFormatFallback(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name     string
-		modelID  string
+		model    string
+		rate     int
 		format   string
 		expected bool
 	}{
-		{"bat_mp3", "Bat", "mp3", true},
-		{"bat_opus", "Bat", "opus", true},
-		{"bat_aac", "Bat", "aac", true},
-		{"bat_wav", "Bat", "wav", false},
-		{"bat_flac", "Bat", "flac", false},
-		{"bird_mp3", "BirdNET_V2.4", "mp3", false},
-		{"bird_wav", "BirdNET_V2.4", "wav", false},
-		{"unknown_model", "Unknown", "mp3", false},
+		{"bat_high_rate_mp3", "BattyBirdNET", 256000, "mp3", true},
+		{"bat_high_rate_opus", "BattyBirdNET", 256000, "opus", true},
+		{"bat_high_rate_aac", "BattyBirdNET", 256000, "aac", true},
+		{"bat_high_rate_wav", "BattyBirdNET", 256000, "wav", false},
+		{"bat_high_rate_flac", "BattyBirdNET", 256000, "flac", false},
+		{"bat_low_rate_mp3", "BattyBirdNET", 48000, "mp3", false},
+		{"bird_high_rate_mp3", "BirdNET", 192000, "mp3", false},
+		{"bird_low_rate_wav", "BirdNET", 48000, "wav", false},
+		{"unknown_model", "Unknown", 256000, "mp3", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.expected, needsBatFormatFallback(tt.modelID, tt.format))
+			assert.Equal(t, tt.expected, needsBatFormatFallback(tt.model, "", tt.rate, tt.format))
 		})
 	}
 }

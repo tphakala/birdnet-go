@@ -922,7 +922,9 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 	// Bat models at high sample rates need WAV when the configured format
 	// (MP3/Opus/AAC) cannot carry rates above 48kHz. Override the extension
 	// now so the database stores the same filename the export will write.
-	if needsBatFormatFallback(item.ModelID, settings.Realtime.Audio.Export.Type) {
+	mInfo := classifier.DetectionModelInfoForID(item.ModelID)
+	sourceRate := p.resolveAudioSource(item.Source).SampleRate
+	if needsBatFormatFallback(mInfo.Name, mInfo.Version, sourceRate, settings.Realtime.Audio.Export.Type) {
 		clipName = replaceExtension(clipName, ".wav")
 	}
 

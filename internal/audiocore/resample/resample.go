@@ -169,7 +169,7 @@ func (r *Resampler) String() string {
 // ResampleBytes is a one-shot convenience function that resamples raw 16-bit
 // PCM bytes from one sample rate to another. It creates a temporary Resampler,
 // processes the input, and returns an independent copy of the output.
-// Returns the input unchanged when fromRate == toRate.
+// When fromRate == toRate, returns the input slice directly (no copy, no allocation).
 func ResampleBytes(pcm []byte, fromRate, toRate int) ([]byte, error) {
 	if fromRate == toRate {
 		return pcm, nil
