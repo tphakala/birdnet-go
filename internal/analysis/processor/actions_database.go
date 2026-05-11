@@ -498,6 +498,7 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 				logger.String("operation", "audio_export_resample"))
 		} else {
 			a.pcmData = resampled
+			a.sourceSampleRate = conf.SampleRate
 			rate = conf.SampleRate
 		}
 	}
