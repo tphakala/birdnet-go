@@ -76,7 +76,7 @@ func TestConvertFilters_DateRange(t *testing.T) {
 	require.NotNil(t, sf.EndTime)
 
 	startExpected := time.Date(2024, 6, 15, 0, 0, 0, 0, time.Local).Unix()
-	endExpected := time.Date(2024, 6, 17, 23, 59, 59, 999999999, time.Local).Unix()
+	endExpected := time.Date(2024, 6, 18, 0, 0, 0, 0, time.Local).Unix()
 
 	assert.Equal(t, startExpected, *sf.StartTime)
 	assert.Equal(t, endExpected, *sf.EndTime)

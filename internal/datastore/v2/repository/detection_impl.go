@@ -1097,15 +1097,21 @@ func (r *detectionRepository) DeletePredictions(ctx context.Context, detectionID
 // ============================================================================
 
 // SaveReview creates or updates a review for a detection.
-// Uses INSERT...ON CONFLICT to avoid TOCTOU between existence check and insert.
+// Uses GORM's clause.OnConflict for dialect-aware upsert (SQLite + MySQL).
 // Idempotent: re-saving updates the verified status and timestamp.
 func (r *detectionRepository) SaveReview(ctx context.Context, review *entities.DetectionReview) error {
 	return datastore.RetryOnLock(ctx, "v2_save_review", func() error {
 		now := time.Now()
-		return r.db.WithContext(ctx).Exec(
-			fmt.Sprintf("INSERT INTO %s (detection_id, verified, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(detection_id) DO UPDATE SET verified = excluded.verified, updated_at = excluded.updated_at",
-				r.reviewsTable()),
-			review.DetectionID, string(review.Verified), now, now).Error
+		review.UpdatedAt = now
+		return r.db.WithContext(ctx).Table(r.reviewsTable()).
+			Clauses(clause.OnConflict{
+				Columns: []clause.Column{{Name: "detection_id"}},
+				DoUpdates: clause.Assignments(map[string]any{
+					"verified":   string(review.Verified),
+					"updated_at": now,
+				}),
+			}).
+			Create(review).Error
 	}, r.metrics)
 }
 
