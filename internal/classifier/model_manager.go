@@ -296,10 +296,11 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	}
 
 	// Unload from orchestrator BEFORE deleting files to avoid crashes.
-	// If unload fails, abort the uninstall: the model may still be
-	// memory-mapped by a running inference engine, so deleting the
-	// file on disk could cause a segfault.
-	if mm.orchestrator != nil && entry.RegistryID != "" {
+	// Only attempt unload if the model is currently loaded; if it is not
+	// loaded, file deletion is safe (nothing is memory-mapping the ONNX file).
+	// If unload fails, abort: the model may still be memory-mapped by a
+	// running inference engine, so deleting the file could cause a segfault.
+	if mm.orchestrator != nil && entry.RegistryID != "" && mm.orchestrator.IsModelLoaded(entry.RegistryID) {
 		if err := mm.orchestrator.UnloadModel(entry.RegistryID); err != nil {
 			return errors.Newf("cannot uninstall %s: model still in use", catalogID).
 				Component("classifier.model_manager").

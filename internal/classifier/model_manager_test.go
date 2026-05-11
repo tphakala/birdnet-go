@@ -390,11 +390,9 @@ func TestModelManager_Install_ConcurrentDownloadRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "already being downloaded")
 }
 
-func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
+func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
 	t.Parallel()
 
-	// Use perch-v2 as the test subject: it has a RegistryID and is not the
-	// permanent model, so Uninstall will attempt to unload it.
 	entry, ok := GetCatalogEntry("perch-v2")
 	require.True(t, ok, "expected perch-v2 catalog entry to exist")
 	require.NotEmpty(t, entry.RegistryID, "perch-v2 must have a RegistryID for this test")
@@ -403,7 +401,53 @@ func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 	subdir := filepath.Join(modelsDir, entry.ID)
 	require.NoError(t, os.MkdirAll(subdir, 0o755))
 
-	// Create all catalog files on disk so we can verify they survive.
+	// Create model files on disk.
+	var modelPath string
+	for _, f := range entry.Files {
+		var dir string
+		if f.Role == RoleEmbeddings {
+			dir = filepath.Join(modelsDir, "shared")
+		} else {
+			dir = subdir
+		}
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		path := filepath.Join(dir, f.LocalName)
+		require.NoError(t, os.WriteFile(path, []byte("data"), 0o644))
+		if f.Role == RoleModel {
+			modelPath = path
+		}
+	}
+
+	// Orchestrator with empty models map: IsModelLoaded returns false,
+	// so Uninstall skips the unload step and proceeds to delete files.
+	orch := &Orchestrator{
+		models: make(map[string]*modelEntry),
+	}
+
+	mm := NewModelManager(modelsDir, orch, nil)
+	mm.ScanInstalled()
+	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before uninstall")
+
+	err := mm.Uninstall(entry.ID)
+	require.NoError(t, err, "Uninstall must succeed when model is not loaded")
+	assert.False(t, mm.IsInstalled(entry.ID), "model must be removed from installed map")
+
+	// Model file must be deleted; labels are retained by design.
+	_, statErr := os.Stat(modelPath)
+	assert.True(t, os.IsNotExist(statErr), "model ONNX file must be deleted after uninstall")
+}
+
+func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok, "expected perch-v2 catalog entry to exist")
+	require.NotEmpty(t, entry.RegistryID, "perch-v2 must have a RegistryID for this test")
+
+	modelsDir := t.TempDir()
+	subdir := filepath.Join(modelsDir, entry.ID)
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+
 	for _, f := range entry.Files {
 		var dir string
 		if f.Role == RoleEmbeddings {
@@ -415,25 +459,28 @@ func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("data"), 0o644))
 	}
 
-	// Create a minimal Orchestrator whose models map is empty so
-	// UnloadModel will fail with "model ... is not loaded".
+	// Orchestrator with the model present in the models map AND set as
+	// primary. IsModelLoaded returns true, but UnloadModel refuses to
+	// unload the primary model, simulating a "model still in use" failure.
+	primaryBN := &BirdNET{ModelInfo: ModelInfo{ID: entry.RegistryID}}
 	orch := &Orchestrator{
-		models: make(map[string]*modelEntry),
+		models: map[string]*modelEntry{
+			entry.RegistryID: {instance: primaryBN},
+		},
+		primary: primaryBN,
 	}
 
 	mm := NewModelManager(modelsDir, orch, nil)
 	mm.ScanInstalled()
 	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before uninstall attempt")
 
-	// Uninstall should fail because UnloadModel cannot find the model.
 	err := mm.Uninstall(entry.ID)
 	require.Error(t, err, "Uninstall must return an error when UnloadModel fails")
 	assert.Contains(t, err.Error(), "model still in use")
 
-	// The model must still be marked as installed.
 	assert.True(t, mm.IsInstalled(entry.ID), "model must remain installed after failed uninstall")
 
-	// All files must still exist on disk (no deletion happened).
+	// All files must still exist on disk.
 	for _, f := range entry.Files {
 		var path string
 		if f.Role == RoleEmbeddings {
