@@ -632,8 +632,9 @@ func (dw *DualWriteRepository) GetHourly(ctx context.Context, date, hour string,
 			return dw.legacy.GetHourly(ctx, date, hour, duration, limit, offset)
 		}
 		hourStart := time.Date(t.Year(), t.Month(), t.Day(), hourInt, 0, 0, 0, time.Local)
+		hourEnd := hourStart.Add(time.Duration(duration) * time.Second)
 
-		dets, total, err := dw.v2.GetByHour(ctx, hourStart.Unix(), limit, offset)
+		dets, total, err := dw.v2.GetByDateRange(ctx, hourStart.Unix(), hourEnd.Unix(), limit, offset)
 		if err != nil {
 			return nil, 0, err
 		}
