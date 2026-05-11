@@ -238,7 +238,7 @@ func (e *AudioEngine) SetScheduler(s *schedule.QuietHoursScheduler) {
 // for the primary model. This must be called before AddSource to ensure
 // buffers are allocated with the correct model key and size.
 // clipBytes, overlapBytes, and readSize should be derived from the model's
-// ModelSpec.ClipSizeBytes(), matching the secondary model allocation path.
+// ModelSpec.BufferDimensions(), matching the secondary model allocation path.
 func (e *AudioEngine) SetPrimaryModel(id string, clipBytes, overlapBytes, readSize int) {
 	e.primaryModelID = id
 	e.primaryClipBytes = clipBytes
