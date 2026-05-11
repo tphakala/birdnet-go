@@ -390,6 +390,62 @@ func TestModelManager_Install_ConcurrentDownloadRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "already being downloaded")
 }
 
+func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
+	t.Parallel()
+
+	// Use perch-v2 as the test subject: it has a RegistryID and is not the
+	// permanent model, so Uninstall will attempt to unload it.
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok, "expected perch-v2 catalog entry to exist")
+	require.NotEmpty(t, entry.RegistryID, "perch-v2 must have a RegistryID for this test")
+
+	modelsDir := t.TempDir()
+	subdir := filepath.Join(modelsDir, entry.ID)
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+
+	// Create all catalog files on disk so we can verify they survive.
+	for _, f := range entry.Files {
+		var dir string
+		if f.Role == RoleEmbeddings {
+			dir = filepath.Join(modelsDir, "shared")
+		} else {
+			dir = subdir
+		}
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("data"), 0o644))
+	}
+
+	// Create a minimal Orchestrator whose models map is empty so
+	// UnloadModel will fail with "model ... is not loaded".
+	orch := &Orchestrator{
+		models: make(map[string]*modelEntry),
+	}
+
+	mm := NewModelManager(modelsDir, orch, nil)
+	mm.ScanInstalled()
+	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before uninstall attempt")
+
+	// Uninstall should fail because UnloadModel cannot find the model.
+	err := mm.Uninstall(entry.ID)
+	require.Error(t, err, "Uninstall must return an error when UnloadModel fails")
+	assert.Contains(t, err.Error(), "model still in use")
+
+	// The model must still be marked as installed.
+	assert.True(t, mm.IsInstalled(entry.ID), "model must remain installed after failed uninstall")
+
+	// All files must still exist on disk (no deletion happened).
+	for _, f := range entry.Files {
+		var path string
+		if f.Role == RoleEmbeddings {
+			path = filepath.Join(modelsDir, "shared", f.LocalName)
+		} else {
+			path = filepath.Join(subdir, f.LocalName)
+		}
+		_, statErr := os.Stat(path)
+		assert.NoError(t, statErr, "file %s must still exist after aborted uninstall", f.LocalName)
+	}
+}
+
 func TestBuildHuggingFaceURL(t *testing.T) {
 	t.Parallel()
 
