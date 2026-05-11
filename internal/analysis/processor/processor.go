@@ -83,7 +83,6 @@ type Processor struct {
 	pendingResetAll      bool                // True if a full reset is pending, protected by thresholdsMutex
 	pendingDetections    map[string]PendingDetection
 	pendingMutex         sync.RWMutex // RWMutex to protect access to pendingDetections (RLock for snapshots)
-	lastDogDetectionLog  map[string]time.Time
 	dogDetectionMutex    sync.Mutex
 	detectionMutex       sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
 	controlChan          chan string
@@ -190,27 +189,35 @@ type Detections struct {
 
 // PendingDetection struct represents a single detection held in memory,
 // including its last updated timestamp and a deadline for flushing it to the worker queue.
+// ModelContribution tracks a single AI model's detection activity for a pending detection.
+type ModelContribution struct {
+	HitCount      int       // Number of times this model detected the species
+	MaxConfidence float64   // Highest confidence seen from this model
+	LastHitAt     time.Time // When this model last detected the species
+}
+
 type PendingDetection struct {
-	Detection       Detections // The detection data
-	Confidence      float64    // Confidence level of the detection
+	Detection       Detections // The detection data (from the best-confidence model)
+	Confidence      float64    // Best confidence seen across all models
 	Source          string     // Audio source of the detection, RTSP URL or audio card name
-	ModelID         string     // Identifies which classifier model produced this detection
+	BestModelID     string     // Model that produced the highest confidence detection
 	FirstDetected   time.Time  // Back-dated time for audio clip extraction (startTime from analysis buffer)
 	CreatedAt       time.Time  // Real wall-clock time when detection was first created (for display)
 	AudioCapturedAt time.Time  // Wall-clock time when the most recent audio chunk was captured (updated on each hit; for spectrogram overlay)
 	LastUpdated     time.Time  // Last time this detection was updated
 	FlushDeadline   time.Time  // Deadline by which the detection must be processed
-	Count           int        // Number of times this detection has been updated
+	Count           int        // Total detection count across all models
 	ExtendedCapture bool       // Whether this detection uses extended capture
 	MaxDeadline     time.Time  // Absolute max flush time (FirstDetected + maxDuration)
+
+	ModelContributions map[string]ModelContribution // Per-model detection data, keyed by model ID
 }
 
-// pendingDetectionKey creates a composite key for the pendingDetections map
-// that includes the source ID and model ID to prevent cross-source and
-// cross-model data corruption when multiple audio sources or models detect
-// the same species concurrently.
-func pendingDetectionKey(sourceID, speciesName, modelID string) string {
-	return sourceID + ":" + speciesName + ":" + modelID
+// pendingDetectionKey creates a composite key for the pendingDetections map.
+// Detections from different models for the same species on the same source are
+// merged into a single entry for cross-model consensus evaluation.
+func pendingDetectionKey(sourceID, speciesName string) string {
+	return sourceID + ":" + speciesName
 }
 
 // suggestLevelForDisabledFilter provides smart recommendations for filter levels
@@ -449,15 +456,14 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 			time.Duration(settings.Realtime.Interval)*time.Second,
 			settings.Realtime.Species.Config,
 		),
-		Metrics:             metrics,
-		LastDogDetection:    make(map[string]time.Time),
-		LastHumanDetection:  make(map[string]time.Time),
-		DynamicThresholds:   make(map[string]*DynamicThreshold),
-		pendingResets:       make(map[string]struct{}),
-		pendingDetections:   make(map[string]PendingDetection),
-		lastDogDetectionLog: make(map[string]time.Time),
-		controlChan:         make(chan string, 10),  // Buffered channel to prevent blocking
-		JobQueue:            jobqueue.NewJobQueue(), // Initialize the job queue
+		Metrics:            metrics,
+		LastDogDetection:   make(map[string]time.Time),
+		LastHumanDetection: make(map[string]time.Time),
+		DynamicThresholds:  make(map[string]*DynamicThreshold),
+		pendingResets:      make(map[string]struct{}),
+		pendingDetections:  make(map[string]PendingDetection),
+		controlChan:        make(chan string, 10),  // Buffered channel to prevent blocking
+		JobQueue:           jobqueue.NewJobQueue(), // Initialize the job queue
 	}
 
 	// Initialize log deduplicator with configuration from settings
@@ -647,30 +653,42 @@ func (p *Processor) processDetections(item classifier.Results) {
 		p.pendingMutex.Lock()
 
 		now := time.Now()
-		mapKey := pendingDetectionKey(item.Source.ID, commonName, item.ModelID)
+		mapKey := pendingDetectionKey(item.Source.ID, commonName)
 
 		if existing, exists := p.pendingDetections[mapKey]; exists {
-			// Update the existing detection if it's already in pendingDetections map
+			// Update the existing detection (may be from same or different model)
 			oldConfidence := existing.Confidence
 			existing.LastUpdated = now
 			existing.AudioCapturedAt = item.AudioCapturedAt
 			if confidence > existing.Confidence {
 				existing.Detection = det
 				existing.Confidence = confidence
+				existing.BestModelID = item.ModelID
 				existing.Source = item.Source.ID
-				// Add structured logging for confidence update
 				GetLogger().Debug("Updated pending detection with higher confidence",
 					logger.String("species", commonName),
+					logger.String("model_id", item.ModelID),
 					logger.Float64("old_confidence", oldConfidence),
 					logger.Float64("new_confidence", confidence),
 					logger.Int("count", existing.Count+1),
 					logger.String("operation", "update_pending_detection"))
 			}
 			existing.Count++
+
+			// Track per-model contribution
+			if existing.ModelContributions == nil {
+				existing.ModelContributions = make(map[string]ModelContribution, 1)
+			}
+			contrib := existing.ModelContributions[item.ModelID]
+			contrib.HitCount++
+			if confidence > contrib.MaxConfidence {
+				contrib.MaxConfidence = confidence
+			}
+			contrib.LastHitAt = now
+			existing.ModelContributions[item.ModelID] = contrib
+
 			p.pendingDetections[mapKey] = existing
 		} else {
-			// Create a new pending detection if it doesn't exist
-			// Add structured logging for new pending detection
 			GetLogger().Info("Created new pending detection",
 				logger.String("species", commonName),
 				logger.Float64("confidence", confidence),
@@ -682,7 +700,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 				Detection:       det,
 				Confidence:      confidence,
 				Source:          item.Source.ID,
-				ModelID:         item.ModelID,
+				BestModelID:     item.ModelID,
 				FirstDetected:   item.StartTime,
 				CreatedAt:       now,
 				AudioCapturedAt: item.AudioCapturedAt,
@@ -691,6 +709,13 @@ func (p *Processor) processDetections(item classifier.Results) {
 				// startTime is backdated for audio extraction, but FlushDeadline needs to be a future deadline.
 				FlushDeadline: now.Add(detectionWindow),
 				Count:         1,
+				ModelContributions: map[string]ModelContribution{
+					item.ModelID: {
+						HitCount:      1,
+						MaxConfidence: confidence,
+						LastHitAt:     now,
+					},
+				},
 			}
 		}
 
@@ -1272,25 +1297,39 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName string) {
 	settings := p.currentSettings()
 
-	// Use item.Confidence directly - it's the correct confidence for THIS species,
-	// not Results[0].Confidence which could be a different (higher confidence) species
-	confidence := float32(item.Confidence)
-
 	GetLogger().Info("approving detection",
 		logger.String("species", speciesName),
 		logger.String("source", p.getDisplayNameForSource(item.Source)),
-		logger.String("model_id", item.ModelID),
-		logger.Int("match_count", item.Count),
+		logger.String("best_model_id", item.BestModelID),
+		logger.Int("total_count", item.Count),
+		logger.Int("model_count", len(item.ModelContributions)),
 		logger.Float64("confidence", item.Confidence),
 		logger.String("operation", "approve_detection"))
 
-	// Learn from this approved high-confidence detection for dynamic threshold adjustment.
-	// This is the correct place for learning - only approved detections should affect thresholds,
-	// not pending detections that may later be discarded as false positives.
-	// Note: speciesName is already lowercase (lowered in flushPendingDetections)
-	p.LearnFromApprovedDetection(item.ModelID, speciesName, item.Detection.Result.Species.ScientificName, confidence)
+	// Learn from each contributing model's approved detection for dynamic threshold adjustment.
+	// Only learn for models whose max confidence exceeds the base threshold to avoid
+	// lowering thresholds based on weak signals that rode on another model's strength.
+	scientificName := item.Detection.Result.Species.ScientificName
+	baseThreshold := float64(p.getBaseConfidenceThreshold(settings, speciesName, scientificName))
+	for modelID, contrib := range item.ModelContributions {
+		if contrib.MaxConfidence >= baseThreshold {
+			p.LearnFromApprovedDetection(modelID, speciesName, scientificName, float32(contrib.MaxConfidence))
+		}
+	}
 
 	p.normalizeDetectionTimes(item)
+
+	// Populate model contributions on the Result for downstream persistence
+	if len(item.ModelContributions) > 0 {
+		item.Detection.Result.ModelContributions = make(map[string]detection.ResultModelContrib, len(item.ModelContributions))
+		for modelID, contrib := range item.ModelContributions {
+			item.Detection.Result.ModelContributions[modelID] = detection.ResultModelContrib{
+				Model:         classifier.DetectionModelInfoForID(modelID),
+				HitCount:      contrib.HitCount,
+				MaxConfidence: contrib.MaxConfidence,
+			}
+		}
+	}
 
 	actionList := p.getActionsForItem(&item.Detection)
 	for _, action := range actionList {
@@ -1449,8 +1488,10 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 			GetLogger().Info("discarding detection",
 				logger.String("species", speciesName),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
+				logger.String("best_model_id", item.BestModelID),
+				logger.Int("total_count", item.Count),
+				logger.Int("model_count", len(item.ModelContributions)),
 				logger.String("reason", reason),
-				logger.Int("count", item.Count),
 				logger.String("operation", "discard_detection"))
 			delete(p.pendingDetections, mapKey)
 
@@ -1465,9 +1506,10 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 		GetLogger().Info("Flushing detection",
 			logger.String("species", speciesName),
 			logger.String("source", p.getDisplayNameForSource(item.Source)),
-			logger.String("model_id", item.ModelID),
+			logger.String("best_model_id", item.BestModelID),
 			logger.Bool("deadline_reached", true),
-			logger.Int("count", item.Count),
+			logger.Int("total_count", item.Count),
+			logger.Int("model_count", len(item.ModelContributions)),
 			logger.Int("required", minDetections),
 			logger.String("operation", "flush_detection"))
 
@@ -1488,19 +1530,7 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 		for key := range p.pendingDetections {
 			item := p.pendingDetections[key]
 			if item.Count >= threshold {
-				broadcastSnapshot = append(broadcastSnapshot, SSEPendingDetection{
-					Species:         item.Detection.Result.Species.CommonName,
-					ScientificName:  item.Detection.Result.Species.ScientificName,
-					Thumbnail:       p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
-					Status:          PendingStatusActive,
-					FirstDetected:   item.CreatedAt.Unix(),
-					AudioCapturedAt: unixOrZero(item.AudioCapturedAt),
-					LastUpdated:     item.LastUpdated.Unix(),
-					Source:          p.getDisplayNameForSource(item.Source),
-					SourceID:        item.Source,
-					ModelID:         item.ModelID,
-					HitCount:        item.Count,
-				})
+				broadcastSnapshot = append(broadcastSnapshot, p.buildPendingDTO(&item, PendingStatusActive))
 			}
 		}
 		logPendingBroadcast(len(broadcastSnapshot), len(terminalNotifs))

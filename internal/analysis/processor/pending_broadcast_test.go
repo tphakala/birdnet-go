@@ -55,7 +55,7 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 	p := &Processor{
 		Settings: &conf.Settings{},
 		pendingDetections: map[string]PendingDetection{
-			"src1:species_a:model1": {
+			"src1:species_a": {
 				Detection: Detections{
 					Result: detection.Result{
 						Species: detection.Species{
@@ -65,12 +65,12 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 					},
 				},
 				Source:        "src1",
-				ModelID:       "model1",
+				BestModelID:   "model1",
 				FirstDetected: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
 				CreatedAt:     time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
 				Count:         5, // Above threshold of 3 (minDetections=12)
 			},
-			"src1:species_b:model1": {
+			"src1:species_b": {
 				Detection: Detections{
 					Result: detection.Result{
 						Species: detection.Species{
@@ -80,12 +80,12 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 					},
 				},
 				Source:        "src1",
-				ModelID:       "model1",
+				BestModelID:   "model1",
 				FirstDetected: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
 				CreatedAt:     time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
 				Count:         1, // Below threshold of 3
 			},
-			"src1:species_c:model1": {
+			"src1:species_c": {
 				Detection: Detections{
 					Result: detection.Result{
 						Species: detection.Species{
@@ -95,7 +95,7 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 					},
 				},
 				Source:        "src1",
-				ModelID:       "model1",
+				BestModelID:   "model1",
 				FirstDetected: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
 				CreatedAt:     time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
 				Count:         3, // Exactly at threshold
@@ -119,7 +119,7 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 	if okA {
 		assert.Equal(t, PendingStatusActive, pdA.Status)
 		assert.Equal(t, "Genus speciesA", pdA.ScientificName)
-		assert.Equal(t, "model1", pdA.ModelID)
+		assert.Equal(t, "model1", pdA.BestModelID)
 		assert.NotZero(t, pdA.FirstDetected)
 	}
 
@@ -129,7 +129,7 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 	if okC {
 		assert.Equal(t, PendingStatusActive, pdC.Status)
 		assert.Equal(t, "Genus speciesC", pdC.ScientificName)
-		assert.Equal(t, "model1", pdC.ModelID)
+		assert.Equal(t, "model1", pdC.BestModelID)
 		assert.NotZero(t, pdC.FirstDetected)
 	}
 
@@ -156,7 +156,7 @@ func TestSnapshotVisiblePending_AllBelowThreshold(t *testing.T) {
 	p := &Processor{
 		Settings: &conf.Settings{},
 		pendingDetections: map[string]PendingDetection{
-			"src1:species_a:model1": {
+			"src1:species_a": {
 				Detection: Detections{
 					Result: detection.Result{
 						Species: detection.Species{
@@ -166,7 +166,7 @@ func TestSnapshotVisiblePending_AllBelowThreshold(t *testing.T) {
 					},
 				},
 				Source:        "src1",
-				ModelID:       "model1",
+				BestModelID:   "model1",
 				FirstDetected: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
 				CreatedAt:     time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
 				Count:         2, // Below threshold of 3
@@ -195,7 +195,7 @@ func TestBuildFlushNotification(t *testing.T) {
 			},
 		},
 		Source:        "src1",
-		ModelID:       "birdnet-v2.4",
+		BestModelID:   "birdnet-v2.4",
 		FirstDetected: time.Date(2026, 3, 7, 8, 50, 0, 0, time.UTC),
 		CreatedAt:     time.Date(2026, 3, 7, 8, 50, 13, 0, time.UTC),
 	}
@@ -204,12 +204,47 @@ func TestBuildFlushNotification(t *testing.T) {
 	assert.Equal(t, "käpytikka", approved.Species)
 	assert.Equal(t, "Dendrocopos major", approved.ScientificName)
 	assert.Equal(t, PendingStatusApproved, approved.Status)
-	assert.Equal(t, "birdnet-v2.4", approved.ModelID)
+	assert.Equal(t, "birdnet-v2.4", approved.BestModelID)
 	assert.Equal(t, item.CreatedAt.Unix(), approved.FirstDetected)
 
 	rejected := p.buildFlushNotification(item, PendingStatusRejected)
 	assert.Equal(t, PendingStatusRejected, rejected.Status)
-	assert.Equal(t, "birdnet-v2.4", rejected.ModelID)
+	assert.Equal(t, "birdnet-v2.4", rejected.BestModelID)
+}
+
+func TestBuildSSEModelContributions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil_map", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, buildSSEModelContributions(nil))
+	})
+
+	t.Run("empty_map", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, buildSSEModelContributions(map[string]ModelContribution{}))
+	})
+
+	t.Run("single_model_returns_nil", func(t *testing.T) {
+		t.Parallel()
+		result := buildSSEModelContributions(map[string]ModelContribution{
+			"BirdNET_V2.4": {HitCount: 3, MaxConfidence: 0.85},
+		})
+		assert.Nil(t, result)
+	})
+
+	t.Run("two_models_sorted_by_id", func(t *testing.T) {
+		t.Parallel()
+		result := buildSSEModelContributions(map[string]ModelContribution{
+			"Perch_V2":     {HitCount: 2, MaxConfidence: 0.90},
+			"BirdNET_V2.4": {HitCount: 3, MaxConfidence: 0.85},
+		})
+		require.Len(t, result, 2)
+		assert.Equal(t, "BirdNET_V2.4", result[0].ModelID)
+		assert.Equal(t, 3, result[0].HitCount)
+		assert.Equal(t, "Perch_V2", result[1].ModelID)
+		assert.Equal(t, 2, result[1].HitCount)
+	})
 }
 
 func TestSnapshotVisiblePending_UsesCreatedAtNotFirstDetected(t *testing.T) {
@@ -410,12 +445,12 @@ func TestPendingSnapshotChanged(t *testing.T) {
 			changed: true,
 		},
 		{
-			name: "model_id_changed",
+			name: "best_model_id_changed",
 			prev: []SSEPendingDetection{
-				{Species: "Blue Tit", SourceID: "src1", ModelID: "model-a", HitCount: 3, Status: PendingStatusActive},
+				{Species: "Blue Tit", SourceID: "src1", BestModelID: "model-a", HitCount: 3, Status: PendingStatusActive},
 			},
 			curr: []SSEPendingDetection{
-				{Species: "Blue Tit", SourceID: "src1", ModelID: "model-b", HitCount: 3, Status: PendingStatusActive},
+				{Species: "Blue Tit", SourceID: "src1", BestModelID: "model-b", HitCount: 3, Status: PendingStatusActive},
 			},
 			changed: true,
 		},

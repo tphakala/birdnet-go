@@ -1,5 +1,5 @@
 // pending_key_test.go tests the composite key for pendingDetections map
-// to ensure per-source and per-model isolation of pending detections.
+// to ensure per-source isolation and cross-model merging of pending detections.
 package processor
 
 import (
@@ -22,28 +22,33 @@ func TestPendingDetectionKey_MultiSource(t *testing.T) {
 
 	now := time.Now()
 	species := testSpeciesEagleOwl
-	modelID := "BirdNET_V2.4"
 
 	// Simulate detection from source A
-	keyA := pendingDetectionKey("source_a", species, modelID)
+	keyA := pendingDetectionKey("source_a", species)
 	p.pendingDetections[keyA] = PendingDetection{
 		Confidence:    0.85,
 		Source:        "source_a",
-		ModelID:       modelID,
+		BestModelID:   "BirdNET_V2.4",
 		FirstDetected: now,
 		FlushDeadline: now.Add(10 * time.Second),
 		Count:         1,
+		ModelContributions: map[string]ModelContribution{
+			"BirdNET_V2.4": {HitCount: 1, MaxConfidence: 0.85, LastHitAt: now},
+		},
 	}
 
 	// Simulate detection from source B (same species)
-	keyB := pendingDetectionKey("source_b", species, modelID)
+	keyB := pendingDetectionKey("source_b", species)
 	p.pendingDetections[keyB] = PendingDetection{
 		Confidence:    0.90,
 		Source:        "source_b",
-		ModelID:       modelID,
+		BestModelID:   "BirdNET_V2.4",
 		FirstDetected: now.Add(1 * time.Second),
 		FlushDeadline: now.Add(11 * time.Second),
 		Count:         1,
+		ModelContributions: map[string]ModelContribution{
+			"BirdNET_V2.4": {HitCount: 1, MaxConfidence: 0.90, LastHitAt: now},
+		},
 	}
 
 	// Both must exist independently
@@ -53,7 +58,7 @@ func TestPendingDetectionKey_MultiSource(t *testing.T) {
 	assert.NotEqual(t, keyA, keyB)
 }
 
-func TestPendingDetectionKey_MultiModel(t *testing.T) {
+func TestPendingDetectionKey_MultiModel_MergedEntry(t *testing.T) {
 	t.Parallel()
 	p := &Processor{
 		Settings:          &conf.Settings{},
@@ -64,55 +69,46 @@ func TestPendingDetectionKey_MultiModel(t *testing.T) {
 	species := testSpeciesEagleOwl
 	sourceID := "source_a"
 
-	// Simulate detection from model A
-	keyA := pendingDetectionKey(sourceID, species, "BirdNET_V2.4")
-	p.pendingDetections[keyA] = PendingDetection{
-		Confidence:    0.85,
-		Source:        sourceID,
-		ModelID:       "BirdNET_V2.4",
-		FirstDetected: now,
-		FlushDeadline: now.Add(10 * time.Second),
-		Count:         1,
+	// With cross-model consensus, same source+species from different models
+	// merge into a single entry
+	key := pendingDetectionKey(sourceID, species)
+	p.pendingDetections[key] = PendingDetection{
+		Confidence:  0.90,
+		Source:      sourceID,
+		BestModelID: "Perch_V2",
+		Count:       2,
+		ModelContributions: map[string]ModelContribution{
+			"BirdNET_V2.4": {HitCount: 1, MaxConfidence: 0.85, LastHitAt: now},
+			"Perch_V2":     {HitCount: 1, MaxConfidence: 0.90, LastHitAt: now},
+		},
 	}
 
-	// Simulate detection from model B (same species, same source)
-	keyB := pendingDetectionKey(sourceID, species, "Perch_V2")
-	p.pendingDetections[keyB] = PendingDetection{
-		Confidence:    0.90,
-		Source:        sourceID,
-		ModelID:       "Perch_V2",
-		FirstDetected: now.Add(1 * time.Second),
-		FlushDeadline: now.Add(11 * time.Second),
-		Count:         1,
-	}
-
-	// Both must exist independently — different models must not collide
-	require.Len(t, p.pendingDetections, 2)
-	assert.Equal(t, "BirdNET_V2.4", p.pendingDetections[keyA].ModelID)
-	assert.Equal(t, "Perch_V2", p.pendingDetections[keyB].ModelID)
-	assert.NotEqual(t, keyA, keyB)
+	require.Len(t, p.pendingDetections, 1)
+	entry := p.pendingDetections[key]
+	assert.Equal(t, "Perch_V2", entry.BestModelID)
+	assert.Equal(t, 2, entry.Count)
+	assert.Len(t, entry.ModelContributions, 2)
+	assert.InDelta(t, 0.85, entry.ModelContributions["BirdNET_V2.4"].MaxConfidence, 1e-9)
+	assert.InDelta(t, 0.90, entry.ModelContributions["Perch_V2"].MaxConfidence, 1e-9)
 }
 
 func TestPendingDetectionKey_Format(t *testing.T) {
 	t.Parallel()
-	key := pendingDetectionKey("rtsp_cam1", testSpeciesEagleOwl, "BirdNET_V2.4")
-	assert.Equal(t, "rtsp_cam1:eurasian eagle-owl:BirdNET_V2.4", key)
+	key := pendingDetectionKey("rtsp_cam1", testSpeciesEagleOwl)
+	assert.Equal(t, "rtsp_cam1:eurasian eagle-owl", key)
 }
 
 func TestPendingDetectionKey_RTSPUrlWithColons(t *testing.T) {
 	t.Parallel()
 
-	// RTSP URLs contain colons — verify keys are unique and species isolation works
 	sourceID := "rtsp://user:pass@192.168.1.100:554/stream"
 	species := testSpeciesEagleOwl
-	modelID := "BirdNET_V2.4"
 
-	key := pendingDetectionKey(sourceID, species, modelID)
+	key := pendingDetectionKey(sourceID, species)
 	assert.Contains(t, key, species)
 	assert.Contains(t, key, sourceID)
-	assert.Contains(t, key, modelID)
 
 	// Two different RTSP sources with same species must produce different keys
-	key2 := pendingDetectionKey("rtsp://cam2:554/alt", species, modelID)
+	key2 := pendingDetectionKey("rtsp://cam2:554/alt", species)
 	assert.NotEqual(t, key, key2)
 }

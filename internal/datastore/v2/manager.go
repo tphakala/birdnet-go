@@ -208,6 +208,7 @@ func v2Entities() []any {
 		&entities.AudioSource{},
 		&entities.Detection{},
 		&entities.DetectionPrediction{},
+		&entities.DetectionModelContribution{},
 		&entities.DetectionReview{},
 		&entities.DetectionComment{},
 		&entities.DetectionLock{},

@@ -29,20 +29,8 @@ type ConversionDeps struct {
 // deps.SpeciesLabelTypeID, deps.AvesClassID, and deps.ChiropteraClassID must be initialized.
 func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *ConversionDeps) (*entities.Detection, error) {
 	// Get or create model first (needed for label creation)
-	modelName := result.Model.Name
-	if modelName == "" {
-		modelName = detection.DefaultModelName
-	}
-	modelVersion := result.Model.Version
-	if modelVersion == "" {
-		modelVersion = detection.DefaultModelVersion
-	}
-	modelVariant := result.Model.Variant
-	if modelVariant == "" {
-		modelVariant = detection.DefaultModelVariant
-	}
-
-	model, err := deps.ModelRepo.GetOrCreate(ctx, modelName, modelVersion, modelVariant, detection.ResolveModelType(modelName, modelVersion), result.Model.ClassifierPath)
+	m := result.Model.WithDefaults()
+	model, err := deps.ModelRepo.GetOrCreate(ctx, m.Name, m.Version, m.Variant, detection.ResolveModelType(m.Name, m.Version), m.ClassifierPath)
 	if err != nil {
 		return nil, fmt.Errorf("model resolution failed: %w", err)
 	}

@@ -68,6 +68,13 @@ func (r *detectionRepository) predictionsTable() string {
 	return tableDetectionPredictions
 }
 
+func (r *detectionRepository) modelContributionsTable() string {
+	if r.useV2Prefix {
+		return tableV2DetectionModelContributions
+	}
+	return tableDetectionModelContributions
+}
+
 func (r *detectionRepository) reviewsTable() string {
 	if r.useV2Prefix {
 		return tableV2DetectionReviews
@@ -1013,6 +1020,32 @@ func (r *detectionRepository) SavePredictions(ctx context.Context, detectionID u
 
 	return datastore.RetryOnLock(ctx, "v2_save_predictions", func() error {
 		return r.db.WithContext(ctx).Table(r.predictionsTable()).Create(&preds).Error
+	}, r.metrics)
+}
+
+// SaveModelContributions stores per-model contribution data for a detection.
+// Existing contributions are deleted and new ones inserted atomically in a single
+// transaction for idempotent reconciliation.
+func (r *detectionRepository) SaveModelContributions(ctx context.Context, detectionID uint, contribs []*entities.DetectionModelContribution) error {
+	if len(contribs) == 0 {
+		return nil
+	}
+
+	return datastore.RetryOnLock(ctx, "v2_save_model_contributions", func() error {
+		return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := tx.Table(r.modelContributionsTable()).
+				Where("detection_id = ?", detectionID).
+				Delete(&entities.DetectionModelContribution{}).Error; err != nil {
+				return err
+			}
+
+			for _, c := range contribs {
+				c.ID = 0
+				c.DetectionID = detectionID
+			}
+
+			return tx.Table(r.modelContributionsTable()).Create(&contribs).Error
+		})
 	}, r.metrics)
 }
 
