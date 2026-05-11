@@ -780,9 +780,17 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 	}
 }
 
+// sourceNeedsReconfigure reports whether the running source's audio parameters
+// differ from the desired config, requiring a full reconfigure (stop + restart).
+func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.SourceConfig) bool {
+	return running.SampleRate != desired.SampleRate ||
+		running.BitDepth != desired.BitDepth ||
+		running.Channels != desired.Channels
+}
+
 // reconfigureChangedSources diffs the currently running sources against the
 // desired config from settings. Only sources that were added, removed, or
-// changed are touched — unchanged streams keep their capture buffers and
+// changed are touched - unchanged streams keep their capture buffers and
 // source IDs intact.
 func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan audiocore.AudioLevelData) {
 	log := GetAudiocoreLogger()
@@ -799,7 +807,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	// security, so we look up sources via GetByConnection on the desired
 	// connection strings instead.
 	registry := p.engine.Registry()
-	alreadyRunning := make(map[string]string) // connStr → sourceID (for sources that stay)
+	alreadyRunning := make(map[string]string) // connStr -> sourceID (for sources that stay)
 	sourceModelMap := make(map[string][]string)
 	var newSourceIDs []string
 	var gainChangedIDs []string
@@ -807,7 +815,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 
 	for connStr, scm := range desired {
 		if src, found := registry.GetByConnection(connStr); found {
-			// Source already running — keep it.
+			// Source already running - keep it.
 			alreadyRunning[connStr] = src.ID
 			sourceModelMap[src.ID] = scm.modelIDs
 			keptCount++
@@ -823,12 +831,30 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				gainChangedIDs = append(gainChangedIDs, src.ID)
 			}
 
+			// Detect audio parameter changes (sample rate, bit depth, channels)
+			// that require a full source reconfigure (stop + buffer realloc + restart).
+			if sourceNeedsReconfigure(src, scm.config) {
+				log.Info("audio parameters changed, reconfiguring source",
+					logger.String("source_id", src.ID),
+					logger.Int("old_sample_rate", src.SampleRate),
+					logger.Int("new_sample_rate", scm.config.SampleRate),
+					logger.Int("old_bit_depth", src.BitDepth),
+					logger.Int("new_bit_depth", scm.config.BitDepth),
+					logger.String("operation", "reconfigure_diff"))
+				if err := p.engine.ReconfigureSource(src.ID, scm.config); err != nil {
+					log.Error("failed to reconfigure source",
+						logger.String("source_id", src.ID),
+						logger.Error(err),
+						logger.String("operation", "reconfigure_diff"))
+				}
+			}
+
 			// Sync display name if the config name changed (e.g., stream renamed in UI).
 			if src.DisplayName != scm.config.DisplayName {
 				registry.UpdateDisplayName(src.ID, scm.config.DisplayName)
 			}
 		} else {
-			// New source — add it.
+			// New source - add it.
 			log.Info("adding new stream from config",
 				logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
 				logger.String("operation", "reconfigure_diff"))
