@@ -27,6 +27,34 @@
       | 'last_seen_desc'
       | 'confidence_desc';
     searchTerm: string;
+    /**
+     * Selected source group display names. Empty array means "all sources".
+     * Display names are grouped on the picker so duplicate audio_sources rows
+     * collapse; we expand back to underlying audio_sources.id values when
+     * issuing API requests via the source_id query parameter.
+     */
+    sourceGroups: string[];
+  }
+
+  // Response shape for GET /api/v2/analytics/sources
+  interface AnalyticsSourceApiEntry {
+    id: number;
+    displayName: string;
+    sourceUri?: string;
+    sourceType?: string;
+    nodeName?: string;
+    detectionCount: number;
+  }
+
+  interface AnalyticsSourceListResponse {
+    sources: AnalyticsSourceApiEntry[];
+  }
+
+  // Aggregated form used by the SpeciesFilterForm picker — one entry per display_name.
+  interface AudioSourceOption {
+    displayName: string;
+    ids: number[];
+    count: number;
   }
 
   interface SpeciesData {
@@ -55,7 +83,57 @@
     endDate: '',
     sortOrder: 'count_desc',
     searchTerm: '',
+    sourceGroups: [],
   });
+
+  // Audio sources loaded once on mount; the picker hides itself when there are <2.
+  let audioSources = $state<AudioSourceOption[]>([]);
+
+  // Resolve selected display names back to the comma-separated audio_sources.id list
+  // used by the `source_id` query parameter. Empty when "all sources" is selected.
+  let selectedSourceIdsParam = $derived.by(() => {
+    if (filters.sourceGroups.length === 0 || audioSources.length === 0) return '';
+    const byName = new Map(audioSources.map(s => [s.displayName, s.ids] as const));
+    const ids: number[] = [];
+    for (const name of filters.sourceGroups) {
+      const matched = byName.get(name);
+      if (matched) ids.push(...matched);
+    }
+    return ids.join(',');
+  });
+
+  // Fetch the historical audio sources list and aggregate by display_name so the picker
+  // shows one entry even when multiple audio_sources rows share a name.
+  async function fetchAudioSources() {
+    try {
+      const resp = await fetch(buildAppUrl('/api/v2/analytics/sources'));
+      if (!resp.ok) {
+        logger.warn('Failed to load analytics sources', { status: resp.status });
+        return;
+      }
+      const data: AnalyticsSourceListResponse = await resp.json();
+      const raw = Array.isArray(data?.sources) ? data.sources : [];
+      const aggregated = new Map<string, AudioSourceOption>();
+      for (const entry of raw) {
+        const name = entry.displayName || t('analytics.filters.audioSourceUnknown');
+        const existing = aggregated.get(name);
+        if (existing) {
+          existing.ids.push(entry.id);
+          existing.count += entry.detectionCount ?? 0;
+        } else {
+          aggregated.set(name, {
+            displayName: name,
+            ids: [entry.id],
+            count: entry.detectionCount ?? 0,
+          });
+        }
+      }
+      audioSources = Array.from(aggregated.values()).sort((a, b) => b.count - a.count);
+    } catch (error) {
+      logger.error('Error fetching analytics audio sources:', error);
+      audioSources = [];
+    }
+  }
 
   // Set default dates on mount
   onMount(() => {
@@ -65,6 +143,9 @@
 
     filters.endDate = formatDateForInput(today);
     filters.startDate = formatDateForInput(lastMonth);
+
+    // Load picker data in parallel with the initial summary fetch.
+    void fetchAudioSources();
 
     // Fetch initial data
     fetchData();
@@ -134,6 +215,9 @@
       const params = new URLSearchParams();
       if (startDate) params.set('start_date', startDate);
       if (endDate) params.set('end_date', endDate);
+      if (selectedSourceIdsParam) {
+        params.set('source_id', selectedSourceIdsParam);
+      }
 
       // Fetch species summary data
       const response = await fetch(
@@ -257,6 +341,7 @@
     filters.timePeriod = 'all';
     filters.sortOrder = 'count_desc';
     filters.searchTerm = '';
+    filters.sourceGroups = [];
 
     const today = new Date();
     const lastMonth = new Date();
@@ -453,6 +538,7 @@
   <!-- Filter Controls -->
   <SpeciesFilterForm
     bind:filters
+    {audioSources}
     {isLoading}
     filteredCount={getFilteredCount()}
     onSubmit={fetchData}

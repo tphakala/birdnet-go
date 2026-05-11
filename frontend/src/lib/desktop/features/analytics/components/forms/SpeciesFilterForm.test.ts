@@ -14,6 +14,7 @@ const createDefaultFilters = () => ({
   endDate: '',
   sortOrder: 'count_desc' as const,
   searchTerm: '',
+  sourceGroups: [] as string[],
 });
 
 describe('SpeciesFilterForm', () => {

@@ -2,6 +2,7 @@
   import FormField from '$lib/desktop/components/forms/FormField.svelte';
   import Input from '$lib/desktop/components/ui/Input.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import { t } from '$lib/i18n';
 
   interface SpeciesFilters {
@@ -18,10 +19,24 @@
       | 'last_seen_desc'
       | 'confidence_desc';
     searchTerm: string;
+    /** Selected source group display names. Empty array means "all sources". */
+    sourceGroups: string[];
+  }
+
+  /**
+   * AudioSourceOption mirrors the shape used by Analytics.svelte's picker — one entry per
+   * display_name with the aggregate detection count. The parent resolves the display name
+   * back to the underlying audio_sources.id list when issuing API requests.
+   */
+  export interface AudioSourceOption {
+    displayName: string;
+    ids: number[];
+    count: number;
   }
 
   interface Props {
     filters: SpeciesFilters;
+    audioSources?: AudioSourceOption[];
     isLoading?: boolean;
     filteredCount: number;
     onSubmit: () => void;
@@ -32,6 +47,7 @@
 
   let {
     filters = $bindable(),
+    audioSources = [],
     isLoading = false,
     filteredCount,
     onSubmit,
@@ -49,6 +65,18 @@
     { value: 'year', label: t('analytics.timePeriodOptions.lastYear') },
     { value: 'custom', label: t('analytics.timePeriodOptions.customRange') },
   ];
+
+  // Build dropdown options from the audio sources list. No locale argument on toLocaleString
+  // so the browser's resolved locale formats the count (NL: "1.234", US: "1,234").
+  let sourceOptions = $derived<SelectOption[]>(
+    audioSources.map(src => ({
+      value: src.displayName,
+      label: `${src.displayName} (${src.count.toLocaleString()})`,
+    }))
+  );
+
+  // Hide the picker entirely when there's only one source — nothing to filter on.
+  let showSourcePicker = $derived(audioSources.length >= 2);
 
   const sortOptions = [
     { value: 'count_desc', label: t('analytics.sortOptions.mostDetections') },
@@ -105,6 +133,22 @@
 
           <FormField label={t('analytics.filters.to')} id="endDate">
             <Input type="date" id="endDate" bind:value={filters.endDate} />
+          </FormField>
+        {/if}
+
+        <!-- Audio Source Filter (multi-select; hidden when only one source exists) -->
+        {#if showSourcePicker}
+          <FormField label={t('analytics.filters.audioSource')} id="audioSource">
+            <SelectDropdown
+              bind:value={filters.sourceGroups}
+              options={sourceOptions}
+              multiple={true}
+              clearable={true}
+              variant="select"
+              size="sm"
+              menuSize="sm"
+              placeholder={t('analytics.filters.audioSourceAll')}
+            />
           </FormField>
         {/if}
 
