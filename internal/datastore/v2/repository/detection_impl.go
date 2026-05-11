@@ -1334,7 +1334,9 @@ func (r *detectionRepository) GetCommentsByDetectionIDs(ctx context.Context, det
 // ============================================================================
 
 // Lock prevents modification/deletion of a detection.
-// Uses INSERT with existence check to avoid TOCTOU races.
+// Uses an atomic INSERT...SELECT...WHERE NOT EXISTS to avoid TOCTOU races.
+// Idempotent: locking an already-locked detection succeeds silently.
+// Returns ErrDetectionNotFound only if the detection does not exist.
 func (r *detectionRepository) Lock(ctx context.Context, detectionID uint) error {
 	return datastore.RetryOnLock(ctx, "v2_lock_detection", func() error {
 		result := r.db.WithContext(ctx).Exec(

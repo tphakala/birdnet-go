@@ -145,6 +145,12 @@ func (dw *DualWriteRepository) Shutdown() {
 // synced to v2; if it was deleted from legacy, the v2 ghost is removed.
 func (dw *DualWriteRepository) StartReconciliation() {
 	dw.reconcileOnce.Do(func() {
+		select {
+		case <-dw.shutdownCh:
+			return
+		default:
+		}
+
 		ticker := time.NewTicker(reconcileInterval)
 		done := make(chan struct{})
 
@@ -154,6 +160,7 @@ func (dw *DualWriteRepository) StartReconciliation() {
 		dw.reconcileMu.Unlock()
 
 		go func() {
+			defer ticker.Stop()
 			defer close(done)
 			for {
 				select {
