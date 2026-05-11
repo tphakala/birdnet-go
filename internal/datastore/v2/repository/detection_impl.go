@@ -1097,31 +1097,15 @@ func (r *detectionRepository) DeletePredictions(ctx context.Context, detectionID
 // ============================================================================
 
 // SaveReview creates or updates a review for a detection.
+// Uses INSERT...ON CONFLICT to avoid TOCTOU between existence check and insert.
+// Idempotent: re-saving updates the verified status and timestamp.
 func (r *detectionRepository) SaveReview(ctx context.Context, review *entities.DetectionReview) error {
-	// Check if review exists
-	var existing entities.DetectionReview
-	err := r.db.WithContext(ctx).Table(r.reviewsTable()).
-		Where("detection_id = ?", review.DetectionID).
-		First(&existing).Error
-
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		// Create new review
-		return datastore.RetryOnLock(ctx, "v2_save_review", func() error {
-			return r.db.WithContext(ctx).Table(r.reviewsTable()).Create(review).Error
-		}, r.metrics)
-	}
-	if err != nil {
-		return err
-	}
-
-	// Update existing review
-	return datastore.RetryOnLock(ctx, "v2_save_review_update", func() error {
-		return r.db.WithContext(ctx).Table(r.reviewsTable()).
-			Where("detection_id = ?", review.DetectionID).
-			Updates(map[string]any{
-				"verified":   review.Verified,
-				"updated_at": time.Now(),
-			}).Error
+	return datastore.RetryOnLock(ctx, "v2_save_review", func() error {
+		now := time.Now()
+		return r.db.WithContext(ctx).Exec(
+			fmt.Sprintf("INSERT INTO %s (detection_id, verified, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(detection_id) DO UPDATE SET verified = excluded.verified, updated_at = excluded.updated_at",
+				r.reviewsTable()),
+			review.DetectionID, string(review.Verified), now, now).Error
 	}, r.metrics)
 }
 
