@@ -304,12 +304,9 @@ func (c *Collector) collectInference(points map[string]float64) {
 		c.prevInferenceSnaps[modelID] = &s
 	}
 
-	// Remove stale snapshots for unloaded models
-	if len(c.prevInferenceSnaps) > len(snaps) {
-		for modelID := range c.prevInferenceSnaps {
-			if _, ok := snaps[modelID]; !ok {
-				delete(c.prevInferenceSnaps, modelID)
-			}
+	for modelID := range c.prevInferenceSnaps {
+		if _, ok := snaps[modelID]; !ok {
+			delete(c.prevInferenceSnaps, modelID)
 		}
 	}
 }

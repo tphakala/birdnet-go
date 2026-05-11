@@ -47,6 +47,9 @@
 
     const padding = 2;
 
+    // Shared X domain: align all datasets to the right edge (most recent point)
+    const maxLen = Math.max(0, ...effectiveDatasets.map(ds => ds.data.length));
+
     let globalMin = Infinity;
     let globalMax = -Infinity;
     for (const ds of effectiveDatasets) {
@@ -66,21 +69,23 @@
       .domain([globalMin, globalMax])
       .range([viewHeight - padding, padding]);
 
+    const xScale = scaleLinear()
+      .domain([0, maxLen - 1])
+      .range([0, viewWidth]);
+
     const paths: PathResult[] = [];
     for (const ds of effectiveDatasets) {
       if (ds.data.length < 2) continue;
 
-      const xScale = scaleLinear()
-        .domain([0, ds.data.length - 1])
-        .range([0, viewWidth]);
+      const offset = maxLen - ds.data.length;
 
       const lineGenerator = line<number>()
-        .x((_, i) => xScale(i))
+        .x((_, i) => xScale(offset + i))
         .y(d => yScale(d))
         .curve(curveMonotoneX);
 
       const areaGenerator = area<number>()
-        .x((_, i) => xScale(i))
+        .x((_, i) => xScale(offset + i))
         .y0(viewHeight)
         .y1(d => yScale(d))
         .curve(curveMonotoneX);
