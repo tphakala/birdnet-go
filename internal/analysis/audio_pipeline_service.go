@@ -908,7 +908,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	}
 
 	// Rebuild routes for sources whose gain changed. The capture device
-	// stays running — only the routes are torn down and re-created so
+	// stays running; only the routes are torn down and re-created so
 	// drainRoute picks up the new gainLinear value.
 	if len(gainChangedIDs) > 0 {
 		for _, sid := range gainChangedIDs {
@@ -936,7 +936,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		}
 	}
 
-	log.Info("stream reconfiguration complete",
+	log.Info("audio source reconfiguration complete",
 		logger.Int("kept", keptCount),
 		logger.Int("added", len(newSourceIDs)),
 		logger.Int("removed", removedCount),
