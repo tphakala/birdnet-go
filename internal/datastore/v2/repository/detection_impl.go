@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -1426,7 +1427,7 @@ func (r *detectionRepository) GetLocksByDetectionIDs(ctx context.Context, detect
 
 // GetSpeciesSummary returns summary statistics for all species.
 // Groups by scientific_name to aggregate across all models for the same species.
-func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint) ([]SpeciesSummaryData, error) {
+func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint, sourceIDs ...uint) ([]SpeciesSummaryData, error) {
 	var results []SpeciesSummaryData
 
 	detTable := r.tableName()
@@ -1451,6 +1452,9 @@ func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end 
 	if modelID != nil {
 		query = query.Where(fmt.Sprintf("%s.model_id = ?", detTable), *modelID)
 	}
+	if len(sourceIDs) > 0 {
+		query = query.Where(fmt.Sprintf("%s.source_id IN ?", detTable), sourceIDs)
+	}
 
 	err := query.Group(fmt.Sprintf("%s.scientific_name", labTable)).
 		Order("total_detections DESC").
@@ -1461,7 +1465,8 @@ func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end 
 
 // buildAnalyticsBaseQuery creates a base query with JOIN and WHERE clauses for analytics.
 // This helper reduces duplication between analytics query methods.
-func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start, end int64, labelID, modelID *uint) *gorm.DB {
+// sourceIDs (when non-empty) restricts results to detections from the listed audio sources.
+func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start, end int64, labelID, modelID *uint, sourceIDs ...uint) *gorm.DB {
 	detTable := r.tableName()
 	revTable := r.reviewsTable()
 	query := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
@@ -1475,18 +1480,21 @@ func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start
 	if modelID != nil {
 		query = query.Where("d.model_id = ?", *modelID)
 	}
+	if len(sourceIDs) > 0 {
+		query = query.Where("d.source_id IN ?", sourceIDs)
+	}
 
 	return query
 }
 
 // GetHourlyDistribution returns detection counts by hour.
-func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, labelID, modelID *uint) ([]HourlyDistributionData, error) {
+func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, labelID, modelID *uint, sourceIDs ...uint) ([]HourlyDistributionData, error) {
 	var results []HourlyDistributionData
 
 	// Use hourFromUnixExpr for correct local timezone conversion
 	// Exclude detections marked as false_positive
 	hourExpr := r.hourFromUnixExpr("d.detected_at")
-	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID).
+	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID, sourceIDs...).
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
 		Group("hour").
 		Order("hour ASC")
@@ -1496,13 +1504,13 @@ func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, 
 }
 
 // GetDailyAnalytics returns daily statistics.
-func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end int64, labelID, modelID *uint) ([]DailyAnalyticsData, error) {
+func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end int64, labelID, modelID *uint, sourceIDs ...uint) ([]DailyAnalyticsData, error) {
 	var results []DailyAnalyticsData
 
 	// Use dialect-appropriate date conversion
 	// Exclude detections marked as false_positive
 	dateExpr := r.dateFromUnixExpr("d.detected_at")
-	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID).
+	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID, sourceIDs...).
 		Select(fmt.Sprintf(`
 			%s as date,
 			COUNT(*) as total_detections,
@@ -1517,7 +1525,7 @@ func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end 
 }
 
 // GetDetectionTrends returns detection trends over time.
-func (r *detectionRepository) GetDetectionTrends(ctx context.Context, period string, limit int, modelID *uint) ([]DailyAnalyticsData, error) {
+func (r *detectionRepository) GetDetectionTrends(ctx context.Context, period string, limit int, modelID *uint, sourceIDs ...uint) ([]DailyAnalyticsData, error) {
 	// Calculate start time based on period
 	var startTime int64
 	now := time.Now().Unix()
@@ -1531,21 +1539,21 @@ func (r *detectionRepository) GetDetectionTrends(ctx context.Context, period str
 		startTime = now - (24 * 3600)
 	}
 
-	return r.GetDailyAnalytics(ctx, startTime, now, nil, modelID)
+	return r.GetDailyAnalytics(ctx, startTime, now, nil, modelID, sourceIDs...)
 }
 
 // GetNewSpecies returns species detected for the first time ever within the range.
 // Groups by scientific_name to aggregate across all models for the same species.
 // Uses MIN(id) as tie-breaker to avoid duplicates when multiple detections share the same timestamp.
-func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int64, limit, offset int) ([]NewSpeciesData, error) {
+// When sourceIDs is non-empty, "first ever" is scoped to detections from those audio sources only.
+func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int64, limit, offset int, sourceIDs ...uint) ([]NewSpeciesData, error) {
 	var results []NewSpeciesData
 
-	// Use raw SQL to properly group by scientific_name across all label IDs
-	// This finds species where their lifetime first detection is within the requested range.
-	//
-	// Approach: Use a derived table to compute lifetime first detection per species,
-	// then filter and join back to get detection details. This is O(n) instead of
-	// the O(n²) correlated subquery approach.
+	// Build optional source filter applied inside both derived table and outer join.
+	// Scoping inside the derived table ensures "lifetime first" is per-source when filtering;
+	// scoping in the outer join keeps detection_id/confidence consistent with the same source set.
+	sourceClauseInner, sourceClauseOuter, sourceArgs := buildSourceFilterClauses(sourceIDs, "d2", "d")
+
 	rawSQL := fmt.Sprintf(`
 		SELECT
 			MIN(d.label_id) as label_id,
@@ -1557,17 +1565,24 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 			SELECT l2.scientific_name, MIN(d2.detected_at) as lifetime_first
 			FROM %s d2
 			JOIN %s l2 ON l2.id = d2.label_id
+			%s
 			GROUP BY l2.scientific_name
 			HAVING MIN(d2.detected_at) >= ? AND MIN(d2.detected_at) < ?
 		) species_first
 		JOIN %s l ON l.scientific_name = species_first.scientific_name
-		JOIN %s d ON d.label_id = l.id AND d.detected_at = species_first.lifetime_first
+		JOIN %s d ON d.label_id = l.id AND d.detected_at = species_first.lifetime_first %s
 		GROUP BY species_first.scientific_name, species_first.lifetime_first
 		ORDER BY first_detected DESC
 		LIMIT ? OFFSET ?
-	`, r.tableName(), r.labelsTable(), r.labelsTable(), r.tableName())
+	`, r.tableName(), r.labelsTable(), sourceClauseInner, r.labelsTable(), r.tableName(), sourceClauseOuter)
 
-	err := r.db.WithContext(ctx).Raw(rawSQL, start, end, limit, offset).Scan(&results).Error
+	args := make([]any, 0, len(sourceArgs)*2+4)
+	args = append(args, sourceArgs...)        // inner WHERE source_id IN ?
+	args = append(args, start, end)            // HAVING bounds
+	args = append(args, sourceArgs...)        // outer AND source_id IN ?
+	args = append(args, limit, offset)        // pagination
+
+	err := r.db.WithContext(ctx).Raw(rawSQL, args...).Scan(&results).Error
 	return results, err
 }
 
@@ -1575,12 +1590,12 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 // Groups by scientific_name to aggregate across all models for the same species.
 // Uses ROW_NUMBER() window function to correctly identify the detection with the earliest timestamp
 // per species, with id as tie-breaker for deterministic results.
-func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start, end int64, limit, offset int) ([]SpeciesFirstSeen, error) {
+// When sourceIDs is non-empty, results are scoped to detections from those audio sources.
+func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start, end int64, limit, offset int, sourceIDs ...uint) ([]SpeciesFirstSeen, error) {
 	var results []SpeciesFirstSeen
 
-	// Use window function to rank detections per species (by scientific_name) by timestamp
-	// This ensures we get the actual detection_id that corresponds to the first_detected time
-	// Partitioning by scientific_name aggregates across all models for the same species
+	sourceClause, _, sourceArgs := buildSourceFilterClauses(sourceIDs, "d", "")
+
 	rawSQL := fmt.Sprintf(`
 		SELECT label_id, scientific_name, first_detected, detection_id
 		FROM (
@@ -1592,15 +1607,44 @@ func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Conte
 				ROW_NUMBER() OVER (PARTITION BY l.scientific_name ORDER BY d.detected_at ASC, d.id ASC) as rn
 			FROM %s d
 			JOIN %s l ON l.id = d.label_id
-			WHERE d.detected_at >= ? AND d.detected_at < ?
+			WHERE d.detected_at >= ? AND d.detected_at < ? %s
 		) ranked
 		WHERE rn = 1
 		ORDER BY first_detected ASC
 		LIMIT ? OFFSET ?
-	`, r.tableName(), r.labelsTable())
+	`, r.tableName(), r.labelsTable(), sourceClause)
 
-	err := r.db.WithContext(ctx).Raw(rawSQL, start, end, limit, offset).Scan(&results).Error
+	args := make([]any, 0, 4+len(sourceArgs))
+	args = append(args, start, end)
+	args = append(args, sourceArgs...)
+	args = append(args, limit, offset)
+
+	err := r.db.WithContext(ctx).Raw(rawSQL, args...).Scan(&results).Error
 	return results, err
+}
+
+// buildSourceFilterClauses returns SQL fragments and args for filtering by audio source IDs.
+// innerAlias is the alias used in a WHERE-style clause (e.g. "d2" → "WHERE d2.source_id IN (?,?)").
+// outerAlias is the alias used in an AND-style clause appended to an existing ON or WHERE (e.g. "d" → " AND d.source_id IN (?,?)").
+// Returns empty strings and no args when sourceIDs is empty.
+func buildSourceFilterClauses(sourceIDs []uint, innerAlias, outerAlias string) (innerClause, outerClause string, args []any) {
+	if len(sourceIDs) == 0 {
+		return "", "", nil
+	}
+	placeholders := make([]string, len(sourceIDs))
+	args = make([]any, len(sourceIDs))
+	for i, id := range sourceIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	list := strings.Join(placeholders, ",")
+	if innerAlias != "" {
+		innerClause = fmt.Sprintf("WHERE %s.source_id IN (%s)", innerAlias, list)
+	}
+	if outerAlias != "" {
+		outerClause = fmt.Sprintf(" AND %s.source_id IN (%s)", outerAlias, list)
+	}
+	return innerClause, outerClause, args
 }
 
 // ============================================================================

@@ -1487,7 +1487,10 @@
       "applyFilters": "Tillämpa filter",
       "exportCsv": "Exportera CSV",
       "species": "arter",
-      "filtered": "(filtrerat)"
+      "filtered": "(filtrerat)",
+      "audioSource": "Ljudkälla",
+      "audioSourceAll": "Alla ljudkällor",
+      "audioSourceUnknown": "Okänd källa"
     },
     "timePeriodOptions": {
       "allTime": "Hela tiden",

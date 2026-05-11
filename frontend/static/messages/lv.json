@@ -1487,7 +1487,10 @@
       "applyFilters": "Lietot filtrus",
       "exportCsv": "Eksportēt CSV",
       "species": "sugas",
-      "filtered": "(filtrēts)"
+      "filtered": "(filtrēts)",
+      "audioSource": "Skaņas avots",
+      "audioSourceAll": "Visi skaņas avoti",
+      "audioSourceUnknown": "Nezināms avots"
     },
     "timePeriodOptions": {
       "allTime": "Visu laiku",

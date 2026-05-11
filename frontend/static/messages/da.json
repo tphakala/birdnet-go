@@ -1487,7 +1487,10 @@
       "applyFilters": "Anvend filtre",
       "exportCsv": "Eksportér CSV",
       "species": "arter",
-      "filtered": "(filtreret)"
+      "filtered": "(filtreret)",
+      "audioSource": "Lydkilde",
+      "audioSourceAll": "Alle lydkilder",
+      "audioSourceUnknown": "Ukendt kilde"
     },
     "timePeriodOptions": {
       "allTime": "Al tid",

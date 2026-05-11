@@ -1463,7 +1463,10 @@
       "applyFilters": "Použiť filtre",
       "exportCsv": "Exportovať CSV",
       "species": "druhy",
-      "filtered": "(filtrované)"
+      "filtered": "(filtrované)",
+      "audioSource": "Zdroj zvuku",
+      "audioSourceAll": "Všetky zdroje zvuku",
+      "audioSourceUnknown": "Neznámy zdroj"
     },
     "timePeriodOptions": {
       "allTime": "Celý čas",

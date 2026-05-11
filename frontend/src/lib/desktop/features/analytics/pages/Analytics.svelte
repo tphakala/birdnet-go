@@ -21,6 +21,34 @@
     timePeriod: 'all' | 'today' | 'week' | 'month' | '90days' | 'year' | 'custom';
     startDate: string;
     endDate: string;
+    /**
+     * Selected source group display names. Empty array means "all sources".
+     * The display-name grouping merges duplicate audio_sources rows that share
+     * a display_name; we map back to the underlying audio_sources.id list when
+     * issuing API requests via the `source_id` query parameter.
+     */
+    sourceGroups: string[];
+  }
+
+  // Response shape for GET /api/v2/analytics/sources
+  interface AnalyticsSourceApiEntry {
+    id: number;
+    displayName: string;
+    sourceUri?: string;
+    sourceType?: string;
+    nodeName?: string;
+    detectionCount: number;
+  }
+
+  interface AnalyticsSourceListResponse {
+    sources: AnalyticsSourceApiEntry[];
+  }
+
+  // Aggregated form used by the FilterForm picker — one entry per display_name.
+  interface AudioSourceOption {
+    displayName: string;
+    ids: number[];
+    count: number;
   }
 
   interface Summary {
@@ -150,7 +178,31 @@
     timePeriod: 'week',
     startDate: '',
     endDate: '',
+    sourceGroups: [],
   });
+
+  // Audio sources loaded once on mount; the picker is hidden when there are fewer than two.
+  let audioSources = $state<AudioSourceOption[]>([]);
+
+  // Map selected display_names back to a comma-separated list of audio_sources.id values
+  // suitable for the `source_id` query parameter. Empty when "all sources" is selected.
+  let selectedSourceIdsParam = $derived.by(() => {
+    if (filters.sourceGroups.length === 0 || audioSources.length === 0) return '';
+    const byName = new Map(audioSources.map(s => [s.displayName, s.ids] as const));
+    const ids: number[] = [];
+    for (const name of filters.sourceGroups) {
+      const matched = byName.get(name);
+      if (matched) ids.push(...matched);
+    }
+    return ids.join(',');
+  });
+
+  // Apply the source filter to a URLSearchParams instance when at least one source is selected.
+  function applySourceFilter(params: URLSearchParams) {
+    if (selectedSourceIdsParam) {
+      params.set('source_id', selectedSourceIdsParam);
+    }
+  }
 
   // Summary data
   let summary = $state<Summary>({
@@ -291,6 +343,7 @@
     lastWeek.setDate(today.getDate() - 6);
     filters.endDate = formatDateForInput(today);
     filters.startDate = formatDateForInput(lastWeek);
+    filters.sourceGroups = [];
     fetchData();
   }
 
@@ -406,6 +459,7 @@
       const params = new URLSearchParams();
       if (startDate) params.set('start_date', startDate);
       if (endDate) params.set('end_date', endDate);
+      applySourceFilter(params);
 
       const url = `/api/v2/analytics/species/summary?${params}`;
       logger.debug('Fetching summary data:', { url, startDate, endDate });
@@ -457,6 +511,7 @@
       const params = new URLSearchParams({ limit: '10' });
       if (startDate) params.set('start_date', startDate);
       if (endDate) params.set('end_date', endDate);
+      applySourceFilter(params);
 
       const url = `/api/v2/analytics/species/summary?${params}`;
       logger.debug('Fetching species chart data:', { url, startDate, endDate });
@@ -521,6 +576,7 @@
       const params = new URLSearchParams();
       if (startDate) params.set('start_date', startDate);
       if (endDate) params.set('end_date', endDate);
+      applySourceFilter(params);
 
       const url = `/api/v2/analytics/time/distribution/hourly?${params}`;
       logger.debug('Fetching time of day data:', { url, startDate, endDate });
@@ -557,6 +613,7 @@
       }
 
       if (endDate) params.set('end_date', endDate);
+      applySourceFilter(params);
 
       const url = `/api/v2/analytics/time/daily?${params}`;
       logger.debug('Fetching trend data:', { url, startDate, endDate });
@@ -581,6 +638,7 @@
       const params = new URLSearchParams();
       if (startDate) params.set('start_date', startDate);
       if (endDate) params.set('end_date', endDate);
+      applySourceFilter(params);
 
       const url = `/api/v2/analytics/species/detections/new?${params}`;
       logger.debug('Fetching new species data:', { url, startDate, endDate });
@@ -1152,6 +1210,40 @@
     }
   }
 
+  // Fetch the list of historical audio sources, aggregated by display_name so the picker
+  // shows a single entry even when the DB contains multiple audio_sources rows for the
+  // same display name (e.g. after a source_uri or node_name change).
+  async function fetchAudioSources() {
+    try {
+      const resp = await api.get<AnalyticsSourceListResponse>('/api/v2/analytics/sources');
+      const raw = Array.isArray(resp?.sources) ? resp.sources : [];
+      const aggregated = new Map<string, AudioSourceOption>();
+      for (const entry of raw) {
+        const name = entry.displayName || t('analytics.filters.audioSourceUnknown');
+        const existing = aggregated.get(name);
+        if (existing) {
+          existing.ids.push(entry.id);
+          existing.count += entry.detectionCount ?? 0;
+        } else {
+          aggregated.set(name, {
+            displayName: name,
+            ids: [entry.id],
+            count: entry.detectionCount ?? 0,
+          });
+        }
+      }
+      // Sort by total detection count descending so most-used sources are at the top.
+      audioSources = Array.from(aggregated.values()).sort((a, b) => b.count - a.count);
+      logger.debug('Loaded analytics audio sources', {
+        groupCount: audioSources.length,
+        rowCount: raw.length,
+      });
+    } catch (err) {
+      logger.error('Error fetching analytics audio sources:', err);
+      audioSources = [];
+    }
+  }
+
   // Initialize on mount
   onMount(async () => {
     // Set Chart.js default font
@@ -1171,6 +1263,10 @@
 
     filters.endDate = formatDateForInput(today);
     filters.startDate = formatDateForInput(lastMonth);
+
+    // Load source list in parallel with the initial data fetch — the picker just won't
+    // render its dropdown until this resolves, but the rest of the page can populate.
+    void fetchAudioSources();
 
     // Wait for component to be fully mounted
     await tick();
@@ -1321,7 +1417,7 @@
   </div>
 
   <!-- Filter Controls -->
-  <FilterForm bind:filters {isLoading} onSubmit={fetchData} onReset={resetFilters} />
+  <FilterForm bind:filters {audioSources} {isLoading} onSubmit={fetchData} onReset={resetFilters} />
 
   <!-- Charts Section -->
   <div class="grid gap-4 charts-grid">

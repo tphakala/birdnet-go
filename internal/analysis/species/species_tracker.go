@@ -76,10 +76,12 @@ func getLog() logger.Logger {
 	return logger.Global().Module("analysis.species")
 }
 
-// SpeciesDatastore defines the minimal interface needed by SpeciesTracker
+// SpeciesDatastore defines the minimal interface needed by SpeciesTracker.
+// Analytics methods carry a variadic source filter for compatibility with datastore.Interface;
+// SpeciesTracker passes no source IDs (lifetime/seasonal first-seen is tracked across all sources).
 type SpeciesDatastore interface {
-	GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
-	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
+	GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int, sourceIDs ...uint) ([]datastore.NewSpeciesData, error)
+	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int, sourceIDs ...uint) ([]datastore.NewSpeciesData, error)
 	// Notification history methods for BG-17 fix
 	GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error)
 	SaveNotificationHistory(history *datastore.NotificationHistory) error

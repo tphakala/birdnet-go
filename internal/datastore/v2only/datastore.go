@@ -2289,13 +2289,13 @@ func (ds *Datastore) parseDateRange(startDate, endDate string) (start, end int64
 }
 
 // GetSpeciesSummaryData retrieves species summary data.
-func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
+func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string, sourceIDs ...uint) ([]datastore.SpeciesSummaryData, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
 	if err != nil {
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetSpeciesSummary(ctx, start, end, nil)
+	v2Data, err := ds.detection.GetSpeciesSummary(ctx, start, end, nil, sourceIDs...)
 	if err != nil {
 		return nil, err
 	}
@@ -2324,7 +2324,7 @@ func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 }
 
 // GetHourlyAnalyticsData retrieves hourly analytics data for a specific date and species.
-func (ds *Datastore) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]datastore.HourlyAnalyticsData, error) {
+func (ds *Datastore) GetHourlyAnalyticsData(ctx context.Context, date, species string, sourceIDs ...uint) ([]datastore.HourlyAnalyticsData, error) {
 	start, end, err := ds.parseDateRange(date, date)
 	if err != nil {
 		return nil, err
@@ -2338,7 +2338,7 @@ func (ds *Datastore) GetHourlyAnalyticsData(ctx context.Context, date, species s
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, labelID, nil)
+	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, labelID, nil, sourceIDs...)
 	if err != nil {
 		return nil, err
 	}
@@ -2375,7 +2375,7 @@ func (ds *Datastore) resolveLabelID(ctx context.Context, species string) (*uint,
 }
 
 // GetDailyAnalyticsData retrieves daily analytics data.
-func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
+func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string, sourceIDs ...uint) ([]datastore.DailyAnalyticsData, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
 	if err != nil {
 		return nil, err
@@ -2389,7 +2389,7 @@ func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetDailyAnalytics(ctx, start, end, labelID, nil)
+	v2Data, err := ds.detection.GetDailyAnalytics(ctx, start, end, labelID, nil, sourceIDs...)
 	if err != nil {
 		return nil, err
 	}
@@ -2405,8 +2405,8 @@ func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 }
 
 // GetDetectionTrends retrieves detection trends.
-func (ds *Datastore) GetDetectionTrends(ctx context.Context, period string, limit int) ([]datastore.DailyAnalyticsData, error) {
-	v2Data, err := ds.detection.GetDetectionTrends(ctx, period, limit, nil)
+func (ds *Datastore) GetDetectionTrends(ctx context.Context, period string, limit int, sourceIDs ...uint) ([]datastore.DailyAnalyticsData, error) {
+	v2Data, err := ds.detection.GetDetectionTrends(ctx, period, limit, nil, sourceIDs...)
 	if err != nil {
 		return nil, err
 	}
@@ -2422,7 +2422,7 @@ func (ds *Datastore) GetDetectionTrends(ctx context.Context, period string, limi
 }
 
 // GetHourlyDistribution retrieves hourly distribution data.
-func (ds *Datastore) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
+func (ds *Datastore) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string, sourceIDs ...uint) ([]datastore.HourlyDistributionData, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
 	if err != nil {
 		return nil, err
@@ -2436,7 +2436,7 @@ func (ds *Datastore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, labelID, nil)
+	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, labelID, nil, sourceIDs...)
 	if err != nil {
 		return nil, err
 	}
@@ -2485,13 +2485,13 @@ func (ds *Datastore) convertToNewSpeciesData(_ context.Context, data []speciesFi
 }
 
 // GetNewSpeciesDetections retrieves new species detections (lifetime firsts).
-func (ds *Datastore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+func (ds *Datastore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int, sourceIDs ...uint) ([]datastore.NewSpeciesData, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
 	if err != nil {
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetNewSpecies(ctx, start, end, limit, offset)
+	v2Data, err := ds.detection.GetNewSpecies(ctx, start, end, limit, offset, sourceIDs...)
 	if err != nil {
 		return nil, err
 	}
@@ -2510,13 +2510,13 @@ func (ds *Datastore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 }
 
 // GetSpeciesFirstDetectionInPeriod retrieves first detection of species in a period.
-func (ds *Datastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+func (ds *Datastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int, sourceIDs ...uint) ([]datastore.NewSpeciesData, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
 	if err != nil {
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetSpeciesFirstDetectionInPeriod(ctx, start, end, limit, offset)
+	v2Data, err := ds.detection.GetSpeciesFirstDetectionInPeriod(ctx, start, end, limit, offset, sourceIDs...)
 	if err != nil {
 		return nil, err
 	}
@@ -2535,7 +2535,7 @@ func (ds *Datastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start
 }
 
 // GetSpeciesDiversityData returns unique species count per day.
-func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]datastore.DailyAnalyticsData, error) {
+func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string, sourceIDs ...uint) ([]datastore.DailyAnalyticsData, error) {
 	// Validate date formats before using in SQL
 	if startDate != "" {
 		if _, err := time.Parse(time.DateOnly, startDate); err != nil {
@@ -2580,6 +2580,11 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 		query = query.Where(fmt.Sprintf("%s <= ?", dateExpr), endDate)
 	}
 
+	// Optional source filter
+	if len(sourceIDs) > 0 {
+		query = query.Where("d.source_id IN ?", sourceIDs)
+	}
+
 	// Execute query
 	if err := query.Scan(&results).Error; err != nil {
 		return nil, errors.New(err).
@@ -2591,6 +2596,38 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 			Build()
 	}
 
+	return results, nil
+}
+
+// ListAnalyticsSourcesData returns audio sources joined with detection counts, ordered
+// by detection count descending. Sources with zero detections are excluded.
+//
+// Multiple audio_sources rows may share a display_name (e.g. when source_uri or node_name
+// changed over time). The frontend is responsible for visually grouping by display_name;
+// this method returns each underlying row separately so that source_id filtering remains
+// precise — selecting "Voordeur" in the UI translates to ?source_id=1,3 if there are two
+// underlying rows for that display name.
+func (ds *Datastore) ListAnalyticsSourcesData(ctx context.Context) ([]datastore.AnalyticsSourceInfo, error) {
+	var results []datastore.AnalyticsSourceInfo
+
+	err := ds.manager.DB().WithContext(ctx).
+		Table("audio_sources s").
+		Select("s.id, s.display_name, s.source_uri, s.source_type, s.node_name, COUNT(d.id) as detection_count").
+		Joins("JOIN detections d ON d.source_id = s.id").
+		Group("s.id, s.display_name, s.source_uri, s.source_type, s.node_name").
+		Order("detection_count DESC, s.display_name ASC").
+		Scan(&results).Error
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "list_analytics_sources").
+			Build()
+	}
+
+	if results == nil {
+		return []datastore.AnalyticsSourceInfo{}, nil
+	}
 	return results, nil
 }
 

@@ -1665,9 +1665,16 @@ func (_c *MockInterface_GetCommentsBatch_Call) RunAndReturn(run func(uint, int) 
 	return _c
 }
 
-// GetDailyAnalyticsData provides a mock function with given fields: ctx, startDate, endDate, species
-func (_m *MockInterface) GetDailyAnalyticsData(ctx context.Context, startDate string, endDate string, species string) ([]datastore.DailyAnalyticsData, error) {
-	ret := _m.Called(ctx, startDate, endDate, species)
+// GetDailyAnalyticsData provides a mock function with given fields: ctx, startDate, endDate, species, sourceIDs
+func (_m *MockInterface) GetDailyAnalyticsData(ctx context.Context, startDate string, endDate string, species string, sourceIDs ...uint) ([]datastore.DailyAnalyticsData, error) {
+	_va := make([]interface{}, len(sourceIDs))
+	for _i := range sourceIDs {
+		_va[_i] = sourceIDs[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, startDate, endDate, species)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetDailyAnalyticsData")
@@ -1675,19 +1682,19 @@ func (_m *MockInterface) GetDailyAnalyticsData(ctx context.Context, startDate st
 
 	var r0 []datastore.DailyAnalyticsData
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) ([]datastore.DailyAnalyticsData, error)); ok {
-		return rf(ctx, startDate, endDate, species)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, ...uint) ([]datastore.DailyAnalyticsData, error)); ok {
+		return rf(ctx, startDate, endDate, species, sourceIDs...)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) []datastore.DailyAnalyticsData); ok {
-		r0 = rf(ctx, startDate, endDate, species)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, ...uint) []datastore.DailyAnalyticsData); ok {
+		r0 = rf(ctx, startDate, endDate, species, sourceIDs...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]datastore.DailyAnalyticsData)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
-		r1 = rf(ctx, startDate, endDate, species)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string, ...uint) error); ok {
+		r1 = rf(ctx, startDate, endDate, species, sourceIDs...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1705,13 +1712,21 @@ type MockInterface_GetDailyAnalyticsData_Call struct {
 //   - startDate string
 //   - endDate string
 //   - species string
-func (_e *MockInterface_Expecter) GetDailyAnalyticsData(ctx interface{}, startDate interface{}, endDate interface{}, species interface{}) *MockInterface_GetDailyAnalyticsData_Call {
-	return &MockInterface_GetDailyAnalyticsData_Call{Call: _e.mock.On("GetDailyAnalyticsData", ctx, startDate, endDate, species)}
+//   - sourceIDs ...uint
+func (_e *MockInterface_Expecter) GetDailyAnalyticsData(ctx interface{}, startDate interface{}, endDate interface{}, species interface{}, sourceIDs ...interface{}) *MockInterface_GetDailyAnalyticsData_Call {
+	return &MockInterface_GetDailyAnalyticsData_Call{Call: _e.mock.On("GetDailyAnalyticsData",
+		append([]interface{}{ctx, startDate, endDate, species}, sourceIDs...)...)}
 }
 
-func (_c *MockInterface_GetDailyAnalyticsData_Call) Run(run func(ctx context.Context, startDate string, endDate string, species string)) *MockInterface_GetDailyAnalyticsData_Call {
+func (_c *MockInterface_GetDailyAnalyticsData_Call) Run(run func(ctx context.Context, startDate string, endDate string, species string, sourceIDs ...uint)) *MockInterface_GetDailyAnalyticsData_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string))
+		variadicArgs := make([]uint, len(args)-4)
+		for i, a := range args[4:] {
+			if a != nil {
+				variadicArgs[i] = a.(uint)
+			}
+		}
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string), variadicArgs...)
 	})
 	return _c
 }
@@ -1721,7 +1736,7 @@ func (_c *MockInterface_GetDailyAnalyticsData_Call) Return(_a0 []datastore.Daily
 	return _c
 }
 
-func (_c *MockInterface_GetDailyAnalyticsData_Call) RunAndReturn(run func(context.Context, string, string, string) ([]datastore.DailyAnalyticsData, error)) *MockInterface_GetDailyAnalyticsData_Call {
+func (_c *MockInterface_GetDailyAnalyticsData_Call) RunAndReturn(run func(context.Context, string, string, string, ...uint) ([]datastore.DailyAnalyticsData, error)) *MockInterface_GetDailyAnalyticsData_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1839,9 +1854,16 @@ func (_c *MockInterface_GetDatabaseStats_Call) RunAndReturn(run func() (*datasto
 	return _c
 }
 
-// GetDetectionTrends provides a mock function with given fields: ctx, period, limit
-func (_m *MockInterface) GetDetectionTrends(ctx context.Context, period string, limit int) ([]datastore.DailyAnalyticsData, error) {
-	ret := _m.Called(ctx, period, limit)
+// GetDetectionTrends provides a mock function with given fields: ctx, period, limit, sourceIDs
+func (_m *MockInterface) GetDetectionTrends(ctx context.Context, period string, limit int, sourceIDs ...uint) ([]datastore.DailyAnalyticsData, error) {
+	_va := make([]interface{}, len(sourceIDs))
+	for _i := range sourceIDs {
+		_va[_i] = sourceIDs[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, period, limit)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetDetectionTrends")
@@ -1849,19 +1871,19 @@ func (_m *MockInterface) GetDetectionTrends(ctx context.Context, period string, 
 
 	var r0 []datastore.DailyAnalyticsData
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, int) ([]datastore.DailyAnalyticsData, error)); ok {
-		return rf(ctx, period, limit)
+	if rf, ok := ret.Get(0).(func(context.Context, string, int, ...uint) ([]datastore.DailyAnalyticsData, error)); ok {
+		return rf(ctx, period, limit, sourceIDs...)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, int) []datastore.DailyAnalyticsData); ok {
-		r0 = rf(ctx, period, limit)
+	if rf, ok := ret.Get(0).(func(context.Context, string, int, ...uint) []datastore.DailyAnalyticsData); ok {
+		r0 = rf(ctx, period, limit, sourceIDs...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]datastore.DailyAnalyticsData)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, int) error); ok {
-		r1 = rf(ctx, period, limit)
+	if rf, ok := ret.Get(1).(func(context.Context, string, int, ...uint) error); ok {
+		r1 = rf(ctx, period, limit, sourceIDs...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1878,13 +1900,21 @@ type MockInterface_GetDetectionTrends_Call struct {
 //   - ctx context.Context
 //   - period string
 //   - limit int
-func (_e *MockInterface_Expecter) GetDetectionTrends(ctx interface{}, period interface{}, limit interface{}) *MockInterface_GetDetectionTrends_Call {
-	return &MockInterface_GetDetectionTrends_Call{Call: _e.mock.On("GetDetectionTrends", ctx, period, limit)}
+//   - sourceIDs ...uint
+func (_e *MockInterface_Expecter) GetDetectionTrends(ctx interface{}, period interface{}, limit interface{}, sourceIDs ...interface{}) *MockInterface_GetDetectionTrends_Call {
+	return &MockInterface_GetDetectionTrends_Call{Call: _e.mock.On("GetDetectionTrends",
+		append([]interface{}{ctx, period, limit}, sourceIDs...)...)}
 }
 
-func (_c *MockInterface_GetDetectionTrends_Call) Run(run func(ctx context.Context, period string, limit int)) *MockInterface_GetDetectionTrends_Call {
+func (_c *MockInterface_GetDetectionTrends_Call) Run(run func(ctx context.Context, period string, limit int, sourceIDs ...uint)) *MockInterface_GetDetectionTrends_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(int))
+		variadicArgs := make([]uint, len(args)-3)
+		for i, a := range args[3:] {
+			if a != nil {
+				variadicArgs[i] = a.(uint)
+			}
+		}
+		run(args[0].(context.Context), args[1].(string), args[2].(int), variadicArgs...)
 	})
 	return _c
 }
@@ -1894,7 +1924,7 @@ func (_c *MockInterface_GetDetectionTrends_Call) Return(_a0 []datastore.DailyAna
 	return _c
 }
 
-func (_c *MockInterface_GetDetectionTrends_Call) RunAndReturn(run func(context.Context, string, int) ([]datastore.DailyAnalyticsData, error)) *MockInterface_GetDetectionTrends_Call {
+func (_c *MockInterface_GetDetectionTrends_Call) RunAndReturn(run func(context.Context, string, int, ...uint) ([]datastore.DailyAnalyticsData, error)) *MockInterface_GetDetectionTrends_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -2036,9 +2066,16 @@ func (_c *MockInterface_GetDynamicThresholdStats_Call) RunAndReturn(run func() (
 	return _c
 }
 
-// GetHourlyAnalyticsData provides a mock function with given fields: ctx, date, species
-func (_m *MockInterface) GetHourlyAnalyticsData(ctx context.Context, date string, species string) ([]datastore.HourlyAnalyticsData, error) {
-	ret := _m.Called(ctx, date, species)
+// GetHourlyAnalyticsData provides a mock function with given fields: ctx, date, species, sourceIDs
+func (_m *MockInterface) GetHourlyAnalyticsData(ctx context.Context, date string, species string, sourceIDs ...uint) ([]datastore.HourlyAnalyticsData, error) {
+	_va := make([]interface{}, len(sourceIDs))
+	for _i := range sourceIDs {
+		_va[_i] = sourceIDs[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, date, species)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetHourlyAnalyticsData")
@@ -2046,19 +2083,19 @@ func (_m *MockInterface) GetHourlyAnalyticsData(ctx context.Context, date string
 
 	var r0 []datastore.HourlyAnalyticsData
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) ([]datastore.HourlyAnalyticsData, error)); ok {
-		return rf(ctx, date, species)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...uint) ([]datastore.HourlyAnalyticsData, error)); ok {
+		return rf(ctx, date, species, sourceIDs...)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) []datastore.HourlyAnalyticsData); ok {
-		r0 = rf(ctx, date, species)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...uint) []datastore.HourlyAnalyticsData); ok {
+		r0 = rf(ctx, date, species, sourceIDs...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]datastore.HourlyAnalyticsData)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = rf(ctx, date, species)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, ...uint) error); ok {
+		r1 = rf(ctx, date, species, sourceIDs...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -2075,13 +2112,21 @@ type MockInterface_GetHourlyAnalyticsData_Call struct {
 //   - ctx context.Context
 //   - date string
 //   - species string
-func (_e *MockInterface_Expecter) GetHourlyAnalyticsData(ctx interface{}, date interface{}, species interface{}) *MockInterface_GetHourlyAnalyticsData_Call {
-	return &MockInterface_GetHourlyAnalyticsData_Call{Call: _e.mock.On("GetHourlyAnalyticsData", ctx, date, species)}
+//   - sourceIDs ...uint
+func (_e *MockInterface_Expecter) GetHourlyAnalyticsData(ctx interface{}, date interface{}, species interface{}, sourceIDs ...interface{}) *MockInterface_GetHourlyAnalyticsData_Call {
+	return &MockInterface_GetHourlyAnalyticsData_Call{Call: _e.mock.On("GetHourlyAnalyticsData",
+		append([]interface{}{ctx, date, species}, sourceIDs...)...)}
 }
 
-func (_c *MockInterface_GetHourlyAnalyticsData_Call) Run(run func(ctx context.Context, date string, species string)) *MockInterface_GetHourlyAnalyticsData_Call {
+func (_c *MockInterface_GetHourlyAnalyticsData_Call) Run(run func(ctx context.Context, date string, species string, sourceIDs ...uint)) *MockInterface_GetHourlyAnalyticsData_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(string))
+		variadicArgs := make([]uint, len(args)-3)
+		for i, a := range args[3:] {
+			if a != nil {
+				variadicArgs[i] = a.(uint)
+			}
+		}
+		run(args[0].(context.Context), args[1].(string), args[2].(string), variadicArgs...)
 	})
 	return _c
 }
@@ -2091,7 +2136,7 @@ func (_c *MockInterface_GetHourlyAnalyticsData_Call) Return(_a0 []datastore.Hour
 	return _c
 }
 
-func (_c *MockInterface_GetHourlyAnalyticsData_Call) RunAndReturn(run func(context.Context, string, string) ([]datastore.HourlyAnalyticsData, error)) *MockInterface_GetHourlyAnalyticsData_Call {
+func (_c *MockInterface_GetHourlyAnalyticsData_Call) RunAndReturn(run func(context.Context, string, string, ...uint) ([]datastore.HourlyAnalyticsData, error)) *MockInterface_GetHourlyAnalyticsData_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -2158,9 +2203,16 @@ func (_c *MockInterface_GetHourlyDetections_Call) RunAndReturn(run func(string, 
 	return _c
 }
 
-// GetHourlyDistribution provides a mock function with given fields: ctx, startDate, endDate, species
-func (_m *MockInterface) GetHourlyDistribution(ctx context.Context, startDate string, endDate string, species string) ([]datastore.HourlyDistributionData, error) {
-	ret := _m.Called(ctx, startDate, endDate, species)
+// GetHourlyDistribution provides a mock function with given fields: ctx, startDate, endDate, species, sourceIDs
+func (_m *MockInterface) GetHourlyDistribution(ctx context.Context, startDate string, endDate string, species string, sourceIDs ...uint) ([]datastore.HourlyDistributionData, error) {
+	_va := make([]interface{}, len(sourceIDs))
+	for _i := range sourceIDs {
+		_va[_i] = sourceIDs[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, startDate, endDate, species)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetHourlyDistribution")
@@ -2168,19 +2220,19 @@ func (_m *MockInterface) GetHourlyDistribution(ctx context.Context, startDate st
 
 	var r0 []datastore.HourlyDistributionData
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) ([]datastore.HourlyDistributionData, error)); ok {
-		return rf(ctx, startDate, endDate, species)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, ...uint) ([]datastore.HourlyDistributionData, error)); ok {
+		return rf(ctx, startDate, endDate, species, sourceIDs...)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) []datastore.HourlyDistributionData); ok {
-		r0 = rf(ctx, startDate, endDate, species)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, ...uint) []datastore.HourlyDistributionData); ok {
+		r0 = rf(ctx, startDate, endDate, species, sourceIDs...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]datastore.HourlyDistributionData)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
-		r1 = rf(ctx, startDate, endDate, species)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string, ...uint) error); ok {
+		r1 = rf(ctx, startDate, endDate, species, sourceIDs...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -2198,13 +2250,21 @@ type MockInterface_GetHourlyDistribution_Call struct {
 //   - startDate string
 //   - endDate string
 //   - species string
-func (_e *MockInterface_Expecter) GetHourlyDistribution(ctx interface{}, startDate interface{}, endDate interface{}, species interface{}) *MockInterface_GetHourlyDistribution_Call {
-	return &MockInterface_GetHourlyDistribution_Call{Call: _e.mock.On("GetHourlyDistribution", ctx, startDate, endDate, species)}
+//   - sourceIDs ...uint
+func (_e *MockInterface_Expecter) GetHourlyDistribution(ctx interface{}, startDate interface{}, endDate interface{}, species interface{}, sourceIDs ...interface{}) *MockInterface_GetHourlyDistribution_Call {
+	return &MockInterface_GetHourlyDistribution_Call{Call: _e.mock.On("GetHourlyDistribution",
+		append([]interface{}{ctx, startDate, endDate, species}, sourceIDs...)...)}
 }
 
-func (_c *MockInterface_GetHourlyDistribution_Call) Run(run func(ctx context.Context, startDate string, endDate string, species string)) *MockInterface_GetHourlyDistribution_Call {
+func (_c *MockInterface_GetHourlyDistribution_Call) Run(run func(ctx context.Context, startDate string, endDate string, species string, sourceIDs ...uint)) *MockInterface_GetHourlyDistribution_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string))
+		variadicArgs := make([]uint, len(args)-4)
+		for i, a := range args[4:] {
+			if a != nil {
+				variadicArgs[i] = a.(uint)
+			}
+		}
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string), variadicArgs...)
 	})
 	return _c
 }
@@ -2214,7 +2274,7 @@ func (_c *MockInterface_GetHourlyDistribution_Call) Return(_a0 []datastore.Hourl
 	return _c
 }
 
-func (_c *MockInterface_GetHourlyDistribution_Call) RunAndReturn(run func(context.Context, string, string, string) ([]datastore.HourlyDistributionData, error)) *MockInterface_GetHourlyDistribution_Call {
+func (_c *MockInterface_GetHourlyDistribution_Call) RunAndReturn(run func(context.Context, string, string, string, ...uint) ([]datastore.HourlyDistributionData, error)) *MockInterface_GetHourlyDistribution_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -2628,9 +2688,16 @@ func (_c *MockInterface_GetLocksBatch_Call) RunAndReturn(run func(uint, int) ([]
 	return _c
 }
 
-// GetNewSpeciesDetections provides a mock function with given fields: ctx, startDate, endDate, limit, offset
-func (_m *MockInterface) GetNewSpeciesDetections(ctx context.Context, startDate string, endDate string, limit int, offset int) ([]datastore.NewSpeciesData, error) {
-	ret := _m.Called(ctx, startDate, endDate, limit, offset)
+// GetNewSpeciesDetections provides a mock function with given fields: ctx, startDate, endDate, limit, offset, sourceIDs
+func (_m *MockInterface) GetNewSpeciesDetections(ctx context.Context, startDate string, endDate string, limit int, offset int, sourceIDs ...uint) ([]datastore.NewSpeciesData, error) {
+	_va := make([]interface{}, len(sourceIDs))
+	for _i := range sourceIDs {
+		_va[_i] = sourceIDs[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, startDate, endDate, limit, offset)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetNewSpeciesDetections")
@@ -2638,19 +2705,19 @@ func (_m *MockInterface) GetNewSpeciesDetections(ctx context.Context, startDate 
 
 	var r0 []datastore.NewSpeciesData
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, int, int) ([]datastore.NewSpeciesData, error)); ok {
-		return rf(ctx, startDate, endDate, limit, offset)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int, int, ...uint) ([]datastore.NewSpeciesData, error)); ok {
+		return rf(ctx, startDate, endDate, limit, offset, sourceIDs...)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, int, int) []datastore.NewSpeciesData); ok {
-		r0 = rf(ctx, startDate, endDate, limit, offset)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int, int, ...uint) []datastore.NewSpeciesData); ok {
+		r0 = rf(ctx, startDate, endDate, limit, offset, sourceIDs...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]datastore.NewSpeciesData)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, string, int, int) error); ok {
-		r1 = rf(ctx, startDate, endDate, limit, offset)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, int, int, ...uint) error); ok {
+		r1 = rf(ctx, startDate, endDate, limit, offset, sourceIDs...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -2669,13 +2736,21 @@ type MockInterface_GetNewSpeciesDetections_Call struct {
 //   - endDate string
 //   - limit int
 //   - offset int
-func (_e *MockInterface_Expecter) GetNewSpeciesDetections(ctx interface{}, startDate interface{}, endDate interface{}, limit interface{}, offset interface{}) *MockInterface_GetNewSpeciesDetections_Call {
-	return &MockInterface_GetNewSpeciesDetections_Call{Call: _e.mock.On("GetNewSpeciesDetections", ctx, startDate, endDate, limit, offset)}
+//   - sourceIDs ...uint
+func (_e *MockInterface_Expecter) GetNewSpeciesDetections(ctx interface{}, startDate interface{}, endDate interface{}, limit interface{}, offset interface{}, sourceIDs ...interface{}) *MockInterface_GetNewSpeciesDetections_Call {
+	return &MockInterface_GetNewSpeciesDetections_Call{Call: _e.mock.On("GetNewSpeciesDetections",
+		append([]interface{}{ctx, startDate, endDate, limit, offset}, sourceIDs...)...)}
 }
 
-func (_c *MockInterface_GetNewSpeciesDetections_Call) Run(run func(ctx context.Context, startDate string, endDate string, limit int, offset int)) *MockInterface_GetNewSpeciesDetections_Call {
+func (_c *MockInterface_GetNewSpeciesDetections_Call) Run(run func(ctx context.Context, startDate string, endDate string, limit int, offset int, sourceIDs ...uint)) *MockInterface_GetNewSpeciesDetections_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(int), args[4].(int))
+		variadicArgs := make([]uint, len(args)-5)
+		for i, a := range args[5:] {
+			if a != nil {
+				variadicArgs[i] = a.(uint)
+			}
+		}
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(int), args[4].(int), variadicArgs...)
 	})
 	return _c
 }
@@ -2685,7 +2760,7 @@ func (_c *MockInterface_GetNewSpeciesDetections_Call) Return(_a0 []datastore.New
 	return _c
 }
 
-func (_c *MockInterface_GetNewSpeciesDetections_Call) RunAndReturn(run func(context.Context, string, string, int, int) ([]datastore.NewSpeciesData, error)) *MockInterface_GetNewSpeciesDetections_Call {
+func (_c *MockInterface_GetNewSpeciesDetections_Call) RunAndReturn(run func(context.Context, string, string, int, int, ...uint) ([]datastore.NewSpeciesData, error)) *MockInterface_GetNewSpeciesDetections_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -3214,9 +3289,16 @@ func (_c *MockInterface_GetReviewsBatch_Call) RunAndReturn(run func(uint, int) (
 	return _c
 }
 
-// GetSpeciesDiversityData provides a mock function with given fields: ctx, startDate, endDate
-func (_m *MockInterface) GetSpeciesDiversityData(ctx context.Context, startDate string, endDate string) ([]datastore.DailyAnalyticsData, error) {
-	ret := _m.Called(ctx, startDate, endDate)
+// GetSpeciesDiversityData provides a mock function with given fields: ctx, startDate, endDate, sourceIDs
+func (_m *MockInterface) GetSpeciesDiversityData(ctx context.Context, startDate string, endDate string, sourceIDs ...uint) ([]datastore.DailyAnalyticsData, error) {
+	_va := make([]interface{}, len(sourceIDs))
+	for _i := range sourceIDs {
+		_va[_i] = sourceIDs[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, startDate, endDate)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetSpeciesDiversityData")
@@ -3224,19 +3306,19 @@ func (_m *MockInterface) GetSpeciesDiversityData(ctx context.Context, startDate 
 
 	var r0 []datastore.DailyAnalyticsData
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) ([]datastore.DailyAnalyticsData, error)); ok {
-		return rf(ctx, startDate, endDate)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...uint) ([]datastore.DailyAnalyticsData, error)); ok {
+		return rf(ctx, startDate, endDate, sourceIDs...)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) []datastore.DailyAnalyticsData); ok {
-		r0 = rf(ctx, startDate, endDate)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...uint) []datastore.DailyAnalyticsData); ok {
+		r0 = rf(ctx, startDate, endDate, sourceIDs...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]datastore.DailyAnalyticsData)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = rf(ctx, startDate, endDate)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, ...uint) error); ok {
+		r1 = rf(ctx, startDate, endDate, sourceIDs...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -3253,13 +3335,21 @@ type MockInterface_GetSpeciesDiversityData_Call struct {
 //   - ctx context.Context
 //   - startDate string
 //   - endDate string
-func (_e *MockInterface_Expecter) GetSpeciesDiversityData(ctx interface{}, startDate interface{}, endDate interface{}) *MockInterface_GetSpeciesDiversityData_Call {
-	return &MockInterface_GetSpeciesDiversityData_Call{Call: _e.mock.On("GetSpeciesDiversityData", ctx, startDate, endDate)}
+//   - sourceIDs ...uint
+func (_e *MockInterface_Expecter) GetSpeciesDiversityData(ctx interface{}, startDate interface{}, endDate interface{}, sourceIDs ...interface{}) *MockInterface_GetSpeciesDiversityData_Call {
+	return &MockInterface_GetSpeciesDiversityData_Call{Call: _e.mock.On("GetSpeciesDiversityData",
+		append([]interface{}{ctx, startDate, endDate}, sourceIDs...)...)}
 }
 
-func (_c *MockInterface_GetSpeciesDiversityData_Call) Run(run func(ctx context.Context, startDate string, endDate string)) *MockInterface_GetSpeciesDiversityData_Call {
+func (_c *MockInterface_GetSpeciesDiversityData_Call) Run(run func(ctx context.Context, startDate string, endDate string, sourceIDs ...uint)) *MockInterface_GetSpeciesDiversityData_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(string))
+		variadicArgs := make([]uint, len(args)-3)
+		for i, a := range args[3:] {
+			if a != nil {
+				variadicArgs[i] = a.(uint)
+			}
+		}
+		run(args[0].(context.Context), args[1].(string), args[2].(string), variadicArgs...)
 	})
 	return _c
 }
@@ -3269,14 +3359,21 @@ func (_c *MockInterface_GetSpeciesDiversityData_Call) Return(_a0 []datastore.Dai
 	return _c
 }
 
-func (_c *MockInterface_GetSpeciesDiversityData_Call) RunAndReturn(run func(context.Context, string, string) ([]datastore.DailyAnalyticsData, error)) *MockInterface_GetSpeciesDiversityData_Call {
+func (_c *MockInterface_GetSpeciesDiversityData_Call) RunAndReturn(run func(context.Context, string, string, ...uint) ([]datastore.DailyAnalyticsData, error)) *MockInterface_GetSpeciesDiversityData_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// GetSpeciesFirstDetectionInPeriod provides a mock function with given fields: ctx, startDate, endDate, limit, offset
-func (_m *MockInterface) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate string, endDate string, limit int, offset int) ([]datastore.NewSpeciesData, error) {
-	ret := _m.Called(ctx, startDate, endDate, limit, offset)
+// GetSpeciesFirstDetectionInPeriod provides a mock function with given fields: ctx, startDate, endDate, limit, offset, sourceIDs
+func (_m *MockInterface) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate string, endDate string, limit int, offset int, sourceIDs ...uint) ([]datastore.NewSpeciesData, error) {
+	_va := make([]interface{}, len(sourceIDs))
+	for _i := range sourceIDs {
+		_va[_i] = sourceIDs[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, startDate, endDate, limit, offset)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetSpeciesFirstDetectionInPeriod")
@@ -3284,19 +3381,19 @@ func (_m *MockInterface) GetSpeciesFirstDetectionInPeriod(ctx context.Context, s
 
 	var r0 []datastore.NewSpeciesData
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, int, int) ([]datastore.NewSpeciesData, error)); ok {
-		return rf(ctx, startDate, endDate, limit, offset)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int, int, ...uint) ([]datastore.NewSpeciesData, error)); ok {
+		return rf(ctx, startDate, endDate, limit, offset, sourceIDs...)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, int, int) []datastore.NewSpeciesData); ok {
-		r0 = rf(ctx, startDate, endDate, limit, offset)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int, int, ...uint) []datastore.NewSpeciesData); ok {
+		r0 = rf(ctx, startDate, endDate, limit, offset, sourceIDs...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]datastore.NewSpeciesData)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, string, int, int) error); ok {
-		r1 = rf(ctx, startDate, endDate, limit, offset)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, int, int, ...uint) error); ok {
+		r1 = rf(ctx, startDate, endDate, limit, offset, sourceIDs...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -3315,13 +3412,21 @@ type MockInterface_GetSpeciesFirstDetectionInPeriod_Call struct {
 //   - endDate string
 //   - limit int
 //   - offset int
-func (_e *MockInterface_Expecter) GetSpeciesFirstDetectionInPeriod(ctx interface{}, startDate interface{}, endDate interface{}, limit interface{}, offset interface{}) *MockInterface_GetSpeciesFirstDetectionInPeriod_Call {
-	return &MockInterface_GetSpeciesFirstDetectionInPeriod_Call{Call: _e.mock.On("GetSpeciesFirstDetectionInPeriod", ctx, startDate, endDate, limit, offset)}
+//   - sourceIDs ...uint
+func (_e *MockInterface_Expecter) GetSpeciesFirstDetectionInPeriod(ctx interface{}, startDate interface{}, endDate interface{}, limit interface{}, offset interface{}, sourceIDs ...interface{}) *MockInterface_GetSpeciesFirstDetectionInPeriod_Call {
+	return &MockInterface_GetSpeciesFirstDetectionInPeriod_Call{Call: _e.mock.On("GetSpeciesFirstDetectionInPeriod",
+		append([]interface{}{ctx, startDate, endDate, limit, offset}, sourceIDs...)...)}
 }
 
-func (_c *MockInterface_GetSpeciesFirstDetectionInPeriod_Call) Run(run func(ctx context.Context, startDate string, endDate string, limit int, offset int)) *MockInterface_GetSpeciesFirstDetectionInPeriod_Call {
+func (_c *MockInterface_GetSpeciesFirstDetectionInPeriod_Call) Run(run func(ctx context.Context, startDate string, endDate string, limit int, offset int, sourceIDs ...uint)) *MockInterface_GetSpeciesFirstDetectionInPeriod_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(int), args[4].(int))
+		variadicArgs := make([]uint, len(args)-5)
+		for i, a := range args[5:] {
+			if a != nil {
+				variadicArgs[i] = a.(uint)
+			}
+		}
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(int), args[4].(int), variadicArgs...)
 	})
 	return _c
 }
@@ -3331,14 +3436,21 @@ func (_c *MockInterface_GetSpeciesFirstDetectionInPeriod_Call) Return(_a0 []data
 	return _c
 }
 
-func (_c *MockInterface_GetSpeciesFirstDetectionInPeriod_Call) RunAndReturn(run func(context.Context, string, string, int, int) ([]datastore.NewSpeciesData, error)) *MockInterface_GetSpeciesFirstDetectionInPeriod_Call {
+func (_c *MockInterface_GetSpeciesFirstDetectionInPeriod_Call) RunAndReturn(run func(context.Context, string, string, int, int, ...uint) ([]datastore.NewSpeciesData, error)) *MockInterface_GetSpeciesFirstDetectionInPeriod_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// GetSpeciesSummaryData provides a mock function with given fields: ctx, startDate, endDate
-func (_m *MockInterface) GetSpeciesSummaryData(ctx context.Context, startDate string, endDate string) ([]datastore.SpeciesSummaryData, error) {
-	ret := _m.Called(ctx, startDate, endDate)
+// GetSpeciesSummaryData provides a mock function with given fields: ctx, startDate, endDate, sourceIDs
+func (_m *MockInterface) GetSpeciesSummaryData(ctx context.Context, startDate string, endDate string, sourceIDs ...uint) ([]datastore.SpeciesSummaryData, error) {
+	_va := make([]interface{}, len(sourceIDs))
+	for _i := range sourceIDs {
+		_va[_i] = sourceIDs[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, startDate, endDate)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetSpeciesSummaryData")
@@ -3346,19 +3458,19 @@ func (_m *MockInterface) GetSpeciesSummaryData(ctx context.Context, startDate st
 
 	var r0 []datastore.SpeciesSummaryData
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) ([]datastore.SpeciesSummaryData, error)); ok {
-		return rf(ctx, startDate, endDate)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...uint) ([]datastore.SpeciesSummaryData, error)); ok {
+		return rf(ctx, startDate, endDate, sourceIDs...)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) []datastore.SpeciesSummaryData); ok {
-		r0 = rf(ctx, startDate, endDate)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...uint) []datastore.SpeciesSummaryData); ok {
+		r0 = rf(ctx, startDate, endDate, sourceIDs...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]datastore.SpeciesSummaryData)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = rf(ctx, startDate, endDate)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, ...uint) error); ok {
+		r1 = rf(ctx, startDate, endDate, sourceIDs...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -3375,13 +3487,21 @@ type MockInterface_GetSpeciesSummaryData_Call struct {
 //   - ctx context.Context
 //   - startDate string
 //   - endDate string
-func (_e *MockInterface_Expecter) GetSpeciesSummaryData(ctx interface{}, startDate interface{}, endDate interface{}) *MockInterface_GetSpeciesSummaryData_Call {
-	return &MockInterface_GetSpeciesSummaryData_Call{Call: _e.mock.On("GetSpeciesSummaryData", ctx, startDate, endDate)}
+//   - sourceIDs ...uint
+func (_e *MockInterface_Expecter) GetSpeciesSummaryData(ctx interface{}, startDate interface{}, endDate interface{}, sourceIDs ...interface{}) *MockInterface_GetSpeciesSummaryData_Call {
+	return &MockInterface_GetSpeciesSummaryData_Call{Call: _e.mock.On("GetSpeciesSummaryData",
+		append([]interface{}{ctx, startDate, endDate}, sourceIDs...)...)}
 }
 
-func (_c *MockInterface_GetSpeciesSummaryData_Call) Run(run func(ctx context.Context, startDate string, endDate string)) *MockInterface_GetSpeciesSummaryData_Call {
+func (_c *MockInterface_GetSpeciesSummaryData_Call) Run(run func(ctx context.Context, startDate string, endDate string, sourceIDs ...uint)) *MockInterface_GetSpeciesSummaryData_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(string))
+		variadicArgs := make([]uint, len(args)-3)
+		for i, a := range args[3:] {
+			if a != nil {
+				variadicArgs[i] = a.(uint)
+			}
+		}
+		run(args[0].(context.Context), args[1].(string), args[2].(string), variadicArgs...)
 	})
 	return _c
 }
@@ -3391,7 +3511,7 @@ func (_c *MockInterface_GetSpeciesSummaryData_Call) Return(_a0 []datastore.Speci
 	return _c
 }
 
-func (_c *MockInterface_GetSpeciesSummaryData_Call) RunAndReturn(run func(context.Context, string, string) ([]datastore.SpeciesSummaryData, error)) *MockInterface_GetSpeciesSummaryData_Call {
+func (_c *MockInterface_GetSpeciesSummaryData_Call) RunAndReturn(run func(context.Context, string, string, ...uint) ([]datastore.SpeciesSummaryData, error)) *MockInterface_GetSpeciesSummaryData_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -3624,6 +3744,64 @@ func (_c *MockInterface_LatestHourlyWeather_Call) Return(_a0 *datastore.HourlyWe
 }
 
 func (_c *MockInterface_LatestHourlyWeather_Call) RunAndReturn(run func() (*datastore.HourlyWeather, error)) *MockInterface_LatestHourlyWeather_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListAnalyticsSourcesData provides a mock function with given fields: ctx
+func (_m *MockInterface) ListAnalyticsSourcesData(ctx context.Context) ([]datastore.AnalyticsSourceInfo, error) {
+	ret := _m.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListAnalyticsSourcesData")
+	}
+
+	var r0 []datastore.AnalyticsSourceInfo
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) ([]datastore.AnalyticsSourceInfo, error)); ok {
+		return rf(ctx)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context) []datastore.AnalyticsSourceInfo); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.AnalyticsSourceInfo)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_ListAnalyticsSourcesData_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListAnalyticsSourcesData'
+type MockInterface_ListAnalyticsSourcesData_Call struct {
+	*mock.Call
+}
+
+// ListAnalyticsSourcesData is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockInterface_Expecter) ListAnalyticsSourcesData(ctx interface{}) *MockInterface_ListAnalyticsSourcesData_Call {
+	return &MockInterface_ListAnalyticsSourcesData_Call{Call: _e.mock.On("ListAnalyticsSourcesData", ctx)}
+}
+
+func (_c *MockInterface_ListAnalyticsSourcesData_Call) Run(run func(ctx context.Context)) *MockInterface_ListAnalyticsSourcesData_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockInterface_ListAnalyticsSourcesData_Call) Return(_a0 []datastore.AnalyticsSourceInfo, _a1 error) *MockInterface_ListAnalyticsSourcesData_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_ListAnalyticsSourcesData_Call) RunAndReturn(run func(context.Context) ([]datastore.AnalyticsSourceInfo, error)) *MockInterface_ListAnalyticsSourcesData_Call {
 	_c.Call.Return(run)
 	return _c
 }

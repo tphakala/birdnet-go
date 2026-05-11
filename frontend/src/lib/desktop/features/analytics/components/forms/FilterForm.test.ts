@@ -12,6 +12,7 @@ const defaultFilters = {
   timePeriod: 'all' as const,
   startDate: '',
   endDate: '',
+  sourceGroups: [] as string[],
 };
 
 describe('FilterForm', () => {

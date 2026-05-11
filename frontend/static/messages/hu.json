@@ -1487,7 +1487,10 @@
       "applyFilters": "Szűrők alkalmazása",
       "exportCsv": "CSV export",
       "species": "faj",
-      "filtered": "(szűrve)"
+      "filtered": "(szűrve)",
+      "audioSource": "Hangforrás",
+      "audioSourceAll": "Összes hangforrás",
+      "audioSourceUnknown": "Ismeretlen forrás"
     },
     "timePeriodOptions": {
       "allTime": "Minden idő",

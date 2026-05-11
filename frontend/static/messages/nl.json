@@ -1467,7 +1467,10 @@
       "applyFilters": "Filters toepassen",
       "exportCsv": "CSV Export",
       "species": "soorten",
-      "filtered": "(gefilterd)"
+      "filtered": "(gefilterd)",
+      "audioSource": "Audiobron",
+      "audioSourceAll": "Alle audiobronnen",
+      "audioSourceUnknown": "Onbekende bron"
     },
     "timePeriodOptions": {
       "today": "Vandaag",

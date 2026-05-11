@@ -250,6 +250,9 @@ export const analyticsI18nTranslations = {
   'analytics.filters.reset': 'Reset',
   'analytics.filters.exportCsv': 'Export CSV',
   'analytics.filters.applyFilters': 'Apply Filters',
+  'analytics.filters.audioSource': 'Audio Source',
+  'analytics.filters.audioSourceAll': 'All audio sources',
+  'analytics.filters.audioSourceUnknown': 'Unknown source',
 
   // Time period options
   'analytics.timePeriodOptions.allTime': 'All Time',

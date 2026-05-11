@@ -1467,7 +1467,10 @@
       "applyFilters": "Käytä suodattimia",
       "exportCsv": "Vie CSV",
       "species": "lajia",
-      "filtered": "(suodatettu)"
+      "filtered": "(suodatettu)",
+      "audioSource": "Äänilähde",
+      "audioSourceAll": "Kaikki äänilähteet",
+      "audioSourceUnknown": "Tuntematon lähde"
     },
     "timePeriodOptions": {
       "allTime": "Koko aika",

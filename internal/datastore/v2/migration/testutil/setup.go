@@ -735,28 +735,31 @@ func (s *testLegacyInterface) ClearNoteClipPathsByNames(_ []string) (int64, erro
 func (s *testLegacyInterface) CountHourlyDetections(_, _ string, _ int) (int64, error) {
 	return 0, nil
 }
-func (s *testLegacyInterface) GetSpeciesSummaryData(_ context.Context, _, _ string) ([]datastore.SpeciesSummaryData, error) {
+func (s *testLegacyInterface) GetSpeciesSummaryData(_ context.Context, _, _ string, _ ...uint) ([]datastore.SpeciesSummaryData, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) GetHourlyAnalyticsData(_ context.Context, _, _ string) ([]datastore.HourlyAnalyticsData, error) {
+func (s *testLegacyInterface) GetHourlyAnalyticsData(_ context.Context, _, _ string, _ ...uint) ([]datastore.HourlyAnalyticsData, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) GetDailyAnalyticsData(_ context.Context, _, _, _ string) ([]datastore.DailyAnalyticsData, error) {
+func (s *testLegacyInterface) GetDailyAnalyticsData(_ context.Context, _, _, _ string, _ ...uint) ([]datastore.DailyAnalyticsData, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) GetDetectionTrends(_ context.Context, _ string, _ int) ([]datastore.DailyAnalyticsData, error) {
+func (s *testLegacyInterface) GetDetectionTrends(_ context.Context, _ string, _ int, _ ...uint) ([]datastore.DailyAnalyticsData, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) GetHourlyDistribution(_ context.Context, _, _, _ string) ([]datastore.HourlyDistributionData, error) {
+func (s *testLegacyInterface) GetHourlyDistribution(_ context.Context, _, _, _ string, _ ...uint) ([]datastore.HourlyDistributionData, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) GetNewSpeciesDetections(_ context.Context, _, _ string, _, _ int) ([]datastore.NewSpeciesData, error) {
+func (s *testLegacyInterface) GetNewSpeciesDetections(_ context.Context, _, _ string, _, _ int, _ ...uint) ([]datastore.NewSpeciesData, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) GetSpeciesFirstDetectionInPeriod(_ context.Context, _, _ string, _, _ int) ([]datastore.NewSpeciesData, error) {
+func (s *testLegacyInterface) GetSpeciesFirstDetectionInPeriod(_ context.Context, _, _ string, _, _ int, _ ...uint) ([]datastore.NewSpeciesData, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) GetSpeciesDiversityData(_ context.Context, _, _ string) ([]datastore.DailyAnalyticsData, error) {
+func (s *testLegacyInterface) GetSpeciesDiversityData(_ context.Context, _, _ string, _ ...uint) ([]datastore.DailyAnalyticsData, error) {
+	return nil, nil
+}
+func (s *testLegacyInterface) ListAnalyticsSourcesData(_ context.Context) ([]datastore.AnalyticsSourceInfo, error) {
 	return nil, nil
 }
 func (s *testLegacyInterface) SearchDetections(_ *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {

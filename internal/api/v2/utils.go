@@ -295,6 +295,54 @@ func (c *Controller) parseOptionalPositiveInt(ctx echo.Context, paramName string
 	return val
 }
 
+// maxSourceIDsPerRequest caps the number of source IDs accepted in a single analytics request
+// to bound the size of the IN-clause in downstream queries.
+const maxSourceIDsPerRequest = 64
+
+// parseOptionalSourceIDs parses an optional comma-separated list of audio source IDs from the
+// "source_id" query parameter. Returns nil if the parameter is absent or empty.
+// Invalid entries (non-numeric, zero, or duplicates) are skipped silently with a debug log;
+// this matches the existing "log and continue" behavior of the other parseOptional helpers.
+// If more than maxSourceIDsPerRequest valid IDs are supplied, the slice is truncated.
+func (c *Controller) parseOptionalSourceIDs(ctx echo.Context, paramName string) []uint {
+	raw := strings.TrimSpace(ctx.QueryParam(paramName))
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	seen := make(map[uint]struct{}, len(parts))
+	result := make([]uint, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		v, err := strconv.ParseUint(p, 10, 32)
+		if err != nil || v == 0 {
+			c.logWarnIfEnabled("Skipping invalid source_id token",
+				logger.String("parameter", paramName),
+				logger.String("value", p),
+				logger.String("ip", ctx.RealIP()),
+				logger.String("path", ctx.Request().URL.Path),
+			)
+			continue
+		}
+		id := uint(v)
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		result = append(result, id)
+		if len(result) >= maxSourceIDsPerRequest {
+			break
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
 // parseOptionalFloat parses an optional float query parameter with optional divisor.
 // Returns the parsed value (divided by divisor if > 0), defaultVal if empty, or defaultVal with warning if invalid.
 func (c *Controller) parseOptionalFloat(ctx echo.Context, paramName string, defaultVal, divisor float64) float64 {

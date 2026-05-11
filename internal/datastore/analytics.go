@@ -59,13 +59,31 @@ type NewSpeciesData struct {
 	CountInPeriod  int    `json:"count_in_period"` // Optional: How many times seen in the query period
 }
 
+// AnalyticsSourceInfo describes an audio source that has detections in the database, used for
+// populating the source filter picker on analytics views. Distinct from live engine sources
+// returned by /api/v2/system/audio/sources: this is grounded in historical data and includes
+// sources that may no longer be active.
+type AnalyticsSourceInfo struct {
+	ID             uint   `gorm:"column:id" json:"id"`                          // audio_sources.id primary key
+	DisplayName    string `gorm:"column:display_name" json:"displayName"`       // Human-readable name (e.g. "Garden feeder")
+	SourceURI      string `gorm:"column:source_uri" json:"sourceUri"`           // Underlying URI (e.g. "rtsp://...")
+	SourceType     string `gorm:"column:source_type" json:"sourceType"`         // Source type classification (rtsp, http, audio_card, file, etc.)
+	NodeName       string `gorm:"column:node_name" json:"nodeName"`             // Node/host that produced the detections
+	DetectionCount int64  `gorm:"column:detection_count" json:"detectionCount"` // Total detections recorded against this source
+}
+
 // GetSpeciesSummaryData retrieves overall statistics for all bird species
-// Optional date range filtering with startDate and endDate parameters in YYYY-MM-DD format
+// Optional date range filtering with startDate and endDate parameters in YYYY-MM-DD format.
+//
+// The sourceIDs variadic parameter is accepted for interface compatibility with the v2 datastore
+// but has no effect on the legacy notes-based path: notes only stores a free-form source_node
+// string, not the v2 audio_sources.id integer used for filtering. Per-source analytics are
+// available only after migrating to the v2 schema.
 //
 // NOTE: Uses a read-only transaction with repeatable read isolation to prevent race conditions
 // when concurrent writes are occurring. This ensures consistent timestamps even when new species
 // are being inserted. See issue #1239 for details on the SQLite WAL mode race condition.
-func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]SpeciesSummaryData, error) {
+func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string, _ ...uint) ([]SpeciesSummaryData, error) {
 	// Pre-allocate with reasonable capacity for typical species count
 	summaries := make([]SpeciesSummaryData, 0, 100)
 
@@ -265,7 +283,10 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 }
 
 // GetHourlyAnalyticsData retrieves detection counts grouped by hour
-func (ds *DataStore) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]HourlyAnalyticsData, error) {
+// GetHourlyAnalyticsData returns hourly detection counts.
+// sourceIDs is accepted for interface compatibility with the v2 datastore but ignored by
+// the legacy notes-based path (no audio_sources foreign key on legacy notes).
+func (ds *DataStore) GetHourlyAnalyticsData(ctx context.Context, date, species string, _ ...uint) ([]HourlyAnalyticsData, error) {
 	var analytics []HourlyAnalyticsData
 	hourFormat := ds.GetHourFormat()
 
@@ -301,7 +322,10 @@ func (ds *DataStore) GetHourlyAnalyticsData(ctx context.Context, date, species s
 }
 
 // GetDailyAnalyticsData retrieves detection counts grouped by day
-func (ds *DataStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string) ([]DailyAnalyticsData, error) {
+// GetDailyAnalyticsData returns daily detection counts.
+// sourceIDs is accepted for interface compatibility with the v2 datastore but ignored by
+// the legacy notes-based path (no audio_sources foreign key on legacy notes).
+func (ds *DataStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string, _ ...uint) ([]DailyAnalyticsData, error) {
 	var analytics []DailyAnalyticsData
 
 	// Base query - exclude detections marked as false_positive
@@ -343,7 +367,10 @@ func (ds *DataStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 }
 
 // GetSpeciesDiversityData retrieves the count of unique species detected per day
-func (ds *DataStore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]DailyAnalyticsData, error) {
+// GetSpeciesDiversityData returns daily unique species counts.
+// sourceIDs is accepted for interface compatibility with the v2 datastore but ignored by
+// the legacy notes-based path (no audio_sources foreign key on legacy notes).
+func (ds *DataStore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string, _ ...uint) ([]DailyAnalyticsData, error) {
 	var diversity []DailyAnalyticsData
 
 	// Base query - count distinct species per day, excluding false positives
@@ -379,7 +406,10 @@ func (ds *DataStore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 }
 
 // GetDetectionTrends calculates the trend in detections over time
-func (ds *DataStore) GetDetectionTrends(ctx context.Context, period string, limit int) ([]DailyAnalyticsData, error) {
+// GetDetectionTrends returns detection trends over a period.
+// sourceIDs is accepted for interface compatibility with the v2 datastore but ignored by
+// the legacy notes-based path (no audio_sources foreign key on legacy notes).
+func (ds *DataStore) GetDetectionTrends(ctx context.Context, period string, limit int, _ ...uint) ([]DailyAnalyticsData, error) {
 	var trends []DailyAnalyticsData
 
 	var interval string
@@ -456,7 +486,10 @@ func (ds *DataStore) GetDetectionTrends(ctx context.Context, period string, limi
 
 // GetHourlyDistribution retrieves hourly detection distribution across a date range
 // Groups detections by hour of day (0-23) regardless of the specific date
-func (ds *DataStore) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string) ([]HourlyDistributionData, error) {
+// GetHourlyDistribution returns aggregated hourly distribution.
+// sourceIDs is accepted for interface compatibility with the v2 datastore but ignored by
+// the legacy notes-based path (no audio_sources foreign key on legacy notes).
+func (ds *DataStore) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string, _ ...uint) ([]HourlyDistributionData, error) {
 	var parsedStartDate, parsedEndDate time.Time
 	var err error
 
@@ -552,7 +585,10 @@ func (ds *DataStore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 // This is suitable for seasonal and yearly tracking where we need to know when each species
 // was first detected within that specific period, regardless of prior detections.
 // It returns all species detected in the period with their first detection date in that period.
-func (ds *DataStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error) {
+// GetSpeciesFirstDetectionInPeriod returns species first detected in a period.
+// sourceIDs is accepted for interface compatibility with the v2 datastore but ignored by
+// the legacy notes-based path (no audio_sources foreign key on legacy notes).
+func (ds *DataStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int, _ ...uint) ([]NewSpeciesData, error) {
 	// Validate input
 	if startDate != "" && endDate != "" && startDate > endDate {
 		return nil, errors.Newf("start date cannot be after end date").
@@ -621,7 +657,10 @@ func (ds *DataStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start
 // This is suitable for lifetime tracking only - NOT for seasonal or yearly tracking.
 // It supports pagination with limit and offset parameters.
 // NOTE: For optimal performance with large datasets, add a composite index on (scientific_name, date)
-func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error) {
+// GetNewSpeciesDetections returns species detected for the first time within a date range.
+// sourceIDs is accepted for interface compatibility with the v2 datastore but ignored by
+// the legacy notes-based path (no audio_sources foreign key on legacy notes).
+func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int, _ ...uint) ([]NewSpeciesData, error) {
 	// Temporary struct to scan raw results, ensuring date can be checked for null/empty
 	type RawNewSpeciesResult struct {
 		ScientificName     string
@@ -718,4 +757,12 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 	}
 
 	return finalResults, nil
+}
+
+// ListAnalyticsSourcesData returns an empty slice on the legacy notes-based datastore.
+// Legacy notes have no audio_sources foreign key, so historical sources cannot be enumerated
+// from this schema. Per-source analytics filtering is supported only after migrating to the
+// v2 schema.
+func (ds *DataStore) ListAnalyticsSourcesData(_ context.Context) ([]AnalyticsSourceInfo, error) {
+	return []AnalyticsSourceInfo{}, nil
 }

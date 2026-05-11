@@ -180,16 +180,23 @@ type Interface interface {
 	GetLockedNotesClipPaths() ([]string, error)
 	ClearNoteClipPathsByNames(clipNames []string) (int64, error)
 	CountHourlyDetections(date, hour string, duration int) (int64, error)
-	// Analytics methods
-	GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]SpeciesSummaryData, error)
-	GetHourlyAnalyticsData(ctx context.Context, date string, species string) ([]HourlyAnalyticsData, error)
-	GetDailyAnalyticsData(ctx context.Context, startDate, endDate string, species string) ([]DailyAnalyticsData, error)
-	GetDetectionTrends(ctx context.Context, period string, limit int) ([]DailyAnalyticsData, error)
-	GetHourlyDistribution(ctx context.Context, startDate, endDate string, species string) ([]HourlyDistributionData, error)
-	GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error)
-	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error)
+	// Analytics methods.
+	// All analytics methods accept a variadic sourceIDs filter; omit to include all audio sources,
+	// or pass one or more audio_sources.id values to restrict results to those sources.
+	GetSpeciesSummaryData(ctx context.Context, startDate, endDate string, sourceIDs ...uint) ([]SpeciesSummaryData, error)
+	GetHourlyAnalyticsData(ctx context.Context, date string, species string, sourceIDs ...uint) ([]HourlyAnalyticsData, error)
+	GetDailyAnalyticsData(ctx context.Context, startDate, endDate string, species string, sourceIDs ...uint) ([]DailyAnalyticsData, error)
+	GetDetectionTrends(ctx context.Context, period string, limit int, sourceIDs ...uint) ([]DailyAnalyticsData, error)
+	GetHourlyDistribution(ctx context.Context, startDate, endDate string, species string, sourceIDs ...uint) ([]HourlyDistributionData, error)
+	GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int, sourceIDs ...uint) ([]NewSpeciesData, error)
+	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int, sourceIDs ...uint) ([]NewSpeciesData, error)
 	// GetSpeciesDiversityData returns daily unique species counts within the given date range.
-	GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]DailyAnalyticsData, error)
+	GetSpeciesDiversityData(ctx context.Context, startDate, endDate string, sourceIDs ...uint) ([]DailyAnalyticsData, error)
+	// ListAnalyticsSourcesData returns the list of historical audio sources with detection counts.
+	// Used by analytics filter pickers. Returns sources that have at least one detection,
+	// ordered by detection count descending. Legacy datastores without an audio_sources table
+	// return an empty slice.
+	ListAnalyticsSourcesData(ctx context.Context) ([]AnalyticsSourceInfo, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods

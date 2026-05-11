@@ -1467,7 +1467,10 @@
       "applyFilters": "Filter anwenden",
       "exportCsv": "CSV exportieren",
       "species": "Arten",
-      "filtered": "(gefiltert)"
+      "filtered": "(gefiltert)",
+      "audioSource": "Audioquelle",
+      "audioSourceAll": "Alle Audioquellen",
+      "audioSourceUnknown": "Unbekannte Quelle"
     },
     "timePeriodOptions": {
       "allTime": "Gesamter Zeitraum",

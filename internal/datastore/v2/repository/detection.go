@@ -229,29 +229,36 @@ type DetectionRepository interface {
 
 	// GetSpeciesSummary returns summary statistics for all species.
 	// modelID is optional; pass nil to include all models.
-	GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint) ([]SpeciesSummaryData, error)
+	// sourceIDs is variadic; omit to include all audio sources.
+	GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint, sourceIDs ...uint) ([]SpeciesSummaryData, error)
 
 	// GetHourlyDistribution returns detection counts by hour.
 	// labelID and modelID are optional filters.
-	GetHourlyDistribution(ctx context.Context, start, end int64, labelID, modelID *uint) ([]HourlyDistributionData, error)
+	// sourceIDs is variadic; omit to include all audio sources.
+	GetHourlyDistribution(ctx context.Context, start, end int64, labelID, modelID *uint, sourceIDs ...uint) ([]HourlyDistributionData, error)
 
 	// GetDailyAnalytics returns daily statistics.
 	// labelID and modelID are optional filters.
-	GetDailyAnalytics(ctx context.Context, start, end int64, labelID, modelID *uint) ([]DailyAnalyticsData, error)
+	// sourceIDs is variadic; omit to include all audio sources.
+	GetDailyAnalytics(ctx context.Context, start, end int64, labelID, modelID *uint, sourceIDs ...uint) ([]DailyAnalyticsData, error)
 
 	// GetDetectionTrends returns detection trends over time.
 	// period is "day", "week", or "month".
 	// modelID is optional.
-	GetDetectionTrends(ctx context.Context, period string, limit int, modelID *uint) ([]DailyAnalyticsData, error)
+	// sourceIDs is variadic; omit to include all audio sources.
+	GetDetectionTrends(ctx context.Context, period string, limit int, modelID *uint, sourceIDs ...uint) ([]DailyAnalyticsData, error)
 
 	// GetNewSpecies returns species detected for the first time ever within the range.
-	GetNewSpecies(ctx context.Context, start, end int64, limit, offset int) ([]NewSpeciesData, error)
+	// sourceIDs is variadic; omit to include all audio sources.
+	// When sourceIDs is set, "first ever" is scoped to detections from those sources.
+	GetNewSpecies(ctx context.Context, start, end int64, limit, offset int, sourceIDs ...uint) ([]NewSpeciesData, error)
 
 	// GetSpeciesFirstDetectionInPeriod returns the first detection of each species
 	// within a specific date range (e.g., "First Robin of Spring 2024").
 	// This is distinct from GetNewSpecies (lifetime firsts) and
 	// GetSpeciesFirstDetection (per-species first ever).
-	GetSpeciesFirstDetectionInPeriod(ctx context.Context, start, end int64, limit, offset int) ([]SpeciesFirstSeen, error)
+	// sourceIDs is variadic; omit to include all audio sources.
+	GetSpeciesFirstDetectionInPeriod(ctx context.Context, start, end int64, limit, offset int, sourceIDs ...uint) ([]SpeciesFirstSeen, error)
 
 	// === Utilities ===
 
