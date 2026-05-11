@@ -613,26 +613,28 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 
 		threads := threadAlloc[registryID]
 
+		var loadErr error
 		switch registryID {
 		case RegistryIDBirdNETV3:
 			log.Warn("BirdNET v3.0 loader not yet implemented, skipping",
 				logger.String("registry_id", registryID))
 		case RegistryIDPerchV2:
 			//nolint:staticcheck // SA4023: loadPerch always errors in non-onnx build, but returns nil in onnx build
-			if err := o.loadPerch(threads); err != nil {
-				return err
-			}
+			loadErr = o.loadPerch(threads)
 		case RegistryIDBSG:
 			log.Warn("BSG loader not yet implemented, skipping",
 				logger.String("registry_id", registryID))
 		case RegistryIDBat:
 			//nolint:staticcheck // SA4023: loadBat always errors in non-onnx build, but returns nil in onnx build
-			if err := o.loadBat(threads); err != nil {
-				return err
-			}
+			loadErr = o.loadBat(threads)
 		default:
 			log.Warn("model registered but no loader implemented",
 				logger.String("registry_id", registryID))
+		}
+		if loadErr != nil {
+			log.Warn("optional model failed to load, will retry after gallery scan",
+				logger.String("registry_id", registryID),
+				logger.Error(loadErr))
 		}
 	}
 
