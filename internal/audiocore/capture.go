@@ -110,7 +110,7 @@ func listDevices(log logger.Logger) ([]DeviceInfo, error) {
 
 	for i := range infos {
 		name := infos[i].Name()
-		if strings.Contains(name, "Discard all samples") {
+		if name == "" || strings.Contains(name, "Discard all samples") {
 			continue
 		}
 
@@ -347,6 +347,16 @@ func startCapture(
 	}
 
 	captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
+	// If exclusive mode init fails, retry with stereo before falling back
+	// to default rate. Many USB devices only support 2-channel capture on
+	// the hw: interface; miniaudio handles the downmix to mono internally.
+	if err != nil && deviceCfg.Capture.ShareMode == malgo.Exclusive && deviceCfg.Capture.Channels != 2 {
+		log.Debug("exclusive mono init failed, retrying with stereo",
+			logger.String("source_id", sourceID),
+			logger.String("device", selectedDevInfo.Name))
+		deviceCfg.Capture.Channels = 2
+		captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
+	}
 	if err != nil && cfg.SampleRate > conf.SampleRate {
 		log.Warn("capture init failed at configured rate, falling back to default",
 			logger.String("source_id", sourceID),

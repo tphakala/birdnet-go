@@ -183,6 +183,15 @@ func probeByInit(malgoCtx *malgo.AllocatedContext, deviceInfo *malgo.DeviceInfo,
 
 		callbacks := malgo.DeviceCallbacks{}
 		device, err := malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
+		// If exclusive mode init fails, retry with stereo. Many USB audio
+		// devices only support 2-channel capture on the hw: interface;
+		// miniaudio handles the downmix to mono internally.
+		if err != nil && deviceCfg.Capture.ShareMode == malgo.Exclusive && deviceCfg.Capture.Channels != 2 {
+			log.Debug("probe: exclusive mono failed, retrying with stereo",
+				logger.Int("sample_rate", rate))
+			deviceCfg.Capture.Channels = 2
+			device, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
+		}
 		if err != nil {
 			log.Debug("probe: rate not supported",
 				logger.Int("sample_rate", rate),
