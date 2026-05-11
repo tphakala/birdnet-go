@@ -13,7 +13,6 @@ var testKnownIDs = map[string]bool{"birdnet": true, "perch_v2": true}
 func TestPerchConfig_Defaults(t *testing.T) {
 	t.Parallel()
 	settings := &Settings{}
-	assert.False(t, settings.Perch.Enabled)
 	assert.Empty(t, settings.Perch.ModelPath)
 	assert.Empty(t, settings.Perch.LabelPath)
 	assert.InDelta(t, 0.0, settings.Perch.Threshold, 0.001)
@@ -90,30 +89,12 @@ func TestMigrateSourceModels_StreamConfigMigration(t *testing.T) {
 	assert.Equal(t, []string{"birdnet"}, settings.Realtime.RTSP.Streams[0].Models)
 }
 
-func TestValidateModelConfig_PerchEnabledRequiresPaths(t *testing.T) {
-	t.Parallel()
-	settings := &Settings{}
-	settings.Perch.Enabled = true
-	settings.Models.Enabled = []string{"birdnet", "perch_v2"}
-	errs := settings.ValidateModelConfig(testKnownIDs)
-	assert.NotEmpty(t, errs, "should return errors when Perch enabled without paths")
-}
-
-func TestValidateModelConfig_PerchDisabledNoErrors(t *testing.T) {
+func TestValidateModelConfig_NoErrorsWithJustBirdNET(t *testing.T) {
 	t.Parallel()
 	settings := &Settings{}
 	settings.Models.Enabled = []string{"birdnet"}
 	errs := settings.ValidateModelConfig(testKnownIDs)
 	assert.Empty(t, errs, "should have no errors with just BirdNET")
-}
-
-func TestValidateModelConfig_PerchInModelsRequiresEnabled(t *testing.T) {
-	t.Parallel()
-	settings := &Settings{}
-	settings.Models.Enabled = []string{"birdnet", "perch_v2"}
-	settings.Perch.Enabled = false
-	errs := settings.ValidateModelConfig(testKnownIDs)
-	assert.NotEmpty(t, errs, "perch_v2 in models.enabled requires perch.enabled=true")
 }
 
 func TestValidateModelConfig_UnknownModelWarning(t *testing.T) {

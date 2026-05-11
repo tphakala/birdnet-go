@@ -76,12 +76,10 @@ func TestPatchMissingSections(t *testing.T) {
 			name:    "perch section accepts valid update",
 			section: "perch",
 			body: map[string]any{
-				"enabled":   true,
 				"threshold": 0.8,
 			},
 			verify: func(t *testing.T, settings *conf.Settings) {
 				t.Helper()
-				assert.True(t, settings.Perch.Enabled)
 				assert.InDelta(t, 0.8, settings.Perch.Threshold, 1e-9)
 			},
 		},

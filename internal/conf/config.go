@@ -1172,7 +1172,6 @@ type RangeFilterSettings struct {
 
 // PerchConfig holds configuration for the Google Perch v2 model.
 type PerchConfig struct {
-	Enabled   bool    `yaml:"enabled" json:"enabled"`                         // true to load Perch at startup
 	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to Perch v2 ONNX model file
 	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to Perch v2 label CSV file
 	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
@@ -1181,7 +1180,6 @@ type PerchConfig struct {
 
 // BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
 type BatConfig struct {
-	Enabled         bool    `yaml:"enabled" json:"enabled"`                                     // true to load bat detection at startup
 	EmbeddingModel  string  `yaml:"embeddingmodel,omitempty" json:"embeddingModel,omitempty"`   // path to BirdNET v2.4 embeddings ONNX model
 	ClassifierModel string  `yaml:"classifiermodel,omitempty" json:"classifierModel,omitempty"` // path to bat species classifier ONNX model
 	LabelPath       string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"`             // path to bat species labels file
@@ -1191,7 +1189,6 @@ type BatConfig struct {
 
 // BSGConfig holds configuration for BSG regional bird models.
 type BSGConfig struct {
-	Enabled   bool   `yaml:"enabled" json:"enabled"`                         // true to load BSG model at startup
 	ModelPath string `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BSG ONNX model file
 	LabelPath string `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BSG label file
 	Locale    string `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation

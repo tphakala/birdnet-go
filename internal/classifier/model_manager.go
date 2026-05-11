@@ -72,6 +72,9 @@ type DownloadState struct {
 // parameter is used to update configuration after install/uninstall; it may
 // be nil for testing.
 func NewModelManager(modelsDir string, orchestrator *Orchestrator, settings *conf.Settings) *ModelManager {
+	if orchestrator != nil {
+		orchestrator.SetModelsDir(modelsDir)
+	}
 	return &ModelManager{
 		modelsDir:    modelsDir,
 		orchestrator: orchestrator,
@@ -168,14 +171,14 @@ func (mm *ModelManager) ScanInstalled() {
 			addIfMissing(ConfigAliasForRegistry(entry.RegistryID))
 		}
 
-		// Also add models enabled via legacy per-model config flags.
-		if updated.Bat.Enabled || updated.Bat.ClassifierModel != "" {
+		// Also add models with explicit config paths to the enabled list.
+		if updated.Bat.ClassifierModel != "" {
 			addIfMissing(conf.ModelIDBat)
 		}
-		if updated.Perch.Enabled || updated.Perch.ModelPath != "" {
+		if updated.Perch.ModelPath != "" {
 			addIfMissing(conf.ModelIDPerchV2)
 		}
-		if updated.BSG.Enabled || updated.BSG.ModelPath != "" {
+		if updated.BSG.ModelPath != "" {
 			addIfMissing(conf.ModelIDBSG)
 		}
 
@@ -581,7 +584,6 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 		GetLogger().Info("BirdNET v3.0 config wiring not yet implemented",
 			logger.String("catalog_id", entry.ID))
 	case RegistryIDPerchV2:
-		updated.Perch.Enabled = true
 		if modelPath != "" {
 			updated.Perch.ModelPath = modelPath
 		}
@@ -589,7 +591,6 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 			updated.Perch.LabelPath = labelsPath
 		}
 	case RegistryIDBSG:
-		updated.BSG.Enabled = true
 		if modelPath != "" {
 			updated.BSG.ModelPath = modelPath
 		}
@@ -597,7 +598,6 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 			updated.BSG.LabelPath = labelsPath
 		}
 	case RegistryIDBat:
-		updated.Bat.Enabled = true
 		if modelPath != "" {
 			updated.Bat.ClassifierModel = modelPath
 		}
@@ -648,11 +648,9 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		GetLogger().Info("BirdNET v3.0 config wiring not yet implemented",
 			logger.String("catalog_id", entry.ID))
 	case RegistryIDPerchV2:
-		updated.Perch.Enabled = false
 		updated.Perch.ModelPath = ""
 		updated.Perch.LabelPath = ""
 	case RegistryIDBSG:
-		updated.BSG.Enabled = false
 		updated.BSG.ModelPath = ""
 		updated.BSG.LabelPath = ""
 	case RegistryIDBat:
@@ -668,7 +666,6 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 			}
 		}
 		if replacement == nil {
-			updated.Bat.Enabled = false
 			updated.Bat.ClassifierModel = ""
 			updated.Bat.LabelPath = ""
 			updated.Bat.EmbeddingModel = ""

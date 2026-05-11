@@ -80,17 +80,10 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.rangefilter.model", "latest")
 	viper.SetDefault("birdnet.rangefilter.threshold", 0.01)
 
-	// Perch model configuration (disabled by default)
-	viper.SetDefault("perch.enabled", false)
-	viper.SetDefault("perch.modelpath", "")
-	viper.SetDefault("perch.labelpath", "")
+	// Perch model configuration
 	viper.SetDefault("perch.threshold", 0.5)
 
-	// Bat detection configuration (disabled by default)
-	viper.SetDefault("bat.enabled", false)
-	viper.SetDefault("bat.embeddingmodel", "")
-	viper.SetDefault("bat.classifiermodel", "")
-	viper.SetDefault("bat.labelpath", "")
+	// Bat detection configuration
 	viper.SetDefault("bat.threshold", 0.5)
 
 	// Global model enablement (BirdNET only by default)
