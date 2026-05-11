@@ -793,7 +793,7 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 // changed are touched - unchanged streams keep their capture buffers and
 // source IDs intact.
 func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan audiocore.AudioLevelData) {
-	log := GetAudiocoreLogger()
+	log := audiocore.GetLogger()
 
 	// Build desired config keyed by connection string, including model IDs.
 	desiredConfigs := p.buildSourceConfigsWithModels()
@@ -820,19 +820,10 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			sourceModelMap[src.ID] = scm.modelIDs
 			keptCount++
 
-			// Detect gain-only changes on kept sources.
-			if src.Gain != scm.config.Gain {
-				log.Info("gain changed for kept source, rebuilding routes",
-					logger.String("source_id", src.ID),
-					logger.Float64("old_gain_db", src.Gain),
-					logger.Float64("new_gain_db", scm.config.Gain),
-					logger.String("operation", "reconfigure_diff"))
-				registry.UpdateGain(src.ID, scm.config.Gain)
-				gainChangedIDs = append(gainChangedIDs, src.ID)
-			}
-
 			// Detect audio parameter changes (sample rate, bit depth, channels)
-			// that require a full source reconfigure (stop + buffer realloc + restart).
+			// that require a full source reconfigure (stop + route removal +
+			// buffer realloc + restart). ReconfigureSource handles everything,
+			// so skip the gain-only route rebuild for this source.
 			if sourceNeedsReconfigure(src, scm.config) {
 				log.Info("audio parameters changed, reconfiguring source",
 					logger.String("source_id", src.ID),
@@ -841,12 +832,24 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					logger.Int("old_bit_depth", src.BitDepth),
 					logger.Int("new_bit_depth", scm.config.BitDepth),
 					logger.String("operation", "reconfigure_diff"))
+				if src.Gain != scm.config.Gain {
+					registry.UpdateGain(src.ID, scm.config.Gain)
+				}
 				if err := p.engine.ReconfigureSource(src.ID, scm.config); err != nil {
 					log.Error("failed to reconfigure source",
 						logger.String("source_id", src.ID),
 						logger.Error(err),
 						logger.String("operation", "reconfigure_diff"))
 				}
+			} else if src.Gain != scm.config.Gain {
+				// Gain-only change: update registry and rebuild routes (no restart needed).
+				log.Info("gain changed for kept source, rebuilding routes",
+					logger.String("source_id", src.ID),
+					logger.Float64("old_gain_db", src.Gain),
+					logger.Float64("new_gain_db", scm.config.Gain),
+					logger.String("operation", "reconfigure_diff"))
+				registry.UpdateGain(src.ID, scm.config.Gain)
+				gainChangedIDs = append(gainChangedIDs, src.ID)
 			}
 
 			// Sync display name if the config name changed (e.g., stream renamed in UI).

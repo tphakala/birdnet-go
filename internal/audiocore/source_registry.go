@@ -42,7 +42,7 @@ type SourceEvent struct {
 	SourceID string
 
 	// Source is a copy of the affected AudioSource at the time of the event.
-	// It is always a copy — listeners must not modify it.
+	// It is always a copy; listeners must not modify it.
 	Source *AudioSource
 }
 
@@ -93,7 +93,7 @@ func NewSourceRegistry(log logger.Logger) *SourceRegistry {
 // Register adds a source to the registry from the given SourceConfig.
 //
 // If a source with the same ConnectionString already exists, it is returned
-// unchanged — no duplicate is created.
+// unchanged, so no duplicate is created.
 //
 // The source type is detected automatically from the ConnectionString unless
 // cfg.Type is already set to a non-Unknown value.
@@ -265,6 +265,21 @@ func (r *SourceRegistry) UpdateDisplayName(sourceID, newName string) bool {
 		logger.String("new_name", newName))
 
 	r.notify(SourceEvent{Type: SourceReconfigured, SourceID: sourceID, Source: snapshot})
+	return true
+}
+
+// UpdateAudioParams updates the SampleRate, BitDepth, and Channels fields of
+// the source after a successful reconfigure. Returns false if not found.
+func (r *SourceRegistry) UpdateAudioParams(sourceID string, sampleRate, bitDepth, channels int) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	src, ok := r.sources[sourceID]
+	if !ok {
+		return false
+	}
+	src.SampleRate = sampleRate
+	src.BitDepth = bitDepth
+	src.Channels = channels
 	return true
 }
 
