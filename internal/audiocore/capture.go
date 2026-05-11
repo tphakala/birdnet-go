@@ -368,7 +368,7 @@ func startCapture(
 			logger.Int("channels", int(deviceCfg.Capture.Channels)),
 			logger.Error(err))
 		if deviceCfg.Capture.Channels != 2 {
-			log.Debug("retrying exclusive mode with stereo",
+			log.Info("retrying exclusive mode with stereo",
 				logger.String("source_id", sourceID))
 			deviceCfg.Capture.Channels = 2
 			captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)

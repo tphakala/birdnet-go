@@ -119,7 +119,13 @@ func ProbeDeviceCapabilities(deviceID string, log logger.Logger) (*DeviceCapabil
 	capabilitiesCacheMu.RUnlock()
 
 	// Cache miss: probe live (device may have been plugged in after startup).
-	return probeDeviceCapabilitiesLive(deviceID, log)
+	caps, err := probeDeviceCapabilitiesLive(deviceID, log)
+	if err == nil && caps != nil {
+		capabilitiesCacheMu.Lock()
+		capabilitiesCache[caps.DeviceID] = caps
+		capabilitiesCacheMu.Unlock()
+	}
+	return caps, err
 }
 
 // probeDeviceCapabilitiesLive queries supported sample rates for a device.
