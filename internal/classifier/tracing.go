@@ -18,7 +18,8 @@ import (
 // tagKeyModel is the tracing tag key used to identify the model in spans.
 const tagKeyModel = "model"
 
-// TracingSpan represents a traced operation with minimal overhead
+// TracingSpan represents a traced operation with minimal overhead.
+// A TracingSpan must not be used from multiple goroutines concurrently.
 type TracingSpan struct {
 	operation      string
 	description    string
@@ -32,8 +33,7 @@ type TracingSpan struct {
 
 // Global metrics instance (set by observability package)
 var (
-	globalMetrics    *metrics.BirdNETMetrics
-	metricsMutex     sync.RWMutex
+	globalMetrics    atomic.Pointer[metrics.BirdNETMetrics]
 	metricsOnce      sync.Once
 	activeOperations int64
 )
@@ -53,17 +53,13 @@ func GetInferenceCounters() *inferencestats.CounterMap {
 // metrics configuration remains consistent throughout the application lifecycle.
 func SetMetrics(m *metrics.BirdNETMetrics) {
 	metricsOnce.Do(func() {
-		metricsMutex.Lock()
-		defer metricsMutex.Unlock()
-		globalMetrics = m
+		globalMetrics.Store(m)
 	})
 }
 
-// getMetrics returns the current metrics instance in a thread-safe manner
+// getMetrics returns the current metrics instance in a thread-safe manner.
 func getMetrics() *metrics.BirdNETMetrics {
-	metricsMutex.RLock()
-	defer metricsMutex.RUnlock()
-	return globalMetrics
+	return globalMetrics.Load()
 }
 
 // StartSpan starts a new tracing span with minimal overhead

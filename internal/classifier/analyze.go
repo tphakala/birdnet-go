@@ -74,8 +74,8 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		span.SetTag("error", "true")
 		span.SetData("error_type", "invoke_failed")
 
-		if globalMetrics != nil {
-			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		if m := getMetrics(); m != nil {
+			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
 		}
 
 		return nil, err
@@ -85,8 +85,8 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	span.SetData("invoke_duration_ms", invokeDuration.Milliseconds())
 
 	// Record model invoke timing separately
-	if globalMetrics != nil {
-		globalMetrics.RecordModelInvoke(bn.ModelInfo.ID, invokeDuration.Seconds())
+	if m := getMetrics(); m != nil {
+		m.RecordModelInvoke(bn.ModelInfo.ID, invokeDuration.Seconds())
 	}
 
 	// Use optimized sigmoid function with buffer reuse
@@ -106,8 +106,8 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		span.SetData("error_type", "label_mismatch")
 
 		// Record error in metrics
-		if globalMetrics != nil {
-			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		if m := getMetrics(); m != nil {
+			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
 		}
 
 		return nil, err
