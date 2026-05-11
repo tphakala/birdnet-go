@@ -90,14 +90,13 @@ func NewModelManager(modelsDir string, orchestrator *Orchestrator, settings *con
 // recorded as installed.
 func (mm *ModelManager) ScanInstalled() {
 	log := GetLogger()
-	mm.mu.Lock()
-	defer mm.mu.Unlock()
 
+	// Phase 1: scan the filesystem under mm.mu.
+	mm.mu.Lock()
 	for i := range EmbeddedCatalog {
 		entry := &EmbeddedCatalog[i]
 		subdir := filepath.Join(mm.modelsDir, entry.ID)
 
-		// Find the model file (Role "model") in the catalog entry.
 		modelFile := ""
 		labelsFile := ""
 		for _, f := range entry.Files {
@@ -135,18 +134,17 @@ func (mm *ModelManager) ScanInstalled() {
 			logger.String("path", modelPath))
 	}
 
+	installedIDs := slices.Collect(maps.Keys(mm.installed))
 	log.Info("Model scan complete",
 		logger.Int("installed_count", len(mm.installed)))
+	mm.mu.Unlock()
 
-	// Sync Models.Enabled with installed/configured models so the model picker
-	// always reflects the actual system state. Use clone-mutate-publish to
-	// avoid mutating the shared settings snapshot in place.
+	// Phase 2: sync Models.Enabled and load models (lock-free).
 	if mm.settings != nil {
 		mm.settingsMu.Lock()
 		updated := conf.CloneSettings(conf.GetSettings())
 		changed := false
 
-		// BirdNET is always present (permanent built-in).
 		if !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
 			return strings.EqualFold(id, conf.ModelIDBirdNET)
 		}) {
@@ -162,8 +160,7 @@ func (mm *ModelManager) ScanInstalled() {
 			}
 		}
 
-		// Add models found in the gallery models directory.
-		for catalogID := range mm.installed {
+		for _, catalogID := range installedIDs {
 			entry, found := GetCatalogEntry(catalogID)
 			if !found {
 				continue
@@ -171,7 +168,6 @@ func (mm *ModelManager) ScanInstalled() {
 			addIfMissing(ConfigAliasForRegistry(entry.RegistryID))
 		}
 
-		// Also add models with explicit config paths to the enabled list.
 		if updated.Bat.ClassifierModel != "" {
 			addIfMissing(conf.ModelIDBat)
 		}
@@ -191,20 +187,18 @@ func (mm *ModelManager) ScanInstalled() {
 		}
 		mm.settingsMu.Unlock()
 
-		mm.loadInstalledModels(log)
+		mm.loadInstalledModels(log, installedIDs)
 	}
 }
 
 // loadInstalledModels loads any installed models that are not yet loaded in
-// the orchestrator. Called after ScanInstalled syncs Models.Enabled, since
-// the orchestrator was created before the scan ran.
-func (mm *ModelManager) loadInstalledModels(log logger.Logger) {
+// the orchestrator. The caller must provide the list of installed catalog IDs
+// (collected while holding mm.mu) so this method runs lock-free.
+func (mm *ModelManager) loadInstalledModels(log logger.Logger, installedIDs []string) {
 	if mm.orchestrator == nil {
 		return
 	}
-	mm.mu.RLock()
-	defer mm.mu.RUnlock()
-	for catalogID := range mm.installed {
+	for _, catalogID := range installedIDs {
 		entry, found := GetCatalogEntry(catalogID)
 		if !found || entry.RegistryID == "" {
 			continue
