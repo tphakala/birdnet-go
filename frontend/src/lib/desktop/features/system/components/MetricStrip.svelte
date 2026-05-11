@@ -212,7 +212,7 @@
         <Sparkline datasets={inferenceDatasets} />
       </div>
       <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-[10px] text-muted">
-        {#each modelsWithData as m}
+        {#each modelsWithData as m (m.id)}
           <span class="flex items-center gap-1">
             <span class="inline-block w-1.5 h-1.5 rounded-full" style:background={m.color}></span>
             {m.name}

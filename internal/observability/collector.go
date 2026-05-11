@@ -303,6 +303,15 @@ func (c *Collector) collectInference(points map[string]float64) {
 		s := snap
 		c.prevInferenceSnaps[modelID] = &s
 	}
+
+	// Remove stale snapshots for unloaded models
+	if len(c.prevInferenceSnaps) > len(snaps) {
+		for modelID := range c.prevInferenceSnaps {
+			if _, ok := snaps[modelID]; !ok {
+				delete(c.prevInferenceSnaps, modelID)
+			}
+		}
+	}
 }
 
 // logOnce logs a message for a metric category only on the first occurrence.

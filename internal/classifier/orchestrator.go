@@ -147,7 +147,10 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 // Predict runs inference using the primary model.
 // Delegates to PredictModel for uniform locking and telemetry.
 func (o *Orchestrator) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
-	return o.PredictModel(ctx, o.ModelInfo.ID, sample)
+	o.mu.RLock()
+	id := o.ModelInfo.ID
+	o.mu.RUnlock()
+	return o.PredictModel(ctx, id, sample)
 }
 
 // PredictModel runs inference on a specific model identified by modelID.

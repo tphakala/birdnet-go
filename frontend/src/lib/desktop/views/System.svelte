@@ -189,14 +189,18 @@
   async function fetchActiveModels(): Promise<void> {
     try {
       const models = await api.get<ActiveModelResponse[]>('/api/v2/system/models');
-      modelMetrics = models.map((m, i) => ({
-        id: m.id,
-        name: m.name,
-        metricKey: m.metric_key,
-        chunkSeconds: m.chunk_seconds,
-        history: [],
-        color: assignModelColor(m.id, i),
-      }));
+      const existing = new Map(modelMetrics.map(m => [m.id, m]));
+      modelMetrics = models.map((m, i) => {
+        const prev = existing.get(m.id);
+        return {
+          id: m.id,
+          name: m.name,
+          metricKey: m.metric_key,
+          chunkSeconds: m.chunk_seconds,
+          history: prev ? prev.history : [],
+          color: prev ? prev.color : assignModelColor(m.id, i),
+        };
+      });
     } catch {
       logger.debug('Models endpoint not available');
     }

@@ -188,9 +188,12 @@ func TestCollector_CollectsInferenceMetrics(t *testing.T) {
 	counters.RecordInvoke("Perch_V2", 8000)      // 8ms
 	collector.SetInferenceCounters(counters)
 
+	birdnetKey := inferencestats.MetricKey("BirdNET_V2.4")
+	perchKey := inferencestats.MetricKey("Perch_V2")
+
 	// First tick: no avg yet (no previous snapshot)
 	collector.collect()
-	avgPts := store.Get("inference.BirdNET_V2_4.avg_ms", 10)
+	avgPts := store.Get(birdnetKey, 10)
 	assert.Nil(t, avgPts, "avg should not be recorded on first tick")
 
 	// Record more data for second tick
@@ -200,11 +203,11 @@ func TestCollector_CollectsInferenceMetrics(t *testing.T) {
 	// Second tick: should have per-model avg
 	collector.collect()
 
-	birdnetAvg := store.Get("inference.BirdNET_V2_4.avg_ms", 10)
+	birdnetAvg := store.Get(birdnetKey, 10)
 	require.Len(t, birdnetAvg, 1)
 	assert.InDelta(t, 10.0, birdnetAvg[0].Value, 0.01) // 10ms / 1 invoke
 
-	perchAvg := store.Get("inference.Perch_V2.avg_ms", 10)
+	perchAvg := store.Get(perchKey, 10)
 	require.Len(t, perchAvg, 1)
 	assert.InDelta(t, 6.0, perchAvg[0].Value, 0.01) // 6ms / 1 invoke
 
@@ -226,7 +229,7 @@ func TestCollector_InferenceIdlePeriod(t *testing.T) {
 	collector.collect()
 	collector.collect()
 
-	avgPts := store.Get("inference.BirdNET_V2_4.avg_ms", 10)
+	avgPts := store.Get(inferencestats.MetricKey("BirdNET_V2.4"), 10)
 	require.Len(t, avgPts, 1)
 	assert.InDelta(t, 0.0, avgPts[0].Value, 0.001, "idle period should record 0")
 }

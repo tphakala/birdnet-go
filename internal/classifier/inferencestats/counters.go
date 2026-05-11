@@ -97,3 +97,8 @@ func (m *CounterMap) SnapshotAll() map[string]Snapshot {
 	})
 	return result
 }
+
+// Delete removes the counters for the given model ID.
+func (m *CounterMap) Delete(modelID string) {
+	m.models.Delete(modelID)
+}
