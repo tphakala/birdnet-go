@@ -1024,11 +1024,13 @@ func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.A
 			audioSource.SafeString = existingSource.SafeString
 			audioSource.DisplayName = existingSource.DisplayName
 			audioSource.Type = detection.DetermineSourceType(existingSource.SafeString)
+			audioSource.SampleRate = existingSource.SampleRate
 		} else if existingSource, exists := registry.Get(source.ID); exists {
 			audioSource.ID = existingSource.ID
 			audioSource.SafeString = existingSource.SafeString
 			audioSource.DisplayName = existingSource.DisplayName
 			audioSource.Type = detection.DetermineSourceType(existingSource.SafeString)
+			audioSource.SampleRate = existingSource.SampleRate
 		}
 	}
 
