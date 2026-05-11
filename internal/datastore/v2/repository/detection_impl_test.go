@@ -63,7 +63,6 @@ func TestDeleteBatch_SkipsLockedDetections(t *testing.T) {
 }
 
 func TestDeleteBatch_EmptyIDs(t *testing.T) {
-	t.Parallel()
 	db := setupDetectionTestDB(t)
 	ctx := t.Context()
 
