@@ -173,7 +173,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	// ranges over birdnet.ResultsQueue, and ResizeQueue closes the old channel
 	// and creates a new one. The processor's range loop exits on the closed
 	// channel, killing the detection pipeline. The default queue size of 100 is
-	// fine — shrinking to 5 added unnecessary backpressure with no benefit.
+	// fine; shrinking to 5 added unnecessary backpressure with no benefit.
 
 	// Initialize the buffer manager using the engine's buffer manager.
 	quitChan := p.done // buffer manager uses this to know when to stop
@@ -192,7 +192,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	sourceIDs := p.setupAudioSources(apiAudioLevelChan, "start")
 
 	if len(sourceIDs) == 0 {
-		GetLogger().Warn("starting without active audio sources",
+		audiocore.GetLogger().Warn("starting without active audio sources",
 			logger.Int("rtsp_streams", len(settings.Realtime.RTSP.Streams)),
 			logger.Int("audio_sources", len(settings.Realtime.Audio.Sources)),
 			logger.String("operation", "startup_audio_check"))
@@ -202,19 +202,19 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	// when the watchdog force-resets a stuck stream.
 	p.engine.FFmpegManager().SetOnStreamReset(func(newSourceID string) {
 		if err := p.bufferMgr.AddMonitor(newSourceID); err != nil {
-			GetLogger().Warn("failed to add monitor after watchdog stream reset",
+			audiocore.GetLogger().Warn("failed to add monitor after watchdog stream reset",
 				logger.String("source_id", newSourceID),
 				logger.Error(err),
 				logger.String("operation", "watchdog_add_monitor"))
 		} else {
-			GetLogger().Info("started analysis monitor after watchdog stream reset",
+			audiocore.GetLogger().Info("started analysis monitor after watchdog stream reset",
 				logger.String("source_id", newSourceID),
 				logger.String("operation", "watchdog_add_monitor"))
 		}
 	})
 
 	// Initialize quiet hours scheduler for stream and sound card management.
-	// Uses audiocore/schedule — scheduler is independent of the audio capture pipeline.
+	// Uses audiocore/schedule: scheduler is independent of the audio capture pipeline.
 	p.quietHoursScheduler = schedule.NewQuietHoursScheduler(schedule.QuietHoursConfig{
 		SunCalc:     p.apiService.SunCalc(),
 		ControlChan: p.apiService.ControlChan(),
@@ -231,13 +231,13 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 
 	// RTSP health monitoring is built into the FFmpeg manager.
 	if len(settings.Realtime.RTSP.Streams) > 0 {
-		GetLogger().Info("RTSP streams will be monitored by FFmpeg manager",
+		audiocore.GetLogger().Info("RTSP streams will be monitored by FFmpeg manager",
 			logger.Int("stream_count", len(settings.Realtime.RTSP.Streams)),
 			logger.String("operation", "rtsp_monitoring_setup"))
 	}
 
 	// Start clip cleanup monitor.
-	// Uses conf.Setting() instead of local settings for hot-reload support —
+	// Uses conf.Setting() instead of local settings for hot-reload support:
 	// retention policy can be changed at runtime via the web UI.
 	if conf.Setting().Realtime.Audio.Export.Retention.Policy != policyNone {
 		p.wg.Go(func() {
@@ -355,7 +355,7 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 // restartAudioCapture restarts the audio capture by removing and re-adding
 // all sources via the AudioEngine.
 func (p *AudioPipelineService) restartAudioCapture() {
-	GetLogger().Info("restarting audio capture",
+	audiocore.GetLogger().Info("restarting audio capture",
 		logger.String("operation", "restart_audio_capture"))
 
 	// Remove all existing sources.
@@ -371,7 +371,7 @@ func (p *AudioPipelineService) restartAudioCapture() {
 func (p *AudioPipelineService) removeAllSources(operation string) {
 	for _, src := range p.engine.Registry().List() {
 		if err := p.engine.RemoveSource(src.ID); err != nil {
-			GetLogger().Warn("failed to remove source",
+			audiocore.GetLogger().Warn("failed to remove source",
 				logger.String("source_id", src.ID),
 				logger.Error(err),
 				logger.String("operation", operation))
@@ -390,9 +390,9 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 // The audioLevelChan receives bridged audio level data for the API SSE endpoint.
 // The operation parameter is used in log messages to distinguish callers.
 func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.AudioLevelData, operation string) []string {
-	log := GetLogger()
+	log := audiocore.GetLogger()
 
-	// Add audio sources via engine — this registers sources, allocates buffers,
+	// Add audio sources via engine: this registers sources, allocates buffers,
 	// and starts capture (FFmpeg streams or device capture).
 	sourceConfigs := p.buildSourceConfigsWithModels()
 	sourceModelMap := make(map[string][]string, len(sourceConfigs))
@@ -445,7 +445,7 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 // is also idempotent: sources that already have a tracked consumer are skipped,
 // so the caller may include previously registered source IDs.
 func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, operation string) {
-	log := GetLogger()
+	log := audiocore.GetLogger()
 	settings := conf.Setting()
 	if !settings.Realtime.Audio.SoundLevel.Enabled {
 		return
@@ -630,7 +630,7 @@ func (p *AudioPipelineService) removeAllSoundLevelConsumers(operation string) {
 	p.soundLevelConsumers = make(map[string]string)
 	p.soundLevelMu.Unlock()
 
-	log := GetLogger()
+	log := audiocore.GetLogger()
 	router := p.engine.Router()
 	for sid, cid := range toRemove {
 		router.RemoveRoute(sid, cid)
@@ -647,7 +647,7 @@ func (p *AudioPipelineService) removeAllSoundLevelConsumers(operation string) {
 // only the models assigned to that source. When a source has no configured
 // models (empty slice), the primary model is used as a fallback.
 func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, sourceModelMap map[string][]string, audioLevelChan chan audiocore.AudioLevelData, operation string) {
-	log := GetLogger()
+	log := audiocore.GetLogger()
 
 	// Build a lookup of all loaded model infos keyed by registry ID.
 	modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
@@ -780,12 +780,20 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 	}
 }
 
+// sourceNeedsReconfigure reports whether the running source's audio parameters
+// differ from the desired config, requiring a full reconfigure (stop + restart).
+func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.SourceConfig) bool {
+	return running.SampleRate != desired.SampleRate ||
+		running.BitDepth != desired.BitDepth ||
+		running.Channels != desired.Channels
+}
+
 // reconfigureChangedSources diffs the currently running sources against the
 // desired config from settings. Only sources that were added, removed, or
-// changed are touched — unchanged streams keep their capture buffers and
+// changed are touched - unchanged streams keep their capture buffers and
 // source IDs intact.
 func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan audiocore.AudioLevelData) {
-	log := GetLogger()
+	log := audiocore.GetLogger()
 
 	// Build desired config keyed by connection string, including model IDs.
 	desiredConfigs := p.buildSourceConfigsWithModels()
@@ -799,21 +807,49 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	// security, so we look up sources via GetByConnection on the desired
 	// connection strings instead.
 	registry := p.engine.Registry()
-	alreadyRunning := make(map[string]string) // connStr → sourceID (for sources that stay)
+	alreadyRunning := make(map[string]string) // connStr -> sourceID (for sources that stay)
 	sourceModelMap := make(map[string][]string)
 	var newSourceIDs []string
 	var gainChangedIDs []string
+	var reconfiguredIDs []string
 	var keptCount int
 
 	for connStr, scm := range desired {
 		if src, found := registry.GetByConnection(connStr); found {
-			// Source already running — keep it.
+			// Source already running - keep it.
 			alreadyRunning[connStr] = src.ID
 			sourceModelMap[src.ID] = scm.modelIDs
 			keptCount++
 
-			// Detect gain-only changes on kept sources.
-			if src.Gain != scm.config.Gain {
+			// Detect audio parameter changes (sample rate, bit depth, channels)
+			// that require a full source reconfigure (stop + route removal +
+			// buffer realloc + restart). ReconfigureSource handles everything,
+			// so skip the gain-only route rebuild for this source.
+			if sourceNeedsReconfigure(src, scm.config) {
+				log.Info("audio parameters changed, reconfiguring source",
+					logger.String("source_id", src.ID),
+					logger.Int("old_sample_rate", src.SampleRate),
+					logger.Int("new_sample_rate", scm.config.SampleRate),
+					logger.Int("old_bit_depth", src.BitDepth),
+					logger.Int("new_bit_depth", scm.config.BitDepth),
+					logger.String("operation", "reconfigure_diff"))
+				if src.Gain != scm.config.Gain {
+					registry.UpdateGain(src.ID, scm.config.Gain)
+				}
+				// ReconfigureSource removes all routes; clear the sound level
+				// tracking entry so re-registration is not blocked by the
+				// idempotency check.
+				p.untrackSoundLevelConsumer(src.ID)
+				if err := p.engine.ReconfigureSource(src.ID, scm.config); err != nil {
+					log.Error("failed to reconfigure source",
+						logger.String("source_id", src.ID),
+						logger.Error(err),
+						logger.String("operation", "reconfigure_diff"))
+				} else {
+					reconfiguredIDs = append(reconfiguredIDs, src.ID)
+				}
+			} else if src.Gain != scm.config.Gain {
+				// Gain-only change: update registry and rebuild routes (no restart needed).
 				log.Info("gain changed for kept source, rebuilding routes",
 					logger.String("source_id", src.ID),
 					logger.Float64("old_gain_db", src.Gain),
@@ -828,7 +864,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				registry.UpdateDisplayName(src.ID, scm.config.DisplayName)
 			}
 		} else {
-			// New source — add it.
+			// New source - add it.
 			log.Info("adding new stream from config",
 				logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
 				logger.String("operation", "reconfigure_diff"))
@@ -881,8 +917,15 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		p.registerSoundLevelConsumers(newSourceIDs, "reconfigure_diff")
 	}
 
+	// Rebuild routes for sources whose audio params changed. ReconfigureSource
+	// removed all routes and reallocated buffers; consumers must be re-created.
+	if len(reconfiguredIDs) > 0 {
+		p.registerConsumersForSources(reconfiguredIDs, sourceModelMap, audioLevelChan, "reconfigure_params")
+		p.registerSoundLevelConsumers(reconfiguredIDs, "reconfigure_params")
+	}
+
 	// Rebuild routes for sources whose gain changed. The capture device
-	// stays running — only the routes are torn down and re-created so
+	// stays running; only the routes are torn down and re-created so
 	// drainRoute picks up the new gainLinear value.
 	if len(gainChangedIDs) > 0 {
 		for _, sid := range gainChangedIDs {
@@ -901,7 +944,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	// receives the full desired state and removes stale monitors correctly.
 	allActiveIDs := slices.Collect(maps.Values(alreadyRunning))
 	allActiveIDs = append(allActiveIDs, newSourceIDs...)
-	// Always call UpdateMonitors — even with an empty slice — so stale
+	// Always call UpdateMonitors (even with an empty slice) so stale
 	// monitors are torn down when the last active stream is disabled.
 	if p.bufferMgr != nil {
 		monitorMap := p.buildMonitorConfigs(sourceModelMap, allActiveIDs)
@@ -910,7 +953,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		}
 	}
 
-	log.Info("stream reconfiguration complete",
+	log.Info("audio source reconfiguration complete",
 		logger.Int("kept", keptCount),
 		logger.Int("added", len(newSourceIDs)),
 		logger.Int("removed", removedCount),

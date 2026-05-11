@@ -234,7 +234,7 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 
 	// Check audio device settings
 	if audioDeviceSettingChanged(oldSettings, currentSettings) {
-		c.logInfoIfEnabled("Audio device settings changed, triggering reconfiguration")
+		audiocore.GetLogger().Info("audio device settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_audio_sources")
 		_ = c.SendToastWithKey("Reconfiguring audio sources...", "info", toastDurationMedium,
 			notification.MsgSettingsReconfiguringAudioSources, nil)

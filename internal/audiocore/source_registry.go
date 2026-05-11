@@ -42,7 +42,7 @@ type SourceEvent struct {
 	SourceID string
 
 	// Source is a copy of the affected AudioSource at the time of the event.
-	// It is always a copy — listeners must not modify it.
+	// It is always a copy; listeners must not modify it.
 	Source *AudioSource
 }
 
@@ -93,7 +93,7 @@ func NewSourceRegistry(log logger.Logger) *SourceRegistry {
 // Register adds a source to the registry from the given SourceConfig.
 //
 // If a source with the same ConnectionString already exists, it is returned
-// unchanged — no duplicate is created.
+// unchanged, so no duplicate is created.
 //
 // The source type is detected automatically from the ConnectionString unless
 // cfg.Type is already set to a non-Unknown value.
@@ -109,9 +109,9 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 
 	r.mu.Lock()
 
-	// Deduplication: return existing source for the same connection string.
+	// Deduplication: return a safe copy of the existing source.
 	if existingID, ok := r.connectionMap[connStr]; ok {
-		existing := r.sources[existingID]
+		existing := r.copySource(r.sources[existingID])
 		r.mu.Unlock()
 		return existing, nil
 	}
@@ -156,7 +156,7 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 		logger.String("type", cfg.Type.String()))
 
 	r.notify(SourceEvent{Type: SourceAdded, SourceID: id, Source: snapshot})
-	return src, nil
+	return snapshot, nil
 }
 
 // Unregister removes the source with the given ID from the registry.
@@ -186,16 +186,21 @@ func (r *SourceRegistry) Unregister(sourceID string) error {
 	return nil
 }
 
-// Get returns the source with the given ID, or (nil, false) if not found.
+// Get returns a safe copy of the source with the given ID, or (nil, false) if
+// not found. The copy omits the private connection string to prevent credential
+// leaks. Callers can read fields without holding the registry lock.
 func (r *SourceRegistry) Get(sourceID string) (*AudioSource, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	src, ok := r.sources[sourceID]
-	return src, ok
+	if !ok {
+		return nil, false
+	}
+	return r.copySource(src), true
 }
 
-// GetByConnection returns the source registered for the given connection string,
-// or (nil, false) if not found.
+// GetByConnection returns a safe copy of the source registered for the given
+// connection string, or (nil, false) if not found.
 func (r *SourceRegistry) GetByConnection(connStr string) (*AudioSource, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -204,7 +209,10 @@ func (r *SourceRegistry) GetByConnection(connStr string) (*AudioSource, bool) {
 		return nil, false
 	}
 	src, ok := r.sources[id]
-	return src, ok
+	if !ok {
+		return nil, false
+	}
+	return r.copySource(src), true
 }
 
 // List returns safe copies of all registered sources, sorted by DisplayName.
@@ -263,6 +271,27 @@ func (r *SourceRegistry) UpdateDisplayName(sourceID, newName string) bool {
 		logger.String("id", sourceID),
 		logger.String("old_name", oldName),
 		logger.String("new_name", newName))
+
+	r.notify(SourceEvent{Type: SourceReconfigured, SourceID: sourceID, Source: snapshot})
+	return true
+}
+
+// UpdateAudioParams updates the SampleRate, BitDepth, and Channels fields of
+// the source after a successful reconfigure. Fires SourceReconfigured so
+// listeners (SSE, MQTT HA discovery) see the new parameters. Returns false
+// if the source does not exist.
+func (r *SourceRegistry) UpdateAudioParams(sourceID string, sampleRate, bitDepth, channels int) bool {
+	r.mu.Lock()
+	src, ok := r.sources[sourceID]
+	if !ok {
+		r.mu.Unlock()
+		return false
+	}
+	src.SampleRate = sampleRate
+	src.BitDepth = bitDepth
+	src.Channels = channels
+	snapshot := r.copySource(src)
+	r.mu.Unlock()
 
 	r.notify(SourceEvent{Type: SourceReconfigured, SourceID: sourceID, Source: snapshot})
 	return true

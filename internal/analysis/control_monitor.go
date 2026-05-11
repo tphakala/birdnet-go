@@ -371,7 +371,7 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 // It delegates to the reconfigureSourcesFn callback provided by AudioPipelineService
 // to avoid duplicating source setup logic.
 func (cm *ControlMonitor) handleReconfigureStreams() {
-	GetLogger().Info("Reconfiguring audio streams")
+	audiocore.GetLogger().Info("Reconfiguring audio streams")
 
 	cm.reconfigureSourcesFn()
 
@@ -381,8 +381,7 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 		cm.quietHoursScheduler.Evaluate()
 	}
 
-	GetLogger().Info("Audio streams reconfigured successfully")
-	cm.notifySuccess("Audio capture reconfigured successfully")
+	audiocore.GetLogger().Info("Audio streams reconfigured successfully")
 }
 
 // handleReconfigureBirdWeather reconfigures the BirdWeather integration
@@ -745,7 +744,7 @@ func (cm *ControlMonitor) handleRebuildExtendedCapture() {
 // when their settings (device, gain, model) change. It delegates to the same
 // diff-based reconfiguration used for RTSP stream changes.
 func (cm *ControlMonitor) handleReconfigureAudioSources() {
-	GetLogger().Info("Reconfiguring audio sources")
+	audiocore.GetLogger().Info("Reconfiguring audio sources")
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -755,7 +754,7 @@ func (cm *ControlMonitor) handleReconfigureAudioSources() {
 			} else {
 				err = fmt.Errorf("panic during audio source reconfiguration: %v", r)
 			}
-			GetLogger().Error(err.Error(),
+			audiocore.GetLogger().Error(err.Error(),
 				logger.String("stack", string(debug.Stack())))
 		}
 	}()
@@ -768,8 +767,7 @@ func (cm *ControlMonitor) handleReconfigureAudioSources() {
 		cm.quietHoursScheduler.Evaluate()
 	}
 
-	GetLogger().Info("Audio sources reconfigured successfully")
-	cm.notifySuccess("Audio sources reconfigured successfully")
+	audiocore.GetLogger().Info("Audio sources reconfigured successfully")
 }
 
 // handleRecalculateDynamicThresholds recalculates all dynamic threshold CurrentValue entries

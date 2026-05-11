@@ -437,10 +437,13 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		_ = e.deviceMgr.StopCapture(sourceID)
 	}
 
-	// 2. Deallocate old buffers.
+	// 2. Remove all routes so consumers don't reference deallocated buffers.
+	e.router.RemoveAllRoutes(sourceID)
+
+	// 3. Deallocate old buffers.
 	e.bufferMgr.DeallocateSource(sourceID)
 
-	// 3. Allocate new buffers scaled to source sample rate.
+	// 4. Allocate new buffers scaled to source sample rate.
 	sampleRate := newCfg.SampleRate
 	if sampleRate <= 0 {
 		sampleRate = defaultSampleRate
@@ -456,6 +459,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		defaultAnalysisOverlap*rateScale,
 		defaultAnalysisReadSize*rateScale,
 	); err != nil {
+		_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 		return errors.New(err).
 			Component("audiocore.engine").
 			Category(errors.CategoryBuffer).
@@ -470,6 +474,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		defaultBytesPerSample,
 	); err != nil {
 		e.bufferMgr.DeallocateSource(sourceID)
+		_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 		return errors.New(err).
 			Component("audiocore.engine").
 			Category(errors.CategoryBuffer).
@@ -478,7 +483,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			Build()
 	}
 
-	// 4. Restart capture with new config.
+	// 5. Restart capture with new config.
 	newType := newCfg.Type
 	if newType == "" || newType == audiocore.SourceTypeUnknown {
 		newType = src.Type
@@ -500,7 +505,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			Debug:            e.debug,
 		}
 		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
-			// Source stays registered — mark it as errored so callers can see the failure.
+			// Source stays registered; mark it as errored so callers can see the failure.
 			_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 			return errors.New(err).
 				Component("audiocore.engine").
@@ -516,7 +521,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			Channels:   newCfg.Channels,
 		}
 		if err := e.deviceMgr.StartCapture(sourceID, newCfg.ConnectionString, devCfg); err != nil {
-			// Source stays registered — mark it as errored so callers can see the failure.
+			// Source stays registered; mark it as errored so callers can see the failure.
 			_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 			return errors.New(err).
 				Component("audiocore.engine").
@@ -526,6 +531,9 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 				Build()
 		}
 	}
+
+	// 6. Update registry so downstream consumers see the new audio params.
+	e.registry.UpdateAudioParams(sourceID, sampleRate, newCfg.BitDepth, newCfg.Channels)
 
 	e.logger.Info("source reconfigured",
 		logger.String("source_id", sourceID),
