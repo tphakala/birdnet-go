@@ -4,11 +4,11 @@ import (
 	"io"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -39,11 +39,77 @@ func TestConvertFilters_PreservesAllFields(t *testing.T) {
 	assert.InDelta(t, minConf, *sf.MinConfidence, 0.001)
 	require.NotNil(t, sf.IsLocked)
 	assert.True(t, *sf.IsLocked)
-	require.NotNil(t, sf.Verified)
-	assert.Equal(t, VerificationFilter(entities.VerificationCorrect), *sf.Verified)
+	require.NotNil(t, sf.IsReviewed)
+	assert.True(t, *sf.IsReviewed)
 	assert.Equal(t, 25, sf.Limit)
 	assert.Equal(t, 10, sf.Offset)
 	assert.True(t, sf.SortDesc)
+}
+
+func TestConvertFilters_VerifiedFalse(t *testing.T) {
+	t.Parallel()
+
+	verified := false
+	filters := &datastore.DetectionFilters{
+		Verified: &verified,
+	}
+
+	dw := &DualWriteRepository{}
+	sf := dw.convertFilters(filters)
+
+	require.NotNil(t, sf.IsReviewed)
+	assert.False(t, *sf.IsReviewed)
+}
+
+func TestConvertFilters_DateRange(t *testing.T) {
+	t.Parallel()
+
+	filters := &datastore.DetectionFilters{
+		StartDate: "2024-06-15",
+		EndDate:   "2024-06-17",
+	}
+
+	dw := &DualWriteRepository{}
+	sf := dw.convertFilters(filters)
+
+	require.NotNil(t, sf.StartTime)
+	require.NotNil(t, sf.EndTime)
+
+	startExpected := time.Date(2024, 6, 15, 0, 0, 0, 0, time.Local).Unix()
+	endExpected := time.Date(2024, 6, 18, 0, 0, 0, 0, time.Local).Unix()
+
+	assert.Equal(t, startExpected, *sf.StartTime)
+	assert.Equal(t, endExpected, *sf.EndTime)
+}
+
+func TestConvertFilters_SingleDate(t *testing.T) {
+	t.Parallel()
+
+	filters := &datastore.DetectionFilters{
+		Date: "2024-06-15",
+	}
+
+	dw := &DualWriteRepository{}
+	sf := dw.convertFilters(filters)
+
+	require.NotNil(t, sf.StartTime)
+	require.NotNil(t, sf.EndTime)
+
+	startExpected := time.Date(2024, 6, 15, 0, 0, 0, 0, time.Local).Unix()
+	assert.Equal(t, startExpected, *sf.StartTime)
+	assert.Greater(t, *sf.EndTime, *sf.StartTime)
+}
+
+func TestConvertFilters_NoDates(t *testing.T) {
+	t.Parallel()
+
+	filters := &datastore.DetectionFilters{}
+
+	dw := &DualWriteRepository{}
+	sf := dw.convertFilters(filters)
+
+	assert.Nil(t, sf.StartTime)
+	assert.Nil(t, sf.EndTime)
 }
 
 func TestConvertFilters_ConfidenceOperators(t *testing.T) {
