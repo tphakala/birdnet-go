@@ -182,9 +182,9 @@ func TestCollector_CollectsInferenceMetrics(t *testing.T) {
 	store := NewMemoryStore(10)
 	collector := NewCollector(store, 1*time.Second, func() float64 { return 0 })
 
-	counters := &inferencestats.Counters{}
-	counters.RecordInvoke(5000)  // 5ms
-	counters.RecordInvoke(15000) // 15ms
+	counters := &inferencestats.CounterMap{}
+	counters.RecordInvoke("test-model", 5000)  // 5ms
+	counters.RecordInvoke("test-model", 15000) // 15ms
 	collector.SetInferenceCounters(counters)
 
 	// First tick: only max (no previous snapshot for avg)
@@ -198,7 +198,7 @@ func TestCollector_CollectsInferenceMetrics(t *testing.T) {
 	assert.Nil(t, avgPts, "avg should not be recorded on first tick")
 
 	// Record more data for second tick
-	counters.RecordInvoke(8000) // 8ms
+	counters.RecordInvoke("test-model", 8000) // 8ms
 
 	// Second tick: should have avg
 	collector.collect()
@@ -213,8 +213,8 @@ func TestCollector_InferenceIdleRecordsZero(t *testing.T) {
 	store := NewMemoryStore(10)
 	collector := NewCollector(store, 1*time.Second, func() float64 { return 0 })
 
-	counters := &inferencestats.Counters{}
-	counters.RecordInvoke(5000)
+	counters := &inferencestats.CounterMap{}
+	counters.RecordInvoke("test-model", 5000)
 	collector.SetInferenceCounters(counters)
 
 	// First tick: establishes baseline

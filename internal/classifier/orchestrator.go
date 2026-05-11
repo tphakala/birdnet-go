@@ -200,6 +200,7 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 			logger.Error(err),
 			logger.Duration("duration", duration))
 	} else {
+		globalInferenceCounters.RecordInvoke(modelID, duration.Microseconds())
 		log.Debug("PredictModel complete",
 			logger.String("model_id", modelID),
 			logger.Int("result_count", len(results)),
