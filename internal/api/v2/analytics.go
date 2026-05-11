@@ -1077,14 +1077,16 @@ func (c *Controller) ListAnalyticsSources(ctx echo.Context) error {
 		s := &sources[i]
 		entry := AnalyticsSourceResponse{
 			ID:             s.ID,
-			SourceType:     s.SourceType,
 			DetectionCount: s.DetectionCount,
 		}
 		if isAuthenticated {
 			entry.DisplayName = s.DisplayName
 			entry.SourceURI = s.SourceURI
+			entry.SourceType = s.SourceType
 			entry.NodeName = s.NodeName
 		} else {
+			// Withhold SourceType too: "rtsp" / "alsa" / "file" reveals install topology
+			// (network camera vs local soundcard vs file replay) to anonymous viewers.
 			entry.DisplayName = anonymizeAnalyticsSourceName(s.ID)
 		}
 		resp.Sources = append(resp.Sources, entry)

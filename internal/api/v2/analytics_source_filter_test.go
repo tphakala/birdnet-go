@@ -169,6 +169,8 @@ func TestListAnalyticsSources_AnonymizesForUnauthenticated(t *testing.T) {
 	assert.NotContains(t, body, "rpi-living-room", "node name reveals host topology; hide for unauthenticated clients")
 	assert.NotContains(t, body, "10.0.0.1", "source_uri must not be exposed to unauthenticated clients")
 	assert.NotContains(t, body, "10.0.0.2")
+	// SourceType is also gated — exposing "rtsp" vs "alsa" reveals install topology.
+	assert.NotContains(t, body, `"sourceType":"rtsp"`, "source type reveals install topology; hide for unauthenticated clients")
 }
 
 // TestListAnalyticsSources_EmptyAndError exercises the two non-happy branches: an empty list
