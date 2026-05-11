@@ -43,25 +43,33 @@ func createTestDetection(t *testing.T, db *gorm.DB, detectedAt int64) *entities.
 	return det
 }
 
+func createBulkDetections(t *testing.T, db *gorm.DB, count int) (dets []*entities.Detection, ids []uint) {
+	t.Helper()
+	dets = make([]*entities.Detection, count)
+	for i := range dets {
+		dets[i] = &entities.Detection{LabelID: 1, ModelID: 1, Confidence: 0.9, DetectedAt: int64(1000 + i)}
+	}
+	require.NoError(t, db.Table(tableDetections).CreateInBatches(dets, 100).Error)
+	ids = make([]uint, count)
+	for i, d := range dets {
+		ids[i] = d.ID
+	}
+	return dets, ids
+}
+
 func TestDeleteBatch_SkipsLockedDetections(t *testing.T) {
 	db := setupDetectionTestDB(t)
 	ctx := t.Context()
 
 	repo := &detectionRepository{db: db}
 
-	det1 := &entities.Detection{LabelID: 1, ModelID: 1, Confidence: 0.9, DetectedAt: 1000}
-	det2 := &entities.Detection{LabelID: 1, ModelID: 1, Confidence: 0.8, DetectedAt: 2000}
-	det3 := &entities.Detection{LabelID: 1, ModelID: 1, Confidence: 0.7, DetectedAt: 3000}
+	det1 := createTestDetection(t, db, 1000)
+	det2 := createTestDetection(t, db, 2000)
+	det3 := createTestDetection(t, db, 3000)
 
-	require.NoError(t, db.Table(tableDetections).Create(det1).Error)
-	require.NoError(t, db.Table(tableDetections).Create(det2).Error)
-	require.NoError(t, db.Table(tableDetections).Create(det3).Error)
-
-	// Lock det2
 	lock := &entities.DetectionLock{DetectionID: det2.ID}
 	require.NoError(t, db.Table(tableDetectionLocks).Create(lock).Error)
 
-	// DeleteBatch all three - should skip det2
 	err := repo.DeleteBatch(ctx, []uint{det1.ID, det2.ID, det3.ID})
 	require.NoError(t, err)
 
@@ -88,11 +96,8 @@ func TestDeleteBatch_AllUnlocked(t *testing.T) {
 
 	repo := &detectionRepository{db: db}
 
-	det1 := &entities.Detection{LabelID: 1, ModelID: 1, Confidence: 0.9, DetectedAt: 1000}
-	det2 := &entities.Detection{LabelID: 1, ModelID: 1, Confidence: 0.8, DetectedAt: 2000}
-
-	require.NoError(t, db.Table(tableDetections).Create(det1).Error)
-	require.NoError(t, db.Table(tableDetections).Create(det2).Error)
+	det1 := createTestDetection(t, db, 1000)
+	det2 := createTestDetection(t, db, 2000)
 
 	err := repo.DeleteBatch(ctx, []uint{det1.ID, det2.ID})
 	require.NoError(t, err)
@@ -108,16 +113,7 @@ func TestDeleteBatch_ChunksLargeBatch(t *testing.T) {
 
 	repo := &detectionRepository{db: db}
 
-	// Create 501 detections to force chunking (batchQuerySize is 500)
-	dets := make([]*entities.Detection, 501)
-	ids := make([]uint, 501)
-	for i := range dets {
-		dets[i] = &entities.Detection{LabelID: 1, ModelID: 1, Confidence: 0.9, DetectedAt: int64(1000 + i)}
-	}
-	require.NoError(t, db.Table(tableDetections).CreateInBatches(dets, 100).Error)
-	for i, d := range dets {
-		ids[i] = d.ID
-	}
+	_, ids := createBulkDetections(t, db, batchQuerySize+1)
 
 	err := repo.DeleteBatch(ctx, ids)
 	require.NoError(t, err)
@@ -133,21 +129,10 @@ func TestDeleteBatch_ChunksRemainderCorrectly(t *testing.T) {
 
 	repo := &detectionRepository{db: db}
 
-	// Create exactly batchQuerySize + 1 detections, lock the last one.
 	// The remainder chunk (1 item) must still execute and respect the lock.
-	total := batchQuerySize + 1
-	dets := make([]*entities.Detection, total)
-	ids := make([]uint, total)
-	for i := range dets {
-		dets[i] = &entities.Detection{LabelID: 1, ModelID: 1, Confidence: 0.9, DetectedAt: int64(1000 + i)}
-	}
-	require.NoError(t, db.Table(tableDetections).CreateInBatches(dets, 100).Error)
-	for i, d := range dets {
-		ids[i] = d.ID
-	}
+	dets, ids := createBulkDetections(t, db, batchQuerySize+1)
 
-	// Lock the last detection (which falls in the remainder chunk)
-	lock := &entities.DetectionLock{DetectionID: dets[total-1].ID}
+	lock := &entities.DetectionLock{DetectionID: dets[len(dets)-1].ID}
 	require.NoError(t, db.Table(tableDetectionLocks).Create(lock).Error)
 
 	err := repo.DeleteBatch(ctx, ids)
@@ -156,7 +141,7 @@ func TestDeleteBatch_ChunksRemainderCorrectly(t *testing.T) {
 	var remaining []entities.Detection
 	require.NoError(t, db.Table(tableDetections).Find(&remaining).Error)
 	require.Len(t, remaining, 1)
-	assert.Equal(t, dets[total-1].ID, remaining[0].ID)
+	assert.Equal(t, dets[len(dets)-1].ID, remaining[0].ID)
 }
 
 // ============================================================================
@@ -313,7 +298,6 @@ func TestSaveReview_UpdatedAtChangesOnUpsert(t *testing.T) {
 	// Small delay to ensure timestamp differs
 	time.Sleep(10 * time.Millisecond)
 
-	// Upsert same status
 	review2 := &entities.DetectionReview{
 		DetectionID: det.ID,
 		Verified:    entities.VerificationFalsePositive,
