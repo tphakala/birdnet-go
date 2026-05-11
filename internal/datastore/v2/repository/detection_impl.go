@@ -327,16 +327,23 @@ func (r *detectionRepository) SaveBatch(ctx context.Context, dets []*entities.De
 }
 
 // DeleteBatch removes multiple detections by ID, skipping locked entries.
+// Chunks the ID list to stay within SQL parameter limits.
 func (r *detectionRepository) DeleteBatch(ctx context.Context, ids []uint) error {
 	if len(ids) == 0 {
 		return nil
 	}
 	return datastore.RetryOnLock(ctx, "v2_delete_detection_batch", func() error {
-		return r.db.WithContext(ctx).Table(r.tableName()).
-			Where("id IN ?", ids).
-			Where(fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = %s.id)",
-				r.locksTable(), r.locksTable(), r.tableName())).
-			Delete(&entities.Detection{}).Error
+		for i := 0; i < len(ids); i += batchQuerySize {
+			end := min(i+batchQuerySize, len(ids))
+			if err := r.db.WithContext(ctx).Table(r.tableName()).
+				Where("id IN ?", ids[i:end]).
+				Where(fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = %s.id)",
+					r.locksTable(), r.locksTable(), r.tableName())).
+				Delete(&entities.Detection{}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
 	}, r.metrics)
 }
 
