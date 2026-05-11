@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -430,7 +431,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	GetLogger().Info("Audio clip saved successfully",
 		logger.String("component", "analysis.processor.actions"),
 		logger.String("detection_id", a.CorrelationID),
-		logger.String("clip_path", a.ClipName),
+		logger.String("clip_path", filepath.Base(outputPath)),
 		logger.Int64("file_size_bytes", fileSize),
 		logger.String("format", exportFormat),
 		logger.Int("sample_rate", exportRate),
@@ -516,4 +517,22 @@ func replaceExtension(path, newExt string) string {
 		return path + newExt
 	}
 	return path[:len(path)-len(ext)] + newExt
+}
+
+// needsBatFormatFallback returns true when the model is a bat classifier
+// and the configured export format cannot carry its high sample rate.
+func needsBatFormatFallback(modelID, exportFormat string) bool {
+	modelInfo := classifier.DetectionModelInfoForID(modelID)
+	if detection.ResolveModelType(modelInfo.Name, modelInfo.Version) != entities.ModelTypeBat {
+		return false
+	}
+	spec, ok := classifier.GetModelSpec(modelID)
+	if !ok || spec.EffectiveSampleRate() <= conf.SampleRate {
+		return false
+	}
+	switch exportFormat {
+	case "mp3", "opus", "aac":
+		return true
+	}
+	return false
 }

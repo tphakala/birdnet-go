@@ -919,6 +919,13 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 	// Create file name for audio clip
 	clipName := p.generateClipName(settings, scientificName, result.Confidence)
 
+	// Bat models at high sample rates need WAV when the configured format
+	// (MP3/Opus/AAC) cannot carry rates above 48kHz. Override the extension
+	// now so the database stores the same filename the export will write.
+	if needsBatFormatFallback(item.ModelID, settings.Realtime.Audio.Export.Type) {
+		clipName = replaceExtension(clipName, ".wav")
+	}
+
 	// Get capture length and pre-capture length for detection end time calculation
 	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
 	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second

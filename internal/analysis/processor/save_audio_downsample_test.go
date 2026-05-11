@@ -191,6 +191,35 @@ func TestSaveAudioAction_BatOpusFallsBackToWAV(t *testing.T) {
 	assert.Equal(t, sourceRate, rate, "fallback WAV should preserve native 256kHz rate")
 }
 
+// TestNeedsBatFormatFallback verifies the bat format fallback logic using
+// the classifier model registry.
+func TestNeedsBatFormatFallback(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		modelID  string
+		format   string
+		expected bool
+	}{
+		{"bat_mp3", "Bat", "mp3", true},
+		{"bat_opus", "Bat", "opus", true},
+		{"bat_aac", "Bat", "aac", true},
+		{"bat_wav", "Bat", "wav", false},
+		{"bat_flac", "Bat", "flac", false},
+		{"bird_mp3", "BirdNET_V2.4", "mp3", false},
+		{"bird_wav", "BirdNET_V2.4", "wav", false},
+		{"unknown_model", "Unknown", "mp3", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, needsBatFormatFallback(tt.modelID, tt.format))
+		})
+	}
+}
+
 // TestReplaceExtension verifies the file extension replacement helper.
 func TestReplaceExtension(t *testing.T) {
 	t.Parallel()
