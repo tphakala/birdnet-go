@@ -111,7 +111,7 @@
   preserveAspectRatio="none"
   class="overflow-visible"
 >
-  {#each rendered.paths as p (p.color)}
+  {#each rendered.paths as p, i (i)}
     <path d={p.area} fill={p.color} opacity="0.08" />
     <path
       d={p.line}
