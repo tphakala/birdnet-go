@@ -186,16 +186,21 @@ func (r *SourceRegistry) Unregister(sourceID string) error {
 	return nil
 }
 
-// Get returns the source with the given ID, or (nil, false) if not found.
+// Get returns a safe copy of the source with the given ID, or (nil, false) if
+// not found. The copy omits the private connection string to prevent credential
+// leaks. Callers can read fields without holding the registry lock.
 func (r *SourceRegistry) Get(sourceID string) (*AudioSource, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	src, ok := r.sources[sourceID]
-	return src, ok
+	if !ok {
+		return nil, false
+	}
+	return r.copySource(src), true
 }
 
-// GetByConnection returns the source registered for the given connection string,
-// or (nil, false) if not found.
+// GetByConnection returns a safe copy of the source registered for the given
+// connection string, or (nil, false) if not found.
 func (r *SourceRegistry) GetByConnection(connStr string) (*AudioSource, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -204,7 +209,10 @@ func (r *SourceRegistry) GetByConnection(connStr string) (*AudioSource, bool) {
 		return nil, false
 	}
 	src, ok := r.sources[id]
-	return src, ok
+	if !ok {
+		return nil, false
+	}
+	return r.copySource(src), true
 }
 
 // List returns safe copies of all registered sources, sorted by DisplayName.

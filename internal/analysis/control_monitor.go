@@ -382,7 +382,6 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 	}
 
 	audiocore.GetLogger().Info("Audio streams reconfigured successfully")
-	cm.notifySuccess("Audio capture reconfigured successfully")
 }
 
 // handleReconfigureBirdWeather reconfigures the BirdWeather integration
@@ -769,7 +768,6 @@ func (cm *ControlMonitor) handleReconfigureAudioSources() {
 	}
 
 	audiocore.GetLogger().Info("Audio sources reconfigured successfully")
-	cm.notifySuccess("Audio sources reconfigured successfully")
 }
 
 // handleRecalculateDynamicThresholds recalculates all dynamic threshold CurrentValue entries
