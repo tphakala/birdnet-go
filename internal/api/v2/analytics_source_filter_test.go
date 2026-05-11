@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -61,17 +62,14 @@ func TestParseOptionalSourceIDs_Truncation(t *testing.T) {
 	t.Parallel()
 
 	const overflow = maxSourceIDsPerRequest + 5
-	parts := make([]string, overflow)
-	for i := range parts {
-		parts[i] = ""
-	}
+
 	// Build "1,2,3,...,N" where N > cap.
 	var b strings.Builder
 	for i := 1; i <= overflow; i++ {
 		if i > 1 {
 			b.WriteByte(',')
 		}
-		b.WriteString(intToString(i))
+		b.WriteString(strconv.Itoa(i))
 	}
 
 	e := echo.New()
@@ -84,34 +82,6 @@ func TestParseOptionalSourceIDs_Truncation(t *testing.T) {
 	require.Len(t, got, maxSourceIDsPerRequest)
 	assert.Equal(t, uint(1), got[0], "leading IDs are preserved")
 	assert.Equal(t, uint(maxSourceIDsPerRequest), got[len(got)-1])
-}
-
-// intToString avoids importing strconv at the top just for one call in the truncation test.
-func intToString(i int) string {
-	var b strings.Builder
-	if i == 0 {
-		b.WriteByte('0')
-		return b.String()
-	}
-	negative := i < 0
-	if negative {
-		i = -i
-	}
-	var digits [20]byte
-	n := 0
-	for i > 0 {
-		digits[n] = byte('0' + i%10)
-		i /= 10
-		n++
-	}
-	if negative {
-		b.WriteByte('-')
-	}
-	for n > 0 {
-		n--
-		b.WriteByte(digits[n])
-	}
-	return b.String()
 }
 
 // TestGetSpeciesSummary_PassesSourceIDsToDatastore verifies the API handler threads the
@@ -157,17 +127,22 @@ func TestGetSpeciesSummary_PassesSourceIDsToDatastore(t *testing.T) {
 	}
 }
 
-// TestListAnalyticsSources_HappyPath verifies the new /analytics/sources endpoint returns
-// the datastore's source list shape unchanged into the API response envelope.
-func TestListAnalyticsSources_HappyPath(t *testing.T) {
+// TestListAnalyticsSources_AnonymizesForUnauthenticated verifies the privacy contract:
+// unauthenticated requests must receive an anonymized DisplayName and no SourceURI or
+// NodeName, because SourceURIs can contain credentials (rtsp://user:pass@host) and
+// display/node names can identify physical camera locations.
+//
+// The test controller has no authService configured, so isClientAuthenticated returns
+// false — this matches the public/unauthenticated case.
+func TestListAnalyticsSources_AnonymizesForUnauthenticated(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	mockDS.EXPECT().
 		ListAnalyticsSourcesData(mock.Anything).
 		Return([]datastore.AnalyticsSourceInfo{
-			{ID: 11, DisplayName: "Voordeur", SourceURI: "rtsp://a", SourceType: "rtsp", NodeName: "host-a", DetectionCount: 100},
-			{ID: 22, DisplayName: "Poort", SourceURI: "rtsp://b", SourceType: "rtsp", NodeName: "host-a", DetectionCount: 50},
+			{ID: 11, DisplayName: "Front Yard Camera", SourceURI: "rtsp://admin:supersecret@10.0.0.1/stream1", SourceType: "rtsp", NodeName: "rpi-living-room", DetectionCount: 100},
+			{ID: 22, DisplayName: "Back Garden", SourceURI: "rtsp://10.0.0.2/stream2", SourceType: "rtsp", NodeName: "rpi-living-room", DetectionCount: 50},
 		}, nil).
 		Once()
 
@@ -175,15 +150,25 @@ func TestListAnalyticsSources_HappyPath(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
-	err := controller.ListAnalyticsSources(ctx)
-	require.NoError(t, err)
+	require.NoError(t, controller.ListAnalyticsSources(ctx))
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	body := rec.Body.String()
+	// IDs and counts are non-informational and should always be present.
 	assert.Contains(t, body, `"id":11`)
-	assert.Contains(t, body, `"displayName":"Voordeur"`)
 	assert.Contains(t, body, `"id":22`)
 	assert.Contains(t, body, `"detectionCount":100`)
+	assert.Contains(t, body, `"detectionCount":50`)
+	// Anonymized display names mirror the audio-level convention.
+	assert.Contains(t, body, `"displayName":"source-11"`)
+	assert.Contains(t, body, `"displayName":"source-22"`)
+	// Sensitive fields must be absent.
+	assert.NotContains(t, body, "supersecret", "credentials in source_uri must never leak to unauthenticated clients")
+	assert.NotContains(t, body, "Front Yard Camera", "real display name must be hidden from unauthenticated clients")
+	assert.NotContains(t, body, "Back Garden")
+	assert.NotContains(t, body, "rpi-living-room", "node name reveals host topology; hide for unauthenticated clients")
+	assert.NotContains(t, body, "10.0.0.1", "source_uri must not be exposed to unauthenticated clients")
+	assert.NotContains(t, body, "10.0.0.2")
 }
 
 // TestListAnalyticsSources_EmptyAndError exercises the two non-happy branches: an empty list

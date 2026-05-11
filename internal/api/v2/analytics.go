@@ -1056,8 +1056,12 @@ type AnalyticsSourceListResponse struct {
 // picker on the analytics page. Always returns 200 with an empty list rather than 404 when no
 // detections exist, so the frontend can render an "All sources" picker without special-casing.
 //
-// For unauthenticated clients, the display name is left as-is (this endpoint exposes historical
-// configuration that is also visible via detections endpoints, which do not anonymize).
+// Public endpoint exposing source metadata: per the API v2 guideline (matching
+// StreamAudioLevel), unauthenticated clients receive an anonymized DisplayName and no
+// SourceURI / NodeName. Source URIs may contain credentials (e.g. rtsp://user:pass@host),
+// and display names / node names can identify physical camera locations — neither belongs
+// in a response to an unauthenticated request. The numeric ID and detection count are
+// kept because they're non-informational and the picker needs them to function.
 func (c *Controller) ListAnalyticsSources(ctx echo.Context) error {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
 	defer cancel()
@@ -1067,25 +1071,41 @@ func (c *Controller) ListAnalyticsSources(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to list analytics sources", http.StatusInternalServerError)
 	}
 
+	isAuthenticated := c.isClientAuthenticated(ctx)
 	resp := AnalyticsSourceListResponse{Sources: make([]AnalyticsSourceResponse, 0, len(sources))}
 	for i := range sources {
 		s := &sources[i]
-		resp.Sources = append(resp.Sources, AnalyticsSourceResponse{
+		entry := AnalyticsSourceResponse{
 			ID:             s.ID,
-			DisplayName:    s.DisplayName,
-			SourceURI:      s.SourceURI,
 			SourceType:     s.SourceType,
-			NodeName:       s.NodeName,
 			DetectionCount: s.DetectionCount,
-		})
+		}
+		if isAuthenticated {
+			entry.DisplayName = s.DisplayName
+			entry.SourceURI = s.SourceURI
+			entry.NodeName = s.NodeName
+		} else {
+			entry.DisplayName = anonymizeAnalyticsSourceName(s.ID)
+		}
+		resp.Sources = append(resp.Sources, entry)
 	}
 
 	c.logInfoIfEnabled("Analytics sources listed",
 		logger.Int("count", len(resp.Sources)),
+		logger.Bool("authenticated", isAuthenticated),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
 	return ctx.JSON(http.StatusOK, resp)
+}
+
+// anonymizeAnalyticsSourceName returns a stable, non-informational label for an audio source
+// used in responses to unauthenticated clients. The numeric `audio_sources.id` is fine to
+// expose (it's an opaque DB primary key), and using it keeps picker selections stable across
+// requests. Mirrors the "camera-<prefix>" pattern used by StreamAudioLevel's anonymizer for
+// stream sources, adapted to the DB-rooted ID we have here.
+func anonymizeAnalyticsSourceName(id uint) string {
+	return fmt.Sprintf("source-%d", id)
 }
 
 // GetTimeOfDayDistribution handles GET /api/v2/analytics/time/distribution/hourly
