@@ -34,21 +34,8 @@ func isStreamType(t audiocore.SourceType) bool {
 	}
 }
 
-// Default buffer parameters used when allocating analysis and capture buffers.
-// These match the values used by the existing BirdNET analysis pipeline.
+// Default buffer parameters used when allocating capture buffers.
 const (
-	// defaultAnalysisCapacity is the ring buffer size in bytes.
-	// 288000 bytes = 3 seconds of 16-bit 48 kHz mono audio.
-	defaultAnalysisCapacity = 288000
-
-	// defaultAnalysisOverlap is the overlap in bytes between consecutive reads.
-	// 144000 bytes = 1.5 seconds of 16-bit 48 kHz mono audio.
-	defaultAnalysisOverlap = 144000
-
-	// defaultAnalysisReadSize is the number of fresh bytes per read.
-	// 144000 bytes = 1.5 seconds of 16-bit 48 kHz mono audio.
-	defaultAnalysisReadSize = 144000
-
 	// defaultCaptureBufferSeconds is the ring buffer capacity in seconds.
 	// This determines how much audio history is retained for clip export.
 	// Must be large enough to cover the export length + detection window
@@ -135,8 +122,14 @@ type AudioEngine struct {
 	cancel    context.CancelCauseFunc
 
 	// primaryModelID is the model identifier used when allocating analysis
-	// buffers. Set via SetPrimaryModelID before adding sources.
+	// buffers. Set via SetPrimaryModel before adding sources.
 	primaryModelID string
+	// primaryClipBytes, primaryOverlapBytes, primaryReadSize are the analysis
+	// buffer dimensions derived from the primary model's spec. Set via
+	// SetPrimaryModel before adding sources.
+	primaryClipBytes    int
+	primaryOverlapBytes int
+	primaryReadSize     int
 	// ffmpegPath is the absolute path to the FFmpeg binary.
 	ffmpegPath string
 	// soxPath is the absolute path to the SoX binary.
@@ -241,12 +234,21 @@ func (e *AudioEngine) SetScheduler(s *schedule.QuietHoursScheduler) {
 	e.scheduler.Store(s)
 }
 
-// SetPrimaryModelID sets the model identifier used when allocating analysis
-// buffers. This must be called before AddSource to ensure buffers are keyed
-// to the correct model. The value should come from the Orchestrator's
-// ModelInfo.ID.
-func (e *AudioEngine) SetPrimaryModelID(id string) {
+// SetPrimaryModel sets the model identifier and analysis buffer dimensions
+// for the primary model. This must be called before AddSource to ensure
+// buffers are allocated with the correct model key and size.
+// clipBytes, overlapBytes, and readSize should be derived from the model's
+// ModelSpec.BufferDimensions(), matching the secondary model allocation path.
+func (e *AudioEngine) SetPrimaryModel(id string, clipBytes, overlapBytes, readSize int) {
 	e.primaryModelID = id
+	e.primaryClipBytes = clipBytes
+	e.primaryOverlapBytes = overlapBytes
+	e.primaryReadSize = readSize
+	e.logger.Info("primary model buffer dimensions set",
+		logger.String("model_id", id),
+		logger.Int("clip_bytes", clipBytes),
+		logger.Int("overlap_bytes", overlapBytes),
+		logger.Int("read_size", readSize))
 }
 
 // PrimaryModelID returns the current primary model identifier.
@@ -259,6 +261,14 @@ func (e *AudioEngine) PrimaryModelID() string {
 // is started. For audio card sources, the device manager begins capture.
 // File-type sources are registered but no long-running capture is started.
 func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
+	if e.primaryModelID == "" {
+		return errors.Newf("SetPrimaryModel must be called before AddSource").
+			Component("audiocore.engine").
+			Category(errors.CategoryState).
+			Context("source_id", cfg.ID).
+			Build()
+	}
+
 	// 1. Register the source.
 	src, err := e.registry.Register(cfg)
 	if err != nil {
@@ -272,22 +282,17 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 
 	sourceID := src.ID
 
-	// 2. Allocate analysis buffer scaled to source sample rate.
-	sampleRate := cfg.SampleRate
-	if sampleRate <= 0 {
-		sampleRate = defaultSampleRate
-	}
-	rateScale := sampleRate / defaultSampleRate
-	if rateScale < 1 {
-		rateScale = 1
-	}
+	// 2. Allocate analysis buffer using the primary model's native dimensions.
+	// BufferConsumer resamples audio to the model's target rate before writing,
+	// so buffer size must match the model spec, not the source sample rate.
 	if err := e.bufferMgr.AllocateAnalysis(
 		sourceID,
 		e.primaryModelID,
-		defaultAnalysisCapacity*rateScale,
-		defaultAnalysisOverlap*rateScale,
-		defaultAnalysisReadSize*rateScale,
+		e.primaryClipBytes,
+		e.primaryOverlapBytes,
+		e.primaryReadSize,
 	); err != nil {
+		_ = e.registry.Unregister(sourceID)
 		return errors.New(err).
 			Component("audiocore.engine").
 			Category(errors.CategoryBuffer).
@@ -296,15 +301,29 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 			Build()
 	}
 
-	// 3. Allocate capture buffer.
+	// 3. Default and validate sample rate for capture buffer and stream config.
+	sampleRate := cfg.SampleRate
+	if sampleRate <= 0 {
+		sampleRate = defaultSampleRate
+	}
+
+	e.logger.Info("allocated primary analysis buffer",
+		logger.String("source_id", sourceID),
+		logger.String("model_id", e.primaryModelID),
+		logger.Int("clip_bytes", e.primaryClipBytes),
+		logger.Int("overlap_bytes", e.primaryOverlapBytes),
+		logger.Int("read_size", e.primaryReadSize),
+		logger.Int("source_sample_rate", sampleRate))
+
+	// 4. Allocate capture buffer.
 	if err := e.bufferMgr.AllocateCapture(
 		sourceID,
 		e.captureBufferSeconds,
 		sampleRate,
 		defaultBytesPerSample,
 	); err != nil {
-		// Roll back analysis buffer on failure.
 		e.bufferMgr.DeallocateSource(sourceID)
+		_ = e.registry.Unregister(sourceID)
 		return errors.New(err).
 			Component("audiocore.engine").
 			Category(errors.CategoryBuffer).
@@ -313,7 +332,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 			Build()
 	}
 
-	// 4. Start capture based on source type.
+	// 5. Start capture based on source type.
 	if isStreamType(cfg.Type) {
 		streamCfg := &ffmpeg.StreamConfig{
 			SourceID:         sourceID,
@@ -370,7 +389,10 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 
 	e.logger.Info("source added",
 		logger.String("source_id", sourceID),
-		logger.String("type", cfg.Type.String()))
+		logger.String("type", cfg.Type.String()),
+		logger.Int("sample_rate", sampleRate),
+		logger.String("primary_model", e.primaryModelID),
+		logger.Int("analysis_clip_bytes", e.primaryClipBytes))
 
 	return nil
 }
@@ -418,6 +440,14 @@ func (e *AudioEngine) RemoveSource(sourceID string) error {
 // ReconfigureSource stops the existing capture for sourceID, reallocates
 // buffers with the new configuration, and restarts capture.
 func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.SourceConfig) error {
+	if e.primaryModelID == "" {
+		return errors.Newf("SetPrimaryModel must be called before ReconfigureSource").
+			Component("audiocore.engine").
+			Category(errors.CategoryState).
+			Context("source_id", sourceID).
+			Build()
+	}
+
 	src, ok := e.registry.Get(sourceID)
 	if !ok {
 		return fmt.Errorf("reconfigure source: %w: %s", audiocore.ErrSourceNotFound, sourceID)
@@ -443,21 +473,17 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	// 3. Deallocate old buffers.
 	e.bufferMgr.DeallocateSource(sourceID)
 
-	// 4. Allocate new buffers scaled to source sample rate.
+	// 4. Allocate new analysis buffer using the primary model's native dimensions.
 	sampleRate := newCfg.SampleRate
 	if sampleRate <= 0 {
 		sampleRate = defaultSampleRate
 	}
-	rateScale := sampleRate / defaultSampleRate
-	if rateScale < 1 {
-		rateScale = 1
-	}
 	if err := e.bufferMgr.AllocateAnalysis(
 		sourceID,
 		e.primaryModelID,
-		defaultAnalysisCapacity*rateScale,
-		defaultAnalysisOverlap*rateScale,
-		defaultAnalysisReadSize*rateScale,
+		e.primaryClipBytes,
+		e.primaryOverlapBytes,
+		e.primaryReadSize,
 	); err != nil {
 		_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 		return errors.New(err).
@@ -467,6 +493,13 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			Context("source_id", sourceID).
 			Build()
 	}
+	e.logger.Info("reallocated primary analysis buffer",
+		logger.String("source_id", sourceID),
+		logger.String("model_id", e.primaryModelID),
+		logger.Int("clip_bytes", e.primaryClipBytes),
+		logger.Int("overlap_bytes", e.primaryOverlapBytes),
+		logger.Int("read_size", e.primaryReadSize),
+		logger.Int("source_sample_rate", sampleRate))
 	if err := e.bufferMgr.AllocateCapture(
 		sourceID,
 		e.captureBufferSeconds,

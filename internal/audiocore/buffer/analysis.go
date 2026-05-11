@@ -259,6 +259,12 @@ func (ab *AnalysisBuffer) OverwriteCount() int64 {
 	return ab.tracker.overwriteCount
 }
 
+// WindowSize returns the total window size (overlapSize + readSize) in bytes.
+// This is the length of the slice returned by Read().
+func (ab *AnalysisBuffer) WindowSize() int {
+	return ab.windowSize
+}
+
 // Reset clears the ring buffer and resets all overlap and tracking state.
 // Useful for testing or restarting a source.
 func (ab *AnalysisBuffer) Reset() {

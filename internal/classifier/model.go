@@ -27,6 +27,15 @@ func (s ModelSpec) ClipSizeBytes() int {
 	return s.SampleRate * int(s.ClipLength.Seconds()) * conf.NumChannels * conf.BytesPerSample
 }
 
+// BufferDimensions returns the analysis buffer dimensions for this model
+// with 50% overlap: (clipBytes, overlapBytes, readSize).
+func (s ModelSpec) BufferDimensions() (clipBytes, overlapBytes, readSize int) {
+	clipBytes = s.ClipSizeBytes()
+	overlapBytes = clipBytes / 2
+	readSize = clipBytes - overlapBytes
+	return
+}
+
 // EffectiveSampleRate returns the sample rate the model expects to receive
 // audio at. When RawSampleRate is set, the model needs raw audio at that
 // rate (e.g. 256kHz bat audio fed without resampling). Otherwise, the
