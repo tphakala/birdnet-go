@@ -111,6 +111,7 @@ func (m *MySQLManager) Initialize() error {
 		&entities.AudioSource{},
 		&entities.Detection{},
 		&entities.DetectionPrediction{},
+		&entities.DetectionModelContribution{},
 		&entities.DetectionReview{},
 		&entities.DetectionComment{},
 		&entities.DetectionLock{},

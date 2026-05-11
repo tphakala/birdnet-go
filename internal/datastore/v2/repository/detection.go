@@ -149,6 +149,11 @@ type DetectionRepository interface {
 	// DeletePredictions removes all predictions for a detection.
 	DeletePredictions(ctx context.Context, detectionID uint) error
 
+	// === Model Contributions ===
+
+	// SaveModelContributions stores per-model contribution data for a detection.
+	SaveModelContributions(ctx context.Context, detectionID uint, contribs []*entities.DetectionModelContribution) error
+
 	// === Reviews ===
 
 	// SaveReview creates or updates a review for a detection.

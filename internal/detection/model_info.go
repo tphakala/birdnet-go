@@ -17,6 +17,20 @@ type ModelInfo struct {
 	ClassifierPath *string // path to custom classifier file, nil for default
 }
 
+// WithDefaults returns a copy of the ModelInfo with empty fields replaced by defaults.
+func (m ModelInfo) WithDefaults() ModelInfo {
+	if m.Name == "" {
+		m.Name = DefaultModelName
+	}
+	if m.Version == "" {
+		m.Version = DefaultModelVersion
+	}
+	if m.Variant == "" {
+		m.Variant = DefaultModelVariant
+	}
+	return m
+}
+
 // DefaultModelInfo returns the default BirdNET model info.
 func DefaultModelInfo() ModelInfo {
 	return ModelInfo{

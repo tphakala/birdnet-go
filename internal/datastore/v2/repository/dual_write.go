@@ -375,6 +375,35 @@ func (dw *DualWriteRepository) syncToV2(ctx context.Context, result *detection.R
 		}
 	}
 
+	// Save model contributions (cross-model consensus data).
+	// Best-effort: contributions are supplementary metadata not stored in legacy,
+	// so they cannot be recovered during dirty ID reconciliation.
+	if len(result.ModelContributions) > 0 {
+		contribs := make([]*entities.DetectionModelContribution, 0, len(result.ModelContributions))
+		for _, contrib := range result.ModelContributions {
+			m := contrib.Model.WithDefaults()
+			modelEntity, err := dw.modelRepo.GetOrCreate(ctx, m.Name, m.Version, m.Variant,
+				detection.ResolveModelType(m.Name, m.Version), m.ClassifierPath)
+			if err != nil {
+				dw.logger.Warn("failed to resolve model for contribution",
+					logger.String("model_name", m.Name),
+					logger.Error(err))
+				continue
+			}
+			contribs = append(contribs, &entities.DetectionModelContribution{
+				DetectionID:   det.ID,
+				ModelID:       modelEntity.ID,
+				HitCount:      contrib.HitCount,
+				MaxConfidence: contrib.MaxConfidence,
+			})
+		}
+		if err := dw.v2.SaveModelContributions(ctx, det.ID, contribs); err != nil {
+			dw.logger.Warn("v2 model contributions save failed",
+				logger.Uint64("detection_id", uint64(det.ID)),
+				logger.Error(err))
+		}
+	}
+
 	// Save additional predictions
 	if len(additionalResults) > 0 {
 		// Get model type for predictions (default to bird if not available)

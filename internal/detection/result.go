@@ -45,12 +45,20 @@ type Result struct {
 	ProcessingTime time.Duration // How long analysis took
 
 	// Runtime-only data (not persisted)
-	Occurrence float64 // Probability 0-1 based on location/time/season
+	Occurrence         float64                       // Probability 0-1 based on location/time/season
+	ModelContributions map[string]ResultModelContrib // Per-model detection data from cross-model consensus, keyed by model ID
 
 	// Review status (populated from DB relations when loaded)
 	Verified string
 	Locked   bool
 	Comments []Comment
+}
+
+// ResultModelContrib records a single AI model's contribution to a detection.
+type ResultModelContrib struct {
+	Model         ModelInfo
+	HitCount      int
+	MaxConfidence float64
 }
 
 // Comment represents a user comment on a detection.
