@@ -173,7 +173,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	// ranges over birdnet.ResultsQueue, and ResizeQueue closes the old channel
 	// and creates a new one. The processor's range loop exits on the closed
 	// channel, killing the detection pipeline. The default queue size of 100 is
-	// fine — shrinking to 5 added unnecessary backpressure with no benefit.
+	// fine; shrinking to 5 added unnecessary backpressure with no benefit.
 
 	// Initialize the buffer manager using the engine's buffer manager.
 	quitChan := p.done // buffer manager uses this to know when to stop
@@ -214,7 +214,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	})
 
 	// Initialize quiet hours scheduler for stream and sound card management.
-	// Uses audiocore/schedule — scheduler is independent of the audio capture pipeline.
+	// Uses audiocore/schedule: scheduler is independent of the audio capture pipeline.
 	p.quietHoursScheduler = schedule.NewQuietHoursScheduler(schedule.QuietHoursConfig{
 		SunCalc:     p.apiService.SunCalc(),
 		ControlChan: p.apiService.ControlChan(),
@@ -237,7 +237,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	}
 
 	// Start clip cleanup monitor.
-	// Uses conf.Setting() instead of local settings for hot-reload support —
+	// Uses conf.Setting() instead of local settings for hot-reload support:
 	// retention policy can be changed at runtime via the web UI.
 	if conf.Setting().Realtime.Audio.Export.Retention.Policy != policyNone {
 		p.wg.Go(func() {
@@ -392,7 +392,7 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.AudioLevelData, operation string) []string {
 	log := GetLogger()
 
-	// Add audio sources via engine — this registers sources, allocates buffers,
+	// Add audio sources via engine: this registers sources, allocates buffers,
 	// and starts capture (FFmpeg streams or device capture).
 	sourceConfigs := p.buildSourceConfigsWithModels()
 	sourceModelMap := make(map[string][]string, len(sourceConfigs))
@@ -927,7 +927,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	// receives the full desired state and removes stale monitors correctly.
 	allActiveIDs := slices.Collect(maps.Values(alreadyRunning))
 	allActiveIDs = append(allActiveIDs, newSourceIDs...)
-	// Always call UpdateMonitors — even with an empty slice — so stale
+	// Always call UpdateMonitors (even with an empty slice) so stale
 	// monitors are torn down when the last active stream is disabled.
 	if p.bufferMgr != nil {
 		monitorMap := p.buildMonitorConfigs(sourceModelMap, allActiveIDs)
