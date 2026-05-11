@@ -24,6 +24,7 @@
     X,
     AlertCircle,
     AlertTriangle,
+    Info,
     Mic,
     Moon,
     ChevronDown,
@@ -359,6 +360,12 @@
           {#if sampleRateLoading}
             <p class="text-xs text-[var(--color-base-content)]/60 mt-1 animate-pulse">
               {t('settings.audio.soundCards.sampleRateProbing')}
+            </p>
+          {/if}
+          {#if editSampleRate > 48000}
+            <p class="flex items-center gap-1 text-xs text-[var(--color-info)] mt-1">
+              <Info class="size-3 shrink-0" />
+              {t('settings.audio.soundCards.sampleRateExclusive')}
             </p>
           {/if}
         </div>

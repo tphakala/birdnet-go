@@ -2767,6 +2767,7 @@
         "sampleRateLabel": "Frecuencia de muestreo",
         "sampleRateUnverified": "No se pudieron verificar las frecuencias compatibles para este dispositivo",
         "sampleRateProbing": "Detectando frecuencias compatibles...",
+        "sampleRateExclusive": "Las tasas superiores a 48 kHz usan acceso exclusivo al dispositivo en Linux, impidiendo que otras aplicaciones compartan la tarjeta de sonido",
         "modelLabel": "Modelos de detección",
         "modelHelp": "Seleccionar modelos de IA para esta fuente de audio",
         "deleteConfirm": "¿Eliminar esta fuente de tarjeta de sonido?",

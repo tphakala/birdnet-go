@@ -176,6 +176,11 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 	}, nil, log, bufMgr)
 	deviceMgr := audiocore.NewDeviceManager(router, bufMgr, log)
 
+	// Probe all device capabilities at startup, before any capture begins.
+	// Exclusive mode probing requires sole device access, so it must happen
+	// before sources are added and capture starts.
+	audiocore.ProbeAllDeviceCapabilities(log)
+
 	e := &AudioEngine{
 		registry:             audiocore.NewSourceRegistry(log),
 		router:               router,
@@ -417,6 +422,13 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	if !ok {
 		return fmt.Errorf("reconfigure source: %w: %s", audiocore.ErrSourceNotFound, sourceID)
 	}
+
+	e.logger.Info("reconfiguring audio source",
+		logger.String("source_id", sourceID),
+		logger.String("device", newCfg.ConnectionString),
+		logger.Int("sample_rate", newCfg.SampleRate),
+		logger.Int("bit_depth", newCfg.BitDepth),
+		logger.Int("channels", newCfg.Channels))
 
 	// 1. Stop existing capture.
 	if isStreamType(src.Type) {

@@ -14,7 +14,7 @@
   @component
 -->
 <script lang="ts">
-  import { Plus, Mic, RefreshCw, ChevronDown, AlertTriangle } from '@lucide/svelte';
+  import { Plus, Mic, RefreshCw, ChevronDown, AlertTriangle, Info } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -414,6 +414,12 @@
               {#if newSampleRateLoading}
                 <p class="text-xs text-[var(--color-base-content)]/60 mt-1 animate-pulse">
                   {t('settings.audio.soundCards.sampleRateProbing')}
+                </p>
+              {/if}
+              {#if newSampleRate > 48000}
+                <p class="flex items-center gap-1 text-xs text-[var(--color-info)] mt-1">
+                  <Info class="size-3 shrink-0" />
+                  {t('settings.audio.soundCards.sampleRateExclusive')}
                 </p>
               {/if}
             </div>

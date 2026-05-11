@@ -56,6 +56,17 @@ func platformBackend() malgo.Backend {
 	}
 }
 
+// nativeCaptureChannels returns the channel count from the device's first
+// reported native capture format, or 0 if none are available.
+func nativeCaptureChannels(info *malgo.DeviceInfo) uint32 {
+	for _, f := range info.Formats {
+		if f.Channels > 0 {
+			return f.Channels
+		}
+	}
+	return 0
+}
+
 // hexToASCII converts a hexadecimal string (as returned by malgo's
 // DeviceID.String()) to its ASCII representation.
 func hexToASCII(hexStr string) (string, error) {
@@ -101,6 +112,9 @@ func listDevices(log logger.Logger) ([]DeviceInfo, error) {
 		name := infos[i].Name()
 		if strings.Contains(name, "Discard all samples") {
 			continue
+		}
+		if name == "" {
+			name = "Default Audio Device"
 		}
 
 		decodedID, err := hexToASCII(infos[i].ID.String())
@@ -250,6 +264,16 @@ func startCapture(
 	deviceCfg.Capture.DeviceID = devIDPtr
 	if cfg.SampleRate > conf.SampleRate {
 		deviceCfg.Capture.Format = malgo.FormatS32
+		if runtime.GOOS == captureOSLinux {
+			deviceCfg.Capture.ShareMode = malgo.Exclusive
+			// In exclusive mode (hw: direct access), the device may reject
+			// channel counts it doesn't natively support. Use the device's
+			// native channel count so InitDevice succeeds; miniaudio's
+			// internal data converter handles any needed downmix.
+			if nativeCh := nativeCaptureChannels(selectedInfo); nativeCh > 0 {
+				deviceCfg.Capture.Channels = nativeCh
+			}
+		}
 	}
 
 	var captureDevice *malgo.Device
@@ -325,7 +349,31 @@ func startCapture(
 		Data: onReceiveFrames,
 	}
 
+	if deviceCfg.Capture.ShareMode == malgo.Exclusive {
+		log.Info("attempting exclusive mode capture",
+			logger.String("source_id", sourceID),
+			logger.String("device", selectedDevInfo.Name),
+			logger.Int("rate", int(deviceCfg.SampleRate)),
+			logger.Int("channels", int(deviceCfg.Capture.Channels)),
+			logger.Int("format", int(deviceCfg.Capture.Format)))
+	}
 	captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
+	// If exclusive mode init fails, retry with stereo before falling back
+	// to default rate. Many USB devices only support 2-channel capture on
+	// the hw: interface; miniaudio handles the downmix to mono internally.
+	if err != nil && deviceCfg.Capture.ShareMode == malgo.Exclusive {
+		log.Warn("exclusive mode init failed",
+			logger.String("source_id", sourceID),
+			logger.String("device", selectedDevInfo.Name),
+			logger.Int("channels", int(deviceCfg.Capture.Channels)),
+			logger.Error(err))
+		if deviceCfg.Capture.Channels != 2 {
+			log.Info("retrying exclusive mode with stereo",
+				logger.String("source_id", sourceID))
+			deviceCfg.Capture.Channels = 2
+			captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
+		}
+	}
 	if err != nil && cfg.SampleRate > conf.SampleRate {
 		log.Warn("capture init failed at configured rate, falling back to default",
 			logger.String("source_id", sourceID),
@@ -334,6 +382,8 @@ func startCapture(
 			logger.Int("fallback_rate", conf.SampleRate))
 		deviceCfg.SampleRate = uint32(conf.SampleRate)
 		deviceCfg.Capture.Format = malgo.FormatS16
+		deviceCfg.Capture.ShareMode = malgo.Shared
+		deviceCfg.Capture.Channels = uint32(cfg.Channels)
 		captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
 		if err == nil {
 			cfg.SampleRate = conf.SampleRate
@@ -351,8 +401,13 @@ func startCapture(
 			Build()
 	}
 
-	// Capture the actual format reported by the device after init.
+	// Capture the actual format and channel count reported by the device
+	// after init. The channel count may differ from cfg.Channels if the
+	// stereo retry path was taken for exclusive mode.
 	formatType = captureDevice.CaptureFormat()
+	if actualCh := int(captureDevice.CaptureChannels()); actualCh != cfg.Channels {
+		cfg.Channels = actualCh
+	}
 
 	if err = captureDevice.Start(); err != nil {
 		captureDevice.Uninit()
@@ -367,13 +422,21 @@ func startCapture(
 			Build()
 	}
 
+	internalRate := captureDevice.CaptureInternalSampleRate()
 	log.Info("malgo capture device started",
 		logger.String("source_id", sourceID),
 		logger.String("device", selectedDevInfo.Name),
 		logger.Int("requested_rate", cfg.SampleRate),
-		logger.Int("actual_rate", int(captureDevice.SampleRate())),
+		logger.Int("hw_rate", int(internalRate)),
 		logger.Int("channels", int(captureDevice.CaptureChannels())),
 		logger.Int("format", int(formatType)))
+	if internalRate > 0 && internalRate != uint32(cfg.SampleRate) {
+		log.Warn("ALSA hardware rate differs from requested rate, audio may be software-resampled",
+			logger.String("source_id", sourceID),
+			logger.String("device", selectedDevInfo.Name),
+			logger.Int("requested_rate", cfg.SampleRate),
+			logger.Int("hw_rate", int(internalRate)))
+	}
 
 	// done is closed when the capture goroutine exits, allowing callers to
 	// wait for graceful device teardown.

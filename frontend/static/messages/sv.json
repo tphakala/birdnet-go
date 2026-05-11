@@ -2796,6 +2796,51 @@
           "refresh": "Uppdatera enheter"
         }
       },
+      "soundCards": {
+        "summary": "{count} ljudkortskälla/-or",
+        "addSource": "Lägg till ljudkort",
+        "nameLabel": "Källnamn",
+        "namePlaceholder": "t.ex. Mikrofon i trädgården",
+        "nameHelp": "Ett beskrivande namn för denna ljudkälla",
+        "deviceLabel": "Ljudenhet",
+        "devicePlaceholder": "Välj en ljudenhet",
+        "gainLabel": "Förstärkning (dB)",
+        "gainHelp": "Justering av ljudingångsförstärkning (-40 till +40 dB)",
+        "sampleRateLabel": "Samplingsfrekvens",
+        "sampleRateUnverified": "Stödda frekvenser kunde inte verifieras för denna enhet",
+        "sampleRateProbing": "Identifierar stödda frekvenser...",
+        "sampleRateExclusive": "Frekvenser över 48 kHz använder exklusiv enhetsåtkomst på Linux, vilket förhindrar andra program från att dela ljudkortet",
+        "modelLabel": "Detektionsmodeller",
+        "modelHelp": "Välj vilka AI-modeller som ska köras på denna ljudkälla",
+        "deleteConfirm": "Ta bort denna ljudkortskälla?",
+        "emptyState": {
+          "title": "Inga ljudkortskällor konfigurerade",
+          "description": "Lägg till en ljudkortskälla för att börja spela in ljud för fågeldetektering.",
+          "hintsTitle": "Kom igång",
+          "hints": {
+            "device": "Välj bland tillgängliga ljudingångsenheter på ditt system",
+            "multiple": "Du kan konfigurera flera ljudkort för olika platser",
+            "model": "Varje källa kan använda en annan detektionsmodell (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Standard)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Fladdermöss-detektering"
+        },
+        "errors": {
+          "nameRequired": "Källnamn krävs",
+          "deviceRequired": "Ljudenhet krävs",
+          "duplicateName": "En källa med detta namn finns redan",
+          "duplicateDevice": "Denna enhet är redan konfigurerad"
+        },
+        "compatibility": {
+          "minSampleRate": "Kräver minst {rate}kHz inspelningsfrekvens",
+          "recommendedSampleRate": "{rate}kHz rekommenderat för bästa resultat",
+          "atLeastOneModel": "Minst en modell måste väljas"
+        }
+      },
       "noSources": {
         "warning": "Inga ljudkällor konfigurerade",
         "description": "BirdNET-Go behöver en ljudingång för att detektera fåglar. Konfigurera minst en källa i fliken Ljudkort eller Strömmar."

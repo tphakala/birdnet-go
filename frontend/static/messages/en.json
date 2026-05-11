@@ -2818,6 +2818,7 @@
         "sampleRateLabel": "Sample Rate",
         "sampleRateUnverified": "Supported rates could not be verified for this device",
         "sampleRateProbing": "Detecting supported rates...",
+        "sampleRateExclusive": "Rates above 48 kHz use exclusive device access on Linux, preventing other applications from sharing the sound card",
         "modelLabel": "Detection Models",
         "modelHelp": "Select which AI models to run on this audio source",
         "deleteConfirm": "Remove this sound card source?",

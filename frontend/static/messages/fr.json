@@ -2994,6 +2994,7 @@
         "sampleRateLabel": "Fréquence d'échantillonnage",
         "sampleRateUnverified": "Les fréquences prises en charge n'ont pas pu être vérifiées pour cet appareil",
         "sampleRateProbing": "Détection des fréquences prises en charge...",
+        "sampleRateExclusive": "Les taux supérieurs à 48 kHz utilisent un accès exclusif au périphérique sous Linux, empêchant les autres applications de partager la carte son",
         "modelLabel": "Modèles de détection",
         "modelHelp": "Sélectionner les modèles d'IA pour cette source audio",
         "deleteConfirm": "Supprimer cette source de carte son ?",

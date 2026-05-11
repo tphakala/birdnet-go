@@ -2797,6 +2797,51 @@
           "refresh": "Eszközök frissítése"
         }
       },
+      "soundCards": {
+        "summary": "{count} hangkártya forrás(ok)",
+        "addSource": "Hangkártya hozzáadása",
+        "nameLabel": "Forrás neve",
+        "namePlaceholder": "pl. Előkerti mikrofon",
+        "nameHelp": "A hangforrás leíró neve",
+        "deviceLabel": "Hangeszköz",
+        "devicePlaceholder": "Válasszon hangeszközt",
+        "gainLabel": "Erősítés (dB)",
+        "gainHelp": "Hangbemenet erősítésének beállítása (-40 - +40 dB)",
+        "sampleRateLabel": "Mintavételezési frekvencia",
+        "sampleRateUnverified": "A támogatott frekvenciák nem ellenőrizhetők ennél az eszköznél",
+        "sampleRateProbing": "Támogatott frekvenciák felderítése...",
+        "sampleRateExclusive": "A 48 kHz feletti frekvenciák kizárólagos eszközhozzáférést használnak Linuxon, megakadályozva más alkalmazásokat a hangkártya megosztásában",
+        "modelLabel": "Detekciós modellek",
+        "modelHelp": "Válassza ki, mely AI-modellek fussanak ezen a hangforráson",
+        "deleteConfirm": "Eltávolítja ezt a hangkártya forrást?",
+        "emptyState": {
+          "title": "Nincsenek hangkártya források konfigurálva",
+          "description": "Adjon hozzá egy hangkártya forrást a madárdetektáláshoz szükséges hangfelvétel elindításához.",
+          "hintsTitle": "Első lépések",
+          "hints": {
+            "device": "Válasszon a rendszerén elérhető hangbemeneti eszközök közül",
+            "multiple": "Több hangkártyát is beállíthat különböző helyszínekhez",
+            "model": "Minden forrás más detekciós modellt használhat (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Alapértelmezett)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Denevérdetektálás"
+        },
+        "errors": {
+          "nameRequired": "A forrás neve kötelező",
+          "deviceRequired": "A hangeszköz kötelező",
+          "duplicateName": "Már létezik ilyen nevű forrás",
+          "duplicateDevice": "Ez az eszköz már konfigurálva van"
+        },
+        "compatibility": {
+          "minSampleRate": "Legalább {rate}kHz mintavételezési frekvencia szükséges",
+          "recommendedSampleRate": "{rate}kHz ajánlott a legjobb eredményekhez",
+          "atLeastOneModel": "Legalább egy modellt ki kell választani"
+        }
+      },
       "noSources": {
         "warning": "Nincs hang forrás konfigurálva",
         "description": "A BirdNET-Go-nak hang bemenetre van szüksége a madarak érzékeléséhez. Kérjük, konfiguráljon legalább egy forrást a Hangszűrő kártya vagy Streamek lapon."

@@ -2767,6 +2767,7 @@
         "sampleRateLabel": "Taxa de amostragem",
         "sampleRateUnverified": "As taxas suportadas não puderam ser verificadas para este dispositivo",
         "sampleRateProbing": "Detectando taxas suportadas...",
+        "sampleRateExclusive": "Taxas acima de 48 kHz usam acesso exclusivo ao dispositivo no Linux, impedindo que outras aplicações compartilhem a placa de som",
         "modelLabel": "Modelos de deteção",
         "modelHelp": "Selecionar modelos de IA para esta fonte de áudio",
         "deleteConfirm": "Remover esta fonte de placa de som?",

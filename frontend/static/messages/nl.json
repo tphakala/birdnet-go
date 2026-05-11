@@ -2994,6 +2994,7 @@
         "sampleRateLabel": "Samplefrequentie",
         "sampleRateUnverified": "Ondersteunde frequenties konden niet worden geverifieerd voor dit apparaat",
         "sampleRateProbing": "Ondersteunde frequenties worden gedetecteerd...",
+        "sampleRateExclusive": "Samplerates boven 48 kHz gebruiken exclusieve apparaattoegang op Linux, waardoor andere applicaties de geluidskaart niet kunnen delen",
         "modelLabel": "Detectiemodellen",
         "modelHelp": "Selecteer AI-modellen voor deze audiobron",
         "deleteConfirm": "Deze geluidskaartbron verwijderen?",

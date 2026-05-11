@@ -2796,6 +2796,51 @@
           "refresh": "Atsvaidzināt ierīces"
         }
       },
+      "soundCards": {
+        "summary": "{count} skaņas kartes avots(-i)",
+        "addSource": "Pievienot skaņas karti",
+        "nameLabel": "Avota nosaukums",
+        "namePlaceholder": "piem., Priekšpagalma mikrofons",
+        "nameHelp": "Aprakstošs nosaukums šim audio avotam",
+        "deviceLabel": "Audio ierīce",
+        "devicePlaceholder": "Izvēlieties audio ierīci",
+        "gainLabel": "Pastiprināšana (dB)",
+        "gainHelp": "Audio ieejas pastiprināšanas regulēšana (no -40 līdz +40 dB)",
+        "sampleRateLabel": "Diskretizācijas frekvence",
+        "sampleRateUnverified": "Atbalstītās frekvences šai ierīcei nevarēja pārbaudīt",
+        "sampleRateProbing": "Atbalstīto frekvenču noteikšana...",
+        "sampleRateExclusive": "Frekvences virs 48 kHz izmanto ekskluzīvu ierīces piekļuvi Linux sistēmā, neļaujot citām lietojumprogrammām koplietot skaņas karti",
+        "modelLabel": "Noteikšanas modeļi",
+        "modelHelp": "Izvēlieties, kurus AI modeļus palaist šajā audio avotā",
+        "deleteConfirm": "Noņemt šo skaņas kartes avotu?",
+        "emptyState": {
+          "title": "Nav konfigurētu skaņas kartes avotu",
+          "description": "Pievienojiet skaņas kartes avotu, lai sāktu audio ierakstīšanu putnu noteikšanai.",
+          "hintsTitle": "Darba sākšana",
+          "hints": {
+            "device": "Izvēlieties no pieejamajām audio ievades ierīcēm jūsu sistēmā",
+            "multiple": "Varat konfigurēt vairākas skaņas kartes dažādām atrašanās vietām",
+            "model": "Katrs avots var izmantot citu noteikšanas modeli (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Noklusējuma)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Sikspārņu noteikšana"
+        },
+        "errors": {
+          "nameRequired": "Avota nosaukums ir obligāts",
+          "deviceRequired": "Audio ierīce ir obligāta",
+          "duplicateName": "Avots ar šādu nosaukumu jau pastāv",
+          "duplicateDevice": "Šī ierīce jau ir konfigurēta"
+        },
+        "compatibility": {
+          "minSampleRate": "Nepieciešama vismaz {rate}kHz ierakstīšanas frekvence",
+          "recommendedSampleRate": "{rate}kHz ieteicams labākajiem rezultātiem",
+          "atLeastOneModel": "Jāizvēlas vismaz viens modelis"
+        }
+      },
       "noSources": {
         "warning": "Nav konfigurētu audio avotu",
         "description": "BirdNET-Go nepieciešama audio ievade, lai noteiktu putnus. Lūdzu, konfigurējiet vismaz vienu avotu cilnē Skaņas karte vai Straumes."
