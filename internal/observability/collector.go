@@ -85,7 +85,7 @@ func (c *Collector) Start(ctx context.Context) {
 // Metric key constants for collected system metrics.
 const (
 	// expectedMetricCount is the pre-allocation hint for the number of metrics collected per tick.
-	expectedMetricCount = 8
+	expectedMetricCount = 12
 
 	metricCPUTotal          = "cpu.total"
 	metricMemoryUsedPercent = "memory.used_percent"
@@ -105,13 +105,7 @@ const (
 )
 
 func inferenceMetricKey(modelID string) string {
-	sanitized := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
-			return r
-		}
-		return '_'
-	}, modelID)
-	return "inference." + sanitized + ".avg_ms"
+	return inferencestats.MetricKey(modelID)
 }
 
 // collect gathers all system metrics and records them as a single batch.

@@ -3,15 +3,7 @@
   import { Cpu, MemoryStick, Thermometer, Brain } from '@lucide/svelte';
   import { formatBytesCompact } from '$lib/utils/formatters';
   import Sparkline from './Sparkline.svelte';
-
-  interface ModelMetrics {
-    id: string;
-    name: string;
-    metricKey: string;
-    chunkSeconds: number;
-    history: number[];
-    color: string;
-  }
+  import type { ModelMetrics } from '$lib/desktop/features/system/types';
 
   interface Props {
     cpuPercent: number;
@@ -55,13 +47,15 @@
   let tempMin = $derived(hasTempHistory ? Math.min(...temperatureHistory) : temperatureValue);
   let tempMax = $derived(hasTempHistory ? Math.max(...temperatureHistory) : temperatureValue);
 
-  let hasInferenceData = $derived(models.some(m => m.history.length > 0));
+  let modelsWithData = $derived(models.filter(m => m.history.length > 0));
+  let hasInferenceData = $derived(modelsWithData.length > 0);
 
   function getThresholdMs(model: ModelMetrics): number {
+    let seconds = model.chunkSeconds;
     if (model.id.startsWith('BirdNET')) {
-      return (model.chunkSeconds - birdnetOverlap) * 1000;
+      seconds = model.chunkSeconds - birdnetOverlap;
     }
-    return model.chunkSeconds * 1000;
+    return Math.max(seconds, 0.001) * 1000;
   }
 
   type StatusLevel = 'ok' | 'warning' | 'critical';
@@ -87,14 +81,14 @@
     return worst;
   });
 
-  let inferenceDatasets = $derived(
-    models.filter(m => m.history.length > 0).map(m => ({ data: m.history, color: m.color }))
-  );
+  let inferenceDatasets = $derived(modelsWithData.map(m => ({ data: m.history, color: m.color })));
 
+  // Prefer BirdNET for the header display; fall back to first model with data
   let primaryAvgMs = $derived.by(() => {
-    const withData = models.filter(m => m.history.length > 0);
-    if (withData.length === 0) return 0;
-    return withData[0].history[withData[0].history.length - 1];
+    if (modelsWithData.length === 0) return 0;
+    const birdnet = modelsWithData.find(m => m.id.startsWith('BirdNET'));
+    const primary = birdnet ?? modelsWithData[0];
+    return primary.history[primary.history.length - 1];
   });
 </script>
 
@@ -218,9 +212,9 @@
         <Sparkline datasets={inferenceDatasets} />
       </div>
       <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-[10px] text-muted">
-        {#each models.filter(m => m.history.length > 0) as m}
+        {#each modelsWithData as m}
           <span class="flex items-center gap-1">
-            <span class="inline-block w-1.5 h-1.5 rounded-full" style:background="{m.color}"></span>
+            <span class="inline-block w-1.5 h-1.5 rounded-full" style:background={m.color}></span>
             {m.name}
             <span class="font-mono tabular-nums"
               >{m.history[m.history.length - 1].toFixed(0)}ms</span

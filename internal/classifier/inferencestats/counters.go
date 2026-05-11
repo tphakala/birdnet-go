@@ -4,6 +4,7 @@
 package inferencestats
 
 import (
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -54,6 +55,21 @@ func updateAtomicMax(addr *atomic.Int64, val int64) {
 			return
 		}
 	}
+}
+
+// SanitizeModelID replaces non-alphanumeric/non-underscore characters with underscores.
+func SanitizeModelID(modelID string) string {
+	return strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			return r
+		}
+		return '_'
+	}, modelID)
+}
+
+// MetricKey returns the metrics store key for a model's average inference time.
+func MetricKey(modelID string) string {
+	return "inference." + SanitizeModelID(modelID) + ".avg_ms"
 }
 
 // CounterMap tracks per-model inference counters. Safe for concurrent use.

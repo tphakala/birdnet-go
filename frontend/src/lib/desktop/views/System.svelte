@@ -18,6 +18,7 @@
   } from '$lib/utils/formatters';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { connectionState } from '$lib/stores/connectionState.svelte';
+  import type { ModelMetrics } from '$lib/desktop/features/system/types';
 
   const logger = loggers.ui;
 
@@ -101,15 +102,6 @@
     metric_key: string;
     chunk_seconds: number;
     sample_rate: number;
-  }
-
-  interface ModelMetrics {
-    id: string;
-    name: string;
-    metricKey: string;
-    chunkSeconds: number;
-    history: number[];
-    color: string;
   }
 
   const MODEL_COLORS: Record<string, string> = {
@@ -210,13 +202,14 @@
     }
   }
 
-  // Load initial metrics history for sparklines, then connect SSE if available.
-  // Falls back to polling existing endpoints when metrics history isn't available.
-  // The `active` flag prevents orphaned resources if the component unmounts mid-flight.
+  function buildMetricsParam(): string {
+    const inferenceKeys = modelMetrics.map(m => m.metricKey).join(',');
+    return `cpu.total,memory.used_percent,cpu.temperature${inferenceKeys ? ',' + inferenceKeys : ''}`;
+  }
+
   async function loadMetricsHistory(active: { current: boolean }): Promise<void> {
     try {
-      const inferenceKeys = modelMetrics.map(m => m.metricKey).join(',');
-      const metricsParam = `cpu.total,memory.used_percent,cpu.temperature${inferenceKeys ? ',' + inferenceKeys : ''}`;
+      const metricsParam = buildMetricsParam();
       const data = await api.get<MetricsHistoryResponse>(
         `/api/v2/system/metrics/history?points=${MAX_HISTORY_POINTS}&metrics=${metricsParam}`
       );
@@ -317,10 +310,8 @@
 
   // Connect to metrics SSE stream for live updates
   function connectMetricsStream(): void {
-    const inferenceKeys = modelMetrics.map(m => m.metricKey).join(',');
-    const metricsParam = `cpu.total,memory.used_percent,cpu.temperature${inferenceKeys ? ',' + inferenceKeys : ''}`;
     metricsSSE = new ReconnectingEventSource(
-      `/api/v2/system/metrics/stream?metrics=${metricsParam}`,
+      `/api/v2/system/metrics/stream?metrics=${buildMetricsParam()}`,
       { max_retry_time: 30000 }
     );
 

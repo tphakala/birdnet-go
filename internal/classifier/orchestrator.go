@@ -145,9 +145,9 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 }
 
 // Predict runs inference using the primary model.
-// Relies on BirdNET's internal locking.
+// Delegates to PredictModel for uniform locking and telemetry.
 func (o *Orchestrator) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
-	return o.primary.Predict(ctx, sample)
+	return o.PredictModel(ctx, o.ModelInfo.ID, sample)
 }
 
 // PredictModel runs inference on a specific model identified by modelID.
