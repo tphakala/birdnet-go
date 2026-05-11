@@ -110,8 +110,11 @@ func listDevices(log logger.Logger) ([]DeviceInfo, error) {
 
 	for i := range infos {
 		name := infos[i].Name()
-		if name == "" || strings.Contains(name, "Discard all samples") {
+		if strings.Contains(name, "Discard all samples") {
 			continue
+		}
+		if name == "" {
+			name = "Default Audio Device"
 		}
 
 		decodedID, err := hexToASCII(infos[i].ID.String())
