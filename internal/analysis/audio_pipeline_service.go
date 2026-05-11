@@ -131,9 +131,11 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	dataStore := p.dbService.DataStore()
 	metrics := p.apiService.Metrics()
 
-	// Set the primary model ID on the engine so that analysis buffers are
-	// allocated with the correct model key instead of a hardcoded constant.
-	p.engine.SetPrimaryModelID(bn.ModelInfo.ID)
+	// Set the primary model ID and buffer dimensions on the engine so that
+	// analysis buffers are allocated from the model's spec, not hardcoded
+	// constants. This matches the secondary model allocation path.
+	clipBytes, overlapBytes, readSize := bn.ModelInfo.Spec.BufferDimensions()
+	p.engine.SetPrimaryModel(bn.ModelInfo.ID, clipBytes, overlapBytes, readSize)
 
 	// Register all loaded models in the ai_models database table so they
 	// appear even before any detections are saved.
@@ -701,10 +703,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				allocatedModels[modelInfos[i].ID] = true
 				continue
 			}
-			spec := modelInfos[i].Spec
-			clipBytes := spec.ClipSizeBytes()
-			overlapBytes := clipBytes / 2 // 50% overlap, matching primary model ratio
-			readSize := clipBytes - overlapBytes
+			clipBytes, overlapBytes, readSize := modelInfos[i].Spec.BufferDimensions()
 			if allocErr := bufMgr.AllocateAnalysis(sid, modelInfos[i].ID, clipBytes, overlapBytes, readSize); allocErr != nil {
 				log.Warn("failed to allocate analysis buffer for secondary model",
 					logger.String("source_id", sid),
@@ -1224,17 +1223,14 @@ func cleanupHLSWithTimeout(ctx context.Context) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				panicErr := fmt.Errorf("panic during HLS cleanup: %v", r)
-				// Log panic but don't block shutdown
 				GetLogger().Error("panic during HLS cleanup",
 					logger.Any("panic", r))
-				_ = errors.New(panicErr).
+				cleanupDone <- errors.Newf("panic during HLS cleanup: %v", r).
 					Component("analysis.audio_pipeline").
 					Category(errors.CategorySystem).
 					Context("operation", "hls_cleanup_panic").
 					Priority(errors.PriorityCritical).
 					Build()
-				cleanupDone <- panicErr
 			}
 		}()
 		cleanupDone <- cleanupHLSStreamingFiles()
