@@ -919,6 +919,15 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 	// Create file name for audio clip
 	clipName := p.generateClipName(settings, scientificName, result.Confidence)
 
+	// Bat models at high sample rates need WAV when the configured format
+	// (MP3/Opus/AAC) cannot carry rates above 48kHz. Override the extension
+	// now so the database stores the same filename the export will write.
+	mInfo := classifier.DetectionModelInfoForID(item.ModelID)
+	sourceRate := p.resolveAudioSource(item.Source).SampleRate
+	if needsBatFormatFallback(mInfo.Name, mInfo.Version, sourceRate, settings.Realtime.Audio.Export.Type) {
+		clipName = replaceExtension(clipName, ".wav")
+	}
+
 	// Get capture length and pre-capture length for detection end time calculation
 	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
 	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
@@ -2007,6 +2016,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 			duration:         captureLength,
 			readyAt:          captureEndTime,
 			sourceSampleRate: det.Result.AudioSource.SampleRate,
+			modelName:        det.Result.Model.Name,
 			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 			PreRenderer:      p.preRenderer,
 			DetectionCtx:     detectionCtx,
@@ -2032,6 +2042,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 			Settings:         settings,
 			ClipName:         det.Result.ClipName,
 			sourceSampleRate: det.Result.AudioSource.SampleRate,
+			modelName:        det.Result.Model.Name,
 			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 			PreRenderer:      p.preRenderer,
 			DetectionCtx:     detectionCtx,
@@ -2044,6 +2055,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 		ClipName:         det.Result.ClipName,
 		pcmData:          pcmData,
 		sourceSampleRate: det.Result.AudioSource.SampleRate,
+		modelName:        det.Result.Model.Name,
 		NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 		PreRenderer:      p.preRenderer,
 		DetectionCtx:     detectionCtx,

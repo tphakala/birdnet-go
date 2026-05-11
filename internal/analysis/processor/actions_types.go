@@ -107,6 +107,7 @@ type SaveAudioAction struct {
 	duration         int
 	readyAt          time.Time
 	sourceSampleRate int               // Actual source capture rate for correct export headers
+	modelName        string            // Detection model name (e.g. "BattyBirdNET") for export strategy
 	NoteID           uint              // Note ID for correlation logging with pre-renderer
 	PreRenderer      PreRendererSubmit // Injected from processor
 	DetectionCtx     *DetectionContext // Shared context to signal ClipSaved to late consumers

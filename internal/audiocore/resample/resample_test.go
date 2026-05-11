@@ -142,6 +142,53 @@ func TestResampler_OddByteInput(t *testing.T) {
 	require.NotNil(t, r)
 	t.Cleanup(func() { require.NoError(t, r.Close()) })
 
-	_, err = r.ResampleInto([]byte{0x01, 0x02, 0x03}) // 3 bytes — not a multiple of 2
+	_, err = r.ResampleInto([]byte{0x01, 0x02, 0x03}) // 3 bytes - not a multiple of 2
 	assert.Error(t, err)
+}
+
+// TestResampleBytes_Downsamples verifies the one-shot helper correctly
+// downsamples 256kHz to 48kHz, producing approximately 48/256 of the input samples.
+func TestResampleBytes_Downsamples(t *testing.T) {
+	const fromRate = 256000
+	const toRate = 48000
+	const inputSamples = 25600 // 100 ms at 256 kHz
+
+	input := makePCM16(t, inputSamples)
+	output, err := ResampleBytes(input, fromRate, toRate)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, len(output)%bytesPerSample, "output must contain complete 16-bit samples")
+
+	outputSamples := len(output) / bytesPerSample
+	expectedSamples := inputSamples * toRate / fromRate
+	tolerance := expectedSamples / 10 // 10%
+	assert.InDelta(t, expectedSamples, outputSamples, float64(tolerance),
+		"output sample count should be approximately %d (got %d)", expectedSamples, outputSamples)
+}
+
+// TestResampleBytes_SameRate verifies that equal rates return the input unchanged.
+func TestResampleBytes_SameRate(t *testing.T) {
+	input := makePCM16(t, 100)
+	output, err := ResampleBytes(input, 48000, 48000)
+	require.NoError(t, err)
+	assert.Equal(t, input, output)
+}
+
+// TestResampleBytes_ReturnsIndependentCopy verifies the output does not alias
+// the internal resampler buffer (which would be freed on Close).
+func TestResampleBytes_ReturnsIndependentCopy(t *testing.T) {
+	input := makePCM16(t, 4800)
+	output, err := ResampleBytes(input, 48000, 32000)
+	require.NoError(t, err)
+	require.NotEmpty(t, output)
+
+	saved := make([]byte, len(output))
+	copy(saved, output)
+
+	// A second call with different data must not corrupt the first result.
+	input2 := makePCM16(t, 9600)
+	_, err = ResampleBytes(input2, 48000, 32000)
+	require.NoError(t, err)
+
+	assert.Equal(t, saved, output, "first result must remain unchanged after second call")
 }
