@@ -175,8 +175,8 @@ New entity in `internal/datastore/v2/entities/`:
 // A single Detection may have votes from multiple models (cross-model consensus).
 type DetectionModelContribution struct {
     ID            uint    `gorm:"primaryKey"`
-    DetectionID   uint    `gorm:"not null;index;uniqueIndex:idx_vote_detection_model"`
-    ModelID       uint    `gorm:"not null;uniqueIndex:idx_vote_detection_model"`
+    DetectionID   uint    `gorm:"not null;index;uniqueIndex:idx_contrib_detection_model"`
+    ModelID       uint    `gorm:"not null;uniqueIndex:idx_contrib_detection_model"`
     HitCount      int     `gorm:"not null"` // Number of inference hits from this model
     MaxConfidence float64 `gorm:"not null"` // Highest confidence from this model
 

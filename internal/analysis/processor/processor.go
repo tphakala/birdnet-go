@@ -676,6 +676,9 @@ func (p *Processor) processDetections(item classifier.Results) {
 			existing.Count++
 
 			// Track per-model contribution
+			if existing.ModelContributions == nil {
+				existing.ModelContributions = make(map[string]ModelContribution, 1)
+			}
 			contrib := existing.ModelContributions[item.ModelID]
 			contrib.HitCount++
 			if confidence > contrib.MaxConfidence {
