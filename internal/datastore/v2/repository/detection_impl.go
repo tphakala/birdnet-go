@@ -326,13 +326,15 @@ func (r *detectionRepository) SaveBatch(ctx context.Context, dets []*entities.De
 	}, r.metrics)
 }
 
-// DeleteBatch removes multiple detections by ID.
+// DeleteBatch removes multiple detections by ID, skipping locked entries.
 func (r *detectionRepository) DeleteBatch(ctx context.Context, ids []uint) error {
 	if len(ids) == 0 {
 		return nil
 	}
 	return datastore.RetryOnLock(ctx, "v2_delete_detection_batch", func() error {
-		return r.db.WithContext(ctx).Table(r.tableName()).Delete(&entities.Detection{}, ids).Error
+		return r.db.WithContext(ctx).Table(r.tableName()).
+			Where("id IN ? AND NOT EXISTS (SELECT 1 FROM "+r.locksTable()+" WHERE "+r.locksTable()+".detection_id = "+r.tableName()+".id)", ids).
+			Delete(&entities.Detection{}).Error
 	}, r.metrics)
 }
 
