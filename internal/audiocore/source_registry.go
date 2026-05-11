@@ -269,17 +269,23 @@ func (r *SourceRegistry) UpdateDisplayName(sourceID, newName string) bool {
 }
 
 // UpdateAudioParams updates the SampleRate, BitDepth, and Channels fields of
-// the source after a successful reconfigure. Returns false if not found.
+// the source after a successful reconfigure. Fires SourceReconfigured so
+// listeners (SSE, MQTT HA discovery) see the new parameters. Returns false
+// if the source does not exist.
 func (r *SourceRegistry) UpdateAudioParams(sourceID string, sampleRate, bitDepth, channels int) bool {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	src, ok := r.sources[sourceID]
 	if !ok {
+		r.mu.Unlock()
 		return false
 	}
 	src.SampleRate = sampleRate
 	src.BitDepth = bitDepth
 	src.Channels = channels
+	snapshot := r.copySource(src)
+	r.mu.Unlock()
+
+	r.notify(SourceEvent{Type: SourceReconfigured, SourceID: sourceID, Source: snapshot})
 	return true
 }
 

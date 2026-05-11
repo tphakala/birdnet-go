@@ -459,6 +459,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		defaultAnalysisOverlap*rateScale,
 		defaultAnalysisReadSize*rateScale,
 	); err != nil {
+		_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 		return errors.New(err).
 			Component("audiocore.engine").
 			Category(errors.CategoryBuffer).
@@ -473,6 +474,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		defaultBytesPerSample,
 	); err != nil {
 		e.bufferMgr.DeallocateSource(sourceID)
+		_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 		return errors.New(err).
 			Component("audiocore.engine").
 			Category(errors.CategoryBuffer).
