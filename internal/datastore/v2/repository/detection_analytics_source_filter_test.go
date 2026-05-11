@@ -205,6 +205,43 @@ func TestGetDailyAnalytics_SourceFilter(t *testing.T) {
 	assert.Equal(t, int64(3), filteredTotal, "Poort has 2 merel + 1 kraai")
 }
 
+// TestGetSpeciesFirstDetectionInPeriod_SourceFilter is a regression test for a SQL bug
+// where the source filter was spliced into the inner subquery using a fresh `WHERE` clause
+// on top of the existing `WHERE d.detected_at ...` clause, producing invalid SQL. The fix
+// is to use the AND-style fragment from buildSourceFilterClauses. This test would have
+// caught the bug because it runs the actual query against SQLite.
+func TestGetSpeciesFirstDetectionInPeriod_SourceFilter(t *testing.T) {
+	_, repo := setupAnalyticsSourceFixture(t)
+	ctx := context.Background()
+
+	// Without filter, all three species are first-detected in the window.
+	all, err := repo.GetSpeciesFirstDetectionInPeriod(ctx, 1000, 2000, 50, 0)
+	require.NoError(t, err)
+	assert.Len(t, all, 3, "fixture has 3 species in the window")
+
+	// With Poort filter, only species whose first detection on Poort lies in the window
+	// should surface. The merel was first heard on Voordeur (t=1400) and then on Poort
+	// (t=1500); when scoped to Poort, t=1500 is its first-detection-on-Poort.
+	filtered, err := repo.GetSpeciesFirstDetectionInPeriod(ctx, 1000, 2000, 50, 0, srcPoortID)
+	require.NoError(t, err)
+	names := make([]string, 0, len(filtered))
+	for _, r := range filtered {
+		names = append(names, r.ScientificName)
+	}
+	assert.ElementsMatch(t, []string{"Turdus merula", "Corvus corone"}, names,
+		"robin is Voordeur-only and must be excluded; merel and kraai are present on Poort")
+
+	// Multi-source filter exercises the IN-clause expansion in the AND fragment.
+	bothSources, err := repo.GetSpeciesFirstDetectionInPeriod(ctx, 1000, 2000, 50, 0, srcVoordeurID, srcPoortID)
+	require.NoError(t, err)
+	assert.Len(t, bothSources, 3, "listing both sources should match the unfiltered result")
+
+	// Nonexistent source: must not return data or produce a SQL error.
+	empty, err := repo.GetSpeciesFirstDetectionInPeriod(ctx, 1000, 2000, 50, 0, srcGhostID)
+	require.NoError(t, err)
+	assert.Empty(t, empty)
+}
+
 // TestGetNewSpecies_SourceFilter verifies that "first ever" semantics are scoped to the
 // selected sources when a filter is applied. The merel was detected on Voordeur (t=1400)
 // before Poort (t=1500); when filtering by Poort only, its first detection should still

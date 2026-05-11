@@ -525,6 +525,9 @@ func (m *mockAudioSourceRepository) GetBySourceURI(_ context.Context, _, _ strin
 func (m *mockAudioSourceRepository) GetAll(_ context.Context) ([]*entities.AudioSource, error) {
 	return nil, nil //nolint:nilnil // mock implementation
 }
+func (m *mockAudioSourceRepository) GetAllWithDetectionCount(_ context.Context) ([]AudioSourceWithDetectionCount, error) {
+	return nil, nil //nolint:nilnil // mock implementation
+}
 func (m *mockAudioSourceRepository) Count(_ context.Context) (int64, error) { return 0, nil }
 func (m *mockAudioSourceRepository) Delete(_ context.Context, _ uint) error { return nil }
 func (m *mockAudioSourceRepository) Update(_ context.Context, _ uint, _ map[string]any) error {

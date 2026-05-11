@@ -182,6 +182,56 @@ func (r *audioSourceRepository) GetAll(ctx context.Context) ([]*entities.AudioSo
 	return sources, err
 }
 
+// GetAllWithDetectionCount returns audio sources joined with their detection counts.
+// Sources with zero detections are excluded via INNER JOIN. Resolves both the
+// audio_sources and detections table names from the same useV2Prefix flag, so the
+// query works in fresh-install (unprefixed) and MySQL-migration (v2_) schemas.
+func (r *audioSourceRepository) GetAllWithDetectionCount(ctx context.Context) ([]AudioSourceWithDetectionCount, error) {
+	detectionsTable := tableDetections
+	if r.useV2Prefix {
+		detectionsTable = tableV2Detections
+	}
+
+	// Scan into an anonymous struct keyed on the underlying GORM column names; the entity
+	// fields would also work but this keeps the row layout local and explicit.
+	type row struct {
+		ID             uint   `gorm:"column:id"`
+		SourceURI      string `gorm:"column:source_uri"`
+		NodeName       string `gorm:"column:node_name"`
+		SourceType     string `gorm:"column:source_type"`
+		DisplayName    *string
+		DetectionCount int64 `gorm:"column:detection_count"`
+	}
+
+	var rows []row
+	err := r.db.WithContext(ctx).
+		Table(fmt.Sprintf("%s s", r.tableName())).
+		Select("s.id, s.source_uri, s.node_name, s.source_type, s.display_name, COUNT(d.id) as detection_count").
+		Joins(fmt.Sprintf("JOIN %s d ON d.source_id = s.id", detectionsTable)).
+		Group("s.id, s.source_uri, s.node_name, s.source_type, s.display_name").
+		Order("detection_count DESC, s.display_name ASC, s.id ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]AudioSourceWithDetectionCount, 0, len(rows))
+	for i := range rows {
+		r := &rows[i]
+		results = append(results, AudioSourceWithDetectionCount{
+			Source: &entities.AudioSource{
+				ID:          r.ID,
+				SourceURI:   r.SourceURI,
+				NodeName:    r.NodeName,
+				SourceType:  entities.SourceType(r.SourceType),
+				DisplayName: r.DisplayName,
+			},
+			DetectionCount: r.DetectionCount,
+		})
+	}
+	return results, nil
+}
+
 // GetByNodeName retrieves all audio sources for a specific node.
 func (r *audioSourceRepository) GetByNodeName(ctx context.Context, nodeName string) ([]*entities.AudioSource, error) {
 	var sources []*entities.AudioSource

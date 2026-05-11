@@ -57,10 +57,12 @@
 
   // Build dropdown options from the audio sources list. Each option's label includes the
   // aggregated detection count so the user can see which sources have meaningful data.
+  // No locale argument: defer to the browser's resolved locale so e.g. Dutch users see
+  // "1.234" and US users see "1,234" without us hardcoding either grouping convention.
   let sourceOptions = $derived<SelectOption[]>(
     audioSources.map(src => ({
       value: src.displayName,
-      label: `${src.displayName} (${src.count.toLocaleString('en-US')})`,
+      label: `${src.displayName} (${src.count.toLocaleString()})`,
     }))
   );
 

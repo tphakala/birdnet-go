@@ -2607,16 +2607,12 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 // this method returns each underlying row separately so that source_id filtering remains
 // precise — selecting "Voordeur" in the UI translates to ?source_id=1,3 if there are two
 // underlying rows for that display name.
+//
+// The actual query lives on the audio source repository so it can resolve prefix-aware
+// table names (v2_ for migrated MySQL installs) instead of hardcoding "audio_sources"
+// and "detections".
 func (ds *Datastore) ListAnalyticsSourcesData(ctx context.Context) ([]datastore.AnalyticsSourceInfo, error) {
-	var results []datastore.AnalyticsSourceInfo
-
-	err := ds.manager.DB().WithContext(ctx).
-		Table("audio_sources s").
-		Select("s.id, s.display_name, s.source_uri, s.source_type, s.node_name, COUNT(d.id) as detection_count").
-		Joins("JOIN detections d ON d.source_id = s.id").
-		Group("s.id, s.display_name, s.source_uri, s.source_type, s.node_name").
-		Order("detection_count DESC, s.display_name ASC").
-		Scan(&results).Error
+	rows, err := ds.source.GetAllWithDetectionCount(ctx)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -2625,8 +2621,21 @@ func (ds *Datastore) ListAnalyticsSourcesData(ctx context.Context) ([]datastore.
 			Build()
 	}
 
-	if results == nil {
-		return []datastore.AnalyticsSourceInfo{}, nil
+	results := make([]datastore.AnalyticsSourceInfo, 0, len(rows))
+	for _, r := range rows {
+		src := r.Source
+		displayName := ""
+		if src.DisplayName != nil {
+			displayName = *src.DisplayName
+		}
+		results = append(results, datastore.AnalyticsSourceInfo{
+			ID:             src.ID,
+			DisplayName:    displayName,
+			SourceURI:      src.SourceURI,
+			SourceType:     string(src.SourceType),
+			NodeName:       src.NodeName,
+			DetectionCount: r.DetectionCount,
+		})
 	}
 	return results, nil
 }

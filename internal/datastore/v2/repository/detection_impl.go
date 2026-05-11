@@ -1594,7 +1594,9 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start, end int64, limit, offset int, sourceIDs ...uint) ([]SpeciesFirstSeen, error) {
 	var results []SpeciesFirstSeen
 
-	sourceClause, _, sourceArgs := buildSourceFilterClauses(sourceIDs, "d", "")
+	// The source filter is appended to an existing `WHERE d.detected_at ...` clause inside the
+	// inner subquery, so we need the AND-style fragment (second return value), not a fresh WHERE.
+	_, sourceClause, sourceArgs := buildSourceFilterClauses(sourceIDs, "", "d")
 
 	rawSQL := fmt.Sprintf(`
 		SELECT label_id, scientific_name, first_detected, detection_id
@@ -1607,7 +1609,7 @@ func (r *detectionRepository) GetSpeciesFirstDetectionInPeriod(ctx context.Conte
 				ROW_NUMBER() OVER (PARTITION BY l.scientific_name ORDER BY d.detected_at ASC, d.id ASC) as rn
 			FROM %s d
 			JOIN %s l ON l.id = d.label_id
-			WHERE d.detected_at >= ? AND d.detected_at < ? %s
+			WHERE d.detected_at >= ? AND d.detected_at < ?%s
 		) ranked
 		WHERE rn = 1
 		ORDER BY first_detected ASC
