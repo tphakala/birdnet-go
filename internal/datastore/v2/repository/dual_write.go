@@ -563,21 +563,13 @@ func (dw *DualWriteRepository) GetBySpecies(ctx context.Context, species string,
 			return dw.legacy.GetBySpecies(ctx, species, filters)
 		}
 
-		limit := 100
-		offset := 0
-		if filters != nil {
-			if filters.Limit > 0 {
-				limit = filters.Limit
-			}
-			offset = filters.Offset
+		if filters == nil {
+			filters = &datastore.DetectionFilters{}
 		}
-
-		// Query across all label IDs for this species (multi-model support)
-		searchFilters := &SearchFilters{
-			LabelIDs: labelIDs,
-			Limit:    limit,
-			Offset:   offset,
-			SortDesc: true,
+		searchFilters := dw.convertFilters(filters)
+		searchFilters.LabelIDs = labelIDs
+		if searchFilters.Limit == 0 {
+			searchFilters.Limit = 100
 		}
 		dets, total, err := dw.v2.Search(ctx, searchFilters)
 		if err != nil {
