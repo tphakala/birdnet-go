@@ -77,9 +77,8 @@ func TestCatalogByCategory(t *testing.T) {
 
 	grouped := CatalogByCategory()
 
-	// Should have wildlife, bird, and bat categories
+	// Should have wildlife and bat categories (bird entries are currently hidden)
 	require.Contains(t, grouped, CategoryWildlife)
-	require.Contains(t, grouped, CategoryBird)
 	require.Contains(t, grouped, CategoryBat)
 
 	// All wildlife entries should have the wildlife category
@@ -87,19 +86,14 @@ func TestCatalogByCategory(t *testing.T) {
 		assert.Equal(t, CategoryWildlife, entry.Category)
 	}
 
-	// All bird entries should have the bird category
-	for _, entry := range grouped[CategoryBird] {
-		assert.Equal(t, CategoryBird, entry.Category)
-	}
-
 	// All bat entries should have the bat category
 	for _, entry := range grouped[CategoryBat] {
 		assert.Equal(t, CategoryBat, entry.Category)
 	}
 
-	// Verify expected counts (2 wildlife, 1 bird, 11 bat entries)
-	assert.Len(t, grouped[CategoryWildlife], 2, "expected 2 wildlife catalog entries")
-	assert.Len(t, grouped[CategoryBird], 1, "expected 1 bird catalog entry")
+	// Verify expected counts (1 visible wildlife, 0 visible bird, 11 bat entries)
+	assert.Len(t, grouped[CategoryWildlife], 1, "expected 1 visible wildlife catalog entry")
+	assert.Empty(t, grouped[CategoryBird], "expected 0 visible bird catalog entries")
 	assert.Len(t, grouped[CategoryBat], 11, "expected 11 bat catalog entries")
 }
 
@@ -129,6 +123,28 @@ func TestEmbeddedCatalog_EntryCount(t *testing.T) {
 
 	// 2 wildlife entries (birdnet-v3.0, perch-v2) + 1 bird entry (bsg-finland) + 11 bat entries = 14 total
 	assert.Len(t, EmbeddedCatalog, 14, "expected 14 total catalog entries")
+}
+
+func TestVisibleCatalog_ExcludesHiddenEntries(t *testing.T) {
+	t.Parallel()
+
+	visible := VisibleCatalog()
+
+	for _, entry := range visible {
+		assert.False(t, entry.Hidden, "visible catalog should not contain hidden entry %q", entry.ID)
+	}
+
+	// Hidden entries should still be findable via GetCatalogEntry
+	birdnetV3, ok := GetCatalogEntry("birdnet-v3.0")
+	require.True(t, ok)
+	assert.True(t, birdnetV3.Hidden)
+
+	bsg, ok := GetCatalogEntry("bsg-finland")
+	require.True(t, ok)
+	assert.True(t, bsg.Hidden)
+
+	// Visible count should be total minus hidden
+	assert.Len(t, visible, len(EmbeddedCatalog)-2)
 }
 
 func TestGetCatalogEntry_BSGFinland(t *testing.T) {

@@ -100,10 +100,11 @@ func (c *Controller) ListModels(ctx echo.Context) error {
 // GetModelCatalog returns the embedded model catalog enriched with install
 // status and compatibility information.
 func (c *Controller) GetModelCatalog(ctx echo.Context) error {
-	catalog := make([]CatalogEntryResponse, 0, len(classifier.EmbeddedCatalog))
+	visible := classifier.VisibleCatalog()
+	catalog := make([]CatalogEntryResponse, 0, len(visible))
 
-	for i := range classifier.EmbeddedCatalog {
-		entry := &classifier.EmbeddedCatalog[i]
+	for i := range visible {
+		entry := &visible[i]
 
 		// Compute total size from all files.
 		var totalSize int64

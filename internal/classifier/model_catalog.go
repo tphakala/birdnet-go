@@ -31,6 +31,7 @@ type CatalogEntry struct {
 	SpeciesCount      int           // number of species the model can identify
 	Version           string        // model version string
 	RegistryID        string        // maps to a ModelRegistry key; empty if loader not yet implemented
+	Hidden            bool          // if true, entry is excluded from the gallery UI
 	RequiredBuildTags []string      // build tags required for this model (e.g., ["onnx"])
 	UpstreamURL       string        // URL to the upstream project repository
 	HuggingFaceRepo   string        // HuggingFace repository path
@@ -63,6 +64,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		SpeciesCount:      0, // determined at runtime from label file
 		Version:           "3.0",
 		RegistryID:        RegistryIDBirdNETV3,
+		Hidden:            true,
 		RequiredBuildTags: []string{"onnx"},
 		UpstreamURL:       "https://github.com/birdnet-team/BirdNET-Analyzer",
 		HuggingFaceRepo:   "tphakala/BirdNET-v3.0",
@@ -103,6 +105,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		SpeciesCount:      0,
 		Version:           "4.4",
 		RegistryID:        RegistryIDBSG,
+		Hidden:            true,
 		RequiredBuildTags: []string{"onnx"},
 		UpstreamURL:       "https://github.com/luomus/BSG",
 		HuggingFaceRepo:   "tphakala/BSG",
@@ -218,12 +221,24 @@ func GetCatalogEntry(id string) (CatalogEntry, bool) {
 	return CatalogEntry{}, false
 }
 
-// CatalogByCategory groups all catalog entries by their Category field
+// VisibleCatalog returns catalog entries that are not hidden.
+func VisibleCatalog() []CatalogEntry {
+	visible := make([]CatalogEntry, 0, len(EmbeddedCatalog))
+	for i := range EmbeddedCatalog {
+		if !EmbeddedCatalog[i].Hidden {
+			visible = append(visible, EmbeddedCatalog[i])
+		}
+	}
+	return visible
+}
+
+// CatalogByCategory groups visible catalog entries by their Category field
 // (e.g., "bird", "bat") and returns the resulting map.
 func CatalogByCategory() map[string][]CatalogEntry {
+	visible := VisibleCatalog()
 	grouped := make(map[string][]CatalogEntry)
-	for i := range EmbeddedCatalog {
-		grouped[EmbeddedCatalog[i].Category] = append(grouped[EmbeddedCatalog[i].Category], EmbeddedCatalog[i])
+	for i := range visible {
+		grouped[visible[i].Category] = append(grouped[visible[i].Category], visible[i])
 	}
 	return grouped
 }
