@@ -507,12 +507,13 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	delete(o.models, registryID)
 	o.mu.Unlock()
 
-	globalInferenceCounters.Delete(registryID)
-
 	// Close the model instance outside the map lock. Acquire the per-model
-	// lock to wait for any in-flight inference to complete.
+	// lock to wait for any in-flight inference to complete before deleting
+	// the counter (prevents re-creation by in-flight RecordInvoke).
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
+
+	globalInferenceCounters.Delete(registryID)
 
 	if entry.instance != nil {
 		modelID := entry.instance.ModelID()
