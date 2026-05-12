@@ -98,8 +98,13 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 // SetModelsDir sets the base directory for gallery-installed models.
 // Called by ModelManager after creation so model loaders can resolve
 // paths from the installed models directory when config paths are empty.
+// Also propagates the directory to the primary BirdNET instance for
+// geomodel auto-selection.
 func (o *Orchestrator) SetModelsDir(dir string) {
 	o.modelsDir = dir
+	if o.primary != nil {
+		o.primary.SetModelsDir(dir)
+	}
 }
 
 // resolveInstalledPaths looks up catalog entries for the given registry ID

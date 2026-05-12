@@ -50,6 +50,7 @@ type BirdNET struct {
 	ScientificIndex  ScientificNameIndex // Index for fast scientific name lookups
 	TaxonomyPath     string              // Path to custom taxonomy file, if used
 	modelVersion     string              // Human-readable model version string (per-instance to avoid shared global state)
+	modelsDir        string              // base directory for gallery-installed models (set by Orchestrator)
 	mu               sync.Mutex
 	resultsBuffer    []datastore.Results // Pre-allocated buffer for results to reduce allocations
 	confidenceBuffer []float32           // Pre-allocated buffer for confidence values to reduce allocations
@@ -347,6 +348,16 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 
 // initializeMetaModel loads and initializes the meta model used for range filtering.
 func (bn *BirdNET) initializeMetaModel() error {
+	// Auto-select v3 geomodel for compatible classifiers when files exist on disk.
+	if bn.Settings.BirdNET.RangeFilter.Model != "v3" && bn.modelsDir != "" {
+		if shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
+			applyAutoSelectedGeomodelPaths(bn.Settings, bn.modelsDir)
+			GetLogger().Info("Auto-selected v3.0 geomodel for compatible classifier",
+				logger.String("classifier", bn.ModelInfo.ID),
+				logger.String("models_dir", bn.modelsDir))
+		}
+	}
+
 	// V3 geomodel is always ONNX; route to ONNX backend even if ModelPath is empty
 	// (initializeV3GeoModel will return a clear error about missing paths).
 	if bn.Settings.BirdNET.RangeFilter.Model == "v3" {
@@ -634,6 +645,13 @@ const DefaultRangeFilterV1ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.t
 // DefaultRangeFilterV2ModelName is the expected filesystem basename for the default (v2) range filter model file.
 // This filename is used when RangeFilter.Model is set to "latest" or unspecified in noembed builds.
 const DefaultRangeFilterV2ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite"
+
+// Geomodel v3 local file names used for auto-selection when the geomodel
+// has been downloaded as a shared companion file by the model gallery.
+const (
+	geomodelONNXLocalName   = "geomodel_v3.0.2_fp16.onnx"
+	geomodelLabelsLocalName = "geomodel_v3.0.2_labels.txt"
+)
 
 // DefaultModelDirectory is the default directory name where model files are expected to be found.
 // This is a relative path that will be resolved against various base paths during model discovery.
@@ -1158,4 +1176,69 @@ func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, co
 	}
 
 	return scientific, common, code
+}
+
+// SetModelsDir sets the base directory for gallery-installed models.
+// Called by the Orchestrator after creation so auto-selection can
+// resolve geomodel paths from the installed models directory.
+func (bn *BirdNET) SetModelsDir(dir string) {
+	bn.modelsDir = dir
+}
+
+// shouldAutoSelectV3Geomodel reports whether the v3 geomodel should be
+// auto-selected for the given classifier. Returns true when the classifier
+// is PerchV2 or BirdNET V3.0 and both geomodel files exist under
+// {modelsDir}/shared/.
+func shouldAutoSelectV3Geomodel(modelID, modelsDir string) bool {
+	if modelsDir == "" {
+		return false
+	}
+	switch modelID {
+	case RegistryIDPerchV2, RegistryIDBirdNETV3:
+		// eligible classifier; check files below
+	default:
+		return false
+	}
+	sharedDir := filepath.Join(modelsDir, "shared")
+	onnxPath := filepath.Join(sharedDir, geomodelONNXLocalName)
+	labelsPath := filepath.Join(sharedDir, geomodelLabelsLocalName)
+	if _, err := os.Stat(onnxPath); err != nil {
+		return false
+	}
+	if _, err := os.Stat(labelsPath); err != nil {
+		return false
+	}
+	return true
+}
+
+// applyAutoSelectedGeomodelPaths configures the range filter settings to
+// use the v3 geomodel from the shared directory. It does not override
+// an existing v3 configuration where both files already point to valid
+// paths on disk.
+func applyAutoSelectedGeomodelPaths(settings *conf.Settings, modelsDir string) {
+	rf := &settings.BirdNET.RangeFilter
+
+	// Do not override if already configured with v3 and paths are valid.
+	if rf.Model == "v3" {
+		onnxOK := false
+		labelsOK := false
+		if rf.ModelPath != "" {
+			if _, err := os.Stat(rf.ModelPath); err == nil {
+				onnxOK = true
+			}
+		}
+		if rf.LabelsPath != "" {
+			if _, err := os.Stat(rf.LabelsPath); err == nil {
+				labelsOK = true
+			}
+		}
+		if onnxOK && labelsOK {
+			return
+		}
+	}
+
+	sharedDir := filepath.Join(modelsDir, "shared")
+	rf.Model = "v3"
+	rf.ModelPath = filepath.Join(sharedDir, geomodelONNXLocalName)
+	rf.LabelsPath = filepath.Join(sharedDir, geomodelLabelsLocalName)
 }
