@@ -49,6 +49,15 @@ export interface CorrectSpeciesResult {
 const inFlightReanalyze = new Set<number>();
 const inFlightCorrection = new Set<number>();
 
+// fetchWithCSRF's default 30s timeout is too aggressive here. Reanalyze on a
+// busy install runs N model windows back-to-back, each contending with the
+// realtime pipeline for the same per-model locks; a 45s clip across BirdNET
+// v2.4 + Perch v2 can take 20s+ wall-time when the realtime path is busy. Use
+// 2 minutes — the backend's hard ceiling on decode is 60s and inference adds
+// only seconds on top, so anything past that is genuinely a hang worth
+// surfacing as an error.
+const REANALYZE_TIMEOUT_MS = 120000;
+
 /**
  * Re-run inference on a saved detection's audio clip. By default runs every
  * loaded compatible classifier; pass `modelIds` to restrict. The server does
@@ -69,6 +78,7 @@ export async function reanalyzeDetection(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ modelIds: modelIds ?? [] }),
+      timeout: REANALYZE_TIMEOUT_MS,
     });
   } catch (err) {
     logger.error('Reanalyze request failed:', err, {
