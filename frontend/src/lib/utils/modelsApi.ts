@@ -33,6 +33,11 @@ export async function uninstallModel(id: string): Promise<void> {
   await api.delete(`${BASE}/installed/${encodeURIComponent(id)}`);
 }
 
+/** Reinstall an already-installed model, re-downloading missing or corrupt files. */
+export async function reinstallModel(id: string): Promise<void> {
+  await api.post(`${BASE}/reinstall/${encodeURIComponent(id)}`);
+}
+
 /**
  * Subscribe to SSE progress events for an ongoing model install.
  *
