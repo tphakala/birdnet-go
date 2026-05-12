@@ -881,6 +881,22 @@
       "label": "Näkymätila",
       "table": "Taulukkonäkymä",
       "cards": "Korttinäkymä"
+    },
+    "reanalyze": {
+      "title": "Analysoi uudelleen toisella mallilla",
+      "description": "Aja tämä klippi eri luokittelijan läpi ja katso, mitä se ennustaa. Mitään ei tallenneta — tämä on kertaluonteinen toinen mielipide.",
+      "modelLabel": "Malli",
+      "loadingModels": "Ladataan saatavilla olevia malleja…",
+      "noOtherModels": "Muita malleja ei ole ladattu. Ota lisää malleja käyttöön kohdassa Asetukset → Mallit.",
+      "run": "Suorita uudelleenanalysointi",
+      "running": "Analysoidaan…",
+      "summary": "{model} • {duration} ääntä {windows} ikkunassa",
+      "noPredictions": "Ennusteita ei palautettu.",
+      "colSpecies": "Laji",
+      "colConfidence": "Luottamus",
+      "button": "Analysoi uudelleen",
+      "buttonAriaLabel": "Analysoi {species}-klippi uudelleen toisella mallilla",
+      "duplicateInFlight": "Tälle havainnolle on jo käynnissä uudelleenanalyysi."
     }
   },
   "species": {

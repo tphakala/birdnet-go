@@ -881,6 +881,22 @@
       "label": "Weergavemodus",
       "table": "Tabelweergave",
       "cards": "Kaartweergave"
+    },
+    "reanalyze": {
+      "title": "Heranalyseren met een ander model",
+      "description": "Laat deze clip door een andere classifier lopen en bekijk wat die voorspelt. Er wordt niets opgeslagen — dit is een eenmalige tweede opinie.",
+      "modelLabel": "Model",
+      "loadingModels": "Beschikbare modellen laden…",
+      "noOtherModels": "Geen andere modellen geladen. Schakel eerst extra modellen in via Instellingen → Modellen.",
+      "run": "Heranalyse uitvoeren",
+      "running": "Bezig met analyseren…",
+      "summary": "{model} • {duration} audio over {windows} vensters",
+      "noPredictions": "Geen voorspellingen ontvangen.",
+      "colSpecies": "Soort",
+      "colConfidence": "Betrouwbaarheid",
+      "button": "Heranalyseren",
+      "buttonAriaLabel": "Clip van {species} heranalyseren met een ander model",
+      "duplicateInFlight": "Er loopt al een heranalyse voor deze detectie."
     }
   },
   "species": {
