@@ -3,6 +3,7 @@ package api
 
 import (
 	"reflect"
+	"slices"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
@@ -18,8 +19,13 @@ type sourceNameUpdater interface {
 }
 
 // audioDeviceSettingChanged checks if audio device pipeline settings have changed.
-// Only compares device-affecting fields (Device, Gain, Model), not display-only
-// fields (Name, Equalizer, QuietHours) which are handled separately.
+// Only compares device-affecting fields (Device, Gain, Model, Models,
+// SampleRate), not display-only fields (Name, Equalizer, QuietHours) which
+// are handled separately.
+//
+// Models is the per-source list of classifier IDs (e.g. ["birdnet",
+// "perch_v2"]); Model is the deprecated singular alias. Both are compared so
+// hot-reload fires whether the user edits the new list or a legacy field.
 func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldSources := oldSettings.Realtime.Audio.Sources
 	newSources := currentSettings.Realtime.Audio.Sources
@@ -31,6 +37,7 @@ func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool
 		if oldSources[i].Device != newSources[i].Device ||
 			oldSources[i].Gain != newSources[i].Gain ||
 			oldSources[i].Model != newSources[i].Model ||
+			!slices.Equal(oldSources[i].Models, newSources[i].Models) ||
 			oldSources[i].SampleRate != newSources[i].SampleRate {
 			return true
 		}

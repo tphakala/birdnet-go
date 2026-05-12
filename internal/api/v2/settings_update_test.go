@@ -644,3 +644,139 @@ func TestDeepNestedUpdates(t *testing.T) {
 	assert.InDelta(t, initialBackoff, settings.Realtime.MQTT.RetrySettings.BackoffMultiplier, 0.001) // Preserved
 	assert.Equal(t, initialTLSEnabled, settings.Realtime.MQTT.TLS.Enabled)                           // Preserved
 }
+
+// TestStreamsSettingsChanged_DetectsModelEdits verifies that per-stream model
+// list changes trigger reconfigure_rtsp_sources. Without this, a user who
+// adds a classifier to a stream (e.g., enables Perch v2 alongside BirdNET)
+// would see the save persist to disk but the running pipeline keep using
+// the old model set — silently breaking the hot-reload contract.
+func TestStreamsSettingsChanged_DetectsModelEdits(t *testing.T) {
+	t.Parallel()
+
+	makeSettings := func(models []string) *conf.Settings {
+		s := &conf.Settings{}
+		s.Realtime.RTSP.Streams = []conf.StreamConfig{
+			{
+				Name:      "Front Yard",
+				URL:       "rtsp://192.168.1.10/stream",
+				Type:      conf.StreamTypeRTSP,
+				Transport: "tcp",
+				Enabled:   true,
+				Models:    models,
+			},
+		}
+		return s
+	}
+
+	tests := []struct {
+		name string
+		old  []string
+		new  []string
+		want bool
+	}{
+		{"identical model list", []string{"birdnet"}, []string{"birdnet"}, false},
+		{"model added", []string{"birdnet"}, []string{"birdnet", "perch_v2"}, true},
+		{"model removed", []string{"birdnet", "perch_v2"}, []string{"birdnet"}, true},
+		{"model reordered", []string{"birdnet", "perch_v2"}, []string{"perch_v2", "birdnet"}, true},
+		{"replaced entirely", []string{"birdnet"}, []string{"perch_v2"}, true},
+		{"both empty", nil, nil, false},
+		{"nil vs empty slice", nil, []string{}, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			old := makeSettings(tc.old)
+			cur := makeSettings(tc.new)
+			assert.Equal(t, tc.want, streamsSettingsChanged(old, cur))
+		})
+	}
+}
+
+// TestAudioDeviceSettingChanged_DetectsModelsEdits verifies the analogous fix
+// for sound-card audio sources: editing AudioSourceConfig.Models must trigger
+// reconfigure_audio_sources. Pre-fix, only the deprecated singular Model
+// string was compared, so adding a classifier via the new list field would
+// silently no-op until restart.
+func TestAudioDeviceSettingChanged_DetectsModelsEdits(t *testing.T) {
+	t.Parallel()
+
+	makeSettings := func(models []string) *conf.Settings {
+		s := &conf.Settings{}
+		s.Realtime.Audio.Sources = []conf.AudioSourceConfig{{
+			Name:   "Garden Mic",
+			Device: "hw:1,0",
+			Gain:   0,
+			Models: models,
+		}}
+		return s
+	}
+
+	tests := []struct {
+		name string
+		old  []string
+		new  []string
+		want bool
+	}{
+		{"identical model list", []string{"birdnet"}, []string{"birdnet"}, false},
+		{"model added", []string{"birdnet"}, []string{"birdnet", "perch_v2"}, true},
+		{"model removed", []string{"birdnet", "perch_v2"}, []string{"birdnet"}, true},
+		{"replaced entirely", []string{"birdnet"}, []string{"perch_v2"}, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			old := makeSettings(tc.old)
+			cur := makeSettings(tc.new)
+			assert.Equal(t, tc.want, audioDeviceSettingChanged(old, cur))
+		})
+	}
+}
+
+// TestStreamsSettingsChanged_BackwardCompatibility verifies that the existing
+// fields (Name, URL, Enabled, Type, Transport) still trigger the change
+// detector — the Models check is additive and must not regress prior coverage.
+func TestStreamsSettingsChanged_BackwardCompatibility(t *testing.T) {
+	t.Parallel()
+
+	base := func() *conf.Settings {
+		s := &conf.Settings{}
+		s.Realtime.RTSP.Streams = []conf.StreamConfig{{
+			Name:      "Front Yard",
+			URL:       "rtsp://192.168.1.10/stream",
+			Type:      conf.StreamTypeRTSP,
+			Transport: "tcp",
+			Enabled:   true,
+			Models:    []string{"birdnet"},
+		}}
+		return s
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*conf.Settings)
+		want   bool
+	}{
+		{"no change", func(*conf.Settings) {}, false},
+		{"name changed", func(s *conf.Settings) { s.Realtime.RTSP.Streams[0].Name = "Back Yard" }, true},
+		{"url changed", func(s *conf.Settings) { s.Realtime.RTSP.Streams[0].URL = "rtsp://192.168.1.11/stream" }, true},
+		{"transport changed", func(s *conf.Settings) { s.Realtime.RTSP.Streams[0].Transport = "udp" }, true},
+		{"disabled", func(s *conf.Settings) { s.Realtime.RTSP.Streams[0].Enabled = false }, true},
+		{"stream added", func(s *conf.Settings) {
+			s.Realtime.RTSP.Streams = append(s.Realtime.RTSP.Streams, conf.StreamConfig{
+				Name: "Garden", URL: "rtsp://192.168.1.12/stream", Type: conf.StreamTypeRTSP, Transport: "tcp",
+			})
+		}, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			old := base()
+			cur := base()
+			tc.mutate(cur)
+			assert.Equal(t, tc.want, streamsSettingsChanged(old, cur))
+		})
+	}
+}
