@@ -1,8 +1,12 @@
 package classifier
 
 import (
+	"bufio"
+	"os"
+	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -44,10 +48,16 @@ func (bn *BirdNET) initializeONNXModel() error {
 }
 
 // initializeONNXMetaModel loads and initializes an ONNX range filter meta model.
+// For v3 geomodel, delegates to initializeV3GeoModel which loads the geomodel
+// with its own 12K labels and wraps it in a mappedRangeFilter.
 func (bn *BirdNET) initializeONNXMetaModel() error {
+	if bn.Settings.BirdNET.RangeFilter.Model == "v3" {
+		return bn.initializeV3GeoModel()
+	}
+
 	start := time.Now()
 
-	// Ensure ONNX Runtime is initialized (idempotent — may already be init from classifier)
+	// Ensure ONNX Runtime is initialized (idempotent - may already be init from classifier)
 	if err := inference.InitONNXRuntime(bn.Settings.BirdNET.ONNXRuntimePath); err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
@@ -73,4 +83,135 @@ func (bn *BirdNET) initializeONNXMetaModel() error {
 
 	bn.rangeFilter = rangeFilter
 	return nil
+}
+
+// initializeV3GeoModel loads the v3.0 geomodel ONNX with its own 12K labels,
+// then wraps the raw ONNX range filter in a mappedRangeFilter that remaps
+// geomodel output scores to the classifier's label order by matching scientific
+// names. This enables the 12K-species geomodel to work with any classifier.
+func (bn *BirdNET) initializeV3GeoModel() error {
+	start := time.Now()
+	rfSettings := bn.Settings.BirdNET.RangeFilter
+
+	if rfSettings.ModelPath == "" {
+		return errors.Newf("v3 geomodel requires rangefilter.modelpath to be set").
+			Category(errors.CategoryModelInit).
+			Context("model", "v3").
+			Build()
+	}
+	if rfSettings.LabelsPath == "" {
+		return errors.Newf("v3 geomodel requires rangefilter.labelspath to be set").
+			Category(errors.CategoryModelInit).
+			Context("model", "v3").
+			Build()
+	}
+
+	// Expand environment variables and ~ prefix in paths (consistent with getMetaModelData)
+	modelPath := os.ExpandEnv(rfSettings.ModelPath)
+	modelPath, err := conf.ExpandTildePath(modelPath)
+	if err != nil {
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("path", rfSettings.ModelPath).
+			Build()
+	}
+
+	labelsPath := os.ExpandEnv(rfSettings.LabelsPath)
+	labelsPath, err = conf.ExpandTildePath(labelsPath)
+	if err != nil {
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("path", rfSettings.LabelsPath).
+			Build()
+	}
+
+	// Ensure ONNX Runtime is initialized
+	if err := inference.InitONNXRuntime(bn.Settings.BirdNET.ONNXRuntimePath); err != nil {
+		return errors.New(err).
+			Category(errors.CategoryModelInit).
+			Context("onnx_runtime_path", bn.Settings.BirdNET.ONNXRuntimePath).
+			Timing("onnx-init", time.Since(start)).
+			Build()
+	}
+
+	// Load geomodel labels from file
+	geoLabels, err := loadLabelsFromFile(labelsPath)
+	if err != nil {
+		return errors.New(err).
+			Category(errors.CategoryModelInit).
+			Context("model_type", "v3_geomodel").
+			Context("labels_path", labelsPath).
+			Build()
+	}
+
+	if len(geoLabels) == 0 {
+		return errors.Newf("v3 geomodel labels file is empty: %s", labelsPath).
+			Category(errors.CategoryModelInit).
+			Context("model_type", "v3_geomodel").
+			Build()
+	}
+
+	// Create ONNX range filter using the geomodel's own labels
+	innerFilter, err := inference.NewONNXRangeFilter(
+		modelPath,
+		inference.ONNXRangeFilterOptions{
+			Labels: geoLabels,
+		},
+	)
+	if err != nil {
+		return errors.New(err).
+			Category(errors.CategoryModelInit).
+			Context("model_type", "v3_geomodel").
+			Context("range_filter_model", modelPath).
+			Timing("onnx-v3-geomodel-init", time.Since(start)).
+			Build()
+	}
+
+	classifierLabels := bn.Settings.BirdNET.Labels
+	mapped := newMappedRangeFilter(innerFilter, classifierLabels, geoLabels, 0.0)
+
+	// Log mapping statistics
+	matchCount := 0
+	for _, idx := range mapped.classifierToGeo {
+		if idx >= 0 {
+			matchCount++
+		}
+	}
+
+	log := GetLogger()
+	if matchCount == 0 && len(classifierLabels) > 0 {
+		log.Warn("V3 geomodel: no species matched classifier labels, range filter will filter out all detections (check labels file)",
+			logger.Int("classifier_species", len(classifierLabels)),
+			logger.String("labels_path", labelsPath))
+	}
+	log.Info("V3 geomodel initialized with species mapping",
+		logger.Int("geomodel_species", len(geoLabels)),
+		logger.Int("classifier_species", len(classifierLabels)),
+		logger.Int("mapped_species", matchCount),
+		logger.Int("unmapped_species", len(classifierLabels)-matchCount))
+
+	bn.rangeFilter = mapped
+	return nil
+}
+
+// loadLabelsFromFile reads species labels from a text file, one per line.
+func loadLabelsFromFile(path string) ([]string, error) {
+	f, err := os.Open(path) //nolint:gosec // G304: path is from application settings
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	var labels []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			labels = append(labels, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return labels, nil
 }

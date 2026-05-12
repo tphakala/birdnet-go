@@ -33,10 +33,11 @@ const (
 	ConfigKeyLabelPath = "birdnet.labelpath"
 
 	// Range Filter Configuration
-	ConfigKeyRangeFilterModel     = "birdnet.rangefilter.model"
-	ConfigKeyRangeFilterThreshold = "birdnet.rangefilter.threshold"
-	ConfigKeyRangeFilterModelPath = "birdnet.rangefilter.modelpath"
-	ConfigKeyRangeFilterDebug     = "birdnet.rangefilter.debug"
+	ConfigKeyRangeFilterModel      = "birdnet.rangefilter.model"
+	ConfigKeyRangeFilterThreshold  = "birdnet.rangefilter.threshold"
+	ConfigKeyRangeFilterModelPath  = "birdnet.rangefilter.modelpath"
+	ConfigKeyRangeFilterLabelsPath = "birdnet.rangefilter.labelspath"
+	ConfigKeyRangeFilterDebug      = "birdnet.rangefilter.debug"
 
 	// Security Configuration
 	ConfigKeyBaseURL = "security.baseurl"
@@ -60,10 +61,11 @@ const (
 	EnvVarLabelPath = "BIRDNET_LABELPATH"
 
 	// Range Filter Configuration
-	EnvVarRangeFilterModel     = "BIRDNET_RANGEFILTER_MODEL"
-	EnvVarRangeFilterThreshold = "BIRDNET_RANGEFILTER_THRESHOLD"
-	EnvVarRangeFilterModelPath = "BIRDNET_RANGEFILTER_MODELPATH"
-	EnvVarRangeFilterDebug     = "BIRDNET_RANGEFILTER_DEBUG"
+	EnvVarRangeFilterModel      = "BIRDNET_RANGEFILTER_MODEL"
+	EnvVarRangeFilterThreshold  = "BIRDNET_RANGEFILTER_THRESHOLD"
+	EnvVarRangeFilterModelPath  = "BIRDNET_RANGEFILTER_MODELPATH"
+	EnvVarRangeFilterLabelsPath = "BIRDNET_RANGEFILTER_LABELSPATH"
+	EnvVarRangeFilterDebug      = "BIRDNET_RANGEFILTER_DEBUG"
 
 	// Security Configuration
 	EnvVarBaseURL = "BIRDNET_URL"
@@ -122,6 +124,7 @@ func getEnvBindings() []envBinding {
 		{ConfigKeyRangeFilterModel, EnvVarRangeFilterModel, validateEnvRangeFilterModel},
 		{ConfigKeyRangeFilterThreshold, EnvVarRangeFilterThreshold, validateEnvRangeFilterThreshold},
 		{ConfigKeyRangeFilterModelPath, EnvVarRangeFilterModelPath, validateEnvPath},
+		{ConfigKeyRangeFilterLabelsPath, EnvVarRangeFilterLabelsPath, validateEnvPath},
 		{ConfigKeyRangeFilterDebug, EnvVarRangeFilterDebug, validateEnvBool},
 
 		// Security Configuration
@@ -269,7 +272,7 @@ func validateEnvThreads(value string) error {
 
 func validateEnvRangeFilterModel(value string) error {
 	value = strings.TrimSpace(value)
-	validModels := []string{"latest", "legacy"}
+	validModels := []string{"latest", "legacy", "v3"}
 	if !slices.Contains(validModels, value) {
 		return fmt.Errorf("must be one of: %s", strings.Join(validModels, ", "))
 	}
@@ -368,7 +371,7 @@ func canonicalizeValue(configKey, envValue string) {
 		// Canonicalize locale to lowercase
 		viper.Set(configKey, strings.ToLower(trimmed))
 
-	case ConfigKeyModelPath, ConfigKeyLabelPath, ConfigKeyRangeFilterModel, ConfigKeyRangeFilterModelPath:
+	case ConfigKeyModelPath, ConfigKeyLabelPath, ConfigKeyRangeFilterModel, ConfigKeyRangeFilterModelPath, ConfigKeyRangeFilterLabelsPath:
 		// Regular string values - just trim whitespace
 		viper.Set(configKey, trimmed)
 
