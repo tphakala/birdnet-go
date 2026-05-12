@@ -188,8 +188,8 @@ func isGeomodelRole(role string) bool {
 	return role == RoleGeomodelModel || role == RoleGeomodelLabels
 }
 
-// hasGeomodelFiles reports whether a catalog entry includes shared geomodel files.
-func hasGeomodelFiles(entry *CatalogEntry) bool {
+// HasGeomodelFiles reports whether a catalog entry includes shared geomodel files.
+func HasGeomodelFiles(entry *CatalogEntry) bool {
 	for _, f := range entry.Files {
 		if isGeomodelRole(f.Role) {
 			return true

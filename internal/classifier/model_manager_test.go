@@ -904,7 +904,7 @@ func TestHasGeomodelFiles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, hasGeomodelFiles(&tt.entry))
+			assert.Equal(t, tt.want, HasGeomodelFiles(&tt.entry))
 		})
 	}
 }
@@ -918,7 +918,7 @@ func TestCatalog_GeomodelFilesOnPerchAndBirdNET(t *testing.T) {
 			entry, ok := GetCatalogEntry(id)
 			require.True(t, ok, "expected %s catalog entry to exist", id)
 
-			assert.True(t, hasGeomodelFiles(&entry), "%s should have geomodel files", id)
+			assert.True(t, HasGeomodelFiles(&entry), "%s should have geomodel files", id)
 
 			var geoFileCount int
 			for _, f := range entry.Files {

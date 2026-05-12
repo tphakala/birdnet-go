@@ -387,7 +387,7 @@ func (mm *ModelManager) cleanupSharedEmbeddings(log logger.Logger, catalogID str
 // model remains installed. The caller must hold mm.mu, and catalogID must
 // still be in mm.installed.
 func (mm *ModelManager) cleanupSharedGeomodel(log logger.Logger, catalogID string, entry *CatalogEntry) {
-	if !hasGeomodelFiles(entry) {
+	if !HasGeomodelFiles(entry) {
 		return
 	}
 	for id := range mm.installed {
@@ -395,7 +395,7 @@ func (mm *ModelManager) cleanupSharedGeomodel(log logger.Logger, catalogID strin
 			continue
 		}
 		other, found := GetCatalogEntry(id)
-		if found && hasGeomodelFiles(&other) {
+		if found && HasGeomodelFiles(&other) {
 			log.Debug("Retaining shared geomodel files; other dependent models still installed",
 				logger.String("catalog_id", catalogID))
 			return
@@ -753,7 +753,7 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 	}
 
 	// Apply geomodel range filter config if this entry includes geomodel files.
-	if hasGeomodelFiles(entry) && entry.GeomodelVersion != "" {
+	if HasGeomodelFiles(entry) && entry.GeomodelVersion != "" {
 		updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
 		for _, f := range entry.Files {
 			switch f.Role {
@@ -842,11 +842,11 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 
 	// Reset geomodel range filter config if no other geomodel-dependent model remains.
 	// mm.installed no longer contains the uninstalled entry (deleted by caller).
-	if hasGeomodelFiles(entry) {
+	if HasGeomodelFiles(entry) {
 		otherGeomodel := false
 		for id := range mm.installed {
 			other, found := GetCatalogEntry(id)
-			if found && hasGeomodelFiles(&other) {
+			if found && HasGeomodelFiles(&other) {
 				otherGeomodel = true
 				break
 			}
