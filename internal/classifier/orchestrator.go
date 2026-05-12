@@ -288,10 +288,13 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusInfo {
 // ReloadRangeFilter reinitializes the range filter on the primary model
 // from current settings without a full model reload.
 func (o *Orchestrator) ReloadRangeFilter() error {
-	if o.primary == nil {
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
 		return nil
 	}
-	return o.primary.ReloadRangeFilter()
+	return primary.ReloadRangeFilter()
 }
 
 // RunFilterProcess executes the filter process on demand and prints results.

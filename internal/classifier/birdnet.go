@@ -347,9 +347,13 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 }
 
 // initializeMetaModel loads and initializes the meta model used for range filtering.
+// Reads range filter config from the latest published settings (not the instance's
+// potentially stale bn.Settings) so that config changes from install/uninstall
+// are reflected without restarting the instance.
 func (bn *BirdNET) initializeMetaModel() error {
 	log := GetLogger()
-	rf := bn.Settings.BirdNET.RangeFilter
+	settings := bn.currentSettings()
+	rf := settings.BirdNET.RangeFilter
 
 	log.Info("Initializing range filter",
 		logger.String("model", rf.Model),
@@ -363,7 +367,8 @@ func (bn *BirdNET) initializeMetaModel() error {
 	// leaves ModelPath/LabelsPath empty (applyAutoSelectedGeomodelPaths skips
 	// when existing paths already point to valid files).
 	if bn.modelsDir != "" && shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
-		applyAutoSelectedGeomodelPaths(bn.Settings, bn.modelsDir)
+		applyAutoSelectedGeomodelPaths(settings, bn.modelsDir)
+		rf = settings.BirdNET.RangeFilter
 		log.Info("Auto-selected v3.0 geomodel for compatible classifier",
 			logger.String("classifier", bn.ModelInfo.ID),
 			logger.String("models_dir", bn.modelsDir))
@@ -371,15 +376,15 @@ func (bn *BirdNET) initializeMetaModel() error {
 
 	// V3 geomodel is always ONNX; route to ONNX backend even if ModelPath is empty
 	// (initializeV3GeoModel will return a clear error about missing paths).
-	if bn.Settings.BirdNET.RangeFilter.Model == "v3" {
+	if rf.Model == "v3" {
 		log.Debug("Routing to ONNX v3 geomodel backend")
 		return bn.initializeONNXMetaModel()
 	}
 
 	// If range filter model path ends with .onnx, use the ONNX backend
-	if isONNXModel(bn.Settings.BirdNET.RangeFilter.ModelPath) {
+	if isONNXModel(rf.ModelPath) {
 		log.Debug("Routing to ONNX range filter backend",
-			logger.String("model_path", bn.Settings.BirdNET.RangeFilter.ModelPath))
+			logger.String("model_path", rf.ModelPath))
 		return bn.initializeONNXMetaModel()
 	}
 

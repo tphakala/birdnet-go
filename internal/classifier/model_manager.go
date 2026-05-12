@@ -239,36 +239,46 @@ func (mm *ModelManager) ensureGeomodelConfig(log logger.Logger, installedIDs []s
 			continue
 		}
 
-		// Files exist. Check if the config already has model=v3 with valid paths.
+		// Build expected paths from catalog entry.
+		expectedModelPath := ""
+		expectedLabelsPath := ""
+		for _, f := range entry.Files {
+			switch f.Role {
+			case RoleGeomodelModel:
+				expectedModelPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			case RoleGeomodelLabels:
+				expectedLabelsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			}
+		}
+
+		// Files exist. Check if the config already matches expected paths.
 		currentSettings := conf.GetSettings()
 		rf := currentSettings.BirdNET.RangeFilter
-		if rf.Model == entry.GeomodelVersion && rf.ModelPath != "" && rf.LabelsPath != "" {
+		if rf.Model == entry.GeomodelVersion &&
+			rf.ModelPath == expectedModelPath &&
+			rf.LabelsPath == expectedLabelsPath {
 			// Config already set; initializeMetaModel handled it at startup.
 			return
 		}
 
-		// Config is stale or missing; update it.
+		// Config is stale or missing; update it under settingsMu to
+		// serialize with concurrent install/uninstall config writes.
 		log.Info("Applying geomodel config for installed model",
 			logger.String("catalog_id", catalogID),
 			logger.String("geomodel_version", entry.GeomodelVersion))
 
-		updated := conf.CloneSettings(currentSettings)
+		mm.settingsMu.Lock()
+		updated := conf.CloneSettings(conf.GetSettings())
 		updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
-		for _, f := range entry.Files {
-			switch f.Role {
-			case RoleGeomodelModel:
-				updated.BirdNET.RangeFilter.ModelPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
-			case RoleGeomodelLabels:
-				updated.BirdNET.RangeFilter.LabelsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
-			}
-		}
-
+		updated.BirdNET.RangeFilter.ModelPath = expectedModelPath
+		updated.BirdNET.RangeFilter.LabelsPath = expectedLabelsPath
 		conf.StoreSettings(updated)
 		if err := conf.SaveSettings(); err != nil {
 			log.Warn("Failed to persist geomodel config",
 				logger.String("catalog_id", catalogID),
 				logger.Error(err))
 		}
+		mm.settingsMu.Unlock()
 
 		if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
 			log.Warn("Failed to reload range filter after geomodel config update",
