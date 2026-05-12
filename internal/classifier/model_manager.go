@@ -458,6 +458,48 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	return nil
 }
 
+// Reinstall re-downloads missing or corrupt files for an already-installed model.
+// Files that pass SHA256 validation are skipped. The baseURL parameter overrides
+// the HuggingFace URL for testing; pass an empty string to use the default.
+// Progress is reported via the channel if non-nil.
+func (mm *ModelManager) Reinstall(entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
+	// Check that the model IS installed (opposite of Install's guard).
+	mm.mu.Lock()
+	if _, ok := mm.installed[entry.ID]; !ok {
+		mm.mu.Unlock()
+		return errors.Newf("model %s is not installed", entry.ID).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("catalog_id", entry.ID).
+			Build()
+	}
+	if _, downloading := mm.downloading[entry.ID]; downloading {
+		mm.mu.Unlock()
+		return errors.Newf("model %s is already being downloaded", entry.ID).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("catalog_id", entry.ID).
+			Build()
+	}
+
+	// Record download as in-progress.
+	mm.downloading[entry.ID] = &DownloadState{
+		CatalogID: entry.ID,
+		Status:    StatusDownloading,
+	}
+	mm.mu.Unlock()
+
+	if err := mm.downloadModelFiles(entry, baseURL, progress); err != nil {
+		// Keep failed state briefly for SSE pollers, then clean up.
+		time.AfterFunc(30*time.Second, func() {
+			mm.removeDownloading(entry.ID)
+		})
+		return err
+	}
+
+	return nil
+}
+
 // downloadModelFiles handles the actual file download, validation, recording,
 // config application, and hot-load for a catalog entry. The caller must have
 // already registered the entry in mm.downloading before calling this method.

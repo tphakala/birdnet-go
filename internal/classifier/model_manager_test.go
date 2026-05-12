@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,10 +17,12 @@ import (
 
 // Test URL paths used in httptest handlers.
 const (
-	testPathModelONNX = "/model.onnx"
-	testPathLabels    = "/labels.txt"
-	testPathGeomodel  = "/geomodel.onnx"
-	testPathGeoLabels = "/geomodel_labels.txt"
+	testPathModelONNX    = "/model.onnx"
+	testPathLabels       = "/labels.txt"
+	testPathGeomodel     = "/geomodel.onnx"
+	testPathGeoLabels    = "/geomodel_labels.txt"
+	testPathModelsONNX   = "/models/test.onnx"
+	testPathModelsLabels = "/models/labels.txt"
 )
 
 // sha256Hex returns the hex-encoded SHA-256 hash of data.
@@ -258,10 +261,10 @@ func TestModelManager_Install(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/models/test.onnx":
+		case testPathModelsONNX:
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(modelContent)
-		case "/models/labels.txt":
+		case testPathModelsLabels:
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(labelsContent)
 		default:
@@ -1111,4 +1114,137 @@ func TestBuildHuggingFaceURL(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestModelManager_Reinstall(t *testing.T) {
+	t.Parallel()
+
+	modelContent := []byte("fake-onnx-model-binary-data")
+	labelsContent := []byte("species_a\nspecies_b\nspecies_c\n")
+	modelChecksum := sha256Hex(modelContent)
+	labelsChecksum := sha256Hex(labelsContent)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case testPathModelsONNX:
+			_, _ = w.Write(modelContent)
+		case testPathModelsLabels:
+			_, _ = w.Write(labelsContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	entry := CatalogEntry{
+		ID:              "test-reinstall-model",
+		Name:            "Test Reinstall",
+		Version:         "1.0",
+		HuggingFaceRepo: "test/repo",
+		Files: []CatalogFile{
+			{RemotePath: "models/test.onnx", LocalName: "test.onnx", Role: RoleModel, SHA256: modelChecksum, SizeBytes: int64(len(modelContent))},
+			{RemotePath: "models/labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: labelsChecksum, SizeBytes: int64(len(labelsContent))},
+		},
+	}
+
+	modelsDir := t.TempDir()
+	mm := NewModelManager(modelsDir, nil, nil)
+
+	// Install first.
+	err := mm.Install(&entry, srv.URL, nil)
+	require.NoError(t, err)
+	require.True(t, mm.IsInstalled("test-reinstall-model"))
+
+	// Delete the model file to simulate corruption/missing file.
+	modelPath := filepath.Join(modelsDir, "test-reinstall-model", "test.onnx")
+	require.NoError(t, os.Remove(modelPath))
+	_, err = os.Stat(modelPath)
+	require.True(t, os.IsNotExist(err), "model file must be deleted before reinstall")
+
+	// Reinstall should re-download the missing file.
+	progress := make(chan DownloadState, 100)
+	err = mm.Reinstall(&entry, srv.URL, progress)
+	require.NoError(t, err)
+
+	// Verify the model file was re-downloaded with correct content.
+	gotModel, err := os.ReadFile(modelPath)
+	require.NoError(t, err)
+	assert.Equal(t, modelContent, gotModel)
+
+	// Verify final complete status was sent.
+	close(progress)
+	var foundComplete bool
+	for s := range progress {
+		if s.Status == StatusComplete {
+			foundComplete = true
+		}
+	}
+	assert.True(t, foundComplete, "expected a 'complete' progress status")
+}
+
+func TestModelManager_Reinstall_NotInstalled(t *testing.T) {
+	t.Parallel()
+
+	mm := NewModelManager(t.TempDir(), nil, nil)
+
+	entry := CatalogEntry{
+		ID:   "test-not-installed",
+		Name: "Not Installed Model",
+	}
+
+	err := mm.Reinstall(&entry, "", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not installed")
+}
+
+func TestModelManager_Reinstall_SkipsValidFiles(t *testing.T) {
+	t.Parallel()
+
+	modelContent := []byte("fake-onnx-model-binary-data")
+	labelsContent := []byte("species_a\nspecies_b\nspecies_c\n")
+	modelChecksum := sha256Hex(modelContent)
+	labelsChecksum := sha256Hex(labelsContent)
+
+	var downloadCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		downloadCount.Add(1)
+		switch r.URL.Path {
+		case testPathModelsONNX:
+			_, _ = w.Write(modelContent)
+		case testPathModelsLabels:
+			_, _ = w.Write(labelsContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	entry := CatalogEntry{
+		ID:              "test-reinstall-skip",
+		Name:            "Test Reinstall Skip",
+		Version:         "1.0",
+		HuggingFaceRepo: "test/repo",
+		Files: []CatalogFile{
+			{RemotePath: "models/test.onnx", LocalName: "test.onnx", Role: RoleModel, SHA256: modelChecksum, SizeBytes: int64(len(modelContent))},
+			{RemotePath: "models/labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: labelsChecksum, SizeBytes: int64(len(labelsContent))},
+		},
+	}
+
+	modelsDir := t.TempDir()
+	mm := NewModelManager(modelsDir, nil, nil)
+
+	// Install first.
+	err := mm.Install(&entry, srv.URL, nil)
+	require.NoError(t, err)
+	require.True(t, mm.IsInstalled("test-reinstall-skip"))
+
+	// Reset the download counter after the initial install.
+	downloadCount.Store(0)
+
+	// Reinstall without deleting anything; all files should pass SHA256 validation.
+	err = mm.Reinstall(&entry, srv.URL, nil)
+	require.NoError(t, err)
+
+	// No HTTP requests should have been made since all files are valid.
+	assert.Equal(t, int64(0), downloadCount.Load(), "expected zero downloads when all files are valid")
 }
