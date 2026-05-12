@@ -439,10 +439,18 @@ func (o *Orchestrator) IsModelLoaded(registryID string) bool {
 	return exists
 }
 
+// modelLoaders maps registry IDs to their loader functions. Models not in
+// this map are recognized but not yet implemented; callers log a warning
+// and skip. Adding a new loader only requires one entry here.
+var modelLoaders = map[string]func(o *Orchestrator, threads int) error{
+	RegistryIDPerchV2: (*Orchestrator).loadPerch,
+	RegistryIDBat:     (*Orchestrator).loadBat,
+}
+
 // LoadModel dynamically loads a model into the Orchestrator at runtime.
 // Called by ModelManager after a successful install. The method delegates
-// to the appropriate model loader (loadPerch, loadBat, etc.) based on
-// the registry ID. Thread-safe.
+// to the appropriate model loader via modelLoaders based on the registry
+// ID. Thread-safe.
 //
 // The write lock is held for the entire load (including I/O-heavy ONNX
 // initialization, typically 1-3 seconds). This briefly blocks inference
@@ -480,6 +488,17 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			Build()
 	}
 
+	loader, implemented := modelLoaders[registryID]
+	if !implemented {
+		log.Warn("Loader not yet implemented",
+			logger.String("registry_id", registryID))
+		return errors.Newf("loader not yet implemented for model %s", registryID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryModelInit).
+			Context("registry_id", registryID).
+			Build()
+	}
+
 	// Allocate a single thread for the new model. The thread count defaults
 	// to 1 because the primary model's thread allocation was computed at
 	// startup and should not be reduced by a dynamic load.
@@ -489,37 +508,7 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 		logger.String("registry_id", registryID),
 		logger.Int("threads", dynamicThreads))
 
-	var err error
-	switch registryID {
-	case RegistryIDBirdNETV3:
-		log.Warn("BirdNET v3.0 loader not yet implemented",
-			logger.String("registry_id", registryID))
-		return errors.Newf("BirdNET v3.0 loader not yet implemented").
-			Component("classifier.orchestrator").
-			Category(errors.CategoryModelInit).
-			Context("registry_id", registryID).
-			Build()
-	case RegistryIDPerchV2:
-		err = o.loadPerch(dynamicThreads)
-	case RegistryIDBSG:
-		log.Warn("BSG loader not yet implemented",
-			logger.String("registry_id", registryID))
-		return errors.Newf("BSG loader not yet implemented").
-			Component("classifier.orchestrator").
-			Category(errors.CategoryModelInit).
-			Context("registry_id", registryID).
-			Build()
-	case RegistryIDBat:
-		err = o.loadBat(dynamicThreads)
-	default:
-		return errors.Newf("no loader implemented for model %s", registryID).
-			Component("classifier.orchestrator").
-			Category(errors.CategoryModelInit).
-			Context("registry_id", registryID).
-			Build()
-	}
-
-	if err != nil {
+	if err := loader(o, dynamicThreads); err != nil {
 		return err
 	}
 
@@ -683,22 +672,13 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 
 		threads := threadAlloc[registryID]
 
-		var loadErr error
-		switch registryID {
-		case RegistryIDBirdNETV3:
-			log.Warn("BirdNET v3.0 loader not yet implemented, skipping",
+		loader, implemented := modelLoaders[registryID]
+		if !implemented {
+			log.Warn("Loader not yet implemented, skipping",
 				logger.String("registry_id", registryID))
-		case RegistryIDPerchV2:
-			loadErr = o.loadPerch(threads)
-		case RegistryIDBSG:
-			log.Warn("BSG loader not yet implemented, skipping",
-				logger.String("registry_id", registryID))
-		case RegistryIDBat:
-			loadErr = o.loadBat(threads)
-		default:
-			log.Warn("model registered but no loader implemented",
-				logger.String("registry_id", registryID))
+			continue
 		}
+		loadErr := loader(o, threads)
 		if loadErr != nil {
 			log.Warn("optional model failed to load, will retry after gallery scan",
 				logger.String("registry_id", registryID),

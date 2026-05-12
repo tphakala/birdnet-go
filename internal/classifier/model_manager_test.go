@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -134,7 +135,7 @@ func TestModelManager_UninstallRemovesModelRetainsLabels(t *testing.T) {
 	// Create all catalog files on disk in their expected locations.
 	for _, f := range entry.Files {
 		var dir string
-		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
+		if isSharedRole(f.Role) {
 			dir = filepath.Join(modelsDir, "shared")
 		} else {
 			dir = subdir
@@ -154,7 +155,7 @@ func TestModelManager_UninstallRemovesModelRetainsLabels(t *testing.T) {
 	// shared geomodel files should be gone (no other dependent model installed).
 	for _, f := range entry.Files {
 		var path string
-		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
+		if isSharedRole(f.Role) {
 			path = filepath.Join(modelsDir, "shared", f.LocalName)
 		} else {
 			path = filepath.Join(subdir, f.LocalName)
@@ -167,6 +168,10 @@ func TestModelManager_UninstallRemovesModelRetainsLabels(t *testing.T) {
 			require.NoError(t, err, "labels file %s should be retained", f.LocalName)
 		case isGeomodelRole(f.Role):
 			assert.True(t, os.IsNotExist(err), "geomodel file %s should be deleted when no dependents remain", f.LocalName)
+		case f.Role == RoleEmbeddings:
+			assert.True(t, os.IsNotExist(err), "embeddings file %s should be deleted when no dependents remain", f.LocalName)
+		case f.Role == RoleTaxonomy:
+			assert.True(t, os.IsNotExist(err), "taxonomy file %s should be deleted when no dependents remain", f.LocalName)
 		}
 	}
 }
@@ -204,7 +209,7 @@ func TestModelManager_DownloadFile(t *testing.T) {
 	destPath := filepath.Join(mm.modelsDir, "test-model", "model.onnx")
 
 	mm.downloading["test-download"] = &DownloadState{CatalogID: "test-download", Status: StatusDownloading}
-	err := mm.downloadFile("test-download", srv.URL+"/model.onnx", destPath, checksum, int64(len(content)), 0)
+	err := mm.downloadFile(t.Context(), "test-download", srv.URL+"/model.onnx", destPath, checksum, int64(len(content)), 0)
 	require.NoError(t, err)
 
 	// Verify file was written with correct content.
@@ -238,7 +243,7 @@ func TestModelManager_DownloadFile_BadChecksum(t *testing.T) {
 	destPath := filepath.Join(mm.modelsDir, "bad-checksum", "model.onnx")
 
 	mm.downloading["test-bad-checksum"] = &DownloadState{CatalogID: "test-bad-checksum", Status: StatusDownloading}
-	err := mm.downloadFile("test-bad-checksum", srv.URL+"/model.onnx", destPath, wrongChecksum, int64(len(content)), 0)
+	err := mm.downloadFile(t.Context(), "test-bad-checksum", srv.URL+"/model.onnx", destPath, wrongChecksum, int64(len(content)), 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checksum")
 
@@ -249,6 +254,52 @@ func TestModelManager_DownloadFile_BadChecksum(t *testing.T) {
 	// Verify destination file was not created.
 	_, err = os.Stat(destPath)
 	assert.True(t, os.IsNotExist(err), "destination file should not exist after checksum failure")
+}
+
+func TestModelManager_DownloadFile_EmptySHA256(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("model data without checksum")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(content)
+	}))
+	defer srv.Close()
+
+	mm := NewModelManager(t.TempDir(), nil, nil)
+	destPath := filepath.Join(mm.modelsDir, "no-checksum", "model.onnx")
+
+	mm.downloading["test-no-checksum"] = &DownloadState{CatalogID: "test-no-checksum", Status: StatusDownloading}
+	err := mm.downloadFile(t.Context(), "test-no-checksum", srv.URL+"/model.onnx", destPath, "", int64(len(content)), 0)
+	require.NoError(t, err, "empty expectedSHA256 should skip verification")
+
+	got, err := os.ReadFile(destPath)
+	require.NoError(t, err)
+	assert.Equal(t, content, got)
+}
+
+func TestModelManager_DownloadFile_ContextCancelled(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data"))
+	}))
+	defer srv.Close()
+
+	mm := NewModelManager(t.TempDir(), nil, nil)
+	destPath := filepath.Join(mm.modelsDir, "cancelled", "model.onnx")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	mm.downloading["test-cancelled"] = &DownloadState{CatalogID: "test-cancelled", Status: StatusDownloading}
+	err := mm.downloadFile(ctx, "test-cancelled", srv.URL+"/model.onnx", destPath, "", 4, 0)
+	require.Error(t, err, "cancelled context should produce an error")
+
+	_, statErr := os.Stat(destPath)
+	assert.True(t, os.IsNotExist(statErr), "file should not exist after cancelled download")
 }
 
 func TestModelManager_Install(t *testing.T) {
@@ -288,7 +339,7 @@ func TestModelManager_Install(t *testing.T) {
 	mm := NewModelManager(modelsDir, nil, nil)
 
 	progress := make(chan DownloadState, 100)
-	err := mm.Install(&entry, srv.URL, progress)
+	err := mm.Install(t.Context(), &entry, srv.URL, progress)
 	require.NoError(t, err)
 
 	// Verify installed.
@@ -332,7 +383,7 @@ func TestModelManager_Install_AlreadyInstalled(t *testing.T) {
 		Name: "Already Installed",
 	}
 
-	err := mm.Install(&entry, "", nil)
+	err := mm.Install(t.Context(), &entry, "", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already installed")
 }
@@ -374,7 +425,7 @@ func TestModelManager_Install_SharedEmbeddings(t *testing.T) {
 	modelsDir := t.TempDir()
 	mm := NewModelManager(modelsDir, nil, nil)
 
-	err := mm.Install(&entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, srv.URL, nil)
 	require.NoError(t, err)
 
 	// Embeddings should be in shared/, not in the model subdirectory.
@@ -411,7 +462,7 @@ func TestModelManager_Install_ConcurrentDownloadRejected(t *testing.T) {
 		Name: "Concurrent Test",
 	}
 
-	err := mm.Install(&entry, "", nil)
+	err := mm.Install(t.Context(), &entry, "", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already being downloaded")
 }
@@ -430,7 +481,7 @@ func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
 	// Create all catalog files on disk in their expected locations.
 	for _, f := range entry.Files {
 		var dir string
-		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
+		if isSharedRole(f.Role) {
 			dir = filepath.Join(modelsDir, "shared")
 		} else {
 			dir = subdir
@@ -456,7 +507,7 @@ func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
 	// Verify per-role file expectations after uninstall.
 	for _, f := range entry.Files {
 		var path string
-		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
+		if isSharedRole(f.Role) {
 			path = filepath.Join(modelsDir, "shared", f.LocalName)
 		} else {
 			path = filepath.Join(subdir, f.LocalName)
@@ -469,6 +520,10 @@ func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
 			require.NoError(t, statErr, "labels file %s must be retained after uninstall", f.LocalName)
 		case isGeomodelRole(f.Role):
 			assert.True(t, os.IsNotExist(statErr), "geomodel file %s must be deleted when no dependents remain", f.LocalName)
+		case f.Role == RoleEmbeddings:
+			assert.True(t, os.IsNotExist(statErr), "embeddings file %s must be deleted when no dependents remain", f.LocalName)
+		case f.Role == RoleTaxonomy:
+			assert.True(t, os.IsNotExist(statErr), "taxonomy file %s must be deleted when no dependents remain", f.LocalName)
 		}
 	}
 }
@@ -486,7 +541,7 @@ func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 
 	for _, f := range entry.Files {
 		var dir string
-		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
+		if isSharedRole(f.Role) {
 			dir = filepath.Join(modelsDir, "shared")
 		} else {
 			dir = subdir
@@ -519,7 +574,7 @@ func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 	// All files must still exist on disk.
 	for _, f := range entry.Files {
 		var path string
-		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
+		if isSharedRole(f.Role) {
 			path = filepath.Join(modelsDir, "shared", f.LocalName)
 		} else {
 			path = filepath.Join(subdir, f.LocalName)
@@ -573,7 +628,7 @@ func TestModelManager_Install_SharedGeomodel(t *testing.T) {
 	modelsDir := t.TempDir()
 	mm := NewModelManager(modelsDir, nil, nil)
 
-	err := mm.Install(&entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, srv.URL, nil)
 	require.NoError(t, err)
 
 	// Geomodel files should be in shared/, not in the model subdirectory.
@@ -633,7 +688,7 @@ func TestModelManager_Install_GeomodelSkipsExisting(t *testing.T) {
 	}
 
 	mm := NewModelManager(modelsDir, nil, nil)
-	err := mm.Install(&entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, srv.URL, nil)
 	require.NoError(t, err)
 
 	// The server returns 404 for geomodel.onnx, so if Install tried to
@@ -665,7 +720,7 @@ func TestModelManager_Uninstall_GeomodelRetainedWhenDependentExists(t *testing.T
 		require.NoError(t, os.MkdirAll(subdir, 0o755))
 		for _, f := range entry.Files {
 			var dir string
-			if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
+			if isSharedRole(f.Role) {
 				dir = sharedDir
 			} else {
 				dir = subdir
@@ -700,6 +755,49 @@ func TestModelManager_Uninstall_GeomodelRetainedWhenDependentExists(t *testing.T
 			path := filepath.Join(sharedDir, f.LocalName)
 			_, err := os.Stat(path)
 			assert.True(t, os.IsNotExist(err), "geomodel file %s must be deleted when no dependents remain", f.LocalName)
+		}
+	}
+}
+
+func TestModelManager_Uninstall_SharedFilesRetainedWhileDownloading(t *testing.T) {
+	t.Parallel()
+
+	entryPerch, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+
+	modelsDir := t.TempDir()
+	sharedDir := filepath.Join(modelsDir, "shared")
+	require.NoError(t, os.MkdirAll(sharedDir, 0o755))
+
+	subdir := filepath.Join(modelsDir, entryPerch.ID)
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+	for _, f := range entryPerch.Files {
+		var dir string
+		if isSharedRole(f.Role) {
+			dir = sharedDir
+		} else {
+			dir = subdir
+		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("data"), 0o644))
+	}
+
+	mm := NewModelManager(modelsDir, nil, nil)
+	mm.ScanInstalled()
+	require.True(t, mm.IsInstalled("perch-v2"))
+
+	// Simulate another geomodel-dependent model downloading concurrently.
+	mm.mu.Lock()
+	mm.downloading["birdnet-v3.0"] = &DownloadState{CatalogID: "birdnet-v3.0", Status: StatusDownloading}
+	mm.mu.Unlock()
+
+	require.NoError(t, mm.Uninstall("perch-v2"))
+
+	// Shared geomodel files must be retained because birdnet-v3.0 is downloading.
+	for _, f := range entryPerch.Files {
+		if isGeomodelRole(f.Role) {
+			path := filepath.Join(sharedDir, f.LocalName)
+			_, err := os.Stat(path)
+			require.NoError(t, err, "geomodel file %s must be retained while another dependent model is downloading", f.LocalName)
 		}
 	}
 }
@@ -784,7 +882,7 @@ func TestModelManager_Install_GeomodelConfigWiring(t *testing.T) {
 	conf.StoreSettings(settings)
 	mm := NewModelManager(modelsDir, nil, settings)
 
-	err := mm.Install(&entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, srv.URL, nil)
 	require.NoError(t, err)
 
 	// Verify range filter config was set.
@@ -842,7 +940,7 @@ func TestModelManager_Uninstall_GeomodelConfigClearing(t *testing.T) {
 	mm := NewModelManager(modelsDir, nil, settings)
 
 	// Install to set config.
-	err := mm.Install(&entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, srv.URL, nil)
 	require.NoError(t, err)
 
 	current := conf.GetSettings()
@@ -1007,7 +1105,7 @@ func TestModelManager_Install_RedownloadsCorruptSharedFile(t *testing.T) {
 	}
 
 	mm := NewModelManager(modelsDir, nil, nil)
-	err := mm.Install(&entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, srv.URL, nil)
 	require.NoError(t, err)
 
 	// Verify the corrupt file was replaced with correct content.
@@ -1063,7 +1161,7 @@ func TestModelManager_Install_GeomodelVersionWiring(t *testing.T) {
 	conf.StoreSettings(settings)
 	mm := NewModelManager(modelsDir, nil, settings)
 
-	err := mm.Install(&entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, srv.URL, nil)
 	require.NoError(t, err)
 
 	current := conf.GetSettings()
@@ -1151,7 +1249,7 @@ func TestModelManager_Reinstall(t *testing.T) {
 	mm := NewModelManager(modelsDir, nil, nil)
 
 	// Install first.
-	err := mm.Install(&entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, srv.URL, nil)
 	require.NoError(t, err)
 	require.True(t, mm.IsInstalled("test-reinstall-model"))
 
@@ -1163,7 +1261,7 @@ func TestModelManager_Reinstall(t *testing.T) {
 
 	// Reinstall should re-download the missing file.
 	progress := make(chan DownloadState, 100)
-	err = mm.Reinstall(&entry, srv.URL, progress)
+	err = mm.Reinstall(t.Context(), &entry, srv.URL, progress)
 	require.NoError(t, err)
 
 	// Verify the model file was re-downloaded with correct content.
@@ -1192,7 +1290,7 @@ func TestModelManager_Reinstall_NotInstalled(t *testing.T) {
 		Name: "Not Installed Model",
 	}
 
-	err := mm.Reinstall(&entry, "", nil)
+	err := mm.Reinstall(t.Context(), &entry, "", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not installed")
 }
@@ -1234,7 +1332,7 @@ func TestModelManager_Reinstall_SkipsValidFiles(t *testing.T) {
 	mm := NewModelManager(modelsDir, nil, nil)
 
 	// Install first.
-	err := mm.Install(&entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, srv.URL, nil)
 	require.NoError(t, err)
 	require.True(t, mm.IsInstalled("test-reinstall-skip"))
 
@@ -1242,7 +1340,7 @@ func TestModelManager_Reinstall_SkipsValidFiles(t *testing.T) {
 	downloadCount.Store(0)
 
 	// Reinstall without deleting anything; all files should pass SHA256 validation.
-	err = mm.Reinstall(&entry, srv.URL, nil)
+	err = mm.Reinstall(t.Context(), &entry, srv.URL, nil)
 	require.NoError(t, err)
 
 	// No HTTP requests should have been made since all files are valid.

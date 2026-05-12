@@ -181,7 +181,7 @@ func (c *Controller) InstallModel(ctx echo.Context) error {
 				)
 			}
 		}()
-		if err := c.ModelManager.Install(&entry, "", progressChan); err != nil {
+		if err := c.ModelManager.Install(c.ctx, &entry, "", progressChan); err != nil {
 			c.logErrorIfEnabled("Model install failed",
 				logger.String("catalog_id", catalogID),
 				logger.Error(err),
@@ -232,7 +232,7 @@ func (c *Controller) ReinstallModel(ctx echo.Context) error {
 				)
 			}
 		}()
-		if err := c.ModelManager.Reinstall(&entry, "", progressChan); err != nil {
+		if err := c.ModelManager.Reinstall(c.ctx, &entry, "", progressChan); err != nil {
 			c.logErrorIfEnabled("Model reinstall failed",
 				logger.String("catalog_id", catalogID),
 				logger.Error(err),

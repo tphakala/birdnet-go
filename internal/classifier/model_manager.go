@@ -3,6 +3,7 @@
 package classifier
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -424,9 +425,9 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	}
 
 	// Clean up shared embeddings, geomodel, and taxonomy files if no other dependent models remain.
-	mm.cleanupSharedEmbeddings(log, catalogID, &entry)
-	mm.cleanupSharedGeomodel(log, catalogID, &entry)
-	mm.cleanupSharedTaxonomy(log, catalogID, &entry)
+	mm.cleanupSharedFiles(log, catalogID, &entry, HasEmbeddingsFiles, isEmbeddingsRole, "embeddings")
+	mm.cleanupSharedFiles(log, catalogID, &entry, HasGeomodelFiles, isGeomodelRole, "geomodel")
+	mm.cleanupSharedFiles(log, catalogID, &entry, HasTaxonomyFiles, isTaxonomyRole, "taxonomy")
 
 	// Labels are intentionally retained on disk.
 
@@ -450,11 +451,14 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	return nil
 }
 
-// cleanupSharedEmbeddings removes shared embeddings files when uninstalling a
-// bat model, but only if no other bat model remains installed. The caller must
-// hold mm.mu, and catalogID must still be in mm.installed.
-func (mm *ModelManager) cleanupSharedEmbeddings(log logger.Logger, catalogID string, entry *CatalogEntry) {
-	if entry.Category != CategoryBat {
+// cleanupSharedFiles removes shared files of a given kind when uninstalling
+// a model, but only if no other installed or currently-downloading model
+// depends on the same files.
+// hasFiles checks whether a catalog entry depends on this kind of shared file.
+// matchRole checks whether a CatalogFile belongs to this kind.
+// The caller must hold mm.mu, and catalogID must still be in mm.installed.
+func (mm *ModelManager) cleanupSharedFiles(log logger.Logger, catalogID string, entry *CatalogEntry, hasFiles func(*CatalogEntry) bool, matchRole func(string) bool, label string) {
+	if !hasFiles(entry) {
 		return
 	}
 	for id := range mm.installed {
@@ -462,89 +466,33 @@ func (mm *ModelManager) cleanupSharedEmbeddings(log logger.Logger, catalogID str
 			continue
 		}
 		other, found := GetCatalogEntry(id)
-		if found && other.Category == CategoryBat {
-			log.Debug("Retaining shared embeddings; other bat models still installed",
+		if found && hasFiles(&other) {
+			log.Debug("Retaining shared "+label+" files; other dependent models still installed",
 				logger.String("catalog_id", catalogID))
 			return
 		}
 	}
-	for _, f := range entry.Files {
-		if f.Role == RoleEmbeddings {
-			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				log.Warn("Failed to remove embeddings file",
-					logger.String("path", path),
-					logger.Error(err))
-			} else if err == nil {
-				log.Info("Removed shared embeddings file",
-					logger.String("path", path))
-			}
-		}
-	}
-}
-
-// cleanupSharedGeomodel removes shared geomodel files when uninstalling a
-// model with geomodel dependencies, but only if no other geomodel-dependent
-// model remains installed. The caller must hold mm.mu, and catalogID must
-// still be in mm.installed.
-func (mm *ModelManager) cleanupSharedGeomodel(log logger.Logger, catalogID string, entry *CatalogEntry) {
-	if !HasGeomodelFiles(entry) {
-		return
-	}
-	for id := range mm.installed {
+	for id := range mm.downloading {
 		if id == catalogID {
 			continue
 		}
 		other, found := GetCatalogEntry(id)
-		if found && HasGeomodelFiles(&other) {
-			log.Debug("Retaining shared geomodel files; other dependent models still installed",
-				logger.String("catalog_id", catalogID))
+		if found && hasFiles(&other) {
+			log.Debug("Retaining shared "+label+" files; another model is downloading",
+				logger.String("catalog_id", catalogID),
+				logger.String("downloading_id", id))
 			return
 		}
 	}
 	for _, f := range entry.Files {
-		if isGeomodelRole(f.Role) {
+		if matchRole(f.Role) {
 			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				log.Warn("Failed to remove geomodel file",
+				log.Warn("Failed to remove "+label+" file",
 					logger.String("path", path),
 					logger.Error(err))
 			} else if err == nil {
-				log.Info("Removed shared geomodel file",
-					logger.String("path", path))
-			}
-		}
-	}
-}
-
-// cleanupSharedTaxonomy removes shared taxonomy files when uninstalling a
-// model with taxonomy dependencies, but only if no other taxonomy-dependent
-// model remains installed. The caller must hold mm.mu, and catalogID must
-// still be in mm.installed.
-func (mm *ModelManager) cleanupSharedTaxonomy(log logger.Logger, catalogID string, entry *CatalogEntry) {
-	if !HasTaxonomyFiles(entry) {
-		return
-	}
-	for id := range mm.installed {
-		if id == catalogID {
-			continue
-		}
-		other, found := GetCatalogEntry(id)
-		if found && HasTaxonomyFiles(&other) {
-			log.Debug("Retaining shared taxonomy files; other dependent models still installed",
-				logger.String("catalog_id", catalogID))
-			return
-		}
-	}
-	for _, f := range entry.Files {
-		if f.Role == RoleTaxonomy {
-			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				log.Warn("Failed to remove taxonomy file",
-					logger.String("path", path),
-					logger.Error(err))
-			} else if err == nil {
-				log.Info("Removed shared taxonomy file",
+				log.Info("Removed shared "+label+" file",
 					logger.String("path", path))
 			}
 		}
@@ -555,7 +503,7 @@ func (mm *ModelManager) cleanupSharedTaxonomy(log logger.Logger, catalogID strin
 // The baseURL parameter overrides the HuggingFace URL for testing; pass an
 // empty string to use the default HuggingFace URL constructed from the entry's
 // repo. Progress is reported via the channel if non-nil.
-func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
+func (mm *ModelManager) Install(ctx context.Context, entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
 	// Check if already installed or already downloading.
 	mm.mu.Lock()
 	if _, ok := mm.installed[entry.ID]; ok {
@@ -582,7 +530,7 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	}
 	mm.mu.Unlock()
 
-	if err := mm.downloadModelFiles(entry, baseURL, progress, true); err != nil {
+	if err := mm.downloadModelFiles(ctx, entry, baseURL, progress, true); err != nil {
 		// Keep failed state briefly for SSE pollers, then clean up.
 		time.AfterFunc(failedStateRetention, func() {
 			mm.removeDownloading(entry.ID)
@@ -597,7 +545,7 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 // Files that pass SHA256 validation are skipped. The baseURL parameter overrides
 // the HuggingFace URL for testing; pass an empty string to use the default.
 // Progress is reported via the channel if non-nil.
-func (mm *ModelManager) Reinstall(entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
+func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
 	// Check that the model IS installed (opposite of Install's guard).
 	mm.mu.Lock()
 	if _, ok := mm.installed[entry.ID]; !ok {
@@ -624,7 +572,7 @@ func (mm *ModelManager) Reinstall(entry *CatalogEntry, baseURL string, progress 
 	}
 	mm.mu.Unlock()
 
-	if err := mm.downloadModelFiles(entry, baseURL, progress, false); err != nil {
+	if err := mm.downloadModelFiles(ctx, entry, baseURL, progress, false); err != nil {
 		// Keep failed state briefly for SSE pollers, then clean up.
 		time.AfterFunc(failedStateRetention, func() {
 			mm.removeDownloading(entry.ID)
@@ -643,7 +591,7 @@ func (mm *ModelManager) Reinstall(entry *CatalogEntry, baseURL string, progress 
 // When cleanupOnFailure is true (Install), newly downloaded files are removed
 // on failure. When false (Reinstall), repaired files are kept so partial
 // progress is not lost.
-func (mm *ModelManager) downloadModelFiles(entry *CatalogEntry, baseURL string, progress chan<- DownloadState, cleanupOnFailure bool) error {
+func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEntry, baseURL string, progress chan<- DownloadState, cleanupOnFailure bool) error {
 	log := GetLogger()
 
 	// Create model subdirectory.
@@ -745,7 +693,7 @@ func (mm *ModelManager) downloadModelFiles(entry *CatalogEntry, baseURL string, 
 		}
 		mm.mu.Unlock()
 
-		if err := mm.downloadFile(entry.ID, url, destPath, f.SHA256, f.SizeBytes, completedBytes); err != nil {
+		if err := mm.downloadFile(ctx, entry.ID, url, destPath, f.SHA256, f.SizeBytes, completedBytes); err != nil {
 			log.Error("Failed to download file",
 				logger.String("catalog_id", entry.ID),
 				logger.String("url", url),
@@ -1072,7 +1020,7 @@ var downloadHTTPClient = &http.Client{
 // polling. completedBytes is the cumulative size of previously downloaded
 // files, used so progress reflects total download, not just the current file.
 // On failure, any temporary file is cleaned up.
-func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 string, totalBytes, completedBytes int64) error {
+func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPath, expectedSHA256 string, totalBytes, completedBytes int64) error {
 	// Ensure parent directory exists.
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 		return errors.Newf("failed to create directory for %s: %v", destPath, err).
@@ -1103,7 +1051,15 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 		}
 	}()
 
-	resp, err := downloadHTTPClient.Get(url) //nolint:noctx // URL is constructed from catalog metadata, not user input
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return errors.Newf("failed to create request for %s: %v", url, err).
+			Component("classifier.model_manager").
+			Category(errors.CategoryNetwork).
+			Context("url", url).
+			Build()
+	}
+	resp, err := downloadHTTPClient.Do(req)
 	if err != nil {
 		return errors.Newf("HTTP request failed for %s: %v", url, err).
 			Component("classifier.model_manager").
@@ -1166,16 +1122,18 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 		}
 	}
 
-	// Verify checksum.
-	actualSHA256 := hex.EncodeToString(hasher.Sum(nil))
-	if actualSHA256 != expectedSHA256 {
-		return errors.Newf("checksum mismatch for %s: expected %s, got %s", destPath, expectedSHA256, actualSHA256).
-			Component("classifier.model_manager").
-			Category(errors.CategoryValidation).
-			Context("dest_path", destPath).
-			Context("expected_sha256", expectedSHA256).
-			Context("actual_sha256", actualSHA256).
-			Build()
+	// Verify checksum (skip when the catalog entry has no expected hash).
+	if expectedSHA256 != "" {
+		actualSHA256 := hex.EncodeToString(hasher.Sum(nil))
+		if actualSHA256 != expectedSHA256 {
+			return errors.Newf("checksum mismatch for %s: expected %s, got %s", destPath, expectedSHA256, actualSHA256).
+				Component("classifier.model_manager").
+				Category(errors.CategoryValidation).
+				Context("dest_path", destPath).
+				Context("expected_sha256", expectedSHA256).
+				Context("actual_sha256", actualSHA256).
+				Build()
+		}
 	}
 
 	// Close before rename so the file is flushed.
