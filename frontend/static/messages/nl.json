@@ -833,7 +833,8 @@
       }
     },
     "row": {
-      "viewDetails": "Bekijk details voor {species}"
+      "viewDetails": "Bekijk details voor {species}",
+      "openDetailFromStatus": "Detailpagina voor {species} openen"
     },
     "media": {
       "title": "Geluid opname & Spectrogram",

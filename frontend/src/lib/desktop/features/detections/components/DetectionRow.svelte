@@ -272,9 +272,19 @@
 </script>
 
 <!-- DetectionRow now returns table cells for proper table structure -->
-<!-- Date & Time -->
+<!-- Date & Time — clickable shortcut to the detection detail page.
+     Anchor (not button) so middle-click and right-click context-menu work
+     normally; onclick intercepts for SPA navigation when the user
+     left-clicks without a modifier. -->
 <td class="text-sm">
-  <span>{detection.date} {detection.time}</span>
+  <a
+    href={buildAppUrl(`/ui/detections/${detection.id}`)}
+    onclick={handleDetailsClick}
+    class="hover:text-primary transition-colors cursor-pointer"
+  >
+    {detection.date}
+    {detection.time}
+  </a>
 </td>
 
 <!-- Weather Column -->
@@ -402,9 +412,21 @@
   <ConfidenceCircle confidence={detection.confidence} size="md" />
 </td>
 
-<!-- Status -->
+<!-- Status — clickable shortcut to the detection detail page. Same
+     anchor pattern as the date/time cell above so the entire badge
+     area acts as a deep link. The StatusBadges component itself stays
+     a pure presentation component; the link wraps it. -->
 <td>
-  <StatusBadges {detection} />
+  <a
+    href={buildAppUrl(`/ui/detections/${detection.id}`)}
+    onclick={handleDetailsClick}
+    class="inline-block cursor-pointer"
+    aria-label={t('detections.row.openDetailFromStatus', {
+      species: detection.commonName,
+    })}
+  >
+    <StatusBadges {detection} />
+  </a>
 </td>
 
 <!-- Recording/Spectrogram -->

@@ -842,7 +842,8 @@
       }
     },
     "row": {
-      "viewDetails": "Näytä {species} tiedot"
+      "viewDetails": "Näytä {species} tiedot",
+      "openDetailFromStatus": "Avaa {species}-havainnon yksityiskohdat"
     },
     "media": {
       "title": "Tallenne ja spektrogrammi",
