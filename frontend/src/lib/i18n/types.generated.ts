@@ -664,6 +664,7 @@ export type TranslationKey =
   | 'detections.weather.conditions.fog'
   | 'detections.weather.conditions.unknown'
   | 'detections.row.viewDetails' // params: species
+  | 'detections.row.openDetailFromStatus' // params: species
   | 'detections.media.title'
   | 'detections.media.clipHint'
   | 'detections.tabs.overview'
@@ -3424,6 +3425,7 @@ export type TranslationParams = {
     total: string | number;
   };
   'detections.row.viewDetails': { species: string | number };
+  'detections.row.openDetailFromStatus': { species: string | number };
   'detections.aria.loaded': { species: string | number };
   'detections.aria.error': { error: string | number };
   'detections.errors.loadFailed': { status: string | number };

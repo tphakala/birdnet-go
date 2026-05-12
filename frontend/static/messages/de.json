@@ -861,7 +861,8 @@
       "noComments": "Keine Kommentare oder Notizen für diese Erkennung."
     },
     "row": {
-      "viewDetails": "Details für {species} anzeigen"
+      "viewDetails": "Details für {species} anzeigen",
+      "openDetailFromStatus": "Detailseite für {species} öffnen"
     },
     "aria": {
       "loading": "Erkennungsdetails werden geladen...",

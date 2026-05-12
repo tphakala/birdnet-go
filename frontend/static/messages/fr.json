@@ -819,7 +819,8 @@
       }
     },
     "row": {
-      "viewDetails": "Voir les détails pour {species}"
+      "viewDetails": "Voir les détails pour {species}",
+      "openDetailFromStatus": "Ouvrir la page de détail pour {species}"
     },
     "status": {
       "locked": "Verrouillé"
