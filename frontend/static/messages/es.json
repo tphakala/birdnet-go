@@ -884,13 +884,13 @@
       "cards": "Vista de tarjetas"
     },
     "reanalyze": {
-      "title": "Reanalizar con otro modelo",
+      "title": "Reanalizar este clip",
       "running": "Analizando…",
       "noPredictions": "No se devolvieron predicciones.",
       "colSpecies": "Especie",
       "button": "Reanalizar",
       "buttonAriaLabel": "Reanalizar el clip de {species} con otro modelo",
-      "descriptionMulti": "Cada clasificador cargado puntúa este clip abajo. Elige la fila correcta y pulsa 'Usar esta' para actualizar la detección.",
+      "descriptionMulti": "Abajo se muestra cómo puntúa cada clasificador cargado este clip. Pulsa 'Usar esta' en la fila que consideres correcta para actualizar la detección.",
       "multiModelSummary": "{models} • {duration} de audio",
       "useThis": "Usar esta",
       "useThisAriaLabel": "Aplicar esta especie ({species}) como detección corregida",
