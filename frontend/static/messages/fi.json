@@ -4495,7 +4495,18 @@
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists."
+      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "status": {
+        "title": "Aktiivinen aluesuodatin",
+        "model": "Malli",
+        "autoSelected": "Automaattisesti valittu",
+        "manual": "Manuaalinen",
+        "classifierModel": "Luokittelija",
+        "mappedSpecies": "Kartoitetut lajit",
+        "unmappedSpecies": "Kartoittamattomat lajit",
+        "totalSpecies": "Lajeja yhteensä",
+        "noFilter": "Ei aktiivista aluesuodatinta"
+      }
     },
     "advanced": {
       "title": "Advanced",
@@ -4555,7 +4566,11 @@
         "removeFailed": "Mallin poistaminen epäonnistui"
       },
       "regionLabel": "Alue",
-      "speciesLabel": "Lajit"
+      "speciesLabel": "Lajit",
+      "reinstall": "Asenna uudelleen",
+      "reinstalling": "Asennetaan uudelleen...",
+      "reinstallComplete": "Tiedostot tarkistettu onnistuneesti",
+      "geomodelBadge": "Sisältää BirdNET v3.0 -geomallin"
     }
   },
   "restart": {

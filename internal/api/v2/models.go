@@ -39,6 +39,7 @@ type CatalogEntryResponse struct {
 	Installed      bool   `json:"installed"`
 	Compatible     bool   `json:"compatible"`
 	TotalSizeBytes int64  `json:"totalSizeBytes"`
+	HasGeomodel    bool   `json:"hasGeomodel"`
 }
 
 // initModelRoutes registers model-related API routes.
@@ -47,6 +48,7 @@ func (c *Controller) initModelRoutes() {
 	c.Group.GET("/models/catalog", c.GetModelCatalog)
 	c.Group.GET("/models/installed", c.GetInstalledModels)
 	c.Group.POST("/models/install/:id", c.InstallModel, c.authMiddleware)
+	c.Group.POST("/models/reinstall/:id", c.ReinstallModel, c.authMiddleware)
 	c.Group.DELETE("/models/installed/:id", c.UninstallModel, c.authMiddleware)
 	c.Group.GET("/models/install/:id/progress", c.StreamInstallProgress)
 }
@@ -133,6 +135,7 @@ func (c *Controller) GetModelCatalog(ctx echo.Context) error {
 			Installed:      installed,
 			Compatible:     true, // build tag check deferred to a later task
 			TotalSizeBytes: totalSize,
+			HasGeomodel:    classifier.HasGeomodelFiles(entry),
 		})
 	}
 
@@ -180,6 +183,57 @@ func (c *Controller) InstallModel(ctx echo.Context) error {
 		}()
 		if err := c.ModelManager.Install(&entry, "", progressChan); err != nil {
 			c.logErrorIfEnabled("Model install failed",
+				logger.String("catalog_id", catalogID),
+				logger.Error(err),
+			)
+		}
+		close(progressChan)
+		// Drain remaining progress events so the channel does not leak.
+		for range progressChan {
+		}
+	})
+
+	return ctx.JSON(http.StatusAccepted, map[string]string{
+		"catalogId": catalogID,
+		"status":    classifier.StatusDownloading,
+	})
+}
+
+// ReinstallModel re-downloads missing or corrupt files for an installed model.
+// Files that pass SHA256 validation are skipped. It returns 202 Accepted
+// immediately while the re-download runs in the background.
+func (c *Controller) ReinstallModel(ctx echo.Context) error {
+	catalogID := ctx.Param("id")
+	if catalogID == "" {
+		return c.HandleError(ctx, nil, "catalog ID is required", http.StatusBadRequest)
+	}
+
+	entry, ok := classifier.GetCatalogEntry(catalogID)
+	if !ok {
+		return c.HandleError(ctx, nil, "unknown catalog ID: "+catalogID, http.StatusNotFound)
+	}
+
+	if c.ModelManager == nil {
+		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
+	}
+
+	if !c.ModelManager.IsInstalled(catalogID) {
+		return c.HandleError(ctx, nil, "model "+catalogID+" is not installed", http.StatusBadRequest)
+	}
+
+	// Start async reinstall in a background goroutine.
+	progressChan := make(chan classifier.DownloadState, 16)
+	c.wg.Go(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				c.logErrorIfEnabled("Panic during model reinstall",
+					logger.String("catalog_id", catalogID),
+					logger.Any("panic", r),
+				)
+			}
+		}()
+		if err := c.ModelManager.Reinstall(&entry, "", progressChan); err != nil {
+			c.logErrorIfEnabled("Model reinstall failed",
 				logger.String("catalog_id", catalogID),
 				logger.Error(err),
 			)

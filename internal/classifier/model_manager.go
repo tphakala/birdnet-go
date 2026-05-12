@@ -35,6 +35,10 @@ const (
 	StatusRemoved     = "removed"
 )
 
+// failedStateRetention is how long a failed download state is kept in the
+// downloading map so SSE pollers can observe the failure before cleanup.
+const failedStateRetention = 30 * time.Second
+
 // ModelManager handles the lifecycle of downloadable models.
 type ModelManager struct {
 	modelsDir    string
@@ -387,7 +391,7 @@ func (mm *ModelManager) cleanupSharedEmbeddings(log logger.Logger, catalogID str
 // model remains installed. The caller must hold mm.mu, and catalogID must
 // still be in mm.installed.
 func (mm *ModelManager) cleanupSharedGeomodel(log logger.Logger, catalogID string, entry *CatalogEntry) {
-	if !hasGeomodelFiles(entry) {
+	if !HasGeomodelFiles(entry) {
 		return
 	}
 	for id := range mm.installed {
@@ -395,7 +399,7 @@ func (mm *ModelManager) cleanupSharedGeomodel(log logger.Logger, catalogID strin
 			continue
 		}
 		other, found := GetCatalogEntry(id)
-		if found && hasGeomodelFiles(&other) {
+		if found && HasGeomodelFiles(&other) {
 			log.Debug("Retaining shared geomodel files; other dependent models still installed",
 				logger.String("catalog_id", catalogID))
 			return
@@ -421,8 +425,6 @@ func (mm *ModelManager) cleanupSharedGeomodel(log logger.Logger, catalogID strin
 // empty string to use the default HuggingFace URL constructed from the entry's
 // repo. Progress is reported via the channel if non-nil.
 func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
-	log := GetLogger()
-
 	// Check if already installed or already downloading.
 	mm.mu.Lock()
 	if _, ok := mm.installed[entry.ID]; ok {
@@ -449,6 +451,70 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	}
 	mm.mu.Unlock()
 
+	if err := mm.downloadModelFiles(entry, baseURL, progress, true); err != nil {
+		// Keep failed state briefly for SSE pollers, then clean up.
+		time.AfterFunc(failedStateRetention, func() {
+			mm.removeDownloading(entry.ID)
+		})
+		return err
+	}
+
+	return nil
+}
+
+// Reinstall re-downloads missing or corrupt files for an already-installed model.
+// Files that pass SHA256 validation are skipped. The baseURL parameter overrides
+// the HuggingFace URL for testing; pass an empty string to use the default.
+// Progress is reported via the channel if non-nil.
+func (mm *ModelManager) Reinstall(entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
+	// Check that the model IS installed (opposite of Install's guard).
+	mm.mu.Lock()
+	if _, ok := mm.installed[entry.ID]; !ok {
+		mm.mu.Unlock()
+		return errors.Newf("model %s is not installed", entry.ID).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("catalog_id", entry.ID).
+			Build()
+	}
+	if _, downloading := mm.downloading[entry.ID]; downloading {
+		mm.mu.Unlock()
+		return errors.Newf("model %s is already being downloaded", entry.ID).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("catalog_id", entry.ID).
+			Build()
+	}
+
+	// Record download as in-progress.
+	mm.downloading[entry.ID] = &DownloadState{
+		CatalogID: entry.ID,
+		Status:    StatusDownloading,
+	}
+	mm.mu.Unlock()
+
+	if err := mm.downloadModelFiles(entry, baseURL, progress, false); err != nil {
+		// Keep failed state briefly for SSE pollers, then clean up.
+		time.AfterFunc(failedStateRetention, func() {
+			mm.removeDownloading(entry.ID)
+		})
+		return err
+	}
+
+	return nil
+}
+
+// downloadModelFiles handles the actual file download, validation, recording,
+// config application, and hot-load for a catalog entry. The caller must have
+// already registered the entry in mm.downloading before calling this method.
+// On failure, downloadModelFiles calls markFailed but the caller is responsible
+// for scheduling cleanup of the download state (e.g., via time.AfterFunc).
+// When cleanupOnFailure is true (Install), newly downloaded files are removed
+// on failure. When false (Reinstall), repaired files are kept so partial
+// progress is not lost.
+func (mm *ModelManager) downloadModelFiles(entry *CatalogEntry, baseURL string, progress chan<- DownloadState, cleanupOnFailure bool) error {
+	log := GetLogger()
+
 	// Create model subdirectory.
 	subdir := filepath.Join(mm.modelsDir, entry.ID)
 	if err := os.MkdirAll(subdir, 0o755); err != nil {
@@ -459,9 +525,6 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 			Context("directory", subdir).
 			Build()
 		mm.markFailed(entry.ID, mkdirErr, progress)
-		time.AfterFunc(30*time.Second, func() {
-			mm.removeDownloading(entry.ID)
-		})
 		return mkdirErr
 	}
 
@@ -472,10 +535,6 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 		for _, f := range downloadedFiles {
 			_ = os.Remove(f)
 		}
-		// Keep failed state briefly for SSE pollers, then clean up.
-		time.AfterFunc(30*time.Second, func() {
-			mm.removeDownloading(entry.ID)
-		})
 	}
 
 	// fileDestPath returns the local destination for a catalog file.
@@ -561,7 +620,9 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 				logger.String("url", url),
 				logger.Error(err))
 			mm.markFailed(entry.ID, err, progress)
-			cleanup()
+			if cleanupOnFailure {
+				cleanup()
+			}
 			return err
 		}
 
@@ -701,7 +762,7 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 	}
 
 	// Apply geomodel range filter config if this entry includes geomodel files.
-	if hasGeomodelFiles(entry) && entry.GeomodelVersion != "" {
+	if HasGeomodelFiles(entry) && entry.GeomodelVersion != "" {
 		updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
 		for _, f := range entry.Files {
 			switch f.Role {
@@ -790,11 +851,11 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 
 	// Reset geomodel range filter config if no other geomodel-dependent model remains.
 	// mm.installed no longer contains the uninstalled entry (deleted by caller).
-	if hasGeomodelFiles(entry) {
+	if HasGeomodelFiles(entry) {
 		otherGeomodel := false
 		for id := range mm.installed {
 			other, found := GetCatalogEntry(id)
-			if found && hasGeomodelFiles(&other) {
+			if found && HasGeomodelFiles(&other) {
 				otherGeomodel = true
 				break
 			}

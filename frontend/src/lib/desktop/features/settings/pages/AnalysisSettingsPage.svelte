@@ -31,6 +31,7 @@
   import {
     fetchCatalog,
     installModel,
+    reinstallModel,
     uninstallModel,
     subscribeInstallProgress,
   } from '$lib/utils/modelsApi';
@@ -108,6 +109,7 @@
 
   let installingId = $state<string | null>(null);
   let deletingId = $state<string | null>(null);
+  let reinstallingId = $state<string | null>(null);
   let downloadProgress = $state<DownloadProgress | null>(null);
   let completionTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -336,6 +338,32 @@
     commonName?: string;
     scientificName?: string;
     label?: string;
+  }
+
+  interface RangeFilterStatus {
+    model: string;
+    modelPath: string;
+    labelsPath: string;
+    autoSelected: boolean;
+    classifierModel: string;
+    geomodelSpecies: number;
+    classifierSpecies: number;
+    mappedSpecies: number;
+    unmappedSpecies: number;
+    passUnmappedSpecies: boolean;
+    threshold: number;
+    locationConfigured: boolean;
+    lastUpdated: string;
+  }
+
+  let rangeFilterStatus = $state<RangeFilterStatus | null>(null);
+
+  async function loadRangeFilterStatus() {
+    try {
+      rangeFilterStatus = await api.get<RangeFilterStatus>('/api/v2/range/status');
+    } catch (err) {
+      logger.error('Failed to load range filter status:', err);
+    }
   }
 
   let rangeFilterState = $state<{
@@ -671,6 +699,7 @@
     loadCatalog();
     loadBirdnetLocales();
     loadRangeFilterCount();
+    loadRangeFilterStatus();
     return () => {
       if (progressCleanup) progressCleanup();
       clearTimeout(completionTimer);
@@ -773,6 +802,52 @@
       error = e instanceof Error ? e.message : t('analysis.gallery.errors.removeFailed');
     } finally {
       deletingId = null;
+    }
+  }
+
+  async function handleReinstall(entry: CatalogEntry) {
+    if (reinstallingId || installingId) return;
+    reinstallingId = entry.id;
+    downloadProgress = null;
+
+    try {
+      await reinstallModel(entry.id);
+
+      progressCleanup = subscribeInstallProgress(
+        entry.id,
+        (progress: DownloadProgress) => {
+          downloadProgress = progress;
+        },
+        () => {
+          downloadProgress = {
+            catalogId: entry.id,
+            status: 'complete',
+            downloadedBytes: 0,
+            totalBytes: 0,
+            currentFile: 0,
+            totalFiles: 0,
+          };
+          progressCleanup = null;
+          clearTimeout(completionTimer);
+          completionTimer = setTimeout(() => {
+            if (reinstallingId === entry.id) {
+              reinstallingId = null;
+              downloadProgress = null;
+            }
+            invalidateModels();
+            loadCatalog();
+          }, 2000);
+        },
+        (err: string) => {
+          error = err;
+          reinstallingId = null;
+          downloadProgress = null;
+          progressCleanup = null;
+        }
+      );
+    } catch (e) {
+      error = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
+      reinstallingId = null;
     }
   }
 
@@ -1004,6 +1079,68 @@
         </div>
       </div>
 
+      {#if rangeFilterStatus && rangeFilterStatus.model}
+        <div
+          class="mt-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)]/50 p-4"
+        >
+          <h4 class="text-sm font-medium text-[var(--color-base-content)] mb-3">
+            {t('analysis.rangeFilter.status.title')}
+          </h4>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+            <div>
+              <span class="text-[var(--color-base-content)]/60"
+                >{t('analysis.rangeFilter.status.model')}</span
+              >
+              <span class="ml-2 font-medium">{rangeFilterStatus.model}</span>
+            </div>
+            <div>
+              <span class="text-[var(--color-base-content)]/60"
+                >{t('analysis.rangeFilter.status.classifierModel')}</span
+              >
+              <span class="ml-2 font-medium">{rangeFilterStatus.classifierModel}</span>
+            </div>
+            <div>
+              <span
+                class={cn(
+                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                  rangeFilterStatus.autoSelected
+                    ? 'bg-[var(--color-success)]/15 text-[var(--color-success)]'
+                    : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/80'
+                )}
+              >
+                {rangeFilterStatus.autoSelected
+                  ? t('analysis.rangeFilter.status.autoSelected')
+                  : t('analysis.rangeFilter.status.manual')}
+              </span>
+            </div>
+            <div>
+              <span class="text-[var(--color-base-content)]/60"
+                >{t('analysis.rangeFilter.status.mappedSpecies')}</span
+              >
+              <span class="ml-2 font-medium tabular-nums"
+                >{rangeFilterStatus.mappedSpecies.toLocaleString()}</span
+              >
+            </div>
+            <div>
+              <span class="text-[var(--color-base-content)]/60"
+                >{t('analysis.rangeFilter.status.unmappedSpecies')}</span
+              >
+              <span class="ml-2 font-medium tabular-nums"
+                >{rangeFilterStatus.unmappedSpecies.toLocaleString()}</span
+              >
+            </div>
+            <div>
+              <span class="text-[var(--color-base-content)]/60"
+                >{t('analysis.rangeFilter.status.totalSpecies')}</span
+              >
+              <span class="ml-2 font-medium tabular-nums"
+                >{rangeFilterStatus.geomodelSpecies.toLocaleString()}</span
+              >
+            </div>
+          </div>
+        </div>
+      {/if}
+
       {#if rangeFilterState.error}
         <div
           class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
@@ -1201,6 +1338,8 @@
         <!-- Installed additional models -->
         {#each installedEntries as entry (entry.id)}
           {@const isDeleting = deletingId === entry.id}
+          {@const isReinstalling = reinstallingId === entry.id}
+          {@const reinstallProgress = isReinstalling ? downloadProgress : null}
           {@const logo = getModelLogo(entry.id)}
           <div
             class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4"
@@ -1225,6 +1364,44 @@
                 <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
               </div>
             </div>
+            <!-- Progress bar (shown during reinstall) -->
+            {#if reinstallProgress}
+              <div class="mt-3 space-y-1.5">
+                {#if reinstallProgress.status === 'complete'}
+                  <div
+                    class="flex items-center gap-2 text-sm font-medium text-[var(--color-success)]"
+                  >
+                    <Check class="h-4 w-4" />
+                    <span>{t('analysis.gallery.reinstallComplete')}</span>
+                  </div>
+                {:else}
+                  <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--color-base-300)]">
+                    <div
+                      class="h-full rounded-full bg-[var(--color-primary)] transition-all duration-300"
+                      style:width="{progressPercent(reinstallProgress)}%"
+                    ></div>
+                  </div>
+                  <div
+                    class="flex items-center justify-between text-xs text-[var(--color-base-content)]/80"
+                  >
+                    <span>
+                      {statusLabel(
+                        reinstallProgress.status
+                      )}{#if reinstallProgress.status === 'downloading' && reinstallProgress.totalFiles > 1}
+                        ({reinstallProgress.currentFile}/{reinstallProgress.totalFiles})
+                      {/if}
+                    </span>
+                    {#if reinstallProgress.status === 'downloading' && reinstallProgress.totalBytes > 0}
+                      <span>
+                        {formatBytes(reinstallProgress.downloadedBytes)} / {formatBytes(
+                          reinstallProgress.totalBytes
+                        )}
+                      </span>
+                    {/if}
+                  </div>
+                {/if}
+              </div>
+            {/if}
             <!-- Metadata grid -->
             <div
               class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
@@ -1242,11 +1419,35 @@
                 {t('analysis.gallery.species', { count: entry.speciesCount })}
               </div>
             </div>
+            <!-- Geomodel badge -->
+            {#if entry.hasGeomodel}
+              <div class="mt-2">
+                <span
+                  class="inline-flex items-center gap-1 rounded-full bg-[var(--color-info)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-info)]"
+                >
+                  {t('analysis.gallery.geomodelBadge')}
+                </span>
+              </div>
+            {/if}
             <!-- Action footer -->
-            <div class="mt-3 flex items-center justify-end">
+            <div class="mt-3 flex items-center justify-end gap-2">
+              <button
+                onclick={() => handleReinstall(entry)}
+                disabled={reinstallingId !== null || installingId !== null || isDeleting}
+                class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-base-content)]/80 hover:bg-[var(--color-base-300)] transition-colors disabled:opacity-50"
+                aria-label="{t('analysis.gallery.reinstall')} {entry.name}"
+              >
+                {#if isReinstalling}
+                  <Loader2 class="size-3.5 animate-spin" />
+                  {t('analysis.gallery.reinstalling')}
+                {:else}
+                  <RefreshCw class="size-3.5" />
+                  {t('analysis.gallery.reinstall')}
+                {/if}
+              </button>
               <button
                 onclick={() => openRemoveDialog(entry)}
-                disabled={isDeleting}
+                disabled={isDeleting || isReinstalling || installingId !== null}
                 class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors disabled:opacity-50"
                 aria-label="{t('analysis.gallery.remove')} {entry.name}"
               >
@@ -1382,6 +1583,17 @@
         {/if}
       </div>
     </div>
+
+    <!-- Geomodel badge -->
+    {#if entry.hasGeomodel}
+      <div class="mt-2">
+        <span
+          class="inline-flex items-center gap-1 rounded-full bg-[var(--color-info)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-info)]"
+        >
+          {t('analysis.gallery.geomodelBadge')}
+        </span>
+      </div>
+    {/if}
 
     <!-- Action footer (pushed to bottom via mt-auto) -->
     <div class="mt-auto flex items-center justify-end pt-3">
