@@ -85,7 +85,7 @@
     "@axe-core/playwright": "^4.11.1",
     "@eslint/js": "^10.0.1",
     "@formatjs/icu-messageformat-parser": "^3.5.4",
-    "@playwright/test": "^1.59.1",
+    "@playwright/test": "^1.60.0",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@tailwindcss/vite": "^4.2.4",
     "@testing-library/jest-dom": "^6.9.1",
