@@ -886,12 +886,18 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 		return true, confidenceThreshold
 	}
 
-	// Range filter applies only to BirdNET; Bat/Perch have independent species sets.
-	if strings.HasPrefix(modelID, detection.DefaultModelName) && !settings.IsSpeciesIncluded(result.Species) {
+	// Apply range filter to all bird classifiers when location-based filtering is active.
+	// Bat is excluded: bat species are not in the bird range filter species list.
+	// For non-BirdNET models (Perch, BSG, etc.), only apply when location is configured:
+	// the species list is built from BirdNET labels, so model-exclusive species absent
+	// from BirdNET's label set would be incorrectly filtered when no location is set.
+	isBirdNETModel := strings.HasPrefix(modelID, detection.DefaultModelName)
+	if modelID != classifier.RegistryIDBat && (isBirdNETModel || settings.BirdNET.LocationConfigured) && !settings.IsSpeciesIncluded(result.Species) {
 		if settings.Debug {
 			GetLogger().Debug("species not on included list",
 				logger.String("species", result.Species),
 				logger.Float32("confidence", result.Confidence),
+				logger.String("model_id", modelID),
 				logger.String("operation", "species_inclusion_filter"))
 		}
 		return true, confidenceThreshold
