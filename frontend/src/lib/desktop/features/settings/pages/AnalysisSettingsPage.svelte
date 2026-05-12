@@ -806,7 +806,7 @@
   }
 
   async function handleReinstall(entry: CatalogEntry) {
-    if (reinstallingId) return;
+    if (reinstallingId || installingId) return;
     reinstallingId = entry.id;
     downloadProgress = null;
 
@@ -1433,7 +1433,7 @@
             <div class="mt-3 flex items-center justify-end gap-2">
               <button
                 onclick={() => handleReinstall(entry)}
-                disabled={isReinstalling || isDeleting || reinstallingId !== null}
+                disabled={reinstallingId !== null || installingId !== null || isDeleting}
                 class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-base-content)]/80 hover:bg-[var(--color-base-300)] transition-colors disabled:opacity-50"
                 aria-label="{t('analysis.gallery.reinstall')} {entry.name}"
               >
@@ -1447,7 +1447,7 @@
               </button>
               <button
                 onclick={() => openRemoveDialog(entry)}
-                disabled={isDeleting || isReinstalling}
+                disabled={isDeleting || isReinstalling || installingId !== null}
                 class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors disabled:opacity-50"
                 aria-label="{t('analysis.gallery.remove')} {entry.name}"
               >

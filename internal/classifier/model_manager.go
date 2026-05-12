@@ -451,7 +451,7 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	}
 	mm.mu.Unlock()
 
-	if err := mm.downloadModelFiles(entry, baseURL, progress); err != nil {
+	if err := mm.downloadModelFiles(entry, baseURL, progress, true); err != nil {
 		// Keep failed state briefly for SSE pollers, then clean up.
 		time.AfterFunc(failedStateRetention, func() {
 			mm.removeDownloading(entry.ID)
@@ -493,7 +493,7 @@ func (mm *ModelManager) Reinstall(entry *CatalogEntry, baseURL string, progress 
 	}
 	mm.mu.Unlock()
 
-	if err := mm.downloadModelFiles(entry, baseURL, progress); err != nil {
+	if err := mm.downloadModelFiles(entry, baseURL, progress, false); err != nil {
 		// Keep failed state briefly for SSE pollers, then clean up.
 		time.AfterFunc(failedStateRetention, func() {
 			mm.removeDownloading(entry.ID)
@@ -509,7 +509,10 @@ func (mm *ModelManager) Reinstall(entry *CatalogEntry, baseURL string, progress 
 // already registered the entry in mm.downloading before calling this method.
 // On failure, downloadModelFiles calls markFailed but the caller is responsible
 // for scheduling cleanup of the download state (e.g., via time.AfterFunc).
-func (mm *ModelManager) downloadModelFiles(entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
+// When cleanupOnFailure is true (Install), newly downloaded files are removed
+// on failure. When false (Reinstall), repaired files are kept so partial
+// progress is not lost.
+func (mm *ModelManager) downloadModelFiles(entry *CatalogEntry, baseURL string, progress chan<- DownloadState, cleanupOnFailure bool) error {
 	log := GetLogger()
 
 	// Create model subdirectory.
@@ -617,7 +620,9 @@ func (mm *ModelManager) downloadModelFiles(entry *CatalogEntry, baseURL string, 
 				logger.String("url", url),
 				logger.Error(err))
 			mm.markFailed(entry.ID, err, progress)
-			cleanup()
+			if cleanupOnFailure {
+				cleanup()
+			}
 			return err
 		}
 
