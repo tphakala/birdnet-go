@@ -180,7 +180,7 @@
   });
 </script>
 
-<Modal {isOpen} title={t('detections.reanalyze.title')} {onClose}>
+<Modal {isOpen} title={t('detections.reanalyze.title')} size="3xl" {onClose}>
   <div class="space-y-4">
     <p class="text-sm text-base-content/70">
       {t('detections.reanalyze.descriptionMulti')}
