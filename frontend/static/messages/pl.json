@@ -881,6 +881,22 @@
       "label": "Tryb widoku",
       "table": "Widok tabeli",
       "cards": "Widok kart"
+    },
+    "reanalyze": {
+      "title": "Ponownie przeanalizuj innym modelem",
+      "description": "Przepuść ten klip przez inny klasyfikator i zobacz, co przewidzi. Nic nie jest zapisywane — to jednorazowa druga opinia.",
+      "modelLabel": "Model",
+      "loadingModels": "Ładowanie dostępnych modeli…",
+      "noOtherModels": "Brak innych załadowanych modeli. Najpierw włącz dodatkowe modele w Ustawienia → Modele.",
+      "run": "Uruchom ponowną analizę",
+      "running": "Analizowanie…",
+      "summary": "{model} • {duration} audio w {windows} oknach",
+      "noPredictions": "Nie zwrócono żadnych przewidywań.",
+      "colSpecies": "Gatunek",
+      "colConfidence": "Pewność",
+      "button": "Przeanalizuj ponownie",
+      "buttonAriaLabel": "Przeanalizuj klip {species} ponownie innym modelem",
+      "duplicateInFlight": "Dla tej detekcji już trwa ponowna analiza."
     }
   },
   "species": {

@@ -881,6 +881,22 @@
       "label": "Ansichtsmodus",
       "table": "Tabellenansicht",
       "cards": "Kartenansicht"
+    },
+    "reanalyze": {
+      "title": "Mit anderem Modell neu analysieren",
+      "description": "Diesen Clip durch einen anderen Klassifikator laufen lassen und die Vorhersage ansehen. Nichts wird gespeichert — dies ist eine einmalige Zweitmeinung.",
+      "modelLabel": "Modell",
+      "loadingModels": "Verfügbare Modelle werden geladen…",
+      "noOtherModels": "Keine weiteren Modelle geladen. Aktiviere zusätzliche Modelle zuerst in Einstellungen → Modelle.",
+      "run": "Neu analysieren",
+      "running": "Wird analysiert…",
+      "summary": "{model} • {duration} Audio über {windows} Fenster",
+      "noPredictions": "Keine Vorhersagen zurückgegeben.",
+      "colSpecies": "Art",
+      "colConfidence": "Konfidenz",
+      "button": "Neu analysieren",
+      "buttonAriaLabel": "{species}-Clip mit anderem Modell neu analysieren",
+      "duplicateInFlight": "Für diese Erkennung läuft bereits eine Neuanalyse."
     }
   },
   "species": {
