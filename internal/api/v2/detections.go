@@ -173,6 +173,7 @@ type DetectionResponse struct {
 	Locked             bool              `json:"locked"`
 	Comments           []CommentResponse `json:"comments,omitempty"`
 	Weather            *WeatherInfo      `json:"weather,omitempty"`
+	ClipName           string            `json:"clipName,omitempty"` // Relative path of saved audio clip; empty when no clip is on disk
 	TimeOfDay          string            `json:"timeOfDay,omitempty"`
 	IsNewSpecies       bool              `json:"isNewSpecies,omitempty"`       // First seen within tracking window
 	DaysSinceFirstSeen int               `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
@@ -652,6 +653,7 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 		ScientificName: note.ScientificName,
 		CommonName:     note.CommonName,
 		Confidence:     note.Confidence,
+		ClipName:       note.ClipName,
 		Locked:         note.Locked,
 	}
 
