@@ -131,7 +131,7 @@ func TestModelManager_UninstallRemovesModelRetainsLabels(t *testing.T) {
 	// Create all catalog files on disk in their expected locations.
 	for _, f := range entry.Files {
 		var dir string
-		if f.Role == RoleEmbeddings || f.Role == RoleGeomodel {
+		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
 			dir = filepath.Join(modelsDir, "shared")
 		} else {
 			dir = subdir
@@ -151,18 +151,18 @@ func TestModelManager_UninstallRemovesModelRetainsLabels(t *testing.T) {
 	// shared geomodel files should be gone (no other dependent model installed).
 	for _, f := range entry.Files {
 		var path string
-		if f.Role == RoleEmbeddings || f.Role == RoleGeomodel {
+		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
 			path = filepath.Join(modelsDir, "shared", f.LocalName)
 		} else {
 			path = filepath.Join(subdir, f.LocalName)
 		}
 		_, err := os.Stat(path)
-		switch f.Role {
-		case RoleModel:
+		switch {
+		case f.Role == RoleModel:
 			assert.True(t, os.IsNotExist(err), "model file %s should be deleted", f.LocalName)
-		case RoleLabels:
+		case f.Role == RoleLabels:
 			require.NoError(t, err, "labels file %s should be retained", f.LocalName)
-		case RoleGeomodel:
+		case isGeomodelRole(f.Role):
 			assert.True(t, os.IsNotExist(err), "geomodel file %s should be deleted when no dependents remain", f.LocalName)
 		}
 	}
@@ -427,7 +427,7 @@ func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
 	// Create all catalog files on disk in their expected locations.
 	for _, f := range entry.Files {
 		var dir string
-		if f.Role == RoleEmbeddings || f.Role == RoleGeomodel {
+		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
 			dir = filepath.Join(modelsDir, "shared")
 		} else {
 			dir = subdir
@@ -453,18 +453,18 @@ func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
 	// Verify per-role file expectations after uninstall.
 	for _, f := range entry.Files {
 		var path string
-		if f.Role == RoleEmbeddings || f.Role == RoleGeomodel {
+		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
 			path = filepath.Join(modelsDir, "shared", f.LocalName)
 		} else {
 			path = filepath.Join(subdir, f.LocalName)
 		}
 		_, statErr := os.Stat(path)
-		switch f.Role {
-		case RoleModel, RoleData:
+		switch {
+		case f.Role == RoleModel || f.Role == RoleData:
 			assert.True(t, os.IsNotExist(statErr), "%s file %s must be deleted after uninstall", f.Role, f.LocalName)
-		case RoleLabels:
+		case f.Role == RoleLabels:
 			require.NoError(t, statErr, "labels file %s must be retained after uninstall", f.LocalName)
-		case RoleGeomodel:
+		case isGeomodelRole(f.Role):
 			assert.True(t, os.IsNotExist(statErr), "geomodel file %s must be deleted when no dependents remain", f.LocalName)
 		}
 	}
@@ -483,7 +483,7 @@ func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 
 	for _, f := range entry.Files {
 		var dir string
-		if f.Role == RoleEmbeddings || f.Role == RoleGeomodel {
+		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
 			dir = filepath.Join(modelsDir, "shared")
 		} else {
 			dir = subdir
@@ -516,7 +516,7 @@ func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 	// All files must still exist on disk.
 	for _, f := range entry.Files {
 		var path string
-		if f.Role == RoleEmbeddings || f.Role == RoleGeomodel {
+		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
 			path = filepath.Join(modelsDir, "shared", f.LocalName)
 		} else {
 			path = filepath.Join(subdir, f.LocalName)
@@ -562,8 +562,8 @@ func TestModelManager_Install_SharedGeomodel(t *testing.T) {
 		Files: []CatalogFile{
 			{RemotePath: "model.onnx", LocalName: "model.onnx", Role: RoleModel, SHA256: modelChecksum, SizeBytes: int64(len(modelContent))},
 			{RemotePath: "labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: labelsChecksum, SizeBytes: int64(len(labelsContent))},
-			{RemotePath: "geomodel.onnx", LocalName: "geomodel_v3.onnx", Role: RoleGeomodel, SHA256: geomodelChecksum, SizeBytes: int64(len(geomodelContent))},
-			{RemotePath: "geomodel_labels.txt", LocalName: "geomodel_v3_labels.txt", Role: RoleGeomodel, SHA256: geomodelLabelsChecksum, SizeBytes: int64(len(geomodelLabelsContent))},
+			{RemotePath: "geomodel.onnx", LocalName: "geomodel_v3.onnx", Role: RoleGeomodelModel, SHA256: geomodelChecksum, SizeBytes: int64(len(geomodelContent))},
+			{RemotePath: "geomodel_labels.txt", LocalName: "geomodel_v3_labels.txt", Role: RoleGeomodelLabels, SHA256: geomodelLabelsChecksum, SizeBytes: int64(len(geomodelLabelsContent))},
 		},
 	}
 
@@ -625,7 +625,7 @@ func TestModelManager_Install_GeomodelSkipsExisting(t *testing.T) {
 		HuggingFaceRepo: "test/repo",
 		Files: []CatalogFile{
 			{RemotePath: "model.onnx", LocalName: "model.onnx", Role: RoleModel, SHA256: modelChecksum, SizeBytes: int64(len(modelContent))},
-			{RemotePath: "geomodel.onnx", LocalName: "geomodel.onnx", Role: RoleGeomodel, SHA256: geomodelChecksum, SizeBytes: int64(len(geomodelContent))},
+			{RemotePath: "geomodel.onnx", LocalName: "geomodel.onnx", Role: RoleGeomodelModel, SHA256: geomodelChecksum, SizeBytes: int64(len(geomodelContent))},
 		},
 	}
 
@@ -662,7 +662,7 @@ func TestModelManager_Uninstall_GeomodelRetainedWhenDependentExists(t *testing.T
 		require.NoError(t, os.MkdirAll(subdir, 0o755))
 		for _, f := range entry.Files {
 			var dir string
-			if f.Role == RoleEmbeddings || f.Role == RoleGeomodel {
+			if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
 				dir = sharedDir
 			} else {
 				dir = subdir
@@ -681,7 +681,7 @@ func TestModelManager_Uninstall_GeomodelRetainedWhenDependentExists(t *testing.T
 
 	// Shared geomodel files should be retained.
 	for _, f := range entryPerch.Files {
-		if f.Role == RoleGeomodel {
+		if isGeomodelRole(f.Role) {
 			path := filepath.Join(sharedDir, f.LocalName)
 			_, err := os.Stat(path)
 			require.NoError(t, err, "geomodel file %s must be retained while birdnet-v3.0 is installed", f.LocalName)
@@ -693,7 +693,7 @@ func TestModelManager_Uninstall_GeomodelRetainedWhenDependentExists(t *testing.T
 
 	// Shared geomodel files should now be deleted.
 	for _, f := range entryV3.Files {
-		if f.Role == RoleGeomodel {
+		if isGeomodelRole(f.Role) {
 			path := filepath.Join(sharedDir, f.LocalName)
 			_, err := os.Stat(path)
 			assert.True(t, os.IsNotExist(err), "geomodel file %s must be deleted when no dependents remain", f.LocalName)
@@ -711,7 +711,7 @@ func TestModelManager_Install_PerFileHuggingFaceRepo(t *testing.T) {
 		HuggingFaceRepo: "main-repo",
 		Files: []CatalogFile{
 			{RemotePath: "model.onnx", LocalName: "model.onnx", Role: RoleModel},
-			{RemotePath: "companion.bin", LocalName: "companion.bin", Role: RoleGeomodel, HuggingFaceRepo: "companion-repo"},
+			{RemotePath: "companion.bin", LocalName: "companion.bin", Role: RoleGeomodelModel, HuggingFaceRepo: "companion-repo"},
 		},
 	}
 
@@ -766,9 +766,10 @@ func TestModelManager_Install_GeomodelConfigWiring(t *testing.T) {
 		Files: []CatalogFile{
 			{RemotePath: "model.onnx", LocalName: "model.onnx", Role: RoleModel, SHA256: sha256Hex(modelContent), SizeBytes: int64(len(modelContent))},
 			{RemotePath: "labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: sha256Hex(labelsContent), SizeBytes: int64(len(labelsContent))},
-			{RemotePath: "geomodel.onnx", LocalName: "geomodel_v3.onnx", Role: RoleGeomodel, SHA256: sha256Hex(geomodelContent), SizeBytes: int64(len(geomodelContent))},
-			{RemotePath: "geomodel_labels.txt", LocalName: "geomodel_v3_labels.txt", Role: RoleGeomodel, SHA256: sha256Hex(geomodelLabelsContent), SizeBytes: int64(len(geomodelLabelsContent))},
+			{RemotePath: "geomodel.onnx", LocalName: "geomodel_v3.onnx", Role: RoleGeomodelModel, SHA256: sha256Hex(geomodelContent), SizeBytes: int64(len(geomodelContent))},
+			{RemotePath: "geomodel_labels.txt", LocalName: "geomodel_v3_labels.txt", Role: RoleGeomodelLabels, SHA256: sha256Hex(geomodelLabelsContent), SizeBytes: int64(len(geomodelLabelsContent))},
 		},
+		GeomodelVersion: "v3",
 	}
 
 	// Save original settings to restore after test.
@@ -823,9 +824,10 @@ func TestModelManager_Uninstall_GeomodelConfigClearing(t *testing.T) {
 		Files: []CatalogFile{
 			{RemotePath: "model.onnx", LocalName: "model.onnx", Role: RoleModel, SHA256: sha256Hex(modelContent), SizeBytes: int64(len(modelContent))},
 			{RemotePath: "labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: sha256Hex(labelsContent), SizeBytes: int64(len(labelsContent))},
-			{RemotePath: "geomodel.onnx", LocalName: "geomodel_v3.onnx", Role: RoleGeomodel, SHA256: sha256Hex(geomodelContent), SizeBytes: int64(len(geomodelContent))},
-			{RemotePath: "geomodel_labels.txt", LocalName: "geomodel_v3_labels.txt", Role: RoleGeomodel, SHA256: sha256Hex(geomodelLabelsContent), SizeBytes: int64(len(geomodelLabelsContent))},
+			{RemotePath: "geomodel.onnx", LocalName: "geomodel_v3.onnx", Role: RoleGeomodelModel, SHA256: sha256Hex(geomodelContent), SizeBytes: int64(len(geomodelContent))},
+			{RemotePath: "geomodel_labels.txt", LocalName: "geomodel_v3_labels.txt", Role: RoleGeomodelLabels, SHA256: sha256Hex(geomodelLabelsContent), SizeBytes: int64(len(geomodelLabelsContent))},
 		},
+		GeomodelVersion: "v3",
 	}
 
 	origSettings := conf.GetSettings()
@@ -879,10 +881,18 @@ func TestHasGeomodelFiles(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "has geomodel files",
+			name: "has geomodel model file",
 			entry: CatalogEntry{Files: []CatalogFile{
 				{Role: RoleModel},
-				{Role: RoleGeomodel},
+				{Role: RoleGeomodelModel},
+			}},
+			want: true,
+		},
+		{
+			name: "has geomodel labels file",
+			entry: CatalogEntry{Files: []CatalogFile{
+				{Role: RoleModel},
+				{Role: RoleGeomodelLabels},
 			}},
 			want: true,
 		},
@@ -909,7 +919,7 @@ func TestCatalog_GeomodelFilesOnPerchAndBirdNET(t *testing.T) {
 
 			var geoFileCount int
 			for _, f := range entry.Files {
-				if f.Role == RoleGeomodel {
+				if isGeomodelRole(f.Role) {
 					geoFileCount++
 					assert.NotEmpty(t, f.SHA256, "geomodel file %s must have a SHA256 checksum", f.LocalName)
 					assert.Positive(t, f.SizeBytes, "geomodel file %s must have a non-zero size", f.LocalName)
@@ -919,6 +929,156 @@ func TestCatalog_GeomodelFilesOnPerchAndBirdNET(t *testing.T) {
 			assert.Equal(t, 2, geoFileCount, "expected exactly 2 geomodel files (ONNX + labels)")
 		})
 	}
+}
+
+func TestVerifySHA256(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("test file content for SHA256 verification")
+	expectedHash := sha256Hex(content)
+
+	t.Run("valid file matches", func(t *testing.T) {
+		t.Parallel()
+		path := filepath.Join(t.TempDir(), "valid.bin")
+		require.NoError(t, os.WriteFile(path, content, 0o644))
+		assert.True(t, verifySHA256(path, expectedHash))
+	})
+
+	t.Run("corrupt file mismatches", func(t *testing.T) {
+		t.Parallel()
+		path := filepath.Join(t.TempDir(), "corrupt.bin")
+		require.NoError(t, os.WriteFile(path, []byte("wrong content"), 0o644))
+		assert.False(t, verifySHA256(path, expectedHash))
+	})
+
+	t.Run("missing file returns false", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, verifySHA256(filepath.Join(t.TempDir(), "missing.bin"), expectedHash))
+	})
+
+	t.Run("empty expected hash skips validation", func(t *testing.T) {
+		t.Parallel()
+		path := filepath.Join(t.TempDir(), "any.bin")
+		require.NoError(t, os.WriteFile(path, []byte("anything"), 0o644))
+		assert.True(t, verifySHA256(path, ""))
+	})
+}
+
+func TestModelManager_Install_RedownloadsCorruptSharedFile(t *testing.T) {
+	t.Parallel()
+
+	modelContent := []byte("model-data")
+	geomodelContent := []byte("correct-geomodel-data")
+	modelChecksum := sha256Hex(modelContent)
+	geomodelChecksum := sha256Hex(geomodelContent)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case testPathModelONNX:
+			_, _ = w.Write(modelContent)
+		case testPathGeomodel:
+			_, _ = w.Write(geomodelContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	modelsDir := t.TempDir()
+
+	// Pre-create a corrupt shared file.
+	sharedDir := filepath.Join(modelsDir, "shared")
+	require.NoError(t, os.MkdirAll(sharedDir, 0o755))
+	corruptPath := filepath.Join(sharedDir, "geomodel.onnx")
+	require.NoError(t, os.WriteFile(corruptPath, []byte("corrupt-data"), 0o644))
+
+	entry := CatalogEntry{
+		ID:              "test-redownload-corrupt",
+		Name:            "Redownload Corrupt Test",
+		Version:         "1.0",
+		HuggingFaceRepo: "test/repo",
+		Files: []CatalogFile{
+			{RemotePath: "model.onnx", LocalName: "model.onnx", Role: RoleModel, SHA256: modelChecksum, SizeBytes: int64(len(modelContent))},
+			{RemotePath: "geomodel.onnx", LocalName: "geomodel.onnx", Role: RoleGeomodelModel, SHA256: geomodelChecksum, SizeBytes: int64(len(geomodelContent))},
+		},
+	}
+
+	mm := NewModelManager(modelsDir, nil, nil)
+	err := mm.Install(&entry, srv.URL, nil)
+	require.NoError(t, err)
+
+	// Verify the corrupt file was replaced with correct content.
+	got, err := os.ReadFile(corruptPath)
+	require.NoError(t, err)
+	assert.Equal(t, geomodelContent, got, "corrupt shared file should be re-downloaded")
+}
+
+func TestModelManager_Install_GeomodelVersionWiring(t *testing.T) {
+	// Not parallel: mutates global settings via conf.StoreSettings.
+
+	modelContent := []byte("perch-model")
+	labelsContent := []byte("labels")
+	geomodelContent := []byte("geo-onnx")
+	geomodelLabelsContent := []byte("geo-labels")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case testPathModelONNX:
+			_, _ = w.Write(modelContent)
+		case testPathLabels:
+			_, _ = w.Write(labelsContent)
+		case testPathGeomodel:
+			_, _ = w.Write(geomodelContent)
+		case testPathGeoLabels:
+			_, _ = w.Write(geomodelLabelsContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	entry := CatalogEntry{
+		ID:              "test-geomodel-version",
+		Name:            "Geomodel Version Test",
+		Version:         "1.0",
+		GeomodelVersion: "v3",
+		RegistryID:      RegistryIDPerchV2,
+		HuggingFaceRepo: "test/repo",
+		Files: []CatalogFile{
+			{RemotePath: "model.onnx", LocalName: "model.onnx", Role: RoleModel, SHA256: sha256Hex(modelContent), SizeBytes: int64(len(modelContent))},
+			{RemotePath: "labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: sha256Hex(labelsContent), SizeBytes: int64(len(labelsContent))},
+			{RemotePath: "geomodel.onnx", LocalName: "geo_v3.onnx", Role: RoleGeomodelModel, SHA256: sha256Hex(geomodelContent), SizeBytes: int64(len(geomodelContent))},
+			{RemotePath: "geomodel_labels.txt", LocalName: "geo_v3_labels.txt", Role: RoleGeomodelLabels, SHA256: sha256Hex(geomodelLabelsContent), SizeBytes: int64(len(geomodelLabelsContent))},
+		},
+	}
+
+	origSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+
+	modelsDir := t.TempDir()
+	settings := conf.GetTestSettings()
+	conf.StoreSettings(settings)
+	mm := NewModelManager(modelsDir, nil, settings)
+
+	err := mm.Install(&entry, srv.URL, nil)
+	require.NoError(t, err)
+
+	current := conf.GetSettings()
+	assert.Equal(t, "v3", current.BirdNET.RangeFilter.Model, "geomodel version from catalog should be used")
+	assert.Equal(t, filepath.Join(modelsDir, "shared", "geo_v3.onnx"), current.BirdNET.RangeFilter.ModelPath)
+	assert.Equal(t, filepath.Join(modelsDir, "shared", "geo_v3_labels.txt"), current.BirdNET.RangeFilter.LabelsPath)
+}
+
+func TestIsGeomodelRole(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, isGeomodelRole(RoleGeomodelModel))
+	assert.True(t, isGeomodelRole(RoleGeomodelLabels))
+	assert.False(t, isGeomodelRole(RoleModel))
+	assert.False(t, isGeomodelRole(RoleLabels))
+	assert.False(t, isGeomodelRole(RoleEmbeddings))
+	assert.False(t, isGeomodelRole(RoleData))
+	assert.False(t, isGeomodelRole(""))
 }
 
 func TestBuildHuggingFaceURL(t *testing.T) {

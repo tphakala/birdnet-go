@@ -402,7 +402,7 @@ func (mm *ModelManager) cleanupSharedGeomodel(log logger.Logger, catalogID strin
 		}
 	}
 	for _, f := range entry.Files {
-		if f.Role == RoleGeomodel {
+		if isGeomodelRole(f.Role) {
 			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				log.Warn("Failed to remove geomodel file",
@@ -481,17 +481,27 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	// fileDestPath returns the local destination for a catalog file.
 	// Shared files (embeddings, geomodel) are stored in a common directory.
 	fileDestPath := func(f CatalogFile) string {
-		if f.Role == RoleEmbeddings || f.Role == RoleGeomodel {
+		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
 			return filepath.Join(mm.modelsDir, "shared", f.LocalName)
 		}
 		return filepath.Join(subdir, f.LocalName)
 	}
 
 	// Compute cumulative totals for progress tracking across all files.
+	// Also validate existing shared files and mark corrupt ones for re-download.
+	needsRedownload := make(map[string]bool)
 	var totalAllBytes int64
 	filesToDownload := 0
 	for _, f := range entry.Files {
-		if _, err := os.Stat(fileDestPath(f)); err != nil {
+		destPath := fileDestPath(f)
+		if _, err := os.Stat(destPath); err != nil {
+			totalAllBytes += f.SizeBytes
+			filesToDownload++
+		} else if f.SHA256 != "" && !verifySHA256(destPath, f.SHA256) {
+			log.Warn("Existing file failed SHA256 validation, will re-download",
+				logger.String("catalog_id", entry.ID),
+				logger.String("path", destPath))
+			needsRedownload[destPath] = true
 			totalAllBytes += f.SizeBytes
 			filesToDownload++
 		}
@@ -504,8 +514,8 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	for _, f := range entry.Files {
 		destPath := fileDestPath(f)
 
-		// Skip download if file already exists (for shared embeddings).
-		if _, err := os.Stat(destPath); err == nil {
+		// Skip download if file already exists and passes SHA256 validation.
+		if _, err := os.Stat(destPath); err == nil && !needsRedownload[destPath] {
 			log.Debug("File already exists, skipping download",
 				logger.String("catalog_id", entry.ID),
 				logger.String("path", destPath))
@@ -690,18 +700,15 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 		}
 	}
 
-	// Apply v3 geomodel range filter config if this entry includes geomodel files.
-	if hasGeomodelFiles(entry) {
-		updated.BirdNET.RangeFilter.Model = "v3"
+	// Apply geomodel range filter config if this entry includes geomodel files.
+	if hasGeomodelFiles(entry) && entry.GeomodelVersion != "" {
+		updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
 		for _, f := range entry.Files {
-			if f.Role != RoleGeomodel {
-				continue
-			}
-			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
-			if strings.HasSuffix(f.LocalName, ".onnx") {
-				updated.BirdNET.RangeFilter.ModelPath = path
-			} else {
-				updated.BirdNET.RangeFilter.LabelsPath = path
+			switch f.Role {
+			case RoleGeomodelModel:
+				updated.BirdNET.RangeFilter.ModelPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			case RoleGeomodelLabels:
+				updated.BirdNET.RangeFilter.LabelsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
 			}
 		}
 	}
@@ -781,7 +788,7 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		}
 	}
 
-	// Reset v3 geomodel range filter config if no other geomodel-dependent model remains.
+	// Reset geomodel range filter config if no other geomodel-dependent model remains.
 	// mm.installed no longer contains the uninstalled entry (deleted by caller).
 	if hasGeomodelFiles(entry) {
 		otherGeomodel := false
@@ -796,6 +803,7 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 			updated.BirdNET.RangeFilter.Model = ""
 			updated.BirdNET.RangeFilter.ModelPath = ""
 			updated.BirdNET.RangeFilter.LabelsPath = ""
+			updated.BirdNET.RangeFilter.PassUnmappedSpecies = false
 		}
 	}
 
@@ -984,6 +992,30 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 // buildHuggingFaceURL constructs the download URL for a file in a HuggingFace repo.
 func buildHuggingFaceURL(repo, filePath string) string {
 	return "https://huggingface.co/" + repo + "/resolve/main/" + filePath
+}
+
+// verifySHA256 checks whether the file at path matches the expected hex-encoded
+// SHA-256 checksum. Returns true on match, false on mismatch or any I/O error.
+func verifySHA256(path, expected string) bool {
+	if expected == "" {
+		return true
+	}
+	f, err := os.Open(path) //nolint:gosec // G304: path is from catalog metadata
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+
+	info, err := f.Stat()
+	if err != nil || info.IsDir() {
+		return false
+	}
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return false
+	}
+	return strings.EqualFold(hex.EncodeToString(h.Sum(nil)), expected)
 }
 
 // fileModTime returns the modification time for a file, or the zero time on error.

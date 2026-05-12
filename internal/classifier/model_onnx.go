@@ -168,7 +168,11 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 	}
 
 	classifierLabels := bn.Settings.BirdNET.Labels
-	mapped := newMappedRangeFilter(innerFilter, classifierLabels, geoLabels, 0.0)
+	var unmappedScore float32
+	if rfSettings.PassUnmappedSpecies {
+		unmappedScore = 1.0
+	}
+	mapped := newMappedRangeFilter(innerFilter, classifierLabels, geoLabels, unmappedScore)
 
 	// Log mapping statistics
 	matchCount := 0

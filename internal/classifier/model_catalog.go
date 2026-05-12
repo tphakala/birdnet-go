@@ -12,11 +12,12 @@ const (
 
 // CatalogFile role constants.
 const (
-	RoleModel      = "model"
-	RoleLabels     = "labels"
-	RoleEmbeddings = "embeddings"
-	RoleGeomodel   = "geomodel"
-	RoleData       = "data"
+	RoleModel          = "model"
+	RoleLabels         = "labels"
+	RoleEmbeddings     = "embeddings"
+	RoleGeomodelModel  = "geomodel_model"
+	RoleGeomodelLabels = "geomodel_labels"
+	RoleData           = "data"
 )
 
 // CatalogEntry describes a downloadable model available in the model gallery.
@@ -31,6 +32,7 @@ type CatalogEntry struct {
 	Region          string        // geographic region, or empty for global models
 	SpeciesCount    int           // number of species the model can identify
 	Version         string        // model version string
+	GeomodelVersion string        // geomodel range filter version (e.g., "v3"); empty if no geomodel
 	RegistryID      string        // maps to a ModelRegistry key; empty if loader not yet implemented
 	Hidden          bool          // if true, entry is excluded from the gallery UI
 	UpstreamURL     string        // URL to the upstream project repository
@@ -42,7 +44,7 @@ type CatalogEntry struct {
 type CatalogFile struct {
 	RemotePath      string // path within the HuggingFace repo
 	LocalName       string // filename to use on disk
-	Role            string // file role: "model", "labels", "embeddings", "geomodel", or "data"
+	Role            string // file role: "model", "labels", "embeddings", "geomodel_model", "geomodel_labels", or "data"
 	SHA256          string // hex-encoded SHA-256 checksum
 	SizeBytes       int64  // file size in bytes
 	HuggingFaceRepo string // override entry-level HuggingFace repo for this file (empty = use entry repo)
@@ -64,13 +66,14 @@ var EmbeddedCatalog = []CatalogEntry{
 		Region:          "",
 		SpeciesCount:    0, // determined at runtime from label file
 		Version:         "3.0",
+		GeomodelVersion: "v3",
 		RegistryID:      RegistryIDBirdNETV3,
 		Hidden:          true,
 		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
 		HuggingFaceRepo: "tphakala/BirdNET-v3.0",
 		Files: append([]CatalogFile{
-			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "placeholder", SizeBytes: 0},
-			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "placeholder", SizeBytes: 0},
+			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "", SizeBytes: 0},
+			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "", SizeBytes: 0},
 		}, geomodelFiles()...),
 	},
 	{
@@ -84,6 +87,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Region:          "",
 		SpeciesCount:    14795,
 		Version:         "2",
+		GeomodelVersion: "v3",
 		RegistryID:      RegistryIDPerchV2,
 		UpstreamURL:     "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
 		HuggingFaceRepo: "tphakala/Perch-v2",
@@ -163,7 +167,7 @@ func geomodelFiles() []CatalogFile {
 		{
 			RemotePath:      "BirdNET+_Geomodel_V3.0.2_Global_12K_FP16.onnx",
 			LocalName:       "geomodel_v3.0.2_fp16.onnx",
-			Role:            RoleGeomodel,
+			Role:            RoleGeomodelModel,
 			SHA256:          geomodelONNXSHA256,
 			SizeBytes:       geomodelONNXSizeBytes,
 			HuggingFaceRepo: geomodelHuggingFaceRepo,
@@ -171,7 +175,7 @@ func geomodelFiles() []CatalogFile {
 		{
 			RemotePath:      "geomodel_v3.0.2_labels.txt",
 			LocalName:       "geomodel_v3.0.2_labels.txt",
-			Role:            RoleGeomodel,
+			Role:            RoleGeomodelLabels,
 			SHA256:          geomodelLabelsSHA256,
 			SizeBytes:       geomodelLabelsSizeBytes,
 			HuggingFaceRepo: geomodelHuggingFaceRepo,
@@ -179,10 +183,15 @@ func geomodelFiles() []CatalogFile {
 	}
 }
 
+// isGeomodelRole reports whether the given file role is a geomodel role.
+func isGeomodelRole(role string) bool {
+	return role == RoleGeomodelModel || role == RoleGeomodelLabels
+}
+
 // hasGeomodelFiles reports whether a catalog entry includes shared geomodel files.
 func hasGeomodelFiles(entry *CatalogEntry) bool {
 	for _, f := range entry.Files {
-		if f.Role == RoleGeomodel {
+		if isGeomodelRole(f.Role) {
 			return true
 		}
 	}
