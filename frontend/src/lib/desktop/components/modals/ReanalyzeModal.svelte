@@ -13,6 +13,7 @@
    * Nothing is written to the database until the user explicitly clicks
    * "Use this" and confirms — the reanalysis itself is read-only.
    */
+  import { untrack } from 'svelte';
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import {
     reanalyzeDetection,
@@ -48,12 +49,21 @@
   // Auto-run reanalysis every time the modal opens. Re-runs on reopen so the
   // results reflect any settings changes that happened while the modal was
   // closed (e.g. user enabled an extra model in the gallery).
+  //
+  // The body is wrapped in untrack() so the state reads inside runReanalysis
+  // (isRunning, result, errorMessage) don't become dependencies of this
+  // effect. Without that, when runReanalysis flipped isRunning back to false
+  // on completion, Svelte 5 would see the dependency change and re-fire the
+  // effect — kicking off another fetch — looping forever (12+ identical
+  // POSTs seen in DevTools when this bug was active).
   $effect(() => {
     if (!isOpen || detectionId === null) return;
-    result = null;
-    errorMessage = null;
-    pendingCorrection = null;
-    runReanalysis();
+    untrack(() => {
+      result = null;
+      errorMessage = null;
+      pendingCorrection = null;
+      runReanalysis();
+    });
   });
 
   async function runReanalysis() {
