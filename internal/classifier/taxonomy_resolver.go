@@ -76,12 +76,12 @@ func NewTaxonomyResolver(taxonomyPath, locale string) (*TaxonomyResolver, error)
 
 	sciCol := findColumn(header, "sci_name")
 	if sciCol < 0 {
-		return &TaxonomyResolver{index: make(map[string]string)}, nil
+		return nil, fmt.Errorf("taxonomy file missing required column 'sci_name'")
 	}
 
 	nameCol := resolveLocaleColumn(header, locale)
 	if nameCol < 0 {
-		return &TaxonomyResolver{index: make(map[string]string)}, nil
+		return nil, fmt.Errorf("taxonomy file missing 'com_name' and locale-specific column for %q", locale)
 	}
 
 	index := make(map[string]string, 14000)

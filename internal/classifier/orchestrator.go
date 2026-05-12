@@ -120,6 +120,13 @@ func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
 	if o.Settings == nil {
 		return
 	}
+
+	for _, r := range o.nameResolvers {
+		if _, ok := r.(*TaxonomyResolver); ok {
+			return
+		}
+	}
+
 	log := GetLogger()
 	taxonomyPath := filepath.Join(modelsDir, "shared", "taxonomy.csv")
 
