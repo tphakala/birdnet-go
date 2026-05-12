@@ -279,6 +279,12 @@ func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific
 	return scientific, common, code
 }
 
+// RangeFilterStatus returns introspection data about the primary model's
+// active range filter configuration.
+func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusInfo {
+	return o.primary.RangeFilterStatus()
+}
+
 // RunFilterProcess executes the filter process on demand and prints results.
 func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 	o.primary.RunFilterProcess(dateStr, week)

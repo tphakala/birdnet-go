@@ -1178,6 +1178,71 @@ func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, co
 	return scientific, common, code
 }
 
+// RangeFilterStatusInfo holds introspection data about the active range filter
+// configuration. Used by the API to expose geomodel state without coupling
+// callers to internal types.
+type RangeFilterStatusInfo struct {
+	Model               string    `json:"model"`
+	ModelPath           string    `json:"modelPath"`
+	LabelsPath          string    `json:"labelsPath"`
+	AutoSelected        bool      `json:"autoSelected"`
+	ClassifierModel     string    `json:"classifierModel"`
+	GeomodelSpecies     int       `json:"geomodelSpecies"`
+	ClassifierSpecies   int       `json:"classifierSpecies"`
+	MappedSpecies       int       `json:"mappedSpecies"`
+	UnmappedSpecies     int       `json:"unmappedSpecies"`
+	PassUnmappedSpecies bool      `json:"passUnmappedSpecies"`
+	Threshold           float32   `json:"threshold"`
+	LocationConfigured  bool      `json:"locationConfigured"`
+	LastUpdated         time.Time `json:"lastUpdated"`
+}
+
+// RangeFilterStatus returns introspection data about the active range filter.
+// Safe for concurrent use; acquires bn.mu to read the rangeFilter field.
+func (bn *BirdNET) RangeFilterStatus() RangeFilterStatusInfo {
+	settings := bn.currentSettings()
+	rf := settings.BirdNET.RangeFilter
+
+	info := RangeFilterStatusInfo{
+		Model:               rf.Model,
+		ModelPath:           rf.ModelPath,
+		LabelsPath:          rf.LabelsPath,
+		ClassifierModel:     bn.ModelInfo.ID,
+		PassUnmappedSpecies: rf.PassUnmappedSpecies,
+		Threshold:           rf.Threshold,
+		LocationConfigured:  settings.BirdNET.LocationConfigured,
+		LastUpdated:         rf.LastUpdated,
+	}
+
+	// Determine if the geomodel was auto-selected: model must be "v3" and
+	// paths must match the shared directory pattern produced by
+	// applyAutoSelectedGeomodelPaths.
+	if rf.Model == "v3" && bn.modelsDir != "" {
+		sharedDir := filepath.Join(bn.modelsDir, "shared")
+		expectedONNX := filepath.Join(sharedDir, geomodelONNXLocalName)
+		expectedLabels := filepath.Join(sharedDir, geomodelLabelsLocalName)
+		info.AutoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
+	}
+
+	// Extract mapping stats from mappedRangeFilter if present.
+	bn.mu.Lock()
+	if mrf, ok := bn.rangeFilter.(*mappedRangeFilter); ok {
+		info.GeomodelSpecies = mrf.inner.NumSpecies()
+		info.ClassifierSpecies = mrf.numClassifier
+		mapped := 0
+		for _, idx := range mrf.classifierToGeo {
+			if idx >= 0 {
+				mapped++
+			}
+		}
+		info.MappedSpecies = mapped
+		info.UnmappedSpecies = mrf.numClassifier - mapped
+	}
+	bn.mu.Unlock()
+
+	return info
+}
+
 // SetModelsDir sets the base directory for gallery-installed models.
 // Called by the Orchestrator after creation so auto-selection can
 // resolve geomodel paths from the installed models directory.
