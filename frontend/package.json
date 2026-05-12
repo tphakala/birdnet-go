@@ -104,7 +104,7 @@
     "eslint-plugin-security": "^4.0.0",
     "eslint-plugin-svelte": "^3.17.0",
     "husky": "^9.1.7",
-    "jscpd": "^4.0.9",
+    "jscpd": "^4.1.1",
     "jsdom": "^29.0.2",
     "lint-staged": "^16.4.0",
     "madge": "^8.0.0",
