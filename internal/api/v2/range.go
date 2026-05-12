@@ -127,6 +127,23 @@ type RangeFilterSpeciesList struct {
 	Orders      []string             `json:"orders"`
 }
 
+// RangeFilterStatusResponse represents the status of the active range filter model
+type RangeFilterStatusResponse struct {
+	Model               string    `json:"model"`
+	ModelPath           string    `json:"modelPath"`
+	LabelsPath          string    `json:"labelsPath"`
+	AutoSelected        bool      `json:"autoSelected"`
+	ClassifierModel     string    `json:"classifierModel"`
+	GeomodelSpecies     int       `json:"geomodelSpecies"`
+	ClassifierSpecies   int       `json:"classifierSpecies"`
+	MappedSpecies       int       `json:"mappedSpecies"`
+	UnmappedSpecies     int       `json:"unmappedSpecies"`
+	PassUnmappedSpecies bool      `json:"passUnmappedSpecies"`
+	Threshold           float32   `json:"threshold"`
+	LocationConfigured  bool      `json:"locationConfigured"`
+	LastUpdated         time.Time `json:"lastUpdated"`
+}
+
 // RangeFilterTestRequest represents the request for testing range filter
 type RangeFilterTestRequest struct {
 	Latitude  float64 `json:"latitude"`
@@ -155,12 +172,50 @@ type RangeFilterTestResponse struct {
 
 // initRangeRoutes sets up the range filter related routes
 func (c *Controller) initRangeRoutes() {
-	// Range filter routes
+	// Range filter status
+	c.Group.GET("/range/status", c.GetRangeFilterStatus)
+
+	// Range filter species routes
 	c.Group.GET("/range/species/count", c.GetRangeFilterSpeciesCount)
 	c.Group.GET("/range/species/list", c.GetRangeFilterSpeciesList)
 	c.Group.GET("/range/species/csv", c.GetRangeFilterSpeciesCSV)
 	c.Group.POST("/range/species/test", c.TestRangeFilter)
 	c.Group.POST("/range/rebuild", c.RebuildRangeFilter)
+}
+
+// GetRangeFilterStatus returns introspection data about the active range filter
+// @Summary Get range filter status
+// @Description Returns the active geomodel, mapping statistics, auto-selection status, and threshold
+// @Tags range
+// @Produce json
+// @Success 200 {object} RangeFilterStatusResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v2/range/status [get]
+func (c *Controller) GetRangeFilterStatus(ctx echo.Context) error {
+	birdnetInstance, err := c.getBirdNETInstance()
+	if err != nil {
+		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
+	}
+
+	status := birdnetInstance.RangeFilterStatus()
+
+	response := RangeFilterStatusResponse{
+		Model:               status.Model,
+		ModelPath:           status.ModelPath,
+		LabelsPath:          status.LabelsPath,
+		AutoSelected:        status.AutoSelected,
+		ClassifierModel:     status.ClassifierModel,
+		GeomodelSpecies:     status.GeomodelSpecies,
+		ClassifierSpecies:   status.ClassifierSpecies,
+		MappedSpecies:       status.MappedSpecies,
+		UnmappedSpecies:     status.UnmappedSpecies,
+		PassUnmappedSpecies: status.PassUnmappedSpecies,
+		Threshold:           status.Threshold,
+		LocationConfigured:  status.LocationConfigured,
+		LastUpdated:         status.LastUpdated,
+	}
+
+	return ctx.JSON(http.StatusOK, response)
 }
 
 // GetRangeFilterSpeciesCount returns the count of species in the current range filter
