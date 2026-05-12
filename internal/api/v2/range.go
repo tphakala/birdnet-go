@@ -38,6 +38,9 @@ func validateRangeFilterRequest(req *RangeFilterTestRequest) error {
 	if req.Threshold < 0 || req.Threshold > 1 {
 		return fmt.Errorf("Threshold must be between 0 and 1") //nolint:staticcheck // user-facing API message
 	}
+	if req.Week != 0 && (req.Week < 1 || req.Week > 48) {
+		return fmt.Errorf("Week must be between 1 and 48") //nolint:staticcheck // user-facing API message
+	}
 	return nil
 }
 
@@ -85,6 +88,27 @@ func (c *Controller) buildTestSettings(lat, lon float64, threshold float32) *con
 	testSnapshot.BirdNET.RangeFilter.Threshold = threshold
 	testSnapshot.BirdNET.LocationConfigured = true
 	return testSnapshot
+}
+
+// convertSpeciesScores converts classifier.SpeciesScore entries to the API
+// response format. When includeScores is true each entry carries a pointer to
+// its probability score; otherwise Score is nil.
+func convertSpeciesScores(scores []classifier.SpeciesScore, includeScores bool) []RangeFilterSpecies {
+	species := make([]RangeFilterSpecies, 0, len(scores))
+	for _, s := range scores {
+		sp := detection.ParseSpeciesString(s.Label)
+		entry := RangeFilterSpecies{
+			Label:          s.Label,
+			ScientificName: sp.ScientificName,
+			CommonName:     sp.CommonName,
+		}
+		if includeScores {
+			score := s.Score
+			entry.Score = &score
+		}
+		species = append(species, entry)
+	}
+	return species
 }
 
 // Location represents geographic coordinates
@@ -266,21 +290,7 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get species scores", http.StatusInternalServerError)
 	}
 
-	// Convert to response format
-	speciesList := make([]RangeFilterSpecies, 0, len(speciesScores))
-	for _, speciesScore := range speciesScores {
-		sp := detection.ParseSpeciesString(speciesScore.Label)
-
-		score := speciesScore.Score
-		species := RangeFilterSpecies{
-			Label:          speciesScore.Label,
-			ScientificName: sp.ScientificName,
-			CommonName:     sp.CommonName,
-			Score:          &score,
-		}
-
-		speciesList = append(speciesList, species)
-	}
+	speciesList := convertSpeciesScores(speciesScores, true)
 
 	response := RangeFilterScoresResponse{
 		Species:   speciesList,
@@ -306,11 +316,6 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/count [get]
 func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
-	// Acquire read lock to prevent reading temporarily swapped values
-	// during a concurrent range filter test (see #1940).
-	c.settingsMutex.RLock()
-	defer c.settingsMutex.RUnlock()
-
 	// Use the latest published snapshot so the daily range filter update
 	// (which publishes via clone-mutate-publish) is visible immediately.
 	settings := conf.CurrentOrFallback(c.Settings)
@@ -338,11 +343,6 @@ func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/list [get]
 func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
-	// Acquire read lock to prevent reading temporarily swapped values
-	// during a concurrent range filter test (see #1940).
-	c.settingsMutex.RLock()
-	defer c.settingsMutex.RUnlock()
-
 	// Use the latest published snapshot so the daily range filter update
 	// (which publishes via clone-mutate-publish) is visible immediately.
 	settings := conf.CurrentOrFallback(c.Settings)
@@ -491,23 +491,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get probable species", http.StatusInternalServerError)
 	}
 
-	// Convert to response format
-	// Pre-allocate slice with capacity for all species scores
-	speciesList := make([]RangeFilterSpecies, 0, len(speciesScores))
-	for _, speciesScore := range speciesScores {
-		sp := detection.ParseSpeciesString(speciesScore.Label)
-
-		// Create score pointer for non-nil value
-		score := speciesScore.Score
-		species := RangeFilterSpecies{
-			Label:          speciesScore.Label,
-			ScientificName: sp.ScientificName,
-			CommonName:     sp.CommonName,
-			Score:          &score, // Individual scores are available from GetProbableSpecies
-		}
-
-		speciesList = append(speciesList, species)
-	}
+	speciesList := convertSpeciesScores(speciesScores, true)
 
 	response := RangeFilterTestResponse{
 		Species:   speciesList,
@@ -681,22 +665,7 @@ func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilt
 		return nil, Location{}, 0, err
 	}
 
-	// Convert to response format
-	speciesList := make([]RangeFilterSpecies, 0, len(speciesScores))
-	for _, speciesScore := range speciesScores {
-		sp := detection.ParseSpeciesString(speciesScore.Label)
-
-		// Create score pointer for non-nil value
-		score := speciesScore.Score
-		species := RangeFilterSpecies{
-			Label:          speciesScore.Label,
-			ScientificName: sp.ScientificName,
-			CommonName:     sp.CommonName,
-			Score:          &score,
-		}
-
-		speciesList = append(speciesList, species)
-	}
+	speciesList := convertSpeciesScores(speciesScores, true)
 
 	location := Location{
 		Latitude:  req.Latitude,

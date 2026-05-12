@@ -243,6 +243,28 @@ func TestTestRangeFilterValidation(t *testing.T) {
 			expectedError:  "Invalid range filter parameters",
 		},
 		{
+			name: "Invalid week too low",
+			request: RangeFilterTestRequest{
+				Latitude:  60.1699,
+				Longitude: 24.9384,
+				Threshold: 0.01,
+				Week:      -1,
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "Invalid range filter parameters",
+		},
+		{
+			name: "Invalid week too high",
+			request: RangeFilterTestRequest{
+				Latitude:  60.1699,
+				Longitude: 24.9384,
+				Threshold: 0.01,
+				Week:      49,
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "Invalid range filter parameters",
+		},
+		{
 			name: "Invalid date format",
 			request: RangeFilterTestRequest{
 				Latitude:  60.1699,
