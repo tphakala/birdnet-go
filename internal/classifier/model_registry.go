@@ -100,7 +100,7 @@ var ModelRegistry = map[string]ModelInfo{
 		ID:               RegistryIDPerchV2,
 		Name:             ModelNamePerchV2,
 		Backend:          BackendONNX,
-		DetectionName:    "Perch",
+		DetectionName:    DetectionNamePerch,
 		DetectionVersion: "V2",
 		Description:      "Perch v2 model with ~14,795 species (scientific names only)",
 		Spec:             ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},

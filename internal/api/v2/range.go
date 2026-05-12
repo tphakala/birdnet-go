@@ -211,11 +211,12 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
 
-	// Read current settings for defaults
+	// Read defaults from latest published settings snapshot so UI changes
+	// to coordinates take effect without restart.
 	c.settingsMutex.RLock()
-	lat := c.Settings.BirdNET.Latitude
-	lon := c.Settings.BirdNET.Longitude
-	threshold := c.Settings.BirdNET.RangeFilter.Threshold
+	settings := conf.CurrentOrFallback(c.Settings)
+	lat := settings.BirdNET.Latitude
+	lon := settings.BirdNET.Longitude
 	c.settingsMutex.RUnlock()
 
 	// Override with query params if provided
@@ -285,14 +286,14 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 		Species:   speciesList,
 		Count:     len(speciesList),
 		Week:      int(week),
-		Threshold: threshold,
+		Threshold: 0,
 		Location: Location{
 			Latitude:  lat,
 			Longitude: lon,
 		},
 	}
 
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Range filter species scores retrieved", logger.Int("species_count", len(speciesList)))
+	c.logAPIRequest(ctx, logger.LogLevelDebug, "Range filter species scores retrieved", logger.Int("species_count", len(speciesList)))
 	return ctx.JSON(http.StatusOK, response)
 }
 
