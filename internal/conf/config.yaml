@@ -355,6 +355,12 @@ webserver:
   enabled: true           # true to enable web server
   port: 8080              # port for web server
   allowembedding: false   # true to allow embedding in iframes (e.g., Home Assistant)
+  livestream:
+    debug: false
+    bitrate: 128          # bitrate for live stream in kbps (16-320)
+    samplerate: 48000     # sample rate for live stream in Hz
+    segmentlength: 2      # length of each HLS segment in seconds (1-30)
+    ffmpegloglevel: warning
   log:
     enabled: false        # true to enable log file
     path: webui.log       # path to log file
@@ -398,6 +404,7 @@ security:
   # redirecttohttps forces HTTP connections to redirect to HTTPS
   # Only works when autotls is enabled or manual TLS certificates are configured
   redirecttohttps: false
+  sessionduration: 168h      # browser session cookie lifetime (default: 7 days)
   allowsubnetbypass:
     enabled: false           # true to disable OAuth in subnet
     subnet: ""               # comma-separated list of CIDR ranges (e.g., "192.168.1.0/24,10.0.0.0/8")

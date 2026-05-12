@@ -22,14 +22,8 @@ import (
 
 // TestIsUserAuthenticatedValidAccessToken tests the IsUserAuthenticated function with a valid access token
 func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
-	// Set the settings instance
-	conf.Setting()
-
-	settings := &conf.Settings{
-		Security: conf.Security{
-			SessionSecret: "test-secret",
-		},
-	}
+	settings := conf.NewTestSettings().Apply()
+	t.Cleanup(func() { conf.NewTestSettings().Apply() })
 
 	s := NewOAuth2Server()
 
@@ -59,9 +53,6 @@ func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
 
 // TestIsUserAuthenticatedTableDriven tests the IsUserAuthenticated function with a table-driven approach
 func TestIsUserAuthenticatedTableDriven(t *testing.T) {
-	// Set the settings instance
-	conf.Setting()
-
 	tests := []struct {
 		name    string
 		token   string
@@ -113,9 +104,7 @@ func TestIsUserAuthenticatedTableDriven(t *testing.T) {
 }
 
 func TestOAuth2Server(t *testing.T) {
-	// Ensure global settings are initialized for NewOAuth2Server()
-	conf.Setting()
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	t.Cleanup(func() { conf.NewTestSettings().Apply() })
 
 	tests := []struct {
 		name string
@@ -203,8 +192,6 @@ func TestNewOAuth2ServerForTesting(t *testing.T) {
 
 // TestIsUserAuthenticatedExpiredToken tests with an expired access token
 func TestIsUserAuthenticatedExpiredToken(t *testing.T) {
-	conf.Setting()
-
 	settings := &conf.Settings{
 		Security: conf.Security{
 			SessionSecret: "test-secret-32-bytes-minimum-len",
@@ -235,8 +222,6 @@ func TestIsUserAuthenticatedExpiredToken(t *testing.T) {
 
 // TestIsUserAuthenticatedNoToken tests with no access token
 func TestIsUserAuthenticatedNoToken(t *testing.T) {
-	conf.Setting()
-
 	settings := &conf.Settings{
 		Security: conf.Security{
 			SessionSecret: "test-secret-32-bytes-minimum-len",
@@ -306,8 +291,6 @@ func TestIsUserAuthenticatedSubnetBypassDisabled(t *testing.T) {
 		t.Skip("Skipping: no non-loopback IPv4 interface found for subnet bypass test")
 	}
 
-	conf.Setting()
-
 	settings := &conf.Settings{
 		Security: conf.Security{
 			SessionSecret: "test-secret-32-bytes-minimum-len",
@@ -341,8 +324,6 @@ func TestIsUserAuthenticatedSubnetBypassEnabled(t *testing.T) {
 		t.Skip("Skipping: no non-loopback IPv4 interface found for subnet bypass test")
 	}
 
-	conf.Setting()
-
 	settings := &conf.Settings{
 		Security: conf.Security{
 			SessionSecret: "test-secret-32-bytes-minimum-len",
@@ -369,8 +350,6 @@ func TestIsUserAuthenticatedSubnetBypassEnabled(t *testing.T) {
 // TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled verifies that
 // disabling subnet bypass does NOT break token-based authentication.
 func TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled(t *testing.T) {
-	conf.Setting()
-
 	settings := &conf.Settings{
 		Security: conf.Security{
 			SessionSecret: "test-secret-32-bytes-minimum-len",
@@ -531,7 +510,7 @@ func TestGenerateAuthCode(t *testing.T) {
 		},
 	}
 	conf.SetTestSettings(settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	t.Cleanup(func() { conf.NewTestSettings().Apply() })
 
 	server := &OAuth2Server{
 		Settings:     settings,
@@ -1248,7 +1227,7 @@ func TestCheckSocialAuthDirect(t *testing.T) {
 				},
 			}
 			conf.SetTestSettings(settings)
-			t.Cleanup(func() { conf.SetTestSettings(nil) })
+			t.Cleanup(func() { conf.NewTestSettings().Apply() })
 
 			server := &OAuth2Server{Settings: settings}
 
@@ -1303,7 +1282,7 @@ func TestCheckSocialAuthFallback(t *testing.T) {
 				},
 			}
 			conf.SetTestSettings(settings)
-			t.Cleanup(func() { conf.SetTestSettings(nil) })
+			t.Cleanup(func() { conf.NewTestSettings().Apply() })
 
 			server := &OAuth2Server{Settings: settings}
 
@@ -1330,7 +1309,7 @@ func TestCheckSocialAuthSessionsWithAuthProviderKey(t *testing.T) {
 		},
 	}
 	conf.SetTestSettings(settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	t.Cleanup(func() { conf.NewTestSettings().Apply() })
 
 	server := &OAuth2Server{Settings: settings}
 

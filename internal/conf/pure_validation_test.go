@@ -901,7 +901,7 @@ func TestValidateWebServerSettings_Invalid(t *testing.T) {
 				Port:    "8080",
 				LiveStream: LiveStreamSettings{
 					BitRate:       128,
-					SegmentLength: 0,
+					SegmentLength: -1,
 				},
 			},
 			expectError: "segment length must be between 1 and 30 seconds",

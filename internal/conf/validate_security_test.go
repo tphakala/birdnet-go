@@ -442,26 +442,30 @@ func TestValidateSecuritySettings_SessionDuration(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		security Security
-		wantErr  bool
-		errType  string
+		name          string
+		security      Security
+		wantErr       bool
+		errType       string
+		wantDuration  time.Duration // expected duration after normalization
+		checkDuration bool          // whether to assert the normalized value
 	}{
 		{
-			name: "Zero session duration - should fail",
+			name: "Zero session duration - normalized to default",
 			security: Security{
 				SessionDuration: 0,
 			},
-			wantErr: true,
-			errType: "security-session-duration",
+			wantErr:       false,
+			checkDuration: true,
+			wantDuration:  DefaultSessionDuration,
 		},
 		{
-			name: "Negative session duration - should fail",
+			name: "Negative session duration - normalized to default",
 			security: Security{
 				SessionDuration: -1,
 			},
-			wantErr: true,
-			errType: "security-session-duration",
+			wantErr:       false,
+			checkDuration: true,
+			wantDuration:  DefaultSessionDuration,
 		},
 		{
 			name: "Valid positive session duration - should pass",
@@ -483,6 +487,10 @@ func TestValidateSecuritySettings_SessionDuration(t *testing.T) {
 				assertValidationError(t, err, tt.errType)
 			} else {
 				assert.NoError(t, err)
+				if tt.checkDuration {
+					assert.Equal(t, tt.wantDuration, tt.security.SessionDuration,
+						"session duration should be normalized to default")
+				}
 			}
 		})
 	}

@@ -1,6 +1,8 @@
 // conf/consts.go hard coded constants
 package conf
 
+import "time"
+
 const (
 	// Model IDs identify the inference backends available for detection.
 	ModelIDBirdNET = "birdnet"
@@ -29,4 +31,17 @@ const (
 	MaxExtendedCaptureDuration        = 1200 // Absolute max (20 minutes)
 	ExtendedCaptureBufferMargin       = 60   // Margin added to MaxDuration for buffer sizing
 	ExtendedCaptureMinBufferMargin    = 30   // Minimum margin above MaxDuration + PreCapture
+
+	// LiveStream defaults for webserver configuration.
+	// Viper nested defaults can be lost when the parent key exists in the config
+	// file but the child section is absent, so validation normalizes to these.
+	DefaultLiveStreamBitRate       = 128
+	DefaultLiveStreamSegmentLength = 2
+	DefaultLiveStreamSampleRate    = 48000
+
+	// DefaultWeatherPollInterval is the default weather poll interval in minutes.
+	DefaultWeatherPollInterval = 60
 )
+
+// DefaultSessionDuration is the default session duration (7 days).
+const DefaultSessionDuration = 168 * time.Hour
