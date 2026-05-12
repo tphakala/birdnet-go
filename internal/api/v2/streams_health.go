@@ -152,15 +152,20 @@ func (c *Controller) initStreamHealthRoutes() {
 
 // resolveSourceURL retrieves the raw connection URL for a sourceID from the registry.
 // Returns an empty string if the source is not found.
+//
+// Uses ConnectionStringByID rather than Get(), because Get() returns a
+// credential-stripped safe copy intended for events — calling
+// GetConnectionString() on that copy always yields "", which breaks the
+// downstream config lookup in getStreamInfo (issue #3038).
+//
+// The raw URL is sanitized at the response boundary via
+// privacy.SanitizeStreamUrl in convertStreamHealthToResponse, so no
+// credentials reach API clients.
 func (c *Controller) resolveSourceURL(registry *audiocore.SourceRegistry, sourceID string) string {
 	if registry == nil {
 		return ""
 	}
-	src, ok := registry.Get(sourceID)
-	if !ok {
-		return ""
-	}
-	connStr, _ := src.GetConnectionString()
+	connStr, _ := registry.ConnectionStringByID(sourceID)
 	return connStr
 }
 
