@@ -347,6 +347,12 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 
 // initializeMetaModel loads and initializes the meta model used for range filtering.
 func (bn *BirdNET) initializeMetaModel() error {
+	// V3 geomodel is always ONNX; route to ONNX backend even if ModelPath is empty
+	// (initializeV3GeoModel will return a clear error about missing paths).
+	if bn.Settings.BirdNET.RangeFilter.Model == "v3" {
+		return bn.initializeONNXMetaModel()
+	}
+
 	// If range filter model path ends with .onnx, use the ONNX backend
 	if isONNXModel(bn.Settings.BirdNET.RangeFilter.ModelPath) {
 		return bn.initializeONNXMetaModel()

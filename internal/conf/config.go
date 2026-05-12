@@ -1162,12 +1162,13 @@ type BirdNETConfig struct {
 
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
-	Debug       bool      `yaml:"debug" json:"debug"`         // true to enable debug mode
-	Model       string    `yaml:"model" json:"model"`         // range filter model version: "legacy" for v1, or empty/default for v2
-	ModelPath   string    `yaml:"modelpath" json:"modelPath"` // path to external meta model file (empty for embedded)
-	Threshold   float32   `yaml:"threshold" json:"threshold"` // rangefilter species occurrence threshold
-	Species     []string  `yaml:"-" json:"species,omitempty"` // list of included species, runtime value
-	LastUpdated time.Time `yaml:"-" json:"lastUpdated"`       // last time the species list was updated, runtime value
+	Debug       bool      `yaml:"debug" json:"debug"`                               // true to enable debug mode
+	Model       string    `yaml:"model" json:"model"`                               // range filter model version: "legacy" for v1, "v3" for geomodel v3.0, or empty/default for v2
+	ModelPath   string    `yaml:"modelpath" json:"modelPath"`                       // path to external meta model file (empty for embedded)
+	LabelsPath  string    `yaml:"labelspath,omitempty" json:"labelsPath,omitempty"` // path to geomodel labels file (required when geomodel differs from classifier labels)
+	Threshold   float32   `yaml:"threshold" json:"threshold"`                       // rangefilter species occurrence threshold
+	Species     []string  `yaml:"-" json:"species,omitempty"`                       // list of included species, runtime value
+	LastUpdated time.Time `yaml:"-" json:"lastUpdated"`                             // last time the species list was updated, runtime value
 }
 
 // PerchConfig holds configuration for the Google Perch v2 model.
