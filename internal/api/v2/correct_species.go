@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
@@ -195,7 +196,12 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 			return fmt.Errorf("detection update failed: %w", result.Error)
 		}
 		if result.RowsAffected == 0 {
-			return fmt.Errorf("detection %d was locked or does not exist", noteIDUint)
+			// We already confirmed the detection exists via c.DS.Get above,
+			// so a zero-row update after passing the lock-NOT-EXISTS guard
+			// effectively means the lock was acquired between the Get() and
+			// this UPDATE (TOCTOU race). Emit a distinct error so the outer
+			// switch can map it to 409 Conflict instead of a vague 500.
+			return fmt.Errorf("detection %d is locked", noteIDUint)
 		}
 
 		// 4. Upsert the review row. The unique index on detection_id makes
@@ -220,15 +226,34 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 			logger.String("model_id", req.ModelID),
 			logger.String("scientific_name", req.ScientificName),
 			logger.Error(correctionErr))
+
+		// Map known-cause errors to precise HTTP statuses. Pattern matching on
+		// the wrapped message is the simplest way to preserve fmt.Errorf-style
+		// errors without introducing sentinel error vars for one handler. Keep
+		// these marker strings in sync with the fmt.Errorf calls inside the
+		// transaction body above.
 		status := http.StatusInternalServerError
-		// Map known-cause errors to clearer status codes for the UI.
+		errMsg := strings.ToLower(correctionErr.Error())
 		switch {
-		case isCorrectionUserError(correctionErr):
+		case strings.Contains(errMsg, "is locked"):
+			status = http.StatusConflict
+		case strings.Contains(errMsg, "does not exist") ||
+			strings.Contains(errMsg, "not present in ai_models"):
+			status = http.StatusNotFound
+		case strings.Contains(errMsg, "not in") ||
+			strings.Contains(errMsg, "is not loaded"):
 			status = http.StatusBadRequest
 		}
-		return c.HandleError(ctx, correctionErr,
-			fmt.Sprintf("Failed to correct species: %s", correctionErr.Error()),
-			status)
+
+		// Only echo the underlying error text to the client for 4xx outcomes
+		// (where it's actionable user feedback). 5xx errors stay generic so
+		// internal DB/schema details from the wrapped Go error don't leak
+		// into the response. The real error is in the structured log above.
+		clientMsg := "Internal error while correcting species"
+		if status < http.StatusInternalServerError {
+			clientMsg = fmt.Sprintf("Failed to correct species: %s", correctionErr.Error())
+		}
+		return c.HandleError(ctx, correctionErr, clientMsg, status)
 	}
 
 	// Resolve a locale-appropriate common name for the response. The
@@ -263,60 +288,4 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 		Confidence:     req.Confidence,
 		Verified:       "correct",
 	})
-}
-
-// isCorrectionUserError reports whether err describes a problem with the
-// caller's input (unknown model, unknown species, lock conflict) vs an
-// internal DB failure. Used to map error → HTTP status.
-func isCorrectionUserError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	// The transaction body returns wrapped fmt.Errorf strings; pattern match
-	// here is the only way to distinguish since we don't define typed errors
-	// for these conditions inline. Keep messages stable when editing.
-	for _, marker := range []string{
-		"not in",
-		"is locked",
-		"does not exist",
-		"not present in ai_models",
-		"is not loaded",
-	} {
-		if containsCaseInsensitive(msg, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-// containsCaseInsensitive is a tiny helper; stdlib strings.Contains is
-// case-sensitive and pulling in a regex for one substring check would be
-// overkill.
-func containsCaseInsensitive(s, substr string) bool {
-	if len(substr) > len(s) {
-		return false
-	}
-	// ASCII fast path — all markers above are ASCII.
-	for i := 0; i+len(substr) <= len(s); i++ {
-		match := true
-		for j := 0; j < len(substr); j++ {
-			a := s[i+j]
-			b := substr[j]
-			if a >= 'A' && a <= 'Z' {
-				a += 'a' - 'A'
-			}
-			if b >= 'A' && b <= 'Z' {
-				b += 'a' - 'A'
-			}
-			if a != b {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
-		}
-	}
-	return false
 }

@@ -665,6 +665,7 @@ export type TranslationKey =
   | 'detections.weather.conditions.unknown'
   | 'detections.row.viewDetails' // params: species
   | 'detections.row.openDetailFromStatus' // params: species
+  | 'detections.row.openDetailFromDate' // params: species, date, time
   | 'detections.media.title'
   | 'detections.media.clipHint'
   | 'detections.tabs.overview'
@@ -1152,9 +1153,6 @@ export type TranslationKey =
   | 'analytics.filters.exportCsv'
   | 'analytics.filters.species'
   | 'analytics.filters.filtered'
-  | 'analytics.filters.audioSource'
-  | 'analytics.filters.audioSourceAll'
-  | 'analytics.filters.audioSourceUnknown'
   | 'analytics.timePeriodOptions.allTime'
   | 'analytics.timePeriodOptions.today'
   | 'analytics.timePeriodOptions.lastWeek'
@@ -3426,6 +3424,11 @@ export type TranslationParams = {
   };
   'detections.row.viewDetails': { species: string | number };
   'detections.row.openDetailFromStatus': { species: string | number };
+  'detections.row.openDetailFromDate': {
+    species: string | number;
+    date: string | number;
+    time: string | number;
+  };
   'detections.aria.loaded': { species: string | number };
   'detections.aria.error': { error: string | number };
   'detections.errors.loadFailed': { status: string | number };

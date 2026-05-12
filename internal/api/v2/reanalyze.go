@@ -316,16 +316,26 @@ type loadedModel struct {
 // silently rejected.
 func selectModelsForReanalysis(bn *classifier.Orchestrator, requestedIDs []string) ([]loadedModel, error) {
 	if len(requestedIDs) > 0 {
+		// Dedupe after registry-ID resolution so a request like
+		// {"modelIds":["birdnet","BirdNET_V2.4"]} doesn't schedule the same
+		// model twice (both forms resolve to "BirdNET_V2.4"). Without this
+		// the response carries duplicate modelsRun entries and we burn
+		// inference cost re-running an identical model.
 		out := make([]loadedModel, 0, len(requestedIDs))
+		seen := make(map[string]struct{}, len(requestedIDs))
 		for _, raw := range requestedIDs {
 			resolvedID := raw
 			if registryID, ok := classifier.ResolveConfigModelID(raw); ok {
 				resolvedID = registryID
 			}
+			if _, dup := seen[resolvedID]; dup {
+				continue
+			}
 			spec, name, ok := lookupLoadedModel(bn, resolvedID)
 			if !ok {
 				return nil, fmt.Errorf("model %q is not loaded; enable it in Settings -> Models first", raw)
 			}
+			seen[resolvedID] = struct{}{}
 			out = append(out, loadedModel{id: resolvedID, name: name, spec: spec})
 		}
 		return out, nil

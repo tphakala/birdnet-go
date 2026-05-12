@@ -48,6 +48,16 @@
   let result = $state<ReanalyzeResult | null>(null);
   let errorMessage = $state<string | null>(null);
 
+  // Monotonic sequence id used to guard against stale reanalysis responses.
+  // The 120-second per-request timeout means a user can open the modal,
+  // close it, and reopen for a different detection (or even the same one)
+  // while an earlier fetch is still in flight. Without a sequence guard,
+  // the older fetch eventually resolves and overwrites `result` with
+  // predictions for the prior detection — a confusing mismatch. Every new
+  // call increments requestSeq; results from a fetch whose seq is no longer
+  // the latest are discarded.
+  let requestSeq = 0;
+
   // Correction-confirm state. We don't use a separate modal for this — a
   // single confirmation row inline below the table keeps the user's eye on
   // the prediction they're about to apply.
@@ -75,20 +85,34 @@
   });
 
   async function runReanalysis() {
-    if (!detectionId || isRunning) return;
+    if (!detectionId) return;
+    // Claim a sequence id BEFORE awaiting; any earlier in-flight call now
+    // has a stale seq and its eventual response will be ignored.
+    const mySeq = ++requestSeq;
     isRunning = true;
     errorMessage = null;
     try {
       const res = await reanalyzeDetection(detectionId);
+      if (mySeq !== requestSeq) {
+        // Modal was closed or reopened for a different detection; discard
+        // this response so it doesn't overwrite newer state.
+        return;
+      }
       if (res === null) {
-        // Duplicate in-flight; the original call will populate result.
+        // Helper dedupe path. The original caller will populate result.
         return;
       }
       result = res;
     } catch (err) {
+      if (mySeq !== requestSeq) return; // superseded
       errorMessage = err instanceof Error ? err.message : String(err);
     } finally {
-      isRunning = false;
+      // Only release the "running" indicator if this call is still the
+      // current one — otherwise the newer in-flight call should keep the
+      // spinner up until it resolves.
+      if (mySeq === requestSeq) {
+        isRunning = false;
+      }
     }
   }
 

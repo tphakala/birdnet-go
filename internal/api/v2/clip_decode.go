@@ -39,6 +39,14 @@ func decodeClipMonoPCM16(
 	ffmpegPath, clipPath string,
 	targetSampleRate, maxDurationSec int,
 ) ([]float32, error) {
+	// Wrap the caller's context in a cancelable child so we can kill ffmpeg
+	// ourselves if the stdout byte cap is hit before ffmpeg finishes
+	// writing. Without this, hitting the cap leaves ffmpeg blocked on a
+	// full pipe and cmd.Wait() hangs until the caller's context times out
+	// (up to 2 minutes on a reanalyze request).
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	if ffmpegPath == "" {
 		return nil, errors.Newf("ffmpeg path not configured").
 			Component("api/v2/reanalyze").
@@ -98,13 +106,25 @@ func decodeClipMonoPCM16(
 			Build()
 	}
 
-	// Cap the captured PCM buffer regardless of -t honoring; LimitReader
-	// triggers a non-EOF error from ffmpeg's stdout writer if exceeded, which
-	// surfaces as the context cancellation below. Add a one-byte tail so we
-	// can detect "exceeded" vs "exactly hit cap".
+	// Cap the captured PCM buffer regardless of whether ffmpeg honors -t;
+	// read one byte past the cap so we can tell "exceeded" from "exactly
+	// hit." If we did exceed, cancel the context to kill ffmpeg before
+	// cmd.Wait() — otherwise ffmpeg blocks on a full stdout pipe and Wait
+	// hangs until the request times out.
 	pcm, readErr := io.ReadAll(io.LimitReader(stdout, maxReanalyzeBytes+1))
+	exceededCap := len(pcm) > maxReanalyzeBytes
+	if exceededCap {
+		cancel()
+	}
 	waitErr := cmd.Wait()
 
+	if exceededCap {
+		return nil, errors.Newf("clip decode exceeded byte cap").
+			Component("api/v2/reanalyze").
+			Category(errors.CategoryValidation).
+			Context("byte_cap", maxReanalyzeBytes).
+			Build()
+	}
 	if waitErr != nil {
 		return nil, errors.New(waitErr).
 			Component("api/v2/reanalyze").
@@ -118,13 +138,6 @@ func decodeClipMonoPCM16(
 			Component("api/v2/reanalyze").
 			Category(errors.CategoryAudio).
 			Context("operation", "ffmpeg_read_stdout").
-			Build()
-	}
-	if len(pcm) > maxReanalyzeBytes {
-		return nil, errors.Newf("clip decode exceeded byte cap").
-			Component("api/v2/reanalyze").
-			Category(errors.CategoryValidation).
-			Context("byte_cap", maxReanalyzeBytes).
 			Build()
 	}
 	if len(pcm) == 0 {

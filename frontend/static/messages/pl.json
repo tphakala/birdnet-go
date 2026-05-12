@@ -834,7 +834,8 @@
     },
     "row": {
       "viewDetails": "Wyświetl szczegóły dla {species}",
-      "openDetailFromStatus": "Otwórz stronę szczegółów dla {species}"
+      "openDetailFromStatus": "Otwórz stronę szczegółów dla {species}",
+      "openDetailFromDate": "Otwórz stronę szczegółów dla {species} z {date} o {time}"
     },
     "media": {
       "title": "Nagranie i Spektrogram",

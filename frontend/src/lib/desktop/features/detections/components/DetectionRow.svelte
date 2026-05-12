@@ -281,6 +281,11 @@
     href={buildAppUrl(`/ui/detections/${detection.id}`)}
     onclick={handleDetailsClick}
     class="hover:text-primary transition-colors cursor-pointer"
+    aria-label={t('detections.row.openDetailFromDate', {
+      species: detection.commonName,
+      date: detection.date,
+      time: detection.time,
+    })}
   >
     {detection.date}
     {detection.time}

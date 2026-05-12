@@ -843,7 +843,8 @@
     },
     "row": {
       "viewDetails": "Ver detalhes para {species}",
-      "openDetailFromStatus": "Abrir página de detalhes para {species}"
+      "openDetailFromStatus": "Abrir página de detalhes para {species}",
+      "openDetailFromDate": "Abrir página de detalhes para {species} gravado em {date} às {time}"
     },
     "media": {
       "title": "Gravação e espectrograma",

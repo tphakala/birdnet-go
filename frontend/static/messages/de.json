@@ -862,7 +862,8 @@
     },
     "row": {
       "viewDetails": "Details für {species} anzeigen",
-      "openDetailFromStatus": "Detailseite für {species} öffnen"
+      "openDetailFromStatus": "Detailseite für {species} öffnen",
+      "openDetailFromDate": "Detailseite für {species}, aufgenommen am {date} um {time}, öffnen"
     },
     "aria": {
       "loading": "Erkennungsdetails werden geladen...",
@@ -890,14 +891,14 @@
       "colSpecies": "Art",
       "button": "Neu analysieren",
       "buttonAriaLabel": "{species}-Clip mit anderem Modell neu analysieren",
-      "descriptionMulti": "Unten siehst du, wie jeder geladene Klassifikator diesen Clip bewertet. Klicke bei der Zeile, die du für richtig hältst, auf 'Diese verwenden', um die Erkennung zu aktualisieren.",
+      "descriptionMulti": "Unten sehen Sie, wie jeder geladene Klassifikator diesen Clip bewertet. Klicken Sie bei der Zeile, die Sie für richtig halten, auf 'Diese verwenden', um die Erkennung zu aktualisieren.",
       "multiModelSummary": "{models} • {duration} Audio",
       "useThis": "Diese verwenden",
       "useThisAriaLabel": "Diese Art ({species}) als korrigierte Erkennung übernehmen",
       "noModelForCorrection": "Kein Modell hat diese Art bewertet; Übernahme nicht möglich.",
       "correctionApplied": "Erkennung auf {species} aktualisiert.",
       "confirmTitle": "Erkennung durch {species} ersetzen?",
-      "confirmBody": "Damit werden Art, Modell und Konfidenz der Erkennung direkt überschrieben und als verifiziert markiert. Vorhandener Reviewstatus wird überschrieben.",
+      "confirmBody": "Damit werden Art, Modell und Konfidenz der Erkennung direkt überschrieben und als verifiziert markiert. Ein vorhandener Reviewstatus wird überschrieben.",
       "confirmApply": "Ja, Korrektur anwenden",
       "applying": "Wird angewendet…"
     }

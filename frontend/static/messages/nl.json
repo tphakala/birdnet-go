@@ -834,7 +834,8 @@
     },
     "row": {
       "viewDetails": "Bekijk details voor {species}",
-      "openDetailFromStatus": "Detailpagina voor {species} openen"
+      "openDetailFromStatus": "Detailpagina voor {species} openen",
+      "openDetailFromDate": "Detailpagina openen voor {species} opgenomen op {date} om {time}"
     },
     "media": {
       "title": "Geluid opname & Spectrogram",

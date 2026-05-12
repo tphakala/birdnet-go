@@ -839,7 +839,8 @@
     },
     "row": {
       "viewDetails": "View details for {species}",
-      "openDetailFromStatus": "Open detail page for {species}"
+      "openDetailFromStatus": "Open detail page for {species}",
+      "openDetailFromDate": "Open detail page for {species} recorded {date} {time}"
     },
     "media": {
       "title": "Recording & Spectrogram",

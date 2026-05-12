@@ -820,7 +820,8 @@
     },
     "row": {
       "viewDetails": "Voir les détails pour {species}",
-      "openDetailFromStatus": "Ouvrir la page de détail pour {species}"
+      "openDetailFromStatus": "Ouvrir la page de détail pour {species}",
+      "openDetailFromDate": "Ouvrir la page de détail pour {species} enregistré le {date} à {time}"
     },
     "status": {
       "locked": "Verrouillé"
