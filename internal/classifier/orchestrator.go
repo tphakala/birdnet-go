@@ -98,8 +98,13 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 // SetModelsDir sets the base directory for gallery-installed models.
 // Called by ModelManager after creation so model loaders can resolve
 // paths from the installed models directory when config paths are empty.
+// Also propagates the directory to the primary BirdNET instance for
+// geomodel auto-selection.
 func (o *Orchestrator) SetModelsDir(dir string) {
 	o.modelsDir = dir
+	if o.primary != nil {
+		o.primary.SetModelsDir(dir)
+	}
 }
 
 // resolveInstalledPaths looks up catalog entries for the given registry ID
@@ -272,6 +277,12 @@ func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific
 	}
 
 	return scientific, common, code
+}
+
+// RangeFilterStatus returns introspection data about the primary model's
+// active range filter configuration.
+func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusInfo {
+	return o.primary.RangeFilterStatus()
 }
 
 // RunFilterProcess executes the filter process on demand and prints results.

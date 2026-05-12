@@ -174,16 +174,8 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 	}
 	mapped := newMappedRangeFilter(innerFilter, classifierLabels, geoLabels, unmappedScore)
 
-	// Log mapping statistics
-	matchCount := 0
-	for _, idx := range mapped.classifierToGeo {
-		if idx >= 0 {
-			matchCount++
-		}
-	}
-
 	log := GetLogger()
-	if matchCount == 0 && len(classifierLabels) > 0 {
+	if mapped.mappedCount == 0 && len(classifierLabels) > 0 {
 		log.Warn("V3 geomodel: no species matched classifier labels, range filter will filter out all detections (check labels file)",
 			logger.Int("classifier_species", len(classifierLabels)),
 			logger.String("labels_path", labelsPath))
@@ -191,8 +183,8 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 	log.Info("V3 geomodel initialized with species mapping",
 		logger.Int("geomodel_species", len(geoLabels)),
 		logger.Int("classifier_species", len(classifierLabels)),
-		logger.Int("mapped_species", matchCount),
-		logger.Int("unmapped_species", len(classifierLabels)-matchCount))
+		logger.Int("mapped_species", mapped.mappedCount),
+		logger.Int("unmapped_species", len(classifierLabels)-mapped.mappedCount))
 
 	bn.rangeFilter = mapped
 	return nil

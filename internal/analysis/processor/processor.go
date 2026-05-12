@@ -838,6 +838,23 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 	return
 }
 
+// shouldApplyRangeFilter returns true if the given model should have its
+// detections filtered by the geographic range filter.
+// BirdNET (any version) and unknown models: always filtered (DetectionModelInfoForID
+// returns DefaultModelInfo with Name="BirdNET" for unrecognized IDs).
+// Perch: filtered only when the v3.0 geomodel is active (it covers Perch species).
+// Bat/BSG: never filtered (independent species sets, no geomodel coverage).
+func shouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
+	mInfo := classifier.DetectionModelInfoForID(modelID)
+	if mInfo.Name == detection.DefaultModelName {
+		return true
+	}
+	if mInfo.Name == classifier.DetectionNamePerch {
+		return settings.BirdNET.RangeFilter.Model == "v3"
+	}
+	return false
+}
+
 // shouldFilterDetection checks if a detection should be filtered out
 func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datastore.Results, commonName, scientificName, speciesLowercase string, baseThreshold float32, source, modelID string) (shouldFilter bool, confidenceThreshold float32) {
 	// Check human detection privacy filter
@@ -886,8 +903,7 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 		return true, confidenceThreshold
 	}
 
-	// Range filter applies only to BirdNET; Bat/Perch have independent species sets.
-	if strings.HasPrefix(modelID, detection.DefaultModelName) && !settings.IsSpeciesIncluded(result.Species) {
+	if shouldApplyRangeFilter(modelID, settings) && !settings.IsSpeciesIncluded(result.Species) {
 		if settings.Debug {
 			GetLogger().Debug("species not on included list",
 				logger.String("species", result.Species),
