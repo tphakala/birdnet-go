@@ -99,12 +99,42 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 // Called by ModelManager after creation so model loaders can resolve
 // paths from the installed models directory when config paths are empty.
 // Also propagates the directory to the primary BirdNET instance for
-// geomodel auto-selection.
+// geomodel auto-selection, and registers the taxonomy resolver if
+// taxonomy.csv is available on disk.
 func (o *Orchestrator) SetModelsDir(dir string) {
 	o.modelsDir = dir
 	if o.primary != nil {
 		o.primary.SetModelsDir(dir)
 	}
+	o.registerTaxonomyResolver(dir)
+}
+
+// registerTaxonomyResolver checks for taxonomy.csv in the shared models
+// directory and, if present, appends a TaxonomyResolver to the name
+// resolver chain. This provides multilingual common name resolution for
+// species not covered by BirdNET's label files.
+func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
+	log := GetLogger()
+	taxonomyPath := filepath.Join(modelsDir, "shared", "taxonomy.csv")
+
+	if _, err := os.Stat(taxonomyPath); err != nil {
+		return
+	}
+
+	locale := o.Settings.BirdNET.Locale
+	resolver, err := NewTaxonomyResolver(taxonomyPath, locale)
+	if err != nil {
+		log.Warn("Failed to load taxonomy resolver",
+			logger.String("path", taxonomyPath),
+			logger.Error(err))
+		return
+	}
+
+	o.nameResolvers = append(o.nameResolvers, resolver)
+	log.Info("Taxonomy resolver registered",
+		logger.String("path", taxonomyPath),
+		logger.String("locale", locale),
+		logger.Int("species", len(resolver.index)))
 }
 
 // resolveInstalledPaths looks up catalog entries for the given registry ID

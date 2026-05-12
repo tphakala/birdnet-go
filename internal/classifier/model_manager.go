@@ -423,9 +423,10 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 		}
 	}
 
-	// Clean up shared embeddings and geomodel files if no other dependent models remain.
+	// Clean up shared embeddings, geomodel, and taxonomy files if no other dependent models remain.
 	mm.cleanupSharedEmbeddings(log, catalogID, &entry)
 	mm.cleanupSharedGeomodel(log, catalogID, &entry)
+	mm.cleanupSharedTaxonomy(log, catalogID, &entry)
 
 	// Labels are intentionally retained on disk.
 
@@ -510,6 +511,40 @@ func (mm *ModelManager) cleanupSharedGeomodel(log logger.Logger, catalogID strin
 					logger.Error(err))
 			} else if err == nil {
 				log.Info("Removed shared geomodel file",
+					logger.String("path", path))
+			}
+		}
+	}
+}
+
+// cleanupSharedTaxonomy removes shared taxonomy files when uninstalling a
+// model with taxonomy dependencies, but only if no other taxonomy-dependent
+// model remains installed. The caller must hold mm.mu, and catalogID must
+// still be in mm.installed.
+func (mm *ModelManager) cleanupSharedTaxonomy(log logger.Logger, catalogID string, entry *CatalogEntry) {
+	if !HasTaxonomyFiles(entry) {
+		return
+	}
+	for id := range mm.installed {
+		if id == catalogID {
+			continue
+		}
+		other, found := GetCatalogEntry(id)
+		if found && HasTaxonomyFiles(&other) {
+			log.Debug("Retaining shared taxonomy files; other dependent models still installed",
+				logger.String("catalog_id", catalogID))
+			return
+		}
+	}
+	for _, f := range entry.Files {
+		if f.Role == RoleTaxonomy {
+			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				log.Warn("Failed to remove taxonomy file",
+					logger.String("path", path),
+					logger.Error(err))
+			} else if err == nil {
+				log.Info("Removed shared taxonomy file",
 					logger.String("path", path))
 			}
 		}
@@ -634,9 +669,9 @@ func (mm *ModelManager) downloadModelFiles(entry *CatalogEntry, baseURL string, 
 	}
 
 	// fileDestPath returns the local destination for a catalog file.
-	// Shared files (embeddings, geomodel) are stored in a common directory.
+	// Shared files (embeddings, geomodel, taxonomy) are stored in a common directory.
 	fileDestPath := func(f CatalogFile) string {
-		if f.Role == RoleEmbeddings || isGeomodelRole(f.Role) {
+		if isSharedRole(f.Role) {
 			return filepath.Join(mm.modelsDir, "shared", f.LocalName)
 		}
 		return filepath.Join(subdir, f.LocalName)
