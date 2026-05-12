@@ -5,7 +5,11 @@ const logger = loggers.ui;
 
 /** Top-N predictions returned by the reanalyze endpoint for a clip. */
 export interface ReanalyzePrediction {
-  species: string;
+  scientificName: string;
+  /** Localized common name in the user's configured BirdNET locale. May be
+   *  empty when the resolver chain has no entry for the species in that
+   *  locale; UI should render scientific-only as a fallback. */
+  commonName?: string;
   confidence: number;
 }
 

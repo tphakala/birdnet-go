@@ -76,13 +76,43 @@ func TestReanalyzeSamples_TopNAggregation(t *testing.T) {
 	require.Len(t, preds, 3)
 
 	// Sorted descending by confidence; max-per-species retained across windows.
-	assert.Equal(t, "Parus major_Great Tit", preds[0].Species)
+	// SplitSpeciesName turns "Scientific_Common" labels (BirdNET shape) into
+	// separate scientific + common fields on the response.
+	assert.Equal(t, "Parus major", preds[0].ScientificName)
+	assert.Equal(t, "Great Tit", preds[0].CommonName)
 	assert.InDelta(t, 0.91, preds[0].Confidence, 1e-6)
-	assert.Equal(t, "Turdus merula_Blackbird", preds[1].Species)
+	assert.Equal(t, "Turdus merula", preds[1].ScientificName)
+	assert.Equal(t, "Blackbird", preds[1].CommonName)
 	assert.InDelta(t, 0.85, preds[1].Confidence, 1e-6)
-	assert.Equal(t, "Erithacus rubecula_Robin", preds[2].Species)
+	assert.Equal(t, "Erithacus rubecula", preds[2].ScientificName)
+	assert.Equal(t, "Robin", preds[2].CommonName)
 	assert.InDelta(t, 0.42, preds[2].Confidence, 1e-6,
 		"robin's max confidence must come from window 1, not window 3")
+}
+
+// TestReanalyzeSamples_PerchStyleBareScientific verifies that bare binomial
+// labels (Perch v2's shape: "Genus species" with no common-name suffix) are
+// classified as scientific names with an empty CommonName, so the handler
+// knows to fill it via the resolver chain.
+func TestReanalyzeSamples_PerchStyleBareScientific(t *testing.T) {
+	t.Parallel()
+
+	spec := classifier.ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second}
+	clipLen := spec.SampleRate * int(spec.ClipLength.Seconds())
+	samples := make([]float32, clipLen)
+
+	stub := func(_ context.Context, _ string, _ [][]float32) ([]datastore.Results, error) {
+		return []datastore.Results{
+			{Species: "Coccothraustes coccothraustes", Confidence: 0.94}, // Perch shape
+		}, nil
+	}
+
+	preds, _, err := reanalyzeSamples(t.Context(), stub, "Perch_V2", spec, samples)
+	require.NoError(t, err)
+	require.Len(t, preds, 1)
+	assert.Equal(t, "Coccothraustes coccothraustes", preds[0].ScientificName)
+	assert.Empty(t, preds[0].CommonName,
+		"Perch-style bare scientific must leave CommonName empty so the handler can resolve it from the locale-aware resolver chain")
 }
 
 // TestReanalyzeSamples_ShortClipPadded verifies that audio shorter than one
