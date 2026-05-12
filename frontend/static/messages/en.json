@@ -884,19 +884,21 @@
     },
     "reanalyze": {
       "title": "Reanalyze with another model",
-      "description": "Run this clip through a different classifier and see what it predicts. Nothing is saved — this is a one-off second opinion.",
-      "modelLabel": "Model",
-      "loadingModels": "Loading available models…",
-      "noOtherModels": "No other models are loaded. Enable additional models in Settings → Models first.",
-      "run": "Run reanalysis",
       "running": "Analyzing…",
-      "summary": "{model} • {duration} of audio across {windows} windows",
       "noPredictions": "No predictions returned.",
       "colSpecies": "Species",
-      "colConfidence": "Confidence",
       "button": "Reanalyze",
       "buttonAriaLabel": "Reanalyze {species} clip with another model",
-      "duplicateInFlight": "A reanalysis is already running for this detection."
+      "descriptionMulti": "Every loaded classifier scores this clip below. Pick the row you think is right and click 'Use this' to update the detection.",
+      "multiModelSummary": "{models} • {duration} of audio",
+      "useThis": "Use this",
+      "useThisAriaLabel": "Apply this species ({species}) as the corrected detection",
+      "noModelForCorrection": "No model has scored this species; cannot apply.",
+      "correctionApplied": "Detection updated to {species}.",
+      "confirmTitle": "Replace detection with {species}?",
+      "confirmBody": "This updates the detection's species, model, and confidence in place, and marks it as verified. Existing review status is overwritten.",
+      "confirmApply": "Yes, apply correction",
+      "applying": "Applying…"
     }
   },
   "species": {

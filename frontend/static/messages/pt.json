@@ -884,19 +884,21 @@
     },
     "reanalyze": {
       "title": "Reanalisar com outro modelo",
-      "description": "Passa este clipe por um classificador diferente e vê o que ele prevê. Nada é guardado — é uma segunda opinião pontual.",
-      "modelLabel": "Modelo",
-      "loadingModels": "A carregar modelos disponíveis…",
-      "noOtherModels": "Não há outros modelos carregados. Ativa modelos adicionais primeiro em Definições → Modelos.",
-      "run": "Executar reanálise",
       "running": "A analisar…",
-      "summary": "{model} • {duration} de áudio em {windows} janelas",
       "noPredictions": "Nenhuma previsão devolvida.",
       "colSpecies": "Espécie",
-      "colConfidence": "Confiança",
       "button": "Reanalisar",
       "buttonAriaLabel": "Reanalisar o clipe de {species} com outro modelo",
-      "duplicateInFlight": "Já existe uma reanálise em curso para esta deteção."
+      "descriptionMulti": "Cada classificador carregado pontua este clipe abaixo. Escolhe a linha correta e clica em 'Usar esta' para atualizar a deteção.",
+      "multiModelSummary": "{models} • {duration} de áudio",
+      "useThis": "Usar esta",
+      "useThisAriaLabel": "Aplicar esta espécie ({species}) como deteção corrigida",
+      "noModelForCorrection": "Nenhum modelo pontuou esta espécie; não é possível aplicar.",
+      "correctionApplied": "Deteção atualizada para {species}.",
+      "confirmTitle": "Substituir a deteção por {species}?",
+      "confirmBody": "Isto atualiza a espécie, o modelo e a confiança da deteção e marca-a como verificada. O estado de revisão existente é substituído.",
+      "confirmApply": "Sim, aplicar correção",
+      "applying": "A aplicar…"
     }
   },
   "species": {
