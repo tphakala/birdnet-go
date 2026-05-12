@@ -1487,7 +1487,7 @@
 
 <!-- ── Main Content ──────────────────────────────────────────────────── -->
 <main class="settings-page-content space-y-6" aria-label={t('analysis.title')}>
-  <SettingsTabs tabs={pageTabs} bind:activeTab={pageTab} showActions={pageTab === 'settings'} />
+  <SettingsTabs tabs={pageTabs} bind:activeTab={pageTab} />
 </main>
 
 <!-- License Acceptance Dialog -->
