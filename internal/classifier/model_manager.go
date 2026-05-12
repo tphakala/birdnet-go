@@ -333,39 +333,9 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 		}
 	}
 
-	// Delete shared embeddings files only if no other bat models remain.
-	if entry.Category == CategoryBat {
-		otherBatInstalled := false
-		for id := range mm.installed {
-			if id == catalogID {
-				continue
-			}
-			other, found := GetCatalogEntry(id)
-			if found && other.Category == CategoryBat {
-				otherBatInstalled = true
-				break
-			}
-		}
-
-		if !otherBatInstalled {
-			for _, f := range entry.Files {
-				if f.Role == RoleEmbeddings {
-					path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
-					if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-						log.Warn("Failed to remove embeddings file",
-							logger.String("path", path),
-							logger.Error(err))
-					} else {
-						log.Info("Removed shared embeddings file",
-							logger.String("path", path))
-					}
-				}
-			}
-		} else {
-			log.Debug("Retaining shared embeddings; other bat models still installed",
-				logger.String("catalog_id", catalogID))
-		}
-	}
+	// Clean up shared embeddings and geomodel files if no other dependent models remain.
+	mm.cleanupSharedEmbeddings(log, catalogID, &entry)
+	mm.cleanupSharedGeomodel(log, catalogID, &entry)
 
 	// Labels are intentionally retained on disk.
 
@@ -377,6 +347,73 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 		logger.String("catalog_id", catalogID))
 
 	return nil
+}
+
+// cleanupSharedEmbeddings removes shared embeddings files when uninstalling a
+// bat model, but only if no other bat model remains installed. The caller must
+// hold mm.mu, and catalogID must still be in mm.installed.
+func (mm *ModelManager) cleanupSharedEmbeddings(log logger.Logger, catalogID string, entry *CatalogEntry) {
+	if entry.Category != CategoryBat {
+		return
+	}
+	for id := range mm.installed {
+		if id == catalogID {
+			continue
+		}
+		other, found := GetCatalogEntry(id)
+		if found && other.Category == CategoryBat {
+			log.Debug("Retaining shared embeddings; other bat models still installed",
+				logger.String("catalog_id", catalogID))
+			return
+		}
+	}
+	for _, f := range entry.Files {
+		if f.Role == RoleEmbeddings {
+			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				log.Warn("Failed to remove embeddings file",
+					logger.String("path", path),
+					logger.Error(err))
+			} else if err == nil {
+				log.Info("Removed shared embeddings file",
+					logger.String("path", path))
+			}
+		}
+	}
+}
+
+// cleanupSharedGeomodel removes shared geomodel files when uninstalling a
+// model with geomodel dependencies, but only if no other geomodel-dependent
+// model remains installed. The caller must hold mm.mu, and catalogID must
+// still be in mm.installed.
+func (mm *ModelManager) cleanupSharedGeomodel(log logger.Logger, catalogID string, entry *CatalogEntry) {
+	if !hasGeomodelFiles(entry) {
+		return
+	}
+	for id := range mm.installed {
+		if id == catalogID {
+			continue
+		}
+		other, found := GetCatalogEntry(id)
+		if found && hasGeomodelFiles(&other) {
+			log.Debug("Retaining shared geomodel files; other dependent models still installed",
+				logger.String("catalog_id", catalogID))
+			return
+		}
+	}
+	for _, f := range entry.Files {
+		if f.Role == RoleGeomodel {
+			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				log.Warn("Failed to remove geomodel file",
+					logger.String("path", path),
+					logger.Error(err))
+			} else if err == nil {
+				log.Info("Removed shared geomodel file",
+					logger.String("path", path))
+			}
+		}
+	}
 }
 
 // Install downloads all files for a catalog entry and records it as installed.
@@ -442,8 +479,9 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	}
 
 	// fileDestPath returns the local destination for a catalog file.
+	// Shared files (embeddings, geomodel) are stored in a common directory.
 	fileDestPath := func(f CatalogFile) string {
-		if f.Role == RoleEmbeddings {
+		if f.Role == RoleEmbeddings || f.Role == RoleGeomodel {
 			return filepath.Join(mm.modelsDir, "shared", f.LocalName)
 		}
 		return filepath.Join(subdir, f.LocalName)
@@ -481,12 +519,17 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 			continue
 		}
 
-		// Build download URL.
+		// Build download URL. Per-file HuggingFaceRepo overrides the entry-level repo,
+		// allowing companion files (e.g., geomodel) to live in a separate repository.
 		var url string
 		if baseURL != "" {
 			url = baseURL + "/" + f.RemotePath
 		} else {
-			url = buildHuggingFaceURL(entry.HuggingFaceRepo, f.RemotePath)
+			repo := entry.HuggingFaceRepo
+			if f.HuggingFaceRepo != "" {
+				repo = f.HuggingFaceRepo
+			}
+			url = buildHuggingFaceURL(repo, f.RemotePath)
 		}
 
 		fileIndex++
@@ -619,8 +662,8 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 
 	switch entry.RegistryID {
 	case RegistryIDBirdNETV3:
-		GetLogger().Info("BirdNET v3.0 config wiring not yet implemented",
-			logger.String("catalog_id", entry.ID))
+		// BirdNET v3.0 acoustic model config will be added when the model is released.
+		// Geomodel range filter config is applied generically below.
 	case RegistryIDPerchV2:
 		if modelPath != "" {
 			updated.Perch.ModelPath = modelPath
@@ -647,6 +690,22 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 		}
 	}
 
+	// Apply v3 geomodel range filter config if this entry includes geomodel files.
+	if hasGeomodelFiles(entry) {
+		updated.BirdNET.RangeFilter.Model = "v3"
+		for _, f := range entry.Files {
+			if f.Role != RoleGeomodel {
+				continue
+			}
+			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			if strings.HasSuffix(f.LocalName, ".onnx") {
+				updated.BirdNET.RangeFilter.ModelPath = path
+			} else {
+				updated.BirdNET.RangeFilter.LabelsPath = path
+			}
+		}
+	}
+
 	// Add config alias to Models.Enabled so the model appears in source config.
 	alias := ConfigAliasForRegistry(entry.RegistryID)
 	if alias != "" && !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
@@ -666,7 +725,8 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 // applyConfigForUninstall updates settings to reflect a removed model.
 // For bat models, Enabled is only set to false when no other bat models
 // remain installed; if another bat model exists, config is re-pointed to it.
-// The caller must hold mm.mu (at least RLock).
+// The caller must hold mm.mu for writing; the uninstalled entry must already
+// be deleted from mm.installed so the geomodel and bat searches skip it.
 // Uses clone-mutate-publish so the shared settings snapshot is never mutated
 // in place. Settings are persisted to disk via conf.SaveSettings so changes
 // survive restarts and are visible to concurrent readers through conf.Setting().
@@ -683,8 +743,8 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 
 	switch entry.RegistryID {
 	case RegistryIDBirdNETV3:
-		GetLogger().Info("BirdNET v3.0 config wiring not yet implemented",
-			logger.String("catalog_id", entry.ID))
+		// BirdNET v3.0 acoustic model config will be cleared when the model is released.
+		// Geomodel range filter config is handled generically below.
 	case RegistryIDPerchV2:
 		updated.Perch.ModelPath = ""
 		updated.Perch.LabelPath = ""
@@ -718,6 +778,24 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 					break
 				}
 			}
+		}
+	}
+
+	// Reset v3 geomodel range filter config if no other geomodel-dependent model remains.
+	// mm.installed no longer contains the uninstalled entry (deleted by caller).
+	if hasGeomodelFiles(entry) {
+		otherGeomodel := false
+		for id := range mm.installed {
+			other, found := GetCatalogEntry(id)
+			if found && hasGeomodelFiles(&other) {
+				otherGeomodel = true
+				break
+			}
+		}
+		if !otherGeomodel {
+			updated.BirdNET.RangeFilter.Model = ""
+			updated.BirdNET.RangeFilter.ModelPath = ""
+			updated.BirdNET.RangeFilter.LabelsPath = ""
 		}
 	}
 
