@@ -352,6 +352,10 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 // Reads range filter config from the latest published settings (not the instance's
 // potentially stale bn.Settings) so that config changes from install/uninstall
 // are reflected without restarting the instance.
+//
+// Auto-selection of the v3 geomodel is used only for local routing; settings are
+// NOT published here. The caller (ensureGeomodelConfig, applyConfigForInstall)
+// is responsible for persisting config after the backend is confirmed working.
 func (bn *BirdNET) initializeMetaModel() error {
 	log := GetLogger()
 	settings := bn.currentSettings()
@@ -365,12 +369,12 @@ func (bn *BirdNET) initializeMetaModel() error {
 		logger.String("models_dir", bn.modelsDir))
 
 	// Auto-select v3 geomodel for compatible classifiers when files exist on disk.
-	// Clone-mutate-publish to avoid racing on the shared settings object.
+	// Only applies locally for routing; does NOT publish settings to avoid
+	// inconsistency if the backend fails to initialize.
 	if bn.modelsDir != "" && shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
-		updated := conf.CloneSettings(settings)
-		applyAutoSelectedGeomodelPaths(updated, bn.modelsDir)
-		conf.StoreSettings(updated)
-		rf = updated.BirdNET.RangeFilter
+		localSettings := conf.CloneSettings(settings)
+		applyAutoSelectedGeomodelPaths(localSettings, bn.modelsDir)
+		rf = localSettings.BirdNET.RangeFilter
 		log.Info("Auto-selected v3.0 geomodel for compatible classifier",
 			logger.String("classifier", bn.ModelInfo.ID),
 			logger.String("models_dir", bn.modelsDir))
