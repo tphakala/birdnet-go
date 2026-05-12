@@ -3,6 +3,8 @@
 // key via RegistryID and provides download metadata for HuggingFace repos.
 package classifier
 
+import "slices"
+
 // Catalog category constants.
 const (
 	CategoryWildlife = "wildlife"
@@ -18,6 +20,7 @@ const (
 	RoleGeomodelModel  = "geomodel_model"
 	RoleGeomodelLabels = "geomodel_labels"
 	RoleData           = "data"
+	RoleTaxonomy       = "taxonomy"
 )
 
 // CatalogEntry describes a downloadable model available in the model gallery.
@@ -71,10 +74,10 @@ var EmbeddedCatalog = []CatalogEntry{
 		Hidden:          true,
 		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
 		HuggingFaceRepo: "tphakala/BirdNET-v3.0",
-		Files: append([]CatalogFile{
+		Files: slices.Concat([]CatalogFile{
 			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "", SizeBytes: 0},
 			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "", SizeBytes: 0},
-		}, geomodelFiles()...),
+		}, geomodelFiles(), taxonomyFiles()),
 	},
 	{
 		ID:              "perch-v2",
@@ -91,10 +94,10 @@ var EmbeddedCatalog = []CatalogEntry{
 		RegistryID:      RegistryIDPerchV2,
 		UpstreamURL:     "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
 		HuggingFaceRepo: "tphakala/Perch-v2",
-		Files: append([]CatalogFile{
+		Files: slices.Concat([]CatalogFile{
 			{RemotePath: "perch_v2.onnx", LocalName: "perch_v2.onnx", Role: RoleModel, SHA256: "bf0c8467a924cb074663970ca4a0ab1e143602121930209657d0dff5d5cefa1f", SizeBytes: 409148616},
 			{RemotePath: "labels.txt", LocalName: "perch_v2_labels.txt", Role: RoleLabels, SHA256: "e4d5c0397d8fb08bf90c6b13a34810af53504faad927e472fcc567793c9de057", SizeBytes: 312716},
-		}, geomodelFiles()...),
+		}, geomodelFiles(), taxonomyFiles()),
 	},
 	{
 		ID:              "bsg-finland",
@@ -160,6 +163,30 @@ const (
 	geomodelLabelsSizeBytes int64 = 479350
 )
 
+// Shared taxonomy.csv from BirdNET v3.0, provides common names in 29 languages
+// for ~13,361 species. Used as fallback name resolver for Perch v2 and other
+// models whose labels contain only scientific names.
+const (
+	taxonomyHuggingFaceRepo       = "tphakala/BirdNET-Geomodel"
+	taxonomySHA256                = "74e4b31d2f9c56fbd1a45d980591654f508c73fc4a153cab52f11367a078ddfd"
+	taxonomySizeBytes       int64 = 9162669
+)
+
+// taxonomyFiles returns the shared taxonomy CatalogFile entry appended to
+// classifiers that benefit from multilingual common name resolution.
+func taxonomyFiles() []CatalogFile {
+	return []CatalogFile{
+		{
+			RemotePath:      "taxonomy.csv",
+			LocalName:       "taxonomy.csv",
+			Role:            RoleTaxonomy,
+			SHA256:          taxonomySHA256,
+			SizeBytes:       taxonomySizeBytes,
+			HuggingFaceRepo: taxonomyHuggingFaceRepo,
+		},
+	}
+}
+
 // geomodelFiles returns the shared geomodel CatalogFile entries appended to
 // classifiers that use the v3.0 range filter (Perch v2, BirdNET v3.0).
 func geomodelFiles() []CatalogFile {
@@ -186,6 +213,21 @@ func geomodelFiles() []CatalogFile {
 // isGeomodelRole reports whether the given file role is a geomodel role.
 func isGeomodelRole(role string) bool {
 	return role == RoleGeomodelModel || role == RoleGeomodelLabels
+}
+
+// isSharedRole reports whether the given file role stores into models/shared/.
+func isSharedRole(role string) bool {
+	return role == RoleEmbeddings || role == RoleTaxonomy || isGeomodelRole(role)
+}
+
+// HasTaxonomyFiles reports whether a catalog entry includes shared taxonomy files.
+func HasTaxonomyFiles(entry *CatalogEntry) bool {
+	for _, f := range entry.Files {
+		if f.Role == RoleTaxonomy {
+			return true
+		}
+	}
+	return false
 }
 
 // HasGeomodelFiles reports whether a catalog entry includes shared geomodel files.

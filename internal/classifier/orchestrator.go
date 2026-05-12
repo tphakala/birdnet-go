@@ -99,12 +99,53 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 // Called by ModelManager after creation so model loaders can resolve
 // paths from the installed models directory when config paths are empty.
 // Also propagates the directory to the primary BirdNET instance for
-// geomodel auto-selection.
+// geomodel auto-selection, and registers the taxonomy resolver if
+// taxonomy.csv is available on disk.
 func (o *Orchestrator) SetModelsDir(dir string) {
 	o.modelsDir = dir
 	if o.primary != nil {
 		o.primary.SetModelsDir(dir)
 	}
+	o.registerTaxonomyResolver(dir)
+}
+
+// registerTaxonomyResolver checks for taxonomy.csv in the shared models
+// directory and, if present, appends a TaxonomyResolver to the name
+// resolver chain. This provides multilingual common name resolution for
+// species not covered by BirdNET's label files.
+//
+// Called during initialization before inference goroutines start, so the
+// unsynchronized append to nameResolvers is safe.
+func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
+	if o.Settings == nil {
+		return
+	}
+
+	for _, r := range o.nameResolvers {
+		if _, ok := r.(*TaxonomyResolver); ok {
+			return
+		}
+	}
+
+	log := GetLogger()
+	taxonomyPath := filepath.Join(modelsDir, "shared", "taxonomy.csv")
+
+	locale := o.Settings.BirdNET.Locale
+	resolver, err := NewTaxonomyResolver(taxonomyPath, locale)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Warn("Failed to load taxonomy resolver",
+				logger.String("path", taxonomyPath),
+				logger.Error(err))
+		}
+		return
+	}
+
+	o.nameResolvers = append(o.nameResolvers, resolver)
+	log.Info("Taxonomy resolver registered",
+		logger.String("path", taxonomyPath),
+		logger.String("locale", locale),
+		logger.Int("species", len(resolver.index)))
 }
 
 // resolveInstalledPaths looks up catalog entries for the given registry ID
@@ -264,12 +305,12 @@ func (o *Orchestrator) GetSpeciesWithScientificAndCommonName(label string) (scie
 // EnrichResultWithTaxonomy adds taxonomy information to a detection result.
 // If the primary model cannot resolve a common name (e.g., Perch labels
 // contain only scientific names), the name resolver chain is consulted
-// to map the scientific name to BirdNET's common name.
+// to find a common name (BirdNET labels, then taxonomy.csv).
 func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific, common, code string) {
 	scientific, common, code = o.primary.EnrichResultWithTaxonomy(speciesLabel)
 
 	// Perch v2 labels are scientific-name-only. Try the resolver chain
-	// to look up a common name from BirdNET's label database.
+	// to look up a common name.
 	if common == "" && scientific != "" {
 		if resolved := o.ResolveName(scientific, ""); resolved != "" {
 			common = resolved
