@@ -421,8 +421,6 @@ func (mm *ModelManager) cleanupSharedGeomodel(log logger.Logger, catalogID strin
 // empty string to use the default HuggingFace URL constructed from the entry's
 // repo. Progress is reported via the channel if non-nil.
 func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
-	log := GetLogger()
-
 	// Check if already installed or already downloading.
 	mm.mu.Lock()
 	if _, ok := mm.installed[entry.ID]; ok {
@@ -449,6 +447,25 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	}
 	mm.mu.Unlock()
 
+	if err := mm.downloadModelFiles(entry, baseURL, progress); err != nil {
+		// Keep failed state briefly for SSE pollers, then clean up.
+		time.AfterFunc(30*time.Second, func() {
+			mm.removeDownloading(entry.ID)
+		})
+		return err
+	}
+
+	return nil
+}
+
+// downloadModelFiles handles the actual file download, validation, recording,
+// config application, and hot-load for a catalog entry. The caller must have
+// already registered the entry in mm.downloading before calling this method.
+// On failure, downloadModelFiles calls markFailed but the caller is responsible
+// for scheduling cleanup of the download state (e.g., via time.AfterFunc).
+func (mm *ModelManager) downloadModelFiles(entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
+	log := GetLogger()
+
 	// Create model subdirectory.
 	subdir := filepath.Join(mm.modelsDir, entry.ID)
 	if err := os.MkdirAll(subdir, 0o755); err != nil {
@@ -459,9 +476,6 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 			Context("directory", subdir).
 			Build()
 		mm.markFailed(entry.ID, mkdirErr, progress)
-		time.AfterFunc(30*time.Second, func() {
-			mm.removeDownloading(entry.ID)
-		})
 		return mkdirErr
 	}
 
@@ -472,10 +486,6 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 		for _, f := range downloadedFiles {
 			_ = os.Remove(f)
 		}
-		// Keep failed state briefly for SSE pollers, then clean up.
-		time.AfterFunc(30*time.Second, func() {
-			mm.removeDownloading(entry.ID)
-		})
 	}
 
 	// fileDestPath returns the local destination for a catalog file.
