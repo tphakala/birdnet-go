@@ -1435,7 +1435,7 @@ func validateWebServerSection(data json.RawMessage) error {
 // key is present in the PATCH payload.
 func validateLiveStreamFields(updateMap map[string]any) error {
 	lsRaw, ok := updateMap["liveStream"]
-	if !ok {
+	if !ok || lsRaw == nil {
 		return nil
 	}
 	ls, ok := lsRaw.(map[string]any)
