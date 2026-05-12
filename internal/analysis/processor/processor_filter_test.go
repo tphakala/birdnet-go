@@ -76,6 +76,12 @@ func TestShouldApplyRangeFilter(t *testing.T) {
 			rangeFilterModel: "v3",
 			expected:         false,
 		},
+		{
+			name:             "unknown model ID defaults to BirdNET via DetectionModelInfoForID",
+			modelID:          "SomeUnknownModel",
+			rangeFilterModel: "",
+			expected:         true,
+		},
 	}
 
 	for _, tt := range tests {

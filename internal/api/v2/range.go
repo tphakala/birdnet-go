@@ -127,23 +127,6 @@ type RangeFilterSpeciesList struct {
 	Orders      []string             `json:"orders"`
 }
 
-// RangeFilterStatusResponse represents the status of the active range filter model
-type RangeFilterStatusResponse struct {
-	Model               string    `json:"model"`
-	ModelPath           string    `json:"modelPath"`
-	LabelsPath          string    `json:"labelsPath"`
-	AutoSelected        bool      `json:"autoSelected"`
-	ClassifierModel     string    `json:"classifierModel"`
-	GeomodelSpecies     int       `json:"geomodelSpecies"`
-	ClassifierSpecies   int       `json:"classifierSpecies"`
-	MappedSpecies       int       `json:"mappedSpecies"`
-	UnmappedSpecies     int       `json:"unmappedSpecies"`
-	PassUnmappedSpecies bool      `json:"passUnmappedSpecies"`
-	Threshold           float32   `json:"threshold"`
-	LocationConfigured  bool      `json:"locationConfigured"`
-	LastUpdated         time.Time `json:"lastUpdated"`
-}
-
 // RangeFilterScoresResponse represents all species with their raw geomodel scores
 type RangeFilterScoresResponse struct {
 	Species   []RangeFilterSpecies `json:"species"`
@@ -198,7 +181,7 @@ func (c *Controller) initRangeRoutes() {
 // @Description Returns the active geomodel, mapping statistics, auto-selection status, and threshold
 // @Tags range
 // @Produce json
-// @Success 200 {object} RangeFilterStatusResponse
+// @Success 200 {object} classifier.RangeFilterStatusInfo
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/status [get]
 func (c *Controller) GetRangeFilterStatus(ctx echo.Context) error {
@@ -207,25 +190,7 @@ func (c *Controller) GetRangeFilterStatus(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
 
-	status := birdnetInstance.RangeFilterStatus()
-
-	response := RangeFilterStatusResponse{
-		Model:               status.Model,
-		ModelPath:           status.ModelPath,
-		LabelsPath:          status.LabelsPath,
-		AutoSelected:        status.AutoSelected,
-		ClassifierModel:     status.ClassifierModel,
-		GeomodelSpecies:     status.GeomodelSpecies,
-		ClassifierSpecies:   status.ClassifierSpecies,
-		MappedSpecies:       status.MappedSpecies,
-		UnmappedSpecies:     status.UnmappedSpecies,
-		PassUnmappedSpecies: status.PassUnmappedSpecies,
-		Threshold:           status.Threshold,
-		LocationConfigured:  status.LocationConfigured,
-		LastUpdated:         status.LastUpdated,
-	}
-
-	return ctx.JSON(http.StatusOK, response)
+	return ctx.JSON(http.StatusOK, birdnetInstance.RangeFilterStatus())
 }
 
 // GetRangeFilterSpeciesScores returns all species with their raw geomodel probability scores

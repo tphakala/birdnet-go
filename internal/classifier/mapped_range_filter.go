@@ -15,6 +15,7 @@ type mappedRangeFilter struct {
 	inner           inference.RangeFilter
 	classifierToGeo []int   // classifierIndex -> geomodelIndex; -1 means no match
 	numClassifier   int     // len(classifierLabels)
+	mappedCount     int     // number of classifier species with a geomodel match
 	unmappedScore   float32 // score for classifier species absent from geomodel
 }
 
@@ -55,10 +56,18 @@ func extractScientificName(label string) string {
 // unmappedScore is the score assigned to classifier species that have no
 // match in the geomodel (0.0 = filter out, 1.0 = pass through).
 func newMappedRangeFilter(inner inference.RangeFilter, classifierLabels, geomodelLabels []string, unmappedScore float32) *mappedRangeFilter {
+	mapping := buildSpeciesMapping(classifierLabels, geomodelLabels)
+	mapped := 0
+	for _, idx := range mapping {
+		if idx >= 0 {
+			mapped++
+		}
+	}
 	return &mappedRangeFilter{
 		inner:           inner,
-		classifierToGeo: buildSpeciesMapping(classifierLabels, geomodelLabels),
+		classifierToGeo: mapping,
 		numClassifier:   len(classifierLabels),
+		mappedCount:     mapped,
 		unmappedScore:   unmappedScore,
 	}
 }

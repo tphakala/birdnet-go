@@ -845,14 +845,13 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 // Bat/BSG/other: never filtered (independent species sets, no geomodel coverage).
 func shouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
 	mInfo := classifier.DetectionModelInfoForID(modelID)
-	switch mInfo.Name {
-	case "BirdNET":
+	if mInfo.Name == detection.DefaultModelName {
 		return true
-	case "Perch":
-		return settings.BirdNET.RangeFilter.Model == "v3"
-	default:
-		return false
 	}
+	if mInfo.Name == classifier.DetectionNamePerch {
+		return settings.BirdNET.RangeFilter.Model == "v3"
+	}
+	return false
 }
 
 // shouldFilterDetection checks if a detection should be filtered out

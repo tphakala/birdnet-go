@@ -1229,14 +1229,8 @@ func (bn *BirdNET) RangeFilterStatus() RangeFilterStatusInfo {
 	if mrf, ok := bn.rangeFilter.(*mappedRangeFilter); ok {
 		info.GeomodelSpecies = mrf.inner.NumSpecies()
 		info.ClassifierSpecies = mrf.numClassifier
-		mapped := 0
-		for _, idx := range mrf.classifierToGeo {
-			if idx >= 0 {
-				mapped++
-			}
-		}
-		info.MappedSpecies = mapped
-		info.UnmappedSpecies = mrf.numClassifier - mapped
+		info.MappedSpecies = mrf.mappedCount
+		info.UnmappedSpecies = mrf.numClassifier - mrf.mappedCount
 	}
 	bn.mu.Unlock()
 

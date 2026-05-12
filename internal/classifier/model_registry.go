@@ -36,6 +36,10 @@ const (
 	RegistryIDPerchV2   = "Perch_V2"
 )
 
+// DetectionNamePerch is the detection model name for Perch classifiers,
+// matching the DetectionName field in the ModelRegistry.
+const DetectionNamePerch = "Perch"
+
 // ModelInfo represents metadata about a classifier model.
 type ModelInfo struct {
 	ID               string    // Unique registry identifier (e.g., "BirdNET_V2.4")
