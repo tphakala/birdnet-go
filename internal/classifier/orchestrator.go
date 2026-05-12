@@ -113,20 +113,24 @@ func (o *Orchestrator) SetModelsDir(dir string) {
 // directory and, if present, appends a TaxonomyResolver to the name
 // resolver chain. This provides multilingual common name resolution for
 // species not covered by BirdNET's label files.
+//
+// Called during initialization before inference goroutines start, so the
+// unsynchronized append to nameResolvers is safe.
 func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
-	log := GetLogger()
-	taxonomyPath := filepath.Join(modelsDir, "shared", "taxonomy.csv")
-
-	if _, err := os.Stat(taxonomyPath); err != nil {
+	if o.Settings == nil {
 		return
 	}
+	log := GetLogger()
+	taxonomyPath := filepath.Join(modelsDir, "shared", "taxonomy.csv")
 
 	locale := o.Settings.BirdNET.Locale
 	resolver, err := NewTaxonomyResolver(taxonomyPath, locale)
 	if err != nil {
-		log.Warn("Failed to load taxonomy resolver",
-			logger.String("path", taxonomyPath),
-			logger.Error(err))
+		if !os.IsNotExist(err) {
+			log.Warn("Failed to load taxonomy resolver",
+				logger.String("path", taxonomyPath),
+				logger.Error(err))
+		}
 		return
 	}
 

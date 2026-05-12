@@ -5,8 +5,12 @@ package classifier
 
 import (
 	"encoding/csv"
+	"fmt"
+	"io"
 	"os"
 	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // taxonomyLocaleColumns maps BirdNET-Go locale codes to taxonomy.csv column
@@ -50,7 +54,8 @@ type TaxonomyResolver struct {
 
 // NewTaxonomyResolver creates a resolver by parsing taxonomyPath for the
 // given locale. If the locale has no dedicated column in taxonomy.csv,
-// English common names (com_name column) are used.
+// English common names (com_name column) are used. The CSV is streamed
+// row-by-row to avoid loading the entire ~9 MB file into memory.
 func NewTaxonomyResolver(taxonomyPath, locale string) (*TaxonomyResolver, error) {
 	f, err := os.Open(taxonomyPath) //nolint:gosec // G304: path from catalog metadata
 	if err != nil {
@@ -61,16 +66,13 @@ func NewTaxonomyResolver(taxonomyPath, locale string) (*TaxonomyResolver, error)
 	reader := csv.NewReader(f)
 	reader.LazyQuotes = true
 
-	records, err := reader.ReadAll()
-	if err != nil {
-		return nil, err
-	}
-
-	if len(records) < 2 {
+	header, err := reader.Read()
+	if errors.Is(err, io.EOF) {
 		return &TaxonomyResolver{index: make(map[string]string)}, nil
 	}
-
-	header := records[0]
+	if err != nil {
+		return nil, fmt.Errorf("reading taxonomy header: %w", err)
+	}
 
 	sciCol := findColumn(header, "sci_name")
 	if sciCol < 0 {
@@ -78,9 +80,19 @@ func NewTaxonomyResolver(taxonomyPath, locale string) (*TaxonomyResolver, error)
 	}
 
 	nameCol := resolveLocaleColumn(header, locale)
+	if nameCol < 0 {
+		return &TaxonomyResolver{index: make(map[string]string)}, nil
+	}
 
-	index := make(map[string]string, len(records)-1)
-	for _, row := range records[1:] {
+	index := make(map[string]string, 14000)
+	for {
+		row, readErr := reader.Read()
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			return nil, fmt.Errorf("reading taxonomy row: %w", readErr)
+		}
 		if sciCol >= len(row) || nameCol >= len(row) {
 			continue
 		}
@@ -106,7 +118,7 @@ func (r *TaxonomyResolver) Resolve(scientificName, _ string) string {
 
 // resolveLocaleColumn finds the best column index for the given locale.
 // Falls back to the English "com_name" column if no locale-specific column
-// exists.
+// exists. Returns -1 if neither is found.
 func resolveLocaleColumn(header []string, locale string) int {
 	locale = strings.ToLower(locale)
 
@@ -116,11 +128,7 @@ func resolveLocaleColumn(header []string, locale string) int {
 		}
 	}
 
-	if idx := findColumn(header, "com_name"); idx >= 0 {
-		return idx
-	}
-
-	return 0
+	return findColumn(header, "com_name")
 }
 
 // findColumn returns the index of the named column in header, or -1.
