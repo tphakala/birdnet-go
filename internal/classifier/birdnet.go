@@ -349,13 +349,14 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 // initializeMetaModel loads and initializes the meta model used for range filtering.
 func (bn *BirdNET) initializeMetaModel() error {
 	// Auto-select v3 geomodel for compatible classifiers when files exist on disk.
-	if bn.Settings.BirdNET.RangeFilter.Model != "v3" && bn.modelsDir != "" {
-		if shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
-			applyAutoSelectedGeomodelPaths(bn.Settings, bn.modelsDir)
-			GetLogger().Info("Auto-selected v3.0 geomodel for compatible classifier",
-				logger.String("classifier", bn.ModelInfo.ID),
-				logger.String("models_dir", bn.modelsDir))
-		}
+	// Also resolves empty paths when the user explicitly sets Model="v3" but
+	// leaves ModelPath/LabelsPath empty (applyAutoSelectedGeomodelPaths skips
+	// when existing paths already point to valid files).
+	if bn.modelsDir != "" && shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
+		applyAutoSelectedGeomodelPaths(bn.Settings, bn.modelsDir)
+		GetLogger().Info("Auto-selected v3.0 geomodel for compatible classifier",
+			logger.String("classifier", bn.ModelInfo.ID),
+			logger.String("models_dir", bn.modelsDir))
 	}
 
 	// V3 geomodel is always ONNX; route to ONNX backend even if ModelPath is empty
