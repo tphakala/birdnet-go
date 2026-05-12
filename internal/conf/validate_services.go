@@ -38,10 +38,10 @@ func ValidateBirdNETSettings(cfg *BirdNETConfig) ValidationResult {
 		result.Errors = append(result.Errors, "BirdNET threads must be at least 0")
 	}
 
-	// Empty string, "latest", or "legacy" are valid
-	if cfg.RangeFilter.Model != "" && cfg.RangeFilter.Model != "latest" && cfg.RangeFilter.Model != "legacy" {
+	// Empty string, "latest", "legacy", or "v3" are valid
+	if cfg.RangeFilter.Model != "" && cfg.RangeFilter.Model != "latest" && cfg.RangeFilter.Model != "legacy" && cfg.RangeFilter.Model != "v3" {
 		result.Valid = false
-		result.Errors = append(result.Errors, "RangeFilter model must be either empty (v2 default), 'latest', or 'legacy'")
+		result.Errors = append(result.Errors, "RangeFilter model must be either empty (v2 default), 'latest', 'legacy', or 'v3'")
 	}
 
 	checkRange(&result, cfg.RangeFilter.Threshold, 0, 1, "RangeFilter threshold must be between 0 and 1")

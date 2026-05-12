@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -105,6 +106,25 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 			Build()
 	}
 
+	// Expand environment variables and ~ prefix in paths (consistent with getMetaModelData)
+	modelPath := os.ExpandEnv(rfSettings.ModelPath)
+	modelPath, err := conf.ExpandTildePath(modelPath)
+	if err != nil {
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("path", rfSettings.ModelPath).
+			Build()
+	}
+
+	labelsPath := os.ExpandEnv(rfSettings.LabelsPath)
+	labelsPath, err = conf.ExpandTildePath(labelsPath)
+	if err != nil {
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("path", rfSettings.LabelsPath).
+			Build()
+	}
+
 	// Ensure ONNX Runtime is initialized
 	if err := inference.InitONNXRuntime(bn.Settings.BirdNET.ONNXRuntimePath); err != nil {
 		return errors.New(err).
@@ -115,18 +135,25 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 	}
 
 	// Load geomodel labels from file
-	geoLabels, err := loadLabelsFromFile(rfSettings.LabelsPath)
+	geoLabels, err := loadLabelsFromFile(labelsPath)
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
 			Context("model_type", "v3_geomodel").
-			Context("labels_path", rfSettings.LabelsPath).
+			Context("labels_path", labelsPath).
+			Build()
+	}
+
+	if len(geoLabels) == 0 {
+		return errors.Newf("v3 geomodel labels file is empty: %s", labelsPath).
+			Category(errors.CategoryModelInit).
+			Context("model_type", "v3_geomodel").
 			Build()
 	}
 
 	// Create ONNX range filter using the geomodel's own labels
 	innerFilter, err := inference.NewONNXRangeFilter(
-		rfSettings.ModelPath,
+		modelPath,
 		inference.ONNXRangeFilterOptions{
 			Labels: geoLabels,
 		},
@@ -135,7 +162,7 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
 			Context("model_type", "v3_geomodel").
-			Context("range_filter_model", rfSettings.ModelPath).
+			Context("range_filter_model", modelPath).
 			Timing("onnx-v3-geomodel-init", time.Since(start)).
 			Build()
 	}
