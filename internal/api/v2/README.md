@@ -168,13 +168,15 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 ### Range Filter (`range.go`)
 
-| Method | Route                  | Handler                      | Auth | Description                         |
-| ------ | ---------------------- | ---------------------------- | ---- | ----------------------------------- |
-| GET    | `/range/species/count` | `GetRangeFilterSpeciesCount` | ❌   | Species count with range filter     |
-| GET    | `/range/species/list`  | `GetRangeFilterSpeciesList`  | ❌   | Species list with taxonomy groups   |
-| GET    | `/range/species/csv`   | `GetRangeFilterSpeciesCSV`   | ❌   | Export species list as CSV download |
-| POST   | `/range/species/test`  | `TestRangeFilter`            | ❌   | Test range filter configuration     |
-| POST   | `/range/rebuild`       | `RebuildRangeFilter`         | ❌   | Rebuild range filter data           |
+| Method | Route                   | Handler                        | Auth | Description                                                      |
+| ------ | ----------------------- | ------------------------------ | ---- | ---------------------------------------------------------------- |
+| GET    | `/range/status`         | `GetRangeFilterStatus`         | ❌   | Range filter model, mapping stats, auto-selection status         |
+| GET    | `/range/species/scores` | `GetRangeFilterSpeciesScores`  | ❌   | All species with raw geomodel scores (no threshold cutoff)       |
+| GET    | `/range/species/count`  | `GetRangeFilterSpeciesCount`   | ❌   | Species count with range filter                                  |
+| GET    | `/range/species/list`   | `GetRangeFilterSpeciesList`    | ❌   | Species list with taxonomy groups                                |
+| GET    | `/range/species/csv`    | `GetRangeFilterSpeciesCSV`     | ❌   | Export species list as CSV download                              |
+| POST   | `/range/species/test`   | `TestRangeFilter`              | ❌   | Test range filter configuration                                  |
+| POST   | `/range/rebuild`        | `RebuildRangeFilter`           | ❌   | Rebuild range filter data                                        |
 
 ### Search (`search.go`)
 
