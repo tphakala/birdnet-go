@@ -884,13 +884,13 @@
       "cards": "Kaartweergave"
     },
     "reanalyze": {
-      "title": "Heranalyseren met een ander model",
+      "title": "Clip heranalyseren",
       "running": "Bezig met analyseren…",
       "noPredictions": "Geen voorspellingen ontvangen.",
       "colSpecies": "Soort",
       "button": "Heranalyseren",
       "buttonAriaLabel": "Clip van {species} heranalyseren met een ander model",
-      "descriptionMulti": "Elke geladen classifier scoort deze clip hieronder. Kies de juiste regel en klik 'Deze gebruiken' om de detectie bij te werken.",
+      "descriptionMulti": "Hieronder zie je wat elk geladen model van deze clip vindt. Klik op 'Deze gebruiken' bij de regel die volgens jou klopt om de detectie aan te passen.",
       "multiModelSummary": "{models} • {duration} audio",
       "useThis": "Deze gebruiken",
       "useThisAriaLabel": "Deze soort ({species}) toepassen als gecorrigeerde detectie",

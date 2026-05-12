@@ -884,13 +884,13 @@
       "cards": "Widok kart"
     },
     "reanalyze": {
-      "title": "Ponownie przeanalizuj innym modelem",
+      "title": "Ponownie przeanalizuj ten klip",
       "running": "Analizowanie…",
       "noPredictions": "Nie zwrócono żadnych przewidywań.",
       "colSpecies": "Gatunek",
       "button": "Przeanalizuj ponownie",
       "buttonAriaLabel": "Przeanalizuj klip {species} ponownie innym modelem",
-      "descriptionMulti": "Każdy załadowany klasyfikator ocenia ten klip poniżej. Wybierz właściwy wiersz i kliknij 'Użyj tego', aby zaktualizować detekcję.",
+      "descriptionMulti": "Poniżej widzisz, jak każdy załadowany klasyfikator ocenił ten klip. Kliknij 'Użyj tego' przy wierszu, który uważasz za poprawny, aby zaktualizować detekcję.",
       "multiModelSummary": "{models} • {duration} audio",
       "useThis": "Użyj tego",
       "useThisAriaLabel": "Zastosuj ten gatunek ({species}) jako poprawioną detekcję",

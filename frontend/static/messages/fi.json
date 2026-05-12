@@ -884,13 +884,13 @@
       "cards": "Korttinäkymä"
     },
     "reanalyze": {
-      "title": "Analysoi uudelleen toisella mallilla",
+      "title": "Analysoi tämä klippi uudelleen",
       "running": "Analysoidaan…",
       "noPredictions": "Ennusteita ei palautettu.",
       "colSpecies": "Laji",
       "button": "Analysoi uudelleen",
       "buttonAriaLabel": "Analysoi {species}-klippi uudelleen toisella mallilla",
-      "descriptionMulti": "Jokainen ladattu luokittelija arvioi tämän klipin alla. Valitse oikea rivi ja paina 'Käytä tätä' päivittääksesi havainnon.",
+      "descriptionMulti": "Alla näet, miten kukin ladattu luokittelija arvioi tämän klipin. Paina 'Käytä tätä' rivillä, jonka uskot oikeaksi, päivittääksesi havainnon.",
       "multiModelSummary": "{models} • {duration} ääntä",
       "useThis": "Käytä tätä",
       "useThisAriaLabel": "Käytä tätä lajia ({species}) korjattuna havaintona",

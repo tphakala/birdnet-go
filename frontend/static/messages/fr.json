@@ -884,13 +884,13 @@
       "cards": "Vue cartes"
     },
     "reanalyze": {
-      "title": "Réanalyser avec un autre modèle",
+      "title": "Réanalyser ce clip",
       "running": "Analyse en cours…",
       "noPredictions": "Aucune prédiction retournée.",
       "colSpecies": "Espèce",
       "button": "Réanalyser",
       "buttonAriaLabel": "Réanalyser le clip de {species} avec un autre modèle",
-      "descriptionMulti": "Chaque classifieur chargé note ce clip ci-dessous. Sélectionnez la bonne ligne et cliquez sur 'Utiliser celle-ci' pour mettre à jour la détection.",
+      "descriptionMulti": "Voici comment chaque classifieur chargé a noté ce clip. Cliquez sur 'Utiliser celle-ci' à la ligne qui vous semble correcte pour mettre à jour la détection.",
       "multiModelSummary": "{models} • {duration} d'audio",
       "useThis": "Utiliser celle-ci",
       "useThisAriaLabel": "Appliquer cette espèce ({species}) comme détection corrigée",

@@ -884,13 +884,13 @@
       "fetchFailed": "Failed to fetch detections"
     },
     "reanalyze": {
-      "title": "Reanalyze with another model",
+      "title": "Reanalyze this clip",
       "running": "Analyzing…",
       "noPredictions": "No predictions returned.",
       "colSpecies": "Species",
       "button": "Reanalyze",
       "buttonAriaLabel": "Reanalyze {species} clip with another model",
-      "descriptionMulti": "Every loaded classifier scores this clip below. Pick the row you think is right and click 'Use this' to update the detection.",
+      "descriptionMulti": "Below is how every loaded classifier scored this clip. Click 'Use this' on the row you think is right to update the detection.",
       "multiModelSummary": "{models} • {duration} of audio",
       "useThis": "Use this",
       "useThisAriaLabel": "Apply this species ({species}) as the corrected detection",

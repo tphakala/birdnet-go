@@ -884,13 +884,13 @@
       "cards": "Kartenansicht"
     },
     "reanalyze": {
-      "title": "Mit anderem Modell neu analysieren",
+      "title": "Diese Aufnahme neu analysieren",
       "running": "Wird analysiert…",
       "noPredictions": "Keine Vorhersagen zurückgegeben.",
       "colSpecies": "Art",
       "button": "Neu analysieren",
       "buttonAriaLabel": "{species}-Clip mit anderem Modell neu analysieren",
-      "descriptionMulti": "Jeder geladene Klassifikator bewertet diesen Clip unten. Wähle die richtige Zeile und klicke 'Diese verwenden', um die Erkennung zu aktualisieren.",
+      "descriptionMulti": "Unten siehst du, wie jeder geladene Klassifikator diesen Clip bewertet. Klicke bei der Zeile, die du für richtig hältst, auf 'Diese verwenden', um die Erkennung zu aktualisieren.",
       "multiModelSummary": "{models} • {duration} Audio",
       "useThis": "Diese verwenden",
       "useThisAriaLabel": "Diese Art ({species}) als korrigierte Erkennung übernehmen",
