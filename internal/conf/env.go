@@ -371,7 +371,7 @@ func canonicalizeValue(configKey, envValue string) {
 		// Canonicalize locale to lowercase
 		viper.Set(configKey, strings.ToLower(trimmed))
 
-	case ConfigKeyModelPath, ConfigKeyLabelPath, ConfigKeyRangeFilterModel, ConfigKeyRangeFilterModelPath:
+	case ConfigKeyModelPath, ConfigKeyLabelPath, ConfigKeyRangeFilterModel, ConfigKeyRangeFilterModelPath, ConfigKeyRangeFilterLabelsPath:
 		// Regular string values - just trim whitespace
 		viper.Set(configKey, trimmed)
 
