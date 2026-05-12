@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"io"
 	"maps"
 	"net/http"
@@ -1055,7 +1056,7 @@ func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPa
 	if err != nil {
 		return errors.Newf("failed to create request for %s: %v", url, err).
 			Component("classifier.model_manager").
-			Category(errors.CategoryNetwork).
+			Category(errors.CategoryValidation).
 			Context("url", url).
 			Build()
 	}
@@ -1078,8 +1079,14 @@ func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPa
 			Build()
 	}
 
-	hasher := sha256.New()
-	reader := io.TeeReader(resp.Body, hasher)
+	var hasher hash.Hash
+	var reader io.Reader
+	if expectedSHA256 != "" {
+		hasher = sha256.New()
+		reader = io.TeeReader(resp.Body, hasher)
+	} else {
+		reader = resp.Body
+	}
 
 	var downloaded int64
 	var lastReport int64
