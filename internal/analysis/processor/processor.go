@@ -840,9 +840,10 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 
 // shouldApplyRangeFilter returns true if the given model should have its
 // detections filtered by the geographic range filter.
-// BirdNET (any version): always filtered.
+// BirdNET (any version) and unknown models: always filtered (DetectionModelInfoForID
+// returns DefaultModelInfo with Name="BirdNET" for unrecognized IDs).
 // Perch: filtered only when the v3.0 geomodel is active (it covers Perch species).
-// Bat/BSG/other: never filtered (independent species sets, no geomodel coverage).
+// Bat/BSG: never filtered (independent species sets, no geomodel coverage).
 func shouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
 	mInfo := classifier.DetectionModelInfoForID(modelID)
 	if mInfo.Name == detection.DefaultModelName {
