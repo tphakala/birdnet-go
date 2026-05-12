@@ -113,7 +113,7 @@ func (r *TaxonomyResolver) Resolve(scientificName, _ string) string {
 	if r.index == nil {
 		return ""
 	}
-	return r.index[strings.ToLower(scientificName)]
+	return r.index[strings.ToLower(strings.TrimSpace(scientificName))]
 }
 
 // resolveLocaleColumn finds the best column index for the given locale.
