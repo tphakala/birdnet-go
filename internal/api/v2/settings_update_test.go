@@ -721,7 +721,10 @@ func TestAudioDeviceSettingChanged_DetectsModelsEdits(t *testing.T) {
 		{"identical model list", []string{"birdnet"}, []string{"birdnet"}, false},
 		{"model added", []string{"birdnet"}, []string{"birdnet", "perch_v2"}, true},
 		{"model removed", []string{"birdnet", "perch_v2"}, []string{"birdnet"}, true},
+		{"model reordered", []string{"birdnet", "perch_v2"}, []string{"perch_v2", "birdnet"}, true},
 		{"replaced entirely", []string{"birdnet"}, []string{"perch_v2"}, true},
+		{"both empty", nil, nil, false},
+		{"nil vs empty slice", nil, []string{}, false},
 	}
 
 	for _, tc := range tests {
