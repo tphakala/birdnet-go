@@ -219,3 +219,87 @@ func TestPatchAlertingZeroRetention(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, 0, controller.Settings.Alerting.HistoryRetentionDays)
 }
+
+func TestPatchWebServerLiveStreamValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		payload     map[string]any
+		wantStatus  int
+		wantContain string
+	}{
+		{
+			name:        "bitRate too low",
+			payload:     map[string]any{"livestream": map[string]any{"bitRate": float64(conf.MinLiveStreamBitRate - 1)}},
+			wantStatus:  http.StatusBadRequest,
+			wantContain: "LiveStream bitrate",
+		},
+		{
+			name:        "bitRate too high",
+			payload:     map[string]any{"livestream": map[string]any{"bitRate": float64(conf.MaxLiveStreamBitRate + 1)}},
+			wantStatus:  http.StatusBadRequest,
+			wantContain: "LiveStream bitrate",
+		},
+		{
+			name:        "sampleRate too low",
+			payload:     map[string]any{"livestream": map[string]any{"sampleRate": float64(conf.MinLiveStreamSampleRate - 1)}},
+			wantStatus:  http.StatusBadRequest,
+			wantContain: "LiveStream sample rate",
+		},
+		{
+			name:        "sampleRate too high",
+			payload:     map[string]any{"livestream": map[string]any{"sampleRate": float64(conf.MaxLiveStreamSampleRate + 1)}},
+			wantStatus:  http.StatusBadRequest,
+			wantContain: "LiveStream sample rate",
+		},
+		{
+			name:        "segmentLength too low",
+			payload:     map[string]any{"livestream": map[string]any{"segmentLength": float64(0)}},
+			wantStatus:  http.StatusBadRequest,
+			wantContain: "LiveStream segment length",
+		},
+		{
+			name:        "segmentLength too high",
+			payload:     map[string]any{"livestream": map[string]any{"segmentLength": float64(conf.MaxLiveStreamSegmentLength + 1)}},
+			wantStatus:  http.StatusBadRequest,
+			wantContain: "LiveStream segment length",
+		},
+		{
+			name:       "valid LiveStream values accepted",
+			payload:    map[string]any{"livestream": map[string]any{"bitRate": float64(128), "sampleRate": float64(48000), "segmentLength": float64(2)}},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "port-only patch skips LiveStream validation",
+			payload:    map[string]any{"port": "8080"},
+			wantStatus: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			controller := getTestController(t, e)
+			controller.Settings.WebServer.Debug = true
+
+			body, err := json.Marshal(tt.payload)
+			require.NoError(t, err)
+
+			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/webserver", bytes.NewReader(body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			ctx.SetParamNames("section")
+			ctx.SetParamValues("webserver")
+
+			err = controller.UpdateSectionSettings(ctx)
+			require.NoError(t, err, "handler should return nil and send HTTP response")
+			assert.Equal(t, tt.wantStatus, rec.Code)
+
+			if tt.wantContain != "" {
+				var response map[string]any
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+				assert.Contains(t, response["error"], tt.wantContain)
+			}
+		})
+	}
+}
