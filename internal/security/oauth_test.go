@@ -22,14 +22,8 @@ import (
 
 // TestIsUserAuthenticatedValidAccessToken tests the IsUserAuthenticated function with a valid access token
 func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
-	// Set the settings instance
-	conf.Setting()
-
-	settings := &conf.Settings{
-		Security: conf.Security{
-			SessionSecret: "test-secret",
-		},
-	}
+	settings := conf.NewTestSettings().Apply()
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
 
 	s := NewOAuth2Server()
 

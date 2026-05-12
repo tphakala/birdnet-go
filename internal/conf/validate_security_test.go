@@ -448,20 +448,18 @@ func TestValidateSecuritySettings_SessionDuration(t *testing.T) {
 		errType  string
 	}{
 		{
-			name: "Zero session duration - should fail",
+			name: "Zero session duration - normalized to default",
 			security: Security{
 				SessionDuration: 0,
 			},
-			wantErr: true,
-			errType: "security-session-duration",
+			wantErr: false,
 		},
 		{
-			name: "Negative session duration - should fail",
+			name: "Negative session duration - normalized to default",
 			security: Security{
 				SessionDuration: -1,
 			},
-			wantErr: true,
-			errType: "security-session-duration",
+			wantErr: false,
 		},
 		{
 			name: "Valid positive session duration - should pass",

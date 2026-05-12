@@ -301,6 +301,12 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 		}
 	}
 
+	// Normalize poll interval: viper nested defaults can be lost when the
+	// parent key exists in the config file but pollinterval is absent.
+	if settings.PollInterval == 0 {
+		settings.PollInterval = 60 // matches viper default
+	}
+
 	// Validate poll interval (minimum 15 minutes)
 	if settings.PollInterval < 15 {
 		return errors.Newf("weather poll interval must be at least 15 minutes, got %d", settings.PollInterval).
