@@ -269,10 +269,11 @@ func ValidateWebServerSettings(settings *WebServerSettings) ValidationResult {
 	if settings.LiveStream.SampleRate == 0 {
 		settings.LiveStream.SampleRate = DefaultLiveStreamSampleRate
 	}
-	if settings.LiveStream.FfmpegLogLevel == "" {
+	trimmed := strings.ToLower(strings.TrimSpace(settings.LiveStream.FfmpegLogLevel))
+	if trimmed == "" {
 		settings.LiveStream.FfmpegLogLevel = DefaultLiveStreamFFmpegLogLevel
 	} else {
-		settings.LiveStream.FfmpegLogLevel = strings.ToLower(strings.TrimSpace(settings.LiveStream.FfmpegLogLevel))
+		settings.LiveStream.FfmpegLogLevel = trimmed
 	}
 
 	// Validate LiveStream settings
