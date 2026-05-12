@@ -884,19 +884,21 @@
     },
     "reanalyze": {
       "title": "Analysoi uudelleen toisella mallilla",
-      "description": "Aja tämä klippi eri luokittelijan läpi ja katso, mitä se ennustaa. Mitään ei tallenneta — tämä on kertaluonteinen toinen mielipide.",
-      "modelLabel": "Malli",
-      "loadingModels": "Ladataan saatavilla olevia malleja…",
-      "noOtherModels": "Muita malleja ei ole ladattu. Ota lisää malleja käyttöön kohdassa Asetukset → Mallit.",
-      "run": "Suorita uudelleenanalysointi",
       "running": "Analysoidaan…",
-      "summary": "{model} • {duration} ääntä {windows} ikkunassa",
       "noPredictions": "Ennusteita ei palautettu.",
       "colSpecies": "Laji",
-      "colConfidence": "Luottamus",
       "button": "Analysoi uudelleen",
       "buttonAriaLabel": "Analysoi {species}-klippi uudelleen toisella mallilla",
-      "duplicateInFlight": "Tälle havainnolle on jo käynnissä uudelleenanalyysi."
+      "descriptionMulti": "Jokainen ladattu luokittelija arvioi tämän klipin alla. Valitse oikea rivi ja paina 'Käytä tätä' päivittääksesi havainnon.",
+      "multiModelSummary": "{models} • {duration} ääntä",
+      "useThis": "Käytä tätä",
+      "useThisAriaLabel": "Käytä tätä lajia ({species}) korjattuna havaintona",
+      "noModelForCorrection": "Mikään malli ei ole pisteyttänyt tätä lajia; ei voi soveltaa.",
+      "correctionApplied": "Havainto päivitetty lajiksi {species}.",
+      "confirmTitle": "Korvataanko havainto lajilla {species}?",
+      "confirmBody": "Tämä päivittää havainnon lajin, mallin ja luottamuksen ja merkitsee sen vahvistetuksi. Olemassa oleva tarkistustila korvataan.",
+      "confirmApply": "Kyllä, käytä korjausta",
+      "applying": "Sovelletaan…"
     }
   },
   "species": {

@@ -691,19 +691,21 @@ export type TranslationKey =
   | 'detections.errors.noIdProvided'
   | 'detections.errors.fetchFailed'
   | 'detections.reanalyze.title'
-  | 'detections.reanalyze.description'
-  | 'detections.reanalyze.modelLabel'
-  | 'detections.reanalyze.loadingModels'
-  | 'detections.reanalyze.noOtherModels'
-  | 'detections.reanalyze.run'
   | 'detections.reanalyze.running'
-  | 'detections.reanalyze.summary' // params: model, duration, windows
   | 'detections.reanalyze.noPredictions'
   | 'detections.reanalyze.colSpecies'
-  | 'detections.reanalyze.colConfidence'
   | 'detections.reanalyze.button'
   | 'detections.reanalyze.buttonAriaLabel' // params: species
-  | 'detections.reanalyze.duplicateInFlight'
+  | 'detections.reanalyze.descriptionMulti'
+  | 'detections.reanalyze.multiModelSummary' // params: models, duration
+  | 'detections.reanalyze.useThis'
+  | 'detections.reanalyze.useThisAriaLabel' // params: species
+  | 'detections.reanalyze.noModelForCorrection'
+  | 'detections.reanalyze.correctionApplied' // params: species
+  | 'detections.reanalyze.confirmTitle' // params: species
+  | 'detections.reanalyze.confirmBody'
+  | 'detections.reanalyze.confirmApply'
+  | 'detections.reanalyze.applying'
   | 'species.rarity.title'
   | 'species.rarity.score'
   | 'species.rarity.basedOnLocation' // params: latitude, longitude
@@ -1149,6 +1151,9 @@ export type TranslationKey =
   | 'analytics.filters.exportCsv'
   | 'analytics.filters.species'
   | 'analytics.filters.filtered'
+  | 'analytics.filters.audioSource'
+  | 'analytics.filters.audioSourceAll'
+  | 'analytics.filters.audioSourceUnknown'
   | 'analytics.timePeriodOptions.allTime'
   | 'analytics.timePeriodOptions.today'
   | 'analytics.timePeriodOptions.lastWeek'
@@ -3422,12 +3427,11 @@ export type TranslationParams = {
   'detections.aria.loaded': { species: string | number };
   'detections.aria.error': { error: string | number };
   'detections.errors.loadFailed': { status: string | number };
-  'detections.reanalyze.summary': {
-    model: string | number;
-    duration: string | number;
-    windows: string | number;
-  };
   'detections.reanalyze.buttonAriaLabel': { species: string | number };
+  'detections.reanalyze.multiModelSummary': { models: string | number; duration: string | number };
+  'detections.reanalyze.useThisAriaLabel': { species: string | number };
+  'detections.reanalyze.correctionApplied': { species: string | number };
+  'detections.reanalyze.confirmTitle': { species: string | number };
   'species.rarity.basedOnLocation': { latitude: string | number; longitude: string | number };
   'spectrogram.gain.level': { value: string | number };
   'system.systemInfo.temperatureValue': { temp: string | number };

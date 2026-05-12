@@ -884,19 +884,21 @@
     },
     "reanalyze": {
       "title": "Heranalyseren met een ander model",
-      "description": "Laat deze clip door een andere classifier lopen en bekijk wat die voorspelt. Er wordt niets opgeslagen — dit is een eenmalige tweede opinie.",
-      "modelLabel": "Model",
-      "loadingModels": "Beschikbare modellen laden…",
-      "noOtherModels": "Geen andere modellen geladen. Schakel eerst extra modellen in via Instellingen → Modellen.",
-      "run": "Heranalyse uitvoeren",
       "running": "Bezig met analyseren…",
-      "summary": "{model} • {duration} audio over {windows} vensters",
       "noPredictions": "Geen voorspellingen ontvangen.",
       "colSpecies": "Soort",
-      "colConfidence": "Betrouwbaarheid",
       "button": "Heranalyseren",
       "buttonAriaLabel": "Clip van {species} heranalyseren met een ander model",
-      "duplicateInFlight": "Er loopt al een heranalyse voor deze detectie."
+      "descriptionMulti": "Elke geladen classifier scoort deze clip hieronder. Kies de juiste regel en klik 'Deze gebruiken' om de detectie bij te werken.",
+      "multiModelSummary": "{models} • {duration} audio",
+      "useThis": "Deze gebruiken",
+      "useThisAriaLabel": "Deze soort ({species}) toepassen als gecorrigeerde detectie",
+      "noModelForCorrection": "Geen model heeft deze soort gescoord; kan niet toegepast worden.",
+      "correctionApplied": "Detectie bijgewerkt naar {species}.",
+      "confirmTitle": "Detectie vervangen door {species}?",
+      "confirmBody": "Dit werkt de soort, het model en de betrouwbaarheid van de detectie ter plekke bij en markeert hem als geverifieerd. Eventuele bestaande beoordeling wordt overschreven.",
+      "confirmApply": "Ja, correctie toepassen",
+      "applying": "Bezig met toepassen…"
     }
   },
   "species": {

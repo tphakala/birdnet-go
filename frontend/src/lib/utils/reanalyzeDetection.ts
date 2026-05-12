@@ -3,66 +3,117 @@ import { loggers } from './logger';
 
 const logger = loggers.ui;
 
-/** Top-N predictions returned by the reanalyze endpoint for a clip. */
+/** A model that participated in a reanalysis run, returned in modelsRun. */
+export interface ReanalyzeModelInfo {
+  id: string;
+  name: string;
+  sampleRate: number;
+  windowCount: number;
+}
+
+/** Top-N prediction from a multi-model reanalysis. ByModel maps each
+ *  participating model's registry ID to the max confidence that model
+ *  produced; absent keys mean the model didn't see the species at all. */
 export interface ReanalyzePrediction {
   scientificName: string;
-  /** Localized common name in the user's configured BirdNET locale. May be
-   *  empty when the resolver chain has no entry for the species in that
-   *  locale; UI should render scientific-only as a fallback. */
   commonName?: string;
-  confidence: number;
+  byModel: Record<string, number>;
 }
 
 /** Full response shape from POST /api/v2/detections/:id/reanalyze. */
 export interface ReanalyzeResult {
   detectionId: number;
-  modelId: string;
-  modelName: string;
-  sampleRate: number;
   clipDurationSec: number;
-  windowCount: number;
+  modelsRun: ReanalyzeModelInfo[];
   predictions: ReanalyzePrediction[];
 }
 
-const inFlightIds = new Set<number>();
+/** Body for POST /api/v2/detections/:id/correct-species. */
+export interface CorrectSpeciesRequest {
+  scientificName: string;
+  modelId: string;
+  confidence: number;
+}
+
+/** Response shape from the correction endpoint. */
+export interface CorrectSpeciesResult {
+  detectionId: number;
+  scientificName: string;
+  commonName: string;
+  modelId: string;
+  modelName: string;
+  confidence: number;
+  verified: string;
+}
+
+const inFlightReanalyze = new Set<number>();
+const inFlightCorrection = new Set<number>();
 
 /**
- * Re-run inference on a saved detection's audio clip using a different model
- * than the one that originally produced the detection. The call is read-only:
- * the server does NOT persist the alternate prediction; callers display it
- * transiently in a modal.
+ * Re-run inference on a saved detection's audio clip. By default runs every
+ * loaded compatible classifier; pass `modelIds` to restrict. The server does
+ * NOT persist any prediction returned here — callers display it transiently.
  *
  * Drops duplicate requests for the same detection while one is in-flight to
- * avoid burning CPU when the user clicks the button twice. Returns `null` in
- * that case; callers should check before treating the response as fresh.
- *
- * modelId accepts either the orchestrator registry ID (e.g. "Perch_V2") or
- * the user-facing config alias (e.g. "perch_v2"); the backend resolves
- * aliases internally.
+ * avoid burning CPU on double-clicks. Returns `null` in that case.
  */
 export async function reanalyzeDetection(
   detectionId: number,
-  modelId: string
+  modelIds?: string[]
 ): Promise<ReanalyzeResult | null> {
-  if (inFlightIds.has(detectionId)) return null;
+  if (inFlightReanalyze.has(detectionId)) return null;
 
-  inFlightIds.add(detectionId);
+  inFlightReanalyze.add(detectionId);
   try {
-    // fetchWithCSRF parses JSON and raises ApiError on non-2xx; no need for
-    // manual response inspection here.
     return await fetchWithCSRF<ReanalyzeResult>(`/api/v2/detections/${detectionId}/reanalyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ modelId }),
+      body: JSON.stringify({ modelIds: modelIds ?? [] }),
     });
   } catch (err) {
     logger.error('Reanalyze request failed:', err, {
       component: 'reanalyzeDetection',
       detectionId,
-      modelId,
+      modelIds,
     });
     throw err;
   } finally {
-    inFlightIds.delete(detectionId);
+    inFlightReanalyze.delete(detectionId);
+  }
+}
+
+/**
+ * Apply a species correction to a saved detection. Replaces the detection's
+ * label_id + model_id + confidence with the user-chosen prediction and marks
+ * verified='correct' in one transaction.
+ *
+ * Drops duplicate requests for the same detection while one is in-flight.
+ * Returns `null` in that case.
+ */
+export async function correctDetectionSpecies(
+  detectionId: number,
+  payload: CorrectSpeciesRequest
+): Promise<CorrectSpeciesResult | null> {
+  if (inFlightCorrection.has(detectionId)) return null;
+
+  inFlightCorrection.add(detectionId);
+  try {
+    return await fetchWithCSRF<CorrectSpeciesResult>(
+      `/api/v2/detections/${detectionId}/correct-species`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }
+    );
+  } catch (err) {
+    logger.error('Correction request failed:', err, {
+      component: 'correctDetectionSpecies',
+      detectionId,
+      payload,
+    });
+    throw err;
+  } finally {
+    inFlightCorrection.delete(detectionId);
   }
 }

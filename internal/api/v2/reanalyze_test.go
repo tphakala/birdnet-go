@@ -19,10 +19,10 @@ import (
 )
 
 // TestReanalyzeSamples_TopNAggregation verifies the window-walking aggregator
-// keeps the max confidence per species across windows and returns at most
-// reanalyzeTopN sorted descending. Uses an injected predict function so the
-// test stays decoupled from the orchestrator (which would require a real
-// model on disk).
+// keeps the max confidence per species across windows and returns the per-model
+// scores sorted descending. Uses an injected predict function so the test
+// stays decoupled from the orchestrator (which would require a real model
+// on disk).
 func TestReanalyzeSamples_TopNAggregation(t *testing.T) {
 	t.Parallel()
 
@@ -158,17 +158,19 @@ func TestReanalyzeSamples_PredictError(t *testing.T) {
 	assert.ErrorIs(t, err, wantErr)
 }
 
-// TestReanalyzeSamples_TruncatesToTopN verifies the response slice never
-// exceeds reanalyzeTopN even when the model emits more species in a window.
-func TestReanalyzeSamples_TruncatesToTopN(t *testing.T) {
+// TestReanalyzeSamples_DoesNotTruncate verifies that per-model aggregation
+// returns every species the model produced, sorted by confidence descending.
+// Top-N truncation is a concern of the multi-model aggregator (it must be
+// applied AFTER merging across all models), not this per-model layer —
+// otherwise a "strong-on-one-model only" species could be silently dropped
+// before merge.
+func TestReanalyzeSamples_DoesNotTruncate(t *testing.T) {
 	t.Parallel()
 
 	spec := classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}
 	clipLen := spec.SampleRate * int(spec.ClipLength.Seconds())
 	samples := make([]float32, clipLen)
 
-	// Emit reanalyzeTopN + 5 distinct species with descending confidence so
-	// the assertion checks both the truncation and the sort order.
 	stub := func(_ context.Context, _ string, _ [][]float32) ([]datastore.Results, error) {
 		out := make([]datastore.Results, 0, reanalyzeTopN+5)
 		for i := 0; i < reanalyzeTopN+5; i++ {
@@ -182,7 +184,8 @@ func TestReanalyzeSamples_TruncatesToTopN(t *testing.T) {
 
 	preds, _, err := reanalyzeSamples(t.Context(), stub, "BirdNET_V2.4", spec, samples)
 	require.NoError(t, err)
-	require.Len(t, preds, reanalyzeTopN)
+	require.Len(t, preds, reanalyzeTopN+5,
+		"per-model aggregator must NOT truncate; multi-model merger does that")
 	for i := 1; i < len(preds); i++ {
 		assert.GreaterOrEqual(t, preds[i-1].Confidence, preds[i].Confidence,
 			"results must be sorted by descending confidence")
