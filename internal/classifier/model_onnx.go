@@ -179,6 +179,11 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 	}
 
 	log := GetLogger()
+	if matchCount == 0 && len(classifierLabels) > 0 {
+		log.Warn("V3 geomodel: no species matched classifier labels, range filter will filter out all detections (check labels file)",
+			logger.Int("classifier_species", len(classifierLabels)),
+			logger.String("labels_path", labelsPath))
+	}
 	log.Info("V3 geomodel initialized with species mapping",
 		logger.Int("geomodel_species", len(geoLabels)),
 		logger.Int("classifier_species", len(classifierLabels)),
