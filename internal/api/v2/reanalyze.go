@@ -48,9 +48,15 @@ type ReanalyzeRequest struct {
 // ReanalyzePrediction is one entry in the top-N predictions returned by
 // reanalysis. Confidence is the maximum the model produced for this species
 // across all windows of the clip.
+//
+// CommonName is resolved via the orchestrator's name-resolver chain in the
+// user's configured BirdNET locale. It can be empty when no resolver knows
+// the species in that locale (rare with the v3 geomodel taxonomy companion
+// installed; falls back to the model's own label when present).
 type ReanalyzePrediction struct {
-	Species    string  `json:"species"`
-	Confidence float32 `json:"confidence"`
+	ScientificName string  `json:"scientificName"`
+	CommonName     string  `json:"commonName,omitempty"`
+	Confidence     float32 `json:"confidence"`
 }
 
 // ReanalyzeResponse is the JSON shape returned by the reanalysis endpoint.
@@ -182,6 +188,12 @@ func (c *Controller) ReanalyzeDetection(ctx echo.Context) error {
 			"Inference failed", http.StatusInternalServerError)
 	}
 
+	// Resolve localized common names for any prediction the model labeled
+	// with a bare scientific name (Perch v2). Uses the configured BirdNET
+	// locale so the UI shows e.g. "Appelvink" alongside "Coccothraustes
+	// coccothraustes" on a Dutch install.
+	applyLocalizedCommonNames(bn, predictions, c.Settings.BirdNET.Locale)
+
 	clipDurationSec := 0.0
 	if spec.SampleRate > 0 {
 		clipDurationSec = float64(len(samples)) / float64(spec.SampleRate)
@@ -268,6 +280,9 @@ func reanalyzeSamples(
 		stride = clipLen
 	}
 
+	// Keyed by the raw label string so windows that report the same species
+	// (regardless of label encoding quirks) merge correctly. Splitting and
+	// common-name resolution happens once at the end.
 	best := make(map[string]float32)
 	windowCount := 0
 	for offset := 0; offset+clipLen <= len(samples); offset += stride {
@@ -285,10 +300,18 @@ func reanalyzeSamples(
 	}
 
 	predictions := make([]ReanalyzePrediction, 0, len(best))
-	for species, conf := range best {
+	for label, conf := range best {
+		scientific, common := classifier.SplitSpeciesName(label)
+		// If the label was already a bare scientific name (Perch v2 case),
+		// SplitSpeciesName returns ("Genus species", ""); leave CommonName
+		// blank here so the handler can fill it via the resolver chain in
+		// the user's locale. For "Genus species_CommonName" (BirdNET case)
+		// the model's own label provides the English common name and we
+		// keep it as a sensible default.
 		predictions = append(predictions, ReanalyzePrediction{
-			Species:    species,
-			Confidence: conf,
+			ScientificName: scientific,
+			CommonName:     common,
+			Confidence:     conf,
 		})
 	}
 	sort.Slice(predictions, func(i, j int) bool {
@@ -298,4 +321,27 @@ func reanalyzeSamples(
 		predictions = predictions[:reanalyzeTopN]
 	}
 	return predictions, windowCount, nil
+}
+
+// applyLocalizedCommonNames fills in CommonName via the orchestrator's
+// resolver chain for any predictions where the model didn't provide one
+// (Perch v2's bare scientific labels). Caller's locale wins; when the
+// resolver returns empty (no taxonomy entry for that scientific name in
+// the chosen locale) the CommonName stays whatever the model itself gave
+// us (possibly still empty — surfaced to the UI as scientific-only).
+func applyLocalizedCommonNames(bn *classifier.Orchestrator, preds []ReanalyzePrediction, locale string) {
+	if bn == nil {
+		return
+	}
+	for i := range preds {
+		if preds[i].CommonName != "" {
+			continue
+		}
+		if preds[i].ScientificName == "" {
+			continue
+		}
+		if name := bn.ResolveName(preds[i].ScientificName, locale); name != "" {
+			preds[i].CommonName = name
+		}
+	}
 }

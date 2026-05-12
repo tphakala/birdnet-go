@@ -195,8 +195,17 @@
             <tbody>
               {#each result.predictions as pred, idx (idx)}
                 <tr>
-                  <td class="font-mono text-sm">{pred.species}</td>
-                  <td class="text-right tabular-nums">
+                  <td class="text-sm">
+                    {#if pred.commonName}
+                      <div class="font-medium">{pred.commonName}</div>
+                      <div class="font-mono text-xs italic text-base-content/60">
+                        {pred.scientificName}
+                      </div>
+                    {:else}
+                      <div class="font-mono">{pred.scientificName}</div>
+                    {/if}
+                  </td>
+                  <td class="text-right tabular-nums align-top">
                     {formatConfidencePercent(pred.confidence)}
                   </td>
                 </tr>
