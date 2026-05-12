@@ -18,8 +18,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/labstack/echo/v4"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -111,9 +114,16 @@ func (c *Controller) ReanalyzeDetection(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Detection ID must be a numeric value", http.StatusBadRequest)
 	}
 
-	// Body is optional — empty body means "run all compatible loaded models".
+	// Body is optional in shape — empty body means "run all compatible
+	// loaded models" — but a malformed body (e.g., invalid JSON) should
+	// fail loudly so a buggy client doesn't silently get the default
+	// behaviour when it meant to restrict the model list.
 	req := &ReanalyzeRequest{}
-	_ = ctx.Bind(req)
+	if err := ctx.Bind(req); err != nil {
+		// A truly empty body returns nil from Bind on Echo; only malformed
+		// JSON / wrong content-type lands here.
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
+	}
 
 	note, err := c.DS.Get(idStr)
 	if err != nil {
@@ -194,38 +204,55 @@ func (c *Controller) ReanalyzeDetection(ctx echo.Context) error {
 			clipDurationSec = d
 		}
 
+		// Dispatch each model in this sample-rate group concurrently.
+		// Distinct model IDs hit distinct orchestrator per-model mutexes, so
+		// goroutines genuinely run in parallel; the orchestrator itself
+		// serializes calls into the same model. errgroup gives us first-
+		// error short-circuit (one model failing aborts the whole request)
+		// and gctx propagation so the canceled request also cancels in-
+		// flight ffmpeg/inference work.
+		g, gctx := errgroup.WithContext(ctx.Request().Context())
+		var accMu sync.Mutex
 		for _, m := range models {
-			scores, windowCount, err := reanalyzeSamples(
-				ctx.Request().Context(), bn.PredictModel, m.id, m.spec, samples)
-			if err != nil {
-				c.logAPIRequest(ctx, logger.LogLevelError, "Reanalysis inference failed",
-					logger.String("detection_id", idStr),
-					logger.String("model_id", m.id),
-					logger.Error(err))
-				return c.HandleError(ctx, err,
-					"Inference failed", http.StatusInternalServerError)
-			}
-			modelInfos = append(modelInfos, ReanalyzeModelInfo{
-				ID:          m.id,
-				Name:        m.name,
-				SampleRate:  m.spec.SampleRate,
-				WindowCount: windowCount,
+			g.Go(func() error {
+				scores, windowCount, err := reanalyzeSamples(
+					gctx, bn.PredictModel, m.id, m.spec, samples)
+				if err != nil {
+					return fmt.Errorf("inference for %s: %w", m.id, err)
+				}
+				accMu.Lock()
+				defer accMu.Unlock()
+				modelInfos = append(modelInfos, ReanalyzeModelInfo{
+					ID:          m.id,
+					Name:        m.name,
+					SampleRate:  m.spec.SampleRate,
+					WindowCount: windowCount,
+				})
+				for _, s := range scores {
+					label := s.ScientificName
+					if label == "" {
+						// SplitSpeciesName fallback: the raw label couldn't
+						// be parsed into scientific form. Key by CommonName
+						// so we still merge identical raw labels across
+						// windows.
+						label = s.CommonName
+					}
+					if _, ok := byLabelModel[label]; !ok {
+						byLabelModel[label] = make(map[string]float32)
+					}
+					if existing, ok := byLabelModel[label][m.id]; !ok || s.Confidence > existing {
+						byLabelModel[label][m.id] = s.Confidence
+					}
+				}
+				return nil
 			})
-			for _, s := range scores {
-				label := s.ScientificName
-				if label == "" {
-					// SplitSpeciesName fallback: the raw label couldn't be
-					// parsed into scientific form. Key by CommonName so we
-					// at least merge identical raw labels across windows.
-					label = s.CommonName
-				}
-				if _, ok := byLabelModel[label]; !ok {
-					byLabelModel[label] = make(map[string]float32)
-				}
-				if existing, ok := byLabelModel[label][m.id]; !ok || s.Confidence > existing {
-					byLabelModel[label][m.id] = s.Confidence
-				}
-			}
+		}
+		if err := g.Wait(); err != nil {
+			c.logAPIRequest(ctx, logger.LogLevelError, "Reanalysis inference failed",
+				logger.String("detection_id", idStr),
+				logger.Error(err))
+			return c.HandleError(ctx, err,
+				"Inference failed", http.StatusInternalServerError)
 		}
 	}
 
@@ -368,7 +395,13 @@ func reanalyzeSamples(
 			Build()
 	}
 
-	clipLen := int(spec.ClipLength.Seconds()) * spec.SampleRate
+	// Compute clip length in samples via nanosecond math rather than
+	// rounding-prone Seconds() * SampleRate. The current model registry only
+	// ships integer-second windows (3s BirdNET, 5s Perch) so this is purely
+	// future-proofing for any fractional-window model someone might add,
+	// but the math costs nothing and avoids a silent off-by-N-samples bug
+	// in that case.
+	clipLen := int(spec.ClipLength.Nanoseconds() * int64(spec.SampleRate) / int64(time.Second))
 	if clipLen <= 0 {
 		return nil, 0, errors.Newf("model %q has invalid clip length", modelID).
 			Component("api/v2/reanalyze").
