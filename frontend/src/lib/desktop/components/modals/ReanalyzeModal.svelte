@@ -8,7 +8,8 @@
    *
    * Per-row "Use this": applies the chosen species as a correction to the
    * detection (updates label/model/confidence in place, marks verified) and
-   * reloads the detail page to reflect the new state.
+   * fires the onCorrected callback so the parent can re-fetch and refresh
+   * its dependent widgets in place.
    *
    * Nothing is written to the database until the user explicitly clicks
    * "Use this" and confirms — the reanalysis itself is read-only.
@@ -30,9 +31,16 @@
     isOpen: boolean;
     detectionId: number | null;
     onClose: () => void;
+    /**
+     * Called after a successful species correction. The parent typically
+     * re-fetches the detection (and any derived data: rarity, history,
+     * taxonomy) so the detail view reflects the new label without a full
+     * page reload. Optional — when omitted, the modal just closes.
+     */
+    onCorrected?: () => void;
   }
 
-  let { isOpen = false, detectionId = null, onClose }: Props = $props();
+  let { isOpen = false, detectionId = null, onClose, onCorrected }: Props = $props();
 
   const logger = loggers.ui;
 
@@ -139,12 +147,12 @@
         })
       );
       onClose();
-      // Reload the page so every widget on the detail view reflects the new
-      // species label/confidence. A targeted refetch would be lighter, but
-      // the detection detail page reads from many derived endpoints
-      // (taxonomy, history, rarity) that would all need invalidating
-      // individually.
-      window.location.reload();
+      // Let the parent re-fetch detection data. DetectionDetail wires this
+      // to its own fetchDetection(), which re-pulls every derived widget
+      // (rarity, history, taxonomy, weather) — same pattern used by
+      // ReviewCard.onSaveComplete. Avoids the full-page reload that the
+      // previous iteration used.
+      onCorrected?.();
     } catch (err) {
       errorMessage = err instanceof Error ? err.message : String(err);
       logger.error('Correction failed', err, {

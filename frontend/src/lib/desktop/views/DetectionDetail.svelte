@@ -926,6 +926,7 @@
   isOpen={reanalyzeOpen}
   detectionId={detection ? detection.id : null}
   onClose={() => (reanalyzeOpen = false)}
+  onCorrected={() => fetchDetection()}
 />
 
 <style>
