@@ -298,12 +298,12 @@ func (o *Orchestrator) GetSpeciesWithScientificAndCommonName(label string) (scie
 // EnrichResultWithTaxonomy adds taxonomy information to a detection result.
 // If the primary model cannot resolve a common name (e.g., Perch labels
 // contain only scientific names), the name resolver chain is consulted
-// to map the scientific name to BirdNET's common name.
+// to find a common name (BirdNET labels, then taxonomy.csv).
 func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific, common, code string) {
 	scientific, common, code = o.primary.EnrichResultWithTaxonomy(speciesLabel)
 
 	// Perch v2 labels are scientific-name-only. Try the resolver chain
-	// to look up a common name from BirdNET's label database.
+	// to look up a common name.
 	if common == "" && scientific != "" {
 		if resolved := o.ResolveName(scientific, ""); resolved != "" {
 			common = resolved
