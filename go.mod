@@ -37,7 +37,7 @@ require (
 	github.com/tphakala/go-audio-resampler v1.3.0
 	github.com/tphakala/go-tflite v0.2.2-0.20260403122459-aedbd0bca261
 	github.com/tphakala/simd v1.0.22
-	github.com/yalue/onnxruntime_go v1.30.0
+	github.com/yalue/onnxruntime_go v1.30.1
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.51.0
 	golang.org/x/net v0.54.0
@@ -113,7 +113,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/term v0.43.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260511170946-3700d4141b60 // indirect
 	google.golang.org/grpc v1.81.0 // indirect
 )
 
