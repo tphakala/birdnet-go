@@ -229,43 +229,43 @@ func TestPatchWebServerLiveStreamValidation(t *testing.T) {
 	}{
 		{
 			name:        "bitRate too low",
-			payload:     map[string]any{"livestream": map[string]any{"bitRate": float64(conf.MinLiveStreamBitRate - 1)}},
+			payload:     map[string]any{"liveStream": map[string]any{"bitRate": float64(conf.MinLiveStreamBitRate - 1)}},
 			wantStatus:  http.StatusBadRequest,
 			wantContain: "LiveStream bitrate",
 		},
 		{
 			name:        "bitRate too high",
-			payload:     map[string]any{"livestream": map[string]any{"bitRate": float64(conf.MaxLiveStreamBitRate + 1)}},
+			payload:     map[string]any{"liveStream": map[string]any{"bitRate": float64(conf.MaxLiveStreamBitRate + 1)}},
 			wantStatus:  http.StatusBadRequest,
 			wantContain: "LiveStream bitrate",
 		},
 		{
 			name:        "sampleRate too low",
-			payload:     map[string]any{"livestream": map[string]any{"sampleRate": float64(conf.MinLiveStreamSampleRate - 1)}},
+			payload:     map[string]any{"liveStream": map[string]any{"sampleRate": float64(conf.MinLiveStreamSampleRate - 1)}},
 			wantStatus:  http.StatusBadRequest,
 			wantContain: "LiveStream sample rate",
 		},
 		{
 			name:        "sampleRate too high",
-			payload:     map[string]any{"livestream": map[string]any{"sampleRate": float64(conf.MaxLiveStreamSampleRate + 1)}},
+			payload:     map[string]any{"liveStream": map[string]any{"sampleRate": float64(conf.MaxLiveStreamSampleRate + 1)}},
 			wantStatus:  http.StatusBadRequest,
 			wantContain: "LiveStream sample rate",
 		},
 		{
 			name:        "segmentLength too low",
-			payload:     map[string]any{"livestream": map[string]any{"segmentLength": float64(0)}},
+			payload:     map[string]any{"liveStream": map[string]any{"segmentLength": float64(0)}},
 			wantStatus:  http.StatusBadRequest,
 			wantContain: "LiveStream segment length",
 		},
 		{
 			name:        "segmentLength too high",
-			payload:     map[string]any{"livestream": map[string]any{"segmentLength": float64(conf.MaxLiveStreamSegmentLength + 1)}},
+			payload:     map[string]any{"liveStream": map[string]any{"segmentLength": float64(conf.MaxLiveStreamSegmentLength + 1)}},
 			wantStatus:  http.StatusBadRequest,
 			wantContain: "LiveStream segment length",
 		},
 		{
 			name:       "valid LiveStream values accepted",
-			payload:    map[string]any{"livestream": map[string]any{"bitRate": float64(128), "sampleRate": float64(48000), "segmentLength": float64(2)}},
+			payload:    map[string]any{"liveStream": map[string]any{"bitRate": float64(128), "sampleRate": float64(48000), "segmentLength": float64(2)}},
 			wantStatus: http.StatusOK,
 		},
 		{

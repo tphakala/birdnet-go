@@ -1431,16 +1431,16 @@ func validateWebServerSection(data json.RawMessage) error {
 	return validateLiveStreamFields(updateMap)
 }
 
-// validateLiveStreamFields validates LiveStream sub-fields if the livestream
+// validateLiveStreamFields validates LiveStream sub-fields if the liveStream
 // key is present in the PATCH payload.
 func validateLiveStreamFields(updateMap map[string]any) error {
-	lsRaw, ok := updateMap["livestream"]
+	lsRaw, ok := updateMap["liveStream"]
 	if !ok {
 		return nil
 	}
 	ls, ok := lsRaw.(map[string]any)
 	if !ok {
-		return fmt.Errorf("livestream must be an object")
+		return fmt.Errorf("liveStream must be an object")
 	}
 
 	if err := validateFloatInRange(ls, "bitRate",
