@@ -35,9 +35,16 @@ const (
 	// LiveStream defaults for webserver configuration.
 	// Viper nested defaults can be lost when the parent key exists in the config
 	// file but the child section is absent, so validation normalizes to these.
-	DefaultLiveStreamBitRate       = 128
-	DefaultLiveStreamSegmentLength = 2
-	DefaultLiveStreamSampleRate    = 48000
+	DefaultLiveStreamBitRate        = 128
+	MinLiveStreamBitRate            = 16
+	MaxLiveStreamBitRate            = 320
+	DefaultLiveStreamSegmentLength  = 2
+	MinLiveStreamSegmentLength      = 1
+	MaxLiveStreamSegmentLength      = 30
+	DefaultLiveStreamSampleRate     = 48000
+	MinLiveStreamSampleRate         = 8000
+	MaxLiveStreamSampleRate         = 96000
+	DefaultLiveStreamFFmpegLogLevel = "warning"
 
 	// DefaultWeatherPollInterval is the default weather poll interval in minutes.
 	DefaultWeatherPollInterval = 60

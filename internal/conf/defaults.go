@@ -333,7 +333,7 @@ func setDefaultConfig() {
 	viper.SetDefault("webserver.livestream.bitrate", DefaultLiveStreamBitRate)
 	viper.SetDefault("webserver.livestream.sampleRate", DefaultLiveStreamSampleRate)
 	viper.SetDefault("webserver.livestream.segmentLength", DefaultLiveStreamSegmentLength)
-	viper.SetDefault("webserver.livestream.ffmpegLogLevel", "warning")
+	viper.SetDefault("webserver.livestream.ffmpegLogLevel", DefaultLiveStreamFFmpegLogLevel)
 
 	// File output configuration
 	viper.SetDefault("output.file.enabled", true)
