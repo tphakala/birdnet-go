@@ -144,6 +144,7 @@ func (c *Controller) initDetectionRoutes() {
 	detectionGroup.DELETE("/:id", c.DeleteDetection)
 	detectionGroup.POST("/:id/review", c.ReviewDetection)
 	detectionGroup.POST("/:id/lock", c.LockDetection)
+	detectionGroup.POST("/:id/reanalyze", c.ReanalyzeDetection)
 	detectionGroup.POST("/ignore", c.IgnoreSpecies)
 	detectionGroup.GET("/ignored", c.GetExcludedSpecies)
 }

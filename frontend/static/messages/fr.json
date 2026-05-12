@@ -881,6 +881,22 @@
       "label": "Mode d'affichage",
       "table": "Vue tableau",
       "cards": "Vue cartes"
+    },
+    "reanalyze": {
+      "title": "Réanalyser avec un autre modèle",
+      "description": "Faire passer ce clip dans un autre classifieur et voir ce qu'il prédit. Rien n'est sauvegardé — c'est un second avis ponctuel.",
+      "modelLabel": "Modèle",
+      "loadingModels": "Chargement des modèles disponibles…",
+      "noOtherModels": "Aucun autre modèle n'est chargé. Activez d'abord des modèles supplémentaires dans Paramètres → Modèles.",
+      "run": "Lancer la réanalyse",
+      "running": "Analyse en cours…",
+      "summary": "{model} • {duration} d'audio sur {windows} fenêtres",
+      "noPredictions": "Aucune prédiction retournée.",
+      "colSpecies": "Espèce",
+      "colConfidence": "Confiance",
+      "button": "Réanalyser",
+      "buttonAriaLabel": "Réanalyser le clip de {species} avec un autre modèle",
+      "duplicateInFlight": "Une réanalyse est déjà en cours pour cette détection."
     }
   },
   "species": {
