@@ -277,9 +277,12 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 
 // getMetaModelData returns the appropriate meta model data based on the settings.
 func (bn *BirdNET) getMetaModelData() ([]byte, error) {
+	settings := bn.currentSettings()
+	rf := settings.BirdNET.RangeFilter
+
 	// Check if external model path is specified
-	if bn.Settings.BirdNET.RangeFilter.ModelPath != "" {
-		modelPath := bn.Settings.BirdNET.RangeFilter.ModelPath
+	if rf.ModelPath != "" {
+		modelPath := rf.ModelPath
 
 		// Expand environment variables and ~ prefix
 		modelPath = os.ExpandEnv(modelPath)
@@ -287,7 +290,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 		if err != nil {
 			return nil, errors.New(err).
 				Category(errors.CategoryFileIO).
-				Context("path", bn.Settings.BirdNET.RangeFilter.ModelPath).
+				Context("path", rf.ModelPath).
 				Build()
 		}
 
@@ -297,7 +300,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 			return nil, errors.New(err).
 				Category(errors.CategoryFileIO).
 				Context("path", modelPath).
-				Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
+				Context("range_filter_model", rf.Model).
 				Build()
 		}
 
@@ -309,16 +312,15 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 	if !hasEmbeddedModels {
 		// Determine which model file to look for based on the model version
 		modelFileName := DefaultRangeFilterV2ModelName
-		if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
+		if rf.Model == "legacy" {
 			modelFileName = DefaultRangeFilterV1ModelName
 			GetLogger().Warn("Looking for legacy range filter model")
 		}
 
 		data, path, err := tryLoadModelFromStandardPaths(modelFileName, "range filter")
 		if err != nil {
-			// Add extra context to the error
 			return nil, errors.Wrap(err).
-				Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
+				Context("range_filter_model", rf.Model).
 				Build()
 		}
 		GetLogger().Info("Loaded range filter model from standard path", logger.String("path", path))
@@ -328,7 +330,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 
 	// Fall back to embedded models
 	var data []byte
-	if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
+	if rf.Model == "legacy" {
 		GetLogger().Warn("Using legacy range filter model")
 		data = metaModelDataV1
 	} else {
@@ -339,7 +341,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 		return nil, errors.Newf("range filter model not available: embedded model is nil").
 			Category(errors.CategoryModelLoad).
 			Context("embedded_models", hasEmbeddedModels).
-			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
+			Context("range_filter_model", rf.Model).
 			Build()
 	}
 
@@ -363,12 +365,12 @@ func (bn *BirdNET) initializeMetaModel() error {
 		logger.String("models_dir", bn.modelsDir))
 
 	// Auto-select v3 geomodel for compatible classifiers when files exist on disk.
-	// Also resolves empty paths when the user explicitly sets Model="v3" but
-	// leaves ModelPath/LabelsPath empty (applyAutoSelectedGeomodelPaths skips
-	// when existing paths already point to valid files).
+	// Clone-mutate-publish to avoid racing on the shared settings object.
 	if bn.modelsDir != "" && shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
-		applyAutoSelectedGeomodelPaths(settings, bn.modelsDir)
-		rf = settings.BirdNET.RangeFilter
+		updated := conf.CloneSettings(settings)
+		applyAutoSelectedGeomodelPaths(updated, bn.modelsDir)
+		conf.StoreSettings(updated)
+		rf = updated.BirdNET.RangeFilter
 		log.Info("Auto-selected v3.0 geomodel for compatible classifier",
 			logger.String("classifier", bn.ModelInfo.ID),
 			logger.String("models_dir", bn.modelsDir))

@@ -51,32 +51,33 @@ func (bn *BirdNET) initializeONNXModel() error {
 // For v3 geomodel, delegates to initializeV3GeoModel which loads the geomodel
 // with its own 12K labels and wraps it in a mappedRangeFilter.
 func (bn *BirdNET) initializeONNXMetaModel() error {
-	if bn.Settings.BirdNET.RangeFilter.Model == "v3" {
+	settings := bn.currentSettings()
+	if settings.BirdNET.RangeFilter.Model == "v3" {
 		return bn.initializeV3GeoModel()
 	}
 
 	start := time.Now()
 
 	// Ensure ONNX Runtime is initialized (idempotent - may already be init from classifier)
-	if err := inference.InitONNXRuntime(bn.Settings.BirdNET.ONNXRuntimePath); err != nil {
+	if err := inference.InitONNXRuntime(settings.BirdNET.ONNXRuntimePath); err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
-			Context("onnx_runtime_path", bn.Settings.BirdNET.ONNXRuntimePath).
+			Context("onnx_runtime_path", settings.BirdNET.ONNXRuntimePath).
 			Timing("onnx-init", time.Since(start)).
 			Build()
 	}
 
 	rangeFilter, err := inference.NewONNXRangeFilter(
-		bn.Settings.BirdNET.RangeFilter.ModelPath,
+		settings.BirdNET.RangeFilter.ModelPath,
 		inference.ONNXRangeFilterOptions{
-			Labels: bn.Settings.BirdNET.Labels,
+			Labels: settings.BirdNET.Labels,
 		},
 	)
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
 			Context("model_type", "range_filter").
-			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.ModelPath).
+			Context("range_filter_model", settings.BirdNET.RangeFilter.ModelPath).
 			Timing("onnx-meta-model-init", time.Since(start)).
 			Build()
 	}
@@ -92,12 +93,13 @@ func (bn *BirdNET) initializeONNXMetaModel() error {
 func (bn *BirdNET) initializeV3GeoModel() error {
 	start := time.Now()
 	log := GetLogger()
-	rfSettings := bn.Settings.BirdNET.RangeFilter
+	settings := bn.currentSettings()
+	rfSettings := settings.BirdNET.RangeFilter
 
 	log.Info("V3 geomodel: starting initialization",
 		logger.String("model_path", rfSettings.ModelPath),
 		logger.String("labels_path", rfSettings.LabelsPath),
-		logger.Int("classifier_labels", len(bn.Settings.BirdNET.Labels)))
+		logger.Int("classifier_labels", len(settings.BirdNET.Labels)))
 
 	if rfSettings.ModelPath == "" {
 		return errors.Newf("v3 geomodel requires rangefilter.modelpath to be set").
@@ -133,10 +135,10 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 
 	// Ensure ONNX Runtime is initialized
 	log.Debug("V3 geomodel: initializing ONNX Runtime")
-	if err := inference.InitONNXRuntime(bn.Settings.BirdNET.ONNXRuntimePath); err != nil {
+	if err := inference.InitONNXRuntime(settings.BirdNET.ONNXRuntimePath); err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
-			Context("onnx_runtime_path", bn.Settings.BirdNET.ONNXRuntimePath).
+			Context("onnx_runtime_path", settings.BirdNET.ONNXRuntimePath).
 			Timing("onnx-init", time.Since(start)).
 			Build()
 	}
@@ -180,7 +182,7 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 			Build()
 	}
 
-	classifierLabels := bn.Settings.BirdNET.Labels
+	classifierLabels := settings.BirdNET.Labels
 	var unmappedScore float32
 	if rfSettings.PassUnmappedSpecies {
 		unmappedScore = 1.0
