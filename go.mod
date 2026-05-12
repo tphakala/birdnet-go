@@ -37,7 +37,7 @@ require (
 	github.com/tphakala/go-audio-resampler v1.3.0
 	github.com/tphakala/go-tflite v0.2.2-0.20260403122459-aedbd0bca261
 	github.com/tphakala/simd v1.0.22
-	github.com/yalue/onnxruntime_go v1.30.0
+	github.com/yalue/onnxruntime_go v1.30.1
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.51.0
 	golang.org/x/net v0.54.0
