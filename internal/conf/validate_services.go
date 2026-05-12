@@ -261,10 +261,13 @@ func ValidateWebServerSettings(settings *WebServerSettings) ValidationResult {
 	// parent key (webserver:) exists in the config file but the child section
 	// (livestream:) is absent. Apply compile-time defaults before range-checking.
 	if settings.LiveStream.BitRate == 0 {
-		settings.LiveStream.BitRate = 128
+		settings.LiveStream.BitRate = DefaultLiveStreamBitRate
 	}
 	if settings.LiveStream.SegmentLength == 0 {
-		settings.LiveStream.SegmentLength = 2
+		settings.LiveStream.SegmentLength = DefaultLiveStreamSegmentLength
+	}
+	if settings.LiveStream.SampleRate == 0 {
+		settings.LiveStream.SampleRate = DefaultLiveStreamSampleRate
 	}
 
 	// Validate LiveStream settings

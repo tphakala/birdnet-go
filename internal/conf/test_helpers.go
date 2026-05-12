@@ -1,7 +1,5 @@
 package conf
 
-import "time"
-
 // SetTestSettings allows tests to inject their own settings instance.
 // Subsequent GetSettings()/Setting() calls observe the new snapshot
 // atomically. Passing nil clears the snapshot, causing the next
@@ -40,16 +38,16 @@ func GetTestSettings() *Settings {
 	// Web server settings
 	settings.WebServer.Enabled = false
 	settings.WebServer.Port = "8080"
-	settings.WebServer.LiveStream.BitRate = 128
-	settings.WebServer.LiveStream.SegmentLength = 2
-	settings.WebServer.LiveStream.SampleRate = 48000
+	settings.WebServer.LiveStream.BitRate = DefaultLiveStreamBitRate
+	settings.WebServer.LiveStream.SegmentLength = DefaultLiveStreamSegmentLength
+	settings.WebServer.LiveStream.SampleRate = DefaultLiveStreamSampleRate
 
 	// Security settings
 	settings.Security.SessionSecret = "test-secret-for-unit-tests"
-	settings.Security.SessionDuration = 168 * time.Hour // 7 days
+	settings.Security.SessionDuration = DefaultSessionDuration
 
 	// Weather settings
-	settings.Realtime.Weather.PollInterval = 60
+	settings.Realtime.Weather.PollInterval = DefaultWeatherPollInterval
 
 	// Output settings
 	settings.Output.SQLite.Enabled = false

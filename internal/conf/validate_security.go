@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -56,7 +55,7 @@ func validateSecuritySettings(settings *Security) error {
 	// Normalize session duration: viper nested defaults can be lost when the
 	// parent key exists in the config file but sessionduration is absent.
 	if settings.SessionDuration <= 0 {
-		settings.SessionDuration = 168 * time.Hour // 7 days, matches viper default
+		settings.SessionDuration = DefaultSessionDuration // 7 days, matches viper default
 	}
 
 	// Validate OIDC provider configuration
