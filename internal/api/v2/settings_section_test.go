@@ -269,6 +269,11 @@ func TestPatchWebServerLiveStreamValidation(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
+			name:       "partial liveStream update succeeds",
+			payload:    map[string]any{"liveStream": map[string]any{"bitRate": float64(192)}},
+			wantStatus: http.StatusOK,
+		},
+		{
 			name:       "port-only patch skips LiveStream validation",
 			payload:    map[string]any{"port": "8080"},
 			wantStatus: http.StatusOK,
