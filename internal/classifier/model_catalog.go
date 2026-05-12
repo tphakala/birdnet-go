@@ -15,6 +15,7 @@ const (
 	RoleModel      = "model"
 	RoleLabels     = "labels"
 	RoleEmbeddings = "embeddings"
+	RoleGeomodel   = "geomodel"
 	RoleData       = "data"
 )
 
@@ -39,11 +40,12 @@ type CatalogEntry struct {
 
 // CatalogFile describes a single file within a model's HuggingFace repository.
 type CatalogFile struct {
-	RemotePath string // path within the HuggingFace repo
-	LocalName  string // filename to use on disk
-	Role       string // file role: "model", "labels", "embeddings", or "data"
-	SHA256     string // hex-encoded SHA-256 checksum
-	SizeBytes  int64  // file size in bytes
+	RemotePath      string // path within the HuggingFace repo
+	LocalName       string // filename to use on disk
+	Role            string // file role: "model", "labels", "embeddings", "geomodel", or "data"
+	SHA256          string // hex-encoded SHA-256 checksum
+	SizeBytes       int64  // file size in bytes
+	HuggingFaceRepo string // override entry-level HuggingFace repo for this file (empty = use entry repo)
 }
 
 // EmbeddedCatalog is the built-in list of models available for download.
@@ -66,10 +68,10 @@ var EmbeddedCatalog = []CatalogEntry{
 		Hidden:          true,
 		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
 		HuggingFaceRepo: "tphakala/BirdNET-v3.0",
-		Files: []CatalogFile{
+		Files: append([]CatalogFile{
 			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "placeholder", SizeBytes: 0},
 			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "placeholder", SizeBytes: 0},
-		},
+		}, geomodelFiles()...),
 	},
 	{
 		ID:              "perch-v2",
@@ -85,10 +87,10 @@ var EmbeddedCatalog = []CatalogEntry{
 		RegistryID:      RegistryIDPerchV2,
 		UpstreamURL:     "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
 		HuggingFaceRepo: "tphakala/Perch-v2",
-		Files: []CatalogFile{
+		Files: append([]CatalogFile{
 			{RemotePath: "perch_v2.onnx", LocalName: "perch_v2.onnx", Role: RoleModel, SHA256: "bf0c8467a924cb074663970ca4a0ab1e143602121930209657d0dff5d5cefa1f", SizeBytes: 409148616},
 			{RemotePath: "labels.txt", LocalName: "perch_v2_labels.txt", Role: RoleLabels, SHA256: "e4d5c0397d8fb08bf90c6b13a34810af53504faad927e472fcc567793c9de057", SizeBytes: 312716},
-		},
+		}, geomodelFiles()...),
 	},
 	{
 		ID:              "bsg-finland",
@@ -144,6 +146,48 @@ const (
 	embeddingsSHA256          = "b6b8f24dc9c3d43f2deb14a6f2c7b5b233e7477b6baf1b52341291e714903fb0"
 	embeddingsSizeBytes int64 = 66932350
 )
+
+// Shared v3.0 geomodel, used as range filter companion by Perch v2 and BirdNET v3.0.
+const (
+	geomodelHuggingFaceRepo       = "tphakala/BirdNET-Geomodel"
+	geomodelONNXSHA256            = "2bc5a9b1e7c24115730015a97dbb688e9e8cd49c02c34a011439182c65ef0017"
+	geomodelONNXSizeBytes   int64 = 7483473
+	geomodelLabelsSHA256          = "92cdca7ca95beb7ed16a0a39f4010fa9a8b468b854b6e8083f732647f136ee1c"
+	geomodelLabelsSizeBytes int64 = 479350
+)
+
+// geomodelFiles returns the shared geomodel CatalogFile entries appended to
+// classifiers that use the v3.0 range filter (Perch v2, BirdNET v3.0).
+func geomodelFiles() []CatalogFile {
+	return []CatalogFile{
+		{
+			RemotePath:      "BirdNET+_Geomodel_V3.0.2_Global_12K_FP16.onnx",
+			LocalName:       "geomodel_v3.0.2_fp16.onnx",
+			Role:            RoleGeomodel,
+			SHA256:          geomodelONNXSHA256,
+			SizeBytes:       geomodelONNXSizeBytes,
+			HuggingFaceRepo: geomodelHuggingFaceRepo,
+		},
+		{
+			RemotePath:      "geomodel_v3.0.2_labels.txt",
+			LocalName:       "geomodel_v3.0.2_labels.txt",
+			Role:            RoleGeomodel,
+			SHA256:          geomodelLabelsSHA256,
+			SizeBytes:       geomodelLabelsSizeBytes,
+			HuggingFaceRepo: geomodelHuggingFaceRepo,
+		},
+	}
+}
+
+// hasGeomodelFiles reports whether a catalog entry includes shared geomodel files.
+func hasGeomodelFiles(entry *CatalogEntry) bool {
+	for _, f := range entry.Files {
+		if f.Role == RoleGeomodel {
+			return true
+		}
+	}
+	return false
+}
 
 // batFileChecksums holds SHA256 and size for a BattyBirdNET model and its labels file.
 type batFileChecksums struct {
