@@ -269,18 +269,33 @@ func ValidateWebServerSettings(settings *WebServerSettings) ValidationResult {
 	if settings.LiveStream.SampleRate == 0 {
 		settings.LiveStream.SampleRate = DefaultLiveStreamSampleRate
 	}
-
-	// Validate LiveStream settings
-	if settings.LiveStream.BitRate < 16 || settings.LiveStream.BitRate > 320 {
-		result.Valid = false
-		result.Errors = append(result.Errors,
-			fmt.Sprintf("LiveStream bitrate must be between 16 and 320 kbps, got %d", settings.LiveStream.BitRate))
+	trimmed := strings.ToLower(strings.TrimSpace(settings.LiveStream.FfmpegLogLevel))
+	if trimmed == "" {
+		settings.LiveStream.FfmpegLogLevel = DefaultLiveStreamFFmpegLogLevel
+	} else {
+		settings.LiveStream.FfmpegLogLevel = trimmed
 	}
 
-	if settings.LiveStream.SegmentLength < 1 || settings.LiveStream.SegmentLength > 30 {
+	// Validate LiveStream settings
+	if settings.LiveStream.SampleRate < MinLiveStreamSampleRate || settings.LiveStream.SampleRate > MaxLiveStreamSampleRate {
 		result.Valid = false
 		result.Errors = append(result.Errors,
-			fmt.Sprintf("LiveStream segment length must be between 1 and 30 seconds, got %d", settings.LiveStream.SegmentLength))
+			fmt.Sprintf("LiveStream sample rate must be between %d and %d Hz, got %d",
+				MinLiveStreamSampleRate, MaxLiveStreamSampleRate, settings.LiveStream.SampleRate))
+	}
+
+	if settings.LiveStream.BitRate < MinLiveStreamBitRate || settings.LiveStream.BitRate > MaxLiveStreamBitRate {
+		result.Valid = false
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("LiveStream bitrate must be between %d and %d kbps, got %d",
+				MinLiveStreamBitRate, MaxLiveStreamBitRate, settings.LiveStream.BitRate))
+	}
+
+	if settings.LiveStream.SegmentLength < MinLiveStreamSegmentLength || settings.LiveStream.SegmentLength > MaxLiveStreamSegmentLength {
+		result.Valid = false
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("LiveStream segment length must be between %d and %d seconds, got %d",
+				MinLiveStreamSegmentLength, MaxLiveStreamSegmentLength, settings.LiveStream.SegmentLength))
 	}
 
 	result.Normalized = settings
