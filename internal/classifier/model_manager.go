@@ -1006,11 +1006,16 @@ func verifySHA256(path, expected string) bool {
 	}
 	defer func() { _ = f.Close() }()
 
+	info, err := f.Stat()
+	if err != nil || info.IsDir() {
+		return false
+	}
+
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return false
 	}
-	return hex.EncodeToString(h.Sum(nil)) == expected
+	return strings.EqualFold(hex.EncodeToString(h.Sum(nil)), expected)
 }
 
 // fileModTime returns the modification time for a file, or the zero time on error.

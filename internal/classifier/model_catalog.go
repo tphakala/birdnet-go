@@ -72,8 +72,8 @@ var EmbeddedCatalog = []CatalogEntry{
 		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
 		HuggingFaceRepo: "tphakala/BirdNET-v3.0",
 		Files: append([]CatalogFile{
-			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "placeholder", SizeBytes: 0},
-			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "placeholder", SizeBytes: 0},
+			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "", SizeBytes: 0},
+			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "", SizeBytes: 0},
 		}, geomodelFiles()...),
 	},
 	{
