@@ -210,10 +210,16 @@ func geomodelFiles() []CatalogFile {
 	}
 }
 
+// isEmbeddingsRole reports whether the given file role is an embeddings role.
+func isEmbeddingsRole(role string) bool { return role == RoleEmbeddings }
+
 // isGeomodelRole reports whether the given file role is a geomodel role.
 func isGeomodelRole(role string) bool {
 	return role == RoleGeomodelModel || role == RoleGeomodelLabels
 }
+
+// isTaxonomyRole reports whether the given file role is a taxonomy role.
+func isTaxonomyRole(role string) bool { return role == RoleTaxonomy }
 
 // isSharedRole reports whether the given file role stores into models/shared/.
 func isSharedRole(role string) bool {
@@ -234,6 +240,16 @@ func HasTaxonomyFiles(entry *CatalogEntry) bool {
 func HasGeomodelFiles(entry *CatalogEntry) bool {
 	for _, f := range entry.Files {
 		if isGeomodelRole(f.Role) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasEmbeddingsFiles reports whether a catalog entry includes shared embeddings files.
+func HasEmbeddingsFiles(entry *CatalogEntry) bool {
+	for _, f := range entry.Files {
+		if f.Role == RoleEmbeddings {
 			return true
 		}
 	}
