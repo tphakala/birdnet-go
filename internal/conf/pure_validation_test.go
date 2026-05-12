@@ -163,7 +163,7 @@ func TestValidateBirdNETSettings_Invalid(t *testing.T) {
 					Model: "invalid",
 				},
 			},
-			expectError: "RangeFilter model must be either empty (v2 default), 'latest', or 'legacy'",
+			expectError: "RangeFilter model must be either empty (v2 default), 'latest', 'legacy', or 'v3'",
 		},
 		{
 			name: "range filter threshold too low",
@@ -830,6 +830,22 @@ func TestValidateWebServerSettings_Valid(t *testing.T) {
 	}
 }
 
+// TestValidateWebServerSettings_Normalization verifies defaults are applied for zero/empty fields.
+func TestValidateWebServerSettings_Normalization(t *testing.T) {
+	t.Parallel()
+
+	settings := WebServerSettings{
+		Enabled: true,
+		Port:    "8080",
+	}
+	result := ValidateWebServerSettings(&settings)
+	assert.True(t, result.Valid, "expected valid config after normalization, got: %v", result.Errors)
+	assert.Equal(t, DefaultLiveStreamBitRate, settings.LiveStream.BitRate)
+	assert.Equal(t, DefaultLiveStreamSegmentLength, settings.LiveStream.SegmentLength)
+	assert.Equal(t, DefaultLiveStreamSampleRate, settings.LiveStream.SampleRate)
+	assert.Equal(t, DefaultLiveStreamFFmpegLogLevel, settings.LiveStream.FfmpegLogLevel)
+}
+
 // TestValidateWebServerSettings_Invalid verifies invalid web server configurations.
 func TestValidateWebServerSettings_Invalid(t *testing.T) {
 	t.Parallel()
@@ -901,7 +917,7 @@ func TestValidateWebServerSettings_Invalid(t *testing.T) {
 				Port:    "8080",
 				LiveStream: LiveStreamSettings{
 					BitRate:       128,
-					SegmentLength: 0,
+					SegmentLength: -1,
 				},
 			},
 			expectError: "segment length must be between 1 and 30 seconds",
@@ -917,6 +933,32 @@ func TestValidateWebServerSettings_Invalid(t *testing.T) {
 				},
 			},
 			expectError: "segment length must be between 1 and 30 seconds",
+		},
+		{
+			name: "livestream sample rate too low",
+			settings: WebServerSettings{
+				Enabled: true,
+				Port:    "8080",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+					SampleRate:    7999,
+				},
+			},
+			expectError: "sample rate must be between",
+		},
+		{
+			name: "livestream sample rate too high",
+			settings: WebServerSettings{
+				Enabled: true,
+				Port:    "8080",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+					SampleRate:    96001,
+				},
+			},
+			expectError: "sample rate must be between",
 		},
 		{
 			name: "basepath missing leading slash",

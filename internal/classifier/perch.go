@@ -1,6 +1,6 @@
 // perch.go provides Perch v2 model support.
 // Label parsing is available in all builds.
-// ONNX inference requires the onnx build tag (see perch_onnx.go).
+// ONNX inference is in perch_onnx.go.
 package classifier
 
 import (

@@ -19,6 +19,7 @@ export interface CatalogEntry {
   installed: boolean;
   compatible: boolean;
   totalSizeBytes: number;
+  hasGeomodel: boolean;
 }
 
 /** Response wrapper for the catalog endpoint. */

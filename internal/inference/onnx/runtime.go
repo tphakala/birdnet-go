@@ -1,5 +1,3 @@
-//go:build onnx
-
 // Package onnx provides inference for bird species classification models
 // (BirdNET, Google Perch, and others) using ONNX Runtime.
 //

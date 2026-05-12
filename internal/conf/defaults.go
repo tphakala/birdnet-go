@@ -229,7 +229,7 @@ func setDefaultConfig() {
 
 	// New weather configuration
 	viper.SetDefault("realtime.weather.debug", false)
-	viper.SetDefault("realtime.weather.pollinterval", 60)
+	viper.SetDefault("realtime.weather.pollinterval", DefaultWeatherPollInterval)
 	viper.SetDefault("realtime.weather.provider", "yrno")
 
 	// OpenWeather specific configuration
@@ -330,10 +330,10 @@ func setDefaultConfig() {
 
 	// Live stream configuration
 	viper.SetDefault("webserver.livestream.debug", false)
-	viper.SetDefault("webserver.livestream.bitrate", 128)
-	viper.SetDefault("webserver.livestream.sampleRate", 48000)
-	viper.SetDefault("webserver.livestream.segmentLength", 2)
-	viper.SetDefault("webserver.livestream.ffmpegLogLevel", "warning")
+	viper.SetDefault("webserver.livestream.bitrate", DefaultLiveStreamBitRate)
+	viper.SetDefault("webserver.livestream.sampleRate", DefaultLiveStreamSampleRate)
+	viper.SetDefault("webserver.livestream.segmentLength", DefaultLiveStreamSegmentLength)
+	viper.SetDefault("webserver.livestream.ffmpegLogLevel", DefaultLiveStreamFFmpegLogLevel)
 
 	// File output configuration
 	viper.SetDefault("output.file.enabled", true)

@@ -41,6 +41,9 @@ jobs:
       - name: Setup TensorFlow Lite
         uses: ./.github/actions/setup-tensorflow
 
+      - name: Setup ONNX Runtime
+        uses: ./.github/actions/setup-onnxruntime
+
       - name: Install FFmpeg, SoX, and test dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:

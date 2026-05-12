@@ -38,10 +38,10 @@ func ValidateBirdNETSettings(cfg *BirdNETConfig) ValidationResult {
 		result.Errors = append(result.Errors, "BirdNET threads must be at least 0")
 	}
 
-	// Empty string, "latest", or "legacy" are valid
-	if cfg.RangeFilter.Model != "" && cfg.RangeFilter.Model != "latest" && cfg.RangeFilter.Model != "legacy" {
+	// Empty string, "latest", "legacy", or "v3" are valid
+	if cfg.RangeFilter.Model != "" && cfg.RangeFilter.Model != "latest" && cfg.RangeFilter.Model != "legacy" && cfg.RangeFilter.Model != "v3" {
 		result.Valid = false
-		result.Errors = append(result.Errors, "RangeFilter model must be either empty (v2 default), 'latest', or 'legacy'")
+		result.Errors = append(result.Errors, "RangeFilter model must be either empty (v2 default), 'latest', 'legacy', or 'v3'")
 	}
 
 	checkRange(&result, cfg.RangeFilter.Threshold, 0, 1, "RangeFilter threshold must be between 0 and 1")
@@ -257,17 +257,45 @@ func ValidateWebServerSettings(settings *WebServerSettings) ValidationResult {
 		result.Errors = append(result.Errors, err.Error())
 	}
 
-	// Validate LiveStream settings
-	if settings.LiveStream.BitRate < 16 || settings.LiveStream.BitRate > 320 {
-		result.Valid = false
-		result.Errors = append(result.Errors,
-			fmt.Sprintf("LiveStream bitrate must be between 16 and 320 kbps, got %d", settings.LiveStream.BitRate))
+	// Normalize LiveStream defaults: viper nested defaults can be lost when the
+	// parent key (webserver:) exists in the config file but the child section
+	// (livestream:) is absent. Apply compile-time defaults before range-checking.
+	if settings.LiveStream.BitRate == 0 {
+		settings.LiveStream.BitRate = DefaultLiveStreamBitRate
+	}
+	if settings.LiveStream.SegmentLength == 0 {
+		settings.LiveStream.SegmentLength = DefaultLiveStreamSegmentLength
+	}
+	if settings.LiveStream.SampleRate == 0 {
+		settings.LiveStream.SampleRate = DefaultLiveStreamSampleRate
+	}
+	trimmed := strings.ToLower(strings.TrimSpace(settings.LiveStream.FfmpegLogLevel))
+	if trimmed == "" {
+		settings.LiveStream.FfmpegLogLevel = DefaultLiveStreamFFmpegLogLevel
+	} else {
+		settings.LiveStream.FfmpegLogLevel = trimmed
 	}
 
-	if settings.LiveStream.SegmentLength < 1 || settings.LiveStream.SegmentLength > 30 {
+	// Validate LiveStream settings
+	if settings.LiveStream.SampleRate < MinLiveStreamSampleRate || settings.LiveStream.SampleRate > MaxLiveStreamSampleRate {
 		result.Valid = false
 		result.Errors = append(result.Errors,
-			fmt.Sprintf("LiveStream segment length must be between 1 and 30 seconds, got %d", settings.LiveStream.SegmentLength))
+			fmt.Sprintf("LiveStream sample rate must be between %d and %d Hz, got %d",
+				MinLiveStreamSampleRate, MaxLiveStreamSampleRate, settings.LiveStream.SampleRate))
+	}
+
+	if settings.LiveStream.BitRate < MinLiveStreamBitRate || settings.LiveStream.BitRate > MaxLiveStreamBitRate {
+		result.Valid = false
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("LiveStream bitrate must be between %d and %d kbps, got %d",
+				MinLiveStreamBitRate, MaxLiveStreamBitRate, settings.LiveStream.BitRate))
+	}
+
+	if settings.LiveStream.SegmentLength < MinLiveStreamSegmentLength || settings.LiveStream.SegmentLength > MaxLiveStreamSegmentLength {
+		result.Valid = false
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("LiveStream segment length must be between %d and %d seconds, got %d",
+				MinLiveStreamSegmentLength, MaxLiveStreamSegmentLength, settings.LiveStream.SegmentLength))
 	}
 
 	result.Normalized = settings

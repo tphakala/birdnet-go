@@ -157,8 +157,6 @@ func TestGetCatalogEntry_BSGFinland(t *testing.T) {
 	assert.Equal(t, CategoryBird, entry.Category)
 	assert.Equal(t, RegistryIDBSG, entry.RegistryID)
 	assert.Equal(t, "Finland", entry.Region)
-	assert.Contains(t, entry.RequiredBuildTags, "onnx")
-
 	hasModel := false
 	hasLabels := false
 	for _, f := range entry.Files {
@@ -182,5 +180,4 @@ func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
 	assert.Equal(t, "BirdNET v3.0", entry.Name)
 	assert.Equal(t, RegistryIDBirdNETV3, entry.RegistryID)
 	assert.Equal(t, CategoryWildlife, entry.Category)
-	assert.Contains(t, entry.RequiredBuildTags, "onnx")
 }

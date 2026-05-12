@@ -221,6 +221,7 @@ func TestValidateAndNormalizeRangeFilterModel(t *testing.T) {
 		{"empty string", "", true},
 		{"latest", "latest", false},
 		{"legacy", "legacy", false},
+		{"v3", "v3", false},
 		{"invalid", "invalid", true},
 	}
 
@@ -243,6 +244,7 @@ func TestValidateAndNormalizeRangeFilterModel(t *testing.T) {
 	}{
 		{"latest model", "latest", "latest"},
 		{"legacy model", "legacy", "legacy"},
+		{"v3 model", "v3", "v3"},
 	}
 
 	for _, tt := range integrationTests {

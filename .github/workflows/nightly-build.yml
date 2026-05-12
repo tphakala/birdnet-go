@@ -75,6 +75,11 @@ jobs:
           echo "BUILD_VERSION=${BUILD_VERSION}" >> ${GITHUB_ENV}
           echo "build_version=${BUILD_VERSION}" >> $GITHUB_OUTPUT
 
+      - name: Setup ONNX Runtime
+        uses: ./.github/actions/setup-onnxruntime
+        with:
+          target-platform: ${{ matrix.goos }}-${{ matrix.goarch }}
+
       - name: Build BirdNET-Go
         run: |
           # Build the application
@@ -117,13 +122,17 @@ jobs:
           if [ "${{ matrix.goos }}" = "linux" ]; then
             if [ "${{ matrix.goarch }}" = "amd64" ]; then
               cp /usr/lib/libtensorflowlite_c.so artifacts/
+              cp /usr/lib/libonnxruntime.so artifacts/
             elif [ "${{ matrix.goarch }}" = "arm64" ]; then
               cp /usr/aarch64-linux-gnu/lib/libtensorflowlite_c.so artifacts/
+              cp /usr/aarch64-linux-gnu/lib/libonnxruntime.so artifacts/
             fi
           elif [ "${{ matrix.goos }}" = "windows" ]; then
             cp /usr/x86_64-w64-mingw32/lib/tensorflowlite_c.dll artifacts/
+            cp /tmp/onnxruntime/lib/*.dll artifacts/
           elif [ "${{ matrix.goos }}" = "darwin" ]; then
             cp /opt/homebrew/lib/libtensorflowlite_c.dylib artifacts/
+            cp /tmp/onnxruntime/lib/libonnxruntime.dylib artifacts/
           fi
 
           # Create tarball

@@ -98,8 +98,54 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 // SetModelsDir sets the base directory for gallery-installed models.
 // Called by ModelManager after creation so model loaders can resolve
 // paths from the installed models directory when config paths are empty.
+// Also propagates the directory to the primary BirdNET instance for
+// geomodel auto-selection, and registers the taxonomy resolver if
+// taxonomy.csv is available on disk.
 func (o *Orchestrator) SetModelsDir(dir string) {
 	o.modelsDir = dir
+	if o.primary != nil {
+		o.primary.SetModelsDir(dir)
+	}
+	o.registerTaxonomyResolver(dir)
+}
+
+// registerTaxonomyResolver checks for taxonomy.csv in the shared models
+// directory and, if present, appends a TaxonomyResolver to the name
+// resolver chain. This provides multilingual common name resolution for
+// species not covered by BirdNET's label files.
+//
+// Called during initialization before inference goroutines start, so the
+// unsynchronized append to nameResolvers is safe.
+func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
+	if o.Settings == nil {
+		return
+	}
+
+	for _, r := range o.nameResolvers {
+		if _, ok := r.(*TaxonomyResolver); ok {
+			return
+		}
+	}
+
+	log := GetLogger()
+	taxonomyPath := filepath.Join(modelsDir, "shared", "taxonomy.csv")
+
+	locale := o.Settings.BirdNET.Locale
+	resolver, err := NewTaxonomyResolver(taxonomyPath, locale)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Warn("Failed to load taxonomy resolver",
+				logger.String("path", taxonomyPath),
+				logger.Error(err))
+		}
+		return
+	}
+
+	o.nameResolvers = append(o.nameResolvers, resolver)
+	log.Info("Taxonomy resolver registered",
+		logger.String("path", taxonomyPath),
+		logger.String("locale", locale),
+		logger.Int("species", len(resolver.index)))
 }
 
 // resolveInstalledPaths looks up catalog entries for the given registry ID
@@ -259,12 +305,12 @@ func (o *Orchestrator) GetSpeciesWithScientificAndCommonName(label string) (scie
 // EnrichResultWithTaxonomy adds taxonomy information to a detection result.
 // If the primary model cannot resolve a common name (e.g., Perch labels
 // contain only scientific names), the name resolver chain is consulted
-// to map the scientific name to BirdNET's common name.
+// to find a common name (BirdNET labels, then taxonomy.csv).
 func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific, common, code string) {
 	scientific, common, code = o.primary.EnrichResultWithTaxonomy(speciesLabel)
 
 	// Perch v2 labels are scientific-name-only. Try the resolver chain
-	// to look up a common name from BirdNET's label database.
+	// to look up a common name.
 	if common == "" && scientific != "" {
 		if resolved := o.ResolveName(scientific, ""); resolved != "" {
 			common = resolved
@@ -272,6 +318,24 @@ func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific
 	}
 
 	return scientific, common, code
+}
+
+// RangeFilterStatus returns introspection data about the primary model's
+// active range filter configuration.
+func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusInfo {
+	return o.primary.RangeFilterStatus()
+}
+
+// ReloadRangeFilter reinitializes the range filter on the primary model
+// from current settings without a full model reload.
+func (o *Orchestrator) ReloadRangeFilter() error {
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return nil
+	}
+	return primary.ReloadRangeFilter()
 }
 
 // RunFilterProcess executes the filter process on demand and prints results.
@@ -425,7 +489,6 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 		logger.String("registry_id", registryID),
 		logger.Int("threads", dynamicThreads))
 
-	//nolint:staticcheck // SA4023: loaders always error in non-onnx build, but return nil in onnx build
 	var err error
 	switch registryID {
 	case RegistryIDBirdNETV3:
@@ -626,13 +689,11 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 			log.Warn("BirdNET v3.0 loader not yet implemented, skipping",
 				logger.String("registry_id", registryID))
 		case RegistryIDPerchV2:
-			//nolint:staticcheck // SA4023: loadPerch always errors in non-onnx build, but returns nil in onnx build
 			loadErr = o.loadPerch(threads)
 		case RegistryIDBSG:
 			log.Warn("BSG loader not yet implemented, skipping",
 				logger.String("registry_id", registryID))
 		case RegistryIDBat:
-			//nolint:staticcheck // SA4023: loadBat always errors in non-onnx build, but returns nil in onnx build
 			loadErr = o.loadBat(threads)
 		default:
 			log.Warn("model registered but no loader implemented",

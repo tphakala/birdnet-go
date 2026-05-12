@@ -4,6 +4,7 @@ vars:
   BINARY_DIR: bin
   BINARY_NAME: birdnet-go
   TFLITE_VERSION: v2.17.1
+  ONNXRUNTIME_VERSION: '1.25.1'
   LABELS_DIR: internal/classifier/data/labels
   AVICOMMONS_DATA_DIR: internal/imageprovider/data
   AVICOMMONS_JSON_FILE: latest.json
@@ -1217,4 +1218,71 @@ tasks:
             fi
             ;;
         esac
-      
+
+  download-onnxruntime:
+    desc: Download and install ONNX Runtime library for the current platform
+    vars:
+      ONNX_LIB_DIR:
+        sh: |
+          case "{{.UNAME_S}}_{{.UNAME_M}}" in
+            Darwin_arm64) echo "/opt/homebrew/lib";;
+            Darwin_*) echo "/usr/local/lib";;
+            Linux_aarch64|Linux_arm64) echo "{{.SYSTEM_LIB_DIR_ARM64}}";;
+            Linux_*) echo "{{.SYSTEM_LIB_DIR_AMD64}}";;
+            *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
+          esac
+      ONNX_ARCHIVE:
+        sh: |
+          case "{{.UNAME_S}}_{{.UNAME_M}}" in
+            Linux_x86_64) echo "onnxruntime-linux-x64-{{.ONNXRUNTIME_VERSION}}.tgz";;
+            Linux_aarch64|Linux_arm64) echo "onnxruntime-linux-aarch64-{{.ONNXRUNTIME_VERSION}}.tgz";;
+            Darwin_x86_64) echo "onnxruntime-osx-x86_64-{{.ONNXRUNTIME_VERSION}}.tgz";;
+            Darwin_arm64) echo "onnxruntime-osx-arm64-{{.ONNXRUNTIME_VERSION}}.tgz";;
+            *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
+          esac
+      ONNX_LIB_NAME:
+        sh: |
+          case "{{.UNAME_S}}" in
+            Linux) echo "libonnxruntime.so";;
+            Darwin) echo "libonnxruntime.dylib";;
+            *) echo "unsupported: {{.UNAME_S}}" >&2; exit 1;;
+          esac
+    cmds:
+      - |
+        if [ -f "{{.ONNX_LIB_DIR}}/{{.ONNX_LIB_NAME}}" ]; then
+          echo "ONNX Runtime already installed at {{.ONNX_LIB_DIR}}/{{.ONNX_LIB_NAME}}"
+          exit 0
+        fi
+
+        echo "Downloading ONNX Runtime {{.ONNXRUNTIME_VERSION}}..."
+        curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v{{.ONNXRUNTIME_VERSION}}/{{.ONNX_ARCHIVE}}" \
+          -o /tmp/onnxruntime.tgz
+
+        mkdir -p /tmp/onnxruntime
+        tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
+        rm /tmp/onnxruntime.tgz
+
+        # Create target directory if needed
+        if [ ! -d "{{.ONNX_LIB_DIR}}" ]; then
+          if [ -w "$(dirname "{{.ONNX_LIB_DIR}}")" ] 2>/dev/null; then
+            mkdir -p "{{.ONNX_LIB_DIR}}"
+          else
+            sudo mkdir -p "{{.ONNX_LIB_DIR}}"
+          fi
+        fi
+
+        # Install library files
+        if [ -w "{{.ONNX_LIB_DIR}}" ]; then
+          cp /tmp/onnxruntime/lib/{{.ONNX_LIB_NAME}}* "{{.ONNX_LIB_DIR}}/"
+        else
+          sudo cp /tmp/onnxruntime/lib/{{.ONNX_LIB_NAME}}* "{{.ONNX_LIB_DIR}}/"
+        fi
+
+        rm -rf /tmp/onnxruntime
+
+        # Update library cache on Linux
+        if [ "{{.UNAME_S}}" = "Linux" ]; then
+          sudo ldconfig 2>/dev/null || true
+        fi
+
+        echo "ONNX Runtime {{.ONNXRUNTIME_VERSION}} installed to {{.ONNX_LIB_DIR}}"

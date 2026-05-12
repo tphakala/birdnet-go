@@ -38,6 +38,16 @@ func GetTestSettings() *Settings {
 	// Web server settings
 	settings.WebServer.Enabled = false
 	settings.WebServer.Port = "8080"
+	settings.WebServer.LiveStream.BitRate = DefaultLiveStreamBitRate
+	settings.WebServer.LiveStream.SegmentLength = DefaultLiveStreamSegmentLength
+	settings.WebServer.LiveStream.SampleRate = DefaultLiveStreamSampleRate
+
+	// Security settings
+	settings.Security.SessionSecret = "test-secret-for-unit-tests"
+	settings.Security.SessionDuration = DefaultSessionDuration
+
+	// Weather settings
+	settings.Realtime.Weather.PollInterval = DefaultWeatherPollInterval
 
 	// Output settings
 	settings.Output.SQLite.Enabled = false

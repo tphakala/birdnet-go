@@ -190,13 +190,15 @@ even if it was detected earlier on another source).
 
 ### Range Filter (`range.go`)
 
-| Method | Route                  | Handler                      | Auth | Description                         |
-| ------ | ---------------------- | ---------------------------- | ---- | ----------------------------------- |
-| GET    | `/range/species/count` | `GetRangeFilterSpeciesCount` | ❌   | Species count with range filter     |
-| GET    | `/range/species/list`  | `GetRangeFilterSpeciesList`  | ❌   | Species list with taxonomy groups   |
-| GET    | `/range/species/csv`   | `GetRangeFilterSpeciesCSV`   | ❌   | Export species list as CSV download |
-| POST   | `/range/species/test`  | `TestRangeFilter`            | ❌   | Test range filter configuration     |
-| POST   | `/range/rebuild`       | `RebuildRangeFilter`         | ❌   | Rebuild range filter data           |
+| Method | Route                   | Handler                        | Auth | Description                                                      |
+| ------ | ----------------------- | ------------------------------ | ---- | ---------------------------------------------------------------- |
+| GET    | `/range/status`         | `GetRangeFilterStatus`         | ❌   | Range filter model, mapping stats, auto-selection status         |
+| GET    | `/range/species/scores` | `GetRangeFilterSpeciesScores`  | ❌   | All species with raw geomodel scores (no threshold cutoff)       |
+| GET    | `/range/species/count`  | `GetRangeFilterSpeciesCount`   | ❌   | Species count with range filter                                  |
+| GET    | `/range/species/list`   | `GetRangeFilterSpeciesList`    | ❌   | Species list with taxonomy groups                                |
+| GET    | `/range/species/csv`    | `GetRangeFilterSpeciesCSV`     | ❌   | Export species list as CSV download                              |
+| POST   | `/range/species/test`   | `TestRangeFilter`              | ❌   | Test range filter configuration                                  |
+| POST   | `/range/rebuild`        | `RebuildRangeFilter`           | ❌   | Rebuild range filter data                                        |
 
 ### Search (`search.go`)
 
@@ -500,9 +502,15 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 ### Models (`models.go`)
 
-| Method | Route     | Handler      | Auth | Description                         |
-| ------ | --------- | ------------ | ---- | ----------------------------------- |
-| GET    | `/models` | `ListModels` | ❌   | List available classifier models    |
+| Method | Route                         | Handler                 | Auth | Description                                          |
+| ------ | ----------------------------- | ----------------------- | ---- | ---------------------------------------------------- |
+| GET    | `/models`                     | `ListModels`            | ❌   | List available classifier models                     |
+| GET    | `/models/catalog`             | `GetModelCatalog`       | ❌   | Model gallery catalog with install status            |
+| GET    | `/models/installed`           | `GetInstalledModels`    | ❌   | List downloaded models                               |
+| POST   | `/models/install/:id`         | `InstallModel`          | ✅   | Download and install a catalog model                 |
+| POST   | `/models/reinstall/:id`       | `ReinstallModel`        | ✅   | Re-download missing/corrupt files for installed model |
+| DELETE | `/models/installed/:id`       | `UninstallModel`        | ✅   | Remove an installed model from disk                  |
+| GET    | `/models/install/:id/progress`| `StreamInstallProgress` | ❌   | SSE stream for install/reinstall progress            |
 
 **GET /api/v2/models** — Returns all classifier models registered in the model registry. Each entry includes a config alias (used in audio source configuration) and a human-readable display name.
 

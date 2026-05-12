@@ -4498,7 +4498,18 @@
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists."
+      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "status": {
+        "title": "Filtre de zone actif",
+        "model": "Modèle",
+        "autoSelected": "Sélectionné automatiquement",
+        "manual": "Manuel",
+        "classifierModel": "Classificateur",
+        "mappedSpecies": "Espèces cartographiées",
+        "unmappedSpecies": "Espèces non cartographiées",
+        "totalSpecies": "Total des espèces",
+        "noFilter": "Aucun filtre de zone actif"
+      }
     },
     "advanced": {
       "title": "Advanced",
@@ -4558,7 +4569,11 @@
         "removeFailed": "Impossible de supprimer le modèle"
       },
       "regionLabel": "Région",
-      "speciesLabel": "Espèces"
+      "speciesLabel": "Espèces",
+      "reinstall": "Réinstaller",
+      "reinstalling": "Réinstallation...",
+      "reinstallComplete": "Fichiers vérifiés avec succès",
+      "geomodelBadge": "Inclut le BirdNET v3.0 geomodel"
     }
   },
   "restart": {

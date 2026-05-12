@@ -91,20 +91,33 @@ jobs:
 
       - name: Login to GitHub Container Registry
         if: inputs.push-to-ghcr
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for attempt in 1 2 3; do
+            if echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin; then
+              echo "GHCR login succeeded"
+              exit 0
+            fi
+            echo "GHCR login attempt $attempt/3 failed, retrying in 15s..."
+            sleep 15
+          done
+          echo "GHCR login failed after 3 attempts"
+          exit 1
 
       - name: Login to Docker Hub
         if: inputs.push-to-dockerhub
-        uses: docker/login-action@v4
         continue-on-error: true
         id: dockerhub-login
-        with:
-          username: tphakala
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          for attempt in 1 2 3; do
+            if echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u tphakala --password-stdin; then
+              echo "Docker Hub login succeeded"
+              exit 0
+            fi
+            echo "Docker Hub login attempt $attempt/3 failed, retrying in 15s..."
+            sleep 15
+          done
+          echo "Docker Hub login failed after 3 attempts"
+          exit 1
 
       - name: Generate tags
         id: tags
@@ -222,175 +235,199 @@ jobs:
 
       - name: Login to GitHub Container Registry
         if: inputs.push-to-ghcr
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for attempt in 1 2 3; do
+            if echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin; then
+              echo "GHCR login succeeded"
+              exit 0
+            fi
+            echo "GHCR login attempt $attempt/3 failed, retrying in 15s..."
+            sleep 15
+          done
+          echo "GHCR login failed after 3 attempts"
+          exit 1
 
       - name: Login to Docker Hub
         if: inputs.push-to-dockerhub
-        uses: docker/login-action@v4
         continue-on-error: true
         id: dockerhub-login
-        with:
-          username: tphakala
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          for attempt in 1 2 3; do
+            if echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u tphakala --password-stdin; then
+              echo "Docker Hub login succeeded"
+              exit 0
+            fi
+            echo "Docker Hub login attempt $attempt/3 failed, retrying in 15s..."
+            sleep 15
+          done
+          echo "Docker Hub login failed after 3 attempts"
+          exit 1
 
       - name: Create and push manifests
         run: |
           set +e  # Don't exit on error - we want to try both registries
 
+          retry() {
+            local max=3 delay=15 attempt=1
+            while [ $attempt -le $max ]; do
+              if "$@"; then return 0; fi
+              echo "  Attempt $attempt/$max failed, retrying in ${delay}s..."
+              sleep $delay
+              attempt=$((attempt + 1))
+            done
+            return 1
+          }
+
           if [ "${{ inputs.tag-strategy }}" = "nightly" ]; then
             DATE=$(date +'%Y%m%d')
-            
+
             # GHCR Manifests
             if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
               echo "Creating GHCR nightly manifests..."
-              
+
               # Create dated manifest
-              docker manifest create ${GHCR_REPO}:nightly-${DATE} \
+              retry docker manifest create ${GHCR_REPO}:nightly-${DATE} \
                 ${GHCR_REPO}:nightly-amd64-${DATE} \
                 ${GHCR_REPO}:nightly-arm64-${DATE} || echo "Failed to create GHCR dated manifest"
-              docker manifest push ${GHCR_REPO}:nightly-${DATE} || echo "Failed to push GHCR dated manifest"
-              
+              retry docker manifest push ${GHCR_REPO}:nightly-${DATE} || echo "Failed to push GHCR dated manifest"
+
               # Create main nightly manifest
-              docker manifest create ${GHCR_REPO}:nightly \
+              retry docker manifest create ${GHCR_REPO}:nightly \
                 ${GHCR_REPO}:nightly-amd64-${DATE} \
                 ${GHCR_REPO}:nightly-arm64-${DATE} || echo "Failed to create GHCR nightly manifest"
-              docker manifest push ${GHCR_REPO}:nightly || echo "Failed to push GHCR nightly manifest"
-              
+              retry docker manifest push ${GHCR_REPO}:nightly || echo "Failed to push GHCR nightly manifest"
+
               # Create Podman-compatible dated manifest
-              docker manifest create ${GHCR_REPO}:podman-nightly-${DATE} \
+              retry docker manifest create ${GHCR_REPO}:podman-nightly-${DATE} \
                 ${GHCR_REPO}:podman-nightly-amd64-${DATE} \
                 ${GHCR_REPO}:podman-nightly-arm64-${DATE} || echo "Failed to create GHCR Podman dated manifest"
-              docker manifest push ${GHCR_REPO}:podman-nightly-${DATE} || echo "Failed to push GHCR Podman dated manifest"
-              
+              retry docker manifest push ${GHCR_REPO}:podman-nightly-${DATE} || echo "Failed to push GHCR Podman dated manifest"
+
               # Create main Podman nightly manifest
-              docker manifest create ${GHCR_REPO}:podman-nightly \
+              retry docker manifest create ${GHCR_REPO}:podman-nightly \
                 ${GHCR_REPO}:podman-nightly-amd64-${DATE} \
                 ${GHCR_REPO}:podman-nightly-arm64-${DATE} || echo "Failed to create GHCR Podman nightly manifest"
-              docker manifest push ${GHCR_REPO}:podman-nightly || echo "Failed to push GHCR Podman nightly manifest"
+              retry docker manifest push ${GHCR_REPO}:podman-nightly || echo "Failed to push GHCR Podman nightly manifest"
 
               # Create latest manifest if requested
               if [ "${{ inputs.create-latest-tag }}" = "true" ]; then
-                docker manifest create ${GHCR_REPO}:latest \
+                retry docker manifest create ${GHCR_REPO}:latest \
                   ${GHCR_REPO}:nightly-amd64-${DATE} \
                   ${GHCR_REPO}:nightly-arm64-${DATE} || echo "Failed to create GHCR latest manifest"
-                docker manifest push ${GHCR_REPO}:latest || echo "Failed to push GHCR latest manifest"
+                retry docker manifest push ${GHCR_REPO}:latest || echo "Failed to push GHCR latest manifest"
 
                 # Create Podman latest manifest
-                docker manifest create ${GHCR_REPO}:podman-latest \
+                retry docker manifest create ${GHCR_REPO}:podman-latest \
                   ${GHCR_REPO}:podman-nightly-amd64-${DATE} \
                   ${GHCR_REPO}:podman-nightly-arm64-${DATE} || echo "Failed to create GHCR Podman latest manifest"
-                docker manifest push ${GHCR_REPO}:podman-latest || echo "Failed to push GHCR Podman latest manifest"
+                retry docker manifest push ${GHCR_REPO}:podman-latest || echo "Failed to push GHCR Podman latest manifest"
               fi
             fi
 
             # Docker Hub Manifests
             if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" = "success" ]; then
               echo "Creating Docker Hub nightly manifests..."
-              
+
               # Create dated manifest
-              docker manifest create ${DOCKERHUB_REPO}:nightly-${DATE} \
+              retry docker manifest create ${DOCKERHUB_REPO}:nightly-${DATE} \
                 ${DOCKERHUB_REPO}:nightly-amd64-${DATE} \
                 ${DOCKERHUB_REPO}:nightly-arm64-${DATE} || echo "Failed to create Docker Hub dated manifest"
-              docker manifest push ${DOCKERHUB_REPO}:nightly-${DATE} || echo "Failed to push Docker Hub dated manifest"
-              
+              retry docker manifest push ${DOCKERHUB_REPO}:nightly-${DATE} || echo "Failed to push Docker Hub dated manifest"
+
               # Create main nightly manifest
-              docker manifest create ${DOCKERHUB_REPO}:nightly \
+              retry docker manifest create ${DOCKERHUB_REPO}:nightly \
                 ${DOCKERHUB_REPO}:nightly-amd64-${DATE} \
                 ${DOCKERHUB_REPO}:nightly-arm64-${DATE} || echo "Failed to create Docker Hub nightly manifest"
-              docker manifest push ${DOCKERHUB_REPO}:nightly || echo "Failed to push Docker Hub nightly manifest"
-              
+              retry docker manifest push ${DOCKERHUB_REPO}:nightly || echo "Failed to push Docker Hub nightly manifest"
+
               # Create Podman-compatible dated manifest
-              docker manifest create ${DOCKERHUB_REPO}:podman-nightly-${DATE} \
+              retry docker manifest create ${DOCKERHUB_REPO}:podman-nightly-${DATE} \
                 ${DOCKERHUB_REPO}:podman-nightly-amd64-${DATE} \
                 ${DOCKERHUB_REPO}:podman-nightly-arm64-${DATE} || echo "Failed to create Docker Hub Podman dated manifest"
-              docker manifest push ${DOCKERHUB_REPO}:podman-nightly-${DATE} || echo "Failed to push Docker Hub Podman dated manifest"
-              
+              retry docker manifest push ${DOCKERHUB_REPO}:podman-nightly-${DATE} || echo "Failed to push Docker Hub Podman dated manifest"
+
               # Create main Podman nightly manifest
-              docker manifest create ${DOCKERHUB_REPO}:podman-nightly \
+              retry docker manifest create ${DOCKERHUB_REPO}:podman-nightly \
                 ${DOCKERHUB_REPO}:podman-nightly-amd64-${DATE} \
                 ${DOCKERHUB_REPO}:podman-nightly-arm64-${DATE} || echo "Failed to create Docker Hub Podman nightly manifest"
-              docker manifest push ${DOCKERHUB_REPO}:podman-nightly || echo "Failed to push Docker Hub Podman nightly manifest"
+              retry docker manifest push ${DOCKERHUB_REPO}:podman-nightly || echo "Failed to push Docker Hub Podman nightly manifest"
 
               # Create latest manifest if requested
               if [ "${{ inputs.create-latest-tag }}" = "true" ]; then
-                docker manifest create ${DOCKERHUB_REPO}:latest \
+                retry docker manifest create ${DOCKERHUB_REPO}:latest \
                   ${DOCKERHUB_REPO}:nightly-amd64-${DATE} \
                   ${DOCKERHUB_REPO}:nightly-arm64-${DATE} || echo "Failed to create Docker Hub latest manifest"
-                docker manifest push ${DOCKERHUB_REPO}:latest || echo "Failed to push Docker Hub latest manifest"
+                retry docker manifest push ${DOCKERHUB_REPO}:latest || echo "Failed to push Docker Hub latest manifest"
 
                 # Create Podman latest manifest
-                docker manifest create ${DOCKERHUB_REPO}:podman-latest \
+                retry docker manifest create ${DOCKERHUB_REPO}:podman-latest \
                   ${DOCKERHUB_REPO}:podman-nightly-amd64-${DATE} \
                   ${DOCKERHUB_REPO}:podman-nightly-arm64-${DATE} || echo "Failed to create Docker Hub Podman latest manifest"
-                docker manifest push ${DOCKERHUB_REPO}:podman-latest || echo "Failed to push Docker Hub Podman latest manifest"
+                retry docker manifest push ${DOCKERHUB_REPO}:podman-latest || echo "Failed to push Docker Hub Podman latest manifest"
               fi
             fi
 
           elif [ "${{ inputs.tag-strategy }}" = "release" ]; then
-            
+
             # GHCR Manifests
             if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
               echo "Creating GHCR release manifests..."
-              
+
               # Create versioned manifest
-              docker manifest create ${GHCR_REPO}:${{ inputs.version }} \
+              retry docker manifest create ${GHCR_REPO}:${{ inputs.version }} \
                 ${GHCR_REPO}:${{ inputs.version }}-amd64 \
                 ${GHCR_REPO}:${{ inputs.version }}-arm64 || echo "Failed to create GHCR versioned manifest"
-              docker manifest push ${GHCR_REPO}:${{ inputs.version }} || echo "Failed to push GHCR versioned manifest"
-              
+              retry docker manifest push ${GHCR_REPO}:${{ inputs.version }} || echo "Failed to push GHCR versioned manifest"
+
               # Create Podman-compatible versioned manifest
-              docker manifest create ${GHCR_REPO}:podman-${{ inputs.version }} \
+              retry docker manifest create ${GHCR_REPO}:podman-${{ inputs.version }} \
                 ${GHCR_REPO}:podman-${{ inputs.version }}-amd64 \
                 ${GHCR_REPO}:podman-${{ inputs.version }}-arm64 || echo "Failed to create GHCR Podman versioned manifest"
-              docker manifest push ${GHCR_REPO}:podman-${{ inputs.version }} || echo "Failed to push GHCR Podman versioned manifest"
-              
+              retry docker manifest push ${GHCR_REPO}:podman-${{ inputs.version }} || echo "Failed to push GHCR Podman versioned manifest"
+
               # Create latest manifest if requested
               if [ "${{ inputs.create-latest-tag }}" = "true" ]; then
-                docker manifest create ${GHCR_REPO}:latest \
+                retry docker manifest create ${GHCR_REPO}:latest \
                   ${GHCR_REPO}:amd64 \
                   ${GHCR_REPO}:arm64 || echo "Failed to create GHCR latest manifest"
-                docker manifest push ${GHCR_REPO}:latest || echo "Failed to push GHCR latest manifest"
-                
+                retry docker manifest push ${GHCR_REPO}:latest || echo "Failed to push GHCR latest manifest"
+
                 # Create Podman latest manifest
-                docker manifest create ${GHCR_REPO}:podman-latest \
+                retry docker manifest create ${GHCR_REPO}:podman-latest \
                   ${GHCR_REPO}:podman-amd64 \
                   ${GHCR_REPO}:podman-arm64 || echo "Failed to create GHCR Podman latest manifest"
-                docker manifest push ${GHCR_REPO}:podman-latest || echo "Failed to push GHCR Podman latest manifest"
+                retry docker manifest push ${GHCR_REPO}:podman-latest || echo "Failed to push GHCR Podman latest manifest"
               fi
             fi
-            
+
             # Docker Hub Manifests
             if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" = "success" ]; then
               echo "Creating Docker Hub release manifests..."
-              
+
               # Create versioned manifest
-              docker manifest create ${DOCKERHUB_REPO}:${{ inputs.version }} \
+              retry docker manifest create ${DOCKERHUB_REPO}:${{ inputs.version }} \
                 ${DOCKERHUB_REPO}:${{ inputs.version }}-amd64 \
                 ${DOCKERHUB_REPO}:${{ inputs.version }}-arm64 || echo "Failed to create Docker Hub versioned manifest"
-              docker manifest push ${DOCKERHUB_REPO}:${{ inputs.version }} || echo "Failed to push Docker Hub versioned manifest"
-              
+              retry docker manifest push ${DOCKERHUB_REPO}:${{ inputs.version }} || echo "Failed to push Docker Hub versioned manifest"
+
               # Create Podman-compatible versioned manifest
-              docker manifest create ${DOCKERHUB_REPO}:podman-${{ inputs.version }} \
+              retry docker manifest create ${DOCKERHUB_REPO}:podman-${{ inputs.version }} \
                 ${DOCKERHUB_REPO}:podman-${{ inputs.version }}-amd64 \
                 ${DOCKERHUB_REPO}:podman-${{ inputs.version }}-arm64 || echo "Failed to create Docker Hub Podman versioned manifest"
-              docker manifest push ${DOCKERHUB_REPO}:podman-${{ inputs.version }} || echo "Failed to push Docker Hub Podman versioned manifest"
-              
+              retry docker manifest push ${DOCKERHUB_REPO}:podman-${{ inputs.version }} || echo "Failed to push Docker Hub Podman versioned manifest"
+
               # Create latest manifest if requested
               if [ "${{ inputs.create-latest-tag }}" = "true" ]; then
-                docker manifest create ${DOCKERHUB_REPO}:latest \
+                retry docker manifest create ${DOCKERHUB_REPO}:latest \
                   ${DOCKERHUB_REPO}:amd64 \
                   ${DOCKERHUB_REPO}:arm64 || echo "Failed to create Docker Hub latest manifest"
-                docker manifest push ${DOCKERHUB_REPO}:latest || echo "Failed to push Docker Hub latest manifest"
-                
+                retry docker manifest push ${DOCKERHUB_REPO}:latest || echo "Failed to push Docker Hub latest manifest"
+
                 # Create Podman latest manifest
-                docker manifest create ${DOCKERHUB_REPO}:podman-latest \
+                retry docker manifest create ${DOCKERHUB_REPO}:podman-latest \
                   ${DOCKERHUB_REPO}:podman-amd64 \
                   ${DOCKERHUB_REPO}:podman-arm64 || echo "Failed to create Docker Hub Podman latest manifest"
-                docker manifest push ${DOCKERHUB_REPO}:podman-latest || echo "Failed to push Docker Hub Podman latest manifest"
+                retry docker manifest push ${DOCKERHUB_REPO}:podman-latest || echo "Failed to push Docker Hub Podman latest manifest"
               fi
             fi
           fi

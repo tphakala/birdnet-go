@@ -3,6 +3,8 @@
 // key via RegistryID and provides download metadata for HuggingFace repos.
 package classifier
 
+import "slices"
+
 // Catalog category constants.
 const (
 	CategoryWildlife = "wildlife"
@@ -12,39 +14,43 @@ const (
 
 // CatalogFile role constants.
 const (
-	RoleModel      = "model"
-	RoleLabels     = "labels"
-	RoleEmbeddings = "embeddings"
-	RoleData       = "data"
+	RoleModel          = "model"
+	RoleLabels         = "labels"
+	RoleEmbeddings     = "embeddings"
+	RoleGeomodelModel  = "geomodel_model"
+	RoleGeomodelLabels = "geomodel_labels"
+	RoleData           = "data"
+	RoleTaxonomy       = "taxonomy"
 )
 
 // CatalogEntry describes a downloadable model available in the model gallery.
 type CatalogEntry struct {
-	ID                string        // unique catalog identifier (e.g., "battybirdnet-eu")
-	Name              string        // user-facing display name
-	Description       string        // short description of the model
-	Author            string        // model author or organization
-	License           string        // license identifier (e.g., "Apache-2.0")
-	CommercialUse     bool          // whether commercial use is permitted
-	Category          string        // "wildlife", "bird", or "bat"
-	Region            string        // geographic region, or empty for global models
-	SpeciesCount      int           // number of species the model can identify
-	Version           string        // model version string
-	RegistryID        string        // maps to a ModelRegistry key; empty if loader not yet implemented
-	Hidden            bool          // if true, entry is excluded from the gallery UI
-	RequiredBuildTags []string      // build tags required for this model (e.g., ["onnx"])
-	UpstreamURL       string        // URL to the upstream project repository
-	HuggingFaceRepo   string        // HuggingFace repository path
-	Files             []CatalogFile // files to download for this model
+	ID              string        // unique catalog identifier (e.g., "battybirdnet-eu")
+	Name            string        // user-facing display name
+	Description     string        // short description of the model
+	Author          string        // model author or organization
+	License         string        // license identifier (e.g., "Apache-2.0")
+	CommercialUse   bool          // whether commercial use is permitted
+	Category        string        // "wildlife", "bird", or "bat"
+	Region          string        // geographic region, or empty for global models
+	SpeciesCount    int           // number of species the model can identify
+	Version         string        // model version string
+	GeomodelVersion string        // geomodel range filter version (e.g., "v3"); empty if no geomodel
+	RegistryID      string        // maps to a ModelRegistry key; empty if loader not yet implemented
+	Hidden          bool          // if true, entry is excluded from the gallery UI
+	UpstreamURL     string        // URL to the upstream project repository
+	HuggingFaceRepo string        // HuggingFace repository path
+	Files           []CatalogFile // files to download for this model
 }
 
 // CatalogFile describes a single file within a model's HuggingFace repository.
 type CatalogFile struct {
-	RemotePath string // path within the HuggingFace repo
-	LocalName  string // filename to use on disk
-	Role       string // file role: "model", "labels", "embeddings", or "data"
-	SHA256     string // hex-encoded SHA-256 checksum
-	SizeBytes  int64  // file size in bytes
+	RemotePath      string // path within the HuggingFace repo
+	LocalName       string // filename to use on disk
+	Role            string // file role: "model", "labels", "embeddings", "geomodel_model", "geomodel_labels", or "data"
+	SHA256          string // hex-encoded SHA-256 checksum
+	SizeBytes       int64  // file size in bytes
+	HuggingFaceRepo string // override entry-level HuggingFace repo for this file (empty = use entry repo)
 }
 
 // EmbeddedCatalog is the built-in list of models available for download.
@@ -53,62 +59,61 @@ type CatalogFile struct {
 var EmbeddedCatalog = []CatalogEntry{
 	// Wildlife models (multi-taxa classifiers)
 	{
-		ID:                "birdnet-v3.0",
-		Name:              "BirdNET v3.0",
-		Description:       "Global wildlife classifier using BirdNET v3.0 architecture",
-		Author:            "Cornell Lab of Ornithology & Chemnitz University of Technology",
-		License:           "TBD",
-		CommercialUse:     false,
-		Category:          CategoryWildlife,
-		Region:            "",
-		SpeciesCount:      0, // determined at runtime from label file
-		Version:           "3.0",
-		RegistryID:        RegistryIDBirdNETV3,
-		Hidden:            true,
-		RequiredBuildTags: []string{"onnx"},
-		UpstreamURL:       "https://github.com/birdnet-team/BirdNET-Analyzer",
-		HuggingFaceRepo:   "tphakala/BirdNET-v3.0",
-		Files: []CatalogFile{
-			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "placeholder", SizeBytes: 0},
-			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "placeholder", SizeBytes: 0},
-		},
+		ID:              "birdnet-v3.0",
+		Name:            "BirdNET v3.0",
+		Description:     "Global wildlife classifier using BirdNET v3.0 architecture",
+		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
+		License:         "TBD",
+		CommercialUse:   false,
+		Category:        CategoryWildlife,
+		Region:          "",
+		SpeciesCount:    0, // determined at runtime from label file
+		Version:         "3.0",
+		GeomodelVersion: "v3",
+		RegistryID:      RegistryIDBirdNETV3,
+		Hidden:          true,
+		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
+		HuggingFaceRepo: "tphakala/BirdNET-v3.0",
+		Files: slices.Concat([]CatalogFile{
+			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "", SizeBytes: 0},
+			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "", SizeBytes: 0},
+		}, geomodelFiles(), taxonomyFiles()),
 	},
 	{
-		ID:                "perch-v2",
-		Name:              "Google Perch v2",
-		Description:       "Google Perch v2 classifier with approximately 14,795 species (scientific names only)",
-		Author:            "Google Research",
-		License:           "Apache-2.0",
-		CommercialUse:     true,
-		Category:          CategoryWildlife,
-		Region:            "",
-		SpeciesCount:      14795,
-		Version:           "2",
-		RegistryID:        RegistryIDPerchV2,
-		RequiredBuildTags: []string{"onnx"},
-		UpstreamURL:       "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
-		HuggingFaceRepo:   "tphakala/Perch-v2",
-		Files: []CatalogFile{
+		ID:              "perch-v2",
+		Name:            "Google Perch v2",
+		Description:     "Google Perch v2 classifier with approximately 14,795 species (scientific names only)",
+		Author:          "Google Research",
+		License:         "Apache-2.0",
+		CommercialUse:   true,
+		Category:        CategoryWildlife,
+		Region:          "",
+		SpeciesCount:    14795,
+		Version:         "2",
+		GeomodelVersion: "v3",
+		RegistryID:      RegistryIDPerchV2,
+		UpstreamURL:     "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
+		HuggingFaceRepo: "tphakala/Perch-v2",
+		Files: slices.Concat([]CatalogFile{
 			{RemotePath: "perch_v2.onnx", LocalName: "perch_v2.onnx", Role: RoleModel, SHA256: "bf0c8467a924cb074663970ca4a0ab1e143602121930209657d0dff5d5cefa1f", SizeBytes: 409148616},
 			{RemotePath: "labels.txt", LocalName: "perch_v2_labels.txt", Role: RoleLabels, SHA256: "e4d5c0397d8fb08bf90c6b13a34810af53504faad927e472fcc567793c9de057", SizeBytes: 312716},
-		},
+		}, geomodelFiles(), taxonomyFiles()),
 	},
 	{
-		ID:                "bsg-finland",
-		Name:              "BSG Finland v4.4",
-		Description:       "Regional bird classifier optimized for Finnish bird species",
-		Author:            "University of Jyväskylä",
-		License:           "Non-commercial",
-		CommercialUse:     false,
-		Category:          CategoryBird,
-		Region:            "Finland",
-		SpeciesCount:      0,
-		Version:           "4.4",
-		RegistryID:        RegistryIDBSG,
-		Hidden:            true,
-		RequiredBuildTags: []string{"onnx"},
-		UpstreamURL:       "https://github.com/luomus/BSG",
-		HuggingFaceRepo:   "tphakala/BSG",
+		ID:              "bsg-finland",
+		Name:            "BSG Finland v4.4",
+		Description:     "Regional bird classifier optimized for Finnish bird species",
+		Author:          "University of Jyväskylä",
+		License:         "Non-commercial",
+		CommercialUse:   false,
+		Category:        CategoryBird,
+		Region:          "Finland",
+		SpeciesCount:    0,
+		Version:         "4.4",
+		RegistryID:      RegistryIDBSG,
+		Hidden:          true,
+		UpstreamURL:     "https://github.com/luomus/BSG",
+		HuggingFaceRepo: "tphakala/BSG",
 		Files: []CatalogFile{
 			{RemotePath: "BSG_birds_Finland_v4_4_fused_fp32.onnx", LocalName: "BSG_birds_Finland_v4_4_fused_fp32.onnx", Role: RoleModel, SHA256: "dd2b6b21c6b3d8adc5d72954f9e33c48b3d692dbbc647758340a69d68b203300", SizeBytes: 45446250},
 			{RemotePath: "BSG_birds_Finland_v4_4_labels_fi.txt", LocalName: "BSG_birds_Finland_v4_4_labels_fi.txt", Role: RoleLabels, SHA256: "01497fbec1bdba18625862ac8a5aedf372801eeb36dfde7a5dbce5353eeda308", SizeBytes: 7813},
@@ -149,6 +154,92 @@ const (
 	embeddingsSizeBytes int64 = 66932350
 )
 
+// Shared v3.0 geomodel, used as range filter companion by Perch v2 and BirdNET v3.0.
+const (
+	geomodelHuggingFaceRepo       = "tphakala/BirdNET-Geomodel"
+	geomodelONNXSHA256            = "2bc5a9b1e7c24115730015a97dbb688e9e8cd49c02c34a011439182c65ef0017"
+	geomodelONNXSizeBytes   int64 = 7483473
+	geomodelLabelsSHA256          = "92cdca7ca95beb7ed16a0a39f4010fa9a8b468b854b6e8083f732647f136ee1c"
+	geomodelLabelsSizeBytes int64 = 479350
+)
+
+// Shared taxonomy.csv from BirdNET v3.0, provides common names in 29 languages
+// for ~13,361 species. Used as fallback name resolver for Perch v2 and other
+// models whose labels contain only scientific names.
+const (
+	taxonomyHuggingFaceRepo       = "tphakala/BirdNET-Geomodel"
+	taxonomySHA256                = "74e4b31d2f9c56fbd1a45d980591654f508c73fc4a153cab52f11367a078ddfd"
+	taxonomySizeBytes       int64 = 9162669
+)
+
+// taxonomyFiles returns the shared taxonomy CatalogFile entry appended to
+// classifiers that benefit from multilingual common name resolution.
+func taxonomyFiles() []CatalogFile {
+	return []CatalogFile{
+		{
+			RemotePath:      "taxonomy.csv",
+			LocalName:       "taxonomy.csv",
+			Role:            RoleTaxonomy,
+			SHA256:          taxonomySHA256,
+			SizeBytes:       taxonomySizeBytes,
+			HuggingFaceRepo: taxonomyHuggingFaceRepo,
+		},
+	}
+}
+
+// geomodelFiles returns the shared geomodel CatalogFile entries appended to
+// classifiers that use the v3.0 range filter (Perch v2, BirdNET v3.0).
+func geomodelFiles() []CatalogFile {
+	return []CatalogFile{
+		{
+			RemotePath:      "BirdNET+_Geomodel_V3.0.2_Global_12K_FP16.onnx",
+			LocalName:       "geomodel_v3.0.2_fp16.onnx",
+			Role:            RoleGeomodelModel,
+			SHA256:          geomodelONNXSHA256,
+			SizeBytes:       geomodelONNXSizeBytes,
+			HuggingFaceRepo: geomodelHuggingFaceRepo,
+		},
+		{
+			RemotePath:      "geomodel_v3.0.2_labels.txt",
+			LocalName:       "geomodel_v3.0.2_labels.txt",
+			Role:            RoleGeomodelLabels,
+			SHA256:          geomodelLabelsSHA256,
+			SizeBytes:       geomodelLabelsSizeBytes,
+			HuggingFaceRepo: geomodelHuggingFaceRepo,
+		},
+	}
+}
+
+// isGeomodelRole reports whether the given file role is a geomodel role.
+func isGeomodelRole(role string) bool {
+	return role == RoleGeomodelModel || role == RoleGeomodelLabels
+}
+
+// isSharedRole reports whether the given file role stores into models/shared/.
+func isSharedRole(role string) bool {
+	return role == RoleEmbeddings || role == RoleTaxonomy || isGeomodelRole(role)
+}
+
+// HasTaxonomyFiles reports whether a catalog entry includes shared taxonomy files.
+func HasTaxonomyFiles(entry *CatalogEntry) bool {
+	for _, f := range entry.Files {
+		if f.Role == RoleTaxonomy {
+			return true
+		}
+	}
+	return false
+}
+
+// HasGeomodelFiles reports whether a catalog entry includes shared geomodel files.
+func HasGeomodelFiles(entry *CatalogEntry) bool {
+	for _, f := range entry.Files {
+		if isGeomodelRole(f.Role) {
+			return true
+		}
+	}
+	return false
+}
+
 // batFileChecksums holds SHA256 and size for a BattyBirdNET model and its labels file.
 type batFileChecksums struct {
 	modelSHA256  string
@@ -170,20 +261,19 @@ func batCatalogEntry(id, name, region string, speciesCount int, fileRegion strin
 	labelsFile := "BattyBirdNET-" + fileRegion + "-256kHz" + quality + "_Labels.txt"
 
 	return CatalogEntry{
-		ID:                id,
-		Name:              name,
-		Description:       "Bat species detection for " + region + " using BirdNET v2.4 embeddings",
-		Author:            "R.D. Zinck",
-		License:           "CC-BY-NC-SA-4.0",
-		CommercialUse:     false,
-		Category:          CategoryBat,
-		Region:            region,
-		SpeciesCount:      speciesCount,
-		Version:           "1.0",
-		RegistryID:        RegistryIDBat,
-		RequiredBuildTags: []string{"onnx"},
-		UpstreamURL:       "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
-		HuggingFaceRepo:   "tphakala/BattyBirdNET-onnx",
+		ID:              id,
+		Name:            name,
+		Description:     "Bat species detection for " + region + " using BirdNET v2.4 embeddings",
+		Author:          "R.D. Zinck",
+		License:         "CC-BY-NC-SA-4.0",
+		CommercialUse:   false,
+		Category:        CategoryBat,
+		Region:          region,
+		SpeciesCount:    speciesCount,
+		Version:         "1.0",
+		RegistryID:      RegistryIDBat,
+		UpstreamURL:     "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+		HuggingFaceRepo: "tphakala/BattyBirdNET-onnx",
 		Files: []CatalogFile{
 			{
 				RemotePath: "fp32/" + modelFile,

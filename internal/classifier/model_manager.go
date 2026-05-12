@@ -35,6 +35,10 @@ const (
 	StatusRemoved     = "removed"
 )
 
+// failedStateRetention is how long a failed download state is kept in the
+// downloading map so SSE pollers can observe the failure before cleanup.
+const failedStateRetention = 30 * time.Second
+
 // ModelManager handles the lifecycle of downloadable models.
 type ModelManager struct {
 	modelsDir    string
@@ -196,6 +200,92 @@ func (mm *ModelManager) ScanInstalled() {
 		mm.settingsMu.Unlock()
 
 		mm.loadInstalledModels(log, installedIDs)
+
+		// After loading models, check if any installed model has geomodel
+		// companion files on disk. If so, ensure the range filter config is
+		// up to date and reload the filter. This handles the upgrade case
+		// where a new binary adds geomodel support to existing models.
+		mm.ensureGeomodelConfig(log, installedIDs)
+	}
+}
+
+// ensureGeomodelConfig checks if any installed model has geomodel companion
+// files on disk and, if the range filter config doesn't already reflect them,
+// updates the config and reloads the range filter.
+func (mm *ModelManager) ensureGeomodelConfig(log logger.Logger, installedIDs []string) {
+	if mm.orchestrator == nil {
+		return
+	}
+
+	for _, catalogID := range installedIDs {
+		entry, found := GetCatalogEntry(catalogID)
+		if !found || !HasGeomodelFiles(&entry) {
+			continue
+		}
+
+		// Check if all geomodel files exist on disk.
+		allPresent := true
+		for _, f := range entry.Files {
+			if !isGeomodelRole(f.Role) {
+				continue
+			}
+			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			if _, err := os.Stat(path); err != nil {
+				allPresent = false
+				break
+			}
+		}
+		if !allPresent {
+			continue
+		}
+
+		// Build expected paths from catalog entry.
+		expectedModelPath := ""
+		expectedLabelsPath := ""
+		for _, f := range entry.Files {
+			switch f.Role {
+			case RoleGeomodelModel:
+				expectedModelPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			case RoleGeomodelLabels:
+				expectedLabelsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			}
+		}
+
+		// Files exist. Check if the config already matches expected paths.
+		currentSettings := conf.GetSettings()
+		rf := currentSettings.BirdNET.RangeFilter
+		if rf.Model == entry.GeomodelVersion &&
+			rf.ModelPath == expectedModelPath &&
+			rf.LabelsPath == expectedLabelsPath {
+			// Config already set; initializeMetaModel handled it at startup.
+			return
+		}
+
+		// Config is stale or missing; update it under settingsMu to
+		// serialize with concurrent install/uninstall config writes.
+		log.Info("Applying geomodel config for installed model",
+			logger.String("catalog_id", catalogID),
+			logger.String("geomodel_version", entry.GeomodelVersion))
+
+		mm.settingsMu.Lock()
+		updated := conf.CloneSettings(conf.GetSettings())
+		updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
+		updated.BirdNET.RangeFilter.ModelPath = expectedModelPath
+		updated.BirdNET.RangeFilter.LabelsPath = expectedLabelsPath
+		conf.StoreSettings(updated)
+		if err := conf.SaveSettings(); err != nil {
+			log.Warn("Failed to persist geomodel config",
+				logger.String("catalog_id", catalogID),
+				logger.Error(err))
+		}
+		mm.settingsMu.Unlock()
+
+		if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
+			log.Warn("Failed to reload range filter after geomodel config update",
+				logger.String("catalog_id", catalogID),
+				logger.Error(err))
+		}
+		return
 	}
 }
 
@@ -333,39 +423,10 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 		}
 	}
 
-	// Delete shared embeddings files only if no other bat models remain.
-	if entry.Category == CategoryBat {
-		otherBatInstalled := false
-		for id := range mm.installed {
-			if id == catalogID {
-				continue
-			}
-			other, found := GetCatalogEntry(id)
-			if found && other.Category == CategoryBat {
-				otherBatInstalled = true
-				break
-			}
-		}
-
-		if !otherBatInstalled {
-			for _, f := range entry.Files {
-				if f.Role == RoleEmbeddings {
-					path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
-					if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-						log.Warn("Failed to remove embeddings file",
-							logger.String("path", path),
-							logger.Error(err))
-					} else {
-						log.Info("Removed shared embeddings file",
-							logger.String("path", path))
-					}
-				}
-			}
-		} else {
-			log.Debug("Retaining shared embeddings; other bat models still installed",
-				logger.String("catalog_id", catalogID))
-		}
-	}
+	// Clean up shared embeddings, geomodel, and taxonomy files if no other dependent models remain.
+	mm.cleanupSharedEmbeddings(log, catalogID, &entry)
+	mm.cleanupSharedGeomodel(log, catalogID, &entry)
+	mm.cleanupSharedTaxonomy(log, catalogID, &entry)
 
 	// Labels are intentionally retained on disk.
 
@@ -373,10 +434,121 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 
 	mm.applyConfigForUninstall(&entry)
 
+	// If geomodel was cleared during uninstall, reload the range filter
+	// so the primary model falls back to the embedded TFLite filter.
+	if mm.orchestrator != nil && HasGeomodelFiles(&entry) {
+		if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
+			log.Warn("Failed to hot-reload range filter after geomodel uninstall",
+				logger.String("catalog_id", catalogID),
+				logger.Error(err))
+		}
+	}
+
 	log.Info("Model uninstalled",
 		logger.String("catalog_id", catalogID))
 
 	return nil
+}
+
+// cleanupSharedEmbeddings removes shared embeddings files when uninstalling a
+// bat model, but only if no other bat model remains installed. The caller must
+// hold mm.mu, and catalogID must still be in mm.installed.
+func (mm *ModelManager) cleanupSharedEmbeddings(log logger.Logger, catalogID string, entry *CatalogEntry) {
+	if entry.Category != CategoryBat {
+		return
+	}
+	for id := range mm.installed {
+		if id == catalogID {
+			continue
+		}
+		other, found := GetCatalogEntry(id)
+		if found && other.Category == CategoryBat {
+			log.Debug("Retaining shared embeddings; other bat models still installed",
+				logger.String("catalog_id", catalogID))
+			return
+		}
+	}
+	for _, f := range entry.Files {
+		if f.Role == RoleEmbeddings {
+			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				log.Warn("Failed to remove embeddings file",
+					logger.String("path", path),
+					logger.Error(err))
+			} else if err == nil {
+				log.Info("Removed shared embeddings file",
+					logger.String("path", path))
+			}
+		}
+	}
+}
+
+// cleanupSharedGeomodel removes shared geomodel files when uninstalling a
+// model with geomodel dependencies, but only if no other geomodel-dependent
+// model remains installed. The caller must hold mm.mu, and catalogID must
+// still be in mm.installed.
+func (mm *ModelManager) cleanupSharedGeomodel(log logger.Logger, catalogID string, entry *CatalogEntry) {
+	if !HasGeomodelFiles(entry) {
+		return
+	}
+	for id := range mm.installed {
+		if id == catalogID {
+			continue
+		}
+		other, found := GetCatalogEntry(id)
+		if found && HasGeomodelFiles(&other) {
+			log.Debug("Retaining shared geomodel files; other dependent models still installed",
+				logger.String("catalog_id", catalogID))
+			return
+		}
+	}
+	for _, f := range entry.Files {
+		if isGeomodelRole(f.Role) {
+			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				log.Warn("Failed to remove geomodel file",
+					logger.String("path", path),
+					logger.Error(err))
+			} else if err == nil {
+				log.Info("Removed shared geomodel file",
+					logger.String("path", path))
+			}
+		}
+	}
+}
+
+// cleanupSharedTaxonomy removes shared taxonomy files when uninstalling a
+// model with taxonomy dependencies, but only if no other taxonomy-dependent
+// model remains installed. The caller must hold mm.mu, and catalogID must
+// still be in mm.installed.
+func (mm *ModelManager) cleanupSharedTaxonomy(log logger.Logger, catalogID string, entry *CatalogEntry) {
+	if !HasTaxonomyFiles(entry) {
+		return
+	}
+	for id := range mm.installed {
+		if id == catalogID {
+			continue
+		}
+		other, found := GetCatalogEntry(id)
+		if found && HasTaxonomyFiles(&other) {
+			log.Debug("Retaining shared taxonomy files; other dependent models still installed",
+				logger.String("catalog_id", catalogID))
+			return
+		}
+	}
+	for _, f := range entry.Files {
+		if f.Role == RoleTaxonomy {
+			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				log.Warn("Failed to remove taxonomy file",
+					logger.String("path", path),
+					logger.Error(err))
+			} else if err == nil {
+				log.Info("Removed shared taxonomy file",
+					logger.String("path", path))
+			}
+		}
+	}
 }
 
 // Install downloads all files for a catalog entry and records it as installed.
@@ -384,8 +556,6 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 // empty string to use the default HuggingFace URL constructed from the entry's
 // repo. Progress is reported via the channel if non-nil.
 func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
-	log := GetLogger()
-
 	// Check if already installed or already downloading.
 	mm.mu.Lock()
 	if _, ok := mm.installed[entry.ID]; ok {
@@ -412,6 +582,70 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	}
 	mm.mu.Unlock()
 
+	if err := mm.downloadModelFiles(entry, baseURL, progress, true); err != nil {
+		// Keep failed state briefly for SSE pollers, then clean up.
+		time.AfterFunc(failedStateRetention, func() {
+			mm.removeDownloading(entry.ID)
+		})
+		return err
+	}
+
+	return nil
+}
+
+// Reinstall re-downloads missing or corrupt files for an already-installed model.
+// Files that pass SHA256 validation are skipped. The baseURL parameter overrides
+// the HuggingFace URL for testing; pass an empty string to use the default.
+// Progress is reported via the channel if non-nil.
+func (mm *ModelManager) Reinstall(entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
+	// Check that the model IS installed (opposite of Install's guard).
+	mm.mu.Lock()
+	if _, ok := mm.installed[entry.ID]; !ok {
+		mm.mu.Unlock()
+		return errors.Newf("model %s is not installed", entry.ID).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("catalog_id", entry.ID).
+			Build()
+	}
+	if _, downloading := mm.downloading[entry.ID]; downloading {
+		mm.mu.Unlock()
+		return errors.Newf("model %s is already being downloaded", entry.ID).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("catalog_id", entry.ID).
+			Build()
+	}
+
+	// Record download as in-progress.
+	mm.downloading[entry.ID] = &DownloadState{
+		CatalogID: entry.ID,
+		Status:    StatusDownloading,
+	}
+	mm.mu.Unlock()
+
+	if err := mm.downloadModelFiles(entry, baseURL, progress, false); err != nil {
+		// Keep failed state briefly for SSE pollers, then clean up.
+		time.AfterFunc(failedStateRetention, func() {
+			mm.removeDownloading(entry.ID)
+		})
+		return err
+	}
+
+	return nil
+}
+
+// downloadModelFiles handles the actual file download, validation, recording,
+// config application, and hot-load for a catalog entry. The caller must have
+// already registered the entry in mm.downloading before calling this method.
+// On failure, downloadModelFiles calls markFailed but the caller is responsible
+// for scheduling cleanup of the download state (e.g., via time.AfterFunc).
+// When cleanupOnFailure is true (Install), newly downloaded files are removed
+// on failure. When false (Reinstall), repaired files are kept so partial
+// progress is not lost.
+func (mm *ModelManager) downloadModelFiles(entry *CatalogEntry, baseURL string, progress chan<- DownloadState, cleanupOnFailure bool) error {
+	log := GetLogger()
+
 	// Create model subdirectory.
 	subdir := filepath.Join(mm.modelsDir, entry.ID)
 	if err := os.MkdirAll(subdir, 0o755); err != nil {
@@ -422,9 +656,6 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 			Context("directory", subdir).
 			Build()
 		mm.markFailed(entry.ID, mkdirErr, progress)
-		time.AfterFunc(30*time.Second, func() {
-			mm.removeDownloading(entry.ID)
-		})
 		return mkdirErr
 	}
 
@@ -435,25 +666,32 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 		for _, f := range downloadedFiles {
 			_ = os.Remove(f)
 		}
-		// Keep failed state briefly for SSE pollers, then clean up.
-		time.AfterFunc(30*time.Second, func() {
-			mm.removeDownloading(entry.ID)
-		})
 	}
 
 	// fileDestPath returns the local destination for a catalog file.
+	// Shared files (embeddings, geomodel, taxonomy) are stored in a common directory.
 	fileDestPath := func(f CatalogFile) string {
-		if f.Role == RoleEmbeddings {
+		if isSharedRole(f.Role) {
 			return filepath.Join(mm.modelsDir, "shared", f.LocalName)
 		}
 		return filepath.Join(subdir, f.LocalName)
 	}
 
 	// Compute cumulative totals for progress tracking across all files.
+	// Also validate existing shared files and mark corrupt ones for re-download.
+	needsRedownload := make(map[string]bool)
 	var totalAllBytes int64
 	filesToDownload := 0
 	for _, f := range entry.Files {
-		if _, err := os.Stat(fileDestPath(f)); err != nil {
+		destPath := fileDestPath(f)
+		if _, err := os.Stat(destPath); err != nil {
+			totalAllBytes += f.SizeBytes
+			filesToDownload++
+		} else if f.SHA256 != "" && !verifySHA256(destPath, f.SHA256) {
+			log.Warn("Existing file failed SHA256 validation, will re-download",
+				logger.String("catalog_id", entry.ID),
+				logger.String("path", destPath))
+			needsRedownload[destPath] = true
 			totalAllBytes += f.SizeBytes
 			filesToDownload++
 		}
@@ -466,8 +704,8 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	for _, f := range entry.Files {
 		destPath := fileDestPath(f)
 
-		// Skip download if file already exists (for shared embeddings).
-		if _, err := os.Stat(destPath); err == nil {
+		// Skip download if file already exists and passes SHA256 validation.
+		if _, err := os.Stat(destPath); err == nil && !needsRedownload[destPath] {
 			log.Debug("File already exists, skipping download",
 				logger.String("catalog_id", entry.ID),
 				logger.String("path", destPath))
@@ -481,12 +719,17 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 			continue
 		}
 
-		// Build download URL.
+		// Build download URL. Per-file HuggingFaceRepo overrides the entry-level repo,
+		// allowing companion files (e.g., geomodel) to live in a separate repository.
 		var url string
 		if baseURL != "" {
 			url = baseURL + "/" + f.RemotePath
 		} else {
-			url = buildHuggingFaceURL(entry.HuggingFaceRepo, f.RemotePath)
+			repo := entry.HuggingFaceRepo
+			if f.HuggingFaceRepo != "" {
+				repo = f.HuggingFaceRepo
+			}
+			url = buildHuggingFaceURL(repo, f.RemotePath)
 		}
 
 		fileIndex++
@@ -508,7 +751,9 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 				logger.String("url", url),
 				logger.Error(err))
 			mm.markFailed(entry.ID, err, progress)
-			cleanup()
+			if cleanupOnFailure {
+				cleanup()
+			}
 			return err
 		}
 
@@ -545,31 +790,50 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 	}
 	mm.applyConfigForInstall(entry, modelPath, labelsPath, embeddingsPath)
 
-	// Hot-load into orchestrator.
-	if mm.orchestrator != nil && entry.RegistryID != "" {
-		if err := mm.orchestrator.LoadModel(entry.RegistryID); err != nil {
-			log.Warn("Failed to hot-load model (will be available after restart)",
-				logger.String("catalog_id", entry.ID),
-				logger.Error(err))
-		}
-	}
-
-	// Send final complete status (non-blocking in case the consumer is gone).
-	if progress != nil {
-		select {
-		case progress <- DownloadState{
-			CatalogID: entry.ID,
-			Status:    StatusComplete,
-		}:
-		default:
-		}
-	}
+	mm.hotLoadAfterInstall(log, entry)
+	sendProgress(progress, entry.ID, StatusComplete)
 
 	log.Info("Model installed",
 		logger.String("catalog_id", entry.ID),
 		logger.String("model_path", modelPath))
 
 	return nil
+}
+
+// hotLoadAfterInstall hot-loads the classifier model and, if the entry
+// includes geomodel companion files, reloads the range filter.
+func (mm *ModelManager) hotLoadAfterInstall(log logger.Logger, entry *CatalogEntry) {
+	if mm.orchestrator == nil {
+		return
+	}
+	if entry.RegistryID != "" {
+		if err := mm.orchestrator.LoadModel(entry.RegistryID); err != nil {
+			log.Warn("Failed to hot-load model (will be available after restart)",
+				logger.String("catalog_id", entry.ID),
+				logger.Error(err))
+		}
+	}
+	if HasGeomodelFiles(entry) {
+		if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
+			log.Warn("Failed to hot-reload range filter after geomodel install",
+				logger.String("catalog_id", entry.ID),
+				logger.Error(err))
+		}
+	}
+}
+
+// sendProgress sends a non-blocking status update to the progress channel.
+func sendProgress(progress chan<- DownloadState, catalogID, status string) {
+	if progress == nil {
+		return
+	}
+	select {
+	case progress <- DownloadState{
+		CatalogID: catalogID,
+		Status:    status,
+	}:
+	default:
+	}
 }
 
 // markFailed sets the download state to StatusFailed so SSE pollers can
@@ -619,8 +883,8 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 
 	switch entry.RegistryID {
 	case RegistryIDBirdNETV3:
-		GetLogger().Info("BirdNET v3.0 config wiring not yet implemented",
-			logger.String("catalog_id", entry.ID))
+		// BirdNET v3.0 acoustic model config will be added when the model is released.
+		// Geomodel range filter config is applied generically below.
 	case RegistryIDPerchV2:
 		if modelPath != "" {
 			updated.Perch.ModelPath = modelPath
@@ -647,6 +911,19 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 		}
 	}
 
+	// Apply geomodel range filter config if this entry includes geomodel files.
+	if HasGeomodelFiles(entry) && entry.GeomodelVersion != "" {
+		updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
+		for _, f := range entry.Files {
+			switch f.Role {
+			case RoleGeomodelModel:
+				updated.BirdNET.RangeFilter.ModelPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			case RoleGeomodelLabels:
+				updated.BirdNET.RangeFilter.LabelsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			}
+		}
+	}
+
 	// Add config alias to Models.Enabled so the model appears in source config.
 	alias := ConfigAliasForRegistry(entry.RegistryID)
 	if alias != "" && !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
@@ -666,7 +943,8 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 // applyConfigForUninstall updates settings to reflect a removed model.
 // For bat models, Enabled is only set to false when no other bat models
 // remain installed; if another bat model exists, config is re-pointed to it.
-// The caller must hold mm.mu (at least RLock).
+// The caller must hold mm.mu for writing; the uninstalled entry must already
+// be deleted from mm.installed so the geomodel and bat searches skip it.
 // Uses clone-mutate-publish so the shared settings snapshot is never mutated
 // in place. Settings are persisted to disk via conf.SaveSettings so changes
 // survive restarts and are visible to concurrent readers through conf.Setting().
@@ -683,8 +961,8 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 
 	switch entry.RegistryID {
 	case RegistryIDBirdNETV3:
-		GetLogger().Info("BirdNET v3.0 config wiring not yet implemented",
-			logger.String("catalog_id", entry.ID))
+		// BirdNET v3.0 acoustic model config will be cleared when the model is released.
+		// Geomodel range filter config is handled generically below.
 	case RegistryIDPerchV2:
 		updated.Perch.ModelPath = ""
 		updated.Perch.LabelPath = ""
@@ -718,6 +996,25 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 					break
 				}
 			}
+		}
+	}
+
+	// Reset geomodel range filter config if no other geomodel-dependent model remains.
+	// mm.installed no longer contains the uninstalled entry (deleted by caller).
+	if HasGeomodelFiles(entry) {
+		otherGeomodel := false
+		for id := range mm.installed {
+			other, found := GetCatalogEntry(id)
+			if found && HasGeomodelFiles(&other) {
+				otherGeomodel = true
+				break
+			}
+		}
+		if !otherGeomodel {
+			updated.BirdNET.RangeFilter.Model = ""
+			updated.BirdNET.RangeFilter.ModelPath = ""
+			updated.BirdNET.RangeFilter.LabelsPath = ""
+			updated.BirdNET.RangeFilter.PassUnmappedSpecies = false
 		}
 	}
 
@@ -906,6 +1203,30 @@ func (mm *ModelManager) downloadFile(catalogID, url, destPath, expectedSHA256 st
 // buildHuggingFaceURL constructs the download URL for a file in a HuggingFace repo.
 func buildHuggingFaceURL(repo, filePath string) string {
 	return "https://huggingface.co/" + repo + "/resolve/main/" + filePath
+}
+
+// verifySHA256 checks whether the file at path matches the expected hex-encoded
+// SHA-256 checksum. Returns true on match, false on mismatch or any I/O error.
+func verifySHA256(path, expected string) bool {
+	if expected == "" {
+		return true
+	}
+	f, err := os.Open(path) //nolint:gosec // G304: path is from catalog metadata
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+
+	info, err := f.Stat()
+	if err != nil || info.IsDir() {
+		return false
+	}
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return false
+	}
+	return strings.EqualFold(hex.EncodeToString(h.Sum(nil)), expected)
 }
 
 // fileModTime returns the modification time for a file, or the zero time on error.

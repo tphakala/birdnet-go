@@ -1417,14 +1417,45 @@ func validateBirdNETSection(data json.RawMessage) error {
 	return validateFloatInRange(updateMap, "longitude", minLongitude, maxLongitude, "longitude")
 }
 
-// validateWebServerSection validates WebServer settings
+// validateWebServerSection validates WebServer settings including LiveStream fields.
 func validateWebServerSection(data json.RawMessage) error {
 	var updateMap map[string]any
 	if err := json.Unmarshal(data, &updateMap); err != nil {
 		return err
 	}
 
-	return validatePortField(updateMap, "port")
+	if err := validatePortField(updateMap, "port"); err != nil {
+		return err
+	}
+
+	return validateLiveStreamFields(updateMap)
+}
+
+// validateLiveStreamFields validates LiveStream sub-fields if the liveStream
+// key is present in the PATCH payload.
+func validateLiveStreamFields(updateMap map[string]any) error {
+	lsRaw, ok := updateMap["liveStream"]
+	if !ok || lsRaw == nil {
+		return nil
+	}
+	ls, ok := lsRaw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("liveStream must be an object")
+	}
+
+	if err := validateFloatInRange(ls, "bitRate",
+		float64(conf.MinLiveStreamBitRate), float64(conf.MaxLiveStreamBitRate),
+		"LiveStream bitrate (kbps)"); err != nil {
+		return err
+	}
+	if err := validateFloatInRange(ls, "segmentLength",
+		float64(conf.MinLiveStreamSegmentLength), float64(conf.MaxLiveStreamSegmentLength),
+		"LiveStream segment length (seconds)"); err != nil {
+		return err
+	}
+	return validateFloatInRange(ls, "sampleRate",
+		float64(conf.MinLiveStreamSampleRate), float64(conf.MaxLiveStreamSampleRate),
+		"LiveStream sample rate (Hz)")
 }
 
 // validateSpeciesSection validates species settings

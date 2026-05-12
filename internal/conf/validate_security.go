@@ -52,12 +52,10 @@ func validateSecuritySettings(settings *Security) error {
 		}
 	}
 
-	// Validate session duration
+	// Normalize session duration: viper nested defaults can be lost when the
+	// parent key exists in the config file but sessionduration is absent.
 	if settings.SessionDuration <= 0 {
-		return errors.Newf("security.sessionduration must be a positive duration").
-			Category(errors.CategoryValidation).
-			Context("validation_type", "security-session-duration").
-			Build()
+		settings.SessionDuration = DefaultSessionDuration // 7 days, matches viper default
 	}
 
 	// Validate OIDC provider configuration
