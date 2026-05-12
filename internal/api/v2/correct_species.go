@@ -150,12 +150,13 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 	// Single-transaction correction: look up the model and label rows, update
 	// the detection, and write the review record. If any step fails the whole
 	// thing rolls back so the operator never sees a half-applied state.
-	db := c.DS.GetDB()
+	// Uses datastore.Interface.Transaction so the call works against the
+	// v2only adapter without reaching into the concrete *DataStore.
 	var (
 		newModelID uint
 		newLabelID uint
 	)
-	correctionErr := db.Transaction(func(tx *gorm.DB) error {
+	correctionErr := c.DS.Transaction(func(tx *gorm.DB) error {
 		// 1. Map orchestrator (name, version) → ai_models.id
 		if err := tx.Table("ai_models").
 			Select("id").
@@ -236,13 +237,22 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 	// works for any species in either model's vocabulary in 24+ locales.
 	common := bn.ResolveName(req.ScientificName, c.Settings.BirdNET.Locale)
 
+	// Invalidate the detection-list cache so dashboards/species pages reflect
+	// the new label immediately. Without this, the 5-minute species-detection
+	// cache continues serving the pre-correction species name (and stale
+	// confidence/verified state) for any list query that included this
+	// detection — the operator sees the correction stick on the detail page
+	// but the parent list still shows the old label for up to 5 minutes.
+	// Same pattern Delete, Review, and Lock handlers use.
+	c.invalidateDetectionCache()
+
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "Species correction applied",
 		logger.String("detection_id", idStr),
 		logger.String("model_id", resolvedID),
 		logger.String("from_species", existing.ScientificName),
 		logger.String("to_species", req.ScientificName),
-		logger.Float("from_confidence", existing.Confidence),
-		logger.Float("to_confidence", req.Confidence))
+		logger.Float64("from_confidence", existing.Confidence),
+		logger.Float64("to_confidence", req.Confidence))
 
 	return ctx.JSON(http.StatusOK, CorrectSpeciesResponse{
 		DetectionID:    existing.ID,
