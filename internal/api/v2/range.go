@@ -22,8 +22,9 @@ import (
 
 // Range filter constants (file-local)
 const (
-	weeksPerMonth = 4 // Simplified ML model uses 4 weeks per month (48 weeks/year)
-	daysPerWeek   = 7 // Days in a week for week calculation
+	weeksPerMonth = 4                  // Simplified ML model uses 4 weeks per month
+	weeksPerYear  = weeksPerMonth * 12 // 48 weeks per year in BirdNET's model
+	daysPerWeek   = 7                  // Days in a week for week calculation
 )
 
 // validateRangeFilterRequest validates the range filter test request parameters.
@@ -37,6 +38,9 @@ func validateRangeFilterRequest(req *RangeFilterTestRequest) error {
 	}
 	if req.Threshold < 0 || req.Threshold > 1 {
 		return fmt.Errorf("Threshold must be between 0 and 1") //nolint:staticcheck // user-facing API message
+	}
+	if req.Week != 0 && (req.Week < 1 || req.Week > weeksPerYear) {
+		return fmt.Errorf("Week must be between 1 and %d", weeksPerYear) //nolint:staticcheck // user-facing API message
 	}
 	return nil
 }
@@ -85,6 +89,37 @@ func (c *Controller) buildTestSettings(lat, lon float64, threshold float32) *con
 	testSnapshot.BirdNET.RangeFilter.Threshold = threshold
 	testSnapshot.BirdNET.LocationConfigured = true
 	return testSnapshot
+}
+
+// convertSpeciesScores converts classifier.SpeciesScore entries to the API
+// response format with probability score pointers.
+func convertSpeciesScores(scores []classifier.SpeciesScore) []RangeFilterSpecies {
+	species := make([]RangeFilterSpecies, 0, len(scores))
+	for _, s := range scores {
+		sp := detection.ParseSpeciesString(s.Label)
+		score := s.Score
+		species = append(species, RangeFilterSpecies{
+			Label:          s.Label,
+			ScientificName: sp.ScientificName,
+			CommonName:     sp.CommonName,
+			Score:          &score,
+		})
+	}
+	return species
+}
+
+// convertLabels converts string labels to the API response format without scores.
+func convertLabels(labels []string) []RangeFilterSpecies {
+	species := make([]RangeFilterSpecies, 0, len(labels))
+	for _, label := range labels {
+		sp := detection.ParseSpeciesString(label)
+		species = append(species, RangeFilterSpecies{
+			Label:          label,
+			ScientificName: sp.ScientificName,
+			CommonName:     sp.CommonName,
+		})
+	}
+	return species
 }
 
 // Location represents geographic coordinates
@@ -251,8 +286,8 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 		if err != nil {
 			return c.HandleError(ctx, err, "Invalid week format", http.StatusBadRequest)
 		}
-		if parsed < 1 || parsed > 48 {
-			return c.HandleError(ctx, nil, "Week must be between 1 and 48", http.StatusBadRequest)
+		if parsed < 1 || parsed > weeksPerYear {
+			return c.HandleError(ctx, nil, fmt.Sprintf("Week must be between 1 and %d", weeksPerYear), http.StatusBadRequest)
 		}
 		week = float32(parsed)
 	}
@@ -266,21 +301,7 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get species scores", http.StatusInternalServerError)
 	}
 
-	// Convert to response format
-	speciesList := make([]RangeFilterSpecies, 0, len(speciesScores))
-	for _, speciesScore := range speciesScores {
-		sp := detection.ParseSpeciesString(speciesScore.Label)
-
-		score := speciesScore.Score
-		species := RangeFilterSpecies{
-			Label:          speciesScore.Label,
-			ScientificName: sp.ScientificName,
-			CommonName:     sp.CommonName,
-			Score:          &score,
-		}
-
-		speciesList = append(speciesList, species)
-	}
+	speciesList := convertSpeciesScores(speciesScores)
 
 	response := RangeFilterScoresResponse{
 		Species:   speciesList,
@@ -306,14 +327,9 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/count [get]
 func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
-	// Acquire read lock to prevent reading temporarily swapped values
-	// during a concurrent range filter test (see #1940).
 	c.settingsMutex.RLock()
-	defer c.settingsMutex.RUnlock()
-
-	// Use the latest published snapshot so the daily range filter update
-	// (which publishes via clone-mutate-publish) is visible immediately.
 	settings := conf.CurrentOrFallback(c.Settings)
+	c.settingsMutex.RUnlock()
 	includedSpecies := settings.GetIncludedSpecies()
 
 	response := RangeFilterSpeciesCount{
@@ -338,31 +354,11 @@ func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/list [get]
 func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
-	// Acquire read lock to prevent reading temporarily swapped values
-	// during a concurrent range filter test (see #1940).
 	c.settingsMutex.RLock()
-	defer c.settingsMutex.RUnlock()
-
-	// Use the latest published snapshot so the daily range filter update
-	// (which publishes via clone-mutate-publish) is visible immediately.
 	settings := conf.CurrentOrFallback(c.Settings)
+	c.settingsMutex.RUnlock()
 	includedSpecies := settings.GetIncludedSpecies()
-
-	// Convert to response format with parsed names
-	// Pre-allocate slice with capacity for all included species
-	speciesList := make([]RangeFilterSpecies, 0, len(includedSpecies))
-	for _, label := range includedSpecies {
-		sp := detection.ParseSpeciesString(label)
-
-		species := RangeFilterSpecies{
-			Label:          label,
-			ScientificName: sp.ScientificName,
-			CommonName:     sp.CommonName,
-			Score:          nil, // No individual scores available for current range filter species
-		}
-
-		speciesList = append(speciesList, species)
-	}
+	speciesList := convertLabels(includedSpecies)
 
 	// Extract taxonomy groups from species list via taxonomy DB
 	var genera []string
@@ -491,23 +487,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get probable species", http.StatusInternalServerError)
 	}
 
-	// Convert to response format
-	// Pre-allocate slice with capacity for all species scores
-	speciesList := make([]RangeFilterSpecies, 0, len(speciesScores))
-	for _, speciesScore := range speciesScores {
-		sp := detection.ParseSpeciesString(speciesScore.Label)
-
-		// Create score pointer for non-nil value
-		score := speciesScore.Score
-		species := RangeFilterSpecies{
-			Label:          speciesScore.Label,
-			ScientificName: sp.ScientificName,
-			CommonName:     sp.CommonName,
-			Score:          &score, // Individual scores are available from GetProbableSpecies
-		}
-
-		speciesList = append(speciesList, species)
-	}
+	speciesList := convertSpeciesScores(speciesScores)
 
 	response := RangeFilterTestResponse{
 		Species:   speciesList,
@@ -561,10 +541,11 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 
 		// Read current settings under lock for defaults
 		c.settingsMutex.RLock()
-		testReq.Latitude = c.Settings.BirdNET.Latitude
-		testReq.Longitude = c.Settings.BirdNET.Longitude
-		testReq.Threshold = c.Settings.BirdNET.RangeFilter.Threshold
+		defaults := conf.CurrentOrFallback(c.Settings)
 		c.settingsMutex.RUnlock()
+		testReq.Latitude = defaults.BirdNET.Latitude
+		testReq.Longitude = defaults.BirdNET.Longitude
+		testReq.Threshold = defaults.BirdNET.RangeFilter.Threshold
 
 		// Override with custom values if provided
 		if customLat != "" {
@@ -607,37 +588,16 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 			return c.HandleError(ctx, err, "Failed to get species list", http.StatusInternalServerError)
 		}
 	} else {
-		// Acquire read lock to snapshot current settings, then release
-		// before expensive CSV generation and I/O.
 		c.settingsMutex.RLock()
-
-		// Use the latest published snapshot for consistency with other
-		// range filter GET endpoints.
 		settings := conf.CurrentOrFallback(c.Settings)
-		includedSpecies := settings.GetIncludedSpecies()
+		c.settingsMutex.RUnlock()
 
-		// Convert to species list format
-		speciesList = make([]RangeFilterSpecies, 0, len(includedSpecies))
-		for _, label := range includedSpecies {
-			sp := detection.ParseSpeciesString(label)
-
-			species := RangeFilterSpecies{
-				Label:          label,
-				ScientificName: sp.ScientificName,
-				CommonName:     sp.CommonName,
-				Score:          nil,
-			}
-
-			speciesList = append(speciesList, species)
-		}
-
+		speciesList = convertLabels(settings.GetIncludedSpecies())
 		location = Location{
 			Latitude:  settings.BirdNET.Latitude,
 			Longitude: settings.BirdNET.Longitude,
 		}
 		threshold = settings.BirdNET.RangeFilter.Threshold
-
-		c.settingsMutex.RUnlock()
 	}
 
 	// Generate CSV content
@@ -681,22 +641,7 @@ func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilt
 		return nil, Location{}, 0, err
 	}
 
-	// Convert to response format
-	speciesList := make([]RangeFilterSpecies, 0, len(speciesScores))
-	for _, speciesScore := range speciesScores {
-		sp := detection.ParseSpeciesString(speciesScore.Label)
-
-		// Create score pointer for non-nil value
-		score := speciesScore.Score
-		species := RangeFilterSpecies{
-			Label:          speciesScore.Label,
-			ScientificName: sp.ScientificName,
-			CommonName:     sp.CommonName,
-			Score:          &score,
-		}
-
-		speciesList = append(speciesList, species)
-	}
+	speciesList := convertSpeciesScores(speciesScores)
 
 	location := Location{
 		Latitude:  req.Latitude,

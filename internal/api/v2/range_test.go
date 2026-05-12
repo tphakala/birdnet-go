@@ -5,6 +5,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -243,6 +244,28 @@ func TestTestRangeFilterValidation(t *testing.T) {
 			expectedError:  "Invalid range filter parameters",
 		},
 		{
+			name: "Invalid week too low",
+			request: RangeFilterTestRequest{
+				Latitude:  60.1699,
+				Longitude: 24.9384,
+				Threshold: 0.01,
+				Week:      -1,
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "Invalid range filter parameters",
+		},
+		{
+			name: "Invalid week too high",
+			request: RangeFilterTestRequest{
+				Latitude:  60.1699,
+				Longitude: 24.9384,
+				Threshold: 0.01,
+				Week:      49,
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "Invalid range filter parameters",
+		},
+		{
 			name: "Invalid date format",
 			request: RangeFilterTestRequest{
 				Latitude:  60.1699,
@@ -276,6 +299,42 @@ func TestTestRangeFilterValidation(t *testing.T) {
 			err = json.Unmarshal(rec.Body.Bytes(), &response)
 			require.NoError(t, err)
 			assert.Contains(t, response.Message, tt.expectedError)
+		})
+	}
+}
+
+// TestValidWeekBoundaries verifies that valid week boundary values pass
+// validation and reach the processor (which returns 500 since it's nil).
+func TestValidWeekBoundaries(t *testing.T) {
+	e, _, controller := setupRangeTestEnvironment(t)
+	controller.Processor = nil
+
+	for _, week := range []float32{1, 48} {
+		t.Run(fmt.Sprintf("week=%v", week), func(t *testing.T) {
+			testRequest := RangeFilterTestRequest{
+				Latitude:  60.1699,
+				Longitude: 24.9384,
+				Threshold: 0.01,
+				Week:      week,
+			}
+
+			requestBody, _ := json.Marshal(testRequest)
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/range/species/test", bytes.NewReader(requestBody))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/range/species/test")
+
+			err := controller.TestRangeFilter(c)
+			require.NoError(t, err)
+
+			// Valid week passes validation and reaches processor (500, not 400)
+			assert.Equal(t, http.StatusInternalServerError, rec.Code)
+
+			var response ErrorResponse
+			err = json.Unmarshal(rec.Body.Bytes(), &response)
+			require.NoError(t, err)
+			assert.Contains(t, response.Message, "BirdNET service not available")
 		})
 	}
 }
