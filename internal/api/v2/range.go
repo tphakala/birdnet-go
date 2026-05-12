@@ -144,6 +144,15 @@ type RangeFilterStatusResponse struct {
 	LastUpdated         time.Time `json:"lastUpdated"`
 }
 
+// RangeFilterScoresResponse represents all species with their raw geomodel scores
+type RangeFilterScoresResponse struct {
+	Species   []RangeFilterSpecies `json:"species"`
+	Count     int                  `json:"count"`
+	Location  Location             `json:"location"`
+	Week      int                  `json:"week"`
+	Threshold float32              `json:"threshold"`
+}
+
 // RangeFilterTestRequest represents the request for testing range filter
 type RangeFilterTestRequest struct {
 	Latitude  float64 `json:"latitude"`
@@ -172,8 +181,9 @@ type RangeFilterTestResponse struct {
 
 // initRangeRoutes sets up the range filter related routes
 func (c *Controller) initRangeRoutes() {
-	// Range filter status
+	// Range filter status and scores
 	c.Group.GET("/range/status", c.GetRangeFilterStatus)
+	c.Group.GET("/range/species/scores", c.GetRangeFilterSpeciesScores)
 
 	// Range filter species routes
 	c.Group.GET("/range/species/count", c.GetRangeFilterSpeciesCount)
@@ -215,6 +225,109 @@ func (c *Controller) GetRangeFilterStatus(ctx echo.Context) error {
 		LastUpdated:         status.LastUpdated,
 	}
 
+	return ctx.JSON(http.StatusOK, response)
+}
+
+// GetRangeFilterSpeciesScores returns all species with their raw geomodel probability scores
+// @Summary Get range filter species scores
+// @Description Returns all species with raw geomodel scores, using current or custom location and week
+// @Tags range
+// @Produce json
+// @Param lat query number false "Custom latitude (uses current settings if not provided)"
+// @Param lon query number false "Custom longitude (uses current settings if not provided)"
+// @Param week query integer false "Custom week 1-48 (uses current date if not provided)"
+// @Success 200 {object} RangeFilterScoresResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v2/range/species/scores [get]
+func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
+	birdnetInstance, err := c.getBirdNETInstance()
+	if err != nil {
+		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
+	}
+
+	// Read current settings for defaults
+	c.settingsMutex.RLock()
+	lat := c.Settings.BirdNET.Latitude
+	lon := c.Settings.BirdNET.Longitude
+	threshold := c.Settings.BirdNET.RangeFilter.Threshold
+	c.settingsMutex.RUnlock()
+
+	// Override with query params if provided
+	if latStr := ctx.QueryParam("lat"); latStr != "" {
+		parsed, err := parseFloat64(latStr)
+		if err != nil {
+			return c.HandleError(ctx, err, "Invalid latitude format", http.StatusBadRequest)
+		}
+		if parsed < -90 || parsed > 90 {
+			return c.HandleError(ctx, nil, "Latitude must be between -90 and 90", http.StatusBadRequest)
+		}
+		lat = parsed
+	}
+
+	if lonStr := ctx.QueryParam("lon"); lonStr != "" {
+		parsed, err := parseFloat64(lonStr)
+		if err != nil {
+			return c.HandleError(ctx, err, "Invalid longitude format", http.StatusBadRequest)
+		}
+		if parsed < -180 || parsed > 180 {
+			return c.HandleError(ctx, nil, "Longitude must be between -180 and 180", http.StatusBadRequest)
+		}
+		lon = parsed
+	}
+
+	// Calculate week from current date or use provided value
+	now := time.Now()
+	week := calculateWeek(now)
+
+	if weekStr := ctx.QueryParam("week"); weekStr != "" {
+		parsed, err := strconv.Atoi(weekStr)
+		if err != nil {
+			return c.HandleError(ctx, err, "Invalid week format", http.StatusBadRequest)
+		}
+		if parsed < 1 || parsed > 48 {
+			return c.HandleError(ctx, nil, "Week must be between 1 and 48", http.StatusBadRequest)
+		}
+		week = float32(parsed)
+	}
+
+	// Build test settings with zero threshold to get ALL species with scores
+	testSettings := c.buildTestSettings(lat, lon, 0)
+
+	// Get all species with their raw scores
+	speciesScores, err := birdnetInstance.GetProbableSpeciesWithSettings(now, week, testSettings)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to get species scores", http.StatusInternalServerError)
+	}
+
+	// Convert to response format
+	speciesList := make([]RangeFilterSpecies, 0, len(speciesScores))
+	for _, speciesScore := range speciesScores {
+		sp := detection.ParseSpeciesString(speciesScore.Label)
+
+		score := speciesScore.Score
+		species := RangeFilterSpecies{
+			Label:          speciesScore.Label,
+			ScientificName: sp.ScientificName,
+			CommonName:     sp.CommonName,
+			Score:          &score,
+		}
+
+		speciesList = append(speciesList, species)
+	}
+
+	response := RangeFilterScoresResponse{
+		Species:   speciesList,
+		Count:     len(speciesList),
+		Week:      int(week),
+		Threshold: threshold,
+		Location: Location{
+			Latitude:  lat,
+			Longitude: lon,
+		},
+	}
+
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Range filter species scores retrieved", logger.Int("species_count", len(speciesList)))
 	return ctx.JSON(http.StatusOK, response)
 }
 
