@@ -348,13 +348,23 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 
 // initializeMetaModel loads and initializes the meta model used for range filtering.
 func (bn *BirdNET) initializeMetaModel() error {
+	log := GetLogger()
+	rf := bn.Settings.BirdNET.RangeFilter
+
+	log.Info("Initializing range filter",
+		logger.String("model", rf.Model),
+		logger.String("model_path", rf.ModelPath),
+		logger.String("labels_path", rf.LabelsPath),
+		logger.String("classifier", bn.ModelInfo.ID),
+		logger.String("models_dir", bn.modelsDir))
+
 	// Auto-select v3 geomodel for compatible classifiers when files exist on disk.
 	// Also resolves empty paths when the user explicitly sets Model="v3" but
 	// leaves ModelPath/LabelsPath empty (applyAutoSelectedGeomodelPaths skips
 	// when existing paths already point to valid files).
 	if bn.modelsDir != "" && shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
 		applyAutoSelectedGeomodelPaths(bn.Settings, bn.modelsDir)
-		GetLogger().Info("Auto-selected v3.0 geomodel for compatible classifier",
+		log.Info("Auto-selected v3.0 geomodel for compatible classifier",
 			logger.String("classifier", bn.ModelInfo.ID),
 			logger.String("models_dir", bn.modelsDir))
 	}
@@ -362,20 +372,25 @@ func (bn *BirdNET) initializeMetaModel() error {
 	// V3 geomodel is always ONNX; route to ONNX backend even if ModelPath is empty
 	// (initializeV3GeoModel will return a clear error about missing paths).
 	if bn.Settings.BirdNET.RangeFilter.Model == "v3" {
+		log.Debug("Routing to ONNX v3 geomodel backend")
 		return bn.initializeONNXMetaModel()
 	}
 
 	// If range filter model path ends with .onnx, use the ONNX backend
 	if isONNXModel(bn.Settings.BirdNET.RangeFilter.ModelPath) {
+		log.Debug("Routing to ONNX range filter backend",
+			logger.String("model_path", bn.Settings.BirdNET.RangeFilter.ModelPath))
 		return bn.initializeONNXMetaModel()
 	}
 
+	log.Debug("Routing to TFLite range filter backend")
 	return bn.initializeTFLiteMetaModel()
 }
 
 // initializeTFLiteMetaModel loads and initializes a TFLite range filter model.
 func (bn *BirdNET) initializeTFLiteMetaModel() error {
 	start := time.Now()
+	log := GetLogger()
 
 	metaModelData, err := bn.getMetaModelData()
 	if err != nil {
@@ -383,7 +398,7 @@ func (bn *BirdNET) initializeTFLiteMetaModel() error {
 	}
 
 	rangeFilter, err := tflite.NewTFLiteRangeFilter(metaModelData, func(msg string) {
-		GetLogger().Error("TFLite meta model error", logger.String("message", msg))
+		log.Error("TFLite meta model error", logger.String("message", msg))
 	})
 	if err != nil {
 		return errors.New(err).
@@ -393,6 +408,10 @@ func (bn *BirdNET) initializeTFLiteMetaModel() error {
 			Timing("meta-model-init", time.Since(start)).
 			Build()
 	}
+
+	log.Info("TFLite range filter initialized",
+		logger.Int("species", rangeFilter.NumSpecies()),
+		logger.String("duration", time.Since(start).String()))
 
 	bn.rangeFilter = rangeFilter
 	return nil
@@ -633,6 +652,45 @@ func (bn *BirdNET) Delete() {
 	}
 	bn.mu.Unlock()
 	bn.clearSpeciesCache()
+}
+
+// ReloadRangeFilter reinitializes just the range filter backend from current
+// settings. This is lighter than ReloadModel and is used when the geomodel
+// config changes (e.g., after a model gallery install adds v3 geomodel files)
+// without requiring a full classifier reload.
+// Holds bn.mu for the entire operation to prevent races with concurrent
+// reads in GetSpeciesOccurrenceAtTime and writes in Delete/ReloadModel.
+func (bn *BirdNET) ReloadRangeFilter() error {
+	log := GetLogger()
+	log.Info("Reloading range filter from updated settings")
+
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+
+	oldRangeFilter := bn.rangeFilter
+
+	if err := bn.initializeMetaModel(); err != nil {
+		// Rollback: restore old range filter if init created a partial one
+		if bn.rangeFilter != nil && bn.rangeFilter != oldRangeFilter {
+			bn.rangeFilter.Close()
+		}
+		bn.rangeFilter = oldRangeFilter
+
+		return errors.New(err).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			Context("operation", "reload_range_filter").
+			Build()
+	}
+
+	// Close old range filter if it was replaced
+	if oldRangeFilter != nil && bn.rangeFilter != oldRangeFilter {
+		oldRangeFilter.Close()
+	}
+
+	bn.clearSpeciesCache()
+	log.Info("Range filter reloaded successfully")
+	return nil
 }
 
 // DefaultBirdNETModelName is the expected filesystem basename for the main BirdNET analysis model file.
@@ -1232,6 +1290,12 @@ func (bn *BirdNET) RangeFilterStatus() RangeFilterStatusInfo {
 		info.ClassifierSpecies = mrf.numClassifier
 		info.MappedSpecies = mrf.mappedCount
 		info.UnmappedSpecies = mrf.numClassifier - mrf.mappedCount
+	} else if bn.rangeFilter != nil {
+		GetLogger().Debug("Range filter is not a mappedRangeFilter",
+			logger.String("type", fmt.Sprintf("%T", bn.rangeFilter)),
+			logger.Int("num_species", bn.rangeFilter.NumSpecies()))
+	} else {
+		GetLogger().Debug("Range filter is nil, species counts will be zero")
 	}
 	bn.mu.Unlock()
 

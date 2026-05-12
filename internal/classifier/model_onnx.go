@@ -91,7 +91,13 @@ func (bn *BirdNET) initializeONNXMetaModel() error {
 // names. This enables the 12K-species geomodel to work with any classifier.
 func (bn *BirdNET) initializeV3GeoModel() error {
 	start := time.Now()
+	log := GetLogger()
 	rfSettings := bn.Settings.BirdNET.RangeFilter
+
+	log.Info("V3 geomodel: starting initialization",
+		logger.String("model_path", rfSettings.ModelPath),
+		logger.String("labels_path", rfSettings.LabelsPath),
+		logger.Int("classifier_labels", len(bn.Settings.BirdNET.Labels)))
 
 	if rfSettings.ModelPath == "" {
 		return errors.Newf("v3 geomodel requires rangefilter.modelpath to be set").
@@ -126,6 +132,7 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 	}
 
 	// Ensure ONNX Runtime is initialized
+	log.Debug("V3 geomodel: initializing ONNX Runtime")
 	if err := inference.InitONNXRuntime(bn.Settings.BirdNET.ONNXRuntimePath); err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
@@ -135,6 +142,7 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 	}
 
 	// Load geomodel labels from file
+	log.Debug("V3 geomodel: loading labels", logger.String("path", labelsPath))
 	geoLabels, err := loadLabelsFromFile(labelsPath)
 	if err != nil {
 		return errors.New(err).
@@ -151,7 +159,12 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 			Build()
 	}
 
+	log.Debug("V3 geomodel: loaded labels",
+		logger.Int("count", len(geoLabels)),
+		logger.String("first", geoLabels[0]))
+
 	// Create ONNX range filter using the geomodel's own labels
+	log.Debug("V3 geomodel: creating ONNX range filter", logger.String("model_path", modelPath))
 	innerFilter, err := inference.NewONNXRangeFilter(
 		modelPath,
 		inference.ONNXRangeFilterOptions{
@@ -174,7 +187,6 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 	}
 	mapped := newMappedRangeFilter(innerFilter, classifierLabels, geoLabels, unmappedScore)
 
-	log := GetLogger()
 	if mapped.mappedCount == 0 && len(classifierLabels) > 0 {
 		log.Warn("V3 geomodel: no species matched classifier labels, range filter will filter out all detections (check labels file)",
 			logger.Int("classifier_species", len(classifierLabels)),
@@ -184,7 +196,8 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 		logger.Int("geomodel_species", len(geoLabels)),
 		logger.Int("classifier_species", len(classifierLabels)),
 		logger.Int("mapped_species", mapped.mappedCount),
-		logger.Int("unmapped_species", len(classifierLabels)-mapped.mappedCount))
+		logger.Int("unmapped_species", len(classifierLabels)-mapped.mappedCount),
+		logger.String("duration", time.Since(start).String()))
 
 	bn.rangeFilter = mapped
 	return nil

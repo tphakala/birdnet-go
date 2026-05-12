@@ -285,6 +285,15 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusInfo {
 	return o.primary.RangeFilterStatus()
 }
 
+// ReloadRangeFilter reinitializes the range filter on the primary model
+// from current settings without a full model reload.
+func (o *Orchestrator) ReloadRangeFilter() error {
+	if o.primary == nil {
+		return nil
+	}
+	return o.primary.ReloadRangeFilter()
+}
+
 // RunFilterProcess executes the filter process on demand and prints results.
 func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 	o.primary.RunFilterProcess(dateStr, week)

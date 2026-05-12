@@ -200,6 +200,82 @@ func (mm *ModelManager) ScanInstalled() {
 		mm.settingsMu.Unlock()
 
 		mm.loadInstalledModels(log, installedIDs)
+
+		// After loading models, check if any installed model has geomodel
+		// companion files on disk. If so, ensure the range filter config is
+		// up to date and reload the filter. This handles the upgrade case
+		// where a new binary adds geomodel support to existing models.
+		mm.ensureGeomodelConfig(log, installedIDs)
+	}
+}
+
+// ensureGeomodelConfig checks if any installed model has geomodel companion
+// files on disk and, if the range filter config doesn't already reflect them,
+// updates the config and reloads the range filter.
+func (mm *ModelManager) ensureGeomodelConfig(log logger.Logger, installedIDs []string) {
+	if mm.orchestrator == nil {
+		return
+	}
+
+	for _, catalogID := range installedIDs {
+		entry, found := GetCatalogEntry(catalogID)
+		if !found || !HasGeomodelFiles(&entry) {
+			continue
+		}
+
+		// Check if all geomodel files exist on disk.
+		allPresent := true
+		for _, f := range entry.Files {
+			if !isGeomodelRole(f.Role) {
+				continue
+			}
+			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			if _, err := os.Stat(path); err != nil {
+				allPresent = false
+				break
+			}
+		}
+		if !allPresent {
+			continue
+		}
+
+		// Files exist. Check if the config already has model=v3 with valid paths.
+		currentSettings := conf.GetSettings()
+		rf := currentSettings.BirdNET.RangeFilter
+		if rf.Model == entry.GeomodelVersion && rf.ModelPath != "" && rf.LabelsPath != "" {
+			// Config already set; initializeMetaModel handled it at startup.
+			return
+		}
+
+		// Config is stale or missing; update it.
+		log.Info("Applying geomodel config for installed model",
+			logger.String("catalog_id", catalogID),
+			logger.String("geomodel_version", entry.GeomodelVersion))
+
+		updated := conf.CloneSettings(currentSettings)
+		updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
+		for _, f := range entry.Files {
+			switch f.Role {
+			case RoleGeomodelModel:
+				updated.BirdNET.RangeFilter.ModelPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			case RoleGeomodelLabels:
+				updated.BirdNET.RangeFilter.LabelsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			}
+		}
+
+		conf.StoreSettings(updated)
+		if err := conf.SaveSettings(); err != nil {
+			log.Warn("Failed to persist geomodel config",
+				logger.String("catalog_id", catalogID),
+				logger.Error(err))
+		}
+
+		if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
+			log.Warn("Failed to reload range filter after geomodel config update",
+				logger.String("catalog_id", catalogID),
+				logger.Error(err))
+		}
+		return
 	}
 }
 
@@ -346,6 +422,16 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	delete(mm.installed, catalogID)
 
 	mm.applyConfigForUninstall(&entry)
+
+	// If geomodel was cleared during uninstall, reload the range filter
+	// so the primary model falls back to the embedded TFLite filter.
+	if mm.orchestrator != nil && HasGeomodelFiles(&entry) {
+		if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
+			log.Warn("Failed to hot-reload range filter after geomodel uninstall",
+				logger.String("catalog_id", catalogID),
+				logger.Error(err))
+		}
+	}
 
 	log.Info("Model uninstalled",
 		logger.String("catalog_id", catalogID))
@@ -659,31 +745,50 @@ func (mm *ModelManager) downloadModelFiles(entry *CatalogEntry, baseURL string, 
 	}
 	mm.applyConfigForInstall(entry, modelPath, labelsPath, embeddingsPath)
 
-	// Hot-load into orchestrator.
-	if mm.orchestrator != nil && entry.RegistryID != "" {
-		if err := mm.orchestrator.LoadModel(entry.RegistryID); err != nil {
-			log.Warn("Failed to hot-load model (will be available after restart)",
-				logger.String("catalog_id", entry.ID),
-				logger.Error(err))
-		}
-	}
-
-	// Send final complete status (non-blocking in case the consumer is gone).
-	if progress != nil {
-		select {
-		case progress <- DownloadState{
-			CatalogID: entry.ID,
-			Status:    StatusComplete,
-		}:
-		default:
-		}
-	}
+	mm.hotLoadAfterInstall(log, entry)
+	sendProgress(progress, entry.ID, StatusComplete)
 
 	log.Info("Model installed",
 		logger.String("catalog_id", entry.ID),
 		logger.String("model_path", modelPath))
 
 	return nil
+}
+
+// hotLoadAfterInstall hot-loads the classifier model and, if the entry
+// includes geomodel companion files, reloads the range filter.
+func (mm *ModelManager) hotLoadAfterInstall(log logger.Logger, entry *CatalogEntry) {
+	if mm.orchestrator == nil {
+		return
+	}
+	if entry.RegistryID != "" {
+		if err := mm.orchestrator.LoadModel(entry.RegistryID); err != nil {
+			log.Warn("Failed to hot-load model (will be available after restart)",
+				logger.String("catalog_id", entry.ID),
+				logger.Error(err))
+		}
+	}
+	if HasGeomodelFiles(entry) {
+		if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
+			log.Warn("Failed to hot-reload range filter after geomodel install",
+				logger.String("catalog_id", entry.ID),
+				logger.Error(err))
+		}
+	}
+}
+
+// sendProgress sends a non-blocking status update to the progress channel.
+func sendProgress(progress chan<- DownloadState, catalogID, status string) {
+	if progress == nil {
+		return
+	}
+	select {
+	case progress <- DownloadState{
+		CatalogID: catalogID,
+		Status:    status,
+	}:
+	default:
+	}
 }
 
 // markFailed sets the download state to StatusFailed so SSE pollers can
