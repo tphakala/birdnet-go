@@ -341,7 +341,7 @@ func TestCleanupReturnValues(t *testing.T) {
 	settings.Realtime.Audio.Export.Retention.MaxAge = "30d"
 	settings.Realtime.Audio.Export.Retention.MaxUsage = "80%"
 	settings.Realtime.Audio.Export.Retention.MinClips = 10
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	t.Cleanup(func() { conf.NewTestSettings().Apply() })
 
 	// Create a mock DB
 	mockDB := &MockDB{}

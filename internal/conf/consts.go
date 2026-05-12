@@ -44,6 +44,4 @@ const (
 )
 
 // DefaultSessionDuration is the default session duration (7 days).
-// Declared as a var because time.Duration constants cannot use time.Hour
-// (which is not a compile-time constant in the language spec).
-var DefaultSessionDuration = 168 * time.Hour
+const DefaultSessionDuration = 168 * time.Hour
