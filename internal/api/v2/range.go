@@ -40,7 +40,7 @@ func validateRangeFilterRequest(req *RangeFilterTestRequest) error {
 		return fmt.Errorf("Threshold must be between 0 and 1") //nolint:staticcheck // user-facing API message
 	}
 	if req.Week != 0 && (req.Week < 1 || req.Week > weeksPerYear) {
-		return fmt.Errorf("Week must be between 1 and 48") //nolint:staticcheck // user-facing API message
+		return fmt.Errorf("Week must be between 1 and %d", weeksPerYear) //nolint:staticcheck // user-facing API message
 	}
 	return nil
 }
@@ -287,7 +287,7 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 			return c.HandleError(ctx, err, "Invalid week format", http.StatusBadRequest)
 		}
 		if parsed < 1 || parsed > weeksPerYear {
-			return c.HandleError(ctx, nil, "Week must be between 1 and 48", http.StatusBadRequest)
+			return c.HandleError(ctx, nil, fmt.Sprintf("Week must be between 1 and %d", weeksPerYear), http.StatusBadRequest)
 		}
 		week = float32(parsed)
 	}
