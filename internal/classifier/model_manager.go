@@ -35,6 +35,10 @@ const (
 	StatusRemoved     = "removed"
 )
 
+// failedStateRetention is how long a failed download state is kept in the
+// downloading map so SSE pollers can observe the failure before cleanup.
+const failedStateRetention = 30 * time.Second
+
 // ModelManager handles the lifecycle of downloadable models.
 type ModelManager struct {
 	modelsDir    string
@@ -449,7 +453,7 @@ func (mm *ModelManager) Install(entry *CatalogEntry, baseURL string, progress ch
 
 	if err := mm.downloadModelFiles(entry, baseURL, progress); err != nil {
 		// Keep failed state briefly for SSE pollers, then clean up.
-		time.AfterFunc(30*time.Second, func() {
+		time.AfterFunc(failedStateRetention, func() {
 			mm.removeDownloading(entry.ID)
 		})
 		return err
@@ -491,7 +495,7 @@ func (mm *ModelManager) Reinstall(entry *CatalogEntry, baseURL string, progress 
 
 	if err := mm.downloadModelFiles(entry, baseURL, progress); err != nil {
 		// Keep failed state briefly for SSE pollers, then clean up.
-		time.AfterFunc(30*time.Second, func() {
+		time.AfterFunc(failedStateRetention, func() {
 			mm.removeDownloading(entry.ID)
 		})
 		return err

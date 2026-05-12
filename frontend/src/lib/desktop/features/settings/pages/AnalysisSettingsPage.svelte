@@ -834,6 +834,7 @@
               reinstallingId = null;
               downloadProgress = null;
             }
+            invalidateModels();
             loadCatalog();
           }, 2000);
         },
