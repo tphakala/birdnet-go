@@ -725,7 +725,8 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 // applyConfigForUninstall updates settings to reflect a removed model.
 // For bat models, Enabled is only set to false when no other bat models
 // remain installed; if another bat model exists, config is re-pointed to it.
-// The caller must hold mm.mu (at least RLock).
+// The caller must hold mm.mu for writing; the uninstalled entry must already
+// be deleted from mm.installed so the geomodel and bat searches skip it.
 // Uses clone-mutate-publish so the shared settings snapshot is never mutated
 // in place. Settings are persisted to disk via conf.SaveSettings so changes
 // survive restarts and are visible to concurrent readers through conf.Setting().

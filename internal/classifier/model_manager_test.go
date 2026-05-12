@@ -790,6 +790,73 @@ func TestModelManager_Install_GeomodelConfigWiring(t *testing.T) {
 	assert.Equal(t, filepath.Join(modelsDir, "shared", "geomodel_v3_labels.txt"), current.BirdNET.RangeFilter.LabelsPath)
 }
 
+func TestModelManager_Uninstall_GeomodelConfigClearing(t *testing.T) {
+	// Not parallel: mutates global settings via conf.StoreSettings.
+
+	modelContent := []byte("perch-model")
+	labelsContent := []byte("labels")
+	geomodelContent := []byte("geo-onnx")
+	geomodelLabelsContent := []byte("geo-labels")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case testPathModelONNX:
+			_, _ = w.Write(modelContent)
+		case testPathLabels:
+			_, _ = w.Write(labelsContent)
+		case testPathGeomodel:
+			_, _ = w.Write(geomodelContent)
+		case testPathGeoLabels:
+			_, _ = w.Write(geomodelLabelsContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	entry := CatalogEntry{
+		ID:              "test-geo-uninstall-config",
+		Name:            "Uninstall Config Test",
+		Version:         "1.0",
+		RegistryID:      RegistryIDPerchV2,
+		HuggingFaceRepo: "test/repo",
+		Files: []CatalogFile{
+			{RemotePath: "model.onnx", LocalName: "model.onnx", Role: RoleModel, SHA256: sha256Hex(modelContent), SizeBytes: int64(len(modelContent))},
+			{RemotePath: "labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: sha256Hex(labelsContent), SizeBytes: int64(len(labelsContent))},
+			{RemotePath: "geomodel.onnx", LocalName: "geomodel_v3.onnx", Role: RoleGeomodel, SHA256: sha256Hex(geomodelContent), SizeBytes: int64(len(geomodelContent))},
+			{RemotePath: "geomodel_labels.txt", LocalName: "geomodel_v3_labels.txt", Role: RoleGeomodel, SHA256: sha256Hex(geomodelLabelsContent), SizeBytes: int64(len(geomodelLabelsContent))},
+		},
+	}
+
+	origSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+
+	modelsDir := t.TempDir()
+	settings := conf.GetTestSettings()
+	conf.StoreSettings(settings)
+	mm := NewModelManager(modelsDir, nil, settings)
+
+	// Install to set config.
+	err := mm.Install(&entry, srv.URL, nil)
+	require.NoError(t, err)
+
+	current := conf.GetSettings()
+	require.Equal(t, "v3", current.BirdNET.RangeFilter.Model, "precondition: install must set model to v3")
+
+	// Add entry to EmbeddedCatalog temporarily so Uninstall can find it.
+	origLen := len(EmbeddedCatalog)
+	EmbeddedCatalog = append(EmbeddedCatalog, entry)
+	t.Cleanup(func() { EmbeddedCatalog = EmbeddedCatalog[:origLen] })
+
+	// Uninstall should clear the range filter config.
+	require.NoError(t, mm.Uninstall("test-geo-uninstall-config"))
+
+	current = conf.GetSettings()
+	assert.Empty(t, current.BirdNET.RangeFilter.Model, "uninstall must clear range filter model")
+	assert.Empty(t, current.BirdNET.RangeFilter.ModelPath, "uninstall must clear range filter model path")
+	assert.Empty(t, current.BirdNET.RangeFilter.LabelsPath, "uninstall must clear range filter labels path")
+}
+
 func TestHasGeomodelFiles(t *testing.T) {
 	t.Parallel()
 
