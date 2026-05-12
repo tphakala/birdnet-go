@@ -701,15 +701,14 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 	}
 
 	// Apply geomodel range filter config if this entry includes geomodel files.
-	if hasGeomodelFiles(entry) {
+	if hasGeomodelFiles(entry) && entry.GeomodelVersion != "" {
 		updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
 		for _, f := range entry.Files {
-			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
 			switch f.Role {
 			case RoleGeomodelModel:
-				updated.BirdNET.RangeFilter.ModelPath = path
+				updated.BirdNET.RangeFilter.ModelPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
 			case RoleGeomodelLabels:
-				updated.BirdNET.RangeFilter.LabelsPath = path
+				updated.BirdNET.RangeFilter.LabelsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
 			}
 		}
 	}
@@ -789,7 +788,7 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		}
 	}
 
-	// Reset v3 geomodel range filter config if no other geomodel-dependent model remains.
+	// Reset geomodel range filter config if no other geomodel-dependent model remains.
 	// mm.installed no longer contains the uninstalled entry (deleted by caller).
 	if hasGeomodelFiles(entry) {
 		otherGeomodel := false
@@ -804,6 +803,7 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 			updated.BirdNET.RangeFilter.Model = ""
 			updated.BirdNET.RangeFilter.ModelPath = ""
 			updated.BirdNET.RangeFilter.LabelsPath = ""
+			updated.BirdNET.RangeFilter.PassUnmappedSpecies = false
 		}
 	}
 
