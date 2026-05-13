@@ -267,28 +267,28 @@ func (m *ActionMockDatastore) ClearNoteClipPathsByNames(_ []string) (int64, erro
 func (m *ActionMockDatastore) CountHourlyDetections(_, _ string, _ int) (int64, error) {
 	return 0, nil
 }
-func (m *ActionMockDatastore) GetSpeciesSummaryData(_ context.Context, _, _ string) ([]datastore.SpeciesSummaryData, error) {
+func (m *ActionMockDatastore) GetSpeciesSummaryData(_ context.Context, _, _ string, _ ...uint) ([]datastore.SpeciesSummaryData, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) GetHourlyAnalyticsData(_ context.Context, _, _ string) ([]datastore.HourlyAnalyticsData, error) {
+func (m *ActionMockDatastore) GetHourlyAnalyticsData(_ context.Context, _, _ string, _ ...uint) ([]datastore.HourlyAnalyticsData, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) GetDailyAnalyticsData(_ context.Context, _, _, _ string) ([]datastore.DailyAnalyticsData, error) {
+func (m *ActionMockDatastore) GetDailyAnalyticsData(_ context.Context, _, _, _ string, _ ...uint) ([]datastore.DailyAnalyticsData, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) GetDetectionTrends(_ context.Context, _ string, _ int) ([]datastore.DailyAnalyticsData, error) {
+func (m *ActionMockDatastore) GetDetectionTrends(_ context.Context, _ string, _ int, _ ...uint) ([]datastore.DailyAnalyticsData, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) GetHourlyDistribution(_ context.Context, _, _, _ string) ([]datastore.HourlyDistributionData, error) {
+func (m *ActionMockDatastore) GetHourlyDistribution(_ context.Context, _, _, _ string, _ ...uint) ([]datastore.HourlyDistributionData, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) GetNewSpeciesDetections(_ context.Context, _, _ string, _, _ int) ([]datastore.NewSpeciesData, error) {
+func (m *ActionMockDatastore) GetNewSpeciesDetections(_ context.Context, _, _ string, _, _ int, _ ...uint) ([]datastore.NewSpeciesData, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) GetSpeciesFirstDetectionInPeriod(_ context.Context, _, _ string, _, _ int) ([]datastore.NewSpeciesData, error) {
+func (m *ActionMockDatastore) GetSpeciesFirstDetectionInPeriod(_ context.Context, _, _ string, _, _ int, _ ...uint) ([]datastore.NewSpeciesData, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) GetSpeciesDiversityData(_ context.Context, _, _ string) ([]datastore.DailyAnalyticsData, error) {
+func (m *ActionMockDatastore) GetSpeciesDiversityData(_ context.Context, _, _ string, _ ...uint) ([]datastore.DailyAnalyticsData, error) {
 	return nil, nil
 }
 func (m *ActionMockDatastore) SearchDetections(_ *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {

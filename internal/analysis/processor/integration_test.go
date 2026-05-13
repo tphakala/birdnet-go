@@ -19,11 +19,11 @@ type MockDatastoreAdapter struct {
 	ds *datastore.DataStore
 }
 
-func (m *MockDatastoreAdapter) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+func (m *MockDatastoreAdapter) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int, sourceIDs ...uint) ([]datastore.NewSpeciesData, error) {
 	return m.ds.GetNewSpeciesDetections(ctx, startDate, endDate, limit, offset)
 }
 
-func (m *MockDatastoreAdapter) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+func (m *MockDatastoreAdapter) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int, sourceIDs ...uint) ([]datastore.NewSpeciesData, error) {
 	return m.ds.GetSpeciesFirstDetectionInPeriod(ctx, startDate, endDate, limit, offset)
 }
 

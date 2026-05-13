@@ -224,16 +224,16 @@ func (m *mockStore) ClearNoteClipPathsByNames(_ []string) (int64, error) { retur
 func (m *mockStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
 	return 0, nil
 }
-func (m *mockStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
+func (m *mockStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string, sourceIDs ...uint) ([]datastore.DailyAnalyticsData, error) {
 	return []datastore.DailyAnalyticsData{}, nil
 }
-func (m *mockStore) GetDetectionTrends(ctx context.Context, period string, limit int) ([]datastore.DailyAnalyticsData, error) {
+func (m *mockStore) GetDetectionTrends(ctx context.Context, period string, limit int, sourceIDs ...uint) ([]datastore.DailyAnalyticsData, error) {
 	return []datastore.DailyAnalyticsData{}, nil
 }
-func (m *mockStore) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]datastore.HourlyAnalyticsData, error) {
+func (m *mockStore) GetHourlyAnalyticsData(ctx context.Context, date, species string, sourceIDs ...uint) ([]datastore.HourlyAnalyticsData, error) {
 	return []datastore.HourlyAnalyticsData{}, nil
 }
-func (m *mockStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
+func (m *mockStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string, sourceIDs ...uint) ([]datastore.SpeciesSummaryData, error) {
 	return []datastore.SpeciesSummaryData{}, nil
 }
 func (m *mockStore) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
@@ -275,24 +275,24 @@ func (m *mockStore) DeleteThresholdEvents(string) error       { return nil }
 func (m *mockStore) DeleteAllThresholdEvents() (int64, error) { return 0, nil }
 
 // GetHourlyDistribution implements the datastore.Interface GetHourlyDistribution method
-func (m *mockStore) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
+func (m *mockStore) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string, sourceIDs ...uint) ([]datastore.HourlyDistributionData, error) {
 	// Default implementation returns empty array for this mock
 	return []datastore.HourlyDistributionData{}, nil
 }
 
 // GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
-func (m *mockStore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+func (m *mockStore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int, sourceIDs ...uint) ([]datastore.NewSpeciesData, error) {
 	// This is a mock test implementation, so we'll return empty data
 	return []datastore.NewSpeciesData{}, nil
 }
 
 // GetSpeciesFirstDetectionInPeriod implements the datastore.Interface GetSpeciesFirstDetectionInPeriod method
-func (m *mockStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+func (m *mockStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int, sourceIDs ...uint) ([]datastore.NewSpeciesData, error) {
 	// This is a mock test implementation, so we'll return empty data
 	return []datastore.NewSpeciesData{}, nil
 }
 
-func (m *mockStore) GetSpeciesDiversityData(_ context.Context, _, _ string) ([]datastore.DailyAnalyticsData, error) {
+func (m *mockStore) GetSpeciesDiversityData(_ context.Context, _, _ string, _ ...uint) ([]datastore.DailyAnalyticsData, error) {
 	return nil, nil
 }
 
@@ -397,43 +397,43 @@ func (m *mockFailingStore) GetImageCacheBatch(providerName string, scientificNam
 	return m.mockStore.GetImageCacheBatch(providerName, scientificNames)
 }
 
-func (m *mockFailingStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
+func (m *mockFailingStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string, sourceIDs ...uint) ([]datastore.DailyAnalyticsData, error) {
 	if m.failGetAllCache {
 		return nil, fmt.Errorf("simulated database error")
 	}
-	return m.mockStore.GetDailyAnalyticsData(ctx, startDate, endDate, species)
+	return m.mockStore.GetDailyAnalyticsData(ctx, startDate, endDate, species, sourceIDs...)
 }
 
-func (m *mockFailingStore) GetDetectionTrends(ctx context.Context, period string, limit int) ([]datastore.DailyAnalyticsData, error) {
+func (m *mockFailingStore) GetDetectionTrends(ctx context.Context, period string, limit int, sourceIDs ...uint) ([]datastore.DailyAnalyticsData, error) {
 	if m.failGetAllCache {
 		return nil, fmt.Errorf("simulated database error")
 	}
-	return m.mockStore.GetDetectionTrends(ctx, period, limit)
+	return m.mockStore.GetDetectionTrends(ctx, period, limit, sourceIDs...)
 }
 
-func (m *mockFailingStore) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]datastore.HourlyAnalyticsData, error) {
+func (m *mockFailingStore) GetHourlyAnalyticsData(ctx context.Context, date, species string, sourceIDs ...uint) ([]datastore.HourlyAnalyticsData, error) {
 	if m.failGetAllCache {
 		return nil, fmt.Errorf("simulated database error")
 	}
-	return m.mockStore.GetHourlyAnalyticsData(ctx, date, species)
+	return m.mockStore.GetHourlyAnalyticsData(ctx, date, species, sourceIDs...)
 }
 
-func (m *mockFailingStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
-	return m.mockStore.GetSpeciesSummaryData(ctx, startDate, endDate)
+func (m *mockFailingStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string, sourceIDs ...uint) ([]datastore.SpeciesSummaryData, error) {
+	return m.mockStore.GetSpeciesSummaryData(ctx, startDate, endDate, sourceIDs...)
 }
 
-func (m *mockFailingStore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+func (m *mockFailingStore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int, sourceIDs ...uint) ([]datastore.NewSpeciesData, error) {
 	if m.failGetAllCache {
 		return nil, fmt.Errorf("simulated database error")
 	}
-	return m.mockStore.GetNewSpeciesDetections(ctx, startDate, endDate, limit, offset)
+	return m.mockStore.GetNewSpeciesDetections(ctx, startDate, endDate, limit, offset, sourceIDs...)
 }
 
-func (m *mockFailingStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+func (m *mockFailingStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int, sourceIDs ...uint) ([]datastore.NewSpeciesData, error) {
 	if m.failGetAllCache {
 		return nil, fmt.Errorf("simulated database error")
 	}
-	return m.mockStore.GetSpeciesFirstDetectionInPeriod(ctx, startDate, endDate, limit, offset)
+	return m.mockStore.GetSpeciesFirstDetectionInPeriod(ctx, startDate, endDate, limit, offset, sourceIDs...)
 }
 
 // verifyCacheEntry validates that an image was cached correctly in the store.
