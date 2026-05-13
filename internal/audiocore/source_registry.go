@@ -210,8 +210,7 @@ func (r *SourceRegistry) ConnectionStringByID(sourceID string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	connStr, _ := src.GetConnectionString()
-	return connStr, true
+	return src.connectionString, true
 }
 
 // GetByConnection returns a safe copy of the source registered for the given
