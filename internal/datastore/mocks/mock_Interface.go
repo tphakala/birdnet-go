@@ -177,6 +177,57 @@ func (_c *MockInterface_Close_Call) RunAndReturn(run func() error) *MockInterfac
 	return _c
 }
 
+// CorrectNoteSpecies provides a mock function with given fields: ctx, noteID, scientific, common, confidence, model
+func (_m *MockInterface) CorrectNoteSpecies(ctx context.Context, noteID uint, scientific string, common string, confidence float64, model detection.ModelInfo) error {
+	ret := _m.Called(ctx, noteID, scientific, common, confidence, model)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CorrectNoteSpecies")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, uint, string, string, float64, detection.ModelInfo) error); ok {
+		r0 = rf(ctx, noteID, scientific, common, confidence, model)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockInterface_CorrectNoteSpecies_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CorrectNoteSpecies'
+type MockInterface_CorrectNoteSpecies_Call struct {
+	*mock.Call
+}
+
+// CorrectNoteSpecies is a helper method to define mock.On call
+//   - ctx context.Context
+//   - noteID uint
+//   - scientific string
+//   - common string
+//   - confidence float64
+//   - model detection.ModelInfo
+func (_e *MockInterface_Expecter) CorrectNoteSpecies(ctx interface{}, noteID interface{}, scientific interface{}, common interface{}, confidence interface{}, model interface{}) *MockInterface_CorrectNoteSpecies_Call {
+	return &MockInterface_CorrectNoteSpecies_Call{Call: _e.mock.On("CorrectNoteSpecies", ctx, noteID, scientific, common, confidence, model)}
+}
+
+func (_c *MockInterface_CorrectNoteSpecies_Call) Run(run func(ctx context.Context, noteID uint, scientific string, common string, confidence float64, model detection.ModelInfo)) *MockInterface_CorrectNoteSpecies_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(uint), args[2].(string), args[3].(string), args[4].(float64), args[5].(detection.ModelInfo))
+	})
+	return _c
+}
+
+func (_c *MockInterface_CorrectNoteSpecies_Call) Return(_a0 error) *MockInterface_CorrectNoteSpecies_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockInterface_CorrectNoteSpecies_Call) RunAndReturn(run func(context.Context, uint, string, string, float64, detection.ModelInfo) error) *MockInterface_CorrectNoteSpecies_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CountHourlyDetections provides a mock function with given fields: date, hour, duration
 func (_m *MockInterface) CountHourlyDetections(date string, hour string, duration int) (int64, error) {
 	ret := _m.Called(date, hour, duration)

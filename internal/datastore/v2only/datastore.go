@@ -1466,6 +1466,20 @@ func (ds *Datastore) SaveNoteReview(review *datastore.NoteReview) error {
 	return ds.detection.SaveReview(ctx, v2Review)
 }
 
+// CorrectNoteSpecies routes an operator-driven species correction through
+// the v2 repositories: it resolves the (model, label) pair, updates
+// v2_detections, and writes the review row — all via the shared helper
+// that DualWriteRepository uses on its v2 mirror, so the v2 schema rules
+// (label vocab gate, detection_locks atomicity) live in one place.
+// The legacy notes/note_locks/note_reviews tables don't exist in v2-only
+// installs, so this implementation talks to v2 directly rather than
+// papering over the legacy schema.
+func (ds *Datastore) CorrectNoteSpecies(ctx context.Context, noteID uint, scientific, common string, confidence float64, model detection.ModelInfo) error {
+	_ = common // v2_detections stores common name via label join; no per-detection column
+	return repository.WriteSpeciesCorrection(ctx, ds.model, ds.label, ds.detection,
+		noteID, scientific, model, confidence)
+}
+
 // GetNoteComments retrieves comments for a note.
 func (ds *Datastore) GetNoteComments(noteID string) ([]datastore.NoteComment, error) {
 	ctx := context.Background()

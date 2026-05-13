@@ -6,24 +6,24 @@
 // place to reflect that choice, and marks it as verified='correct' in the
 // same step.
 //
-// Implementation note: the correction is written via raw SQL against the v2
-// schema (detections + labels + ai_models tables) rather than through the
-// datastore.Interface, because v2only doesn't expose a generic UpdateNote
-// surface and adding one would require regenerating mockery mocks for a
-// single-shot endpoint. The v2 schema is stable; the raw SQL is scoped to
-// three statements inside a single transaction.
+// Implementation note: all persistence goes through c.Repo.CorrectSpecies
+// (datastore.DetectionRepository). The legacy v1 path lands in the notes
+// table; the v2only adapter routes through v2 repositories; any future
+// dual-write composition mirrors the write across both. Keeping the
+// schema-specific SQL out of the handler is the whole point — we don't
+// want this endpoint to drift when upstream finishes the v1→v2 cutover.
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -31,20 +31,20 @@ import (
 // POST /api/v2/detections/:id/correct-species.
 type CorrectSpeciesRequest struct {
 	// ScientificName is the binomial Latin name the user is asserting (e.g.
-	// "Ficedula hypoleuca"). Must match an existing labels row keyed by the
-	// chosen ModelID — we never create labels here, because doing so would
-	// fork the model's vocabulary.
+	// "Ficedula hypoleuca"). The chosen ModelID must be loaded by the
+	// running server, which is the gate against arbitrary species names —
+	// the UI only offers species the model actually predicted.
 	ScientificName string `json:"scientificName"`
 
 	// ModelID is the orchestrator registry ID (e.g. "BirdNET_V2.4",
-	// "Perch_V2") or the user-facing config alias (e.g. "birdnet"). The
-	// resulting detection record carries this model's ID and the label_id
-	// from that model's vocabulary. Required.
+	// "Perch_V2") or the user-facing config alias (e.g. "birdnet"). Used
+	// to validate that the correction comes from a known model and to
+	// route v2 writes to the matching ai_models row. Required.
 	ModelID string `json:"modelId"`
 
 	// Confidence is the confidence value to record on the corrected
-	// detection. Typically the max confidence the chosen model produced for
-	// this species in the reanalysis pass. Range [0, 1].
+	// detection. Typically the max confidence the chosen model produced
+	// for this species in the reanalysis pass. Range [0, 1].
 	Confidence float64 `json:"confidence"`
 }
 
@@ -61,26 +61,25 @@ type CorrectSpeciesResponse struct {
 
 // CorrectDetectionSpecies handles POST /api/v2/detections/:id/correct-species.
 // @Summary Correct a detection's species and mark it verified
-// @Description Replaces the detection's species/confidence/model with the
-// @Description chosen prediction (typically from a reanalyze response), and
-// @Description records a 'correct' review in one transaction. The detection
-// @Description must be unlocked.
+// @Description Replaces the detection's species/confidence with the chosen
+// @Description prediction (typically from a reanalyze response), and records
+// @Description a 'correct' review in one operation. The detection must be
+// @Description unlocked.
 // @Tags detections
 // @Accept json
 // @Produce json
 // @Param id path int true "Detection ID"
 // @Param request body CorrectSpeciesRequest true "Correction payload"
 // @Success 200 {object} CorrectSpeciesResponse "Updated detection state"
-// @Failure 400 {object} ErrorResponse "Invalid request or unknown species/model"
+// @Failure 400 {object} ErrorResponse "Invalid request or unknown model"
 // @Failure 404 {object} ErrorResponse "Detection not found"
 // @Failure 409 {object} ErrorResponse "Detection is locked"
 // @Failure 500 {object} ErrorResponse "Database failure"
 // @Router /detections/{id}/correct-species [post]
 func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 	idStr := ctx.Param("id")
-	noteIDUint, parseErr := strconv.ParseUint(idStr, 10, 64)
-	if parseErr != nil {
-		return c.HandleError(ctx, parseErr,
+	if _, err := strconv.ParseUint(idStr, 10, 64); err != nil {
+		return c.HandleError(ctx, err,
 			"Detection ID must be a numeric value", http.StatusBadRequest)
 	}
 
@@ -104,9 +103,10 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 			"confidence must be in [0, 1]", http.StatusBadRequest)
 	}
 
-	// Verify the detection exists and capture its current state so we can
-	// log the before/after change. Lock state is checked atomically inside
-	// the transaction below.
+	// Capture current state for the structured log diff at the end. The
+	// repository performs its own atomic lock check, so c.DS.Get here is
+	// pure read-side context — the canonical lock guard runs inside the
+	// CorrectSpecies write.
 	existing, err := c.DS.Get(idStr)
 	if err != nil {
 		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
@@ -118,11 +118,9 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 			http.StatusConflict)
 	}
 
-	// Resolve the orchestrator registry ID through the alias chain. We need
-	// the orchestrator's ModelInfo to translate registry ID → (name,
-	// version) so we can map to the ai_models row, and to confirm the
-	// model is actually loaded (we won't accept corrections naming a model
-	// the running server doesn't know about).
+	// Resolve the registry ID through the alias chain, confirm the model
+	// is loaded, and capture the (name, version, variant) tuple v2-aware
+	// implementations need to find the matching v2_ai_models row.
 	bn, err := c.getBirdNETInstance()
 	if err != nil {
 		return c.HandleError(ctx, err,
@@ -132,143 +130,66 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 	if registryID, ok := classifier.ResolveConfigModelID(req.ModelID); ok {
 		resolvedID = registryID
 	}
-	var modelName, modelVersion, modelDisplayName string
+	var (
+		loadedInfo       classifier.ModelInfo
+		modelDisplayName string
+		modelFound       bool
+	)
 	for _, info := range bn.ModelInfos() {
 		if info.ID == resolvedID {
-			modelName = info.DetectionName
-			modelVersion = info.DetectionVersion
+			loadedInfo = info
 			modelDisplayName = info.Name
+			modelFound = true
 			break
 		}
 	}
-	if modelName == "" || modelVersion == "" {
+	if !modelFound || loadedInfo.DetectionName == "" || loadedInfo.DetectionVersion == "" {
 		return c.HandleError(ctx,
 			fmt.Errorf("model %q is not loaded", req.ModelID),
 			"Specified model is not loaded; cannot apply correction",
 			http.StatusBadRequest)
 	}
 
-	// Single-transaction correction: look up the model and label rows, update
-	// the detection, and write the review record. If any step fails the whole
-	// thing rolls back so the operator never sees a half-applied state.
-	// Uses datastore.Interface.Transaction so the call works against the
-	// v2only adapter without reaching into the concrete *DataStore.
-	var (
-		newModelID uint
-		newLabelID uint
-	)
-	correctionErr := c.DS.Transaction(func(tx *gorm.DB) error {
-		// 1. Map orchestrator (name, version) → ai_models.id
-		if err := tx.Table("ai_models").
-			Select("id").
-			Where("name = ? AND version = ?", modelName, modelVersion).
-			Scan(&newModelID).Error; err != nil {
-			return fmt.Errorf("ai_models lookup failed: %w", err)
-		}
-		if newModelID == 0 {
-			return fmt.Errorf("model %s/%s not present in ai_models table", modelName, modelVersion)
-		}
+	// Resolve the locale-appropriate common name. The resolver chain on
+	// the orchestrator covers BirdNET's labels and the v3 geomodel
+	// taxonomy companion (PR #3042 upstream); it falls back to the
+	// scientific name if the species is outside both vocabularies, which
+	// keeps the UI readable even for an exotic correction.
+	commonName := bn.ResolveName(req.ScientificName, c.Settings.BirdNET.Locale)
 
-		// 2. Find label_id for (scientific_name, model_id). We do NOT create
-		// a new label here — if the chosen model doesn't have a label for
-		// this species, the user must pick a different model.
-		if err := tx.Table("labels").
-			Select("id").
-			Where("scientific_name = ? AND model_id = ?", req.ScientificName, newModelID).
-			Scan(&newLabelID).Error; err != nil {
-			return fmt.Errorf("labels lookup failed: %w", err)
-		}
-		if newLabelID == 0 {
-			return fmt.Errorf("species %q not in %s's vocabulary", req.ScientificName, modelDisplayName)
-		}
-
-		// 3. Update detection. Locked check is duplicated here in case the
-		// lock was set between our Get() above and now (TOCTOU). Using
-		// raw_value() COALESCE pattern would also work; explicit
-		// NOT EXISTS keeps it readable.
-		result := tx.Exec(
-			`UPDATE detections
-			    SET label_id = ?, model_id = ?, confidence = ?
-			  WHERE id = ?
-			    AND NOT EXISTS (SELECT 1 FROM detection_locks WHERE detection_id = ?)`,
-			newLabelID, newModelID, req.Confidence, noteIDUint, noteIDUint)
-		if result.Error != nil {
-			return fmt.Errorf("detection update failed: %w", result.Error)
-		}
-		if result.RowsAffected == 0 {
-			// We already confirmed the detection exists via c.DS.Get above,
-			// so a zero-row update after passing the lock-NOT-EXISTS guard
-			// effectively means the lock was acquired between the Get() and
-			// this UPDATE (TOCTOU race). Emit a distinct error so the outer
-			// switch can map it to 409 Conflict instead of a vague 500.
-			return fmt.Errorf("detection %d is locked", noteIDUint)
-		}
-
-		// 4. Upsert the review row. The unique index on detection_id makes
-		// this an ON CONFLICT update; SQLite syntax matches what the rest
-		// of the codebase uses.
-		now := tx.NowFunc()
-		if err := tx.Exec(
-			`INSERT INTO detection_reviews (detection_id, verified, created_at, updated_at)
-			 VALUES (?, 'correct', ?, ?)
-			 ON CONFLICT(detection_id) DO UPDATE
-			    SET verified = excluded.verified, updated_at = excluded.updated_at`,
-			noteIDUint, now, now).Error; err != nil {
-			return fmt.Errorf("review upsert failed: %w", err)
-		}
-
-		return nil
-	})
-
-	if correctionErr != nil {
+	if err := c.Repo.CorrectSpecies(ctx.Request().Context(), idStr, datastore.CorrectSpeciesParams{
+		ScientificName: req.ScientificName,
+		CommonName:     commonName,
+		Confidence:     req.Confidence,
+		Model:          loadedInfo.ToDetectionModelInfo(),
+	}); err != nil {
 		c.logAPIRequest(ctx, logger.LogLevelError, "Species correction failed",
 			logger.String("detection_id", idStr),
 			logger.String("model_id", req.ModelID),
 			logger.String("scientific_name", req.ScientificName),
-			logger.Error(correctionErr))
+			logger.Error(err))
 
-		// Map known-cause errors to precise HTTP statuses. Pattern matching on
-		// the wrapped message is the simplest way to preserve fmt.Errorf-style
-		// errors without introducing sentinel error vars for one handler. Keep
-		// these marker strings in sync with the fmt.Errorf calls inside the
-		// transaction body above.
+		// Map known sentinels to precise statuses. Anything else stays
+		// 500 with a generic client message so DB/schema internals don't
+		// leak through the wrap; the real error is in the structured
+		// log above.
 		status := http.StatusInternalServerError
-		errMsg := strings.ToLower(correctionErr.Error())
-		switch {
-		case strings.Contains(errMsg, "is locked"):
-			status = http.StatusConflict
-		case strings.Contains(errMsg, "does not exist") ||
-			strings.Contains(errMsg, "not present in ai_models"):
-			status = http.StatusNotFound
-		case strings.Contains(errMsg, "not in") ||
-			strings.Contains(errMsg, "is not loaded"):
-			status = http.StatusBadRequest
-		}
-
-		// Only echo the underlying error text to the client for 4xx outcomes
-		// (where it's actionable user feedback). 5xx errors stay generic so
-		// internal DB/schema details from the wrapped Go error don't leak
-		// into the response. The real error is in the structured log above.
 		clientMsg := "Internal error while correcting species"
-		if status < http.StatusInternalServerError {
-			clientMsg = fmt.Sprintf("Failed to correct species: %s", correctionErr.Error())
+		if errors.Is(err, datastore.ErrDetectionLocked) {
+			status = http.StatusConflict
+			clientMsg = "Failed to correct species: detection is locked"
 		}
-		return c.HandleError(ctx, correctionErr, clientMsg, status)
+		return c.HandleError(ctx, err, clientMsg, status)
 	}
 
-	// Resolve a locale-appropriate common name for the response. The
-	// resolver chain on the orchestrator covers both BirdNET's labels and
-	// the v3 geomodel taxonomy CSV companion (PR #3042 upstream), so this
-	// works for any species in either model's vocabulary in 24+ locales.
-	common := bn.ResolveName(req.ScientificName, c.Settings.BirdNET.Locale)
-
-	// Invalidate the detection-list cache so dashboards/species pages reflect
-	// the new label immediately. Without this, the 5-minute species-detection
-	// cache continues serving the pre-correction species name (and stale
-	// confidence/verified state) for any list query that included this
-	// detection — the operator sees the correction stick on the detail page
-	// but the parent list still shows the old label for up to 5 minutes.
-	// Same pattern Delete, Review, and Lock handlers use.
+	// Invalidate the detection-list cache so dashboards/species pages
+	// reflect the new label immediately. Without this, the 5-minute
+	// species-detection cache continues serving the pre-correction
+	// species name (and stale confidence/verified state) for any list
+	// query that included this detection — the operator sees the
+	// correction stick on the detail page but the parent list still
+	// shows the old label for up to 5 minutes. Same pattern Delete,
+	// Review, and Lock handlers use.
 	c.invalidateDetectionCache()
 
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "Species correction applied",
@@ -282,7 +203,7 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, CorrectSpeciesResponse{
 		DetectionID:    existing.ID,
 		ScientificName: req.ScientificName,
-		CommonName:     common,
+		CommonName:     commonName,
 		ModelID:        resolvedID,
 		ModelName:      modelDisplayName,
 		Confidence:     req.Confidence,

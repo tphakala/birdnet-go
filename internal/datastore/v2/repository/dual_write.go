@@ -742,6 +742,36 @@ func (dw *DualWriteRepository) GetReview(ctx context.Context, id string) (string
 	return dw.legacy.GetReview(ctx, id)
 }
 
+// CorrectSpecies applies an operator-driven species correction. Legacy v1
+// gets the authoritative write (so the API's read paths, which still go
+// through c.DS / c.Repo.Get against v1, see the corrected species
+// immediately). When dual-write mode is active we mirror the change to v2
+// fire-and-forget: failures are logged but don't bubble up, matching the
+// pattern SetReview / AddComment use for metadata propagation.
+func (dw *DualWriteRepository) CorrectSpecies(ctx context.Context, id string, params datastore.CorrectSpeciesParams) error {
+	if err := dw.legacy.CorrectSpecies(ctx, id, params); err != nil {
+		return err
+	}
+
+	dualWrite, _ := dw.stateManager.IsInDualWriteMode()
+	if dualWrite && params.Model.Name != "" {
+		uid, err := parseDetectionID(id)
+		if err == nil {
+			if err := WriteSpeciesCorrection(ctx,
+				dw.modelRepo, dw.labelRepo, dw.v2,
+				uid, params.ScientificName, params.Model, params.Confidence,
+			); err != nil {
+				dw.logger.Warn("v2 correction mirror failed",
+					logger.String("id", id),
+					logger.String("scientific", params.ScientificName),
+					logger.Error(err))
+			}
+		}
+	}
+
+	return nil
+}
+
 // AddComment adds a comment to a detection.
 func (dw *DualWriteRepository) AddComment(ctx context.Context, id, comment string) error {
 	if err := dw.legacy.AddComment(ctx, id, comment); err != nil {
