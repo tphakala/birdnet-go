@@ -2,11 +2,9 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -38,7 +36,7 @@ func TestParseOptionalSourceIDs(t *testing.T) {
 		{name: "non-numeric rejected, valid kept", query: "?source_id=foo,7", want: []uint{7}},
 		{name: "empty tokens skipped", query: "?source_id=,1,,3,", want: []uint{1, 3}},
 		{name: "all invalid returns nil", query: "?source_id=foo,bar,0", want: nil},
-		{name: "value with only whitespace returns nil", query: "?source_id=   ", want: nil},
+		{name: "value with only whitespace returns nil", query: "?source_id=%20%20%20", want: nil},
 	}
 
 	c := &Controller{Settings: newValidTestSettings()}
@@ -86,8 +84,12 @@ func TestParseOptionalSourceIDs_Truncation(t *testing.T) {
 }
 
 // TestGetSpeciesSummary_PassesSourceIDsToDatastore verifies the API handler threads the
-// parsed source_id values into the datastore call as a variadic argument. Uses mockery's
-// EXPECT() pattern against MockInterface, matching the variadic with mock.Anything.
+// parsed source_id values into the datastore call as a variadic argument. Each test case
+// pre-expands tc.wantSources into mockery's variadic interface{} slots — mockery treats a
+// single mock.Anything as exactly one variadic value, so a generic "anything" match would
+// only validate the single-source case. The pre-expansion gives us per-slot value matching
+// (so the test fails loudly on misordered or dropped IDs) plus a .Once() assertion that
+// the call happened exactly the way the handler should have made it.
 func TestGetSpeciesSummary_PassesSourceIDsToDatastore(t *testing.T) {
 	t.Parallel()
 
@@ -106,13 +108,12 @@ func TestGetSpeciesSummary_PassesSourceIDsToDatastore(t *testing.T) {
 			t.Parallel()
 			e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-			// Capture the variadic argument the handler passes so we can assert on it.
-			var captured []uint
+			variadicMatchers := make([]any, 0, len(tc.wantSources))
+			for _, id := range tc.wantSources {
+				variadicMatchers = append(variadicMatchers, id)
+			}
 			mockDS.EXPECT().
-				GetSpeciesSummaryData(mock.Anything, "2026-01-01", "2026-01-31", mock.Anything).
-				Run(func(_ context.Context, _, _ string, src ...uint) {
-					captured = slices.Clone(src)
-				}).
+				GetSpeciesSummaryData(mock.Anything, "2026-01-01", "2026-01-31", variadicMatchers...).
 				Return([]datastore.SpeciesSummaryData{}, nil).
 				Once()
 
@@ -123,7 +124,6 @@ func TestGetSpeciesSummary_PassesSourceIDsToDatastore(t *testing.T) {
 			err := controller.GetSpeciesSummary(ctx)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusOK, rec.Code)
-			assert.Equal(t, tc.wantSources, captured, "source_id query param must be passed through to the datastore")
 		})
 	}
 }

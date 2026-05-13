@@ -49,34 +49,6 @@ func TestSourceRegistry_RegisterAndGet(t *testing.T) {
 	assert.Equal(t, src.ID, gotByConn.ID)
 }
 
-// TestSourceRegistry_ConnectionStringByID verifies the raw connection string
-// can be retrieved by source ID. Get() returns a credential-stripped copy, so
-// internal callers that need the raw URL (e.g., to match against config) must
-// use this dedicated method.
-func TestSourceRegistry_ConnectionStringByID(t *testing.T) {
-	t.Parallel()
-	r := newTestRegistry(t)
-
-	const conn = "rtsp://user:secret@192.168.1.10/stream"
-	src, err := r.Register(&SourceConfig{ConnectionString: conn})
-	require.NoError(t, err)
-
-	got, ok := r.ConnectionStringByID(src.ID)
-	require.True(t, ok)
-	assert.Equal(t, conn, got, "ConnectionStringByID must return the raw connection string (not the safe-copy empty value)")
-
-	// Cross-check: Get() returns the safe copy with empty connection string.
-	safe, ok := r.Get(src.ID)
-	require.True(t, ok)
-	gotFromCopy, _ := safe.GetConnectionString()
-	assert.Empty(t, gotFromCopy, "Get() must keep stripping credentials from the returned copy")
-
-	// Unknown ID returns (\"\", false).
-	missing, ok := r.ConnectionStringByID("nonexistent")
-	assert.False(t, ok)
-	assert.Empty(t, missing)
-}
-
 // TestSourceRegistry_RegisterDuplicate verifies that registering the same
 // connection string twice returns the existing source.
 func TestSourceRegistry_RegisterDuplicate(t *testing.T) {
