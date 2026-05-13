@@ -29,7 +29,7 @@ func TestParseOptionalSourceIDs(t *testing.T) {
 		{name: "absent param returns nil", query: "", want: nil},
 		{name: "single id", query: "?source_id=3", want: []uint{3}},
 		{name: "comma-separated list preserves order", query: "?source_id=2,5,1", want: []uint{2, 5, 1}},
-		{name: "whitespace tolerated", query: "?source_id= 2 , 5 ,  1 ", want: []uint{2, 5, 1}},
+		{name: "whitespace tolerated", query: "?source_id=%202%20,%205%20,%20%201%20", want: []uint{2, 5, 1}},
 		{name: "duplicates collapsed", query: "?source_id=1,1,2,2,1", want: []uint{1, 2}},
 		{name: "zero rejected", query: "?source_id=0", want: nil},
 		{name: "negative rejected, valid kept", query: "?source_id=-1,4", want: []uint{4}},
