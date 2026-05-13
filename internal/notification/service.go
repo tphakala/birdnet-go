@@ -226,6 +226,12 @@ func (s *Service) MarkAsRead(id string) error {
 	return s.store.Update(notification)
 }
 
+// MarkAllAsRead marks every unread notification as read in a single
+// store-level operation. Returns the number of notifications changed.
+func (s *Service) MarkAllAsRead() (int, error) {
+	return s.store.MarkAllRead()
+}
+
 // MarkAsAcknowledged updates a notification's status to acknowledged
 func (s *Service) MarkAsAcknowledged(id string) error {
 	if id == "" {
