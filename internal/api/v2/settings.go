@@ -2225,7 +2225,14 @@ func mqttSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		oldMQTT.TLS.ClientKey != newMQTT.TLS.ClientKey
 }
 
-// streamsSettingsChanged checks if stream settings have changed
+// streamsSettingsChanged checks if stream settings have changed in a way that
+// requires the audio engine to reconfigure RTSP sources.
+//
+// Per-stream Models is included: when a user adds or removes a classifier on
+// a stream (e.g., enables Perch v2 alongside BirdNET) the orchestrator must
+// rebind the stream's analysis pipeline. Without this check, the save
+// persists to disk but the running pipeline keeps using the previous model
+// set until a restart — silently breaking the hot-reload contract.
 func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldRTSP := oldSettings.Realtime.RTSP
 	newRTSP := currentSettings.Realtime.RTSP
@@ -2235,7 +2242,7 @@ func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		return true
 	}
 
-	// Check for changes in individual streams (name, URL, type, or transport)
+	// Check for changes in individual streams (name, URL, type, transport, or models)
 	for i := range oldRTSP.Streams {
 		if i >= len(newRTSP.Streams) {
 			return true
@@ -2246,7 +2253,8 @@ func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 			oldStream.URL != newStream.URL ||
 			oldStream.IsEnabled() != newStream.IsEnabled() ||
 			oldStream.Type != newStream.Type ||
-			oldStream.Transport != newStream.Transport {
+			oldStream.Transport != newStream.Transport ||
+			!slices.Equal(oldStream.Models, newStream.Models) {
 			return true
 		}
 	}
