@@ -131,12 +131,16 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 	if registryID, ok := classifier.ResolveConfigModelID(req.ModelID); ok {
 		resolvedID = registryID
 	}
+	// Index-based loop so we don't copy classifier.ModelInfo (~224 bytes)
+	// every iteration just to read .ID. Only the three string fields we
+	// need are pulled out into locals.
 	var modelName, modelVersion, modelDisplayName string
-	for _, info := range bn.ModelInfos() {
-		if info.ID == resolvedID {
-			modelName = info.DetectionName
-			modelVersion = info.DetectionVersion
-			modelDisplayName = info.Name
+	infos := bn.ModelInfos()
+	for i := range infos {
+		if infos[i].ID == resolvedID {
+			modelName = infos[i].DetectionName
+			modelVersion = infos[i].DetectionVersion
+			modelDisplayName = infos[i].Name
 			break
 		}
 	}

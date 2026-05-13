@@ -71,13 +71,13 @@ type ReanalyzePrediction struct {
 // MaxConfidence returns the highest confidence any model produced for this
 // species. Used for sorting the top-N list.
 func (p ReanalyzePrediction) MaxConfidence() float32 {
-	var max float32
+	var best float32
 	for _, c := range p.ByModel {
-		if c > max {
-			max = c
+		if c > best {
+			best = c
 		}
 	}
-	return max
+	return best
 }
 
 // ReanalyzeResponse is the JSON shape returned by the reanalysis endpoint.

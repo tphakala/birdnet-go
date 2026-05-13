@@ -173,7 +173,7 @@ func TestReanalyzeSamples_DoesNotTruncate(t *testing.T) {
 
 	stub := func(_ context.Context, _ string, _ [][]float32) ([]datastore.Results, error) {
 		out := make([]datastore.Results, 0, reanalyzeTopN+5)
-		for i := 0; i < reanalyzeTopN+5; i++ {
+		for i := range reanalyzeTopN + 5 {
 			out = append(out, datastore.Results{
 				Species:    "species_" + string(rune('A'+i)),
 				Confidence: float32(reanalyzeTopN+5-i) / 100.0,
