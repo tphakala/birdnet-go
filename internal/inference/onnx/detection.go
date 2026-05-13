@@ -60,6 +60,7 @@ func buildModelConfig(mt ModelType, inputShape []int64, outputShapes [][]int64) 
 	switch mt {
 	case BirdNETv24:
 		cfg.LogitsIndex = 0
+		cfg.LogitsSize = lastDim(outputShapes[0])
 		if numOutputs >= 2 {
 			if embSize := lastDim(outputShapes[1]); embSize > 0 {
 				cfg.EmbeddingIndex = 1
@@ -68,10 +69,12 @@ func buildModelConfig(mt ModelType, inputShape []int64, outputShapes [][]int64) 
 		}
 	case BirdNETv30:
 		cfg.LogitsIndex = 1
+		cfg.LogitsSize = lastDim(outputShapes[1])
 		cfg.EmbeddingIndex = 0
 		cfg.EmbeddingSize = embeddingSizeV30
 	case PerchV2:
 		cfg.LogitsIndex = 3
+		cfg.LogitsSize = lastDim(outputShapes[3])
 		cfg.EmbeddingIndex = 0
 		cfg.EmbeddingSize = embeddingSizePerch
 	}

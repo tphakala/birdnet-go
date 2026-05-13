@@ -274,7 +274,7 @@ describe('NotificationBell Component', () => {
       await fireEvent.click(markAllButton);
 
       await waitFor(() => {
-        expect(api.put).toHaveBeenCalledWith('/api/v2/notifications/1/read');
+        expect(api.put).toHaveBeenCalledWith('/api/v2/notifications/read-all');
       });
     });
   });

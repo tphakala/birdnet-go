@@ -199,14 +199,10 @@ func (r *SourceRegistry) Get(sourceID string) (*AudioSource, bool) {
 	return r.copySource(src), true
 }
 
-// ConnectionStringByID returns the raw connection string for the source with
-// the given ID, or ("", false) if not found.
-//
-// This bypasses the safe-copy path used by Get() — the returned string may
-// contain credentials. Callers MUST sanitize before logging or exposing to
-// clients (use privacy.SanitizeStreamUrl). Intended for internal lookups
-// that need the exact raw URL (e.g., matching against config entries keyed
-// by URL).
+// ConnectionStringByID returns the raw connection string for the given source
+// ID, or ("", false) if not found. This bypasses the safe-copy path used by
+// Get(); the returned string may contain credentials. Callers MUST sanitize
+// before exposing to API clients (use privacy.SanitizeStreamUrl).
 func (r *SourceRegistry) ConnectionStringByID(sourceID string) (string, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -214,8 +210,7 @@ func (r *SourceRegistry) ConnectionStringByID(sourceID string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	connStr, _ := src.GetConnectionString()
-	return connStr, true
+	return src.connectionString, true
 }
 
 // GetByConnection returns a safe copy of the source registered for the given

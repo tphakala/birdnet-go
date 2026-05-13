@@ -150,22 +150,18 @@ func (c *Controller) initStreamHealthRoutes() {
 		middleware.RateLimiterWithConfig(rateLimiterConfig))
 }
 
-// resolveSourceURL retrieves the raw connection URL for a sourceID from the registry.
-// Returns an empty string if the source is not found.
-//
-// Uses ConnectionStringByID rather than Get(), because Get() returns a
-// credential-stripped safe copy intended for events — calling
-// GetConnectionString() on that copy always yields "", which breaks the
-// downstream config lookup in getStreamInfo (issue #3038).
-//
-// The raw URL is sanitized at the response boundary via
-// privacy.SanitizeStreamUrl in convertStreamHealthToResponse, so no
-// credentials reach API clients.
+// resolveSourceURL retrieves the raw connection URL for a sourceID from the
+// registry. Returns an empty string if the source is not found. The raw URL
+// is needed for matching against config entries; callers that expose the URL
+// to API clients MUST sanitize it first (privacy.SanitizeStreamUrl).
 func (c *Controller) resolveSourceURL(registry *audiocore.SourceRegistry, sourceID string) string {
 	if registry == nil {
 		return ""
 	}
-	connStr, _ := registry.ConnectionStringByID(sourceID)
+	connStr, ok := registry.ConnectionStringByID(sourceID)
+	if !ok {
+		return ""
+	}
 	return connStr
 }
 
