@@ -191,7 +191,10 @@ func (m *mockStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]data
 func (m *mockStore) GetNoteReview(noteID string) (*datastore.NoteReview, error) {
 	return nil, datastore.ErrNoteReviewNotFound
 }
-func (m *mockStore) SaveNoteReview(review *datastore.NoteReview) error              { return nil }
+func (m *mockStore) SaveNoteReview(review *datastore.NoteReview) error { return nil }
+func (m *mockStore) ListAnalyticsSourcesData(_ context.Context) ([]datastore.AnalyticsSourceInfo, error) {
+	return nil, nil
+}
 func (m *mockStore) GetNoteComments(noteID string) ([]datastore.NoteComment, error) { return nil, nil }
 func (m *mockStore) GetNoteResults(noteID string) ([]datastore.Results, error)      { return nil, nil }
 func (m *mockStore) SaveNoteComment(comment *datastore.NoteComment) error           { return nil }

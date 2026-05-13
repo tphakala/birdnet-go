@@ -187,6 +187,9 @@ func (m *ActionMockDatastore) GetNoteReview(_ string) (*datastore.NoteReview, er
 func (m *ActionMockDatastore) SaveNoteReview(_ *datastore.NoteReview) error {
 	return nil
 }
+func (m *ActionMockDatastore) ListAnalyticsSourcesData(_ context.Context) ([]datastore.AnalyticsSourceInfo, error) {
+	return nil, nil
+}
 func (m *ActionMockDatastore) GetNoteComments(_ string) ([]datastore.NoteComment, error) {
 	return nil, nil
 }
