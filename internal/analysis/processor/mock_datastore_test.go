@@ -187,6 +187,9 @@ func (m *ActionMockDatastore) GetNoteReview(_ string) (*datastore.NoteReview, er
 func (m *ActionMockDatastore) SaveNoteReview(_ *datastore.NoteReview) error {
 	return nil
 }
+func (m *ActionMockDatastore) CorrectNoteSpecies(_ context.Context, _ uint, _, _ string, _ float64, _ detection.ModelInfo) error {
+	return nil
+}
 func (m *ActionMockDatastore) GetNoteComments(_ string) ([]datastore.NoteComment, error) {
 	return nil, nil
 }
@@ -478,6 +481,9 @@ func (m *MockDetectionRepository) IsLocked(_ context.Context, _ string) (bool, e
 func (m *MockDetectionRepository) SetReview(_ context.Context, _, _ string) error { return nil }
 func (m *MockDetectionRepository) GetReview(_ context.Context, _ string) (string, error) {
 	return "", nil
+}
+func (m *MockDetectionRepository) CorrectSpecies(_ context.Context, _ string, _ datastore.CorrectSpeciesParams) error {
+	return nil
 }
 func (m *MockDetectionRepository) AddComment(_ context.Context, _, _ string) error { return nil }
 func (m *MockDetectionRepository) GetComments(_ context.Context, _ string) ([]detection.Comment, error) {
