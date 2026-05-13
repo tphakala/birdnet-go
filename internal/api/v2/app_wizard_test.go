@@ -65,6 +65,7 @@ func (f *fakeV2Manager) CheckpointWAL() error { return nil }
 func (f *fakeV2Manager) Delete() error        { return nil }
 func (f *fakeV2Manager) Exists() bool         { return true }
 func (f *fakeV2Manager) IsMySQL() bool        { return false }
+func (f *fakeV2Manager) TablePrefix() string  { return "" }
 
 // newFakeV2ManagerWithDetections creates a fakeV2Manager backed by an
 // in-memory SQLite database.  If count > 0, it inserts that many dummy
