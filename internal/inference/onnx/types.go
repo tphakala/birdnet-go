@@ -66,6 +66,7 @@ type ModelConfig struct {
 	EmbeddingSize  int     // 0 if model doesn't produce embeddings
 	EmbeddingIndex int     // which output tensor contains embeddings, -1 if none
 	LogitsIndex    int     // which output tensor contains logits
+	LogitsSize     int     // actual logits output dimension from model metadata
 	InputShape     []int64 // actual shape from ONNX model
 }
 

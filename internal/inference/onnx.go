@@ -21,6 +21,10 @@ type ONNXClassifierOptions struct {
 	Labels []string
 	// Threads is the number of CPU threads for ONNX inference. 0 = use ONNX defaults.
 	Threads int
+	// SkipLabelValidation disables the label-count-vs-model-output check.
+	// Use when the model is loaded only for embedding extraction and the
+	// caller's label list may not match the model's logits dimension.
+	SkipLabelValidation bool
 }
 
 // onnxClassifier implements Classifier using an ONNX Runtime session.
@@ -40,6 +44,9 @@ func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier
 		ort.WithLabels(opts.Labels),
 		ort.WithTopK(0),          // We handle topK in BirdNET-Go's post-processing
 		ort.WithMinConfidence(0), // No filtering, return all raw scores
+	}
+	if opts.SkipLabelValidation {
+		classifierOpts = append(classifierOpts, ort.WithSkipLabelValidation())
 	}
 	var configErr error
 	if opts.Threads > 0 {
