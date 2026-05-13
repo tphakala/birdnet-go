@@ -199,6 +199,21 @@ func (r *SourceRegistry) Get(sourceID string) (*AudioSource, bool) {
 	return r.copySource(src), true
 }
 
+// ConnectionStringByID returns the raw connection string for the given source
+// ID, or ("", false) if not found. This bypasses the safe-copy path used by
+// Get(); the returned string may contain credentials. Callers MUST sanitize
+// before exposing to API clients (use privacy.SanitizeStreamUrl).
+func (r *SourceRegistry) ConnectionStringByID(sourceID string) (string, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	src, ok := r.sources[sourceID]
+	if !ok {
+		return "", false
+	}
+	connStr, _ := src.GetConnectionString()
+	return connStr, true
+}
+
 // GetByConnection returns a safe copy of the source registered for the given
 // connection string, or (nil, false) if not found.
 func (r *SourceRegistry) GetByConnection(connStr string) (*AudioSource, bool) {
