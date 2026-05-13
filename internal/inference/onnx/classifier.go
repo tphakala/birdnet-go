@@ -286,6 +286,9 @@ func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddin
 	}
 	allLogits := logitsTensor.GetData()
 	logitsSize := c.config.LogitsSize
+	if logitsSize <= 0 {
+		return nil, nil, fmt.Errorf("birdnet: invalid logits size %d", logitsSize)
+	}
 	if logitsSize > len(allLogits) {
 		return nil, nil, fmt.Errorf("birdnet: logits tensor too small: need %d, have %d", logitsSize, len(allLogits))
 	}
@@ -485,6 +488,9 @@ func (c *Classifier) processOutput(outputs []ort.Value, batchIdx int) (*Result, 
 	}
 	allLogits := logitsTensor.GetData()
 	stride := c.config.LogitsSize
+	if stride <= 0 {
+		return nil, fmt.Errorf("birdnet: invalid logits size %d", stride)
+	}
 	start := batchIdx * stride
 	end := start + stride
 	if end > len(allLogits) {
