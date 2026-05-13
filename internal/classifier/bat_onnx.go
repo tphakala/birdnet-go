@@ -45,8 +45,9 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 	}
 
 	embClassifier, err := inference.NewONNXClassifier(cfg.EmbeddingModelPath, inference.ONNXClassifierOptions{
-		Labels:  cfg.EmbeddingLabels,
-		Threads: cfg.Threads,
+		Labels:              cfg.EmbeddingLabels,
+		Threads:             cfg.Threads,
+		SkipLabelValidation: true,
 	})
 	if err != nil {
 		return nil, errors.New(err).

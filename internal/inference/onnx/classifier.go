@@ -22,12 +22,13 @@ type Classifier struct {
 type ClassifierOption func(*classifierConfig)
 
 type classifierConfig struct {
-	modelType     *ModelType
-	labels        []string
-	labelsPath    string
-	topK          int
-	minConf       float32
-	sessionOptsFn func(*ort.SessionOptions)
+	modelType           *ModelType
+	labels              []string
+	labelsPath          string
+	topK                int
+	minConf             float32
+	sessionOptsFn       func(*ort.SessionOptions)
+	skipLabelValidation bool
 }
 
 func defaultClassifierConfig() *classifierConfig {
@@ -60,6 +61,13 @@ func WithTopK(k int) ClassifierOption {
 // WithMinConfidence sets the minimum confidence threshold. Default: 0.0.
 func WithMinConfidence(threshold float32) ClassifierOption {
 	return func(c *classifierConfig) { c.minConf = threshold }
+}
+
+// WithSkipLabelValidation disables the label-count-vs-model-output check.
+// Use when the model is loaded only for embedding extraction and the caller's
+// label list may not match the model's logits output dimension.
+func WithSkipLabelValidation() ClassifierOption {
+	return func(c *classifierConfig) { c.skipLabelValidation = true }
 }
 
 // WithSessionOptions provides a callback to configure the ONNX Runtime session options.
@@ -106,8 +114,10 @@ func NewClassifier(modelPath string, opts ...ClassifierOption) (*Classifier, err
 		return nil, err
 	}
 
-	if err := validateLabelCount(&modelCfg, outputInfos, len(labels)); err != nil {
-		return nil, err
+	if !cfg.skipLabelValidation {
+		if err := validateLabelCount(&modelCfg, outputInfos, len(labels)); err != nil {
+			return nil, err
+		}
 	}
 
 	// Create ONNX session
@@ -275,12 +285,12 @@ func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddin
 		return nil, nil, fmt.Errorf("birdnet: logits tensor has unexpected type")
 	}
 	allLogits := logitsTensor.GetData()
-	numClasses := len(c.labels)
-	if numClasses > len(allLogits) {
-		return nil, nil, fmt.Errorf("birdnet: logits tensor too small: need %d, have %d", numClasses, len(allLogits))
+	logitsSize := c.config.LogitsSize
+	if logitsSize > len(allLogits) {
+		return nil, nil, fmt.Errorf("birdnet: logits tensor too small: need %d, have %d", logitsSize, len(allLogits))
 	}
-	logits = make([]float32, numClasses)
-	copy(logits, allLogits[:numClasses])
+	logits = make([]float32, logitsSize)
+	copy(logits, allLogits[:logitsSize])
 
 	if c.config.EmbeddingIndex >= 0 {
 		embTensor, ok := outputs[c.config.EmbeddingIndex].(*ort.Tensor[float32])
@@ -439,7 +449,7 @@ func (c *Classifier) outputShape(outputIdx, batchSize int) ([]int64, error) {
 	case BirdNETv24:
 		switch outputIdx {
 		case 0:
-			return []int64{batch, int64(len(c.labels))}, nil
+			return []int64{batch, int64(c.config.LogitsSize)}, nil
 		case 1:
 			if c.config.EmbeddingSize > 0 {
 				return []int64{batch, int64(c.config.EmbeddingSize)}, nil
@@ -450,7 +460,7 @@ func (c *Classifier) outputShape(outputIdx, batchSize int) ([]int64, error) {
 		case 0:
 			return []int64{batch, int64(c.config.EmbeddingSize)}, nil
 		case 1:
-			return []int64{batch, int64(len(c.labels))}, nil
+			return []int64{batch, int64(c.config.LogitsSize)}, nil
 		}
 	case PerchV2:
 		switch outputIdx {
@@ -461,7 +471,7 @@ func (c *Classifier) outputShape(outputIdx, batchSize int) ([]int64, error) {
 		case 2:
 			return []int64{batch, 500, 128}, nil
 		case 3:
-			return []int64{batch, int64(len(c.labels))}, nil
+			return []int64{batch, int64(c.config.LogitsSize)}, nil
 		}
 	}
 	return nil, fmt.Errorf("birdnet: unexpected output index %d for model %s", outputIdx, c.config.Type)
@@ -474,9 +484,9 @@ func (c *Classifier) processOutput(outputs []ort.Value, batchIdx int) (*Result, 
 		return nil, fmt.Errorf("birdnet: logits tensor has unexpected type")
 	}
 	allLogits := logitsTensor.GetData()
-	numClasses := len(c.labels)
-	start := batchIdx * numClasses
-	end := start + numClasses
+	stride := c.config.LogitsSize
+	start := batchIdx * stride
+	end := start + stride
 	if end > len(allLogits) {
 		return nil, fmt.Errorf("birdnet: logits tensor too small for batch index %d", batchIdx)
 	}
