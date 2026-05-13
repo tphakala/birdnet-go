@@ -153,12 +153,10 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 	}
 
 	if err := bn.initializeMetaModel(); err != nil {
-		return nil, errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "initialize_range_filter").
-			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
-			Build()
+		GetLogger().Warn("Range filter initialization failed, starting without species filtering (fix via Settings > Species)",
+			logger.Error(err),
+			logger.String("range_filter_model", settings.BirdNET.RangeFilter.Model),
+			logger.String("model_path", settings.BirdNET.RangeFilter.ModelPath))
 	}
 
 	// Normalize and validate locale setting.
