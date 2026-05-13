@@ -330,6 +330,9 @@ type NotificationStore interface {
 	Count(filter *FilterOptions) (int, error)
 	// Update modifies an existing notification
 	Update(notification *Notification) error
+	// MarkAllRead sets every unread, non-toast notification to StatusRead and
+	// returns the number of notifications that were changed.
+	MarkAllRead() (int, error)
 	// Delete removes a notification
 	Delete(id string) error
 	// DeleteExpired removes all expired notifications
@@ -481,6 +484,22 @@ func (s *InMemoryStore) Update(notification *Notification) error {
 
 	s.notifications[notification.ID] = notification.Clone()
 	return nil
+}
+
+// MarkAllRead sets every unread, non-toast notification to StatusRead.
+// Returns the number of notifications that were changed.
+func (s *InMemoryStore) MarkAllRead() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	changed := 0
+	for _, notif := range s.notifications {
+		if notif.Status == StatusUnread && !isToastNotification(notif) {
+			notif.Status = StatusRead
+			changed++
+		}
+	}
+	return changed, nil
 }
 
 // Delete removes a notification

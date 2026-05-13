@@ -199,10 +199,17 @@
     }
   }
 
-  // Mark all as read
+  // Mark all notifications as read via bulk endpoint
   async function markAllAsRead() {
-    const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
-    await Promise.all(unreadIds.map(id => markAsRead(id)));
+    try {
+      await api.put('/api/v2/notifications/read-all');
+      notifications = notifications.map(n => ({ ...n, read: true, status: 'read' }));
+      hasUnread = false;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        toastActions.error(t('notifications.errors.markReadFailed'));
+      }
+    }
   }
 
   // Mark multiple notifications as read (for group actions)
