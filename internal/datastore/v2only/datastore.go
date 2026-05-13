@@ -1476,8 +1476,17 @@ func (ds *Datastore) SaveNoteReview(review *datastore.NoteReview) error {
 // papering over the legacy schema.
 func (ds *Datastore) CorrectNoteSpecies(ctx context.Context, noteID uint, scientific, common string, confidence float64, model detection.ModelInfo) error {
 	_ = common // v2_detections stores common name via label join; no per-detection column
-	return repository.WriteSpeciesCorrection(ctx, ds.model, ds.label, ds.detection,
+	err := repository.WriteSpeciesCorrection(ctx, ds.model, ds.label, ds.detection,
 		noteID, scientific, model, confidence)
+	// Translate the v2 repository's sentinel to the datastore-level
+	// sentinel that callers (correct_species.go) match on with
+	// errors.Is. Without this, the API maps a v2only locked detection
+	// to 500 instead of 409 because the package-private repository.
+	// ErrDetectionLocked doesn't equal datastore.ErrDetectionLocked.
+	if errors.Is(err, repository.ErrDetectionLocked) {
+		return datastore.ErrDetectionLocked
+	}
+	return err
 }
 
 // GetNoteComments retrieves comments for a note.
