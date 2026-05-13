@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -110,7 +111,7 @@ func TestGetSpeciesSummary_PassesSourceIDsToDatastore(t *testing.T) {
 			mockDS.EXPECT().
 				GetSpeciesSummaryData(mock.Anything, "2026-01-01", "2026-01-31", mock.Anything).
 				Run(func(_ context.Context, _, _ string, src ...uint) {
-					captured = append([]uint(nil), src...)
+					captured = slices.Clone(src)
 				}).
 				Return([]datastore.SpeciesSummaryData{}, nil).
 				Once()

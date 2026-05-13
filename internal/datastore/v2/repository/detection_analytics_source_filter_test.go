@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -105,7 +104,7 @@ func TestGetSpeciesSummary_SourceFilter(t *testing.T) {
 	// No t.Parallel(): the shared-cache in-memory SQLite used by setupDetectionTestDB collides
 	// when multiple tests in this package run concurrently.
 	_, repo := setupAnalyticsSourceFixture(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Count rows by scientific name to make assertions readable.
 	countsBySpecies := func(rows []SpeciesSummaryData) map[string]int64 {
@@ -156,7 +155,7 @@ func TestGetHourlyDistribution_SourceFilter(t *testing.T) {
 	// No t.Parallel(): the shared-cache in-memory SQLite used by setupDetectionTestDB collides
 	// when multiple tests in this package run concurrently.
 	_, repo := setupAnalyticsSourceFixture(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Without filter, all 7 seeded detections should be counted across hours.
 	t.Run("no filter aggregates all sources", func(t *testing.T) {
@@ -185,7 +184,7 @@ func TestGetDailyAnalytics_SourceFilter(t *testing.T) {
 	// No t.Parallel(): the shared-cache in-memory SQLite used by setupDetectionTestDB collides
 	// when multiple tests in this package run concurrently.
 	_, repo := setupAnalyticsSourceFixture(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	all, err := repo.GetDailyAnalytics(ctx, 1000, 2000, nil, nil)
 	require.NoError(t, err)
@@ -212,7 +211,7 @@ func TestGetDailyAnalytics_SourceFilter(t *testing.T) {
 // caught the bug because it runs the actual query against SQLite.
 func TestGetSpeciesFirstDetectionInPeriod_SourceFilter(t *testing.T) {
 	_, repo := setupAnalyticsSourceFixture(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Without filter, all three species are first-detected in the window.
 	all, err := repo.GetSpeciesFirstDetectionInPeriod(ctx, 1000, 2000, 50, 0)
@@ -250,7 +249,7 @@ func TestGetNewSpecies_SourceFilter(t *testing.T) {
 	// No t.Parallel(): the shared-cache in-memory SQLite used by setupDetectionTestDB collides
 	// when multiple tests in this package run concurrently.
 	_, repo := setupAnalyticsSourceFixture(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("unfiltered finds all 3 species as new in the window", func(t *testing.T) {
 		rows, err := repo.GetNewSpecies(ctx, 1000, 2000, 50, 0)

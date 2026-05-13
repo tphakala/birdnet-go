@@ -68,6 +68,10 @@ describe('Species (analytics page)', () => {
     globalThis.fetch = mockFetchSequence({
       '/api/v2/analytics/species/summary': () => summary,
       '/api/v2/analytics/species/thumbnails': () => ({}),
+      // Page mounts fetchAudioSources(); without a mock the catch handler
+      // calls loggers.analytics.error(), which is undefined in this test
+      // env and throws an unhandled TypeError.
+      '/api/v2/analytics/sources': () => ({ sources: [] }),
     });
 
     const { container } = speciesTest.render({});
@@ -108,6 +112,8 @@ describe('Species (analytics page)', () => {
       '/api/v2/analytics/species/thumbnails': () => ({
         'Cardinalis cardinalis': '/api/v2/media/image/Cardinalis%20cardinalis',
       }),
+      // Same reason as the first test — fetchAudioSources fires on mount.
+      '/api/v2/analytics/sources': () => ({ sources: [] }),
     });
 
     const { container } = speciesTest.render({});
