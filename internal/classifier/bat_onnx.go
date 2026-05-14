@@ -96,16 +96,10 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 		logger.String("classifier_model", cfg.ClassifierModelPath),
 		logger.Int("bat_species", len(batLabels)))
 
-	var hpFilter *equalizer.FilterChain
-	if conf.Setting().Bat.FilterEnabled {
-		hpFilter = buildBatHPFilter()
-	}
-
 	return &Bat{
 		embeddingExtractor: embExtractor,
 		batClassifier:      batCC,
 		info:               info,
-		hpFilter:           hpFilter,
 	}, nil
 }
 
@@ -249,23 +243,17 @@ func (b *Bat) Labels() []string {
 }
 
 // UpdateFilter rebuilds the high-pass filter from current settings.
-// Called on hot-reload when bat filter settings change.
+// Currently a no-op: the filter is disabled pending bat classifier retraining
+// because it increases false positives with the current model. The filter
+// infrastructure is retained for future use.
 func (b *Bat) UpdateFilter() {
-	log := GetLogger()
-	settings := conf.Setting()
-
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if !settings.Bat.FilterEnabled {
-		if b.hpFilter != nil {
-			log.Info("bat high-pass filter disabled")
-		}
+	if b.hpFilter != nil {
+		GetLogger().Info("bat high-pass filter disabled")
 		b.hpFilter = nil
-		return
 	}
-
-	b.hpFilter = buildBatHPFilter()
 }
 
 // buildBatHPFilter creates a high-pass filter chain from current bat settings.
