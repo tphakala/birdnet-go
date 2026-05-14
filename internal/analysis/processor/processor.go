@@ -822,7 +822,7 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 		return
 	}
 
-	samples := ultrasonic.PCM16ToFloat64(item.PCMdata)
+	samples := convert.BytesToFloat64PCM16(item.PCMdata)
 	cv, ok := ultrasonic.ComputeUSFrameCV(samples, sourceRate, filterCfg)
 	if !ok {
 		GetLogger().Debug("ultrasonic filter: insufficient data for CV computation",
@@ -833,7 +833,7 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 	}
 
 	unlikely := ultrasonic.IsUnlikely(cv, filterCfg)
-	GetLogger().Info("ultrasonic validation filter result",
+	GetLogger().Debug("ultrasonic validation filter result",
 		logger.Float64("us_frame_cv", cv),
 		logger.Float64("threshold", filterCfg.CVThreshold),
 		logger.Bool("unlikely", unlikely),
@@ -844,6 +844,10 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 		for i := range detections {
 			detections[i].Result.Unlikely = true
 		}
+		GetLogger().Info("bat detections tagged as unlikely by ultrasonic filter",
+			logger.Float64("us_frame_cv", cv),
+			logger.String("source", item.Source.DisplayName),
+			logger.Int("detections", len(detections)))
 	}
 }
 

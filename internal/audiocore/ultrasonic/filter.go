@@ -22,6 +22,10 @@ func ComputeUSFrameCV(samples []float64, sampleRate int, cfg conf.UltrasonicFilt
 		return 0, false
 	}
 
+	if cfg.FFTSize&(cfg.FFTSize-1) != 0 {
+		return 0, false
+	}
+
 	if cfg.FrequencySplitHz >= sampleRate/2 {
 		return 0, false
 	}
@@ -65,20 +69,6 @@ func ComputeUSFrameCV(samples []float64, sampleRate int, cfg conf.UltrasonicFilt
 // consistent with bat echolocation.
 func IsUnlikely(cv float64, cfg conf.UltrasonicFilterConfig) bool {
 	return cv < cfg.CVThreshold
-}
-
-// PCM16ToFloat64 converts 16-bit signed PCM bytes (little-endian, mono) to float64 samples
-// normalized to [-1.0, 1.0].
-func PCM16ToFloat64(data []byte) []float64 {
-	numSamples := len(data) / 2
-	samples := make([]float64, numSamples)
-	for i := range numSamples {
-		lo := data[2*i]
-		hi := data[2*i+1]
-		raw := int16(uint16(lo) | uint16(hi)<<8)
-		samples[i] = float64(raw) / 32768.0
-	}
-	return samples
 }
 
 // coefficientOfVariation returns std/mean for the given values.

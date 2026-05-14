@@ -82,6 +82,15 @@ func TestComputeUSFrameCV_FrequencySplitAboveNyquist(t *testing.T) {
 	assert.False(t, ok, "should fail when frequency split >= Nyquist")
 }
 
+func TestComputeUSFrameCV_NonPowerOfTwoFFTSize(t *testing.T) {
+	t.Parallel()
+	cfg := defaultFilterConfig()
+	cfg.FFTSize = 6000
+
+	_, ok := ComputeUSFrameCV(make([]float64, 20000), 256000, cfg)
+	assert.False(t, ok, "should fail when FFTSize is not a power of 2")
+}
+
 func TestComputeUSFrameCV_TooFewFrames(t *testing.T) {
 	t.Parallel()
 	cfg := defaultFilterConfig()
@@ -103,25 +112,6 @@ func TestIsUnlikely(t *testing.T) {
 	assert.True(t, IsUnlikely(0.14, cfg), "CV 0.14 should be unlikely")
 	assert.False(t, IsUnlikely(0.15, cfg), "CV exactly at threshold should not be unlikely")
 	assert.False(t, IsUnlikely(0.50, cfg), "CV 0.50 should not be unlikely")
-}
-
-func TestPCM16ToFloat64(t *testing.T) {
-	t.Parallel()
-
-	// Encode known values as little-endian 16-bit PCM
-	data := []byte{
-		0x00, 0x00, // 0
-		0xFF, 0x7F, // 32767 (max positive)
-		0x01, 0x80, // -32767
-		0x00, 0x80, // -32768 (min)
-	}
-
-	samples := PCM16ToFloat64(data)
-	require.Len(t, samples, 4)
-	assert.InDelta(t, 0.0, samples[0], 1e-6)
-	assert.InDelta(t, 32767.0/32768.0, samples[1], 1e-6)
-	assert.InDelta(t, -32767.0/32768.0, samples[2], 1e-6)
-	assert.InDelta(t, -1.0, samples[3], 1e-6)
 }
 
 func TestHanningWindow(t *testing.T) {
