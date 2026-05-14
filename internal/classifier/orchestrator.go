@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -420,6 +421,11 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		resp.Classifiers = append(resp.Classifiers, cov)
 	}
 	o.mu.RUnlock()
+
+	// Sort classifiers by ID for stable API output (map iteration is random).
+	sort.Slice(resp.Classifiers, func(i, j int) bool {
+		return resp.Classifiers[i].ID < resp.Classifiers[j].ID
+	})
 
 	return resp
 }
