@@ -248,7 +248,7 @@
     { value: 'basic', label: t('settings.notifications.push.services.webhook.auth.basic') },
   ]);
 
-  const ntfyProtocolOptions = $derived([
+  const protocolOptions = $derived([
     { value: 'https', label: 'HTTPS' },
     { value: 'http', label: 'HTTP' },
   ]);
@@ -500,7 +500,9 @@
       }
       case 'gotify': {
         if (serviceFormData.gotifyServer && serviceFormData.gotifyToken) {
-          const server = serviceFormData.gotifyServer.replace(/^https?:\/\//, '');
+          const server = serviceFormData.gotifyServer
+            .replace(/^https?:\/\//i, '')
+            .replace(/\/+$/, '');
           const disableTls = serviceFormData.gotifyProtocol === 'http' ? '?disabletls=yes' : '';
           return `gotify://${server}/${serviceFormData.gotifyToken}${disableTls}`;
         }
@@ -1607,7 +1609,7 @@
                       <div class="flex items-center gap-2 mt-1 flex-wrap">
                         <SelectDropdown
                           bind:value={serviceFormData.ntfyProtocol}
-                          options={ntfyProtocolOptions}
+                          options={protocolOptions}
                           variant="select"
                           size="sm"
                           menuSize="sm"
@@ -1699,12 +1701,13 @@
                         'settings.notifications.push.services.gotify.server.placeholder'
                       )}
                       onchange={value => {
-                        if (value.startsWith('http://')) {
+                        const lower = value.toLowerCase();
+                        if (lower.startsWith('http://')) {
                           serviceFormData.gotifyProtocol = 'http';
-                          serviceFormData.gotifyServer = value.replace(/^http:\/\//, '');
-                        } else if (value.startsWith('https://')) {
+                          serviceFormData.gotifyServer = value.replace(/^https?:\/\//i, '');
+                        } else if (lower.startsWith('https://')) {
                           serviceFormData.gotifyProtocol = 'https';
-                          serviceFormData.gotifyServer = value.replace(/^https:\/\//, '');
+                          serviceFormData.gotifyServer = value.replace(/^https?:\/\//i, '');
                         } else {
                           serviceFormData.gotifyServer = value;
                         }
@@ -1721,7 +1724,7 @@
                       </span>
                       <SelectDropdown
                         bind:value={serviceFormData.gotifyProtocol}
-                        options={ntfyProtocolOptions}
+                        options={protocolOptions}
                         variant="select"
                         size="sm"
                         menuSize="sm"
