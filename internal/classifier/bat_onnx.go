@@ -3,6 +3,7 @@ package classifier
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -12,6 +13,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
+)
+
+const (
+	butterworthQ           = 1.0 / math.Sqrt2
+	defaultFilterCutoffHz  = 4000.0
+	defaultFilterPassCount = 1
 )
 
 // Bat represents a loaded bat detection model that chains BirdNET v2.4
@@ -89,40 +96,9 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 		logger.String("classifier_model", cfg.ClassifierModelPath),
 		logger.Int("bat_species", len(batLabels)))
 
-	settings := conf.Setting()
 	var hpFilter *equalizer.FilterChain
-	if settings.Bat.FilterEnabled {
-		cutoff := settings.Bat.FilterCutoffHz
-		if cutoff <= 0 {
-			cutoff = 4000.0
-		}
-		passes := settings.Bat.FilterPassCount
-		if passes < 1 {
-			passes = 1
-		}
-		hp, hpErr := equalizer.NewHighPass(
-			float64(ModelRegistry[RegistryIDBat].Spec.SampleRate),
-			cutoff,
-			0.707,
-			passes,
-		)
-		if hpErr != nil {
-			log.Error("failed to create bat high-pass filter, continuing without filter",
-				logger.Error(hpErr),
-				logger.Float64("cutoff_hz", cutoff),
-				logger.Int("passes", passes))
-		} else {
-			hpFilter = equalizer.NewFilterChain()
-			if addErr := hpFilter.AddFilter(hp); addErr != nil {
-				log.Error("failed to add bat high-pass filter to chain",
-					logger.Error(addErr))
-				hpFilter = nil
-			} else {
-				log.Info("bat high-pass filter enabled",
-					logger.Float64("cutoff_hz", cutoff),
-					logger.Int("passes", passes))
-			}
-		}
+	if conf.Setting().Bat.FilterEnabled {
+		hpFilter = buildBatHPFilter()
 	}
 
 	return &Bat{
@@ -289,40 +265,49 @@ func (b *Bat) UpdateFilter() {
 		return
 	}
 
+	b.hpFilter = buildBatHPFilter()
+}
+
+// buildBatHPFilter creates a high-pass filter chain from current bat settings.
+// Returns nil if filter creation fails (errors are logged).
+func buildBatHPFilter() *equalizer.FilterChain {
+	log := GetLogger()
+	settings := conf.Setting()
+
 	cutoff := settings.Bat.FilterCutoffHz
 	if cutoff <= 0 {
-		cutoff = 4000.0
+		cutoff = defaultFilterCutoffHz
 	}
 	passes := settings.Bat.FilterPassCount
 	if passes < 1 {
-		passes = 1
+		passes = defaultFilterPassCount
 	}
 
 	hp, err := equalizer.NewHighPass(
 		float64(ModelRegistry[RegistryIDBat].Spec.SampleRate),
 		cutoff,
-		0.707,
+		butterworthQ,
 		passes,
 	)
 	if err != nil {
-		log.Error("failed to create bat high-pass filter on reload",
+		log.Error("failed to create bat high-pass filter",
 			logger.Error(err),
 			logger.Float64("cutoff_hz", cutoff),
 			logger.Int("passes", passes))
-		return
+		return nil
 	}
 
 	chain := equalizer.NewFilterChain()
 	if addErr := chain.AddFilter(hp); addErr != nil {
-		log.Error("failed to add bat high-pass filter to chain on reload",
+		log.Error("failed to add bat high-pass filter to chain",
 			logger.Error(addErr))
-		return
+		return nil
 	}
 
-	b.hpFilter = chain
-	log.Info("bat high-pass filter reloaded",
+	log.Info("bat high-pass filter configured",
 		logger.Float64("cutoff_hz", cutoff),
 		logger.Int("passes", passes))
+	return chain
 }
 
 // Close releases resources held by the bat model.

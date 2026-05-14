@@ -4517,8 +4517,8 @@
         "helpText": "Minimale betrouwbaarheidsscore (0.0 - 1.0) vereist om een detectie vast te leggen."
       },
       "batThreshold": {
-        "label": "Bat Detection Threshold",
-        "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
+        "label": "Vleermuis-detectiedrempel",
+        "helpText": "Minimale betrouwbaarheidsscore voor vleermuissoortdetecties. Geldt alleen voor vleermuisclassificatiemodellen."
       },
       "batFilter": {
         "label": "Vleermuis audio hoogdoorlaatfilter",

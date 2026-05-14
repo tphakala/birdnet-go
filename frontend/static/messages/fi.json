@@ -4517,8 +4517,8 @@
         "helpText": "Vähimmäisluotettavuuspisteet (0.0 - 1.0), joka vaaditaan tunnistuksen tallentamiseen."
       },
       "batThreshold": {
-        "label": "Bat Detection Threshold",
-        "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
+        "label": "Lepakkotunnistuksen kynnysarvo",
+        "helpText": "Vähimmäisluottamusarvo lepakkolajien tunnistuksille. Koskee vain lepakkoluokittelumalleja."
       },
       "batFilter": {
         "label": "Lepakkoäänen ylipäästösuodatin",

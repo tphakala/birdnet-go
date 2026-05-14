@@ -4517,8 +4517,8 @@
         "helpText": "Puntuación mínima de confianza (0.0 - 1.0) requerida para registrar una detección."
       },
       "batThreshold": {
-        "label": "Bat Detection Threshold",
-        "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
+        "label": "Umbral de detección de murciélagos",
+        "helpText": "Puntuación de confianza mínima para detecciones de especies de murciélagos. Solo se aplica a modelos clasificadores de murciélagos."
       },
       "batFilter": {
         "label": "Filtro de paso alto para murciélagos",
