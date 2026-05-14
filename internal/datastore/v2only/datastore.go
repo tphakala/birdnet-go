@@ -1044,16 +1044,17 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	// detection_predictions table (which only stores secondary predictions).
 	// Secondary sort by scientific_name ensures deterministic results when counts are equal.
 	// Excludes detections marked as false_positive.
+	prefix := ds.manager.TablePrefix()
 	db := ds.manager.DB()
-	err = db.Table("detections d").
+	err = db.Table(prefix+"detections d").
 		Select(`
 			l.scientific_name,
 			COUNT(d.id) as count,
 			MAX(d.confidence) as max_confidence,
 			MAX(d.detected_at) as latest_time
 		`).
-		Joins("JOIN labels l ON d.label_id = l.id").
-		Joins("LEFT JOIN detection_reviews dr ON d.id = dr.detection_id").
+		Joins(fmt.Sprintf("JOIN %slabels l ON d.label_id = l.id", prefix)).
+		Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
 		Where("d.detected_at >= ? AND d.detected_at < ?", startTime, endTime).
 		Where("d.confidence >= ?", minConfidenceNormalized).
 		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
@@ -1209,9 +1210,10 @@ func (ds *Datastore) GetBatchHourlyOccurrences(date string, species []string, mi
 
 	var results []result
 	// Exclude detections marked as false_positive
+	prefix := ds.manager.TablePrefix()
 	err = ds.manager.DB().WithContext(ctx).
-		Table("detections d").
-		Joins("LEFT JOIN detection_reviews dr ON d.id = dr.detection_id").
+		Table(prefix+"detections d").
+		Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
 		Select(fmt.Sprintf("d.label_id as label_id, %s as hour, COUNT(*) as count", hourExpr)).
 		Where("d.label_id IN ?", flatLabelIDs).
 		Where("d.detected_at >= ? AND d.detected_at < ?", startOfDay, endOfDay).
@@ -2114,13 +2116,14 @@ func (ds *Datastore) ClearNoteClipPathsByNames(clipNames []string) (int64, error
 	const batchSize = 500
 	var totalAffected int64
 	ctx := context.Background()
+	detectionsTable := ds.manager.TablePrefix() + "detections"
 
 	for i := 0; i < len(clipNames); i += batchSize {
 		end := min(i+batchSize, len(clipNames))
 		batch := clipNames[i:end]
 
 		result := ds.manager.DB().WithContext(ctx).
-			Table("detections").
+			Table(detectionsTable).
 			Where("clip_name IN ?", batch).
 			Update("clip_name", nil)
 		if result.Error != nil {
@@ -2564,11 +2567,12 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 	}
 
 	// Build query to count distinct species per day, excluding false positives
+	prefix := ds.manager.TablePrefix()
 	query := ds.manager.DB().WithContext(ctx).
-		Table("detections d").
+		Table(prefix+"detections d").
 		Select(fmt.Sprintf("%s as date, COUNT(DISTINCT l.scientific_name) as count", dateExpr)).
-		Joins("JOIN labels l ON d.label_id = l.id").
-		Joins("LEFT JOIN detection_reviews dr ON d.id = dr.detection_id").
+		Joins(fmt.Sprintf("JOIN %slabels l ON d.label_id = l.id", prefix)).
+		Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
 		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group(dateExpr).
 		Order("date")
