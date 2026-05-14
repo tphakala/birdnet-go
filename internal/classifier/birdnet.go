@@ -1298,6 +1298,8 @@ func (bn *BirdNET) PrimaryRangeFilterCoverage() (geomodel *GeomodelStatus, prima
 			Version:      rf.Model,
 			TotalSpecies: mrf.inner.NumSpecies(),
 		}
+	} else {
+		primary.WithoutRangeData = primary.TotalSpecies
 	}
 	bn.mu.Unlock()
 
