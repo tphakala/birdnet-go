@@ -213,10 +213,10 @@ func (c *Controller) initRangeRoutes() {
 
 // GetRangeFilterStatus returns introspection data about the active range filter
 // @Summary Get range filter status
-// @Description Returns the active geomodel, mapping statistics, auto-selection status, and threshold
+// @Description Returns per-classifier geomodel coverage, auto-selection status, and threshold
 // @Tags range
 // @Produce json
-// @Success 200 {object} classifier.RangeFilterStatusInfo
+// @Success 200 {object} classifier.RangeFilterStatusResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/status [get]
 func (c *Controller) GetRangeFilterStatus(ctx echo.Context) error {

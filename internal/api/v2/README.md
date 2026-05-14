@@ -171,7 +171,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 | Method | Route                   | Handler                        | Auth | Description                                                      |
 | ------ | ----------------------- | ------------------------------ | ---- | ---------------------------------------------------------------- |
-| GET    | `/range/status`         | `GetRangeFilterStatus`         | ❌   | Range filter model, mapping stats, auto-selection status         |
+| GET    | `/range/status`         | `GetRangeFilterStatus`         | ❌   | Per-classifier geomodel coverage, auto-selection, threshold      |
 | GET    | `/range/species/scores` | `GetRangeFilterSpeciesScores`  | ❌   | All species with raw geomodel scores (no threshold cutoff)       |
 | GET    | `/range/species/count`  | `GetRangeFilterSpeciesCount`   | ❌   | Species count with range filter                                  |
 | GET    | `/range/species/list`   | `GetRangeFilterSpeciesList`    | ❌   | Species list with taxonomy groups                                |
