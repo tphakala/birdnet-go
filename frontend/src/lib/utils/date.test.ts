@@ -5,6 +5,7 @@ import {
   parseLocalDateString,
   isToday,
   isFutureDate,
+  isBeyondTomorrow,
   parseHour,
   getLocalTimeString,
   parseTime,
@@ -187,6 +188,44 @@ describe('Date Utilities', () => {
 
       expect(isFutureDate('2024-01-14')).toBe(false);
       expect(isFutureDate('2023-12-31')).toBe(false);
+    });
+  });
+
+  describe('isBeyondTomorrow', () => {
+    it('should return false for today', () => {
+      const mockDate = new Date('2024-01-15T12:00:00');
+      vi.setSystemTime(mockDate);
+
+      expect(isBeyondTomorrow('2024-01-15')).toBe(false);
+    });
+
+    it('should return false for +1 day (server-ahead timezone tolerance)', () => {
+      const mockDate = new Date('2024-01-15T12:00:00');
+      vi.setSystemTime(mockDate);
+
+      expect(isBeyondTomorrow('2024-01-16')).toBe(false);
+    });
+
+    it('should return false for +2 days (covers UTC+14 vs UTC-12 gap)', () => {
+      const mockDate = new Date('2024-01-15T12:00:00');
+      vi.setSystemTime(mockDate);
+
+      expect(isBeyondTomorrow('2024-01-17')).toBe(false);
+    });
+
+    it('should return true for +3 days (beyond any timezone gap)', () => {
+      const mockDate = new Date('2024-01-15T12:00:00');
+      vi.setSystemTime(mockDate);
+
+      expect(isBeyondTomorrow('2024-01-18')).toBe(true);
+    });
+
+    it('should return false for past dates', () => {
+      const mockDate = new Date('2024-01-15T12:00:00');
+      vi.setSystemTime(mockDate);
+
+      expect(isBeyondTomorrow('2024-01-14')).toBe(false);
+      expect(isBeyondTomorrow('2023-12-31')).toBe(false);
     });
   });
 
