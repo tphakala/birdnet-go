@@ -372,10 +372,56 @@ func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific
 	return scientific, common, code
 }
 
-// RangeFilterStatus returns introspection data about the primary model's
-// active range filter configuration.
-func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusInfo {
-	return o.primary.RangeFilterStatus()
+// RangeFilterStatus returns introspection data about the range filter,
+// including per-classifier geomodel coverage for all active non-bat models.
+func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
+	settings := o.primary.currentSettings()
+	rf := settings.BirdNET.RangeFilter
+
+	geomodel, primaryCoverage, geoLabels, _ := o.primary.PrimaryRangeFilterCoverage()
+
+	resp := RangeFilterStatusResponse{
+		Geomodel:            geomodel,
+		PassUnmappedSpecies: rf.PassUnmappedSpecies,
+		Threshold:           rf.Threshold,
+		LocationConfigured:  settings.BirdNET.LocationConfigured,
+		LastUpdated:         rf.LastUpdated,
+	}
+
+	// Always include the primary classifier.
+	resp.Classifiers = append(resp.Classifiers, primaryCoverage)
+
+	// Add coverage for additional (non-bat) models.
+	o.mu.RLock()
+	for id, entry := range o.models {
+		if entry.instance == nil || id == o.primary.ModelInfo.ID {
+			continue
+		}
+		if id == RegistryIDBat {
+			continue
+		}
+		info, exists := ModelRegistry[id]
+		name := id
+		if exists {
+			name = info.Name
+		}
+		cov := ClassifierCoverage{
+			ID:           id,
+			Name:         name,
+			TotalSpecies: entry.instance.NumSpecies(),
+		}
+		if len(geoLabels) > 0 {
+			cov.WithRangeData, cov.WithoutRangeData = ComputeGeomodelCoverage(
+				entry.instance.Labels(), geoLabels,
+			)
+		} else {
+			cov.WithoutRangeData = cov.TotalSpecies
+		}
+		resp.Classifiers = append(resp.Classifiers, cov)
+	}
+	o.mu.RUnlock()
+
+	return resp
 }
 
 // ReloadRangeFilter reinitializes the range filter on the primary model

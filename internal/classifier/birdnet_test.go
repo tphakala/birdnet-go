@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -160,7 +159,7 @@ func TestBirdNET_SetModelsDir(t *testing.T) {
 	assert.Equal(t, "/some/path", bn.modelsDir)
 }
 
-func TestRangeFilterStatus_NoFilter(t *testing.T) {
+func TestPrimaryRangeFilterCoverage_NoFilter(t *testing.T) {
 	t.Parallel()
 
 	settings := &conf.Settings{}
@@ -170,21 +169,21 @@ func TestRangeFilterStatus_NoFilter(t *testing.T) {
 	bn := &BirdNET{
 		Settings:     settings,
 		speciesCache: make(map[string]*speciesCacheEntry),
-		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4"},
+		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
 	}
 
-	info := bn.RangeFilterStatus()
+	geomodel, primary, geoLabels, autoSelected := bn.PrimaryRangeFilterCoverage()
 
-	assert.Empty(t, info.Model, "model should be empty when no range filter is configured")
-	assert.False(t, info.AutoSelected, "AutoSelected should be false without v3 geomodel")
-	assert.Equal(t, "BirdNET_V2.4", info.ClassifierModel)
-	assert.InDelta(t, 0.05, info.Threshold, 0.001)
-	assert.Zero(t, info.GeomodelSpecies, "GeomodelSpecies should be 0 without a mapped filter")
-	assert.Zero(t, info.MappedSpecies, "MappedSpecies should be 0 without a mapped filter")
-	assert.Zero(t, info.UnmappedSpecies, "UnmappedSpecies should be 0 without a mapped filter")
+	assert.Nil(t, geomodel, "geomodel should be nil when no mapped filter is active")
+	assert.Equal(t, "BirdNET_V2.4", primary.ID)
+	assert.Equal(t, "BirdNET v2.4", primary.Name)
+	assert.Zero(t, primary.WithRangeData)
+	assert.Zero(t, primary.WithoutRangeData)
+	assert.Empty(t, geoLabels)
+	assert.False(t, autoSelected)
 }
 
-func TestRangeFilterStatus_WithMappedFilter(t *testing.T) {
+func TestPrimaryRangeFilterCoverage_WithMappedFilter(t *testing.T) {
 	t.Parallel()
 
 	modelsDir := t.TempDir()
@@ -194,19 +193,14 @@ func TestRangeFilterStatus_WithMappedFilter(t *testing.T) {
 	expectedONNX := filepath.Join(sharedDir, geomodelONNXLocalName)
 	expectedLabels := filepath.Join(sharedDir, geomodelLabelsLocalName)
 
-	lastUpdated := time.Date(2026, 5, 12, 10, 0, 0, 0, time.UTC)
-
 	settings := &conf.Settings{}
 	settings.BirdNET.RangeFilter.Model = "v3"
 	settings.BirdNET.RangeFilter.ModelPath = expectedONNX
 	settings.BirdNET.RangeFilter.LabelsPath = expectedLabels
 	settings.BirdNET.RangeFilter.Threshold = 0.03
 	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
-	settings.BirdNET.RangeFilter.LastUpdated = lastUpdated
 	settings.BirdNET.LocationConfigured = true
 
-	// Build a mappedRangeFilter with known mapping stats.
-	// 3 geomodel species, 4 classifier species, 3 mapped, 1 unmapped.
 	classifierLabels := []string{
 		"Turdus merula_Common Blackbird",
 		"Parus major_Great Tit",
@@ -219,6 +213,9 @@ func TestRangeFilterStatus_WithMappedFilter(t *testing.T) {
 		"Erithacus rubecula_Robin",
 	}
 
+	// NumSpecies() reads from settings.BirdNET.Labels, so populate it.
+	settings.BirdNET.Labels = classifierLabels
+
 	inner := &fakeRangeFilter{
 		scores: make([]float32, len(geomodelLabels)),
 	}
@@ -227,24 +224,23 @@ func TestRangeFilterStatus_WithMappedFilter(t *testing.T) {
 	bn := &BirdNET{
 		Settings:     settings,
 		speciesCache: make(map[string]*speciesCacheEntry),
-		ModelInfo:    ModelInfo{ID: RegistryIDBirdNETV3},
+		ModelInfo:    ModelInfo{ID: RegistryIDBirdNETV3, Name: ModelNameBirdNETv30},
 		modelsDir:    modelsDir,
 		rangeFilter:  mapped,
 	}
 
-	info := bn.RangeFilterStatus()
+	geomodel, primary, geoLabels, autoSelected := bn.PrimaryRangeFilterCoverage()
 
-	assert.Equal(t, "v3", info.Model)
-	assert.Equal(t, expectedONNX, info.ModelPath)
-	assert.Equal(t, expectedLabels, info.LabelsPath)
-	assert.True(t, info.AutoSelected, "paths match auto-selected pattern")
-	assert.Equal(t, RegistryIDBirdNETV3, info.ClassifierModel)
-	assert.Equal(t, len(geomodelLabels), info.GeomodelSpecies)
-	assert.Equal(t, len(classifierLabels), info.ClassifierSpecies)
-	assert.Equal(t, 3, info.MappedSpecies)
-	assert.Equal(t, 1, info.UnmappedSpecies)
-	assert.True(t, info.PassUnmappedSpecies)
-	assert.InDelta(t, 0.03, info.Threshold, 0.001)
-	assert.True(t, info.LocationConfigured)
-	assert.Equal(t, lastUpdated, info.LastUpdated)
+	require.NotNil(t, geomodel)
+	assert.Equal(t, "v3", geomodel.Version)
+	assert.Equal(t, len(geomodelLabels), geomodel.TotalSpecies)
+	assert.True(t, geomodel.AutoSelected)
+	assert.True(t, autoSelected)
+
+	assert.Equal(t, RegistryIDBirdNETV3, primary.ID)
+	assert.Equal(t, len(classifierLabels), primary.TotalSpecies)
+	assert.Equal(t, 3, primary.WithRangeData)
+	assert.Equal(t, 1, primary.WithoutRangeData)
+
+	assert.Equal(t, geomodelLabels, geoLabels)
 }

@@ -1246,69 +1246,73 @@ func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, co
 	return scientific, common, code
 }
 
-// RangeFilterStatusInfo holds introspection data about the active range filter
-// configuration. Used by the API to expose geomodel state without coupling
-// callers to internal types.
-type RangeFilterStatusInfo struct {
-	Model               string    `json:"model"`
-	ModelPath           string    `json:"modelPath"`
-	LabelsPath          string    `json:"labelsPath"`
-	AutoSelected        bool      `json:"autoSelected"`
-	ClassifierModel     string    `json:"classifierModel"`
-	GeomodelSpecies     int       `json:"geomodelSpecies"`
-	ClassifierSpecies   int       `json:"classifierSpecies"`
-	MappedSpecies       int       `json:"mappedSpecies"`
-	UnmappedSpecies     int       `json:"unmappedSpecies"`
-	PassUnmappedSpecies bool      `json:"passUnmappedSpecies"`
-	Threshold           float32   `json:"threshold"`
-	LocationConfigured  bool      `json:"locationConfigured"`
-	LastUpdated         time.Time `json:"lastUpdated"`
+// GeomodelStatus holds metadata about the active geomodel.
+type GeomodelStatus struct {
+	Version      string `json:"version"`
+	TotalSpecies int    `json:"totalSpecies"`
+	AutoSelected bool   `json:"autoSelected"`
 }
 
-// RangeFilterStatus returns introspection data about the active range filter.
-// Safe for concurrent use; acquires bn.mu to read the rangeFilter field.
-func (bn *BirdNET) RangeFilterStatus() RangeFilterStatusInfo {
+// ClassifierCoverage holds the geomodel coverage stats for one classifier.
+type ClassifierCoverage struct {
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	TotalSpecies     int    `json:"totalSpecies"`
+	WithRangeData    int    `json:"withRangeData"`
+	WithoutRangeData int    `json:"withoutRangeData"`
+}
+
+// RangeFilterStatusResponse holds the complete range filter status including
+// per-classifier geomodel coverage. Used by the API to expose geomodel state
+// without coupling callers to internal types.
+type RangeFilterStatusResponse struct {
+	Geomodel            *GeomodelStatus      `json:"geomodel"`
+	Classifiers         []ClassifierCoverage `json:"classifiers"`
+	PassUnmappedSpecies bool                 `json:"passUnmappedSpecies"`
+	Threshold           float32              `json:"threshold"`
+	LocationConfigured  bool                 `json:"locationConfigured"`
+	LastUpdated         time.Time            `json:"lastUpdated"`
+}
+
+// PrimaryRangeFilterCoverage returns the geomodel info and coverage stats for
+// the primary classifier. The orchestrator calls this and then adds coverage
+// for additional models.
+func (bn *BirdNET) PrimaryRangeFilterCoverage() (geomodel *GeomodelStatus, primary ClassifierCoverage, geoLabels []string, autoSelected bool) {
 	settings := bn.currentSettings()
 	rf := settings.BirdNET.RangeFilter
 
-	info := RangeFilterStatusInfo{
-		Model:               rf.Model,
-		ModelPath:           rf.ModelPath,
-		LabelsPath:          rf.LabelsPath,
-		ClassifierModel:     bn.ModelInfo.ID,
-		PassUnmappedSpecies: rf.PassUnmappedSpecies,
-		Threshold:           rf.Threshold,
-		LocationConfigured:  settings.BirdNET.LocationConfigured,
-		LastUpdated:         rf.LastUpdated,
+	primary = ClassifierCoverage{
+		ID:           bn.ModelInfo.ID,
+		Name:         bn.ModelInfo.Name,
+		TotalSpecies: bn.NumSpecies(),
 	}
 
-	// Determine if the geomodel was auto-selected: model must be "v3" and
-	// paths must match the shared directory pattern produced by
-	// applyAutoSelectedGeomodelPaths.
+	bn.mu.Lock()
+	mrf, isMapped := bn.rangeFilter.(*mappedRangeFilter)
+	if isMapped {
+		primary.WithRangeData = mrf.mappedCount
+		primary.WithoutRangeData = mrf.numClassifier - mrf.mappedCount
+		geoLabels = mrf.geomodelLabels
+
+		geomodel = &GeomodelStatus{
+			Version:      rf.Model,
+			TotalSpecies: mrf.inner.NumSpecies(),
+		}
+	}
+	bn.mu.Unlock()
+
 	if rf.Model == "v3" && bn.modelsDir != "" {
 		sharedDir := filepath.Join(bn.modelsDir, "shared")
 		expectedONNX := filepath.Join(sharedDir, geomodelONNXLocalName)
 		expectedLabels := filepath.Join(sharedDir, geomodelLabelsLocalName)
-		info.AutoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
+		autoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
 	}
 
-	// Extract mapping stats from mappedRangeFilter if present.
-	bn.mu.Lock()
-	if mrf, ok := bn.rangeFilter.(*mappedRangeFilter); ok {
-		info.GeomodelSpecies = mrf.inner.NumSpecies()
-		info.ClassifierSpecies = mrf.numClassifier
-		info.MappedSpecies = mrf.mappedCount
-		info.UnmappedSpecies = mrf.numClassifier - mrf.mappedCount
-	} else if bn.rangeFilter != nil {
-		GetLogger().Debug("Range filter is not a mappedRangeFilter",
-			logger.String("type", fmt.Sprintf("%T", bn.rangeFilter)),
-			logger.Int("num_species", bn.rangeFilter.NumSpecies()))
-	} else {
-		GetLogger().Debug("Range filter is nil, species counts will be zero")
+	if geomodel != nil {
+		geomodel.AutoSelected = autoSelected
 	}
-	bn.mu.Unlock()
 
-	return info
+	return geomodel, primary, geoLabels, autoSelected
 }
 
 // SetModelsDir sets the base directory for gallery-installed models.
