@@ -17,7 +17,7 @@
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import { CircleCheck, X } from '@lucide/svelte';
+  import { CircleCheck, CircleHelp, X } from '@lucide/svelte';
   import type { Detection } from '$lib/types/detection.types';
 
   interface Props {
@@ -114,6 +114,14 @@
         />
       </svg>
       {t('detections.status.locked')}
+    </span>
+  {/if}
+
+  <!-- Unlikely Badge -->
+  {#if detection.unlikely}
+    <span class={`badge ${badgeSize} badge-warning gap-1`}>
+      <CircleHelp class={iconSize} />
+      {t('common.review.status.unlikely')}
     </span>
   {/if}
 </div>
