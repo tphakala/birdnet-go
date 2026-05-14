@@ -35,7 +35,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.42.0
 	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
 	github.com/tphakala/go-audio-resampler v1.3.0
-	github.com/tphakala/go-tflite v0.2.2-0.20260403122459-aedbd0bca261
+	github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7
 	github.com/tphakala/simd v1.0.22
 	github.com/yalue/onnxruntime_go v1.30.1
 	go.uber.org/goleak v1.3.0
