@@ -421,6 +421,7 @@ func (r *detectionRepository) noteToResult(note *Note) (*detection.Result, error
 		Sensitivity:    note.Sensitivity,
 		ClipName:       note.ClipName,
 		ProcessingTime: note.ProcessingTime,
+		Unlikely:       note.Unlikely,
 		Occurrence:     note.Occurrence,
 		Verified:       note.Verified,
 		Locked:         note.Locked,

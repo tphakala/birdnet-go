@@ -99,9 +99,9 @@ func TestComputeUSFrameCV_TooFewFrames(t *testing.T) {
 	_, ok := ComputeUSFrameCV(make([]float64, cfg.FFTSize), 256000, cfg)
 	assert.False(t, ok, "should fail with too few STFT frames")
 
-	// FFTSize + HopSize samples = 1 frame, need at least 2
+	// FFTSize + HopSize samples = 2 frames (with +1 formula), which is the minimum
 	_, ok = ComputeUSFrameCV(make([]float64, cfg.FFTSize+cfg.HopSize), 256000, cfg)
-	assert.False(t, ok, "should fail with only 1 STFT frame")
+	assert.True(t, ok, "FFTSize + HopSize should yield 2 frames (minimum for CV)")
 }
 
 func TestIsUnlikely(t *testing.T) {

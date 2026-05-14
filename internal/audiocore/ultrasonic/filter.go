@@ -18,7 +18,7 @@ import (
 // with the configured FFT/hop sizes, sums energy above the frequency split for
 // each frame, and returns std(framePowers)/mean(framePowers).
 func ComputeUSFrameCV(samples []float64, sampleRate int, cfg conf.UltrasonicFilterConfig) (float64, bool) {
-	if len(samples) < cfg.FFTSize || sampleRate <= 0 || cfg.FFTSize <= 0 || cfg.HopSize <= 0 {
+	if len(samples) < cfg.FFTSize || sampleRate <= 0 || cfg.FFTSize < 2 || cfg.HopSize <= 0 {
 		return 0, false
 	}
 
@@ -26,12 +26,12 @@ func ComputeUSFrameCV(samples []float64, sampleRate int, cfg conf.UltrasonicFilt
 		return 0, false
 	}
 
-	if cfg.FrequencySplitHz >= sampleRate/2 {
+	if cfg.FrequencySplitHz < 0 || cfg.FrequencySplitHz >= sampleRate/2 {
 		return 0, false
 	}
 
 	window := hanningWindow(cfg.FFTSize)
-	numFrames := (len(samples) - cfg.FFTSize) / cfg.HopSize
+	numFrames := 1 + (len(samples)-cfg.FFTSize)/cfg.HopSize
 	if numFrames < 2 {
 		return 0, false
 	}
@@ -52,11 +52,12 @@ func ComputeUSFrameCV(samples []float64, sampleRate int, cfg conf.UltrasonicFilt
 
 		var power float64
 		for bin := splitBin; bin <= nyquistBin; bin++ {
-			mag := cmplx.Abs(buf[bin]) * 2.0 / float64(cfg.FFTSize)
-			if bin == 0 || bin == nyquistBin {
-				mag /= 2.0
+			z := buf[bin]
+			p := real(z)*real(z) + imag(z)*imag(z)
+			if bin > 0 && bin < nyquistBin {
+				p *= 2
 			}
-			power += mag * mag
+			power += p
 		}
 		framePowers[frame] = power
 	}

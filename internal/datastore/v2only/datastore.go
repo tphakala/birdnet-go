@@ -806,6 +806,7 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		ProcessingTime: processingTime,
 		Source:         source,
 		Comments:       comments,
+		Unlikely:       det.Unlikely,
 		Verified:       verified,
 		Locked:         locked,
 	}
