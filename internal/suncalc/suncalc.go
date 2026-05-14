@@ -176,6 +176,12 @@ func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error)
 	}, nil
 }
 
+// LocationName returns the IANA timezone name for the observer's location
+// (e.g., "Australia/Sydney", "America/Los_Angeles").
+func (sc *SunCalc) LocationName() string {
+	return sc.location.String()
+}
+
 // GetSunriseTime returns the sunrise time for a given date
 func (sc *SunCalc) GetSunriseTime(date time.Time) (time.Time, error) {
 	sunEventTimes, err := sc.GetSunEventTimes(date)

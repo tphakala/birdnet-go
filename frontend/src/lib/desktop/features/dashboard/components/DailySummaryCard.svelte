@@ -51,7 +51,7 @@ Responsive Breakpoints:
   import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
-  import { getLocalDateString, getLocalTimeString, parseLocalDateString } from '$lib/utils/date';
+  import { getLocalDateString, getDateInTimezone } from '$lib/utils/date';
   import {
     buildHourlyDetectionUrl,
     buildSpeciesDetectionUrl,
@@ -126,6 +126,7 @@ Responsive Breakpoints:
   interface SunTimes {
     sunrise: string; // ISO date string
     sunset: string; // ISO date string
+    timezone: string; // IANA timezone name from server
   }
 
   // Hourly weather data from API
@@ -188,6 +189,7 @@ Responsive Breakpoints:
     onNextDay: () => void;
     onGoToToday: () => void;
     onDateChange: (_date: string) => void;
+    onServerTimezone?: (_timezone: string) => void;
   }
 
   let {
@@ -201,6 +203,7 @@ Responsive Breakpoints:
     onNextDay,
     onGoToToday,
     onDateChange,
+    onServerTimezone,
   }: Props = $props();
 
   // Progressive loading state management
@@ -209,6 +212,9 @@ Responsive Breakpoints:
 
   // Sun times state
   let sunTimes = $state<SunTimes | null>(null);
+
+  // Server timezone from sun times API (used for date constraints)
+  let serverTimezone = $state('');
 
   // Hourly weather state
   let hourlyWeather = $state<HourlyWeatherResponse[]>([]);
@@ -272,6 +278,7 @@ Responsive Breakpoints:
       const sunTimesData: SunTimes = {
         sunrise: responseData.sunrise,
         sunset: responseData.sunset,
+        timezone: responseData.timezone ?? '',
       };
 
       // Cache the result
@@ -295,6 +302,11 @@ Responsive Breakpoints:
         // Only update if this is still the current date (prevents race condition)
         if (selectedDate === currentDate) {
           sunTimes = times;
+          // Propagate server timezone to parent for date navigation constraints
+          if (times?.timezone && times.timezone !== serverTimezone) {
+            serverTimezone = times.timezone;
+            onServerTimezone?.(times.timezone);
+          }
         }
       });
     }
@@ -352,12 +364,17 @@ Responsive Breakpoints:
     }
   });
 
-  // Calculate which hour column corresponds to sunrise/sunset
+  // Calculate which hour column corresponds to sunrise/sunset.
+  // Parses the hour directly from the RFC3339 string to preserve the server's timezone.
+  // Using new Date().getHours() would convert to browser local time, causing wrong
+  // column placement when browser and server are in different timezones (#3005).
   const getSunHourFromTime = (timeStr: string): number | null => {
     if (!timeStr) return null;
     try {
-      const date = new Date(timeStr);
-      return date.getHours();
+      const tIndex = timeStr.indexOf('T');
+      if (tIndex === -1) return null;
+      const hour = parseInt(timeStr.substring(tIndex + 1, tIndex + 3), 10);
+      return isNaN(hour) || hour < 0 || hour > 23 ? null : hour;
     } catch (parseError) {
       logger.error('Error parsing time', parseError, { timeStr });
       return null;
@@ -664,7 +681,11 @@ Responsive Breakpoints:
 
   // LRU cache automatically manages memory, no need for periodic cleanup
 
-  const isToday = $derived(selectedDate === getLocalDateString());
+  // Use server timezone for "today" check when available, falling back to browser local
+  const serverTodayDate = $derived(
+    serverTimezone ? getDateInTimezone(serverTimezone) : getLocalDateString()
+  );
+  const isToday = $derived(selectedDate === serverTodayDate);
 
   // Check for reduced motion preference for performance and accessibility
   const prefersReducedMotion = $derived(
@@ -740,6 +761,7 @@ Responsive Breakpoints:
       value={selectedDate}
       onChange={onDateChange}
       onTodayClick={onGoToToday}
+      maxDate={serverTodayDate}
       className="mx-auto md:mx-2 w-auto"
     />
 
@@ -757,9 +779,9 @@ Responsive Breakpoints:
 
 {#snippet sunIcon(sunType: 'sunrise' | 'sunset', sunTime: string | undefined, shouldShow: boolean)}
   {#if shouldShow && sunTime}
-    {@const parsedDate = parseLocalDateString(sunTime)}
-    {#if parsedDate}
-      {@const formattedTime = getLocalTimeString(parsedDate, false)}
+    {@const tIdx = sunTime.indexOf('T')}
+    {@const formattedTime = tIdx !== -1 ? sunTime.substring(tIdx + 1, tIdx + 6) : ''}
+    {#if formattedTime}
       <div
         class="sun-icon-wrapper"
         title={t(`dashboard.dailySummary.daylight.${sunType}`, { time: formattedTime })}

@@ -80,6 +80,27 @@ export function isFutureDate(dateString: string): boolean {
 }
 
 /**
+ * Get the current date as YYYY-MM-DD in a specific IANA timezone.
+ * Uses Intl.DateTimeFormat for correct DST handling.
+ *
+ * @param timezone - IANA timezone name (e.g., "Australia/Sydney", "America/Los_Angeles")
+ * @returns Date string in YYYY-MM-DD format, or browser local date if timezone is invalid
+ */
+export function getDateInTimezone(timezone: string): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    return formatter.format(new Date());
+  } catch {
+    return getLocalDateString();
+  }
+}
+
+/**
  * Parse a time string (HH:MM:SS) and extract the hour component
  *
  * @param timeString - Time string in HH:MM:SS format
