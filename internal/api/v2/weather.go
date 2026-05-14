@@ -586,6 +586,7 @@ type SunTimesResponse struct {
 	Sunset    time.Time `json:"sunset"`
 	CivilDawn time.Time `json:"civil_dawn"`
 	CivilDusk time.Time `json:"civil_dusk"`
+	Timezone  string    `json:"timezone"` // IANA timezone name derived from observer coordinates
 }
 
 // GetSunTimes handles GET /api/v2/weather/sun/:date
@@ -649,6 +650,7 @@ func (c *Controller) GetSunTimes(ctx echo.Context) error {
 		Sunset:    sunTimes.Sunset,
 		CivilDawn: sunTimes.CivilDawn,
 		CivilDusk: sunTimes.CivilDusk,
+		Timezone:  c.SunCalc.LocationName(),
 	}
 
 	c.logInfoIfEnabled("Calculated sun times",

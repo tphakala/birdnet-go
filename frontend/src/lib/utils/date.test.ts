@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   getLocalDateString,
+  getDateInTimezone,
   parseLocalDateString,
   isToday,
   isFutureDate,
@@ -354,6 +355,36 @@ describe('Date Utilities', () => {
 
       expect(getLocalDateString(endOfYear)).toBe('2023-12-31');
       expect(getLocalDateString(startOfNewYear)).toBe('2024-01-01');
+    });
+  });
+
+  describe('getDateInTimezone', () => {
+    it('should return a valid YYYY-MM-DD string', () => {
+      const result = getDateInTimezone('America/New_York');
+      expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('should return different dates for timezones across the date line', () => {
+      // Fix time to just after midnight UTC so Pacific/Auckland (UTC+12) is already
+      // on the next day while America/Los_Angeles (UTC-7) is still on the previous day
+      vi.setSystemTime(new Date('2024-06-15T00:30:00Z'));
+
+      const auckland = getDateInTimezone('Pacific/Auckland');
+      const losAngeles = getDateInTimezone('America/Los_Angeles');
+
+      // Auckland at UTC 00:30 is Jun 15 12:30 NZST, LA is Jun 14 17:30 PDT
+      expect(auckland).toBe('2024-06-15');
+      expect(losAngeles).toBe('2024-06-14');
+    });
+
+    it('should fall back to local date for invalid timezone', () => {
+      const result = getDateInTimezone('Invalid/Timezone');
+      expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('should handle UTC timezone', () => {
+      vi.setSystemTime(new Date('2024-03-10T12:00:00Z'));
+      expect(getDateInTimezone('UTC')).toBe('2024-03-10');
     });
   });
 });

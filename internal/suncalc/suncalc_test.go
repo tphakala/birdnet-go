@@ -59,6 +59,17 @@ func TestGetSunsetTime(t *testing.T) {
 	assert.False(t, sunset.IsZero(), "sunset time is zero")
 }
 
+func TestLocationName(t *testing.T) {
+	sc := newTestSunCalc()
+
+	name := sc.LocationName()
+	assert.Equal(t, "Europe/Helsinki", name, "expected IANA timezone for Helsinki coordinates")
+
+	// Sydney coordinates
+	scSydney := NewSunCalc(-33.8688, 151.2093)
+	assert.Equal(t, "Australia/Sydney", scSydney.LocationName(), "expected IANA timezone for Sydney coordinates")
+}
+
 func TestCacheConsistency(t *testing.T) {
 	sc := newTestSunCalc()
 	date := midsummerDate()
