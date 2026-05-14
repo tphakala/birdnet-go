@@ -618,7 +618,7 @@ func (p *Processor) startDetectionProcessor() {
 func (p *Processor) processDetections(item classifier.Results) {
 	// Add structured logging for detection pipeline entry
 	GetLogger().Debug("Processing detections from queue",
-		logger.String("source", item.Source.DisplayName),
+		logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
 		logger.String("model_id", item.ModelID),
 		logger.Time("start_time", item.StartTime),
 		logger.Int("results_count", len(item.Results)),
@@ -693,7 +693,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 			GetLogger().Info("Created new pending detection",
 				logger.String("species", commonName),
 				logger.Float64("confidence", confidence),
-				logger.String("source", item.Source.DisplayName),
+				logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
 				logger.String("model_id", item.ModelID),
 				logger.Time("flush_deadline", now.Add(detectionWindow)),
 				logger.String("operation", "create_pending_detection"))
@@ -813,7 +813,8 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 		return
 	}
 
-	sourceRate := p.resolveAudioSource(item.Source).SampleRate
+	resolved := p.resolveAudioSource(item.Source)
+	sourceRate := resolved.SampleRate
 	if sourceRate <= 0 || sourceRate <= filterCfg.FrequencySplitHz*2 {
 		return
 	}
@@ -824,30 +825,30 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 
 	samples := convert.BytesToFloat64PCM16(item.PCMdata)
 	cv, ok := ultrasonic.ComputeUSFrameCV(samples, sourceRate, filterCfg)
+	sourceName := resolved.DisplayName
 	if !ok {
 		GetLogger().Debug("ultrasonic filter: insufficient data for CV computation",
-			logger.String("source", item.Source.DisplayName),
+			logger.String("source", sourceName),
 			logger.Int("sample_count", len(samples)),
 			logger.Int("sample_rate", sourceRate))
 		return
 	}
 
 	unlikely := ultrasonic.IsUnlikely(cv, filterCfg)
-	GetLogger().Debug("ultrasonic validation filter result",
+	logFields := []logger.Field{
 		logger.Float64("us_frame_cv", cv),
 		logger.Float64("threshold", filterCfg.CVThreshold),
 		logger.Bool("unlikely", unlikely),
-		logger.String("source", item.Source.DisplayName),
-		logger.Int("detections", len(detections)))
-
+		logger.String("source", sourceName),
+		logger.Int("detections", len(detections)),
+	}
 	if unlikely {
+		GetLogger().Info("ultrasonic validation: detections tagged unlikely", logFields...)
 		for i := range detections {
 			detections[i].Result.Unlikely = true
 		}
-		GetLogger().Info("bat detections tagged as unlikely by ultrasonic filter",
-			logger.Float64("us_frame_cv", cv),
-			logger.String("source", item.Source.DisplayName),
-			logger.Int("detections", len(detections)))
+	} else {
+		GetLogger().Debug("ultrasonic validation filter result", logFields...)
 	}
 }
 
@@ -1195,7 +1196,7 @@ func (p *Processor) handleDogDetection(settings *conf.Settings, item classifier.
 		GetLogger().Info("dog detection filtered",
 			logger.Float32("confidence", result.Confidence),
 			logger.Float32("threshold", float32(settings.Realtime.DogBarkFilter.Confidence)),
-			logger.String("source", item.Source.DisplayName),
+			logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
 			logger.String("operation", "dog_bark_filter"))
 		p.detectionMutex.Lock()
 		p.LastDogDetection[item.Source.ID] = item.StartTime
@@ -1213,7 +1214,7 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 		GetLogger().Info("human detection filtered",
 			logger.Float32("confidence", result.Confidence),
 			logger.Float32("threshold", float32(settings.Realtime.PrivacyFilter.Confidence)),
-			logger.String("source", item.Source.DisplayName),
+			logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
 			logger.String("operation", "privacy_filter"))
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
 		// bird detections if a human vocalization is detected after the first detection
