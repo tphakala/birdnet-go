@@ -42,6 +42,20 @@ func buildSpeciesMapping(classifierLabels, geomodelLabels []string) []int {
 	return mapping
 }
 
+// ComputeGeomodelCoverage counts how many classifier species have a matching
+// scientific name in the geomodel label set. Returns (withRangeData, withoutRangeData).
+func ComputeGeomodelCoverage(classifierLabels, geomodelLabels []string) (withRangeData, withoutRangeData int) {
+	mapping := buildSpeciesMapping(classifierLabels, geomodelLabels)
+	for _, idx := range mapping {
+		if idx >= 0 {
+			withRangeData++
+		} else {
+			withoutRangeData++
+		}
+	}
+	return withRangeData, withoutRangeData
+}
+
 // extractScientificName returns the scientific name portion from a
 // "ScientificName_CommonName" label string.
 func extractScientificName(label string) string {

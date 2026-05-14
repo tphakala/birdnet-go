@@ -257,3 +257,39 @@ func TestMappedRangeFilter_PredictIncludedSpecies_PropagatesError(t *testing.T) 
 	_, err := mapped.PredictIncludedSpecies(60.0, 25.0, 20.0, 0.1)
 	assert.Error(t, err)
 }
+
+func TestComputeGeomodelCoverage(t *testing.T) {
+	t.Parallel()
+
+	classifierLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Erithacus rubecula_European Robin",
+		"Ficedula hypoleuca_Pied Flycatcher",
+	}
+	geomodelLabels := []string{
+		"Parus major_Great Tit",
+		"Turdus merula_Amsel",
+		"Corvus corax_Northern Raven",
+		"Erithacus rubecula_Robin",
+	}
+
+	withRange, withoutRange := ComputeGeomodelCoverage(classifierLabels, geomodelLabels)
+	assert.Equal(t, 3, withRange, "3 classifier species match geomodel by scientific name")
+	assert.Equal(t, 1, withoutRange, "1 classifier species has no geomodel match")
+}
+
+func TestComputeGeomodelCoverage_EmptyInputs(t *testing.T) {
+	t.Parallel()
+
+	withRange, withoutRange := ComputeGeomodelCoverage(nil, nil)
+	assert.Zero(t, withRange)
+	assert.Zero(t, withoutRange)
+
+	withRange, withoutRange = ComputeGeomodelCoverage(
+		[]string{"Turdus merula_Blackbird"},
+		nil,
+	)
+	assert.Zero(t, withRange)
+	assert.Equal(t, 1, withoutRange)
+}
