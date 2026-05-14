@@ -12,6 +12,7 @@
     "refresh": "Atsvaidzināt",
     "delete": "Dzēst",
     "edit": "Rediģēt",
+    "enabled": "Iespējots",
     "search": "Meklēt",
     "filter": "Filtrs",
     "sort": "Kārtot",
@@ -659,6 +660,8 @@
       },
       "actions": {
         "menuLabel": "Darbības ar sugu {species}",
+        "markCorrect": "Pareizs",
+        "markFalsePositive": "Nepareizs",
         "review": "Pārskatīt atklāšanu",
         "showSpecies": "Rādīt sugu",
         "ignoreSpecies": "Ignorēt sugu",
@@ -764,6 +767,7 @@
     "headers": {
       "dateTime": "Datums un laiks",
       "weather": "Laikapstākļi",
+      "source": "Avots",
       "species": "Suga",
       "confidence": "Ticamība",
       "thumbnail": "Sīktēls",
@@ -1667,6 +1671,7 @@
     "title": "Iestatījumi - BirdNET-Go",
     "loading": "Ielādē iestatījumus...",
     "sections": {
+      "analysis": "Analīze",
       "node": "Galvenie",
       "userinterface": "Saskarne",
       "audio": "Audio",
@@ -2830,6 +2835,10 @@
           "refresh": "Atsvaidzināt ierīces"
         }
       },
+      "noSources": {
+        "warning": "Nav konfigurētu audio avotu",
+        "description": "BirdNET-Go nepieciešama audio ievade, lai noteiktu putnus. Lūdzu, konfigurējiet vismaz vienu avotu cilnē Skaņas karte vai Straumes."
+      },
       "soundCards": {
         "summary": "{count} skaņas kartes avots(-i)",
         "addSource": "Pievienot skaņas karti",
@@ -2874,10 +2883,6 @@
           "recommendedSampleRate": "{rate}kHz ieteicams labākajiem rezultātiem",
           "atLeastOneModel": "Jāizvēlas vismaz viens modelis"
         }
-      },
-      "noSources": {
-        "warning": "Nav konfigurētu audio avotu",
-        "description": "BirdNET-Go nepieciešama audio ievade, lai noteiktu putnus. Lūdzu, konfigurējiet vismaz vienu avotu cilnē Skaņas karte vai Straumes."
       },
       "audioCapture": {
         "title": "Skaņas kartes konfigurācija",
@@ -4052,13 +4057,13 @@
     "labels": {
       "showPassword": "Rādīt paroli",
       "hidePassword": "Slēpt paroli",
-      "copyToClipboard": "Kopēt starpliktuvē",
-      "clearSelection": "Notīrīt atlasi",
-      "selectOption": "Izvēlieties opciju",
       "secretSet": "Iestatīts",
       "changeSecret": "Mainīt",
       "cancelChange": "Atcelt",
-      "enterNewSecret": "Ievadiet jaunu vērtību"
+      "enterNewSecret": "Ievadiet jaunu vērtību",
+      "copyToClipboard": "Kopēt starpliktuvē",
+      "clearSelection": "Notīrīt atlasi",
+      "selectOption": "Izvēlieties opciju"
     },
     "help": {
       "passwordStrength": "Paroles stiprums: {strength}",
@@ -4159,11 +4164,11 @@
       "spectrogramLoading": "Ielādē spektrogrammu...",
       "spectrogramLoaded": "Spektrogramma ielādēta",
       "spectrogramLoadingAria": "Ielādē spektrogrammu",
+      "spectrogramAlt": "Audio spektrogramma",
       "spectrogramGeneratingAria": "Ģenerē spektrogrammu",
       "generating": "Ģenerē...",
       "queuePosition": "Rinda: {position}",
-      "loadError": "Neizdevās ielādēt audio",
-      "spectrogramAlt": "Audio spektrogramma"
+      "loadError": "Neizdevās ielādēt audio"
     },
     "forms": {
       "numberField": {
@@ -4502,7 +4507,18 @@
     }
   },
   "analysis": {
+    "title": "Analīze",
+    "tabs": {
+      "settings": "Settings",
+      "models": "Models"
+    },
     "detection": {
+      "title": "Detection Settings",
+      "description": "Configure confidence thresholds and language for species classification.",
+      "confidenceThreshold": {
+        "label": "Confidence Threshold",
+        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+      },
       "batThreshold": {
         "label": "Sikspārņu noteikšanas slieksnis",
         "helpText": "Minimālais ticamības rādītājs sikspārņu sugu noteikšanai. Attiecas tikai uz sikspārņu klasifikatora modeļiem."
@@ -4518,7 +4534,95 @@
       "batUltrasonicFilter": {
         "label": "Pēcnoteikšanas validācija",
         "helpText": "Kad iespējots, sikspārņu noteikšana tiek pārbaudīta, analizējot ultraskaņas enerģijas modeļus avota ierakstā. Noteikšanas bez eholokācijas pazīmēm tiek atzīmētas kā maz ticamas."
+      },
+      "locale": {
+        "label": "Species Language",
+        "helpText": "Language used for species common names in the interface."
       }
+    },
+    "rangeFilter": {
+      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "status": {
+        "title": "Range Filter Overview",
+        "geomodelInfo": "Geomodel {version} - {species} known species",
+        "autoSelected": "Auto-selected",
+        "manual": "Manual",
+        "classifier": "Classifier",
+        "totalSpecies": "Total Species",
+        "withRangeData": "With Range Data",
+        "withoutRangeData": "Without Range Data",
+        "withRangeDataTooltip": "Species that the geomodel can evaluate for geographic probability at your location",
+        "withoutRangeDataTooltip": "Species without geographic data in the geomodel, handled by the unmapped species setting below",
+        "noFilter": "No range filter active",
+        "passUnmapped": {
+          "label": "Allow species without range data",
+          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+        }
+      }
+    },
+    "advanced": {
+      "title": "Advanced",
+      "description": "Processing and custom model configuration."
+    },
+    "gallery": {
+      "title": "Model Gallery",
+      "description": "Manage classifier models for bird and bat detection.",
+      "tabs": {
+        "installed": "Installed",
+        "available": "Available"
+      },
+      "loading": "Loading models...",
+      "retry": "Retry",
+      "builtIn": "Built-in",
+      "builtInDescription": "Built-in bird species classifier by the BirdNET team.",
+      "species": "{count} species",
+      "install": "Install",
+      "installing": "Installing...",
+      "remove": "Remove",
+      "removing": "Removing...",
+      "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
+      "noAvailableModels": "No additional models available for your platform.",
+      "categories": {
+        "wildlife": "Wildlife Classifiers",
+        "bird": "Bird Classifiers",
+        "bat": "Bat Classifiers"
+      },
+      "progress": {
+        "downloading": "Downloading...",
+        "verifying": "Verifying...",
+        "loading": "Loading...",
+        "complete": "Installed successfully",
+        "failed": "Failed"
+      },
+      "license": {
+        "title": "License Agreement",
+        "model": "Model",
+        "author": "Author",
+        "license": "License",
+        "commercialUse": "Commercial Use",
+        "downloadSize": "Download Size",
+        "allowed": "Allowed",
+        "notAllowed": "Not allowed",
+        "commercialUseAllowed": "Commercial use allowed",
+        "nonCommercialOnly": "Non-commercial use only",
+        "nonCommercialWarning": "This model is licensed for non-commercial use only. By installing, you agree to comply with the license terms.",
+        "acceptAndInstall": "Accept & Install"
+      },
+      "removeDialog": {
+        "title": "Remove {name}?",
+        "confirmation": "This will remove the model files from disk. Label data is retained for existing detections."
+      },
+      "errors": {
+        "catalogLoadFailed": "Failed to load model catalog",
+        "installFailed": "Failed to start model installation",
+        "removeFailed": "Failed to remove model"
+      },
+      "regionLabel": "Region",
+      "speciesLabel": "Species",
+      "reinstall": "Reinstall",
+      "reinstalling": "Reinstalling...",
+      "reinstallComplete": "Files verified successfully",
+      "geomodelBadge": "Includes BirdNET v3.0 geomodel"
     }
   },
   "restart": {

@@ -12,6 +12,7 @@
     "refresh": "Opdater",
     "delete": "Slet",
     "edit": "Rediger",
+    "enabled": "Aktiveret",
     "search": "Søg",
     "filter": "Filtrer",
     "sort": "Sortér",
@@ -659,6 +660,8 @@
       },
       "actions": {
         "menuLabel": "Handlinger for {species}",
+        "markCorrect": "Korrekt",
+        "markFalsePositive": "Ukorrekt",
         "review": "Gennemgå registrering",
         "showSpecies": "Vis art",
         "ignoreSpecies": "Ignorér art",
@@ -764,6 +767,7 @@
     "headers": {
       "dateTime": "Dato og tid",
       "weather": "Vejr",
+      "source": "Kilde",
       "species": "Art",
       "confidence": "Sikkerhed",
       "thumbnail": "Miniaturebillede",
@@ -1667,6 +1671,7 @@
     "title": "Indstillinger - BirdNET-Go",
     "loading": "Indlæser indstillinger...",
     "sections": {
+      "analysis": "Analyse",
       "node": "Generelt",
       "userinterface": "Grænseflade",
       "audio": "Lyd",
@@ -2830,6 +2835,10 @@
           "refresh": "Opdater enheder"
         }
       },
+      "noSources": {
+        "warning": "Ingen lydkilder konfigureret",
+        "description": "BirdNET-Go har brug for en lydindgang for at registrere fugle. Konfigurer venligst mindst én kilde under fanen Lydkort eller Strømme."
+      },
       "soundCards": {
         "summary": "{count} lydkortkilde(r)",
         "addSource": "Tilføj lydkort",
@@ -2874,10 +2883,6 @@
           "recommendedSampleRate": "{rate}kHz anbefalet for bedste resultater",
           "atLeastOneModel": "Mindst én model skal vælges"
         }
-      },
-      "noSources": {
-        "warning": "Ingen lydkilder konfigureret",
-        "description": "BirdNET-Go har brug for en lydindgang for at registrere fugle. Konfigurer venligst mindst én kilde under fanen Lydkort eller Strømme."
       },
       "audioCapture": {
         "title": "Lydkortkonfiguration",
@@ -4052,13 +4057,13 @@
     "labels": {
       "showPassword": "Vis adgangskode",
       "hidePassword": "Skjul adgangskode",
-      "copyToClipboard": "Kopiér til udklipsholder",
-      "clearSelection": "Ryd valg",
-      "selectOption": "Vælg en mulighed",
       "secretSet": "Indstillet",
       "changeSecret": "Skift",
       "cancelChange": "Annuller",
-      "enterNewSecret": "Indtast ny værdi"
+      "enterNewSecret": "Indtast ny værdi",
+      "copyToClipboard": "Kopiér til udklipsholder",
+      "clearSelection": "Ryd valg",
+      "selectOption": "Vælg en mulighed"
     },
     "help": {
       "passwordStrength": "Adgangskodestyrke: {strength}",
@@ -4159,11 +4164,11 @@
       "spectrogramLoading": "Indlæser spektrogram...",
       "spectrogramLoaded": "Spektrogram indlæst",
       "spectrogramLoadingAria": "Indlæser spektrogram",
+      "spectrogramAlt": "Lydspektrogram",
       "spectrogramGeneratingAria": "Genererer spektrogram",
       "generating": "Genererer...",
       "queuePosition": "Kø: {position}",
-      "loadError": "Kunne ikke indlæse lyd",
-      "spectrogramAlt": "Lydspektrogram"
+      "loadError": "Kunne ikke indlæse lyd"
     },
     "forms": {
       "numberField": {
@@ -4502,7 +4507,18 @@
     }
   },
   "analysis": {
+    "title": "Analyse",
+    "tabs": {
+      "settings": "Settings",
+      "models": "Models"
+    },
     "detection": {
+      "title": "Detection Settings",
+      "description": "Configure confidence thresholds and language for species classification.",
+      "confidenceThreshold": {
+        "label": "Confidence Threshold",
+        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+      },
       "batThreshold": {
         "label": "Flagermus-detekteringsgrænse",
         "helpText": "Minimum konfidensscore for flagermusartsdetektioner. Gælder kun for flagermusklassificeringsmodeller."
@@ -4518,7 +4534,95 @@
       "batUltrasonicFilter": {
         "label": "Validering efter detektion",
         "helpText": "Når aktiveret, valideres flagermusdetektioner ved at analysere ultralydsmønstre i kildeoptagelsen. Detektioner uden typiske flagermus-ekkolokationskarakteristika markeres som usandsynlige."
+      },
+      "locale": {
+        "label": "Species Language",
+        "helpText": "Language used for species common names in the interface."
       }
+    },
+    "rangeFilter": {
+      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "status": {
+        "title": "Range Filter Overview",
+        "geomodelInfo": "Geomodel {version} - {species} known species",
+        "autoSelected": "Auto-selected",
+        "manual": "Manual",
+        "classifier": "Classifier",
+        "totalSpecies": "Total Species",
+        "withRangeData": "With Range Data",
+        "withoutRangeData": "Without Range Data",
+        "withRangeDataTooltip": "Species that the geomodel can evaluate for geographic probability at your location",
+        "withoutRangeDataTooltip": "Species without geographic data in the geomodel, handled by the unmapped species setting below",
+        "noFilter": "No range filter active",
+        "passUnmapped": {
+          "label": "Allow species without range data",
+          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+        }
+      }
+    },
+    "advanced": {
+      "title": "Advanced",
+      "description": "Processing and custom model configuration."
+    },
+    "gallery": {
+      "title": "Model Gallery",
+      "description": "Manage classifier models for bird and bat detection.",
+      "tabs": {
+        "installed": "Installed",
+        "available": "Available"
+      },
+      "loading": "Loading models...",
+      "retry": "Retry",
+      "builtIn": "Built-in",
+      "builtInDescription": "Built-in bird species classifier by the BirdNET team.",
+      "species": "{count} species",
+      "install": "Install",
+      "installing": "Installing...",
+      "remove": "Remove",
+      "removing": "Removing...",
+      "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
+      "noAvailableModels": "No additional models available for your platform.",
+      "categories": {
+        "wildlife": "Wildlife Classifiers",
+        "bird": "Bird Classifiers",
+        "bat": "Bat Classifiers"
+      },
+      "progress": {
+        "downloading": "Downloading...",
+        "verifying": "Verifying...",
+        "loading": "Loading...",
+        "complete": "Installed successfully",
+        "failed": "Failed"
+      },
+      "license": {
+        "title": "License Agreement",
+        "model": "Model",
+        "author": "Author",
+        "license": "License",
+        "commercialUse": "Commercial Use",
+        "downloadSize": "Download Size",
+        "allowed": "Allowed",
+        "notAllowed": "Not allowed",
+        "commercialUseAllowed": "Commercial use allowed",
+        "nonCommercialOnly": "Non-commercial use only",
+        "nonCommercialWarning": "This model is licensed for non-commercial use only. By installing, you agree to comply with the license terms.",
+        "acceptAndInstall": "Accept & Install"
+      },
+      "removeDialog": {
+        "title": "Remove {name}?",
+        "confirmation": "This will remove the model files from disk. Label data is retained for existing detections."
+      },
+      "errors": {
+        "catalogLoadFailed": "Failed to load model catalog",
+        "installFailed": "Failed to start model installation",
+        "removeFailed": "Failed to remove model"
+      },
+      "regionLabel": "Region",
+      "speciesLabel": "Species",
+      "reinstall": "Reinstall",
+      "reinstalling": "Reinstalling...",
+      "reinstallComplete": "Files verified successfully",
+      "geomodelBadge": "Includes BirdNET v3.0 geomodel"
     }
   },
   "restart": {

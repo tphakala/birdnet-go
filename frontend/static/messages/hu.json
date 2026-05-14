@@ -12,6 +12,7 @@
     "refresh": "Frissítés",
     "delete": "Törlés",
     "edit": "Szerkesztés",
+    "enabled": "Engedélyezve",
     "search": "Keresés",
     "filter": "Szűrés",
     "sort": "Rendezés",
@@ -391,17 +392,17 @@
         "reconfiguringTelemetry": "Telemetria beállítások frissítése...",
         "reconfiguringPushNotifications": "Push értesítési szolgáltatók újrakonfigurálása...",
         "reconfiguringSpeciesTracking": "Faj követés frissítése...",
+        "recalculatingThresholds": "Dinamikus küszöbértékek újraszámítása az új alapértékhez",
+        "reconfiguringDynamicThresholds": "Dinamikus küszöbértékek újrakonfigurálása...",
         "webserverRestartRequired": "Webszerver beállítások megváltoztak. Újraindítás szükséges.",
         "reconfiguringSoundLevel": "Hangszint monitorozás frissítése...",
         "reconfiguringAudioSources": "Hangforrások újrakonfigurálása...",
+        "rebuildingExtendedCapture": "Kiterjesztett rögzítési szűrő újraépítése...",
         "extendedCaptureRestartRequired": "Kiterjesztett rögzítés beállítások megváltoztak. Újraindítás szükséges.",
         "equalizerUpdateFailed": "A hang EQ beállítások frissítése sikertelen",
         "equalizerUpdated": "Hang EQ beállítások frissítve",
         "savedSuccessfully": "Beállítások sikeresen mentve",
-        "saveFailed": "A beállítások mentése sikertelen",
-        "recalculatingThresholds": "Dinamikus küszöbértékek újraszámítása az új alapértékhez",
-        "reconfiguringDynamicThresholds": "Dinamikus küszöbértékek újrakonfigurálása...",
-        "rebuildingExtendedCapture": "Kiterjesztett rögzítési szűrő újraépítése..."
+        "saveFailed": "A beállítások mentése sikertelen"
       },
       "migration": {
         "startedTitle": "Adatbázis migráció elkezdődött",
@@ -516,6 +517,15 @@
       "unlocked": "Zárolatlan",
       "unlikely": "Valószínűtlen"
     },
+    "review": {
+      "review": "Ellenőrzés",
+      "reviewDetection": "Detektálás ellenőrzése: {species}",
+      "markCorrect": "Megjelölés helyesként",
+      "markFalsePositive": "Megjelölés téves pozitívként",
+      "markedCorrect": "Detektálás helyesként megjelölve",
+      "markedFalsePositive": "Detektálás téves pozitívként megjelölve",
+      "failed": "Az ellenőrzési állapot frissítése sikertelen"
+    },
     "detailsPanel": {
       "audioPlayer": "Hang lejátszó",
       "expandDetails": "Részletek kibontása: {species}",
@@ -533,15 +543,6 @@
       "page": "{current}. oldal / {total}",
       "goToPrevious": "Előző oldal",
       "goToNext": "Következő oldal"
-    },
-    "review": {
-      "review": "Ellenőrzés",
-      "reviewDetection": "Detektálás ellenőrzése: {species}",
-      "markCorrect": "Megjelölés helyesként",
-      "markFalsePositive": "Megjelölés téves pozitívként",
-      "markedCorrect": "Detektálás helyesként megjelölve",
-      "markedFalsePositive": "Detektálás téves pozitívként megjelölve",
-      "failed": "Az ellenőrzési állapot frissítése sikertelen"
     }
   },
   "error": {
@@ -659,6 +660,8 @@
       },
       "actions": {
         "menuLabel": "Műveletek: {species}",
+        "markCorrect": "Megjelölés helyesként",
+        "markFalsePositive": "Megjelölés téves pozitívként",
         "review": "Detektálás áttekintése",
         "showSpecies": "Faj megjelenítése",
         "ignoreSpecies": "Faj figyelmen kívül hagyása",
@@ -764,6 +767,7 @@
     "headers": {
       "dateTime": "Dátum és idő",
       "weather": "Időjárás",
+      "source": "Forrás",
       "species": "Faj",
       "confidence": "Megbízhatóság",
       "thumbnail": "Miniatűr",
@@ -964,11 +968,11 @@
       "frequencyRange": "Frekvencia tartomány",
       "colorMap": "Színtérkép",
       "gain": "Erősítés",
+      "gainTooltip": "Spektrogram megjelenítési erősítés",
       "mute": "Némítás",
       "unmute": "Némítás feloldása",
       "frequencyRangeMin": "Minimum frekvencia",
       "frequencyRangeMax": "Maximum frekvencia",
-      "gainTooltip": "Spektrogram megjelenítési erősítés",
       "audioMonitor": "Hangmonitor"
     },
     "error": {
@@ -1667,6 +1671,7 @@
     "title": "Beállítások - BirdNET-Go",
     "loading": "Beállítások betöltése...",
     "sections": {
+      "analysis": "Elemzés",
       "node": "Általános",
       "userinterface": "Felület",
       "audio": "Hang",
@@ -1707,7 +1712,6 @@
       "setAsDefault": "Beállítás alapértelmezettként",
       "defaultIndicator": "Alapértelmezett bemeneti forrás"
     },
-    "restartRequired": "Néhány változtatáshoz szerver újraindítás szükséges. Kérjük, indítsa újra a BirdNET-Go-t.",
     "main": {
       "tabs": {
         "general": "Általános",
@@ -2831,6 +2835,10 @@
           "refresh": "Eszközök frissítése"
         }
       },
+      "noSources": {
+        "warning": "Nincs hang forrás konfigurálva",
+        "description": "A BirdNET-Go-nak hang bemenetre van szüksége a madarak érzékeléséhez. Kérjük, konfiguráljon legalább egy forrást a Hangszűrő kártya vagy Streamek lapon."
+      },
       "soundCards": {
         "summary": "{count} hangkártya forrás(ok)",
         "addSource": "Hangkártya hozzáadása",
@@ -2875,10 +2883,6 @@
           "recommendedSampleRate": "{rate}kHz ajánlott a legjobb eredményekhez",
           "atLeastOneModel": "Legalább egy modellt ki kell választani"
         }
-      },
-      "noSources": {
-        "warning": "Nincs hang forrás konfigurálva",
-        "description": "A BirdNET-Go-nak hang bemenetre van szüksége a madarak érzékeléséhez. Kérjük, konfiguráljon legalább egy forrást a Hangszűrő kártya vagy Streamek lapon."
       },
       "audioCapture": {
         "title": "Hangszűrő kártya konfiguráció",
@@ -3888,6 +3892,7 @@
         }
       },
       "v2Required": "A riasztási szabályokhoz a bővített adatbázis séma szükséges. Az adatbázist a Rendszer alatti Adatbázis oldalról migrálhatja.",
+      "v2RequiredLink": "Rendszer adatbázis oldal.",
       "builtInRules": {
         "newSpecies": {
           "name": "Új faj detektálva",
@@ -3929,8 +3934,7 @@
           "name": "BirdWeather feltöltés sikertelen",
           "description": "Értesít, amikor egy BirdWeather feltöltés sikertelen"
         }
-      },
-      "v2RequiredLink": "Rendszer adatbázis oldal."
+      }
     },
     "appearance": {
       "colorScheme": "Szín séma",
@@ -3972,7 +3976,8 @@
         "defaultGainHelpText": "Kezdeti erősítés a felvételek lejátszásakor. A madár hangok gyakran halkak, ezért 6-12 dB erősítés ajánlott.",
         "defaultGainUnit": "dB"
       }
-    }
+    },
+    "restartRequired": "Néhány változtatáshoz szerver újraindítás szükséges. Kérjük, indítsa újra a BirdNET-Go-t."
   },
   "auth": {
     "login": "Bejelentkezés",
@@ -4052,13 +4057,13 @@
     "labels": {
       "showPassword": "Jelszó megjelenítése",
       "hidePassword": "Jelszó elrejtése",
-      "copyToClipboard": "Másolás vágólapra",
-      "clearSelection": "Kijelölés törlése",
-      "selectOption": "Opció kiválasztása",
       "secretSet": "Beállítva",
       "changeSecret": "Módosítás",
       "cancelChange": "Mégse",
-      "enterNewSecret": "Új érték megadása"
+      "enterNewSecret": "Új érték megadása",
+      "copyToClipboard": "Másolás vágólapra",
+      "clearSelection": "Kijelölés törlése",
+      "selectOption": "Opció kiválasztása"
     },
     "help": {
       "passwordStrength": "Jelszó erőssége: {strength}",
@@ -4502,7 +4507,18 @@
     }
   },
   "analysis": {
+    "title": "Elemzés",
+    "tabs": {
+      "settings": "Settings",
+      "models": "Models"
+    },
     "detection": {
+      "title": "Detection Settings",
+      "description": "Configure confidence thresholds and language for species classification.",
+      "confidenceThreshold": {
+        "label": "Confidence Threshold",
+        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+      },
       "batThreshold": {
         "label": "Denevér-észlelési küszöb",
         "helpText": "Minimális megbízhatósági pontszám a denevérfajok észleléséhez. Csak a denevérosztályozó modellekre vonatkozik."
@@ -4518,7 +4534,95 @@
       "batUltrasonicFilter": {
         "label": "Utólagos érzékelés-ellenőrzés",
         "helpText": "Bekapcsolva a denevérészleléseket az ultrahang-energiaminták elemzésével ellenőrzi a forrásanyagban. Az echolokációs jellemzőkkel nem rendelkező észleléseket valószínűtlenként jelöli meg."
+      },
+      "locale": {
+        "label": "Species Language",
+        "helpText": "Language used for species common names in the interface."
       }
+    },
+    "rangeFilter": {
+      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "status": {
+        "title": "Range Filter Overview",
+        "geomodelInfo": "Geomodel {version} - {species} known species",
+        "autoSelected": "Auto-selected",
+        "manual": "Manual",
+        "classifier": "Classifier",
+        "totalSpecies": "Total Species",
+        "withRangeData": "With Range Data",
+        "withoutRangeData": "Without Range Data",
+        "withRangeDataTooltip": "Species that the geomodel can evaluate for geographic probability at your location",
+        "withoutRangeDataTooltip": "Species without geographic data in the geomodel, handled by the unmapped species setting below",
+        "noFilter": "No range filter active",
+        "passUnmapped": {
+          "label": "Allow species without range data",
+          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+        }
+      }
+    },
+    "advanced": {
+      "title": "Advanced",
+      "description": "Processing and custom model configuration."
+    },
+    "gallery": {
+      "title": "Model Gallery",
+      "description": "Manage classifier models for bird and bat detection.",
+      "tabs": {
+        "installed": "Installed",
+        "available": "Available"
+      },
+      "loading": "Loading models...",
+      "retry": "Retry",
+      "builtIn": "Built-in",
+      "builtInDescription": "Built-in bird species classifier by the BirdNET team.",
+      "species": "{count} species",
+      "install": "Install",
+      "installing": "Installing...",
+      "remove": "Remove",
+      "removing": "Removing...",
+      "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
+      "noAvailableModels": "No additional models available for your platform.",
+      "categories": {
+        "wildlife": "Wildlife Classifiers",
+        "bird": "Bird Classifiers",
+        "bat": "Bat Classifiers"
+      },
+      "progress": {
+        "downloading": "Downloading...",
+        "verifying": "Verifying...",
+        "loading": "Loading...",
+        "complete": "Installed successfully",
+        "failed": "Failed"
+      },
+      "license": {
+        "title": "License Agreement",
+        "model": "Model",
+        "author": "Author",
+        "license": "License",
+        "commercialUse": "Commercial Use",
+        "downloadSize": "Download Size",
+        "allowed": "Allowed",
+        "notAllowed": "Not allowed",
+        "commercialUseAllowed": "Commercial use allowed",
+        "nonCommercialOnly": "Non-commercial use only",
+        "nonCommercialWarning": "This model is licensed for non-commercial use only. By installing, you agree to comply with the license terms.",
+        "acceptAndInstall": "Accept & Install"
+      },
+      "removeDialog": {
+        "title": "Remove {name}?",
+        "confirmation": "This will remove the model files from disk. Label data is retained for existing detections."
+      },
+      "errors": {
+        "catalogLoadFailed": "Failed to load model catalog",
+        "installFailed": "Failed to start model installation",
+        "removeFailed": "Failed to remove model"
+      },
+      "regionLabel": "Region",
+      "speciesLabel": "Species",
+      "reinstall": "Reinstall",
+      "reinstalling": "Reinstalling...",
+      "reinstallComplete": "Files verified successfully",
+      "geomodelBadge": "Includes BirdNET v3.0 geomodel"
     }
   },
   "restart": {
