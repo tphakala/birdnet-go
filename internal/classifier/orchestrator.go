@@ -343,12 +343,16 @@ func (o *Orchestrator) ReloadBatFilter() {
 	o.mu.RLock()
 	entry, ok := o.models[RegistryIDBat]
 	o.mu.RUnlock()
-	if !ok {
+	if !ok || entry == nil {
 		return
 	}
-	if bat, ok := entry.instance.(*Bat); ok {
-		bat.UpdateFilter()
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	bat, ok := entry.instance.(*Bat)
+	if !ok || bat == nil {
+		return
 	}
+	bat.UpdateFilter()
 }
 
 // RunFilterProcess executes the filter process on demand and prints results.

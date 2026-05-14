@@ -2111,7 +2111,9 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 			if check.action != "" {
 				reconfigActions = append(reconfigActions, check.action)
 			}
-			_ = c.SendToastWithKey(check.toast, check.toastTyp, check.duration, check.toastKey, nil)
+			if check.toast != "" || check.toastKey != "" {
+				_ = c.SendToastWithKey(check.toast, check.toastTyp, check.duration, check.toastKey, nil)
+			}
 		}
 	}
 
