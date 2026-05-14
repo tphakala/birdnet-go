@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -80,6 +81,11 @@ func (s *nighttimeScheduler) refresh(nighttimeOnly bool) {
 			GetLogger().Warn("bat nighttime scheduler has no suncalc instance, bat model will run 24/7",
 				logger.String("operation", "nighttime_scheduler_refresh"))
 		}
+		s.active.Store(true)
+		return
+	}
+
+	if !conf.Setting().BirdNET.LocationConfigured {
 		s.active.Store(true)
 		return
 	}

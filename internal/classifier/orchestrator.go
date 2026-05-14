@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -45,8 +46,9 @@ type Orchestrator struct {
 	primary   *BirdNET // direct access to the primary model
 	modelsDir string   // base directory for gallery-installed models
 
-	// Nighttime scheduling for bat model.
-	scheduler *nighttimeScheduler
+	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
+	// IsModelActive (called on every monitor tick) reads lock-free.
+	scheduler atomic.Pointer[nighttimeScheduler]
 }
 
 // NewOrchestrator creates a new Orchestrator with BirdNET as the primary model
@@ -159,19 +161,16 @@ func (o *Orchestrator) SetSunCalc(sc *suncalc.SunCalc) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	if o.scheduler != nil {
+	if o.scheduler.Load() != nil {
 		return // already started
 	}
 
-	o.scheduler = newNighttimeScheduler(sc)
+	s := newNighttimeScheduler(sc)
+	o.scheduler.Store(s)
 
 	// Only start the scheduler if the bat model is actually loaded.
 	if _, hasBat := o.models[RegistryIDBat]; hasBat {
-		o.scheduler.start(func() bool {
-			return conf.Setting().Bat.NighttimeOnly
-		})
-		GetLogger().Info("bat nighttime scheduler started",
-			logger.String("operation", "set_suncalc"))
+		o.startBatScheduler(s)
 	}
 }
 
@@ -182,11 +181,23 @@ func (o *Orchestrator) IsModelActive(modelID string) bool {
 	if modelID != RegistryIDBat {
 		return true
 	}
-	s := o.scheduler
+	s := o.scheduler.Load()
 	if s == nil {
 		return true // no scheduler = no restriction
 	}
 	return s.isActive()
+}
+
+// startBatScheduler creates a fresh scheduler (preserving the suncalc
+// reference from an existing one if present) and starts it. Handles the
+// unload/reload case where the previous scheduler's stopChan is closed.
+func (o *Orchestrator) startBatScheduler(s *nighttimeScheduler) {
+	nighttimeOnlyFn := func() bool {
+		return conf.Setting().Bat.NighttimeOnly
+	}
+	s.start(nighttimeOnlyFn)
+	GetLogger().Info("bat nighttime scheduler started",
+		logger.String("operation", "bat_scheduler_start"))
 }
 
 // resolveInstalledPaths looks up catalog entries for the given registry ID
@@ -480,8 +491,8 @@ func (o *Orchestrator) Delete() {
 		}
 		entry.mu.Unlock()
 	}
-	if o.scheduler != nil {
-		o.scheduler.stop()
+	if s := o.scheduler.Load(); s != nil {
+		s.stop()
 	}
 	// Nil out references to fail fast on use-after-delete.
 	o.primary = nil
@@ -575,12 +586,14 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 		logger.String("registry_id", registryID))
 
 	// Start nighttime scheduler if bat model was just loaded and suncalc is available.
-	if registryID == RegistryIDBat && o.scheduler != nil {
-		o.scheduler.start(func() bool {
-			return conf.Setting().Bat.NighttimeOnly
-		})
-		log.Info("bat nighttime scheduler started after dynamic load",
-			logger.String("operation", "load_model"))
+	// Create a fresh scheduler to handle the unload/reload case where the
+	// previous scheduler's stopChan was closed.
+	if registryID == RegistryIDBat {
+		if old := o.scheduler.Load(); old != nil && old.sunCalc != nil {
+			s := newNighttimeScheduler(old.sunCalc)
+			o.scheduler.Store(s)
+			o.startBatScheduler(s)
+		}
 	}
 
 	return nil
@@ -625,8 +638,10 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	// Remove from map while holding the write lock so no new PredictModel
 	// calls can obtain this entry.
 	delete(o.models, registryID)
-	if registryID == RegistryIDBat && o.scheduler != nil {
-		o.scheduler.stop()
+	if registryID == RegistryIDBat {
+		if s := o.scheduler.Load(); s != nil {
+			s.stop()
+		}
 	}
 	o.mu.Unlock()
 
