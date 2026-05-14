@@ -280,6 +280,27 @@ func mutateCloneEverywhere(dst *Settings) {
 	dst.Notification.Push.Providers[0] = pp
 }
 
+// TestCloneSettings_IncludedScientificNamesIndependence verifies that
+// IncludedScientificNames is deep-cloned so mutations on the copy do not
+// affect the original.
+func TestCloneSettings_IncludedScientificNamesIndependence(t *testing.T) {
+	t.Parallel()
+
+	src := &Settings{}
+	src.BirdNET.RangeFilter.IncludedScientificNames = map[string]struct{}{
+		"turdus merula": {},
+		"parus major":   {},
+	}
+
+	dst := CloneSettings(src)
+
+	dst.BirdNET.RangeFilter.IncludedScientificNames["corvus corax"] = struct{}{}
+
+	assert.Len(t, src.BirdNET.RangeFilter.IncludedScientificNames, 2,
+		"source map must not be modified by mutation of clone")
+	assert.Len(t, dst.BirdNET.RangeFilter.IncludedScientificNames, 3)
+}
+
 // assertSourceUnchanged verifies that every field touched by
 // mutateCloneEverywhere still holds its original value on src.
 func assertSourceUnchanged(t *testing.T, src *Settings) {
