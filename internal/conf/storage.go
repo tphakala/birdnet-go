@@ -155,8 +155,8 @@ func Load() (*Settings, error) {
 	// API returns correct season dates from the start. Without this,
 	// Viper defaults (Northern Hemisphere) would be served regardless
 	// of the configured latitude.
-	if settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled &&
-		settings.BirdNET.Latitude != 0 {
+	locationConfigured := settings.BirdNET.Latitude != 0 || settings.BirdNET.Longitude != 0
+	if settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled && locationConfigured {
 		settings.Realtime.SpeciesTracking.SeasonalTracking = GetSeasonalTrackingWithHemisphere(
 			settings.Realtime.SpeciesTracking.SeasonalTracking,
 			settings.BirdNET.Latitude,
@@ -419,7 +419,8 @@ func Setting() *Settings {
 func prepareSettingsForSave(s *Settings, latitude float64) Settings {
 	settingsCopy := *s
 
-	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled && latitude != 0 {
+	locationConfigured := latitude != 0 || s.BirdNET.Longitude != 0
+	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled && locationConfigured {
 		settingsCopy.Realtime.SpeciesTracking.SeasonalTracking = GetSeasonalTrackingWithHemisphere(
 			settingsCopy.Realtime.SpeciesTracking.SeasonalTracking,
 			latitude,

@@ -213,10 +213,12 @@ func TestPrepareSettingsForSave_PreservesNorthernForNorthern(t *testing.T) {
 
 	result := prepareSettingsForSave(settings, 45.0)
 
-	spring := result.Realtime.SpeciesTracking.SeasonalTracking.Seasons["spring"]
+	spring, exists := result.Realtime.SpeciesTracking.SeasonalTracking.Seasons["spring"]
+	require.True(t, exists, "Expected spring season")
 	assert.Equal(t, 3, spring.StartMonth, "Northern hemisphere spring should stay in March")
 
-	winter := result.Realtime.SpeciesTracking.SeasonalTracking.Seasons["winter"]
+	winter, exists := result.Realtime.SpeciesTracking.SeasonalTracking.Seasons["winter"]
+	require.True(t, exists, "Expected winter season")
 	assert.Equal(t, 12, winter.StartMonth, "Northern hemisphere winter should stay in December")
 }
 
@@ -270,6 +272,33 @@ func TestPrepareSettingsForSave_SkipsUnconfiguredLatitude(t *testing.T) {
 	spring := result.Realtime.SpeciesTracking.SeasonalTracking.Seasons["spring"]
 	assert.Equal(t, 3, spring.StartMonth,
 		"Seasons should be unchanged when latitude is 0 (unconfigured)")
+}
+
+// TestPrepareSettingsForSave_PreservesCustomSeasonNames verifies that non-standard
+// season names are not replaced by hemisphere defaults.
+func TestPrepareSettingsForSave_PreservesCustomSeasonNames(t *testing.T) {
+	t.Parallel()
+
+	customSeasons := map[string]Season{
+		"monsoon": {StartMonth: 6, StartDay: 1},
+		"dry":     {StartMonth: 11, StartDay: 1},
+	}
+
+	settings := &Settings{}
+	settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
+	settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = maps.Clone(customSeasons)
+
+	result := prepareSettingsForSave(settings, -33.9)
+
+	require.Len(t, result.Realtime.SpeciesTracking.SeasonalTracking.Seasons, 2)
+
+	monsoon, exists := result.Realtime.SpeciesTracking.SeasonalTracking.Seasons["monsoon"]
+	require.True(t, exists, "Expected monsoon season to be preserved")
+	assert.Equal(t, 6, monsoon.StartMonth, "Custom season dates should not be changed")
+
+	dry, exists := result.Realtime.SpeciesTracking.SeasonalTracking.Seasons["dry"]
+	require.True(t, exists, "Expected dry season to be preserved")
+	assert.Equal(t, 11, dry.StartMonth, "Custom season dates should not be changed")
 }
 
 // TestPrepareSettingsForSave_DoesNotMutateInput verifies original settings unchanged.
