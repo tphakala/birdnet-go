@@ -4507,6 +4507,10 @@
       "batFilter": {
         "label": "Filtro passa-alto audio pipistrelli",
         "helpText": "Filtra le frequenze udibili dall'uomo prima dell'analisi dei pipistrelli per ridurre i falsi positivi causati dal canto degli uccelli e dal rumore ambientale."
+      },
+      "batNighttimeOnly": {
+        "label": "Solo di notte",
+        "helpText": "Se abilitato, il rilevamento dei pipistrelli funziona solo tra il crepuscolo civile e l'alba civile. Richiede la configurazione della posizione. Disabilita per eseguire il rilevamento continuamente."
       }
     }
   },

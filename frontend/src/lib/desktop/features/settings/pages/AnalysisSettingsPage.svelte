@@ -136,7 +136,9 @@
     }
   );
   let falsePositiveFilter = $derived($realtimeSettings?.falsePositiveFilter ?? { level: 0 });
-  let bat = $derived($batSettings ?? { enabled: false, threshold: 0.5, filterEnabled: false });
+  let bat = $derived(
+    $batSettings ?? { enabled: false, threshold: 0.5, filterEnabled: false, nighttimeOnly: true }
+  );
 
   // Check if a bat model is installed
   const hasBatModel = $derived(catalog.some(e => e.installed && e.category === 'bat'));
@@ -660,6 +662,10 @@
     settingsActions.updateSection('bat', { filterEnabled: value });
   }
 
+  function updateBatNighttimeOnly(value: boolean) {
+    settingsActions.updateSection('bat', { nighttimeOnly: value });
+  }
+
   function updateThreshold(value: number) {
     settingsActions.updateSection('birdnet', { threshold: value });
   }
@@ -893,12 +899,14 @@
         locale: store.originalData.birdnet?.locale,
         batThreshold: store.originalData.bat?.threshold,
         batFilterEnabled: store.originalData.bat?.filterEnabled,
+        batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
       }}
       currentData={{
         threshold: birdnet?.threshold,
         locale: birdnet?.locale,
         batThreshold: bat.threshold,
         batFilterEnabled: bat.filterEnabled,
+        batNighttimeOnly: bat.nighttimeOnly,
       }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -961,6 +969,13 @@
             helpText={t('analysis.detection.batFilter.helpText')}
             disabled={store.isLoading || store.isSaving}
             onchange={updateBatFilterEnabled}
+          />
+          <Checkbox
+            checked={bat.nighttimeOnly ?? true}
+            label={t('analysis.detection.batNighttimeOnly.label')}
+            helpText={t('analysis.detection.batNighttimeOnly.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={updateBatNighttimeOnly}
           />
         {/if}
       </div>
