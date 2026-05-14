@@ -174,7 +174,7 @@ flowchart TB
         F1[Human voice privacy filter]
         F2[Species exclusion list]
         F3[Confidence threshold\nper-species or global]
-        F4[Range filter\nGeomodel v3.0]
+        F4[Range filter\nBirdNET Geomodel v3.0]
         F5[Ultrasonic CV filter\nbat only]
     end
 
@@ -249,14 +249,14 @@ At flush time, the total hit count is the **sum across all models**. This means:
 
 The `BestModelID` field tracks which model produced the highest individual confidence score. This model is credited as the primary detector in the database record, while per-model contributions are stored separately in the `DetectionModelContribution` table.
 
-### Range Filter (Geomodel v3.0)
+### Range Filter (BirdNET Geomodel v3.0)
 
 The range filter limits detections to species that are geographically plausible at the configured location and time of year.
 
 | Model | Range Filtered? | Reason |
 |-------|----------------|--------|
 | BirdNET v2.4 | Always | BirdNET species are in the geomodel |
-| Perch v2 | Only with Geomodel v3.0 | v3 covers Perch's expanded label set |
+| Perch v2 | Only with BirdNET Geomodel v3.0 | v3 covers Perch's expanded label set |
 | BattyBirdNET | Never | Bat species have independent range data |
 | BSG | Never | Independent species set |
 
