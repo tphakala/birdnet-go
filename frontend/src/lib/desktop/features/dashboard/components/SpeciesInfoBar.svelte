@@ -124,14 +124,15 @@
 
   /* Species thumbnail */
   /* 4:3 aspect ratio to match avicommons 320×240 source images */
+  /* Colors are overlay-specific: this bar sits on a dark image, not a themed surface */
   .species-thumbnail {
     flex-shrink: 0;
     width: 3.5rem;
     height: 2.625rem;
     border-radius: 0.5rem;
     overflow: hidden;
-    border: 2px solid color-mix(in srgb, var(--color-base-content) 20%, transparent);
-    background-color: var(--color-base-300);
+    border: 2px solid rgb(255 255 255 / 0.15);
+    background-color: rgb(15 23 42 / 0.6);
   }
 
   .thumbnail-image {
@@ -192,8 +193,8 @@
     padding: 0 0.375rem;
     height: 1rem;
     border-radius: 9999px;
-    background-color: color-mix(in srgb, var(--color-base-content) 15%, transparent);
-    color: var(--text-muted);
+    background-color: rgb(255 255 255 / 0.12);
+    color: rgb(255 255 255 / 0.75);
     font-size: 0.625rem;
     font-weight: 500;
   }
@@ -214,7 +215,7 @@
   .scientific-name {
     font-size: 0.8125rem;
     font-style: italic;
-    color: var(--text-muted);
+    color: rgb(255 255 255 / 0.65);
     line-height: 1.3;
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
   }
@@ -238,7 +239,7 @@
 
   .relative-time {
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: rgb(255 255 255 / 0.65);
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
   }
 </style>
