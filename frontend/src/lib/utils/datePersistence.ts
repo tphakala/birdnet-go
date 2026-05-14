@@ -48,11 +48,11 @@ export function getDateFromURL(urlParam: string = DATE_URL_PARAM): string | null
 
     if (!dateStr) return null;
 
-    // Validate format and reject dates too far ahead (tolerates +1 day
+    // Validate format and reject dates too far ahead (tolerates up to +2 days
     // for server-ahead timezones where server timezone isn't yet known)
     const parsedDate = parseLocalDateString(dateStr);
     if (!parsedDate || isBeyondTomorrow(dateStr)) {
-      logger.debug('Invalid or future date in URL', { date: dateStr });
+      logger.debug('Invalid or too-far-ahead date in URL', { date: dateStr });
       return null;
     }
 
@@ -126,7 +126,7 @@ export function getStoredDate(
       return null;
     }
 
-    // Reject dates too far ahead (tolerates +1 day for server-ahead timezones)
+    // Reject dates too far ahead (tolerates up to +2 days for server-ahead timezones)
     if (isBeyondTomorrow(stored.date)) {
       logger.debug('Stored date is too far in the future', { date: stored.date });
       window.localStorage.removeItem(storageKey);

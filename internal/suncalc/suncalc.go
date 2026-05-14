@@ -125,6 +125,9 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 		clear(sc.cache)
 	}
 	sc.cache[dateKey] = cacheEntry{times: times}
+	if sc.metrics != nil {
+		sc.metrics.UpdateCacheSize(float64(len(sc.cache)))
+	}
 	sc.lock.Unlock()
 
 	// Record successful operation and update sun time gauges
