@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -15,10 +16,13 @@ const schedulerRefreshInterval = 60 * time.Second
 // based on civil dusk/dawn times. A background goroutine refreshes the
 // state every 60 seconds so the hot path is a single atomic load.
 type nighttimeScheduler struct {
-	sunCalc  *suncalc.SunCalc
-	active   atomic.Bool
-	stopChan chan struct{}
-	warnOnce atomic.Bool
+	sunCalc      *suncalc.SunCalc
+	active       atomic.Bool
+	stopChan     chan struct{}
+	stopOnce     sync.Once
+	warnOnce     atomic.Bool
+	locationWarn atomic.Bool
+	prevNight    atomic.Int32 // -1=unset, 0=day, 1=night; for transition logging
 }
 
 // newNighttimeScheduler creates a scheduler. If sunCalc is nil, the
@@ -28,7 +32,8 @@ func newNighttimeScheduler(sc *suncalc.SunCalc) *nighttimeScheduler {
 		sunCalc:  sc,
 		stopChan: make(chan struct{}),
 	}
-	s.active.Store(true) // fail open: active until first refresh
+	s.active.Store(true)  // fail open: active until first refresh
+	s.prevNight.Store(-1) // unset; first refresh will log the initial state
 	return s
 }
 
@@ -53,14 +58,11 @@ func (s *nighttimeScheduler) start(nighttimeOnlyFn func() bool) {
 	}()
 }
 
-// stop terminates the background goroutine.
+// stop terminates the background goroutine. Safe for concurrent callers.
 func (s *nighttimeScheduler) stop() {
-	select {
-	case <-s.stopChan:
-		// already closed
-	default:
+	s.stopOnce.Do(func() {
 		close(s.stopChan)
-	}
+	})
 }
 
 // isActive returns the precomputed bat-active state. Single atomic load.
@@ -86,11 +88,31 @@ func (s *nighttimeScheduler) refresh(nighttimeOnly bool) {
 	}
 
 	if !conf.Setting().BirdNET.LocationConfigured {
+		if s.locationWarn.CompareAndSwap(false, true) {
+			GetLogger().Warn("bat nighttime scheduler: location not configured, bat model will run 24/7",
+				logger.String("operation", "nighttime_scheduler_refresh"))
+		}
 		s.active.Store(true)
 		return
 	}
 
-	s.active.Store(isNighttime(s.sunCalc, time.Now()))
+	night := isNighttime(s.sunCalc, time.Now())
+	s.active.Store(night)
+
+	var nightInt int32
+	if night {
+		nightInt = 1
+	}
+	prev := s.prevNight.Swap(nightInt)
+	if prev != nightInt {
+		if night {
+			GetLogger().Info("bat detection activated (nighttime)",
+				logger.String("operation", "nighttime_scheduler_transition"))
+		} else {
+			GetLogger().Info("bat detection paused (daytime)",
+				logger.String("operation", "nighttime_scheduler_transition"))
+		}
+	}
 }
 
 // isNighttime checks if the given time falls within the nighttime window
