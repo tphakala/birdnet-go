@@ -1294,8 +1294,13 @@ func (bn *BirdNET) PrimaryRangeFilterCoverage() (geomodel *GeomodelStatus, prima
 		primary.WithoutRangeData = mrf.numClassifier - mrf.mappedCount
 		geoLabels = mrf.geomodelLabels
 
+		version := rf.Model
+		if version == "v3" {
+			version = "v3.0"
+		}
+
 		geomodel = &GeomodelStatus{
-			Version:      rf.Model,
+			Version:      version,
 			TotalSpecies: mrf.inner.NumSpecies(),
 		}
 	}
