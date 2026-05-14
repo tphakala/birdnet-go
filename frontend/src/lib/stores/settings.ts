@@ -115,6 +115,9 @@ export interface BatSettings {
   locale?: string;
   filterEnabled: boolean;
   nighttimeOnly: boolean;
+  ultrasonicFilter?: {
+    enabled: boolean;
+  };
 }
 
 export interface SQLiteSettings {
@@ -849,6 +852,9 @@ function createEmptySettings(): SettingsFormData {
       threshold: 0.5,
       filterEnabled: false,
       nighttimeOnly: true,
+      ultrasonicFilter: {
+        enabled: true,
+      },
     },
     realtime: {
       interval: 15,

@@ -153,7 +153,8 @@
         "verifiedCorrect": "Ellenőrizve - Helyes",
         "falsePositive": "Hamis pozitív",
         "notReviewed": "Nincs áttekintve",
-        "locked": "Zárolva"
+        "locked": "Zárolva",
+        "unlikely": "Valószínűtlen"
       },
       "form": {
         "correctDetection": "Helyes detektálás",
@@ -512,7 +513,8 @@
       "false": "Hamis",
       "unverified": "Ellenőrizetlen",
       "locked": "Zárolva",
-      "unlocked": "Zárolatlan"
+      "unlocked": "Zárolatlan",
+      "unlikely": "Valószínűtlen"
     },
     "detailsPanel": {
       "audioPlayer": "Hang lejátszó",
@@ -640,7 +642,8 @@
         "verified": "Ellenőrizve",
         "false": "Hamis",
         "unverified": "Ellenőrizetlen",
-        "locked": "Zárolva"
+        "locked": "Zárolva",
+        "unlikely": "Valószínűtlen"
       },
       "modals": {
         "showSpecies": "{species} faj megjelenítése",
@@ -4511,6 +4514,10 @@
       "batNighttimeOnly": {
         "label": "Csak éjszaka",
         "helpText": "Ha engedélyezve van, a denevérészlelés csak polgári alkony és polgári hajnal között fut. A helyszín konfigurálása szükséges. Kapcsolja ki az éjjel-nappali denevérészleléshez."
+      },
+      "batUltrasonicFilter": {
+        "label": "Utólagos érzékelés-ellenőrzés",
+        "helpText": "Bekapcsolva a denevérészleléseket az ultrahang-energiaminták elemzésével ellenőrzi a forrásanyagban. Az echolokációs jellemzőkkel nem rendelkező észleléseket valószínűtlenként jelöli meg."
       }
     }
   },

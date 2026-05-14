@@ -153,7 +153,8 @@
         "verifiedCorrect": "Verificato corretto",
         "falsePositive": "Falso positivo",
         "notReviewed": "Non revisionato",
-        "locked": "Bloccato"
+        "locked": "Bloccato",
+        "unlikely": "Improbabile"
       },
       "form": {
         "correctDetection": "Rilevamento corretto",
@@ -512,7 +513,8 @@
       "false": "Falso",
       "unverified": "Non verificato",
       "locked": "Bloccato",
-      "unlocked": "Sbloccato"
+      "unlocked": "Sbloccato",
+      "unlikely": "Improbabile"
     },
     "review": {
       "review": "Verifica",
@@ -640,7 +642,8 @@
         "verified": "Verificato",
         "false": "Falso",
         "unverified": "Non verificato",
-        "locked": "Bloccato"
+        "locked": "Bloccato",
+        "unlikely": "Improbabile"
       },
       "modals": {
         "showSpecies": "Mostra Specie {species}",
@@ -4511,6 +4514,10 @@
       "batNighttimeOnly": {
         "label": "Solo di notte",
         "helpText": "Se abilitato, il rilevamento dei pipistrelli funziona solo tra il crepuscolo civile e l'alba civile. Richiede la configurazione della posizione. Disabilita per eseguire il rilevamento continuamente."
+      },
+      "batUltrasonicFilter": {
+        "label": "Validazione post-rilevamento",
+        "helpText": "Quando abilitato, i rilevamenti di pipistrelli vengono validati analizzando i pattern di energia ultrasonica nell'audio sorgente. I rilevamenti privi di caratteristiche di ecolocalizzazione vengono contrassegnati come improbabili."
       }
     }
   },

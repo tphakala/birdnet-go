@@ -153,7 +153,8 @@
         "verifiedCorrect": "Overené ako správne",
         "falsePositive": "Falošne pozitívne",
         "notReviewed": "Neskontrolované",
-        "locked": "Uzamknuté"
+        "locked": "Uzamknuté",
+        "unlikely": "Nepravdepodobné"
       },
       "form": {
         "correctDetection": "Správna detekcia",
@@ -512,7 +513,8 @@
       "false": "Falošné",
       "unverified": "Neoverené",
       "locked": "Uzamknuté",
-      "unlocked": "Odomknuté"
+      "unlocked": "Odomknuté",
+      "unlikely": "Nepravdepodobné"
     },
     "review": {
       "review": "Overiť",
@@ -640,7 +642,8 @@
         "verified": "Overené",
         "false": "Falošné",
         "unverified": "Neoverené",
-        "locked": "Uzamknuté"
+        "locked": "Uzamknuté",
+        "unlikely": "Nepravdepodobné"
       },
       "modals": {
         "showSpecies": "Zobraziť druh {species}",
@@ -4511,6 +4514,10 @@
       "batNighttimeOnly": {
         "label": "Iba v noci",
         "helpText": "Keď je povolené, detekcia netopierov beží iba medzi občianskym súmrakom a občianskym svitaním. Vyžaduje nakonfigurovanú polohu. Vypnite pre nepretržitú detekciu."
+      },
+      "batUltrasonicFilter": {
+        "label": "Overenie po detekcii",
+        "helpText": "Keď je zapnuté, detekcie netopierov sa overujú analýzou ultrazvukových energetických vzorcov v zdrojovom zvuku. Detekcie bez charakteristík echolokácie sú označené ako nepravdepodobné."
       }
     }
   },

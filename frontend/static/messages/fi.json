@@ -154,7 +154,8 @@
         "verifiedCorrect": "Todennettu oikeaksi",
         "falsePositive": "Virheellinen havainto",
         "notReviewed": "Ei tarkistettu",
-        "locked": "Lukittu"
+        "locked": "Lukittu",
+        "unlikely": "Epätodennäköinen"
       },
       "form": {
         "correctDetection": "Oikea havainto",
@@ -513,7 +514,8 @@
       "false": "Virheellinen",
       "unverified": "Todentamaton",
       "locked": "Lukittu",
-      "unlocked": "Avoin"
+      "unlocked": "Avoin",
+      "unlikely": "Epätodennäköinen"
     },
     "review": {
       "review": "Tarkista",
@@ -641,7 +643,8 @@
         "verified": "Todennettu",
         "false": "Virheellinen",
         "unverified": "Todentamaton",
-        "locked": "Lukittu"
+        "locked": "Lukittu",
+        "unlikely": "Epätodennäköinen"
       },
       "modals": {
         "showSpecies": "Näytä laji {species}",
@@ -4527,6 +4530,10 @@
       "batNighttimeOnly": {
         "label": "Vain yöaikaan",
         "helpText": "Kun käytössä, lepakkotunnistus toimii vain siviilihämärän ja siviiliaamunkoiton välillä. Vaatii, että sijainti on määritetty. Poista käytöstä, jos haluat lepakkotunnistuksen olevan käytössä ympäri vuorokauden."
+      },
+      "batUltrasonicFilter": {
+        "label": "Tunnistuksen jälkitarkistus",
+        "helpText": "Kun käytössä, lepakkotunnistukset validoidaan analysoimalla ultraäänienergiakuvioita lähdeäänitteestä. Tunnistukset, joista puuttuvat kaikuluotausominaisuudet, merkitään epätodennäköisiksi."
       },
       "locale": {
         "label": "Species Language",

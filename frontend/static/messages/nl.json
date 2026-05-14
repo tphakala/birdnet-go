@@ -154,7 +154,8 @@
         "verifiedCorrect": "Goedgekeurd",
         "falsePositive": "Afgekeurd",
         "notReviewed": "Niet beoordeeld",
-        "locked": "Vergrendeld"
+        "locked": "Vergrendeld",
+        "unlikely": "Onwaarschijnlijk"
       },
       "form": {
         "correctDetection": "Herkenning goedgekeurd",
@@ -513,7 +514,8 @@
       "false": "Afgekeurd",
       "unverified": "Niet beoordeeld",
       "locked": "Vergrendeld",
-      "unlocked": "Ontgrendeld"
+      "unlocked": "Ontgrendeld",
+      "unlikely": "Onwaarschijnlijk"
     },
     "review": {
       "review": "Beoordelen",
@@ -641,7 +643,8 @@
         "verified": "Goedgekeurd",
         "false": "Afgekeurd",
         "unverified": "Niet beoordeeld",
-        "locked": "Vergrendeld"
+        "locked": "Vergrendeld",
+        "unlikely": "Onwaarschijnlijk"
       },
       "modals": {
         "showSpecies": "Toon soort {species}",
@@ -4527,6 +4530,10 @@
       "batNighttimeOnly": {
         "label": "Alleen 's nachts",
         "helpText": "Wanneer ingeschakeld, werkt de vleermuisdetectie alleen tussen de burgerlijke schemering en de burgerlijke dageraad. Vereist dat de locatie is geconfigureerd. Schakel uit om vleermuisdetectie de klok rond uit te voeren."
+      },
+      "batUltrasonicFilter": {
+        "label": "Validatie na detectie",
+        "helpText": "Indien ingeschakeld worden vleermuisdetecties gevalideerd door analyse van ultrasone energiepatronen in de bronaudio. Detecties zonder echolocatiekenmerken worden gemarkeerd als onwaarschijnlijk."
       },
       "locale": {
         "label": "Species Language",

@@ -164,7 +164,8 @@
         "verifiedCorrect": "Verificado correcto",
         "falsePositive": "Falso positivo",
         "notReviewed": "No revisado",
-        "locked": "Bloqueado"
+        "locked": "Bloqueado",
+        "unlikely": "Improbable"
       },
       "form": {
         "correctDetection": "Detección correcta",
@@ -513,7 +514,8 @@
       "false": "Falso",
       "unverified": "No verificado",
       "locked": "Bloqueado",
-      "unlocked": "Desbloqueado"
+      "unlocked": "Desbloqueado",
+      "unlikely": "Improbable"
     },
     "review": {
       "review": "Revisar",
@@ -641,7 +643,8 @@
         "verified": "Verificado",
         "false": "Falso",
         "unverified": "No verificado",
-        "locked": "Bloqueado"
+        "locked": "Bloqueado",
+        "unlikely": "Improbable"
       },
       "modals": {
         "showSpecies": "Mostrar especie {species}",
@@ -4527,6 +4530,10 @@
       "batNighttimeOnly": {
         "label": "Solo nocturno",
         "helpText": "Cuando está activado, la detección de murciélagos funciona solo entre el crepúsculo civil y el amanecer civil. Requiere que la ubicación esté configurada. Desactive para ejecutar la detección de murciélagos las 24 horas."
+      },
+      "batUltrasonicFilter": {
+        "label": "Validación posterior a la detección",
+        "helpText": "Cuando está activado, las detecciones de murciélagos se validan analizando los patrones de energía ultrasónica en el audio fuente. Las detecciones sin características de ecolocalización se marcan como improbables."
       },
       "locale": {
         "label": "Species Language",
