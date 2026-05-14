@@ -473,6 +473,13 @@ func (m *BufferManager) processMonitorTick(
 		return true, hasReadBuffer
 	}
 
+	// Skip inference for models that are currently inactive (e.g., bat model
+	// during daytime when nighttime-only scheduling is enabled). The buffered
+	// audio data is released by the existing defer release().
+	if !m.bn.IsModelActive(cfg.modelID) {
+		return true, hasReadBuffer
+	}
+
 	m.logger.Debug("buffer monitor dispatching to ProcessData",
 		logger.String("source_id", cfg.sourceID),
 		logger.String("model_id", cfg.modelID),
