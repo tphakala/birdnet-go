@@ -703,7 +703,7 @@
     transform: translateX(-50%);
     font-size: 0.75rem;
     color: var(--color-error);
-    background-color: color-mix(in srgb, var(--color-error) 10%, var(--color-base-100) 95%);
+    background-color: color-mix(in srgb, var(--color-error) 10%, var(--color-base-100));
     padding: 0.125rem 0.5rem;
     border-radius: 0.25rem;
     white-space: nowrap;
@@ -711,7 +711,7 @@
     pointer-events: auto;
   }
 
-  :global(.dark) .error-indicator {
+  :global([data-theme='dark']) .error-indicator {
     background-color: color-mix(in srgb, var(--color-error) 30%, var(--color-base-300));
     color: color-mix(in srgb, var(--color-error) 40%, white);
   }
