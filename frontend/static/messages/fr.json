@@ -4517,8 +4517,12 @@
         "helpText": "Score de confiance minimum (0.0 - 1.0) requis pour qu'une détection soit enregistrée."
       },
       "batThreshold": {
-        "label": "Bat Detection Threshold",
-        "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
+        "label": "Seuil de détection des chauves-souris",
+        "helpText": "Score de confiance minimum pour les détections d'espèces de chauves-souris. S'applique uniquement aux modèles classificateurs de chauves-souris."
+      },
+      "batFilter": {
+        "label": "Filtre passe-haut pour chauves-souris",
+        "helpText": "Filtre les fréquences audibles avant l'analyse des chauves-souris pour réduire les faux positifs dus aux chants d'oiseaux et au bruit ambiant."
       },
       "locale": {
         "label": "Species Language",

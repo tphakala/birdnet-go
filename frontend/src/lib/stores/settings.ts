@@ -113,6 +113,7 @@ export interface BatSettings {
   enabled: boolean;
   threshold: number;
   locale?: string;
+  filterEnabled: boolean;
 }
 
 export interface SQLiteSettings {
@@ -845,6 +846,7 @@ function createEmptySettings(): SettingsFormData {
     bat: {
       enabled: false,
       threshold: 0.5,
+      filterEnabled: false,
     },
     realtime: {
       interval: 15,

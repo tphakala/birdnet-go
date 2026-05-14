@@ -4517,8 +4517,12 @@
         "helpText": "Pontuação mínima de confiança (0.0 - 1.0) necessária para que uma detecção seja registrada."
       },
       "batThreshold": {
-        "label": "Bat Detection Threshold",
-        "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
+        "label": "Limiar de deteção de morcegos",
+        "helpText": "Pontuação de confiança mínima para deteções de espécies de morcegos. Aplica-se apenas a modelos classificadores de morcegos."
+      },
+      "batFilter": {
+        "label": "Filtro passa-altas para morcegos",
+        "helpText": "Filtra frequências audíveis antes da análise de morcegos para reduzir falsos positivos causados por cantos de aves e ruído ambiente."
       },
       "locale": {
         "label": "Species Language",

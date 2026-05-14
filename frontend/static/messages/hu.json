@@ -4498,6 +4498,18 @@
       }
     }
   },
+  "analysis": {
+    "detection": {
+      "batThreshold": {
+        "label": "Denevér-észlelési küszöb",
+        "helpText": "Minimális megbízhatósági pontszám a denevérfajok észleléséhez. Csak a denevérosztályozó modellekre vonatkozik."
+      },
+      "batFilter": {
+        "label": "Denevér hang felüláteresztő szűrő",
+        "helpText": "Kiszűri az emberi fül számára hallható frekvenciákat a denevérelemzés előtt, hogy csökkentse a madárdal és a környezeti zaj okozta téves észleléseket."
+      }
+    }
+  },
   "restart": {
     "applicationRestart": "Alkalmazás újraindítása",
     "containerRestart": "Konténer újraindítása",

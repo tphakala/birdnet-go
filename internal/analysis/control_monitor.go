@@ -256,8 +256,17 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleQuietHoursStopSoundCard()
 	case schedule.SignalQuietHoursStartSoundCard:
 		cm.handleQuietHoursStartSoundCard()
+	case "reconfigure_bat_filter":
+		cm.handleReconfigureBatFilter()
 	default:
 		GetLogger().Warn("Received unknown control signal", logger.String("signal", signal))
+	}
+}
+
+// handleReconfigureBatFilter rebuilds the bat model's high-pass filter from current settings.
+func (cm *ControlMonitor) handleReconfigureBatFilter() {
+	if cm.bn != nil {
+		cm.bn.ReloadBatFilter()
 	}
 }
 

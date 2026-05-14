@@ -4517,8 +4517,12 @@
         "helpText": "Mindest-Konfidenzwert (0.0 - 1.0), ab dem eine Erkennung aufgezeichnet wird."
       },
       "batThreshold": {
-        "label": "Bat Detection Threshold",
-        "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
+        "label": "Fledermaus-Erkennungsschwelle",
+        "helpText": "Minimale Konfidenzbewertung für Fledermausarten-Erkennungen. Gilt nur für Fledermaus-Klassifikatormodelle."
+      },
+      "batFilter": {
+        "label": "Fledermaus-Audio-Hochpassfilter",
+        "helpText": "Filtert hörbare Frequenzen vor der Fledermausanalyse heraus, um Fehlerkennungen durch Vogelgesang und Umgebungsgeräusche zu reduzieren."
       },
       "locale": {
         "label": "Species Language",

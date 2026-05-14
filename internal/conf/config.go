@@ -1187,6 +1187,9 @@ type BatConfig struct {
 	LabelPath       string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"`             // path to bat species labels file
 	Threshold       float64 `yaml:"threshold" json:"threshold"`                                 // confidence threshold for bat detections
 	Locale          string  `yaml:"locale,omitempty" json:"locale,omitempty"`                   // locale for species label translation
+	FilterEnabled   bool    `yaml:"filterenabled" json:"filterEnabled"`                         // enable high-pass filter for bat audio
+	FilterCutoffHz  float64 `yaml:"filtercutoffhz,omitempty" json:"filterCutoffHz,omitempty"`   // high-pass filter cutoff frequency in Hz
+	FilterPassCount int     `yaml:"filterpasscount,omitempty" json:"filterPassCount,omitempty"` // number of filter passes for steeper rolloff
 }
 
 // BSGConfig holds configuration for BSG regional bird models.
