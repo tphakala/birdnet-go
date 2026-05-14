@@ -27,6 +27,7 @@ func TestCreateHealthSnapshot(t *testing.T) {
 
 		snapshot := createHealthSnapshot("rtsp://test/stream", health)
 
+		assert.Equal(t, "rtsp://test/stream", snapshot.RawURL)
 		assert.True(t, snapshot.IsHealthy)
 		assert.Equal(t, "running", snapshot.ProcessState)
 		assert.Equal(t, 0, snapshot.RestartCount)
@@ -48,8 +49,9 @@ func TestCreateHealthSnapshot(t *testing.T) {
 			},
 		}
 
-		snapshot := createHealthSnapshot("rtsp://test/stream", health)
+		snapshot := createHealthSnapshot("rtsp://test/unhealthy", health)
 
+		assert.Equal(t, "rtsp://test/unhealthy", snapshot.RawURL)
 		assert.False(t, snapshot.IsHealthy)
 		assert.Equal(t, "circuit_open", snapshot.ProcessState)
 		assert.Equal(t, 5, snapshot.RestartCount)

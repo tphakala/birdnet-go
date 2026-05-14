@@ -679,10 +679,10 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 			continue
 		}
 
-		// Release lock during expensive model loading to avoid blocking
-		// inference on concurrent goroutines.
-		o.mu.Unlock()
+		// Hold the lock through the loader call because loaders write
+		// directly to o.models (e.g., loadPerch, loadBat).
 		loadErr := loader(o, threads)
+		o.mu.Unlock()
 		if loadErr != nil {
 			log.Warn("optional model failed to load, will retry after gallery scan",
 				logger.String("registry_id", registryID),

@@ -116,6 +116,17 @@ func TestValidateModelConfig_SourceReferencesUnavailableModel(t *testing.T) {
 	assert.NotEmpty(t, warnings, "source referencing model not in models.enabled should warn")
 }
 
+func TestValidateModelConfig_SkipSourceRefsAtEarlyLoading(t *testing.T) {
+	t.Parallel()
+	settings := &Settings{}
+	settings.Models.Enabled = []string{"birdnet"}
+	settings.Realtime.Audio.Sources = []AudioSourceConfig{
+		{Name: "Mic1", Device: "hw:0,0", Models: []string{"birdnet", "perch_v2"}},
+	}
+	warnings := settings.ValidateModelConfig(testKnownIDs, false)
+	assert.Empty(t, warnings, "source reference checks should be skipped when checkSourceRefs is false")
+}
+
 func TestBirdNETConfig_VersionField(t *testing.T) {
 	t.Parallel()
 	settings := &Settings{}
