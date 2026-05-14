@@ -244,17 +244,15 @@ func (r *detectionRepository) GetReview(ctx context.Context, id string) (string,
 	return review.Verified, nil
 }
 
-// CorrectSpecies replaces a detection's species + confidence and writes a
-// 'correct' review. Delegates the species write to the underlying Interface
-// — the legacy v1 store updates the notes row, the v2only adapter routes
-// through the v2 repositories — and then upserts the review via the
-// existing SaveNoteReview path (which is itself dialect-safe across MySQL
-// and SQLite).
+// CorrectSpecies replaces a detection's species + confidence and records a
+// 'correct' review. Both happen inside CorrectNoteSpecies, which owns the
+// species update and the review write as one atomic operation (see its
+// contract on the Interface).
 //
-// A failure on the review upsert leaves the species change committed but
-// the review unset — recoverable via the verified toggle. The inverse
-// failure mode (verified row pointing at an unchanged species) would be
-// worse, which is why the review goes second.
+// We deliberately do NOT issue a separate SaveNoteReview here. The earlier
+// shape did, which double-wrote the review on the v2only path
+// (WriteSpeciesCorrection already saves it) and left a window where the
+// species update could commit without the review landing.
 func (r *detectionRepository) CorrectSpecies(ctx context.Context, id string, params *CorrectSpeciesParams) error {
 	noteID, err := r.parseID(id)
 	if err != nil {
@@ -265,16 +263,6 @@ func (r *detectionRepository) CorrectSpecies(ctx context.Context, id string, par
 		params.ScientificName, params.CommonName, params.Confidence, params.Model,
 	); err != nil {
 		return fmt.Errorf("failed to correct species for detection %s: %w", id, err)
-	}
-
-	review := &NoteReview{
-		NoteID:    noteID,
-		Verified:  "correct",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	if err := r.store.SaveNoteReview(review); err != nil {
-		return fmt.Errorf("failed to record review for detection %s: %w", id, err)
 	}
 	return nil
 }

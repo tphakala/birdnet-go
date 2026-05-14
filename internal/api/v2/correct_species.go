@@ -153,6 +153,16 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 			"Specified model is not loaded; cannot apply correction",
 			http.StatusBadRequest)
 	}
+	// Reject ultrasonic-only models (e.g. the Bat classifier). They expect
+	// raw audio at rates our saved RTSP clips don't contain, so a
+	// correction attributed to one is meaningless — the reanalyze endpoint
+	// filters them out for the same reason (RawSampleRate != 0).
+	if loadedInfo.Spec.RawSampleRate != 0 {
+		return c.HandleError(ctx,
+			fmt.Errorf("model %q is ultrasonic-only", req.ModelID),
+			"Specified model is not applicable to this detection's audio; cannot apply correction",
+			http.StatusBadRequest)
+	}
 
 	// Resolve the locale-appropriate common name. The resolver chain on
 	// the orchestrator covers BirdNET's labels and the v3 geomodel
