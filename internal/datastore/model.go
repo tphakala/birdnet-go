@@ -43,6 +43,7 @@ type Note struct {
 	Sensitivity    float64
 	ClipName       string
 	ProcessingTime time.Duration
+	Unlikely       bool          `gorm:"default:false"`                 // Tagged by ultrasonic validation filter
 	Occurrence     float64       `gorm:"-" json:"occurrence,omitempty"` // Runtime only, occurrence probability (0-1) based on location/time
 	Results        []Results     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
 	Review         *NoteReview   `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"` // One-to-one relationship with cascade delete
@@ -166,6 +167,7 @@ type DetectionRecord struct {
 	AudioFilePath  string    `json:"audioFilePath,omitempty"`
 	Verified       string    `json:"verified,omitempty"`
 	Locked         bool      `json:"locked,omitempty"`
+	Unlikely       bool      `json:"unlikely,omitempty"`
 	HasAudio       bool      `json:"hasAudio,omitempty"`
 	Device         string    `json:"device,omitempty"`
 	Source         string    `json:"source,omitempty"`

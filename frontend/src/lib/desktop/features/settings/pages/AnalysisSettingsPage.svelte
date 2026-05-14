@@ -137,7 +137,13 @@
   );
   let falsePositiveFilter = $derived($realtimeSettings?.falsePositiveFilter ?? { level: 0 });
   let bat = $derived(
-    $batSettings ?? { enabled: false, threshold: 0.5, filterEnabled: false, nighttimeOnly: true }
+    $batSettings ?? {
+      enabled: false,
+      threshold: 0.5,
+      filterEnabled: false,
+      nighttimeOnly: true,
+      ultrasonicFilter: { enabled: true },
+    }
   );
 
   // Check if a bat model is installed
@@ -669,6 +675,12 @@
     settingsActions.updateSection('bat', { nighttimeOnly: value });
   }
 
+  function updateBatUltrasonicFilter(value: boolean) {
+    settingsActions.updateSection('bat', {
+      ultrasonicFilter: { ...bat.ultrasonicFilter, enabled: value },
+    });
+  }
+
   function updateThreshold(value: number) {
     settingsActions.updateSection('birdnet', { threshold: value });
   }
@@ -902,12 +914,14 @@
         locale: store.originalData.birdnet?.locale,
         batThreshold: store.originalData.bat?.threshold,
         batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
+        batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
       }}
       currentData={{
         threshold: birdnet?.threshold,
         locale: birdnet?.locale,
         batThreshold: bat.threshold,
         batNighttimeOnly: bat.nighttimeOnly,
+        batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
       }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -970,6 +984,13 @@
             helpText={t('analysis.detection.batNighttimeOnly.helpText')}
             disabled={store.isLoading || store.isSaving}
             onchange={updateBatNighttimeOnly}
+          />
+          <Checkbox
+            checked={bat.ultrasonicFilter?.enabled ?? true}
+            label={t('analysis.detection.batUltrasonicFilter.label')}
+            helpText={t('analysis.detection.batUltrasonicFilter.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={updateBatUltrasonicFilter}
           />
         {/if}
       </div>

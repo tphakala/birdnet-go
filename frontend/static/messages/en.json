@@ -154,7 +154,8 @@
         "verifiedCorrect": "Verified Correct",
         "falsePositive": "False Positive",
         "notReviewed": "Not Reviewed",
-        "locked": "Locked"
+        "locked": "Locked",
+        "unlikely": "Unlikely"
       },
       "form": {
         "correctDetection": "Correct Detection",
@@ -513,7 +514,8 @@
       "false": "False",
       "unverified": "Unverified",
       "locked": "Locked",
-      "unlocked": "Unlocked"
+      "unlocked": "Unlocked",
+      "unlikely": "Unlikely"
     },
     "review": {
       "review": "Review",
@@ -641,7 +643,8 @@
         "verified": "Verified",
         "false": "False",
         "unverified": "Unverified",
-        "locked": "Locked"
+        "locked": "Locked",
+        "unlikely": "Unlikely"
       },
       "modals": {
         "showSpecies": "Show Species {species}",
@@ -4527,6 +4530,10 @@
       "batNighttimeOnly": {
         "label": "Nighttime Only",
         "helpText": "When enabled, bat detection runs only between civil dusk and civil dawn. Requires location to be configured. Disable to run bat detection around the clock."
+      },
+      "batUltrasonicFilter": {
+        "label": "Post Detection Validation",
+        "helpText": "When enabled, bat detections are validated by analyzing ultrasonic energy patterns in the source audio. Detections that lack bat echolocation characteristics are tagged as unlikely."
       },
       "locale": {
         "label": "Species Language",

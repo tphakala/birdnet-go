@@ -25,6 +25,7 @@ export interface Detection {
   confidence: number;
   verified: 'correct' | 'false_positive' | 'unverified';
   locked: boolean;
+  unlikely?: boolean;
   comments?: Comment[];
   clipName?: string;
   weather?: Weather;

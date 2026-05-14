@@ -154,7 +154,8 @@
         "verifiedCorrect": "Zweryfikowane Poprawnie",
         "falsePositive": "Fałszywie Pozytywne",
         "notReviewed": "Nieprzejrzane",
-        "locked": "Zablokowane"
+        "locked": "Zablokowane",
+        "unlikely": "Mało prawdopodobne"
       },
       "form": {
         "correctDetection": "Poprawna Detekcja",
@@ -513,7 +514,8 @@
       "false": "Fałszywe",
       "unverified": "Niezweryfikowane",
       "locked": "Zablokowane",
-      "unlocked": "Odblokowane"
+      "unlocked": "Odblokowane",
+      "unlikely": "Mało prawdopodobne"
     },
     "review": {
       "review": "Oceń",
@@ -641,7 +643,8 @@
         "verified": "Zweryfikowane",
         "false": "Fałszywe",
         "unverified": "Niezweryfikowane",
-        "locked": "Zablokowane"
+        "locked": "Zablokowane",
+        "unlikely": "Mało prawdopodobne"
       },
       "modals": {
         "showSpecies": "Pokaż Gatunek {species}",
@@ -4527,6 +4530,10 @@
       "batNighttimeOnly": {
         "label": "Tylko w nocy",
         "helpText": "Po włączeniu wykrywanie nietoperzy działa tylko między zmierzchem cywilnym a świtem cywilnym. Wymaga skonfigurowanej lokalizacji. Wyłącz, aby wykrywanie nietoperzy działało całą dobę."
+      },
+      "batUltrasonicFilter": {
+        "label": "Walidacja po wykryciu",
+        "helpText": "Po włączeniu wykrycia nietoperzy są weryfikowane przez analizę wzorców energii ultradźwiękowej w nagraniu źródłowym. Wykrycia bez cech echolokacji są oznaczane jako mało prawdopodobne."
       },
       "locale": {
         "label": "Species Language",

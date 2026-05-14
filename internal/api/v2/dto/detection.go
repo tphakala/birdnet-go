@@ -23,6 +23,7 @@ type DetectionResponse struct {
 	ClipName       string      `json:"clipName,omitempty"`
 	Verified       string      `json:"verified,omitempty"`
 	Locked         bool        `json:"locked"`
+	Unlikely       bool        `json:"unlikely,omitempty"`
 	Source         *SourceInfo `json:"source,omitempty"`
 	Model          *ModelInfo  `json:"model,omitempty"`
 	Comments       []Comment   `json:"comments,omitempty"`
@@ -99,6 +100,7 @@ func NewDetectionResponse(r *detection.Result) *DetectionResponse {
 		ClipName:       r.ClipName,
 		Verified:       r.Verified,
 		Locked:         r.Locked,
+		Unlikely:       r.Unlikely,
 	}
 
 	// Only set time fields if non-zero to avoid "0001-01-01T00:00:00Z" in API

@@ -153,7 +153,8 @@
         "verifiedCorrect": "Verificēts kā pareizs",
         "falsePositive": "Kļūdaini pozitīvs",
         "notReviewed": "Nav pārskatīts",
-        "locked": "Bloķēts"
+        "locked": "Bloķēts",
+        "unlikely": "Maz ticams"
       },
       "form": {
         "correctDetection": "Pareiza noteikšana",
@@ -512,7 +513,8 @@
       "false": "Kļūdains",
       "unverified": "Neverificēts",
       "locked": "Bloķēts",
-      "unlocked": "Atbloķēts"
+      "unlocked": "Atbloķēts",
+      "unlikely": "Maz ticams"
     },
     "review": {
       "review": "Pārskatīt",
@@ -640,7 +642,8 @@
         "verified": "Verificēts",
         "false": "Nepatiess",
         "unverified": "Neverificēts",
-        "locked": "Bloķēts"
+        "locked": "Bloķēts",
+        "unlikely": "Maz ticams"
       },
       "modals": {
         "showSpecies": "Rādīt sugu {species}",
@@ -4511,6 +4514,10 @@
       "batNighttimeOnly": {
         "label": "Tikai naktī",
         "helpText": "Ja iespējots, sikspārņu noteikšana darbojas tikai starp pilsoniskajiem krēsliem un pilsonisko rītausmu. Nepieciešama atrašanās vietas konfigurācija. Atspējojiet, lai noteikšana darbotos visu diennakti."
+      },
+      "batUltrasonicFilter": {
+        "label": "Pēcnoteikšanas validācija",
+        "helpText": "Kad iespējots, sikspārņu noteikšana tiek pārbaudīta, analizējot ultraskaņas enerģijas modeļus avota ierakstā. Noteikšanas bez eholokācijas pazīmēm tiek atzīmētas kā maz ticamas."
       }
     }
   },

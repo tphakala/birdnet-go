@@ -46,6 +46,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
+  import { CircleHelp } from '@lucide/svelte';
   import type { Detection } from '$lib/types/detection.types';
   type Size = 'sm' | 'md' | 'lg';
   type VerificationStatus = Detection['verified'];
@@ -91,6 +92,14 @@
   {#if detection.locked}
     <div class={cn('status-badge locked', sizeClass)}>
       {t('common.review.status.locked')}
+    </div>
+  {/if}
+
+  <!-- Unlikely badge -->
+  {#if detection.unlikely}
+    <div class={cn('status-badge unlikely', sizeClass)}>
+      <CircleHelp class="size-3 mr-1" />
+      {t('common.review.status.unlikely')}
     </div>
   {/if}
 
@@ -149,6 +158,10 @@
   }
 
   .status-badge.locked {
+    --badge-color: var(--color-warning);
+  }
+
+  .status-badge.unlikely {
     --badge-color: var(--color-warning);
   }
 

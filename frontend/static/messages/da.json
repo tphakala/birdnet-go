@@ -153,7 +153,8 @@
         "verifiedCorrect": "Bekræftet korrekt",
         "falsePositive": "Falsk positiv",
         "notReviewed": "Ikke gennemgået",
-        "locked": "Låst"
+        "locked": "Låst",
+        "unlikely": "Usandsynlig"
       },
       "form": {
         "correctDetection": "Korrekt detektion",
@@ -512,7 +513,8 @@
       "false": "Falsk",
       "unverified": "Ubekræftet",
       "locked": "Låst",
-      "unlocked": "Ulåst"
+      "unlocked": "Ulåst",
+      "unlikely": "Usandsynlig"
     },
     "review": {
       "review": "Gennemgå",
@@ -640,7 +642,8 @@
         "verified": "Verificeret",
         "false": "Falsk",
         "unverified": "Ikke verificeret",
-        "locked": "Låst"
+        "locked": "Låst",
+        "unlikely": "Usandsynlig"
       },
       "modals": {
         "showSpecies": "Vis art {species}",
@@ -4511,6 +4514,10 @@
       "batNighttimeOnly": {
         "label": "Kun om natten",
         "helpText": "Når aktiveret kører flagermusdetektering kun mellem borgerlig tusmørke og borgerlig daggry. Kræver at placering er konfigureret. Deaktiver for at køre flagermusdetektering hele dagen."
+      },
+      "batUltrasonicFilter": {
+        "label": "Validering efter detektion",
+        "helpText": "Når aktiveret, valideres flagermusdetektioner ved at analysere ultralydsmønstre i kildeoptagelsen. Detektioner uden typiske flagermus-ekkolokationskarakteristika markeres som usandsynlige."
       }
     }
   },

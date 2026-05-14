@@ -23,6 +23,7 @@ type NoteEntity struct {
 	Sensitivity    float64
 	ClipName       string
 	ProcessingTime time.Duration
+	Unlikely       bool `gorm:"default:false"`
 
 	// Relationships
 	Results  []ResultsEntity     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
