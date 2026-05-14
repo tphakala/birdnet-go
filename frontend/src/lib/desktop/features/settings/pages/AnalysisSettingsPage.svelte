@@ -658,10 +658,6 @@
     settingsActions.updateSection('bat', { threshold: value });
   }
 
-  function updateBatFilterEnabled(value: boolean) {
-    settingsActions.updateSection('bat', { filterEnabled: value });
-  }
-
   function updateBatNighttimeOnly(value: boolean) {
     settingsActions.updateSection('bat', { nighttimeOnly: value });
   }
@@ -898,14 +894,12 @@
         threshold: store.originalData.birdnet?.threshold,
         locale: store.originalData.birdnet?.locale,
         batThreshold: store.originalData.bat?.threshold,
-        batFilterEnabled: store.originalData.bat?.filterEnabled,
         batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
       }}
       currentData={{
         threshold: birdnet?.threshold,
         locale: birdnet?.locale,
         batThreshold: bat.threshold,
-        batFilterEnabled: bat.filterEnabled,
         batNighttimeOnly: bat.nighttimeOnly,
       }}
     >
@@ -962,13 +956,6 @@
             step={0.01}
             disabled={store.isLoading || store.isSaving}
             helpText={t('analysis.detection.batThreshold.helpText')}
-          />
-          <Checkbox
-            checked={bat.filterEnabled ?? false}
-            label={t('analysis.detection.batFilter.label')}
-            helpText={t('analysis.detection.batFilter.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateBatFilterEnabled}
           />
           <Checkbox
             checked={bat.nighttimeOnly ?? true}
