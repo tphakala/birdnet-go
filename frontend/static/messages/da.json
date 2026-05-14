@@ -2409,8 +2409,11 @@
             "name": "Gotify",
             "server": {
               "label": "Server-URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "Dit Gotify-serverværtsnavn (uden https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Dit Gotify-servernavn og port"
+            },
+            "protocol": {
+              "label": "Protokol"
             },
             "token": {
               "label": "Applikationstoken",

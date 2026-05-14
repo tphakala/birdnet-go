@@ -160,6 +160,7 @@
     ntfyCheckStatus: 'idle' | 'checking' | 'https' | 'http' | 'unreachable';
     gotifyServer: string;
     gotifyToken: string;
+    gotifyProtocol: 'https' | 'http';
     pushoverApiToken: string;
     pushoverUserKey: string;
     slackWebhookUrl: string;
@@ -202,6 +203,7 @@
     ntfyCheckStatus: 'idle',
     gotifyServer: '',
     gotifyToken: '',
+    gotifyProtocol: 'https',
     pushoverApiToken: '',
     pushoverUserKey: '',
     slackWebhookUrl: '',
@@ -246,7 +248,7 @@
     { value: 'basic', label: t('settings.notifications.push.services.webhook.auth.basic') },
   ]);
 
-  const ntfyProtocolOptions = $derived([
+  const protocolOptions = $derived([
     { value: 'https', label: 'HTTPS' },
     { value: 'http', label: 'HTTP' },
   ]);
@@ -498,8 +500,11 @@
       }
       case 'gotify': {
         if (serviceFormData.gotifyServer && serviceFormData.gotifyToken) {
-          const server = serviceFormData.gotifyServer.replace(/^https?:\/\//, '');
-          return `gotify://${server}/${serviceFormData.gotifyToken}`;
+          const server = serviceFormData.gotifyServer
+            .replace(/^https?:\/\//i, '')
+            .replace(/\/+$/, '');
+          const disableTls = serviceFormData.gotifyProtocol === 'http' ? '?disabletls=yes' : '';
+          return `gotify://${server}/${serviceFormData.gotifyToken}${disableTls}`;
         }
         return '';
       }
@@ -710,6 +715,7 @@
       ntfyCheckStatus: 'idle',
       gotifyServer: '',
       gotifyToken: '',
+      gotifyProtocol: 'https',
       pushoverApiToken: '',
       pushoverUserKey: '',
       slackWebhookUrl: '',
@@ -772,6 +778,26 @@
           }
           serviceFormData.ntfyCheckStatus = 'idle';
           serviceFormData.ntfyCheckHost = '';
+        }
+        break;
+      }
+      case 'gotify': {
+        /* eslint-disable security/detect-unsafe-regex -- no nested quantifiers; each segment is bounded by literal anchors */
+        const gotifyPattern = /^gotify:\/\/([^/?]+)(?:\/([^?]*))?(?:\?(.*))?$/;
+        /* eslint-enable security/detect-unsafe-regex */
+        if (safeRegexTest(gotifyPattern, url, 500)) {
+          const match = url.match(gotifyPattern)!;
+          const [, host, token, queryString] = match;
+
+          serviceFormData.gotifyServer = host || '';
+          serviceFormData.gotifyToken = token || '';
+
+          const params = new URLSearchParams(queryString || '');
+          const disableTlsEntry = Array.from(params.entries()).find(
+            ([key]) => key.toLowerCase() === 'disabletls'
+          );
+          const disableTls = disableTlsEntry?.[1]?.toLowerCase();
+          serviceFormData.gotifyProtocol = disableTls === 'yes' ? 'http' : 'https';
         }
         break;
       }
@@ -1586,7 +1612,7 @@
                       <div class="flex items-center gap-2 mt-1 flex-wrap">
                         <SelectDropdown
                           bind:value={serviceFormData.ntfyProtocol}
-                          options={ntfyProtocolOptions}
+                          options={protocolOptions}
                           variant="select"
                           size="sm"
                           menuSize="sm"
@@ -1677,11 +1703,35 @@
                       placeholder={t(
                         'settings.notifications.push.services.gotify.server.placeholder'
                       )}
-                      onchange={value => (serviceFormData.gotifyServer = value)}
+                      onchange={value => {
+                        const match = value.match(/^(https?):\/\/([^?#]+)/i);
+                        if (match) {
+                          serviceFormData.gotifyProtocol =
+                            match[1].toLowerCase() === 'http' ? 'http' : 'https';
+                          serviceFormData.gotifyServer = match[2];
+                        } else {
+                          serviceFormData.gotifyServer = value;
+                        }
+                      }}
                     />
                     <p class="text-xs text-[var(--color-base-content)]/60 -mt-2">
                       {t('settings.notifications.push.services.gotify.server.helpText')}
                     </p>
+
+                    <!-- Protocol selector -->
+                    <div class="flex items-center gap-2 mt-1">
+                      <span class="text-sm text-[var(--color-base-content)]/70">
+                        {t('settings.notifications.push.services.gotify.protocol.label')}
+                      </span>
+                      <SelectDropdown
+                        bind:value={serviceFormData.gotifyProtocol}
+                        options={protocolOptions}
+                        variant="select"
+                        size="sm"
+                        menuSize="sm"
+                      />
+                    </div>
+
                     <TextInput
                       id="gotify-token"
                       value={serviceFormData.gotifyToken}
