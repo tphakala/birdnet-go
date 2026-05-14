@@ -252,27 +252,3 @@ func maskAPIKey(rawURL, keyParamName string) string {
 	parsedURL.RawQuery = queryParams.Encode()
 	return parsedURL.String()
 }
-
-func getPrimaryWeatherDescription(weather []struct {
-	ID          int    `json:"id"`
-	Main        string `json:"main"`
-	Description string `json:"description"`
-	Icon        string `json:"icon"`
-}) string {
-	if len(weather) > 0 {
-		return weather[0].Description
-	}
-	return "N/A"
-}
-
-func getPrimaryWeatherIcon(weather []struct {
-	ID          int    `json:"id"`
-	Main        string `json:"main"`
-	Description string `json:"description"`
-	Icon        string `json:"icon"`
-}, providerName string) string {
-	if len(weather) > 0 {
-		return string(GetStandardIconCode(weather[0].Icon, providerName))
-	}
-	return string(IconUnknown)
-}

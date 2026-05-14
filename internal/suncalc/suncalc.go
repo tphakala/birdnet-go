@@ -28,6 +28,12 @@ type cacheEntry struct {
 	times SunEventTimes // Sun event times in local time
 }
 
+// maxCacheEntries caps the number of cached dates to prevent unbounded
+// memory growth. 400 entries covers over a year of daily lookups; when
+// exceeded the entire cache is cleared so the working set rebuilds
+// organically from live traffic.
+const maxCacheEntries = 400
+
 // SunCalc handles caching and calculation of sun event times
 type SunCalc struct {
 	cache    map[string]cacheEntry   // Cache of sun event times for dates
@@ -82,12 +88,28 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 		return entry.times, nil
 	}
 
-	// Record cache miss
+	// Double-check under write lock: another goroutine may have populated
+	// the cache between the RLock check and now. This reduces (but does
+	// not fully eliminate) redundant calculations under high concurrency,
+	// which is acceptable since calculateSunEventTimes is pure math.
+	sc.lock.Lock()
+	if entry, ok := sc.cache[dateKey]; ok {
+		sc.lock.Unlock()
+		if sc.metrics != nil {
+			sc.metrics.RecordSunCalcCacheHit("get_sun_events")
+			sc.metrics.RecordSunCalcOperation("get_sun_events", "success")
+			sc.metrics.RecordSunCalcDuration("get_sun_events", time.Since(start).Seconds())
+		}
+		return entry.times, nil
+	}
+	sc.lock.Unlock()
+
+	// Record cache miss only after the double-check confirms it
 	if sc.metrics != nil {
 		sc.metrics.RecordSunCalcCacheMiss("get_sun_events")
 	}
 
-	// If not in cache, calculate the sun event times using the local date
+	// Calculate outside the lock to avoid blocking readers.
 	times, err := sc.calculateSunEventTimes(localDate)
 	if err != nil {
 		if sc.metrics != nil {
@@ -97,9 +119,15 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 		return SunEventTimes{}, err
 	}
 
-	// Acquire a write lock and update the cache with the new times
+	// Store result and enforce cache size limit.
 	sc.lock.Lock()
+	if len(sc.cache) >= maxCacheEntries {
+		clear(sc.cache)
+	}
 	sc.cache[dateKey] = cacheEntry{times: times}
+	if sc.metrics != nil {
+		sc.metrics.UpdateCacheSize(float64(len(sc.cache)))
+	}
 	sc.lock.Unlock()
 
 	// Record successful operation and update sun time gauges
@@ -118,7 +146,6 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 		}
 	}
 
-	// Return the calculated times
 	return times, nil
 }
 
