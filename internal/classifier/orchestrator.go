@@ -481,11 +481,9 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 	}
 
 	if _, exists := o.models[registryID]; exists {
-		return errors.Newf("model %s is already loaded", registryID).
-			Component("classifier.orchestrator").
-			Category(errors.CategoryValidation).
-			Context("registry_id", registryID).
-			Build()
+		log.Debug("model already loaded, skipping",
+			logger.String("registry_id", registryID))
+		return nil
 	}
 
 	loader, implemented := modelLoaders[registryID]
@@ -665,20 +663,27 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 			continue
 		}
 
-		// Skip the primary model (already loaded)
-		if _, exists := o.models[registryID]; exists {
-			continue
-		}
+		// Closure with defer ensures the mutex is released even if a
+		// loader panics during model initialization.
+		loadErr := func() error {
+			o.mu.Lock()
+			defer o.mu.Unlock()
 
-		threads := threadAlloc[registryID]
+			if _, exists := o.models[registryID]; exists {
+				return nil
+			}
 
-		loader, implemented := modelLoaders[registryID]
-		if !implemented {
-			log.Warn("Loader not yet implemented, skipping",
-				logger.String("registry_id", registryID))
-			continue
-		}
-		loadErr := loader(o, threads)
+			loader, implemented := modelLoaders[registryID]
+			if !implemented {
+				log.Warn("Loader not yet implemented, skipping",
+					logger.String("registry_id", registryID))
+				return nil
+			}
+
+			// Hold the lock through the loader call because loaders write
+			// directly to o.models (e.g., loadPerch, loadBat).
+			return loader(o, threadAlloc[registryID])
+		}()
 		if loadErr != nil {
 			log.Warn("optional model failed to load, will retry after gallery scan",
 				logger.String("registry_id", registryID),
