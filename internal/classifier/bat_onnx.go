@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -20,6 +21,7 @@ type Bat struct {
 	embeddingExtractor inference.EmbeddingExtractor
 	batClassifier      inference.CustomClassifier
 	info               ModelInfo
+	hpFilter           *equalizer.FilterChain
 	mu                 sync.Mutex
 }
 
@@ -87,10 +89,47 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 		logger.String("classifier_model", cfg.ClassifierModelPath),
 		logger.Int("bat_species", len(batLabels)))
 
+	settings := conf.Setting()
+	var hpFilter *equalizer.FilterChain
+	if settings.Bat.FilterEnabled {
+		cutoff := settings.Bat.FilterCutoffHz
+		if cutoff <= 0 {
+			cutoff = 4000.0
+		}
+		passes := settings.Bat.FilterPassCount
+		if passes < 1 {
+			passes = 1
+		}
+		hp, hpErr := equalizer.NewHighPass(
+			float64(ModelRegistry[RegistryIDBat].Spec.SampleRate),
+			cutoff,
+			0.707,
+			passes,
+		)
+		if hpErr != nil {
+			log.Error("failed to create bat high-pass filter, continuing without filter",
+				logger.Error(hpErr),
+				logger.Float64("cutoff_hz", cutoff),
+				logger.Int("passes", passes))
+		} else {
+			hpFilter = equalizer.NewFilterChain()
+			if addErr := hpFilter.AddFilter(hp); addErr != nil {
+				log.Error("failed to add bat high-pass filter to chain",
+					logger.Error(addErr))
+				hpFilter = nil
+			} else {
+				log.Info("bat high-pass filter enabled",
+					logger.Float64("cutoff_hz", cutoff),
+					logger.Int("passes", passes))
+			}
+		}
+	}
+
 	return &Bat{
 		embeddingExtractor: embExtractor,
 		batClassifier:      batCC,
 		info:               info,
+		hpFilter:           hpFilter,
 	}, nil
 }
 
@@ -111,6 +150,11 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 		return nil, errors.Newf("bat classifier is not initialized").
 			Category(errors.CategoryModelInit).
 			Build()
+	}
+
+	if b.hpFilter != nil {
+		b.hpFilter.Reset()
+		b.hpFilter.ApplyBatchFloat32(samples[0])
 	}
 
 	log.Debug("bat predict starting",
