@@ -304,19 +304,21 @@ func selectModelsForReanalysis(bn *classifier.Orchestrator, requestedIDs []strin
 		return out, nil
 	}
 
-	// Default: all standard-audio loaded models.
+	// Default: all standard-audio loaded models. Index-based loop so we
+	// don't copy classifier.ModelInfo (~224 bytes) per iteration.
 	var out []loadedModel
-	for _, info := range bn.ModelInfos() {
-		if info.Spec.RawSampleRate != 0 {
+	infos := bn.ModelInfos()
+	for i := range infos {
+		if infos[i].Spec.RawSampleRate != 0 {
 			// Skip ultrasonic-only models (bat). They expect raw audio at
 			// 256kHz that our saved RTSP clips don't contain — running them
 			// would produce nonsense scores.
 			continue
 		}
-		if info.Spec.SampleRate <= 0 {
+		if infos[i].Spec.SampleRate <= 0 {
 			continue
 		}
-		out = append(out, loadedModel{id: info.ID, name: info.Name, spec: info.Spec})
+		out = append(out, loadedModel{id: infos[i].ID, name: infos[i].Name, spec: infos[i].Spec})
 	}
 	return out, nil
 }
@@ -325,9 +327,10 @@ func selectModelsForReanalysis(bn *classifier.Orchestrator, requestedIDs []strin
 // with the given ID, or (zero, "", false) when the model is not currently
 // loaded by the orchestrator.
 func lookupLoadedModel(bn *classifier.Orchestrator, modelID string) (classifier.ModelSpec, string, bool) {
-	for _, info := range bn.ModelInfos() {
-		if info.ID == modelID {
-			return info.Spec, info.Name, true
+	infos := bn.ModelInfos()
+	for i := range infos {
+		if infos[i].ID == modelID {
+			return infos[i].Spec, infos[i].Name, true
 		}
 	}
 	return classifier.ModelSpec{}, "", false

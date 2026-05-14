@@ -226,8 +226,7 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 			logger.Error(correctionErr))
 		status := http.StatusInternalServerError
 		// Map known-cause errors to clearer status codes for the UI.
-		switch {
-		case isCorrectionUserError(correctionErr):
+		if isCorrectionUserError(correctionErr) {
 			status = http.StatusBadRequest
 		}
 		return c.HandleError(ctx, correctionErr,
