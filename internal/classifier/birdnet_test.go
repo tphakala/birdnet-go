@@ -1,14 +1,36 @@
 package classifier
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 )
+
+// fakeModelInstance is a minimal ModelInstance for testing orchestrator logic
+// without loading real models.
+type fakeModelInstance struct {
+	id     string
+	name   string
+	labels []string
+}
+
+func (f *fakeModelInstance) Predict(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+	return nil, nil
+}
+func (f *fakeModelInstance) Spec() ModelSpec      { return ModelSpec{} }
+func (f *fakeModelInstance) ModelID() string      { return f.id }
+func (f *fakeModelInstance) ModelName() string    { return f.name }
+func (f *fakeModelInstance) ModelVersion() string { return "" }
+func (f *fakeModelInstance) NumSpecies() int      { return len(f.labels) }
+func (f *fakeModelInstance) Labels() []string     { return f.labels }
+func (f *fakeModelInstance) Close() error         { return nil }
 
 func TestShouldAutoSelectV3Geomodel(t *testing.T) {
 	t.Parallel()
@@ -243,4 +265,178 @@ func TestPrimaryRangeFilterCoverage_WithMappedFilter(t *testing.T) {
 	assert.Equal(t, 1, primary.WithoutRangeData)
 
 	assert.Equal(t, geomodelLabels, geoLabels)
+}
+
+func TestRangeFilterStatus_PerClassifierCoverage(t *testing.T) {
+	t.Parallel()
+
+	modelsDir := t.TempDir()
+	sharedDir := filepath.Join(modelsDir, "shared")
+	require.NoError(t, os.MkdirAll(sharedDir, 0o755))
+
+	expectedONNX := filepath.Join(sharedDir, geomodelONNXLocalName)
+	expectedLabels := filepath.Join(sharedDir, geomodelLabelsLocalName)
+
+	settings := &conf.Settings{}
+	settings.BirdNET.RangeFilter.Model = "v3"
+	settings.BirdNET.RangeFilter.ModelPath = expectedONNX
+	settings.BirdNET.RangeFilter.LabelsPath = expectedLabels
+	settings.BirdNET.RangeFilter.Threshold = 0.01
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = false
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.RangeFilter.LastUpdated = time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+
+	primaryLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Erithacus rubecula_European Robin",
+		"Ficedula hypoleuca_Pied Flycatcher",
+	}
+	// NumSpecies() reads from settings.BirdNET.Labels, so populate it.
+	settings.BirdNET.Labels = primaryLabels
+
+	geomodelLabels := []string{
+		"Parus major_Great Tit",
+		"Turdus merula_Amsel",
+		"Erithacus rubecula_Robin",
+		"Corvus corax_Northern Raven",
+		"Sturnus vulgaris_European Starling",
+	}
+
+	inner := &fakeRangeFilter{scores: make([]float32, len(geomodelLabels))}
+	mapped := newMappedRangeFilter(inner, primaryLabels, geomodelLabels, 0.0)
+
+	primary := &BirdNET{
+		Settings:     settings,
+		speciesCache: make(map[string]*speciesCacheEntry),
+		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
+		modelsDir:    modelsDir,
+		rangeFilter:  mapped,
+	}
+
+	perchLabels := []string{
+		"Turdus merula",
+		"Corvus corax",
+		"Bubo bubo",
+	}
+	perchInstance := &fakeModelInstance{
+		id:     RegistryIDPerchV2,
+		name:   ModelNamePerchV2,
+		labels: perchLabels,
+	}
+
+	orch := &Orchestrator{
+		Settings:  settings,
+		ModelInfo: primary.ModelInfo,
+		primary:   primary,
+		models: map[string]*modelEntry{
+			"BirdNET_V2.4":    {instance: primary},
+			RegistryIDPerchV2: {instance: perchInstance},
+		},
+		modelsDir: modelsDir,
+	}
+
+	resp := orch.RangeFilterStatus()
+
+	require.NotNil(t, resp.Geomodel)
+	assert.Equal(t, "v3", resp.Geomodel.Version)
+	assert.Equal(t, len(geomodelLabels), resp.Geomodel.TotalSpecies)
+	assert.True(t, resp.Geomodel.AutoSelected)
+
+	assert.False(t, resp.PassUnmappedSpecies)
+	assert.InDelta(t, 0.01, resp.Threshold, 0.001)
+	assert.True(t, resp.LocationConfigured)
+
+	require.Len(t, resp.Classifiers, 2)
+
+	classifierByID := make(map[string]ClassifierCoverage)
+	for _, c := range resp.Classifiers {
+		classifierByID[c.ID] = c
+	}
+
+	birdnet := classifierByID["BirdNET_V2.4"]
+	assert.Equal(t, "BirdNET v2.4", birdnet.Name)
+	assert.Equal(t, 4, birdnet.TotalSpecies)
+	assert.Equal(t, 3, birdnet.WithRangeData)
+	assert.Equal(t, 1, birdnet.WithoutRangeData)
+
+	perch := classifierByID[RegistryIDPerchV2]
+	assert.Equal(t, ModelNamePerchV2, perch.Name)
+	assert.Equal(t, 3, perch.TotalSpecies)
+	assert.Equal(t, 2, perch.WithRangeData)
+	assert.Equal(t, 1, perch.WithoutRangeData)
+}
+
+func TestRangeFilterStatus_BatExcluded(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.BirdNET.RangeFilter.Model = "v3"
+
+	geomodelLabels := []string{"Parus major_Great Tit"}
+	primaryLabels := []string{"Parus major_Great Tit"}
+	settings.BirdNET.Labels = primaryLabels
+
+	inner := &fakeRangeFilter{scores: make([]float32, len(geomodelLabels))}
+	mapped := newMappedRangeFilter(inner, primaryLabels, geomodelLabels, 0.0)
+
+	primary := &BirdNET{
+		Settings:     settings,
+		speciesCache: make(map[string]*speciesCacheEntry),
+		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
+		rangeFilter:  mapped,
+	}
+
+	batInstance := &fakeModelInstance{
+		id:     RegistryIDBat,
+		name:   "Bat Classifier",
+		labels: []string{"Myotis daubentonii", "Pipistrellus pipistrellus"},
+	}
+
+	orch := &Orchestrator{
+		Settings:  settings,
+		ModelInfo: primary.ModelInfo,
+		primary:   primary,
+		models: map[string]*modelEntry{
+			"BirdNET_V2.4": {instance: primary},
+			RegistryIDBat:  {instance: batInstance},
+		},
+	}
+
+	resp := orch.RangeFilterStatus()
+
+	require.Len(t, resp.Classifiers, 1, "bat model should be excluded")
+	assert.Equal(t, "BirdNET_V2.4", resp.Classifiers[0].ID)
+}
+
+func TestRangeFilterStatus_NoGeomodel(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.BirdNET.RangeFilter.Model = ""
+	settings.BirdNET.RangeFilter.Threshold = 0.05
+
+	primary := &BirdNET{
+		Settings:     settings,
+		speciesCache: make(map[string]*speciesCacheEntry),
+		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
+	}
+
+	orch := &Orchestrator{
+		Settings:  settings,
+		ModelInfo: primary.ModelInfo,
+		primary:   primary,
+		models: map[string]*modelEntry{
+			"BirdNET_V2.4": {instance: primary},
+		},
+	}
+
+	resp := orch.RangeFilterStatus()
+
+	assert.Nil(t, resp.Geomodel)
+	require.Len(t, resp.Classifiers, 1)
+	assert.Equal(t, "BirdNET_V2.4", resp.Classifiers[0].ID)
+	assert.Zero(t, resp.Classifiers[0].WithRangeData)
+	assert.Zero(t, resp.Classifiers[0].WithoutRangeData)
+	assert.InDelta(t, 0.05, resp.Threshold, 0.001)
 }
