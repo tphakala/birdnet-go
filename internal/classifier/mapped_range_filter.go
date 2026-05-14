@@ -106,22 +106,23 @@ func (m *mappedRangeFilter) Predict(latitude, longitude, week float32) ([]float3
 	return scores, nil
 }
 
-// PredictIncludedSpecies returns the geomodel labels whose predicted score meets
-// or exceeds threshold. The returned labels come from the geomodel's own label
-// set (not the classifier's labels), so the result covers all species the
-// geomodel knows about regardless of which classifier is active.
-func (m *mappedRangeFilter) PredictIncludedSpecies(lat, lon, week, threshold float32) ([]string, error) {
+// PredictSpeciesScores returns geomodel species whose predicted score meets or
+// exceeds threshold, together with their raw scores. The returned labels come
+// from the geomodel's own label set (not the classifier's labels), so the
+// result covers all species the geomodel knows about regardless of which
+// classifier is active.
+func (m *mappedRangeFilter) PredictSpeciesScores(lat, lon, week, threshold float32) ([]SpeciesScore, error) {
 	geoScores, err := m.inner.Predict(lat, lon, week)
 	if err != nil {
 		return nil, err
 	}
-	included := make([]string, 0, len(m.geomodelLabels)/4)
+	result := make([]SpeciesScore, 0, len(m.geomodelLabels)/4)
 	for i, score := range geoScores {
 		if score >= threshold && i < len(m.geomodelLabels) {
-			included = append(included, m.geomodelLabels[i])
+			result = append(result, SpeciesScore{Score: float64(score), Label: m.geomodelLabels[i]})
 		}
 	}
-	return included, nil
+	return result, nil
 }
 
 // GeomodelLabels returns the full geomodel label set for use in species
