@@ -342,16 +342,23 @@
     label?: string;
   }
 
-  interface RangeFilterStatus {
-    model: string;
-    modelPath: string;
-    labelsPath: string;
+  interface GeomodelStatus {
+    version: string;
+    totalSpecies: number;
     autoSelected: boolean;
-    classifierModel: string;
-    geomodelSpecies: number;
-    classifierSpecies: number;
-    mappedSpecies: number;
-    unmappedSpecies: number;
+  }
+
+  interface ClassifierCoverage {
+    id: string;
+    name: string;
+    totalSpecies: number;
+    withRangeData: number;
+    withoutRangeData: number;
+  }
+
+  interface RangeFilterStatus {
+    geomodel: GeomodelStatus | null;
+    classifiers: ClassifierCoverage[];
     passUnmappedSpecies: boolean;
     threshold: number;
     locationConfigured: boolean;
@@ -1094,72 +1101,92 @@
         </div>
       </div>
 
-      {#if rangeFilterStatus && rangeFilterStatus.model}
+      {#if rangeFilterStatus && rangeFilterStatus.geomodel}
         <div
           class="mt-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)]/50 p-4"
         >
           <h4 class="text-sm font-medium text-[var(--color-base-content)] mb-3">
             {t('analysis.rangeFilter.status.title')}
           </h4>
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm">
-            <div>
-              <span class="text-[var(--color-base-content)]/60"
-                >{t('analysis.rangeFilter.status.model')}</span
-              >
-              <span class="ml-2 font-medium">{rangeFilterStatus.model}</span>
+
+          <!-- Geomodel info line -->
+          <div class="flex items-center gap-2 text-sm mb-3">
+            <span class="font-medium">
+              {t('analysis.rangeFilter.status.geomodelInfo', {
+                version: rangeFilterStatus.geomodel.version,
+                species: rangeFilterStatus.geomodel.totalSpecies.toLocaleString(),
+              })}
+            </span>
+            <span
+              class={cn(
+                'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                rangeFilterStatus.geomodel.autoSelected
+                  ? 'bg-[var(--color-success)]/15 text-[var(--color-success)]'
+                  : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/80'
+              )}
+            >
+              {rangeFilterStatus.geomodel.autoSelected
+                ? t('analysis.rangeFilter.status.autoSelected')
+                : t('analysis.rangeFilter.status.manual')}
+            </span>
+          </div>
+
+          <!-- Per-classifier coverage table -->
+          {#if rangeFilterStatus.classifiers.length > 0}
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b border-[var(--color-base-300)]">
+                    <th class="text-left py-2 pr-4 font-medium text-[var(--color-base-content)]/60"
+                      >{t('analysis.rangeFilter.status.classifier')}</th
+                    >
+                    <th class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                      >{t('analysis.rangeFilter.status.totalSpecies')}</th
+                    >
+                    <th
+                      class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                      title={t('analysis.rangeFilter.status.withRangeDataTooltip')}
+                      >{t('analysis.rangeFilter.status.withRangeData')}</th
+                    >
+                    <th
+                      class="text-right py-2 pl-4 font-medium text-[var(--color-base-content)]/60"
+                      title={t('analysis.rangeFilter.status.withoutRangeDataTooltip')}
+                      >{t('analysis.rangeFilter.status.withoutRangeData')}</th
+                    >
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each rangeFilterStatus.classifiers as classifier (classifier.id)}
+                    <tr class="border-b border-[var(--color-base-300)]/50 last:border-0">
+                      <td class="py-2 pr-4 font-medium">{classifier.name}</td>
+                      <td class="py-2 px-4 text-right tabular-nums"
+                        >{classifier.totalSpecies.toLocaleString()}</td
+                      >
+                      <td class="py-2 px-4 text-right tabular-nums"
+                        >{classifier.withRangeData.toLocaleString()}</td
+                      >
+                      <td class="py-2 pl-4 text-right tabular-nums"
+                        >{classifier.withoutRangeData.toLocaleString()}</td
+                      >
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
             </div>
-            <div>
-              <span class="text-[var(--color-base-content)]/60"
-                >{t('analysis.rangeFilter.status.classifierModel')}</span
-              >
-              <span class="ml-2 font-medium">{rangeFilterStatus.classifierModel}</span>
-            </div>
-            <div>
-              <span
-                class={cn(
-                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                  rangeFilterStatus.autoSelected
-                    ? 'bg-[var(--color-success)]/15 text-[var(--color-success)]'
-                    : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/80'
-                )}
-              >
-                {rangeFilterStatus.autoSelected
-                  ? t('analysis.rangeFilter.status.autoSelected')
-                  : t('analysis.rangeFilter.status.manual')}
-              </span>
-            </div>
-            <div>
-              <span class="text-[var(--color-base-content)]/60"
-                >{t('analysis.rangeFilter.status.classifierSpecies')}</span
-              >
-              <span class="ml-2 font-medium tabular-nums"
-                >{(rangeFilterStatus.classifierSpecies ?? 0).toLocaleString()}</span
-              >
-            </div>
-            <div>
-              <span class="text-[var(--color-base-content)]/60"
-                >{t('analysis.rangeFilter.status.mappedSpecies')}</span
-              >
-              <span class="ml-2 font-medium tabular-nums"
-                >{rangeFilterStatus.mappedSpecies.toLocaleString()}</span
-              >
-            </div>
-            <div>
-              <span class="text-[var(--color-base-content)]/60"
-                >{t('analysis.rangeFilter.status.unmappedSpecies')}</span
-              >
-              <span class="ml-2 font-medium tabular-nums"
-                >{rangeFilterStatus.unmappedSpecies.toLocaleString()}</span
-              >
-            </div>
-            <div>
-              <span class="text-[var(--color-base-content)]/60"
-                >{t('analysis.rangeFilter.status.totalSpecies')}</span
-              >
-              <span class="ml-2 font-medium tabular-nums"
-                >{rangeFilterStatus.geomodelSpecies.toLocaleString()}</span
-              >
-            </div>
+          {/if}
+
+          <!-- Pass unmapped species toggle -->
+          <div class="mt-3 pt-3 border-t border-[var(--color-base-300)]">
+            <Checkbox
+              label={t('analysis.rangeFilter.status.passUnmapped.label')}
+              checked={birdnet?.rangeFilter?.passUnmappedSpecies ?? false}
+              onchange={value =>
+                settingsActions.updateSection('birdnet', {
+                  rangeFilter: { ...birdnet?.rangeFilter, passUnmappedSpecies: value },
+                })}
+              helpText={t('analysis.rangeFilter.status.passUnmapped.helpText')}
+              disabled={store.isLoading || store.isSaving}
+            />
           </div>
         </div>
       {/if}
@@ -1903,7 +1930,7 @@
         <button
           type="button"
           class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-          aria-label="Close modal"
+          aria-label={t('common.aria.closeModal')}
           onclick={() => (rangeFilterState.showModal = false)}
         >
           <X class="size-5" />

@@ -91,6 +91,7 @@ export interface FalsePositiveFilterSettings {
 
 export interface RangeFilterSettings {
   threshold: number;
+  passUnmappedSpecies: boolean;
   speciesCount: number | null;
   species: string[];
 }
@@ -840,6 +841,7 @@ function createEmptySettings(): SettingsFormData {
       locationConfigured: false,
       rangeFilter: {
         threshold: 0.03,
+        passUnmappedSpecies: false,
         speciesCount: null,
         species: [],
       },

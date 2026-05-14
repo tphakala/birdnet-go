@@ -4536,16 +4536,21 @@
     "rangeFilter": {
       "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
       "status": {
-        "title": "Filtro de alcance ativo",
-        "model": "Modelo",
+        "title": "Resumo do filtro de alcance",
+        "geomodelInfo": "Geomodelo {version} - {species} espécies conhecidas",
         "autoSelected": "Selecionado automaticamente",
         "manual": "Manual",
-        "classifierModel": "Classificador",
-        "classifierSpecies": "Espécies do classificador",
-        "mappedSpecies": "Espécies mapeadas",
-        "unmappedSpecies": "Espécies não mapeadas",
+        "classifier": "Classificador",
         "totalSpecies": "Total de espécies",
-        "noFilter": "Nenhum filtro de alcance ativo"
+        "withRangeData": "Com dados de alcance",
+        "withoutRangeData": "Sem dados de alcance",
+        "withRangeDataTooltip": "Espécies que o geomodelo pode avaliar por probabilidade geográfica na sua localização",
+        "withoutRangeDataTooltip": "Espécies sem dados geográficos no geomodelo, tratadas pela configuração de espécies não mapeadas abaixo",
+        "noFilter": "Nenhum filtro de alcance ativo",
+        "passUnmapped": {
+          "label": "Permitir espécies sem dados de alcance",
+          "helpText": "Permitir deteções de espécies para as quais o geomodelo não tem dados geográficos. Quando desativado, estas espécies são sempre filtradas."
+        }
       }
     },
     "advanced": {
