@@ -98,7 +98,7 @@
 
   <!-- Lock Status Badge -->
   {#if detection.locked}
-    <span class={`badge ${badgeSize} badge-warning gap-1`}>
+    <span class={`badge ${badgeSize} ${gapSize} badge-warning`}>
       <svg
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
@@ -119,7 +119,7 @@
 
   <!-- Unlikely Badge -->
   {#if detection.unlikely}
-    <span class={`badge ${badgeSize} badge-warning gap-1`}>
+    <span class={`badge ${badgeSize} ${gapSize} badge-warning`}>
       <CircleHelp class={iconSize} />
       {t('common.review.status.unlikely')}
     </span>
