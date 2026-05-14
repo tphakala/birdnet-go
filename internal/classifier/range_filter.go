@@ -31,34 +31,80 @@ func (a ByScore) Len() int           { return len(a) }
 func (a ByScore) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For descending order
 
-// BuildRangeFilter updates the range filter with current probable species
+// UniversalSpeciesPredictor is implemented by range filters that can
+// produce a species inclusion list from their own labels, independent
+// of any specific classifier's label set.
+type UniversalSpeciesPredictor interface {
+	PredictIncludedSpecies(lat, lon, week, threshold float32) ([]string, error)
+}
+
+// BuildRangeFilter updates the range filter with current probable species.
+// If the active range filter implements UniversalSpeciesPredictor, the
+// species list is derived directly from the geomodel's own labels
+// (typically ~12K species). Otherwise it falls back to GetProbableSpecies,
+// which is limited to the BirdNET classifier's label set.
 func BuildRangeFilter(o *Orchestrator) error {
 	start := time.Now()
-
-	// Get date for Range Filter week calculation
 	today := time.Now().Truncate(24 * time.Hour)
+	settings := conf.CurrentOrFallback(o.Settings)
 
-	// Update location based species list
-	speciesScores, err := o.GetProbableSpecies(today, 0.0)
-	if err != nil {
-		return errors.New(err).
-			Category(errors.CategoryValidation).
-			Context("date", today.Format(time.DateOnly)).
-			Context("latitude", o.Settings.BirdNET.Latitude).
-			Context("longitude", o.Settings.BirdNET.Longitude).
-			Timing("range-filter-build", time.Since(start)).
-			Build()
-	}
+	var includedSpecies []string
 
-	// Convert the speciesScores slice to a slice of species labels
-	// Pre-allocate slice with capacity for all species scores
-	includedSpecies := make([]string, 0, len(speciesScores))
-	for _, speciesScore := range speciesScores {
-		includedSpecies = append(includedSpecies, speciesScore.Label)
+	o.primary.mu.Lock()
+	rf := o.primary.rangeFilter
+	o.primary.mu.Unlock()
+
+	if up, ok := rf.(UniversalSpeciesPredictor); ok && settings.BirdNET.LocationConfigured {
+		threshold := settings.BirdNET.RangeFilter.Threshold
+		if threshold < 0 || threshold > 1 {
+			GetLogger().Warn("Invalid LocationFilterThreshold value, using default",
+				logger.Float64("invalid_value", float64(threshold)),
+				logger.Float64("default_value", 0.01))
+			threshold = 0.01
+		}
+
+		labels, err := up.PredictIncludedSpecies(
+			float32(settings.BirdNET.Latitude),
+			float32(settings.BirdNET.Longitude),
+			getWeekForFilter(today),
+			threshold,
+		)
+		if err != nil {
+			return errors.New(err).
+				Category(errors.CategoryValidation).
+				Context("date", today.Format(time.DateOnly)).
+				Context("latitude", settings.BirdNET.Latitude).
+				Context("longitude", settings.BirdNET.Longitude).
+				Timing("range-filter-build", time.Since(start)).
+				Build()
+		}
+
+		includedSpecies = make([]string, 0, len(labels))
+		for _, label := range labels {
+			if !isSpeciesExcluded(label, settings.Realtime.Species.Exclude) {
+				includedSpecies = append(includedSpecies, label)
+			}
+		}
+
+		addUserOverrideSpecies(&includedSpecies, settings, labels)
+	} else {
+		speciesScores, err := o.GetProbableSpecies(today, 0.0)
+		if err != nil {
+			return errors.New(err).
+				Category(errors.CategoryValidation).
+				Context("date", today.Format(time.DateOnly)).
+				Context("latitude", settings.BirdNET.Latitude).
+				Context("longitude", settings.BirdNET.Longitude).
+				Timing("range-filter-build", time.Since(start)).
+				Build()
+		}
+		includedSpecies = make([]string, 0, len(speciesScores))
+		for _, speciesScore := range speciesScores {
+			includedSpecies = append(includedSpecies, speciesScore.Label)
+		}
 	}
 
 	if conf.Setting().BirdNET.RangeFilter.Debug {
-		// Debug: Write included species to file
 		debugFile := "debug_included_species.txt"
 		var content strings.Builder
 		fmt.Fprintf(&content, "Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
@@ -68,7 +114,6 @@ func BuildRangeFilter(o *Orchestrator) error {
 			content.WriteString(species + "\n")
 		}
 		if err := os.WriteFile(debugFile, []byte(content.String()), 0o600); err != nil {
-			// Don't fail the operation, just log the error
 			GetLogger().Warn("Failed to write included species debug file",
 				logger.Error(err),
 				logger.String("debug_file", debugFile),
@@ -77,8 +122,40 @@ func BuildRangeFilter(o *Orchestrator) error {
 	}
 
 	conf.UpdateIncludedSpecies(includedSpecies)
-
 	return nil
+}
+
+// addUserOverrideSpecies appends species from the explicit include list
+// and species with configured actions to the inclusion set. Each entry is
+// matched against availableLabels by common or scientific name; if no match
+// is found the raw entry is appended so the scientific name map picks it up.
+func addUserOverrideSpecies(includedSpecies *[]string, settings *conf.Settings, availableLabels []string) {
+	seen := make(map[string]bool, len(*includedSpecies))
+	for _, s := range *includedSpecies {
+		seen[s] = true
+	}
+
+	addOverride := func(speciesName string) {
+		matched := false
+		for _, label := range availableLabels {
+			if matchesSpecies(label, speciesName) && !seen[label] {
+				*includedSpecies = append(*includedSpecies, label)
+				seen[label] = true
+				matched = true
+			}
+		}
+		if !matched && !seen[speciesName] {
+			*includedSpecies = append(*includedSpecies, speciesName)
+			seen[speciesName] = true
+		}
+	}
+
+	for _, species := range settings.Realtime.Species.Include {
+		addOverride(species)
+	}
+	for species := range settings.Realtime.Species.Config {
+		addOverride(species)
+	}
 }
 
 // GetProbableSpecies filters and sorts bird species based on their scores.
