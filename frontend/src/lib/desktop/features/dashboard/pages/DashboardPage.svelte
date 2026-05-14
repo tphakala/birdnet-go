@@ -943,11 +943,21 @@ Performance Optimizations:
     }
   }
 
+  // Minute-level tick so serverTodayDate recomputes across midnight
+  let nowTick = $state(Date.now());
+  $effect(() => {
+    const id = setInterval(() => {
+      nowTick = Date.now();
+    }, 60_000);
+    return () => clearInterval(id);
+  });
+
   // Server-aware "today" date: uses server timezone when known, falls back to browser local.
   // All date comparisons that gate navigation or SSE updates should use this, not getLocalDateString().
-  const serverTodayDate = $derived(
-    serverTimezone ? getDateInTimezone(serverTimezone) : getLocalDateString()
-  );
+  const serverTodayDate = $derived.by(() => {
+    void nowTick;
+    return serverTimezone ? getDateInTimezone(serverTimezone) : getLocalDateString();
+  });
 
   // Derived state to check if we're viewing today's data
   const isViewingToday = $derived(selectedDate === serverTodayDate);

@@ -681,10 +681,20 @@ Responsive Breakpoints:
 
   // LRU cache automatically manages memory, no need for periodic cleanup
 
+  // Minute-level tick so serverTodayDate recomputes across midnight
+  let nowTick = $state(Date.now());
+  $effect(() => {
+    const id = setInterval(() => {
+      nowTick = Date.now();
+    }, 60_000);
+    return () => clearInterval(id);
+  });
+
   // Use server timezone for "today" check when available, falling back to browser local
-  const serverTodayDate = $derived(
-    serverTimezone ? getDateInTimezone(serverTimezone) : getLocalDateString()
-  );
+  const serverTodayDate = $derived.by(() => {
+    void nowTick;
+    return serverTimezone ? getDateInTimezone(serverTimezone) : getLocalDateString();
+  });
   const isToday = $derived(selectedDate === serverTodayDate);
 
   // Check for reduced motion preference for performance and accessibility
