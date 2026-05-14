@@ -419,7 +419,7 @@ func Setting() *Settings {
 func prepareSettingsForSave(s *Settings, latitude float64) Settings {
 	settingsCopy := *s
 
-	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled {
+	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled && latitude != 0 {
 		settingsCopy.Realtime.SpeciesTracking.SeasonalTracking = GetSeasonalTrackingWithHemisphere(
 			settingsCopy.Realtime.SpeciesTracking.SeasonalTracking,
 			latitude,

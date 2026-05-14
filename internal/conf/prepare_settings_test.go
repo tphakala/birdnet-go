@@ -227,7 +227,6 @@ func TestPrepareSettingsForSave_EquatorialRegion(t *testing.T) {
 		name     string
 		latitude float64
 	}{
-		{"equator", 0.0},
 		{"slightly north", 5.0},
 		{"slightly south", -5.0},
 		{"northern threshold boundary", NorthernHemisphereThreshold - 0.1},
@@ -248,6 +247,29 @@ func TestPrepareSettingsForSave_EquatorialRegion(t *testing.T) {
 				"Expected default seasons to be populated for equatorial region")
 		})
 	}
+}
+
+// TestPrepareSettingsForSave_SkipsUnconfiguredLatitude verifies that latitude 0
+// (location not yet configured) preserves existing seasons without adjustment.
+func TestPrepareSettingsForSave_SkipsUnconfiguredLatitude(t *testing.T) {
+	t.Parallel()
+
+	nhDefaults := map[string]Season{
+		"spring": {StartMonth: 3, StartDay: 20},
+		"summer": {StartMonth: 6, StartDay: 21},
+		"fall":   {StartMonth: 9, StartDay: 22},
+		"winter": {StartMonth: 12, StartDay: 21},
+	}
+
+	settings := &Settings{}
+	settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
+	settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = maps.Clone(nhDefaults)
+
+	result := prepareSettingsForSave(settings, 0.0)
+
+	spring := result.Realtime.SpeciesTracking.SeasonalTracking.Seasons["spring"]
+	assert.Equal(t, 3, spring.StartMonth,
+		"Seasons should be unchanged when latitude is 0 (unconfigured)")
 }
 
 // TestPrepareSettingsForSave_DoesNotMutateInput verifies original settings unchanged.
@@ -275,7 +297,6 @@ func TestPrepareSettingsForSave_DifferentLatitudes(t *testing.T) {
 		{45.0, "northern"},
 		{NorthernHemisphereThreshold + 1, "northern"},
 		{5.0, "equatorial"},
-		{0.0, "equatorial"},
 		{-5.0, "equatorial"},
 		{SouthernHemisphereThreshold - 1, "southern"},
 		{-45.0, "southern"},
