@@ -60,7 +60,7 @@ func (d *ActionDispatcher) dispatchInternal(rule *entities.AlertRule, event *Ale
 	if event == nil {
 		event = &AlertEvent{}
 	}
-	dispatched := false
+	defaultDispatched := false
 	for i := range rule.Actions {
 		action := &rule.Actions[i]
 		title := renderTitle(action.TemplateTitle, rule, event)
@@ -68,16 +68,17 @@ func (d *ActionDispatcher) dispatchInternal(rule *entities.AlertRule, event *Ale
 
 		switch action.Target {
 		case TargetBell, TargetPush:
-			// Both targets create and broadcast a notification through the
-			// same path. When a rule has both bell and push actions with
-			// identical (or empty) templates, skip the second dispatch to
-			// avoid duplicate notifications.
-			if dispatched && action.TemplateTitle == "" && action.TemplateMessage == "" {
+			hasCustomTemplate := action.TemplateTitle != "" || action.TemplateMessage != ""
+			// Both targets broadcast through the same path. Deduplicate
+			// only when multiple actions use default templates, since
+			// they produce identical notifications.
+			if !hasCustomTemplate && defaultDispatched {
 				continue
 			}
-			hasCustomTemplate := action.TemplateTitle != "" || action.TemplateMessage != ""
 			d.dispatchNotification(action.Target, title, message, rule, event, hasCustomTemplate, isTest)
-			dispatched = true
+			if !hasCustomTemplate {
+				defaultDispatched = true
+			}
 		default:
 			d.log.Warn("unknown alert action target",
 				logger.String("target", action.Target),
