@@ -4498,6 +4498,18 @@
       }
     }
   },
+  "analysis": {
+    "detection": {
+      "batThreshold": {
+        "label": "Tröskel för fladdermöss-detektion",
+        "helpText": "Minsta konfidenspoäng för detektering av fladdermusarter. Gäller endast för klassificeringsmodeller för fladdermöss."
+      },
+      "batFilter": {
+        "label": "Högpassfilter för fladdermöss-ljud",
+        "helpText": "Filtrerar bort hörbara frekvenser före fladdermöss-analysen för att minska falska positiva resultat från fågelsång och omgivningsljud."
+      }
+    }
+  },
   "restart": {
     "applicationRestart": "Starta om applikation",
     "containerRestart": "Starta om container",

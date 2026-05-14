@@ -4498,6 +4498,18 @@
       }
     }
   },
+  "analysis": {
+    "detection": {
+      "batThreshold": {
+        "label": "Prah detekcie netopierov",
+        "helpText": "Minimálne skóre spoľahlivosti pre detekcie druhov netopierov. Platí len pre klasifikačné modely netopierov."
+      },
+      "batFilter": {
+        "label": "Horný priepustný filter pre netopiere",
+        "helpText": "Filtruje počuteľné frekvencie pred analýzou netopierov na zníženie falošných detekcií spôsobených spevom vtákov a okolitým hlukom."
+      }
+    }
+  },
   "restart": {
     "applicationRestart": "Reštartovať aplikáciu",
     "containerRestart": "Reštartovať kontajner",

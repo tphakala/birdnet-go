@@ -4498,6 +4498,18 @@
       }
     }
   },
+  "analysis": {
+    "detection": {
+      "batThreshold": {
+        "label": "Flagermus-detekteringsgrænse",
+        "helpText": "Minimum konfidensscore for flagermusartsdetektioner. Gælder kun for flagermusklassificeringsmodeller."
+      },
+      "batFilter": {
+        "label": "Flagermus-audio-højpasfilter",
+        "helpText": "Filtrerer hørbare frekvenser fra før flagermusanalysen for at reducere falske positiver fra fuglesang og omgivende støj."
+      }
+    }
+  },
   "restart": {
     "applicationRestart": "Genstart applikation",
     "containerRestart": "Genstart container",
