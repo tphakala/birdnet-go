@@ -272,6 +272,59 @@ func (b *Bat) Labels() []string {
 	return b.batClassifier.Labels()
 }
 
+// UpdateFilter rebuilds the high-pass filter from current settings.
+// Called on hot-reload when bat filter settings change.
+func (b *Bat) UpdateFilter() {
+	log := GetLogger()
+	settings := conf.Setting()
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if !settings.Bat.FilterEnabled {
+		if b.hpFilter != nil {
+			log.Info("bat high-pass filter disabled")
+		}
+		b.hpFilter = nil
+		return
+	}
+
+	cutoff := settings.Bat.FilterCutoffHz
+	if cutoff <= 0 {
+		cutoff = 4000.0
+	}
+	passes := settings.Bat.FilterPassCount
+	if passes < 1 {
+		passes = 1
+	}
+
+	hp, err := equalizer.NewHighPass(
+		float64(ModelRegistry[RegistryIDBat].Spec.SampleRate),
+		cutoff,
+		0.707,
+		passes,
+	)
+	if err != nil {
+		log.Error("failed to create bat high-pass filter on reload",
+			logger.Error(err),
+			logger.Float64("cutoff_hz", cutoff),
+			logger.Int("passes", passes))
+		return
+	}
+
+	chain := equalizer.NewFilterChain()
+	if addErr := chain.AddFilter(hp); addErr != nil {
+		log.Error("failed to add bat high-pass filter to chain on reload",
+			logger.Error(addErr))
+		return
+	}
+
+	b.hpFilter = chain
+	log.Info("bat high-pass filter reloaded",
+		logger.Float64("cutoff_hz", cutoff),
+		logger.Int("passes", passes))
+}
+
 // Close releases resources held by the bat model.
 func (b *Bat) Close() error {
 	b.mu.Lock()
