@@ -92,6 +92,7 @@ type SSEDetectionData struct {
 	// Review status
 	Verified string `json:"verified,omitempty"`
 	Locked   bool   `json:"locked"`
+	Unlikely bool   `json:"unlikely,omitempty"`
 
 	// Bird image with attribution
 	BirdImage SSEBirdImage `json:"birdImage"`
@@ -150,6 +151,7 @@ func newSSEDetectionData(note *datastore.Note, birdImage *imageprovider.BirdImag
 		ClipName:       safeBaseName(note.ClipName),
 		Verified:       note.Verified,
 		Locked:         note.Locked,
+		Unlikely:       note.Unlikely,
 		Timestamp:      time.Now(),
 		EventType:      "new_detection",
 	}

@@ -44,6 +44,9 @@ type Result struct {
 	ClipName       string        // Saved audio clip filename
 	ProcessingTime time.Duration // How long analysis took
 
+	// Validation flags
+	Unlikely bool // Tagged by the ultrasonic validation filter when source audio lacks bat echolocation characteristics
+
 	// Runtime-only data (not persisted)
 	Occurrence         float64                       // Probability 0-1 based on location/time/season
 	ModelContributions map[string]ResultModelContrib // Per-model detection data from cross-model consensus, keyed by model ID

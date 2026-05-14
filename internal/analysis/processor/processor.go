@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ultrasonic"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -791,7 +792,59 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 		detections = append(detections, det)
 	}
 
+	// Run ultrasonic validation filter on bat detections. Computed once per chunk
+	// since all detections share the same source audio.
+	if len(detections) > 0 && item.ModelID == classifier.RegistryIDBat {
+		p.applyUltrasonicFilter(settings, item, detections)
+	}
+
 	return detections
+}
+
+// applyUltrasonicFilter runs the ultrasonic validation filter on a batch of bat detections.
+// It computes the US frame CV once from the shared PCM audio and tags all detections
+// as unlikely when the CV falls below the configured threshold. The PCM data is at
+// the source sample rate (e.g., 256kHz), not the model's internal 48kHz rate.
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional for item
+func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifier.Results, detections []Detections) {
+	filterCfg := settings.Bat.UltrasonicFilter
+	if !filterCfg.Enabled {
+		return
+	}
+
+	sourceRate := p.resolveAudioSource(item.Source).SampleRate
+	if sourceRate <= 0 || sourceRate <= filterCfg.FrequencySplitHz*2 {
+		return
+	}
+
+	if len(item.PCMdata) < 4 {
+		return
+	}
+
+	samples := ultrasonic.PCM16ToFloat64(item.PCMdata)
+	cv, ok := ultrasonic.ComputeUSFrameCV(samples, sourceRate, filterCfg)
+	if !ok {
+		GetLogger().Debug("ultrasonic filter: insufficient data for CV computation",
+			logger.String("source", item.Source.DisplayName),
+			logger.Int("sample_count", len(samples)),
+			logger.Int("sample_rate", sourceRate))
+		return
+	}
+
+	unlikely := ultrasonic.IsUnlikely(cv, filterCfg)
+	GetLogger().Info("ultrasonic validation filter result",
+		logger.Float64("us_frame_cv", cv),
+		logger.Float64("threshold", filterCfg.CVThreshold),
+		logger.Bool("unlikely", unlikely),
+		logger.String("source", item.Source.DisplayName),
+		logger.Int("detections", len(detections)))
+
+	if unlikely {
+		for i := range detections {
+			detections[i].Result.Unlikely = true
+		}
+	}
 }
 
 // parseAndValidateSpecies parses species information and validates it
