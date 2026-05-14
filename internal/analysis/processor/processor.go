@@ -908,6 +908,7 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 			GetLogger().Debug("species not on included list",
 				logger.String("species", result.Species),
 				logger.Float32("confidence", result.Confidence),
+				logger.String("model_id", modelID),
 				logger.String("operation", "species_inclusion_filter"))
 		}
 		return true, confidenceThreshold

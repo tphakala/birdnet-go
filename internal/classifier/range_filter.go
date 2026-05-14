@@ -87,6 +87,12 @@ func BuildRangeFilter(o *Orchestrator) error {
 		}
 
 		addUserOverrideSpecies(&includedSpecies, settings, labels)
+
+		GetLogger().Info("Range filter updated via universal geomodel path",
+			logger.Int("geomodel_species", len(labels)),
+			logger.Int("included_species", len(includedSpecies)),
+			logger.Float64("threshold", float64(threshold)),
+			logger.String("duration", time.Since(start).String()))
 	} else {
 		speciesScores, err := o.GetProbableSpecies(today, 0.0)
 		if err != nil {
@@ -102,6 +108,10 @@ func BuildRangeFilter(o *Orchestrator) error {
 		for _, speciesScore := range speciesScores {
 			includedSpecies = append(includedSpecies, speciesScore.Label)
 		}
+
+		GetLogger().Info("Range filter updated via legacy classifier path",
+			logger.Int("included_species", len(includedSpecies)),
+			logger.String("duration", time.Since(start).String()))
 	}
 
 	if conf.Setting().BirdNET.RangeFilter.Debug {
