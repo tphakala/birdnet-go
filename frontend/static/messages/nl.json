@@ -4520,6 +4520,10 @@
         "label": "Bat Detection Threshold",
         "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
       },
+      "batFilter": {
+        "label": "Vleermuis audio hoogdoorlaatfilter",
+        "helpText": "Filtert hoorbare frequenties vóór de vleermuisanalyse om valse detecties door vogelzang en omgevingsgeluid te verminderen."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

@@ -4520,6 +4520,10 @@
         "label": "Bat Detection Threshold",
         "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
       },
+      "batFilter": {
+        "label": "Bat Audio High-Pass Filter",
+        "helpText": "Filters out human-audible frequencies before bat analysis to reduce false positives from bird songs and ambient noise."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

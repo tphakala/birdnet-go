@@ -4520,6 +4520,10 @@
         "label": "Bat Detection Threshold",
         "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
       },
+      "batFilter": {
+        "label": "Filtre passe-haut pour chauves-souris",
+        "helpText": "Filtre les fréquences audibles avant l'analyse des chauves-souris pour réduire les faux positifs dus aux chants d'oiseaux et au bruit ambiant."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

@@ -4520,6 +4520,10 @@
         "label": "Bat Detection Threshold",
         "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
       },
+      "batFilter": {
+        "label": "Fledermaus-Audio-Hochpassfilter",
+        "helpText": "Filtert hörbare Frequenzen vor der Fledermausanalyse heraus, um Fehlerkennungen durch Vogelgesang und Umgebungsgeräusche zu reduzieren."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

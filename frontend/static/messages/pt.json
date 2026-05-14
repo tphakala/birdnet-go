@@ -4520,6 +4520,10 @@
         "label": "Bat Detection Threshold",
         "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
       },
+      "batFilter": {
+        "label": "Filtro passa-altas para morcegos",
+        "helpText": "Filtra frequências audíveis antes da análise de morcegos para reduzir falsos positivos causados por cantos de aves e ruído ambiente."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."
