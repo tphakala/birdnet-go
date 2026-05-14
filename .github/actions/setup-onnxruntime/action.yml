@@ -50,14 +50,14 @@ runs:
             rm -rf "$TMPDIR" /tmp/onnxruntime.zip
             ;;
           darwin-arm64)
-            echo "Downloading ONNX Runtime v${VERSION} for macOS ARM64..."
             curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-osx-arm64-${VERSION}.tgz" \
               -o /tmp/onnxruntime.tgz
-            echo "Download complete, size: $(wc -c < /tmp/onnxruntime.tgz) bytes"
-            tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
-            echo "Extracted to /tmp/onnxruntime:"
-            ls -la /tmp/onnxruntime/lib/ || echo "WARNING: lib/ directory not found after extraction"
-            rm /tmp/onnxruntime.tgz
+            # BSD tar on macOS treats ./ as a path component, so --strip-components=1
+            # only strips ./ instead of the full directory prefix. Use cp instead.
+            TMPDIR_ORT=$(mktemp -d)
+            tar -xzf /tmp/onnxruntime.tgz -C "$TMPDIR_ORT"
+            cp -R "$TMPDIR_ORT"/onnxruntime-*/* /tmp/onnxruntime/
+            rm -rf "$TMPDIR_ORT" /tmp/onnxruntime.tgz
             ;;
           *)
             echo "::error::Unsupported platform: ${{ inputs.target-platform }}"
