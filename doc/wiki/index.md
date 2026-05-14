@@ -19,6 +19,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 
 ## Advanced Features
 
+- [Detection Pipeline Architecture](detection-pipeline.md) - How audio flows through multi-model inference, filtering, and action dispatch
 - [BirdNET Detection Pipeline](BirdNET‐Go-Guide#birdnet-detection-pipeline) - Understanding how settings affect detections
 - [BirdNET Range Filter](BirdNET‐Go-Guide#birdnet-range-filter) - Location and time-based species filtering
 - [Web Dashboard](BirdNET‐Go-Guide#web-dashboard) - Using the visualization dashboard
