@@ -185,6 +185,10 @@ func TestPrimaryRangeFilterCoverage_NoFilter(t *testing.T) {
 	t.Parallel()
 
 	settings := &conf.Settings{}
+	settings.BirdNET.Labels = []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+	}
 	settings.BirdNET.RangeFilter.Model = ""
 	settings.BirdNET.RangeFilter.Threshold = 0.05
 
@@ -199,6 +203,7 @@ func TestPrimaryRangeFilterCoverage_NoFilter(t *testing.T) {
 	assert.Nil(t, geomodel, "geomodel should be nil when no mapped filter is active")
 	assert.Equal(t, "BirdNET_V2.4", primary.ID)
 	assert.Equal(t, "BirdNET v2.4", primary.Name)
+	assert.Equal(t, 2, primary.TotalSpecies)
 	assert.Zero(t, primary.WithRangeData)
 	assert.Zero(t, primary.WithoutRangeData)
 	assert.Empty(t, geoLabels)
@@ -413,6 +418,10 @@ func TestRangeFilterStatus_NoGeomodel(t *testing.T) {
 	t.Parallel()
 
 	settings := &conf.Settings{}
+	settings.BirdNET.Labels = []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+	}
 	settings.BirdNET.RangeFilter.Model = ""
 	settings.BirdNET.RangeFilter.Threshold = 0.05
 
@@ -436,6 +445,7 @@ func TestRangeFilterStatus_NoGeomodel(t *testing.T) {
 	assert.Nil(t, resp.Geomodel)
 	require.Len(t, resp.Classifiers, 1)
 	assert.Equal(t, "BirdNET_V2.4", resp.Classifiers[0].ID)
+	assert.Equal(t, 2, resp.Classifiers[0].TotalSpecies)
 	assert.Zero(t, resp.Classifiers[0].WithRangeData)
 	assert.Zero(t, resp.Classifiers[0].WithoutRangeData)
 	assert.InDelta(t, 0.05, resp.Threshold, 0.001)
