@@ -307,6 +307,7 @@ func TestDispatcher_BellAndPush_DefaultTemplates_Deduplicated(t *testing.T) {
 
 	dispatcher.Dispatch(rule, event)
 
+	assert.Empty(t, mock.calls, "deduplicated actions should not produce non-keyed calls")
 	assert.Len(t, mock.keyCalls, 1, "bell+push with identical default templates should deduplicate to one notification")
 }
 
