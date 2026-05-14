@@ -4543,16 +4543,21 @@
     "rangeFilter": {
       "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
       "status": {
-        "title": "Aktiivinen aluesuodatin",
-        "model": "Malli",
+        "title": "Aluesuodattimen yhteenveto",
+        "geomodelInfo": "Geomalli {version} - {species} tunnettua lajia",
         "autoSelected": "Automaattisesti valittu",
         "manual": "Manuaalinen",
-        "classifierModel": "Luokittelija",
-        "classifierSpecies": "Luokittelijan lajit",
-        "mappedSpecies": "Kartoitetut lajit",
-        "unmappedSpecies": "Kartoittamattomat lajit",
+        "classifier": "Luokittelija",
         "totalSpecies": "Lajeja yhteensä",
-        "noFilter": "Ei aktiivista aluesuodatinta"
+        "withRangeData": "Aluetiedoilla",
+        "withoutRangeData": "Ilman aluetietoja",
+        "withRangeDataTooltip": "Lajit, joiden maantieteellisen todennäköisyyden geomalli voi arvioida sijainnissasi",
+        "withoutRangeDataTooltip": "Lajit, joilla ei ole maantieteellisiä tietoja geomallissa, käsitellään alla olevalla kartoittamattomien lajien asetuksella",
+        "noFilter": "Ei aktiivista aluesuodatinta",
+        "passUnmapped": {
+          "label": "Salli lajit ilman aluetietoja",
+          "helpText": "Salli sellaisten lajien havainnot, joille geomallilla ei ole maantieteellisiä tietoja. Kun pois päältä, nämä lajit suodatetaan aina pois."
+        }
       }
     },
     "advanced": {

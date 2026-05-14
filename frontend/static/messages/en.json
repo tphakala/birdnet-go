@@ -4543,16 +4543,21 @@
     "rangeFilter": {
       "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
       "status": {
-        "title": "Active Range Filter",
-        "model": "Model",
+        "title": "Range Filter Overview",
+        "geomodelInfo": "Geomodel {version} - {species} known species",
         "autoSelected": "Auto-selected",
         "manual": "Manual",
-        "classifierModel": "Classifier",
-        "classifierSpecies": "Classifier Species",
-        "mappedSpecies": "Mapped Species",
-        "unmappedSpecies": "Unmapped Species",
+        "classifier": "Classifier",
         "totalSpecies": "Total Species",
-        "noFilter": "No range filter active"
+        "withRangeData": "With Range Data",
+        "withoutRangeData": "Without Range Data",
+        "withRangeDataTooltip": "Species that the geomodel can evaluate for geographic probability at your location",
+        "withoutRangeDataTooltip": "Species without geographic data in the geomodel, handled by the unmapped species setting below",
+        "noFilter": "No range filter active",
+        "passUnmapped": {
+          "label": "Allow species without range data",
+          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+        }
       }
     },
     "advanced": {

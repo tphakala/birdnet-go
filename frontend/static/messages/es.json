@@ -4543,16 +4543,21 @@
     "rangeFilter": {
       "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
       "status": {
-        "title": "Filtro de rango activo",
-        "model": "Modelo",
+        "title": "Resumen del filtro de rango",
+        "geomodelInfo": "Geomodelo {version} - {species} especies conocidas",
         "autoSelected": "Seleccionado automáticamente",
         "manual": "Manual",
-        "classifierModel": "Clasificador",
-        "classifierSpecies": "Especies del clasificador",
-        "mappedSpecies": "Especies mapeadas",
-        "unmappedSpecies": "Especies no mapeadas",
+        "classifier": "Clasificador",
         "totalSpecies": "Total de especies",
-        "noFilter": "Ningún filtro de rango activo"
+        "withRangeData": "Con datos de rango",
+        "withoutRangeData": "Sin datos de rango",
+        "withRangeDataTooltip": "Especies que el geomodelo puede evaluar por probabilidad geográfica en su ubicación",
+        "withoutRangeDataTooltip": "Especies sin datos geográficos en el geomodelo, gestionadas por la configuración de especies no mapeadas a continuación",
+        "noFilter": "Ningún filtro de rango activo",
+        "passUnmapped": {
+          "label": "Permitir especies sin datos de rango",
+          "helpText": "Permitir detecciones de especies para las que el geomodelo no tiene datos geográficos. Cuando está desactivado, estas especies siempre se filtran."
+        }
       }
     },
     "advanced": {

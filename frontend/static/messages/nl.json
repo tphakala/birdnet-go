@@ -4543,16 +4543,21 @@
     "rangeFilter": {
       "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
       "status": {
-        "title": "Actief gebiedsfilter",
-        "model": "Model",
+        "title": "Gebiedsfilter overzicht",
+        "geomodelInfo": "Geomodel {version} - {species} bekende soorten",
         "autoSelected": "Automatisch geselecteerd",
         "manual": "Handmatig",
-        "classifierModel": "Classificator",
-        "classifierSpecies": "Classificator soorten",
-        "mappedSpecies": "Gekoppelde soorten",
-        "unmappedSpecies": "Niet-gekoppelde soorten",
+        "classifier": "Classificator",
         "totalSpecies": "Totaal aantal soorten",
-        "noFilter": "Geen gebiedsfilter actief"
+        "withRangeData": "Met gebiedsgegevens",
+        "withoutRangeData": "Zonder gebiedsgegevens",
+        "withRangeDataTooltip": "Soorten waarvoor het geomodel de geografische waarschijnlijkheid op uw locatie kan evalueren",
+        "withoutRangeDataTooltip": "Soorten zonder geografische gegevens in het geomodel, afgehandeld door de instelling voor niet-gekoppelde soorten hieronder",
+        "noFilter": "Geen gebiedsfilter actief",
+        "passUnmapped": {
+          "label": "Soorten zonder gebiedsgegevens toestaan",
+          "helpText": "Detecties toestaan van soorten waarvoor het geomodel geen geografische gegevens heeft. Wanneer uitgeschakeld, worden deze soorten altijd uitgefilterd."
+        }
       }
     },
     "advanced": {

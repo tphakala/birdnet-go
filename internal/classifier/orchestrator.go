@@ -440,9 +440,8 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 			cov.WithRangeData, cov.WithoutRangeData = ComputeGeomodelCoverage(
 				task.labels, geoLabels,
 			)
-		} else {
-			cov.WithoutRangeData = cov.TotalSpecies
 		}
+		// No geomodel active: leave coverage counters at zero.
 		resp.Classifiers = append(resp.Classifiers, cov)
 	}
 
