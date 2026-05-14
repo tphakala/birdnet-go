@@ -4524,6 +4524,10 @@
         "label": "Fledermaus-Audio-Hochpassfilter",
         "helpText": "Filtert hörbare Frequenzen vor der Fledermausanalyse heraus, um Fehlerkennungen durch Vogelgesang und Umgebungsgeräusche zu reduzieren."
       },
+      "batNighttimeOnly": {
+        "label": "Nur nachts",
+        "helpText": "Wenn aktiviert, wird die Fledermauerkennung nur zwischen der bürgerlichen Abenddämmerung und der Morgendämmerung durchgeführt. Erfordert eine konfigurierte Standorteinstellung. Deaktivieren, um die Fledermauerkennung rund um die Uhr auszuführen."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

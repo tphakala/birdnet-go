@@ -4524,6 +4524,10 @@
         "label": "Lepakkoäänen ylipäästösuodatin",
         "helpText": "Suodattaa kuultavat taajuudet ennen lepakkoanalyysiä vähentääkseen linnunlaulun ja taustamelun aiheuttamia vääriä tunnistuksia."
       },
+      "batNighttimeOnly": {
+        "label": "Vain yöaikaan",
+        "helpText": "Kun käytössä, lepakkotunnistus toimii vain siviilihämärän ja siviiliaamunkoiton välillä. Vaatii, että sijainti on määritetty. Poista käytöstä, jos haluat lepakkotunnistuksen olevan käytössä ympäri vuorokauden."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

@@ -4524,6 +4524,10 @@
         "label": "Filtro passa-altas para morcegos",
         "helpText": "Filtra frequências audíveis antes da análise de morcegos para reduzir falsos positivos causados por cantos de aves e ruído ambiente."
       },
+      "batNighttimeOnly": {
+        "label": "Apenas noturno",
+        "helpText": "Quando ativado, a deteção de morcegos funciona apenas entre o crepúsculo civil e a aurora civil. Requer que a localização esteja configurada. Desative para executar a deteção de morcegos 24 horas por dia."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."
