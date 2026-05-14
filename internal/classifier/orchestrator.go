@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // modelEntry holds a model instance with its own lock for concurrent access.
@@ -43,6 +44,9 @@ type Orchestrator struct {
 	models    map[string]*modelEntry
 	primary   *BirdNET // direct access to the primary model
 	modelsDir string   // base directory for gallery-installed models
+
+	// Nighttime scheduling for bat model.
+	scheduler *nighttimeScheduler
 }
 
 // NewOrchestrator creates a new Orchestrator with BirdNET as the primary model
@@ -146,6 +150,43 @@ func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
 		logger.String("path", taxonomyPath),
 		logger.String("locale", locale),
 		logger.Int("species", len(resolver.index)))
+}
+
+// SetSunCalc injects the sun calculator into the orchestrator and starts
+// the bat nighttime scheduler if the bat model is loaded. Called during
+// pipeline startup after the suncalc instance is available.
+func (o *Orchestrator) SetSunCalc(sc *suncalc.SunCalc) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if o.scheduler != nil {
+		return // already started
+	}
+
+	o.scheduler = newNighttimeScheduler(sc)
+
+	// Only start the scheduler if the bat model is actually loaded.
+	if _, hasBat := o.models[RegistryIDBat]; hasBat {
+		o.scheduler.start(func() bool {
+			return conf.Setting().Bat.NighttimeOnly
+		})
+		GetLogger().Info("bat nighttime scheduler started",
+			logger.String("operation", "set_suncalc"))
+	}
+}
+
+// IsModelActive returns whether a model should currently run inference.
+// For the bat model, this checks the nighttime scheduler. For all other
+// models, it always returns true.
+func (o *Orchestrator) IsModelActive(modelID string) bool {
+	if modelID != RegistryIDBat {
+		return true
+	}
+	s := o.scheduler
+	if s == nil {
+		return true // no scheduler = no restriction
+	}
+	return s.isActive()
 }
 
 // resolveInstalledPaths looks up catalog entries for the given registry ID
@@ -439,6 +480,9 @@ func (o *Orchestrator) Delete() {
 		}
 		entry.mu.Unlock()
 	}
+	if o.scheduler != nil {
+		o.scheduler.stop()
+	}
 	// Nil out references to fail fast on use-after-delete.
 	o.primary = nil
 	o.models = nil
@@ -530,6 +574,15 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 	log.Info("Model loaded dynamically",
 		logger.String("registry_id", registryID))
 
+	// Start nighttime scheduler if bat model was just loaded and suncalc is available.
+	if registryID == RegistryIDBat && o.scheduler != nil {
+		o.scheduler.start(func() bool {
+			return conf.Setting().Bat.NighttimeOnly
+		})
+		log.Info("bat nighttime scheduler started after dynamic load",
+			logger.String("operation", "load_model"))
+	}
+
 	return nil
 }
 
@@ -572,6 +625,9 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	// Remove from map while holding the write lock so no new PredictModel
 	// calls can obtain this entry.
 	delete(o.models, registryID)
+	if registryID == RegistryIDBat && o.scheduler != nil {
+		o.scheduler.stop()
+	}
 	o.mu.Unlock()
 
 	// Close the model instance outside the map lock. Acquire the per-model
