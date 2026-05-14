@@ -60,15 +60,25 @@ func (d *ActionDispatcher) dispatchInternal(rule *entities.AlertRule, event *Ale
 	if event == nil {
 		event = &AlertEvent{}
 	}
+	defaultDispatched := false
 	for i := range rule.Actions {
 		action := &rule.Actions[i]
 		title := renderTitle(action.TemplateTitle, rule, event)
 		message := renderMessage(action.TemplateMessage, rule, event)
 
 		switch action.Target {
-		case TargetBell:
+		case TargetBell, TargetPush:
 			hasCustomTemplate := action.TemplateTitle != "" || action.TemplateMessage != ""
-			d.dispatchBell(title, message, rule, event, hasCustomTemplate, isTest)
+			// Both targets broadcast through the same path. Deduplicate
+			// only when multiple actions use default templates, since
+			// they produce identical notifications.
+			if !hasCustomTemplate && defaultDispatched {
+				continue
+			}
+			d.dispatchNotification(action.Target, title, message, rule, event, hasCustomTemplate, isTest)
+			if !hasCustomTemplate {
+				defaultDispatched = true
+			}
 		default:
 			d.log.Warn("unknown alert action target",
 				logger.String("target", action.Target),
@@ -77,7 +87,7 @@ func (d *ActionDispatcher) dispatchInternal(rule *entities.AlertRule, event *Ale
 	}
 }
 
-func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.AlertRule, event *AlertEvent, hasCustomTemplate, isTest bool) {
+func (d *ActionDispatcher) dispatchNotification(target, title, message string, rule *entities.AlertRule, event *AlertEvent, hasCustomTemplate, isTest bool) {
 	if d.notifCreator == nil {
 		return
 	}
@@ -100,10 +110,11 @@ func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.Al
 			)
 		}
 		if err != nil {
-			d.log.Error("failed to create bell notification",
+			d.log.Error("failed to dispatch notification",
+				logger.String("target", target),
 				logger.Uint64("rule_id", uint64(rule.ID)),
 				logger.Error(err))
-			d.telemetry.ReportDispatchFailed(TargetBell, err.Error())
+			d.telemetry.ReportDispatchFailed(target, err.Error())
 		}
 		return
 	}
@@ -115,10 +126,11 @@ func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.Al
 		err = d.notifCreator.CreateAndBroadcast(notifType, title, message, event.Properties)
 	}
 	if err != nil {
-		d.log.Error("failed to create bell notification",
+		d.log.Error("failed to dispatch notification",
+			logger.String("target", target),
 			logger.Uint64("rule_id", uint64(rule.ID)),
 			logger.Error(err))
-		d.telemetry.ReportDispatchFailed(TargetBell, err.Error())
+		d.telemetry.ReportDispatchFailed(target, err.Error())
 	}
 }
 

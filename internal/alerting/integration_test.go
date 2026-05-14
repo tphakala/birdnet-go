@@ -225,7 +225,7 @@ func TestIntegration_CustomRuleWithConditions(t *testing.T) {
 		},
 		Actions: []entities.AlertAction{
 			{Target: TargetBell},
-			{Target: "push"},
+			{Target: TargetPush},
 		},
 	}
 	err := repo.CreateRule(t.Context(), customRule)
@@ -254,7 +254,7 @@ func TestIntegration_CustomRuleWithConditions(t *testing.T) {
 	}
 	engine.HandleEvent(highEvent)
 	assert.Equal(t, 1, recorder.count(), "high-confidence event should trigger rule")
-	assert.Equal(t, []string{TargetBell, "push"}, recorder.lastCall().targets)
+	assert.Equal(t, []string{TargetBell, TargetPush}, recorder.lastCall().targets)
 }
 
 func TestIntegration_MetricSustainedThresholdFires(t *testing.T) {

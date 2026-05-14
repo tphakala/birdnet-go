@@ -225,6 +225,175 @@ func TestDispatcher_MultipleActions(t *testing.T) {
 	assert.Len(t, mock.calls, 2)
 }
 
+func TestDispatcher_PushAction(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+	rule := &entities.AlertRule{
+		ID:   1,
+		Name: "Pigeon Alert",
+		Actions: []entities.AlertAction{
+			{Target: TargetPush, TemplateTitle: "Pigeon detected", TemplateMessage: "A pigeon was seen"},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeDetection,
+		EventName:  EventDetectionOccurred,
+		Properties: map[string]any{
+			PropertySpeciesName: "Rock Pigeon",
+			PropertyConfidence:  0.85,
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.calls, 1, "push target should create a notification")
+	assert.Equal(t, notification.TypeDetection, mock.calls[0].notifType)
+	assert.Equal(t, "Pigeon detected", mock.calls[0].title)
+	assert.Equal(t, "A pigeon was seen", mock.calls[0].message)
+}
+
+func TestDispatcher_PushAction_DefaultTemplate(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+	rule := &entities.AlertRule{
+		ID:   1,
+		Name: "Pigeon Alert",
+		Actions: []entities.AlertAction{
+			{Target: TargetPush},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeDetection,
+		EventName:  EventDetectionOccurred,
+		Properties: map[string]any{
+			PropertySpeciesName: "Rock Pigeon",
+			PropertyConfidence:  0.85,
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	assert.Empty(t, mock.calls, "push with default template should use keyed variant")
+	require.Len(t, mock.keyCalls, 1)
+	assert.Equal(t, notification.TypeDetection, mock.keyCalls[0].notifType)
+	assert.Equal(t, MsgAlertDetectionOccurred, mock.keyCalls[0].messageKey)
+}
+
+func TestDispatcher_BellAndPush_DefaultTemplates_Deduplicated(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+	rule := &entities.AlertRule{
+		ID:   1,
+		Name: "Full Alert",
+		Actions: []entities.AlertAction{
+			{Target: TargetBell},
+			{Target: TargetPush},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeDetection,
+		EventName:  EventDetectionOccurred,
+		Properties: map[string]any{
+			PropertySpeciesName: "Rock Pigeon",
+			PropertyConfidence:  0.85,
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	assert.Empty(t, mock.calls, "deduplicated actions should not produce non-keyed calls")
+	assert.Len(t, mock.keyCalls, 1, "bell+push with identical default templates should deduplicate to one notification")
+}
+
+func TestDispatcher_BellCustom_PushDefault(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+	rule := &entities.AlertRule{
+		ID:   1,
+		Name: "Mixed Templates",
+		Actions: []entities.AlertAction{
+			{Target: TargetBell, TemplateTitle: "Custom bell title"},
+			{Target: TargetPush},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeDetection,
+		EventName:  EventDetectionOccurred,
+		Properties: map[string]any{
+			PropertySpeciesName: "Rock Pigeon",
+			PropertyConfidence:  0.85,
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.calls, 1, "bell with custom template should dispatch")
+	require.Len(t, mock.keyCalls, 1, "push with default template should also dispatch")
+}
+
+func TestDispatcher_BellDefault_PushCustom(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+	rule := &entities.AlertRule{
+		ID:   1,
+		Name: "Mixed Templates",
+		Actions: []entities.AlertAction{
+			{Target: TargetBell},
+			{Target: TargetPush, TemplateTitle: "Push: {{species_name}}"},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeDetection,
+		EventName:  EventDetectionOccurred,
+		Properties: map[string]any{
+			PropertySpeciesName: "Rock Pigeon",
+			PropertyConfidence:  0.85,
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.keyCalls, 1, "bell with default template should dispatch")
+	require.Len(t, mock.calls, 1, "push with custom template should also dispatch")
+}
+
+func TestDispatcher_BellAndPush_DifferentTemplates(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+	rule := &entities.AlertRule{
+		ID:   1,
+		Name: "Full Alert",
+		Actions: []entities.AlertAction{
+			{Target: TargetBell, TemplateTitle: "Bell: new bird"},
+			{Target: TargetPush, TemplateTitle: "Push: {{species_name}}"},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeDetection,
+		EventName:  EventDetectionOccurred,
+		Properties: map[string]any{
+			PropertySpeciesName: "Rock Pigeon",
+			PropertyConfidence:  0.85,
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	assert.Len(t, mock.calls, 2, "bell+push with different custom templates should create two notifications")
+}
+
 func TestDispatcher_UnknownTargetSkipped(t *testing.T) {
 	mock := &mockNotifCreator{}
 	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
