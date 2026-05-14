@@ -405,6 +405,14 @@
     background-color: color-mix(in srgb, var(--color-primary) 15%, transparent);
   }
 
+  :global([data-theme='dark']) .limit-dropdown-option-selected {
+    background-color: color-mix(in srgb, var(--color-primary) 20%, transparent);
+  }
+
+  :global([data-theme='dark']) .limit-dropdown-option-selected:hover {
+    background-color: color-mix(in srgb, var(--color-primary) 25%, transparent);
+  }
+
   .limit-dropdown-option-text {
     font-variant-numeric: tabular-nums;
   }
