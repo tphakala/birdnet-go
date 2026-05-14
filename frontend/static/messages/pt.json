@@ -164,7 +164,8 @@
         "verifiedCorrect": "Verificado correto",
         "falsePositive": "Falso positivo",
         "notReviewed": "Não revisado",
-        "locked": "Bloqueado"
+        "locked": "Bloqueado",
+        "unlikely": "Improvável"
       },
       "form": {
         "correctDetection": "Detecção correta",
@@ -513,7 +514,8 @@
       "false": "Falso",
       "unverified": "Não verificado",
       "locked": "Bloqueado",
-      "unlocked": "Desbloqueado"
+      "unlocked": "Desbloqueado",
+      "unlikely": "Improvável"
     },
     "review": {
       "review": "Revisar",
@@ -641,7 +643,8 @@
         "verified": "Verificado",
         "false": "Falso",
         "unverified": "Não verificado",
-        "locked": "Bloqueado"
+        "locked": "Bloqueado",
+        "unlikely": "Improvável"
       },
       "modals": {
         "showSpecies": "Mostrar espécie {species}",
@@ -4527,6 +4530,10 @@
       "batNighttimeOnly": {
         "label": "Apenas noturno",
         "helpText": "Quando ativado, a deteção de morcegos funciona apenas entre o crepúsculo civil e a aurora civil. Requer que a localização esteja configurada. Desative para executar a deteção de morcegos 24 horas por dia."
+      },
+      "batUltrasonicFilter": {
+        "label": "Validação pós-deteção",
+        "helpText": "Quando ativado, as deteções de morcegos são validadas pela análise dos padrões de energia ultrassónica no áudio de origem. Deteções sem características de ecolocalização são marcadas como improváveis."
       },
       "locale": {
         "label": "Species Language",

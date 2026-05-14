@@ -154,7 +154,8 @@
         "verifiedCorrect": "Als korrekt verifiziert",
         "falsePositive": "Falsch positiv",
         "notReviewed": "Nicht überprüft",
-        "locked": "Gesperrt"
+        "locked": "Gesperrt",
+        "unlikely": "Unwahrscheinlich"
       },
       "form": {
         "correctDetection": "Korrekte Erkennung",
@@ -513,7 +514,8 @@
       "false": "Falsch",
       "unverified": "Unverifiziert",
       "locked": "Gesperrt",
-      "unlocked": "Entsperrt"
+      "unlocked": "Entsperrt",
+      "unlikely": "Unwahrscheinlich"
     },
     "review": {
       "review": "Überprüfen",
@@ -641,7 +643,8 @@
         "verified": "Verifiziert",
         "false": "Falsch",
         "unverified": "Unverifiziert",
-        "locked": "Gesperrt"
+        "locked": "Gesperrt",
+        "unlikely": "Unwahrscheinlich"
       },
       "modals": {
         "showSpecies": "Art {species} anzeigen",
@@ -4527,6 +4530,10 @@
       "batNighttimeOnly": {
         "label": "Nur nachts",
         "helpText": "Wenn aktiviert, wird die Fledermauserkennung nur zwischen der bürgerlichen Abenddämmerung und der Morgendämmerung durchgeführt. Erfordert eine konfigurierte Standorteinstellung. Deaktivieren, um die Fledermauserkennung rund um die Uhr auszuführen."
+      },
+      "batUltrasonicFilter": {
+        "label": "Nachträgliche Validierung",
+        "helpText": "Wenn aktiviert, werden Fledermauserkennungen durch Analyse der Ultraschall-Energiemuster in der Quellaufnahme validiert. Erkennungen ohne typische Echoortungsmerkmale werden als unwahrscheinlich markiert."
       },
       "locale": {
         "label": "Species Language",

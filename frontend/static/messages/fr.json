@@ -154,7 +154,8 @@
         "verifiedCorrect": "Vérifié correct",
         "falsePositive": "Faux positif",
         "notReviewed": "Non examiné",
-        "locked": "Verrouillé"
+        "locked": "Verrouillé",
+        "unlikely": "Improbable"
       },
       "form": {
         "correctDetection": "Détection correcte",
@@ -513,7 +514,8 @@
       "false": "Faux",
       "unverified": "Non vérifié",
       "locked": "Verrouillé",
-      "unlocked": "Déverrouillé"
+      "unlocked": "Déverrouillé",
+      "unlikely": "Improbable"
     },
     "review": {
       "review": "Vérifier",
@@ -641,7 +643,8 @@
         "verified": "Vérifié",
         "false": "Faux",
         "unverified": "Non vérifié",
-        "locked": "Verrouillé"
+        "locked": "Verrouillé",
+        "unlikely": "Improbable"
       },
       "modals": {
         "showSpecies": "Afficher l'espèce {species}",
@@ -4527,6 +4530,10 @@
       "batNighttimeOnly": {
         "label": "Nocturne uniquement",
         "helpText": "Lorsqu'activé, la détection de chauves-souris fonctionne uniquement entre le crépuscule civil et l'aube civile. Nécessite la configuration de l'emplacement. Désactivez pour exécuter la détection en permanence."
+      },
+      "batUltrasonicFilter": {
+        "label": "Validation post-détection",
+        "helpText": "Lorsqu'activé, les détections de chauves-souris sont validées en analysant les motifs d'énergie ultrasonique dans l'audio source. Les détections sans caractéristiques d'écholocation sont marquées comme improbables."
       },
       "locale": {
         "label": "Species Language",

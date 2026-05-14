@@ -12,7 +12,7 @@
   import type { Detection } from '$lib/types/detection.types';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { formatRelativeTime } from '$lib/utils/formatters';
-  import { Check } from '@lucide/svelte';
+  import { Check, CircleHelp } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
@@ -39,6 +39,7 @@
   // Check verification status (API returns verified directly on detection)
   const isVerified = $derived(detection.verified === 'correct');
   const isFalsePositive = $derived(detection.verified === 'false_positive');
+  const isUnlikely = $derived(detection.unlikely === true);
 
   // Thumbnail URL — buildAppUrl prepends the configured base path so the
   // image resolves correctly behind reverse proxies (e.g. /birdnet/...).
@@ -85,6 +86,14 @@
           role="status"
           aria-label={t('dashboard.recentDetections.status.unverified')}
           >{t('dashboard.recentDetections.status.unverified')}</span
+        >
+      {/if}
+      {#if isUnlikely}
+        <span
+          class="unlikely-badge"
+          role="status"
+          aria-label={t('dashboard.recentDetections.status.unlikely')}
+          ><CircleHelp class="size-2.5" />{t('dashboard.recentDetections.status.unlikely')}</span
         >
       {/if}
     </div>
@@ -185,6 +194,19 @@
     border-radius: 9999px;
     background-color: rgb(51 65 85 / 0.8);
     color: rgb(203 213 225);
+    font-size: 0.625rem;
+    font-weight: 500;
+  }
+
+  .unlikely-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0 0.375rem;
+    height: 1rem;
+    border-radius: 9999px;
+    background-color: color-mix(in srgb, var(--color-warning) 90%, transparent);
+    color: white;
     font-size: 0.625rem;
     font-weight: 500;
   }
