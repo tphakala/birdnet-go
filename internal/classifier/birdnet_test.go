@@ -259,7 +259,7 @@ func TestPrimaryRangeFilterCoverage_WithMappedFilter(t *testing.T) {
 	geomodel, primary, geoLabels, autoSelected := bn.PrimaryRangeFilterCoverage()
 
 	require.NotNil(t, geomodel)
-	assert.Equal(t, "v3", geomodel.Version)
+	assert.Equal(t, "v3.0", geomodel.Version)
 	assert.Equal(t, len(geomodelLabels), geomodel.TotalSpecies)
 	assert.True(t, geomodel.AutoSelected)
 	assert.True(t, autoSelected)
@@ -344,7 +344,7 @@ func TestRangeFilterStatus_PerClassifierCoverage(t *testing.T) {
 	resp := orch.RangeFilterStatus()
 
 	require.NotNil(t, resp.Geomodel)
-	assert.Equal(t, "v3", resp.Geomodel.Version)
+	assert.Equal(t, "v3.0", resp.Geomodel.Version)
 	assert.Equal(t, len(geomodelLabels), resp.Geomodel.TotalSpecies)
 	assert.True(t, resp.Geomodel.AutoSelected)
 

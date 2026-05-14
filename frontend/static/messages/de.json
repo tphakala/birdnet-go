@@ -4544,7 +4544,7 @@
       "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
       "status": {
         "title": "Gebietsfilter-Übersicht",
-        "geomodelInfo": "Geomodell {version} - {species} bekannte Arten",
+        "geomodelInfo": "BirdNET-Geomodell {version} - {species} bekannte Arten",
         "autoSelected": "Automatisch ausgewählt",
         "manual": "Manuell",
         "classifier": "Klassifikator",

@@ -4543,8 +4543,8 @@
     "rangeFilter": {
       "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
       "status": {
-        "title": "Range Filter Overview",
-        "geomodelInfo": "Geomodel {version} - {species} known species",
+        "title": "Területszűrő áttekintés",
+        "geomodelInfo": "BirdNET Geomodell {version} - {species} ismert faj",
         "autoSelected": "Auto-selected",
         "manual": "Manual",
         "classifier": "Classifier",

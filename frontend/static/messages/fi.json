@@ -4544,7 +4544,7 @@
       "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
       "status": {
         "title": "Aluesuodattimen yhteenveto",
-        "geomodelInfo": "Geomalli {version} - {species} tunnettua lajia",
+        "geomodelInfo": "BirdNET-geomalli {version} - {species} tunnettua lajia",
         "autoSelected": "Automaattisesti valittu",
         "manual": "Manuaalinen",
         "classifier": "Luokittelija",
