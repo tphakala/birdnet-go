@@ -793,8 +793,11 @@
           serviceFormData.gotifyToken = token || '';
 
           const params = new URLSearchParams(queryString || '');
-          const disableTls = params.get('disabletls');
-          serviceFormData.gotifyProtocol = disableTls?.toLowerCase() === 'yes' ? 'http' : 'https';
+          const disableTlsEntry = Array.from(params.entries()).find(
+            ([key]) => key.toLowerCase() === 'disabletls'
+          );
+          const disableTls = disableTlsEntry?.[1]?.toLowerCase();
+          serviceFormData.gotifyProtocol = disableTls === 'yes' ? 'http' : 'https';
         }
         break;
       }

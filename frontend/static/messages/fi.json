@@ -2315,7 +2315,7 @@
           "gotify": {
             "name": "Gotify",
             "server": {
-              "label": "Palvelimen URL",
+              "label": "Palvelin",
               "placeholder": "gotify.example.com:8070",
               "helpText": "Gotify-palvelimesi isäntänimi ja portti"
             },

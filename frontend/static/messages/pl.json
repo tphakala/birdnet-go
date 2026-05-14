@@ -2326,7 +2326,7 @@
               "helpText": "Nazwa hosta i port serwera Gotify"
             },
             "protocol": {
-              "label": "Protokol"
+              "label": "Protokół"
             },
             "token": {
               "label": "Token aplikacji",
