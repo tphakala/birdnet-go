@@ -66,7 +66,7 @@ func (d *ActionDispatcher) dispatchInternal(rule *entities.AlertRule, event *Ale
 		message := renderMessage(action.TemplateMessage, rule, event)
 
 		switch action.Target {
-		case TargetBell:
+		case TargetBell, TargetPush:
 			hasCustomTemplate := action.TemplateTitle != "" || action.TemplateMessage != ""
 			d.dispatchBell(title, message, rule, event, hasCustomTemplate, isTest)
 		default:
