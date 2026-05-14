@@ -198,7 +198,7 @@ func TestMappedRangeFilter_GeomodelLabelsStored(t *testing.T) {
 	assert.Equal(t, geomodelLabels, mapped.geomodelLabels)
 }
 
-func TestMappedRangeFilter_PredictIncludedSpecies(t *testing.T) {
+func TestMappedRangeFilter_PredictSpeciesScores(t *testing.T) {
 	t.Parallel()
 
 	// geomodel scores: species A=0.8, B=0.9, C=0.3, D=0.05
@@ -217,17 +217,20 @@ func TestMappedRangeFilter_PredictIncludedSpecies(t *testing.T) {
 	classifierLabels := []string{"Parus major_Titmouse"}
 	mapped := newMappedRangeFilter(inner, classifierLabels, geomodelLabels, 0.0)
 
-	included, err := mapped.PredictIncludedSpecies(60.0, 25.0, 20.0, 0.1)
+	included, err := mapped.PredictSpeciesScores(60.0, 25.0, 20.0, 0.1)
 	require.NoError(t, err)
 
 	// species D (score 0.05) is below threshold; A, B, C should be included
 	require.Len(t, included, 3)
-	assert.Equal(t, "Parus major_Great Tit", included[0])
-	assert.Equal(t, "Turdus merula_Amsel", included[1])
-	assert.Equal(t, "Erithacus rubecula_Robin", included[2])
+	assert.Equal(t, "Parus major_Great Tit", included[0].Label)
+	assert.InDelta(t, 0.8, included[0].Score, 0.001)
+	assert.Equal(t, "Turdus merula_Amsel", included[1].Label)
+	assert.InDelta(t, 0.9, included[1].Score, 0.001)
+	assert.Equal(t, "Erithacus rubecula_Robin", included[2].Label)
+	assert.InDelta(t, 0.3, included[2].Score, 0.001)
 }
 
-func TestMappedRangeFilter_PredictIncludedSpecies_EmptyResult(t *testing.T) {
+func TestMappedRangeFilter_PredictSpeciesScores_EmptyResult(t *testing.T) {
 	t.Parallel()
 
 	geomodelLabels := []string{
@@ -241,12 +244,12 @@ func TestMappedRangeFilter_PredictIncludedSpecies_EmptyResult(t *testing.T) {
 	mapped := newMappedRangeFilter(inner, []string{"Parus major_Titmouse"}, geomodelLabels, 0.0)
 
 	// threshold of 0.5 means no species pass
-	included, err := mapped.PredictIncludedSpecies(60.0, 25.0, 20.0, 0.5)
+	included, err := mapped.PredictSpeciesScores(60.0, 25.0, 20.0, 0.5)
 	require.NoError(t, err)
 	assert.Empty(t, included, "no species should pass a high threshold")
 }
 
-func TestMappedRangeFilter_PredictIncludedSpecies_PropagatesError(t *testing.T) {
+func TestMappedRangeFilter_PredictSpeciesScores_PropagatesError(t *testing.T) {
 	t.Parallel()
 
 	inner := &fakeRangeFilter{
@@ -254,7 +257,7 @@ func TestMappedRangeFilter_PredictIncludedSpecies_PropagatesError(t *testing.T) 
 	}
 	mapped := newMappedRangeFilter(inner, []string{"A_B"}, []string{"A_B"}, 0.0)
 
-	_, err := mapped.PredictIncludedSpecies(60.0, 25.0, 20.0, 0.1)
+	_, err := mapped.PredictSpeciesScores(60.0, 25.0, 20.0, 0.1)
 	assert.Error(t, err)
 }
 

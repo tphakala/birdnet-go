@@ -3,11 +3,8 @@
 package classifier
 
 import (
-	"encoding/csv"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -35,7 +32,7 @@ func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For d
 // produce a species inclusion list from their own labels, independent
 // of any specific classifier's label set.
 type UniversalSpeciesPredictor interface {
-	PredictIncludedSpecies(lat, lon, week, threshold float32) ([]string, error)
+	PredictSpeciesScores(lat, lon, week, threshold float32) ([]SpeciesScore, error)
 	GeomodelLabels() []string
 }
 
@@ -62,7 +59,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 		}
 
 		allGeoLabels := up.GeomodelLabels()
-		labels, err := up.PredictIncludedSpecies(
+		scores, err := up.PredictSpeciesScores(
 			float32(settings.BirdNET.Latitude),
 			float32(settings.BirdNET.Longitude),
 			getWeekForFilter(today),
@@ -80,17 +77,17 @@ func BuildRangeFilter(o *Orchestrator) error {
 				Build()
 		}
 
-		includedSpecies = make([]string, 0, len(labels))
-		for _, label := range labels {
-			if !isSpeciesExcluded(label, settings.Realtime.Species.Exclude) {
-				includedSpecies = append(includedSpecies, label)
+		includedSpecies = make([]string, 0, len(scores))
+		for _, ss := range scores {
+			if !isSpeciesExcluded(ss.Label, settings.Realtime.Species.Exclude) {
+				includedSpecies = append(includedSpecies, ss.Label)
 			}
 		}
 
 		addUserOverrideSpecies(&includedSpecies, settings, allGeoLabels)
 
 		GetLogger().Info("Range filter updated via universal geomodel path",
-			logger.Int("geomodel_species", len(labels)),
+			logger.Int("geomodel_species", len(scores)),
 			logger.Int("included_species", len(includedSpecies)),
 			logger.Float64("threshold", float64(threshold)),
 			logger.String("duration", time.Since(start).String()))
@@ -135,6 +132,41 @@ func BuildRangeFilter(o *Orchestrator) error {
 
 	conf.UpdateIncludedSpecies(includedSpecies)
 	return nil
+}
+
+// addUserOverrideSpeciesScores appends species from the explicit include list
+// and species with configured actions to a SpeciesScore slice with score 1.0.
+// Used by the universal geomodel path in getProbableSpecies.
+func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, settings *conf.Settings, availableLabels []string) {
+	seen := make(map[string]bool, len(*speciesScores))
+	for _, ss := range *speciesScores {
+		seen[ss.Label] = true
+	}
+
+	addOverride := func(speciesName string) {
+		matched := false
+		for _, label := range availableLabels {
+			if matchesSpecies(label, speciesName) {
+				matched = true
+				if !seen[label] {
+					bn.Debug("Adding override species with max score: %s (matched with: %s)", label, speciesName)
+					*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
+					seen[label] = true
+				}
+			}
+		}
+		if !matched && !seen[speciesName] {
+			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: speciesName})
+			seen[speciesName] = true
+		}
+	}
+
+	for _, species := range settings.Realtime.Species.Include {
+		addOverride(species)
+	}
+	for species := range settings.Realtime.Species.Config {
+		addOverride(species)
+	}
 }
 
 // addUserOverrideSpecies appends species from the explicit include list
@@ -191,6 +223,12 @@ func (bn *BirdNET) GetProbableSpeciesWithSettings(date time.Time, week float32, 
 
 // getProbableSpecies is the shared implementation for both the global-settings
 // and explicit-settings entry points.
+//
+// When the range filter implements UniversalSpeciesPredictor (v3 geomodel),
+// species are predicted using the geomodel's own 12K label set, so the result
+// includes all taxa the geomodel covers (birds, mammals, insects, etc.)
+// regardless of which classifier is active. Otherwise, the legacy path maps
+// geomodel scores to the classifier's label set.
 func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
 	bn.Debug("Applying range filter")
 
@@ -218,7 +256,47 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 		threshold = 0.01
 	}
 
-	// Apply prediction filter based on the context
+	if week == 0 {
+		week = getWeekForFilter(date)
+	}
+
+	// Try the universal geomodel path first: predict from the geomodel's
+	// own label set so that all 12K species are covered.
+	bn.mu.Lock()
+	up, isUniversal := bn.rangeFilter.(UniversalSpeciesPredictor)
+	if isUniversal {
+		allGeoLabels := up.GeomodelLabels()
+		scores, err := up.PredictSpeciesScores(
+			float32(settings.BirdNET.Latitude),
+			float32(settings.BirdNET.Longitude),
+			week,
+			threshold,
+		)
+		bn.mu.Unlock()
+
+		if err != nil {
+			return nil, errors.New(err).
+				Category(errors.CategoryValidation).
+				Context("date", date.Format(time.DateOnly)).
+				Context("week", week).
+				Context("model", settings.BirdNET.RangeFilter.Model).
+				Build()
+		}
+
+		speciesScores := make([]SpeciesScore, 0, len(scores))
+		for _, ss := range scores {
+			if !isSpeciesExcluded(ss.Label, settings.Realtime.Species.Exclude) {
+				speciesScores = append(speciesScores, ss)
+			}
+		}
+
+		addUserOverrideSpeciesScores(bn, &speciesScores, settings, allGeoLabels)
+		sort.Sort(ByScore(speciesScores))
+		return speciesScores, nil
+	}
+	bn.mu.Unlock()
+
+	// Legacy path: map geomodel scores to the classifier's label set.
 	filters, err := bn.predictFilter(date, week, settings, threshold)
 	if err != nil {
 		return nil, errors.New(err).
@@ -229,7 +307,6 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 			Build()
 	}
 
-	// Collect species scores, applying exclude list
 	var speciesScores []SpeciesScore
 	for _, filter := range filters {
 		if !isSpeciesExcluded(filter.Label, settings.Realtime.Species.Exclude) {
@@ -239,25 +316,16 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 		}
 	}
 
-	// Add included species and species with actions with maximum score
 	processedSpecies := make(map[string]bool)
-
-	// Process explicitly included species
 	labels := settings.BirdNET.Labels
 	for _, includedSpecies := range settings.Realtime.Species.Include {
-		bn.Debug("Processing included species: %s", includedSpecies)
 		addSpeciesWithMaxScore(bn, &speciesScores, includedSpecies, processedSpecies, labels)
 	}
-
-	// Process species with configured actions
 	for species := range settings.Realtime.Species.Config {
-		bn.Debug("Processing species with actions: %s", species)
 		addSpeciesWithMaxScore(bn, &speciesScores, species, processedSpecies, labels)
 	}
 
-	// Sort species scores in descending order
 	sort.Sort(ByScore(speciesScores))
-
 	return speciesScores, nil
 }
 
@@ -383,75 +451,6 @@ func getWeekForFilter(date time.Time) float32 {
 	weekInMonth := (day-1)/7 + 1
 
 	return float32(weeksFromMonths + weekInMonth)
-}
-
-// Function to update the score of existing species or add new ones
-func updateOrAddSpecies(scoreMap map[string]*SpeciesScore, scores *[]SpeciesScore, label string) {
-	if score, exists := scoreMap[label]; exists {
-		score.Score = 1.0 // Updates the score of the existing species
-	} else {
-		newScore := SpeciesScore{Score: 1.0, Label: label}
-		*scores = append(*scores, newScore)          // Adds new species to the slice
-		scoreMap[label] = &(*scores)[len(*scores)-1] // Update map with new score reference
-	}
-}
-
-// loadSpeciesFromCSV reads species names from a CSV file located in one of the default config paths.
-// Assumes that each row in the CSV file has the species name as the first element.
-func loadSpeciesFromCSV(fileName string) ([]string, error) {
-	// Retrieve the default config paths.
-	configPaths, err := conf.GetDefaultConfigPaths()
-	if err != nil {
-		return nil, fmt.Errorf("error getting default config paths: %w", err)
-	}
-
-	var file *os.File
-
-	// Try to open the file in one of the default config paths.
-	for _, path := range configPaths {
-		fullPath := filepath.Join(path, fileName)
-		file, err = os.Open(fullPath) //nolint:gosec // G304: fullPath built from known config paths
-		if err == nil {
-			break
-		}
-	}
-
-	if file == nil {
-		return nil, fmt.Errorf("file '%s' not found in default config paths", fileName)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			GetLogger().Warn("Failed to close species config file",
-				logger.Error(err),
-				logger.String("file", fileName))
-		}
-	}()
-
-	// Read from the CSV file
-	reader := csv.NewReader(file)
-	reader.Comment = '#'        // Set comment character
-	reader.FieldsPerRecord = -1 // Allow a variable number of fields
-
-	var speciesList []string
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			GetLogger().Warn("Error reading CSV file record",
-				logger.Error(err),
-				logger.String("file", fileName))
-			continue // Skip this record and continue with the next
-		}
-
-		if len(record) > 0 {
-			species := record[0] // Assuming species name is in the first column
-			speciesList = append(speciesList, species)
-		}
-	}
-
-	return speciesList, nil
 }
 
 // debug functions
