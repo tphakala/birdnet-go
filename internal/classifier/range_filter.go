@@ -36,6 +36,7 @@ func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For d
 // of any specific classifier's label set.
 type UniversalSpeciesPredictor interface {
 	PredictIncludedSpecies(lat, lon, week, threshold float32) ([]string, error)
+	GeomodelLabels() []string
 }
 
 // BuildRangeFilter updates the range filter with current probable species.
@@ -60,6 +61,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 			threshold = 0.01
 		}
 
+		allGeoLabels := up.GeomodelLabels()
 		labels, err := up.PredictIncludedSpecies(
 			float32(settings.BirdNET.Latitude),
 			float32(settings.BirdNET.Longitude),
@@ -85,7 +87,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 			}
 		}
 
-		addUserOverrideSpecies(&includedSpecies, settings, labels)
+		addUserOverrideSpecies(&includedSpecies, settings, allGeoLabels)
 
 		GetLogger().Info("Range filter updated via universal geomodel path",
 			logger.Int("geomodel_species", len(labels)),

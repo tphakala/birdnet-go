@@ -1131,7 +1131,7 @@
                 >{t('analysis.rangeFilter.status.classifierSpecies')}</span
               >
               <span class="ml-2 font-medium tabular-nums"
-                >{rangeFilterStatus.classifierSpecies.toLocaleString()}</span
+                >{(rangeFilterStatus.classifierSpecies ?? 0).toLocaleString()}</span
               >
             </div>
             <div>

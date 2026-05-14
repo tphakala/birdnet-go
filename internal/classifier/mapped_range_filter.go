@@ -110,6 +110,13 @@ func (m *mappedRangeFilter) PredictIncludedSpecies(lat, lon, week, threshold flo
 	return included, nil
 }
 
+// GeomodelLabels returns the full geomodel label set for use in species
+// override matching, where the caller needs to search all known species
+// (not just those passing the range filter threshold).
+func (m *mappedRangeFilter) GeomodelLabels() []string {
+	return m.geomodelLabels
+}
+
 // NumSpecies returns the number of classifier labels (not geomodel labels).
 func (m *mappedRangeFilter) NumSpecies() int {
 	return m.numClassifier
