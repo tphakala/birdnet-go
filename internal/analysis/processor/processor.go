@@ -846,6 +846,8 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 		GetLogger().Info("ultrasonic validation: detections tagged unlikely", logFields...)
 		for i := range detections {
 			detections[i].Result.Unlikely = true
+			detections[i].Result.UltrasonicCV = cv
+			detections[i].Result.UltrasonicCVThreshold = filterCfg.CVThreshold
 		}
 	} else {
 		GetLogger().Debug("ultrasonic validation filter result", logFields...)

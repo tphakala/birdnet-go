@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
@@ -149,6 +150,21 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	// Share the database ID with downstream actions (MQTT, SSE) immediately.
 	if a.DetectionCtx != nil {
 		a.DetectionCtx.NoteID.Store(uint64(a.Result.ID))
+	}
+
+	// Add an explanatory comment when the ultrasonic validation filter tagged this detection as unlikely.
+	if a.Result.Unlikely && a.Result.ID != 0 && a.Repo != nil {
+		locale := a.Settings.Realtime.Dashboard.Locale
+		comment := formatUnlikelyComment(locale, a.Result.UltrasonicCV, a.Result.UltrasonicCVThreshold)
+		noteID := strconv.FormatUint(uint64(a.Result.ID), 10)
+		if err := a.Repo.AddComment(ctx, noteID, comment); err != nil {
+			GetLogger().Warn("failed to add unlikely comment to detection",
+				logger.String("detection_id", a.CorrelationID),
+				logger.Uint64("note_id", uint64(a.Result.ID)),
+				logger.String("species", a.Result.Species.CommonName),
+				logger.Error(err),
+				logger.String("operation", "unlikely_comment"))
+		}
 	}
 
 	// After successful save, publish detection event to the event bus.

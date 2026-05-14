@@ -48,8 +48,10 @@ type Result struct {
 	Unlikely bool // Tagged by the ultrasonic validation filter when source audio lacks bat echolocation characteristics
 
 	// Runtime-only data (not persisted)
-	Occurrence         float64                       // Probability 0-1 based on location/time/season
-	ModelContributions map[string]ResultModelContrib // Per-model detection data from cross-model consensus, keyed by model ID
+	Occurrence            float64                       // Probability 0-1 based on location/time/season
+	ModelContributions    map[string]ResultModelContrib // Per-model detection data from cross-model consensus, keyed by model ID
+	UltrasonicCV          float64                       // US frame CV value from validation filter (for comment generation)
+	UltrasonicCVThreshold float64                       // CV threshold used by validation filter (for comment generation)
 
 	// Review status (populated from DB relations when loaded)
 	Verified string
