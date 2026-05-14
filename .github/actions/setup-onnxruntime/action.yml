@@ -61,6 +61,19 @@ runs:
             ;;
         esac
 
+    - name: Repair dylib symlinks after cache restore
+      if: inputs.target-platform == 'darwin-arm64'
+      shell: bash
+      run: |
+        cd /tmp/onnxruntime/lib
+        if [ ! -e libonnxruntime.dylib ]; then
+          target=$(ls libonnxruntime.*.dylib 2>/dev/null | grep -v dSYM | head -1)
+          if [ -n "$target" ]; then
+            ln -sf "$target" libonnxruntime.dylib
+            echo "Repaired missing symlink: libonnxruntime.dylib -> $target"
+          fi
+        fi
+
     - name: Install ONNX Runtime to system path
       shell: bash
       run: |
