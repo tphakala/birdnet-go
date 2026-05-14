@@ -209,6 +209,46 @@ Each pending detection tracks:
 
 Cross-model agreement strengthens confidence: hit counts from all contributing models are combined for the minimum-detections threshold check. A species detected by both BirdNET and Perch reaches the threshold faster than one detected by a single model.
 
+### How Multiple Models Reduce False Positives
+
+The minimum-detections threshold (`trigger` setting) is the primary false positive filter. A detection must accumulate enough hits within the detection window before it is approved. With multiple models, hit counts from all contributing models are summed.
+
+```mermaid
+sequenceDiagram
+    participant BN as BirdNET v2.4
+    participant PC as Perch v2
+    participant PD as PendingDetection<br/>Turdus merula
+
+    Note over PD: trigger = 3 hits required
+
+    BN->>PD: Hit 1 (85% confidence)
+    Note over PD: Total hits: 1 (BN:1)
+
+    PC->>PD: Hit 2 (72% confidence)
+    Note over PD: Total hits: 2 (BN:1, Perch:1)
+
+    BN->>PD: Hit 3 (79% confidence)
+    Note over PD: Total hits: 3 (BN:2, Perch:1)<br/>Threshold met!
+
+    Note over PD: FlushDeadline reached<br/>APPROVED
+```
+
+Each `PendingDetection` stores a `ModelContributions` map tracking per-model statistics:
+
+| Field | Purpose |
+|-------|---------|
+| `HitCount` | Number of analysis windows where this model detected the species |
+| `MaxConfidence` | Highest single-detection confidence from this model |
+| `LastHitAt` | Timestamp of the most recent hit from this model |
+
+At flush time, the total hit count is the **sum across all models**. This means:
+
+- **Single model**: BirdNET must produce 3 hits alone to meet a trigger of 3
+- **Two models**: BirdNET (2 hits) + Perch (1 hit) = 3 total, threshold met
+- **Cross-model agreement**: When both models independently identify the same species, the combined evidence is stronger, reducing false positives from single-model artifacts
+
+The `BestModelID` field tracks which model produced the highest individual confidence score. This model is credited as the primary detector in the database record, while per-model contributions are stored separately in the `DetectionModelContribution` table.
+
 ### Range Filter (Geomodel v3.0)
 
 The range filter limits detections to species that are geographically plausible at the configured location and time of year.
@@ -259,60 +299,103 @@ The `JobQueue` is a bounded queue with retry/backoff support. BirdWeather and MQ
 
 ## Complete Data Flow Summary
 
-```
-Sound Card (48-256kHz)     RTSP Stream (48kHz)
-        |                         |
-        v                         v
-   [malgo capture]          [FFmpeg decode]
-        |                         |
-        +----------+--------------+
-                   |
-                   v
-            AudioRouter.Dispatch()
-                   |
-        +----------+-----------+----------+
-        |          |           |          |
-        v          v           v          v
-    Route:BN   Route:Perch  Route:Bat  CaptureBuffer
-    (48kHz)    (32kHz)      (256kHz)   (source rate)
-        |          |           |
-        v          v           v
-   AnalysisBuf AnalysisBuf AnalysisBuf
-   3s window   5s window   0.5625s real
-        |          |           |
-        v          v           v
-   [100ms poll] [100ms poll] [100ms poll + night gate]
-        |          |           |
-        v          v           v
-   BirdNET v2.4  Perch v2    Bat two-stage
-   (TFLite/ONNX) (ONNX)     (embed + classify)
-        |          |           |
-        +----------+-----------+
-                   |
-                   v
-            ResultsQueue (chan, cap 100)
-                   |
-                   v
-           processDetections()
-                   |
-           [filter chain]
-                   |
-                   v
-           PendingDetections map
-           key: sourceID:species
-           (cross-model merge)
-                   |
-                   v
-           flushPendingDetections() [1s tick]
-                   |
-                   v
-           Approved? --> Actions:
-                         - Database (SQLite/MySQL)
-                         - Save Audio (from CaptureBuffer)
-                         - SSE (web live feed)
-                         - MQTT (Home Assistant)
-                         - BirdWeather
-                         - Log file
-                         - Custom command
-                         - Alerts (via event bus)
+```mermaid
+flowchart TB
+    subgraph Sources["Audio Sources"]
+        SC["Sound Card\n48-256 kHz"]
+        RTSP["RTSP Stream\n48 kHz"]
+    end
+
+    subgraph Capture["Capture Layer"]
+        MALGO["malgo capture\nS16 PCM conversion"]
+        FFMPEG["FFmpeg decode"]
+    end
+
+    AR["AudioRouter.Dispatch()"]
+
+    subgraph Routes["Per-Model Routes"]
+        RBN["Route: BirdNET\n48 kHz + EQ"]
+        RPC["Route: Perch\n32 kHz + EQ"]
+        RBAT["Route: Bat\n256 kHz raw"]
+    end
+
+    CB["CaptureBuffer\nRing buffer at source rate\nfor audio clip export"]
+
+    subgraph AnalysisBuffers["Analysis Buffers"]
+        ABN["AnalysisBuffer\n3s window\n48 kHz"]
+        APC["AnalysisBuffer\n5s window\n32 kHz"]
+        ABAT["AnalysisBuffer\n0.5625s real time\n256 kHz as 48 kHz"]
+    end
+
+    subgraph Monitors["Buffer Monitors (100ms poll)"]
+        MBN["Monitor: BirdNET"]
+        MPC["Monitor: Perch"]
+        MBAT["Monitor: Bat\n+ nighttime gate"]
+    end
+
+    subgraph Models["Model Inference"]
+        BN["BirdNET v2.4\nTFLite / ONNX\n6522 species"]
+        PC["Perch v2\nONNX\n14795 species"]
+        BAT["Bat Two-Stage\n1. BirdNET embeddings 1024-dim\n2. Regional classifier"]
+    end
+
+    RQ["ResultsQueue\nchannel, capacity 100"]
+
+    subgraph Filtering["Detection Processing"]
+        PD["processDetections()"]
+        FC["Filter Chain\nPrivacy, Exclusion, Confidence\nRange Filter, Ultrasonic CV"]
+        PM["PendingDetections map\nkey: sourceID:species\nCross-model hit count merge"]
+        FL["flushPendingDetections()\n1s tick, check deadlines\nMin detections threshold"]
+    end
+
+    subgraph Actions["Action Dispatch"]
+        DBA["Database\nSQLite / MySQL"]
+        SAA["Save Audio\nfrom CaptureBuffer"]
+        SSEA["SSE Broadcast\nWeb UI live feed"]
+        MQTTA["MQTT Publish\nHome Assistant"]
+        BWA["BirdWeather\nAPI upload"]
+        LOGA["Log File"]
+        CMDA["Custom Command"]
+        ALRT["Alert Engine\nPush Notifications"]
+    end
+
+    SC --> MALGO
+    RTSP --> FFMPEG
+    MALGO --> AR
+    FFMPEG --> AR
+
+    AR --> RBN
+    AR --> RPC
+    AR --> RBAT
+    AR --> CB
+
+    RBN --> ABN
+    RPC --> APC
+    RBAT --> ABAT
+
+    ABN --> MBN
+    APC --> MPC
+    ABAT --> MBAT
+
+    MBN --> BN
+    MPC --> PC
+    MBAT --> BAT
+
+    BN --> RQ
+    PC --> RQ
+    BAT --> RQ
+
+    RQ --> PD
+    PD --> FC
+    FC --> PM
+    PM --> FL
+
+    FL --> DBA
+    FL --> SAA
+    FL --> SSEA
+    FL --> MQTTA
+    FL --> BWA
+    FL --> LOGA
+    FL --> CMDA
+    DBA -->|DetectionEvent| ALRT
 ```
