@@ -121,7 +121,7 @@
     height: 2.625rem;
     border-radius: 0.5rem;
     overflow: hidden;
-    border: 2px solid color-mix(in srgb, var(--color-secondary) 80%, transparent);
+    border: 2px solid color-mix(in srgb, var(--color-base-content) 20%, transparent);
     background-color: var(--color-base-300);
   }
 
@@ -183,7 +183,7 @@
     padding: 0 0.375rem;
     height: 1rem;
     border-radius: 9999px;
-    background-color: color-mix(in srgb, var(--color-secondary) 80%, transparent);
+    background-color: color-mix(in srgb, var(--color-base-content) 15%, transparent);
     color: var(--text-muted);
     font-size: 0.625rem;
     font-weight: 500;
