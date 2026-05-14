@@ -4541,6 +4541,7 @@
         "autoSelected": "Selecionado automaticamente",
         "manual": "Manual",
         "classifierModel": "Classificador",
+        "classifierSpecies": "Espécies do classificador",
         "mappedSpecies": "Espécies mapeadas",
         "unmappedSpecies": "Espécies não mapeadas",
         "totalSpecies": "Total de espécies",

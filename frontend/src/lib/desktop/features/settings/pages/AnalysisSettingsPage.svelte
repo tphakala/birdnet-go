@@ -1130,6 +1130,14 @@
             </div>
             <div>
               <span class="text-[var(--color-base-content)]/60"
+                >{t('analysis.rangeFilter.status.classifierSpecies')}</span
+              >
+              <span class="ml-2 font-medium tabular-nums"
+                >{(rangeFilterStatus.classifierSpecies ?? 0).toLocaleString()}</span
+              >
+            </div>
+            <div>
+              <span class="text-[var(--color-base-content)]/60"
                 >{t('analysis.rangeFilter.status.mappedSpecies')}</span
               >
               <span class="ml-2 font-medium tabular-nums"

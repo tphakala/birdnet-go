@@ -4541,6 +4541,7 @@
         "autoSelected": "Automaattisesti valittu",
         "manual": "Manuaalinen",
         "classifierModel": "Luokittelija",
+        "classifierSpecies": "Luokittelijan lajit",
         "mappedSpecies": "Kartoitetut lajit",
         "unmappedSpecies": "Kartoittamattomat lajit",
         "totalSpecies": "Lajeja yhteensä",

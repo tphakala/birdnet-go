@@ -13,10 +13,11 @@ import (
 // changing predictFilter() or any downstream code.
 type mappedRangeFilter struct {
 	inner           inference.RangeFilter
-	classifierToGeo []int   // classifierIndex -> geomodelIndex; -1 means no match
-	numClassifier   int     // len(classifierLabels)
-	mappedCount     int     // number of classifier species with a geomodel match
-	unmappedScore   float32 // score for classifier species absent from geomodel
+	classifierToGeo []int    // classifierIndex -> geomodelIndex; -1 means no match
+	numClassifier   int      // len(classifierLabels)
+	mappedCount     int      // number of classifier species with a geomodel match
+	unmappedScore   float32  // score for classifier species absent from geomodel
+	geomodelLabels  []string // geomodel label set in geomodel output order
 }
 
 // buildSpeciesMapping creates the classifier-to-geomodel index mapping by
@@ -69,6 +70,7 @@ func newMappedRangeFilter(inner inference.RangeFilter, classifierLabels, geomode
 		numClassifier:   len(classifierLabels),
 		mappedCount:     mapped,
 		unmappedScore:   unmappedScore,
+		geomodelLabels:  geomodelLabels,
 	}
 }
 
@@ -88,6 +90,31 @@ func (m *mappedRangeFilter) Predict(latitude, longitude, week float32) ([]float3
 		}
 	}
 	return scores, nil
+}
+
+// PredictIncludedSpecies returns the geomodel labels whose predicted score meets
+// or exceeds threshold. The returned labels come from the geomodel's own label
+// set (not the classifier's labels), so the result covers all species the
+// geomodel knows about regardless of which classifier is active.
+func (m *mappedRangeFilter) PredictIncludedSpecies(lat, lon, week, threshold float32) ([]string, error) {
+	geoScores, err := m.inner.Predict(lat, lon, week)
+	if err != nil {
+		return nil, err
+	}
+	included := make([]string, 0, len(m.geomodelLabels)/4)
+	for i, score := range geoScores {
+		if score >= threshold && i < len(m.geomodelLabels) {
+			included = append(included, m.geomodelLabels[i])
+		}
+	}
+	return included, nil
+}
+
+// GeomodelLabels returns the full geomodel label set for use in species
+// override matching, where the caller needs to search all known species
+// (not just those passing the range filter threshold).
+func (m *mappedRangeFilter) GeomodelLabels() []string {
+	return m.geomodelLabels
 }
 
 // NumSpecies returns the number of classifier labels (not geomodel labels).

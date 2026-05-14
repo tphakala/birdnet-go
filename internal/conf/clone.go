@@ -50,6 +50,7 @@ func CloneSettings(src *Settings) *Settings {
 	// BirdNET.
 	dst.BirdNET.Labels = slices.Clone(src.BirdNET.Labels)
 	dst.BirdNET.RangeFilter.Species = slices.Clone(src.BirdNET.RangeFilter.Species)
+	dst.BirdNET.RangeFilter.IncludedScientificNames = maps.Clone(src.BirdNET.RangeFilter.IncludedScientificNames)
 
 	// Models.
 	dst.Models.Enabled = slices.Clone(src.Models.Enabled)
