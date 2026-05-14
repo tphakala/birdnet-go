@@ -303,12 +303,12 @@ func writeMonoWAV16(t *testing.T, path string, sampleRate, seconds int, freq flo
 	defer func() { _ = f.Close() }()
 
 	// RIFF header
-	_, _ = f.Write([]byte("RIFF"))
+	_, _ = f.WriteString("RIFF")
 	_ = binary.Write(f, binary.LittleEndian, uint32(36+dataBytes))
-	_, _ = f.Write([]byte("WAVE"))
+	_, _ = f.WriteString("WAVE")
 
 	// fmt chunk (PCM)
-	_, _ = f.Write([]byte("fmt "))
+	_, _ = f.WriteString("fmt ")
 	_ = binary.Write(f, binary.LittleEndian, uint32(16)) // subchunk size
 	_ = binary.Write(f, binary.LittleEndian, uint16(1))  // PCM format
 	_ = binary.Write(f, binary.LittleEndian, uint16(1))  // channels = mono
@@ -318,7 +318,7 @@ func writeMonoWAV16(t *testing.T, path string, sampleRate, seconds int, freq flo
 	_ = binary.Write(f, binary.LittleEndian, uint16(16))           // bits per sample
 
 	// data chunk
-	_, _ = f.Write([]byte("data"))
+	_, _ = f.WriteString("data")
 	_ = binary.Write(f, binary.LittleEndian, uint32(dataBytes))
 	for i := 0; i < numSamples; i++ {
 		v := int16(math.Sin(2*math.Pi*freq*float64(i)/float64(sampleRate)) * 32767)
