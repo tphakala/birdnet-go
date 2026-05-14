@@ -4507,6 +4507,10 @@
       "batFilter": {
         "label": "Sikspārņu audio augstfrekvences filtrs",
         "helpText": "Filtrē cilvēka dzirdei pieejamās frekvences pirms sikspārņu analīzes, lai samazinātu viltus pozitīvos rezultātus no putnu dziesmām un apkārtējā trokšņa."
+      },
+      "batNighttimeOnly": {
+        "label": "Tikai naktī",
+        "helpText": "Ja iespējots, sikspārņu noteikšana darbojas tikai starp pilsoniskajiem krēsliem un pilsonisko rītausmu. Nepieciešama atrašanās vietas konfigurācija. Atspējojiet, lai noteikšana darbotos visu diennakti."
       }
     }
   },

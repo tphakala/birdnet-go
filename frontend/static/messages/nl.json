@@ -4524,6 +4524,10 @@
         "label": "Vleermuis audio hoogdoorlaatfilter",
         "helpText": "Filtert hoorbare frequenties vóór de vleermuisanalyse om valse detecties door vogelzang en omgevingsgeluid te verminderen."
       },
+      "batNighttimeOnly": {
+        "label": "Alleen 's nachts",
+        "helpText": "Wanneer ingeschakeld, werkt de vleermuisdetectie alleen tussen de burgerlijke schemering en de burgerlijke dageraad. Vereist dat de locatie is geconfigureerd. Schakel uit om vleermuisdetectie de klok rond uit te voeren."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

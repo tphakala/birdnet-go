@@ -4507,6 +4507,10 @@
       "batFilter": {
         "label": "Flagermus-audio-højpasfilter",
         "helpText": "Filtrerer hørbare frekvenser fra før flagermusanalysen for at reducere falske positiver fra fuglesang og omgivende støj."
+      },
+      "batNighttimeOnly": {
+        "label": "Kun om natten",
+        "helpText": "Når aktiveret kører flagermusdetektering kun mellem borgerlig tusmørke og borgerlig daggry. Kræver at placering er konfigureret. Deaktiver for at køre flagermusdetektering hele dagen."
       }
     }
   },

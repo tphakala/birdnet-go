@@ -4524,6 +4524,10 @@
         "label": "Filtr górnoprzepustowy dla nietoperzy",
         "helpText": "Filtruje słyszalne częstotliwości przed analizą nietoperzy, aby zmniejszyć fałszywe wykrycia spowodowane śpiewem ptaków i hałasem otoczenia."
       },
+      "batNighttimeOnly": {
+        "label": "Tylko w nocy",
+        "helpText": "Po włączeniu wykrywanie nietoperzy działa tylko między zmierzchem cywilnym a świtem cywilnym. Wymaga skonfigurowanej lokalizacji. Wyłącz, aby wykrywanie nietoperzy działało całą dobę."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

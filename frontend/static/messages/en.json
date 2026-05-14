@@ -4524,6 +4524,10 @@
         "label": "Bat Audio High-Pass Filter",
         "helpText": "Filters out human-audible frequencies before bat analysis to reduce false positives from bird songs and ambient noise."
       },
+      "batNighttimeOnly": {
+        "label": "Nighttime Only",
+        "helpText": "When enabled, bat detection runs only between civil dusk and civil dawn. Requires location to be configured. Disable to run bat detection around the clock."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

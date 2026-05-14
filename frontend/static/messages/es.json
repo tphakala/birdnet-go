@@ -4524,6 +4524,10 @@
         "label": "Filtro de paso alto para murciélagos",
         "helpText": "Filtra las frecuencias audibles antes del análisis de murciélagos para reducir falsos positivos por cantos de aves y ruido ambiental."
       },
+      "batNighttimeOnly": {
+        "label": "Solo nocturno",
+        "helpText": "Cuando está activado, la detección de murciélagos funciona solo entre el crepúsculo civil y el amanecer civil. Requiere que la ubicación esté configurada. Desactive para ejecutar la detección de murciélagos las 24 horas."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

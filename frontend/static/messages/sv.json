@@ -4507,6 +4507,10 @@
       "batFilter": {
         "label": "Högpassfilter för fladdermöss-ljud",
         "helpText": "Filtrerar bort hörbara frekvenser före fladdermöss-analysen för att minska falska positiva resultat från fågelsång och omgivningsljud."
+      },
+      "batNighttimeOnly": {
+        "label": "Endast nattetid",
+        "helpText": "När aktiverat körs fladdermöss-detektering endast mellan borgerlig skymning och borgerlig gryning. Kräver konfigurerad plats. Inaktivera för att köra detektering dygnet runt."
       }
     }
   },

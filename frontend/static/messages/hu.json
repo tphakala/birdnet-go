@@ -4507,6 +4507,10 @@
       "batFilter": {
         "label": "Denevér hang felüláteresztő szűrő",
         "helpText": "Kiszűri az emberi fül számára hallható frekvenciákat a denevérelemzés előtt, hogy csökkentse a madárdal és a környezeti zaj okozta téves észleléseket."
+      },
+      "batNighttimeOnly": {
+        "label": "Csak éjszaka",
+        "helpText": "Ha engedélyezve van, a denevérészlelés csak polgári alkony és polgári hajnal között fut. A helyszín konfigurálása szükséges. Kapcsolja ki az éjjel-nappali denevérészleléshez."
       }
     }
   },

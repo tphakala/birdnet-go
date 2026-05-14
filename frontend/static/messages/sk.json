@@ -4507,6 +4507,10 @@
       "batFilter": {
         "label": "Horný priepustný filter pre netopiere",
         "helpText": "Filtruje počuteľné frekvencie pred analýzou netopierov na zníženie falošných detekcií spôsobených spevom vtákov a okolitým hlukom."
+      },
+      "batNighttimeOnly": {
+        "label": "Iba v noci",
+        "helpText": "Keď je povolené, detekcia netopierov beží iba medzi občianskym súmrakom a občianskym svitaním. Vyžaduje nakonfigurovanú polohu. Vypnite pre nepretržitú detekciu."
       }
     }
   },

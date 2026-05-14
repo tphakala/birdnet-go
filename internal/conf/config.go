@@ -1190,6 +1190,7 @@ type BatConfig struct {
 	FilterEnabled   bool    `yaml:"filterenabled" json:"filterEnabled"`                         // enable high-pass filter for bat audio
 	FilterCutoffHz  float64 `yaml:"filtercutoffhz,omitempty" json:"filterCutoffHz,omitempty"`   // high-pass filter cutoff frequency in Hz
 	FilterPassCount int     `yaml:"filterpasscount,omitempty" json:"filterPassCount,omitempty"` // number of filter passes for steeper rolloff
+	NighttimeOnly   bool    `yaml:"nighttimeonly" json:"nighttimeOnly"`                         // restrict bat detection to nighttime (civil dusk to civil dawn)
 }
 
 // BSGConfig holds configuration for BSG regional bird models.
