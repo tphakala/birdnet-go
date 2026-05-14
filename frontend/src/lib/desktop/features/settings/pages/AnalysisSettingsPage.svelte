@@ -907,14 +907,14 @@
         locale: store.originalData.birdnet?.locale,
         batThreshold: store.originalData.bat?.threshold,
         batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
-        batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled,
+        batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
       }}
       currentData={{
         threshold: birdnet?.threshold,
         locale: birdnet?.locale,
         batThreshold: bat.threshold,
         batNighttimeOnly: bat.nighttimeOnly,
-        batUltrasonicFilter: bat.ultrasonicFilter?.enabled,
+        batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
       }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">

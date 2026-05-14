@@ -205,7 +205,7 @@
     padding: 0 0.375rem;
     height: 1rem;
     border-radius: 9999px;
-    background-color: rgb(245 158 11 / 0.9);
+    background-color: color-mix(in srgb, var(--color-warning) 90%, transparent);
     color: white;
     font-size: 0.625rem;
     font-weight: 500;
