@@ -176,7 +176,10 @@ type streamInfo struct {
 // Uses c.Settings (injected via Controller constructor) which points to the
 // shared settings instance — mutations are visible immediately.
 func (c *Controller) getStreamInfo(rawURL string) streamInfo {
+	c.settingsMutex.RLock()
 	settings := c.Settings
+	c.settingsMutex.RUnlock()
+
 	if settings == nil {
 		return streamInfo{}
 	}
@@ -518,8 +521,13 @@ func (c *Controller) handleStreamStatsUpdate(ctx echo.Context, clientID string) 
 // @Success 200 {object} SSEStreamHealthData "Stream health update events"
 // @Failure 401 {object} ErrorResponse "Unauthorized"
 // @Failure 429 {object} ErrorResponse "Too many requests"
+// @Failure 503 {object} ErrorResponse "Audio engine not initialized"
 // @Router /api/v2/streams/health/stream [get]
 func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
+	if c.engine == nil {
+		return c.HandleError(ctx, nil, "Audio engine not initialized", http.StatusServiceUnavailable)
+	}
+
 	// Create a context with timeout for maximum connection duration
 	timeoutCtx, cancel := context.WithTimeout(ctx.Request().Context(), maxSSEStreamDuration)
 	defer cancel()
@@ -574,8 +582,10 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 	}
 }
 
-// streamHealthSnapshot captures key health metrics for change detection
+// streamHealthSnapshot captures key health metrics for change detection.
+// RawURL is cached at creation time so it survives source unregistration.
 type streamHealthSnapshot struct {
+	RawURL             string
 	IsHealthy          bool
 	ProcessState       string
 	LastErrorType      string
@@ -585,8 +595,9 @@ type streamHealthSnapshot struct {
 }
 
 // createHealthSnapshot creates a snapshot of stream health for comparison.
-func createHealthSnapshot(health *ffmpeg.StreamHealth) streamHealthSnapshot {
+func createHealthSnapshot(rawURL string, health *ffmpeg.StreamHealth) streamHealthSnapshot {
 	snapshot := streamHealthSnapshot{
+		RawURL:             rawURL,
 		IsHealthy:          health.IsHealthy,
 		ProcessState:       health.ProcessState.String(),
 		RestartCount:       health.RestartCount,
@@ -602,7 +613,7 @@ func createHealthSnapshot(health *ffmpeg.StreamHealth) streamHealthSnapshot {
 }
 
 // hasHealthChanged checks if stream health has changed significantly
-func hasHealthChanged(prev, current streamHealthSnapshot) bool {
+func hasHealthChanged(prev, current *streamHealthSnapshot) bool {
 	return prev.IsHealthy != current.IsHealthy ||
 		prev.ProcessState != current.ProcessState ||
 		prev.LastErrorType != current.LastErrorType ||
@@ -611,7 +622,7 @@ func hasHealthChanged(prev, current streamHealthSnapshot) bool {
 }
 
 // determineEventType determines the appropriate event type based on what changed
-func determineEventType(prev, current streamHealthSnapshot) string {
+func determineEventType(prev, current *streamHealthSnapshot) string {
 	// Prioritize event types by importance
 	if prev.ProcessState != current.ProcessState {
 		return "state_change"
@@ -642,10 +653,9 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 	registry := c.engine.Registry()
 
 	for sourceID, health := range healthData {
-		currentSnapshot := createHealthSnapshot(health)
-
 		// Resolve the connection URL for SSE events (sourceID is an internal key, not a URL)
 		rawURL := c.resolveSourceURL(registry, sourceID)
+		currentSnapshot := createHealthSnapshot(rawURL, health)
 
 		// Check if this is a new stream or if something changed
 		previousSnapshot, exists := previousState[sourceID]
@@ -658,9 +668,9 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 					logger.Error(err))
 				return err
 			}
-		} else if hasHealthChanged(previousSnapshot, currentSnapshot) {
+		} else if hasHealthChanged(&previousSnapshot, &currentSnapshot) {
 			// Stream health changed
-			eventType := determineEventType(previousSnapshot, currentSnapshot)
+			eventType := determineEventType(&previousSnapshot, &currentSnapshot)
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, health, eventType); err != nil {
 				c.logDebugIfEnabled("Failed to send health update, client disconnected",
 					logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
@@ -682,15 +692,14 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 
 // processRemovedStreams checks for and processes streams that have been removed
 func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, healthData map[string]*ffmpeg.StreamHealth, previousState map[string]streamHealthSnapshot) error {
-	registry := c.engine.Registry()
-
-	for prevSourceID := range previousState {
+	for prevSourceID, prevSnapshot := range previousState {
 		if _, exists := healthData[prevSourceID]; exists {
 			continue
 		}
 
-		// Stream was removed — resolve the connection URL for the SSE event
-		rawURL := c.resolveSourceURL(registry, prevSourceID)
+		// Stream was removed; use the cached URL from the snapshot since the
+		// source has already been unregistered from the registry.
+		rawURL := prevSnapshot.RawURL
 		sanitizedURL := privacy.SanitizeStreamUrl(rawURL)
 		emptyHealth := ffmpeg.StreamHealth{}
 		response := convertStreamHealthToResponse(rawURL, &emptyHealth)

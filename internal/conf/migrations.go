@@ -365,8 +365,10 @@ func normalizeRTSPStreamEnabledDefaults(rawStreams any) ([]any, bool) {
 // prefixed with "error:"; non-fatal issues with "warning:".
 // knownIDs is the set of recognized config-level model identifiers; callers
 // should pass classifier.KnownConfigIDs() when available, or a hardcoded
-// fallback during early config loading.
-func (s *Settings) ValidateModelConfig(knownIDs map[string]bool) []string {
+// fallback during early config loading. When checkSourceRefs is true,
+// sources and streams are validated against models.enabled; set to false
+// during early loading before ScanInstalled has synced the enabled list.
+func (s *Settings) ValidateModelConfig(knownIDs map[string]bool, checkSourceRefs bool) []string {
 	var issues []string
 
 	enabledSet := make(map[string]bool, len(s.Models.Enabled))
@@ -380,18 +382,25 @@ func (s *Settings) ValidateModelConfig(knownIDs map[string]bool) []string {
 		}
 	}
 
-	for i := range s.Realtime.Audio.Sources {
-		src := &s.Realtime.Audio.Sources[i]
-		for _, modelID := range src.Models {
-			if !enabledSet[strings.ToLower(modelID)] {
-				issues = append(issues, "warning: source \""+src.Name+"\" references model \""+modelID+"\" not in models.enabled")
+	// Source/stream reference checks are skipped here. During early config
+	// loading, models.enabled is not yet synchronized with gallery-installed
+	// models (ScanInstalled runs later), so these checks produce false
+	// positives. The orchestrator re-validates with the authoritative model
+	// list after startup sync is complete.
+	if checkSourceRefs {
+		for i := range s.Realtime.Audio.Sources {
+			src := &s.Realtime.Audio.Sources[i]
+			for _, modelID := range src.Models {
+				if !enabledSet[strings.ToLower(modelID)] {
+					issues = append(issues, "warning: source \""+src.Name+"\" references model \""+modelID+"\" not in models.enabled")
+				}
 			}
 		}
-	}
-	for _, stream := range s.Realtime.RTSP.AllStreams() {
-		for _, modelID := range stream.Models {
-			if !enabledSet[strings.ToLower(modelID)] {
-				issues = append(issues, "warning: stream \""+stream.Name+"\" references model \""+modelID+"\" not in models.enabled")
+		for _, stream := range s.Realtime.RTSP.AllStreams() {
+			for _, modelID := range stream.Models {
+				if !enabledSet[strings.ToLower(modelID)] {
+					issues = append(issues, "warning: stream \""+stream.Name+"\" references model \""+modelID+"\" not in models.enabled")
+				}
 			}
 		}
 	}
@@ -408,7 +417,7 @@ func (s *Settings) applyModelValidation() error {
 	// This fallback is used during config loading before the classifier package
 	// is available. The orchestrator re-validates with the authoritative list.
 	knownIDs := map[string]bool{ModelIDBirdNET: true, ModelIDPerchV2: true, ModelIDBat: true, ModelIDBSG: true}
-	modelIssues := s.ValidateModelConfig(knownIDs)
+	modelIssues := s.ValidateModelConfig(knownIDs, false)
 	var fatalErrors []string
 	for _, issue := range modelIssues {
 		if strings.HasPrefix(issue, "error:") {

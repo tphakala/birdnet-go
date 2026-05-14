@@ -93,7 +93,7 @@ func TestValidateModelConfig_NoErrorsWithJustBirdNET(t *testing.T) {
 	t.Parallel()
 	settings := &Settings{}
 	settings.Models.Enabled = []string{"birdnet"}
-	errs := settings.ValidateModelConfig(testKnownIDs)
+	errs := settings.ValidateModelConfig(testKnownIDs, true)
 	assert.Empty(t, errs, "should have no errors with just BirdNET")
 }
 
@@ -101,7 +101,7 @@ func TestValidateModelConfig_UnknownModelWarning(t *testing.T) {
 	t.Parallel()
 	settings := &Settings{}
 	settings.Models.Enabled = []string{"birdnet", "unknown_model"}
-	warnings := settings.ValidateModelConfig(testKnownIDs)
+	warnings := settings.ValidateModelConfig(testKnownIDs, true)
 	assert.NotEmpty(t, warnings, "unknown model ID should produce a warning")
 }
 
@@ -112,7 +112,7 @@ func TestValidateModelConfig_SourceReferencesUnavailableModel(t *testing.T) {
 	settings.Realtime.Audio.Sources = []AudioSourceConfig{
 		{Name: "Mic1", Device: "hw:0,0", Models: []string{"birdnet", "perch_v2"}},
 	}
-	warnings := settings.ValidateModelConfig(testKnownIDs)
+	warnings := settings.ValidateModelConfig(testKnownIDs, true)
 	assert.NotEmpty(t, warnings, "source referencing model not in models.enabled should warn")
 }
 

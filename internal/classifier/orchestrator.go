@@ -481,11 +481,9 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 	}
 
 	if _, exists := o.models[registryID]; exists {
-		return errors.Newf("model %s is already loaded", registryID).
-			Component("classifier.orchestrator").
-			Category(errors.CategoryValidation).
-			Context("registry_id", registryID).
-			Build()
+		log.Debug("model already loaded, skipping",
+			logger.String("registry_id", registryID))
+		return nil
 	}
 
 	loader, implemented := modelLoaders[registryID]
@@ -665,19 +663,25 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 			continue
 		}
 
-		// Skip the primary model (already loaded)
-		if _, exists := o.models[registryID]; exists {
+		o.mu.Lock()
+		_, exists := o.models[registryID]
+		if exists {
+			o.mu.Unlock()
 			continue
 		}
 
 		threads := threadAlloc[registryID]
-
 		loader, implemented := modelLoaders[registryID]
 		if !implemented {
+			o.mu.Unlock()
 			log.Warn("Loader not yet implemented, skipping",
 				logger.String("registry_id", registryID))
 			continue
 		}
+
+		// Release lock during expensive model loading to avoid blocking
+		// inference on concurrent goroutines.
+		o.mu.Unlock()
 		loadErr := loader(o, threads)
 		if loadErr != nil {
 			log.Warn("optional model failed to load, will retry after gallery scan",
