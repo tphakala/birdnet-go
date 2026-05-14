@@ -16,7 +16,8 @@ import (
 var speciesListMutex sync.Mutex
 
 // UpdateIncludedSpecies clones the current settings, replaces the species
-// list and LastUpdated timestamp, and publishes a new immutable snapshot.
+// list, builds the O(1) scientific name lookup map, and publishes a new
+// immutable snapshot.
 func UpdateIncludedSpecies(species []string) {
 	speciesListMutex.Lock()
 	defer speciesListMutex.Unlock()
@@ -29,6 +30,17 @@ func UpdateIncludedSpecies(species []string) {
 	updated := CloneSettings(current)
 	updated.BirdNET.RangeFilter.Species = make([]string, len(species))
 	copy(updated.BirdNET.RangeFilter.Species, species)
+
+	sciNames := make(map[string]struct{}, len(species))
+	for _, label := range species {
+		sci := label
+		if idx := strings.IndexByte(label, '_'); idx >= 0 {
+			sci = label[:idx]
+		}
+		sciNames[strings.ToLower(sci)] = struct{}{}
+	}
+	updated.BirdNET.RangeFilter.IncludedScientificNames = sciNames
+
 	updated.BirdNET.RangeFilter.LastUpdated = time.Now()
 	StoreSettings(updated)
 }
@@ -39,9 +51,21 @@ func (s *Settings) GetIncludedSpecies() []string {
 	return slices.Clone(s.BirdNET.RangeFilter.Species)
 }
 
-// IsSpeciesIncluded checks if a given scientific name matches the scientific
-// name part of any included species in this snapshot.
+// IsSpeciesIncluded reports whether the given label is in the included species
+// set. When the IncludedScientificNames map is populated (the fast path), it
+// performs an O(1) lookup on the lowercased scientific name portion of the
+// label. Labels may be in BirdNET format ("Parus major_Great Tit") or contain
+// the scientific name only ("Parus major"). The legacy O(n) fallback is used
+// when the map is empty (e.g. for snapshots loaded before this feature).
 func (s *Settings) IsSpeciesIncluded(result string) bool {
+	if len(s.BirdNET.RangeFilter.IncludedScientificNames) > 0 {
+		sci := result
+		if idx := strings.IndexByte(result, '_'); idx >= 0 {
+			sci = result[:idx]
+		}
+		_, found := s.BirdNET.RangeFilter.IncludedScientificNames[strings.ToLower(sci)]
+		return found
+	}
 	for _, fullSpeciesString := range s.BirdNET.RangeFilter.Species {
 		if strings.HasPrefix(fullSpeciesString, result) {
 			return true
