@@ -130,8 +130,8 @@
     height: 2.625rem;
     border-radius: 0.5rem;
     overflow: hidden;
-    border: 2px solid rgb(51 65 85 / 0.8);
-    background-color: rgb(30 41 59);
+    border: 2px solid color-mix(in srgb, var(--color-base-content) 20%, transparent);
+    background-color: var(--color-base-300);
   }
 
   .thumbnail-image {
@@ -170,8 +170,8 @@
     width: 1rem;
     height: 1rem;
     border-radius: 9999px;
-    background-color: rgb(34 197 94);
-    color: white;
+    background-color: var(--color-success);
+    color: var(--color-success-content);
   }
 
   .false-positive-badge {
@@ -180,8 +180,8 @@
     padding: 0 0.375rem;
     height: 1rem;
     border-radius: 9999px;
-    background-color: rgb(239 68 68 / 0.9);
-    color: white;
+    background-color: color-mix(in srgb, var(--color-error) 90%, transparent);
+    color: var(--color-error-content);
     font-size: 0.625rem;
     font-weight: 500;
   }
@@ -192,8 +192,8 @@
     padding: 0 0.375rem;
     height: 1rem;
     border-radius: 9999px;
-    background-color: rgb(51 65 85 / 0.8);
-    color: rgb(203 213 225);
+    background-color: color-mix(in srgb, var(--color-base-content) 15%, transparent);
+    color: var(--text-muted);
     font-size: 0.625rem;
     font-weight: 500;
   }
@@ -214,7 +214,7 @@
   .scientific-name {
     font-size: 0.8125rem;
     font-style: italic;
-    color: rgb(148 163 184);
+    color: var(--text-muted);
     line-height: 1.3;
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
   }
@@ -238,7 +238,7 @@
 
   .relative-time {
     font-size: 0.75rem;
-    color: rgb(148 163 184);
+    color: var(--text-muted);
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
   }
 </style>
