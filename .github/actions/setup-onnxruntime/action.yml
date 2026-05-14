@@ -50,9 +50,13 @@ runs:
             rm -rf "$TMPDIR" /tmp/onnxruntime.zip
             ;;
           darwin-arm64)
+            echo "Downloading ONNX Runtime v${VERSION} for macOS ARM64..."
             curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-osx-arm64-${VERSION}.tgz" \
               -o /tmp/onnxruntime.tgz
+            echo "Download complete, size: $(wc -c < /tmp/onnxruntime.tgz) bytes"
             tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
+            echo "Extracted to /tmp/onnxruntime:"
+            ls -la /tmp/onnxruntime/lib/ || echo "WARNING: lib/ directory not found after extraction"
             rm /tmp/onnxruntime.tgz
             ;;
           *)
@@ -61,18 +65,30 @@ runs:
             ;;
         esac
 
-    - name: Repair dylib symlinks after cache restore
-      if: inputs.target-platform == 'darwin-arm64'
+    - name: Verify download and repair symlinks
       shell: bash
       run: |
-        cd /tmp/onnxruntime/lib
-        if [ ! -e libonnxruntime.dylib ]; then
-          target=$(ls libonnxruntime.*.dylib 2>/dev/null | grep -v dSYM | head -1)
-          if [ -n "$target" ]; then
-            ln -sf "$target" libonnxruntime.dylib
-            echo "Repaired missing symlink: libonnxruntime.dylib -> $target"
-          fi
+        if [ ! -d /tmp/onnxruntime/lib ]; then
+          echo "::error::ONNX Runtime lib directory missing at /tmp/onnxruntime/lib"
+          echo "Contents of /tmp/onnxruntime:"
+          ls -laR /tmp/onnxruntime 2>/dev/null || echo "(directory does not exist)"
+          exit 1
         fi
+        echo "ONNX Runtime lib contents:"
+        ls -la /tmp/onnxruntime/lib/
+
+        # Repair dylib symlink if broken or missing after cache restore
+        case "${{ inputs.target-platform }}" in
+          darwin-arm64)
+            if [ ! -e /tmp/onnxruntime/lib/libonnxruntime.dylib ]; then
+              target=$(find /tmp/onnxruntime/lib -maxdepth 1 -name 'libonnxruntime.*.dylib' -not -name '*.dSYM' -type f | head -1)
+              if [ -n "$target" ]; then
+                ln -sf "$(basename "$target")" /tmp/onnxruntime/lib/libonnxruntime.dylib
+                echo "Repaired missing symlink: libonnxruntime.dylib -> $(basename "$target")"
+              fi
+            fi
+            ;;
+        esac
 
     - name: Install ONNX Runtime to system path
       shell: bash
