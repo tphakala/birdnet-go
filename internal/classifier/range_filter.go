@@ -45,21 +45,18 @@ type UniversalSpeciesPredictor interface {
 // which is limited to the BirdNET classifier's label set.
 func BuildRangeFilter(o *Orchestrator) error {
 	start := time.Now()
-	today := time.Now().Truncate(24 * time.Hour)
+	today := start.Truncate(24 * time.Hour)
 	settings := conf.CurrentOrFallback(o.Settings)
 
 	var includedSpecies []string
 
 	o.primary.mu.Lock()
 	rf := o.primary.rangeFilter
-	o.primary.mu.Unlock()
+	up, isUniversal := rf.(UniversalSpeciesPredictor)
 
-	if up, ok := rf.(UniversalSpeciesPredictor); ok && settings.BirdNET.LocationConfigured {
+	if isUniversal && settings.BirdNET.LocationConfigured {
 		threshold := settings.BirdNET.RangeFilter.Threshold
 		if threshold < 0 || threshold > 1 {
-			GetLogger().Warn("Invalid LocationFilterThreshold value, using default",
-				logger.Float64("invalid_value", float64(threshold)),
-				logger.Float64("default_value", 0.01))
 			threshold = 0.01
 		}
 
@@ -69,6 +66,8 @@ func BuildRangeFilter(o *Orchestrator) error {
 			getWeekForFilter(today),
 			threshold,
 		)
+		o.primary.mu.Unlock()
+
 		if err != nil {
 			return errors.New(err).
 				Category(errors.CategoryValidation).
@@ -94,6 +93,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 			logger.Float64("threshold", float64(threshold)),
 			logger.String("duration", time.Since(start).String()))
 	} else {
+		o.primary.mu.Unlock()
 		speciesScores, err := o.GetProbableSpecies(today, 0.0)
 		if err != nil {
 			return errors.New(err).
@@ -114,7 +114,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 			logger.String("duration", time.Since(start).String()))
 	}
 
-	if conf.Setting().BirdNET.RangeFilter.Debug {
+	if settings.BirdNET.RangeFilter.Debug {
 		debugFile := "debug_included_species.txt"
 		var content strings.Builder
 		fmt.Fprintf(&content, "Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
