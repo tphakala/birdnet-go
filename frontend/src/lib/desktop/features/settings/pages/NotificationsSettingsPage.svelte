@@ -1704,13 +1704,11 @@
                         'settings.notifications.push.services.gotify.server.placeholder'
                       )}
                       onchange={value => {
-                        const lower = value.toLowerCase();
-                        if (lower.startsWith('http://')) {
-                          serviceFormData.gotifyProtocol = 'http';
-                          serviceFormData.gotifyServer = value.replace(/^https?:\/\//i, '');
-                        } else if (lower.startsWith('https://')) {
-                          serviceFormData.gotifyProtocol = 'https';
-                          serviceFormData.gotifyServer = value.replace(/^https?:\/\//i, '');
+                        const match = value.match(/^(https?):\/\/([^?#]+)/i);
+                        if (match) {
+                          serviceFormData.gotifyProtocol =
+                            match[1].toLowerCase() === 'http' ? 'http' : 'https';
+                          serviceFormData.gotifyServer = match[2];
                         } else {
                           serviceFormData.gotifyServer = value;
                         }
