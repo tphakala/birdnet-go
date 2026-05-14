@@ -34,6 +34,7 @@ func ResultToEntity(r *detection.Result) *entities.NoteEntity {
 		Sensitivity:    r.Sensitivity,
 		ClipName:       r.ClipName,
 		ProcessingTime: r.ProcessingTime,
+		Unlikely:       r.Unlikely,
 	}
 }
 
@@ -65,6 +66,7 @@ func EntityToResult(e *entities.NoteEntity, tz *time.Location) (*detection.Resul
 		Sensitivity:    e.Sensitivity,
 		ClipName:       e.ClipName,
 		ProcessingTime: e.ProcessingTime,
+		Unlikely:       e.Unlikely,
 		Model:          detection.DefaultModelInfo(),
 	}
 

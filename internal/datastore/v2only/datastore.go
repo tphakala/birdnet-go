@@ -554,6 +554,7 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		ModelID:    model.ID,
 		DetectedAt: detectedAt,
 		Confidence: note.Confidence,
+		Unlikely:   note.Unlikely,
 	}
 
 	if note.Latitude != 0 {
@@ -805,6 +806,7 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		ProcessingTime: processingTime,
 		Source:         source,
 		Comments:       comments,
+		Unlikely:       det.Unlikely,
 		Verified:       verified,
 		Locked:         locked,
 	}
@@ -918,6 +920,7 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 		AudioFilePath:  audioFilePath,
 		Verified:       verified,
 		Locked:         locked,
+		Unlikely:       det.Unlikely,
 		HasAudio:       hasAudio,
 		Device:         device,
 		Source:         source,
