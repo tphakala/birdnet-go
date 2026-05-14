@@ -590,6 +590,7 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 	// previous scheduler's stopChan was closed.
 	if registryID == RegistryIDBat {
 		if old := o.scheduler.Load(); old != nil && old.sunCalc != nil {
+			old.stop()
 			s := newNighttimeScheduler(old.sunCalc)
 			o.scheduler.Store(s)
 			o.startBatScheduler(s)

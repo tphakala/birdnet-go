@@ -4526,7 +4526,7 @@
       },
       "batNighttimeOnly": {
         "label": "Nur nachts",
-        "helpText": "Wenn aktiviert, wird die Fledermauerkennung nur zwischen der bürgerlichen Abenddämmerung und der Morgendämmerung durchgeführt. Erfordert eine konfigurierte Standorteinstellung. Deaktivieren, um die Fledermauerkennung rund um die Uhr auszuführen."
+        "helpText": "Wenn aktiviert, wird die Fledermauserkennung nur zwischen der bürgerlichen Abenddämmerung und der Morgendämmerung durchgeführt. Erfordert eine konfigurierte Standorteinstellung. Deaktivieren, um die Fledermauserkennung rund um die Uhr auszuführen."
       },
       "locale": {
         "label": "Species Language",
