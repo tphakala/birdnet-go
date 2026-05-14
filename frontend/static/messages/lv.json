@@ -2381,8 +2381,11 @@
             "name": "Gotify",
             "server": {
               "label": "Servera URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "Jūsu Gotify servera resursdatora nosaukums (bez https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Jūsu Gotify servera resursdatora nosaukums un ports"
+            },
+            "protocol": {
+              "label": "Protokols"
             },
             "token": {
               "label": "Lietojumprogrammas tokens",

@@ -2382,8 +2382,11 @@
             "name": "Gotify",
             "server": {
               "label": "Szerver URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "A Gotify szerver hostname (https:// nélkül)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "A Gotify szervered hosztneve és portja"
+            },
+            "protocol": {
+              "label": "Protokoll"
             },
             "token": {
               "label": "Alkalmazás token",

@@ -160,6 +160,7 @@
     ntfyCheckStatus: 'idle' | 'checking' | 'https' | 'http' | 'unreachable';
     gotifyServer: string;
     gotifyToken: string;
+    gotifyProtocol: 'https' | 'http';
     pushoverApiToken: string;
     pushoverUserKey: string;
     slackWebhookUrl: string;
@@ -202,6 +203,7 @@
     ntfyCheckStatus: 'idle',
     gotifyServer: '',
     gotifyToken: '',
+    gotifyProtocol: 'https',
     pushoverApiToken: '',
     pushoverUserKey: '',
     slackWebhookUrl: '',
@@ -499,7 +501,8 @@
       case 'gotify': {
         if (serviceFormData.gotifyServer && serviceFormData.gotifyToken) {
           const server = serviceFormData.gotifyServer.replace(/^https?:\/\//, '');
-          return `gotify://${server}/${serviceFormData.gotifyToken}`;
+          const disableTls = serviceFormData.gotifyProtocol === 'http' ? '?disabletls=yes' : '';
+          return `gotify://${server}/${serviceFormData.gotifyToken}${disableTls}`;
         }
         return '';
       }
@@ -710,6 +713,7 @@
       ntfyCheckStatus: 'idle',
       gotifyServer: '',
       gotifyToken: '',
+      gotifyProtocol: 'https',
       pushoverApiToken: '',
       pushoverUserKey: '',
       slackWebhookUrl: '',
@@ -772,6 +776,23 @@
           }
           serviceFormData.ntfyCheckStatus = 'idle';
           serviceFormData.ntfyCheckHost = '';
+        }
+        break;
+      }
+      case 'gotify': {
+        /* eslint-disable security/detect-unsafe-regex -- no nested quantifiers; each segment is bounded by literal anchors */
+        const gotifyPattern = /^gotify:\/\/([^/?]+)(?:\/([^?]*))?(?:\?(.*))?$/;
+        /* eslint-enable security/detect-unsafe-regex */
+        if (safeRegexTest(gotifyPattern, url, 500)) {
+          const match = url.match(gotifyPattern)!;
+          const [, host, token, queryString] = match;
+
+          serviceFormData.gotifyServer = host || '';
+          serviceFormData.gotifyToken = token || '';
+
+          const params = new URLSearchParams(queryString || '');
+          const disableTls = params.get('disabletls');
+          serviceFormData.gotifyProtocol = disableTls?.toLowerCase() === 'yes' ? 'http' : 'https';
         }
         break;
       }
@@ -1677,11 +1698,36 @@
                       placeholder={t(
                         'settings.notifications.push.services.gotify.server.placeholder'
                       )}
-                      onchange={value => (serviceFormData.gotifyServer = value)}
+                      onchange={value => {
+                        if (value.startsWith('http://')) {
+                          serviceFormData.gotifyProtocol = 'http';
+                          serviceFormData.gotifyServer = value.replace(/^http:\/\//, '');
+                        } else if (value.startsWith('https://')) {
+                          serviceFormData.gotifyProtocol = 'https';
+                          serviceFormData.gotifyServer = value.replace(/^https:\/\//, '');
+                        } else {
+                          serviceFormData.gotifyServer = value;
+                        }
+                      }}
                     />
                     <p class="text-xs text-[var(--color-base-content)]/60 -mt-2">
                       {t('settings.notifications.push.services.gotify.server.helpText')}
                     </p>
+
+                    <!-- Protocol selector -->
+                    <div class="flex items-center gap-2 mt-1">
+                      <span class="text-sm text-[var(--color-base-content)]/70">
+                        {t('settings.notifications.push.services.gotify.protocol.label')}
+                      </span>
+                      <SelectDropdown
+                        bind:value={serviceFormData.gotifyProtocol}
+                        options={ntfyProtocolOptions}
+                        variant="select"
+                        size="sm"
+                        menuSize="sm"
+                      />
+                    </div>
+
                     <TextInput
                       id="gotify-token"
                       value={serviceFormData.gotifyToken}

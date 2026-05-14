@@ -2386,8 +2386,11 @@
             "name": "Gotify",
             "server": {
               "label": "Server URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "Your Gotify server hostname (without https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Your Gotify server hostname and port"
+            },
+            "protocol": {
+              "label": "Protocol"
             },
             "token": {
               "label": "Application Token",

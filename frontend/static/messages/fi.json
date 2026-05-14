@@ -2316,8 +2316,11 @@
             "name": "Gotify",
             "server": {
               "label": "Palvelimen URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "Gotify-palvelimesi isäntänimi (ilman https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Gotify-palvelimesi isäntänimi ja portti"
+            },
+            "protocol": {
+              "label": "Protokolla"
             },
             "token": {
               "label": "Sovelluksen token",

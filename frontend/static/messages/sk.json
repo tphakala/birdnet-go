@@ -2351,8 +2351,11 @@
             "name": "Gotify",
             "server": {
               "label": "URL servera",
-              "placeholder": "gotify.example.com",
-              "helpText": "Hostname vášho Gotify servera (bez https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Názov hostiteľa a port vášho servera Gotify"
+            },
+            "protocol": {
+              "label": "Protokol"
             },
             "token": {
               "label": "Token aplikácie",

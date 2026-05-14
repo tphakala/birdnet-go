@@ -2316,8 +2316,11 @@
             "name": "Gotify",
             "server": {
               "label": "Server-URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "Je Gotify-server hostnaam (zonder https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Uw Gotify-server hostnaam en poort"
+            },
+            "protocol": {
+              "label": "Protocol"
             },
             "token": {
               "label": "Applicatietoken",
