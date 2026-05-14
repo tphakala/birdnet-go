@@ -4537,6 +4537,7 @@
         "autoSelected": "Automatisch geselecteerd",
         "manual": "Handmatig",
         "classifierModel": "Classificator",
+        "classifierSpecies": "Classificator soorten",
         "mappedSpecies": "Gekoppelde soorten",
         "unmappedSpecies": "Niet-gekoppelde soorten",
         "totalSpecies": "Totaal aantal soorten",
