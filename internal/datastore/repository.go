@@ -59,7 +59,7 @@ type DetectionRepository interface {
 	// Implementations that wrap the v2 schema use params.Model to write
 	// the matching v2_ai_models / v2_labels rows; v1-only implementations
 	// ignore params.Model (the v1 notes table has no model_id column).
-	CorrectSpecies(ctx context.Context, id string, params CorrectSpeciesParams) error
+	CorrectSpecies(ctx context.Context, id string, params *CorrectSpeciesParams) error
 
 	// Comment operations
 	AddComment(ctx context.Context, id, comment string) error

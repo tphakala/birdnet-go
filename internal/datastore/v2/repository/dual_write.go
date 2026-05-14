@@ -748,7 +748,7 @@ func (dw *DualWriteRepository) GetReview(ctx context.Context, id string) (string
 // immediately). When dual-write mode is active we mirror the change to v2
 // fire-and-forget: failures are logged but don't bubble up, matching the
 // pattern SetReview / AddComment use for metadata propagation.
-func (dw *DualWriteRepository) CorrectSpecies(ctx context.Context, id string, params datastore.CorrectSpeciesParams) error {
+func (dw *DualWriteRepository) CorrectSpecies(ctx context.Context, id string, params *datastore.CorrectSpeciesParams) error {
 	if err := dw.legacy.CorrectSpecies(ctx, id, params); err != nil {
 		return err
 	}

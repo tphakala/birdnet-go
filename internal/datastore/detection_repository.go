@@ -255,7 +255,7 @@ func (r *detectionRepository) GetReview(ctx context.Context, id string) (string,
 // the review unset — recoverable via the verified toggle. The inverse
 // failure mode (verified row pointing at an unchanged species) would be
 // worse, which is why the review goes second.
-func (r *detectionRepository) CorrectSpecies(ctx context.Context, id string, params CorrectSpeciesParams) error {
+func (r *detectionRepository) CorrectSpecies(ctx context.Context, id string, params *CorrectSpeciesParams) error {
 	noteID, err := r.parseID(id)
 	if err != nil {
 		return err

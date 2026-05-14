@@ -234,7 +234,7 @@ func TestDecodeClipMonoPCM16_Roundtrip(t *testing.T) {
 	// Decode at the same rate so we know exactly how many samples to expect.
 	samples, err := decodeClipMonoPCM16(t.Context(), ffmpeg, srcPath, srcRate, 10)
 	require.NoError(t, err)
-	assert.Equal(t, srcRate*srcSeconds, len(samples),
+	assert.Len(t, samples, srcRate*srcSeconds,
 		"decoder should return exactly one second of samples at the source rate")
 
 	// Non-silent: a 440 Hz sine should produce non-zero values somewhere in
@@ -320,7 +320,7 @@ func writeMonoWAV16(t *testing.T, path string, sampleRate, seconds int, freq flo
 	// data chunk
 	_, _ = f.WriteString("data")
 	_ = binary.Write(f, binary.LittleEndian, uint32(dataBytes))
-	for i := 0; i < numSamples; i++ {
+	for i := range numSamples {
 		v := int16(math.Sin(2*math.Pi*freq*float64(i)/float64(sampleRate)) * 32767)
 		_ = binary.Write(f, binary.LittleEndian, v)
 	}

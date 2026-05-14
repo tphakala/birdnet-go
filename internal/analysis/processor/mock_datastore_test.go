@@ -482,7 +482,7 @@ func (m *MockDetectionRepository) SetReview(_ context.Context, _, _ string) erro
 func (m *MockDetectionRepository) GetReview(_ context.Context, _ string) (string, error) {
 	return "", nil
 }
-func (m *MockDetectionRepository) CorrectSpecies(_ context.Context, _ string, _ datastore.CorrectSpeciesParams) error {
+func (m *MockDetectionRepository) CorrectSpecies(_ context.Context, _ string, _ *datastore.CorrectSpeciesParams) error {
 	return nil
 }
 func (m *MockDetectionRepository) AddComment(_ context.Context, _, _ string) error { return nil }

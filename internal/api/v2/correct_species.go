@@ -161,7 +161,7 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 	// keeps the UI readable even for an exotic correction.
 	commonName := bn.ResolveName(req.ScientificName, c.Settings.BirdNET.Locale)
 
-	if err := c.Repo.CorrectSpecies(ctx.Request().Context(), idStr, datastore.CorrectSpeciesParams{
+	if err := c.Repo.CorrectSpecies(ctx.Request().Context(), idStr, &datastore.CorrectSpeciesParams{
 		ScientificName: req.ScientificName,
 		CommonName:     commonName,
 		Confidence:     req.Confidence,

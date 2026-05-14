@@ -587,7 +587,7 @@ func (r *testDetectionRepo) SetReview(_ context.Context, _, _ string) error { re
 func (r *testDetectionRepo) GetReview(_ context.Context, _ string) (string, error) {
 	return "", nil
 }
-func (r *testDetectionRepo) CorrectSpecies(_ context.Context, _ string, _ datastore.CorrectSpeciesParams) error {
+func (r *testDetectionRepo) CorrectSpecies(_ context.Context, _ string, _ *datastore.CorrectSpeciesParams) error {
 	return nil
 }
 

@@ -73,7 +73,7 @@ func (_c *MockDetectionRepository_AddComment_Call) RunAndReturn(run func(context
 }
 
 // CorrectSpecies provides a mock function with given fields: ctx, id, params
-func (_m *MockDetectionRepository) CorrectSpecies(ctx context.Context, id string, params datastore.CorrectSpeciesParams) error {
+func (_m *MockDetectionRepository) CorrectSpecies(ctx context.Context, id string, params *datastore.CorrectSpeciesParams) error {
 	ret := _m.Called(ctx, id, params)
 
 	if len(ret) == 0 {
@@ -81,7 +81,7 @@ func (_m *MockDetectionRepository) CorrectSpecies(ctx context.Context, id string
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, datastore.CorrectSpeciesParams) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, *datastore.CorrectSpeciesParams) error); ok {
 		r0 = rf(ctx, id, params)
 	} else {
 		r0 = ret.Error(0)
@@ -98,14 +98,14 @@ type MockDetectionRepository_CorrectSpecies_Call struct {
 // CorrectSpecies is a helper method to define mock.On call
 //   - ctx context.Context
 //   - id string
-//   - params datastore.CorrectSpeciesParams
+//   - params *datastore.CorrectSpeciesParams
 func (_e *MockDetectionRepository_Expecter) CorrectSpecies(ctx interface{}, id interface{}, params interface{}) *MockDetectionRepository_CorrectSpecies_Call {
 	return &MockDetectionRepository_CorrectSpecies_Call{Call: _e.mock.On("CorrectSpecies", ctx, id, params)}
 }
 
-func (_c *MockDetectionRepository_CorrectSpecies_Call) Run(run func(ctx context.Context, id string, params datastore.CorrectSpeciesParams)) *MockDetectionRepository_CorrectSpecies_Call {
+func (_c *MockDetectionRepository_CorrectSpecies_Call) Run(run func(ctx context.Context, id string, params *datastore.CorrectSpeciesParams)) *MockDetectionRepository_CorrectSpecies_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(datastore.CorrectSpeciesParams))
+		run(args[0].(context.Context), args[1].(string), args[2].(*datastore.CorrectSpeciesParams))
 	})
 	return _c
 }
@@ -115,7 +115,7 @@ func (_c *MockDetectionRepository_CorrectSpecies_Call) Return(_a0 error) *MockDe
 	return _c
 }
 
-func (_c *MockDetectionRepository_CorrectSpecies_Call) RunAndReturn(run func(context.Context, string, datastore.CorrectSpeciesParams) error) *MockDetectionRepository_CorrectSpecies_Call {
+func (_c *MockDetectionRepository_CorrectSpecies_Call) RunAndReturn(run func(context.Context, string, *datastore.CorrectSpeciesParams) error) *MockDetectionRepository_CorrectSpecies_Call {
 	_c.Call.Return(run)
 	return _c
 }
