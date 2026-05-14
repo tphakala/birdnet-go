@@ -303,7 +303,7 @@ func containsCaseInsensitive(s, substr string) bool {
 	// ASCII fast path — all markers above are ASCII.
 	for i := 0; i+len(substr) <= len(s); i++ {
 		match := true
-		for j := 0; j < len(substr); j++ {
+		for j := range len(substr) {
 			a := s[i+j]
 			b := substr[j]
 			if a >= 'A' && a <= 'Z' {
