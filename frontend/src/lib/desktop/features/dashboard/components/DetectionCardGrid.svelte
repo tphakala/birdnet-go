@@ -333,31 +333,20 @@
     font-size: 0.875rem;
     font-weight: 600;
     border-radius: 0.5rem;
-    border: 1px solid rgb(226 232 240); /* slate-200 */
-    background-color: rgb(255 255 255);
-    color: rgb(15 23 42); /* slate-900 */
+    border: 1px solid var(--border-100);
+    background-color: var(--color-base-100);
+    color: var(--color-base-content);
     cursor: pointer;
     transition: all 150ms ease;
   }
 
   .limit-dropdown-trigger:hover {
-    background-color: rgb(248 250 252); /* slate-50 */
-    border-color: rgb(203 213 225); /* slate-300 */
+    background-color: var(--color-base-200);
+    border-color: var(--border-200);
   }
 
   .limit-dropdown-trigger:focus {
     outline: none;
-  }
-
-  :global([data-theme='dark']) .limit-dropdown-trigger {
-    background-color: rgb(30 41 59); /* slate-800 */
-    border-color: rgb(71 85 105); /* slate-600 */
-    color: rgb(241 245 249); /* slate-100 */
-  }
-
-  :global([data-theme='dark']) .limit-dropdown-trigger:hover {
-    background-color: rgb(51 65 85); /* slate-700 */
-    border-color: rgb(100 116 139); /* slate-500 */
   }
 
   .limit-dropdown-value {
@@ -367,16 +356,12 @@
   .limit-dropdown-icon {
     width: 1rem;
     height: 1rem;
-    color: rgb(148 163 184); /* slate-400 */
+    color: var(--text-muted);
     transition: transform 200ms ease;
   }
 
   .limit-dropdown-icon-open {
     transform: rotate(180deg);
-  }
-
-  :global([data-theme='dark']) .limit-dropdown-icon {
-    color: rgb(100 116 139); /* slate-500 */
   }
 
   .limit-dropdown-menu {
@@ -387,19 +372,9 @@
     min-width: 5rem;
     padding: 0.25rem;
     border-radius: 0.5rem;
-    border: 1px solid rgb(226 232 240); /* slate-200 */
-    background-color: rgb(255 255 255);
-    box-shadow:
-      0 10px 15px -3px rgba(0, 0, 0, 0.1),
-      0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  }
-
-  :global([data-theme='dark']) .limit-dropdown-menu {
-    background-color: rgb(30 41 59); /* slate-800 */
-    border-color: rgb(51 65 85); /* slate-700 */
-    box-shadow:
-      0 10px 15px -3px rgba(0, 0, 0, 0.3),
-      0 4px 6px -2px rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-100);
+    background-color: var(--color-base-100);
+    box-shadow: var(--shadow-lg);
   }
 
   .limit-dropdown-option {
@@ -412,42 +387,22 @@
     font-weight: 500;
     border-radius: 0.375rem;
     background-color: transparent;
-    color: rgb(51 65 85); /* slate-700 */
+    color: var(--color-base-content);
     cursor: pointer;
     transition: all 100ms ease;
   }
 
   .limit-dropdown-option:hover {
-    background-color: rgb(241 245 249); /* slate-100 */
-    color: rgb(15 23 42); /* slate-900 */
-  }
-
-  :global([data-theme='dark']) .limit-dropdown-option {
-    color: rgb(203 213 225); /* slate-300 */
-  }
-
-  :global([data-theme='dark']) .limit-dropdown-option:hover {
-    background-color: rgb(51 65 85); /* slate-700 */
-    color: rgb(241 245 249); /* slate-100 */
+    background-color: var(--hover-overlay);
   }
 
   .limit-dropdown-option-selected {
-    background-color: rgb(240 249 255); /* sky-50 */
-    color: rgb(2 132 199); /* sky-600 */
+    background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    color: var(--color-primary);
   }
 
   .limit-dropdown-option-selected:hover {
-    background-color: rgb(224 242 254); /* sky-100 */
-  }
-
-  :global([data-theme='dark']) .limit-dropdown-option-selected {
-    background-color: rgb(12 74 110); /* sky-900 */
-    color: rgb(125 211 252); /* sky-300 */
-  }
-
-  :global([data-theme='dark']) .limit-dropdown-option-selected:hover {
-    background-color: rgb(7 89 133); /* sky-800 */
-    color: rgb(186 230 253); /* sky-200 */
+    background-color: color-mix(in srgb, var(--color-primary) 15%, transparent);
   }
 
   .limit-dropdown-option-text {
@@ -457,11 +412,7 @@
   .limit-dropdown-check {
     width: 1rem;
     height: 1rem;
-    color: rgb(2 132 199); /* sky-600 */
-  }
-
-  :global([data-theme='dark']) .limit-dropdown-check {
-    color: rgb(125 211 252); /* sky-300 */
+    color: var(--color-primary);
   }
 
   /* ========================================================================
