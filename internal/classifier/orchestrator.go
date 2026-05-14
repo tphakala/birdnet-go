@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -372,10 +373,85 @@ func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific
 	return scientific, common, code
 }
 
-// RangeFilterStatus returns introspection data about the primary model's
-// active range filter configuration.
-func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusInfo {
-	return o.primary.RangeFilterStatus()
+// RangeFilterStatus returns introspection data about the range filter,
+// including per-classifier geomodel coverage for all active non-bat models.
+func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
+	// Snapshot primary under read lock to avoid racing with Delete().
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return RangeFilterStatusResponse{}
+	}
+
+	settings := primary.currentSettings()
+	rf := settings.BirdNET.RangeFilter
+
+	geomodel, primaryCoverage, geoLabels, _ := primary.PrimaryRangeFilterCoverage()
+
+	resp := RangeFilterStatusResponse{
+		Geomodel:            geomodel,
+		PassUnmappedSpecies: rf.PassUnmappedSpecies,
+		Threshold:           rf.Threshold,
+		LocationConfigured:  settings.BirdNET.LocationConfigured,
+		LastUpdated:         rf.LastUpdated,
+	}
+
+	// Always include the primary classifier.
+	resp.Classifiers = append(resp.Classifiers, primaryCoverage)
+
+	// Collect additional model info under a brief lock, then compute
+	// coverage outside the lock to avoid blocking writers.
+	type modelTask struct {
+		id     string
+		name   string
+		labels []string
+	}
+
+	var tasks []modelTask
+	o.mu.RLock()
+	for id, entry := range o.models {
+		if entry.instance == nil || id == primary.ModelInfo.ID {
+			continue
+		}
+		if id == RegistryIDBat {
+			continue
+		}
+		info, exists := ModelRegistry[id]
+		name := id
+		if exists {
+			name = info.Name
+		}
+		tasks = append(tasks, modelTask{
+			id:     id,
+			name:   name,
+			labels: entry.instance.Labels(),
+		})
+	}
+	o.mu.RUnlock()
+
+	for _, task := range tasks {
+		cov := ClassifierCoverage{
+			ID:           task.id,
+			Name:         task.name,
+			TotalSpecies: len(task.labels),
+		}
+		if len(geoLabels) > 0 {
+			cov.WithRangeData, cov.WithoutRangeData = ComputeGeomodelCoverage(
+				task.labels, geoLabels,
+			)
+		} else {
+			cov.WithoutRangeData = cov.TotalSpecies
+		}
+		resp.Classifiers = append(resp.Classifiers, cov)
+	}
+
+	// Sort classifiers by ID for stable API output (map iteration is random).
+	sort.Slice(resp.Classifiers, func(i, j int) bool {
+		return resp.Classifiers[i].ID < resp.Classifiers[j].ID
+	})
+
+	return resp
 }
 
 // ReloadRangeFilter reinitializes the range filter on the primary model
