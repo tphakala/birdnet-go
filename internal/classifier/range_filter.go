@@ -150,10 +150,12 @@ func addUserOverrideSpecies(includedSpecies *[]string, settings *conf.Settings, 
 	addOverride := func(speciesName string) {
 		matched := false
 		for _, label := range availableLabels {
-			if matchesSpecies(label, speciesName) && !seen[label] {
-				*includedSpecies = append(*includedSpecies, label)
-				seen[label] = true
+			if matchesSpecies(label, speciesName) {
 				matched = true
+				if !seen[label] {
+					*includedSpecies = append(*includedSpecies, label)
+					seen[label] = true
+				}
 			}
 		}
 		if !matched && !seen[speciesName] {
