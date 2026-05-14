@@ -51,6 +51,7 @@ BirdNET-Go is an AI solution for continuous avian monitoring and identification
   - **BirdNET v2.4** (6,500+ bird species, included by default)
   - **Google Perch v2** (14,795 bird species)
   - **BattyBirdNET** (11 regional bat classifiers covering Africa, Americas, East Asia, Europe, Middle East, South Asia, Southeast Asia, and USA)
+- **BirdNET Geomodel v3.0** for location-based species range filtering
 - Run multiple models simultaneously on separate audio sources
 - Local processing, Internet connectivity not required
 - Easy to use Web user interface for data visualisation
@@ -61,7 +62,7 @@ BirdNET-Go is an AI solution for continuous avian monitoring and identification
 - Minimal runtime dependencies, BirdNET Tensorflow Lite model is embedded in compiled binary
 - Provides endpoint for Prometheus data scraping
 - Runs on Windows, Linux and macOS
-- Low resource usage, works on Raspberry Pi 3 and equivalent 64-bit single board computers
+- Low resource usage, works on Raspberry Pi 4 and equivalent 64-bit single board computers
 
 ## Installation
 
