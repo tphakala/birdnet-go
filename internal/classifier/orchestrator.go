@@ -663,26 +663,27 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 			continue
 		}
 
-		o.mu.Lock()
-		_, exists := o.models[registryID]
-		if exists {
-			o.mu.Unlock()
-			continue
-		}
+		// Closure with defer ensures the mutex is released even if a
+		// loader panics during model initialization.
+		loadErr := func() error {
+			o.mu.Lock()
+			defer o.mu.Unlock()
 
-		threads := threadAlloc[registryID]
-		loader, implemented := modelLoaders[registryID]
-		if !implemented {
-			o.mu.Unlock()
-			log.Warn("Loader not yet implemented, skipping",
-				logger.String("registry_id", registryID))
-			continue
-		}
+			if _, exists := o.models[registryID]; exists {
+				return nil
+			}
 
-		// Hold the lock through the loader call because loaders write
-		// directly to o.models (e.g., loadPerch, loadBat).
-		loadErr := loader(o, threads)
-		o.mu.Unlock()
+			loader, implemented := modelLoaders[registryID]
+			if !implemented {
+				log.Warn("Loader not yet implemented, skipping",
+					logger.String("registry_id", registryID))
+				return nil
+			}
+
+			// Hold the lock through the loader call because loaders write
+			// directly to o.models (e.g., loadPerch, loadBat).
+			return loader(o, threadAlloc[registryID])
+		}()
 		if loadErr != nil {
 			log.Warn("optional model failed to load, will retry after gallery scan",
 				logger.String("registry_id", registryID),

@@ -371,23 +371,21 @@ func normalizeRTSPStreamEnabledDefaults(rawStreams any) ([]any, bool) {
 func (s *Settings) ValidateModelConfig(knownIDs map[string]bool, checkSourceRefs bool) []string {
 	var issues []string
 
-	enabledSet := make(map[string]bool, len(s.Models.Enabled))
-	for _, id := range s.Models.Enabled {
-		enabledSet[strings.ToLower(id)] = true
-	}
-
 	for _, id := range s.Models.Enabled {
 		if !knownIDs[strings.ToLower(id)] {
 			issues = append(issues, "warning: unknown model ID in models.enabled: "+id)
 		}
 	}
 
-	// Source/stream reference checks are skipped here. During early config
-	// loading, models.enabled is not yet synchronized with gallery-installed
-	// models (ScanInstalled runs later), so these checks produce false
-	// positives. The orchestrator re-validates with the authoritative model
-	// list after startup sync is complete.
+	// During early config loading, models.enabled is not yet synchronized
+	// with gallery-installed models (ScanInstalled runs later), so these
+	// checks produce false positives. The orchestrator re-validates with
+	// the authoritative model list after startup sync is complete.
 	if checkSourceRefs {
+		enabledSet := make(map[string]bool, len(s.Models.Enabled))
+		for _, id := range s.Models.Enabled {
+			enabledSet[strings.ToLower(id)] = true
+		}
 		for i := range s.Realtime.Audio.Sources {
 			src := &s.Realtime.Audio.Sources[i]
 			for _, modelID := range src.Models {
