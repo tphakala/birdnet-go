@@ -85,6 +85,9 @@ func setDefaultConfig() {
 
 	// Bat detection configuration
 	viper.SetDefault("bat.threshold", 0.5)
+	viper.SetDefault("bat.filterenabled", false)
+	viper.SetDefault("bat.filtercutoffhz", 4000.0)
+	viper.SetDefault("bat.filterpasscount", 1)
 
 	// Global model enablement (BirdNET only by default)
 	viper.SetDefault("models.enabled", []string{"birdnet"})
