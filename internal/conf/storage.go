@@ -151,6 +151,18 @@ func Load() (*Settings, error) {
 		}
 	}
 
+	// Adjust seasonal tracking for the user's hemisphere so the settings
+	// API returns correct season dates from the start. Without this,
+	// Viper defaults (Northern Hemisphere) would be served regardless
+	// of the configured latitude.
+	if settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled &&
+		settings.BirdNET.Latitude != 0 {
+		settings.Realtime.SpeciesTracking.SeasonalTracking = GetSeasonalTrackingWithHemisphere(
+			settings.Realtime.SpeciesTracking.SeasonalTracking,
+			settings.BirdNET.Latitude,
+		)
+	}
+
 	// Publish the loaded settings atomically. Readers calling GetSettings
 	// immediately after this point see this snapshot.
 	settingsInstance.Store(settings)
@@ -398,7 +410,7 @@ func Setting() *Settings {
 // This function is separated from SaveSettings to enable unit testing without filesystem I/O.
 //
 // Current transformations:
-//   - Auto-populates seasonal tracking seasons based on latitude if not already set
+//   - Adjusts seasonal tracking seasons for the user's hemisphere based on latitude
 //
 // Note: This is a pure function that only transforms data. It does not handle:
 //   - Mutex locking (handled by SaveSettings caller)
@@ -407,13 +419,11 @@ func Setting() *Settings {
 func prepareSettingsForSave(s *Settings, latitude float64) Settings {
 	settingsCopy := *s
 
-	// Auto-update seasonal tracking dates based on latitude if seasonal tracking is enabled
-	// and no custom seasons are already defined
-	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled &&
-		len(settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons) == 0 {
-		// Get hemisphere-appropriate default seasons
-		defaultSeasons := GetDefaultSeasons(latitude)
-		settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons = defaultSeasons
+	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled {
+		settingsCopy.Realtime.SpeciesTracking.SeasonalTracking = GetSeasonalTrackingWithHemisphere(
+			settingsCopy.Realtime.SpeciesTracking.SeasonalTracking,
+			latitude,
+		)
 	}
 
 	return settingsCopy
