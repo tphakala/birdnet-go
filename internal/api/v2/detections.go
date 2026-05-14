@@ -171,6 +171,7 @@ type DetectionResponse struct {
 	Confidence         float64           `json:"confidence"`
 	Verified           string            `json:"verified"`
 	Locked             bool              `json:"locked"`
+	Unlikely           bool              `json:"unlikely,omitempty"`
 	Comments           []CommentResponse `json:"comments,omitempty"`
 	Weather            *WeatherInfo      `json:"weather,omitempty"`
 	TimeOfDay          string            `json:"timeOfDay,omitempty"`
@@ -653,6 +654,7 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 		CommonName:     note.CommonName,
 		Confidence:     note.Confidence,
 		Locked:         note.Locked,
+		Unlikely:       note.Unlikely,
 	}
 
 	// populate source info if available
