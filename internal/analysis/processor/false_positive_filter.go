@@ -143,6 +143,31 @@ func calculateBatMinDetections(settings *conf.Settings) int {
 	return int(math.Max(1, math.Ceil(required)))
 }
 
+// visibilityThresholds holds precomputed per-model visibility thresholds.
+// The map key is the model ID; unknown model IDs fall back to the bird threshold.
+type visibilityThresholds map[string]int
+
+// precomputeVisibilityThresholds calculates visibility thresholds for bird and
+// bat models once per settings snapshot so callers can look up by model ID
+// without recomputing inside a loop or under a lock.
+func precomputeVisibilityThresholds(settings *conf.Settings) visibilityThresholds {
+	birdVis := CalculateVisibilityThreshold(calculateMinDetectionsFromSettings(settings))
+	batVis := CalculateVisibilityThreshold(calculateBatMinDetections(settings))
+	return visibilityThresholds{
+		"":                       birdVis, // default for unknown model IDs
+		classifier.RegistryIDBat: batVis,
+	}
+}
+
+// getThreshold returns the visibility threshold for a model ID, falling back
+// to the bird threshold for unknown model IDs.
+func (vt visibilityThresholds) getThreshold(modelID string) int {
+	if t, ok := vt[modelID]; ok {
+		return t
+	}
+	return vt[""]
+}
+
 // getLevelDescription returns a detailed description of what each level does.
 func getLevelDescription(level int) string {
 	switch level {

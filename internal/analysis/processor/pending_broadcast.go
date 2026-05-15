@@ -137,13 +137,13 @@ func CalculateVisibilityThreshold(minDetections int) int {
 // The caller must NOT hold pendingMutex.
 func (p *Processor) SnapshotVisiblePending() []SSEPendingDetection {
 	settings := p.currentSettings()
+	visThresholds := precomputeVisibilityThresholds(settings)
 
 	p.pendingMutex.RLock()
 	result := make([]SSEPendingDetection, 0, len(p.pendingDetections))
 	for key := range p.pendingDetections {
 		item := p.pendingDetections[key]
-		threshold := CalculateVisibilityThreshold(calculateMinDetectionsForModel(settings, item.BestModelID))
-		if item.Count < threshold {
+		if item.Count < visThresholds.getThreshold(item.BestModelID) {
 			continue
 		}
 		result = append(result, p.buildPendingDTO(&item, PendingStatusActive))
