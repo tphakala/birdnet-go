@@ -482,7 +482,8 @@
       "confidenceMax": "Maksimum sikkerhedsprocent",
       "verifiedStatus": "Bekræftelsesstatus",
       "lockedStatus": "Låsestatus",
-      "timeOfDay": "Tidspunkt på dagen"
+      "timeOfDay": "Tidspunkt på dagen",
+      "source": "Audio Source"
     },
     "advancedFilters": "Avancerede filtre",
     "showAdvancedFilters": "Vis avancerede filtre",
@@ -504,6 +505,9 @@
       "sunrise": "Solopgang +/- 30 min",
       "sunset": "Solnedgang +/- 30 min"
     },
+    "sourceOptions": {
+      "any": "All Sources"
+    },
     "sortOptions": {
       "dateDesc": "Dato (nyeste først)",
       "dateAsc": "Dato (ældste først)",
@@ -515,6 +519,7 @@
       "timeOfDay": "Tidspunkt på dagen",
       "species": "Art",
       "confidence": "Sikkerhed",
+      "source": "Source",
       "status": "Status",
       "actions": "Handlinger"
     },

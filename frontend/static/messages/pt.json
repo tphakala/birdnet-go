@@ -482,7 +482,8 @@
       "confidenceMax": "Porcentagem máxima de confiança",
       "verifiedStatus": "Status verificado",
       "lockedStatus": "Status bloqueado",
-      "timeOfDay": "Hora do dia"
+      "timeOfDay": "Hora do dia",
+      "source": "Audio Source"
     },
     "advancedFilters": "Filtros avançados",
     "showAdvancedFilters": "Mostrar filtros avançados",
@@ -504,6 +505,9 @@
       "sunrise": "Nascer do sol +/- 30min",
       "sunset": "Pôr do sol +/- 30min"
     },
+    "sourceOptions": {
+      "any": "All Sources"
+    },
     "sortOptions": {
       "dateDesc": "Data (Mais recente primeiro)",
       "dateAsc": "Data (Mais antigo primeiro)",
@@ -515,6 +519,7 @@
       "timeOfDay": "Hora do dia",
       "species": "Espécie",
       "confidence": "Confiança",
+      "source": "Source",
       "status": "Estado",
       "actions": "Ações"
     },

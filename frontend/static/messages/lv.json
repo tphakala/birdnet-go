@@ -482,7 +482,8 @@
       "confidenceMax": "Maksimālā ticamības procentuālā vērtība",
       "verifiedStatus": "Verifikācijas statuss",
       "lockedStatus": "Bloķēšanas statuss",
-      "timeOfDay": "Diennakts laiks"
+      "timeOfDay": "Diennakts laiks",
+      "source": "Audio Source"
     },
     "advancedFilters": "Papildu filtri",
     "showAdvancedFilters": "Rādīt papildu filtrus",
@@ -504,6 +505,9 @@
       "sunrise": "Saullēkts +/- 30 min",
       "sunset": "Saulriets +/- 30 min"
     },
+    "sourceOptions": {
+      "any": "All Sources"
+    },
     "sortOptions": {
       "dateDesc": "Datums (jaunākie vispirms)",
       "dateAsc": "Datums (vecākie vispirms)",
@@ -515,6 +519,7 @@
       "timeOfDay": "Diennakts laiks",
       "species": "Suga",
       "confidence": "Ticamība",
+      "source": "Source",
       "status": "Statuss",
       "actions": "Darbības"
     },

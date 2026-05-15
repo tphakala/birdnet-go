@@ -482,7 +482,8 @@
       "confidenceMax": "Enimmäisluottamusprosentti",
       "verifiedStatus": "Todennettu tila",
       "lockedStatus": "Lukittu tila",
-      "timeOfDay": "Vuorokaudenaika"
+      "timeOfDay": "Vuorokaudenaika",
+      "source": "Audio Source"
     },
     "advancedFilters": "Lisäsuodattimet",
     "showAdvancedFilters": "Näytä lisäsuodattimet",
@@ -504,6 +505,9 @@
       "sunrise": "Auringonnousu +/- 30min",
       "sunset": "Auringonlasku +/- 30min"
     },
+    "sourceOptions": {
+      "any": "All Sources"
+    },
     "sortOptions": {
       "dateDesc": "Päivämäärä (Uusin ensin)",
       "dateAsc": "Päivämäärä (Vanhin ensin)",
@@ -515,6 +519,7 @@
       "timeOfDay": "Vuorokaudenaika",
       "species": "Laji",
       "confidence": "Luottamus",
+      "source": "Source",
       "status": "Tila",
       "actions": "Toiminnot"
     },

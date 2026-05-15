@@ -482,7 +482,8 @@
       "confidenceMax": "Hoogste percentage betrouwbaarheid",
       "verifiedStatus": "Status beoordeling",
       "lockedStatus": "Status vergrendeling",
-      "timeOfDay": "Tijdstip"
+      "timeOfDay": "Tijdstip",
+      "source": "Audio Source"
     },
     "advancedFilters": "Uitgebreide filters",
     "showAdvancedFilters": "Toon uitgebreide filters",
@@ -504,6 +505,9 @@
       "sunrise": "Zonsopkomst +/- 30 min.",
       "sunset": "Zonsondergang +/- 30 min."
     },
+    "sourceOptions": {
+      "any": "All Sources"
+    },
     "sortOptions": {
       "dateDesc": "Datum (Nieuwste eerst)",
       "dateAsc": "Datum (Oudste eerst)",
@@ -515,6 +519,7 @@
       "timeOfDay": "Dagdeel",
       "species": "Soort",
       "confidence": "Betrouwbaarheid",
+      "source": "Source",
       "status": "Status",
       "actions": "Akties"
     },
