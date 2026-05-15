@@ -471,7 +471,9 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 }
 
 // ReloadRangeFilter reinitializes the range filter on the primary model
-// from current settings without a full model reload.
+// from current settings without a full model reload, then rebuilds the
+// species inclusion list so the processor's detection filter reflects
+// the new backend immediately.
 func (o *Orchestrator) ReloadRangeFilter() error {
 	o.mu.RLock()
 	primary := o.primary
@@ -479,7 +481,10 @@ func (o *Orchestrator) ReloadRangeFilter() error {
 	if primary == nil {
 		return nil
 	}
-	return primary.ReloadRangeFilter()
+	if err := primary.ReloadRangeFilter(); err != nil {
+		return err
+	}
+	return BuildRangeFilter(o)
 }
 
 // ReloadBatFilter rebuilds the bat model's high-pass filter from current settings.
