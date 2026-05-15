@@ -660,8 +660,8 @@
       },
       "actions": {
         "menuLabel": "Actions pour {species}",
-        "markCorrect": "Correct",
-        "markFalsePositive": "Incorrect",
+        "markCorrect": "Correcte",
+        "markFalsePositive": "Incorrecte",
         "review": "Examiner la détection",
         "showSpecies": "Afficher l'espèce",
         "ignoreSpecies": "Ignorer l'espèce",
@@ -2841,7 +2841,7 @@
         "mqttTopic": "Topic MQTT :",
         "sseEndpoint": "Point de terminaison SSE :",
         "prometheusMetrics": "Métriques Prometheus :",
-        "disabled": "Sound level monitoring is disabled"
+        "disabled": "La surveillance du niveau sonore est désactivée"
       },
       "clipSettings": {
         "title": "Paramètres des clips",
@@ -2879,8 +2879,8 @@
         "bitrateLabel": "Débit",
         "bitrateHelp": "Débit de compression audio pour les formats avec perte. Plage : {min}-{max} kbps. Des valeurs plus élevées offrent une meilleure qualité mais des fichiers plus volumineux.",
         "losslessNote": "Les formats sans perte préservent la qualité audio originale sans artefacts de compression.",
-        "normalizationDisabled": "Audio normalization is disabled",
-        "disabledInfo": "Enable clip recording above to configure clip settings, file format, and storage options."
+        "normalizationDisabled": "La normalisation audio est désactivée",
+        "disabledInfo": "Activez l'enregistrement de clips ci-dessus pour configurer les paramètres de clip, le format de fichier et les options de stockage."
       },
       "extendedCapture": {
         "title": "Capture étendue",
@@ -2941,12 +2941,12 @@
           "age": "Âge",
           "usage": "Utilisation"
         },
-        "noRetentionTitle": "All Clips Retained",
-        "noRetentionDescription": "Audio clips will be kept indefinitely. Monitor disk usage to prevent storage issues.",
-        "ageRetentionTitle": "Age-Based Cleanup",
-        "ageRetentionDescription": "Clips older than the specified age will be automatically deleted, while preserving the minimum number per species.",
-        "usageRetentionTitle": "Usage-Based Cleanup",
-        "usageRetentionDescription": "When disk usage exceeds the threshold, oldest clips will be deleted until usage is within limits."
+        "noRetentionTitle": "Tous les clips conservés",
+        "noRetentionDescription": "Les clips audio seront conservés indéfiniment. Surveillez l'utilisation du disque pour éviter les problèmes de stockage.",
+        "ageRetentionTitle": "Nettoyage par ancienneté",
+        "ageRetentionDescription": "Les clips plus anciens que l'âge spécifié seront automatiquement supprimés, tout en conservant le nombre minimum par espèce.",
+        "usageRetentionTitle": "Nettoyage par utilisation",
+        "usageRetentionDescription": "Lorsque l'utilisation du disque dépasse le seuil, les clips les plus anciens seront supprimés jusqu'à ce que l'utilisation soit dans les limites."
       },
       "formats": {
         "wav": "WAV",
@@ -3171,7 +3171,7 @@
         "enableLabel": "Activer l'authentification par mot de passe",
         "passwordLabel": "Mot de passe",
         "passwordHelpText": "Limiter l'accès aux paramètres avec un mot de passe.",
-        "disabled": "Password authentication is disabled"
+        "disabled": "L'authentification par mot de passe est désactivée"
       },
       "oauth": {
         "title": "Authentification externe",
@@ -3284,7 +3284,7 @@
       "bypassAuthentication": {
         "title": "Contourner l'authentification",
         "description": "Autoriser l'accès aux paramètres sans authentification",
-        "disabled": "Subnet bypass is disabled"
+        "disabled": "Le contournement par sous-réseau est désactivé"
       },
       "exceptions": {
         "title": "Exceptions"
@@ -3472,27 +3472,27 @@
           "thresholdPlaceholder": "0.5",
           "intervalPlaceholder": "0"
         },
-        "addConfiguration": "Add Configuration",
-        "newConfiguration": "New Configuration",
-        "editing": "Editing: {species}",
-        "configuredCount": "{count} configured",
+        "addConfiguration": "Ajouter une configuration",
+        "newConfiguration": "Nouvelle configuration",
+        "editing": "Modification : {species}",
+        "configuredCount": "{count} configurées",
         "searchPlaceholder": "Type to search...",
-        "saving": "Saving...",
-        "save": "Save",
-        "cancel": "Cancel",
-        "configureActions": "Configure Actions",
-        "actionsConfigured": "Configured",
+        "saving": "Enregistrement...",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "configureActions": "Configurer les actions",
+        "actionsConfigured": "Configuré",
         "list": {
-          "threshold": "Threshold:",
-          "interval": "Interval:",
-          "intervalNone": "None",
+          "threshold": "Seuil :",
+          "interval": "Intervalle :",
+          "intervalNone": "Aucun",
           "actionBadge": "Action",
-          "editTitle": "Edit configuration",
-          "removeTitle": "Remove configuration"
+          "editTitle": "Modifier la configuration",
+          "removeTitle": "Supprimer la configuration"
         },
         "emptyState": {
-          "title": "No configurations yet.",
-          "description": "Click \"Add Configuration\" to customize species detection settings."
+          "title": "Aucune configuration pour le moment.",
+          "description": "Cliquez sur « Ajouter une configuration » pour personnaliser les paramètres de détection des espèces."
         }
       },
       "synonyms": {
@@ -4169,7 +4169,7 @@
         "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
       },
       "subnet": {
-        "maxSubnetsReached": "Maximum number of subnets ({max}) reached."
+        "maxSubnetsReached": "Nombre maximum de sous-réseaux ({max}) atteint."
       }
     },
     "datePicker": {
@@ -4509,8 +4509,8 @@
   "analysis": {
     "title": "Analyse",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Paramètres",
+      "models": "Modèles"
     },
     "detection": {
       "title": "Paramètres de détection",
@@ -4540,12 +4540,12 @@
         "helpText": "Nécessite plusieurs confirmations d'une détection de chauve-souris dans une fenêtre glissante avant de l'accepter. Les niveaux supérieurs nécessitent plus de confirmations, réduisant les faux positifs. Le modèle chauve-souris utilise un chevauchement fixe de 50 %, aucun ajustement n'est donc nécessaire."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Langue des espèces",
+        "helpText": "Langue utilisée pour les noms communs des espèces dans l'interface."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Le filtre de zone s'applique uniquement aux classificateurs d'oiseaux. Les modèles de chauves-souris utilisent leurs propres listes d'espèces.",
       "status": {
         "title": "Aperçu du filtre de zone",
         "geomodelInfo": "BirdNET Géomodèle {version} - {species} espèces connues",
@@ -4565,8 +4565,8 @@
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Avancé",
+      "description": "Configuration du traitement et des modèles personnalisés."
     },
     "gallery": {
       "title": "Galerie de modèles",

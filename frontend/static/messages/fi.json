@@ -1443,7 +1443,7 @@
       "samples": "näytettä",
       "available": "saatav.",
       "min": "Min",
-      "max": "Max",
+      "max": "Maks",
       "limit": "Raja",
       "tempUnavailable": "Ei saatavilla",
       "online": "Verkossa",
@@ -3928,22 +3928,22 @@
     },
     "userInterface": {
       "tabs": {
-        "appearance": "Appearance",
-        "language": "Language & Regional",
-        "visualContent": "Visual Content",
+        "appearance": "Ulkoasu",
+        "language": "Kieli ja alue",
+        "visualContent": "Visuaalinen sisältö",
         "audioPlayback": "Äänentoisto"
       },
       "appearance": {
-        "title": "Appearance",
-        "description": "Customize the look and feel of your BirdNET-Go interface"
+        "title": "Ulkoasu",
+        "description": "Mukauta BirdNET-Go-käyttöliittymän ulkoasua"
       },
       "language": {
-        "title": "Language & Regional",
-        "description": "Language, temperature units, and regional display preferences"
+        "title": "Kieli ja alue",
+        "description": "Kieli, lämpötilayksiköt ja alueelliset näyttöasetukset"
       },
       "visualContent": {
-        "title": "Visual Content",
-        "description": "Configure bird images and spectrogram display settings"
+        "title": "Visuaalinen sisältö",
+        "description": "Lintukuvien ja spektrogramminäytön asetukset"
       },
       "audioPlayback": {
         "title": "Äänentoisto",
@@ -4214,7 +4214,7 @@
         "extracting": "Puretaan leikettä...",
         "extractError": "Leikkeen purku epäonnistui",
         "formatLabel": "Muoto",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Toista valinta",
@@ -4509,8 +4509,8 @@
   "analysis": {
     "title": "Analyysi",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Asetukset",
+      "models": "Mallit"
     },
     "detection": {
       "title": "Tunnistusasetukset",
@@ -4540,12 +4540,12 @@
         "helpText": "Vaatii useita vahvistuksia lepakkotunnistuksesta liukuvan ikkunan sisällä ennen kuin se hyväksytään. Korkeammat tasot vaativat enemmän vahvistuksia, mikä vähentää vääriä positiivisia. Lepakkomalli käyttää kiinteää 50 % päällekkäisyyttä, joten päällekkäisyyden säätöä ei tarvita."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Lajien kieli",
+        "helpText": "Kieli, jolla lajien yleisnimistö näytetään käyttöliittymässä."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Aluesuodatin koskee vain lintuluokittimia. Lepakkomallit käyttävät omia lajilistojaan.",
       "status": {
         "title": "Aluesuodattimen yhteenveto",
         "geomodelInfo": "BirdNET-geomalli {version} - {species} tunnettua lajia",
@@ -4565,8 +4565,8 @@
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Lisäasetukset",
+      "description": "Käsittelyn ja mukautettujen mallien asetukset."
     },
     "gallery": {
       "title": "Malligalleria",

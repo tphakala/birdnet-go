@@ -3357,7 +3357,7 @@
         "modeAutoTLSDescription": "Automatický certifikát cez Let's Encrypt",
         "modeManualDescription": "Nahrať vlastný certifikát a kľúč",
         "modeSelfSignedDescription": "Vygenerovať samopodpísaný certifikát",
-        "portLabel": "HTTPS Port",
+        "portLabel": "Port HTTPS",
         "portHelpText": "Port pre HTTPS pripojenia (predvolený: 8443)",
         "redirectToHttps": "Presmerovať HTTP na HTTPS",
         "autoTLSRequirements": "Vyžaduje dostupnosť portov 80 a 443. Na Linuxe proces potrebuje root alebo schopnosť CAP_NET_BIND_SERVICE.",
@@ -4238,7 +4238,7 @@
         "extracting": "Extrahovanie klipu...",
         "extractError": "Nepodarilo sa extrahovať klip",
         "formatLabel": "Formát",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Prehrať výber",
@@ -4509,12 +4509,12 @@
   "analysis": {
     "title": "Analýza",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Nastavenia",
+      "models": "Modely"
     },
     "detection": {
-      "title": "Detection Settings",
-      "description": "Configure confidence thresholds and language for species classification.",
+      "title": "Nastavenia detekcie",
+      "description": "Nastavte prahové hodnoty spoľahlivosti a jazyk klasifikácie druhov.",
       "confidenceThreshold": {
         "label": "Confidence Threshold",
         "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
@@ -4540,97 +4540,97 @@
         "helpText": "Vyžaduje viacero potvrdení detekcie netopiera v posuvnom okne pred jej prijatím. Vyššie úrovne vyžadujú viac potvrdení, čím sa znižujú falošné pozitíva. Model netopierov používa pevné 50% prekrývanie, takže úprava prekrývania nie je potrebná."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Jazyk druhov",
+        "helpText": "Jazyk používaný pre bežné názvy druhov v rozhraní."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Filter rozsahu sa vzťahuje len na klasifikátory vtákov. Modely netopierov používajú vlastné zoznamy druhov.",
       "status": {
         "title": "Prehľad filtra rozsahu",
         "geomodelInfo": "BirdNET Geomodel {version} - {species} známych druhov",
-        "autoSelected": "Auto-selected",
-        "manual": "Manual",
-        "classifier": "Classifier",
-        "totalSpecies": "Total Species",
-        "withRangeData": "With Range Data",
-        "withoutRangeData": "Without Range Data",
-        "withRangeDataTooltip": "Species that the geomodel can evaluate for geographic probability at your location",
-        "withoutRangeDataTooltip": "Species without geographic data in the geomodel, handled by the unmapped species setting below",
-        "noFilter": "No range filter active",
+        "autoSelected": "Automaticky vybrané",
+        "manual": "Manuálne",
+        "classifier": "Klasifikátor",
+        "totalSpecies": "Celkový počet druhov",
+        "withRangeData": "S údajmi o rozsahu",
+        "withoutRangeData": "Bez údajov o rozsahu",
+        "withRangeDataTooltip": "Druhy, pre ktoré geomodel môže vyhodnotiť geografickú pravdepodobnosť na vašej polohe",
+        "withoutRangeDataTooltip": "Druhy bez geografických údajov v geomodeli, spravované nastavením nemapovaných druhov nižšie",
+        "noFilter": "Žiadny aktívny filter rozsahu",
         "passUnmapped": {
-          "label": "Allow species without range data",
-          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+          "label": "Povoliť druhy bez údajov o rozsahu",
+          "helpText": "Povoliť detekcie druhov, pre ktoré geomodel nemá geografické údaje. Ak je vypnuté, tieto druhy sa vždy odfiltrujú."
         }
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Pokročilé",
+      "description": "Konfigurácia spracovania a vlastných modelov."
     },
     "gallery": {
-      "title": "Model Gallery",
-      "description": "Manage classifier models for bird and bat detection.",
+      "title": "Galéria modelov",
+      "description": "Správa klasifikačných modelov pre detekciu vtákov a netopierov.",
       "tabs": {
-        "installed": "Installed",
-        "available": "Available"
+        "installed": "Nainštalované",
+        "available": "Dostupné"
       },
-      "loading": "Loading models...",
-      "retry": "Retry",
-      "builtIn": "Built-in",
-      "builtInDescription": "Built-in bird species classifier by the BirdNET team.",
-      "species": "{count} species",
-      "install": "Install",
-      "installing": "Installing...",
-      "remove": "Remove",
-      "removing": "Removing...",
-      "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
-      "noAvailableModels": "No additional models available for your platform.",
+      "loading": "Načítavajú sa modely...",
+      "retry": "Skúsiť znova",
+      "builtIn": "Vstavaný",
+      "builtInDescription": "Vstavaný klasifikátor vtáčích druhov od tímu BirdNET.",
+      "species": "{count} druhov",
+      "install": "Inštalovať",
+      "installing": "Inštaluje sa...",
+      "remove": "Odstrániť",
+      "removing": "Odstraňovanie...",
+      "noInstalledModels": "Žiadne ďalšie modely nie sú nainštalované. Prejdite na kartu Dostupné a pridajte ďalšie klasifikátory.",
+      "noAvailableModels": "Pre vašu platformu nie sú k dispozícii žiadne ďalšie modely.",
       "sections": {
         "acoustic": "Akustické klasifikátory",
         "geomodel": "Geomodely"
       },
       "categories": {
-        "wildlife": "Wildlife Classifiers",
-        "bird": "Bird Classifiers",
-        "bat": "Bat Classifiers"
+        "wildlife": "Klasifikátory voľne žijúcich živočíchov",
+        "bird": "Klasifikátory vtákov",
+        "bat": "Klasifikátory netopierov"
       },
       "progress": {
-        "downloading": "Downloading...",
-        "verifying": "Verifying...",
-        "loading": "Loading...",
-        "complete": "Installed successfully",
-        "failed": "Failed"
+        "downloading": "Sťahovanie...",
+        "verifying": "Overovanie...",
+        "loading": "Načítava sa...",
+        "complete": "Úspešne nainštalované",
+        "failed": "Zlyhanie"
       },
       "license": {
-        "title": "License Agreement",
+        "title": "Licenčná zmluva",
         "model": "Model",
-        "author": "Author",
-        "license": "License",
-        "commercialUse": "Commercial Use",
-        "downloadSize": "Download Size",
-        "allowed": "Allowed",
-        "notAllowed": "Not allowed",
-        "commercialUseAllowed": "Commercial use allowed",
-        "nonCommercialOnly": "Non-commercial use only",
-        "nonCommercialWarning": "This model is licensed for non-commercial use only. By installing, you agree to comply with the license terms.",
-        "acceptAndInstall": "Accept & Install"
+        "author": "Autor",
+        "license": "Licencia",
+        "commercialUse": "Komerčné využitie",
+        "downloadSize": "Veľkosť na stiahnutie",
+        "allowed": "Povolené",
+        "notAllowed": "Nepovolené",
+        "commercialUseAllowed": "Komerčné využitie povolené",
+        "nonCommercialOnly": "Len nekomerčné využitie",
+        "nonCommercialWarning": "Tento model je licencovaný len na nekomerčné použitie. Inštaláciou súhlasíte s licenčnými podmienkami.",
+        "acceptAndInstall": "Prijať a inštalovať"
       },
       "removeDialog": {
-        "title": "Remove {name}?",
-        "confirmation": "This will remove the model files from disk. Label data is retained for existing detections."
+        "title": "Odstrániť {name}?",
+        "confirmation": "Tým sa odstránia súbory modelu z disku. Údaje štítkov pre existujúce detekcie sa zachovajú."
       },
       "errors": {
-        "catalogLoadFailed": "Failed to load model catalog",
-        "installFailed": "Failed to start model installation",
-        "removeFailed": "Failed to remove model"
+        "catalogLoadFailed": "Nepodarilo sa načítať katalóg modelov",
+        "installFailed": "Nepodarilo sa spustiť inštaláciu modelu",
+        "removeFailed": "Nepodarilo sa odstrániť model"
       },
-      "regionLabel": "Region",
-      "speciesLabel": "Species",
-      "reinstall": "Reinstall",
-      "reinstalling": "Reinstalling...",
-      "reinstallComplete": "Files verified successfully",
-      "geomodelBadge": "Includes BirdNET v3.0 geomodel"
+      "regionLabel": "Región",
+      "speciesLabel": "Druhy",
+      "reinstall": "Preinštalovať",
+      "reinstalling": "Preinštalovanie...",
+      "reinstallComplete": "Súbory úspešne overené",
+      "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel"
     }
   },
   "restart": {
