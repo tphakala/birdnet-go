@@ -750,6 +750,7 @@
   };
 
   function getBatFalsePositiveFilterDescription(level: number): string {
+    // eslint-disable-next-line security/detect-object-injection
     const descKey = BAT_FP_DESCRIPTION_KEYS[level];
     if (!descKey) return '';
 
