@@ -73,6 +73,7 @@
     Loader2,
     RefreshCw,
     Radar,
+    Globe,
     XCircle,
     X,
     Check,
@@ -159,6 +160,9 @@
   );
   const availableBats = $derived(
     catalog.filter(e => !e.installed && e.compatible && e.category === 'bat')
+  );
+  const availableGeomodels = $derived(
+    catalog.filter(e => !e.installed && e.compatible && e.category === 'geomodel')
   );
 
   // ── BirdNET locale loading ────────────────────────────────────────────
@@ -1420,7 +1424,9 @@
                 <img src={logo} alt="" class="size-10 shrink-0 rounded-lg" />
               {:else}
                 <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-                  {#if entry.category === 'bat'}
+                  {#if entry.category === 'geomodel'}
+                    <Globe size={24} class="text-[var(--color-primary)]" />
+                  {:else if entry.category === 'bat'}
                     <Radar size={24} class="text-[var(--color-primary)]" />
                   {:else}
                     <BrainCircuit size={24} class="text-[var(--color-primary)]" />
@@ -1432,10 +1438,21 @@
                 <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
                   {entry.description}
                 </p>
-                <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
+                {#if entry.upstreamUrl}
+                  <a
+                    href={entry.upstreamUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="mt-1 inline-block text-xs text-[var(--color-primary)]/80 hover:text-[var(--color-primary)] transition-colors"
+                  >
+                    {entry.author}
+                  </a>
+                {:else}
+                  <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
+                {/if}
               </div>
             </div>
-            <!-- Progress bar (shown during reinstall) -->
+            <!-- Progress bar (shown during reinstall, not for companion entries) -->
             {#if reinstallProgress}
               <div class="mt-3 space-y-1.5">
                 {#if reinstallProgress.status === 'complete'}
@@ -1489,9 +1506,31 @@
               <div class="text-[var(--color-base-content)]/80">
                 {t('analysis.gallery.species', { count: entry.speciesCount })}
               </div>
+              <div class="text-[var(--color-base-content)]/80">
+                {t('analysis.gallery.license.license')}
+              </div>
+              <div>
+                {#if entry.commercialUse}
+                  <span
+                    class="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs text-[var(--color-success)]"
+                    title={t('analysis.gallery.license.commercialUseAllowed')}
+                  >
+                    <Shield class="size-3" />
+                    {entry.license}
+                  </span>
+                {:else}
+                  <span
+                    class="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs text-[var(--color-warning)]"
+                    title={t('analysis.gallery.license.nonCommercialOnly')}
+                  >
+                    <ShieldAlert class="size-3" />
+                    {entry.license}
+                  </span>
+                {/if}
+              </div>
             </div>
-            <!-- Geomodel badge -->
-            {#if entry.hasGeomodel}
+            <!-- Geomodel badge (for acoustic classifiers that bundle a geomodel) -->
+            {#if entry.hasGeomodel && entry.category !== 'geomodel'}
               <div class="mt-2">
                 <span
                   class="inline-flex items-center gap-1 rounded-full bg-[var(--color-info)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-info)]"
@@ -1557,7 +1596,9 @@
         <img src={logo} alt="" class="size-10 shrink-0 rounded-lg" />
       {:else}
         <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-          {#if entry.category === 'bat'}
+          {#if entry.category === 'geomodel'}
+            <Globe size={24} class="text-[var(--color-primary)]" />
+          {:else if entry.category === 'bat'}
             <Radar size={24} class="text-[var(--color-primary)]" />
           {:else}
             <BrainCircuit size={24} class="text-[var(--color-primary)]" />
@@ -1586,7 +1627,7 @@
       </div>
     </div>
 
-    <!-- Progress bar (shown during install) -->
+    <!-- Progress bar (shown during install, not for companion entries) -->
     {#if progress}
       <div class="mt-3 space-y-1.5">
         {#if progress.status === 'complete'}
@@ -1655,8 +1696,8 @@
       </div>
     </div>
 
-    <!-- Geomodel badge -->
-    {#if entry.hasGeomodel}
+    <!-- Geomodel badge (for acoustic classifiers that bundle a geomodel) -->
+    {#if entry.hasGeomodel && entry.category !== 'geomodel'}
       <div class="mt-2">
         <span
           class="inline-flex items-center gap-1 rounded-full bg-[var(--color-info)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-info)]"
@@ -1711,55 +1752,75 @@
         </button>
       </div>
     {:else}
-      <!-- Wildlife Classifiers -->
-      {#if availableWildlife.length > 0}
-        <div>
-          <h3
-            class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
-          >
-            {t('analysis.gallery.categories.wildlife')}
-          </h3>
+      <!-- Acoustic Classifiers section -->
+      {#if availableWildlife.length > 0 || availableBirds.length > 0 || availableBats.length > 0}
+        <div class="space-y-4">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-[var(--color-base-content)]">
+            {t('analysis.gallery.sections.acoustic')}
+          </h2>
+
+          {#if availableWildlife.length > 0}
+            <div>
+              <h3
+                class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
+              >
+                {t('analysis.gallery.categories.wildlife')}
+              </h3>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {#each availableWildlife as entry (entry.id)}
+                  {@render modelCard(entry)}
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if availableBirds.length > 0}
+            <div>
+              <h3
+                class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
+              >
+                {t('analysis.gallery.categories.bird')}
+              </h3>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {#each availableBirds as entry (entry.id)}
+                  {@render modelCard(entry)}
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if availableBats.length > 0}
+            <div>
+              <h3
+                class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
+              >
+                {t('analysis.gallery.categories.bat')}
+              </h3>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {#each availableBats as entry (entry.id)}
+                  {@render modelCard(entry)}
+                {/each}
+              </div>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      <!-- Geomodels section -->
+      {#if availableGeomodels.length > 0}
+        <div class="space-y-4">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-[var(--color-base-content)]">
+            {t('analysis.gallery.sections.geomodel')}
+          </h2>
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {#each availableWildlife as entry (entry.id)}
+            {#each availableGeomodels as entry (entry.id)}
               {@render modelCard(entry)}
             {/each}
           </div>
         </div>
       {/if}
 
-      <!-- Bird Classifiers -->
-      {#if availableBirds.length > 0}
-        <div>
-          <h3
-            class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
-          >
-            {t('analysis.gallery.categories.bird')}
-          </h3>
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {#each availableBirds as entry (entry.id)}
-              {@render modelCard(entry)}
-            {/each}
-          </div>
-        </div>
-      {/if}
-
-      <!-- Bat Classifiers -->
-      {#if availableBats.length > 0}
-        <div>
-          <h3
-            class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
-          >
-            {t('analysis.gallery.categories.bat')}
-          </h3>
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {#each availableBats as entry (entry.id)}
-              {@render modelCard(entry)}
-            {/each}
-          </div>
-        </div>
-      {/if}
-
-      {#if availableWildlife.length === 0 && availableBirds.length === 0 && availableBats.length === 0}
+      {#if availableWildlife.length === 0 && availableBirds.length === 0 && availableBats.length === 0 && availableGeomodels.length === 0}
         <p class="py-8 text-center text-sm text-[var(--color-base-content)]/80">
           {t('analysis.gallery.noAvailableModels')}
         </p>

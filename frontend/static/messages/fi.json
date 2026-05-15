@@ -4582,6 +4582,10 @@
       "removing": "Poistetaan...",
       "noInstalledModels": "Ei asennettuja lisämalleja. Selaa Saatavilla-välilehteä lisätäksesi luokittelijoita.",
       "noAvailableModels": "Ei lisämalleja saatavilla alustallesi.",
+      "sections": {
+        "acoustic": "Akustiset luokittelijat",
+        "geomodel": "Geomallit"
+      },
       "categories": {
         "wildlife": "Eläinluokittelijat",
         "bird": "Lintuluokittelijat",
