@@ -1785,15 +1785,15 @@
           "overlapAdjusted": "Päällekkäisyysasetus säädetty automaattisesti arvoon {overlap}s suodatinvaatimusten täyttämiseksi",
           "overlapReduced": "Päällekkäisyysasetus pienennetty arvoon {overlap}s vastaamaan suodatustasoa",
           "levelNames": {
-            "off": "Off",
-            "lenient": "Lenient",
-            "moderate": "Moderate",
-            "balanced": "Balanced",
-            "strict": "Strict",
-            "maximum": "Maximum",
-            "unknown": "Unknown"
+            "off": "Pois",
+            "lenient": "Matala",
+            "moderate": "Kohtalainen",
+            "balanced": "Tasapainoinen",
+            "strict": "Tiukka",
+            "maximum": "Maksimi",
+            "unknown": "Tuntematon"
           },
-          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
+          "warningOff": "Ilman suodatusta jokainen luottamuskynnyksen ylittävä havainto hyväksytään välittömästi. Tämä tuottaa tyypillisesti useita vääriä positiivisia päivässä. Jo matala suodatus parantaa tulosten laatua merkittävästi."
         },
         "rangeFilter": {
           "title": "Aluesuodatin",
@@ -4549,13 +4549,13 @@
         "label": "Lepakon väärien positiivisten suodatin",
         "helpText": "Vaatii useita vahvistuksia lepakkotunnistuksesta liukuvan ikkunan sisällä ennen kuin se hyväksytään. Korkeammat tasot vaativat enemmän vahvistuksia, mikä vähentää vääriä positiivisia. Lepakkomalli käyttää kiinteää 50 % päällekkäisyyttä, joten päällekkäisyyden säätöä ei tarvita.",
         "levels": {
-          "off": "No filtering; accepts any bat detection immediately.",
-          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
-          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
-          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+          "off": "Ei suodatusta; hyväksyy minkä tahansa lepakkohavainnon välittömästi.",
+          "lenient": "Yksi vahvistus vaaditaan. Sopii alueille, joilla on paljon lepakkoaktiivisuutta.",
+          "moderate": "Hyvä tasapaino useimpiin asetuksiin. Vähentää merkittävästi vääriä positiivisia.",
+          "strict": "Maksimaalinen suodatus korkeimman tarkkuuden saavuttamiseksi."
         },
-        "detectionCount": "{count} confirmations required. {description}",
-        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
+        "detectionCount": "{count} vahvistusta vaaditaan. {description}",
+        "warningOff": "Ilman suodatusta väärien positiivisten todennäköisyys on suuri. Suodatuksen käyttöönotto parantaa tarkkuutta merkittävästi."
       },
       "locale": {
         "label": "Species Language",
@@ -4651,15 +4651,15 @@
       "geomodelBadge": "Sisältää BirdNET v3.0 -geomallin"
     },
     "bird": {
-      "title": "Bird Detection",
-      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+      "title": "Lintuhavainnot",
+      "description": "Määritä luottamuskynnys, lajikieli ja väärien positiivisten suodatus lintuluokittimille."
     },
     "bat": {
-      "title": "Bat Detection",
-      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+      "title": "Lepakkohavainnot",
+      "description": "Määritä kynnys, ajastus ja väärien positiivisten suodatus lepakkoluokittimille."
     },
     "dynamicThreshold": {
-      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
+      "birdOnlyNote": "Dynaaminen kynnys koskee vain lintuluokittimia."
     }
   },
   "restart": {

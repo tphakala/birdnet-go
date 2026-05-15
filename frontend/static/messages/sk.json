@@ -1785,15 +1785,15 @@
           "overlapAdjusted": "Nastavenie prekrytia bolo automaticky upravené na {overlap}s, aby spĺňalo požiadavky filtra",
           "overlapReduced": "Nastavenie prekrytia bolo znížené na {overlap}s, aby zodpovedalo úrovni filtra",
           "levelNames": {
-            "off": "Off",
-            "lenient": "Lenient",
-            "moderate": "Moderate",
-            "balanced": "Balanced",
-            "strict": "Strict",
+            "off": "Vypnutý",
+            "lenient": "Nízky",
+            "moderate": "Mierny",
+            "balanced": "Vyvážený",
+            "strict": "Prísny",
             "maximum": "Maximum",
-            "unknown": "Unknown"
+            "unknown": "Neznámy"
           },
-          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
+          "warningOff": "Bez filtrovania sa každá detekcia nad prahom spoľahlivosti ihneď akceptuje. To zvyčajne spôsobuje niekoľko falošných pozitív denne. Aj nízke filtrovanie výrazne zlepšuje kvalitu výsledkov."
         },
         "rangeFilter": {
           "title": "Filter rozsahu",
@@ -4549,13 +4549,13 @@
         "label": "Filter falošne pozitívnych netopierov",
         "helpText": "Vyžaduje viacero potvrdení detekcie netopiera v posuvnom okne pred jej prijatím. Vyššie úrovne vyžadujú viac potvrdení, čím sa znižujú falošné pozitíva. Model netopierov používa pevné 50% prekrývanie, takže úprava prekrývania nie je potrebná.",
         "levels": {
-          "off": "No filtering; accepts any bat detection immediately.",
-          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
-          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
-          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+          "off": "Žiadne filtrovanie; akceptuje akúkoľvek detekciu netopiera okamžite.",
+          "lenient": "Vyžaduje sa jedno potvrdenie. Vhodné pre oblasti s vysokou aktivitou netopierov.",
+          "moderate": "Dobrá rovnováha pre väčšinu nastavení. Výrazne znižuje falošné pozitíva.",
+          "strict": "Maximálne filtrovanie pre najvyššiu presnosť."
         },
-        "detectionCount": "{count} confirmations required. {description}",
-        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
+        "detectionCount": "Vyžaduje sa {count} potvrdení. {description}",
+        "warningOff": "Bez filtrovania je vysoká pravdepodobnosť falošných pozitív. Zapnutie filtrovania výrazne zlepšuje presnosť."
       },
       "locale": {
         "label": "Species Language",
@@ -4651,15 +4651,15 @@
       "geomodelBadge": "Includes BirdNET v3.0 geomodel"
     },
     "bird": {
-      "title": "Bird Detection",
-      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+      "title": "Detekcia vtákov",
+      "description": "Nakonfigurujte prah spoľahlivosti, jazyk druhov a filtrovanie falošných pozitív pre klasifikátory vtákov."
     },
     "bat": {
-      "title": "Bat Detection",
-      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+      "title": "Detekcia netopierov",
+      "description": "Nakonfigurujte prah, plánovanie a filtrovanie falošných pozitív pre klasifikátory netopierov."
     },
     "dynamicThreshold": {
-      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
+      "birdOnlyNote": "Dynamický prah sa vzťahuje len na klasifikátory vtákov."
     }
   },
   "restart": {

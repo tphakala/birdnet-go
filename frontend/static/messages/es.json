@@ -1785,15 +1785,15 @@
           "overlapAdjusted": "La configuración de superposición se ajustó automáticamente a {overlap}s para cumplir con los requisitos del filtro",
           "overlapReduced": "La configuración de superposición se redujo a {overlap}s para coincidir con el nivel del filtro",
           "levelNames": {
-            "off": "Off",
-            "lenient": "Lenient",
-            "moderate": "Moderate",
-            "balanced": "Balanced",
-            "strict": "Strict",
-            "maximum": "Maximum",
-            "unknown": "Unknown"
+            "off": "Desactivado",
+            "lenient": "Bajo",
+            "moderate": "Moderado",
+            "balanced": "Equilibrado",
+            "strict": "Estricto",
+            "maximum": "Máximo",
+            "unknown": "Desconocido"
           },
-          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
+          "warningOff": "Sin filtrado, cualquier detección por encima del umbral de confianza se acepta inmediatamente. Esto produce típicamente varios falsos positivos al día. Incluso un filtrado bajo mejora significativamente la calidad de los resultados."
         },
         "rangeFilter": {
           "title": "Filtro de rango",
@@ -4549,13 +4549,13 @@
         "label": "Filtro de falsos positivos de murciélagos",
         "helpText": "Requiere múltiples confirmaciones de una detección de murciélago dentro de una ventana deslizante antes de aceptarla. Niveles más altos requieren más confirmaciones, reduciendo los falsos positivos. El modelo de murciélagos usa una superposición fija del 50%, por lo que no se necesita ajuste de superposición.",
         "levels": {
-          "off": "No filtering; accepts any bat detection immediately.",
-          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
-          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
-          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+          "off": "Sin filtrado; acepta cualquier detección de murciélago inmediatamente.",
+          "lenient": "Se requiere una confirmación. Adecuado para zonas con alta actividad de murciélagos.",
+          "moderate": "Buen equilibrio para la mayoría de configuraciones. Reduce significativamente los falsos positivos.",
+          "strict": "Filtrado máximo para la mayor precisión."
         },
-        "detectionCount": "{count} confirmations required. {description}",
-        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
+        "detectionCount": "{count} confirmaciones requeridas. {description}",
+        "warningOff": "Sin filtrado hay una alta probabilidad de falsos positivos. Activar el filtrado mejora significativamente la precisión."
       },
       "locale": {
         "label": "Species Language",
@@ -4651,15 +4651,15 @@
       "geomodelBadge": "Incluye BirdNET v3.0 geomodel"
     },
     "bird": {
-      "title": "Bird Detection",
-      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+      "title": "Detección de aves",
+      "description": "Configure el umbral de confianza, el idioma de especies y el filtrado de falsos positivos para clasificadores de aves."
     },
     "bat": {
-      "title": "Bat Detection",
-      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+      "title": "Detección de murciélagos",
+      "description": "Configure el umbral, la programación y el filtrado de falsos positivos para clasificadores de murciélagos."
     },
     "dynamicThreshold": {
-      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
+      "birdOnlyNote": "El umbral dinámico se aplica solo a clasificadores de aves."
     }
   },
   "restart": {

@@ -1785,15 +1785,15 @@
           "overlapAdjusted": "Az átfedési beállítás automatikusan {overlap}s-re állítva a szűrési követelményeknek megfelelően",
           "overlapReduced": "Az átfedési beállítás {overlap}s-re csökkentve a szűrési szintnek megfelelően",
           "levelNames": {
-            "off": "Off",
-            "lenient": "Lenient",
-            "moderate": "Moderate",
-            "balanced": "Balanced",
-            "strict": "Strict",
+            "off": "Ki",
+            "lenient": "Enyhe",
+            "moderate": "Mérsékelt",
+            "balanced": "Kiegyensúlyozott",
+            "strict": "Szigorú",
             "maximum": "Maximum",
-            "unknown": "Unknown"
+            "unknown": "Ismeretlen"
           },
-          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
+          "warningOff": "Szűrés nélkül a megbízhatósági küszöb feletti minden észlelés azonnal elfogadásra kerül. Ez általában naponta több hamis pozitívat eredményez. Már az enyhe szűrés is jelentősen javítja az eredmények minőségét."
         },
         "rangeFilter": {
           "title": "Tartomány szűrő",
@@ -4549,13 +4549,13 @@
         "label": "Denevér hamis pozitív szűrő",
         "helpText": "Több megerősítést igényel egy denevérészleléshez egy csúszó ablakon belül, mielőtt elfogadná. A magasabb szintek több megerősítést igényelnek, csökkentve a hamis pozitívokat. A denevérmodell fix 50%-os átfedést használ, így átfedés-beállítás nem szükséges.",
         "levels": {
-          "off": "No filtering; accepts any bat detection immediately.",
-          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
-          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
-          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+          "off": "Nincs szűrés; bármely denevérészlelés azonnal elfogadásra kerül.",
+          "lenient": "Egyetlen megerősítés szükséges. Magas denevéraktivitású területekre alkalmas.",
+          "moderate": "Jó egyensúly a legtöbb beállításhoz. Jelentősen csökkenti a hamis pozitívakat.",
+          "strict": "Maximális szűrés a legmagasabb pontosság érdekében."
         },
-        "detectionCount": "{count} confirmations required. {description}",
-        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
+        "detectionCount": "{count} megerősítés szükséges. {description}",
+        "warningOff": "Szűrés nélkül nagy a hamis pozitívak valószínűsége. A szűrés engedélyezése jelentősen javítja a pontosságot."
       },
       "locale": {
         "label": "Species Language",
@@ -4651,15 +4651,15 @@
       "geomodelBadge": "Includes BirdNET v3.0 geomodel"
     },
     "bird": {
-      "title": "Bird Detection",
-      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+      "title": "Madárészlelés",
+      "description": "Állítsa be a megbízhatósági küszöböt, a fajnyelvet és a hamis pozitív szűrést a madárosztályozókhoz."
     },
     "bat": {
-      "title": "Bat Detection",
-      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+      "title": "Denevérészlelés",
+      "description": "Állítsa be a küszöböt, az ütemezést és a hamis pozitív szűrést a denevérosztályozókhoz."
     },
     "dynamicThreshold": {
-      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
+      "birdOnlyNote": "A dinamikus küszöb csak a madárosztályozókra vonatkozik."
     }
   },
   "restart": {

@@ -1785,15 +1785,15 @@
           "overlapAdjusted": "Impostazione sovrapposizione regolata automaticamente a {overlap}s per soddisfare i requisiti del filtro",
           "overlapReduced": "Impostazione sovrapposizione ridotta a {overlap}s per corrispondere al livello del filtro",
           "levelNames": {
-            "off": "Off",
-            "lenient": "Lenient",
-            "moderate": "Moderate",
-            "balanced": "Balanced",
-            "strict": "Strict",
-            "maximum": "Maximum",
-            "unknown": "Unknown"
+            "off": "Disattivato",
+            "lenient": "Basso",
+            "moderate": "Moderato",
+            "balanced": "Bilanciato",
+            "strict": "Rigoroso",
+            "maximum": "Massimo",
+            "unknown": "Sconosciuto"
           },
-          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
+          "warningOff": "Senza filtraggio, qualsiasi rilevamento sopra la soglia di confidenza viene accettato immediatamente. Questo produce tipicamente diversi falsi positivi al giorno. Anche un filtraggio basso migliora significativamente la qualità dei risultati."
         },
         "rangeFilter": {
           "title": "Filtro Intervallo",
@@ -4549,13 +4549,13 @@
         "label": "Filtro falsi positivi pipistrelli",
         "helpText": "Richiede multiple conferme di un rilevamento di pipistrello all'interno di una finestra scorrevole prima di accettarlo. Livelli più alti richiedono più conferme, riducendo i falsi positivi. Il modello pipistrelli usa una sovrapposizione fissa del 50%, quindi non è necessario alcun aggiustamento.",
         "levels": {
-          "off": "No filtering; accepts any bat detection immediately.",
-          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
-          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
-          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+          "off": "Nessun filtraggio; accetta qualsiasi rilevamento di pipistrello immediatamente.",
+          "lenient": "Singola conferma richiesta. Adatto per zone con alta attività di pipistrelli.",
+          "moderate": "Buon equilibrio per la maggior parte delle configurazioni. Riduce significativamente i falsi positivi.",
+          "strict": "Filtraggio massimo per la massima precisione."
         },
-        "detectionCount": "{count} confirmations required. {description}",
-        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
+        "detectionCount": "{count} conferme richieste. {description}",
+        "warningOff": "Senza filtraggio c'è un'alta probabilità di falsi positivi. L'attivazione del filtraggio migliora significativamente la precisione."
       },
       "locale": {
         "label": "Species Language",
@@ -4651,15 +4651,15 @@
       "geomodelBadge": "Includes BirdNET v3.0 geomodel"
     },
     "bird": {
-      "title": "Bird Detection",
-      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+      "title": "Rilevamento uccelli",
+      "description": "Configura la soglia di confidenza, la lingua delle specie e il filtraggio dei falsi positivi per i classificatori di uccelli."
     },
     "bat": {
-      "title": "Bat Detection",
-      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+      "title": "Rilevamento pipistrelli",
+      "description": "Configura la soglia, la pianificazione e il filtraggio dei falsi positivi per i classificatori di pipistrelli."
     },
     "dynamicThreshold": {
-      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
+      "birdOnlyNote": "La soglia dinamica si applica solo ai classificatori di uccelli."
     }
   },
   "restart": {

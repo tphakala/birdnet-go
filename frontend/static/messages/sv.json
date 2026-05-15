@@ -1785,15 +1785,15 @@
           "overlapAdjusted": "Överlappningsinställningen justerades automatiskt till {overlap}s för att uppfylla filterkraven",
           "overlapReduced": "Överlappningsinställningen minskades till {overlap}s för att matcha filternivån",
           "levelNames": {
-            "off": "Off",
-            "lenient": "Lenient",
-            "moderate": "Moderate",
-            "balanced": "Balanced",
-            "strict": "Strict",
+            "off": "Av",
+            "lenient": "Låg",
+            "moderate": "Måttlig",
+            "balanced": "Balanserad",
+            "strict": "Strikt",
             "maximum": "Maximum",
-            "unknown": "Unknown"
+            "unknown": "Okänd"
           },
-          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
+          "warningOff": "Utan filtrering accepteras varje detektering över konfidenströskeln omedelbart. Detta ger vanligtvis flera falska positiva per dag. Även låg filtrering förbättrar resultatkvaliteten avsevärt."
         },
         "rangeFilter": {
           "title": "Områdesfilter",
@@ -4549,13 +4549,13 @@
         "label": "Fladdermus falskt-positiv filter",
         "helpText": "Kräver flera bekräftelser av en fladdermusdetektion inom ett glidande fönster innan den accepteras. Högre nivåer kräver fler bekräftelser, vilket minskar falska positiva. Fladdermusmodellen använder en fast 50% överlappning, så ingen överlappningsjustering behövs.",
         "levels": {
-          "off": "No filtering; accepts any bat detection immediately.",
-          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
-          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
-          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+          "off": "Ingen filtrering; accepterar varje fladdermusdetektering omedelbart.",
+          "lenient": "En bekräftelse krävs. Lämplig för områden med hög fladdermusaktivitet.",
+          "moderate": "Bra balans för de flesta uppsättningar. Minskar falska positiva avsevärt.",
+          "strict": "Maximal filtrering för högsta noggrannhet."
         },
-        "detectionCount": "{count} confirmations required. {description}",
-        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
+        "detectionCount": "{count} bekräftelser krävs. {description}",
+        "warningOff": "Utan filtrering finns det hög sannolikhet för falska positiva. Att aktivera filtrering förbättrar noggrannheten avsevärt."
       },
       "locale": {
         "label": "Species Language",
@@ -4651,15 +4651,15 @@
       "geomodelBadge": "Includes BirdNET v3.0 geomodel"
     },
     "bird": {
-      "title": "Bird Detection",
-      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+      "title": "Fågeldetektering",
+      "description": "Konfigurera konfidenströskel, artspråk och filtrering av falska positiva för fågelklassificerare."
     },
     "bat": {
-      "title": "Bat Detection",
-      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+      "title": "Fladdermusdetektering",
+      "description": "Konfigurera tröskel, schemaläggning och filtrering av falska positiva för fladdermusklassificerare."
     },
     "dynamicThreshold": {
-      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
+      "birdOnlyNote": "Dynamiskt tröskelvärde gäller endast fågelklassificerare."
     }
   },
   "restart": {

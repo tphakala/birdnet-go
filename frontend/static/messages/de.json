@@ -1785,15 +1785,15 @@
           "overlapAdjusted": "Überlappungseinstellung automatisch auf {overlap}s angepasst, um die Filteranforderungen zu erfüllen",
           "overlapReduced": "Überlappungseinstellung auf {overlap}s reduziert, um der Filterstufe zu entsprechen",
           "levelNames": {
-            "off": "Off",
-            "lenient": "Lenient",
-            "moderate": "Moderate",
-            "balanced": "Balanced",
-            "strict": "Strict",
+            "off": "Aus",
+            "lenient": "Niedrig",
+            "moderate": "Mittel",
+            "balanced": "Ausgewogen",
+            "strict": "Streng",
             "maximum": "Maximum",
-            "unknown": "Unknown"
+            "unknown": "Unbekannt"
           },
-          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
+          "warningOff": "Ohne Filterung wird jede Erkennung über dem Konfidenzschwellenwert sofort akzeptiert. Dies erzeugt typischerweise mehrere Fehlerkennungen pro Tag. Selbst eine niedrige Filterung verbessert die Ergebnisqualität erheblich."
         },
         "rangeFilter": {
           "title": "Reichweitenfilter",
@@ -4549,13 +4549,13 @@
         "label": "Fledermaus-Falsch-Positiv-Filter",
         "helpText": "Erfordert mehrere Bestätigungen einer Fledermauserkennung innerhalb eines gleitenden Fensters, bevor sie akzeptiert wird. Höhere Stufen erfordern mehr Bestätigungen und reduzieren Fehlerkennungen. Das Fledermausmodell verwendet eine feste 50%-Überlappung, daher ist keine Überlappungsanpassung erforderlich.",
         "levels": {
-          "off": "No filtering; accepts any bat detection immediately.",
-          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
-          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
-          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+          "off": "Keine Filterung; akzeptiert jede Fledermauserkennung sofort.",
+          "lenient": "Einzelne Bestätigung erforderlich. Geeignet für Gebiete mit hoher Fledermausaktivität.",
+          "moderate": "Gute Balance für die meisten Setups. Reduziert Fehlerkennungen erheblich.",
+          "strict": "Maximale Filterung für höchste Genauigkeit."
         },
-        "detectionCount": "{count} confirmations required. {description}",
-        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
+        "detectionCount": "{count} Bestätigungen erforderlich. {description}",
+        "warningOff": "Ohne Filterung besteht eine hohe Wahrscheinlichkeit für Fehlerkennungen. Die Aktivierung der Filterung verbessert die Genauigkeit erheblich."
       },
       "locale": {
         "label": "Species Language",
@@ -4651,15 +4651,15 @@
       "geomodelBadge": "Enthält BirdNET v3.0 Geomodell"
     },
     "bird": {
-      "title": "Bird Detection",
-      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+      "title": "Vogelerkennung",
+      "description": "Konfigurieren Sie Konfidenzschwelle, Artensprache und Falsch-Positiv-Filterung für Vogelklassifikatoren."
     },
     "bat": {
-      "title": "Bat Detection",
-      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+      "title": "Fledermauserkennung",
+      "description": "Konfigurieren Sie Schwellenwert, Zeitplanung und Falsch-Positiv-Filterung für Fledermausklassifikatoren."
     },
     "dynamicThreshold": {
-      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
+      "birdOnlyNote": "Der dynamische Schwellenwert gilt nur für Vogelklassifikatoren."
     }
   },
   "restart": {

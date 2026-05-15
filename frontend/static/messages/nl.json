@@ -1785,15 +1785,15 @@
           "overlapAdjusted": "Overlap-instelling automatisch aangepast naar {overlap}s om aan de filtervereisten te voldoen",
           "overlapReduced": "Overlap-instelling verlaagd naar {overlap}s om overeen te komen met het filterniveau",
           "levelNames": {
-            "off": "Off",
-            "lenient": "Lenient",
-            "moderate": "Moderate",
-            "balanced": "Balanced",
-            "strict": "Strict",
+            "off": "Uit",
+            "lenient": "Laag",
+            "moderate": "Gemiddeld",
+            "balanced": "Gebalanceerd",
+            "strict": "Streng",
             "maximum": "Maximum",
-            "unknown": "Unknown"
+            "unknown": "Onbekend"
           },
-          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
+          "warningOff": "Zonder filtering wordt elke detectie boven de betrouwbaarheidsdrempel onmiddellijk geaccepteerd. Dit levert doorgaans meerdere vals-positieven per dag op. Zelfs lage filtering verbetert de resultaatkwaliteit aanzienlijk."
         },
         "rangeFilter": {
           "title": "Bereik Filter",
@@ -4549,13 +4549,13 @@
         "label": "Vleermuis vals-positief filter",
         "helpText": "Vereist meerdere bevestigingen van een vleermuisdetectie binnen een schuifvenster voordat deze wordt geaccepteerd. Hogere niveaus vereisen meer bevestigingen, waardoor valse positieven worden verminderd. Het vleermuismodel gebruikt een vaste overlap van 50%, dus er is geen overlapaanpassing nodig.",
         "levels": {
-          "off": "No filtering; accepts any bat detection immediately.",
-          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
-          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
-          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+          "off": "Geen filtering; accepteert elke vleermuisdetectie onmiddellijk.",
+          "lenient": "Enkele bevestiging vereist. Geschikt voor gebieden met veel vleermuisactiviteit.",
+          "moderate": "Goede balans voor de meeste opstellingen. Vermindert vals-positieven aanzienlijk.",
+          "strict": "Maximale filtering voor de hoogste nauwkeurigheid."
         },
-        "detectionCount": "{count} confirmations required. {description}",
-        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
+        "detectionCount": "{count} bevestigingen vereist. {description}",
+        "warningOff": "Zonder filtering is er een grote kans op vals-positieven. Het inschakelen van filtering verbetert de nauwkeurigheid aanzienlijk."
       },
       "locale": {
         "label": "Species Language",
@@ -4651,15 +4651,15 @@
       "geomodelBadge": "Bevat BirdNET v3.0 geomodel"
     },
     "bird": {
-      "title": "Bird Detection",
-      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+      "title": "Vogeldetectie",
+      "description": "Configureer betrouwbaarheidsdrempel, soortentaal en vals-positief filtering voor vogelclassificatoren."
     },
     "bat": {
-      "title": "Bat Detection",
-      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+      "title": "Vleermuisdetectie",
+      "description": "Configureer drempel, planning en vals-positief filtering voor vleermuisclassificatoren."
     },
     "dynamicThreshold": {
-      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
+      "birdOnlyNote": "Dynamische drempel geldt alleen voor vogelclassificatoren."
     }
   },
   "restart": {

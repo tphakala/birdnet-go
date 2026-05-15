@@ -1785,15 +1785,15 @@
           "overlapAdjusted": "Configuração de sobreposição ajustada automaticamente para {overlap}s para atender aos requisitos do filtro",
           "overlapReduced": "A configuração de sobreposição foi reduzida para {overlap}s para corresponder ao nível do filtro",
           "levelNames": {
-            "off": "Off",
-            "lenient": "Lenient",
-            "moderate": "Moderate",
-            "balanced": "Balanced",
-            "strict": "Strict",
-            "maximum": "Maximum",
-            "unknown": "Unknown"
+            "off": "Desativado",
+            "lenient": "Baixo",
+            "moderate": "Moderado",
+            "balanced": "Equilibrado",
+            "strict": "Rigoroso",
+            "maximum": "Máximo",
+            "unknown": "Desconhecido"
           },
-          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
+          "warningOff": "Sem filtragem, qualquer deteção acima do limiar de confiança é aceite imediatamente. Isto produz tipicamente vários falsos positivos por dia. Mesmo uma filtragem baixa melhora significativamente a qualidade dos resultados."
         },
         "rangeFilter": {
           "title": "Filtro de alcance",
@@ -4549,13 +4549,13 @@
         "label": "Filtro de falsos positivos de morcegos",
         "helpText": "Requer múltiplas confirmações de uma deteção de morcego dentro de uma janela deslizante antes de a aceitar. Níveis mais altos requerem mais confirmações, reduzindo falsos positivos. O modelo de morcegos usa uma sobreposição fixa de 50%, portanto não é necessário ajuste de sobreposição.",
         "levels": {
-          "off": "No filtering; accepts any bat detection immediately.",
-          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
-          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
-          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+          "off": "Sem filtragem; aceita qualquer deteção de morcego imediatamente.",
+          "lenient": "Uma confirmação necessária. Adequado para zonas com elevada atividade de morcegos.",
+          "moderate": "Bom equilíbrio para a maioria das configurações. Reduz significativamente os falsos positivos.",
+          "strict": "Filtragem máxima para a maior precisão."
         },
-        "detectionCount": "{count} confirmations required. {description}",
-        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
+        "detectionCount": "{count} confirmações necessárias. {description}",
+        "warningOff": "Sem filtragem existe uma alta probabilidade de falsos positivos. Ativar a filtragem melhora significativamente a precisão."
       },
       "locale": {
         "label": "Species Language",
@@ -4651,15 +4651,15 @@
       "geomodelBadge": "Inclui BirdNET v3.0 geomodel"
     },
     "bird": {
-      "title": "Bird Detection",
-      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+      "title": "Deteção de aves",
+      "description": "Configure o limiar de confiança, o idioma das espécies e a filtragem de falsos positivos para classificadores de aves."
     },
     "bat": {
-      "title": "Bat Detection",
-      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+      "title": "Deteção de morcegos",
+      "description": "Configure o limiar, o agendamento e a filtragem de falsos positivos para classificadores de morcegos."
     },
     "dynamicThreshold": {
-      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
+      "birdOnlyNote": "O limiar dinâmico aplica-se apenas a classificadores de aves."
     }
   },
   "restart": {

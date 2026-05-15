@@ -1785,15 +1785,15 @@
           "overlapAdjusted": "Le paramètre de chevauchement a été automatiquement ajusté à {overlap}s pour répondre aux exigences du filtre",
           "overlapReduced": "Le paramètre de chevauchement a été réduit à {overlap}s pour correspondre au niveau du filtre",
           "levelNames": {
-            "off": "Off",
-            "lenient": "Lenient",
-            "moderate": "Moderate",
-            "balanced": "Balanced",
+            "off": "Désactivé",
+            "lenient": "Faible",
+            "moderate": "Modéré",
+            "balanced": "Équilibré",
             "strict": "Strict",
             "maximum": "Maximum",
-            "unknown": "Unknown"
+            "unknown": "Inconnu"
           },
-          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
+          "warningOff": "Sans filtrage, toute détection au-dessus du seuil de confiance est acceptée immédiatement. Cela produit typiquement plusieurs faux positifs par jour. Même un filtrage faible améliore considérablement la qualité des résultats."
         },
         "rangeFilter": {
           "title": "Filtre de portée",
@@ -4549,13 +4549,13 @@
         "label": "Filtre de faux positifs chauves-souris",
         "helpText": "Nécessite plusieurs confirmations d'une détection de chauve-souris dans une fenêtre glissante avant de l'accepter. Les niveaux supérieurs nécessitent plus de confirmations, réduisant les faux positifs. Le modèle chauve-souris utilise un chevauchement fixe de 50 %, aucun ajustement n'est donc nécessaire.",
         "levels": {
-          "off": "No filtering; accepts any bat detection immediately.",
-          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
-          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
-          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+          "off": "Aucun filtrage ; accepte toute détection de chauve-souris immédiatement.",
+          "lenient": "Une seule confirmation requise. Adapté aux zones à forte activité de chauves-souris.",
+          "moderate": "Bon équilibre pour la plupart des configurations. Réduit considérablement les faux positifs.",
+          "strict": "Filtrage maximal pour la plus grande précision."
         },
-        "detectionCount": "{count} confirmations required. {description}",
-        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
+        "detectionCount": "{count} confirmations requises. {description}",
+        "warningOff": "Sans filtrage, la probabilité de faux positifs est élevée. L'activation du filtrage améliore considérablement la précision."
       },
       "locale": {
         "label": "Species Language",
@@ -4651,15 +4651,15 @@
       "geomodelBadge": "Inclut le BirdNET v3.0 geomodel"
     },
     "bird": {
-      "title": "Bird Detection",
-      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+      "title": "Détection des oiseaux",
+      "description": "Configurez le seuil de confiance, la langue des espèces et le filtrage des faux positifs pour les classificateurs d'oiseaux."
     },
     "bat": {
-      "title": "Bat Detection",
-      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+      "title": "Détection des chauves-souris",
+      "description": "Configurez le seuil, la planification et le filtrage des faux positifs pour les classificateurs de chauves-souris."
     },
     "dynamicThreshold": {
-      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
+      "birdOnlyNote": "Le seuil dynamique s'applique uniquement aux classificateurs d'oiseaux."
     }
   },
   "restart": {
