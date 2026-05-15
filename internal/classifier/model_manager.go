@@ -346,16 +346,13 @@ func (mm *ModelManager) scanSharedOnlyEntry(log logger.Logger, entry *CatalogEnt
 		}
 		switch f.Role {
 		case RoleGeomodelModel:
-			if modelPath == "" {
-				modelPath = p
-			}
+			modelPath = p
 		case RoleGeomodelLabels:
 			labelsPath = p
-		default:
-			if modelPath == "" {
-				modelPath = p
-			}
 		}
+	}
+	if modelPath == "" {
+		return false
 	}
 	mm.installed[entry.ID] = InstalledModel{
 		CatalogID:   entry.ID,
@@ -831,10 +828,10 @@ func resolveSharedPaths(entry *CatalogEntry, modelPath, labelsPath string, destP
 		return modelPath, labelsPath
 	}
 	for _, f := range entry.Files {
-		if f.Role == RoleGeomodelModel {
+		switch f.Role {
+		case RoleGeomodelModel:
 			modelPath = destPath(f)
-		}
-		if f.Role == RoleGeomodelLabels && labelsPath == "" {
+		case RoleGeomodelLabels:
 			labelsPath = destPath(f)
 		}
 	}
