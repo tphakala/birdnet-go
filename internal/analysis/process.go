@@ -22,11 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
-var (
-	processMetrics      *metrics.MyAudioMetrics // Global metrics instance for audio processing operations
-	processMetricsMutex sync.RWMutex            // Mutex for thread-safe access to processMetrics
-	processMetricsOnce  sync.Once               // Ensures metrics are only set once
-)
+var processMetrics atomic.Pointer[metrics.MyAudioMetrics]
 
 const (
 	// Float32BufferSize is the number of float32 samples in a standard buffer.
@@ -73,6 +69,30 @@ func getOverrunTracker(source, modelID string) *bufferOverrunTracker {
 	t := &bufferOverrunTracker{}
 	overrunTrackers[key] = t
 	return t
+}
+
+// CleanupOverrunTrackers removes tracker entries that have been idle longer than maxAge.
+func CleanupOverrunTrackers(maxAge time.Duration) {
+	now := time.Now()
+	overrunTrackersMu.Lock()
+	defer overrunTrackersMu.Unlock()
+	for key, tracker := range overrunTrackers {
+		tracker.mu.Lock()
+		idle := !tracker.windowStart.IsZero() && now.Sub(tracker.windowStart) > maxAge
+		noActivity := tracker.windowStart.IsZero() && tracker.overrunCount == 0
+		tracker.mu.Unlock()
+		if idle || noActivity {
+			delete(overrunTrackers, key)
+		}
+	}
+}
+
+// ResetOverrunTrackers removes all tracker entries. Called when audio sources
+// are reconfigured to prevent stale entries from accumulating.
+func ResetOverrunTrackers() {
+	overrunTrackersMu.Lock()
+	clear(overrunTrackers)
+	overrunTrackersMu.Unlock()
 }
 
 // lastQueueOverflowReport tracks the last time a queue overflow was reported to Sentry.
@@ -137,14 +157,9 @@ func reportBufferOverruns(count int64, maxElapsed, bufferLen, window time.Durati
 }
 
 // SetProcessMetrics sets the metrics instance for audio processing operations.
-// This function is thread-safe and ensures metrics are only set once per process lifetime.
-// Subsequent calls will be ignored due to sync.Once (idempotent behavior).
+// Thread-safe; only the first call wins (subsequent calls are no-ops).
 func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
-	processMetricsOnce.Do(func() {
-		processMetricsMutex.Lock()
-		defer processMetricsMutex.Unlock()
-		processMetrics = myAudioMetrics
-	})
+	processMetrics.CompareAndSwap(nil, myAudioMetrics)
 }
 
 // ProcessData processes the given audio data to detect bird species, logs the
@@ -201,9 +216,7 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 	}
 
 	// Record inference duration metric (always, even on error)
-	processMetricsMutex.RLock()
-	pm := processMetrics
-	processMetricsMutex.RUnlock()
+	pm := processMetrics.Load()
 	if pm != nil {
 		pm.RecordAudioInferenceDuration(source, inferenceDuration.Seconds())
 	}
@@ -270,9 +283,7 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 			logger.String("source", source))
 		recordBufferOverrun(getOverrunTracker(source, modelID), elapsedTime, effectiveBufferDuration)
 
-		processMetricsMutex.RLock()
-		m := processMetrics
-		processMetricsMutex.RUnlock()
+		m := processMetrics.Load()
 		if m != nil {
 			m.RecordBirdNETProcessingOverrun(source, elapsedTime.Seconds(), effectiveBufferDuration.Seconds())
 		}

@@ -369,7 +369,7 @@ func (bn *BirdNET) initializeMetaModel() error {
 	// Auto-select v3 geomodel for compatible classifiers when files exist on disk.
 	// Only applies locally for routing; does NOT publish settings to avoid
 	// inconsistency if the backend fails to initialize.
-	if bn.modelsDir != "" && shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
+	if rf.Model == "" && bn.modelsDir != "" && shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
 		localSettings := conf.CloneSettings(settings)
 		applyAutoSelectedGeomodelPaths(localSettings, bn.modelsDir)
 		rf = localSettings.BirdNET.RangeFilter

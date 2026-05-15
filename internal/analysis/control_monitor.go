@@ -286,10 +286,10 @@ func (cm *ControlMonitor) handleRebuildRangeFilter() {
 	// for maintenance tasks. Future maintainers: this is just opportunistic cleanup,
 	// not a functional requirement of range filter rebuilding.
 	if cm.proc != nil {
-		// Clean entries older than 1 hour
 		cm.proc.CleanupLogDeduplicator(time.Hour)
 		cm.proc.CleanupEventTracker(time.Hour)
 	}
+	CleanupOverrunTrackers(time.Hour)
 }
 
 // handleReloadBirdnet reloads the BirdNET model
@@ -382,6 +382,7 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 func (cm *ControlMonitor) handleReconfigureStreams() {
 	audiocore.GetLogger().Info("Reconfiguring audio streams")
 
+	ResetOverrunTrackers()
 	cm.reconfigureSourcesFn()
 
 	// Re-evaluate quiet hours after stream reconfiguration to ensure
@@ -754,6 +755,8 @@ func (cm *ControlMonitor) handleRebuildExtendedCapture() {
 // diff-based reconfiguration used for RTSP stream changes.
 func (cm *ControlMonitor) handleReconfigureAudioSources() {
 	audiocore.GetLogger().Info("Reconfiguring audio sources")
+
+	ResetOverrunTrackers()
 
 	defer func() {
 		if r := recover(); r != nil {
