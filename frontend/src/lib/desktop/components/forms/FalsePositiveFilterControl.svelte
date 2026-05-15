@@ -10,6 +10,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import { t } from '$lib/i18n';
+  import { safeArrayAccess } from '$lib/utils/security';
 
   interface Props {
     id: string;
@@ -21,17 +22,13 @@
 
   let { id, level, onUpdate, getDescription, disabled = false }: Props = $props();
 
-  const LEVELS = [
-    { value: 0, name: 'Off' },
-    { value: 1, name: 'Lenient' },
-    { value: 2, name: 'Moderate' },
-    { value: 3, name: 'Balanced' },
-    { value: 4, name: 'Strict' },
-    { value: 5, name: 'Maximum' },
-  ];
+  const LEVEL_KEYS: string[] = ['off', 'lenient', 'moderate', 'balanced', 'strict', 'maximum'];
+  const LEVEL_COUNT = LEVEL_KEYS.length;
 
   function getLevelName(value: number): string {
-    return LEVELS.find(l => l.value === value)?.name ?? 'Unknown';
+    const key = safeArrayAccess(LEVEL_KEYS, value);
+    if (!key) return t('settings.main.sections.falsePositiveFilter.levelNames.unknown');
+    return t(`settings.main.sections.falsePositiveFilter.levelNames.${key}`);
   }
 
   function getBadgeClass(value: number): string {
@@ -82,13 +79,13 @@
 
   <!-- Stepped dots showing discrete levels -->
   <div class="flex justify-between px-[2px] mt-1.5" aria-hidden="true">
-    {#each LEVELS as l (l.value)}
+    {#each Array.from({ length: LEVEL_COUNT }, (_, i) => i) as i (i)}
       <div
         class={cn(
           'size-1.5 rounded-full transition-colors',
-          l.value <= level ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-base-300)]'
+          i <= level ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-base-300)]'
         )}
-        title={l.name}
+        title={getLevelName(i)}
       ></div>
     {/each}
   </div>

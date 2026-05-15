@@ -1783,7 +1783,16 @@
           },
           "hardwareNote": "Strict and Maximum levels require higher overlap settings and more CPU resources. RPi 4 or better hardware is required for these levels.",
           "overlapAdjusted": "Overlap setting automatically adjusted to {overlap}s to meet filter requirements",
-          "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level"
+          "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level",
+          "levelNames": {
+            "off": "Off",
+            "lenient": "Lenient",
+            "moderate": "Moderate",
+            "balanced": "Balanced",
+            "strict": "Strict",
+            "maximum": "Maximum",
+            "unknown": "Unknown"
+          }
         },
         "rangeFilter": {
           "title": "Range Filter",

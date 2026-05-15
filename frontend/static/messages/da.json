@@ -1783,7 +1783,16 @@
           },
           "hardwareNote": "Streng og Maksimum niveauer kræver højere overlapindstillinger og flere CPU-ressourcer. RPi 4 eller bedre hardware er påkrævet til disse niveauer.",
           "overlapAdjusted": "Overlapindstilling automatisk justeret til {overlap}s for at opfylde filterkravene",
-          "overlapReduced": "Overlapindstilling reduceret til {overlap}s for at matche filterniveauet"
+          "overlapReduced": "Overlapindstilling reduceret til {overlap}s for at matche filterniveauet",
+          "levelNames": {
+            "off": "Off",
+            "lenient": "Lenient",
+            "moderate": "Moderate",
+            "balanced": "Balanced",
+            "strict": "Strict",
+            "maximum": "Maximum",
+            "unknown": "Unknown"
+          }
         },
         "rangeFilter": {
           "title": "Områdefilter",

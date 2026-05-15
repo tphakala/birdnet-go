@@ -1783,7 +1783,16 @@
           },
           "hardwareNote": "Strikt- och maximumnivåer kräver högre överlappningsinställningar och mer CPU-resurser. RPi 4 eller bättre hårdvara krävs för dessa nivåer.",
           "overlapAdjusted": "Överlappningsinställningen justerades automatiskt till {overlap}s för att uppfylla filterkraven",
-          "overlapReduced": "Överlappningsinställningen minskades till {overlap}s för att matcha filternivån"
+          "overlapReduced": "Överlappningsinställningen minskades till {overlap}s för att matcha filternivån",
+          "levelNames": {
+            "off": "Off",
+            "lenient": "Lenient",
+            "moderate": "Moderate",
+            "balanced": "Balanced",
+            "strict": "Strict",
+            "maximum": "Maximum",
+            "unknown": "Unknown"
+          }
         },
         "rangeFilter": {
           "title": "Områdesfilter",

@@ -1783,7 +1783,16 @@
           },
           "hardwareNote": "Los niveles Estricto y Máximo requieren configuraciones de superposición más altas y más recursos de CPU. Se requiere RPi 4 o hardware superior para estos niveles.",
           "overlapAdjusted": "La configuración de superposición se ajustó automáticamente a {overlap}s para cumplir con los requisitos del filtro",
-          "overlapReduced": "La configuración de superposición se redujo a {overlap}s para coincidir con el nivel del filtro"
+          "overlapReduced": "La configuración de superposición se redujo a {overlap}s para coincidir con el nivel del filtro",
+          "levelNames": {
+            "off": "Off",
+            "lenient": "Lenient",
+            "moderate": "Moderate",
+            "balanced": "Balanced",
+            "strict": "Strict",
+            "maximum": "Maximum",
+            "unknown": "Unknown"
+          }
         },
         "rangeFilter": {
           "title": "Filtro de rango",

@@ -1783,7 +1783,16 @@
           },
           "hardwareNote": "A szigorú és maximális szintek nagyobb átfedési beállításokat és több CPU erőforrást igényelnek. Ezekhez a szintekhez RPi 4 vagy jobb hardver szükséges.",
           "overlapAdjusted": "Az átfedési beállítás automatikusan {overlap}s-re állítva a szűrési követelményeknek megfelelően",
-          "overlapReduced": "Az átfedési beállítás {overlap}s-re csökkentve a szűrési szintnek megfelelően"
+          "overlapReduced": "Az átfedési beállítás {overlap}s-re csökkentve a szűrési szintnek megfelelően",
+          "levelNames": {
+            "off": "Off",
+            "lenient": "Lenient",
+            "moderate": "Moderate",
+            "balanced": "Balanced",
+            "strict": "Strict",
+            "maximum": "Maximum",
+            "unknown": "Unknown"
+          }
         },
         "rangeFilter": {
           "title": "Tartomány szűrő",

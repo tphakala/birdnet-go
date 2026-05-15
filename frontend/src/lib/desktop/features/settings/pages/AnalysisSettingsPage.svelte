@@ -218,42 +218,36 @@
   const falsePositiveFilterLevels = [
     {
       value: 0,
-      name: 'Off',
       descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.off',
       minOverlap: 0.0,
       threshold: 0.0,
     },
     {
       value: 1,
-      name: 'Lenient',
       descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.lenient',
       minOverlap: 2.0,
       threshold: 0.2,
     },
     {
       value: 2,
-      name: 'Moderate',
       descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.moderate',
       minOverlap: 2.2,
       threshold: 0.3,
     },
     {
       value: 3,
-      name: 'Balanced',
       descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.balanced',
       minOverlap: 2.4,
       threshold: 0.5,
     },
     {
       value: 4,
-      name: 'Strict',
       descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.strict',
       minOverlap: 2.7,
       threshold: 0.6,
     },
     {
       value: 5,
-      name: 'Maximum',
       descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.maximum',
       minOverlap: 2.8,
       threshold: 0.7,
