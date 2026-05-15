@@ -48,18 +48,19 @@ func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier
 	if opts.SkipLabelValidation {
 		classifierOpts = append(classifierOpts, ort.WithSkipLabelValidation())
 	}
-	var configErr error
-	if opts.Threads > 0 {
-		threads := opts.Threads
-		classifierOpts = append(classifierOpts, ort.WithSessionOptions(func(so *ortlib.SessionOptions) {
-			if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
-				configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
-			}
-			if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
-				configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
-			}
-		}))
+	threads := opts.Threads
+	if threads <= 0 {
+		threads = runtime.NumCPU()
 	}
+	var configErr error
+	classifierOpts = append(classifierOpts, ort.WithSessionOptions(func(so *ortlib.SessionOptions) {
+		if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
+			configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
+		}
+		if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
+			configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
+		}
+	}))
 	classifier, err := ort.NewClassifier(modelPath, classifierOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ONNX classifier: %w", err)
@@ -125,18 +126,19 @@ func NewONNXCustomClassifier(modelPath string, opts ONNXCustomClassifierOptions)
 		return nil, fmt.Errorf("ONNX custom classifier requires labels or labels path")
 	}
 
-	var configErr error
-	if opts.Threads > 0 {
-		threads := opts.Threads
-		builder = builder.SessionOptions(func(so *ortlib.SessionOptions) {
-			if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
-				configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
-			}
-			if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
-				configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
-			}
-		})
+	threads := opts.Threads
+	if threads <= 0 {
+		threads = runtime.NumCPU()
 	}
+	var configErr error
+	builder = builder.SessionOptions(func(so *ortlib.SessionOptions) {
+		if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
+			configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
+		}
+		if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
+			configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
+		}
+	})
 
 	cc, err := builder.Build()
 	if err != nil {

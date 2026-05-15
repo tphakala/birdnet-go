@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -27,6 +28,13 @@ type modelEntry struct {
 // Orchestrator manages classifier model instances and provides the primary
 // inference API. It replaces direct *BirdNET usage at all call sites.
 // Supports multiple models with per-model locking and name resolution.
+//
+// Lock ordering (acquire in this order to prevent deadlocks):
+//  1. mu (RWMutex) - protects models map; released before inference
+//  2. inferenceMu (Mutex) - serializes inference across all models
+//  3. entry.mu (Mutex) - per-model; guards instance lifecycle
+//
+// Delete/UnloadModel acquire mu + entry.mu but NOT inferenceMu.
 type Orchestrator struct {
 	// Public fields — same layout as BirdNET for drop-in caller migration.
 	Settings        *conf.Settings
@@ -42,10 +50,11 @@ type Orchestrator struct {
 	// NOTE: models map is keyed by ModelInfo.ID at construction time. If ReloadModel
 	// changes the model ID, the key goes stale. Delete() iterates values so cleanup
 	// is unaffected. ReloadModel re-keys the map after reload.
-	mu        sync.RWMutex // protects the models map
-	models    map[string]*modelEntry
-	primary   *BirdNET // direct access to the primary model
-	modelsDir string   // base directory for gallery-installed models
+	mu          sync.RWMutex // protects the models map
+	inferenceMu sync.Mutex   // serializes inference across all models
+	models      map[string]*modelEntry
+	primary     *BirdNET // direct access to the primary model
+	modelsDir   string   // base directory for gallery-installed models
 
 	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
 	// IsModelActive (called on every monitor tick) reads lock-free.
@@ -270,9 +279,11 @@ func (o *Orchestrator) Predict(ctx context.Context, sample [][]float32) ([]datas
 }
 
 // PredictModel runs inference on a specific model identified by modelID.
-// It uses a two-level locking protocol: a read lock on the models map to fetch
-// the entry (fast), then a per-model lock for inference (slow). The map lock is
-// released before acquiring the model lock to prevent deadlocks with ReloadModel.
+// It uses a three-level locking protocol: a read lock on the models map to
+// fetch the entry (fast), then inferenceMu to serialize inference across all
+// models (only one model runs at a time), then entry.mu for instance lifecycle.
+// The map lock is released before acquiring inference/model locks to prevent
+// deadlocks with ReloadModel and Delete.
 func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error) {
 	log := GetLogger()
 
@@ -289,6 +300,9 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 			Context("model_id", modelID).
 			Build()
 	}
+
+	o.inferenceMu.Lock()
+	defer o.inferenceMu.Unlock()
 
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
@@ -666,10 +680,12 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			Build()
 	}
 
-	// Allocate a single thread for the new model. The thread count defaults
-	// to 1 because the primary model's thread allocation was computed at
-	// startup and should not be reduced by a dynamic load.
-	const dynamicThreads = 1
+	// Give the new model the full thread budget. Inference is serialized by
+	// inferenceMu so concurrent CPU contention cannot occur.
+	dynamicThreads := o.Settings.BirdNET.Threads
+	if dynamicThreads <= 0 {
+		dynamicThreads = runtime.NumCPU()
+	}
 
 	log.Info("Loading model dynamically",
 		logger.String("registry_id", registryID),
@@ -803,8 +819,8 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 }
 
 // computeThreadAllocation pre-computes thread distribution for all models
-// that will be loaded. This runs before loading additional models so
-// constructors receive their allocated thread count.
+// that will be loaded. Inference is serialized by inferenceMu, so each model
+// gets the full thread budget (they never run simultaneously).
 func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings, primaryID string) map[string]int {
 	// Collect unique model IDs that will be loaded. Deduplicates
 	// case variants like ["perch_v2", "PERCH_V2"] that resolve to the same ID.
@@ -819,11 +835,19 @@ func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings, primaryI
 		modelIDs = append(modelIDs, registryID)
 	}
 
-	alloc := divideThreads(settings.BirdNET.Threads, modelIDs, primaryID)
+	total := settings.BirdNET.Threads
+	if total <= 0 {
+		total = runtime.NumCPU()
+	}
+
+	alloc := make(map[string]int, len(modelIDs))
+	for _, id := range modelIDs {
+		alloc[id] = total
+	}
 
 	if len(modelIDs) > 1 {
-		GetLogger().Info("Thread allocation for multi-model",
-			logger.Int("total_threads", settings.BirdNET.Threads),
+		GetLogger().Info("Thread allocation for multi-model (serialized inference)",
+			logger.Int("threads_per_model", total),
 			logger.Int("model_count", len(modelIDs)))
 		for id, threads := range alloc {
 			GetLogger().Debug("Model thread allocation",
