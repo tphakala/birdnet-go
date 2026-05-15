@@ -142,14 +142,27 @@ func TestOrchestrator_PredictModel_UnknownModel(t *testing.T) {
 	assert.Contains(t, err.Error(), "nonexistent")
 }
 
-func TestOrchestrator_PredictModel_NoCrossModelBlocking(t *testing.T) {
+func TestOrchestrator_PredictModel_SerializedInference(t *testing.T) {
 	t.Parallel()
 
+	// Track the order of inference events to verify serialization.
+	var events []string
+	var eventsMu sync.Mutex
+	addEvent := func(name string) {
+		eventsMu.Lock()
+		events = append(events, name)
+		eventsMu.Unlock()
+	}
+
+	slowStarted := make(chan struct{})
 	slowMock := &mockModelInstance{
 		id:   "slow-model",
 		spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 		predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			addEvent("slow-start")
+			close(slowStarted)
 			time.Sleep(100 * time.Millisecond)
+			addEvent("slow-end")
 			return []datastore.Results{{Species: "Slow Bird", Confidence: 0.5}}, nil
 		},
 	}
@@ -157,6 +170,8 @@ func TestOrchestrator_PredictModel_NoCrossModelBlocking(t *testing.T) {
 		id:   "fast-model",
 		spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 		predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			addEvent("fast-start")
+			addEvent("fast-end")
 			return []datastore.Results{{Species: "Fast Bird", Confidence: 0.9}}, nil
 		},
 	}
@@ -164,35 +179,31 @@ func TestOrchestrator_PredictModel_NoCrossModelBlocking(t *testing.T) {
 	o := newTestOrchestrator(t, slowMock, fastMock)
 
 	var wg sync.WaitGroup
-	fastDone := make(chan time.Time, 1)
-	slowDone := make(chan time.Time, 1)
-
 	sample := [][]float32{{0.1, 0.2}}
 	ctx := t.Context()
 
 	// Launch slow model first
 	wg.Go(func() {
 		_, _ = o.PredictModel(ctx, "slow-model", sample)
-		slowDone <- time.Now()
 	})
 
-	// Launch fast model immediately after
+	// Wait for slow model to actually start inference, then launch fast model.
+	// The fast model should be blocked by inferenceMu until slow finishes.
+	<-slowStarted
 	wg.Go(func() {
 		_, _ = o.PredictModel(ctx, "fast-model", sample)
-		fastDone <- time.Now()
 	})
 
 	wg.Wait()
 
-	fastFinish := <-fastDone
-	slowFinish := <-slowDone
+	eventsMu.Lock()
+	defer eventsMu.Unlock()
 
-	// Fast model should finish well before slow model (at least 50ms earlier).
-	// If per-model locking is broken and they share a lock, fast would be blocked
-	// until slow finishes.
-	assert.True(t, fastFinish.Before(slowFinish),
-		"fast model should finish before slow model; fast=%v slow=%v",
-		fastFinish, slowFinish)
+	require.Len(t, events, 4, "expected 4 inference events")
+	assert.Equal(t, "slow-start", events[0])
+	assert.Equal(t, "slow-end", events[1])
+	assert.Equal(t, "fast-start", events[2])
+	assert.Equal(t, "fast-end", events[3])
 }
 
 func TestOrchestrator_ModelInfos(t *testing.T) {
