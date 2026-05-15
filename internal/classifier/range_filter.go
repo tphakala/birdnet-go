@@ -69,12 +69,16 @@ func BuildRangeFilter(o *Orchestrator) error {
 		// Sync unmappedScore with the current PassUnmappedSpecies setting so
 		// that the legacy predictFilter path (which calls Predict()) sees the
 		// correct value without requiring a full ReloadRangeFilter.
+		// Also capture the pre-computed classifier-to-geomodel mapping to
+		// avoid rebuilding it after the lock is released.
+		var cachedMapping []int
 		if mrf, ok := rf.(*mappedRangeFilter); ok {
 			var score float32
 			if settings.BirdNET.RangeFilter.PassUnmappedSpecies {
 				score = 1.0
 			}
 			mrf.unmappedScore = score
+			cachedMapping = mrf.classifierToGeo
 		}
 		o.primary.mu.Unlock()
 
@@ -106,7 +110,10 @@ func BuildRangeFilter(o *Orchestrator) error {
 			for _, s := range includedSpecies {
 				seen[s] = true
 			}
-			mapping := buildSpeciesMapping(settings.BirdNET.Labels, allGeoLabels)
+			mapping := cachedMapping
+			if mapping == nil {
+				mapping = buildSpeciesMapping(settings.BirdNET.Labels, allGeoLabels)
+			}
 			for i, geoIdx := range mapping {
 				if geoIdx == -1 {
 					label := settings.BirdNET.Labels[i]
@@ -300,6 +307,10 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 	up, isUniversal := bn.rangeFilter.(UniversalSpeciesPredictor)
 	if isUniversal {
 		allGeoLabels := up.GeomodelLabels()
+		var cachedMapping []int
+		if mrf, ok := bn.rangeFilter.(*mappedRangeFilter); ok {
+			cachedMapping = mrf.classifierToGeo
+		}
 		scores, err := up.PredictSpeciesScores(
 			float32(settings.BirdNET.Latitude),
 			float32(settings.BirdNET.Longitude),
@@ -331,7 +342,10 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 			for _, ss := range speciesScores {
 				seen[ss.Label] = true
 			}
-			mapping := buildSpeciesMapping(settings.BirdNET.Labels, allGeoLabels)
+			mapping := cachedMapping
+			if mapping == nil {
+				mapping = buildSpeciesMapping(settings.BirdNET.Labels, allGeoLabels)
+			}
 			for i, geoIdx := range mapping {
 				if geoIdx == -1 {
 					label := settings.BirdNET.Labels[i]
