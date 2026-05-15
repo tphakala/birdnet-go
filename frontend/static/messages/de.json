@@ -3953,7 +3953,7 @@
       "schemeForest": "Wald",
       "schemeAmber": "Bernstein",
       "schemeViolet": "Violett",
-      "schemeRose": "Rose",
+      "schemeRose": "Rosé",
       "schemeCustom": "Benutzerdefiniert",
       "customPrimary": "Primärfarbe",
       "customAccent": "Akzentfarbe",
@@ -4519,8 +4519,8 @@
   "analysis": {
     "title": "Analyse",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Einstellungen",
+      "models": "Modelle"
     },
     "detection": {
       "title": "Erkennungseinstellungen",
@@ -4550,7 +4550,6 @@
         "helpText": "Erfordert mehrere Bestätigungen einer Fledermauserkennung innerhalb eines gleitenden Fensters, bevor sie akzeptiert wird. Höhere Stufen erfordern mehr Bestätigungen und reduzieren Fehlerkennungen. Das Fledermausmodell verwendet eine feste 50%-Überlappung, daher ist keine Überlappungsanpassung erforderlich.",
         "levels": {
           "off": "Keine Filterung; akzeptiert jede Fledermauserkennung sofort.",
-          "lenient": "Einzelne Bestätigung erforderlich. Geeignet für Gebiete mit hoher Fledermausaktivität.",
           "moderate": "Gute Balance für die meisten Setups. Reduziert Fehlerkennungen erheblich.",
           "strict": "Maximale Filterung für höchste Genauigkeit."
         },
@@ -4558,12 +4557,12 @@
         "warningOff": "Ohne Filterung besteht eine hohe Wahrscheinlichkeit für Fehlerkennungen. Die Aktivierung der Filterung verbessert die Genauigkeit erheblich."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Artensprache",
+        "helpText": "Sprache für die gebräuchlichen Artnamen in der Benutzeroberfläche."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Der Reichweitenfilter gilt nur für Vogelklassifikatoren. Fledermausmodelle verwenden eigene Artenlisten.",
       "status": {
         "title": "Gebietsfilter-Übersicht",
         "geomodelInfo": "BirdNET-Geomodell {version} - {species} bekannte Arten",
@@ -4583,8 +4582,8 @@
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Erweitert",
+      "description": "Verarbeitungs- und benutzerdefinierte Modellkonfiguration."
     },
     "gallery": {
       "title": "Modellgalerie",

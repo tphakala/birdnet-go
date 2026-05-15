@@ -4550,7 +4550,6 @@
         "helpText": "Requires multiple confirmations of a bat detection within a sliding window before accepting it. Higher levels require more confirmations, reducing false positives. The bat model uses a fixed 50% overlap, so no overlap adjustment is needed.",
         "levels": {
           "off": "No filtering; accepts any bat detection immediately.",
-          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
           "moderate": "Good balance for most setups. Significantly reduces false positives.",
           "strict": "Maximum filtering for highest accuracy."
         },

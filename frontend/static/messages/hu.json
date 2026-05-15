@@ -4248,7 +4248,7 @@
         "extracting": "Részlet kivonása...",
         "extractError": "A részlet kivonása sikertelen",
         "formatLabel": "Formátum",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Kijelölés lejátszása",
@@ -4519,12 +4519,12 @@
   "analysis": {
     "title": "Elemzés",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Beállítások",
+      "models": "Modellek"
     },
     "detection": {
-      "title": "Detection Settings",
-      "description": "Configure confidence thresholds and language for species classification.",
+      "title": "Detektálási beállítások",
+      "description": "Megbízhatósági küszöbértékek és nyelv beállítása a fajok osztályozásához.",
       "confidenceThreshold": {
         "label": "Confidence Threshold",
         "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
@@ -4550,7 +4550,6 @@
         "helpText": "Több megerősítést igényel egy denevérészleléshez egy csúszó ablakon belül, mielőtt elfogadná. A magasabb szintek több megerősítést igényelnek, csökkentve a hamis pozitívokat. A denevérmodell fix 50%-os átfedést használ, így átfedés-beállítás nem szükséges.",
         "levels": {
           "off": "Nincs szűrés; bármely denevérészlelés azonnal elfogadásra kerül.",
-          "lenient": "Egyetlen megerősítés szükséges. Magas denevéraktivitású területekre alkalmas.",
           "moderate": "Jó egyensúly a legtöbb beállításhoz. Jelentősen csökkenti a hamis pozitívakat.",
           "strict": "Maximális szűrés a legmagasabb pontosság érdekében."
         },
@@ -4558,97 +4557,97 @@
         "warningOff": "Szűrés nélkül nagy a hamis pozitívak valószínűsége. A szűrés engedélyezése jelentősen javítja a pontosságot."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Fajok nyelve",
+        "helpText": "A fajok köznapi neveihez használt nyelv a felületen."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "A területszűrő csak madár osztályozókra vonatkozik. A denevérmodellek saját fajlistákat használnak.",
       "status": {
         "title": "Területszűrő áttekintés",
         "geomodelInfo": "BirdNET Geomodell {version} - {species} ismert faj",
-        "autoSelected": "Auto-selected",
-        "manual": "Manual",
-        "classifier": "Classifier",
-        "totalSpecies": "Total Species",
-        "withRangeData": "With Range Data",
-        "withoutRangeData": "Without Range Data",
-        "withRangeDataTooltip": "Species that the geomodel can evaluate for geographic probability at your location",
-        "withoutRangeDataTooltip": "Species without geographic data in the geomodel, handled by the unmapped species setting below",
-        "noFilter": "No range filter active",
+        "autoSelected": "Automatikusan kiválasztott",
+        "manual": "Kézi",
+        "classifier": "Osztályozó",
+        "totalSpecies": "Összes faj",
+        "withRangeData": "Területi adattal",
+        "withoutRangeData": "Területi adat nélkül",
+        "withRangeDataTooltip": "Fajok, amelyeket a geomodell ki tud értékelni földrajzi valószínűség szempontjából az Ön helyén",
+        "withoutRangeDataTooltip": "Fajok földrajzi adat nélkül a geomodellben, az alábbi nem térképezett fajok beállítás kezeli",
+        "noFilter": "Nincs aktív területszűrő",
         "passUnmapped": {
-          "label": "Allow species without range data",
-          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+          "label": "Területi adat nélküli fajok engedélyezése",
+          "helpText": "Engedélyezze azon fajok detektálását, amelyekhez a geomodellnek nincs földrajzi adata. Kikapcsolva ezek a fajok mindig kiszűrésre kerülnek."
         }
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Haladó",
+      "description": "Feldolgozási és egyéni modell beállítások."
     },
     "gallery": {
-      "title": "Model Gallery",
-      "description": "Manage classifier models for bird and bat detection.",
+      "title": "Modellgaléria",
+      "description": "Osztályozó modellek kezelése madár- és denevérdetektáláshoz.",
       "tabs": {
-        "installed": "Installed",
-        "available": "Available"
+        "installed": "Telepített",
+        "available": "Elérhető"
       },
-      "loading": "Loading models...",
-      "retry": "Retry",
-      "builtIn": "Built-in",
-      "builtInDescription": "Built-in bird species classifier by the BirdNET team.",
-      "species": "{count} species",
-      "install": "Install",
-      "installing": "Installing...",
-      "remove": "Remove",
-      "removing": "Removing...",
-      "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
-      "noAvailableModels": "No additional models available for your platform.",
+      "loading": "Modellek betöltése...",
+      "retry": "Újra",
+      "builtIn": "Beépített",
+      "builtInDescription": "A BirdNET csapat beépített madárfaj-osztályozója.",
+      "species": "{count} faj",
+      "install": "Telepítés",
+      "installing": "Telepítés...",
+      "remove": "Eltávolítás",
+      "removing": "Eltávolítás...",
+      "noInstalledModels": "Nincs további telepített modell. Az Elérhető fülön böngészhet további osztályozók között.",
+      "noAvailableModels": "Nincs további elérhető modell az Ön platformjához.",
       "sections": {
         "acoustic": "Akusztikus osztályozók",
         "geomodel": "Geomodellek"
       },
       "categories": {
-        "wildlife": "Wildlife Classifiers",
-        "bird": "Bird Classifiers",
-        "bat": "Bat Classifiers"
+        "wildlife": "Vadon élő állatok osztályozók",
+        "bird": "Madár osztályozók",
+        "bat": "Denevér osztályozók"
       },
       "progress": {
-        "downloading": "Downloading...",
-        "verifying": "Verifying...",
-        "loading": "Loading...",
-        "complete": "Installed successfully",
-        "failed": "Failed"
+        "downloading": "Letöltés...",
+        "verifying": "Ellenőrzés...",
+        "loading": "Betöltés...",
+        "complete": "Sikeresen telepítve",
+        "failed": "Sikertelen"
       },
       "license": {
-        "title": "License Agreement",
-        "model": "Model",
-        "author": "Author",
-        "license": "License",
-        "commercialUse": "Commercial Use",
-        "downloadSize": "Download Size",
-        "allowed": "Allowed",
-        "notAllowed": "Not allowed",
-        "commercialUseAllowed": "Commercial use allowed",
-        "nonCommercialOnly": "Non-commercial use only",
-        "nonCommercialWarning": "This model is licensed for non-commercial use only. By installing, you agree to comply with the license terms.",
-        "acceptAndInstall": "Accept & Install"
+        "title": "Licencszerződés",
+        "model": "Modell",
+        "author": "Szerző",
+        "license": "Licenc",
+        "commercialUse": "Kereskedelmi felhasználás",
+        "downloadSize": "Letöltési méret",
+        "allowed": "Engedélyezett",
+        "notAllowed": "Nem engedélyezett",
+        "commercialUseAllowed": "Kereskedelmi felhasználás engedélyezett",
+        "nonCommercialOnly": "Csak nem kereskedelmi célú felhasználás",
+        "nonCommercialWarning": "Ez a modell csak nem kereskedelmi felhasználásra licencelt. A telepítéssel elfogadja a licencfeltételeket.",
+        "acceptAndInstall": "Elfogadás és telepítés"
       },
       "removeDialog": {
-        "title": "Remove {name}?",
-        "confirmation": "This will remove the model files from disk. Label data is retained for existing detections."
+        "title": "{name} eltávolítása?",
+        "confirmation": "Ez eltávolítja a modellfájlokat a lemezről. A meglévő detektálások címkeadatai megmaradnak."
       },
       "errors": {
-        "catalogLoadFailed": "Failed to load model catalog",
-        "installFailed": "Failed to start model installation",
-        "removeFailed": "Failed to remove model"
+        "catalogLoadFailed": "Nem sikerült betölteni a modellkatalógust",
+        "installFailed": "Nem sikerült elindítani a modell telepítését",
+        "removeFailed": "Nem sikerült eltávolítani a modellt"
       },
-      "regionLabel": "Region",
-      "speciesLabel": "Species",
-      "reinstall": "Reinstall",
-      "reinstalling": "Reinstalling...",
-      "reinstallComplete": "Files verified successfully",
-      "geomodelBadge": "Includes BirdNET v3.0 geomodel"
+      "regionLabel": "Régió",
+      "speciesLabel": "Fajok",
+      "reinstall": "Újratelepítés",
+      "reinstalling": "Újratelepítés...",
+      "reinstallComplete": "Fájlok sikeresen ellenőrizve",
+      "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt"
     },
     "bird": {
       "title": "Madárészlelés",

@@ -4248,7 +4248,7 @@
         "extracting": "A extrair clip...",
         "extractError": "Falha ao extrair clip",
         "formatLabel": "Formato",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Reproduzir seleção",
@@ -4519,8 +4519,8 @@
   "analysis": {
     "title": "Análise",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Definições",
+      "models": "Modelos"
     },
     "detection": {
       "title": "Configurações de detecção",
@@ -4550,7 +4550,6 @@
         "helpText": "Requer múltiplas confirmações de uma deteção de morcego dentro de uma janela deslizante antes de a aceitar. Níveis mais altos requerem mais confirmações, reduzindo falsos positivos. O modelo de morcegos usa uma sobreposição fixa de 50%, portanto não é necessário ajuste de sobreposição.",
         "levels": {
           "off": "Sem filtragem; aceita qualquer deteção de morcego imediatamente.",
-          "lenient": "Uma confirmação necessária. Adequado para zonas com elevada atividade de morcegos.",
           "moderate": "Bom equilíbrio para a maioria das configurações. Reduz significativamente os falsos positivos.",
           "strict": "Filtragem máxima para a maior precisão."
         },
@@ -4558,12 +4557,12 @@
         "warningOff": "Sem filtragem existe uma alta probabilidade de falsos positivos. Ativar a filtragem melhora significativamente a precisão."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Idioma das espécies",
+        "helpText": "Idioma utilizado para os nomes comuns das espécies na interface."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "O filtro de alcance aplica-se apenas a classificadores de aves. Os modelos de morcegos usam as suas próprias listas de espécies.",
       "status": {
         "title": "Resumo do filtro de alcance",
         "geomodelInfo": "BirdNET Geomodelo {version} - {species} espécies conhecidas",
@@ -4583,8 +4582,8 @@
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Avançado",
+      "description": "Configuração de processamento e modelos personalizados."
     },
     "gallery": {
       "title": "Galeria de modelos",

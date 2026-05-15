@@ -16,6 +16,13 @@
     "search": "Rechercher",
     "filter": "Filtrer",
     "sort": "Trier",
+    "done": "Terminé",
+    "actions": {
+      "download": "Télécharger",
+      "review": "Réviser",
+      "play": "Lire",
+      "view": "Voir"
+    },
     "settings": "Paramètres",
     "close": "Fermer",
     "back": "Retour",
@@ -26,18 +33,11 @@
     "ok": "OK",
     "apply": "Appliquer",
     "clear": "Effacer",
-    "done": "Terminé",
     "goToDashboard": "Aller au tableau de bord",
     "reportIssue": "Signaler un problème",
     "loginToViewDetails": "Connectez-vous pour voir les détails",
     "pageNotFound": "Page non trouvée",
     "internalServerError": "Erreur interne du serveur",
-    "actions": {
-      "download": "Télécharger",
-      "review": "Réviser",
-      "play": "Lire",
-      "view": "Voir"
-    },
     "buttons": {
       "save": "Enregistrer les modifications",
       "reset": "Réinitialiser",
@@ -123,6 +123,9 @@
       "editSpecies": "Modifier l'espèce",
       "removeSpecies": "Supprimer l'espèce",
       "dismissError": "Ignorer l'erreur",
+      "downloadCsv": "Télécharger la liste des espèces au format CSV",
+      "visitEbirdLink": "Ouvrir eBird.org dans un nouvel onglet",
+      "learnEbirdTaxonomyLink": "Ouvrir la taxonomie eBird dans un nouvel onglet",
       "datePickerCalendar": "Calendrier de sélection de date",
       "selectDate": "Sélectionner une date",
       "previousMonth": "Mois précédent",
@@ -130,9 +133,6 @@
       "selectToday": "Sélectionner aujourd'hui",
       "dateSelected": "Date sélectionnée : {date}",
       "calendarNavigation": "Navigation du calendrier : utilisez les flèches pour vous déplacer, Entrée pour sélectionner, Échap pour fermer",
-      "downloadCsv": "Télécharger la liste des espèces au format CSV",
-      "visitEbirdLink": "Ouvrir eBird.org dans un nouvel onglet",
-      "learnEbirdTaxonomyLink": "Ouvrir la taxonomie eBird dans un nouvel onglet",
       "resizeHandle": "Glisser pour redimensionner"
     },
     "labels": {
@@ -660,8 +660,8 @@
       },
       "actions": {
         "menuLabel": "Actions pour {species}",
-        "markCorrect": "Correct",
-        "markFalsePositive": "Incorrect",
+        "markCorrect": "Correcte",
+        "markFalsePositive": "Incorrecte",
         "review": "Examiner la détection",
         "showSpecies": "Afficher l'espèce",
         "ignoreSpecies": "Ignorer l'espèce",
@@ -775,25 +775,6 @@
       "recording": "Enregistrement",
       "actions": "Actions"
     },
-    "viewToggle": {
-      "label": "Mode d'affichage",
-      "table": "Vue tableau",
-      "cards": "Vue cartes"
-    },
-    "status": {
-      "locked": "Verrouillé"
-    },
-    "timeOfDay": {
-      "day": "Jour",
-      "night": "Nuit",
-      "sunrise": "Lever du soleil",
-      "sunset": "Coucher du soleil",
-      "any": "N'importe quand",
-      "unknown": "Inconnu"
-    },
-    "table": {
-      "caption": "Liste des détections d'oiseaux avec date, espèce, confiance et informations de statut"
-    },
     "empty": {
       "title": "Aucune détection trouvée",
       "description": "Essayez d'ajuster vos filtres ou critères de recherche"
@@ -871,6 +852,20 @@
     "row": {
       "viewDetails": "Voir les détails pour {species}"
     },
+    "status": {
+      "locked": "Verrouillé"
+    },
+    "timeOfDay": {
+      "day": "Jour",
+      "night": "Nuit",
+      "sunrise": "Lever du soleil",
+      "sunset": "Coucher du soleil",
+      "any": "N'importe quand",
+      "unknown": "Inconnu"
+    },
+    "table": {
+      "caption": "Liste des détections d'oiseaux avec date, espèce, confiance et informations de statut"
+    },
     "media": {
       "title": "Enregistrement et spectrogramme",
       "clipHint": "Cliquez et faites glisser sur le spectrogramme pour sélectionner une plage à exporter"
@@ -912,6 +907,11 @@
       "loadFailed": "Échec du chargement de la détection (Erreur {status}). Veuillez actualiser la page.",
       "noIdProvided": "Aucun identifiant de détection fourni.",
       "fetchFailed": "Échec de la récupération des détections"
+    },
+    "viewToggle": {
+      "label": "Mode d'affichage",
+      "table": "Vue tableau",
+      "cards": "Vue cartes"
     }
   },
   "species": {
@@ -1039,12 +1039,6 @@
         "buffCache": "Tampon/Cache"
       }
     },
-    "progress": {
-      "labels": {
-        "overallProgress": "Progression globale",
-        "progress": "Progression"
-      }
-    },
     "processInfo": {
       "title": "Informations sur les processus",
       "loading": "Chargement des informations sur les processus...",
@@ -1076,6 +1070,12 @@
       "temperature": "Échec du chargement de la température : {error}",
       "processes": "Échec du chargement des informations sur les processus : {error}"
     },
+    "progress": {
+      "labels": {
+        "overallProgress": "Progression globale",
+        "progress": "Progression"
+      }
+    },
     "sections": {
       "overview": "Vue d'ensemble",
       "database": "Base de données",
@@ -1084,13 +1084,211 @@
     "database": {
       "title": "Gestion de la base de données",
       "description": "Gérer la migration du schéma",
+      "migration": {
+        "title": "Migration de la base de données",
+        "description": "Migrer de l'ancien schéma vers le schéma v2 normalisé",
+        "completedTitle": "Migration terminée",
+        "completedNote": "Votre base de données a été migrée avec succès vers le nouveau schéma. Veuillez redémarrer BirdNET-Go pour basculer vers la nouvelle base de données. Note : La nouvelle base de données est plus petite car elle stocke les données plus efficacement - c'est normal et toutes vos données sont préservées.",
+        "status": {
+          "idle": "Prêt à démarrer",
+          "initializing": "Initialisation",
+          "dual_write": "Double écriture active",
+          "migrating": "Migration des données primaires",
+          "migrating_predictions": "Migration des données secondaires",
+          "paused": "En pause",
+          "validating": "Validation",
+          "cutover": "Basculement en cours",
+          "completed": "Migration terminée",
+          "failed": "Validation échouée"
+        },
+        "progress": {
+          "title": "Progression de la migration",
+          "records": "enregistrements",
+          "percent": "{percent}%",
+          "rate": "{rate} enregistrements/sec",
+          "rateValue": "{rate} enr/s",
+          "remaining": "Restant : {time}",
+          "eta": "Temps restant estimé",
+          "dirtyIds": "{count} enregistrements en attente",
+          "paused": "Migration en pause",
+          "completedTitle": "Migration terminée",
+          "completedBody": "Les {count} enregistrements ont été migrés avec succès vers la base de données V2. L'application utilisera V2 comme base de données principale après le redémarrage.",
+          "restartTitle": "Redémarrage requis",
+          "restartBody": "Redémarrez l'application pour basculer vers la base de données V2. Le nettoyage de l'ancienne base de données sera disponible après le redémarrage.",
+          "fallbackError": "Incohérence du nombre d'enregistrements entre les bases de données ancienne et V2. Certains enregistrements n'ont peut-être pas été migrés correctement.",
+          "migrateInfo": "La migration transférera {count} enregistrements de l'ancienne base de données vers le nouveau schéma V2. Le mode double écriture garantit zéro perte de données pendant la migration.",
+          "sourceLegacy": "Source (ancienne)",
+          "targetV2": "Cible (V2)",
+          "recordsLabel": "Enregistrements",
+          "sizeLabel": "Taille",
+          "prerequisitesNotMet": "Prérequis non remplis — résolvez les problèmes critiques ci-dessous",
+          "validatingTitle": "Validation des données",
+          "validatingBody": "Comparaison de {count} enregistrements avec la base de données V2...",
+          "dirtyRecordsCatchup": "{count} enregistrements modifiés — tentative de réconciliation",
+          "cutoverTitle": "Finalisation du basculement",
+          "cutoverBody": "Finalisation de la transition vers la base de données V2...",
+          "migratingPhase": "Migration de {phase}",
+          "progressLabel": "Progression",
+          "ofRecords": "/ {count} enregistrements",
+          "percentComplete": "{percent}% terminé",
+          "recordsPerSec": "{rate} enregistrements/s",
+          "calculating": "Calcul...",
+          "dirtyWriteFailed": "{count} enregistrements n'ont pas pu être écrits — seront réconciliés lors de la validation"
+        },
+        "phase": {
+          "indicator": "Phase {current} sur {total} : ",
+          "detections": "Migration des détections primaires",
+          "predictions": "Migration des détections secondaires",
+          "reviews": "Migration des évaluations",
+          "comments": "Migration des commentaires",
+          "locks": "Migration des verrouillages"
+        },
+        "notes": {
+          "in_progress": "Vous pouvez continuer à utiliser le système normalement pendant que la migration s'exécute en arrière-plan.",
+          "dual_write": "Migration en cours. Vos données sont en sécurité - toutes les nouvelles détections sont enregistrées dans les deux bases de données. Vous pouvez continuer à utiliser BirdNET-Go normalement.",
+          "migrating": "Copie de vos détections existantes vers la nouvelle base de données. Cela peut prendre un certain temps selon le nombre de détections. Vous pouvez mettre en pause et reprendre à tout moment.",
+          "validating": "Vérification que tous les enregistrements ont été copiés correctement. Presque terminé !",
+          "cutover": "Passage à la nouvelle base de données. Cela ne prend qu'un instant.",
+          "paused": "La migration est en pause. Vos données sont en sécurité. Reprenez quand vous êtes prêt."
+        },
+        "actions": {
+          "start": "Démarrer la migration",
+          "pause": "Pause",
+          "resume": "Reprendre",
+          "cancel": "Annuler",
+          "rollback": "Restaurer",
+          "retryValidation": "Réessayer la validation"
+        },
+        "confirmCancel": {
+          "title": "Annuler la migration ?",
+          "message": "Cela arrêtera la migration et reviendra à l'état inactif. Vous pouvez redémarrer la migration en toute sécurité plus tard - les enregistrements ne seront pas dupliqués.",
+          "confirm": "Oui, annuler",
+          "dismiss": "Non, continuer"
+        },
+        "confirmRollback": {
+          "title": "Restaurer la migration ?",
+          "message": "Cela reviendra à l'ancienne base de données. Les nouvelles détections enregistrées depuis la migration seront préservées dans la base de données améliorée mais ne seront pas visibles jusqu'à ce que la migration soit relancée.",
+          "confirm": "Oui, restaurer",
+          "dismiss": "Non, garder l'améliorée"
+        },
+        "errors": {
+          "startFailed": "Échec du démarrage de la migration",
+          "pauseFailed": "Échec de la mise en pause de la migration",
+          "resumeFailed": "Échec de la reprise de la migration",
+          "cancelFailed": "Échec de l'annulation de la migration",
+          "rollbackFailed": "Échec de la restauration de la migration",
+          "fetchFailed": "Échec de la récupération du statut de migration",
+          "retryValidationFailed": "Échec de la nouvelle tentative de validation"
+        },
+        "worker": {
+          "running": "Worker en cours",
+          "paused": "Worker en pause",
+          "stopped": "Worker arrêté"
+        },
+        "prerequisites": {
+          "title": "Vérifications pré-migration",
+          "rerunChecks": "Relancer les vérifications",
+          "critical": "Critique",
+          "allPassed": "Toutes les vérifications réussies - prêt pour la migration",
+          "criticalIssues": "{count} problème(s) critique(s) doit/doivent être résolu(s)",
+          "warningsCount": "{count} avertissement(s)",
+          "running": "Exécution des vérifications pré-migration...",
+          "checkingStep": "Étape {current} sur {total}",
+          "errors": {
+            "fetchFailed": "Échec de la récupération des prérequis"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "État de migration"
+            },
+            "disk_space": {
+              "name": "Espace disque"
+            },
+            "legacy_accessible": {
+              "name": "Connexion à la base de données"
+            },
+            "sqlite_integrity": {
+              "name": "Intégrité de la base de données"
+            },
+            "mysql_table_health": {
+              "name": "Santé des tables"
+            },
+            "write_permission": {
+              "name": "Permission d'écriture"
+            },
+            "mysql_permissions": {
+              "name": "Permissions MySQL"
+            },
+            "record_count": {
+              "name": "Nombre d'enregistrements"
+            },
+            "existing_v2_data": {
+              "name": "Données de migration existantes"
+            },
+            "no_active_locks": {
+              "name": "Verrous actifs"
+            },
+            "memory_available": {
+              "name": "Mémoire disponible"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          },
+          "passedCount": "{passed}/{total} réussis",
+          "criticalCount": "{count} critique(s)",
+          "warningCount": "{count} avertissement(s)",
+          "rerun": "Relancer",
+          "showDetails": "Afficher les détails",
+          "hideDetails": "Masquer les détails",
+          "status": {
+            "passed": "Réussi",
+            "failed": "Échoué",
+            "error": "Erreur",
+            "warning": "Avertissement",
+            "skipped": "Ignoré"
+          }
+        },
+        "requiredNote": "La migration de la base de données est requise pour les prochaines fonctionnalités de BirdNET-Go qui reposent sur le nouveau schéma de base de données normalisé. Les nouvelles fonctionnalités ne seront pas disponibles tant que la migration ne sera pas terminée.",
+        "starting": "Démarrage de la migration...",
+        "confirmDialog": {
+          "title": "Démarrer la migration de la base de données",
+          "message": "La migration copiera vos données de détection de la base de données actuelle vers une nouvelle base de données normalisée. Votre base de données d'origine reste inchangée. Cependant, il est recommandé de créer une sauvegarde en cas de problèmes inattendus.",
+          "checkbox": "Je confirme avoir sauvegardé ma base de données ou comprendre les risques de continuer sans sauvegarde.",
+          "note": "Vous pouvez télécharger une sauvegarde en utilisant le bouton \"Télécharger la sauvegarde\" ci-dessus."
+        },
+        "details": {
+          "title": "Détails de la base de données",
+          "detections": "{count} détections",
+          "lastBackup": "Dernière sauvegarde : {date}",
+          "noBackups": "Aucune sauvegarde",
+          "integrity": "Intégrité : {status}"
+        },
+        "strip": {
+          "legacy": "Ancienne",
+          "v2Target": "V2 (cible)",
+          "active": "Actif",
+          "migration": "Migration",
+          "complete": "Terminée",
+          "recordsMigrated": "{count} enregistrements migrés",
+          "readyToMigrate": "Prêt pour la migration",
+          "recordsInLegacy": "{count} enregistrements dans l'ancienne",
+          "comparingRecords": "Comparaison du nombre d'enregistrements...",
+          "validationFailed": "Validation échouée",
+          "rate": "Débit",
+          "recPerSec": "{rate} enr./s",
+          "dayAvg": "~{count} / jour moy.",
+          "dayHistory": "Historique 30 jours"
+        }
+      },
       "legacy": {
         "title": "Base de données héritée",
         "fetchFailed": "Échec de la récupération du statut de la base de données héritée",
         "cleanup": {
           "title": "Nettoyage de la base de données héritée",
-          "description": "Cette base de données est maintenant hors ligne et n'est plus utilisée. Toutes vos données ont été migrées vers la base de données améliorée.",
-          "recommendation": "Il est recommandé de supprimer cette base de données pour libérer de l'espace disque.",
           "location": "Emplacement",
           "size": "Taille",
           "records": "Enregistrements",
@@ -1107,7 +1305,9 @@
           "confirmMessage": "Vous êtes sur le point de supprimer définitivement la base de données héritée ({size}). Cette action ne peut pas être annulée.",
           "confirmCheckbox": "Je comprends que cela supprimera définitivement la base de données héritée",
           "cancelButton": "Annuler",
-          "deleteConfirmButton": "Supprimer définitivement"
+          "deleteConfirmButton": "Supprimer définitivement",
+          "description": "Cette base de données est maintenant hors ligne et n'est plus utilisée. Toutes vos données ont été migrées vers la base de données améliorée.",
+          "recommendation": "Il est recommandé de supprimer cette base de données pour libérer de l'espace disque."
         }
       },
       "v2": {
@@ -1125,7 +1325,6 @@
       "dashboard": {
         "title": "Tableau de bord de la base de données",
         "fetchFailed": "Échec de la récupération de l'aperçu de la base de données",
-        "loading": "Chargement...",
         "metrics": {
           "readLatency": "Latence de lecture",
           "writeLatency": "Latence d'écriture",
@@ -1180,8 +1379,6 @@
         },
         "detectionRate": {
           "title": "Taux de détection (24h)",
-          "chartLabel": "Taux de détection sur 24 heures",
-          "detectionsTooltip": "{count} détections",
           "perHour": "/h",
           "min": "min",
           "avg": "moy.",
@@ -1190,7 +1387,9 @@
           "backupSize": "Taille de la sauvegarde",
           "createBackup": "Créer une sauvegarde",
           "mysqlHost": "Hôte",
-          "mysqlBackupNote": "Les sauvegardes MySQL doivent être gérées via mysqldump ou vos outils d'administration MySQL."
+          "mysqlBackupNote": "Les sauvegardes MySQL doivent être gérées via mysqldump ou vos outils d'administration MySQL.",
+          "chartLabel": "Taux de détection sur 24 heures",
+          "detectionsTooltip": "{count} détections"
         },
         "tables": {
           "title": "Tables",
@@ -1200,7 +1399,8 @@
           "rows": "Lignes",
           "size": "Taille",
           "usage": "Utilisation"
-        }
+        },
+        "loading": "Chargement..."
       },
       "backup": {
         "download": "Télécharger la sauvegarde",
@@ -1232,207 +1432,7 @@
           }
         }
       },
-      "notInitialized": "Non initialisé",
-      "migration": {
-        "title": "Migration de la base de données",
-        "description": "Migrer de l'ancien schéma vers le schéma v2 normalisé",
-        "requiredNote": "La migration de la base de données est requise pour les prochaines fonctionnalités de BirdNET-Go qui reposent sur le nouveau schéma de base de données normalisé. Les nouvelles fonctionnalités ne seront pas disponibles tant que la migration ne sera pas terminée.",
-        "completedTitle": "Migration terminée",
-        "completedNote": "Votre base de données a été migrée avec succès vers le nouveau schéma. Veuillez redémarrer BirdNET-Go pour basculer vers la nouvelle base de données. Note : La nouvelle base de données est plus petite car elle stocke les données plus efficacement - c'est normal et toutes vos données sont préservées.",
-        "starting": "Démarrage de la migration...",
-        "status": {
-          "idle": "Prêt à démarrer",
-          "initializing": "Initialisation",
-          "dual_write": "Double écriture active",
-          "migrating": "Migration des données primaires",
-          "migrating_predictions": "Migration des données secondaires",
-          "paused": "En pause",
-          "validating": "Validation",
-          "cutover": "Basculement en cours",
-          "completed": "Migration terminée",
-          "failed": "Validation échouée"
-        },
-        "progress": {
-          "title": "Progression de la migration",
-          "records": "enregistrements",
-          "paused": "Migration en pause",
-          "percent": "{percent}%",
-          "rate": "{rate} enregistrements/sec",
-          "rateValue": "{rate} enr/s",
-          "remaining": "Restant : {time}",
-          "eta": "Temps restant estimé",
-          "dirtyIds": "{count} enregistrements en attente",
-          "completedTitle": "Migration terminée",
-          "completedBody": "Les {count} enregistrements ont été migrés avec succès vers la base de données V2. L'application utilisera V2 comme base de données principale après le redémarrage.",
-          "restartTitle": "Redémarrage requis",
-          "restartBody": "Redémarrez l'application pour basculer vers la base de données V2. Le nettoyage de l'ancienne base de données sera disponible après le redémarrage.",
-          "fallbackError": "Incohérence du nombre d'enregistrements entre les bases de données ancienne et V2. Certains enregistrements n'ont peut-être pas été migrés correctement.",
-          "migrateInfo": "La migration transférera {count} enregistrements de l'ancienne base de données vers le nouveau schéma V2. Le mode double écriture garantit zéro perte de données pendant la migration.",
-          "sourceLegacy": "Source (ancienne)",
-          "targetV2": "Cible (V2)",
-          "recordsLabel": "Enregistrements",
-          "sizeLabel": "Taille",
-          "prerequisitesNotMet": "Prérequis non remplis — résolvez les problèmes critiques ci-dessous",
-          "validatingTitle": "Validation des données",
-          "validatingBody": "Comparaison de {count} enregistrements avec la base de données V2...",
-          "dirtyRecordsCatchup": "{count} enregistrements modifiés — tentative de réconciliation",
-          "cutoverTitle": "Finalisation du basculement",
-          "cutoverBody": "Finalisation de la transition vers la base de données V2...",
-          "migratingPhase": "Migration de {phase}",
-          "progressLabel": "Progression",
-          "ofRecords": "/ {count} enregistrements",
-          "percentComplete": "{percent}% terminé",
-          "recordsPerSec": "{rate} enregistrements/s",
-          "calculating": "Calcul...",
-          "dirtyWriteFailed": "{count} enregistrements n'ont pas pu être écrits — seront réconciliés lors de la validation"
-        },
-        "details": {
-          "title": "Détails de la base de données",
-          "detections": "{count} détections",
-          "lastBackup": "Dernière sauvegarde : {date}",
-          "noBackups": "Aucune sauvegarde",
-          "integrity": "Intégrité : {status}"
-        },
-        "strip": {
-          "legacy": "Ancienne",
-          "v2Target": "V2 (cible)",
-          "active": "Actif",
-          "migration": "Migration",
-          "complete": "Terminée",
-          "recordsMigrated": "{count} enregistrements migrés",
-          "readyToMigrate": "Prêt pour la migration",
-          "recordsInLegacy": "{count} enregistrements dans l'ancienne",
-          "comparingRecords": "Comparaison du nombre d'enregistrements...",
-          "validationFailed": "Validation échouée",
-          "rate": "Débit",
-          "recPerSec": "{rate} enr./s",
-          "dayAvg": "~{count} / jour moy.",
-          "dayHistory": "Historique 30 jours"
-        },
-        "phase": {
-          "indicator": "Phase {current} sur {total} : ",
-          "detections": "Migration des détections primaires",
-          "predictions": "Migration des détections secondaires",
-          "reviews": "Migration des évaluations",
-          "comments": "Migration des commentaires",
-          "locks": "Migration des verrouillages"
-        },
-        "notes": {
-          "in_progress": "Vous pouvez continuer à utiliser le système normalement pendant que la migration s'exécute en arrière-plan.",
-          "dual_write": "Migration en cours. Vos données sont en sécurité - toutes les nouvelles détections sont enregistrées dans les deux bases de données. Vous pouvez continuer à utiliser BirdNET-Go normalement.",
-          "migrating": "Copie de vos détections existantes vers la nouvelle base de données. Cela peut prendre un certain temps selon le nombre de détections. Vous pouvez mettre en pause et reprendre à tout moment.",
-          "validating": "Vérification que tous les enregistrements ont été copiés correctement. Presque terminé !",
-          "cutover": "Passage à la nouvelle base de données. Cela ne prend qu'un instant.",
-          "paused": "La migration est en pause. Vos données sont en sécurité. Reprenez quand vous êtes prêt."
-        },
-        "actions": {
-          "start": "Démarrer la migration",
-          "pause": "Pause",
-          "resume": "Reprendre",
-          "cancel": "Annuler",
-          "rollback": "Restaurer",
-          "retryValidation": "Réessayer la validation"
-        },
-        "confirmDialog": {
-          "title": "Démarrer la migration de la base de données",
-          "message": "La migration copiera vos données de détection de la base de données actuelle vers une nouvelle base de données normalisée. Votre base de données d'origine reste inchangée. Cependant, il est recommandé de créer une sauvegarde en cas de problèmes inattendus.",
-          "checkbox": "Je confirme avoir sauvegardé ma base de données ou comprendre les risques de continuer sans sauvegarde.",
-          "note": "Vous pouvez télécharger une sauvegarde en utilisant le bouton \"Télécharger la sauvegarde\" ci-dessus."
-        },
-        "confirmCancel": {
-          "title": "Annuler la migration ?",
-          "message": "Cela arrêtera la migration et reviendra à l'état inactif. Vous pouvez redémarrer la migration en toute sécurité plus tard - les enregistrements ne seront pas dupliqués.",
-          "confirm": "Oui, annuler",
-          "dismiss": "Non, continuer"
-        },
-        "confirmRollback": {
-          "title": "Restaurer la migration ?",
-          "message": "Cela reviendra à l'ancienne base de données. Les nouvelles détections enregistrées depuis la migration seront préservées dans la base de données améliorée mais ne seront pas visibles jusqu'à ce que la migration soit relancée.",
-          "confirm": "Oui, restaurer",
-          "dismiss": "Non, garder l'améliorée"
-        },
-        "errors": {
-          "startFailed": "Échec du démarrage de la migration",
-          "pauseFailed": "Échec de la mise en pause de la migration",
-          "resumeFailed": "Échec de la reprise de la migration",
-          "cancelFailed": "Échec de l'annulation de la migration",
-          "rollbackFailed": "Échec de la restauration de la migration",
-          "retryValidationFailed": "Échec de la nouvelle tentative de validation",
-          "fetchFailed": "Échec de la récupération du statut de migration"
-        },
-        "worker": {
-          "running": "Worker en cours",
-          "paused": "Worker en pause",
-          "stopped": "Worker arrêté"
-        },
-        "prerequisites": {
-          "title": "Vérifications pré-migration",
-          "rerunChecks": "Relancer les vérifications",
-          "critical": "Critique",
-          "allPassed": "Toutes les vérifications réussies - prêt pour la migration",
-          "criticalIssues": "{count} problème(s) critique(s) doit/doivent être résolu(s)",
-          "warningsCount": "{count} avertissement(s)",
-          "running": "Exécution des vérifications pré-migration...",
-          "checkingStep": "Étape {current} sur {total}",
-          "passedCount": "{passed}/{total} réussis",
-          "criticalCount": "{count} critique(s)",
-          "warningCount": "{count} avertissement(s)",
-          "rerun": "Relancer",
-          "showDetails": "Afficher les détails",
-          "hideDetails": "Masquer les détails",
-          "status": {
-            "passed": "Réussi",
-            "failed": "Échoué",
-            "error": "Erreur",
-            "warning": "Avertissement",
-            "skipped": "Ignoré"
-          },
-          "errors": {
-            "fetchFailed": "Échec de la récupération des prérequis"
-          },
-          "checks": {
-            "state_idle": {
-              "name": "État de migration"
-            },
-            "disk_space": {
-              "name": "Espace disque"
-            },
-            "legacy_accessible": {
-              "name": "Connexion à la base de données"
-            },
-            "sqlite_integrity": {
-              "name": "Intégrité de la base de données"
-            },
-            "mysql_table_health": {
-              "name": "Santé des tables"
-            },
-            "write_permission": {
-              "name": "Permission d'écriture"
-            },
-            "mysql_permissions": {
-              "name": "Permissions MySQL"
-            },
-            "record_count": {
-              "name": "Nombre d'enregistrements"
-            },
-            "existing_v2_data": {
-              "name": "Données de migration existantes"
-            },
-            "no_active_locks": {
-              "name": "Verrous actifs"
-            },
-            "memory_available": {
-              "name": "Mémoire disponible"
-            },
-            "mysql_max_packet": {
-              "name": "MySQL Max Packet"
-            },
-            "mysql_timeout": {
-              "name": "MySQL Timeout"
-            }
-          }
-        }
-      }
+      "notInitialized": "Non initialisé"
     },
     "metrics": {
       "cpu": "CPU",
@@ -1463,30 +1463,6 @@
       "free": "libre",
       "ram": "RAM"
     }
-  },
-  "terminal": {
-    "title": "Terminal",
-    "disabled": "Terminal désactivé",
-    "disabledDescription": "Le terminal navigateur est désactivé. Activez-le dans Paramètres → Sécurité pour utiliser cette fonctionnalité.",
-    "connected": "Connecté",
-    "disconnected": "Déconnecté",
-    "connecting": "Connexion en cours...",
-    "connectionError": "Échec de la connexion",
-    "connectionClosed": "Connexion fermée",
-    "securityWarning": "Avertissement : Ce terminal fournit un accès shell direct au système hôte. Ne l'activez que sur des réseaux de confiance.",
-    "copySelection": "Copier la sélection",
-    "expand": "Agrandir",
-    "collapse": "Réduire",
-    "fullscreen": "Plein écran",
-    "exitFullscreen": "Quitter le plein écran",
-    "colorTheme": "Thème de couleur",
-    "themeDark": "Sombre",
-    "themeLight": "Clair",
-    "themeHighContrast": "Contraste élevé",
-    "detach": "Ouvrir dans une nouvelle fenêtre",
-    "detached": "Terminal détaché",
-    "detachedDescription": "Le terminal fonctionne dans une fenêtre séparée. Fermez cette fenêtre pour le ramener ici.",
-    "reattach": "Rattacher"
   },
   "analytics": {
     "title": "Vue d'ensemble",
@@ -1677,9 +1653,9 @@
       "audio": "Audio",
       "filters": "Filtres",
       "integration": "Intégrations",
+      "notifications": "Notifications",
       "security": "Sécurité",
       "species": "Espèces",
-      "notifications": "Notifications",
       "support": "Support"
     },
     "notFound": {
@@ -1696,29 +1672,11 @@
       "unsavedChanges": "Modifications non enregistrées",
       "toolbar": "Actions des paramètres"
     },
-    "errors": {
-      "loadFailed": "Échec du chargement des paramètres",
-      "saveFailed": "Échec de l'enregistrement des paramètres",
-      "databaseStatsFailed": "Échec du chargement des statistiques de la base de données",
-      "csvDownloadFailed": "Échec du téléchargement du CSV"
-    },
     "card": {
       "changed": "modifié",
       "changedAriaLabel": "Paramètres modifiés"
     },
-    "tabs": {
-      "navigation": "Onglets de navigation des paramètres",
-      "hasChanges": "Cet onglet contient des modifications non enregistrées",
-      "setAsDefault": "Définir par défaut",
-      "defaultIndicator": "Source d'entrée par défaut"
-    },
     "main": {
-      "tabs": {
-        "general": "Général",
-        "detection": "Détection",
-        "location": "Localisation",
-        "database": "Base de données"
-      },
       "sections": {
         "main": {
           "title": "Paramètres principaux",
@@ -1748,7 +1706,6 @@
         },
         "dynamicThreshold": {
           "title": "Seuil dynamique",
-          "description": "Ajuster automatiquement la sensibilité de détection en fonction des observations précédentes",
           "enable": {
             "label": "Activer le seuil dynamique (fonctionnalité spécifique à BirdNET-Go)",
             "helpText": "Active la fonctionnalité de seuil de confiance dynamique pour une détection des chants d'oiseaux plus adaptative."
@@ -1764,7 +1721,8 @@
           "expireTime": {
             "label": "Temps d'expiration du seuil dynamique (heures)",
             "helpText": "Le nombre d'heures pendant lesquelles les ajustements du seuil dynamique restent valides. Après cette période, le seuil dynamique est réinitialisé."
-          }
+          },
+          "description": "Ajuster automatiquement la sensibilité de détection en fonction des observations précédentes"
         },
         "falsePositiveFilter": {
           "title": "Filtre de Faux Positifs",
@@ -1797,7 +1755,6 @@
         },
         "rangeFilter": {
           "title": "Filtre de portée",
-          "description": "Limiter la détection aux espèces probables dans votre région géographique",
           "stationLocation": {
             "label": "Emplacement de la station",
             "helpText": "Emplacement de la station, utilisé pour les données météorologiques et pour limiter les espèces d'oiseaux à celles probables dans la région."
@@ -1836,7 +1793,8 @@
             "loadingSpecies": "Chargement des espèces...",
             "noSpeciesFound": "Aucune espèce trouvée avec les paramètres actuels",
             "close": "Fermer"
-          }
+          },
+          "description": "Limiter la détection aux espèces probables dans votre région géographique"
         },
         "database": {
           "title": "Paramètres de base de données",
@@ -1846,18 +1804,16 @@
             "helpText": "Sélectionnez le type de base de données à utiliser pour stocker les détections."
           },
           "sqlite": {
-            "title": "Configuration SQLite",
-            "description": "Configurer l'emplacement du fichier de base de données SQLite",
             "note": "SQLite est le type de base de données recommandé pour la plupart des utilisateurs.",
             "path": {
               "label": "Chemin de la base de données SQLite",
               "placeholder": "Entrez le chemin de la base de données SQLite",
               "helpText": "Chemin du fichier de base de données SQLite relatif au répertoire de l'application"
-            }
+            },
+            "title": "Configuration SQLite",
+            "description": "Configurer l'emplacement du fichier de base de données SQLite"
           },
           "mysql": {
-            "title": "Configuration MySQL",
-            "description": "Configurer les paramètres de connexion au serveur de base de données MySQL",
             "host": {
               "label": "Hôte MySQL",
               "placeholder": "Entrez l'hôte MySQL",
@@ -1881,7 +1837,9 @@
               "label": "Base de données MySQL",
               "placeholder": "Entrez le nom de la base de données MySQL",
               "helpText": "Nom de la base de données MySQL"
-            }
+            },
+            "title": "Configuration MySQL",
+            "description": "Configurer les paramètres de connexion au serveur de base de données MySQL"
           },
           "stats": {
             "title": "Statistiques de la base de données",
@@ -2071,6 +2029,12 @@
         "mapLoadFailed": "Échec du chargement de la carte. Veuillez essayer d'actualiser la page.",
         "modalMapLoadFailed": "Échec du chargement de la carte modale. Veuillez fermer et rouvrir la fenêtre.",
         "mapUnavailable": "Carte indisponible : WebGL n'est pas pris en charge par ce navigateur. Vous pouvez toujours définir votre emplacement à l'aide des champs de coordonnées ci-dessus."
+      },
+      "tabs": {
+        "general": "Général",
+        "detection": "Détection",
+        "location": "Localisation",
+        "database": "Base de données"
       }
     },
     "support": {
@@ -2127,10 +2091,10 @@
         },
         "userMessage": {
           "label": "Décrivez le problème",
-          "placeholder": "Veuillez décrire le problème et inclure le lien du problème GitHub si applicable (par ex., #123)",
-          "githubTip": "💡 Conseil : Si vous avez un problème GitHub, veuillez inclure le numéro du problème (par ex., #123) et mentionner votre ID système {systemId} dans le problème GitHub pour aider les développeurs à lier vos données de support.",
           "labelOptional": "Décrivez le problème (facultatif)",
+          "placeholder": "Veuillez décrire le problème et inclure le lien du problème GitHub si applicable (par ex., #123)",
           "placeholderOptional": "Ajoutez des détails supplémentaires sur le problème...",
+          "githubTip": "💡 Conseil : Si vous avez un problème GitHub, veuillez inclure le numéro du problème (par ex., #123) et mentionner votre ID système {systemId} dans le problème GitHub pour aider les développeurs à lier vos données de support.",
           "systemIdNote": "Mentionnez votre ID système {systemId} dans le problème GitHub."
         },
         "uploadOption": {
@@ -2221,40 +2185,6 @@
           "imageUrl": "Lien vers l'image de l'espèce",
           "daysSinceFirstSeen": "Nombre de jours depuis la première détection"
         }
-      },
-      "testNotification": {
-        "title": "Envoyer une notification de test de nouvelle espèce",
-        "description": "Générez une notification de test pour une détection de nouvelle espèce afin de vérifier que votre système de notifications fonctionne",
-        "whatHappens": "Que se passe-t-il lorsque vous cliquez sur 'Envoyer test' :",
-        "sendButton": "Envoyer test",
-        "sendingButton": "Envoi...",
-        "statusMessages": {
-          "sending": "Envoi de la notification de test...",
-          "success": "Notification de test envoyée avec succès ! Vérifiez votre cloche de notification.",
-          "error": "Échec de l'envoi de la notification de test : {message}",
-          "serviceUnavailable": "Le service de notifications n'est pas disponible. Veuillez vérifier vos paramètres de notification."
-        }
-      },
-      "statusMessages": {
-        "sending": "Envoi de la notification de test...",
-        "success": "Notification de test envoyée avec succès !",
-        "error": "Échec de l'envoi de la notification de test : {message}",
-        "serviceUnavailable": "Le service de notifications n'est pas disponible. Veuillez vérifier vos paramètres de notification."
-      },
-      "systemInfo": {
-        "howToView": "Comment voir les notifications :",
-        "technicalDetails": "Détails techniques sur les notifications dans BirdNET-Go :"
-      },
-      "privacy": {
-        "title": "Avis de confidentialité pour les webhooks externes",
-        "description": "Les notifications de détection peuvent inclure des données sensibles lorsqu'elles sont envoyées à des services externes :",
-        "gps": "Coordonnées GPS",
-        "gpsDetails": "Position exacte (latitude/longitude) si configurée",
-        "urls": "URLs de détection",
-        "urlsDetails": "Peuvent exposer des informations sur le réseau interne",
-        "species": "Données d'espèces",
-        "speciesDetails": "Quels oiseaux ont été détectés et quand",
-        "recommendation": "N'activez les webhooks externes que si vous faites confiance au service destinataire ou utilisez des services auto-hébergés/locaux."
       },
       "push": {
         "title": "Notifications Push",
@@ -2525,30 +2455,63 @@
             "invalidUrl": "Format d'URL invalide. L'URL doit commencer par service://"
           }
         }
+      },
+      "testNotification": {
+        "title": "Envoyer une notification de test de nouvelle espèce",
+        "description": "Générez une notification de test pour une détection de nouvelle espèce afin de vérifier que votre système de notifications fonctionne",
+        "whatHappens": "Que se passe-t-il lorsque vous cliquez sur 'Envoyer test' :",
+        "sendButton": "Envoyer test",
+        "sendingButton": "Envoi...",
+        "statusMessages": {
+          "sending": "Envoi de la notification de test...",
+          "success": "Notification de test envoyée avec succès ! Vérifiez votre cloche de notification.",
+          "error": "Échec de l'envoi de la notification de test : {message}",
+          "serviceUnavailable": "Le service de notifications n'est pas disponible. Veuillez vérifier vos paramètres de notification."
+        }
+      },
+      "statusMessages": {
+        "sending": "Envoi de la notification de test...",
+        "success": "Notification de test envoyée avec succès !",
+        "error": "Échec de l'envoi de la notification de test : {message}",
+        "serviceUnavailable": "Le service de notifications n'est pas disponible. Veuillez vérifier vos paramètres de notification."
+      },
+      "systemInfo": {
+        "howToView": "Comment voir les notifications :",
+        "technicalDetails": "Détails techniques sur les notifications dans BirdNET-Go :"
+      },
+      "privacy": {
+        "title": "Avis de confidentialité pour les webhooks externes",
+        "description": "Les notifications de détection peuvent inclure des données sensibles lorsqu'elles sont envoyées à des services externes :",
+        "gps": "Coordonnées GPS",
+        "gpsDetails": "Position exacte (latitude/longitude) si configurée",
+        "urls": "URLs de détection",
+        "urlsDetails": "Peuvent exposer des informations sur le réseau interne",
+        "species": "Données d'espèces",
+        "speciesDetails": "Quels oiseaux ont été détectés et quand",
+        "recommendation": "N'activez les webhooks externes que si vous faites confiance au service destinataire ou utilisez des services auto-hébergés/locaux."
       }
     },
     "filters": {
-      "title": "Filtres",
       "privacyFiltering": {
         "title": "Filtrage de confidentialité",
         "description": "Le filtrage de confidentialité évite d'enregistrer des clips audio lorsque des voix humaines sont détectées",
         "enable": "Activer le filtrage de confidentialité",
-        "disabled": "Le filtrage de confidentialité est désactivé",
         "confidenceLabel": "Seuil de confiance pour la détection humaine",
-        "confidenceHelp": "Définir le niveau de confiance pour la détection de voix humaine, une valeur plus faible rend le filtre plus sensible"
+        "confidenceHelp": "Définir le niveau de confiance pour la détection de voix humaine, une valeur plus faible rend le filtre plus sensible",
+        "disabled": "Le filtrage de confidentialité est désactivé"
       },
       "falsePositivePrevention": {
         "title": "Prévention des faux positifs",
         "description": "Configurer les filtres de détection erronée",
         "enableDogBark": "Activer le filtre d'aboiement de chien",
-        "disabled": "Le filtre d'aboiement de chien est désactivé",
         "confidenceLabel": "Seuil de confiance",
         "confidenceHelp": "Définir le niveau de confiance pour la détection d'aboiement de chien, une valeur plus faible rend le filtre plus sensible",
         "expireTimeLabel": "Temps d'expiration des aboiements de chien (minutes)",
         "expireTimeHelp": "Définissez pendant combien de temps garder en mémoire la détection d'aboiement de chien",
         "addDogBarkSpeciesLabel": "Ajouter une espèce similaire à un aboiement de chien",
         "addDogBarkSpeciesHelp": "Rechercher et ajouter des espèces qui pourraient être confondues avec des aboiements de chien",
-        "addSpeciesButton": "Ajouter"
+        "addSpeciesButton": "Ajouter",
+        "disabled": "Le filtre d'aboiement de chien est désactivé"
       },
       "speciesNamePlaceholder": "Nom de l'espèce",
       "typeSpeciesName": "Tapez le nom de l'espèce...",
@@ -2566,7 +2529,8 @@
       },
       "errors": {
         "speciesLoadFailed": "Échec du chargement de la liste des espèces. Veuillez réessayer."
-      }
+      },
+      "title": "Filtres"
     },
     "integration": {
       "birdweather": {
@@ -2804,6 +2768,218 @@
         "recording": "Enregistrement",
         "retention": "Rétention"
       },
+      "audioCapture": {
+        "title": "Capture audio",
+        "description": "Définir la source de capture audio, carte son ou flux RTSP",
+        "soundCardSource": "Source audio",
+        "audioSourceLabel": "Source audio (nécessite un redémarrage de l'application)",
+        "audioSourceHelp": "Sélectionnez le périphérique d'entrée audio pour la détection des sons d'oiseaux. Les modifications nécessitent un redémarrage de l'application.",
+        "noSoundCardCapture": "Aucune carte son disponible pour la capture",
+        "rtspSource": "Source RTSP",
+        "rtspTransportLabel": "Protocole de transport RTSP",
+        "rtspTransportHelp": "TCP est plus fiable mais peut avoir une latence plus élevée. UDP est plus rapide mais peut subir des pertes de paquets sur les réseaux de mauvaise qualité.",
+        "rtspUrlsLabel": "URLs de flux RTSP",
+        "rtspUrlsHelp": "Entrez une ou plusieurs URLs de flux RTSP pour les sources audio réseau. Format : rtsp://ip:port/flux. Note : Les identifiants d'authentification doivent être configurés séparément dans les paramètres de votre serveur RTSP pour des raisons de sécurité.",
+        "noDeviceSelected": "Aucun périphérique audio sélectionné",
+        "refreshDevices": "Actualiser",
+        "deviceSelected": "Carte son sélectionnée et prête pour la capture",
+        "availableDevices": "Périphériques audio disponibles",
+        "active": "Actif",
+        "streamsConfigured": "{count} flux configuré(s)"
+      },
+      "quietHours": {
+        "title": "Heures calmes",
+        "sectionTitle": "Heures calmes",
+        "sectionDescription": "Mettre en pause la capture audio pendant les fenêtres de temps configurées pour réduire l'utilisation du CPU lorsque les oiseaux sont peu susceptibles d'être actifs.",
+        "modeLabel": "Mode de planification",
+        "modeFixed": "Horaires fixes",
+        "modeSolar": "Lever/Coucher du soleil",
+        "startTime": "Heure de début",
+        "endTime": "Heure de fin",
+        "startEvent": "Événement de début",
+        "endEvent": "Événement de fin",
+        "offsetMinutes": "Décalage (min)",
+        "sunrise": "Lever du soleil",
+        "sunset": "Coucher du soleil",
+        "fixedHint": "La capture est suspendue quotidiennement entre les heures de début et de fin. Les fenêtres nocturnes (par ex. 22h00 à 06h00) sont prises en charge.",
+        "solarHint": "Les horaires sont calculés à partir du lever/coucher du soleil à votre emplacement configuré. Utilisez des décalages négatifs avant l'événement, positifs après.",
+        "badge": "Calme",
+        "enabledBadge": "Heures calmes activées pour ce flux"
+      },
+      "audioFilters": {
+        "title": "Filtres audio",
+        "description": "Configurer les filtres audio par défaut appliqués à toutes les sources. Les réglages d'égaliseur par source sont disponibles dans les paramètres de chaque carte son.",
+        "enableEqualizer": "Activer l'égaliseur audio",
+        "enableEqualizerHelp": "Appliquer un filtrage de fréquence pour améliorer la détection des chants d'oiseaux en réduisant les bruits et fréquences indésirables.",
+        "filterType": "Type de filtre",
+        "newFilterType": "Nouveau type de filtre",
+        "selectFilterType": "Sélectionner le type de filtre",
+        "addFilter": "Ajouter un filtre",
+        "remove": "Supprimer",
+        "frequencyResponse": "Réponse en fréquence",
+        "cutoffFrequency": "Fréquence de coupure",
+        "cutoffFrequencyHelp": "Fréquence à laquelle le filtre commence à atténuer les signaux. Les chants d'oiseaux se situent généralement entre 1 et 10 kHz.",
+        "qFactor": "Facteur Q",
+        "qFactorHelp": "Le facteur de qualité contrôle la netteté du filtre. Des valeurs faibles (0,1-1) créent des pentes douces, des valeurs élevées (1-10) créent des coupures plus abruptes.",
+        "gain": "Gain",
+        "gainHelp": "Niveau d'amplification ou d'atténuation en décibels (dB).",
+        "attenuation": "Atténuation",
+        "attenuationHelp": "Taux de décroissance du filtre. Des valeurs plus élevées fournissent une atténuation plus abrupte des fréquences filtrées.",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
+        },
+        "filterHelp": "Ajoutez plusieurs filtres pour façonner la réponse en fréquence pour une détection optimale des oiseaux dans votre environnement.",
+        "graph": {
+          "flatResponse": "Réponse plate (Aucun filtre appliqué)",
+          "frequency": "Fréquence (Hz)",
+          "gain": "Gain (dB)"
+        }
+      },
+      "soundLevelMonitoring": {
+        "title": "Surveillance du niveau sonore",
+        "description": "Surveiller et signaler les niveaux sonores environnementaux",
+        "enable": "Activer la surveillance du niveau sonore",
+        "enableHelp": "Suivre les niveaux de bruit ambiant pour comprendre votre environnement d'enregistrement et corréler avec les modèles d'activité des oiseaux.",
+        "intervalLabel": "Intervalle de mesure (secondes)",
+        "intervalHelp": "Fréquence de mesure et de rapport des niveaux sonores. Des valeurs plus faibles fournissent des données plus granulaires mais utilisent plus de ressources. Minimum 5 secondes, recommandé 60 secondes.",
+        "dataOutputTitle": "Sortie des données de niveau sonore",
+        "dataOutputDescription": "Lorsqu'activé, les mesures du niveau sonore sont publiées via :",
+        "mqttTopic": "Topic MQTT :",
+        "sseEndpoint": "Point de terminaison SSE :",
+        "prometheusMetrics": "Métriques Prometheus :",
+        "disabled": "La surveillance du niveau sonore est désactivée"
+      },
+      "clipSettings": {
+        "title": "Paramètres des clips",
+        "description": "Configurer la capture et le traitement des clips audio pour les chants d'oiseaux identifiés"
+      },
+      "clipRecording": {
+        "title": "Paramètres d'enregistrement des clips",
+        "description": "Configurer la capture, le format et les options de stockage des clips audio pour les chants détectés.",
+        "enable": "Activer l'enregistrement des clips",
+        "disabled": "L'enregistrement des clips est désactivé",
+        "enableHelp": "Enregistrer des clips audio des chants d'oiseaux détectés pour révision, partage ou création de jeux de données personnalisés.",
+        "captureSettings": "Paramètres de capture",
+        "lengthLabel": "Durée de capture",
+        "lengthHelp": "Durée d'audio à capturer pour chaque détection (10-60 secondes). Des clips plus longs fournissent plus de contexte mais utilisent plus d'espace de stockage.",
+        "preCaptureLabel": "Tampon de pré-détection",
+        "preCaptureHelp": "Secondes d'audio à inclure avant la détection de l'oiseau (0-{max} secondes). Garantit que le chant complet de l'oiseau est capturé depuis son début.",
+        "gainLabel": "Gain audio",
+        "gainHelp": "Amplification audio pour les clips enregistrés en décibels (0 à 20 dB). Rend les clips audio enregistrés plus forts pour une écoute plus facile. N'affecte pas la détection. 0 dB signifie aucune amplification.",
+        "normalization": "Normalisation audio",
+        "normalizationEnable": "Activer la normalisation de volume",
+        "normalizationHelp": "Ajuster automatiquement les niveaux audio selon la norme de diffusion EBU R128 pour un volume de lecture cohérent sur tous les clips.",
+        "targetLUFSLabel": "Volume cible (LUFS)",
+        "targetLUFSHelp": "Cible de volume intégré en LUFS (Loudness Units relative to Full Scale). -23 LUFS est la norme de diffusion EBU R128. Plage : -40 à -10 LUFS.",
+        "loudnessRangeLabel": "Plage de volume (LU)",
+        "loudnessRangeHelp": "Variation maximale de volume dans le clip (0-20 LU). Des valeurs plus faibles créent un volume plus cohérent mais peuvent réduire la dynamique.",
+        "truePeakLabel": "Limite de pic réel (dBTP)",
+        "truePeakHelp": "Niveau de pic réel maximal pour éviter l'écrêtage numérique (-10 à 0 dBTP). -2 dBTP fournit une marge de sécurité pour la plupart des systèmes de lecture.",
+        "normalizationNote": "Norme EBU R128",
+        "normalizationNoteDescription": "La normalisation audio suit la norme de diffusion EBU R128, garantissant des niveaux de lecture cohérents sur différents appareils et évitant l'écrêtage.",
+        "fileSettings": "Paramètres de fichier",
+        "pathLabel": "Dossier des clips",
+        "pathHelp": "Répertoire où les clips audio seront enregistrés. Les chemins relatifs sont par rapport au répertoire de l'application. Exemple : 'clips/' ou '/var/audio/birds/'",
+        "typeLabel": "Format audio",
+        "typeHelp": "Format audio pour les clips enregistrés. WAV et FLAC sont sans perte (meilleure qualité, fichiers plus volumineux). MP3, AAC et Opus sont avec perte (fichiers plus petits, légère perte de qualité).",
+        "bitrateLabel": "Débit",
+        "bitrateHelp": "Débit de compression audio pour les formats avec perte. Plage : {min}-{max} kbps. Des valeurs plus élevées offrent une meilleure qualité mais des fichiers plus volumineux.",
+        "losslessNote": "Les formats sans perte préservent la qualité audio originale sans artefacts de compression.",
+        "normalizationDisabled": "La normalisation audio est désactivée",
+        "disabledInfo": "Activez l'enregistrement de clips ci-dessus pour configurer les paramètres de clip, le format de fichier et les options de stockage."
+      },
+      "extendedCapture": {
+        "title": "Capture étendue",
+        "description": "Enregistre des clips audio plus longs lorsqu'une espèce chante de manière répétée, produisant un seul enregistrement combiné au lieu de nombreux clips courts.",
+        "ramWarning": "La capture étendue nécessite de la RAM supplémentaire pour les tampons audio. Non recommandé pour les appareils avec 512 Mo de RAM ou moins (par ex. Raspberry Pi Zero).",
+        "enable": "Activer la capture étendue",
+        "enableHelp": "Lorsqu'elle est activée, les détections répétées des espèces configurées sont fusionnées en un seul enregistrement plus long.",
+        "maxDurationLabel": "Durée maximale",
+        "maxDurationHelp": "Longueur maximale d'un clip de capture étendue. L'enregistrement s'allonge au fil des détections, jusqu'à cette limite.",
+        "speciesListLabel": "Espèces en capture étendue",
+        "addSpeciesLabel": "Ajouter une espèce",
+        "addSpeciesHelp": "Espèces déclenchant la capture étendue. Prend en charge les noms communs, les noms scientifiques et la correspondance au niveau du genre (par ex. « Strix » inclut toutes les chouettes Strix).",
+        "addSpeciesButton": "Ajouter",
+        "disabled": "La capture étendue est désactivée"
+      },
+      "fileSettings": {
+        "title": "Paramètres de fichier",
+        "description": "Configurer l'emplacement de stockage et le format audio pour les clips enregistrés.",
+        "pathLabel": "Dossier des clips",
+        "pathHelp": "Répertoire où les clips audio seront enregistrés. Les chemins relatifs sont par rapport au répertoire de l'application. Exemple : 'clips/' ou '/var/audio/birds/'",
+        "typeLabel": "Format audio",
+        "typeHelp": "Format audio pour les clips enregistrés. WAV et FLAC sont sans perte (meilleure qualité, fichiers plus volumineux). MP3, AAC et Opus sont avec perte (fichiers plus petits, légère perte de qualité).",
+        "bitrateLabel": "Débit",
+        "bitrateHelp": "Débit de compression audio pour les formats avec perte. Plage : {min}-{max} kbps. Des valeurs plus élevées offrent une meilleure qualité mais des fichiers plus volumineux.",
+        "losslessNote": "Les formats sans perte préservent la qualité audio originale sans artefacts de compression."
+      },
+      "audioNormalization": {
+        "title": "Normalisation audio",
+        "description": "Ajuster les niveaux audio pour un volume de lecture cohérent sur tous les clips.",
+        "enable": "Activer la normalisation du volume",
+        "enableHelp": "Ajuster automatiquement les niveaux audio selon la norme de diffusion EBU R128 pour un volume de lecture cohérent sur tous les clips.",
+        "disabled": "La normalisation audio est désactivée",
+        "requiresRecording": "Activez l'enregistrement des clips dans l'onglet Enregistrement pour utiliser la normalisation audio.",
+        "targetLUFSLabel": "Volume cible (LUFS)",
+        "targetLUFSHelp": "Cible de volume intégré en LUFS (Loudness Units relative to Full Scale). -23 LUFS est la norme de diffusion EBU R128. Plage : -40 à -10 LUFS.",
+        "loudnessRangeLabel": "Plage de volume (LU)",
+        "loudnessRangeHelp": "Variation maximale de volume dans le clip (0-20 LU). Des valeurs plus faibles créent un volume plus cohérent mais peuvent réduire la dynamique.",
+        "truePeakLabel": "Limite de pic réel (dBTP)",
+        "truePeakHelp": "Niveau de pic réel maximal pour éviter l'écrêtage numérique (-10 à 0 dBTP). -2 dBTP fournit une marge de sécurité pour la plupart des systèmes de lecture.",
+        "noteTitle": "Norme EBU R128",
+        "noteDescription": "La normalisation audio suit la norme de diffusion EBU R128, garantissant des niveaux de lecture cohérents sur différents appareils et évitant l'écrêtage."
+      },
+      "audioClipRetention": {
+        "title": "Rétention des clips audio",
+        "description": "Configurer le nettoyage des clips audio",
+        "policyLabel": "Politique de rétention",
+        "policyHelp": "Choisissez comment les clips audio sont automatiquement supprimés. Aucune : conserver tous les clips. Âge : supprimer les clips plus anciens que spécifié. Utilisation : supprimer les clips les plus anciens lorsque l'utilisation du disque dépasse la limite.",
+        "maxAgeLabel": "Âge maximum",
+        "maxAgeHelp": "Supprimer les clips audio plus anciens que cette durée. Format : nombre suivi de l'unité (h=heures, d=jours, w=semaines, m=mois). Exemples : '7d' pour 7 jours, '4w' pour 4 semaines.",
+        "maxUsageLabel": "Utilisation maximale du disque",
+        "maxUsageHelp": "Supprimer les clips les plus anciens lorsque le répertoire audio utilise plus que ce pourcentage de l'espace disque disponible.",
+        "minClipsLabel": "Clips minimum par espèce",
+        "minClipsHelp": "Toujours conserver au moins ce nombre de clips pour chaque espèce d'oiseau, quel que soit l'âge ou l'utilisation du disque. Aide à préserver les enregistrements rares.",
+        "keepSpectrograms": "Conserver les images de spectrogramme",
+        "keepSpectrogramsHelp": "Conserver les images de spectrogramme même lorsque les clips audio sont supprimés. Les spectrogrammes utilisent moins d'espace et fournissent une référence visuelle.",
+        "policies": {
+          "none": "Aucune",
+          "age": "Âge",
+          "usage": "Utilisation"
+        },
+        "noRetentionTitle": "Tous les clips conservés",
+        "noRetentionDescription": "Les clips audio seront conservés indéfiniment. Surveillez l'utilisation du disque pour éviter les problèmes de stockage.",
+        "ageRetentionTitle": "Nettoyage par ancienneté",
+        "ageRetentionDescription": "Les clips plus anciens que l'âge spécifié seront automatiquement supprimés, tout en conservant le nombre minimum par espèce.",
+        "usageRetentionTitle": "Nettoyage par utilisation",
+        "usageRetentionDescription": "Lorsque l'utilisation du disque dépasse le seuil, les clips les plus anciens seront supprimés jusqu'à ce que l'utilisation soit dans les limites."
+      },
+      "formats": {
+        "wav": "WAV",
+        "flac": "FLAC",
+        "aac": "AAC",
+        "opus": "Opus",
+        "mp3": "MP3"
+      },
+      "transport": {
+        "tcp": "TCP",
+        "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Filtre passe-bas",
+        "highpass": "Filtre passe-haut",
+        "bandpass": "Filtre passe-bande",
+        "bandstop": "Filtre coupe-bande"
+      },
+      "errors": {
+        "devicesLoadFailed": "Échec du chargement des périphériques audio. Veuillez vérifier les permissions système.",
+        "invalidBitrate": "Valeur de débit invalide",
+        "invalidRetentionPolicy": "Politique de rétention invalide"
+      },
       "emptyStates": {
         "soundCard": {
           "title": "Aucune carte son détectée",
@@ -2894,44 +3070,6 @@
           "atLeastOneModel": "Au moins un modèle doit être sélectionné"
         }
       },
-      "audioCapture": {
-        "title": "Capture audio",
-        "description": "Définir la source de capture audio, carte son ou flux RTSP",
-        "soundCardSource": "Source audio",
-        "audioSourceLabel": "Source audio (nécessite un redémarrage de l'application)",
-        "audioSourceHelp": "Sélectionnez le périphérique d'entrée audio pour la détection des sons d'oiseaux. Les modifications nécessitent un redémarrage de l'application.",
-        "noSoundCardCapture": "Aucune carte son disponible pour la capture",
-        "noDeviceSelected": "Aucun périphérique audio sélectionné",
-        "refreshDevices": "Actualiser",
-        "rtspSource": "Source RTSP",
-        "rtspTransportLabel": "Protocole de transport RTSP",
-        "rtspTransportHelp": "TCP est plus fiable mais peut avoir une latence plus élevée. UDP est plus rapide mais peut subir des pertes de paquets sur les réseaux de mauvaise qualité.",
-        "rtspUrlsLabel": "URLs de flux RTSP",
-        "rtspUrlsHelp": "Entrez une ou plusieurs URLs de flux RTSP pour les sources audio réseau. Format : rtsp://ip:port/flux. Note : Les identifiants d'authentification doivent être configurés séparément dans les paramètres de votre serveur RTSP pour des raisons de sécurité.",
-        "deviceSelected": "Carte son sélectionnée et prête pour la capture",
-        "availableDevices": "Périphériques audio disponibles",
-        "active": "Actif",
-        "streamsConfigured": "{count} flux configuré(s)"
-      },
-      "quietHours": {
-        "title": "Heures calmes",
-        "sectionTitle": "Heures calmes",
-        "sectionDescription": "Mettre en pause la capture audio pendant les fenêtres de temps configurées pour réduire l'utilisation du CPU lorsque les oiseaux sont peu susceptibles d'être actifs.",
-        "modeLabel": "Mode de planification",
-        "modeFixed": "Horaires fixes",
-        "modeSolar": "Lever/Coucher du soleil",
-        "startTime": "Heure de début",
-        "endTime": "Heure de fin",
-        "startEvent": "Événement de début",
-        "endEvent": "Événement de fin",
-        "offsetMinutes": "Décalage (min)",
-        "sunrise": "Lever du soleil",
-        "sunset": "Coucher du soleil",
-        "fixedHint": "La capture est suspendue quotidiennement entre les heures de début et de fin. Les fenêtres nocturnes (par ex. 22h00 à 06h00) sont prises en charge.",
-        "solarHint": "Les horaires sont calculés à partir du lever/coucher du soleil à votre emplacement configuré. Utilisez des décalages négatifs avant l'événement, positifs après.",
-        "badge": "Calme",
-        "enabledBadge": "Heures calmes activées pour ce flux"
-      },
       "rtspStreams": {
         "title": "Configuration des Flux Audio",
         "description": "Configurez les flux audio réseau pour la capture audio à distance. Supporte les protocoles RTSP, HTTP, HLS, RTMP et UDP.",
@@ -3008,180 +3146,6 @@
           "failed": "Échouée",
           "unknown": "Inconnue"
         }
-      },
-      "audioFilters": {
-        "title": "Filtres audio",
-        "description": "Configurer les filtres audio par défaut appliqués à toutes les sources. Les réglages d'égaliseur par source sont disponibles dans les paramètres de chaque carte son.",
-        "enableEqualizer": "Activer l'égaliseur audio",
-        "enableEqualizerHelp": "Appliquer un filtrage de fréquence pour améliorer la détection des chants d'oiseaux en réduisant les bruits et fréquences indésirables.",
-        "filterType": "Type de filtre",
-        "newFilterType": "Nouveau type de filtre",
-        "selectFilterType": "Sélectionner le type de filtre",
-        "addFilter": "Ajouter un filtre",
-        "remove": "Supprimer",
-        "frequencyResponse": "Réponse en fréquence",
-        "cutoffFrequency": "Fréquence de coupure",
-        "cutoffFrequencyHelp": "Fréquence à laquelle le filtre commence à atténuer les signaux. Les chants d'oiseaux se situent généralement entre 1 et 10 kHz.",
-        "qFactor": "Facteur Q",
-        "qFactorHelp": "Le facteur de qualité contrôle la netteté du filtre. Des valeurs faibles (0,1-1) créent des pentes douces, des valeurs élevées (1-10) créent des coupures plus abruptes.",
-        "gain": "Gain",
-        "gainHelp": "Niveau d'amplification ou d'atténuation en décibels (dB).",
-        "attenuation": "Atténuation",
-        "attenuationHelp": "Taux de décroissance du filtre. Des valeurs plus élevées fournissent une atténuation plus abrupte des fréquences filtrées.",
-        "attenuationLevels": {
-          "0db": "0dB",
-          "12db": "12dB",
-          "24db": "24dB",
-          "36db": "36dB",
-          "48db": "48dB"
-        },
-        "filterHelp": "Ajoutez plusieurs filtres pour façonner la réponse en fréquence pour une détection optimale des oiseaux dans votre environnement.",
-        "graph": {
-          "flatResponse": "Réponse plate (Aucun filtre appliqué)",
-          "frequency": "Fréquence (Hz)",
-          "gain": "Gain (dB)"
-        }
-      },
-      "soundLevelMonitoring": {
-        "title": "Surveillance du niveau sonore",
-        "description": "Surveiller et signaler les niveaux sonores environnementaux",
-        "enable": "Activer la surveillance du niveau sonore",
-        "enableHelp": "Suivre les niveaux de bruit ambiant pour comprendre votre environnement d'enregistrement et corréler avec les modèles d'activité des oiseaux.",
-        "disabled": "Sound level monitoring is disabled",
-        "intervalLabel": "Intervalle de mesure (secondes)",
-        "intervalHelp": "Fréquence de mesure et de rapport des niveaux sonores. Des valeurs plus faibles fournissent des données plus granulaires mais utilisent plus de ressources. Minimum 5 secondes, recommandé 60 secondes.",
-        "dataOutputTitle": "Sortie des données de niveau sonore",
-        "dataOutputDescription": "Lorsqu'activé, les mesures du niveau sonore sont publiées via :",
-        "mqttTopic": "Topic MQTT :",
-        "sseEndpoint": "Point de terminaison SSE :",
-        "prometheusMetrics": "Métriques Prometheus :"
-      },
-      "clipSettings": {
-        "title": "Paramètres des clips",
-        "description": "Configurer la capture et le traitement des clips audio pour les chants d'oiseaux identifiés"
-      },
-      "clipRecording": {
-        "title": "Paramètres d'enregistrement des clips",
-        "description": "Configurer la capture, le format et les options de stockage des clips audio pour les chants détectés.",
-        "enable": "Activer l'enregistrement des clips",
-        "enableHelp": "Enregistrer des clips audio des chants d'oiseaux détectés pour révision, partage ou création de jeux de données personnalisés.",
-        "disabled": "L'enregistrement des clips est désactivé",
-        "captureSettings": "Paramètres de capture",
-        "lengthLabel": "Durée de capture",
-        "lengthHelp": "Durée d'audio à capturer pour chaque détection (10-60 secondes). Des clips plus longs fournissent plus de contexte mais utilisent plus d'espace de stockage.",
-        "preCaptureLabel": "Tampon de pré-détection",
-        "preCaptureHelp": "Secondes d'audio à inclure avant la détection de l'oiseau (0-{max} secondes). Garantit que le chant complet de l'oiseau est capturé depuis son début.",
-        "gainLabel": "Gain audio",
-        "gainHelp": "Amplification audio pour les clips enregistrés en décibels (0 à 20 dB). Rend les clips audio enregistrés plus forts pour une écoute plus facile. N'affecte pas la détection. 0 dB signifie aucune amplification.",
-        "normalization": "Normalisation audio",
-        "normalizationEnable": "Activer la normalisation de volume",
-        "normalizationHelp": "Ajuster automatiquement les niveaux audio selon la norme de diffusion EBU R128 pour un volume de lecture cohérent sur tous les clips.",
-        "normalizationDisabled": "Audio normalization is disabled",
-        "targetLUFSLabel": "Volume cible (LUFS)",
-        "targetLUFSHelp": "Cible de volume intégré en LUFS (Loudness Units relative to Full Scale). -23 LUFS est la norme de diffusion EBU R128. Plage : -40 à -10 LUFS.",
-        "loudnessRangeLabel": "Plage de volume (LU)",
-        "loudnessRangeHelp": "Variation maximale de volume dans le clip (0-20 LU). Des valeurs plus faibles créent un volume plus cohérent mais peuvent réduire la dynamique.",
-        "truePeakLabel": "Limite de pic réel (dBTP)",
-        "truePeakHelp": "Niveau de pic réel maximal pour éviter l'écrêtage numérique (-10 à 0 dBTP). -2 dBTP fournit une marge de sécurité pour la plupart des systèmes de lecture.",
-        "normalizationNote": "Norme EBU R128",
-        "normalizationNoteDescription": "La normalisation audio suit la norme de diffusion EBU R128, garantissant des niveaux de lecture cohérents sur différents appareils et évitant l'écrêtage.",
-        "fileSettings": "Paramètres de fichier",
-        "pathLabel": "Dossier des clips",
-        "pathHelp": "Répertoire où les clips audio seront enregistrés. Les chemins relatifs sont par rapport au répertoire de l'application. Exemple : 'clips/' ou '/var/audio/birds/'",
-        "typeLabel": "Format audio",
-        "typeHelp": "Format audio pour les clips enregistrés. WAV et FLAC sont sans perte (meilleure qualité, fichiers plus volumineux). MP3, AAC et Opus sont avec perte (fichiers plus petits, légère perte de qualité).",
-        "bitrateLabel": "Débit",
-        "bitrateHelp": "Débit de compression audio pour les formats avec perte. Plage : {min}-{max} kbps. Des valeurs plus élevées offrent une meilleure qualité mais des fichiers plus volumineux.",
-        "losslessNote": "Les formats sans perte préservent la qualité audio originale sans artefacts de compression.",
-        "disabledInfo": "Enable clip recording above to configure clip settings, file format, and storage options."
-      },
-      "extendedCapture": {
-        "title": "Capture étendue",
-        "description": "Enregistre des clips audio plus longs lorsqu'une espèce chante de manière répétée, produisant un seul enregistrement combiné au lieu de nombreux clips courts.",
-        "ramWarning": "La capture étendue nécessite de la RAM supplémentaire pour les tampons audio. Non recommandé pour les appareils avec 512 Mo de RAM ou moins (par ex. Raspberry Pi Zero).",
-        "enable": "Activer la capture étendue",
-        "enableHelp": "Lorsqu'elle est activée, les détections répétées des espèces configurées sont fusionnées en un seul enregistrement plus long.",
-        "maxDurationLabel": "Durée maximale",
-        "maxDurationHelp": "Longueur maximale d'un clip de capture étendue. L'enregistrement s'allonge au fil des détections, jusqu'à cette limite.",
-        "speciesListLabel": "Espèces en capture étendue",
-        "addSpeciesLabel": "Ajouter une espèce",
-        "addSpeciesHelp": "Espèces déclenchant la capture étendue. Prend en charge les noms communs, les noms scientifiques et la correspondance au niveau du genre (par ex. « Strix » inclut toutes les chouettes Strix).",
-        "addSpeciesButton": "Ajouter",
-        "disabled": "La capture étendue est désactivée"
-      },
-      "fileSettings": {
-        "title": "Paramètres de fichier",
-        "description": "Configurer l'emplacement de stockage et le format audio pour les clips enregistrés.",
-        "pathLabel": "Dossier des clips",
-        "pathHelp": "Répertoire où les clips audio seront enregistrés. Les chemins relatifs sont par rapport au répertoire de l'application. Exemple : 'clips/' ou '/var/audio/birds/'",
-        "typeLabel": "Format audio",
-        "typeHelp": "Format audio pour les clips enregistrés. WAV et FLAC sont sans perte (meilleure qualité, fichiers plus volumineux). MP3, AAC et Opus sont avec perte (fichiers plus petits, légère perte de qualité).",
-        "bitrateLabel": "Débit",
-        "bitrateHelp": "Débit de compression audio pour les formats avec perte. Plage : {min}-{max} kbps. Des valeurs plus élevées offrent une meilleure qualité mais des fichiers plus volumineux.",
-        "losslessNote": "Les formats sans perte préservent la qualité audio originale sans artefacts de compression."
-      },
-      "audioNormalization": {
-        "title": "Normalisation audio",
-        "description": "Ajuster les niveaux audio pour un volume de lecture cohérent sur tous les clips.",
-        "enable": "Activer la normalisation du volume",
-        "enableHelp": "Ajuster automatiquement les niveaux audio selon la norme de diffusion EBU R128 pour un volume de lecture cohérent sur tous les clips.",
-        "disabled": "La normalisation audio est désactivée",
-        "requiresRecording": "Activez l'enregistrement des clips dans l'onglet Enregistrement pour utiliser la normalisation audio.",
-        "targetLUFSLabel": "Volume cible (LUFS)",
-        "targetLUFSHelp": "Cible de volume intégré en LUFS (Loudness Units relative to Full Scale). -23 LUFS est la norme de diffusion EBU R128. Plage : -40 à -10 LUFS.",
-        "loudnessRangeLabel": "Plage de volume (LU)",
-        "loudnessRangeHelp": "Variation maximale de volume dans le clip (0-20 LU). Des valeurs plus faibles créent un volume plus cohérent mais peuvent réduire la dynamique.",
-        "truePeakLabel": "Limite de pic réel (dBTP)",
-        "truePeakHelp": "Niveau de pic réel maximal pour éviter l'écrêtage numérique (-10 à 0 dBTP). -2 dBTP fournit une marge de sécurité pour la plupart des systèmes de lecture.",
-        "noteTitle": "Norme EBU R128",
-        "noteDescription": "La normalisation audio suit la norme de diffusion EBU R128, garantissant des niveaux de lecture cohérents sur différents appareils et évitant l'écrêtage."
-      },
-      "audioClipRetention": {
-        "title": "Rétention des clips audio",
-        "description": "Configurer le nettoyage des clips audio",
-        "policyLabel": "Politique de rétention",
-        "policyHelp": "Choisissez comment les clips audio sont automatiquement supprimés. Aucune : conserver tous les clips. Âge : supprimer les clips plus anciens que spécifié. Utilisation : supprimer les clips les plus anciens lorsque l'utilisation du disque dépasse la limite.",
-        "maxAgeLabel": "Âge maximum",
-        "maxAgeHelp": "Supprimer les clips audio plus anciens que cette durée. Format : nombre suivi de l'unité (h=heures, d=jours, w=semaines, m=mois). Exemples : '7d' pour 7 jours, '4w' pour 4 semaines.",
-        "maxUsageLabel": "Utilisation maximale du disque",
-        "maxUsageHelp": "Supprimer les clips les plus anciens lorsque le répertoire audio utilise plus que ce pourcentage de l'espace disque disponible.",
-        "minClipsLabel": "Clips minimum par espèce",
-        "minClipsHelp": "Toujours conserver au moins ce nombre de clips pour chaque espèce d'oiseau, quel que soit l'âge ou l'utilisation du disque. Aide à préserver les enregistrements rares.",
-        "keepSpectrograms": "Conserver les images de spectrogramme",
-        "keepSpectrogramsHelp": "Conserver les images de spectrogramme même lorsque les clips audio sont supprimés. Les spectrogrammes utilisent moins d'espace et fournissent une référence visuelle.",
-        "policies": {
-          "none": "Aucune",
-          "age": "Âge",
-          "usage": "Utilisation"
-        },
-        "noRetentionTitle": "All Clips Retained",
-        "noRetentionDescription": "Audio clips will be kept indefinitely. Monitor disk usage to prevent storage issues.",
-        "ageRetentionTitle": "Age-Based Cleanup",
-        "ageRetentionDescription": "Clips older than the specified age will be automatically deleted, while preserving the minimum number per species.",
-        "usageRetentionTitle": "Usage-Based Cleanup",
-        "usageRetentionDescription": "When disk usage exceeds the threshold, oldest clips will be deleted until usage is within limits."
-      },
-      "formats": {
-        "wav": "WAV",
-        "flac": "FLAC",
-        "aac": "AAC",
-        "opus": "Opus",
-        "mp3": "MP3"
-      },
-      "transport": {
-        "tcp": "TCP",
-        "udp": "UDP"
-      },
-      "filterTypes": {
-        "lowpass": "Filtre passe-bas",
-        "highpass": "Filtre passe-haut",
-        "bandpass": "Filtre passe-bande",
-        "bandstop": "Filtre coupe-bande"
-      },
-      "errors": {
-        "devicesLoadFailed": "Échec du chargement des périphériques audio. Veuillez vérifier les permissions système.",
-        "invalidBitrate": "Valeur de débit invalide",
-        "invalidRetentionPolicy": "Politique de rétention invalide"
       }
     },
     "security": {
@@ -3215,9 +3179,9 @@
         "title": "Authentification basique",
         "description": "Accès sécurisé avec un mot de passe simple",
         "enableLabel": "Activer l'authentification par mot de passe",
-        "disabled": "Password authentication is disabled",
         "passwordLabel": "Mot de passe",
-        "passwordHelpText": "Limiter l'accès aux paramètres avec un mot de passe."
+        "passwordHelpText": "Limiter l'accès aux paramètres avec un mot de passe.",
+        "disabled": "L'authentification par mot de passe est désactivée"
       },
       "oauth": {
         "title": "Authentification externe",
@@ -3330,7 +3294,7 @@
       "bypassAuthentication": {
         "title": "Contourner l'authentification",
         "description": "Autoriser l'accès aux paramètres sans authentification",
-        "disabled": "Subnet bypass is disabled"
+        "disabled": "Le contournement par sous-réseau est désactivé"
       },
       "exceptions": {
         "title": "Exceptions"
@@ -3518,27 +3482,27 @@
           "thresholdPlaceholder": "0.5",
           "intervalPlaceholder": "0"
         },
-        "addConfiguration": "Add Configuration",
-        "newConfiguration": "New Configuration",
-        "editing": "Editing: {species}",
-        "configuredCount": "{count} configured",
+        "addConfiguration": "Ajouter une configuration",
+        "newConfiguration": "Nouvelle configuration",
+        "editing": "Modification : {species}",
+        "configuredCount": "{count} configurées",
         "searchPlaceholder": "Type to search...",
-        "saving": "Saving...",
-        "save": "Save",
-        "cancel": "Cancel",
-        "configureActions": "Configure Actions",
-        "actionsConfigured": "Configured",
+        "saving": "Enregistrement...",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "configureActions": "Configurer les actions",
+        "actionsConfigured": "Configurées",
         "list": {
-          "threshold": "Threshold:",
-          "interval": "Interval:",
-          "intervalNone": "None",
+          "threshold": "Seuil :",
+          "interval": "Intervalle :",
+          "intervalNone": "Aucun",
           "actionBadge": "Action",
-          "editTitle": "Edit configuration",
-          "removeTitle": "Remove configuration"
+          "editTitle": "Modifier la configuration",
+          "removeTitle": "Supprimer la configuration"
         },
         "emptyState": {
-          "title": "No configurations yet.",
-          "description": "Click \"Add Configuration\" to customize species detection settings."
+          "title": "Aucune configuration pour le moment.",
+          "description": "Cliquez sur « Ajouter une configuration » pour personnaliser les paramètres de détection des espèces."
         }
       },
       "synonyms": {
@@ -3569,8 +3533,6 @@
         "parameters": {
           "label": "Paramètres",
           "helpText": "Ces valeurs seront transmises à votre commande dans l'ordre indiqué",
-          "placeholder": "Cliquez sur les boutons ci-dessous pour ajouter des paramètres ou saisissez manuellement",
-          "tooltip": "Utilisez les boutons ci-dessous ou saisissez directement (séparés par des virgules)",
           "availableTitle": "Paramètres disponibles",
           "buttons": {
             "commonName": "NomCommun",
@@ -3579,7 +3541,9 @@
             "time": "Temps",
             "source": "Source",
             "clearParameters": "Effacer les paramètres"
-          }
+          },
+          "placeholder": "Cliquez sur les boutons ci-dessous pour ajouter des paramètres ou saisissez manuellement",
+          "tooltip": "Utilisez les boutons ci-dessous ou saisissez directement (séparés par des virgules)"
         },
         "executeDefaults": {
           "label": "Exécuter également les actions par défaut (stockage en base de données, notifications, etc.)",
@@ -3588,7 +3552,6 @@
       },
       "add": "Ajouter",
       "remove": "Supprimer",
-      "suggestions": "Suggestions d'espèces",
       "addSpeciesToInclude": "Ajouter des espèces à inclure",
       "addSpeciesToIncludeLabel": "Ajouter de nouvelles espèces à inclure",
       "addSpeciesToExclude": "Ajouter des espèces à exclure",
@@ -3731,12 +3694,19 @@
         "resetAllError": "Échec de la réinitialisation des seuils",
         "expand": "Afficher l'historique des événements",
         "collapse": "Masquer l'historique des événements"
-      }
+      },
+      "suggestions": "Suggestions d'espèces"
     },
     "database": {
       "sqlitePlaceholder": "Entrez le chemin de la base de données SQLite",
       "mysqlHostPlaceholder": "Entrez l'hôte MySQL",
       "mysqlUsernamePlaceholder": "Entrez le nom d'utilisateur MySQL"
+    },
+    "tabs": {
+      "navigation": "Onglets de navigation des paramètres",
+      "hasChanges": "Cet onglet contient des modifications non enregistrées",
+      "setAsDefault": "Définir par défaut",
+      "defaultIndicator": "Source d'entrée par défaut"
     },
     "alerts": {
       "sections": {
@@ -3945,6 +3915,12 @@
           "description": "Notifie lorsqu'un envoi BirdWeather échoue"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Échec du chargement des paramètres",
+      "saveFailed": "Échec de l'enregistrement des paramètres",
+      "databaseStatsFailed": "Échec du chargement des statistiques de la base de données",
+      "csvDownloadFailed": "Échec du téléchargement du CSV"
     },
     "appearance": {
       "colorScheme": "Thème de couleurs",
@@ -4185,15 +4161,6 @@
         "adjustedToMinimum": "Valeur ajustée au minimum ({value})",
         "adjustedToMaximum": "Valeur ajustée au maximum ({value})"
       },
-      "rtsp": {
-        "addNewStream": "Add New RTSP Stream",
-        "maxStreamsReached": "Maximum number of RTSP streams ({max}) reached.",
-        "cameraPlaceholder": "Camera 1",
-        "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
-      },
-      "subnet": {
-        "maxSubnetsReached": "Maximum number of subnets ({max}) reached."
-      },
       "species": {
         "loadingSpecies": "Chargement des espèces...",
         "typePlaceholder": "Tapez le nom de l'espèce...",
@@ -4204,6 +4171,15 @@
         "searchPlaceholder": "Rechercher...",
         "searchOptions": "Options de recherche",
         "noOptions": "Aucune option trouvée"
+      },
+      "rtsp": {
+        "addNewStream": "Add New RTSP Stream",
+        "maxStreamsReached": "Maximum number of RTSP streams ({max}) reached.",
+        "cameraPlaceholder": "Camera 1",
+        "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
+      },
+      "subnet": {
+        "maxSubnetsReached": "Nombre maximum de sous-réseaux ({max}) atteint."
       }
     },
     "datePicker": {
@@ -4298,6 +4274,30 @@
       "review": "Réviser",
       "download": "Télécharger"
     }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "disabled": "Terminal désactivé",
+    "disabledDescription": "Le terminal navigateur est désactivé. Activez-le dans Paramètres → Sécurité pour utiliser cette fonctionnalité.",
+    "connected": "Connecté",
+    "disconnected": "Déconnecté",
+    "connecting": "Connexion en cours...",
+    "connectionError": "Échec de la connexion",
+    "connectionClosed": "Connexion fermée",
+    "securityWarning": "Avertissement : Ce terminal fournit un accès shell direct au système hôte. Ne l'activez que sur des réseaux de confiance.",
+    "copySelection": "Copier la sélection",
+    "expand": "Agrandir",
+    "collapse": "Réduire",
+    "fullscreen": "Plein écran",
+    "exitFullscreen": "Quitter le plein écran",
+    "colorTheme": "Thème de couleur",
+    "themeDark": "Sombre",
+    "themeLight": "Clair",
+    "themeHighContrast": "Contraste élevé",
+    "detach": "Ouvrir dans une nouvelle fenêtre",
+    "detached": "Terminal détaché",
+    "detachedDescription": "Le terminal fonctionne dans une fenêtre séparée. Fermez cette fenêtre pour le ramener ici.",
+    "reattach": "Rattacher"
   },
   "quietHours": {
     "indicator": {
@@ -4519,8 +4519,8 @@
   "analysis": {
     "title": "Analyse",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Paramètres",
+      "models": "Modèles"
     },
     "detection": {
       "title": "Paramètres de détection",
@@ -4550,7 +4550,6 @@
         "helpText": "Nécessite plusieurs confirmations d'une détection de chauve-souris dans une fenêtre glissante avant de l'accepter. Les niveaux supérieurs nécessitent plus de confirmations, réduisant les faux positifs. Le modèle chauve-souris utilise un chevauchement fixe de 50 %, aucun ajustement n'est donc nécessaire.",
         "levels": {
           "off": "Aucun filtrage ; accepte toute détection de chauve-souris immédiatement.",
-          "lenient": "Une seule confirmation requise. Adapté aux zones à forte activité de chauves-souris.",
           "moderate": "Bon équilibre pour la plupart des configurations. Réduit considérablement les faux positifs.",
           "strict": "Filtrage maximal pour la plus grande précision."
         },
@@ -4558,12 +4557,12 @@
         "warningOff": "Sans filtrage, la probabilité de faux positifs est élevée. L'activation du filtrage améliore considérablement la précision."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Langue des espèces",
+        "helpText": "Langue utilisée pour les noms communs des espèces dans l'interface."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Le filtre de zone s'applique uniquement aux classificateurs d'oiseaux. Les modèles de chauves-souris utilisent leurs propres listes d'espèces.",
       "status": {
         "title": "Aperçu du filtre de zone",
         "geomodelInfo": "BirdNET Géomodèle {version} - {species} espèces connues",
@@ -4583,8 +4582,8 @@
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Avancé",
+      "description": "Configuration du traitement et des modèles personnalisés."
     },
     "gallery": {
       "title": "Galerie de modèles",

@@ -994,12 +994,12 @@
       originalData={{
         threshold: store.originalData.birdnet?.threshold,
         locale: store.originalData.birdnet?.locale,
-        fpFilter: store.originalData.realtime?.falsePositiveFilter,
+        fpFilter: store.originalData.realtime?.falsePositiveFilter?.level ?? 0,
       }}
       currentData={{
         threshold: birdnet?.threshold,
         locale: birdnet?.locale,
-        fpFilter: store.formData.realtime?.falsePositiveFilter,
+        fpFilter: falsePositiveFilter.level,
       }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">

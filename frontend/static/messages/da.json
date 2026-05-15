@@ -4519,12 +4519,12 @@
   "analysis": {
     "title": "Analyse",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Indstillinger",
+      "models": "Modeller"
     },
     "detection": {
-      "title": "Detection Settings",
-      "description": "Configure confidence thresholds and language for species classification.",
+      "title": "Detektionsindstillinger",
+      "description": "Konfigurer tærskler for konfidens og sprog til artsklassificering.",
       "confidenceThreshold": {
         "label": "Confidence Threshold",
         "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
@@ -4550,7 +4550,6 @@
         "helpText": "Kræver flere bekræftelser af en flagermusdetektion inden for et glidende vindue, før den accepteres. Højere niveauer kræver flere bekræftelser, hvilket reducerer falske positiver. Flagermusmodellen bruger et fast 50% overlap, så ingen overlapjustering er nødvendig.",
         "levels": {
           "off": "Ingen filtrering; accepterer enhver flagermusregistrering med det samme.",
-          "lenient": "Enkelt bekræftelse krævet. Velegnet til områder med høj flagermusaktivitet.",
           "moderate": "God balance for de fleste opsætninger. Reducerer falske positiver markant.",
           "strict": "Maksimal filtrering for højeste nøjagtighed."
         },
@@ -4558,97 +4557,97 @@
         "warningOff": "Uden filtrering er der stor sandsynlighed for falske positiver. Aktivering af filtrering forbedrer nøjagtigheden markant."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Artssprog",
+        "helpText": "Sprog brugt til arternes almindelige navne i brugerfladen."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Områdefilter gælder kun for fugleklassifikatorer. Flagermusmodeller bruger deres egne artslister.",
       "status": {
         "title": "Områdefilter oversigt",
         "geomodelInfo": "BirdNET Geomodel {version} - {species} kendte arter",
-        "autoSelected": "Auto-selected",
-        "manual": "Manual",
-        "classifier": "Classifier",
-        "totalSpecies": "Total Species",
-        "withRangeData": "With Range Data",
-        "withoutRangeData": "Without Range Data",
-        "withRangeDataTooltip": "Species that the geomodel can evaluate for geographic probability at your location",
-        "withoutRangeDataTooltip": "Species without geographic data in the geomodel, handled by the unmapped species setting below",
-        "noFilter": "No range filter active",
+        "autoSelected": "Automatisk valgt",
+        "manual": "Manuel",
+        "classifier": "Klassifikator",
+        "totalSpecies": "Antal arter i alt",
+        "withRangeData": "Med områdedata",
+        "withoutRangeData": "Uden områdedata",
+        "withRangeDataTooltip": "Arter som geomodellen kan evaluere for geografisk sandsynlighed på din placering",
+        "withoutRangeDataTooltip": "Arter uden geografiske data i geomodellen, håndteret af indstillingen for ikke-kortlagte arter nedenfor",
+        "noFilter": "Intet områdefilter aktivt",
         "passUnmapped": {
-          "label": "Allow species without range data",
-          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+          "label": "Tillad arter uden områdedata",
+          "helpText": "Tillad detektioner af arter, som geomodellen ikke har geografiske data for. Når deaktiveret, filtreres disse arter altid fra."
         }
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Avanceret",
+      "description": "Behandling og brugerdefineret modelkonfiguration."
     },
     "gallery": {
-      "title": "Model Gallery",
-      "description": "Manage classifier models for bird and bat detection.",
+      "title": "Modelgalleri",
+      "description": "Administrer klassifikatormodeller til fugle- og flagermusdetektion.",
       "tabs": {
-        "installed": "Installed",
-        "available": "Available"
+        "installed": "Installerede",
+        "available": "Tilgængelige"
       },
-      "loading": "Loading models...",
-      "retry": "Retry",
-      "builtIn": "Built-in",
-      "builtInDescription": "Built-in bird species classifier by the BirdNET team.",
-      "species": "{count} species",
-      "install": "Install",
-      "installing": "Installing...",
-      "remove": "Remove",
-      "removing": "Removing...",
-      "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
-      "noAvailableModels": "No additional models available for your platform.",
+      "loading": "Indlæser modeller...",
+      "retry": "Prøv igen",
+      "builtIn": "Indbygget",
+      "builtInDescription": "Indbygget fuglearts-klassifikator fra BirdNET-teamet.",
+      "species": "{count} arter",
+      "install": "Installer",
+      "installing": "Installerer...",
+      "remove": "Fjern",
+      "removing": "Fjerner...",
+      "noInstalledModels": "Ingen yderligere modeller installeret. Gennemse fanen Tilgængelige for at tilføje flere klassifikatorer.",
+      "noAvailableModels": "Ingen yderligere modeller tilgængelige til din platform.",
       "sections": {
         "acoustic": "Akustiske klassifikatorer",
         "geomodel": "Geomodeller"
       },
       "categories": {
-        "wildlife": "Wildlife Classifiers",
-        "bird": "Bird Classifiers",
-        "bat": "Bat Classifiers"
+        "wildlife": "Vildtklassifikatorer",
+        "bird": "Fugleklassifikatorer",
+        "bat": "Flagermusklassifikatorer"
       },
       "progress": {
-        "downloading": "Downloading...",
-        "verifying": "Verifying...",
-        "loading": "Loading...",
-        "complete": "Installed successfully",
-        "failed": "Failed"
+        "downloading": "Downloader...",
+        "verifying": "Verificerer...",
+        "loading": "Indlæser...",
+        "complete": "Installeret succesfuldt",
+        "failed": "Fejlet"
       },
       "license": {
-        "title": "License Agreement",
+        "title": "Licensaftale",
         "model": "Model",
-        "author": "Author",
-        "license": "License",
-        "commercialUse": "Commercial Use",
-        "downloadSize": "Download Size",
-        "allowed": "Allowed",
-        "notAllowed": "Not allowed",
-        "commercialUseAllowed": "Commercial use allowed",
-        "nonCommercialOnly": "Non-commercial use only",
-        "nonCommercialWarning": "This model is licensed for non-commercial use only. By installing, you agree to comply with the license terms.",
-        "acceptAndInstall": "Accept & Install"
+        "author": "Forfatter",
+        "license": "Licens",
+        "commercialUse": "Kommerciel brug",
+        "downloadSize": "Downloadstørrelse",
+        "allowed": "Tilladt",
+        "notAllowed": "Ikke tilladt",
+        "commercialUseAllowed": "Kommerciel brug tilladt",
+        "nonCommercialOnly": "Kun ikke-kommerciel brug",
+        "nonCommercialWarning": "Denne model er licenseret kun til ikke-kommerciel brug. Ved at installere accepterer du at overholde licensbetingelserne.",
+        "acceptAndInstall": "Accepter og installer"
       },
       "removeDialog": {
-        "title": "Remove {name}?",
-        "confirmation": "This will remove the model files from disk. Label data is retained for existing detections."
+        "title": "Fjern {name}?",
+        "confirmation": "Dette vil fjerne modelfilerne fra disken. Labeldata bevares for eksisterende detektioner."
       },
       "errors": {
-        "catalogLoadFailed": "Failed to load model catalog",
-        "installFailed": "Failed to start model installation",
-        "removeFailed": "Failed to remove model"
+        "catalogLoadFailed": "Kunne ikke indlæse modelkatalog",
+        "installFailed": "Kunne ikke starte modelinstallation",
+        "removeFailed": "Kunne ikke fjerne model"
       },
       "regionLabel": "Region",
-      "speciesLabel": "Species",
-      "reinstall": "Reinstall",
-      "reinstalling": "Reinstalling...",
-      "reinstallComplete": "Files verified successfully",
-      "geomodelBadge": "Includes BirdNET v3.0 geomodel"
+      "speciesLabel": "Arter",
+      "reinstall": "Geninstaller",
+      "reinstalling": "Geninstallerer...",
+      "reinstallComplete": "Filer verificeret succesfuldt",
+      "geomodelBadge": "Inkluderer BirdNET v3.0 geomodel"
     },
     "bird": {
       "title": "Fugleregistrering",
