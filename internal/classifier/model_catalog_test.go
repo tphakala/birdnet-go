@@ -59,7 +59,7 @@ func TestEmbeddedCatalog_ValidCategories(t *testing.T) {
 	validCategories := map[string]bool{CategoryWildlife: true, CategoryBird: true, CategoryBat: true, CategoryGeomodel: true}
 	for _, entry := range EmbeddedCatalog {
 		assert.True(t, validCategories[entry.Category],
-			"catalog entry %q has invalid category %q (must be \"wildlife\", \"bird\", or \"bat\")", entry.ID, entry.Category)
+			"catalog entry %q has invalid category %q (must be \"wildlife\", \"bird\", \"bat\", or \"geomodel\")", entry.ID, entry.Category)
 	}
 }
 
