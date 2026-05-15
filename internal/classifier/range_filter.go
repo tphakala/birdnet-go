@@ -65,6 +65,17 @@ func BuildRangeFilter(o *Orchestrator) error {
 			getWeekForFilter(today),
 			threshold,
 		)
+
+		// Sync unmappedScore with the current PassUnmappedSpecies setting so
+		// that the legacy predictFilter path (which calls Predict()) sees the
+		// correct value without requiring a full ReloadRangeFilter.
+		if mrf, ok := rf.(*mappedRangeFilter); ok {
+			var score float32
+			if settings.BirdNET.RangeFilter.PassUnmappedSpecies {
+				score = 1.0
+			}
+			mrf.unmappedScore = score
+		}
 		o.primary.mu.Unlock()
 
 		if err != nil {
@@ -86,9 +97,32 @@ func BuildRangeFilter(o *Orchestrator) error {
 
 		addUserOverrideSpecies(&includedSpecies, settings, allGeoLabels)
 
+		// When PassUnmappedSpecies is enabled, add classifier species that
+		// have no corresponding entry in the geomodel so they are not
+		// silently blocked by the species inclusion check in the processor.
+		var unmappedCount int
+		if settings.BirdNET.RangeFilter.PassUnmappedSpecies {
+			seen := make(map[string]bool, len(includedSpecies))
+			for _, s := range includedSpecies {
+				seen[s] = true
+			}
+			mapping := buildSpeciesMapping(settings.BirdNET.Labels, allGeoLabels)
+			for i, geoIdx := range mapping {
+				if geoIdx == -1 {
+					label := settings.BirdNET.Labels[i]
+					if !seen[label] && !isSpeciesExcluded(label, settings.Realtime.Species.Exclude) {
+						includedSpecies = append(includedSpecies, label)
+						seen[label] = true
+						unmappedCount++
+					}
+				}
+			}
+		}
+
 		GetLogger().Info("Range filter updated via universal geomodel path",
 			logger.Int("geomodel_species", len(scores)),
 			logger.Int("included_species", len(includedSpecies)),
+			logger.Int("unmapped_species_added", unmappedCount),
 			logger.Float64("threshold", float64(threshold)),
 			logger.String("duration", time.Since(start).String()))
 	} else {
@@ -291,6 +325,24 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 		}
 
 		addUserOverrideSpeciesScores(bn, &speciesScores, settings, allGeoLabels)
+
+		if settings.BirdNET.RangeFilter.PassUnmappedSpecies {
+			seen := make(map[string]bool, len(speciesScores))
+			for _, ss := range speciesScores {
+				seen[ss.Label] = true
+			}
+			mapping := buildSpeciesMapping(settings.BirdNET.Labels, allGeoLabels)
+			for i, geoIdx := range mapping {
+				if geoIdx == -1 {
+					label := settings.BirdNET.Labels[i]
+					if !seen[label] && !isSpeciesExcluded(label, settings.Realtime.Species.Exclude) {
+						speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
+						seen[label] = true
+					}
+				}
+			}
+		}
+
 		sort.Sort(ByScore(speciesScores))
 		return speciesScores, nil
 	}
