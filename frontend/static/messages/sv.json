@@ -1792,7 +1792,8 @@
             "strict": "Strict",
             "maximum": "Maximum",
             "unknown": "Unknown"
-          }
+          },
+          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
         },
         "rangeFilter": {
           "title": "Områdesfilter",
@@ -4546,7 +4547,15 @@
       },
       "batFalsePositiveFilter": {
         "label": "Fladdermus falskt-positiv filter",
-        "helpText": "Kräver flera bekräftelser av en fladdermusdetektion inom ett glidande fönster innan den accepteras. Högre nivåer kräver fler bekräftelser, vilket minskar falska positiva. Fladdermusmodellen använder en fast 50% överlappning, så ingen överlappningsjustering behövs."
+        "helpText": "Kräver flera bekräftelser av en fladdermusdetektion inom ett glidande fönster innan den accepteras. Högre nivåer kräver fler bekräftelser, vilket minskar falska positiva. Fladdermusmodellen använder en fast 50% överlappning, så ingen överlappningsjustering behövs.",
+        "levels": {
+          "off": "No filtering; accepts any bat detection immediately.",
+          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
+          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
+          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+        },
+        "detectionCount": "{count} confirmations required. {description}",
+        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
       },
       "locale": {
         "label": "Species Language",

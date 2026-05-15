@@ -1792,7 +1792,8 @@
             "strict": "Strict",
             "maximum": "Maximum",
             "unknown": "Unknown"
-          }
+          },
+          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
         },
         "rangeFilter": {
           "title": "Bereik Filter",
@@ -4546,7 +4547,15 @@
       },
       "batFalsePositiveFilter": {
         "label": "Vleermuis vals-positief filter",
-        "helpText": "Vereist meerdere bevestigingen van een vleermuisdetectie binnen een schuifvenster voordat deze wordt geaccepteerd. Hogere niveaus vereisen meer bevestigingen, waardoor valse positieven worden verminderd. Het vleermuismodel gebruikt een vaste overlap van 50%, dus er is geen overlapaanpassing nodig."
+        "helpText": "Vereist meerdere bevestigingen van een vleermuisdetectie binnen een schuifvenster voordat deze wordt geaccepteerd. Hogere niveaus vereisen meer bevestigingen, waardoor valse positieven worden verminderd. Het vleermuismodel gebruikt een vaste overlap van 50%, dus er is geen overlapaanpassing nodig.",
+        "levels": {
+          "off": "No filtering; accepts any bat detection immediately.",
+          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
+          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
+          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+        },
+        "detectionCount": "{count} confirmations required. {description}",
+        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
       },
       "locale": {
         "label": "Species Language",

@@ -41,7 +41,9 @@
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
-  import FalsePositiveFilterControl from '$lib/desktop/components/forms/FalsePositiveFilterControl.svelte';
+  import FalsePositiveFilterControl, {
+    type FilterLevel,
+  } from '$lib/desktop/components/forms/FalsePositiveFilterControl.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
@@ -667,6 +669,72 @@
     });
   }
 
+  // ── FP filter level definitions for the shared component ─────────────
+  const BADGE_OFF = 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]';
+  const BADGE_SUCCESS = 'bg-[var(--color-success)] text-[var(--color-success-content)]';
+  const BADGE_INFO = 'bg-[var(--color-info)] text-[var(--color-info-content)]';
+  const BADGE_WARNING = 'bg-[var(--color-warning)] text-[var(--color-warning-content)]';
+  const BADGE_ERROR = 'bg-[var(--color-error)] text-[var(--color-error-content)]';
+
+  const BIRD_FP_LEVELS: FilterLevel[] = [
+    {
+      value: 0,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.off',
+      badgeClass: BADGE_OFF,
+    },
+    {
+      value: 1,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.lenient',
+      badgeClass: BADGE_SUCCESS,
+    },
+    {
+      value: 2,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.moderate',
+      badgeClass: BADGE_INFO,
+    },
+    {
+      value: 3,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.balanced',
+      badgeClass: BADGE_WARNING,
+    },
+    {
+      value: 4,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.strict',
+      badgeClass: BADGE_ERROR,
+    },
+    {
+      value: 5,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.maximum',
+      badgeClass: BADGE_ERROR,
+    },
+  ];
+
+  // Bat has only 4 distinct levels (fixed 50% overlap, 4 detections in window):
+  // Off=bypass, Lenient=1 det, Moderate=2 det, Strict=3 det
+  // Balanced(2 det) duplicates Moderate, Maximum(3 det) duplicates Strict.
+  const BAT_FP_LEVELS: FilterLevel[] = [
+    {
+      value: 0,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.off',
+      badgeClass: BADGE_OFF,
+    },
+    {
+      value: 1,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.lenient',
+      badgeClass: BADGE_SUCCESS,
+    },
+    {
+      value: 2,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.moderate',
+      badgeClass: BADGE_INFO,
+    },
+    {
+      value: 4,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.strict',
+      badgeClass: BADGE_ERROR,
+    },
+  ];
+
   // Bat FP filter calculation helpers.
   // The bat model uses a fixed 50% overlap (1.5s step for 3s clip),
   // yielding 4 possible detections in a 6-second reference window.
@@ -680,16 +748,23 @@
     return Math.max(1, Math.ceil(required));
   }
 
+  // Bat-specific descriptions keyed by actual level value
+  const BAT_FP_DESCRIPTION_KEYS: Record<number, string> = {
+    0: 'analysis.detection.batFalsePositiveFilter.levels.off',
+    1: 'analysis.detection.batFalsePositiveFilter.levels.lenient',
+    2: 'analysis.detection.batFalsePositiveFilter.levels.moderate',
+    4: 'analysis.detection.batFalsePositiveFilter.levels.strict',
+  };
+
   function getBatFalsePositiveFilterDescription(level: number): string {
-    const levelData = safeArrayAccess(falsePositiveFilterLevels, level);
-    if (!levelData) return '';
+    const descKey = BAT_FP_DESCRIPTION_KEYS[level as keyof typeof BAT_FP_DESCRIPTION_KEYS];
+    if (!descKey) return '';
 
-    const minDet = calculateBatMinDetections(level);
-    const baseDescription = t(levelData.descriptionKey);
-
+    const baseDescription = t(descKey);
     if (level === 0) return baseDescription;
 
-    return t('settings.main.sections.falsePositiveFilter.detectionCount', {
+    const minDet = calculateBatMinDetections(level);
+    return t('analysis.detection.batFalsePositiveFilter.detectionCount', {
       count: minDet.toString(),
       description: baseDescription,
     });
@@ -983,13 +1058,19 @@
         <FalsePositiveFilterControl
           id="false-positive-filter-level"
           level={falsePositiveFilter.level}
+          levels={BIRD_FP_LEVELS}
           onUpdate={updateFalsePositiveFilterLevel}
           getDescription={level => getFalsePositiveFilterDescription(level, birdnet?.overlap ?? 0)}
           disabled={store.isLoading || store.isSaving}
         />
       </div>
 
-      {#if falsePositiveFilter.level >= 4}
+      {#if falsePositiveFilter.level === 0}
+        <SettingsNote>
+          {#snippet icon()}<AlertTriangle class="size-4 text-[var(--color-warning)]" />{/snippet}
+          <span>{t('settings.main.sections.falsePositiveFilter.warningOff')}</span>
+        </SettingsNote>
+      {:else if falsePositiveFilter.level >= 4}
         <SettingsNote>
           <span>{t('settings.main.sections.falsePositiveFilter.hardwareNote')}</span>
         </SettingsNote>
@@ -1049,11 +1130,19 @@
           <FalsePositiveFilterControl
             id="bat-false-positive-filter-level"
             level={batFPLevel}
+            levels={BAT_FP_LEVELS}
             onUpdate={updateBatFalsePositiveFilterLevel}
             getDescription={level => getBatFalsePositiveFilterDescription(level)}
             disabled={store.isLoading || store.isSaving}
           />
         </div>
+
+        {#if batFPLevel === 0}
+          <SettingsNote>
+            {#snippet icon()}<AlertTriangle class="size-4 text-[var(--color-warning)]" />{/snippet}
+            <span>{t('analysis.detection.batFalsePositiveFilter.warningOff')}</span>
+          </SettingsNote>
+        {/if}
       </SettingsSection>
     {/if}
 

@@ -1,9 +1,9 @@
 <!--
   False Positive Filter Control
 
-  Stepped slider for false positive filter level selection (0-5).
-  Used by both bird and bat detection settings with different
-  calculation parameters passed via the getDescription callback.
+  Stepped slider for false positive filter level selection.
+  Accepts a configurable levels array so bird and bat filters
+  can expose different level sets (bat has fewer distinct levels).
 
   @component
 -->
@@ -12,40 +12,36 @@
   import { t } from '$lib/i18n';
   import { safeArrayAccess } from '$lib/utils/security';
 
+  export interface FilterLevel {
+    value: number;
+    nameKey: string;
+    badgeClass: string;
+  }
+
   interface Props {
     id: string;
     level: number;
+    levels: FilterLevel[];
     onUpdate: (_level: number) => void;
     getDescription: (_level: number) => string;
     disabled?: boolean;
   }
 
-  let { id, level, onUpdate, getDescription, disabled = false }: Props = $props();
+  let { id, level, levels, onUpdate, getDescription, disabled = false }: Props = $props();
 
-  const LEVEL_KEYS: string[] = ['off', 'lenient', 'moderate', 'balanced', 'strict', 'maximum'];
-  const LEVEL_COUNT = LEVEL_KEYS.length;
+  const sliderPosition = $derived(
+    Math.max(
+      0,
+      levels.findIndex(l => l.value === level)
+    )
+  );
 
-  function getLevelName(value: number): string {
-    const key = safeArrayAccess(LEVEL_KEYS, value);
-    if (!key) return t('settings.main.sections.falsePositiveFilter.levelNames.unknown');
-    return t(`settings.main.sections.falsePositiveFilter.levelNames.${key}`);
-  }
+  const currentLevel = $derived(safeArrayAccess(levels, sliderPosition));
 
-  function getBadgeClass(value: number): string {
-    switch (value) {
-      case 1:
-        return 'bg-[var(--color-success)] text-[var(--color-success-content)]';
-      case 2:
-        return 'bg-[var(--color-info)] text-[var(--color-info-content)]';
-      case 3:
-        return 'bg-[var(--color-warning)] text-[var(--color-warning-content)]';
-      case 4:
-      case 5:
-        return 'bg-[var(--color-error)] text-[var(--color-error-content)]';
-      case 0:
-      default:
-        return 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]';
-    }
+  function handleInput(e: Event) {
+    const pos = parseInt((e.currentTarget as HTMLInputElement).value);
+    const target = safeArrayAccess(levels, pos);
+    if (target) onUpdate(target.value);
   }
 </script>
 
@@ -54,14 +50,16 @@
     <span class="text-sm font-medium text-[var(--color-base-content)]">
       {t('settings.main.sections.falsePositiveFilter.level.label')}
     </span>
-    <span
-      class={cn(
-        'inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full',
-        getBadgeClass(level)
-      )}
-    >
-      {getLevelName(level)}
-    </span>
+    {#if currentLevel}
+      <span
+        class={cn(
+          'inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full',
+          currentLevel.badgeClass
+        )}
+      >
+        {t(currentLevel.nameKey)}
+      </span>
+    {/if}
   </label>
 
   <input
@@ -70,22 +68,21 @@
     aria-describedby="{id}-help"
     class="w-full h-2 bg-[var(--color-base-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
     min={0}
-    max={5}
+    max={levels.length - 1}
     step={1}
-    value={level}
-    oninput={e => onUpdate(parseInt(e.currentTarget.value))}
+    value={sliderPosition}
+    oninput={handleInput}
     {disabled}
   />
 
   <!-- Stepped dots showing discrete levels -->
   <div class="flex justify-between px-[2px] mt-1.5" aria-hidden="true">
-    {#each Array.from({ length: LEVEL_COUNT }, (_, i) => i) as i (i)}
+    {#each levels as _, i (i)}
       <div
         class={cn(
           'size-1.5 rounded-full transition-colors',
-          i <= level ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-base-300)]'
+          i <= sliderPosition ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-base-300)]'
         )}
-        title={getLevelName(i)}
       ></div>
     {/each}
   </div>

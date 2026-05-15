@@ -1792,7 +1792,8 @@
             "strict": "Strict",
             "maximum": "Maximum",
             "unknown": "Unknown"
-          }
+          },
+          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
         },
         "rangeFilter": {
           "title": "Filtro Intervallo",
@@ -4546,7 +4547,15 @@
       },
       "batFalsePositiveFilter": {
         "label": "Filtro falsi positivi pipistrelli",
-        "helpText": "Richiede multiple conferme di un rilevamento di pipistrello all'interno di una finestra scorrevole prima di accettarlo. Livelli più alti richiedono più conferme, riducendo i falsi positivi. Il modello pipistrelli usa una sovrapposizione fissa del 50%, quindi non è necessario alcun aggiustamento."
+        "helpText": "Richiede multiple conferme di un rilevamento di pipistrello all'interno di una finestra scorrevole prima di accettarlo. Livelli più alti richiedono più conferme, riducendo i falsi positivi. Il modello pipistrelli usa una sovrapposizione fissa del 50%, quindi non è necessario alcun aggiustamento.",
+        "levels": {
+          "off": "No filtering; accepts any bat detection immediately.",
+          "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
+          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
+          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+        },
+        "detectionCount": "{count} confirmations required. {description}",
+        "warningOff": "Without filtering, bat detections will include false positives from bird songs, ambient noise, and other non-bat sounds. Even lenient filtering significantly improves accuracy, especially when multiple models are installed."
       },
       "locale": {
         "label": "Species Language",
