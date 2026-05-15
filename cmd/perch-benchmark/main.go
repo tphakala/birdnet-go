@@ -38,8 +38,10 @@ type benchConfig struct {
 	warmup     int
 	iterations int
 	threads    []int
+	batches    []int
 	verify     bool
 	audioPath  string
+	xnnpack    bool
 }
 
 type benchStats struct {
@@ -95,7 +97,9 @@ func run() error {
 	// Print system info
 	printSystemInfo()
 	fmt.Printf("Warmup: %d iterations, Benchmark: %d iterations\n", cfg.warmup, cfg.iterations)
-	fmt.Printf("Thread configs: %v\n\n", cfg.threads)
+	fmt.Printf("Thread configs: %v\n", cfg.threads)
+	fmt.Printf("Batch sizes: %v\n", cfg.batches)
+	fmt.Printf("XNNPACK EP: %v\n\n", cfg.xnnpack)
 
 	var allResults []resultEntry
 
@@ -107,20 +111,29 @@ func run() error {
 		fmt.Printf("========================================\n")
 
 		for _, threads := range cfg.threads {
-			fmt.Printf("\n  Threads: %d (intra-op = inter-op = %d)\n", threads, threads)
+			for _, batchSize := range cfg.batches {
+				fmt.Printf("\n  Threads: %d, Batch: %d\n", threads, batchSize)
 
-			stats, err := runBenchmark(modelPath, labels, audio, threads, cfg.warmup, cfg.iterations)
-			if err != nil {
-				fmt.Printf("  ERROR: %v\n", err)
-				continue
+				var stats benchStats
+				var err error
+				if batchSize <= 1 {
+					stats, err = runBenchmark(modelPath, labels, audio, threads, cfg.xnnpack, cfg.warmup, cfg.iterations)
+				} else {
+					stats, err = runBatchBenchmark(modelPath, labels, audio, threads, batchSize, cfg.xnnpack, cfg.warmup, cfg.iterations)
+				}
+				if err != nil {
+					fmt.Printf("  ERROR: %v\n", err)
+					continue
+				}
+
+				printBatchStats(stats, batchSize)
+				allResults = append(allResults, resultEntry{
+					model:   modelName,
+					threads: threads,
+					batch:   batchSize,
+					stats:   stats,
+				})
 			}
-
-			printStats(stats)
-			allResults = append(allResults, resultEntry{
-				model:   modelName,
-				threads: threads,
-				stats:   stats,
-			})
 		}
 		fmt.Println()
 	}
@@ -145,7 +158,7 @@ func run() error {
 }
 
 func parseFlags() benchConfig {
-	var modelsStr, threadsStr string
+	var modelsStr, threadsStr, batchStr string
 
 	cfg := benchConfig{}
 	flag.StringVar(&modelsStr, "models", "", "comma-separated ONNX model paths")
@@ -154,6 +167,8 @@ func parseFlags() benchConfig {
 	flag.IntVar(&cfg.warmup, "warmup", defaultWarmup, "warmup iterations per config")
 	flag.IntVar(&cfg.iterations, "iters", defaultIters, "benchmark iterations per config")
 	flag.StringVar(&threadsStr, "threads", "1,2,4", "comma-separated thread counts to test")
+	flag.StringVar(&batchStr, "batch", "1", "comma-separated batch sizes to test")
+	flag.BoolVar(&cfg.xnnpack, "xnnpack", false, "use XNNPACK execution provider")
 	flag.BoolVar(&cfg.verify, "verify", true, "verify output equivalence between models")
 	flag.StringVar(&cfg.audioPath, "audio", "", "path to raw float32 PCM file (random if empty)")
 	flag.Parse()
@@ -161,17 +176,28 @@ func parseFlags() benchConfig {
 	if modelsStr != "" {
 		cfg.modelPaths = strings.Split(modelsStr, ",")
 	}
-	if threadsStr != "" {
-		for s := range strings.SplitSeq(threadsStr, ",") {
-			s = strings.TrimSpace(s)
-			var n int
-			if _, err := fmt.Sscanf(s, "%d", &n); err == nil && n > 0 {
-				cfg.threads = append(cfg.threads, n)
+	for _, str := range []struct {
+		raw string
+		dst *[]int
+	}{
+		{threadsStr, &cfg.threads},
+		{batchStr, &cfg.batches},
+	} {
+		if str.raw != "" {
+			for s := range strings.SplitSeq(str.raw, ",") {
+				s = strings.TrimSpace(s)
+				var n int
+				if _, err := fmt.Sscanf(s, "%d", &n); err == nil && n >= 0 {
+					*str.dst = append(*str.dst, n)
+				}
 			}
 		}
 	}
 	if len(cfg.threads) == 0 {
 		cfg.threads = []int{1, 2, 4}
+	}
+	if len(cfg.batches) == 0 {
+		cfg.batches = []int{1}
 	}
 
 	return cfg
@@ -230,8 +256,8 @@ func printSystemInfo() {
 	fmt.Printf("\nSystem: %s/%s, %d CPUs\n", runtime.GOOS, runtime.GOARCH, runtime.NumCPU())
 }
 
-func runBenchmark(modelPath string, labels []string, audio []float32, threads, warmup, iterations int) (benchStats, error) {
-	classifier, err := createClassifier(modelPath, labels, threads)
+func runBenchmark(modelPath string, labels []string, audio []float32, threads int, useXNNPACK bool, warmup, iterations int) (benchStats, error) {
+	classifier, err := createClassifier(modelPath, labels, threads, useXNNPACK)
 	if err != nil {
 		return benchStats{}, fmt.Errorf("create classifier: %w", err)
 	}
@@ -257,18 +283,65 @@ func runBenchmark(modelPath string, labels []string, audio []float32, threads, w
 	return computeStats(durations), nil
 }
 
-func createClassifier(modelPath string, labels []string, threads int) (*onnx.Classifier, error) {
-	opts := []onnx.ClassifierOption{
+func runBatchBenchmark(modelPath string, labels []string, audio []float32, threads, batchSize int, useXNNPACK bool, warmup, iterations int) (benchStats, error) {
+	classifier, err := createClassifier(modelPath, labels, threads, useXNNPACK)
+	if err != nil {
+		return benchStats{}, fmt.Errorf("create classifier: %w", err)
+	}
+	defer func() { _ = classifier.Close() }()
+
+	segments := make([][]float32, batchSize)
+	for i := range batchSize {
+		segments[i] = make([]float32, len(audio))
+		copy(segments[i], audio)
+	}
+
+	// Warmup
+	for range warmup {
+		if _, err := classifier.PredictBatch(segments); err != nil {
+			return benchStats{}, fmt.Errorf("batch warmup failed: %w", err)
+		}
+	}
+
+	// Timed runs
+	durations := make([]time.Duration, iterations)
+	for i := range iterations {
+		start := time.Now()
+		if _, err := classifier.PredictBatch(segments); err != nil {
+			return benchStats{}, fmt.Errorf("batch inference %d failed: %w", i, err)
+		}
+		durations[i] = time.Since(start)
+	}
+
+	return computeStats(durations), nil
+}
+
+func createClassifier(modelPath string, labels []string, threads int, useXNNPACK bool) (*onnx.Classifier, error) {
+	opts := make([]onnx.ClassifierOption, 0, 5)
+	opts = append(opts,
 		onnx.WithLabels(labels),
 		onnx.WithTopK(0),
 		onnx.WithMinConfidence(0),
 		onnx.WithSkipLabelValidation(),
-	}
-	if threads > 0 {
-		opts = append(opts, onnx.WithSessionOptions(func(so *ortlib.SessionOptions) {
-			_ = so.SetIntraOpNumThreads(threads)
-			_ = so.SetInterOpNumThreads(threads)
-		}))
+	)
+	var configErr error
+	opts = append(opts, onnx.WithSessionOptions(func(so *ortlib.SessionOptions) {
+		if threads > 0 {
+			if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
+				configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
+			}
+			if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
+				configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
+			}
+		}
+		if useXNNPACK {
+			if err := so.AppendExecutionProvider("XNNPACK", map[string]string{}); err != nil && configErr == nil {
+				configErr = fmt.Errorf("failed to append XNNPACK EP: %w", err)
+			}
+		}
+	}))
+	if configErr != nil {
+		return nil, configErr
 	}
 	return onnx.NewClassifier(modelPath, opts...)
 }
@@ -312,14 +385,16 @@ func computeStats(durations []time.Duration) benchStats {
 	}
 }
 
-func printStats(s benchStats) {
+func printBatchStats(s benchStats, batchSize int) {
 	fmt.Printf("  Mean:   %v\n", s.mean.Round(time.Millisecond))
 	fmt.Printf("  Median: %v\n", s.median.Round(time.Millisecond))
 	fmt.Printf("  Min:    %v\n", s.min.Round(time.Millisecond))
 	fmt.Printf("  Max:    %v\n", s.max.Round(time.Millisecond))
 	fmt.Printf("  P95:    %v\n", s.p95.Round(time.Millisecond))
 	fmt.Printf("  Stddev: %v\n", s.stddev.Round(time.Millisecond))
-	fmt.Printf("  Throughput: %.2f inferences/sec\n", 1.0/s.mean.Seconds())
+	batchThroughput := float64(batchSize) / s.mean.Seconds()
+	perSegment := s.mean / time.Duration(batchSize)
+	fmt.Printf("  Throughput: %.2f segments/sec (%.0fms per segment)\n", batchThroughput, float64(perSegment.Milliseconds()))
 }
 
 func verifyEquivalence(modelPaths, labels []string, audio []float32) {
@@ -330,7 +405,7 @@ func verifyEquivalence(modelPaths, labels []string, audio []float32) {
 	outputs := make([]modelOutput, 0, len(modelPaths))
 
 	for _, path := range modelPaths {
-		classifier, err := createClassifier(path, labels, 1)
+		classifier, err := createClassifier(path, labels, 1, false)
 		if err != nil {
 			fmt.Printf("  ERROR creating classifier for %s: %v\n", filepath.Base(path), err)
 			return
@@ -387,31 +462,39 @@ func verifyEquivalence(modelPaths, labels []string, audio []float32) {
 type resultEntry struct {
 	model   string
 	threads int
+	batch   int
 	stats   benchStats
 }
 
 func printSummary(results []resultEntry) {
-	fmt.Printf("\n  %-30s  Threads  Mean         Median       P95          Throughput\n", "Model")
-	fmt.Printf("  %-30s  -------  -----------  -----------  -----------  ----------\n", strings.Repeat("-", 30))
+	fmt.Printf("\n  %-25s  Threads  Batch  Mean         Median       P95          Seg/s    ms/seg\n", "Model")
+	fmt.Printf("  %-25s  -------  -----  -----------  -----------  -----------  -------  ------\n", strings.Repeat("-", 25))
 
 	for _, r := range results {
-		fmt.Printf("  %-30s  %5d    %10v   %10v   %10v   %5.2f/s\n",
-			r.model, r.threads,
+		segPerSec := float64(r.batch) / r.stats.mean.Seconds()
+		msPerSeg := float64(r.stats.mean.Milliseconds()) / float64(r.batch)
+		fmt.Printf("  %-25s  %5d    %3d    %10v   %10v   %10v   %5.2f    %5.0f\n",
+			r.model, r.threads, r.batch,
 			r.stats.mean.Round(time.Millisecond),
 			r.stats.median.Round(time.Millisecond),
 			r.stats.p95.Round(time.Millisecond),
-			1.0/r.stats.mean.Seconds(),
+			segPerSec, msPerSeg,
 		)
 	}
 
-	// Find best config
+	// Find best throughput (segments per second)
 	if len(results) > 0 {
 		best := results[0]
+		bestThroughput := float64(best.batch) / best.stats.mean.Seconds()
 		for _, r := range results[1:] {
-			if r.stats.mean < best.stats.mean {
+			t := float64(r.batch) / r.stats.mean.Seconds()
+			if t > bestThroughput {
 				best = r
+				bestThroughput = t
 			}
 		}
-		fmt.Printf("\n  Best: %s @ %d threads (%.0fms mean)\n", best.model, best.threads, float64(best.stats.mean.Milliseconds()))
+		fmt.Printf("\n  Best throughput: %s @ %d threads, batch %d (%.2f seg/s, %.0fms/seg)\n",
+			best.model, best.threads, best.batch, bestThroughput,
+			float64(best.stats.mean.Milliseconds())/float64(best.batch))
 	}
 }
