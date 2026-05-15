@@ -4535,6 +4535,10 @@
         "label": "Walidacja po wykryciu",
         "helpText": "Po włączeniu wykrycia nietoperzy są weryfikowane przez analizę wzorców energii ultradźwiękowej w nagraniu źródłowym. Wykrycia bez cech echolokacji są oznaczane jako mało prawdopodobne."
       },
+      "batFalsePositiveFilter": {
+        "label": "Filtr fałszywie pozytywnych nietoperzy",
+        "helpText": "Wymaga wielu potwierdzeń wykrycia nietoperza w przesuwnym oknie czasowym przed jego zaakceptowaniem. Wyższe poziomy wymagają więcej potwierdzeń, zmniejszając liczbę fałszywych wykryć. Model nietoperzy używa stałego 50% nakładania, więc nie jest wymagana regulacja nakładania."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

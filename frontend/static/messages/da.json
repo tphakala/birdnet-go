@@ -4535,6 +4535,10 @@
         "label": "Validering efter detektion",
         "helpText": "Når aktiveret, valideres flagermusdetektioner ved at analysere ultralydsmønstre i kildeoptagelsen. Detektioner uden typiske flagermus-ekkolokationskarakteristika markeres som usandsynlige."
       },
+      "batFalsePositiveFilter": {
+        "label": "Flagermus falsk-positiv filter",
+        "helpText": "Kræver flere bekræftelser af en flagermusdetektion inden for et glidende vindue, før den accepteres. Højere niveauer kræver flere bekræftelser, hvilket reducerer falske positiver. Flagermusmodellen bruger et fast 50% overlap, så ingen overlapjustering er nødvendig."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

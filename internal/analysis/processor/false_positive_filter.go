@@ -1,6 +1,13 @@
 // false_positive_filter.go
 package processor
 
+import (
+	"math"
+
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
+)
+
 // getMinimumOverlapForLevel returns the minimum overlap required for each filtering level.
 // Higher levels require higher overlap to generate more detections for filtering.
 //
@@ -102,6 +109,63 @@ func getRecommendedLevelForOverlap(overlap float64) (level int, overlapSufficien
 	// If we get here, overlap is too low even for Level 0
 	// This shouldn't happen since Level 0 requires 0.0 overlap
 	return 0, true
+}
+
+// calculateMinDetectionsForModel routes to the correct minDetections calculation
+// based on the model ID. Bat models use a fixed 50% overlap instead of the
+// user-configurable BirdNET overlap, and read from a separate filter config.
+func calculateMinDetectionsForModel(settings *conf.Settings, modelID string) int {
+	if modelID == classifier.RegistryIDBat {
+		return calculateBatMinDetections(settings)
+	}
+	return calculateMinDetectionsFromSettings(settings)
+}
+
+// calculateBatMinDetections computes the minimum detection count for bat models.
+// The bat model's buffer overlap is fixed at 50% (hardcoded in BufferDimensions),
+// giving a 1.5-second step for a 3-second clip. Within a 6-second reference
+// window, this yields 4 possible detections.
+func calculateBatMinDetections(settings *conf.Settings) int {
+	const chunkDurationSeconds = 3.0
+	const referenceWindowSeconds = 6.0
+	const batOverlapSeconds = 1.5 // fixed 50% of 3s clip
+	const epsilon = 1e-9
+
+	level := settings.Bat.FalsePositiveFilter.Level
+	if level == 0 {
+		return 1
+	}
+
+	segmentLength := chunkDurationSeconds - batOverlapSeconds
+	maxDetections := referenceWindowSeconds / segmentLength
+	threshold := getThresholdForLevel(level)
+	required := maxDetections*threshold - epsilon
+	return int(math.Max(1, math.Ceil(required)))
+}
+
+// visibilityThresholds holds precomputed per-model visibility thresholds.
+// The map key is the model ID; unknown model IDs fall back to the bird threshold.
+type visibilityThresholds map[string]int
+
+// precomputeVisibilityThresholds calculates visibility thresholds for bird and
+// bat models once per settings snapshot so callers can look up by model ID
+// without recomputing inside a loop or under a lock.
+func precomputeVisibilityThresholds(settings *conf.Settings) visibilityThresholds {
+	birdVis := CalculateVisibilityThreshold(calculateMinDetectionsFromSettings(settings))
+	batVis := CalculateVisibilityThreshold(calculateBatMinDetections(settings))
+	return visibilityThresholds{
+		"":                       birdVis, // default for unknown model IDs
+		classifier.RegistryIDBat: batVis,
+	}
+}
+
+// getThreshold returns the visibility threshold for a model ID, falling back
+// to the bird threshold for unknown model IDs.
+func (vt visibilityThresholds) getThreshold(modelID string) int {
+	if t, ok := vt[modelID]; ok {
+		return t
+	}
+	return vt[""]
 }
 
 // getLevelDescription returns a detailed description of what each level does.

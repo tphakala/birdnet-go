@@ -4535,6 +4535,10 @@
         "label": "Nachträgliche Validierung",
         "helpText": "Wenn aktiviert, werden Fledermauserkennungen durch Analyse der Ultraschall-Energiemuster in der Quellaufnahme validiert. Erkennungen ohne typische Echoortungsmerkmale werden als unwahrscheinlich markiert."
       },
+      "batFalsePositiveFilter": {
+        "label": "Fledermaus-Falsch-Positiv-Filter",
+        "helpText": "Erfordert mehrere Bestätigungen einer Fledermauserkennung innerhalb eines gleitenden Fensters, bevor sie akzeptiert wird. Höhere Stufen erfordern mehr Bestätigungen und reduzieren Fehlerkennungen. Das Fledermausmodell verwendet eine feste 50%-Überlappung, daher ist keine Überlappungsanpassung erforderlich."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

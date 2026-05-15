@@ -143,12 +143,14 @@
       threshold: 0.5,
       filterEnabled: false,
       nighttimeOnly: true,
+      falsePositiveFilter: { level: 0 },
       ultrasonicFilter: { enabled: true },
     }
   );
 
   // Check if a bat model is installed
   const hasBatModel = $derived(catalog.some(e => e.installed && e.category === 'bat'));
+  const batFPLevel = $derived(bat.falsePositiveFilter?.level ?? 0);
 
   // ── Derived catalog views ─────────────────────────────────────────────
   const installedEntries = $derived(catalog.filter(e => e.installed));
@@ -685,6 +687,40 @@
     });
   }
 
+  function updateBatFalsePositiveFilterLevel(newLevel: number) {
+    settingsActions.updateSection('bat', {
+      falsePositiveFilter: { level: newLevel },
+    });
+  }
+
+  // Bat FP filter calculation helpers.
+  // The bat model uses a fixed 50% overlap (1.5s step for 3s clip),
+  // yielding 4 possible detections in a 6-second reference window.
+  const BAT_MAX_DETECTIONS_IN_WINDOW = 4;
+
+  function calculateBatMinDetections(level: number): number {
+    if (level === 0) return 1;
+    const levelData = safeArrayAccess(falsePositiveFilterLevels, level);
+    if (!levelData) return 1;
+    const required = BAT_MAX_DETECTIONS_IN_WINDOW * levelData.threshold - FLOAT_EPSILON;
+    return Math.max(1, Math.ceil(required));
+  }
+
+  function getBatFalsePositiveFilterDescription(level: number): string {
+    const levelData = safeArrayAccess(falsePositiveFilterLevels, level);
+    if (!levelData) return '';
+
+    const minDet = calculateBatMinDetections(level);
+    const baseDescription = t(levelData.descriptionKey);
+
+    if (level === 0) return baseDescription;
+
+    return t('settings.main.sections.falsePositiveFilter.detectionCount', {
+      count: minDet.toString(),
+      description: baseDescription,
+    });
+  }
+
   function updateThreshold(value: number) {
     settingsActions.updateSection('birdnet', { threshold: value });
   }
@@ -919,6 +955,7 @@
         batThreshold: store.originalData.bat?.threshold,
         batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
         batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
+        batFPFilter: store.originalData.bat?.falsePositiveFilter?.level ?? 0,
       }}
       currentData={{
         threshold: birdnet?.threshold,
@@ -926,6 +963,7 @@
         batThreshold: bat.threshold,
         batNighttimeOnly: bat.nighttimeOnly,
         batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
+        batFPFilter: batFPLevel,
       }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -996,6 +1034,48 @@
             disabled={store.isLoading || store.isSaving}
             onchange={updateBatUltrasonicFilter}
           />
+
+          <!-- Bat False Positive Filter -->
+          <div class="md:col-span-2">
+            <div class="min-w-0">
+              <label
+                for="bat-false-positive-filter-level"
+                class="flex items-center justify-between mb-2"
+              >
+                <span class="text-sm font-medium text-[var(--color-base-content)]">
+                  {t('analysis.detection.batFalsePositiveFilter.label')}
+                </span>
+                <span
+                  class={cn(
+                    'inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full',
+                    getFalsePositiveFilterBadgeClass(batFPLevel)
+                  )}
+                >
+                  {getFalsePositiveFilterLevelName(batFPLevel)}
+                </span>
+              </label>
+              <input
+                id="bat-false-positive-filter-level"
+                type="range"
+                aria-describedby="bat-false-positive-filter-help"
+                class="w-full h-2 bg-[var(--color-base-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
+                min={0}
+                max={5}
+                step={1}
+                value={batFPLevel}
+                oninput={e => updateBatFalsePositiveFilterLevel(parseInt(e.currentTarget.value))}
+                disabled={store.isLoading || store.isSaving}
+              />
+              <div class="mt-1">
+                <span
+                  id="bat-false-positive-filter-help"
+                  class="text-xs text-[var(--color-base-content)] opacity-60"
+                >
+                  {getBatFalsePositiveFilterDescription(batFPLevel)}
+                </span>
+              </div>
+            </div>
+          </div>
         {/if}
       </div>
     </SettingsSection>

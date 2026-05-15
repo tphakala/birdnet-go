@@ -4535,6 +4535,10 @@
         "label": "Validación posterior a la detección",
         "helpText": "Cuando está activado, las detecciones de murciélagos se validan analizando los patrones de energía ultrasónica en el audio fuente. Las detecciones sin características de ecolocalización se marcan como improbables."
       },
+      "batFalsePositiveFilter": {
+        "label": "Filtro de falsos positivos de murciélagos",
+        "helpText": "Requiere múltiples confirmaciones de una detección de murciélago dentro de una ventana deslizante antes de aceptarla. Niveles más altos requieren más confirmaciones, reduciendo los falsos positivos. El modelo de murciélagos usa una superposición fija del 50%, por lo que no se necesita ajuste de superposición."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

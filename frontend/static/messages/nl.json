@@ -4535,6 +4535,10 @@
         "label": "Validatie na detectie",
         "helpText": "Indien ingeschakeld worden vleermuisdetecties gevalideerd door analyse van ultrasone energiepatronen in de bronaudio. Detecties zonder echolocatiekenmerken worden gemarkeerd als onwaarschijnlijk."
       },
+      "batFalsePositiveFilter": {
+        "label": "Vleermuis vals-positief filter",
+        "helpText": "Vereist meerdere bevestigingen van een vleermuisdetectie binnen een schuifvenster voordat deze wordt geaccepteerd. Hogere niveaus vereisen meer bevestigingen, waardoor valse positieven worden verminderd. Het vleermuismodel gebruikt een vaste overlap van 50%, dus er is geen overlapaanpassing nodig."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

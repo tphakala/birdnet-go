@@ -1183,16 +1183,17 @@ type PerchConfig struct {
 
 // BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
 type BatConfig struct {
-	EmbeddingModel   string                 `yaml:"embeddingmodel,omitempty" json:"embeddingModel,omitempty"`   // path to BirdNET v2.4 embeddings ONNX model
-	ClassifierModel  string                 `yaml:"classifiermodel,omitempty" json:"classifierModel,omitempty"` // path to bat species classifier ONNX model
-	LabelPath        string                 `yaml:"labelpath,omitempty" json:"labelPath,omitempty"`             // path to bat species labels file
-	Threshold        float64                `yaml:"threshold" json:"threshold"`                                 // confidence threshold for bat detections
-	Locale           string                 `yaml:"locale,omitempty" json:"locale,omitempty"`                   // locale for species label translation
-	FilterEnabled    bool                   `yaml:"filterenabled" json:"filterEnabled"`                         // enable high-pass filter for bat audio
-	FilterCutoffHz   float64                `yaml:"filtercutoffhz,omitempty" json:"filterCutoffHz,omitempty"`   // high-pass filter cutoff frequency in Hz
-	FilterPassCount  int                    `yaml:"filterpasscount,omitempty" json:"filterPassCount,omitempty"` // number of filter passes for steeper rolloff
-	NighttimeOnly    bool                   `yaml:"nighttimeonly" json:"nighttimeOnly"`                         // restrict bat detection to nighttime (civil dusk to civil dawn)
-	UltrasonicFilter UltrasonicFilterConfig `yaml:"ultrasonicfilter" json:"ultrasonicFilter"`                   // post-detection ultrasonic validation filter
+	EmbeddingModel      string                      `yaml:"embeddingmodel,omitempty" json:"embeddingModel,omitempty"`   // path to BirdNET v2.4 embeddings ONNX model
+	ClassifierModel     string                      `yaml:"classifiermodel,omitempty" json:"classifierModel,omitempty"` // path to bat species classifier ONNX model
+	LabelPath           string                      `yaml:"labelpath,omitempty" json:"labelPath,omitempty"`             // path to bat species labels file
+	Threshold           float64                     `yaml:"threshold" json:"threshold"`                                 // confidence threshold for bat detections
+	Locale              string                      `yaml:"locale,omitempty" json:"locale,omitempty"`                   // locale for species label translation
+	FilterEnabled       bool                        `yaml:"filterenabled" json:"filterEnabled"`                         // enable high-pass filter for bat audio
+	FilterCutoffHz      float64                     `yaml:"filtercutoffhz,omitempty" json:"filterCutoffHz,omitempty"`   // high-pass filter cutoff frequency in Hz
+	FilterPassCount     int                         `yaml:"filterpasscount,omitempty" json:"filterPassCount,omitempty"` // number of filter passes for steeper rolloff
+	NighttimeOnly       bool                        `yaml:"nighttimeonly" json:"nighttimeOnly"`                         // restrict bat detection to nighttime (civil dusk to civil dawn)
+	FalsePositiveFilter FalsePositiveFilterSettings `yaml:"falsepositivefilter" json:"falsePositiveFilter"`             // false positive filtering for bat detections (level 0-5)
+	UltrasonicFilter    UltrasonicFilterConfig      `yaml:"ultrasonicfilter" json:"ultrasonicFilter"`                   // post-detection ultrasonic validation filter
 }
 
 // UltrasonicFilterConfig controls the post-detection ultrasonic validation filter for bat detections.

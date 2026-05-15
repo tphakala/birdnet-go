@@ -116,6 +116,9 @@ export interface BatSettings {
   locale?: string;
   filterEnabled: boolean;
   nighttimeOnly: boolean;
+  falsePositiveFilter?: {
+    level: number;
+  };
   ultrasonicFilter?: {
     enabled: boolean;
   };
