@@ -4570,7 +4570,7 @@
     },
     "gallery": {
       "title": "Modellgalleri",
-      "description": "Hantera klassificeringsmodeller för fågel- och fladdermsdetektion.",
+      "description": "Hantera klassificeringsmodeller för fågel- och fladdermusdetektion.",
       "tabs": {
         "installed": "Installerade",
         "available": "Tillgängliga"
