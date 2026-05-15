@@ -9,6 +9,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"math"
@@ -232,8 +233,7 @@ func prepareAudio(audioPath string) []float32 {
 			if samples >= perchSampleCount {
 				audio := make([]float32, perchSampleCount)
 				for i := range perchSampleCount {
-					offset := i * 4
-					bits := uint32(data[offset]) | uint32(data[offset+1])<<8 | uint32(data[offset+2])<<16 | uint32(data[offset+3])<<24
+					bits := binary.LittleEndian.Uint32(data[i*4 : i*4+4])
 					audio[i] = math.Float32frombits(bits)
 				}
 				fmt.Printf("Using audio from: %s\n", audioPath)
@@ -340,10 +340,15 @@ func createClassifier(modelPath string, labels []string, threads int, useXNNPACK
 			}
 		}
 	}))
+	classifier, err := onnx.NewClassifier(modelPath, opts...)
+	if err != nil {
+		return nil, err
+	}
 	if configErr != nil {
+		_ = classifier.Close()
 		return nil, configErr
 	}
-	return onnx.NewClassifier(modelPath, opts...)
+	return classifier, nil
 }
 
 func computeStats(durations []time.Duration) benchStats {
