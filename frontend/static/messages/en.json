@@ -4551,11 +4551,11 @@
         "levels": {
           "off": "No filtering; accepts any bat detection immediately.",
           "lenient": "Single confirmation required. Suitable for areas with high bat activity.",
-          "moderate": "Good balance for most setups. Significantly reduces false positives from bird songs and ambient noise.",
-          "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
+          "moderate": "Good balance for most setups. Significantly reduces false positives.",
+          "strict": "Maximum filtering for highest accuracy."
         },
         "detectionCount": "{count} confirmations required. {description}",
-        "warningOff": "Without filtering there is a high probability of false positives. Enabling filtering significantly improves accuracy, especially when multiple models are installed."
+        "warningOff": "Without filtering there is a high probability of false positives. Enabling filtering significantly improves accuracy."
       },
       "locale": {
         "label": "Species Language",
