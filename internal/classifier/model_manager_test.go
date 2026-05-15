@@ -148,6 +148,13 @@ func TestModelManager_UninstallRemovesModelRetainsLabels(t *testing.T) {
 	mm.ScanInstalled()
 	require.True(t, mm.IsInstalled(entry.ID))
 
+	// The standalone geomodel entry also gets detected as installed because
+	// its shared files exist. Uninstall it first so that shared geomodel
+	// files are not retained by the standalone entry.
+	if mm.IsInstalled("birdnet-geomodel-v3") {
+		require.NoError(t, mm.Uninstall("birdnet-geomodel-v3"))
+	}
+
 	require.NoError(t, mm.Uninstall(entry.ID))
 	assert.False(t, mm.IsInstalled(entry.ID))
 
@@ -500,6 +507,11 @@ func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
 	mm.ScanInstalled()
 	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before uninstall")
 
+	// Remove standalone geomodel entry so shared files are not retained.
+	if mm.IsInstalled("birdnet-geomodel-v3") {
+		require.NoError(t, mm.Uninstall("birdnet-geomodel-v3"))
+	}
+
 	err := mm.Uninstall(entry.ID)
 	require.NoError(t, err, "Uninstall must succeed when model is not loaded")
 	assert.False(t, mm.IsInstalled(entry.ID), "model must be removed from installed map")
@@ -746,8 +758,11 @@ func TestModelManager_Uninstall_GeomodelRetainedWhenDependentExists(t *testing.T
 		}
 	}
 
-	// Now uninstall birdnet-v3.0; no dependents remain.
+	// Now uninstall birdnet-v3.0 and the standalone geomodel entry.
 	require.NoError(t, mm.Uninstall("birdnet-v3.0"))
+	if mm.IsInstalled("birdnet-geomodel-v3") {
+		require.NoError(t, mm.Uninstall("birdnet-geomodel-v3"))
+	}
 
 	// Shared geomodel files should now be deleted.
 	for _, f := range entryV3.Files {
