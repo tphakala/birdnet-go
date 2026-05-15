@@ -1783,7 +1783,17 @@
           },
           "hardwareNote": "Prísne a maximálne úrovne vyžadujú vyššie nastavenia prekrytia a viac prostriedkov CPU. Pre tieto úrovne sa vyžaduje hardvér RPi 4 alebo lepší.",
           "overlapAdjusted": "Nastavenie prekrytia bolo automaticky upravené na {overlap}s, aby spĺňalo požiadavky filtra",
-          "overlapReduced": "Nastavenie prekrytia bolo znížené na {overlap}s, aby zodpovedalo úrovni filtra"
+          "overlapReduced": "Nastavenie prekrytia bolo znížené na {overlap}s, aby zodpovedalo úrovni filtra",
+          "levelNames": {
+            "off": "Vypnutý",
+            "lenient": "Nízky",
+            "moderate": "Mierny",
+            "balanced": "Vyvážený",
+            "strict": "Prísny",
+            "maximum": "Maximum",
+            "unknown": "Neznámy"
+          },
+          "warningOff": "Bez filtrovania sa každá detekcia nad prahom spoľahlivosti ihneď akceptuje. To zvyčajne spôsobuje niekoľko falošných pozitív denne. Aj nízke filtrovanie výrazne zlepšuje kvalitu výsledkov."
         },
         "rangeFilter": {
           "title": "Filter rozsahu",
@@ -4537,7 +4547,14 @@
       },
       "batFalsePositiveFilter": {
         "label": "Filter falošne pozitívnych netopierov",
-        "helpText": "Vyžaduje viacero potvrdení detekcie netopiera v posuvnom okne pred jej prijatím. Vyššie úrovne vyžadujú viac potvrdení, čím sa znižujú falošné pozitíva. Model netopierov používa pevné 50% prekrývanie, takže úprava prekrývania nie je potrebná."
+        "helpText": "Vyžaduje viacero potvrdení detekcie netopiera v posuvnom okne pred jej prijatím. Vyššie úrovne vyžadujú viac potvrdení, čím sa znižujú falošné pozitíva. Model netopierov používa pevné 50% prekrývanie, takže úprava prekrývania nie je potrebná.",
+        "levels": {
+          "off": "Žiadne filtrovanie; akceptuje akúkoľvek detekciu netopiera okamžite.",
+          "moderate": "Dobrá rovnováha pre väčšinu nastavení. Výrazne znižuje falošné pozitíva.",
+          "strict": "Maximálne filtrovanie pre najvyššiu presnosť."
+        },
+        "detectionCount": "Vyžaduje sa {count} potvrdení. {description}",
+        "warningOff": "Bez filtrovania je vysoká pravdepodobnosť falošných pozitív. Zapnutie filtrovania výrazne zlepšuje presnosť."
       },
       "locale": {
         "label": "Jazyk druhov",
@@ -4631,6 +4648,17 @@
       "reinstalling": "Preinštalovanie...",
       "reinstallComplete": "Súbory úspešne overené",
       "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel"
+    },
+    "bird": {
+      "title": "Detekcia vtákov",
+      "description": "Nakonfigurujte prah spoľahlivosti, jazyk druhov a filtrovanie falošných pozitív pre klasifikátory vtákov."
+    },
+    "bat": {
+      "title": "Detekcia netopierov",
+      "description": "Nakonfigurujte prah, plánovanie a filtrovanie falošných pozitív pre klasifikátory netopierov."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dynamický prah sa vzťahuje len na klasifikátory vtákov."
     }
   },
   "restart": {

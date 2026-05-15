@@ -1783,7 +1783,17 @@
           },
           "hardwareNote": "Strikt- och maximumnivåer kräver högre överlappningsinställningar och mer CPU-resurser. RPi 4 eller bättre hårdvara krävs för dessa nivåer.",
           "overlapAdjusted": "Överlappningsinställningen justerades automatiskt till {overlap}s för att uppfylla filterkraven",
-          "overlapReduced": "Överlappningsinställningen minskades till {overlap}s för att matcha filternivån"
+          "overlapReduced": "Överlappningsinställningen minskades till {overlap}s för att matcha filternivån",
+          "levelNames": {
+            "off": "Av",
+            "lenient": "Låg",
+            "moderate": "Måttlig",
+            "balanced": "Balanserad",
+            "strict": "Strikt",
+            "maximum": "Maximum",
+            "unknown": "Okänd"
+          },
+          "warningOff": "Utan filtrering accepteras varje detektering över konfidenströskeln omedelbart. Detta ger vanligtvis flera falska positiva per dag. Även låg filtrering förbättrar resultatkvaliteten avsevärt."
         },
         "rangeFilter": {
           "title": "Områdesfilter",
@@ -4537,7 +4547,14 @@
       },
       "batFalsePositiveFilter": {
         "label": "Fladdermus falskt-positiv filter",
-        "helpText": "Kräver flera bekräftelser av en fladdermusdetektion inom ett glidande fönster innan den accepteras. Högre nivåer kräver fler bekräftelser, vilket minskar falska positiva. Fladdermusmodellen använder en fast 50% överlappning, så ingen överlappningsjustering behövs."
+        "helpText": "Kräver flera bekräftelser av en fladdermusdetektion inom ett glidande fönster innan den accepteras. Högre nivåer kräver fler bekräftelser, vilket minskar falska positiva. Fladdermusmodellen använder en fast 50% överlappning, så ingen överlappningsjustering behövs.",
+        "levels": {
+          "off": "Ingen filtrering; accepterar varje fladdermusdetektering omedelbart.",
+          "moderate": "Bra balans för de flesta uppsättningar. Minskar falska positiva avsevärt.",
+          "strict": "Maximal filtrering för högsta noggrannhet."
+        },
+        "detectionCount": "{count} bekräftelser krävs. {description}",
+        "warningOff": "Utan filtrering finns det hög sannolikhet för falska positiva. Att aktivera filtrering förbättrar noggrannheten avsevärt."
       },
       "locale": {
         "label": "Artspråk",
@@ -4631,6 +4648,17 @@
       "reinstalling": "Installerar om...",
       "reinstallComplete": "Filer verifierade",
       "geomodelBadge": "Inkluderar BirdNET v3.0 geomodell"
+    },
+    "bird": {
+      "title": "Fågeldetektering",
+      "description": "Konfigurera konfidenströskel, artspråk och filtrering av falska positiva för fågelklassificerare."
+    },
+    "bat": {
+      "title": "Fladdermusdetektering",
+      "description": "Konfigurera tröskel, schemaläggning och filtrering av falska positiva för fladdermusklassificerare."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dynamiskt tröskelvärde gäller endast fågelklassificerare."
     }
   },
   "restart": {

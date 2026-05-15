@@ -1,14 +1,4 @@
 {
-  "pageTitle": {
-    "settings": "Configurações - BirdNET-Go",
-    "pageNotFound": "404 - Página não encontrada",
-    "serverError": "500 - Erro interno do servidor",
-    "componentError": "Erro ao carregar componente",
-    "speciesAnalytics": "Análise de espécies",
-    "advancedAnalytics": "Análise avançada",
-    "detectionDetails": "Detalhes da detecção",
-    "settingsNotAvailable": "Configurações não disponíveis"
-  },
   "common": {
     "loading": "Carregando...",
     "error": "Erro",
@@ -26,12 +16,6 @@
     "search": "Pesquisar",
     "filter": "Filtrar",
     "sort": "Ordenar",
-    "actions": {
-      "download": "Baixar",
-      "review": "Revisar",
-      "play": "Reproduzir",
-      "view": "Ver"
-    },
     "settings": "Configurações",
     "close": "Fechar",
     "back": "Voltar",
@@ -48,6 +32,12 @@
     "loginToViewDetails": "Faça login para ver detalhes",
     "pageNotFound": "Página não encontrada",
     "internalServerError": "Erro interno do servidor",
+    "actions": {
+      "download": "Baixar",
+      "review": "Revisar",
+      "play": "Reproduzir",
+      "view": "Ver"
+    },
     "buttons": {
       "save": "Salvar alterações",
       "reset": "Redefinir",
@@ -133,9 +123,6 @@
       "editSpecies": "Editar espécie",
       "removeSpecies": "Remover espécie",
       "dismissError": "Descartar erro",
-      "downloadCsv": "Baixar lista de espécies em CSV",
-      "visitEbirdLink": "Abrir eBird.org em uma nova aba",
-      "learnEbirdTaxonomyLink": "Abrir Taxonomia eBird em uma nova aba",
       "datePickerCalendar": "Calendário de seleção de data",
       "selectDate": "Selecionar data",
       "previousMonth": "Mês anterior",
@@ -143,6 +130,9 @@
       "selectToday": "Selecionar hoje",
       "dateSelected": "Data selecionada: {date}",
       "calendarNavigation": "Use as teclas de seta para navegar no calendário, Enter para selecionar, Escape para fechar",
+      "downloadCsv": "Baixar lista de espécies em CSV",
+      "visitEbirdLink": "Abrir eBird.org em uma nova aba",
+      "learnEbirdTaxonomyLink": "Abrir Taxonomia eBird em uma nova aba",
       "resizeHandle": "Arraste para redimensionar"
     },
     "labels": {
@@ -207,6 +197,16 @@
     "actionsColumn": "Ações",
     "closeModal": "Fechar diálogo",
     "hoursShort": "h"
+  },
+  "pageTitle": {
+    "settings": "Configurações - BirdNET-Go",
+    "pageNotFound": "404 - Página não encontrada",
+    "serverError": "500 - Erro interno do servidor",
+    "componentError": "Erro ao carregar componente",
+    "speciesAnalytics": "Análise de espécies",
+    "advancedAnalytics": "Análise avançada",
+    "detectionDetails": "Detalhes da detecção",
+    "settingsNotAvailable": "Configurações não disponíveis"
   },
   "navigation": {
     "dashboard": "Painel",
@@ -753,15 +753,6 @@
   },
   "detections": {
     "title": "Detecções",
-    "errors": {
-      "notFound": "Detecção não encontrada. Pode ter sido excluída ou o ID está incorreto.",
-      "noPermission": "Você não tem permissão para visualizar esta detecção.",
-      "loginRequired": "Faça login para visualizar esta detecção.",
-      "serverError": "Erro no servidor. Tente novamente mais tarde ou entre em contato com o suporte se o problema persistir.",
-      "loadFailed": "Falha ao carregar detecção (Erro {status}). Atualize a página.",
-      "noIdProvided": "ID da detecção não fornecido.",
-      "fetchFailed": "Falha ao buscar as detecções"
-    },
     "titles": {
       "hourly": "Resultados por hora às {hour}:00 em {date}",
       "hourlyRange": "Resultados por hora de {startHour}:00 a {endHour}:00 em {date}",
@@ -783,6 +774,11 @@
       "status": "Estado",
       "recording": "Gravação",
       "actions": "Ações"
+    },
+    "viewToggle": {
+      "label": "Modo de visualização",
+      "table": "Vista de tabela",
+      "cards": "Vista de cartões"
     },
     "status": {
       "locked": "Bloqueado"
@@ -908,10 +904,14 @@
       "loaded": "Detalhes de detecção carregados para {species}",
       "error": "Erro ao carregar detecção: {error}"
     },
-    "viewToggle": {
-      "label": "Modo de visualização",
-      "table": "Vista de tabela",
-      "cards": "Vista de cartões"
+    "errors": {
+      "notFound": "Detecção não encontrada. Pode ter sido excluída ou o ID está incorreto.",
+      "noPermission": "Você não tem permissão para visualizar esta detecção.",
+      "loginRequired": "Faça login para visualizar esta detecção.",
+      "serverError": "Erro no servidor. Tente novamente mais tarde ou entre em contato com o suporte se o problema persistir.",
+      "loadFailed": "Falha ao carregar detecção (Erro {status}). Atualize a página.",
+      "noIdProvided": "ID da detecção não fornecido.",
+      "fetchFailed": "Falha ao buscar as detecções"
     }
   },
   "species": {
@@ -1039,6 +1039,12 @@
         "buffCache": "Buffer/Cache"
       }
     },
+    "progress": {
+      "labels": {
+        "overallProgress": "Progresso geral",
+        "progress": "Progresso"
+      }
+    },
     "processInfo": {
       "title": "Informações de processos",
       "loading": "Carregando informações de processo...",
@@ -1070,12 +1076,6 @@
       "temperature": "Falha ao carregar temperatura: {error}",
       "processes": "Falha ao carregar informações de processos: {error}"
     },
-    "progress": {
-      "labels": {
-        "overallProgress": "Progresso geral",
-        "progress": "Progresso"
-      }
-    },
     "sections": {
       "overview": "Visão geral",
       "database": "Base de dados",
@@ -1084,211 +1084,13 @@
     "database": {
       "title": "Gestão da base de dados",
       "description": "Gerir migração de esquema",
-      "migration": {
-        "title": "Migração da base de dados",
-        "description": "Migrar do esquema antigo para o esquema v2 normalizado",
-        "completedTitle": "Migração concluída",
-        "completedNote": "Seu banco de dados foi migrado com sucesso para o novo esquema. Por favor, reinicie o BirdNET-Go para mudar para o novo banco de dados. Nota: O novo banco de dados é menor porque armazena dados de forma mais eficiente - isso é normal e todos os seus dados estão preservados.",
-        "status": {
-          "idle": "Pronto para iniciar",
-          "initializing": "A inicializar",
-          "dual_write": "Escrita dupla ativa",
-          "migrating": "A migrar dados primários",
-          "migrating_predictions": "A migrar dados secundários",
-          "paused": "Pausado",
-          "validating": "A validar",
-          "cutover": "Transição em curso",
-          "completed": "Migração concluída",
-          "failed": "Validação falhou"
-        },
-        "progress": {
-          "title": "Progresso da migração",
-          "records": "registos",
-          "percent": "{percent}%",
-          "rate": "{rate} registos/seg",
-          "rateValue": "{rate} reg/s",
-          "remaining": "Restante: {time}",
-          "eta": "Tempo restante estimado",
-          "dirtyIds": "{count} registos pendentes",
-          "paused": "Migração em pausa",
-          "completedTitle": "Migração concluída",
-          "completedBody": "Todos os {count} registos foram migrados com sucesso para o banco de dados V2. O aplicativo usará o V2 como banco de dados principal após a reinicialização.",
-          "restartTitle": "Reinicialização necessária",
-          "restartBody": "Reinicie o aplicativo para mudar para o banco de dados V2. A limpeza do banco de dados legado estará disponível após a reinicialização.",
-          "fallbackError": "Divergência na contagem de registos entre os bancos de dados legado e V2. Alguns registos podem não ter sido migrados corretamente.",
-          "migrateInfo": "A migração transferirá {count} registos do banco de dados legado para o novo esquema V2. O modo de escrita dupla garante zero perda de dados durante a migração.",
-          "sourceLegacy": "Origem (legado)",
-          "targetV2": "Destino (V2)",
-          "recordsLabel": "Registos",
-          "sizeLabel": "Tamanho",
-          "prerequisitesNotMet": "Pré-requisitos não atendidos — resolva os problemas críticos abaixo",
-          "validatingTitle": "Validando dados",
-          "validatingBody": "Comparando {count} registos legados com o banco de dados V2...",
-          "dirtyRecordsCatchup": "{count} registos pendentes — tentando reconciliação",
-          "cutoverTitle": "Finalizando transição",
-          "cutoverBody": "Finalizando transição para o banco de dados V2...",
-          "migratingPhase": "Migrando {phase}",
-          "progressLabel": "Progresso",
-          "ofRecords": "/ {count} registos",
-          "percentComplete": "{percent}% concluído",
-          "recordsPerSec": "{rate} registos/s",
-          "calculating": "Calculando...",
-          "dirtyWriteFailed": "{count} registos falharam ao gravar — serão reconciliados durante a validação"
-        },
-        "phase": {
-          "indicator": "Fase {current} de {total}: ",
-          "detections": "A migrar detecções primárias",
-          "predictions": "A migrar detecções secundárias",
-          "reviews": "A migrar avaliações",
-          "comments": "A migrar comentários",
-          "locks": "A migrar bloqueios"
-        },
-        "notes": {
-          "in_progress": "Você pode continuar usando o sistema normalmente enquanto a migração é executada em segundo plano.",
-          "dual_write": "Migração em andamento. Seus dados estão seguros - todas as novas detecções estão sendo salvas em ambos os bancos de dados. Você pode continuar usando o BirdNET-Go normalmente.",
-          "migrating": "Copiando suas detecções existentes para o novo banco de dados. Isso pode demorar um pouco dependendo de quantas detecções você tem. Você pode pausar e retomar a qualquer momento.",
-          "validating": "Verificando se todos os registos foram copiados corretamente. Quase pronto!",
-          "cutover": "Alternando para o novo banco de dados. Isso leva apenas um momento.",
-          "paused": "A migração está pausada. Seus dados estão seguros. Retome quando estiver pronto."
-        },
-        "actions": {
-          "start": "Iniciar migração",
-          "pause": "Pausar",
-          "resume": "Retomar",
-          "cancel": "Cancelar",
-          "rollback": "Reverter",
-          "retryValidation": "Repetir validação"
-        },
-        "confirmCancel": {
-          "title": "Cancelar migração?",
-          "message": "Isso interromperá a migração e retornará ao estado inativo. Você pode reiniciar a migração com segurança mais tarde - os registos não serão duplicados.",
-          "confirm": "Sim, cancelar",
-          "dismiss": "Não, continuar"
-        },
-        "confirmRollback": {
-          "title": "Reverter migração?",
-          "message": "Isto reverterá para a base de dados antiga. Novas deteções registadas desde a migração serão preservadas na base de dados melhorada mas não ficarão visíveis até a migração ser executada novamente.",
-          "confirm": "Sim, reverter",
-          "dismiss": "Não, manter melhorada"
-        },
-        "errors": {
-          "startFailed": "Falha ao iniciar a migração",
-          "pauseFailed": "Falha ao pausar a migração",
-          "resumeFailed": "Falha ao retomar a migração",
-          "cancelFailed": "Falha ao cancelar a migração",
-          "rollbackFailed": "Falha ao reverter a migração",
-          "fetchFailed": "Falha ao obter o estado da migração",
-          "retryValidationFailed": "Falha ao repetir a validação"
-        },
-        "worker": {
-          "running": "Worker em execução",
-          "paused": "Worker pausado",
-          "stopped": "Worker parado"
-        },
-        "prerequisites": {
-          "title": "Verificações pré-migração",
-          "rerunChecks": "Executar verificações novamente",
-          "critical": "Crítico",
-          "allPassed": "Todas as verificações passaram - pronto para migrar",
-          "criticalIssues": "{count} problema(s) crítico(s) deve(m) ser resolvido(s)",
-          "warningsCount": "{count} aviso(s)",
-          "running": "A executar verificações pré-migração...",
-          "checkingStep": "Passo {current} de {total}",
-          "errors": {
-            "fetchFailed": "Falha ao obter os pré-requisitos"
-          },
-          "checks": {
-            "state_idle": {
-              "name": "Estado da migração"
-            },
-            "disk_space": {
-              "name": "Espaço em disco"
-            },
-            "legacy_accessible": {
-              "name": "Conexão à base de dados"
-            },
-            "sqlite_integrity": {
-              "name": "Integridade da base de dados"
-            },
-            "mysql_table_health": {
-              "name": "Saúde das tabelas"
-            },
-            "write_permission": {
-              "name": "Permissão de escrita"
-            },
-            "mysql_permissions": {
-              "name": "Permissões MySQL"
-            },
-            "record_count": {
-              "name": "Contagem de registos"
-            },
-            "existing_v2_data": {
-              "name": "Dados de migração existentes"
-            },
-            "no_active_locks": {
-              "name": "Bloqueios ativos"
-            },
-            "memory_available": {
-              "name": "Memória disponível"
-            },
-            "mysql_max_packet": {
-              "name": "MySQL Max Packet"
-            },
-            "mysql_timeout": {
-              "name": "MySQL Timeout"
-            }
-          },
-          "passedCount": "{passed}/{total} aprovadas",
-          "criticalCount": "{count} crítico(s)",
-          "warningCount": "{count} aviso(s)",
-          "rerun": "Executar novamente",
-          "showDetails": "Mostrar detalhes",
-          "hideDetails": "Ocultar detalhes",
-          "status": {
-            "passed": "Aprovado",
-            "failed": "Falhou",
-            "error": "Erro",
-            "warning": "Aviso",
-            "skipped": "Ignorado"
-          }
-        },
-        "requiredNote": "A migração da base de dados é necessária para as próximas funcionalidades do BirdNET-Go que dependem do novo esquema de base de dados normalizado. As novas funcionalidades não estarão disponíveis até que a migração esteja concluída.",
-        "starting": "A iniciar migração...",
-        "confirmDialog": {
-          "title": "Iniciar migração da base de dados",
-          "message": "A migração irá copiar os seus dados de deteção da base de dados atual para uma nova base de dados normalizada. A sua base de dados original permanece inalterada. No entanto, é recomendado criar uma cópia de segurança caso ocorram problemas inesperados.",
-          "checkbox": "Confirmo que fiz uma cópia de segurança da minha base de dados ou compreendo os riscos de continuar sem cópia de segurança.",
-          "note": "Pode transferir uma cópia de segurança usando o botão \"Transferir cópia de segurança\" acima."
-        },
-        "details": {
-          "title": "Detalhes do banco de dados",
-          "detections": "{count} detecções",
-          "lastBackup": "Último backup: {date}",
-          "noBackups": "Sem backups",
-          "integrity": "Integridade: {status}"
-        },
-        "strip": {
-          "legacy": "Legado",
-          "v2Target": "V2 (destino)",
-          "active": "Ativo",
-          "migration": "Migração",
-          "complete": "Concluída",
-          "recordsMigrated": "{count} registos migrados",
-          "readyToMigrate": "Pronto para migrar",
-          "recordsInLegacy": "{count} registos no legado",
-          "comparingRecords": "Comparando contagem de registos...",
-          "validationFailed": "Validação falhou",
-          "rate": "Taxa",
-          "recPerSec": "{rate} reg/s",
-          "dayAvg": "~{count} / dia méd.",
-          "dayHistory": "Histórico de 30 dias"
-        }
-      },
       "legacy": {
         "title": "Base de dados legada",
         "fetchFailed": "Falha ao obter o estado da base de dados legada",
         "cleanup": {
           "title": "Limpeza da base de dados legada",
+          "description": "Este banco de dados agora está offline e não está mais em uso. Todos os seus dados foram migrados para o banco de dados aprimorado.",
+          "recommendation": "Recomenda-se excluir este banco de dados para liberar espaço em disco.",
           "location": "Localização",
           "size": "Tamanho",
           "records": "Registos",
@@ -1305,9 +1107,7 @@
           "confirmMessage": "Está prestes a eliminar permanentemente a base de dados legada ({size}). Esta ação não pode ser desfeita.",
           "confirmCheckbox": "Compreendo que isto eliminará permanentemente a base de dados legada",
           "cancelButton": "Cancelar",
-          "deleteConfirmButton": "Eliminar permanentemente",
-          "description": "Este banco de dados agora está offline e não está mais em uso. Todos os seus dados foram migrados para o banco de dados aprimorado.",
-          "recommendation": "Recomenda-se excluir este banco de dados para liberar espaço em disco."
+          "deleteConfirmButton": "Eliminar permanentemente"
         }
       },
       "v2": {
@@ -1325,6 +1125,7 @@
       "dashboard": {
         "title": "Painel da Base de Dados",
         "fetchFailed": "Falha ao obter visão geral da base de dados",
+        "loading": "Carregando...",
         "metrics": {
           "readLatency": "Latência de Leitura",
           "writeLatency": "Latência de Escrita",
@@ -1379,6 +1180,8 @@
         },
         "detectionRate": {
           "title": "Taxa de Deteção (24h)",
+          "chartLabel": "Taxa de detecção nas últimas 24 horas",
+          "detectionsTooltip": "{count} detecções",
           "perHour": "/h",
           "min": "mín",
           "avg": "méd",
@@ -1387,9 +1190,7 @@
           "backupSize": "Tamanho da cópia",
           "createBackup": "Criar Cópia de Segurança",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "Os backups do MySQL devem ser geridos através do mysqldump ou das suas ferramentas de administração MySQL.",
-          "chartLabel": "Taxa de detecção nas últimas 24 horas",
-          "detectionsTooltip": "{count} detecções"
+          "mysqlBackupNote": "Os backups do MySQL devem ser geridos através do mysqldump ou das suas ferramentas de administração MySQL."
         },
         "tables": {
           "title": "Tabelas",
@@ -1399,8 +1200,7 @@
           "rows": "Linhas",
           "size": "Tamanho",
           "usage": "Utilização"
-        },
-        "loading": "Carregando..."
+        }
       },
       "backup": {
         "download": "Transferir cópia de segurança",
@@ -1432,7 +1232,207 @@
           }
         }
       },
-      "notInitialized": "Não inicializado"
+      "notInitialized": "Não inicializado",
+      "migration": {
+        "title": "Migração da base de dados",
+        "description": "Migrar do esquema antigo para o esquema v2 normalizado",
+        "requiredNote": "A migração da base de dados é necessária para as próximas funcionalidades do BirdNET-Go que dependem do novo esquema de base de dados normalizado. As novas funcionalidades não estarão disponíveis até que a migração esteja concluída.",
+        "completedTitle": "Migração concluída",
+        "completedNote": "Seu banco de dados foi migrado com sucesso para o novo esquema. Por favor, reinicie o BirdNET-Go para mudar para o novo banco de dados. Nota: O novo banco de dados é menor porque armazena dados de forma mais eficiente - isso é normal e todos os seus dados estão preservados.",
+        "starting": "A iniciar migração...",
+        "status": {
+          "idle": "Pronto para iniciar",
+          "initializing": "A inicializar",
+          "dual_write": "Escrita dupla ativa",
+          "migrating": "A migrar dados primários",
+          "migrating_predictions": "A migrar dados secundários",
+          "paused": "Pausado",
+          "validating": "A validar",
+          "cutover": "Transição em curso",
+          "completed": "Migração concluída",
+          "failed": "Validação falhou"
+        },
+        "progress": {
+          "title": "Progresso da migração",
+          "records": "registos",
+          "paused": "Migração em pausa",
+          "percent": "{percent}%",
+          "rate": "{rate} registos/seg",
+          "rateValue": "{rate} reg/s",
+          "remaining": "Restante: {time}",
+          "eta": "Tempo restante estimado",
+          "dirtyIds": "{count} registos pendentes",
+          "completedTitle": "Migração concluída",
+          "completedBody": "Todos os {count} registos foram migrados com sucesso para o banco de dados V2. O aplicativo usará o V2 como banco de dados principal após a reinicialização.",
+          "restartTitle": "Reinicialização necessária",
+          "restartBody": "Reinicie o aplicativo para mudar para o banco de dados V2. A limpeza do banco de dados legado estará disponível após a reinicialização.",
+          "fallbackError": "Divergência na contagem de registos entre os bancos de dados legado e V2. Alguns registos podem não ter sido migrados corretamente.",
+          "migrateInfo": "A migração transferirá {count} registos do banco de dados legado para o novo esquema V2. O modo de escrita dupla garante zero perda de dados durante a migração.",
+          "sourceLegacy": "Origem (legado)",
+          "targetV2": "Destino (V2)",
+          "recordsLabel": "Registos",
+          "sizeLabel": "Tamanho",
+          "prerequisitesNotMet": "Pré-requisitos não atendidos — resolva os problemas críticos abaixo",
+          "validatingTitle": "Validando dados",
+          "validatingBody": "Comparando {count} registos legados com o banco de dados V2...",
+          "dirtyRecordsCatchup": "{count} registos pendentes — tentando reconciliação",
+          "cutoverTitle": "Finalizando transição",
+          "cutoverBody": "Finalizando transição para o banco de dados V2...",
+          "migratingPhase": "Migrando {phase}",
+          "progressLabel": "Progresso",
+          "ofRecords": "/ {count} registos",
+          "percentComplete": "{percent}% concluído",
+          "recordsPerSec": "{rate} registos/s",
+          "calculating": "Calculando...",
+          "dirtyWriteFailed": "{count} registos falharam ao gravar — serão reconciliados durante a validação"
+        },
+        "details": {
+          "title": "Detalhes do banco de dados",
+          "detections": "{count} detecções",
+          "lastBackup": "Último backup: {date}",
+          "noBackups": "Sem backups",
+          "integrity": "Integridade: {status}"
+        },
+        "strip": {
+          "legacy": "Legado",
+          "v2Target": "V2 (destino)",
+          "active": "Ativo",
+          "migration": "Migração",
+          "complete": "Concluída",
+          "recordsMigrated": "{count} registos migrados",
+          "readyToMigrate": "Pronto para migrar",
+          "recordsInLegacy": "{count} registos no legado",
+          "comparingRecords": "Comparando contagem de registos...",
+          "validationFailed": "Validação falhou",
+          "rate": "Taxa",
+          "recPerSec": "{rate} reg/s",
+          "dayAvg": "~{count} / dia méd.",
+          "dayHistory": "Histórico de 30 dias"
+        },
+        "phase": {
+          "indicator": "Fase {current} de {total}: ",
+          "detections": "A migrar detecções primárias",
+          "predictions": "A migrar detecções secundárias",
+          "reviews": "A migrar avaliações",
+          "comments": "A migrar comentários",
+          "locks": "A migrar bloqueios"
+        },
+        "notes": {
+          "in_progress": "Você pode continuar usando o sistema normalmente enquanto a migração é executada em segundo plano.",
+          "dual_write": "Migração em andamento. Seus dados estão seguros - todas as novas detecções estão sendo salvas em ambos os bancos de dados. Você pode continuar usando o BirdNET-Go normalmente.",
+          "migrating": "Copiando suas detecções existentes para o novo banco de dados. Isso pode demorar um pouco dependendo de quantas detecções você tem. Você pode pausar e retomar a qualquer momento.",
+          "validating": "Verificando se todos os registos foram copiados corretamente. Quase pronto!",
+          "cutover": "Alternando para o novo banco de dados. Isso leva apenas um momento.",
+          "paused": "A migração está pausada. Seus dados estão seguros. Retome quando estiver pronto."
+        },
+        "actions": {
+          "start": "Iniciar migração",
+          "pause": "Pausar",
+          "resume": "Retomar",
+          "cancel": "Cancelar",
+          "rollback": "Reverter",
+          "retryValidation": "Repetir validação"
+        },
+        "confirmDialog": {
+          "title": "Iniciar migração da base de dados",
+          "message": "A migração irá copiar os seus dados de deteção da base de dados atual para uma nova base de dados normalizada. A sua base de dados original permanece inalterada. No entanto, é recomendado criar uma cópia de segurança caso ocorram problemas inesperados.",
+          "checkbox": "Confirmo que fiz uma cópia de segurança da minha base de dados ou compreendo os riscos de continuar sem cópia de segurança.",
+          "note": "Pode transferir uma cópia de segurança usando o botão \"Transferir cópia de segurança\" acima."
+        },
+        "confirmCancel": {
+          "title": "Cancelar migração?",
+          "message": "Isso interromperá a migração e retornará ao estado inativo. Você pode reiniciar a migração com segurança mais tarde - os registos não serão duplicados.",
+          "confirm": "Sim, cancelar",
+          "dismiss": "Não, continuar"
+        },
+        "confirmRollback": {
+          "title": "Reverter migração?",
+          "message": "Isto reverterá para a base de dados antiga. Novas deteções registadas desde a migração serão preservadas na base de dados melhorada mas não ficarão visíveis até a migração ser executada novamente.",
+          "confirm": "Sim, reverter",
+          "dismiss": "Não, manter melhorada"
+        },
+        "errors": {
+          "startFailed": "Falha ao iniciar a migração",
+          "pauseFailed": "Falha ao pausar a migração",
+          "resumeFailed": "Falha ao retomar a migração",
+          "cancelFailed": "Falha ao cancelar a migração",
+          "rollbackFailed": "Falha ao reverter a migração",
+          "retryValidationFailed": "Falha ao repetir a validação",
+          "fetchFailed": "Falha ao obter o estado da migração"
+        },
+        "worker": {
+          "running": "Worker em execução",
+          "paused": "Worker pausado",
+          "stopped": "Worker parado"
+        },
+        "prerequisites": {
+          "title": "Verificações pré-migração",
+          "rerunChecks": "Executar verificações novamente",
+          "critical": "Crítico",
+          "allPassed": "Todas as verificações passaram - pronto para migrar",
+          "criticalIssues": "{count} problema(s) crítico(s) deve(m) ser resolvido(s)",
+          "warningsCount": "{count} aviso(s)",
+          "running": "A executar verificações pré-migração...",
+          "checkingStep": "Passo {current} de {total}",
+          "passedCount": "{passed}/{total} aprovadas",
+          "criticalCount": "{count} crítico(s)",
+          "warningCount": "{count} aviso(s)",
+          "rerun": "Executar novamente",
+          "showDetails": "Mostrar detalhes",
+          "hideDetails": "Ocultar detalhes",
+          "status": {
+            "passed": "Aprovado",
+            "failed": "Falhou",
+            "error": "Erro",
+            "warning": "Aviso",
+            "skipped": "Ignorado"
+          },
+          "errors": {
+            "fetchFailed": "Falha ao obter os pré-requisitos"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Estado da migração"
+            },
+            "disk_space": {
+              "name": "Espaço em disco"
+            },
+            "legacy_accessible": {
+              "name": "Conexão à base de dados"
+            },
+            "sqlite_integrity": {
+              "name": "Integridade da base de dados"
+            },
+            "mysql_table_health": {
+              "name": "Saúde das tabelas"
+            },
+            "write_permission": {
+              "name": "Permissão de escrita"
+            },
+            "mysql_permissions": {
+              "name": "Permissões MySQL"
+            },
+            "record_count": {
+              "name": "Contagem de registos"
+            },
+            "existing_v2_data": {
+              "name": "Dados de migração existentes"
+            },
+            "no_active_locks": {
+              "name": "Bloqueios ativos"
+            },
+            "memory_available": {
+              "name": "Memória disponível"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          }
+        }
+      }
     },
     "metrics": {
       "cpu": "CPU",
@@ -1463,6 +1463,30 @@
       "free": "livre",
       "ram": "RAM"
     }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "disabled": "Terminal desativado",
+    "disabledDescription": "O terminal do navegador está desativado. Ative-o em Configurações → Segurança para usar este recurso.",
+    "connected": "Conectado",
+    "disconnected": "Desconectado",
+    "connecting": "Conectando...",
+    "connectionError": "Falha na conexão",
+    "connectionClosed": "Conexão fechada",
+    "securityWarning": "Aviso: Este terminal fornece acesso direto ao shell do sistema host. Ative apenas em redes confiáveis.",
+    "copySelection": "Copiar seleção",
+    "expand": "Expandir",
+    "collapse": "Recolher",
+    "fullscreen": "Tela cheia",
+    "exitFullscreen": "Sair da tela cheia",
+    "colorTheme": "Tema de cores",
+    "themeDark": "Escuro",
+    "themeLight": "Claro",
+    "themeHighContrast": "Alto contraste",
+    "detach": "Abrir em nova janela",
+    "detached": "Terminal separado",
+    "detachedDescription": "O terminal está em execução numa janela separada. Feche essa janela para devolvê-lo aqui.",
+    "reattach": "Reconectar"
   },
   "analytics": {
     "title": "Visão geral",
@@ -1653,9 +1677,9 @@
       "audio": "Áudio",
       "filters": "Filtros",
       "integration": "Integrações",
-      "notifications": "Notificações",
       "security": "Segurança",
       "species": "Espécies",
+      "notifications": "Notificações",
       "support": "Suporte"
     },
     "notFound": {
@@ -1672,11 +1696,29 @@
       "unsavedChanges": "Alterações não salvas",
       "toolbar": "Ações de configurações"
     },
+    "errors": {
+      "loadFailed": "Falha ao carregar as configurações",
+      "saveFailed": "Falha ao salvar as configurações",
+      "databaseStatsFailed": "Falha ao carregar as estatísticas do banco de dados",
+      "csvDownloadFailed": "Falha ao baixar o CSV"
+    },
     "card": {
       "changed": "alterado",
       "changedAriaLabel": "Configurações alteradas"
     },
+    "tabs": {
+      "navigation": "Abas de navegação das configurações",
+      "hasChanges": "Esta aba tem alterações não salvas",
+      "setAsDefault": "Definir como padrão",
+      "defaultIndicator": "Fonte de entrada padrão"
+    },
     "main": {
+      "tabs": {
+        "general": "Geral",
+        "detection": "Detecção",
+        "location": "Localização",
+        "database": "Banco de dados"
+      },
       "sections": {
         "main": {
           "title": "Configurações principais",
@@ -1741,7 +1783,17 @@
           },
           "hardwareNote": "Os níveis Rigoroso e Máximo requerem configurações de sobreposição mais altas e mais recursos de CPU. RPi 4 ou hardware superior é necessário para esses níveis.",
           "overlapAdjusted": "Configuração de sobreposição ajustada automaticamente para {overlap}s para atender aos requisitos do filtro",
-          "overlapReduced": "A configuração de sobreposição foi reduzida para {overlap}s para corresponder ao nível do filtro"
+          "overlapReduced": "A configuração de sobreposição foi reduzida para {overlap}s para corresponder ao nível do filtro",
+          "levelNames": {
+            "off": "Desativado",
+            "lenient": "Baixo",
+            "moderate": "Moderado",
+            "balanced": "Equilibrado",
+            "strict": "Rigoroso",
+            "maximum": "Máximo",
+            "unknown": "Desconhecido"
+          },
+          "warningOff": "Sem filtragem, qualquer deteção acima do limiar de confiança é aceite imediatamente. Isto produz tipicamente vários falsos positivos por dia. Mesmo uma filtragem baixa melhora significativamente a qualidade dos resultados."
         },
         "rangeFilter": {
           "title": "Filtro de alcance",
@@ -1794,16 +1846,18 @@
             "helpText": "Selecione o tipo de banco de dados a ser usado para armazenar detecções."
           },
           "sqlite": {
+            "title": "Configuração SQLite",
+            "description": "Configure o local do arquivo de banco de dados SQLite",
             "note": "SQLite é o tipo de banco de dados recomendado para a maioria dos usuários.",
             "path": {
               "label": "Caminho do banco de dados SQLite",
               "placeholder": "Digite o caminho do banco de dados SQLite",
               "helpText": "Caminho do arquivo de banco de dados SQLite relativo ao diretório da aplicação"
-            },
-            "title": "Configuração SQLite",
-            "description": "Configure o local do arquivo de banco de dados SQLite"
+            }
           },
           "mysql": {
+            "title": "Configuração MySQL",
+            "description": "Configure as definições de conexão para o servidor de banco de dados MySQL",
             "host": {
               "label": "Host MySQL",
               "placeholder": "Digite o host MySQL",
@@ -1827,9 +1881,7 @@
               "label": "Banco de dados MySQL",
               "placeholder": "Digite o nome do banco de dados MySQL",
               "helpText": "Nome do banco de dados MySQL"
-            },
-            "title": "Configuração MySQL",
-            "description": "Configure as definições de conexão para o servidor de banco de dados MySQL"
+            }
           },
           "stats": {
             "title": "Estatísticas da base de dados",
@@ -1864,19 +1916,19 @@
         "userInterface": {
           "title": "Configurações da interface do usuário",
           "description": "Personalizar a interface do usuário",
-          "language": {
-            "title": "Idioma",
-            "description": "Configure o idioma de exibição para a interface do usuário",
-            "locale": {
-              "label": "Idioma da interface",
-              "helpText": "Selecione o idioma para a interface do usuário"
-            }
-          },
           "interface": {
             "title": "Configurações de interface",
             "description": "Escolha seu idioma preferido",
             "locale": {
               "label": "Idioma de exibição",
+              "helpText": "Selecione o idioma para a interface do usuário"
+            }
+          },
+          "language": {
+            "title": "Idioma",
+            "description": "Configure o idioma de exibição para a interface do usuário",
+            "locale": {
+              "label": "Idioma da interface",
               "helpText": "Selecione o idioma para a interface do usuário"
             }
           },
@@ -2011,20 +2063,14 @@
       },
       "errors": {
         "localesLoadFailed": "Não foi possível carregar as opções de idioma. Usando padrões.",
+        "providersLoadFailed": "Não foi possível carregar os provedores de imagem. Usando padrões.",
+        "rangeFilterTestFailed": "Falha ao testar configurações do filtro de alcance",
+        "rangeFilterLoadFailed": "Falha ao carregar lista de espécies",
+        "rangeFilterCountFailed": "Falha ao carregar contagem de espécies",
         "mapLibraryLoadFailed": "Falha ao carregar a biblioteca de mapas. Atualize a página.",
         "mapLoadFailed": "Falha ao carregar o mapa. Tente atualizar a página.",
         "modalMapLoadFailed": "Falha ao carregar o mapa modal. Feche e reabra a janela.",
-        "mapUnavailable": "Mapa indisponível: WebGL não é suportado neste navegador. Você ainda pode definir sua localização usando os campos de coordenadas acima.",
-        "providersLoadFailed": "Não foi possível carregar os provedores de imagem. Usando padrões.",
-        "rangeFilterCountFailed": "Falha ao carregar contagem de espécies",
-        "rangeFilterLoadFailed": "Falha ao carregar lista de espécies",
-        "rangeFilterTestFailed": "Falha ao testar configurações do filtro de alcance"
-      },
-      "tabs": {
-        "general": "Geral",
-        "detection": "Detecção",
-        "location": "Localização",
-        "database": "Banco de dados"
+        "mapUnavailable": "Mapa indisponível: WebGL não é suportado neste navegador. Você ainda pode definir sua localização usando os campos de coordenadas acima."
       }
     },
     "support": {
@@ -2081,10 +2127,10 @@
         },
         "userMessage": {
           "label": "Descreva o problema",
-          "labelOptional": "Descreva o problema (opcional)",
           "placeholder": "Por favor descreva o problema e inclua o link do issue do GitHub se aplicável (ex: #123)",
-          "placeholderOptional": "Adicione detalhes adicionais sobre o problema...",
           "githubTip": "💡 Dica: Se você tem um issue no GitHub, inclua o número do issue (ex: #123) e mencione seu ID do Sistema {systemId} no issue do GitHub para ajudar os desenvolvedores a vincular seus dados de suporte.",
+          "labelOptional": "Descreva o problema (opcional)",
+          "placeholderOptional": "Adicione detalhes adicionais sobre o problema...",
           "systemIdNote": "Mencione seu ID do Sistema {systemId} no issue do GitHub."
         },
         "uploadOption": {
@@ -2175,6 +2221,40 @@
           "imageUrl": "Link para imagem da espécie",
           "daysSinceFirstSeen": "Número de dias desde a primeira detecção"
         }
+      },
+      "testNotification": {
+        "title": "Enviar notificação de teste de nova espécie",
+        "description": "Gere uma notificação de teste para uma detecção de nova espécie para verificar se seu sistema de notificações está funcionando",
+        "whatHappens": "O que acontece quando você clica em 'Enviar teste':",
+        "sendButton": "Enviar teste",
+        "sendingButton": "Enviando...",
+        "statusMessages": {
+          "sending": "Enviando notificação de teste...",
+          "success": "Notificação de teste enviada com sucesso! Verifique seu sino de notificação.",
+          "error": "Falha ao enviar notificação de teste: {message}",
+          "serviceUnavailable": "O serviço de notificações não está disponível. Por favor, verifique suas configurações de notificação."
+        }
+      },
+      "statusMessages": {
+        "sending": "Enviando notificação de teste...",
+        "success": "Notificação de teste enviada com sucesso!",
+        "error": "Falha ao enviar notificação de teste: {message}",
+        "serviceUnavailable": "O serviço de notificações não está disponível. Por favor, verifique suas configurações de notificação."
+      },
+      "systemInfo": {
+        "howToView": "Como visualizar notificações:",
+        "technicalDetails": "Detalhes técnicos sobre notificações no BirdNET-Go:"
+      },
+      "privacy": {
+        "title": "Aviso de privacidade para webhooks externos",
+        "description": "As notificações de detecção podem incluir dados sensíveis quando enviadas para serviços externos:",
+        "gps": "Coordenadas GPS",
+        "gpsDetails": "Localização exata (latitude/longitude) se configurada",
+        "urls": "URLs de detecção",
+        "urlsDetails": "Podem expor informações da rede interna",
+        "species": "Dados de espécies",
+        "speciesDetails": "Quais aves foram detectadas e quando",
+        "recommendation": "Ative webhooks externos apenas se confiar no serviço receptor ou usar serviços auto-hospedados/locais."
       },
       "push": {
         "title": "Notificações Push",
@@ -2445,66 +2525,30 @@
             "invalidUrl": "Formato de URL inválido. A URL deve começar com servico://"
           }
         }
-      },
-      "testNotification": {
-        "title": "Enviar notificação de teste de nova espécie",
-        "description": "Gere uma notificação de teste para uma detecção de nova espécie para verificar se seu sistema de notificações está funcionando",
-        "whatHappens": "O que acontece quando você clica em 'Enviar teste':",
-        "sendButton": "Enviar teste",
-        "sendingButton": "Enviando...",
-        "statusMessages": {
-          "sending": "Enviando notificação de teste...",
-          "success": "Notificação de teste enviada com sucesso! Verifique seu sino de notificação.",
-          "error": "Falha ao enviar notificação de teste: {message}",
-          "serviceUnavailable": "O serviço de notificações não está disponível. Por favor, verifique suas configurações de notificação."
-        }
-      },
-      "statusMessages": {
-        "sending": "Enviando notificação de teste...",
-        "success": "Notificação de teste enviada com sucesso!",
-        "error": "Falha ao enviar notificação de teste: {message}",
-        "serviceUnavailable": "O serviço de notificações não está disponível. Por favor, verifique suas configurações de notificação."
-      },
-      "systemInfo": {
-        "howToView": "Como visualizar notificações:",
-        "technicalDetails": "Detalhes técnicos sobre notificações no BirdNET-Go:"
-      },
-      "privacy": {
-        "title": "Aviso de privacidade para webhooks externos",
-        "description": "As notificações de detecção podem incluir dados sensíveis quando enviadas para serviços externos:",
-        "gps": "Coordenadas GPS",
-        "gpsDetails": "Localização exata (latitude/longitude) se configurada",
-        "urls": "URLs de detecção",
-        "urlsDetails": "Podem expor informações da rede interna",
-        "species": "Dados de espécies",
-        "speciesDetails": "Quais aves foram detectadas e quando",
-        "recommendation": "Ative webhooks externos apenas se confiar no serviço receptor ou usar serviços auto-hospedados/locais."
       }
     },
     "filters": {
-      "errors": {
-        "speciesLoadFailed": "Falha ao carregar lista de espécies. Por favor, tente novamente."
-      },
+      "title": "Filtros",
       "privacyFiltering": {
         "title": "Filtragem de privacidade",
         "description": "A filtragem de privacidade evita salvar clipes de áudio quando vozes humanas são detectadas",
         "enable": "Ativar filtragem de privacidade",
+        "disabled": "Filtragem de privacidade está desativada",
         "confidenceLabel": "Limiar de confiança para detecção humana",
-        "confidenceHelp": "Defina o nível de confiança para detecção de voz humana, valores mais baixos tornam o filtro mais sensível",
-        "disabled": "Filtragem de privacidade está desativada"
+        "confidenceHelp": "Defina o nível de confiança para detecção de voz humana, valores mais baixos tornam o filtro mais sensível"
       },
       "falsePositivePrevention": {
         "title": "Prevenção de falsos positivos",
         "description": "Configurar filtros de detecção falsa",
         "enableDogBark": "Ativar filtro de latido de cachorro",
+        "disabled": "Filtro de latido de cachorro está desativado",
         "confidenceLabel": "Limiar de confiança",
         "confidenceHelp": "Defina o nível de confiança para detecção de latido de cachorro, valores mais baixos tornam o filtro mais sensível",
         "expireTimeLabel": "Tempo de expiração de latido de cachorro (minutos)",
         "expireTimeHelp": "Defina por quanto tempo lembrar um latido de cachorro detectado",
         "addDogBarkSpeciesLabel": "Adicionar espécies de latido de cachorro",
         "addDogBarkSpeciesHelp": "Pesquise e adicione espécies que podem ser confundidas com latidos de cachorro",
-        "addSpeciesButton": "Adicionar",
-        "disabled": "Filtro de latido de cachorro está desativado"
+        "addSpeciesButton": "Adicionar"
       },
       "speciesNamePlaceholder": "Nome da espécie",
       "typeSpeciesName": "Digite o nome da espécie...",
@@ -2520,395 +2564,8 @@
         "addSpeciesLabel": "Adicionar espécie noturna",
         "addSpeciesHelp": "Pesquisar e adicionar espécies, géneros, famílias ou ordens para filtrar durante o dia. Predefinição: Strigiformes (todas as corujas). Nota: uma lista vazia não filtra nenhuma espécie durante o dia."
       },
-      "title": "Filtros"
-    },
-    "audio": {
-      "loading": "Carregando dispositivos de áudio...",
-      "tabs": {
-        "soundCard": "Placa de Som",
-        "streams": "Fluxos",
-        "processing": "Processamento",
-        "recording": "Gravação",
-        "retention": "Retenção"
-      },
-      "audioCapture": {
-        "title": "Captura de áudio",
-        "description": "Definir fonte de captura de áudio, placa de som ou fluxo RTSP",
-        "soundCardSource": "Fonte da placa de som",
-        "audioSourceLabel": "Fonte de áudio (requer reinicialização da aplicação)",
-        "audioSourceHelp": "Selecione o dispositivo de entrada de áudio para detecção de sons de pássaros. As alterações requerem reinicialização da aplicação para entrar em vigor.",
-        "noSoundCardCapture": "Sem captura de placa de som",
-        "rtspSource": "Fonte RTSP",
-        "rtspTransportLabel": "Protocolo de transporte RTSP",
-        "rtspTransportHelp": "TCP é mais confiável, mas pode ter maior latência. UDP é mais rápido, mas pode apresentar perda de pacotes em redes com problemas.",
-        "rtspUrlsLabel": "URLs de fluxo RTSP",
-        "rtspUrlsHelp": "Digite uma ou mais URLs de fluxo RTSP para fontes de áudio de rede. Formato: rtsp://ip:porta/fluxo. Nota: As credenciais de autenticação devem ser configuradas separadamente nas configurações do servidor RTSP para segurança.",
-        "noDeviceSelected": "Nenhum dispositivo de áudio selecionado",
-        "refreshDevices": "Atualizar",
-        "deviceSelected": "Placa de som selecionada e pronta para captura",
-        "availableDevices": "Dispositivos de áudio disponíveis",
-        "active": "Ativo",
-        "streamsConfigured": "{count} fluxo(s) configurado(s)"
-      },
-      "quietHours": {
-        "title": "Horas silenciosas",
-        "sectionTitle": "Horas silenciosas",
-        "sectionDescription": "Pausar a captura de áudio durante janelas de tempo configuradas para reduzir o uso de CPU quando as aves provavelmente não estão ativas.",
-        "modeLabel": "Modo de agendamento",
-        "modeFixed": "Horários fixos",
-        "modeSolar": "Nascer/Pôr do sol",
-        "startTime": "Hora de início",
-        "endTime": "Hora de fim",
-        "startEvent": "Evento de início",
-        "endEvent": "Evento de fim",
-        "offsetMinutes": "Deslocamento (min)",
-        "sunrise": "Nascer do sol",
-        "sunset": "Pôr do sol",
-        "fixedHint": "A captura é pausada diariamente entre as horas de início e fim. Janelas noturnas (por exemplo, 22:00 às 06:00) são suportadas.",
-        "solarHint": "Os horários são calculados a partir do nascer/pôr do sol na sua localização configurada. Use deslocamentos negativos para antes do evento, positivos para depois.",
-        "badge": "Silêncio",
-        "enabledBadge": "Horas silenciosas habilitadas para este fluxo"
-      },
-      "audioFilters": {
-        "title": "Filtros de áudio",
-        "description": "Configurar filtros de áudio padrão aplicados a todas as fontes. Ajustes de EQ por fonte estão disponíveis nas configurações de cada placa de som.",
-        "enableEqualizer": "Ativar equalizador de áudio",
-        "enableEqualizerHelp": "Aplicar filtragem de frequência para melhorar a detecção de cantos de pássaros, reduzindo ruídos e frequências indesejadas.",
-        "filterType": "Tipo de filtro",
-        "newFilterType": "Novo tipo de filtro",
-        "selectFilterType": "Selecionar tipo de filtro",
-        "addFilter": "Adicionar filtro",
-        "remove": "Remover",
-        "frequencyResponse": "Resposta de frequência",
-        "cutoffFrequency": "Frequência de corte",
-        "cutoffFrequencyHelp": "Frequência na qual o filtro começa a atenuar sinais. Os cantos de pássaros normalmente variam de 1 a 10 kHz.",
-        "qFactor": "Fator Q",
-        "qFactorHelp": "O fator de qualidade controla a nitidez do filtro. Valores mais baixos (0,1-1) criam inclinações mais suaves, valores mais altos (1-10) criam cortes mais acentuados.",
-        "gain": "Ganho",
-        "gainHelp": "Nível de amplificação ou atenuação em decibéis (dB).",
-        "attenuation": "Atenuação",
-        "attenuationHelp": "Taxa de atenuação do filtro. Valores mais altos fornecem atenuação mais acentuada de frequências filtradas.",
-        "filterHelp": "Adicione vários filtros para moldar a resposta de frequência para detecção ideal de pássaros em seu ambiente.",
-        "attenuationLevels": {
-          "0db": "0dB",
-          "12db": "12dB",
-          "24db": "24dB",
-          "36db": "36dB",
-          "48db": "48dB"
-        },
-        "graph": {
-          "flatResponse": "Resposta plana (Sem filtros aplicados)",
-          "frequency": "Frequência (Hz)",
-          "gain": "Ganho (dB)"
-        }
-      },
-      "soundLevelMonitoring": {
-        "title": "Monitoramento do nível sonoro",
-        "description": "Monitorar e relatar níveis sonoros ambientais",
-        "enable": "Ativar monitoramento do nível sonoro",
-        "enableHelp": "Rastreie os níveis de ruído ambiente para entender seu ambiente de gravação e correlacionar com padrões de atividade de pássaros.",
-        "intervalLabel": "Intervalo de medição (segundos)",
-        "intervalHelp": "Com que frequência medir e relatar os níveis sonoros. Valores mais baixos fornecem dados mais granulares, mas usam mais recursos. Mínimo 5 segundos, recomendado 60 segundos.",
-        "dataOutputTitle": "Saída de dados do nível sonoro",
-        "dataOutputDescription": "Quando ativado, as medições do nível sonoro são publicadas via:",
-        "mqttTopic": "Tópico MQTT:",
-        "sseEndpoint": "Endpoint SSE:",
-        "prometheusMetrics": "Métricas Prometheus:",
-        "disabled": "Monitoramento do nível sonoro está desativado"
-      },
-      "clipSettings": {
-        "title": "Configurações de clipes",
-        "description": "Configurar captura e processamento de clipes de áudio para chamados de pássaros identificados"
-      },
-      "clipRecording": {
-        "title": "Configurações de Gravação de Clipes",
-        "description": "Configurar captura, formato e opções de armazenamento de clipes de áudio para chamados detectados.",
-        "enable": "Ativar gravação de clipes",
-        "disabled": "A gravação de clipes está desativada",
-        "enableHelp": "Salvar clipes de áudio de chamados de pássaros detectados para revisão, compartilhamento ou criação de conjuntos de dados personalizados.",
-        "captureSettings": "Configurações de captura",
-        "lengthLabel": "Duração da captura",
-        "lengthHelp": "Duração do áudio a ser capturado para cada detecção (10-60 segundos). Clipes mais longos fornecem mais contexto, mas usam mais armazenamento.",
-        "preCaptureLabel": "Buffer pré-detecção",
-        "preCaptureHelp": "Segundos de áudio a incluir antes da detecção do pássaro (0-{max} segundos). Garante que o canto completo do pássaro seja capturado desde o início.",
-        "gainLabel": "Ganho de áudio",
-        "gainHelp": "Amplificação de áudio para clipes salvos em decibéis (0 a 20 dB). Torna os clipes de áudio salvos mais altos para facilitar a audição. Não afeta a detecção. 0 dB significa sem amplificação.",
-        "normalization": "Normalização de áudio",
-        "normalizationEnable": "Ativar normalização de volume",
-        "normalizationHelp": "Ajustar automaticamente os níveis de áudio para o padrão de transmissão EBU R128 para volume de reprodução consistente em todos os clipes.",
-        "targetLUFSLabel": "Volume alvo (LUFS)",
-        "targetLUFSHelp": "Alvo de volume integrado em LUFS (Unidades de Volume relativas à Escala Completa). -23 LUFS é o padrão de transmissão EBU R128. Intervalo: -40 a -10 LUFS.",
-        "loudnessRangeLabel": "Intervalo de volume (LU)",
-        "loudnessRangeHelp": "Variação máxima de volume dentro do clipe (0-20 LU). Valores mais baixos criam volume mais consistente, mas podem reduzir a dinâmica.",
-        "truePeakLabel": "Limite de pico verdadeiro (dBTP)",
-        "truePeakHelp": "Nível máximo de pico verdadeiro para evitar distorção digital (-10 a 0 dBTP). -2 dBTP fornece margem segura para a maioria dos sistemas de reprodução.",
-        "normalizationNote": "Padrão EBU R128",
-        "normalizationNoteDescription": "A normalização de áudio segue o padrão de transmissão EBU R128, garantindo níveis de reprodução consistentes em diferentes dispositivos e evitando distorção.",
-        "fileSettings": "Configurações de arquivo",
-        "pathHelp": "Diretório onde os clipes de áudio serão salvos. Caminhos relativos são do diretório da aplicação. Exemplo: 'clips/' ou '/var/audio/birds/'",
-        "typeHelp": "Formato de áudio para clipes salvos. WAV e FLAC são sem perdas (melhor qualidade, arquivos maiores). MP3, AAC e Opus são com perdas (arquivos menores, pequena perda de qualidade).",
-        "bitrateHelp": "Taxa de bits de compressão de áudio para formatos com perdas. Intervalo: {min}-{max} kbps. Valores mais altos fornecem melhor qualidade, mas arquivos maiores.",
-        "losslessNote": "Formatos sem perdas preservam a qualidade de áudio original sem artefatos de compressão.",
-        "pathLabel": "Pasta de Clipes",
-        "typeLabel": "Formato de Áudio",
-        "bitrateLabel": "Taxa de bits",
-        "normalizationDisabled": "Normalização de áudio está desativada",
-        "disabledInfo": "Ative a gravação de clipes acima para configurar as definições de clipes, formato de arquivo e opções de armazenamento."
-      },
-      "extendedCapture": {
-        "title": "Captura estendida",
-        "description": "Grava clipes de áudio mais longos quando uma espécie canta repetidamente, produzindo uma única gravação combinada em vez de muitos clipes curtos.",
-        "ramWarning": "A captura estendida requer RAM adicional para buffers de áudio. Não recomendado para dispositivos com 512 MB de RAM ou menos (ex.: Raspberry Pi Zero).",
-        "enable": "Ativar captura estendida",
-        "enableHelp": "Quando ativada, as deteções repetidas das espécies configuradas são combinadas numa única gravação mais longa.",
-        "maxDurationLabel": "Duração máxima",
-        "maxDurationHelp": "Comprimento máximo de um clipe de captura estendida. A gravação cresce à medida que as deteções continuam, até este limite.",
-        "speciesListLabel": "Espécies de captura estendida",
-        "addSpeciesLabel": "Adicionar espécie",
-        "addSpeciesHelp": "Espécies que acionam a captura estendida. Suporta nomes comuns, nomes científicos e correspondência ao nível do género (ex.: \"Strix\" inclui todas as corujas Strix).",
-        "addSpeciesButton": "Adicionar",
-        "disabled": "A captura estendida está desativada"
-      },
-      "fileSettings": {
-        "title": "Configurações de Arquivo",
-        "description": "Configurar local de armazenamento e formato de áudio para clipes salvos.",
-        "pathLabel": "Pasta de Clipes",
-        "pathHelp": "Diretório onde os clipes de áudio serão salvos. Caminhos relativos são do diretório da aplicação. Exemplo: 'clips/' ou '/var/audio/birds/'",
-        "typeLabel": "Formato de Áudio",
-        "typeHelp": "Formato de áudio para clipes salvos. WAV e FLAC são sem perdas (melhor qualidade, arquivos maiores). MP3, AAC e Opus são com perdas (arquivos menores, pequena perda de qualidade).",
-        "bitrateLabel": "Taxa de bits",
-        "bitrateHelp": "Taxa de bits de compressão de áudio para formatos com perdas. Intervalo: {min}-{max} kbps. Valores mais altos fornecem melhor qualidade, mas arquivos maiores.",
-        "losslessNote": "Formatos sem perdas preservam a qualidade de áudio original sem artefatos de compressão."
-      },
-      "audioNormalization": {
-        "title": "Normalização de Áudio",
-        "description": "Ajustar níveis de áudio para volume de reprodução consistente em todos os clipes.",
-        "enable": "Ativar Normalização de Volume",
-        "enableHelp": "Ajustar automaticamente os níveis de áudio para o padrão de transmissão EBU R128 para volume de reprodução consistente em todos os clipes.",
-        "disabled": "A normalização de áudio está desativada",
-        "requiresRecording": "Ative a gravação de clipes na aba Gravação para usar a normalização de áudio.",
-        "targetLUFSLabel": "Volume Alvo (LUFS)",
-        "targetLUFSHelp": "Alvo de volume integrado em LUFS (Unidades de Volume relativas à Escala Completa). -23 LUFS é o padrão de transmissão EBU R128. Intervalo: -40 a -10 LUFS.",
-        "loudnessRangeLabel": "Intervalo de Volume (LU)",
-        "loudnessRangeHelp": "Variação máxima de volume dentro do clipe (0-20 LU). Valores mais baixos criam volume mais consistente, mas podem reduzir a dinâmica.",
-        "truePeakLabel": "Limite de Pico Verdadeiro (dBTP)",
-        "truePeakHelp": "Nível máximo de pico verdadeiro para evitar distorção digital (-10 a 0 dBTP). -2 dBTP fornece margem segura para a maioria dos sistemas de reprodução.",
-        "noteTitle": "Padrão EBU R128",
-        "noteDescription": "A normalização de áudio segue o padrão de transmissão EBU R128, garantindo níveis de reprodução consistentes em diferentes dispositivos e evitando distorção."
-      },
-      "audioClipRetention": {
-        "title": "Retenção de clipes de áudio",
-        "description": "Configurar limpeza de clipes de áudio",
-        "policyLabel": "Política de retenção",
-        "policyHelp": "Escolha como os clipes de áudio são excluídos automaticamente. Nenhuma: manter todos os clipes. Idade: excluir clipes mais antigos do que o especificado. Uso: excluir clipes mais antigos quando o uso do disco exceder o limite.",
-        "maxAgeLabel": "Idade máxima",
-        "maxAgeHelp": "Excluir clipes de áudio mais antigos do que esta duração. Formato: número seguido de unidade (h=horas, d=dias, w=semanas, m=meses). Exemplos: '7d' para 7 dias, '4w' para 4 semanas.",
-        "maxUsageLabel": "Uso máximo do disco",
-        "maxUsageHelp": "Excluir os clipes mais antigos quando o diretório de áudio usar mais do que esta porcentagem do espaço disponível em disco.",
-        "minClipsLabel": "Clipes mínimos por espécie",
-        "minClipsHelp": "Sempre manter pelo menos este número de clipes para cada espécie de pássaro, independentemente da idade ou uso do disco. Ajuda a preservar gravações raras.",
-        "keepSpectrograms": "Manter imagens de espectrograma",
-        "keepSpectrogramsHelp": "Manter imagens de espectrograma mesmo quando os clipes de áudio forem excluídos. Espectrogramas usam menos espaço e fornecem referência visual.",
-        "policies": {
-          "none": "Nenhuma",
-          "age": "Idade",
-          "usage": "Uso"
-        },
-        "noRetentionTitle": "Todos os clipes retidos",
-        "noRetentionDescription": "Os clipes de áudio serão mantidos indefinidamente. Monitore o uso do disco para evitar problemas de armazenamento.",
-        "ageRetentionTitle": "Limpeza baseada em idade",
-        "ageRetentionDescription": "Clipes mais antigos que a idade especificada serão automaticamente excluídos, preservando o número mínimo por espécie.",
-        "usageRetentionTitle": "Limpeza baseada em uso",
-        "usageRetentionDescription": "Quando o uso do disco exceder o limiar, os clipes mais antigos serão excluídos até que o uso esteja dentro dos limites."
-      },
-      "formats": {
-        "wav": "WAV",
-        "flac": "FLAC",
-        "aac": "AAC",
-        "opus": "Opus",
-        "mp3": "MP3"
-      },
-      "transport": {
-        "tcp": "TCP",
-        "udp": "UDP"
-      },
-      "filterTypes": {
-        "lowpass": "Filtro passa-baixa",
-        "highpass": "Filtro passa-alta",
-        "bandpass": "Filtro passa-banda",
-        "bandstop": "Filtro rejeita-banda"
-      },
       "errors": {
-        "devicesLoadFailed": "Falha ao carregar dispositivos de áudio. Por favor, verifique as permissões do sistema.",
-        "invalidBitrate": "Valor de taxa de bits inválido",
-        "invalidRetentionPolicy": "Política de retenção inválida"
-      },
-      "emptyStates": {
-        "soundCard": {
-          "title": "Nenhuma placa de som detectada",
-          "description": "Nenhum dispositivo de entrada de áudio local foi encontrado neste sistema. Isso é normal para implantações de contêiner ou servidor sem interface gráfica.",
-          "errorTitle": "Erro ao carregar dispositivos",
-          "hintsTitle": "Você pode:",
-          "hints": {
-            "container": "Isso é normal para implantações de contêiner/sem interface gráfica",
-            "streams": "Configure fluxos de rede na aba Fluxos em vez disso",
-            "usb": "Conecte um microfone USB e atualize a lista"
-          },
-          "refresh": "Atualizar dispositivos",
-          "retry": "Tentar novamente"
-        },
-        "streams": {
-          "title": "Nenhum fluxo configurado",
-          "description": "Adicione fluxos de áudio RTSP ou de rede de câmeras IP, servidores de microfone ou outras fontes de streaming.",
-          "hintsTitle": "Começando:",
-          "hints": {
-            "rtsp": "Digite URLs RTSP no formato: rtsp://ip:porta/stream",
-            "multiple": "Você pode adicionar vários fluxos para diferentes locais",
-            "protocol": "Escolha TCP para confiabilidade ou UDP para menor latência"
-          }
-        }
-      },
-      "soundCard": {
-        "title": "Placa de som",
-        "description": "Configure o dispositivo de entrada de áudio local",
-        "audioSourceLabel": "Fonte de áudio (requer reinicialização da aplicação para entrar em vigor)",
-        "audioSourceHelp": "Selecione o dispositivo de entrada de áudio para detecção de sons de pássaros. As alterações requerem reinicialização da aplicação para entrar em vigor.",
-        "noSoundCardCapture": "Sem captura de placa de som",
-        "empty": {
-          "title": "Nenhuma placa de som detectada",
-          "description": "Nenhum dispositivo de entrada de áudio local foi encontrado neste sistema. Isso é normal para implantações de contêiner ou servidor sem interface gráfica.",
-          "hintsTitle": "Você pode:",
-          "hintStream": "Configure fluxos de rede na aba Fluxos",
-          "hintUsb": "Conecte um microfone USB e atualize a lista",
-          "goToStreams": "Ir para Fluxos",
-          "refresh": "Atualizar dispositivos"
-        }
-      },
-      "noSources": {
-        "warning": "Nenhuma fonte de áudio configurada",
-        "description": "BirdNET-Go precisa de uma entrada de áudio para detectar pássaros. Por favor, configure pelo menos uma fonte na aba Placa de Som ou Fluxos."
-      },
-      "soundCards": {
-        "summary": "{count} fonte(s) de placa de som",
-        "addSource": "Adicionar Placa de Som",
-        "nameLabel": "Nome da Fonte",
-        "namePlaceholder": "ex. Microfone do Jardim da Frente",
-        "nameHelp": "Um nome descritivo para esta fonte de áudio",
-        "deviceLabel": "Dispositivo de Áudio",
-        "devicePlaceholder": "Selecionar um dispositivo de áudio",
-        "gainLabel": "Ganho (dB)",
-        "gainHelp": "Ajuste de ganho de entrada de áudio (-40 a +40 dB)",
-        "sampleRateLabel": "Taxa de amostragem",
-        "sampleRateUnverified": "As taxas suportadas não puderam ser verificadas para este dispositivo",
-        "sampleRateProbing": "Detectando taxas suportadas...",
-        "sampleRateExclusive": "Taxas acima de 48 kHz usam acesso exclusivo ao dispositivo no Linux, impedindo que outras aplicações compartilhem a placa de som",
-        "modelLabel": "Modelos de deteção",
-        "modelHelp": "Selecionar modelos de IA para esta fonte de áudio",
-        "deleteConfirm": "Remover esta fonte de placa de som?",
-        "emptyState": {
-          "title": "Nenhuma Fonte de Placa de Som Configurada",
-          "description": "Adicione uma fonte de placa de som para começar a capturar áudio para detecção de pássaros.",
-          "hintsTitle": "Primeiros Passos",
-          "hints": {
-            "device": "Selecione entre os dispositivos de entrada de áudio disponíveis no seu sistema",
-            "multiple": "Pode configurar várias placas de som para diferentes localizações",
-            "model": "Cada fonte pode usar um modelo de detecção diferente (BirdNET, Perch, Bat)"
-          }
-        },
-        "models": {
-          "birdnetDefault": "BirdNET (Padrão)",
-          "birdnet": "BirdNET",
-          "perchV2": "Google Perch v2",
-          "bat": "Deteção de morcegos"
-        },
-        "errors": {
-          "nameRequired": "O nome da fonte é obrigatório",
-          "deviceRequired": "O dispositivo de áudio é obrigatório",
-          "duplicateName": "Já existe uma fonte com este nome",
-          "duplicateDevice": "Este dispositivo já está configurado"
-        },
-        "compatibility": {
-          "minSampleRate": "Requer pelo menos {rate}kHz de taxa de amostragem",
-          "recommendedSampleRate": "{rate}kHz recomendado para melhores resultados",
-          "atLeastOneModel": "Pelo menos um modelo deve ser selecionado"
-        }
-      },
-      "rtspStreams": {
-        "title": "Configuração de Fluxos de Áudio",
-        "description": "Configure fluxos de áudio de rede para captura de áudio remota. Suporta protocolos RTSP, HTTP, HLS, RTMP e UDP.",
-        "noStreamsConfigured": "Nenhum fluxo configurado"
-      },
-      "streams": {
-        "streamLabel": "Transmissão",
-        "nameLabel": "Nome do Stream",
-        "enabled": "Ativada",
-        "disabled": "Desativada",
-        "namePlaceholder": "ex. Comedouro do Jardim",
-        "nameHelp": "Um nome descritivo para identificar este stream de áudio",
-        "urlLabel": "URL do Stream",
-        "urlHelp": "Digite a URL do stream com credenciais opcionais (ex. rtsp://host:porta/caminho). Use variáveis de ambiente para credenciais.",
-        "typeLabel": "Tipo de Stream",
-        "typeHelp": "Protocolo do stream - detectado automaticamente da URL",
-        "transportLabel": "Protocolo",
-        "summary": "{count} stream(s) configurado(s)",
-        "healthy": "saudável",
-        "unhealthy": "com falha",
-        "unknown": "desconhecido",
-        "refresh": "Atualizar",
-        "addStream": "Adicionar Stream",
-        "deleteConfirm": "Remover este stream?",
-        "restartCount": "Reiniciado {count} vez(es)",
-        "healthLoadError": "Falha ao carregar status do stream",
-        "status": {
-          "connected": "Conectado",
-          "connecting": "Conectando",
-          "error": "Erro",
-          "idle": "Inativo",
-          "suppressed": "Horas silenciosas",
-          "unknown": "Desconhecido"
-        },
-        "emptyState": {
-          "title": "Nenhum Stream Configurado",
-          "description": "Adicione streams de áudio de câmeras IP, servidores Icecast ou outras fontes de rede.",
-          "hintsTitle": "Primeiros Passos",
-          "hints": {
-            "rtsp": "Suporta streams RTSP, HTTP, HLS, RTMP e UDP/RTP",
-            "credentials": "Credenciais podem ser incluídas na URL ou usar variáveis de ambiente",
-            "protocol": "TCP é mais confiável para RTSP, UDP tem menor latência"
-          }
-        },
-        "errors": {
-          "nameRequired": "Nome do stream é obrigatório",
-          "duplicateName": "Já existe um stream com este nome",
-          "urlRequired": "URL do stream é obrigatória",
-          "invalidUrl": "Formato de URL de stream inválido",
-          "duplicate": "Esta URL de stream já existe"
-        },
-        "timeline": {
-          "error": "Erro",
-          "noHistory": "Nenhum histórico de estados ou erros disponível.",
-          "stateChange": "Mudança de estado",
-          "host": "Host",
-          "troubleshooting": "Solução de problemas",
-          "from": "De",
-          "to": "Para",
-          "reason": "Motivo",
-          "eventAt": "Evento em {time}"
-        },
-        "diagnostics": {
-          "toggleDiagnostics": "Alternar diagnósticos",
-          "processState": "Estado do processo",
-          "lastData": "Últimos dados",
-          "restartCount": "Reinícios",
-          "connection": "Conexão",
-          "stateErrorHistory": "Histórico de estados e erros"
-        },
-        "connectionStatus": {
-          "stable": "Estável",
-          "degraded": "Degradada",
-          "failed": "Falhou",
-          "unknown": "Desconhecido"
-        }
+        "speciesLoadFailed": "Falha ao carregar lista de espécies. Por favor, tente novamente."
       }
     },
     "integration": {
@@ -3138,6 +2795,628 @@
         }
       }
     },
+    "audio": {
+      "loading": "Carregando dispositivos de áudio...",
+      "tabs": {
+        "soundCard": "Placa de Som",
+        "streams": "Fluxos",
+        "processing": "Processamento",
+        "recording": "Gravação",
+        "retention": "Retenção"
+      },
+      "emptyStates": {
+        "soundCard": {
+          "title": "Nenhuma placa de som detectada",
+          "description": "Nenhum dispositivo de entrada de áudio local foi encontrado neste sistema. Isso é normal para implantações de contêiner ou servidor sem interface gráfica.",
+          "errorTitle": "Erro ao carregar dispositivos",
+          "hintsTitle": "Você pode:",
+          "hints": {
+            "container": "Isso é normal para implantações de contêiner/sem interface gráfica",
+            "streams": "Configure fluxos de rede na aba Fluxos em vez disso",
+            "usb": "Conecte um microfone USB e atualize a lista"
+          },
+          "refresh": "Atualizar dispositivos",
+          "retry": "Tentar novamente"
+        },
+        "streams": {
+          "title": "Nenhum fluxo configurado",
+          "description": "Adicione fluxos de áudio RTSP ou de rede de câmeras IP, servidores de microfone ou outras fontes de streaming.",
+          "hintsTitle": "Começando:",
+          "hints": {
+            "rtsp": "Digite URLs RTSP no formato: rtsp://ip:porta/stream",
+            "multiple": "Você pode adicionar vários fluxos para diferentes locais",
+            "protocol": "Escolha TCP para confiabilidade ou UDP para menor latência"
+          }
+        }
+      },
+      "soundCard": {
+        "title": "Placa de som",
+        "description": "Configure o dispositivo de entrada de áudio local",
+        "audioSourceLabel": "Fonte de áudio (requer reinicialização da aplicação para entrar em vigor)",
+        "audioSourceHelp": "Selecione o dispositivo de entrada de áudio para detecção de sons de pássaros. As alterações requerem reinicialização da aplicação para entrar em vigor.",
+        "noSoundCardCapture": "Sem captura de placa de som",
+        "empty": {
+          "title": "Nenhuma placa de som detectada",
+          "description": "Nenhum dispositivo de entrada de áudio local foi encontrado neste sistema. Isso é normal para implantações de contêiner ou servidor sem interface gráfica.",
+          "hintsTitle": "Você pode:",
+          "hintStream": "Configure fluxos de rede na aba Fluxos",
+          "hintUsb": "Conecte um microfone USB e atualize a lista",
+          "goToStreams": "Ir para Fluxos",
+          "refresh": "Atualizar dispositivos"
+        }
+      },
+      "noSources": {
+        "warning": "Nenhuma fonte de áudio configurada",
+        "description": "BirdNET-Go precisa de uma entrada de áudio para detectar pássaros. Por favor, configure pelo menos uma fonte na aba Placa de Som ou Fluxos."
+      },
+      "soundCards": {
+        "summary": "{count} fonte(s) de placa de som",
+        "addSource": "Adicionar Placa de Som",
+        "nameLabel": "Nome da Fonte",
+        "namePlaceholder": "ex. Microfone do Jardim da Frente",
+        "nameHelp": "Um nome descritivo para esta fonte de áudio",
+        "deviceLabel": "Dispositivo de Áudio",
+        "devicePlaceholder": "Selecionar um dispositivo de áudio",
+        "gainLabel": "Ganho (dB)",
+        "gainHelp": "Ajuste de ganho de entrada de áudio (-40 a +40 dB)",
+        "sampleRateLabel": "Taxa de amostragem",
+        "sampleRateUnverified": "As taxas suportadas não puderam ser verificadas para este dispositivo",
+        "sampleRateProbing": "Detectando taxas suportadas...",
+        "sampleRateExclusive": "Taxas acima de 48 kHz usam acesso exclusivo ao dispositivo no Linux, impedindo que outras aplicações compartilhem a placa de som",
+        "modelLabel": "Modelos de deteção",
+        "modelHelp": "Selecionar modelos de IA para esta fonte de áudio",
+        "deleteConfirm": "Remover esta fonte de placa de som?",
+        "emptyState": {
+          "title": "Nenhuma Fonte de Placa de Som Configurada",
+          "description": "Adicione uma fonte de placa de som para começar a capturar áudio para detecção de pássaros.",
+          "hintsTitle": "Primeiros Passos",
+          "hints": {
+            "device": "Selecione entre os dispositivos de entrada de áudio disponíveis no seu sistema",
+            "multiple": "Pode configurar várias placas de som para diferentes localizações",
+            "model": "Cada fonte pode usar um modelo de detecção diferente (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Padrão)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Deteção de morcegos"
+        },
+        "errors": {
+          "nameRequired": "O nome da fonte é obrigatório",
+          "deviceRequired": "O dispositivo de áudio é obrigatório",
+          "duplicateName": "Já existe uma fonte com este nome",
+          "duplicateDevice": "Este dispositivo já está configurado"
+        },
+        "compatibility": {
+          "minSampleRate": "Requer pelo menos {rate}kHz de taxa de amostragem",
+          "recommendedSampleRate": "{rate}kHz recomendado para melhores resultados",
+          "atLeastOneModel": "Pelo menos um modelo deve ser selecionado"
+        }
+      },
+      "audioCapture": {
+        "title": "Captura de áudio",
+        "description": "Definir fonte de captura de áudio, placa de som ou fluxo RTSP",
+        "soundCardSource": "Fonte da placa de som",
+        "audioSourceLabel": "Fonte de áudio (requer reinicialização da aplicação)",
+        "audioSourceHelp": "Selecione o dispositivo de entrada de áudio para detecção de sons de pássaros. As alterações requerem reinicialização da aplicação para entrar em vigor.",
+        "noSoundCardCapture": "Sem captura de placa de som",
+        "noDeviceSelected": "Nenhum dispositivo de áudio selecionado",
+        "refreshDevices": "Atualizar",
+        "rtspSource": "Fonte RTSP",
+        "rtspTransportLabel": "Protocolo de transporte RTSP",
+        "rtspTransportHelp": "TCP é mais confiável, mas pode ter maior latência. UDP é mais rápido, mas pode apresentar perda de pacotes em redes com problemas.",
+        "rtspUrlsLabel": "URLs de fluxo RTSP",
+        "rtspUrlsHelp": "Digite uma ou mais URLs de fluxo RTSP para fontes de áudio de rede. Formato: rtsp://ip:porta/fluxo. Nota: As credenciais de autenticação devem ser configuradas separadamente nas configurações do servidor RTSP para segurança.",
+        "deviceSelected": "Placa de som selecionada e pronta para captura",
+        "availableDevices": "Dispositivos de áudio disponíveis",
+        "active": "Ativo",
+        "streamsConfigured": "{count} fluxo(s) configurado(s)"
+      },
+      "quietHours": {
+        "title": "Horas silenciosas",
+        "sectionTitle": "Horas silenciosas",
+        "sectionDescription": "Pausar a captura de áudio durante janelas de tempo configuradas para reduzir o uso de CPU quando as aves provavelmente não estão ativas.",
+        "modeLabel": "Modo de agendamento",
+        "modeFixed": "Horários fixos",
+        "modeSolar": "Nascer/Pôr do sol",
+        "startTime": "Hora de início",
+        "endTime": "Hora de fim",
+        "startEvent": "Evento de início",
+        "endEvent": "Evento de fim",
+        "offsetMinutes": "Deslocamento (min)",
+        "sunrise": "Nascer do sol",
+        "sunset": "Pôr do sol",
+        "fixedHint": "A captura é pausada diariamente entre as horas de início e fim. Janelas noturnas (por exemplo, 22:00 às 06:00) são suportadas.",
+        "solarHint": "Os horários são calculados a partir do nascer/pôr do sol na sua localização configurada. Use deslocamentos negativos para antes do evento, positivos para depois.",
+        "badge": "Silêncio",
+        "enabledBadge": "Horas silenciosas habilitadas para este fluxo"
+      },
+      "rtspStreams": {
+        "title": "Configuração de Fluxos de Áudio",
+        "description": "Configure fluxos de áudio de rede para captura de áudio remota. Suporta protocolos RTSP, HTTP, HLS, RTMP e UDP.",
+        "noStreamsConfigured": "Nenhum fluxo configurado"
+      },
+      "streams": {
+        "streamLabel": "Transmissão",
+        "nameLabel": "Nome do Stream",
+        "enabled": "Ativada",
+        "disabled": "Desativada",
+        "namePlaceholder": "ex. Comedouro do Jardim",
+        "nameHelp": "Um nome descritivo para identificar este stream de áudio",
+        "urlLabel": "URL do Stream",
+        "urlHelp": "Digite a URL do stream com credenciais opcionais (ex. rtsp://host:porta/caminho). Use variáveis de ambiente para credenciais.",
+        "typeLabel": "Tipo de Stream",
+        "typeHelp": "Protocolo do stream - detectado automaticamente da URL",
+        "transportLabel": "Protocolo",
+        "summary": "{count} stream(s) configurado(s)",
+        "healthy": "saudável",
+        "unhealthy": "com falha",
+        "unknown": "desconhecido",
+        "refresh": "Atualizar",
+        "addStream": "Adicionar Stream",
+        "deleteConfirm": "Remover este stream?",
+        "restartCount": "Reiniciado {count} vez(es)",
+        "healthLoadError": "Falha ao carregar status do stream",
+        "status": {
+          "connected": "Conectado",
+          "connecting": "Conectando",
+          "error": "Erro",
+          "idle": "Inativo",
+          "suppressed": "Horas silenciosas",
+          "unknown": "Desconhecido"
+        },
+        "emptyState": {
+          "title": "Nenhum Stream Configurado",
+          "description": "Adicione streams de áudio de câmeras IP, servidores Icecast ou outras fontes de rede.",
+          "hintsTitle": "Primeiros Passos",
+          "hints": {
+            "rtsp": "Suporta streams RTSP, HTTP, HLS, RTMP e UDP/RTP",
+            "credentials": "Credenciais podem ser incluídas na URL ou usar variáveis de ambiente",
+            "protocol": "TCP é mais confiável para RTSP, UDP tem menor latência"
+          }
+        },
+        "errors": {
+          "nameRequired": "Nome do stream é obrigatório",
+          "duplicateName": "Já existe um stream com este nome",
+          "urlRequired": "URL do stream é obrigatória",
+          "invalidUrl": "Formato de URL de stream inválido",
+          "duplicate": "Esta URL de stream já existe"
+        },
+        "timeline": {
+          "error": "Erro",
+          "noHistory": "Nenhum histórico de estados ou erros disponível.",
+          "stateChange": "Mudança de estado",
+          "host": "Host",
+          "troubleshooting": "Solução de problemas",
+          "from": "De",
+          "to": "Para",
+          "reason": "Motivo",
+          "eventAt": "Evento em {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Alternar diagnósticos",
+          "processState": "Estado do processo",
+          "lastData": "Últimos dados",
+          "restartCount": "Reinícios",
+          "connection": "Conexão",
+          "stateErrorHistory": "Histórico de estados e erros"
+        },
+        "connectionStatus": {
+          "stable": "Estável",
+          "degraded": "Degradada",
+          "failed": "Falhou",
+          "unknown": "Desconhecido"
+        }
+      },
+      "audioFilters": {
+        "title": "Filtros de áudio",
+        "description": "Configurar filtros de áudio padrão aplicados a todas as fontes. Ajustes de EQ por fonte estão disponíveis nas configurações de cada placa de som.",
+        "enableEqualizer": "Ativar equalizador de áudio",
+        "enableEqualizerHelp": "Aplicar filtragem de frequência para melhorar a detecção de cantos de pássaros, reduzindo ruídos e frequências indesejadas.",
+        "filterType": "Tipo de filtro",
+        "newFilterType": "Novo tipo de filtro",
+        "selectFilterType": "Selecionar tipo de filtro",
+        "addFilter": "Adicionar filtro",
+        "remove": "Remover",
+        "frequencyResponse": "Resposta de frequência",
+        "cutoffFrequency": "Frequência de corte",
+        "cutoffFrequencyHelp": "Frequência na qual o filtro começa a atenuar sinais. Os cantos de pássaros normalmente variam de 1 a 10 kHz.",
+        "qFactor": "Fator Q",
+        "qFactorHelp": "O fator de qualidade controla a nitidez do filtro. Valores mais baixos (0,1-1) criam inclinações mais suaves, valores mais altos (1-10) criam cortes mais acentuados.",
+        "gain": "Ganho",
+        "gainHelp": "Nível de amplificação ou atenuação em decibéis (dB).",
+        "attenuation": "Atenuação",
+        "attenuationHelp": "Taxa de atenuação do filtro. Valores mais altos fornecem atenuação mais acentuada de frequências filtradas.",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
+        },
+        "filterHelp": "Adicione vários filtros para moldar a resposta de frequência para detecção ideal de pássaros em seu ambiente.",
+        "graph": {
+          "flatResponse": "Resposta plana (Sem filtros aplicados)",
+          "frequency": "Frequência (Hz)",
+          "gain": "Ganho (dB)"
+        }
+      },
+      "soundLevelMonitoring": {
+        "title": "Monitoramento do nível sonoro",
+        "description": "Monitorar e relatar níveis sonoros ambientais",
+        "enable": "Ativar monitoramento do nível sonoro",
+        "enableHelp": "Rastreie os níveis de ruído ambiente para entender seu ambiente de gravação e correlacionar com padrões de atividade de pássaros.",
+        "disabled": "Monitoramento do nível sonoro está desativado",
+        "intervalLabel": "Intervalo de medição (segundos)",
+        "intervalHelp": "Com que frequência medir e relatar os níveis sonoros. Valores mais baixos fornecem dados mais granulares, mas usam mais recursos. Mínimo 5 segundos, recomendado 60 segundos.",
+        "dataOutputTitle": "Saída de dados do nível sonoro",
+        "dataOutputDescription": "Quando ativado, as medições do nível sonoro são publicadas via:",
+        "mqttTopic": "Tópico MQTT:",
+        "sseEndpoint": "Endpoint SSE:",
+        "prometheusMetrics": "Métricas Prometheus:"
+      },
+      "clipSettings": {
+        "title": "Configurações de clipes",
+        "description": "Configurar captura e processamento de clipes de áudio para chamados de pássaros identificados"
+      },
+      "clipRecording": {
+        "title": "Configurações de Gravação de Clipes",
+        "description": "Configurar captura, formato e opções de armazenamento de clipes de áudio para chamados detectados.",
+        "enable": "Ativar gravação de clipes",
+        "enableHelp": "Salvar clipes de áudio de chamados de pássaros detectados para revisão, compartilhamento ou criação de conjuntos de dados personalizados.",
+        "disabled": "A gravação de clipes está desativada",
+        "captureSettings": "Configurações de captura",
+        "lengthLabel": "Duração da captura",
+        "lengthHelp": "Duração do áudio a ser capturado para cada detecção (10-60 segundos). Clipes mais longos fornecem mais contexto, mas usam mais armazenamento.",
+        "preCaptureLabel": "Buffer pré-detecção",
+        "preCaptureHelp": "Segundos de áudio a incluir antes da detecção do pássaro (0-{max} segundos). Garante que o canto completo do pássaro seja capturado desde o início.",
+        "gainLabel": "Ganho de áudio",
+        "gainHelp": "Amplificação de áudio para clipes salvos em decibéis (0 a 20 dB). Torna os clipes de áudio salvos mais altos para facilitar a audição. Não afeta a detecção. 0 dB significa sem amplificação.",
+        "normalization": "Normalização de áudio",
+        "normalizationEnable": "Ativar normalização de volume",
+        "normalizationHelp": "Ajustar automaticamente os níveis de áudio para o padrão de transmissão EBU R128 para volume de reprodução consistente em todos os clipes.",
+        "normalizationDisabled": "Normalização de áudio está desativada",
+        "targetLUFSLabel": "Volume alvo (LUFS)",
+        "targetLUFSHelp": "Alvo de volume integrado em LUFS (Unidades de Volume relativas à Escala Completa). -23 LUFS é o padrão de transmissão EBU R128. Intervalo: -40 a -10 LUFS.",
+        "loudnessRangeLabel": "Intervalo de volume (LU)",
+        "loudnessRangeHelp": "Variação máxima de volume dentro do clipe (0-20 LU). Valores mais baixos criam volume mais consistente, mas podem reduzir a dinâmica.",
+        "truePeakLabel": "Limite de pico verdadeiro (dBTP)",
+        "truePeakHelp": "Nível máximo de pico verdadeiro para evitar distorção digital (-10 a 0 dBTP). -2 dBTP fornece margem segura para a maioria dos sistemas de reprodução.",
+        "normalizationNote": "Padrão EBU R128",
+        "normalizationNoteDescription": "A normalização de áudio segue o padrão de transmissão EBU R128, garantindo níveis de reprodução consistentes em diferentes dispositivos e evitando distorção.",
+        "fileSettings": "Configurações de arquivo",
+        "pathLabel": "Pasta de Clipes",
+        "pathHelp": "Diretório onde os clipes de áudio serão salvos. Caminhos relativos são do diretório da aplicação. Exemplo: 'clips/' ou '/var/audio/birds/'",
+        "typeLabel": "Formato de Áudio",
+        "typeHelp": "Formato de áudio para clipes salvos. WAV e FLAC são sem perdas (melhor qualidade, arquivos maiores). MP3, AAC e Opus são com perdas (arquivos menores, pequena perda de qualidade).",
+        "bitrateLabel": "Taxa de bits",
+        "bitrateHelp": "Taxa de bits de compressão de áudio para formatos com perdas. Intervalo: {min}-{max} kbps. Valores mais altos fornecem melhor qualidade, mas arquivos maiores.",
+        "losslessNote": "Formatos sem perdas preservam a qualidade de áudio original sem artefatos de compressão.",
+        "disabledInfo": "Ative a gravação de clipes acima para configurar as definições de clipes, formato de arquivo e opções de armazenamento."
+      },
+      "extendedCapture": {
+        "title": "Captura estendida",
+        "description": "Grava clipes de áudio mais longos quando uma espécie canta repetidamente, produzindo uma única gravação combinada em vez de muitos clipes curtos.",
+        "ramWarning": "A captura estendida requer RAM adicional para buffers de áudio. Não recomendado para dispositivos com 512 MB de RAM ou menos (ex.: Raspberry Pi Zero).",
+        "enable": "Ativar captura estendida",
+        "enableHelp": "Quando ativada, as deteções repetidas das espécies configuradas são combinadas numa única gravação mais longa.",
+        "maxDurationLabel": "Duração máxima",
+        "maxDurationHelp": "Comprimento máximo de um clipe de captura estendida. A gravação cresce à medida que as deteções continuam, até este limite.",
+        "speciesListLabel": "Espécies de captura estendida",
+        "addSpeciesLabel": "Adicionar espécie",
+        "addSpeciesHelp": "Espécies que acionam a captura estendida. Suporta nomes comuns, nomes científicos e correspondência ao nível do género (ex.: \"Strix\" inclui todas as corujas Strix).",
+        "addSpeciesButton": "Adicionar",
+        "disabled": "A captura estendida está desativada"
+      },
+      "fileSettings": {
+        "title": "Configurações de Arquivo",
+        "description": "Configurar local de armazenamento e formato de áudio para clipes salvos.",
+        "pathLabel": "Pasta de Clipes",
+        "pathHelp": "Diretório onde os clipes de áudio serão salvos. Caminhos relativos são do diretório da aplicação. Exemplo: 'clips/' ou '/var/audio/birds/'",
+        "typeLabel": "Formato de Áudio",
+        "typeHelp": "Formato de áudio para clipes salvos. WAV e FLAC são sem perdas (melhor qualidade, arquivos maiores). MP3, AAC e Opus são com perdas (arquivos menores, pequena perda de qualidade).",
+        "bitrateLabel": "Taxa de bits",
+        "bitrateHelp": "Taxa de bits de compressão de áudio para formatos com perdas. Intervalo: {min}-{max} kbps. Valores mais altos fornecem melhor qualidade, mas arquivos maiores.",
+        "losslessNote": "Formatos sem perdas preservam a qualidade de áudio original sem artefatos de compressão."
+      },
+      "audioNormalization": {
+        "title": "Normalização de Áudio",
+        "description": "Ajustar níveis de áudio para volume de reprodução consistente em todos os clipes.",
+        "enable": "Ativar Normalização de Volume",
+        "enableHelp": "Ajustar automaticamente os níveis de áudio para o padrão de transmissão EBU R128 para volume de reprodução consistente em todos os clipes.",
+        "disabled": "A normalização de áudio está desativada",
+        "requiresRecording": "Ative a gravação de clipes na aba Gravação para usar a normalização de áudio.",
+        "targetLUFSLabel": "Volume Alvo (LUFS)",
+        "targetLUFSHelp": "Alvo de volume integrado em LUFS (Unidades de Volume relativas à Escala Completa). -23 LUFS é o padrão de transmissão EBU R128. Intervalo: -40 a -10 LUFS.",
+        "loudnessRangeLabel": "Intervalo de Volume (LU)",
+        "loudnessRangeHelp": "Variação máxima de volume dentro do clipe (0-20 LU). Valores mais baixos criam volume mais consistente, mas podem reduzir a dinâmica.",
+        "truePeakLabel": "Limite de Pico Verdadeiro (dBTP)",
+        "truePeakHelp": "Nível máximo de pico verdadeiro para evitar distorção digital (-10 a 0 dBTP). -2 dBTP fornece margem segura para a maioria dos sistemas de reprodução.",
+        "noteTitle": "Padrão EBU R128",
+        "noteDescription": "A normalização de áudio segue o padrão de transmissão EBU R128, garantindo níveis de reprodução consistentes em diferentes dispositivos e evitando distorção."
+      },
+      "audioClipRetention": {
+        "title": "Retenção de clipes de áudio",
+        "description": "Configurar limpeza de clipes de áudio",
+        "policyLabel": "Política de retenção",
+        "policyHelp": "Escolha como os clipes de áudio são excluídos automaticamente. Nenhuma: manter todos os clipes. Idade: excluir clipes mais antigos do que o especificado. Uso: excluir clipes mais antigos quando o uso do disco exceder o limite.",
+        "maxAgeLabel": "Idade máxima",
+        "maxAgeHelp": "Excluir clipes de áudio mais antigos do que esta duração. Formato: número seguido de unidade (h=horas, d=dias, w=semanas, m=meses). Exemplos: '7d' para 7 dias, '4w' para 4 semanas.",
+        "maxUsageLabel": "Uso máximo do disco",
+        "maxUsageHelp": "Excluir os clipes mais antigos quando o diretório de áudio usar mais do que esta porcentagem do espaço disponível em disco.",
+        "minClipsLabel": "Clipes mínimos por espécie",
+        "minClipsHelp": "Sempre manter pelo menos este número de clipes para cada espécie de pássaro, independentemente da idade ou uso do disco. Ajuda a preservar gravações raras.",
+        "keepSpectrograms": "Manter imagens de espectrograma",
+        "keepSpectrogramsHelp": "Manter imagens de espectrograma mesmo quando os clipes de áudio forem excluídos. Espectrogramas usam menos espaço e fornecem referência visual.",
+        "policies": {
+          "none": "Nenhuma",
+          "age": "Idade",
+          "usage": "Uso"
+        },
+        "noRetentionTitle": "Todos os clipes retidos",
+        "noRetentionDescription": "Os clipes de áudio serão mantidos indefinidamente. Monitore o uso do disco para evitar problemas de armazenamento.",
+        "ageRetentionTitle": "Limpeza baseada em idade",
+        "ageRetentionDescription": "Clipes mais antigos que a idade especificada serão automaticamente excluídos, preservando o número mínimo por espécie.",
+        "usageRetentionTitle": "Limpeza baseada em uso",
+        "usageRetentionDescription": "Quando o uso do disco exceder o limiar, os clipes mais antigos serão excluídos até que o uso esteja dentro dos limites."
+      },
+      "formats": {
+        "wav": "WAV",
+        "flac": "FLAC",
+        "aac": "AAC",
+        "opus": "Opus",
+        "mp3": "MP3"
+      },
+      "transport": {
+        "tcp": "TCP",
+        "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Filtro passa-baixa",
+        "highpass": "Filtro passa-alta",
+        "bandpass": "Filtro passa-banda",
+        "bandstop": "Filtro rejeita-banda"
+      },
+      "errors": {
+        "devicesLoadFailed": "Falha ao carregar dispositivos de áudio. Por favor, verifique as permissões do sistema.",
+        "invalidBitrate": "Valor de taxa de bits inválido",
+        "invalidRetentionPolicy": "Política de retenção inválida"
+      }
+    },
+    "security": {
+      "pageLabel": "Configurações de segurança",
+      "baseUrlLabel": "URL Base",
+      "baseUrlHelp": "URL externa completa para configurações de proxy reverso. Quando definida, esta URL é usada como está para notificações e redirecionamentos OAuth, ignorando as configurações de Host e AutoTLS.",
+      "baseUrlValidation": "Por favor, insira uma URL válida começando com http:// ou https:// e incluindo um nome de host",
+      "hostLabel": "Endereço do host",
+      "hostHelp": "O nome de host público ou endereço IP do seu servidor (ex. birdnet.example.com). Necessário para login OAuth e certificados TLS. Se estiver atrás de um proxy reverso, use a URL base.",
+      "allowSubnetBypassLabel": "Permitir acesso da sub-rede para contornar autenticação",
+      "allowedSubnetsLabel": "Sub-redes permitidas",
+      "allowedSubnetsHelp": "Intervalos de rede permitidos para contornar o login (notação CIDR, lista separada por vírgulas)",
+      "securityWarningTitle": "Aviso de segurança:",
+      "subnetWarningText": "Dispositivos dessas sub-redes terão acesso irrestrito. Inclua apenas redes internas confiáveis.",
+      "httpsSettingsTitle": "Configurações HTTPS",
+      "httpsSettingsDescription": "Acesso seguro com criptografia SSL/TLS",
+      "basicAuthTitle": "Autenticação básica",
+      "basicAuthDescription": "Acesso seguro com uma senha simples",
+      "serverConfiguration": {
+        "title": "Configuração do servidor",
+        "description": "Configurar HTTPS e configurações SSL/TLS",
+        "autoTlsLabel": "Gerenciamento automático de certificado SSL (AutoTLS)",
+        "autoTlsRequirements": {
+          "title": "Requisitos do AutoTLS:",
+          "domainRequired": "Um nome de domínio registrado é obrigatório",
+          "domainPointing": "O domínio deve apontar para o IP público deste servidor",
+          "portsAccessible": "As portas 80 e 443 devem estar acessíveis pela internet"
+        }
+      },
+      "basicAuthentication": {
+        "title": "Autenticação básica",
+        "description": "Acesso seguro com uma senha simples",
+        "enableLabel": "Ativar autenticação por senha",
+        "disabled": "Autenticação por senha está desativada",
+        "passwordLabel": "Senha",
+        "passwordHelpText": "Limitar acesso às configurações com uma senha."
+      },
+      "oauth": {
+        "title": "Autenticação externa",
+        "description": "Entrar com um provedor de identidade externo ou OIDC",
+        "form": {
+          "editTitle": "Editar provedor OAuth",
+          "addTitle": "Adicionar provedor OAuth",
+          "providerLabel": "Provedor",
+          "providerHelpText": "Selecione o provedor OAuth a configurar",
+          "cancelButton": "Cancelar",
+          "saveButton": "Salvar"
+        },
+        "providers": {
+          "title": "Provedores configurados",
+          "addButton": "Adicionar provedor",
+          "enableToggle": "Alternar estado do provedor",
+          "editButton": "Editar configurações do provedor",
+          "deleteButton": "Excluir provedor",
+          "deleteConfirm": "Tem certeza de que deseja excluir o provedor OAuth {provider}?"
+        },
+        "hostRequiredWarning": "O endereço do host ou a URL base não está configurado",
+        "hostRequiredWarningDescription": "O login OAuth requer que um endereço de host ou URL base seja definido na aba Configuração do servidor. Sem isso, os provedores OAuth não podem criar URLs de callback e o login falhará.",
+        "redirectUriNotConfigured": "Não configurado - defina o endereço do host ou a URL base na aba Configuração do servidor",
+        "noProviders": "Nenhum provedor OAuth configurado",
+        "noProvidersDescription": "Adicione um provedor para habilitar o login com Google, GitHub, Microsoft, LINE, Kakao ou um provedor OIDC personalizado.",
+        "enableProviderLabel": "Habilitar este provedor",
+        "getCredentialsLabel": "Obtenha suas credenciais de {provider}",
+        "redirectUriTitle": "URI de redirecionamento:",
+        "clientIdLabel": "ID do cliente",
+        "clientIdHelpText": "O ID do cliente OAuth 2.0 do console de desenvolvedor do seu provedor",
+        "clientSecretLabel": "Segredo do cliente",
+        "clientSecretHelpText": "O segredo do cliente OAuth 2.0 do console de desenvolvedor do seu provedor",
+        "userIdLabel": "ID do usuário (opcional)",
+        "userIdHelpText": "Restringir acesso a uma conta de usuário específica por e-mail ou ID",
+        "google": {
+          "title": "OAuth do Google",
+          "enableLabel": "Permitir login OAuth2 via Google",
+          "redirectUriTitle": "URI de redirecionamento para o Console do Google Cloud:",
+          "getCredentialsLabel": "Obtenha suas credenciais do Console do Google Cloud",
+          "clientIdLabel": "ID do cliente",
+          "clientIdHelpText": "O ID do cliente OAuth 2.0 obtido do Console do Google Cloud ao configurar as credenciais OAuth.",
+          "clientSecretLabel": "Segredo do cliente",
+          "clientSecretHelpText": "O segredo do cliente OAuth 2.0 obtido do Console do Google Cloud ao configurar as credenciais OAuth.",
+          "userIdLabel": "ID do usuário"
+        },
+        "github": {
+          "title": "OAuth do GitHub",
+          "enableLabel": "Permitir login OAuth2 via GitHub",
+          "redirectUriTitle": "URI de redirecionamento para Configurações de desenvolvedor do GitHub:",
+          "getCredentialsLabel": "Obtenha suas credenciais das Configurações de desenvolvedor do GitHub",
+          "clientIdLabel": "ID do cliente",
+          "clientIdHelpText": "O ID do cliente OAuth 2.0 obtido das Configurações de desenvolvedor do GitHub ao configurar as credenciais OAuth.",
+          "clientSecretLabel": "Segredo do cliente",
+          "clientSecretHelpText": "O segredo do cliente OAuth 2.0 obtido das Configurações de desenvolvedor do GitHub ao configurar as credenciais OAuth.",
+          "userIdLabel": "ID do usuário"
+        },
+        "microsoft": {
+          "title": "Conta Microsoft",
+          "enableLabel": "Permitir login OAuth2 via conta Microsoft",
+          "redirectUriTitle": "URI de redirecionamento para registro de aplicativo do Azure:",
+          "getCredentialsLabel": "Obter credenciais no Portal do Azure",
+          "clientIdLabel": "ID do cliente",
+          "clientIdHelpText": "O ID do aplicativo (cliente) obtido do registro de aplicativo do Azure.",
+          "clientSecretLabel": "Segredo do cliente",
+          "clientSecretHelpText": "O valor do segredo do cliente obtido do registro de aplicativo do Azure.",
+          "userIdLabel": "ID do usuário"
+        },
+        "line": {
+          "title": "LINE Login",
+          "enableLabel": "Permitir login OAuth2 via LINE",
+          "redirectUriTitle": "URI de redirecionamento para LINE Developers Console:",
+          "getCredentialsLabel": "Obter credenciais no LINE Developers Console",
+          "clientIdLabel": "Channel ID",
+          "clientIdHelpText": "O Channel ID obtido do LINE Developers Console ao configurar o LINE Login.",
+          "clientSecretLabel": "Channel Secret",
+          "clientSecretHelpText": "O Channel Secret obtido do LINE Developers Console ao configurar o LINE Login.",
+          "userIdLabel": "ID do usuário"
+        },
+        "kakao": {
+          "title": "Kakao Login",
+          "enableLabel": "Permitir login OAuth2 via Kakao",
+          "redirectUriTitle": "URI de redirecionamento para Kakao Developers Console:",
+          "getCredentialsLabel": "Obter credenciais no Kakao Developers Console",
+          "clientIdLabel": "REST API Key",
+          "clientIdHelpText": "O REST API Key obtido do Kakao Developers Console ao configurar o Kakao Login.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "O Client Secret obtido do Kakao Developers Console ao configurar o Kakao Login.",
+          "userIdLabel": "ID do usuário"
+        },
+        "oidc": {
+          "title": "Fornecedor OIDC",
+          "enableLabel": "Ativar autenticação OIDC",
+          "redirectUriTitle": "URI de Redirecionamento",
+          "getCredentialsLabel": "Configurar no seu Fornecedor de Identidade",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "O client ID do seu fornecedor de identidade OIDC",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "O client secret do seu fornecedor de identidade OIDC",
+          "userIdLabel": "Utilizador Permitido (email ou sub claim)",
+          "issuerUrlLabel": "URL do Emissor",
+          "issuerUrlHelpText": "O URL do emissor do seu fornecedor de identidade OpenID Connect (ex: https://auth.example.com)",
+          "issuerUrlPlaceholder": "https://auth.example.com",
+          "issuerUrlRequired": "O URL do emissor é obrigatório para fornecedores OIDC",
+          "issuerUrlInvalid": "O URL do emissor deve ser um URL HTTP ou HTTPS válido",
+          "scopesLabel": "Scopes",
+          "scopesHelpText": "Lista de scopes OIDC separados por vírgula (padrão: openid, profile, email)",
+          "scopesPlaceholder": "openid, profile, email"
+        }
+      },
+      "bypassAuthentication": {
+        "title": "Bypass de autenticação",
+        "description": "Permitir acesso sem autenticação de redes confiáveis",
+        "disabled": "Bypass de sub-rede está desativado"
+      },
+      "exceptions": {
+        "title": "Exceções"
+      },
+      "publicAccess": {
+        "title": "Acesso Público",
+        "description": "Permitir que funcionalidades específicas fiquem acessíveis sem autenticação.",
+        "liveAudioLabel": "Permitir reprodução pública de áudio em direto",
+        "liveAudioHelp": "Quando ativado, qualquer pessoa pode ouvir transmissões de áudio em direto sem iniciar sessão. Definições e eliminação continuam a requerer autenticação.",
+        "warningText": "Ativar funcionalidades de acesso público expõe-nas a qualquer pessoa que consiga aceder a este servidor. Ative apenas se confia no seu ambiente de rede."
+      },
+      "placeholders": {
+        "baseUrl": "https://birdnet.example.com:5500",
+        "host": "Por exemplo, localhost:8080 ou example.domain.com",
+        "allowedUsers": "Digite um ou mais e-mails de usuários permitidos",
+        "subnet": "Digite uma sub-rede CIDR (ex. 192.168.1.0/24)"
+      },
+      "terminal": {
+        "title": "Terminal do Navegador",
+        "enableLabel": "Ativar terminal do navegador",
+        "enableHelpText": "Permite acesso ao shell do sistema host a partir de qualquer sessão de navegador autenticada. Desative quando não estiver em uso.",
+        "securityWarning": "Ativar o terminal do navegador fornece acesso direto ao shell do sistema operacional host. Qualquer pessoa com credenciais válidas pode executar comandos arbitrários. Ative este recurso apenas em redes confiáveis. Desative-o quando não for necessário.",
+        "confirmEnable": "Tem certeza que deseja ativar o terminal do navegador? Isso concede acesso ao shell do sistema host. Faça isso apenas em redes confiáveis."
+      },
+      "tls": {
+        "title": "TLS / HTTPS",
+        "description": "Configurar encriptação TLS/HTTPS para ligações seguras",
+        "modeLabel": "Modo TLS",
+        "modeNone": "Nenhum (HTTP)",
+        "modeLetsEncrypt": "Let's Encrypt",
+        "modeManual": "Certificado Manual",
+        "modeSelfSigned": "Auto-assinado",
+        "modeNoneDescription": "HTTP simples sem encriptação",
+        "modeAutoTLSDescription": "Certificado automático via Let's Encrypt",
+        "modeManualDescription": "Carregar o seu próprio certificado e chave",
+        "modeSelfSignedDescription": "Gerar um certificado auto-assinado",
+        "portLabel": "Porta HTTPS",
+        "portHelpText": "Porta para ligações HTTPS (padrão: 8443)",
+        "redirectToHttps": "Redirecionar HTTP para HTTPS",
+        "autoTLSRequirements": "Requer que as portas 80 e 443 estejam acessíveis. No Linux, o processo necessita de root ou capacidade CAP_NET_BIND_SERVICE.",
+        "validityLabel": "Validade do Certificado",
+        "validityHelpText": "Durante quanto tempo o certificado deve ser válido",
+        "validity365d": "1 ano",
+        "validity730d": "2 anos",
+        "generateButton": "Gerar Certificado",
+        "regenerateButton": "Regenerar Certificado",
+        "generating": "A gerar...",
+        "certificateLabel": "Certificado (PEM)",
+        "privateKeyLabel": "Chave Privada (PEM)",
+        "caCertificateLabel": "Certificado CA (PEM, opcional)",
+        "uploadButton": "Carregar Certificado",
+        "uploading": "A carregar...",
+        "browseFile": "Procurar...",
+        "plaintextWarning": "Aviso: A sua chave privada será transmitida em texto simples via HTTP. Carregue certificados apenas quando ligado através de uma rede de confiança ou localhost.",
+        "certificateInstalled": "Certificado Instalado",
+        "subject": "Sujeito",
+        "issuer": "Emissor",
+        "validFrom": "Válido Desde",
+        "validUntil": "Válido Até",
+        "daysRemaining": "Dias Restantes",
+        "sans": "Nomes Alternativos do Sujeito",
+        "fingerprint": "Impressão Digital",
+        "expiryWarning": "O certificado está prestes a expirar",
+        "loading": "A carregar informações do certificado...",
+        "loadError": "Falha ao carregar informações do certificado",
+        "generateSuccess": "Certificado auto-assinado gerado com sucesso",
+        "generateError": "Falha ao gerar certificado",
+        "uploadSuccess": "Certificado carregado com sucesso",
+        "uploadError": "Falha ao carregar certificado",
+        "deleteSuccess": "Certificado removido com sucesso",
+        "deleteError": "Falha ao eliminar certificado",
+        "removeCertificate": "Remover Certificado",
+        "deleteConfirm": "Tem a certeza de que pretende remover o certificado TLS instalado? O modo TLS será reposto para Nenhum.",
+        "restartRequired": "As alterações TLS requerem um reinício do servidor para terem efeito.",
+        "noCertificate": "Nenhum certificado instalado",
+        "validity1825d": "5 anos",
+        "autoTLSHostRequired": "É necessário um nome de host para o Let's Encrypt. Introduza o seu nome de domínio público no campo Host acima.",
+        "autoTLSNoIP": "O Let's Encrypt requer um nome de domínio, não um endereço IP. Introduza um domínio público como birds.example.com.",
+        "autoTLSNeedsFQDN": "O Let's Encrypt requer um nome de domínio totalmente qualificado (ex: birds.example.com), não um nome de host simples.",
+        "autoTLSNoLocalhost": "O Let's Encrypt não pode emitir certificados para localhost.",
+        "autoTLSPrivateTLD": "O Let's Encrypt não pode emitir certificados para domínios privados ({tld} não é resolúvel publicamente).",
+        "downloadCertificate": "Transferir Certificado",
+        "downloadCertificateHelp": "Instale este certificado no armazenamento de confiança do seu sistema operativo para evitar avisos de segurança do navegador.",
+        "fileReadError": "Falha ao ler o ficheiro selecionado"
+      }
+    },
     "species": {
       "pageLabel": "Configurações de espécies",
       "saveError": "Falha ao guardar a configuração de \"{species}\". Tente novamente.",
@@ -3290,6 +3569,8 @@
         "parameters": {
           "label": "Parâmetros",
           "helpText": "Esses valores serão passados para seu comando na ordem listada",
+          "placeholder": "Clique nos botões abaixo para adicionar parâmetros ou escreva manualmente",
+          "tooltip": "Use os botões abaixo ou escreva diretamente (separados por vírgula)",
           "availableTitle": "Parâmetros disponíveis",
           "buttons": {
             "commonName": "NomeComum",
@@ -3298,9 +3579,7 @@
             "time": "Hora",
             "source": "Fonte",
             "clearParameters": "Limpar parâmetros"
-          },
-          "placeholder": "Clique nos botões abaixo para adicionar parâmetros ou escreva manualmente",
-          "tooltip": "Use os botões abaixo ou escreva diretamente (separados por vírgula)"
+          }
         },
         "executeDefaults": {
           "label": "Também executar ações padrão (armazenamento em banco de dados, notificações, etc.)",
@@ -3309,6 +3588,7 @@
       },
       "add": "Adicionar",
       "remove": "Remover",
+      "suggestions": "Sugestões de espécies",
       "addSpeciesToInclude": "Adicionar espécies para incluir",
       "addSpeciesToIncludeLabel": "Adicionar novas espécies para incluir",
       "addSpeciesToExclude": "Adicionar espécies para excluir",
@@ -3451,252 +3731,12 @@
         "resetAllError": "Falha ao redefinir limiares",
         "expand": "Mostrar histórico de eventos",
         "collapse": "Ocultar histórico de eventos"
-      },
-      "suggestions": "Sugestões de espécies"
-    },
-    "security": {
-      "pageLabel": "Configurações de segurança",
-      "serverConfiguration": {
-        "title": "Configuração do servidor",
-        "description": "Configurar HTTPS e configurações SSL/TLS",
-        "autoTlsLabel": "Gerenciamento automático de certificado SSL (AutoTLS)",
-        "autoTlsRequirements": {
-          "title": "Requisitos do AutoTLS:",
-          "domainRequired": "Um nome de domínio registrado é obrigatório",
-          "domainPointing": "O domínio deve apontar para o IP público deste servidor",
-          "portsAccessible": "As portas 80 e 443 devem estar acessíveis pela internet"
-        }
-      },
-      "basicAuthentication": {
-        "title": "Autenticação básica",
-        "description": "Acesso seguro com uma senha simples",
-        "enableLabel": "Ativar autenticação por senha",
-        "passwordLabel": "Senha",
-        "passwordHelpText": "Limitar acesso às configurações com uma senha.",
-        "disabled": "Autenticação por senha está desativada"
-      },
-      "oauth": {
-        "title": "Autenticação externa",
-        "description": "Entrar com um provedor de identidade externo ou OIDC",
-        "form": {
-          "editTitle": "Editar provedor OAuth",
-          "addTitle": "Adicionar provedor OAuth",
-          "providerLabel": "Provedor",
-          "providerHelpText": "Selecione o provedor OAuth a configurar",
-          "cancelButton": "Cancelar",
-          "saveButton": "Salvar"
-        },
-        "providers": {
-          "title": "Provedores configurados",
-          "addButton": "Adicionar provedor",
-          "enableToggle": "Alternar estado do provedor",
-          "editButton": "Editar configurações do provedor",
-          "deleteButton": "Excluir provedor",
-          "deleteConfirm": "Tem certeza de que deseja excluir o provedor OAuth {provider}?"
-        },
-        "hostRequiredWarning": "O endereço do host ou a URL base não está configurado",
-        "hostRequiredWarningDescription": "O login OAuth requer que um endereço de host ou URL base seja definido na aba Configuração do servidor. Sem isso, os provedores OAuth não podem criar URLs de callback e o login falhará.",
-        "redirectUriNotConfigured": "Não configurado - defina o endereço do host ou a URL base na aba Configuração do servidor",
-        "noProviders": "Nenhum provedor OAuth configurado",
-        "noProvidersDescription": "Adicione um provedor para habilitar o login com Google, GitHub, Microsoft, LINE, Kakao ou um provedor OIDC personalizado.",
-        "enableProviderLabel": "Habilitar este provedor",
-        "getCredentialsLabel": "Obtenha suas credenciais de {provider}",
-        "redirectUriTitle": "URI de redirecionamento:",
-        "clientIdLabel": "ID do cliente",
-        "clientIdHelpText": "O ID do cliente OAuth 2.0 do console de desenvolvedor do seu provedor",
-        "clientSecretLabel": "Segredo do cliente",
-        "clientSecretHelpText": "O segredo do cliente OAuth 2.0 do console de desenvolvedor do seu provedor",
-        "userIdLabel": "ID do usuário (opcional)",
-        "userIdHelpText": "Restringir acesso a uma conta de usuário específica por e-mail ou ID",
-        "google": {
-          "title": "OAuth do Google",
-          "enableLabel": "Permitir login OAuth2 via Google",
-          "redirectUriTitle": "URI de redirecionamento para o Console do Google Cloud:",
-          "getCredentialsLabel": "Obtenha suas credenciais do Console do Google Cloud",
-          "clientIdLabel": "ID do cliente",
-          "clientIdHelpText": "O ID do cliente OAuth 2.0 obtido do Console do Google Cloud ao configurar as credenciais OAuth.",
-          "clientSecretLabel": "Segredo do cliente",
-          "clientSecretHelpText": "O segredo do cliente OAuth 2.0 obtido do Console do Google Cloud ao configurar as credenciais OAuth.",
-          "userIdLabel": "ID do usuário"
-        },
-        "github": {
-          "title": "OAuth do GitHub",
-          "enableLabel": "Permitir login OAuth2 via GitHub",
-          "redirectUriTitle": "URI de redirecionamento para Configurações de desenvolvedor do GitHub:",
-          "getCredentialsLabel": "Obtenha suas credenciais das Configurações de desenvolvedor do GitHub",
-          "clientIdLabel": "ID do cliente",
-          "clientIdHelpText": "O ID do cliente OAuth 2.0 obtido das Configurações de desenvolvedor do GitHub ao configurar as credenciais OAuth.",
-          "clientSecretLabel": "Segredo do cliente",
-          "clientSecretHelpText": "O segredo do cliente OAuth 2.0 obtido das Configurações de desenvolvedor do GitHub ao configurar as credenciais OAuth.",
-          "userIdLabel": "ID do usuário"
-        },
-        "microsoft": {
-          "title": "Conta Microsoft",
-          "enableLabel": "Permitir login OAuth2 via conta Microsoft",
-          "redirectUriTitle": "URI de redirecionamento para registro de aplicativo do Azure:",
-          "getCredentialsLabel": "Obter credenciais no Portal do Azure",
-          "clientIdLabel": "ID do cliente",
-          "clientIdHelpText": "O ID do aplicativo (cliente) obtido do registro de aplicativo do Azure.",
-          "clientSecretLabel": "Segredo do cliente",
-          "clientSecretHelpText": "O valor do segredo do cliente obtido do registro de aplicativo do Azure.",
-          "userIdLabel": "ID do usuário"
-        },
-        "line": {
-          "title": "LINE Login",
-          "enableLabel": "Permitir login OAuth2 via LINE",
-          "redirectUriTitle": "URI de redirecionamento para LINE Developers Console:",
-          "getCredentialsLabel": "Obter credenciais no LINE Developers Console",
-          "clientIdLabel": "Channel ID",
-          "clientIdHelpText": "O Channel ID obtido do LINE Developers Console ao configurar o LINE Login.",
-          "clientSecretLabel": "Channel Secret",
-          "clientSecretHelpText": "O Channel Secret obtido do LINE Developers Console ao configurar o LINE Login.",
-          "userIdLabel": "ID do usuário"
-        },
-        "kakao": {
-          "title": "Kakao Login",
-          "enableLabel": "Permitir login OAuth2 via Kakao",
-          "redirectUriTitle": "URI de redirecionamento para Kakao Developers Console:",
-          "getCredentialsLabel": "Obter credenciais no Kakao Developers Console",
-          "clientIdLabel": "REST API Key",
-          "clientIdHelpText": "O REST API Key obtido do Kakao Developers Console ao configurar o Kakao Login.",
-          "clientSecretLabel": "Client Secret",
-          "clientSecretHelpText": "O Client Secret obtido do Kakao Developers Console ao configurar o Kakao Login.",
-          "userIdLabel": "ID do usuário"
-        },
-        "oidc": {
-          "title": "Fornecedor OIDC",
-          "enableLabel": "Ativar autenticação OIDC",
-          "redirectUriTitle": "URI de Redirecionamento",
-          "getCredentialsLabel": "Configurar no seu Fornecedor de Identidade",
-          "clientIdLabel": "Client ID",
-          "clientIdHelpText": "O client ID do seu fornecedor de identidade OIDC",
-          "clientSecretLabel": "Client Secret",
-          "clientSecretHelpText": "O client secret do seu fornecedor de identidade OIDC",
-          "userIdLabel": "Utilizador Permitido (email ou sub claim)",
-          "issuerUrlLabel": "URL do Emissor",
-          "issuerUrlHelpText": "O URL do emissor do seu fornecedor de identidade OpenID Connect (ex: https://auth.example.com)",
-          "issuerUrlPlaceholder": "https://auth.example.com",
-          "issuerUrlRequired": "O URL do emissor é obrigatório para fornecedores OIDC",
-          "issuerUrlInvalid": "O URL do emissor deve ser um URL HTTP ou HTTPS válido",
-          "scopesLabel": "Scopes",
-          "scopesHelpText": "Lista de scopes OIDC separados por vírgula (padrão: openid, profile, email)",
-          "scopesPlaceholder": "openid, profile, email"
-        }
-      },
-      "bypassAuthentication": {
-        "title": "Bypass de autenticação",
-        "description": "Permitir acesso sem autenticação de redes confiáveis",
-        "disabled": "Bypass de sub-rede está desativado"
-      },
-      "exceptions": {
-        "title": "Exceções"
-      },
-      "publicAccess": {
-        "title": "Acesso Público",
-        "description": "Permitir que funcionalidades específicas fiquem acessíveis sem autenticação.",
-        "liveAudioLabel": "Permitir reprodução pública de áudio em direto",
-        "liveAudioHelp": "Quando ativado, qualquer pessoa pode ouvir transmissões de áudio em direto sem iniciar sessão. Definições e eliminação continuam a requerer autenticação.",
-        "warningText": "Ativar funcionalidades de acesso público expõe-nas a qualquer pessoa que consiga aceder a este servidor. Ative apenas se confia no seu ambiente de rede."
-      },
-      "baseUrlLabel": "URL Base",
-      "baseUrlHelp": "URL externa completa para configurações de proxy reverso. Quando definida, esta URL é usada como está para notificações e redirecionamentos OAuth, ignorando as configurações de Host e AutoTLS.",
-      "baseUrlValidation": "Por favor, insira uma URL válida começando com http:// ou https:// e incluindo um nome de host",
-      "hostLabel": "Endereço do host",
-      "hostHelp": "O nome de host público ou endereço IP do seu servidor (ex. birdnet.example.com). Necessário para login OAuth e certificados TLS. Se estiver atrás de um proxy reverso, use a URL base.",
-      "allowSubnetBypassLabel": "Permitir acesso da sub-rede para contornar autenticação",
-      "allowedSubnetsLabel": "Sub-redes permitidas",
-      "allowedSubnetsHelp": "Intervalos de rede permitidos para contornar o login (notação CIDR, lista separada por vírgulas)",
-      "securityWarningTitle": "Aviso de segurança:",
-      "subnetWarningText": "Dispositivos dessas sub-redes terão acesso irrestrito. Inclua apenas redes internas confiáveis.",
-      "httpsSettingsTitle": "Configurações HTTPS",
-      "httpsSettingsDescription": "Acesso seguro com criptografia SSL/TLS",
-      "basicAuthTitle": "Autenticação básica",
-      "basicAuthDescription": "Acesso seguro com uma senha simples",
-      "placeholders": {
-        "baseUrl": "https://birdnet.example.com:5500",
-        "host": "Por exemplo, localhost:8080 ou example.domain.com",
-        "allowedUsers": "Digite um ou mais e-mails de usuários permitidos",
-        "subnet": "Digite uma sub-rede CIDR (ex. 192.168.1.0/24)"
-      },
-      "terminal": {
-        "title": "Terminal do Navegador",
-        "enableLabel": "Ativar terminal do navegador",
-        "enableHelpText": "Permite acesso ao shell do sistema host a partir de qualquer sessão de navegador autenticada. Desative quando não estiver em uso.",
-        "securityWarning": "Ativar o terminal do navegador fornece acesso direto ao shell do sistema operacional host. Qualquer pessoa com credenciais válidas pode executar comandos arbitrários. Ative este recurso apenas em redes confiáveis. Desative-o quando não for necessário.",
-        "confirmEnable": "Tem certeza que deseja ativar o terminal do navegador? Isso concede acesso ao shell do sistema host. Faça isso apenas em redes confiáveis."
-      },
-      "tls": {
-        "title": "TLS / HTTPS",
-        "description": "Configurar encriptação TLS/HTTPS para ligações seguras",
-        "modeLabel": "Modo TLS",
-        "modeNone": "Nenhum (HTTP)",
-        "modeLetsEncrypt": "Let's Encrypt",
-        "modeManual": "Certificado Manual",
-        "modeSelfSigned": "Auto-assinado",
-        "modeNoneDescription": "HTTP simples sem encriptação",
-        "modeAutoTLSDescription": "Certificado automático via Let's Encrypt",
-        "modeManualDescription": "Carregar o seu próprio certificado e chave",
-        "modeSelfSignedDescription": "Gerar um certificado auto-assinado",
-        "portLabel": "Porta HTTPS",
-        "portHelpText": "Porta para ligações HTTPS (padrão: 8443)",
-        "redirectToHttps": "Redirecionar HTTP para HTTPS",
-        "autoTLSRequirements": "Requer que as portas 80 e 443 estejam acessíveis. No Linux, o processo necessita de root ou capacidade CAP_NET_BIND_SERVICE.",
-        "validityLabel": "Validade do Certificado",
-        "validityHelpText": "Durante quanto tempo o certificado deve ser válido",
-        "validity365d": "1 ano",
-        "validity730d": "2 anos",
-        "generateButton": "Gerar Certificado",
-        "regenerateButton": "Regenerar Certificado",
-        "generating": "A gerar...",
-        "certificateLabel": "Certificado (PEM)",
-        "privateKeyLabel": "Chave Privada (PEM)",
-        "caCertificateLabel": "Certificado CA (PEM, opcional)",
-        "uploadButton": "Carregar Certificado",
-        "uploading": "A carregar...",
-        "browseFile": "Procurar...",
-        "plaintextWarning": "Aviso: A sua chave privada será transmitida em texto simples via HTTP. Carregue certificados apenas quando ligado através de uma rede de confiança ou localhost.",
-        "certificateInstalled": "Certificado Instalado",
-        "subject": "Sujeito",
-        "issuer": "Emissor",
-        "validFrom": "Válido Desde",
-        "validUntil": "Válido Até",
-        "daysRemaining": "Dias Restantes",
-        "sans": "Nomes Alternativos do Sujeito",
-        "fingerprint": "Impressão Digital",
-        "expiryWarning": "O certificado está prestes a expirar",
-        "loading": "A carregar informações do certificado...",
-        "loadError": "Falha ao carregar informações do certificado",
-        "generateSuccess": "Certificado auto-assinado gerado com sucesso",
-        "generateError": "Falha ao gerar certificado",
-        "uploadSuccess": "Certificado carregado com sucesso",
-        "uploadError": "Falha ao carregar certificado",
-        "deleteSuccess": "Certificado removido com sucesso",
-        "deleteError": "Falha ao eliminar certificado",
-        "removeCertificate": "Remover Certificado",
-        "deleteConfirm": "Tem a certeza de que pretende remover o certificado TLS instalado? O modo TLS será reposto para Nenhum.",
-        "restartRequired": "As alterações TLS requerem um reinício do servidor para terem efeito.",
-        "noCertificate": "Nenhum certificado instalado",
-        "validity1825d": "5 anos",
-        "autoTLSHostRequired": "É necessário um nome de host para o Let's Encrypt. Introduza o seu nome de domínio público no campo Host acima.",
-        "autoTLSNoIP": "O Let's Encrypt requer um nome de domínio, não um endereço IP. Introduza um domínio público como birds.example.com.",
-        "autoTLSNeedsFQDN": "O Let's Encrypt requer um nome de domínio totalmente qualificado (ex: birds.example.com), não um nome de host simples.",
-        "autoTLSNoLocalhost": "O Let's Encrypt não pode emitir certificados para localhost.",
-        "autoTLSPrivateTLD": "O Let's Encrypt não pode emitir certificados para domínios privados ({tld} não é resolúvel publicamente).",
-        "downloadCertificate": "Transferir Certificado",
-        "downloadCertificateHelp": "Instale este certificado no armazenamento de confiança do seu sistema operativo para evitar avisos de segurança do navegador.",
-        "fileReadError": "Falha ao ler o ficheiro selecionado"
       }
     },
     "database": {
       "sqlitePlaceholder": "Digite o caminho do banco de dados SQLite",
       "mysqlHostPlaceholder": "Digite o host MySQL",
       "mysqlUsernamePlaceholder": "Digite o nome de usuário MySQL"
-    },
-    "tabs": {
-      "navigation": "Abas de navegação das configurações",
-      "hasChanges": "Esta aba tem alterações não salvas",
-      "setAsDefault": "Definir como padrão",
-      "defaultIndicator": "Fonte de entrada padrão"
     },
     "alerts": {
       "sections": {
@@ -3905,12 +3945,6 @@
           "description": "Notifica quando um envio para BirdWeather falha"
         }
       }
-    },
-    "errors": {
-      "loadFailed": "Falha ao carregar as configurações",
-      "saveFailed": "Falha ao salvar as configurações",
-      "databaseStatsFailed": "Falha ao carregar as estatísticas do banco de dados",
-      "csvDownloadFailed": "Falha ao baixar o CSV"
     },
     "appearance": {
       "colorScheme": "Esquema de cores",
@@ -4265,30 +4299,6 @@
       "download": "Baixar"
     }
   },
-  "terminal": {
-    "title": "Terminal",
-    "disabled": "Terminal desativado",
-    "disabledDescription": "O terminal do navegador está desativado. Ative-o em Configurações → Segurança para usar este recurso.",
-    "connected": "Conectado",
-    "disconnected": "Desconectado",
-    "connecting": "Conectando...",
-    "connectionError": "Falha na conexão",
-    "connectionClosed": "Conexão fechada",
-    "securityWarning": "Aviso: Este terminal fornece acesso direto ao shell do sistema host. Ative apenas em redes confiáveis.",
-    "copySelection": "Copiar seleção",
-    "expand": "Expandir",
-    "collapse": "Recolher",
-    "fullscreen": "Tela cheia",
-    "exitFullscreen": "Sair da tela cheia",
-    "colorTheme": "Tema de cores",
-    "themeDark": "Escuro",
-    "themeLight": "Claro",
-    "themeHighContrast": "Alto contraste",
-    "detach": "Abrir em nova janela",
-    "detached": "Terminal separado",
-    "detachedDescription": "O terminal está em execução numa janela separada. Feche essa janela para devolvê-lo aqui.",
-    "reattach": "Reconectar"
-  },
   "quietHours": {
     "indicator": {
       "tooltip": "Horas silenciosas ativas — {count} fonte(s) pausada(s)"
@@ -4537,7 +4547,14 @@
       },
       "batFalsePositiveFilter": {
         "label": "Filtro de falsos positivos de morcegos",
-        "helpText": "Requer múltiplas confirmações de uma deteção de morcego dentro de uma janela deslizante antes de a aceitar. Níveis mais altos requerem mais confirmações, reduzindo falsos positivos. O modelo de morcegos usa uma sobreposição fixa de 50%, portanto não é necessário ajuste de sobreposição."
+        "helpText": "Requer múltiplas confirmações de uma deteção de morcego dentro de uma janela deslizante antes de a aceitar. Níveis mais altos requerem mais confirmações, reduzindo falsos positivos. O modelo de morcegos usa uma sobreposição fixa de 50%, portanto não é necessário ajuste de sobreposição.",
+        "levels": {
+          "off": "Sem filtragem; aceita qualquer deteção de morcego imediatamente.",
+          "moderate": "Bom equilíbrio para a maioria das configurações. Reduz significativamente os falsos positivos.",
+          "strict": "Filtragem máxima para a maior precisão."
+        },
+        "detectionCount": "{count} confirmações necessárias. {description}",
+        "warningOff": "Sem filtragem existe uma alta probabilidade de falsos positivos. Ativar a filtragem melhora significativamente a precisão."
       },
       "locale": {
         "label": "Idioma das espécies",
@@ -4631,6 +4648,17 @@
       "reinstalling": "Reinstalando...",
       "reinstallComplete": "Ficheiros verificados com sucesso",
       "geomodelBadge": "Inclui BirdNET v3.0 geomodel"
+    },
+    "bird": {
+      "title": "Deteção de aves",
+      "description": "Configure o limiar de confiança, o idioma das espécies e a filtragem de falsos positivos para classificadores de aves."
+    },
+    "bat": {
+      "title": "Deteção de morcegos",
+      "description": "Configure o limiar, o agendamento e a filtragem de falsos positivos para classificadores de morcegos."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "O limiar dinâmico aplica-se apenas a classificadores de aves."
     }
   },
   "restart": {

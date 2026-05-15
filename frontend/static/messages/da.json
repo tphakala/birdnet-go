@@ -1783,7 +1783,17 @@
           },
           "hardwareNote": "Streng og Maksimum niveauer kræver højere overlapindstillinger og flere CPU-ressourcer. RPi 4 eller bedre hardware er påkrævet til disse niveauer.",
           "overlapAdjusted": "Overlapindstilling automatisk justeret til {overlap}s for at opfylde filterkravene",
-          "overlapReduced": "Overlapindstilling reduceret til {overlap}s for at matche filterniveauet"
+          "overlapReduced": "Overlapindstilling reduceret til {overlap}s for at matche filterniveauet",
+          "levelNames": {
+            "off": "Fra",
+            "lenient": "Mild",
+            "moderate": "Moderat",
+            "balanced": "Balanceret",
+            "strict": "Streng",
+            "maximum": "Maksimum",
+            "unknown": "Ukendt"
+          },
+          "warningOff": "Uden filtrering accepteres enhver registrering over konfidenstærsklen med det samme. Dette giver typisk flere falske positiver om dagen. Selv mild filtrering forbedrer resultatkvaliteten markant."
         },
         "rangeFilter": {
           "title": "Områdefilter",
@@ -4537,7 +4547,14 @@
       },
       "batFalsePositiveFilter": {
         "label": "Flagermus falsk-positiv filter",
-        "helpText": "Kræver flere bekræftelser af en flagermusdetektion inden for et glidende vindue, før den accepteres. Højere niveauer kræver flere bekræftelser, hvilket reducerer falske positiver. Flagermusmodellen bruger et fast 50% overlap, så ingen overlapjustering er nødvendig."
+        "helpText": "Kræver flere bekræftelser af en flagermusdetektion inden for et glidende vindue, før den accepteres. Højere niveauer kræver flere bekræftelser, hvilket reducerer falske positiver. Flagermusmodellen bruger et fast 50% overlap, så ingen overlapjustering er nødvendig.",
+        "levels": {
+          "off": "Ingen filtrering; accepterer enhver flagermusregistrering med det samme.",
+          "moderate": "God balance for de fleste opsætninger. Reducerer falske positiver markant.",
+          "strict": "Maksimal filtrering for højeste nøjagtighed."
+        },
+        "detectionCount": "{count} bekræftelser krævet. {description}",
+        "warningOff": "Uden filtrering er der stor sandsynlighed for falske positiver. Aktivering af filtrering forbedrer nøjagtigheden markant."
       },
       "locale": {
         "label": "Artssprog",
@@ -4631,6 +4648,17 @@
       "reinstalling": "Geninstallerer...",
       "reinstallComplete": "Filer verificeret succesfuldt",
       "geomodelBadge": "Inkluderer BirdNET v3.0 geomodel"
+    },
+    "bird": {
+      "title": "Fugleregistrering",
+      "description": "Konfigurer konfidenstærskel, artssprog og filtrering af falske positiver for fugleklassifikatorer."
+    },
+    "bat": {
+      "title": "Flagermusregistrering",
+      "description": "Konfigurer tærskel, planlægning og filtrering af falske positiver for flagermusklassifikatorer."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dynamisk tærskel gælder kun for fugleklassifikatorer."
     }
   },
   "restart": {

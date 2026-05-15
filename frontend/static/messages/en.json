@@ -1783,7 +1783,17 @@
           },
           "hardwareNote": "Strict and Maximum levels require higher overlap settings and more CPU resources. RPi 4 or better hardware is required for these levels.",
           "overlapAdjusted": "Overlap setting automatically adjusted to {overlap}s to meet filter requirements",
-          "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level"
+          "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level",
+          "levelNames": {
+            "off": "Off",
+            "lenient": "Lenient",
+            "moderate": "Moderate",
+            "balanced": "Balanced",
+            "strict": "Strict",
+            "maximum": "Maximum",
+            "unknown": "Unknown"
+          },
+          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
         },
         "rangeFilter": {
           "title": "Range Filter",
@@ -4537,7 +4547,14 @@
       },
       "batFalsePositiveFilter": {
         "label": "Bat False Positive Filter",
-        "helpText": "Requires multiple confirmations of a bat detection within a sliding window before accepting it. Higher levels require more confirmations, reducing false positives. The bat model uses a fixed 50% overlap, so no overlap adjustment is needed."
+        "helpText": "Requires multiple confirmations of a bat detection within a sliding window before accepting it. Higher levels require more confirmations, reducing false positives. The bat model uses a fixed 50% overlap, so no overlap adjustment is needed.",
+        "levels": {
+          "off": "No filtering; accepts any bat detection immediately.",
+          "moderate": "Good balance for most setups. Significantly reduces false positives.",
+          "strict": "Maximum filtering for highest accuracy."
+        },
+        "detectionCount": "{count} confirmations required. {description}",
+        "warningOff": "Without filtering there is a high probability of false positives. Enabling filtering significantly improves accuracy."
       },
       "locale": {
         "label": "Species Language",
@@ -4631,6 +4648,17 @@
       "reinstalling": "Reinstalling...",
       "reinstallComplete": "Files verified successfully",
       "geomodelBadge": "Includes BirdNET v3.0 geomodel"
+    },
+    "bird": {
+      "title": "Bird Detection",
+      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+    },
+    "bat": {
+      "title": "Bat Detection",
+      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
     }
   },
   "restart": {

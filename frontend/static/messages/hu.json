@@ -1783,7 +1783,17 @@
           },
           "hardwareNote": "A szigorú és maximális szintek nagyobb átfedési beállításokat és több CPU erőforrást igényelnek. Ezekhez a szintekhez RPi 4 vagy jobb hardver szükséges.",
           "overlapAdjusted": "Az átfedési beállítás automatikusan {overlap}s-re állítva a szűrési követelményeknek megfelelően",
-          "overlapReduced": "Az átfedési beállítás {overlap}s-re csökkentve a szűrési szintnek megfelelően"
+          "overlapReduced": "Az átfedési beállítás {overlap}s-re csökkentve a szűrési szintnek megfelelően",
+          "levelNames": {
+            "off": "Ki",
+            "lenient": "Enyhe",
+            "moderate": "Mérsékelt",
+            "balanced": "Kiegyensúlyozott",
+            "strict": "Szigorú",
+            "maximum": "Maximum",
+            "unknown": "Ismeretlen"
+          },
+          "warningOff": "Szűrés nélkül a megbízhatósági küszöb feletti minden észlelés azonnal elfogadásra kerül. Ez általában naponta több hamis pozitívat eredményez. Már az enyhe szűrés is jelentősen javítja az eredmények minőségét."
         },
         "rangeFilter": {
           "title": "Tartomány szűrő",
@@ -4537,7 +4547,14 @@
       },
       "batFalsePositiveFilter": {
         "label": "Denevér hamis pozitív szűrő",
-        "helpText": "Több megerősítést igényel egy denevérészleléshez egy csúszó ablakon belül, mielőtt elfogadná. A magasabb szintek több megerősítést igényelnek, csökkentve a hamis pozitívokat. A denevérmodell fix 50%-os átfedést használ, így átfedés-beállítás nem szükséges."
+        "helpText": "Több megerősítést igényel egy denevérészleléshez egy csúszó ablakon belül, mielőtt elfogadná. A magasabb szintek több megerősítést igényelnek, csökkentve a hamis pozitívokat. A denevérmodell fix 50%-os átfedést használ, így átfedés-beállítás nem szükséges.",
+        "levels": {
+          "off": "Nincs szűrés; bármely denevérészlelés azonnal elfogadásra kerül.",
+          "moderate": "Jó egyensúly a legtöbb beállításhoz. Jelentősen csökkenti a hamis pozitívakat.",
+          "strict": "Maximális szűrés a legmagasabb pontosság érdekében."
+        },
+        "detectionCount": "{count} megerősítés szükséges. {description}",
+        "warningOff": "Szűrés nélkül nagy a hamis pozitívak valószínűsége. A szűrés engedélyezése jelentősen javítja a pontosságot."
       },
       "locale": {
         "label": "Fajok nyelve",
@@ -4631,6 +4648,17 @@
       "reinstalling": "Újratelepítés...",
       "reinstallComplete": "Fájlok sikeresen ellenőrizve",
       "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt"
+    },
+    "bird": {
+      "title": "Madárészlelés",
+      "description": "Állítsa be a megbízhatósági küszöböt, a fajnyelvet és a hamis pozitív szűrést a madárosztályozókhoz."
+    },
+    "bat": {
+      "title": "Denevérészlelés",
+      "description": "Állítsa be a küszöböt, az ütemezést és a hamis pozitív szűrést a denevérosztályozókhoz."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "A dinamikus küszöb csak a madárosztályozókra vonatkozik."
     }
   },
   "restart": {

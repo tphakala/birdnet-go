@@ -1783,7 +1783,17 @@
           },
           "hardwareNote": "Stingrie un Maksimālie līmeņi prasa augstākus pārklāšanās iestatījumus un vairāk CPU resursu. Šiem līmeņiem nepieciešams RPi 4 vai labāka aparatūra.",
           "overlapAdjusted": "Pārklāšanās iestatījums automātiski pielāgots uz {overlap}s, lai izpildītu filtra prasības",
-          "overlapReduced": "Pārklāšanās iestatījums samazināts uz {overlap}s, lai atbilstu filtra līmenim"
+          "overlapReduced": "Pārklāšanās iestatījums samazināts uz {overlap}s, lai atbilstu filtra līmenim",
+          "levelNames": {
+            "off": "Izslēgts",
+            "lenient": "Zems",
+            "moderate": "Mērens",
+            "balanced": "Līdzsvarots",
+            "strict": "Stingrs",
+            "maximum": "Maksimums",
+            "unknown": "Nezināms"
+          },
+          "warningOff": "Bez filtrēšanas jebkura noteikšana virs ticamības sliekšņa tiek pieņemta nekavējoties. Tas parasti rada vairākus viltus pozitīvos dienā. Pat zema filtrēšana ievērojami uzlabo rezultātu kvalitāti."
         },
         "rangeFilter": {
           "title": "Areāla filtrs",
@@ -4537,7 +4547,14 @@
       },
       "batFalsePositiveFilter": {
         "label": "Sikspārņu viltus pozitīvo filtrs",
-        "helpText": "Pieprasa vairākus apstiprinājumus sikspārņu noteikšanai slīdošajā logā pirms tā pieņemšanas. Augstāki līmeņi pieprasa vairāk apstiprinājumu, samazinot viltus pozitīvos. Sikspārņu modelis izmanto fiksētu 50% pārklāšanos, tāpēc pārklāšanās pielāgošana nav nepieciešama."
+        "helpText": "Pieprasa vairākus apstiprinājumus sikspārņu noteikšanai slīdošajā logā pirms tā pieņemšanas. Augstāki līmeņi pieprasa vairāk apstiprinājumu, samazinot viltus pozitīvos. Sikspārņu modelis izmanto fiksētu 50% pārklāšanos, tāpēc pārklāšanās pielāgošana nav nepieciešama.",
+        "levels": {
+          "off": "Nav filtrēšanas; pieņem jebkuru sikspārņu noteikšanu nekavējoties.",
+          "moderate": "Labs līdzsvars lielākajai daļai iestatījumu. Ievērojami samazina viltus pozitīvos.",
+          "strict": "Maksimāla filtrēšana augstākajai precizitātei."
+        },
+        "detectionCount": "Nepieciešami {count} apstiprinājumi. {description}",
+        "warningOff": "Bez filtrēšanas ir liela viltus pozitīvo varbūtība. Filtrēšanas iespējošana ievērojami uzlabo precizitāti."
       },
       "locale": {
         "label": "Sugu valoda",
@@ -4631,6 +4648,17 @@
       "reinstalling": "Pārinstalē...",
       "reinstallComplete": "Faili veiksmīgi pārbaudīti",
       "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis"
+    },
+    "bird": {
+      "title": "Putnu noteikšana",
+      "description": "Konfigurējiet ticamības slieksni, sugu valodu un viltus pozitīvo filtrēšanu putnu klasifikatoriem."
+    },
+    "bat": {
+      "title": "Sikspārņu noteikšana",
+      "description": "Konfigurējiet slieksni, grafiku un viltus pozitīvo filtrēšanu sikspārņu klasifikatoriem."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dinamiskais slieksnis attiecas tikai uz putnu klasifikatoriem."
     }
   },
   "restart": {

@@ -1783,7 +1783,17 @@
           },
           "hardwareNote": "I livelli Rigoroso e Massimo richiedono impostazioni di sovrapposizione più alte e più risorse CPU. Hardware RPi 4 o migliore è richiesto per questi livelli.",
           "overlapAdjusted": "Impostazione sovrapposizione regolata automaticamente a {overlap}s per soddisfare i requisiti del filtro",
-          "overlapReduced": "Impostazione sovrapposizione ridotta a {overlap}s per corrispondere al livello del filtro"
+          "overlapReduced": "Impostazione sovrapposizione ridotta a {overlap}s per corrispondere al livello del filtro",
+          "levelNames": {
+            "off": "Disattivato",
+            "lenient": "Basso",
+            "moderate": "Moderato",
+            "balanced": "Bilanciato",
+            "strict": "Rigoroso",
+            "maximum": "Massimo",
+            "unknown": "Sconosciuto"
+          },
+          "warningOff": "Senza filtraggio, qualsiasi rilevamento sopra la soglia di confidenza viene accettato immediatamente. Questo produce tipicamente diversi falsi positivi al giorno. Anche un filtraggio basso migliora significativamente la qualità dei risultati."
         },
         "rangeFilter": {
           "title": "Filtro Intervallo",
@@ -4537,7 +4547,14 @@
       },
       "batFalsePositiveFilter": {
         "label": "Filtro falsi positivi pipistrelli",
-        "helpText": "Richiede multiple conferme di un rilevamento di pipistrello all'interno di una finestra scorrevole prima di accettarlo. Livelli più alti richiedono più conferme, riducendo i falsi positivi. Il modello pipistrelli usa una sovrapposizione fissa del 50%, quindi non è necessario alcun aggiustamento."
+        "helpText": "Richiede multiple conferme di un rilevamento di pipistrello all'interno di una finestra scorrevole prima di accettarlo. Livelli più alti richiedono più conferme, riducendo i falsi positivi. Il modello pipistrelli usa una sovrapposizione fissa del 50%, quindi non è necessario alcun aggiustamento.",
+        "levels": {
+          "off": "Nessun filtraggio; accetta qualsiasi rilevamento di pipistrello immediatamente.",
+          "moderate": "Buon equilibrio per la maggior parte delle configurazioni. Riduce significativamente i falsi positivi.",
+          "strict": "Filtraggio massimo per la massima precisione."
+        },
+        "detectionCount": "{count} conferme richieste. {description}",
+        "warningOff": "Senza filtraggio c'è un'alta probabilità di falsi positivi. L'attivazione del filtraggio migliora significativamente la precisione."
       },
       "locale": {
         "label": "Lingua delle specie",
@@ -4631,6 +4648,17 @@
       "reinstalling": "Reinstallazione...",
       "reinstallComplete": "File verificati con successo",
       "geomodelBadge": "Include il geomodel BirdNET v3.0"
+    },
+    "bird": {
+      "title": "Rilevamento uccelli",
+      "description": "Configura la soglia di confidenza, la lingua delle specie e il filtraggio dei falsi positivi per i classificatori di uccelli."
+    },
+    "bat": {
+      "title": "Rilevamento pipistrelli",
+      "description": "Configura la soglia, la pianificazione e il filtraggio dei falsi positivi per i classificatori di pipistrelli."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "La soglia dinamica si applica solo ai classificatori di uccelli."
     }
   },
   "restart": {

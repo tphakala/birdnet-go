@@ -1741,7 +1741,17 @@
           },
           "hardwareNote": "Les niveaux Strict et Maximum nécessitent des paramètres de chevauchement plus élevés et plus de ressources CPU. Un RPi 4 ou un matériel supérieur est requis pour ces niveaux.",
           "overlapAdjusted": "Le paramètre de chevauchement a été automatiquement ajusté à {overlap}s pour répondre aux exigences du filtre",
-          "overlapReduced": "Le paramètre de chevauchement a été réduit à {overlap}s pour correspondre au niveau du filtre"
+          "overlapReduced": "Le paramètre de chevauchement a été réduit à {overlap}s pour correspondre au niveau du filtre",
+          "levelNames": {
+            "off": "Désactivé",
+            "lenient": "Faible",
+            "moderate": "Modéré",
+            "balanced": "Équilibré",
+            "strict": "Strict",
+            "maximum": "Maximum",
+            "unknown": "Inconnu"
+          },
+          "warningOff": "Sans filtrage, toute détection au-dessus du seuil de confiance est acceptée immédiatement. Cela produit typiquement plusieurs faux positifs par jour. Même un filtrage faible améliore considérablement la qualité des résultats."
         },
         "rangeFilter": {
           "title": "Filtre de portée",
@@ -4537,7 +4547,14 @@
       },
       "batFalsePositiveFilter": {
         "label": "Filtre de faux positifs chauves-souris",
-        "helpText": "Nécessite plusieurs confirmations d'une détection de chauve-souris dans une fenêtre glissante avant de l'accepter. Les niveaux supérieurs nécessitent plus de confirmations, réduisant les faux positifs. Le modèle chauve-souris utilise un chevauchement fixe de 50 %, aucun ajustement n'est donc nécessaire."
+        "helpText": "Nécessite plusieurs confirmations d'une détection de chauve-souris dans une fenêtre glissante avant de l'accepter. Les niveaux supérieurs nécessitent plus de confirmations, réduisant les faux positifs. Le modèle chauve-souris utilise un chevauchement fixe de 50 %, aucun ajustement n'est donc nécessaire.",
+        "levels": {
+          "off": "Aucun filtrage ; accepte toute détection de chauve-souris immédiatement.",
+          "moderate": "Bon équilibre pour la plupart des configurations. Réduit considérablement les faux positifs.",
+          "strict": "Filtrage maximal pour la plus grande précision."
+        },
+        "detectionCount": "{count} confirmations requises. {description}",
+        "warningOff": "Sans filtrage, la probabilité de faux positifs est élevée. L'activation du filtrage améliore considérablement la précision."
       },
       "locale": {
         "label": "Langue des espèces",
@@ -4631,6 +4648,17 @@
       "reinstalling": "Réinstallation...",
       "reinstallComplete": "Fichiers vérifiés avec succès",
       "geomodelBadge": "Inclut le BirdNET v3.0 geomodel"
+    },
+    "bird": {
+      "title": "Détection des oiseaux",
+      "description": "Configurez le seuil de confiance, la langue des espèces et le filtrage des faux positifs pour les classificateurs d'oiseaux."
+    },
+    "bat": {
+      "title": "Détection des chauves-souris",
+      "description": "Configurez le seuil, la planification et le filtrage des faux positifs pour les classificateurs de chauves-souris."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Le seuil dynamique s'applique uniquement aux classificateurs d'oiseaux."
     }
   },
   "restart": {
