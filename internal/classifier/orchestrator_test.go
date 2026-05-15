@@ -231,6 +231,54 @@ func TestOrchestrator_LoadAdditionalModels_UnknownModelSkipped(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestOrchestrator_ModelSpecFor(t *testing.T) {
+	t.Parallel()
+
+	birdnet := &mockModelInstance{
+		id:   "BirdNET_V2.4",
+		spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+	}
+	perch := &mockModelInstance{
+		id:   "Google_Perch_V2",
+		spec: ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
+	}
+
+	o := newTestOrchestrator(t, birdnet, perch)
+
+	t.Run("returns BirdNET spec", func(t *testing.T) {
+		t.Parallel()
+		spec, ok := o.ModelSpecFor("BirdNET_V2.4")
+		require.True(t, ok)
+		assert.Equal(t, 3*time.Second, spec.ClipLength)
+		assert.Equal(t, 48000, spec.SampleRate)
+	})
+
+	t.Run("returns Perch spec", func(t *testing.T) {
+		t.Parallel()
+		spec, ok := o.ModelSpecFor("Google_Perch_V2")
+		require.True(t, ok)
+		assert.Equal(t, 5*time.Second, spec.ClipLength)
+		assert.Equal(t, 32000, spec.SampleRate)
+	})
+
+	t.Run("unknown model returns false", func(t *testing.T) {
+		t.Parallel()
+		_, ok := o.ModelSpecFor("nonexistent")
+		assert.False(t, ok)
+	})
+
+	t.Run("nil instance returns false", func(t *testing.T) {
+		t.Parallel()
+		o2 := &Orchestrator{
+			models: map[string]*modelEntry{
+				"closed": {instance: nil},
+			},
+		}
+		_, ok := o2.ModelSpecFor("closed")
+		assert.False(t, ok)
+	})
+}
+
 func TestOrchestrator_ModelInfos_SkipsNilInstances(t *testing.T) {
 	t.Parallel()
 
