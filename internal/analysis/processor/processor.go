@@ -337,6 +337,31 @@ func validateAndLogFilterConfig(settings *conf.Settings) {
 	}
 }
 
+// validateAndLogBatFilterConfig validates the bat false positive filter configuration
+// and logs the effective minDetections. The bat model uses a fixed 50% overlap,
+// so there are no overlap-related warnings.
+func validateAndLogBatFilterConfig(settings *conf.Settings) {
+	if err := settings.Bat.FalsePositiveFilter.Validate(); err != nil {
+		GetLogger().Error("Invalid bat false positive filter configuration, falling back to level 0",
+			logger.Error(err),
+			logger.Int("fallback_level", 0),
+			logger.String("operation", "bat_false_positive_filter_validation"))
+		settings.Bat.FalsePositiveFilter.Level = 0
+	}
+
+	level := settings.Bat.FalsePositiveFilter.Level
+	if level == 0 {
+		return
+	}
+
+	minDetections := calculateBatMinDetections(settings)
+	GetLogger().Info("Bat false positive filter active",
+		logger.Int("level", level),
+		logger.String("level_name", getLevelName(level)),
+		logger.Int("min_detections", minDetections),
+		logger.String("operation", "bat_false_positive_filter_config"))
+}
+
 // initLogDeduplicator creates and configures the log deduplicator.
 func initLogDeduplicator(settings *conf.Settings) *LogDeduplicator {
 	healthCheckInterval := 60 * time.Second
@@ -510,6 +535,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 
 	// Validate and log false positive filter configuration
 	validateAndLogFilterConfig(settings)
+	validateAndLogBatFilterConfig(settings)
 
 	// Validate user-configured custom ExecuteCommand action paths up front
 	// so that a misconfigured command path produces a single user-facing
@@ -734,8 +760,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 
 	// Broadcast updated pending detections snapshot for "currently hearing" UI.
 	// This runs after all new detections are incorporated into pendingDetections.
-	minDet := calculateMinDetectionsFromSettings(settings)
-	snapshot := p.SnapshotVisiblePending(minDet)
+	snapshot := p.SnapshotVisiblePending()
 	p.broadcastPendingSnapshot(snapshot)
 }
 
@@ -779,7 +804,7 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 		p.handleHumanDetection(settings, item, speciesLowercase, result)
 
 		// Determine confidence threshold and check filters
-		baseThreshold := p.getBaseConfidenceThreshold(settings, commonName, scientificName)
+		baseThreshold := p.getBaseConfidenceThreshold(settings, commonName, scientificName, item.ModelID)
 
 		// Check if detection should be filtered
 		shouldSkip, _ := p.shouldFilterDetection(settings, result, commonName, scientificName, speciesLowercase, baseThreshold, item.Source.ID, item.ModelID)
@@ -1228,7 +1253,9 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 
 // getBaseConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
 // It supports lookup by both common name and scientific name for consistency with include/exclude matching.
-func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonName, scientificName string) float32 {
+// The modelID parameter selects which global threshold to use when no per-species config exists:
+// bat models use settings.Bat.Threshold, all others use settings.BirdNET.Threshold.
+func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonName, scientificName, modelID string) float32 {
 	// Check if species has a custom threshold using both common and scientific name lookup
 	if config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName); exists {
 		if settings.Debug {
@@ -1241,7 +1268,10 @@ func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonNa
 		return float32(config.Threshold)
 	}
 
-	// Fall back to global threshold
+	// Fall back to model-specific global threshold
+	if modelID == classifier.RegistryIDBat {
+		return float32(settings.Bat.Threshold)
+	}
 	return float32(settings.BirdNET.Threshold)
 }
 
@@ -1303,13 +1333,13 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 	return filepath.ToSlash(filepath.Join(year, month, filename))
 }
 
-// shouldDiscardDetection checks if a detection should be discarded based on various criteria
-func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections int) (shouldDiscard bool, reason string) {
-	settings := p.currentSettings()
-
+// shouldDiscardDetection checks if a detection should be discarded based on various criteria.
+// The caller provides a settings snapshot and the precomputed minDetections (from
+// calculateMinDetectionsForModel) to avoid redundant settings fetches and ensure
+// consistency within a single flush cycle.
+func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
-		// Add structured logging for minimum count filtering
 		GetLogger().Debug("Detection discarded due to insufficient count",
 			logger.String("species", item.Detection.Result.Species.CommonName),
 			logger.Int("count", item.Count),
@@ -1404,7 +1434,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	// Only learn for models whose max confidence exceeds the base threshold to avoid
 	// lowering thresholds based on weak signals that rode on another model's strength.
 	scientificName := item.Detection.Result.Species.ScientificName
-	baseThreshold := float64(p.getBaseConfidenceThreshold(settings, speciesName, scientificName))
+	baseThreshold := float64(p.getBaseConfidenceThreshold(settings, speciesName, scientificName, item.BestModelID))
 	for modelID, contrib := range item.ModelContributions {
 		if contrib.MaxConfidence >= baseThreshold {
 			p.LearnFromApprovedDetection(modelID, speciesName, scientificName, float32(contrib.MaxConfidence))
@@ -1556,9 +1586,12 @@ func (p *Processor) calculateMinDetections() int {
 }
 
 // flushPendingDetections processes one flush cycle, flushing eligible detections.
+// minDetections is computed per-item using the item's BestModelID so that bat
+// and bird models each apply their own false positive filter configuration.
 // Returns the count of pending and flushed detections for logging.
-func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flushedCount int) {
+func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	now := time.Now()
+	settings := p.currentSettings()
 
 	var terminalNotifs []SSEPendingDetection
 	var broadcastSnapshot []SSEPendingDetection
@@ -1573,12 +1606,10 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 			continue
 		}
 
-		// Get species name from the detection data (not the map key,
-		// since source IDs like RTSP URLs may contain colons).
-		// Lowercase to match the convention used in processDetections and dynamic thresholds.
 		speciesName := strings.ToLower(item.Detection.Result.Species.CommonName)
+		itemMinDetections := calculateMinDetectionsForModel(settings, item.BestModelID)
 
-		if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
+		if shouldDiscard, reason := p.shouldDiscardDetection(&item, settings, itemMinDetections); shouldDiscard {
 			GetLogger().Info("discarding detection",
 				logger.String("species", speciesName),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
@@ -1589,8 +1620,7 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 				logger.String("operation", "discard_detection"))
 			delete(p.pendingDetections, mapKey)
 
-			// Collect rejected notification if species was visible
-			if item.Count >= CalculateVisibilityThreshold(minDetections) {
+			if item.Count >= CalculateVisibilityThreshold(itemMinDetections) {
 				terminalNotifs = append(terminalNotifs, p.buildFlushNotification(&item, PendingStatusRejected))
 			}
 
@@ -1604,53 +1634,40 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 			logger.Bool("deadline_reached", true),
 			logger.Int("total_count", item.Count),
 			logger.Int("model_count", len(item.ModelContributions)),
-			logger.Int("required", minDetections),
+			logger.Int("required", itemMinDetections),
 			logger.String("operation", "flush_detection"))
 
 		p.processApprovedDetection(&item, speciesName)
 		delete(p.pendingDetections, mapKey)
 		flushedCount++
 
-		// Collect approved notification if species was visible
-		if item.Count >= CalculateVisibilityThreshold(minDetections) {
+		if item.Count >= CalculateVisibilityThreshold(itemMinDetections) {
 			terminalNotifs = append(terminalNotifs, p.buildFlushNotification(&item, PendingStatusApproved))
 		}
 	}
 
 	// Build snapshot while still holding the lock, then release before broadcasting.
 	if len(terminalNotifs) > 0 || flushedCount > 0 {
-		threshold := CalculateVisibilityThreshold(minDetections)
 		broadcastSnapshot = make([]SSEPendingDetection, 0, len(p.pendingDetections)+len(terminalNotifs))
 		for key := range p.pendingDetections {
 			item := p.pendingDetections[key]
+			threshold := CalculateVisibilityThreshold(calculateMinDetectionsForModel(settings, item.BestModelID))
 			if item.Count >= threshold {
 				broadcastSnapshot = append(broadcastSnapshot, p.buildPendingDTO(&item, PendingStatusActive))
 			}
 		}
 		logPendingBroadcast(len(broadcastSnapshot), len(terminalNotifs))
 		broadcastSnapshot = append(broadcastSnapshot, terminalNotifs...)
-		// Sort for stable comparison in broadcastPendingSnapshot.
 		sortPendingSnapshot(broadcastSnapshot)
 	}
 
 	p.pendingMutex.Unlock()
 
-	// Broadcast outside the lock to avoid blocking processDetections.
 	if broadcastSnapshot != nil {
 		p.broadcastPendingSnapshot(broadcastSnapshot)
 	}
 
 	return pendingCount, flushedCount
-}
-
-// logMinDetectionsChange logs when minDetections changes due to config update.
-func logMinDetectionsChange(lastValue, newValue int) {
-	if lastValue != -1 && newValue != lastValue {
-		GetLogger().Info("minDetections updated due to config change",
-			logger.Int("old_value", lastValue),
-			logger.Int("new_value", newValue),
-			logger.String("operation", "pending_flusher_config_update"))
-	}
 }
 
 // pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
@@ -1664,16 +1681,10 @@ func (p *Processor) pendingDetectionsFlusher() {
 		ticker := time.NewTicker(DefaultFlushInterval)
 		defer ticker.Stop()
 
-		lastMinDetections := -1
-
 		for {
 			select {
 			case <-ticker.C:
-				minDetections := p.calculateMinDetections()
-				logMinDetectionsChange(lastMinDetections, minDetections)
-				lastMinDetections = minDetections
-
-				pendingCount, flushedCount := p.flushPendingDetections(minDetections)
+				pendingCount, flushedCount := p.flushPendingDetections()
 
 				if pendingCount > 0 || flushedCount > 0 {
 					GetLogger().Debug("Pending detections flusher cycle",

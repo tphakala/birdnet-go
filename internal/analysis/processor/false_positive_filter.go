@@ -1,6 +1,13 @@
 // false_positive_filter.go
 package processor
 
+import (
+	"math"
+
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
+)
+
 // getMinimumOverlapForLevel returns the minimum overlap required for each filtering level.
 // Higher levels require higher overlap to generate more detections for filtering.
 //
@@ -102,6 +109,38 @@ func getRecommendedLevelForOverlap(overlap float64) (level int, overlapSufficien
 	// If we get here, overlap is too low even for Level 0
 	// This shouldn't happen since Level 0 requires 0.0 overlap
 	return 0, true
+}
+
+// calculateMinDetectionsForModel routes to the correct minDetections calculation
+// based on the model ID. Bat models use a fixed 50% overlap instead of the
+// user-configurable BirdNET overlap, and read from a separate filter config.
+func calculateMinDetectionsForModel(settings *conf.Settings, modelID string) int {
+	if modelID == classifier.RegistryIDBat {
+		return calculateBatMinDetections(settings)
+	}
+	return calculateMinDetectionsFromSettings(settings)
+}
+
+// calculateBatMinDetections computes the minimum detection count for bat models.
+// The bat model's buffer overlap is fixed at 50% (hardcoded in BufferDimensions),
+// giving a 1.5-second step for a 3-second clip. Within a 6-second reference
+// window, this yields 4 possible detections.
+func calculateBatMinDetections(settings *conf.Settings) int {
+	const chunkDurationSeconds = 3.0
+	const referenceWindowSeconds = 6.0
+	const batOverlapSeconds = 1.5 // fixed 50% of 3s clip
+	const epsilon = 1e-9
+
+	level := settings.Bat.FalsePositiveFilter.Level
+	if level == 0 {
+		return 1
+	}
+
+	segmentLength := chunkDurationSeconds - batOverlapSeconds
+	maxDetections := referenceWindowSeconds / segmentLength
+	threshold := getThresholdForLevel(level)
+	required := maxDetections*threshold - epsilon
+	return int(math.Max(1, math.Ceil(required)))
 }
 
 // getLevelDescription returns a detailed description of what each level does.

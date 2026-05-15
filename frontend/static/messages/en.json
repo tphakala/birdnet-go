@@ -4535,6 +4535,10 @@
         "label": "Post Detection Validation",
         "helpText": "When enabled, bat detections are validated by analyzing ultrasonic energy patterns in the source audio. Detections that lack bat echolocation characteristics are tagged as unlikely."
       },
+      "batFalsePositiveFilter": {
+        "label": "Bat False Positive Filter",
+        "helpText": "Requires multiple confirmations of a bat detection within a sliding window before accepting it. Higher levels require more confirmations, reducing false positives. The bat model uses a fixed 50% overlap, so no overlap adjustment is needed."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

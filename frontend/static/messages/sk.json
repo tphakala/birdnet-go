@@ -4535,6 +4535,10 @@
         "label": "Overenie po detekcii",
         "helpText": "Keď je zapnuté, detekcie netopierov sa overujú analýzou ultrazvukových energetických vzorcov v zdrojovom zvuku. Detekcie bez charakteristík echolokácie sú označené ako nepravdepodobné."
       },
+      "batFalsePositiveFilter": {
+        "label": "Filter falošne pozitívnych netopierov",
+        "helpText": "Vyžaduje viacero potvrdení detekcie netopiera v posuvnom okne pred jej prijatím. Vyššie úrovne vyžadujú viac potvrdení, čím sa znižujú falošné pozitíva. Model netopierov používa pevné 50% prekrývanie, takže úprava prekrývania nie je potrebná."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

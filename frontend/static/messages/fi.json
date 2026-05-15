@@ -4535,6 +4535,10 @@
         "label": "Tunnistuksen jälkitarkistus",
         "helpText": "Kun käytössä, lepakkotunnistukset validoidaan analysoimalla ultraäänienergiakuvioita lähdeäänitteestä. Tunnistukset, joista puuttuvat kaikuluotausominaisuudet, merkitään epätodennäköisiksi."
       },
+      "batFalsePositiveFilter": {
+        "label": "Lepakon väärien positiivisten suodatin",
+        "helpText": "Vaatii useita vahvistuksia lepakkotunnistuksesta liukuvan ikkunan sisällä ennen kuin se hyväksytään. Korkeammat tasot vaativat enemmän vahvistuksia, mikä vähentää vääriä positiivisia. Lepakkomalli käyttää kiinteää 50 % päällekkäisyyttä, joten päällekkäisyyden säätöä ei tarvita."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

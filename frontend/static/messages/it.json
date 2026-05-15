@@ -4535,6 +4535,10 @@
         "label": "Validazione post-rilevamento",
         "helpText": "Quando abilitato, i rilevamenti di pipistrelli vengono validati analizzando i pattern di energia ultrasonica nell'audio sorgente. I rilevamenti privi di caratteristiche di ecolocalizzazione vengono contrassegnati come improbabili."
       },
+      "batFalsePositiveFilter": {
+        "label": "Filtro falsi positivi pipistrelli",
+        "helpText": "Richiede multiple conferme di un rilevamento di pipistrello all'interno di una finestra scorrevole prima di accettarlo. Livelli più alti richiedono più conferme, riducendo i falsi positivi. Il modello pipistrelli usa una sovrapposizione fissa del 50%, quindi non è necessario alcun aggiustamento."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."

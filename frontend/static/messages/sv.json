@@ -4535,6 +4535,10 @@
         "label": "Validering efter detektion",
         "helpText": "När aktiverat valideras fladdermusdetektioner genom att analysera ultraljudsenergi i källljudet. Detektioner utan ekolokationsegenskaper markeras som osannolika."
       },
+      "batFalsePositiveFilter": {
+        "label": "Fladdermus falskt-positiv filter",
+        "helpText": "Kräver flera bekräftelser av en fladdermusdetektion inom ett glidande fönster innan den accepteras. Högre nivåer kräver fler bekräftelser, vilket minskar falska positiva. Fladdermusmodellen använder en fast 50% överlappning, så ingen överlappningsjustering behövs."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."
