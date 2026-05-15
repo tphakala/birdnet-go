@@ -26,8 +26,7 @@ class TranslationSync {
   sync(options: SyncOptions): boolean {
     const reference = this.loadJson(DEFAULT_LOCALE);
     if (!reference) {
-      console.error(`Failed to load reference locale ${DEFAULT_LOCALE}.json`);
-      process.exit(1);
+      throw new Error(`Failed to load reference locale ${DEFAULT_LOCALE}.json`);
     }
 
     const results: SyncResult[] = [];
@@ -116,7 +115,11 @@ class TranslationSync {
       const value = existing[key]; // eslint-disable-line security/detect-object-injection
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         const leafKeys = this.getAllLeafKeys(value as JsonObject, fullKey);
-        removedKeys.push(...leafKeys);
+        if (leafKeys.length === 0) {
+          removedKeys.push(fullKey);
+        } else {
+          removedKeys.push(...leafKeys);
+        }
       } else {
         removedKeys.push(fullKey);
       }
@@ -140,7 +143,12 @@ class TranslationSync {
     const filePath = join(this.messagesPath, `${locale}.json`);
     try {
       // eslint-disable-next-line security/detect-non-literal-fs-filename
-      return JSON.parse(readFileSync(filePath, 'utf-8')) as JsonObject;
+      const parsed: unknown = JSON.parse(readFileSync(filePath, 'utf-8'));
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        console.error(`Invalid JSON structure in ${locale}.json: expected an object`);
+        return null;
+      }
+      return parsed as JsonObject;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         console.error(`File not found: ${filePath}`);
@@ -153,13 +161,8 @@ class TranslationSync {
 
   private writeJson(locale: string, data: JsonObject): void {
     const filePath = join(this.messagesPath, `${locale}.json`);
-    try {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
-      writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
-    } catch (error) {
-      console.error(`Failed to write ${locale}.json:`, error);
-      process.exit(1);
-    }
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
   }
 
   private printSummary(results: SyncResult[], options: SyncOptions): void {
@@ -226,10 +229,12 @@ preserved. Key ordering matches en.json to reduce diff noise.
     verbose: args.includes('--verbose') || args.includes('-v'),
   };
 
-  const syncer = new TranslationSync();
-  const modified = syncer.sync(options);
-
-  if (options.check && modified) {
+  try {
+    const syncer = new TranslationSync();
+    const modified = syncer.sync(options);
+    if (options.check && modified) process.exit(1);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   }
 }

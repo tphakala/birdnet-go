@@ -60,7 +60,7 @@ echo "🔍 Running frontend pre-commit checks..."
 cd frontend || exit 1
 
 # Check i18n key sync if translation files are staged
-I18N_FILES=$(git diff --cached --name-only --diff-filter=ACM | \
+I18N_FILES=$(git diff --cached --name-only --diff-filter=ACMR | \
   grep 'frontend/static/messages/.*\.json$' || true)
 
 if [ -n "$I18N_FILES" ]; then
