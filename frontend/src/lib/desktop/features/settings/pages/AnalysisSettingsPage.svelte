@@ -743,16 +743,14 @@
     return Math.max(1, Math.ceil(required));
   }
 
-  // Bat-specific descriptions keyed by actual level value
   const BAT_FP_DESCRIPTION_KEYS: Record<number, string> = {
     0: 'analysis.detection.batFalsePositiveFilter.levels.off',
-    1: 'analysis.detection.batFalsePositiveFilter.levels.lenient',
     2: 'analysis.detection.batFalsePositiveFilter.levels.moderate',
     4: 'analysis.detection.batFalsePositiveFilter.levels.strict',
   };
 
   function getBatFalsePositiveFilterDescription(level: number): string {
-    const descKey = BAT_FP_DESCRIPTION_KEYS[level as keyof typeof BAT_FP_DESCRIPTION_KEYS];
+    const descKey = BAT_FP_DESCRIPTION_KEYS[level];
     if (!descKey) return '';
 
     const baseDescription = t(descKey);
