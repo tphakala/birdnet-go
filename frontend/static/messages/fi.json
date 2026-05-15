@@ -483,7 +483,7 @@
       "verifiedStatus": "Todennettu tila",
       "lockedStatus": "Lukittu tila",
       "timeOfDay": "Vuorokaudenaika",
-      "source": "Audio Source"
+      "source": "Äänilähde"
     },
     "advancedFilters": "Lisäsuodattimet",
     "showAdvancedFilters": "Näytä lisäsuodattimet",
@@ -506,7 +506,7 @@
       "sunset": "Auringonlasku +/- 30min"
     },
     "sourceOptions": {
-      "any": "All Sources"
+      "any": "Kaikki lähteet"
     },
     "sortOptions": {
       "dateDesc": "Päivämäärä (Uusin ensin)",
@@ -519,7 +519,7 @@
       "timeOfDay": "Vuorokaudenaika",
       "species": "Laji",
       "confidence": "Luottamus",
-      "source": "Source",
+      "source": "Lähde",
       "status": "Tila",
       "actions": "Toiminnot"
     },

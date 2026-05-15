@@ -483,7 +483,7 @@
       "verifiedStatus": "Ellenőrzött állapot",
       "lockedStatus": "Zárolt állapot",
       "timeOfDay": "Napszak",
-      "source": "Audio Source"
+      "source": "Hangforrás"
     },
     "advancedFilters": "Speciális szűrők",
     "showAdvancedFilters": "Speciális szűrők megjelenítése",
@@ -506,7 +506,7 @@
       "sunset": "Napnyugta +/- 30 perc"
     },
     "sourceOptions": {
-      "any": "All Sources"
+      "any": "Összes forrás"
     },
     "sortOptions": {
       "dateDesc": "Dátum (Legújabb elöl)",
@@ -519,7 +519,7 @@
       "timeOfDay": "Napszak",
       "species": "Faj",
       "confidence": "Megbízhatóság",
-      "source": "Source",
+      "source": "Forrás",
       "status": "Állapot",
       "actions": "Műveletek"
     },

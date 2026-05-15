@@ -483,7 +483,7 @@
       "verifiedStatus": "Stato verifica",
       "lockedStatus": "Stato blocco",
       "timeOfDay": "Momento della giornata",
-      "source": "Audio Source"
+      "source": "Sorgente audio"
     },
     "advancedFilters": "Filtri avanzati",
     "showAdvancedFilters": "Mostra filtri avanzati",
@@ -506,7 +506,7 @@
       "sunset": "Tramonto +/- 30min"
     },
     "sourceOptions": {
-      "any": "All Sources"
+      "any": "Tutte le fonti"
     },
     "sortOptions": {
       "dateDesc": "Data (Più recenti prima)",
@@ -519,7 +519,7 @@
       "timeOfDay": "Momento della giornata",
       "species": "Specie",
       "confidence": "Confidenza",
-      "source": "Source",
+      "source": "Fonte",
       "status": "Stato",
       "actions": "Azioni"
     },
