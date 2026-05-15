@@ -4238,7 +4238,7 @@
         "extracting": "Izgūst klipu...",
         "extractError": "Neizdevās izgūt klipu",
         "formatLabel": "Formāts",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Atskaņot atlasi",
@@ -4509,12 +4509,12 @@
   "analysis": {
     "title": "Analīze",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Iestatījumi",
+      "models": "Modeļi"
     },
     "detection": {
-      "title": "Detection Settings",
-      "description": "Configure confidence thresholds and language for species classification.",
+      "title": "Noteikšanas iestatījumi",
+      "description": "Konfigurējiet ticamības sliekšņus un valodu sugu klasifikācijai.",
       "confidenceThreshold": {
         "label": "Confidence Threshold",
         "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
@@ -4536,97 +4536,97 @@
         "helpText": "Kad iespējots, sikspārņu noteikšana tiek pārbaudīta, analizējot ultraskaņas enerģijas modeļus avota ierakstā. Noteikšanas bez eholokācijas pazīmēm tiek atzīmētas kā maz ticamas."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Sugu valoda",
+        "helpText": "Valoda, kas tiek izmantota sugu nosaukumiem interfeisā."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Areāla filtrs attiecas tikai uz putnu klasifikatoriem. Sikspārņu modeļi izmanto savus sugu sarakstus.",
       "status": {
         "title": "Diapazona filtra pārskats",
         "geomodelInfo": "BirdNET Geomodels {version} - {species} zināmas sugas",
-        "autoSelected": "Auto-selected",
-        "manual": "Manual",
-        "classifier": "Classifier",
-        "totalSpecies": "Total Species",
-        "withRangeData": "With Range Data",
-        "withoutRangeData": "Without Range Data",
-        "withRangeDataTooltip": "Species that the geomodel can evaluate for geographic probability at your location",
-        "withoutRangeDataTooltip": "Species without geographic data in the geomodel, handled by the unmapped species setting below",
-        "noFilter": "No range filter active",
+        "autoSelected": "Automātiski atlasīts",
+        "manual": "Manuāli",
+        "classifier": "Klasifikators",
+        "totalSpecies": "Kopējais sugu skaits",
+        "withRangeData": "Ar areāla datiem",
+        "withoutRangeData": "Bez areāla datiem",
+        "withRangeDataTooltip": "Sugas, kurām ģeomodelis var novērtēt ģeogrāfisko varbūtību jūsu atrašanās vietā",
+        "withoutRangeDataTooltip": "Sugas bez ģeogrāfiskajiem datiem ģeomodelī, kuras pārvalda nekartēto sugu iestatījums zemāk",
+        "noFilter": "Nav aktīva areāla filtra",
         "passUnmapped": {
-          "label": "Allow species without range data",
-          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+          "label": "Atļaut sugas bez areāla datiem",
+          "helpText": "Atļaut sugu noteikšanu, kurām ģeomodelim nav ģeogrāfisko datu. Ja atspējots, šīs sugas vienmēr tiek izfiltrētas."
         }
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Papildu",
+      "description": "Apstrādes un pielāgotu modeļu konfigurācija."
     },
     "gallery": {
-      "title": "Model Gallery",
-      "description": "Manage classifier models for bird and bat detection.",
+      "title": "Modeļu galerija",
+      "description": "Pārvaldiet klasifikācijas modeļus putnu un sikspārņu noteikšanai.",
       "tabs": {
-        "installed": "Installed",
-        "available": "Available"
+        "installed": "Instalētie",
+        "available": "Pieejamie"
       },
-      "loading": "Loading models...",
-      "retry": "Retry",
-      "builtIn": "Built-in",
-      "builtInDescription": "Built-in bird species classifier by the BirdNET team.",
-      "species": "{count} species",
-      "install": "Install",
-      "installing": "Installing...",
-      "remove": "Remove",
-      "removing": "Removing...",
-      "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
-      "noAvailableModels": "No additional models available for your platform.",
+      "loading": "Ielādē modeļus...",
+      "retry": "Mēģināt vēlreiz",
+      "builtIn": "Iebūvēts",
+      "builtInDescription": "BirdNET komandas iebūvēts putnu sugu klasifikators.",
+      "species": "{count} sugas",
+      "install": "Instalēt",
+      "installing": "Instalē...",
+      "remove": "Noņemt",
+      "removing": "Noņem...",
+      "noInstalledModels": "Nav instalēti papildu modeļi. Pārlūkojiet cilni Pieejamie, lai pievienotu vairāk klasifikatoru.",
+      "noAvailableModels": "Jūsu platformai nav pieejami papildu modeļi.",
       "sections": {
         "acoustic": "Akustiskie klasifikatori",
         "geomodel": "Ģeomodeļi"
       },
       "categories": {
-        "wildlife": "Wildlife Classifiers",
-        "bird": "Bird Classifiers",
-        "bat": "Bat Classifiers"
+        "wildlife": "Savvaļas dzīvnieku klasifikatori",
+        "bird": "Putnu klasifikatori",
+        "bat": "Sikspārņu klasifikatori"
       },
       "progress": {
-        "downloading": "Downloading...",
-        "verifying": "Verifying...",
-        "loading": "Loading...",
-        "complete": "Installed successfully",
-        "failed": "Failed"
+        "downloading": "Lejupielādē...",
+        "verifying": "Pārbauda...",
+        "loading": "Ielādē...",
+        "complete": "Veiksmīgi instalēts",
+        "failed": "Neizdevās"
       },
       "license": {
-        "title": "License Agreement",
-        "model": "Model",
-        "author": "Author",
-        "license": "License",
-        "commercialUse": "Commercial Use",
-        "downloadSize": "Download Size",
-        "allowed": "Allowed",
-        "notAllowed": "Not allowed",
-        "commercialUseAllowed": "Commercial use allowed",
-        "nonCommercialOnly": "Non-commercial use only",
-        "nonCommercialWarning": "This model is licensed for non-commercial use only. By installing, you agree to comply with the license terms.",
-        "acceptAndInstall": "Accept & Install"
+        "title": "Licences līgums",
+        "model": "Modelis",
+        "author": "Autors",
+        "license": "Licence",
+        "commercialUse": "Komerciāla izmantošana",
+        "downloadSize": "Lejupielādes izmērs",
+        "allowed": "Atļauts",
+        "notAllowed": "Nav atļauts",
+        "commercialUseAllowed": "Komerciāla izmantošana atļauta",
+        "nonCommercialOnly": "Tikai nekomerciāla izmantošana",
+        "nonCommercialWarning": "Šis modelis ir licencēts tikai nekomerciālai izmantošanai. Instalējot jūs piekrītat licences noteikumiem.",
+        "acceptAndInstall": "Pieņemt un instalēt"
       },
       "removeDialog": {
-        "title": "Remove {name}?",
-        "confirmation": "This will remove the model files from disk. Label data is retained for existing detections."
+        "title": "Noņemt {name}?",
+        "confirmation": "Modeļa faili tiks noņemti no diska. Esošo noteikšanu etiķešu dati tiks saglabāti."
       },
       "errors": {
-        "catalogLoadFailed": "Failed to load model catalog",
-        "installFailed": "Failed to start model installation",
-        "removeFailed": "Failed to remove model"
+        "catalogLoadFailed": "Neizdevās ielādēt modeļu katalogu",
+        "installFailed": "Neizdevās sākt modeļa instalēšanu",
+        "removeFailed": "Neizdevās noņemt modeli"
       },
-      "regionLabel": "Region",
-      "speciesLabel": "Species",
-      "reinstall": "Reinstall",
-      "reinstalling": "Reinstalling...",
-      "reinstallComplete": "Files verified successfully",
-      "geomodelBadge": "Includes BirdNET v3.0 geomodel"
+      "regionLabel": "Reģions",
+      "speciesLabel": "Sugas",
+      "reinstall": "Pārinstalēt",
+      "reinstalling": "Pārinstalē...",
+      "reinstallComplete": "Faili veiksmīgi pārbaudīti",
+      "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis"
     }
   },
   "restart": {

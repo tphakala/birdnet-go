@@ -1351,7 +1351,7 @@
           "avgWait": "Średni czas oczekiwania",
           "busyTimeouts": "Limity czasu zajętości",
           "walSize": "Rozmiar WAL",
-          "checkpoints": "Punkty kontrolne",
+          "checkpoints": "Checkpoints",
           "freelistPages": "Strony wolnej listy",
           "cacheSize": "Rozmiar cache"
         },
@@ -1443,7 +1443,7 @@
       "samples": "próbek",
       "available": "dost.",
       "min": "Min",
-      "max": "Max",
+      "max": "Maks",
       "limit": "Limit",
       "tempUnavailable": "Niedostępna",
       "online": "Online",
@@ -2129,7 +2129,7 @@
         "summary": {
           "active": "aktywne",
           "builtIn": "wbudowane",
-          "total": "łącznie"
+          "total": "razem"
         }
       },
       "sections": {
@@ -4214,7 +4214,7 @@
         "extracting": "Wyodrębnianie klipu...",
         "extractError": "Nie udało się wyodrębnić klipu",
         "formatLabel": "Format",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Odtwórz zaznaczenie",
@@ -4509,8 +4509,8 @@
   "analysis": {
     "title": "Analiza",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Ustawienia",
+      "models": "Modele"
     },
     "detection": {
       "title": "Ustawienia detekcji",
@@ -4536,12 +4536,12 @@
         "helpText": "Po włączeniu wykrycia nietoperzy są weryfikowane przez analizę wzorców energii ultradźwiękowej w nagraniu źródłowym. Wykrycia bez cech echolokacji są oznaczane jako mało prawdopodobne."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Język gatunków",
+        "helpText": "Język używany do nazw zwyczajowych gatunków w interfejsie."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Filtr zasięgu dotyczy tylko klasyfikatorów ptaków. Modele nietoperzy używają własnych list gatunków.",
       "status": {
         "title": "Przegląd filtra zasięgu",
         "geomodelInfo": "BirdNET Geomodel {version} - {species} znanych gatunków",
@@ -4561,8 +4561,8 @@
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Zaawansowane",
+      "description": "Konfiguracja przetwarzania i modeli niestandardowych."
     },
     "gallery": {
       "title": "Galeria modeli",

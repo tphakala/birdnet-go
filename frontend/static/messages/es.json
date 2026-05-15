@@ -4214,7 +4214,7 @@
         "extracting": "Extrayendo clip...",
         "extractError": "Error al extraer el clip",
         "formatLabel": "Formato",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Reproducir selección",
@@ -4509,8 +4509,8 @@
   "analysis": {
     "title": "Análisis",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Ajustes",
+      "models": "Modelos"
     },
     "detection": {
       "title": "Configuración de detección",
@@ -4536,12 +4536,12 @@
         "helpText": "Cuando está activado, las detecciones de murciélagos se validan analizando los patrones de energía ultrasónica en el audio fuente. Las detecciones sin características de ecolocalización se marcan como improbables."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Idioma de especies",
+        "helpText": "Idioma utilizado para los nombres comunes de especies en la interfaz."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "El filtro de rango se aplica solo a clasificadores de aves. Los modelos de murciélagos usan sus propias listas de especies.",
       "status": {
         "title": "Resumen del filtro de rango",
         "geomodelInfo": "BirdNET Geomodelo {version} - {species} especies conocidas",
@@ -4561,8 +4561,8 @@
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Avanzado",
+      "description": "Configuración de procesamiento y modelos personalizados."
     },
     "gallery": {
       "title": "Galería de modelos",

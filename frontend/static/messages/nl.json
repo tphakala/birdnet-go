@@ -4509,8 +4509,8 @@
   "analysis": {
     "title": "Analyse",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Instellingen",
+      "models": "Modellen"
     },
     "detection": {
       "title": "Detectie-instellingen",
@@ -4536,12 +4536,12 @@
         "helpText": "Indien ingeschakeld worden vleermuisdetecties gevalideerd door analyse van ultrasone energiepatronen in de bronaudio. Detecties zonder echolocatiekenmerken worden gemarkeerd als onwaarschijnlijk."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Soortentaal",
+        "helpText": "Taal voor de gangbare soortnamen in de interface."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Bereikfilter geldt alleen voor vogelclassificatoren. Vleermuismodellen gebruiken hun eigen soortenlijsten.",
       "status": {
         "title": "Gebiedsfilter overzicht",
         "geomodelInfo": "BirdNET Geomodel {version} - {species} bekende soorten",
@@ -4561,8 +4561,8 @@
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Geavanceerd",
+      "description": "Verwerking en aangepaste modelconfiguratie."
     },
     "gallery": {
       "title": "Modellengalerij",

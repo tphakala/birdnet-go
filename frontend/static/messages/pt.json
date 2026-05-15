@@ -4214,7 +4214,7 @@
         "extracting": "A extrair clip...",
         "extractError": "Falha ao extrair clip",
         "formatLabel": "Formato",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Reproduzir seleção",
@@ -4509,8 +4509,8 @@
   "analysis": {
     "title": "Análise",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Definições",
+      "models": "Modelos"
     },
     "detection": {
       "title": "Configurações de detecção",
@@ -4536,12 +4536,12 @@
         "helpText": "Quando ativado, as deteções de morcegos são validadas pela análise dos padrões de energia ultrassónica no áudio de origem. Deteções sem características de ecolocalização são marcadas como improváveis."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Idioma das espécies",
+        "helpText": "Idioma utilizado para os nomes comuns das espécies na interface."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "O filtro de alcance aplica-se apenas a classificadores de aves. Os modelos de morcegos usam as suas próprias listas de espécies.",
       "status": {
         "title": "Resumo do filtro de alcance",
         "geomodelInfo": "BirdNET Geomodelo {version} - {species} espécies conhecidas",
@@ -4561,8 +4561,8 @@
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Avançado",
+      "description": "Configuração de processamento e modelos personalizados."
     },
     "gallery": {
       "title": "Galeria de modelos",

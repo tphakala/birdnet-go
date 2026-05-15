@@ -4507,14 +4507,14 @@
     }
   },
   "analysis": {
-    "title": "Analysis",
+    "title": "Analisi",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Impostazioni",
+      "models": "Modelli"
     },
     "detection": {
-      "title": "Detection Settings",
-      "description": "Configure confidence thresholds and language for species classification.",
+      "title": "Impostazioni di rilevamento",
+      "description": "Configura le soglie di confidenza e la lingua per la classificazione delle specie.",
       "confidenceThreshold": {
         "label": "Confidence Threshold",
         "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
@@ -4536,97 +4536,97 @@
         "helpText": "Quando abilitato, i rilevamenti di pipistrelli vengono validati analizzando i pattern di energia ultrasonica nell'audio sorgente. I rilevamenti privi di caratteristiche di ecolocalizzazione vengono contrassegnati come improbabili."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Lingua delle specie",
+        "helpText": "Lingua utilizzata per i nomi comuni delle specie nell'interfaccia."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Il filtro di zona si applica solo ai classificatori di uccelli. I modelli per pipistrelli usano le proprie liste di specie.",
       "status": {
         "title": "Panoramica filtro di zona",
         "geomodelInfo": "BirdNET Geomodello {version} - {species} specie conosciute",
-        "autoSelected": "Auto-selected",
-        "manual": "Manual",
-        "classifier": "Classifier",
-        "totalSpecies": "Total Species",
-        "withRangeData": "With Range Data",
-        "withoutRangeData": "Without Range Data",
-        "withRangeDataTooltip": "Species that the geomodel can evaluate for geographic probability at your location",
-        "withoutRangeDataTooltip": "Species without geographic data in the geomodel, handled by the unmapped species setting below",
-        "noFilter": "No range filter active",
+        "autoSelected": "Selezionato automaticamente",
+        "manual": "Manuale",
+        "classifier": "Classificatore",
+        "totalSpecies": "Specie totali",
+        "withRangeData": "Con dati di distribuzione",
+        "withoutRangeData": "Senza dati di distribuzione",
+        "withRangeDataTooltip": "Specie che il geomodel può valutare per la probabilità geografica nella tua posizione",
+        "withoutRangeDataTooltip": "Specie senza dati geografici nel geomodel, gestite dall'impostazione delle specie non mappate qui sotto",
+        "noFilter": "Nessun filtro di zona attivo",
         "passUnmapped": {
-          "label": "Allow species without range data",
-          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+          "label": "Consenti specie senza dati di distribuzione",
+          "helpText": "Consenti i rilevamenti di specie per le quali il geomodel non ha dati geografici. Se disabilitato, queste specie vengono sempre filtrate."
         }
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Avanzate",
+      "description": "Configurazione dell'elaborazione e dei modelli personalizzati."
     },
     "gallery": {
-      "title": "Model Gallery",
-      "description": "Manage classifier models for bird and bat detection.",
+      "title": "Galleria modelli",
+      "description": "Gestisci i modelli di classificazione per il rilevamento di uccelli e pipistrelli.",
       "tabs": {
-        "installed": "Installed",
-        "available": "Available"
+        "installed": "Installati",
+        "available": "Disponibili"
       },
-      "loading": "Loading models...",
-      "retry": "Retry",
-      "builtIn": "Built-in",
-      "builtInDescription": "Built-in bird species classifier by the BirdNET team.",
-      "species": "{count} species",
-      "install": "Install",
-      "installing": "Installing...",
-      "remove": "Remove",
-      "removing": "Removing...",
-      "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
-      "noAvailableModels": "No additional models available for your platform.",
+      "loading": "Caricamento modelli...",
+      "retry": "Riprova",
+      "builtIn": "Integrato",
+      "builtInDescription": "Classificatore di specie di uccelli integrato dal team BirdNET.",
+      "species": "{count} specie",
+      "install": "Installa",
+      "installing": "Installazione...",
+      "remove": "Rimuovi",
+      "removing": "Rimozione...",
+      "noInstalledModels": "Nessun modello aggiuntivo installato. Sfoglia la scheda Disponibili per aggiungerne altri.",
+      "noAvailableModels": "Nessun modello aggiuntivo disponibile per la tua piattaforma.",
       "sections": {
         "acoustic": "Classificatori acustici",
         "geomodel": "Geomodelli"
       },
       "categories": {
-        "wildlife": "Wildlife Classifiers",
-        "bird": "Bird Classifiers",
-        "bat": "Bat Classifiers"
+        "wildlife": "Classificatori di fauna selvatica",
+        "bird": "Classificatori di uccelli",
+        "bat": "Classificatori di pipistrelli"
       },
       "progress": {
-        "downloading": "Downloading...",
-        "verifying": "Verifying...",
-        "loading": "Loading...",
-        "complete": "Installed successfully",
-        "failed": "Failed"
+        "downloading": "Download in corso...",
+        "verifying": "Verifica in corso...",
+        "loading": "Caricamento...",
+        "complete": "Installazione completata",
+        "failed": "Non riuscito"
       },
       "license": {
-        "title": "License Agreement",
-        "model": "Model",
-        "author": "Author",
-        "license": "License",
-        "commercialUse": "Commercial Use",
-        "downloadSize": "Download Size",
-        "allowed": "Allowed",
-        "notAllowed": "Not allowed",
-        "commercialUseAllowed": "Commercial use allowed",
-        "nonCommercialOnly": "Non-commercial use only",
-        "nonCommercialWarning": "This model is licensed for non-commercial use only. By installing, you agree to comply with the license terms.",
-        "acceptAndInstall": "Accept & Install"
+        "title": "Contratto di licenza",
+        "model": "Modello",
+        "author": "Autore",
+        "license": "Licenza",
+        "commercialUse": "Uso commerciale",
+        "downloadSize": "Dimensione download",
+        "allowed": "Consentito",
+        "notAllowed": "Non consentito",
+        "commercialUseAllowed": "Uso commerciale consentito",
+        "nonCommercialOnly": "Solo uso non commerciale",
+        "nonCommercialWarning": "Questo modello è concesso in licenza solo per uso non commerciale. Installandolo, accetti di rispettare i termini della licenza.",
+        "acceptAndInstall": "Accetta e installa"
       },
       "removeDialog": {
-        "title": "Remove {name}?",
-        "confirmation": "This will remove the model files from disk. Label data is retained for existing detections."
+        "title": "Rimuovere {name}?",
+        "confirmation": "I file del modello verranno rimossi dal disco. I dati delle etichette vengono conservati per i rilevamenti esistenti."
       },
       "errors": {
-        "catalogLoadFailed": "Failed to load model catalog",
-        "installFailed": "Failed to start model installation",
-        "removeFailed": "Failed to remove model"
+        "catalogLoadFailed": "Impossibile caricare il catalogo dei modelli",
+        "installFailed": "Impossibile avviare l'installazione del modello",
+        "removeFailed": "Impossibile rimuovere il modello"
       },
-      "regionLabel": "Region",
-      "speciesLabel": "Species",
-      "reinstall": "Reinstall",
-      "reinstalling": "Reinstalling...",
-      "reinstallComplete": "Files verified successfully",
-      "geomodelBadge": "Includes BirdNET v3.0 geomodel"
+      "regionLabel": "Regione",
+      "speciesLabel": "Specie",
+      "reinstall": "Reinstalla",
+      "reinstalling": "Reinstallazione...",
+      "reinstallComplete": "File verificati con successo",
+      "geomodelBadge": "Include il geomodel BirdNET v3.0"
     }
   },
   "restart": {

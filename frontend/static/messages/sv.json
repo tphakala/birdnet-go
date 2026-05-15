@@ -4509,12 +4509,12 @@
   "analysis": {
     "title": "Analys",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Inställningar",
+      "models": "Modeller"
     },
     "detection": {
-      "title": "Detection Settings",
-      "description": "Configure confidence thresholds and language for species classification.",
+      "title": "Detektionsinställningar",
+      "description": "Konfigurera konfidenströsklar och språk för artklassificering.",
       "confidenceThreshold": {
         "label": "Confidence Threshold",
         "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
@@ -4536,97 +4536,97 @@
         "helpText": "När aktiverat valideras fladdermusdetektioner genom att analysera ultraljudsenergi i källljudet. Detektioner utan ekolokationsegenskaper markeras som osannolika."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Artspråk",
+        "helpText": "Språk som används för arternas vardagliga namn i gränssnittet."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Områdesfilter gäller bara fågelklassificerare. Fladdermusmodeller använder egna artlistor.",
       "status": {
         "title": "Områdesfilter översikt",
         "geomodelInfo": "BirdNET Geomodell {version} - {species} kända arter",
-        "autoSelected": "Auto-selected",
-        "manual": "Manual",
-        "classifier": "Classifier",
-        "totalSpecies": "Total Species",
-        "withRangeData": "With Range Data",
-        "withoutRangeData": "Without Range Data",
-        "withRangeDataTooltip": "Species that the geomodel can evaluate for geographic probability at your location",
-        "withoutRangeDataTooltip": "Species without geographic data in the geomodel, handled by the unmapped species setting below",
-        "noFilter": "No range filter active",
+        "autoSelected": "Automatiskt vald",
+        "manual": "Manuell",
+        "classifier": "Klassificerare",
+        "totalSpecies": "Totalt antal arter",
+        "withRangeData": "Med områdesdata",
+        "withoutRangeData": "Utan områdesdata",
+        "withRangeDataTooltip": "Arter som geomodellen kan utvärdera för geografisk sannolikhet vid din plats",
+        "withoutRangeDataTooltip": "Arter utan geografiska data i geomodellen, hanteras av inställningen för ej kartlagda arter nedan",
+        "noFilter": "Inget områdesfilter aktivt",
         "passUnmapped": {
-          "label": "Allow species without range data",
-          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+          "label": "Tillåt arter utan områdesdata",
+          "helpText": "Tillåt detektioner av arter som geomodellen saknar geografiska data för. När inaktiverad filtreras dessa arter alltid bort."
         }
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Avancerat",
+      "description": "Bearbetning och anpassad modellkonfiguration."
     },
     "gallery": {
-      "title": "Model Gallery",
-      "description": "Manage classifier models for bird and bat detection.",
+      "title": "Modellgalleri",
+      "description": "Hantera klassificeringsmodeller för fågel- och fladdermsdetektion.",
       "tabs": {
-        "installed": "Installed",
-        "available": "Available"
+        "installed": "Installerade",
+        "available": "Tillgängliga"
       },
-      "loading": "Loading models...",
-      "retry": "Retry",
-      "builtIn": "Built-in",
-      "builtInDescription": "Built-in bird species classifier by the BirdNET team.",
-      "species": "{count} species",
-      "install": "Install",
-      "installing": "Installing...",
-      "remove": "Remove",
-      "removing": "Removing...",
-      "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
-      "noAvailableModels": "No additional models available for your platform.",
+      "loading": "Laddar modeller...",
+      "retry": "Försök igen",
+      "builtIn": "Inbyggd",
+      "builtInDescription": "Inbyggd fågelartsklassificerare från BirdNET-teamet.",
+      "species": "{count} arter",
+      "install": "Installera",
+      "installing": "Installerar...",
+      "remove": "Ta bort",
+      "removing": "Tar bort...",
+      "noInstalledModels": "Inga ytterligare modeller installerade. Bläddra i fliken Tillgängliga för att lägga till fler klassificerare.",
+      "noAvailableModels": "Inga ytterligare modeller tillgängliga för din plattform.",
       "sections": {
         "acoustic": "Akustiska klassificerare",
         "geomodel": "Geomodeller"
       },
       "categories": {
-        "wildlife": "Wildlife Classifiers",
-        "bird": "Bird Classifiers",
-        "bat": "Bat Classifiers"
+        "wildlife": "Viltklassificerare",
+        "bird": "Fågelklassificerare",
+        "bat": "Fladdermusklassificerare"
       },
       "progress": {
-        "downloading": "Downloading...",
-        "verifying": "Verifying...",
-        "loading": "Loading...",
-        "complete": "Installed successfully",
-        "failed": "Failed"
+        "downloading": "Laddar ner...",
+        "verifying": "Verifierar...",
+        "loading": "Laddar...",
+        "complete": "Installerad",
+        "failed": "Misslyckades"
       },
       "license": {
-        "title": "License Agreement",
-        "model": "Model",
-        "author": "Author",
-        "license": "License",
-        "commercialUse": "Commercial Use",
-        "downloadSize": "Download Size",
-        "allowed": "Allowed",
-        "notAllowed": "Not allowed",
-        "commercialUseAllowed": "Commercial use allowed",
-        "nonCommercialOnly": "Non-commercial use only",
-        "nonCommercialWarning": "This model is licensed for non-commercial use only. By installing, you agree to comply with the license terms.",
-        "acceptAndInstall": "Accept & Install"
+        "title": "Licensavtal",
+        "model": "Modell",
+        "author": "Upphovsperson",
+        "license": "Licens",
+        "commercialUse": "Kommersiellt bruk",
+        "downloadSize": "Nedladdningsstorlek",
+        "allowed": "Tillåtet",
+        "notAllowed": "Ej tillåtet",
+        "commercialUseAllowed": "Kommersiellt bruk tillåtet",
+        "nonCommercialOnly": "Endast icke-kommersiellt bruk",
+        "nonCommercialWarning": "Denna modell är licensierad enbart för icke-kommersiellt bruk. Genom att installera godkänner du att följa licensvillkoren.",
+        "acceptAndInstall": "Acceptera och installera"
       },
       "removeDialog": {
-        "title": "Remove {name}?",
-        "confirmation": "This will remove the model files from disk. Label data is retained for existing detections."
+        "title": "Ta bort {name}?",
+        "confirmation": "Detta tar bort modellfilerna från disken. Etikettdata behålls för befintliga detektioner."
       },
       "errors": {
-        "catalogLoadFailed": "Failed to load model catalog",
-        "installFailed": "Failed to start model installation",
-        "removeFailed": "Failed to remove model"
+        "catalogLoadFailed": "Kunde inte ladda modellkatalogen",
+        "installFailed": "Kunde inte starta modellinstallation",
+        "removeFailed": "Kunde inte ta bort modell"
       },
       "regionLabel": "Region",
-      "speciesLabel": "Species",
-      "reinstall": "Reinstall",
-      "reinstalling": "Reinstalling...",
-      "reinstallComplete": "Files verified successfully",
-      "geomodelBadge": "Includes BirdNET v3.0 geomodel"
+      "speciesLabel": "Arter",
+      "reinstall": "Installera om",
+      "reinstalling": "Installerar om...",
+      "reinstallComplete": "Filer verifierade",
+      "geomodelBadge": "Inkluderar BirdNET v3.0 geomodell"
     }
   },
   "restart": {

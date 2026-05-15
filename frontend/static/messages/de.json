@@ -3919,7 +3919,7 @@
       "schemeForest": "Wald",
       "schemeAmber": "Bernstein",
       "schemeViolet": "Violett",
-      "schemeRose": "Rose",
+      "schemeRose": "Rosé",
       "schemeCustom": "Benutzerdefiniert",
       "customPrimary": "Primärfarbe",
       "customAccent": "Akzentfarbe",
@@ -4509,8 +4509,8 @@
   "analysis": {
     "title": "Analyse",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Einstellungen",
+      "models": "Modelle"
     },
     "detection": {
       "title": "Erkennungseinstellungen",
@@ -4536,12 +4536,12 @@
         "helpText": "Wenn aktiviert, werden Fledermauserkennungen durch Analyse der Ultraschall-Energiemuster in der Quellaufnahme validiert. Erkennungen ohne typische Echoortungsmerkmale werden als unwahrscheinlich markiert."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Artensprache",
+        "helpText": "Sprache für die gebräuchlichen Artnamen in der Benutzeroberfläche."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Der Reichweitenfilter gilt nur für Vogelklassifikatoren. Fledermausmodelle verwenden eigene Artenlisten.",
       "status": {
         "title": "Gebietsfilter-Übersicht",
         "geomodelInfo": "BirdNET-Geomodell {version} - {species} bekannte Arten",
@@ -4561,8 +4561,8 @@
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Erweitert",
+      "description": "Verarbeitungs- und benutzerdefinierte Modellkonfiguration."
     },
     "gallery": {
       "title": "Modellgalerie",
