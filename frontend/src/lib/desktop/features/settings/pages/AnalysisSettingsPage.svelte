@@ -1146,7 +1146,7 @@
       originalData={store.originalData.birdnet?.rangeFilter}
       currentData={birdnet?.rangeFilter}
     >
-      <SettingsNote>{t('analysis.rangeFilter.birdOnlyNote')}</SettingsNote>
+      <SettingsNote><span>{t('analysis.rangeFilter.birdOnlyNote')}</span></SettingsNote>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
         <NumberField
@@ -1337,7 +1337,7 @@
       originalData={store.originalData.realtime?.dynamicThreshold}
       currentData={store.formData.realtime?.dynamicThreshold}
     >
-      <SettingsNote>{t('analysis.dynamicThreshold.birdOnlyNote')}</SettingsNote>
+      <SettingsNote><span>{t('analysis.dynamicThreshold.birdOnlyNote')}</span></SettingsNote>
 
       <div class="mt-4">
         <Checkbox
