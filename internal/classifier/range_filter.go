@@ -316,13 +316,18 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 		}
 	}
 
+	seen := make(map[string]bool, len(speciesScores))
+	for _, ss := range speciesScores {
+		seen[ss.Label] = true
+	}
+
 	processedSpecies := make(map[string]bool)
 	labels := settings.BirdNET.Labels
 	for _, includedSpecies := range settings.Realtime.Species.Include {
-		addSpeciesWithMaxScore(bn, &speciesScores, includedSpecies, processedSpecies, labels)
+		addSpeciesWithMaxScore(bn, &speciesScores, includedSpecies, processedSpecies, labels, seen)
 	}
 	for species := range settings.Realtime.Species.Config {
-		addSpeciesWithMaxScore(bn, &speciesScores, species, processedSpecies, labels)
+		addSpeciesWithMaxScore(bn, &speciesScores, species, processedSpecies, labels, seen)
 	}
 
 	sort.Sort(ByScore(speciesScores))
@@ -342,9 +347,8 @@ func zeroScoresForAllLabels(labels, excludeList []string) []SpeciesScore {
 	return speciesScores
 }
 
-// addSpeciesWithMaxScore adds all matching species to the scores list with maximum score
-func addSpeciesWithMaxScore(bn *BirdNET, speciesScores *[]SpeciesScore, speciesName string, processedSpecies map[string]bool, labels []string) {
-	// Skip if already processed
+// addSpeciesWithMaxScore adds all matching species to the scores list with maximum score.
+func addSpeciesWithMaxScore(bn *BirdNET, speciesScores *[]SpeciesScore, speciesName string, processedSpecies map[string]bool, labels []string, seen map[string]bool) {
 	if processedSpecies[speciesName] {
 		return
 	}
@@ -352,8 +356,11 @@ func addSpeciesWithMaxScore(bn *BirdNET, speciesScores *[]SpeciesScore, speciesN
 	matchFound := false
 	for _, label := range labels {
 		if matchesSpecies(label, speciesName) {
-			bn.Debug("Adding species with max score: %s (matched with: %s)", label, speciesName)
-			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
+			if !seen[label] {
+				bn.Debug("Adding species with max score: %s (matched with: %s)", label, speciesName)
+				*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
+				seen[label] = true
+			}
 			matchFound = true
 		}
 	}
