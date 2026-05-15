@@ -255,23 +255,21 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 		}
 	}
 
-	// Get the current settings
-	settings := conf.Setting()
+	// Derive the analysis buffer interval from the model's spec. If
+	// inference exceeds this interval the pipeline falls behind real-time.
+	effectiveBufferDuration := 3 * time.Second / 2 // fallback: BirdNET v2.4
+	if spec, ok := bn.ModelSpecFor(modelID); ok {
+		effectiveBufferDuration = spec.BufferInterval()
+	}
 
-	// Calculate the effective buffer duration
-	bufferDuration := 3 * time.Second // base duration
-	overlapDuration := time.Duration(settings.BirdNET.Overlap * float64(time.Second))
-	effectiveBufferDuration := bufferDuration - overlapDuration
-
-	// Check if processing time exceeds effective buffer duration
 	if elapsedTime > effectiveBufferDuration {
-		log.Warn("BirdNET processing time exceeded buffer length",
+		log.Warn("processing time exceeded buffer interval",
 			logger.Duration("elapsed_time", elapsedTime),
-			logger.Duration("buffer_length", effectiveBufferDuration),
+			logger.Duration("buffer_interval", effectiveBufferDuration),
+			logger.String("model_id", modelID),
 			logger.String("source", source))
 		recordBufferOverrun(getOverrunTracker(source, modelID), elapsedTime, effectiveBufferDuration)
 
-		// Record Prometheus metrics for observability
 		processMetricsMutex.RLock()
 		m := processMetrics
 		processMetricsMutex.RUnlock()

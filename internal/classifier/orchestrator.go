@@ -189,6 +189,23 @@ func (o *Orchestrator) IsModelActive(modelID string) bool {
 	return s.isActive()
 }
 
+// ModelSpecFor returns the ModelSpec for the given model ID.
+// Returns the zero value and false if the model is not loaded.
+func (o *Orchestrator) ModelSpecFor(modelID string) (ModelSpec, bool) {
+	o.mu.RLock()
+	entry, ok := o.models[modelID]
+	o.mu.RUnlock()
+	if !ok {
+		return ModelSpec{}, false
+	}
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.instance == nil {
+		return ModelSpec{}, false
+	}
+	return entry.instance.Spec(), true
+}
+
 // startBatScheduler creates a fresh scheduler (preserving the suncalc
 // reference from an existing one if present) and starts it. Handles the
 // unload/reload case where the previous scheduler's stopChan is closed.
