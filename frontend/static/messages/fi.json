@@ -16,12 +16,6 @@
     "search": "Haku",
     "filter": "Suodata",
     "sort": "Lajittele",
-    "actions": {
-      "download": "Lataa",
-      "review": "Tarkastele",
-      "play": "Toista",
-      "view": "Näytä"
-    },
     "settings": "Asetukset",
     "close": "Sulje",
     "back": "Takaisin",
@@ -38,6 +32,12 @@
     "loginToViewDetails": "Kirjaudu nähdäksesi lisätiedot",
     "pageNotFound": "Sivua ei löydy",
     "internalServerError": "Sisäinen palvelinvirhe",
+    "actions": {
+      "download": "Lataa",
+      "review": "Tarkastele",
+      "play": "Toista",
+      "view": "Näytä"
+    },
     "buttons": {
       "save": "Tallenna muutokset",
       "reset": "Palauta",
@@ -198,6 +198,16 @@
     "closeModal": "Sulje valintaikkuna",
     "hoursShort": "t"
   },
+  "pageTitle": {
+    "settings": "Asetukset - BirdNET-Go",
+    "pageNotFound": "404 - Sivua ei löydy",
+    "serverError": "500 - Sisäinen palvelinvirhe",
+    "componentError": "Komponentin latausvirhe",
+    "speciesAnalytics": "Lajianalytiikka",
+    "advancedAnalytics": "Edistynyt analytiikka",
+    "detectionDetails": "Tunnistuksen tiedot",
+    "settingsNotAvailable": "Asetukset eivät ole käytettävissä"
+  },
   "navigation": {
     "dashboard": "Yleiskatsaus",
     "settingsMenu": "Asetusvalikko",
@@ -219,16 +229,6 @@
     "settingsSubmenu": "Asetusten alavalikko",
     "systemSubmenu": "Järjestelmän alavalikko",
     "systemTerminal": "Terminaali"
-  },
-  "pageTitle": {
-    "settings": "Asetukset - BirdNET-Go",
-    "pageNotFound": "404 - Sivua ei löydy",
-    "serverError": "500 - Sisäinen palvelinvirhe",
-    "componentError": "Komponentin latausvirhe",
-    "speciesAnalytics": "Lajianalytiikka",
-    "advancedAnalytics": "Edistynyt analytiikka",
-    "detectionDetails": "Tunnistuksen tiedot",
-    "settingsNotAvailable": "Asetukset eivät ole käytettävissä"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -775,6 +775,11 @@
       "recording": "Tallenne",
       "actions": "Toiminnot"
     },
+    "viewToggle": {
+      "label": "Näkymätila",
+      "table": "Taulukkonäkymä",
+      "cards": "Korttinäkymä"
+    },
     "status": {
       "locked": "Lukittu"
     },
@@ -795,15 +800,6 @@
     },
     "pagination": {
       "showing": "Näytetään {from}-{to} / {total} tuloksesta"
-    },
-    "errors": {
-      "notFound": "Havaintoa ei löytynyt. Se on ehkä poistettu tai tunniste on virheellinen.",
-      "noPermission": "Sinulla ei ole oikeutta tarkastella tätä havaintoa.",
-      "loginRequired": "Kirjaudu sisään tarkastellaksesi tätä havaintoa.",
-      "serverError": "Palvelinvirhe. Yritä myöhemmin uudelleen tai ota yhteyttä tukeen, jos ongelma jatkuu.",
-      "loadFailed": "Havainnon lataaminen epäonnistui (Virhe {status}). Päivitä sivu.",
-      "noIdProvided": "Havainnon tunnistetta ei annettu.",
-      "fetchFailed": "Havaintojen hakeminen epäonnistui"
     },
     "weather": {
       "title": "Säätiedot",
@@ -908,10 +904,14 @@
       "loaded": "Havainnon tiedot ladattu: {species}",
       "error": "Virhe havainnon latauksessa: {error}"
     },
-    "viewToggle": {
-      "label": "Näkymätila",
-      "table": "Taulukkonäkymä",
-      "cards": "Korttinäkymä"
+    "errors": {
+      "notFound": "Havaintoa ei löytynyt. Se on ehkä poistettu tai tunniste on virheellinen.",
+      "noPermission": "Sinulla ei ole oikeutta tarkastella tätä havaintoa.",
+      "loginRequired": "Kirjaudu sisään tarkastellaksesi tätä havaintoa.",
+      "serverError": "Palvelinvirhe. Yritä myöhemmin uudelleen tai ota yhteyttä tukeen, jos ongelma jatkuu.",
+      "loadFailed": "Havainnon lataaminen epäonnistui (Virhe {status}). Päivitä sivu.",
+      "noIdProvided": "Havainnon tunnistetta ei annettu.",
+      "fetchFailed": "Havaintojen hakeminen epäonnistui"
     }
   },
   "species": {
@@ -1039,6 +1039,12 @@
         "buffCache": "Puskuri/välimuisti"
       }
     },
+    "progress": {
+      "labels": {
+        "overallProgress": "Kokonaisedistyminen",
+        "progress": "Edistyminen"
+      }
+    },
     "processInfo": {
       "title": "Prosessitiedot",
       "loading": "Ladataan prosessitietoja...",
@@ -1070,12 +1076,6 @@
       "temperature": "Lämpötilan lataus epäonnistui: {error}",
       "processes": "Prosessitietojen lataus epäonnistui: {error}"
     },
-    "progress": {
-      "labels": {
-        "overallProgress": "Kokonaisedistyminen",
-        "progress": "Edistyminen"
-      }
-    },
     "sections": {
       "overview": "Yleiskatsaus",
       "database": "Tietokanta",
@@ -1084,211 +1084,13 @@
     "database": {
       "title": "Tietokannan hallinta",
       "description": "Hallitse skeemamigraatiota",
-      "migration": {
-        "title": "Tietokantamigraatio",
-        "description": "Migroi vanhasta skeemasta normalisoituun v2-skeemaan",
-        "completedTitle": "Migraatio valmis",
-        "completedNote": "Tietokantasi on siirretty onnistuneesti uuteen skeemaan. Käynnistä BirdNET-Go uudelleen siirtyäksesi uuteen tietokantaan. Huom: Uusi tietokanta on pienempi, koska se tallentaa tiedot tehokkaammin - tämä on normaalia ja kaikki tietosi on säilytetty.",
-        "status": {
-          "idle": "Valmis aloitettavaksi",
-          "initializing": "Alustus",
-          "dual_write": "Kaksoiskirjoitus aktiivinen",
-          "migrating": "Migroidaan ensisijaiset",
-          "migrating_predictions": "Migroidaan toissijaiset",
-          "paused": "Keskeytetty",
-          "validating": "Vahvistetaan",
-          "cutover": "Vaihto käynnissä",
-          "completed": "Migraatio valmis",
-          "failed": "Validointi epäonnistui"
-        },
-        "progress": {
-          "title": "Migraation edistyminen",
-          "records": "tietuetta",
-          "percent": "{percent}%",
-          "rate": "{rate} tietuetta/sek",
-          "rateValue": "{rate} tiet/s",
-          "remaining": "Jäljellä: {time}",
-          "eta": "Arvioitu jäljellä oleva aika",
-          "dirtyIds": "{count} tietuetta odottaa",
-          "paused": "Migraatio keskeytetty",
-          "completedTitle": "Siirto valmis",
-          "completedBody": "Kaikki {count} tietuetta on siirretty onnistuneesti V2-tietokantaan. Sovellus käyttää V2:ta ensisijaisena tietokantana uudelleenkäynnistyksen jälkeen.",
-          "restartTitle": "Uudelleenkäynnistys vaaditaan",
-          "restartBody": "Käynnistä sovellus uudelleen vaihtaaksesi V2-tietokantaan. Vanhan tietokannan siivous on käytettävissä uudelleenkäynnistyksen jälkeen.",
-          "fallbackError": "Tietuemäärä ei täsmää vanhan ja V2-tietokannan välillä. Joitain tietueita ei ehkä ole siirretty oikein.",
-          "migrateInfo": "Siirto siirtää {count} tietuetta vanhasta tietokannasta uuteen V2-skeemaan. Kaksoistallennustila varmistaa, ettei tietoja menetetä siirron aikana.",
-          "sourceLegacy": "Lähde (vanha)",
-          "targetV2": "Kohde (V2)",
-          "recordsLabel": "Tietueet",
-          "sizeLabel": "Koko",
-          "prerequisitesNotMet": "Edellytykset eivät täyty – ratkaise alla olevat kriittiset ongelmat",
-          "validatingTitle": "Tietojen tarkistus",
-          "validatingBody": "Verrataan {count} vanhaa tietuetta V2-tietokantaan...",
-          "dirtyRecordsCatchup": "{count} muuttunutta tietuetta — yritetään täsmäytystä",
-          "cutoverTitle": "Viimeistellään siirtymä",
-          "cutoverBody": "Viimeistellään siirtymä V2-tietokantaan...",
-          "migratingPhase": "Siirretään {phase}",
-          "progressLabel": "Edistyminen",
-          "ofRecords": "/ {count} tietuetta",
-          "percentComplete": "{percent}% valmis",
-          "recordsPerSec": "{rate} tietuetta/s",
-          "calculating": "Lasketaan...",
-          "dirtyWriteFailed": "{count} tietueen kirjoitus epäonnistui — täsmäytetään tarkistuksen aikana"
-        },
-        "phase": {
-          "indicator": "Vaihe {current}/{total}: ",
-          "detections": "Migroidaan ensisijaiset havainnot",
-          "predictions": "Migroidaan toissijaiset havainnot",
-          "reviews": "Migroidaan arvioinnit",
-          "comments": "Migroidaan kommentit",
-          "locks": "Migroidaan lukitukset"
-        },
-        "notes": {
-          "in_progress": "Voit jatkaa järjestelmän normaalia käyttöä migraation suorittaessa taustalla.",
-          "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - kaikki uudet havainnot tallennetaan molempiin tietokantoihin. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
-          "migrating": "Kopioidaan olemassa olevia havaintojasi uuteen tietokantaan. Tämä voi kestää jonkin aikaa havaintojen määrästä riippuen. Voit keskeyttää ja jatkaa milloin tahansa.",
-          "validating": "Tarkistetaan, että kaikki tietueet kopioitiin oikein. Melkein valmis!",
-          "cutover": "Vaihdetaan uuteen tietokantaan. Tämä kestää vain hetken.",
-          "paused": "Migraatio on keskeytetty. Tietosi ovat turvassa. Jatka kun olet valmis."
-        },
-        "actions": {
-          "start": "Aloita migraatio",
-          "pause": "Keskeytä",
-          "resume": "Jatka",
-          "cancel": "Peruuta",
-          "rollback": "Palauta",
-          "retryValidation": "Yritä validointia uudelleen"
-        },
-        "confirmCancel": {
-          "title": "Peruuta migraatio?",
-          "message": "Tämä pysäyttää migraation ja palauttaa lepotilaan. Voit käynnistää migraation turvallisesti uudelleen myöhemmin - tietueita ei kopioida.",
-          "confirm": "Kyllä, peruuta",
-          "dismiss": "Ei, jatka"
-        },
-        "confirmRollback": {
-          "title": "Palauta migraatio?",
-          "message": "Tämä palauttaa vanhaan tietokantaan. Migraation jälkeen tallennetut uudet havainnot säilyvät parannetussa tietokannassa, mutta eivät näy ennen uutta migraatiota.",
-          "confirm": "Kyllä, palauta",
-          "dismiss": "Ei, säilytä parannettu"
-        },
-        "errors": {
-          "startFailed": "Migraation käynnistys epäonnistui",
-          "pauseFailed": "Migraation keskeytys epäonnistui",
-          "resumeFailed": "Migraation jatkaminen epäonnistui",
-          "cancelFailed": "Migraation peruutus epäonnistui",
-          "rollbackFailed": "Migraation palautus epäonnistui",
-          "fetchFailed": "Migraation tilan haku epäonnistui",
-          "retryValidationFailed": "Validoinnin uudelleenyritys epäonnistui"
-        },
-        "worker": {
-          "running": "Worker käynnissä",
-          "paused": "Worker keskeytetty",
-          "stopped": "Worker pysäytetty"
-        },
-        "prerequisites": {
-          "title": "Migraation esitarkistukset",
-          "rerunChecks": "Suorita tarkistukset uudelleen",
-          "critical": "Kriittinen",
-          "allPassed": "Kaikki tarkistukset läpäisty - valmis migraatioon",
-          "criticalIssues": "{count} kriittinen ongelma on ratkaistava",
-          "warningsCount": "{count} varoitus(ta)",
-          "running": "Suoritetaan esitarkistuksia...",
-          "checkingStep": "Vaihe {current}/{total}",
-          "errors": {
-            "fetchFailed": "Esivaatimusten haku epäonnistui"
-          },
-          "checks": {
-            "state_idle": {
-              "name": "Migraation tila"
-            },
-            "disk_space": {
-              "name": "Levytila"
-            },
-            "legacy_accessible": {
-              "name": "Tietokantayhteys"
-            },
-            "sqlite_integrity": {
-              "name": "Tietokannan eheys"
-            },
-            "mysql_table_health": {
-              "name": "Taulujen kunto"
-            },
-            "write_permission": {
-              "name": "Kirjoitusoikeus"
-            },
-            "mysql_permissions": {
-              "name": "MySQL-oikeudet"
-            },
-            "record_count": {
-              "name": "Tietueiden määrä"
-            },
-            "existing_v2_data": {
-              "name": "Olemassa olevat migraatiotiedot"
-            },
-            "no_active_locks": {
-              "name": "Aktiiviset lukot"
-            },
-            "memory_available": {
-              "name": "Käytettävissä oleva muisti"
-            },
-            "mysql_max_packet": {
-              "name": "MySQL Max Packet"
-            },
-            "mysql_timeout": {
-              "name": "MySQL Timeout"
-            }
-          },
-          "passedCount": "{passed}/{total} hyväksytty",
-          "criticalCount": "{count} kriittistä",
-          "warningCount": "{count} varoitusta",
-          "rerun": "Suorita uudelleen",
-          "showDetails": "Näytä tiedot",
-          "hideDetails": "Piilota tiedot",
-          "status": {
-            "passed": "Hyväksytty",
-            "failed": "Epäonnistui",
-            "error": "Virhe",
-            "warning": "Varoitus",
-            "skipped": "Ohitettu"
-          }
-        },
-        "requiredNote": "Tietokannan migraatio vaaditaan tulevien BirdNET-Go-ominaisuuksien vuoksi, jotka hyödyntävät uutta normalisoitua tietokantaskeemaa. Uudet ominaisuudet eivät ole käytettävissä ennen migraation valmistumista.",
-        "starting": "Käynnistetään migraatiota...",
-        "confirmDialog": {
-          "title": "Aloita tietokannan migraatio",
-          "message": "Migraatio kopioi havaintotietosi nykyisestä tietokannasta uuteen normalisoituun tietokantaan. Alkuperäinen tietokantasi säilyy muuttumattomana. Varmuuskopion luominen on kuitenkin suositeltavaa odottamattomien ongelmien varalta.",
-          "checkbox": "Vahvistan, että olen varmuuskopioinut tietokantani tai ymmärrän riskit jatkamisesta ilman varmuuskopiota.",
-          "note": "Voit ladata varmuuskopion käyttämällä yllä olevaa \"Lataa varmuuskopio\" -painiketta."
-        },
-        "details": {
-          "title": "Tietokannan tiedot",
-          "detections": "{count} tunnistusta",
-          "lastBackup": "Viimeisin varmuuskopio: {date}",
-          "noBackups": "Ei varmuuskopioita",
-          "integrity": "Eheys: {status}"
-        },
-        "strip": {
-          "legacy": "Vanha",
-          "v2Target": "V2 (kohde)",
-          "active": "Aktiivinen",
-          "migration": "Siirto",
-          "complete": "Valmis",
-          "recordsMigrated": "{count} tietuetta siirretty",
-          "readyToMigrate": "Valmis siirtoon",
-          "recordsInLegacy": "{count} tietuetta vanhassa",
-          "comparingRecords": "Verrataan tietuemääriä...",
-          "validationFailed": "Tarkistus epäonnistui",
-          "rate": "Nopeus",
-          "recPerSec": "{rate} tiet./s",
-          "dayAvg": "~{count} / päivä keskim.",
-          "dayHistory": "30 päivän historia"
-        }
-      },
       "legacy": {
         "title": "Vanha tietokanta",
         "fetchFailed": "Vanhan tietokannan tilan haku epäonnistui",
         "cleanup": {
           "title": "Vanhan tietokannan siivous",
+          "description": "Tämä tietokanta on nyt offline-tilassa eikä sitä enää käytetä. Kaikki tietosi on siirretty parannettuun tietokantaan.",
+          "recommendation": "Tietokannan poistamista suositellaan levytilan vapauttamiseksi.",
           "location": "Sijainti",
           "size": "Koko",
           "records": "Tietueet",
@@ -1305,9 +1107,7 @@
           "confirmMessage": "Olet poistamassa pysyvästi vanhan tietokannan ({size}). Tätä toimintoa ei voi kumota.",
           "confirmCheckbox": "Ymmärrän, että tämä poistaa vanhan tietokannan pysyvästi",
           "cancelButton": "Peruuta",
-          "deleteConfirmButton": "Poista pysyvästi",
-          "description": "Tämä tietokanta on nyt offline-tilassa eikä sitä enää käytetä. Kaikki tietosi on siirretty parannettuun tietokantaan.",
-          "recommendation": "Tietokannan poistamista suositellaan levytilan vapauttamiseksi."
+          "deleteConfirmButton": "Poista pysyvästi"
         }
       },
       "v2": {
@@ -1325,6 +1125,7 @@
       "dashboard": {
         "title": "Tietokantapaneeli",
         "fetchFailed": "Tietokannan yleiskatsauksen haku epäonnistui",
+        "loading": "Ladataan...",
         "metrics": {
           "readLatency": "Lukuviive",
           "writeLatency": "Kirjoitusviive",
@@ -1379,6 +1180,8 @@
         },
         "detectionRate": {
           "title": "Havaintotaajuus (24h)",
+          "chartLabel": "Tunnistusmäärä 24 tunnin ajalta",
+          "detectionsTooltip": "{count} tunnistusta",
           "perHour": "/t",
           "min": "min",
           "avg": "keskim.",
@@ -1387,9 +1190,7 @@
           "backupSize": "Varmuuskopion koko",
           "createBackup": "Luo varmuuskopio",
           "mysqlHost": "Palvelin",
-          "mysqlBackupNote": "MySQL-varmuuskopiot tulee hallita mysqldump-työkalulla tai MySQL-hallintatyökaluillasi.",
-          "chartLabel": "Tunnistusmäärä 24 tunnin ajalta",
-          "detectionsTooltip": "{count} tunnistusta"
+          "mysqlBackupNote": "MySQL-varmuuskopiot tulee hallita mysqldump-työkalulla tai MySQL-hallintatyökaluillasi."
         },
         "tables": {
           "title": "Taulukot",
@@ -1399,8 +1200,7 @@
           "rows": "Rivit",
           "size": "Koko",
           "usage": "Käyttö"
-        },
-        "loading": "Ladataan..."
+        }
       },
       "backup": {
         "download": "Lataa varmuuskopio",
@@ -1432,7 +1232,207 @@
           }
         }
       },
-      "notInitialized": "Ei alustettu"
+      "notInitialized": "Ei alustettu",
+      "migration": {
+        "title": "Tietokantamigraatio",
+        "description": "Migroi vanhasta skeemasta normalisoituun v2-skeemaan",
+        "requiredNote": "Tietokannan migraatio vaaditaan tulevien BirdNET-Go-ominaisuuksien vuoksi, jotka hyödyntävät uutta normalisoitua tietokantaskeemaa. Uudet ominaisuudet eivät ole käytettävissä ennen migraation valmistumista.",
+        "completedTitle": "Migraatio valmis",
+        "completedNote": "Tietokantasi on siirretty onnistuneesti uuteen skeemaan. Käynnistä BirdNET-Go uudelleen siirtyäksesi uuteen tietokantaan. Huom: Uusi tietokanta on pienempi, koska se tallentaa tiedot tehokkaammin - tämä on normaalia ja kaikki tietosi on säilytetty.",
+        "starting": "Käynnistetään migraatiota...",
+        "status": {
+          "idle": "Valmis aloitettavaksi",
+          "initializing": "Alustus",
+          "dual_write": "Kaksoiskirjoitus aktiivinen",
+          "migrating": "Migroidaan ensisijaiset",
+          "migrating_predictions": "Migroidaan toissijaiset",
+          "paused": "Keskeytetty",
+          "validating": "Vahvistetaan",
+          "cutover": "Vaihto käynnissä",
+          "completed": "Migraatio valmis",
+          "failed": "Validointi epäonnistui"
+        },
+        "progress": {
+          "title": "Migraation edistyminen",
+          "records": "tietuetta",
+          "paused": "Migraatio keskeytetty",
+          "percent": "{percent}%",
+          "rate": "{rate} tietuetta/sek",
+          "rateValue": "{rate} tiet/s",
+          "remaining": "Jäljellä: {time}",
+          "eta": "Arvioitu jäljellä oleva aika",
+          "dirtyIds": "{count} tietuetta odottaa",
+          "completedTitle": "Siirto valmis",
+          "completedBody": "Kaikki {count} tietuetta on siirretty onnistuneesti V2-tietokantaan. Sovellus käyttää V2:ta ensisijaisena tietokantana uudelleenkäynnistyksen jälkeen.",
+          "restartTitle": "Uudelleenkäynnistys vaaditaan",
+          "restartBody": "Käynnistä sovellus uudelleen vaihtaaksesi V2-tietokantaan. Vanhan tietokannan siivous on käytettävissä uudelleenkäynnistyksen jälkeen.",
+          "fallbackError": "Tietuemäärä ei täsmää vanhan ja V2-tietokannan välillä. Joitain tietueita ei ehkä ole siirretty oikein.",
+          "migrateInfo": "Siirto siirtää {count} tietuetta vanhasta tietokannasta uuteen V2-skeemaan. Kaksoistallennustila varmistaa, ettei tietoja menetetä siirron aikana.",
+          "sourceLegacy": "Lähde (vanha)",
+          "targetV2": "Kohde (V2)",
+          "recordsLabel": "Tietueet",
+          "sizeLabel": "Koko",
+          "prerequisitesNotMet": "Edellytykset eivät täyty – ratkaise alla olevat kriittiset ongelmat",
+          "validatingTitle": "Tietojen tarkistus",
+          "validatingBody": "Verrataan {count} vanhaa tietuetta V2-tietokantaan...",
+          "dirtyRecordsCatchup": "{count} muuttunutta tietuetta — yritetään täsmäytystä",
+          "cutoverTitle": "Viimeistellään siirtymä",
+          "cutoverBody": "Viimeistellään siirtymä V2-tietokantaan...",
+          "migratingPhase": "Siirretään {phase}",
+          "progressLabel": "Edistyminen",
+          "ofRecords": "/ {count} tietuetta",
+          "percentComplete": "{percent}% valmis",
+          "recordsPerSec": "{rate} tietuetta/s",
+          "calculating": "Lasketaan...",
+          "dirtyWriteFailed": "{count} tietueen kirjoitus epäonnistui — täsmäytetään tarkistuksen aikana"
+        },
+        "details": {
+          "title": "Tietokannan tiedot",
+          "detections": "{count} tunnistusta",
+          "lastBackup": "Viimeisin varmuuskopio: {date}",
+          "noBackups": "Ei varmuuskopioita",
+          "integrity": "Eheys: {status}"
+        },
+        "strip": {
+          "legacy": "Vanha",
+          "v2Target": "V2 (kohde)",
+          "active": "Aktiivinen",
+          "migration": "Siirto",
+          "complete": "Valmis",
+          "recordsMigrated": "{count} tietuetta siirretty",
+          "readyToMigrate": "Valmis siirtoon",
+          "recordsInLegacy": "{count} tietuetta vanhassa",
+          "comparingRecords": "Verrataan tietuemääriä...",
+          "validationFailed": "Tarkistus epäonnistui",
+          "rate": "Nopeus",
+          "recPerSec": "{rate} tiet./s",
+          "dayAvg": "~{count} / päivä keskim.",
+          "dayHistory": "30 päivän historia"
+        },
+        "phase": {
+          "indicator": "Vaihe {current}/{total}: ",
+          "detections": "Migroidaan ensisijaiset havainnot",
+          "predictions": "Migroidaan toissijaiset havainnot",
+          "reviews": "Migroidaan arvioinnit",
+          "comments": "Migroidaan kommentit",
+          "locks": "Migroidaan lukitukset"
+        },
+        "notes": {
+          "in_progress": "Voit jatkaa järjestelmän normaalia käyttöä migraation suorittaessa taustalla.",
+          "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - kaikki uudet havainnot tallennetaan molempiin tietokantoihin. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
+          "migrating": "Kopioidaan olemassa olevia havaintojasi uuteen tietokantaan. Tämä voi kestää jonkin aikaa havaintojen määrästä riippuen. Voit keskeyttää ja jatkaa milloin tahansa.",
+          "validating": "Tarkistetaan, että kaikki tietueet kopioitiin oikein. Melkein valmis!",
+          "cutover": "Vaihdetaan uuteen tietokantaan. Tämä kestää vain hetken.",
+          "paused": "Migraatio on keskeytetty. Tietosi ovat turvassa. Jatka kun olet valmis."
+        },
+        "actions": {
+          "start": "Aloita migraatio",
+          "pause": "Keskeytä",
+          "resume": "Jatka",
+          "cancel": "Peruuta",
+          "rollback": "Palauta",
+          "retryValidation": "Yritä validointia uudelleen"
+        },
+        "confirmDialog": {
+          "title": "Aloita tietokannan migraatio",
+          "message": "Migraatio kopioi havaintotietosi nykyisestä tietokannasta uuteen normalisoituun tietokantaan. Alkuperäinen tietokantasi säilyy muuttumattomana. Varmuuskopion luominen on kuitenkin suositeltavaa odottamattomien ongelmien varalta.",
+          "checkbox": "Vahvistan, että olen varmuuskopioinut tietokantani tai ymmärrän riskit jatkamisesta ilman varmuuskopiota.",
+          "note": "Voit ladata varmuuskopion käyttämällä yllä olevaa \"Lataa varmuuskopio\" -painiketta."
+        },
+        "confirmCancel": {
+          "title": "Peruuta migraatio?",
+          "message": "Tämä pysäyttää migraation ja palauttaa lepotilaan. Voit käynnistää migraation turvallisesti uudelleen myöhemmin - tietueita ei kopioida.",
+          "confirm": "Kyllä, peruuta",
+          "dismiss": "Ei, jatka"
+        },
+        "confirmRollback": {
+          "title": "Palauta migraatio?",
+          "message": "Tämä palauttaa vanhaan tietokantaan. Migraation jälkeen tallennetut uudet havainnot säilyvät parannetussa tietokannassa, mutta eivät näy ennen uutta migraatiota.",
+          "confirm": "Kyllä, palauta",
+          "dismiss": "Ei, säilytä parannettu"
+        },
+        "errors": {
+          "startFailed": "Migraation käynnistys epäonnistui",
+          "pauseFailed": "Migraation keskeytys epäonnistui",
+          "resumeFailed": "Migraation jatkaminen epäonnistui",
+          "cancelFailed": "Migraation peruutus epäonnistui",
+          "rollbackFailed": "Migraation palautus epäonnistui",
+          "retryValidationFailed": "Validoinnin uudelleenyritys epäonnistui",
+          "fetchFailed": "Migraation tilan haku epäonnistui"
+        },
+        "worker": {
+          "running": "Worker käynnissä",
+          "paused": "Worker keskeytetty",
+          "stopped": "Worker pysäytetty"
+        },
+        "prerequisites": {
+          "title": "Migraation esitarkistukset",
+          "rerunChecks": "Suorita tarkistukset uudelleen",
+          "critical": "Kriittinen",
+          "allPassed": "Kaikki tarkistukset läpäisty - valmis migraatioon",
+          "criticalIssues": "{count} kriittinen ongelma on ratkaistava",
+          "warningsCount": "{count} varoitus(ta)",
+          "running": "Suoritetaan esitarkistuksia...",
+          "checkingStep": "Vaihe {current}/{total}",
+          "passedCount": "{passed}/{total} hyväksytty",
+          "criticalCount": "{count} kriittistä",
+          "warningCount": "{count} varoitusta",
+          "rerun": "Suorita uudelleen",
+          "showDetails": "Näytä tiedot",
+          "hideDetails": "Piilota tiedot",
+          "status": {
+            "passed": "Hyväksytty",
+            "failed": "Epäonnistui",
+            "error": "Virhe",
+            "warning": "Varoitus",
+            "skipped": "Ohitettu"
+          },
+          "errors": {
+            "fetchFailed": "Esivaatimusten haku epäonnistui"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Migraation tila"
+            },
+            "disk_space": {
+              "name": "Levytila"
+            },
+            "legacy_accessible": {
+              "name": "Tietokantayhteys"
+            },
+            "sqlite_integrity": {
+              "name": "Tietokannan eheys"
+            },
+            "mysql_table_health": {
+              "name": "Taulujen kunto"
+            },
+            "write_permission": {
+              "name": "Kirjoitusoikeus"
+            },
+            "mysql_permissions": {
+              "name": "MySQL-oikeudet"
+            },
+            "record_count": {
+              "name": "Tietueiden määrä"
+            },
+            "existing_v2_data": {
+              "name": "Olemassa olevat migraatiotiedot"
+            },
+            "no_active_locks": {
+              "name": "Aktiiviset lukot"
+            },
+            "memory_available": {
+              "name": "Käytettävissä oleva muisti"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL Timeout"
+            }
+          }
+        }
+      }
     },
     "metrics": {
       "cpu": "CPU",
@@ -1463,6 +1463,30 @@
       "free": "vapaana",
       "ram": "RAM"
     }
+  },
+  "terminal": {
+    "title": "Pääte",
+    "disabled": "Terminaali on poistettu käytöstä",
+    "disabledDescription": "Selainpääte on poistettu käytöstä. Ota se käyttöön Asetukset → Turvallisuus -kohdassa käyttääksesi tätä ominaisuutta.",
+    "connected": "Yhdistetty",
+    "disconnected": "Yhteys katkaistu",
+    "connecting": "Yhdistetään...",
+    "connectionError": "Yhteys epäonnistui",
+    "connectionClosed": "Yhteys katkaistu",
+    "securityWarning": "Varoitus: Tämä pääte tarjoaa suoran komentotulkin käytön host-järjestelmään. Ota käyttöön vain luotetuissa verkoissa.",
+    "copySelection": "Kopioi valinta",
+    "expand": "Laajenna",
+    "collapse": "Pienennä",
+    "fullscreen": "Koko näyttö",
+    "exitFullscreen": "Poistu koko näytöstä",
+    "colorTheme": "Väriteema",
+    "themeDark": "Tumma",
+    "themeLight": "Vaalea",
+    "themeHighContrast": "Korkea kontrasti",
+    "detach": "Avaa uudessa ikkunassa",
+    "detached": "Terminaali on irrotettu",
+    "detachedDescription": "Terminaali toimii erillisessä ikkunassa. Sulje se palauttaaksesi sen tänne.",
+    "reattach": "Liitä takaisin"
   },
   "analytics": {
     "title": "Yleiskatsaus",
@@ -1574,6 +1598,10 @@
       "dateRange": "Päivämääräväli",
       "chartOptions": "Kaavion asetukset",
       "speciesSelection": "Lajien valinta ({count}/{max})",
+      "speciesSelectionHint": "Hae tai klikkaa alla olevia merkkejä",
+      "speciesPlaceholder": "Hae ja valitse lajit analysoitavaksi...",
+      "noSpeciesFound": "Lajeja ei löytynyt valitulla aikavälillä",
+      "detections": "{count} havaintoa",
       "dateRangeOptions": {
         "week": "Viime viikko",
         "month": "Viime kuukausi",
@@ -1620,13 +1648,6 @@
           "species": "Laji"
         }
       },
-      "aria": {
-        "startDate": "Alkupäivämäärä",
-        "endDate": "Loppupäivämäärä",
-        "loadingAnalytics": "Ladataan analytiikkatietoja",
-        "loadingTrends": "Ladataan trenditietoja",
-        "loadingDiversity": "Ladataan monimuotoisuustietoja"
-      },
       "categories": {
         "birds": "Linnut"
       },
@@ -1634,10 +1655,13 @@
         "startDate": "Alkupäivämäärä",
         "endDate": "Loppupäivämäärä"
       },
-      "speciesSelectionHint": "Hae tai klikkaa alla olevia merkkejä",
-      "speciesPlaceholder": "Hae ja valitse lajit analysoitavaksi...",
-      "noSpeciesFound": "Lajeja ei löytynyt valitulla aikavälillä",
-      "detections": "{count} havaintoa"
+      "aria": {
+        "startDate": "Alkupäivämäärä",
+        "endDate": "Loppupäivämäärä",
+        "loadingAnalytics": "Ladataan analytiikkatietoja",
+        "loadingTrends": "Ladataan trenditietoja",
+        "loadingDiversity": "Ladataan monimuotoisuustietoja"
+      }
     },
     "errors": {
       "loadFailed": "Analytiikkatietojen lataaminen epäonnistui. Yritä uudelleen."
@@ -1653,9 +1677,9 @@
       "audio": "Ääni",
       "filters": "Suodattimet",
       "integration": "Integraatiot",
-      "notifications": "Ilmoitukset",
       "security": "Turvallisuus",
       "species": "Lajit",
+      "notifications": "Ilmoitukset",
       "support": "Tuki"
     },
     "notFound": {
@@ -1672,11 +1696,29 @@
       "unsavedChanges": "Tallentamattomat muutokset",
       "toolbar": "Asetusten toiminnot"
     },
+    "errors": {
+      "loadFailed": "Asetusten lataaminen epäonnistui",
+      "saveFailed": "Asetusten tallentaminen epäonnistui",
+      "databaseStatsFailed": "Tietokantatilastojen lataaminen epäonnistui",
+      "csvDownloadFailed": "CSV-tiedoston lataaminen epäonnistui"
+    },
     "card": {
       "changed": "muutettu",
       "changedAriaLabel": "Asetuksia muutettu"
     },
+    "tabs": {
+      "navigation": "Asetusten navigointivälilehdet",
+      "hasChanges": "Tällä välilehdellä on tallentamattomia muutoksia",
+      "setAsDefault": "Aseta oletukseksi",
+      "defaultIndicator": "Oletuslähde"
+    },
     "main": {
+      "tabs": {
+        "general": "Yleiset",
+        "detection": "Tunnistus",
+        "location": "Sijainti",
+        "database": "Tietokanta"
+      },
       "sections": {
         "main": {
           "title": "Pääasetukset",
@@ -2019,12 +2061,6 @@
         "mapLoadFailed": "Kartan lataus epäonnistui. Kokeile päivittää sivu.",
         "modalMapLoadFailed": "Ikkunan kartan lataus epäonnistui. Sulje ja avaa ikkuna uudelleen.",
         "mapUnavailable": "Kartta ei ole käytettävissä: selain ei tue WebGL:ää. Voit silti asettaa sijaintisi yllä olevien koordinaattikenttien avulla."
-      },
-      "tabs": {
-        "general": "Yleiset",
-        "detection": "Tunnistus",
-        "location": "Sijainti",
-        "database": "Tietokanta"
       }
     },
     "support": {
@@ -2081,10 +2117,10 @@
         },
         "userMessage": {
           "label": "Kuvaile ongelma",
-          "labelOptional": "Lisätiedot (valinnainen)",
           "placeholder": "Kuvaile ongelma ja sisällytä GitHub-ongelman linkki jos saatavilla (esim. #123)",
-          "placeholderOptional": "Anna lisäkontekstia ongelmasta, jota ei ole GitHub-ongelmassasi",
           "githubTip": "💡 Vinkki: Jos sinulla on GitHub-ongelma, sisällytä ongelman numero (esim. #123) ja mainitse järjestelmätunnuksesi {systemId} GitHub-ongelmassa auttaaksesi kehittäjiä yhdistämään tukitietosi.",
+          "labelOptional": "Lisätiedot (valinnainen)",
+          "placeholderOptional": "Anna lisäkontekstia ongelmasta, jota ei ole GitHub-ongelmassasi",
           "systemIdNote": "💡 Vinkki: Järjestelmätunnuksesi {systemId} sisällytetään automaattisesti lähetykseen"
         },
         "uploadOption": {
@@ -2175,6 +2211,40 @@
           "imageUrl": "Linkki lajikuvaan",
           "daysSinceFirstSeen": "Päivien lukumäärä ensimmäisestä havainnosta"
         }
+      },
+      "testNotification": {
+        "title": "Lähetä uuden lajin testi-ilmoitus",
+        "description": "Luo testi-ilmoitus uuden lajin havaitsemisesta varmistaaksesi, että ilmoitusjärjestelmäsi toimii",
+        "whatHappens": "Mitä tapahtuu kun klikkaat 'Lähetä testi':",
+        "sendButton": "Lähetä testi",
+        "sendingButton": "Lähetetään...",
+        "statusMessages": {
+          "sending": "Lähetetään testi-ilmoitusta...",
+          "success": "Testi-ilmoitus lähetetty onnistuneesti! Tarkista ilmoituskellosi.",
+          "error": "Testi-ilmoituksen lähetys epäonnistui: {message}",
+          "serviceUnavailable": "Ilmoituspalvelu ei ole käytettävissä. Tarkista ilmoitusasetuksesi."
+        }
+      },
+      "statusMessages": {
+        "sending": "Lähetetään testi-ilmoitusta...",
+        "success": "Testi-ilmoitus lähetetty onnistuneesti!",
+        "error": "Testi-ilmoituksen lähetys epäonnistui: {message}",
+        "serviceUnavailable": "Ilmoituspalvelu ei ole käytettävissä. Tarkista ilmoitusasetuksesi."
+      },
+      "systemInfo": {
+        "howToView": "Kuinka tarkastella ilmoituksia:",
+        "technicalDetails": "Tekniset tiedot ilmoituksista BirdNET-Go:ssa:"
+      },
+      "privacy": {
+        "title": "Tietosuojailmoitus ulkoisille webhokeille",
+        "description": "Tunnistamisilmoitukset voivat sisältää arkaluonteisia tietoja, kun ne lähetetään ulkoisiin palveluihin:",
+        "gps": "GPS-koordinaatit",
+        "gpsDetails": "Tarkka sijainti (leveyspiiri/pituuspiiri), jos määritetty",
+        "urls": "Tunnistus-URL:t",
+        "urlsDetails": "Voivat paljastaa sisäisen verkon tietoja",
+        "species": "Lajitiedot",
+        "speciesDetails": "Mitkä linnut tunnistettiin ja milloin",
+        "recommendation": "Ota ulkoiset webhookit käyttöön vain, jos luotat vastaanottavaan palveluun tai käytät itse isännöityjä/paikallisia palveluja."
       },
       "push": {
         "title": "Push-ilmoitukset",
@@ -2445,63 +2515,30 @@
             "invalidUrl": "Virheellinen URL-muoto. URL:n tulee alkaa service://"
           }
         }
-      },
-      "testNotification": {
-        "title": "Lähetä uuden lajin testi-ilmoitus",
-        "description": "Luo testi-ilmoitus uuden lajin havaitsemisesta varmistaaksesi, että ilmoitusjärjestelmäsi toimii",
-        "whatHappens": "Mitä tapahtuu kun klikkaat 'Lähetä testi':",
-        "sendButton": "Lähetä testi",
-        "sendingButton": "Lähetetään...",
-        "statusMessages": {
-          "sending": "Lähetetään testi-ilmoitusta...",
-          "success": "Testi-ilmoitus lähetetty onnistuneesti! Tarkista ilmoituskellosi.",
-          "error": "Testi-ilmoituksen lähetys epäonnistui: {message}",
-          "serviceUnavailable": "Ilmoituspalvelu ei ole käytettävissä. Tarkista ilmoitusasetuksesi."
-        }
-      },
-      "statusMessages": {
-        "sending": "Lähetetään testi-ilmoitusta...",
-        "success": "Testi-ilmoitus lähetetty onnistuneesti!",
-        "error": "Testi-ilmoituksen lähetys epäonnistui: {message}",
-        "serviceUnavailable": "Ilmoituspalvelu ei ole käytettävissä. Tarkista ilmoitusasetuksesi."
-      },
-      "systemInfo": {
-        "howToView": "Kuinka tarkastella ilmoituksia:",
-        "technicalDetails": "Tekniset tiedot ilmoituksista BirdNET-Go:ssa:"
-      },
-      "privacy": {
-        "title": "Tietosuojailmoitus ulkoisille webhokeille",
-        "description": "Tunnistamisilmoitukset voivat sisältää arkaluonteisia tietoja, kun ne lähetetään ulkoisiin palveluihin:",
-        "gps": "GPS-koordinaatit",
-        "gpsDetails": "Tarkka sijainti (leveyspiiri/pituuspiiri), jos määritetty",
-        "urls": "Tunnistus-URL:t",
-        "urlsDetails": "Voivat paljastaa sisäisen verkon tietoja",
-        "species": "Lajitiedot",
-        "speciesDetails": "Mitkä linnut tunnistettiin ja milloin",
-        "recommendation": "Ota ulkoiset webhookit käyttöön vain, jos luotat vastaanottavaan palveluun tai käytät itse isännöityjä/paikallisia palveluja."
       }
     },
     "filters": {
+      "title": "Suodattimet",
       "privacyFiltering": {
         "title": "Yksityisyyssuodatus",
         "description": "Yksityisyyssuodatus estää äänileikkeiden tallentamisen, kun ihmisääniä havaitaan",
         "enable": "Ota yksityisyyssuodatus käyttöön",
+        "disabled": "Yksityisyyssuodatus on poistettu käytöstä",
         "confidenceLabel": "Luottamuskynnys ihmisen tunnistukseen",
-        "confidenceHelp": "Aseta luottamustaso ihmisäänen tunnistukseen, matalampi arvo tekee suodattimesta herkemmän",
-        "disabled": "Yksityisyyssuodatus on poistettu käytöstä"
+        "confidenceHelp": "Aseta luottamustaso ihmisäänen tunnistukseen, matalampi arvo tekee suodattimesta herkemmän"
       },
       "falsePositivePrevention": {
         "title": "Väärien positiivisten ehkäisy",
         "description": "Määritä virhetunnistussuodattimet",
         "enableDogBark": "Ota koiran haukunnan suodatin käyttöön",
+        "disabled": "Koiran haukuntasuodatin on poistettu käytöstä",
         "confidenceLabel": "Luottamuskynnys",
         "confidenceHelp": "Aseta luottamustaso koiran haukunnan tunnistukseen, matalampi arvo tekee suodattimesta herkemmän",
         "expireTimeLabel": "Koiran haukunnan vanhenemisaika (minuuttia)",
         "expireTimeHelp": "Aseta kuinka kauan havaittu koiran haukunta muistetaan",
         "addDogBarkSpeciesLabel": "Lisää koiran haukunnan lajeja",
         "addDogBarkSpeciesHelp": "Etsi ja lisää lajeja, jotka voidaan sekoittaa koiran haukuntaan",
-        "addSpeciesButton": "Lisää",
-        "disabled": "Koiran haukuntasuodatin on poistettu käytöstä"
+        "addSpeciesButton": "Lisää"
       },
       "speciesNamePlaceholder": "Lajin nimi",
       "typeSpeciesName": "Kirjoita lajin nimi...",
@@ -2519,396 +2556,6 @@
       },
       "errors": {
         "speciesLoadFailed": "Lajiluettelon lataus epäonnistui. Yritä uudelleen."
-      },
-      "title": "Suodattimet"
-    },
-    "audio": {
-      "loading": "Ladataan äänilaitteita...",
-      "tabs": {
-        "soundCard": "Äänikortti",
-        "streams": "Lähetykset",
-        "processing": "Käsittely",
-        "recording": "Tallennus",
-        "retention": "Säilytys"
-      },
-      "audioCapture": {
-        "title": "Äänen tallennus",
-        "description": "Aseta äänen tallennuslähde, äänikortti tai RTSP-striimi",
-        "soundCardSource": "Äänikorttilähde",
-        "audioSourceLabel": "Äänilähde (vaatii sovelluksen uudelleenkäynnistyksen)",
-        "audioSourceHelp": "Valitse äänen syöttölaite lintuäänten tunnistukseen. Muutokset vaativat sovelluksen uudelleenkäynnistyksen.",
-        "noSoundCardCapture": "Ei äänikortin tallennusta",
-        "rtspSource": "RTSP-lähde",
-        "rtspTransportLabel": "RTSP-siirtoprotokolla",
-        "rtspTransportHelp": "TCP on luotettavampi mutta saattaa aiheuttaa suurempaa viivettä. UDP on nopeampi mutta saattaa kokea pakettihäviötä heikoissa verkoissa.",
-        "rtspUrlsLabel": "RTSP-striimin URL-osoitteet",
-        "rtspUrlsHelp": "Syötä yksi tai useampi RTSP-striimin URL-osoite verkkoäänilähteille. Muoto: rtsp://ip:portti/stream. Huom: Todennustiedot tulisi määrittää erikseen RTSP-palvelimen asetuksissa tietoturvan vuoksi.",
-        "noDeviceSelected": "Äänilaitetta ei ole valittu",
-        "refreshDevices": "Päivitä",
-        "deviceSelected": "Äänikortti valittu ja valmis tallennukseen",
-        "availableDevices": "Saatavilla olevat äänilaitteet",
-        "active": "Aktiivinen",
-        "streamsConfigured": "{count} striimi(ä) määritetty"
-      },
-      "quietHours": {
-        "title": "Hiljaiset tunnit",
-        "sectionTitle": "Hiljaiset tunnit",
-        "sectionDescription": "Keskeytä äänen tallennus määritettyinä aikajaksoina vähentääksesi suorittimen käyttöä, kun linnut eivät todennäköisesti ole aktiivisia.",
-        "modeLabel": "Aikataulutila",
-        "modeFixed": "Kiinteät ajat",
-        "modeSolar": "Auringonnousu/-lasku",
-        "startTime": "Alkamisaika",
-        "endTime": "Päättymisaika",
-        "startEvent": "Aloitustapahtuma",
-        "endEvent": "Lopetustapahtuma",
-        "offsetMinutes": "Poikkeama (min)",
-        "sunrise": "Auringonnousu",
-        "sunset": "Auringonlasku",
-        "fixedHint": "Tallennus keskeytyy päivittäin alku- ja loppuaikojen välillä. Yön yli -ikkunat (esim. 22:00–06:00) ovat tuettuja.",
-        "solarHint": "Ajat lasketaan auringonnousun/-laskun perusteella määritetyssä sijainnissasi. Käytä negatiivisia poikkeamia ennen tapahtumaa, positiivisia sen jälkeen.",
-        "badge": "Hiljainen",
-        "enabledBadge": "Hiljaiset tunnit käytössä tälle striimille"
-      },
-      "audioFilters": {
-        "title": "Äänisuodattimet",
-        "description": "Määritä oletusäänisuodattimet kaikille lähteille. Lähdekohtaiset taajuuskorjainasetukset ovat saatavilla kunkin äänikortin asetuksissa.",
-        "enableEqualizer": "Ota taajuuskorjain käyttöön",
-        "enableEqualizerHelp": "Käytä taajuussuodatusta parantaaksesi lintuäänten tunnistusta vähentämällä ei-toivottua melua ja taajuuksia.",
-        "filterType": "Suodatintyyppi",
-        "newFilterType": "Uusi suodatintyyppi",
-        "selectFilterType": "Valitse suodatintyyppi",
-        "addFilter": "Lisää suodatin",
-        "remove": "Poista",
-        "frequencyResponse": "Taajuusvaste",
-        "cutoffFrequency": "Rajataajuus",
-        "cutoffFrequencyHelp": "Taajuus, jossa suodatin alkaa vaimentaa signaaleja. Lintuäänten taajuudet ovat tyypillisesti 1-10 kHz välillä.",
-        "qFactor": "Q-kerroin",
-        "qFactorHelp": "Laatukerroin ohjaa suodattimen terävyyttä. Matalat arvot (0.1-1) luovat loivempia kaarevia, korkeammat arvot (1-10) luovat jyrkempiä katkoja.",
-        "gain": "Vahvistus",
-        "gainHelp": "Vahvistus tai vaimennus desibeleinä (dB).",
-        "attenuation": "Vaimennus",
-        "attenuationHelp": "Suodattimen vaimennusnopeus. Korkeammat arvot tarjoavat jyrkemmän suodatettujen taajuuksien vaimentamisen.",
-        "filterHelp": "Lisää useita suodattimia muodostaaksesi taajuusvasteen optimaaliseen lintujen tunnistukseen ympäristössäsi.",
-        "attenuationLevels": {
-          "0db": "0dB",
-          "12db": "12dB",
-          "24db": "24dB",
-          "36db": "36dB",
-          "48db": "48dB"
-        },
-        "graph": {
-          "flatResponse": "Tasainen vaste (Ei suodattimia käytössä)",
-          "frequency": "Taajuus (Hz)",
-          "gain": "Vahvistus (dB)"
-        }
-      },
-      "soundLevelMonitoring": {
-        "title": "Äänitason seuranta",
-        "description": "Seuraa ja raportoi ympäristön äänitasoja",
-        "enable": "Ota äänitason seuranta käyttöön",
-        "enableHelp": "Seuraa ympäristön melutasoja ymmärtääksesi tallennusympäristöäsi ja korreloida lintujen aktiivisuusmallien kanssa.",
-        "intervalLabel": "Mittausväli (sekuntia)",
-        "intervalHelp": "Kuinka usein äänitasot mitataan ja raportoidaan. Matalammat arvot tarjoavat tarkempia tietoja mutta käyttävät enemmän resursseja. Vähintään 5 sekuntia, suositus 60 sekuntia.",
-        "dataOutputTitle": "Äänitasotietojen lähtö",
-        "dataOutputDescription": "Kun käytössä, äänitasomittaukset julkaistaan kautta:",
-        "mqttTopic": "MQTT-aihe:",
-        "sseEndpoint": "SSE-päätepiste:",
-        "prometheusMetrics": "Prometheus-mittarit:",
-        "disabled": "Äänitason seuranta on poistettu käytöstä"
-      },
-      "clipSettings": {
-        "title": "Leikeasetukset",
-        "description": "Määritä äänileikkeiden tallennus ja käsittely tunnistetuille lintuäänille"
-      },
-      "clipRecording": {
-        "title": "Leikkeen tallennusasetukset",
-        "description": "Määritä äänileikkeiden tallennus, muoto ja tallennusvaihtoehdot havaituille lintuäänille.",
-        "enable": "Ota leikkeiden tallennus käyttöön",
-        "disabled": "Leikkeiden tallennus on poistettu käytöstä",
-        "enableHelp": "Tallenna havaittujen lintuäänten äänileikkeitä tarkastelua, jakamista tai mukautettujen tietojoukkojen rakentamista varten.",
-        "captureSettings": "Tallennusasetukset",
-        "lengthLabel": "Tallennuspituus",
-        "lengthHelp": "Äänen kesto tallennettavaksi jokaiselle havainnolle (10-60 sekuntia). Pidemmät leikkeet tarjoavat enemmän kontekstia mutta käyttävät enemmän tallennustilaa.",
-        "preCaptureLabel": "Esitallennuspuskuri",
-        "preCaptureHelp": "Sekuntimäärä ääntä sisällytettäväksi ennen linnun havaitsemista (0-{max} sekuntia). Varmistaa, että koko lintuääni tallennetaan alusta alkaen.",
-        "gainLabel": "Äänenvahvistus",
-        "gainHelp": "Äänen vahvistus tallennetuille leikkeille desibeleinä (0-20 dB). Tekee tallennetuista äänileikkeistä voimakkaampia helpompaan kuunteluun. Ei vaikuta tunnistukseen. 0 dB tarkoittaa ei vahvistusta.",
-        "normalization": "Äänen normalisointi",
-        "normalizationEnable": "Ota käyttöön äänenvoimakkuuden normalisointi",
-        "normalizationHelp": "Säädä äänentasoja automaattisesti EBU R128 -lähetysstandardin mukaisesti tasaiseen toistoäänenvoimakkuuteen kaikissa leikkeissä.",
-        "targetLUFSLabel": "Tavoiteäänenvoimakkuus (LUFS)",
-        "targetLUFSHelp": "Integroitu äänenvoimakkuustavoite LUFS:na (Loudness Units relative to Full Scale). -23 LUFS on EBU R128 -lähetysstandardi. Alue: -40 - -10 LUFS.",
-        "loudnessRangeLabel": "Äänenvoimakkuusalue (LU)",
-        "loudnessRangeHelp": "Enimmäisvaihtelu äänenvoimakkuudessa leikkeen sisällä (0-20 LU). Matalammat arvot luovat tasaisemman äänenvoimakkuuden mutta saattavat vähentää dynamiikkaa.",
-        "truePeakLabel": "Todellinen huippuraja (dBTP)",
-        "truePeakHelp": "Enimmäinen todellinen huipputaso digitaalisen leikkauksen estämiseksi (-10 - 0 dBTP). -2 dBTP tarjoaa turvallisen marginaalin useimmille toistoalgoille.",
-        "normalizationNote": "EBU R128 -standardi",
-        "normalizationNoteDescription": "Äänen normalisointi noudattaa EBU R128 -lähetysstandardia varmistaen tasaiset toistotasot eri laitteilla ja estäen leikkauksen.",
-        "fileSettings": "Tiedostoasetukset",
-        "pathLabel": "Leikkeiden kansio",
-        "pathHelp": "Hakemisto, johon äänileikkeet tallennetaan. Suhteelliset polut ovat sovellushakemistosta. Esimerkki: 'clips/' tai '/var/audio/birds/'",
-        "typeLabel": "Äänimuoto",
-        "typeHelp": "Tallennettujen leikkeiden äänimuoto. WAV ja FLAC ovat häviöttömiä (paras laatu, suuremmat tiedostot). MP3, AAC ja Opus ovat häviöllisiä (pienemmät tiedostot, pieni laatutappio).",
-        "bitrateLabel": "Bittinopeus",
-        "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
-        "losslessNote": "Häviöttömät muodot säilyttävät alkuperäisen äänenlaadun ilman pakkaushäiriöitä.",
-        "normalizationDisabled": "Äänen normalisointi on poistettu käytöstä",
-        "disabledInfo": "Ota leikkeiden tallennus käyttöön yllä määrittääksesi leikeasetuksia, tiedostomuotoa ja tallennusvaihtoehtoja."
-      },
-      "extendedCapture": {
-        "title": "Laajennettu tallennus",
-        "description": "Tallentaa pidempiä äänileikkeitä, kun laji laulaa toistuvasti, ja tuottaa yhden yhdistetyn tallennuksen useiden lyhyiden leikkeiden sijaan.",
-        "ramWarning": "Laajennettu tallennus vaatii lisää RAM-muistia äänipuskureille. Ei suositella laitteille, joissa on 512 Mt RAM tai vähemmän (esim. Raspberry Pi Zero).",
-        "enable": "Ota laajennettu tallennus käyttöön",
-        "enableHelp": "Kun käytössä, määritettyjen lajien toistuvat havainnot yhdistetään yhdeksi pidemmäksi tallennukseksi.",
-        "maxDurationLabel": "Enimmäiskesto",
-        "maxDurationHelp": "Laajennetun tallennuksen leikkeen enimmäispituus. Tallennus kasvaa havaintojen jatkuessa tähän rajaan asti.",
-        "speciesListLabel": "Laajennetun tallennuksen lajit",
-        "addSpeciesLabel": "Lisää laji",
-        "addSpeciesHelp": "Lajit, jotka käynnistävät laajennetun tallennuksen. Tukee yleisnimiä, tieteellisiä nimiä ja sukutason vastaavuutta (esim. \"Strix\" kattaa kaikki Strix-pöllöt).",
-        "addSpeciesButton": "Lisää",
-        "disabled": "Laajennettu tallennus on pois käytöstä"
-      },
-      "fileSettings": {
-        "title": "Tiedostoasetukset",
-        "description": "Määritä tallennuspaikka ja äänimuoto tallennetuille leikkeille.",
-        "pathLabel": "Leikkeiden kansio",
-        "pathHelp": "Hakemisto, johon äänileikkeet tallennetaan. Suhteelliset polut ovat sovellushakemistosta. Esimerkki: 'clips/' tai '/var/audio/birds/'",
-        "typeLabel": "Äänimuoto",
-        "typeHelp": "Tallennettujen leikkeiden äänimuoto. WAV ja FLAC ovat häviöttömiä (paras laatu, suuremmat tiedostot). MP3, AAC ja Opus ovat häviöllisiä (pienemmät tiedostot, pieni laatutappio).",
-        "bitrateLabel": "Bittinopeus",
-        "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
-        "losslessNote": "Häviöttömät muodot säilyttävät alkuperäisen äänenlaadun ilman pakkaushäiriöitä."
-      },
-      "audioNormalization": {
-        "title": "Äänen normalisointi",
-        "description": "Säädä äänitasoja tasaista toistoäänenvoimakkuutta varten kaikissa leikkeissä.",
-        "enable": "Ota käyttöön äänenvoimakkuuden normalisointi",
-        "enableHelp": "Säädä äänitasot automaattisesti EBU R128 -lähetysstandardiin tasaista toistoäänenvoimakkuutta varten kaikissa leikkeissä.",
-        "disabled": "Äänen normalisointi on pois käytöstä",
-        "requiresRecording": "Ota käyttöön leikkeiden tallennus Tallennus-välilehdellä käyttääksesi äänen normalisointia.",
-        "targetLUFSLabel": "Tavoiteäänenvoimakkuus (LUFS)",
-        "targetLUFSHelp": "Integroitu äänenvoimakkuustavoite LUFS-yksiköissä (Loudness Units relative to Full Scale). -23 LUFS on EBU R128 -lähetysstandardi. Alue: -40 - -10 LUFS.",
-        "loudnessRangeLabel": "Äänenvoimakkuusalue (LU)",
-        "loudnessRangeHelp": "Enimmäisvaihtelu äänenvoimakkuudessa leikkeen sisällä (0-20 LU). Matalammat arvot luovat tasaisemman äänenvoimakkuuden mutta saattavat vähentää dynamiikkaa.",
-        "truePeakLabel": "Todellinen huippuraja (dBTP)",
-        "truePeakHelp": "Enimmäinen todellinen huipputaso digitaalisen leikkauksen estämiseksi (-10 - 0 dBTP). -2 dBTP tarjoaa turvallisen marginaalin useimmille toistoalgoille.",
-        "noteTitle": "EBU R128 -standardi",
-        "noteDescription": "Äänen normalisointi noudattaa EBU R128 -lähetysstandardia varmistaen tasaiset toistotasot eri laitteilla ja estäen leikkauksen."
-      },
-      "audioClipRetention": {
-        "title": "Äänileikkeiden säilytys",
-        "description": "Määritä äänileikkeiden siivous",
-        "policyLabel": "Säilytyskäytäntö",
-        "policyHelp": "Valitse, miten äänileikkeet poistetaan automaattisesti. Ei mitään: säilytä kaikki leikkeet. Ikä: poista tiettyä vanhemmat leikkeet. Käyttö: poista vanhimmat leikkeet kun levyn käyttö ylittää rajan.",
-        "maxAgeLabel": "Enimmäisikä",
-        "maxAgeHelp": "Poista tätä vanhemmat äänileikkeet. Muoto: numero ja yksikkö (h=tunnit, d=päivät, w=viikot, m=kuukaudet). Esimerkkejä: '7d' 7 päivälle, '4w' 4 viikolle.",
-        "maxUsageLabel": "Levyn enimmäiskäyttö",
-        "maxUsageHelp": "Poista vanhimmat leikkeet, kun äänihakemisto käyttää enemmän kuin tämän prosenttiosuuden käytettävissä olevasta levytilasta.",
-        "minClipsLabel": "Vähimmäisleikkeet lajia kohden",
-        "minClipsHelp": "Säilytä aina vähintään tämä määrä leikkeitä jokaiselle lintulajille iästä tai levyn käytöstä riippumatta. Auttaa säilyttämään harvinaisia tallenteita.",
-        "keepSpectrograms": "Säilytä spektrogrammikuvat",
-        "keepSpectrogramsHelp": "Säilytä spektrogrammikuvat vaikka äänileikkeet poistettaisiin. Spektrogrammit käyttävät vähemmän tilaa ja tarjoavat visuaalisen viitteen.",
-        "policies": {
-          "none": "Ei mitään",
-          "age": "Ikä",
-          "usage": "Käyttö"
-        },
-        "noRetentionTitle": "Kaikki leikkeet säilytetään",
-        "noRetentionDescription": "Äänileikkeitä säilytetään toistaiseksi. Seuraa levytilan käyttöä estääksesi tallennusongelmia.",
-        "ageRetentionTitle": "Ikään perustuva siivous",
-        "ageRetentionDescription": "Määritettyä ikää vanhemmat leikkeet poistetaan automaattisesti, säilyttäen kuitenkin vähimmäismäärän lajia kohden.",
-        "usageRetentionTitle": "Käyttöön perustuva siivous",
-        "usageRetentionDescription": "Kun levytilan käyttö ylittää kynnysarvon, vanhimmat leikkeet poistetaan, kunnes käyttö on rajojen sisällä."
-      },
-      "formats": {
-        "wav": "WAV",
-        "flac": "FLAC",
-        "aac": "AAC",
-        "opus": "Opus",
-        "mp3": "MP3"
-      },
-      "transport": {
-        "tcp": "TCP",
-        "udp": "UDP"
-      },
-      "filterTypes": {
-        "lowpass": "Alipäästösuodatin",
-        "highpass": "Ylipäästösuodatin",
-        "bandpass": "Kaistanpäästösuodatin",
-        "bandstop": "Kaistansulkusuodatin"
-      },
-      "errors": {
-        "devicesLoadFailed": "Äänilaitteiden lataus epäonnistui. Tarkista järjestelmän käyttöoikeudet.",
-        "invalidBitrate": "Virheellinen bittinopeusarvo",
-        "invalidRetentionPolicy": "Virheellinen säilytyskäytäntö"
-      },
-      "emptyStates": {
-        "soundCard": {
-          "title": "Äänikortteja ei havaittu",
-          "description": "Tässä järjestelmässä ei löytynyt paikallisia äänitulovälineitä. Tämä on normaalia kontti- tai päättömissä palvelinkäyttöönotoissa.",
-          "errorTitle": "Virhe laitteiden latauksessa",
-          "hintsTitle": "Voit:",
-          "hints": {
-            "container": "Tämä on normaalia kontti-/päättömissä käyttöönotoissa",
-            "streams": "Määritä verkkostriimit sen sijaan Striimit-välilehdellä",
-            "usb": "Liitä USB-mikrofoni ja päivitä luettelo"
-          },
-          "refresh": "Päivitä laitteet",
-          "retry": "Yritä uudelleen"
-        },
-        "streams": {
-          "title": "Striimejä ei ole määritetty",
-          "description": "Lisää RTSP- tai verkkoäänistriimejä IP-kameroista, mikrofonpalvelimista tai muista striimaavista lähteistä.",
-          "hintsTitle": "Aloittaminen:",
-          "hints": {
-            "rtsp": "Syötä RTSP-URL-osoitteet muodossa: rtsp://ip:portti/stream",
-            "multiple": "Voit lisätä useita striimejä eri sijainteja varten",
-            "protocol": "Valitse TCP luotettavuuden vuoksi tai UDP pienemmän viiveen saamiseksi"
-          }
-        }
-      },
-      "soundCard": {
-        "title": "Äänikortti",
-        "description": "Määritä paikallinen äänitulolaite",
-        "audioSourceLabel": "Äänilähde (vaatii sovelluksen uudelleenkäynnistyksen)",
-        "audioSourceHelp": "Valitse äänitulolaite lintuäänten tunnistukseen. Muutokset vaativat sovelluksen uudelleenkäynnistyksen.",
-        "noSoundCardCapture": "Ei äänikortin tallennusta",
-        "empty": {
-          "title": "Äänikortteja ei havaittu",
-          "description": "Tässä järjestelmässä ei löytynyt paikallisia äänitulovälineitä. Tämä on normaalia kontti- tai päättömissä palvelinkäyttöönotoissa.",
-          "hintsTitle": "Voit:",
-          "hintStream": "Määritä verkkostriimit Striimit-välilehdellä",
-          "hintUsb": "Liitä USB-mikrofoni ja päivitä luettelo",
-          "goToStreams": "Siirry striimeihin",
-          "refresh": "Päivitä laitteet"
-        }
-      },
-      "noSources": {
-        "warning": "Äänilähteita ei ole määritetty",
-        "description": "BirdNET-Go tarvitsee äänen syötteen lintujen havaitsemiseen. Määritä vähintään yksi lähde Äänikortti- tai Striimit-välilehdellä."
-      },
-      "soundCards": {
-        "summary": "{count} äänikorttilähdettä",
-        "addSource": "Lisää äänikortti",
-        "nameLabel": "Lähteen nimi",
-        "namePlaceholder": "esim. Etupihan mikrofoni",
-        "nameHelp": "Kuvaava nimi tälle äänilähteelle",
-        "deviceLabel": "Äänilaite",
-        "devicePlaceholder": "Valitse äänilaite",
-        "gainLabel": "Vahvistus (dB)",
-        "gainHelp": "Äänen tulovahvistuksen säätö (-40 - +40 dB)",
-        "sampleRateLabel": "Näytteenottotaajuus",
-        "sampleRateUnverified": "Tuettuja taajuuksia ei voitu vahvistaa tälle laitteelle",
-        "sampleRateProbing": "Tunnistetaan tuettuja taajuuksia...",
-        "sampleRateExclusive": "Yli 48 kHz näytteenottotaajuudet käyttävät yksinoikeudellista laitepääsyä Linuxissa, estäen muita sovelluksia jakamasta äänikorttia",
-        "modelLabel": "Tunnistusmallit",
-        "modelHelp": "Valitse tässä äänilähteessä käytettävät tekoälymallit",
-        "deleteConfirm": "Poistetaanko tämä äänikorttilähtö?",
-        "emptyState": {
-          "title": "Äänikorttilähteitä ei ole määritetty",
-          "description": "Lisää äänikorttilähtö aloittaaksesi äänen tallennuksen lintujen tunnistamista varten.",
-          "hintsTitle": "Alkuun pääseminen",
-          "hints": {
-            "device": "Valitse järjestelmän käytettävissä olevista äänen syöttölaitteista",
-            "multiple": "Voit määrittää useita äänikortteja eri sijainneille",
-            "model": "Jokainen lähde voi käyttää eri tunnistusmallia (BirdNET, Perch, Bat)"
-          }
-        },
-        "models": {
-          "birdnetDefault": "BirdNET (Oletus)",
-          "birdnet": "BirdNET",
-          "perchV2": "Google Perch v2",
-          "bat": "Lepakkotunnistus"
-        },
-        "errors": {
-          "nameRequired": "Lähteen nimi on pakollinen",
-          "deviceRequired": "Äänilaite on pakollinen",
-          "duplicateName": "Tämänniminen lähde on jo olemassa",
-          "duplicateDevice": "Tämä laite on jo määritetty"
-        },
-        "compatibility": {
-          "minSampleRate": "Vaatii vähintään {rate}kHz näytteenottotaajuuden",
-          "recommendedSampleRate": "{rate}kHz suositellaan parhaisiin tuloksiin",
-          "atLeastOneModel": "Vähintään yksi malli on valittava"
-        }
-      },
-      "rtspStreams": {
-        "title": "Äänistriimien määritys",
-        "description": "Määritä verkkoäänistriimejä etäänen tallennukseen. Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-protokollia.",
-        "noStreamsConfigured": "Striimejä ei ole määritetty"
-      },
-      "streams": {
-        "streamLabel": "Lähetys",
-        "nameLabel": "Striimin nimi",
-        "enabled": "Käytössä",
-        "disabled": "Pois käytöstä",
-        "namePlaceholder": "esim. Etupihan ruokinta",
-        "nameHelp": "Kuvaava nimi tämän äänistriimin tunnistamiseen",
-        "urlLabel": "Striimin URL",
-        "urlHelp": "Syötä striimin URL-osoite valinnaisilla tunnistetiedoilla (esim. rtsp://palvelin:portti/polku). Käytä ympäristömuuttujia tunnistetiedoille.",
-        "typeLabel": "Striimin tyyppi",
-        "typeHelp": "Striimin protokolla - tunnistetaan automaattisesti URL:sta",
-        "transportLabel": "Protokolla",
-        "summary": "{count} striimi(ä) määritetty",
-        "healthy": "kunnossa",
-        "unhealthy": "viallinen",
-        "unknown": "tuntematon",
-        "refresh": "Päivitä",
-        "addStream": "Lisää striimi",
-        "deleteConfirm": "Poista tämä striimi?",
-        "restartCount": "Uudelleenkäynnistetty {count} kertaa",
-        "healthLoadError": "Striimin tilan lataus epäonnistui",
-        "status": {
-          "connected": "Yhdistetty",
-          "connecting": "Yhdistetään",
-          "error": "Virhe",
-          "idle": "Odottaa",
-          "suppressed": "Hiljaiset tunnit",
-          "unknown": "Tuntematon"
-        },
-        "emptyState": {
-          "title": "Ei määritettyjä striimejä",
-          "description": "Lisää äänistriimejä IP-kameroista, Icecast-palvelimista tai muista verkkolähteistä.",
-          "hintsTitle": "Aloitus",
-          "hints": {
-            "rtsp": "Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP/RTP-striimejä",
-            "credentials": "Tunnistetiedot voi sisällyttää URL:iin tai käyttää ympäristömuuttujia",
-            "protocol": "TCP on luotettavampi RTSP:lle, UDP:llä on pienempi latenssi"
-          }
-        },
-        "errors": {
-          "nameRequired": "Striimin nimi on pakollinen",
-          "duplicateName": "Tämän niminen striimi on jo olemassa",
-          "urlRequired": "Striimin URL on pakollinen",
-          "invalidUrl": "Virheellinen striimin URL-muoto",
-          "duplicate": "Tämä striimin URL on jo olemassa"
-        },
-        "timeline": {
-          "error": "Virhe",
-          "noHistory": "Ei tila- tai virhehistoriaa saatavilla.",
-          "stateChange": "Tilamuutos",
-          "host": "Palvelin",
-          "troubleshooting": "Vianmääritys",
-          "from": "Mistä",
-          "to": "Mihin",
-          "reason": "Syy",
-          "eventAt": "Tapahtuma {time}"
-        },
-        "diagnostics": {
-          "toggleDiagnostics": "Näytä/piilota diagnostiikka",
-          "processState": "Prosessin tila",
-          "lastData": "Viimeisin data",
-          "restartCount": "Uudelleenkäynnistykset",
-          "connection": "Yhteys",
-          "stateErrorHistory": "Tila- ja virhehistoria"
-        },
-        "connectionStatus": {
-          "stable": "Vakaa",
-          "degraded": "Heikentynyt",
-          "failed": "Epäonnistunut",
-          "unknown": "Tuntematon"
-        }
       }
     },
     "integration": {
@@ -3138,321 +2785,394 @@
         }
       }
     },
-    "species": {
-      "pageLabel": "Lajiasetukset",
-      "saveError": "Lajin \"{species}\" asetusten tallennus epäonnistui. Yritä uudelleen.",
-      "configUpdated": "Lajin \"{species}\" asetukset päivitetty",
-      "configAdded": "Lajin \"{species}\" asetukset lisätty",
-      "duplicateConfigError": "Lajilla \"{species}\" on jo asetukset. Valitse toinen nimi.",
-      "activeSpecies": {
-        "title": "Aktiiviset lajit",
-        "tabLabel": "Aktiivis.",
-        "description": "Lajit, jotka tunnistetaan nykyisen sijainnin ja suodatusasetusten perusteella",
-        "stats": {
-          "species": "Lajit",
-          "location": "Sijainti",
-          "threshold": "Kynnysarvo",
-          "updated": "Päivitetty",
-          "justNow": "Juuri nyt",
-          "minutesAgo": "{count}m sitten",
-          "hoursAgo": "{count}t sitten"
+    "audio": {
+      "loading": "Ladataan äänilaitteita...",
+      "tabs": {
+        "soundCard": "Äänikortti",
+        "streams": "Lähetykset",
+        "processing": "Käsittely",
+        "recording": "Tallennus",
+        "retention": "Säilytys"
+      },
+      "emptyStates": {
+        "soundCard": {
+          "title": "Äänikortteja ei havaittu",
+          "description": "Tässä järjestelmässä ei löytynyt paikallisia äänitulovälineitä. Tämä on normaalia kontti- tai päättömissä palvelinkäyttöönotoissa.",
+          "errorTitle": "Virhe laitteiden latauksessa",
+          "hintsTitle": "Voit:",
+          "hints": {
+            "container": "Tämä on normaalia kontti-/päättömissä käyttöönotoissa",
+            "streams": "Määritä verkkostriimit sen sijaan Striimit-välilehdellä",
+            "usb": "Liitä USB-mikrofoni ja päivitä luettelo"
+          },
+          "refresh": "Päivitä laitteet",
+          "retry": "Yritä uudelleen"
         },
-        "search": {
-          "placeholder": "Etsi lajeja..."
-        },
-        "badges": {
-          "included": "Sisällytetty",
-          "configured": "Määritetty"
-        },
-        "empty": {
-          "title": "Lajeja ei löytynyt",
-          "description": "Määritä sijaintisi pääasetuksissa nähdäksesi saatavilla olevat lajit"
-        },
-        "noResults": "Mikään laji ei vastaa hakuasi",
-        "infoNote": "Tämä luettelo perustuu sijaintiisi ja aluesuodattimen kynnysarvoon. Manuaalisesti lisätyt lajit sisällytetään aina.",
-        "retry": "Yritä uudelleen",
-        "expand": "Laajenna luettelo",
-        "collapse": "Supista luettelo",
-        "downloadCsv": "Lataa CSV",
-        "errors": {
-          "loadFailed": "Aktiivisten lajien luettelon lataus epäonnistui"
-        },
-        "locationNotConfigured": {
-          "title": "Sijaintia ei ole määritetty",
-          "description": "Määritä sijaintisi pääasetuksissa nähdäksesi alueellasi esiintyvät lajit. Aluesuodatin käyttää sijaintiasi määrittääkseen, mitkä lajit todennäköisesti esiintyvät lähistölläsi.",
-          "action": "Määritä sijainti"
-        },
-        "columns": {
-          "commonName": "Nimi",
-          "scientificName": "Tieteellinen nimi",
-          "score": "Pisteet",
-          "status": "Tila"
+        "streams": {
+          "title": "Striimejä ei ole määritetty",
+          "description": "Lisää RTSP- tai verkkoäänistriimejä IP-kameroista, mikrofonpalvelimista tai muista striimaavista lähteistä.",
+          "hintsTitle": "Aloittaminen:",
+          "hints": {
+            "rtsp": "Syötä RTSP-URL-osoitteet muodossa: rtsp://ip:portti/stream",
+            "multiple": "Voit lisätä useita striimejä eri sijainteja varten",
+            "protocol": "Valitse TCP luotettavuuden vuoksi tai UDP pienemmän viiveen saamiseksi"
+          }
         }
       },
-      "alwaysInclude": {
-        "title": "Sisällytä lajit aina",
-        "tabLabel": "Sisällytä",
-        "description": "Tämän listan lajit sisällytetään aina havaittujen lajien alueelle",
-        "noSpeciesMessage": "Sisällytyslistaan ei ole lisätty lajeja"
+      "soundCard": {
+        "title": "Äänikortti",
+        "description": "Määritä paikallinen äänitulolaite",
+        "audioSourceLabel": "Äänilähde (vaatii sovelluksen uudelleenkäynnistyksen)",
+        "audioSourceHelp": "Valitse äänitulolaite lintuäänten tunnistukseen. Muutokset vaativat sovelluksen uudelleenkäynnistyksen.",
+        "noSoundCardCapture": "Ei äänikortin tallennusta",
+        "empty": {
+          "title": "Äänikortteja ei havaittu",
+          "description": "Tässä järjestelmässä ei löytynyt paikallisia äänitulovälineitä. Tämä on normaalia kontti- tai päättömissä palvelinkäyttöönotoissa.",
+          "hintsTitle": "Voit:",
+          "hintStream": "Määritä verkkostriimit Striimit-välilehdellä",
+          "hintUsb": "Liitä USB-mikrofoni ja päivitä luettelo",
+          "goToStreams": "Siirry striimeihin",
+          "refresh": "Päivitä laitteet"
+        }
       },
-      "alwaysExclude": {
-        "title": "Jätä lajit aina pois",
-        "tabLabel": "Jätä pois",
-        "description": "Tämän listan lajit jätetään aina pois tunnistuksesta",
-        "noSpeciesMessage": "Poissulkulistaan ei ole lisätty lajeja"
+      "noSources": {
+        "warning": "Äänilähteita ei ole määritetty",
+        "description": "BirdNET-Go tarvitsee äänen syötteen lintujen havaitsemiseen. Määritä vähintään yksi lähde Äänikortti- tai Striimit-välilehdellä."
       },
-      "customConfiguration": {
-        "title": "Mukautettu lajikokoonpano",
-        "tabLabel": "Mukautet.",
-        "description": "Lajikohtaiset kynnysarvot, havaintovälit ja toiminnot",
-        "helpText": {
-          "intro": "Määritä lajikohtaisia asetuksia:",
-          "threshold": "Kynnysarvo: Vähimmäisluottamuspistemäärä (0-1) joka vaaditaan havainnon tekemiseen",
-          "interval": "Väli: Vähimmäisaika sekunteina saman lajin havaintojen välillä (0 = käytä yleistä oletusarvoa)",
-          "actions": "Toiminnot: Mukautetut komennot, jotka suoritetaan kun tämä laji havaitaan"
+      "soundCards": {
+        "summary": "{count} äänikorttilähdettä",
+        "addSource": "Lisää äänikortti",
+        "nameLabel": "Lähteen nimi",
+        "namePlaceholder": "esim. Etupihan mikrofoni",
+        "nameHelp": "Kuvaava nimi tälle äänilähteelle",
+        "deviceLabel": "Äänilaite",
+        "devicePlaceholder": "Valitse äänilaite",
+        "gainLabel": "Vahvistus (dB)",
+        "gainHelp": "Äänen tulovahvistuksen säätö (-40 - +40 dB)",
+        "sampleRateLabel": "Näytteenottotaajuus",
+        "sampleRateUnverified": "Tuettuja taajuuksia ei voitu vahvistaa tälle laitteelle",
+        "sampleRateProbing": "Tunnistetaan tuettuja taajuuksia...",
+        "sampleRateExclusive": "Yli 48 kHz näytteenottotaajuudet käyttävät yksinoikeudellista laitepääsyä Linuxissa, estäen muita sovelluksia jakamasta äänikorttia",
+        "modelLabel": "Tunnistusmallit",
+        "modelHelp": "Valitse tässä äänilähteessä käytettävät tekoälymallit",
+        "deleteConfirm": "Poistetaanko tämä äänikorttilähtö?",
+        "emptyState": {
+          "title": "Äänikorttilähteitä ei ole määritetty",
+          "description": "Lisää äänikorttilähtö aloittaaksesi äänen tallennuksen lintujen tunnistamista varten.",
+          "hintsTitle": "Alkuun pääseminen",
+          "hints": {
+            "device": "Valitse järjestelmän käytettävissä olevista äänen syöttölaitteista",
+            "multiple": "Voit määrittää useita äänikortteja eri sijainneille",
+            "model": "Jokainen lähde voi käyttää eri tunnistusmallia (BirdNET, Perch, Bat)"
+          }
         },
-        "columnHeaders": {
-          "species": "Laji",
-          "settings": "Asetukset",
-          "actions": "Toiminnot"
+        "models": {
+          "birdnetDefault": "BirdNET (Oletus)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Lepakkotunnistus"
         },
-        "badges": {
-          "threshold": "Kynnys: {value}",
-          "interval": "Väli: {value}s",
-          "customAction": "Mukautettu toiminto",
-          "executeDefaults": "+Oletukset"
+        "errors": {
+          "nameRequired": "Lähteen nimi on pakollinen",
+          "deviceRequired": "Äänilaite on pakollinen",
+          "duplicateName": "Tämänniminen lähde on jo olemassa",
+          "duplicateDevice": "Tämä laite on jo määritetty"
         },
-        "dropdown": {
-          "editConfig": "Muokkaa asetuksia",
-          "addAction": "Lisää toiminto",
-          "remove": "Poista"
-        },
-        "labels": {
-          "threshold": "Kynnysarvo",
-          "interval": "Väli",
-          "intervalSeconds": "Väli (sek)",
-          "addButton": "Lisää"
-        },
-        "noConfigurationsMessage": "Mukautettuja lajikokoonpanoja ei ole lisätty",
-        "addForm": {
-          "speciesPlaceholder": "Lajin nimi",
-          "thresholdPlaceholder": "0.5",
-          "intervalPlaceholder": "0"
-        },
-        "addConfiguration": "Lisää määritys",
-        "newConfiguration": "Uusi määritys",
-        "editing": "Muokataan: {species}",
-        "configuredCount": "{count} määritetty",
-        "searchPlaceholder": "Kirjoita hakeaksesi...",
-        "saving": "Tallennetaan...",
-        "save": "Tallenna",
-        "cancel": "Peruuta",
-        "configureActions": "Määritä toiminnot",
-        "actionsConfigured": "Määritetty",
-        "list": {
-          "threshold": "Kynnysarvo:",
-          "interval": "Väli:",
-          "intervalNone": "Ei mitään",
-          "actionBadge": "Toiminto",
-          "editTitle": "Muokkaa määritystä",
-          "removeTitle": "Poista määritys"
+        "compatibility": {
+          "minSampleRate": "Vaatii vähintään {rate}kHz näytteenottotaajuuden",
+          "recommendedSampleRate": "{rate}kHz suositellaan parhaisiin tuloksiin",
+          "atLeastOneModel": "Vähintään yksi malli on valittava"
+        }
+      },
+      "audioCapture": {
+        "title": "Äänen tallennus",
+        "description": "Aseta äänen tallennuslähde, äänikortti tai RTSP-striimi",
+        "soundCardSource": "Äänikorttilähde",
+        "audioSourceLabel": "Äänilähde (vaatii sovelluksen uudelleenkäynnistyksen)",
+        "audioSourceHelp": "Valitse äänen syöttölaite lintuäänten tunnistukseen. Muutokset vaativat sovelluksen uudelleenkäynnistyksen.",
+        "noSoundCardCapture": "Ei äänikortin tallennusta",
+        "noDeviceSelected": "Äänilaitetta ei ole valittu",
+        "refreshDevices": "Päivitä",
+        "rtspSource": "RTSP-lähde",
+        "rtspTransportLabel": "RTSP-siirtoprotokolla",
+        "rtspTransportHelp": "TCP on luotettavampi mutta saattaa aiheuttaa suurempaa viivettä. UDP on nopeampi mutta saattaa kokea pakettihäviötä heikoissa verkoissa.",
+        "rtspUrlsLabel": "RTSP-striimin URL-osoitteet",
+        "rtspUrlsHelp": "Syötä yksi tai useampi RTSP-striimin URL-osoite verkkoäänilähteille. Muoto: rtsp://ip:portti/stream. Huom: Todennustiedot tulisi määrittää erikseen RTSP-palvelimen asetuksissa tietoturvan vuoksi.",
+        "deviceSelected": "Äänikortti valittu ja valmis tallennukseen",
+        "availableDevices": "Saatavilla olevat äänilaitteet",
+        "active": "Aktiivinen",
+        "streamsConfigured": "{count} striimi(ä) määritetty"
+      },
+      "quietHours": {
+        "title": "Hiljaiset tunnit",
+        "sectionTitle": "Hiljaiset tunnit",
+        "sectionDescription": "Keskeytä äänen tallennus määritettyinä aikajaksoina vähentääksesi suorittimen käyttöä, kun linnut eivät todennäköisesti ole aktiivisia.",
+        "modeLabel": "Aikataulutila",
+        "modeFixed": "Kiinteät ajat",
+        "modeSolar": "Auringonnousu/-lasku",
+        "startTime": "Alkamisaika",
+        "endTime": "Päättymisaika",
+        "startEvent": "Aloitustapahtuma",
+        "endEvent": "Lopetustapahtuma",
+        "offsetMinutes": "Poikkeama (min)",
+        "sunrise": "Auringonnousu",
+        "sunset": "Auringonlasku",
+        "fixedHint": "Tallennus keskeytyy päivittäin alku- ja loppuaikojen välillä. Yön yli -ikkunat (esim. 22:00–06:00) ovat tuettuja.",
+        "solarHint": "Ajat lasketaan auringonnousun/-laskun perusteella määritetyssä sijainnissasi. Käytä negatiivisia poikkeamia ennen tapahtumaa, positiivisia sen jälkeen.",
+        "badge": "Hiljainen",
+        "enabledBadge": "Hiljaiset tunnit käytössä tälle striimille"
+      },
+      "rtspStreams": {
+        "title": "Äänistriimien määritys",
+        "description": "Määritä verkkoäänistriimejä etäänen tallennukseen. Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-protokollia.",
+        "noStreamsConfigured": "Striimejä ei ole määritetty"
+      },
+      "streams": {
+        "streamLabel": "Lähetys",
+        "nameLabel": "Striimin nimi",
+        "enabled": "Käytössä",
+        "disabled": "Pois käytöstä",
+        "namePlaceholder": "esim. Etupihan ruokinta",
+        "nameHelp": "Kuvaava nimi tämän äänistriimin tunnistamiseen",
+        "urlLabel": "Striimin URL",
+        "urlHelp": "Syötä striimin URL-osoite valinnaisilla tunnistetiedoilla (esim. rtsp://palvelin:portti/polku). Käytä ympäristömuuttujia tunnistetiedoille.",
+        "typeLabel": "Striimin tyyppi",
+        "typeHelp": "Striimin protokolla - tunnistetaan automaattisesti URL:sta",
+        "transportLabel": "Protokolla",
+        "summary": "{count} striimi(ä) määritetty",
+        "healthy": "kunnossa",
+        "unhealthy": "viallinen",
+        "unknown": "tuntematon",
+        "refresh": "Päivitä",
+        "addStream": "Lisää striimi",
+        "deleteConfirm": "Poista tämä striimi?",
+        "restartCount": "Uudelleenkäynnistetty {count} kertaa",
+        "healthLoadError": "Striimin tilan lataus epäonnistui",
+        "status": {
+          "connected": "Yhdistetty",
+          "connecting": "Yhdistetään",
+          "error": "Virhe",
+          "idle": "Odottaa",
+          "suppressed": "Hiljaiset tunnit",
+          "unknown": "Tuntematon"
         },
         "emptyState": {
-          "title": "Määrityksiä ei vielä ole.",
-          "description": "Napsauta \"Lisää määritys\" mukauttaaksesi lajintunnistusasetuksia."
-        }
-      },
-      "synonyms": {
-        "tabLabel": "Synonyymit",
-        "description": "Yhdistä BirdNETin tieteelliset lajinimet niiden päivitettyihin vastineisiin uudemmassa taksonomiassa. Käytetään vain varasijana haettaessa lintukuvia Wikipediasta ja AviCommonsista; ei nimeä lajeja uudelleen havainnoissa tai koontinäytöllä.",
-        "helpText": "Muuttaaksesi lajin käyttöliittymässä näkyvää nimeä, muokkaa BirdNETin tunnistetiedostoa (asetus \"Nimikkeiden polku\" pääasetuksissa).",
-        "birdnetName": "BirdNET-nimi",
-        "updatedName": "Päivitetty tieteellinen nimi",
-        "addButton": "Lisää synonyymi",
-        "emptyState": "Ei määritettyjä taksonomiasynonyymejä",
+          "title": "Ei määritettyjä striimejä",
+          "description": "Lisää äänistriimejä IP-kameroista, Icecast-palvelimista tai muista verkkolähteistä.",
+          "hintsTitle": "Aloitus",
+          "hints": {
+            "rtsp": "Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP/RTP-striimejä",
+            "credentials": "Tunnistetiedot voi sisällyttää URL:iin tai käyttää ympäristömuuttujia",
+            "protocol": "TCP on luotettavampi RTSP:lle, UDP:llä on pienempi latenssi"
+          }
+        },
         "errors": {
-          "unknownSpecies": "Lajia ei löydy BirdNET-tunnisteista",
-          "duplicateKey": "Tälle lajille on jo olemassa synonyymi",
-          "emptyUpdatedName": "Päivitetty nimi on pakollinen"
+          "nameRequired": "Striimin nimi on pakollinen",
+          "duplicateName": "Tämän niminen striimi on jo olemassa",
+          "urlRequired": "Striimin URL on pakollinen",
+          "invalidUrl": "Virheellinen striimin URL-muoto",
+          "duplicate": "Tämä striimin URL on jo olemassa"
+        },
+        "timeline": {
+          "error": "Virhe",
+          "noHistory": "Ei tila- tai virhehistoriaa saatavilla.",
+          "stateChange": "Tilamuutos",
+          "host": "Palvelin",
+          "troubleshooting": "Vianmääritys",
+          "from": "Mistä",
+          "to": "Mihin",
+          "reason": "Syy",
+          "eventAt": "Tapahtuma {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Näytä/piilota diagnostiikka",
+          "processState": "Prosessin tila",
+          "lastData": "Viimeisin data",
+          "restartCount": "Uudelleenkäynnistykset",
+          "connection": "Yhteys",
+          "stateErrorHistory": "Tila- ja virhehistoria"
+        },
+        "connectionStatus": {
+          "stable": "Vakaa",
+          "degraded": "Heikentynyt",
+          "failed": "Epäonnistunut",
+          "unknown": "Tuntematon"
         }
       },
-      "actionsModal": {
-        "title": "Toiminnot lajille {species}",
-        "actionType": {
-          "label": "Toiminnon tyyppi",
-          "executeCommand": "Suorita komento",
-          "onlySupported": "Tällä hetkellä vain komennon suoritus -toiminnot ovat tuettuja"
+      "audioFilters": {
+        "title": "Äänisuodattimet",
+        "description": "Määritä oletusäänisuodattimet kaikille lähteille. Lähdekohtaiset taajuuskorjainasetukset ovat saatavilla kunkin äänikortin asetuksissa.",
+        "enableEqualizer": "Ota taajuuskorjain käyttöön",
+        "enableEqualizerHelp": "Käytä taajuussuodatusta parantaaksesi lintuäänten tunnistusta vähentämällä ei-toivottua melua ja taajuuksia.",
+        "filterType": "Suodatintyyppi",
+        "newFilterType": "Uusi suodatintyyppi",
+        "selectFilterType": "Valitse suodatintyyppi",
+        "addFilter": "Lisää suodatin",
+        "remove": "Poista",
+        "frequencyResponse": "Taajuusvaste",
+        "cutoffFrequency": "Rajataajuus",
+        "cutoffFrequencyHelp": "Taajuus, jossa suodatin alkaa vaimentaa signaaleja. Lintuäänten taajuudet ovat tyypillisesti 1-10 kHz välillä.",
+        "qFactor": "Q-kerroin",
+        "qFactorHelp": "Laatukerroin ohjaa suodattimen terävyyttä. Matalat arvot (0.1-1) luovat loivempia kaarevia, korkeammat arvot (1-10) luovat jyrkempiä katkoja.",
+        "gain": "Vahvistus",
+        "gainHelp": "Vahvistus tai vaimennus desibeleinä (dB).",
+        "attenuation": "Vaimennus",
+        "attenuationHelp": "Suodattimen vaimennusnopeus. Korkeammat arvot tarjoavat jyrkemmän suodatettujen taajuuksien vaimentamisen.",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
         },
-        "command": {
-          "label": "Komento",
-          "helpText": "Anna täydellinen polku komentoon tai skriptiin jonka haluat suorittaa"
-        },
-        "parameters": {
-          "label": "Parametrit",
-          "helpText": "Nämä arvot välitetään komennolle listatussa järjestyksessä",
-          "availableTitle": "Käytettävissä olevat parametrit",
-          "buttons": {
-            "commonName": "YleinenNimi",
-            "scientificName": "TieteellinenNimi",
-            "confidence": "Luottamus",
-            "time": "Aika",
-            "source": "Lähde",
-            "clearParameters": "Tyhjennä parametrit"
-          },
-          "placeholder": "Napsauta alla olevia painikkeita lisätäksesi parametreja tai kirjoita manuaalisesti",
-          "tooltip": "Käytä alla olevia painikkeita tai kirjoita suoraan (pilkuilla eroteltuina)"
-        },
-        "executeDefaults": {
-          "label": "Suorita myös oletustoiminnot (tietokantatallennus, ilmoitukset jne.)",
-          "helpText": "Kun käytössä, sekä mukautettu toimintosi että järjestelmän oletustoiminnot suoritetaan. Kun pois käytöstä, vain mukautettu toimintosi suoritetaan."
+        "filterHelp": "Lisää useita suodattimia muodostaaksesi taajuusvasteen optimaaliseen lintujen tunnistukseen ympäristössäsi.",
+        "graph": {
+          "flatResponse": "Tasainen vaste (Ei suodattimia käytössä)",
+          "frequency": "Taajuus (Hz)",
+          "gain": "Vahvistus (dB)"
         }
       },
-      "add": "Lisää",
-      "remove": "Poista",
-      "addSpeciesToInclude": "Lisää sisällytettäviä lajeja",
-      "addSpeciesToIncludeLabel": "Lisää uusia sisällytettäviä lajeja",
-      "addSpeciesToExclude": "Lisää pois jätettäviä lajeja",
-      "addSpeciesToExcludeLabel": "Lisää uusia pois jätettäviä lajeja",
-      "commandPathPlaceholder": "/polku/komentoon",
-      "parametersPlaceholder": "Parametrit ilmestyvät tähän",
+      "soundLevelMonitoring": {
+        "title": "Äänitason seuranta",
+        "description": "Seuraa ja raportoi ympäristön äänitasoja",
+        "enable": "Ota äänitason seuranta käyttöön",
+        "enableHelp": "Seuraa ympäristön melutasoja ymmärtääksesi tallennusympäristöäsi ja korreloida lintujen aktiivisuusmallien kanssa.",
+        "disabled": "Äänitason seuranta on poistettu käytöstä",
+        "intervalLabel": "Mittausväli (sekuntia)",
+        "intervalHelp": "Kuinka usein äänitasot mitataan ja raportoidaan. Matalammat arvot tarjoavat tarkempia tietoja mutta käyttävät enemmän resursseja. Vähintään 5 sekuntia, suositus 60 sekuntia.",
+        "dataOutputTitle": "Äänitasotietojen lähtö",
+        "dataOutputDescription": "Kun käytössä, äänitasomittaukset julkaistaan kautta:",
+        "mqttTopic": "MQTT-aihe:",
+        "sseEndpoint": "SSE-päätepiste:",
+        "prometheusMetrics": "Prometheus-mittarit:"
+      },
+      "clipSettings": {
+        "title": "Leikeasetukset",
+        "description": "Määritä äänileikkeiden tallennus ja käsittely tunnistetuille lintuäänille"
+      },
+      "clipRecording": {
+        "title": "Leikkeen tallennusasetukset",
+        "description": "Määritä äänileikkeiden tallennus, muoto ja tallennusvaihtoehdot havaituille lintuäänille.",
+        "enable": "Ota leikkeiden tallennus käyttöön",
+        "enableHelp": "Tallenna havaittujen lintuäänten äänileikkeitä tarkastelua, jakamista tai mukautettujen tietojoukkojen rakentamista varten.",
+        "disabled": "Leikkeiden tallennus on poistettu käytöstä",
+        "captureSettings": "Tallennusasetukset",
+        "lengthLabel": "Tallennuspituus",
+        "lengthHelp": "Äänen kesto tallennettavaksi jokaiselle havainnolle (10-60 sekuntia). Pidemmät leikkeet tarjoavat enemmän kontekstia mutta käyttävät enemmän tallennustilaa.",
+        "preCaptureLabel": "Esitallennuspuskuri",
+        "preCaptureHelp": "Sekuntimäärä ääntä sisällytettäväksi ennen linnun havaitsemista (0-{max} sekuntia). Varmistaa, että koko lintuääni tallennetaan alusta alkaen.",
+        "gainLabel": "Äänenvahvistus",
+        "gainHelp": "Äänen vahvistus tallennetuille leikkeille desibeleinä (0-20 dB). Tekee tallennetuista äänileikkeistä voimakkaampia helpompaan kuunteluun. Ei vaikuta tunnistukseen. 0 dB tarkoittaa ei vahvistusta.",
+        "normalization": "Äänen normalisointi",
+        "normalizationEnable": "Ota käyttöön äänenvoimakkuuden normalisointi",
+        "normalizationHelp": "Säädä äänentasoja automaattisesti EBU R128 -lähetysstandardin mukaisesti tasaiseen toistoäänenvoimakkuuteen kaikissa leikkeissä.",
+        "normalizationDisabled": "Äänen normalisointi on poistettu käytöstä",
+        "targetLUFSLabel": "Tavoiteäänenvoimakkuus (LUFS)",
+        "targetLUFSHelp": "Integroitu äänenvoimakkuustavoite LUFS:na (Loudness Units relative to Full Scale). -23 LUFS on EBU R128 -lähetysstandardi. Alue: -40 - -10 LUFS.",
+        "loudnessRangeLabel": "Äänenvoimakkuusalue (LU)",
+        "loudnessRangeHelp": "Enimmäisvaihtelu äänenvoimakkuudessa leikkeen sisällä (0-20 LU). Matalammat arvot luovat tasaisemman äänenvoimakkuuden mutta saattavat vähentää dynamiikkaa.",
+        "truePeakLabel": "Todellinen huippuraja (dBTP)",
+        "truePeakHelp": "Enimmäinen todellinen huipputaso digitaalisen leikkauksen estämiseksi (-10 - 0 dBTP). -2 dBTP tarjoaa turvallisen marginaalin useimmille toistoalgoille.",
+        "normalizationNote": "EBU R128 -standardi",
+        "normalizationNoteDescription": "Äänen normalisointi noudattaa EBU R128 -lähetysstandardia varmistaen tasaiset toistotasot eri laitteilla ja estäen leikkauksen.",
+        "fileSettings": "Tiedostoasetukset",
+        "pathLabel": "Leikkeiden kansio",
+        "pathHelp": "Hakemisto, johon äänileikkeet tallennetaan. Suhteelliset polut ovat sovellushakemistosta. Esimerkki: 'clips/' tai '/var/audio/birds/'",
+        "typeLabel": "Äänimuoto",
+        "typeHelp": "Tallennettujen leikkeiden äänimuoto. WAV ja FLAC ovat häviöttömiä (paras laatu, suuremmat tiedostot). MP3, AAC ja Opus ovat häviöllisiä (pienemmät tiedostot, pieni laatutappio).",
+        "bitrateLabel": "Bittinopeus",
+        "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
+        "losslessNote": "Häviöttömät muodot säilyttävät alkuperäisen äänenlaadun ilman pakkaushäiriöitä.",
+        "disabledInfo": "Ota leikkeiden tallennus käyttöön yllä määrittääksesi leikeasetuksia, tiedostomuotoa ja tallennusvaihtoehtoja."
+      },
+      "extendedCapture": {
+        "title": "Laajennettu tallennus",
+        "description": "Tallentaa pidempiä äänileikkeitä, kun laji laulaa toistuvasti, ja tuottaa yhden yhdistetyn tallennuksen useiden lyhyiden leikkeiden sijaan.",
+        "ramWarning": "Laajennettu tallennus vaatii lisää RAM-muistia äänipuskureille. Ei suositella laitteille, joissa on 512 Mt RAM tai vähemmän (esim. Raspberry Pi Zero).",
+        "enable": "Ota laajennettu tallennus käyttöön",
+        "enableHelp": "Kun käytössä, määritettyjen lajien toistuvat havainnot yhdistetään yhdeksi pidemmäksi tallennukseksi.",
+        "maxDurationLabel": "Enimmäiskesto",
+        "maxDurationHelp": "Laajennetun tallennuksen leikkeen enimmäispituus. Tallennus kasvaa havaintojen jatkuessa tähän rajaan asti.",
+        "speciesListLabel": "Laajennetun tallennuksen lajit",
+        "addSpeciesLabel": "Lisää laji",
+        "addSpeciesHelp": "Lajit, jotka käynnistävät laajennetun tallennuksen. Tukee yleisnimiä, tieteellisiä nimiä ja sukutason vastaavuutta (esim. \"Strix\" kattaa kaikki Strix-pöllöt).",
+        "addSpeciesButton": "Lisää",
+        "disabled": "Laajennettu tallennus on pois käytöstä"
+      },
+      "fileSettings": {
+        "title": "Tiedostoasetukset",
+        "description": "Määritä tallennuspaikka ja äänimuoto tallennetuille leikkeille.",
+        "pathLabel": "Leikkeiden kansio",
+        "pathHelp": "Hakemisto, johon äänileikkeet tallennetaan. Suhteelliset polut ovat sovellushakemistosta. Esimerkki: 'clips/' tai '/var/audio/birds/'",
+        "typeLabel": "Äänimuoto",
+        "typeHelp": "Tallennettujen leikkeiden äänimuoto. WAV ja FLAC ovat häviöttömiä (paras laatu, suuremmat tiedostot). MP3, AAC ja Opus ovat häviöllisiä (pienemmät tiedostot, pieni laatutappio).",
+        "bitrateLabel": "Bittinopeus",
+        "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
+        "losslessNote": "Häviöttömät muodot säilyttävät alkuperäisen äänenlaadun ilman pakkaushäiriöitä."
+      },
+      "audioNormalization": {
+        "title": "Äänen normalisointi",
+        "description": "Säädä äänitasoja tasaista toistoäänenvoimakkuutta varten kaikissa leikkeissä.",
+        "enable": "Ota käyttöön äänenvoimakkuuden normalisointi",
+        "enableHelp": "Säädä äänitasot automaattisesti EBU R128 -lähetysstandardiin tasaista toistoäänenvoimakkuutta varten kaikissa leikkeissä.",
+        "disabled": "Äänen normalisointi on pois käytöstä",
+        "requiresRecording": "Ota käyttöön leikkeiden tallennus Tallennus-välilehdellä käyttääksesi äänen normalisointia.",
+        "targetLUFSLabel": "Tavoiteäänenvoimakkuus (LUFS)",
+        "targetLUFSHelp": "Integroitu äänenvoimakkuustavoite LUFS-yksiköissä (Loudness Units relative to Full Scale). -23 LUFS on EBU R128 -lähetysstandardi. Alue: -40 - -10 LUFS.",
+        "loudnessRangeLabel": "Äänenvoimakkuusalue (LU)",
+        "loudnessRangeHelp": "Enimmäisvaihtelu äänenvoimakkuudessa leikkeen sisällä (0-20 LU). Matalammat arvot luovat tasaisemman äänenvoimakkuuden mutta saattavat vähentää dynamiikkaa.",
+        "truePeakLabel": "Todellinen huippuraja (dBTP)",
+        "truePeakHelp": "Enimmäinen todellinen huipputaso digitaalisen leikkauksen estämiseksi (-10 - 0 dBTP). -2 dBTP tarjoaa turvallisen marginaalin useimmille toistoalgoille.",
+        "noteTitle": "EBU R128 -standardi",
+        "noteDescription": "Äänen normalisointi noudattaa EBU R128 -lähetysstandardia varmistaen tasaiset toistotasot eri laitteilla ja estäen leikkauksen."
+      },
+      "audioClipRetention": {
+        "title": "Äänileikkeiden säilytys",
+        "description": "Määritä äänileikkeiden siivous",
+        "policyLabel": "Säilytyskäytäntö",
+        "policyHelp": "Valitse, miten äänileikkeet poistetaan automaattisesti. Ei mitään: säilytä kaikki leikkeet. Ikä: poista tiettyä vanhemmat leikkeet. Käyttö: poista vanhimmat leikkeet kun levyn käyttö ylittää rajan.",
+        "maxAgeLabel": "Enimmäisikä",
+        "maxAgeHelp": "Poista tätä vanhemmat äänileikkeet. Muoto: numero ja yksikkö (h=tunnit, d=päivät, w=viikot, m=kuukaudet). Esimerkkejä: '7d' 7 päivälle, '4w' 4 viikolle.",
+        "maxUsageLabel": "Levyn enimmäiskäyttö",
+        "maxUsageHelp": "Poista vanhimmat leikkeet, kun äänihakemisto käyttää enemmän kuin tämän prosenttiosuuden käytettävissä olevasta levytilasta.",
+        "minClipsLabel": "Vähimmäisleikkeet lajia kohden",
+        "minClipsHelp": "Säilytä aina vähintään tämä määrä leikkeitä jokaiselle lintulajille iästä tai levyn käytöstä riippumatta. Auttaa säilyttämään harvinaisia tallenteita.",
+        "keepSpectrograms": "Säilytä spektrogrammikuvat",
+        "keepSpectrogramsHelp": "Säilytä spektrogrammikuvat vaikka äänileikkeet poistettaisiin. Spektrogrammit käyttävät vähemmän tilaa ja tarjoavat visuaalisen viitteen.",
+        "policies": {
+          "none": "Ei mitään",
+          "age": "Ikä",
+          "usage": "Käyttö"
+        },
+        "noRetentionTitle": "Kaikki leikkeet säilytetään",
+        "noRetentionDescription": "Äänileikkeitä säilytetään toistaiseksi. Seuraa levytilan käyttöä estääksesi tallennusongelmia.",
+        "ageRetentionTitle": "Ikään perustuva siivous",
+        "ageRetentionDescription": "Määritettyä ikää vanhemmat leikkeet poistetaan automaattisesti, säilyttäen kuitenkin vähimmäismäärän lajia kohden.",
+        "usageRetentionTitle": "Käyttöön perustuva siivous",
+        "usageRetentionDescription": "Kun levytilan käyttö ylittää kynnysarvon, vanhimmat leikkeet poistetaan, kunnes käyttö on rajojen sisällä."
+      },
+      "formats": {
+        "wav": "WAV",
+        "flac": "FLAC",
+        "aac": "AAC",
+        "opus": "Opus",
+        "mp3": "MP3"
+      },
+      "transport": {
+        "tcp": "TCP",
+        "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Alipäästösuodatin",
+        "highpass": "Ylipäästösuodatin",
+        "bandpass": "Kaistanpäästösuodatin",
+        "bandstop": "Kaistansulkusuodatin"
+      },
       "errors": {
-        "speciesLoadFailed": "Lajiluettelon lataus epäonnistui. Yritä uudelleen."
-      },
-      "tracking": {
-        "title": "Seuranta",
-        "tabLabel": "Seuranta",
-        "description": "Määritä uusien lajihavaintojen seuranta aikajaksojen perusteella",
-        "enabled": {
-          "label": "Ota lajiseuranta käyttöön",
-          "helpText": "Kun käytössä, järjestelmä seuraa uusia lajihavaintoja ja voi lähettää ilmoituksia"
-        },
-        "newSpeciesWindowDays": {
-          "label": "Uuden lajin ikkuna (päivää)",
-          "helpText": "Kuinka monta päivää lajia pidetään 'uutena' ensimmäisen havainnon jälkeen (1-365)"
-        },
-        "syncIntervalMinutes": {
-          "label": "Synkronointiväli (minuuttia)",
-          "helpText": "Kuinka usein seurantatiedot synkronoidaan tietokannan kanssa (1-1440)"
-        },
-        "notificationSuppressionHours": {
-          "label": "Ilmoitusten esto (tuntia)",
-          "helpText": "Tuntia, joiden ajan estetään saman lajin toistuvat ilmoitukset (0-8760)"
-        },
-        "yearly": {
-          "title": "Vuosiseuranta",
-          "description": "Seuraa lajien ensimmäisiä saapumisia joka vuosi",
-          "enabled": {
-            "label": "Ota vuosiseuranta käyttöön",
-            "helpText": "Seuraa ja ilmoita, kun laji havaitaan ensimmäisen kerran vuodessa"
-          },
-          "resetMonth": {
-            "label": "Nollauskuukausi",
-            "helpText": "Kuukausi, jolloin vuosiseuranta nollataan (1-12)"
-          },
-          "resetDay": {
-            "label": "Nollauspäivä",
-            "helpText": "Kuukauden päivä, jolloin vuosiseuranta nollataan"
-          },
-          "windowDays": {
-            "label": "Ikkuna (päivää)",
-            "helpText": "Päivät 'uusi tänä vuonna' -ilmaisimen näyttämiseksi (1-365)"
-          }
-        },
-        "seasonal": {
-          "title": "Kausiseuranta",
-          "description": "Seuraa lajien ensimmäisiä saapumisia joka kausi",
-          "enabled": {
-            "label": "Ota kausiseuranta käyttöön",
-            "helpText": "Seuraa ja ilmoita, kun laji havaitaan ensimmäisen kerran kaudessa"
-          },
-          "windowDays": {
-            "label": "Ikkuna (päivää)",
-            "helpText": "Päivät 'uusi tällä kaudella' -ilmaisimen näyttämiseksi (1-365)"
-          },
-          "seasons": {
-            "title": "Kausimääritykset",
-            "description": "Määritä, milloin kukin kausi alkaa. Kaudet mukautuvat automaattisesti sijaintisi leveysasteen perusteella.",
-            "spring": "Kevät",
-            "summer": "Kesä",
-            "fall": "Syksy",
-            "winter": "Talvi",
-            "wet1": "Sadekausi 1",
-            "dry1": "Kuivakausi 1",
-            "wet2": "Sadekausi 2",
-            "dry2": "Kuivakausi 2",
-            "startMonth": "Alkukuukausi",
-            "startDay": "Alkupäivä",
-            "hemisphereNote": "Kausien päivämäärät määritetään automaattisesti leveysasteesi perusteella. Pohjoisella pallonpuoliskolla käytetään tavallisia vuodenaikoja, eteläisellä pallonpuoliskolla siirrettyjä päivämääriä ja päiväntasaajan alueilla sade-/kuivakausia."
-          }
-        },
-        "months": {
-          "january": "Tammikuu",
-          "february": "Helmikuu",
-          "march": "Maaliskuu",
-          "april": "Huhtikuu",
-          "may": "Toukokuu",
-          "june": "Kesäkuu",
-          "july": "Heinäkuu",
-          "august": "Elokuu",
-          "september": "Syyskuu",
-          "october": "Lokakuu",
-          "november": "Marraskuu",
-          "december": "Joulukuu"
-        },
-        "units": {
-          "days": "päivää",
-          "min": "min",
-          "hours": "t"
-        }
-      },
-      "dynamicThreshold": {
-        "tabLabel": "Opitut",
-        "title": "Opitut kynnysarvot",
-        "description": "Tämä sivu näyttää dynaamisten kynnysarvojen suoritusaikaiset tiedot. Kun käytössä kohdassa Pääasetukset → Tunnistus, kynnysarvoja säädetään automaattisesti useiden korkean luottamuksen havaintojen perusteella. Täällä näkyvien lajien oletetaan esiintyvän tässä sijainnissa.",
-        "stats": {
-          "active": "Aktiiviset",
-          "atMinimum": "Minimissä",
-          "minThreshold": "Min. kynnys",
-          "validityPeriod": "Voimassaoloaika"
-        },
-        "header": {
-          "species": "Laji",
-          "threshold": "Kynnysarvo",
-          "expires": "Vanhenee"
-        },
-        "searchPlaceholder": "Hae lajeja...",
-        "threshold": "Kynnysarvo",
-        "level": "Taso",
-        "expires": "Vanhenee",
-        "expired": "Vanhentunut",
-        "confidence": "Luottamus",
-        "requiredConfidence": "Vaadittu luottamus",
-        "resetAll": "Nollaa kaikki",
-        "resetSpecies": "Nollaa tämän lajin kynnysarvo",
-        "noEvents": "Ei kynnysarvon muutoshistoriaa",
-        "changeReason": {
-          "highConfidence": "Korkean luottamuksen havainto",
-          "expiry": "Kynnysarvo vanhentunut",
-          "manualReset": "Manuaalinen nollaus"
-        },
-        "note": "Korkean luottamuksen havainnot vahvistavat, mitkä lajit esiintyvät tässä sijainnissa. Useiden korkean luottamuksen osumien jälkeen tunnistuskynnystä alennetaan turvallisesti, jotta saadaan enemmän ääniä ilman merkittävää väärien positiivisten riskiä. Kynnysarvot nollautuvat automaattisesti asetetun voimassaoloajan jälkeen.",
-        "empty": {
-          "title": "Ei opittuja kynnysarvoja",
-          "description": "Korkean luottamuksen havainnot luovat automaattisesti opitut kynnysarvot lajeille"
-        },
-        "resetAllConfirm": {
-          "title": "Nollaa kaikki kynnysarvot",
-          "message": "Tämä nollaa kaikki {count} opittua kynnysarvoa. Lajit on havaittava uudelleen korkealla luottamuksella niiden kynnysarvojen alentamiseksi."
-        },
-        "loadError": "Dynaamisten kynnysarvojen lataus epäonnistui",
-        "resetSuccess": "Kynnysarvo nollattu lajille {species}",
-        "resetError": "Kynnysarvon nollaus epäonnistui",
-        "resetAllSuccess": "{count} kynnysarvoa nollattu",
-        "resetAllError": "Kynnysarvojen nollaus epäonnistui",
-        "expand": "Näytä tapahtumahistoria",
-        "collapse": "Piilota tapahtumahistoria"
-      },
-      "suggestions": "Lajiehdotukset"
+        "devicesLoadFailed": "Äänilaitteiden lataus epäonnistui. Tarkista järjestelmän käyttöoikeudet.",
+        "invalidBitrate": "Virheellinen bittinopeusarvo",
+        "invalidRetentionPolicy": "Virheellinen säilytyskäytäntö"
+      }
     },
     "security": {
       "pageLabel": "Turva-asetukset",
@@ -3485,9 +3205,9 @@
         "title": "Perustunnistautuminen",
         "description": "Suojattu pääsy yksinkertaisella salasanalla",
         "enableLabel": "Ota käyttöön salasanatunnistautuminen",
+        "disabled": "Salasana-autentikointi on poistettu käytöstä",
         "passwordLabel": "Salasana",
-        "passwordHelpText": "Rajoita pääsy asetuksiin salasanalla.",
-        "disabled": "Salasana-autentikointi on poistettu käytöstä"
+        "passwordHelpText": "Rajoita pääsy asetuksiin salasanalla."
       },
       "oauth": {
         "title": "Ulkoinen tunnistautuminen",
@@ -3687,16 +3407,326 @@
         "fileReadError": "Valitun tiedoston lukeminen epäonnistui"
       }
     },
+    "species": {
+      "pageLabel": "Lajiasetukset",
+      "saveError": "Lajin \"{species}\" asetusten tallennus epäonnistui. Yritä uudelleen.",
+      "configUpdated": "Lajin \"{species}\" asetukset päivitetty",
+      "configAdded": "Lajin \"{species}\" asetukset lisätty",
+      "duplicateConfigError": "Lajilla \"{species}\" on jo asetukset. Valitse toinen nimi.",
+      "activeSpecies": {
+        "title": "Aktiiviset lajit",
+        "tabLabel": "Aktiivis.",
+        "description": "Lajit, jotka tunnistetaan nykyisen sijainnin ja suodatusasetusten perusteella",
+        "stats": {
+          "species": "Lajit",
+          "location": "Sijainti",
+          "threshold": "Kynnysarvo",
+          "updated": "Päivitetty",
+          "justNow": "Juuri nyt",
+          "minutesAgo": "{count}m sitten",
+          "hoursAgo": "{count}t sitten"
+        },
+        "search": {
+          "placeholder": "Etsi lajeja..."
+        },
+        "badges": {
+          "included": "Sisällytetty",
+          "configured": "Määritetty"
+        },
+        "empty": {
+          "title": "Lajeja ei löytynyt",
+          "description": "Määritä sijaintisi pääasetuksissa nähdäksesi saatavilla olevat lajit"
+        },
+        "noResults": "Mikään laji ei vastaa hakuasi",
+        "infoNote": "Tämä luettelo perustuu sijaintiisi ja aluesuodattimen kynnysarvoon. Manuaalisesti lisätyt lajit sisällytetään aina.",
+        "retry": "Yritä uudelleen",
+        "expand": "Laajenna luettelo",
+        "collapse": "Supista luettelo",
+        "downloadCsv": "Lataa CSV",
+        "errors": {
+          "loadFailed": "Aktiivisten lajien luettelon lataus epäonnistui"
+        },
+        "locationNotConfigured": {
+          "title": "Sijaintia ei ole määritetty",
+          "description": "Määritä sijaintisi pääasetuksissa nähdäksesi alueellasi esiintyvät lajit. Aluesuodatin käyttää sijaintiasi määrittääkseen, mitkä lajit todennäköisesti esiintyvät lähistölläsi.",
+          "action": "Määritä sijainti"
+        },
+        "columns": {
+          "commonName": "Nimi",
+          "scientificName": "Tieteellinen nimi",
+          "score": "Pisteet",
+          "status": "Tila"
+        }
+      },
+      "alwaysInclude": {
+        "title": "Sisällytä lajit aina",
+        "tabLabel": "Sisällytä",
+        "description": "Tämän listan lajit sisällytetään aina havaittujen lajien alueelle",
+        "noSpeciesMessage": "Sisällytyslistaan ei ole lisätty lajeja"
+      },
+      "alwaysExclude": {
+        "title": "Jätä lajit aina pois",
+        "tabLabel": "Jätä pois",
+        "description": "Tämän listan lajit jätetään aina pois tunnistuksesta",
+        "noSpeciesMessage": "Poissulkulistaan ei ole lisätty lajeja"
+      },
+      "customConfiguration": {
+        "title": "Mukautettu lajikokoonpano",
+        "tabLabel": "Mukautet.",
+        "description": "Lajikohtaiset kynnysarvot, havaintovälit ja toiminnot",
+        "helpText": {
+          "intro": "Määritä lajikohtaisia asetuksia:",
+          "threshold": "Kynnysarvo: Vähimmäisluottamuspistemäärä (0-1) joka vaaditaan havainnon tekemiseen",
+          "interval": "Väli: Vähimmäisaika sekunteina saman lajin havaintojen välillä (0 = käytä yleistä oletusarvoa)",
+          "actions": "Toiminnot: Mukautetut komennot, jotka suoritetaan kun tämä laji havaitaan"
+        },
+        "columnHeaders": {
+          "species": "Laji",
+          "settings": "Asetukset",
+          "actions": "Toiminnot"
+        },
+        "badges": {
+          "threshold": "Kynnys: {value}",
+          "interval": "Väli: {value}s",
+          "customAction": "Mukautettu toiminto",
+          "executeDefaults": "+Oletukset"
+        },
+        "dropdown": {
+          "editConfig": "Muokkaa asetuksia",
+          "addAction": "Lisää toiminto",
+          "remove": "Poista"
+        },
+        "labels": {
+          "threshold": "Kynnysarvo",
+          "interval": "Väli",
+          "intervalSeconds": "Väli (sek)",
+          "addButton": "Lisää"
+        },
+        "noConfigurationsMessage": "Mukautettuja lajikokoonpanoja ei ole lisätty",
+        "addForm": {
+          "speciesPlaceholder": "Lajin nimi",
+          "thresholdPlaceholder": "0.5",
+          "intervalPlaceholder": "0"
+        },
+        "addConfiguration": "Lisää määritys",
+        "newConfiguration": "Uusi määritys",
+        "editing": "Muokataan: {species}",
+        "configuredCount": "{count} määritetty",
+        "searchPlaceholder": "Kirjoita hakeaksesi...",
+        "saving": "Tallennetaan...",
+        "save": "Tallenna",
+        "cancel": "Peruuta",
+        "configureActions": "Määritä toiminnot",
+        "actionsConfigured": "Määritetty",
+        "list": {
+          "threshold": "Kynnysarvo:",
+          "interval": "Väli:",
+          "intervalNone": "Ei mitään",
+          "actionBadge": "Toiminto",
+          "editTitle": "Muokkaa määritystä",
+          "removeTitle": "Poista määritys"
+        },
+        "emptyState": {
+          "title": "Määrityksiä ei vielä ole.",
+          "description": "Napsauta \"Lisää määritys\" mukauttaaksesi lajintunnistusasetuksia."
+        }
+      },
+      "synonyms": {
+        "tabLabel": "Synonyymit",
+        "description": "Yhdistä BirdNETin tieteelliset lajinimet niiden päivitettyihin vastineisiin uudemmassa taksonomiassa. Käytetään vain varasijana haettaessa lintukuvia Wikipediasta ja AviCommonsista; ei nimeä lajeja uudelleen havainnoissa tai koontinäytöllä.",
+        "helpText": "Muuttaaksesi lajin käyttöliittymässä näkyvää nimeä, muokkaa BirdNETin tunnistetiedostoa (asetus \"Nimikkeiden polku\" pääasetuksissa).",
+        "birdnetName": "BirdNET-nimi",
+        "updatedName": "Päivitetty tieteellinen nimi",
+        "addButton": "Lisää synonyymi",
+        "emptyState": "Ei määritettyjä taksonomiasynonyymejä",
+        "errors": {
+          "unknownSpecies": "Lajia ei löydy BirdNET-tunnisteista",
+          "duplicateKey": "Tälle lajille on jo olemassa synonyymi",
+          "emptyUpdatedName": "Päivitetty nimi on pakollinen"
+        }
+      },
+      "actionsModal": {
+        "title": "Toiminnot lajille {species}",
+        "actionType": {
+          "label": "Toiminnon tyyppi",
+          "executeCommand": "Suorita komento",
+          "onlySupported": "Tällä hetkellä vain komennon suoritus -toiminnot ovat tuettuja"
+        },
+        "command": {
+          "label": "Komento",
+          "helpText": "Anna täydellinen polku komentoon tai skriptiin jonka haluat suorittaa"
+        },
+        "parameters": {
+          "label": "Parametrit",
+          "helpText": "Nämä arvot välitetään komennolle listatussa järjestyksessä",
+          "placeholder": "Napsauta alla olevia painikkeita lisätäksesi parametreja tai kirjoita manuaalisesti",
+          "tooltip": "Käytä alla olevia painikkeita tai kirjoita suoraan (pilkuilla eroteltuina)",
+          "availableTitle": "Käytettävissä olevat parametrit",
+          "buttons": {
+            "commonName": "YleinenNimi",
+            "scientificName": "TieteellinenNimi",
+            "confidence": "Luottamus",
+            "time": "Aika",
+            "source": "Lähde",
+            "clearParameters": "Tyhjennä parametrit"
+          }
+        },
+        "executeDefaults": {
+          "label": "Suorita myös oletustoiminnot (tietokantatallennus, ilmoitukset jne.)",
+          "helpText": "Kun käytössä, sekä mukautettu toimintosi että järjestelmän oletustoiminnot suoritetaan. Kun pois käytöstä, vain mukautettu toimintosi suoritetaan."
+        }
+      },
+      "add": "Lisää",
+      "remove": "Poista",
+      "suggestions": "Lajiehdotukset",
+      "addSpeciesToInclude": "Lisää sisällytettäviä lajeja",
+      "addSpeciesToIncludeLabel": "Lisää uusia sisällytettäviä lajeja",
+      "addSpeciesToExclude": "Lisää pois jätettäviä lajeja",
+      "addSpeciesToExcludeLabel": "Lisää uusia pois jätettäviä lajeja",
+      "commandPathPlaceholder": "/polku/komentoon",
+      "parametersPlaceholder": "Parametrit ilmestyvät tähän",
+      "errors": {
+        "speciesLoadFailed": "Lajiluettelon lataus epäonnistui. Yritä uudelleen."
+      },
+      "tracking": {
+        "title": "Seuranta",
+        "tabLabel": "Seuranta",
+        "description": "Määritä uusien lajihavaintojen seuranta aikajaksojen perusteella",
+        "enabled": {
+          "label": "Ota lajiseuranta käyttöön",
+          "helpText": "Kun käytössä, järjestelmä seuraa uusia lajihavaintoja ja voi lähettää ilmoituksia"
+        },
+        "newSpeciesWindowDays": {
+          "label": "Uuden lajin ikkuna (päivää)",
+          "helpText": "Kuinka monta päivää lajia pidetään 'uutena' ensimmäisen havainnon jälkeen (1-365)"
+        },
+        "syncIntervalMinutes": {
+          "label": "Synkronointiväli (minuuttia)",
+          "helpText": "Kuinka usein seurantatiedot synkronoidaan tietokannan kanssa (1-1440)"
+        },
+        "notificationSuppressionHours": {
+          "label": "Ilmoitusten esto (tuntia)",
+          "helpText": "Tuntia, joiden ajan estetään saman lajin toistuvat ilmoitukset (0-8760)"
+        },
+        "yearly": {
+          "title": "Vuosiseuranta",
+          "description": "Seuraa lajien ensimmäisiä saapumisia joka vuosi",
+          "enabled": {
+            "label": "Ota vuosiseuranta käyttöön",
+            "helpText": "Seuraa ja ilmoita, kun laji havaitaan ensimmäisen kerran vuodessa"
+          },
+          "resetMonth": {
+            "label": "Nollauskuukausi",
+            "helpText": "Kuukausi, jolloin vuosiseuranta nollataan (1-12)"
+          },
+          "resetDay": {
+            "label": "Nollauspäivä",
+            "helpText": "Kuukauden päivä, jolloin vuosiseuranta nollataan"
+          },
+          "windowDays": {
+            "label": "Ikkuna (päivää)",
+            "helpText": "Päivät 'uusi tänä vuonna' -ilmaisimen näyttämiseksi (1-365)"
+          }
+        },
+        "seasonal": {
+          "title": "Kausiseuranta",
+          "description": "Seuraa lajien ensimmäisiä saapumisia joka kausi",
+          "enabled": {
+            "label": "Ota kausiseuranta käyttöön",
+            "helpText": "Seuraa ja ilmoita, kun laji havaitaan ensimmäisen kerran kaudessa"
+          },
+          "windowDays": {
+            "label": "Ikkuna (päivää)",
+            "helpText": "Päivät 'uusi tällä kaudella' -ilmaisimen näyttämiseksi (1-365)"
+          },
+          "seasons": {
+            "title": "Kausimääritykset",
+            "description": "Määritä, milloin kukin kausi alkaa. Kaudet mukautuvat automaattisesti sijaintisi leveysasteen perusteella.",
+            "spring": "Kevät",
+            "summer": "Kesä",
+            "fall": "Syksy",
+            "winter": "Talvi",
+            "wet1": "Sadekausi 1",
+            "dry1": "Kuivakausi 1",
+            "wet2": "Sadekausi 2",
+            "dry2": "Kuivakausi 2",
+            "startMonth": "Alkukuukausi",
+            "startDay": "Alkupäivä",
+            "hemisphereNote": "Kausien päivämäärät määritetään automaattisesti leveysasteesi perusteella. Pohjoisella pallonpuoliskolla käytetään tavallisia vuodenaikoja, eteläisellä pallonpuoliskolla siirrettyjä päivämääriä ja päiväntasaajan alueilla sade-/kuivakausia."
+          }
+        },
+        "months": {
+          "january": "Tammikuu",
+          "february": "Helmikuu",
+          "march": "Maaliskuu",
+          "april": "Huhtikuu",
+          "may": "Toukokuu",
+          "june": "Kesäkuu",
+          "july": "Heinäkuu",
+          "august": "Elokuu",
+          "september": "Syyskuu",
+          "october": "Lokakuu",
+          "november": "Marraskuu",
+          "december": "Joulukuu"
+        },
+        "units": {
+          "days": "päivää",
+          "min": "min",
+          "hours": "t"
+        }
+      },
+      "dynamicThreshold": {
+        "tabLabel": "Opitut",
+        "title": "Opitut kynnysarvot",
+        "description": "Tämä sivu näyttää dynaamisten kynnysarvojen suoritusaikaiset tiedot. Kun käytössä kohdassa Pääasetukset → Tunnistus, kynnysarvoja säädetään automaattisesti useiden korkean luottamuksen havaintojen perusteella. Täällä näkyvien lajien oletetaan esiintyvän tässä sijainnissa.",
+        "stats": {
+          "active": "Aktiiviset",
+          "atMinimum": "Minimissä",
+          "minThreshold": "Min. kynnys",
+          "validityPeriod": "Voimassaoloaika"
+        },
+        "header": {
+          "species": "Laji",
+          "threshold": "Kynnysarvo",
+          "expires": "Vanhenee"
+        },
+        "searchPlaceholder": "Hae lajeja...",
+        "threshold": "Kynnysarvo",
+        "level": "Taso",
+        "expires": "Vanhenee",
+        "expired": "Vanhentunut",
+        "confidence": "Luottamus",
+        "requiredConfidence": "Vaadittu luottamus",
+        "resetAll": "Nollaa kaikki",
+        "resetSpecies": "Nollaa tämän lajin kynnysarvo",
+        "noEvents": "Ei kynnysarvon muutoshistoriaa",
+        "changeReason": {
+          "highConfidence": "Korkean luottamuksen havainto",
+          "expiry": "Kynnysarvo vanhentunut",
+          "manualReset": "Manuaalinen nollaus"
+        },
+        "note": "Korkean luottamuksen havainnot vahvistavat, mitkä lajit esiintyvät tässä sijainnissa. Useiden korkean luottamuksen osumien jälkeen tunnistuskynnystä alennetaan turvallisesti, jotta saadaan enemmän ääniä ilman merkittävää väärien positiivisten riskiä. Kynnysarvot nollautuvat automaattisesti asetetun voimassaoloajan jälkeen.",
+        "empty": {
+          "title": "Ei opittuja kynnysarvoja",
+          "description": "Korkean luottamuksen havainnot luovat automaattisesti opitut kynnysarvot lajeille"
+        },
+        "resetAllConfirm": {
+          "title": "Nollaa kaikki kynnysarvot",
+          "message": "Tämä nollaa kaikki {count} opittua kynnysarvoa. Lajit on havaittava uudelleen korkealla luottamuksella niiden kynnysarvojen alentamiseksi."
+        },
+        "loadError": "Dynaamisten kynnysarvojen lataus epäonnistui",
+        "resetSuccess": "Kynnysarvo nollattu lajille {species}",
+        "resetError": "Kynnysarvon nollaus epäonnistui",
+        "resetAllSuccess": "{count} kynnysarvoa nollattu",
+        "resetAllError": "Kynnysarvojen nollaus epäonnistui",
+        "expand": "Näytä tapahtumahistoria",
+        "collapse": "Piilota tapahtumahistoria"
+      }
+    },
     "database": {
       "sqlitePlaceholder": "Syötä SQLite-tietokannan polku",
       "mysqlHostPlaceholder": "Syötä MySQL-isäntä",
       "mysqlUsernamePlaceholder": "Syötä MySQL-käyttäjänimi"
-    },
-    "tabs": {
-      "navigation": "Asetusten navigointivälilehdet",
-      "hasChanges": "Tällä välilehdellä on tallentamattomia muutoksia",
-      "setAsDefault": "Aseta oletukseksi",
-      "defaultIndicator": "Oletuslähde"
     },
     "alerts": {
       "sections": {
@@ -3905,12 +3935,6 @@
           "description": "Ilmoittaa kun BirdWeather-lähetys epäonnistuu"
         }
       }
-    },
-    "errors": {
-      "loadFailed": "Asetusten lataaminen epäonnistui",
-      "saveFailed": "Asetusten tallentaminen epäonnistui",
-      "databaseStatsFailed": "Tietokantatilastojen lataaminen epäonnistui",
-      "csvDownloadFailed": "CSV-tiedoston lataaminen epäonnistui"
     },
     "appearance": {
       "colorScheme": "Värimaailma",
@@ -4151,17 +4175,6 @@
         "adjustedToMinimum": "Arvo säädetty minimiin ({value})",
         "adjustedToMaximum": "Arvo säädetty maksimiin ({value})"
       },
-      "species": {
-        "suggestionsAvailable": "{count} lajiehdotusta saatavilla. Käytä nuolinäppäimiä navigoimiseen.",
-        "noSuggestions": "Ei saatavilla olevia lajiehdotuksia.",
-        "loadingSpecies": "Ladataan lajeja...",
-        "typePlaceholder": "Kirjoita lajin nimi..."
-      },
-      "select": {
-        "searchOptions": "Etsi vaihtoehdot",
-        "noOptions": "Vaihtoehtoja ei löydy",
-        "searchPlaceholder": "Hae..."
-      },
       "rtsp": {
         "addNewStream": "Lisää uusi RTSP-striimi",
         "maxStreamsReached": "RTSP-striimien enimmäismäärä ({max}) saavutettu.",
@@ -4170,6 +4183,17 @@
       },
       "subnet": {
         "maxSubnetsReached": "Aliverkkojen enimmäismäärä ({max}) saavutettu."
+      },
+      "species": {
+        "loadingSpecies": "Ladataan lajeja...",
+        "typePlaceholder": "Kirjoita lajin nimi...",
+        "suggestionsAvailable": "{count} lajiehdotusta saatavilla. Käytä nuolinäppäimiä navigoimiseen.",
+        "noSuggestions": "Ei saatavilla olevia lajiehdotuksia."
+      },
+      "select": {
+        "searchPlaceholder": "Hae...",
+        "searchOptions": "Etsi vaihtoehdot",
+        "noOptions": "Vaihtoehtoja ei löydy"
       }
     },
     "datePicker": {
@@ -4264,30 +4288,6 @@
       "review": "Tarkista",
       "download": "Lataa"
     }
-  },
-  "terminal": {
-    "title": "Pääte",
-    "disabled": "Terminaali on poistettu käytöstä",
-    "disabledDescription": "Selainpääte on poistettu käytöstä. Ota se käyttöön Asetukset → Turvallisuus -kohdassa käyttääksesi tätä ominaisuutta.",
-    "connected": "Yhdistetty",
-    "disconnected": "Yhteys katkaistu",
-    "connecting": "Yhdistetään...",
-    "connectionError": "Yhteys epäonnistui",
-    "connectionClosed": "Yhteys katkaistu",
-    "securityWarning": "Varoitus: Tämä pääte tarjoaa suoran komentotulkin käytön host-järjestelmään. Ota käyttöön vain luotetuissa verkoissa.",
-    "copySelection": "Kopioi valinta",
-    "expand": "Laajenna",
-    "collapse": "Pienennä",
-    "fullscreen": "Koko näyttö",
-    "exitFullscreen": "Poistu koko näytöstä",
-    "colorTheme": "Väriteema",
-    "themeDark": "Tumma",
-    "themeLight": "Vaalea",
-    "themeHighContrast": "Korkea kontrasti",
-    "detach": "Avaa uudessa ikkunassa",
-    "detached": "Terminaali on irrotettu",
-    "detachedDescription": "Terminaali toimii erillisessä ikkunassa. Sulje se palauttaaksesi sen tänne.",
-    "reattach": "Liitä takaisin"
   },
   "quietHours": {
     "indicator": {
@@ -4631,6 +4631,17 @@
       "reinstalling": "Asennetaan uudelleen...",
       "reinstallComplete": "Tiedostot tarkistettu onnistuneesti",
       "geomodelBadge": "Sisältää BirdNET v3.0 -geomallin"
+    },
+    "bird": {
+      "title": "Bird Detection",
+      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+    },
+    "bat": {
+      "title": "Bat Detection",
+      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
     }
   },
   "restart": {

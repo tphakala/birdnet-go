@@ -775,6 +775,11 @@
       "recording": "Geluid opname",
       "actions": "Akties"
     },
+    "viewToggle": {
+      "label": "Weergavemodus",
+      "table": "Tabelweergave",
+      "cards": "Kaartweergave"
+    },
     "status": {
       "locked": "Vergrendeld"
     },
@@ -907,11 +912,6 @@
       "loadFailed": "Kon detectie niet laden (Fout {status}). Ververs de pagina.",
       "noIdProvided": "Geen detectie-ID opgegeven.",
       "fetchFailed": "Detecties konden niet worden opgehaald"
-    },
-    "viewToggle": {
-      "label": "Weergavemodus",
-      "table": "Tabelweergave",
-      "cards": "Kaartweergave"
     }
   },
   "species": {
@@ -1039,6 +1039,12 @@
         "buffCache": "Buffer/Cache"
       }
     },
+    "progress": {
+      "labels": {
+        "overallProgress": "Totale voortgang",
+        "progress": "Voortgang"
+      }
+    },
     "processInfo": {
       "title": "Proces informatie",
       "loading": "Proces informatie laden...",
@@ -1070,12 +1076,6 @@
       "temperature": "Temperatuur inlezen mislukt: {error}",
       "processes": "Proces informatie inlezen mislukt: {error}"
     },
-    "progress": {
-      "labels": {
-        "overallProgress": "Totale voortgang",
-        "progress": "Voortgang"
-      }
-    },
     "sections": {
       "overview": "Overzicht",
       "database": "Database",
@@ -1084,211 +1084,13 @@
     "database": {
       "title": "Databasebeheer",
       "description": "Beheer schema-migratie",
-      "migration": {
-        "title": "Databasemigratie",
-        "description": "Migreer van oud schema naar genormaliseerd v2 schema",
-        "completedTitle": "Migratie voltooid",
-        "completedNote": "Uw database is succesvol gemigreerd naar het nieuwe schema. Herstart BirdNET-Go om over te schakelen naar de nieuwe database. Opmerking: De nieuwe database is kleiner omdat deze gegevens efficiënter opslaat - dit is normaal en al uw gegevens zijn behouden.",
-        "status": {
-          "idle": "Klaar om te starten",
-          "initializing": "Initialiseren",
-          "dual_write": "Dubbel schrijven actief",
-          "migrating": "Primaire gegevens migreren",
-          "migrating_predictions": "Secundaire gegevens migreren",
-          "paused": "Gepauzeerd",
-          "validating": "Valideren",
-          "cutover": "Overschakeling bezig",
-          "completed": "Migratie voltooid",
-          "failed": "Validatie mislukt"
-        },
-        "progress": {
-          "title": "Migratievoortgang",
-          "records": "records",
-          "percent": "{percent}%",
-          "rate": "{rate} records/sec",
-          "rateValue": "{rate} rec/s",
-          "remaining": "Resterend: {time}",
-          "eta": "Geschatte resterende tijd",
-          "dirtyIds": "{count} records wachtend",
-          "paused": "Migratie gepauzeerd",
-          "completedTitle": "Migratie voltooid",
-          "completedBody": "Alle {count} records zijn succesvol gemigreerd naar de V2-database. De applicatie gebruikt V2 als primaire database na herstart.",
-          "restartTitle": "Herstart vereist",
-          "restartBody": "Herstart de applicatie om naar de V2-database te schakelen. Opruiming van de oude database is beschikbaar na herstart.",
-          "fallbackError": "Verschil in recordaantal tussen legacy- en V2-database. Sommige records zijn mogelijk niet correct gemigreerd.",
-          "migrateInfo": "De migratie zal {count} records overzetten van de legacy-database naar het nieuwe V2-schema. De dual-write-modus garandeert nul dataverlies tijdens de migratie.",
-          "sourceLegacy": "Bron (legacy)",
-          "targetV2": "Doel (V2)",
-          "recordsLabel": "Records",
-          "sizeLabel": "Grootte",
-          "prerequisitesNotMet": "Vereisten niet voldaan — los de kritieke problemen hieronder op",
-          "validatingTitle": "Gegevens valideren",
-          "validatingBody": "{count} legacy-records vergelijken met V2-database...",
-          "dirtyRecordsCatchup": "{count} gewijzigde records — poging tot synchronisatie",
-          "cutoverTitle": "Overschakeling voltooien",
-          "cutoverBody": "Overschakeling naar V2-database voltooien...",
-          "migratingPhase": "Migratie van {phase}",
-          "progressLabel": "Voortgang",
-          "ofRecords": "/ {count} records",
-          "percentComplete": "{percent}% voltooid",
-          "recordsPerSec": "{rate} records/s",
-          "calculating": "Berekenen...",
-          "dirtyWriteFailed": "{count} records konden niet worden geschreven — worden afgestemd tijdens validatie"
-        },
-        "phase": {
-          "indicator": "Fase {current} van {total}: ",
-          "detections": "Primaire detecties migreren",
-          "predictions": "Secundaire detecties migreren",
-          "reviews": "Beoordelingen migreren",
-          "comments": "Opmerkingen migreren",
-          "locks": "Vergrendelingen migreren"
-        },
-        "notes": {
-          "in_progress": "U kunt het systeem normaal blijven gebruiken terwijl de migratie op de achtergrond draait.",
-          "dual_write": "Migratie is bezig. Uw gegevens zijn veilig - alle nieuwe detecties worden opgeslagen in beide databases. U kunt BirdNET-Go gewoon blijven gebruiken.",
-          "migrating": "Bestaande detecties worden gekopieerd naar de nieuwe database. Dit kan even duren afhankelijk van hoeveel detecties u heeft. U kunt op elk moment pauzeren en hervatten.",
-          "validating": "Controleren of alle records correct zijn gekopieerd. Bijna klaar!",
-          "cutover": "Overschakelen naar de nieuwe database. Dit duurt slechts een moment.",
-          "paused": "Migratie is gepauzeerd. Uw gegevens zijn veilig. Hervat wanneer u klaar bent."
-        },
-        "actions": {
-          "start": "Start migratie",
-          "pause": "Pauzeren",
-          "resume": "Hervatten",
-          "cancel": "Annuleren",
-          "rollback": "Terugdraaien",
-          "retryValidation": "Validatie opnieuw proberen"
-        },
-        "confirmCancel": {
-          "title": "Migratie annuleren?",
-          "message": "Dit stopt de migratie en keert terug naar de inactieve status. U kunt de migratie later veilig opnieuw starten - records worden niet gedupliceerd.",
-          "confirm": "Ja, annuleren",
-          "dismiss": "Nee, doorgaan"
-        },
-        "confirmRollback": {
-          "title": "Migratie terugdraaien?",
-          "message": "Dit keert terug naar de oude database. Nieuwe detecties sinds de migratie blijven bewaard in de verbeterde database maar zijn niet zichtbaar totdat de migratie opnieuw wordt uitgevoerd.",
-          "confirm": "Ja, terugdraaien",
-          "dismiss": "Nee, verbeterde behouden"
-        },
-        "errors": {
-          "startFailed": "Kan migratie niet starten",
-          "pauseFailed": "Kan migratie niet pauzeren",
-          "resumeFailed": "Kan migratie niet hervatten",
-          "cancelFailed": "Kan migratie niet annuleren",
-          "rollbackFailed": "Kan migratie niet terugdraaien",
-          "fetchFailed": "Kan migratiestatus niet ophalen",
-          "retryValidationFailed": "Opnieuw proberen van validatie mislukt"
-        },
-        "worker": {
-          "running": "Worker actief",
-          "paused": "Worker gepauzeerd",
-          "stopped": "Worker gestopt"
-        },
-        "prerequisites": {
-          "title": "Pre-migratiecontroles",
-          "rerunChecks": "Controles opnieuw uitvoeren",
-          "critical": "Kritiek",
-          "allPassed": "Alle controles geslaagd - klaar voor migratie",
-          "criticalIssues": "{count} kritiek(e) probleem/problemen moet(en) worden opgelost",
-          "warningsCount": "{count} waarschuwing(en)",
-          "running": "Pre-migratie controles uitvoeren...",
-          "checkingStep": "Stap {current} van {total}",
-          "errors": {
-            "fetchFailed": "Kan vereisten niet ophalen"
-          },
-          "checks": {
-            "state_idle": {
-              "name": "Migratiestatus"
-            },
-            "disk_space": {
-              "name": "Schijfruimte"
-            },
-            "legacy_accessible": {
-              "name": "Databaseverbinding"
-            },
-            "sqlite_integrity": {
-              "name": "Database-integriteit"
-            },
-            "mysql_table_health": {
-              "name": "Tabelgezondheid"
-            },
-            "write_permission": {
-              "name": "Schrijfrechten"
-            },
-            "mysql_permissions": {
-              "name": "MySQL-rechten"
-            },
-            "record_count": {
-              "name": "Aantal records"
-            },
-            "existing_v2_data": {
-              "name": "Bestaande migratiegegevens"
-            },
-            "no_active_locks": {
-              "name": "Actieve vergrendelingen"
-            },
-            "memory_available": {
-              "name": "Beschikbaar geheugen"
-            },
-            "mysql_max_packet": {
-              "name": "MySQL Max Packet"
-            },
-            "mysql_timeout": {
-              "name": "MySQL-timeout"
-            }
-          },
-          "passedCount": "{passed}/{total} geslaagd",
-          "criticalCount": "{count} kritiek",
-          "warningCount": "{count} waarschuwing(en)",
-          "rerun": "Opnieuw uitvoeren",
-          "showDetails": "Details tonen",
-          "hideDetails": "Details verbergen",
-          "status": {
-            "passed": "Geslaagd",
-            "failed": "Mislukt",
-            "error": "Fout",
-            "warning": "Waarschuwing",
-            "skipped": "Overgeslagen"
-          }
-        },
-        "requiredNote": "Databasemigratie is vereist voor aankomende BirdNET-Go-functies die afhankelijk zijn van het nieuwe genormaliseerde databaseschema. Nieuwe functies zijn pas beschikbaar na voltooiing van de migratie.",
-        "starting": "Migratie wordt gestart...",
-        "confirmDialog": {
-          "title": "Databasemigratie starten",
-          "message": "De migratie kopieert uw detectiegegevens van de huidige database naar een nieuwe genormaliseerde database. Uw originele database blijft ongewijzigd. Het wordt echter aanbevolen om een back-up te maken voor het geval er onverwachte problemen optreden.",
-          "checkbox": "Ik bevestig dat ik een back-up van mijn database heb gemaakt of de risico's begrijp van doorgaan zonder back-up.",
-          "note": "U kunt een back-up downloaden met de knop \"Back-up downloaden\" hierboven."
-        },
-        "details": {
-          "title": "Databasedetails",
-          "detections": "{count} detecties",
-          "lastBackup": "Laatste back-up: {date}",
-          "noBackups": "Geen back-ups",
-          "integrity": "Integriteit: {status}"
-        },
-        "strip": {
-          "legacy": "Legacy",
-          "v2Target": "V2 (doel)",
-          "active": "Actief",
-          "migration": "Migratie",
-          "complete": "Voltooid",
-          "recordsMigrated": "{count} records gemigreerd",
-          "readyToMigrate": "Klaar voor migratie",
-          "recordsInLegacy": "{count} records in legacy",
-          "comparingRecords": "Recordaantallen vergelijken...",
-          "validationFailed": "Validatie mislukt",
-          "rate": "Snelheid",
-          "recPerSec": "{rate} rec/s",
-          "dayAvg": "~{count} / dag gem.",
-          "dayHistory": "30 dagen geschiedenis"
-        }
-      },
       "legacy": {
         "title": "Legacy database",
         "fetchFailed": "Kon legacy databasestatus niet ophalen",
         "cleanup": {
           "title": "Legacy database opruimen",
+          "description": "Deze database is nu offline en wordt niet meer gebruikt. Al uw gegevens zijn gemigreerd naar de verbeterde database.",
+          "recommendation": "Het wordt aanbevolen om deze database te verwijderen om schijfruimte vrij te maken.",
           "location": "Locatie",
           "size": "Grootte",
           "records": "Records",
@@ -1305,9 +1107,7 @@
           "confirmMessage": "U staat op het punt de legacy database ({size}) permanent te verwijderen. Deze actie kan niet ongedaan worden gemaakt.",
           "confirmCheckbox": "Ik begrijp dat dit de legacy database permanent zal verwijderen",
           "cancelButton": "Annuleren",
-          "deleteConfirmButton": "Permanent verwijderen",
-          "description": "Deze database is nu offline en wordt niet meer gebruikt. Al uw gegevens zijn gemigreerd naar de verbeterde database.",
-          "recommendation": "Het wordt aanbevolen om deze database te verwijderen om schijfruimte vrij te maken."
+          "deleteConfirmButton": "Permanent verwijderen"
         }
       },
       "v2": {
@@ -1325,6 +1125,7 @@
       "dashboard": {
         "title": "Database-dashboard",
         "fetchFailed": "Kan database-overzicht niet ophalen",
+        "loading": "Laden...",
         "metrics": {
           "readLatency": "Leeslatentie",
           "writeLatency": "Schrijflatentie",
@@ -1379,6 +1180,8 @@
         },
         "detectionRate": {
           "title": "Detectiefrequentie (24u)",
+          "chartLabel": "Detectiepercentage over 24 uur",
+          "detectionsTooltip": "{count} detecties",
           "perHour": "/uur",
           "min": "min",
           "avg": "gem",
@@ -1387,9 +1190,7 @@
           "backupSize": "Back-upgrootte",
           "createBackup": "Back-up maken",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "MySQL-back-ups moeten worden beheerd via mysqldump of uw MySQL-beheertools.",
-          "chartLabel": "Detectiepercentage over 24 uur",
-          "detectionsTooltip": "{count} detecties"
+          "mysqlBackupNote": "MySQL-back-ups moeten worden beheerd via mysqldump of uw MySQL-beheertools."
         },
         "tables": {
           "title": "Tabellen",
@@ -1399,8 +1200,7 @@
           "rows": "Rijen",
           "size": "Grootte",
           "usage": "Gebruik"
-        },
-        "loading": "Laden..."
+        }
       },
       "backup": {
         "download": "Back-up downloaden",
@@ -1432,7 +1232,207 @@
           }
         }
       },
-      "notInitialized": "Niet geïnitialiseerd"
+      "notInitialized": "Niet geïnitialiseerd",
+      "migration": {
+        "title": "Databasemigratie",
+        "description": "Migreer van oud schema naar genormaliseerd v2 schema",
+        "requiredNote": "Databasemigratie is vereist voor aankomende BirdNET-Go-functies die afhankelijk zijn van het nieuwe genormaliseerde databaseschema. Nieuwe functies zijn pas beschikbaar na voltooiing van de migratie.",
+        "completedTitle": "Migratie voltooid",
+        "completedNote": "Uw database is succesvol gemigreerd naar het nieuwe schema. Herstart BirdNET-Go om over te schakelen naar de nieuwe database. Opmerking: De nieuwe database is kleiner omdat deze gegevens efficiënter opslaat - dit is normaal en al uw gegevens zijn behouden.",
+        "starting": "Migratie wordt gestart...",
+        "status": {
+          "idle": "Klaar om te starten",
+          "initializing": "Initialiseren",
+          "dual_write": "Dubbel schrijven actief",
+          "migrating": "Primaire gegevens migreren",
+          "migrating_predictions": "Secundaire gegevens migreren",
+          "paused": "Gepauzeerd",
+          "validating": "Valideren",
+          "cutover": "Overschakeling bezig",
+          "completed": "Migratie voltooid",
+          "failed": "Validatie mislukt"
+        },
+        "progress": {
+          "title": "Migratievoortgang",
+          "records": "records",
+          "paused": "Migratie gepauzeerd",
+          "percent": "{percent}%",
+          "rate": "{rate} records/sec",
+          "rateValue": "{rate} rec/s",
+          "remaining": "Resterend: {time}",
+          "eta": "Geschatte resterende tijd",
+          "dirtyIds": "{count} records wachtend",
+          "completedTitle": "Migratie voltooid",
+          "completedBody": "Alle {count} records zijn succesvol gemigreerd naar de V2-database. De applicatie gebruikt V2 als primaire database na herstart.",
+          "restartTitle": "Herstart vereist",
+          "restartBody": "Herstart de applicatie om naar de V2-database te schakelen. Opruiming van de oude database is beschikbaar na herstart.",
+          "fallbackError": "Verschil in recordaantal tussen legacy- en V2-database. Sommige records zijn mogelijk niet correct gemigreerd.",
+          "migrateInfo": "De migratie zal {count} records overzetten van de legacy-database naar het nieuwe V2-schema. De dual-write-modus garandeert nul dataverlies tijdens de migratie.",
+          "sourceLegacy": "Bron (legacy)",
+          "targetV2": "Doel (V2)",
+          "recordsLabel": "Records",
+          "sizeLabel": "Grootte",
+          "prerequisitesNotMet": "Vereisten niet voldaan — los de kritieke problemen hieronder op",
+          "validatingTitle": "Gegevens valideren",
+          "validatingBody": "{count} legacy-records vergelijken met V2-database...",
+          "dirtyRecordsCatchup": "{count} gewijzigde records — poging tot synchronisatie",
+          "cutoverTitle": "Overschakeling voltooien",
+          "cutoverBody": "Overschakeling naar V2-database voltooien...",
+          "migratingPhase": "Migratie van {phase}",
+          "progressLabel": "Voortgang",
+          "ofRecords": "/ {count} records",
+          "percentComplete": "{percent}% voltooid",
+          "recordsPerSec": "{rate} records/s",
+          "calculating": "Berekenen...",
+          "dirtyWriteFailed": "{count} records konden niet worden geschreven — worden afgestemd tijdens validatie"
+        },
+        "details": {
+          "title": "Databasedetails",
+          "detections": "{count} detecties",
+          "lastBackup": "Laatste back-up: {date}",
+          "noBackups": "Geen back-ups",
+          "integrity": "Integriteit: {status}"
+        },
+        "strip": {
+          "legacy": "Legacy",
+          "v2Target": "V2 (doel)",
+          "active": "Actief",
+          "migration": "Migratie",
+          "complete": "Voltooid",
+          "recordsMigrated": "{count} records gemigreerd",
+          "readyToMigrate": "Klaar voor migratie",
+          "recordsInLegacy": "{count} records in legacy",
+          "comparingRecords": "Recordaantallen vergelijken...",
+          "validationFailed": "Validatie mislukt",
+          "rate": "Snelheid",
+          "recPerSec": "{rate} rec/s",
+          "dayAvg": "~{count} / dag gem.",
+          "dayHistory": "30 dagen geschiedenis"
+        },
+        "phase": {
+          "indicator": "Fase {current} van {total}: ",
+          "detections": "Primaire detecties migreren",
+          "predictions": "Secundaire detecties migreren",
+          "reviews": "Beoordelingen migreren",
+          "comments": "Opmerkingen migreren",
+          "locks": "Vergrendelingen migreren"
+        },
+        "notes": {
+          "in_progress": "U kunt het systeem normaal blijven gebruiken terwijl de migratie op de achtergrond draait.",
+          "dual_write": "Migratie is bezig. Uw gegevens zijn veilig - alle nieuwe detecties worden opgeslagen in beide databases. U kunt BirdNET-Go gewoon blijven gebruiken.",
+          "migrating": "Bestaande detecties worden gekopieerd naar de nieuwe database. Dit kan even duren afhankelijk van hoeveel detecties u heeft. U kunt op elk moment pauzeren en hervatten.",
+          "validating": "Controleren of alle records correct zijn gekopieerd. Bijna klaar!",
+          "cutover": "Overschakelen naar de nieuwe database. Dit duurt slechts een moment.",
+          "paused": "Migratie is gepauzeerd. Uw gegevens zijn veilig. Hervat wanneer u klaar bent."
+        },
+        "actions": {
+          "start": "Start migratie",
+          "pause": "Pauzeren",
+          "resume": "Hervatten",
+          "cancel": "Annuleren",
+          "rollback": "Terugdraaien",
+          "retryValidation": "Validatie opnieuw proberen"
+        },
+        "confirmDialog": {
+          "title": "Databasemigratie starten",
+          "message": "De migratie kopieert uw detectiegegevens van de huidige database naar een nieuwe genormaliseerde database. Uw originele database blijft ongewijzigd. Het wordt echter aanbevolen om een back-up te maken voor het geval er onverwachte problemen optreden.",
+          "checkbox": "Ik bevestig dat ik een back-up van mijn database heb gemaakt of de risico's begrijp van doorgaan zonder back-up.",
+          "note": "U kunt een back-up downloaden met de knop \"Back-up downloaden\" hierboven."
+        },
+        "confirmCancel": {
+          "title": "Migratie annuleren?",
+          "message": "Dit stopt de migratie en keert terug naar de inactieve status. U kunt de migratie later veilig opnieuw starten - records worden niet gedupliceerd.",
+          "confirm": "Ja, annuleren",
+          "dismiss": "Nee, doorgaan"
+        },
+        "confirmRollback": {
+          "title": "Migratie terugdraaien?",
+          "message": "Dit keert terug naar de oude database. Nieuwe detecties sinds de migratie blijven bewaard in de verbeterde database maar zijn niet zichtbaar totdat de migratie opnieuw wordt uitgevoerd.",
+          "confirm": "Ja, terugdraaien",
+          "dismiss": "Nee, verbeterde behouden"
+        },
+        "errors": {
+          "startFailed": "Kan migratie niet starten",
+          "pauseFailed": "Kan migratie niet pauzeren",
+          "resumeFailed": "Kan migratie niet hervatten",
+          "cancelFailed": "Kan migratie niet annuleren",
+          "rollbackFailed": "Kan migratie niet terugdraaien",
+          "retryValidationFailed": "Opnieuw proberen van validatie mislukt",
+          "fetchFailed": "Kan migratiestatus niet ophalen"
+        },
+        "worker": {
+          "running": "Worker actief",
+          "paused": "Worker gepauzeerd",
+          "stopped": "Worker gestopt"
+        },
+        "prerequisites": {
+          "title": "Pre-migratiecontroles",
+          "rerunChecks": "Controles opnieuw uitvoeren",
+          "critical": "Kritiek",
+          "allPassed": "Alle controles geslaagd - klaar voor migratie",
+          "criticalIssues": "{count} kritiek(e) probleem/problemen moet(en) worden opgelost",
+          "warningsCount": "{count} waarschuwing(en)",
+          "running": "Pre-migratie controles uitvoeren...",
+          "checkingStep": "Stap {current} van {total}",
+          "passedCount": "{passed}/{total} geslaagd",
+          "criticalCount": "{count} kritiek",
+          "warningCount": "{count} waarschuwing(en)",
+          "rerun": "Opnieuw uitvoeren",
+          "showDetails": "Details tonen",
+          "hideDetails": "Details verbergen",
+          "status": {
+            "passed": "Geslaagd",
+            "failed": "Mislukt",
+            "error": "Fout",
+            "warning": "Waarschuwing",
+            "skipped": "Overgeslagen"
+          },
+          "errors": {
+            "fetchFailed": "Kan vereisten niet ophalen"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Migratiestatus"
+            },
+            "disk_space": {
+              "name": "Schijfruimte"
+            },
+            "legacy_accessible": {
+              "name": "Databaseverbinding"
+            },
+            "sqlite_integrity": {
+              "name": "Database-integriteit"
+            },
+            "mysql_table_health": {
+              "name": "Tabelgezondheid"
+            },
+            "write_permission": {
+              "name": "Schrijfrechten"
+            },
+            "mysql_permissions": {
+              "name": "MySQL-rechten"
+            },
+            "record_count": {
+              "name": "Aantal records"
+            },
+            "existing_v2_data": {
+              "name": "Bestaande migratiegegevens"
+            },
+            "no_active_locks": {
+              "name": "Actieve vergrendelingen"
+            },
+            "memory_available": {
+              "name": "Beschikbaar geheugen"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL Max Packet"
+            },
+            "mysql_timeout": {
+              "name": "MySQL-timeout"
+            }
+          }
+        }
+      }
     },
     "metrics": {
       "cpu": "CPU",
@@ -1463,6 +1463,30 @@
       "free": "vrij",
       "ram": "RAM"
     }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "disabled": "Terminal uitgeschakeld",
+    "disabledDescription": "De browserterminal is uitgeschakeld. Schakel deze in via Instellingen → Beveiliging om deze functie te gebruiken.",
+    "connected": "Verbonden",
+    "disconnected": "Verbinding verbroken",
+    "connecting": "Verbinden...",
+    "connectionError": "Verbinding mislukt",
+    "connectionClosed": "Verbinding gesloten",
+    "securityWarning": "Waarschuwing: Deze terminal biedt directe shell-toegang tot het hostsysteem. Activeer alleen op vertrouwde netwerken.",
+    "copySelection": "Selectie kopiëren",
+    "expand": "Uitvouwen",
+    "collapse": "Invouwen",
+    "fullscreen": "Volledig scherm",
+    "exitFullscreen": "Volledig scherm verlaten",
+    "colorTheme": "Kleurenthema",
+    "themeDark": "Donker",
+    "themeLight": "Licht",
+    "themeHighContrast": "Hoog contrast",
+    "detach": "Openen in nieuw venster",
+    "detached": "Terminal is losgekoppeld",
+    "detachedDescription": "De terminal draait in een apart venster. Sluit dat venster om het hier terug te brengen.",
+    "reattach": "Opnieuw koppelen"
   },
   "analytics": {
     "title": "Aantallen",
@@ -1501,13 +1525,13 @@
       "filtered": "(gefilterd)"
     },
     "timePeriodOptions": {
+      "allTime": "Alle herkenningen",
       "today": "Vandaag",
       "lastWeek": "Laatste 7 dagen",
       "lastMonth": "Laatste 30 dagen",
       "last90Days": "Laatste 90 dagen",
       "lastYear": "Laatste 12 maanden",
-      "customRange": "Kies een periode",
-      "allTime": "Alle herkenningen"
+      "customRange": "Kies een periode"
     },
     "sortOptions": {
       "mostDetections": "Meest herkend",
@@ -1672,11 +1696,29 @@
       "unsavedChanges": "Niet opgeslagen wijzigingen",
       "toolbar": "Instellingenacties"
     },
+    "errors": {
+      "loadFailed": "Instellingen konden niet worden geladen",
+      "saveFailed": "Instellingen konden niet worden opgeslagen",
+      "databaseStatsFailed": "Databasestatistieken konden niet worden geladen",
+      "csvDownloadFailed": "CSV-download mislukt"
+    },
     "card": {
       "changed": "gewijzigd",
       "changedAriaLabel": "Instellingen gewijzigd"
     },
+    "tabs": {
+      "navigation": "Navigatietabbladen voor instellingen",
+      "hasChanges": "Dit tabblad heeft niet-opgeslagen wijzigingen",
+      "setAsDefault": "Als standaard instellen",
+      "defaultIndicator": "Standaard invoerbron"
+    },
     "main": {
+      "tabs": {
+        "general": "Algemeen",
+        "detection": "Detectie",
+        "location": "Locatie",
+        "database": "Database"
+      },
       "sections": {
         "main": {
           "title": "Hoofdinstellingen",
@@ -1804,6 +1846,8 @@
             }
           },
           "mysql": {
+            "title": "MySQL-configuratie",
+            "description": "Configureer verbindingsinstellingen voor MySQL databaseserver",
             "host": {
               "label": "MySQL-host",
               "placeholder": "Voer MySQL host in",
@@ -1827,9 +1871,7 @@
               "label": "MySQL-database",
               "placeholder": "Voer MySQL database naam in",
               "helpText": "MySQL database naam"
-            },
-            "title": "MySQL-configuratie",
-            "description": "Configureer verbindingsinstellingen voor MySQL databaseserver"
+            }
           },
           "stats": {
             "title": "Databasestatistieken",
@@ -2019,12 +2061,6 @@
         "mapLoadFailed": "Laden van kaart mislukt. Probeer de pagina te vernieuwen.",
         "modalMapLoadFailed": "Laden van modale kaart mislukt. Sluit het venster en open het opnieuw.",
         "mapUnavailable": "Kaart niet beschikbaar: WebGL wordt niet ondersteund in deze browser. U kunt uw locatie nog steeds instellen via de coördinaatinvoervelden hierboven."
-      },
-      "tabs": {
-        "general": "Algemeen",
-        "detection": "Detectie",
-        "location": "Locatie",
-        "database": "Database"
       }
     },
     "support": {
@@ -2175,6 +2211,40 @@
           "imageUrl": "Link naar soortafbeelding",
           "daysSinceFirstSeen": "Aantal dagen sinds eerste detectie"
         }
+      },
+      "testNotification": {
+        "title": "Verstuur Test Nieuwe Soort Melding",
+        "description": "Genereer een test melding voor een nieuwe soort herkenning om te verifiëren dat jouw meldings systeem werkt",
+        "whatHappens": "Wat gebeurt er wanneer je 'Verstuur Test' klikt:",
+        "sendButton": "Verstuur Test",
+        "sendingButton": "Verzenden...",
+        "statusMessages": {
+          "sending": "Test melding verzenden...",
+          "success": "Test melding succesvol verzonden! Controleer jouw meldingen bel.",
+          "error": "Verzenden van test melding mislukt: {message}",
+          "serviceUnavailable": "Meldings service is niet beschikbaar. Controleer jouw meldings instellingen."
+        }
+      },
+      "statusMessages": {
+        "sending": "Test melding verzenden...",
+        "success": "Test melding succesvol verzonden!",
+        "error": "Verzenden van test melding mislukt: {message}",
+        "serviceUnavailable": "Meldings service is niet beschikbaar. Controleer jouw meldings instellingen."
+      },
+      "systemInfo": {
+        "howToView": "Hoe meldingen te bekijken:",
+        "technicalDetails": "Technische details over meldingen in BirdNET-Go:"
+      },
+      "privacy": {
+        "title": "Privacy Kennisgeving voor Externe Webhooks",
+        "description": "Herkennings meldingen kunnen gevoelige gegevens bevatten wanneer verzonden naar externe services:",
+        "gps": "GPS Coördinaten",
+        "gpsDetails": "Exacte locatie (breedtegraad/lengtegraad) indien geconfigureerd",
+        "urls": "Herkennings URLs",
+        "urlsDetails": "Kan interne netwerk informatie blootstellen",
+        "species": "Soorten Gegevens",
+        "speciesDetails": "Welke vogels zijn herkend en wanneer",
+        "recommendation": "Schakel externe webhooks alleen in als je de ontvangende service vertrouwt of self-hosted/lokale services gebruikt."
       },
       "push": {
         "title": "Pushmeldingen",
@@ -2445,63 +2515,30 @@
             "invalidUrl": "Ongeldig URL-formaat. URL moet beginnen met service://"
           }
         }
-      },
-      "testNotification": {
-        "title": "Verstuur Test Nieuwe Soort Melding",
-        "description": "Genereer een test melding voor een nieuwe soort herkenning om te verifiëren dat jouw meldings systeem werkt",
-        "whatHappens": "Wat gebeurt er wanneer je 'Verstuur Test' klikt:",
-        "sendButton": "Verstuur Test",
-        "sendingButton": "Verzenden...",
-        "statusMessages": {
-          "sending": "Test melding verzenden...",
-          "success": "Test melding succesvol verzonden! Controleer jouw meldingen bel.",
-          "error": "Verzenden van test melding mislukt: {message}",
-          "serviceUnavailable": "Meldings service is niet beschikbaar. Controleer jouw meldings instellingen."
-        }
-      },
-      "statusMessages": {
-        "sending": "Test melding verzenden...",
-        "success": "Test melding succesvol verzonden!",
-        "error": "Verzenden van test melding mislukt: {message}",
-        "serviceUnavailable": "Meldings service is niet beschikbaar. Controleer jouw meldings instellingen."
-      },
-      "systemInfo": {
-        "howToView": "Hoe meldingen te bekijken:",
-        "technicalDetails": "Technische details over meldingen in BirdNET-Go:"
-      },
-      "privacy": {
-        "title": "Privacy Kennisgeving voor Externe Webhooks",
-        "description": "Herkennings meldingen kunnen gevoelige gegevens bevatten wanneer verzonden naar externe services:",
-        "gps": "GPS Coördinaten",
-        "gpsDetails": "Exacte locatie (breedtegraad/lengtegraad) indien geconfigureerd",
-        "urls": "Herkennings URLs",
-        "urlsDetails": "Kan interne netwerk informatie blootstellen",
-        "species": "Soorten Gegevens",
-        "speciesDetails": "Welke vogels zijn herkend en wanneer",
-        "recommendation": "Schakel externe webhooks alleen in als je de ontvangende service vertrouwt of self-hosted/lokale services gebruikt."
       }
     },
     "filters": {
+      "title": "Filters",
       "privacyFiltering": {
         "title": "Privacy Filteren",
         "description": "Privacy filteren voorkomt het opslaan van audio clips wanneer menselijke stemmen worden gedetecteerd",
         "enable": "Schakel Privacy Filteren in",
+        "disabled": "Privacy filteren is uitgeschakeld",
         "confidenceLabel": "Betrouwbaarheids Drempelwaarde voor Menselijke Detectie",
-        "confidenceHelp": "Stel het betrouwbaarheidsniveau in voor menselijke stem detectie, lagere waarde maakt filter gevoeliger",
-        "disabled": "Privacy filteren is uitgeschakeld"
+        "confidenceHelp": "Stel het betrouwbaarheidsniveau in voor menselijke stem detectie, lagere waarde maakt filter gevoeliger"
       },
       "falsePositivePrevention": {
         "title": "Vals Positief Preventie",
         "description": "Configureer valse detectie filters",
         "enableDogBark": "Schakel Hondengeblaf Filter in",
+        "disabled": "Hondengeblaf filter is uitgeschakeld",
         "confidenceLabel": "Betrouwbaarheids Drempelwaarde",
         "confidenceHelp": "Stel het betrouwbaarheidsniveau in voor hondengeblaf detectie, lagere waarde maakt filter gevoeliger",
         "expireTimeLabel": "Hondengeblaf Verlooptijd (Minuten)",
         "expireTimeHelp": "Stel in hoe lang een gedetecteerd hondengeblaf wordt onthouden",
         "addDogBarkSpeciesLabel": "Voeg Hondengeblaf Soorten toe",
         "addDogBarkSpeciesHelp": "Zoek en voeg soorten toe die verward kunnen worden met hondengeblaf",
-        "addSpeciesButton": "Toevoegen",
-        "disabled": "Hondengeblaf filter is uitgeschakeld"
+        "addSpeciesButton": "Toevoegen"
       },
       "speciesNamePlaceholder": "Soorten naam",
       "typeSpeciesName": "Typ soorten naam...",
@@ -2519,8 +2556,7 @@
       },
       "errors": {
         "speciesLoadFailed": "Laden van soorten lijst mislukt. Probeer het opnieuw."
-      },
-      "title": "Filters"
+      }
     },
     "integration": {
       "birdweather": {
@@ -2758,218 +2794,6 @@
         "recording": "Opname",
         "retention": "Bewaring"
       },
-      "audioCapture": {
-        "title": "Audio Opname",
-        "description": "Stel audio opname bron in, geluidskaart of RTSP stream",
-        "soundCardSource": "Geluidskaart Bron",
-        "audioSourceLabel": "Audio Bron (vereist applicatie herstart om effect te hebben)",
-        "audioSourceHelp": "Selecteer het audio invoer apparaat voor vogelgeluid detectie. Wijzigingen vereisen applicatie herstart om effect te hebben.",
-        "noSoundCardCapture": "Geen geluidskaart opname",
-        "rtspSource": "RTSP Bron",
-        "rtspTransportLabel": "RTSP-transportprotocol",
-        "rtspTransportHelp": "TCP is betrouwbaarder maar kan hogere latentie hebben. UDP is sneller maar kan pakketverlies ervaren op slechte netwerken.",
-        "rtspUrlsLabel": "RTSP-stream-URL's",
-        "rtspUrlsHelp": "Voer één of meer RTSP stream URLs in voor netwerk audio bronnen. Formaat: rtsp://ip:port/stream. Note: Authenticatie gegevens moeten apart worden geconfigureerd in jouw RTSP server instellingen voor beveiliging.",
-        "noDeviceSelected": "Geen audio apparaat geselecteerd",
-        "refreshDevices": "Vernieuwen",
-        "deviceSelected": "Geluidskaart geselecteerd en klaar voor opname",
-        "availableDevices": "Beschikbare Audio Apparaten",
-        "active": "Actief",
-        "streamsConfigured": "{count} stream(s) geconfigureerd"
-      },
-      "quietHours": {
-        "title": "Stille uren",
-        "sectionTitle": "Stille uren",
-        "sectionDescription": "Pauzeer audio-opname tijdens geconfigureerde tijdvensters om het CPU-gebruik te verminderen wanneer vogels waarschijnlijk niet actief zijn.",
-        "modeLabel": "Planningsmodus",
-        "modeFixed": "Vaste tijden",
-        "modeSolar": "Zonsopgang/-ondergang",
-        "startTime": "Starttijd",
-        "endTime": "Eindtijd",
-        "startEvent": "Startgebeurtenis",
-        "endEvent": "Eindgebeurtenis",
-        "offsetMinutes": "Offset (min)",
-        "sunrise": "Zonsopgang",
-        "sunset": "Zonsondergang",
-        "fixedHint": "Opname wordt dagelijks gepauzeerd tussen start- en eindtijden. Nachtelijke vensters (bijv. 22:00 tot 06:00) worden ondersteund.",
-        "solarHint": "Tijden worden berekend op basis van zonsopgang/-ondergang op uw geconfigureerde locatie. Gebruik negatieve offsets voor vóór het evenement, positieve voor erna.",
-        "badge": "Stil",
-        "enabledBadge": "Stille uren ingeschakeld voor deze stream"
-      },
-      "audioFilters": {
-        "title": "Audiofilters",
-        "description": "Standaard audiofilters configureren voor alle bronnen. Per-bron EQ-instellingen zijn beschikbaar in de instellingen van elke geluidskaart.",
-        "enableEqualizer": "Schakel Audio Equalizer in",
-        "enableEqualizerHelp": "Pas frequentie filtering toe om vogelroep detectie te verbeteren door ongewenste ruis en frequenties te verminderen.",
-        "filterType": "Filtertype",
-        "newFilterType": "Nieuw Filtertype",
-        "selectFilterType": "Selecteer filtertype",
-        "addFilter": "Voeg Filter toe",
-        "remove": "Verwijderen",
-        "frequencyResponse": "Frequentie Respons",
-        "cutoffFrequency": "Afsnij Frequentie",
-        "cutoffFrequencyHelp": "Frequentie waarbij de filter signalen begint te verzwakken. Vogelroepen variëren typisch van 1-10 kHz.",
-        "qFactor": "Q-factor",
-        "qFactorHelp": "Kwaliteits factor bepaalt de scherpte van de filter. Lagere waarden (0.1-1) creëren zachtere hellingen, hogere waarden (1-10) creëren steilere afsnijdingen.",
-        "gain": "Versterking",
-        "gainHelp": "Versterking of verzwakking niveau in decibels (dB).",
-        "attenuation": "Verzwakking",
-        "attenuationHelp": "Filter rolloff snelheid. Hogere waarden geven steilere verzwakking van gefilterde frequenties.",
-        "attenuationLevels": {
-          "0db": "0dB",
-          "12db": "12dB",
-          "24db": "24dB",
-          "36db": "36dB",
-          "48db": "48dB"
-        },
-        "filterHelp": "Voeg meerdere filters toe om de frequentie respons te vormen voor optimale vogel detectie in jouw omgeving.",
-        "graph": {
-          "flatResponse": "Vlakke respons (Geen filters toegepast)",
-          "frequency": "Frequentie (Hz)",
-          "gain": "Versterking (dB)"
-        }
-      },
-      "soundLevelMonitoring": {
-        "title": "Geluidsniveau Monitoring",
-        "description": "Monitor en rapporteer omgevings geluidsniveaus",
-        "enable": "Schakel Geluidsniveau Monitoring in",
-        "enableHelp": "Volg omgevingsruis niveaus om jouw opname omgeving te begrijpen en te correleren met vogel activiteits patronen.",
-        "intervalLabel": "Meet Interval (seconden)",
-        "intervalHelp": "Hoe vaak geluidsniveaus worden gemeten en gerapporteerd. Lagere waarden geven meer gedetailleerde gegevens maar gebruiken meer bronnen. Minimum 5 seconden, aanbevolen 60 seconden.",
-        "dataOutputTitle": "Geluidsniveau Gegevens Output",
-        "dataOutputDescription": "Wanneer ingeschakeld, worden geluidsniveau metingen gepubliceerd via:",
-        "mqttTopic": "MQTT-topic:",
-        "sseEndpoint": "SSE-eindpunt:",
-        "prometheusMetrics": "Prometheus-metrics:",
-        "disabled": "Geluidsniveaubewaking is uitgeschakeld"
-      },
-      "clipSettings": {
-        "title": "Clip Instellingen",
-        "description": "Configureer audio clip opname en verwerking voor geïdentificeerde vogelroepen"
-      },
-      "clipRecording": {
-        "title": "Clip Opname Instellingen",
-        "description": "Configureer audio clip opname, formaat en opslag opties voor gedetecteerde vogelroepen.",
-        "enable": "Schakel clip opname in",
-        "disabled": "Clip opname is uitgeschakeld",
-        "enableHelp": "Bewaar audio clips van gedetecteerde vogelroepen voor beoordeling, delen, of bouwen van aangepaste datasets.",
-        "captureSettings": "Opname Instellingen",
-        "lengthLabel": "Opname Lengte",
-        "lengthHelp": "Duur van audio om op te nemen voor elke detectie (10-60 seconden). Langere clips geven meer context maar gebruiken meer opslag.",
-        "preCaptureLabel": "Pre-Detectie Buffer",
-        "preCaptureHelp": "Seconden audio om op te nemen vóór de vogel werd gedetecteerd (0-{max} seconden). Zorgt ervoor dat de complete vogelroep vanaf het begin wordt opgenomen.",
-        "gainLabel": "Audio Versterking",
-        "gainHelp": "Audio versterking voor opgeslagen clips in decibels (0 tot 20 dB). Maakt opgeslagen audio clips luider voor makkelijker luisteren. Beïnvloedt detectie niet. 0 dB betekent geen versterking.",
-        "normalization": "Audio Normalisatie",
-        "normalizationEnable": "Schakel Luidheid Normalisatie in",
-        "normalizationHelp": "Pas audio niveaus automatisch aan naar EBU R128 uitzend standaard voor consistent afspeel volume over alle clips.",
-        "targetLUFSLabel": "Doel Luidheid (LUFS)",
-        "targetLUFSHelp": "Geïntegreerd luidheid doel in LUFS (Loudness Units relative to Full Scale). -23 LUFS is de EBU R128 uitzend standaard. Bereik: -40 tot -10 LUFS.",
-        "loudnessRangeLabel": "Luidheid Bereik (LU)",
-        "loudnessRangeHelp": "Maximum variatie in luidheid binnen de clip (0-20 LU). Lagere waarden creëren meer consistent volume maar kunnen dynamiek verminderen.",
-        "truePeakLabel": "Ware Piek Limiet (dBTP)",
-        "truePeakHelp": "Maximum ware piek niveau om digitale clipping te voorkomen (-10 tot 0 dBTP). -2 dBTP geeft veilige headroom voor de meeste afspeel systemen.",
-        "normalizationNote": "EBU R128 Standaard",
-        "normalizationNoteDescription": "Audio normalisatie volgt de EBU R128 uitzend standaard, zorgt voor consistent afspeel niveaus over verschillende apparaten en voorkomt clipping.",
-        "fileSettings": "Bestand Instellingen",
-        "pathLabel": "Clips Map",
-        "pathHelp": "Map waar audio clips worden opgeslagen. Relatieve paden zijn vanaf de applicatie map. Voorbeeld: 'clips/' of '/var/audio/birds/'",
-        "typeLabel": "Audio Formaat",
-        "typeHelp": "Audio formaat voor opgeslagen clips. WAV en FLAC zijn lossless (beste kwaliteit, grotere bestanden). MP3, AAC, en Opus zijn lossy (kleinere bestanden, lichte kwaliteitsverlies).",
-        "bitrateLabel": "Bitrate",
-        "bitrateHelp": "Audio compressie bitrate voor lossy formaten. Bereik: {min}-{max} kbps. Hogere waarden geven betere kwaliteit maar grotere bestanden.",
-        "losslessNote": "Lossless formaten behouden originele audio kwaliteit zonder compressie artefacten.",
-        "normalizationDisabled": "Audionormalisatie is uitgeschakeld",
-        "disabledInfo": "Schakel fragmentopname hierboven in om fragmentinstellingen, bestandsformaat en opslagopties te configureren."
-      },
-      "extendedCapture": {
-        "title": "Uitgebreide opname",
-        "description": "Neemt langere audioclips op wanneer een soort herhaaldelijk roept, en maakt één gecombineerde opname in plaats van veel korte clips.",
-        "ramWarning": "Uitgebreide opname vereist extra RAM voor audiobuffers. Niet aanbevolen voor apparaten met 512 MB RAM of minder (bijv. Raspberry Pi Zero).",
-        "enable": "Uitgebreide opname inschakelen",
-        "enableHelp": "Wanneer ingeschakeld, worden herhaalde detecties van geconfigureerde soorten samengevoegd tot één langere opname.",
-        "maxDurationLabel": "Maximale duur",
-        "maxDurationHelp": "Maximale lengte van een uitgebreide opnameclip. De opname groeit naarmate detecties doorgaan, tot deze limiet.",
-        "speciesListLabel": "Soorten voor uitgebreide opname",
-        "addSpeciesLabel": "Soort toevoegen",
-        "addSpeciesHelp": "Soorten die uitgebreide opname activeren. Ondersteunt gewone namen, wetenschappelijke namen en matching op genusniveau (bijv. \"Strix\" omvat alle Strix-uilen).",
-        "addSpeciesButton": "Toevoegen",
-        "disabled": "Uitgebreide opname is uitgeschakeld"
-      },
-      "fileSettings": {
-        "title": "Bestand Instellingen",
-        "description": "Configureer opslaglocatie en audio formaat voor opgeslagen clips.",
-        "pathLabel": "Clips Map",
-        "pathHelp": "Map waar audio clips worden opgeslagen. Relatieve paden zijn vanaf de applicatie map. Voorbeeld: 'clips/' of '/var/audio/birds/'",
-        "typeLabel": "Audio Formaat",
-        "typeHelp": "Audio formaat voor opgeslagen clips. WAV en FLAC zijn lossless (beste kwaliteit, grotere bestanden). MP3, AAC, en Opus zijn lossy (kleinere bestanden, lichte kwaliteitsverlies).",
-        "bitrateLabel": "Bitrate",
-        "bitrateHelp": "Audio compressie bitrate voor lossy formaten. Bereik: {min}-{max} kbps. Hogere waarden geven betere kwaliteit maar grotere bestanden.",
-        "losslessNote": "Lossless formaten behouden originele audio kwaliteit zonder compressie artefacten."
-      },
-      "audioNormalization": {
-        "title": "Audio Normalisatie",
-        "description": "Pas audio niveaus aan voor consistent afspeel volume over alle clips.",
-        "enable": "Luidheid Normalisatie Inschakelen",
-        "enableHelp": "Pas audio niveaus automatisch aan naar EBU R128 uitzend standaard voor consistent afspeel volume over alle clips.",
-        "disabled": "Audio normalisatie is uitgeschakeld",
-        "requiresRecording": "Schakel clip opname in op het Opname tabblad om audio normalisatie te gebruiken.",
-        "targetLUFSLabel": "Doel Luidheid (LUFS)",
-        "targetLUFSHelp": "Geïntegreerd luidheid doel in LUFS (Loudness Units relative to Full Scale). -23 LUFS is de EBU R128 uitzend standaard. Bereik: -40 tot -10 LUFS.",
-        "loudnessRangeLabel": "Luidheid Bereik (LU)",
-        "loudnessRangeHelp": "Maximum variatie in luidheid binnen de clip (0-20 LU). Lagere waarden creëren meer consistent volume maar kunnen dynamiek verminderen.",
-        "truePeakLabel": "Ware Piek Limiet (dBTP)",
-        "truePeakHelp": "Maximum ware piek niveau om digitale clipping te voorkomen (-10 tot 0 dBTP). -2 dBTP geeft veilige headroom voor de meeste afspeel systemen.",
-        "noteTitle": "EBU R128 Standaard",
-        "noteDescription": "Audio normalisatie volgt de EBU R128 uitzend standaard, zorgt voor consistent afspeel niveaus over verschillende apparaten en voorkomt clipping."
-      },
-      "audioClipRetention": {
-        "title": "Audio Clip Bewaring",
-        "description": "Configureer automatische opschoning van opgeslagen audio clips",
-        "policyLabel": "Bewarings Beleid",
-        "policyHelp": "Kies hoe audio clips automatisch worden verwijderd. Geen: behoud alle clips. Leeftijd: verwijder clips ouder dan gespecificeerd. Gebruik: verwijder oudste clips wanneer schijfgebruik limiet overschrijdt.",
-        "maxAgeLabel": "Maximum Leeftijd",
-        "maxAgeHelp": "Verwijder audio clips ouder dan deze duur. Formaat: nummer gevolgd door eenheid (h=uren, d=dagen, w=weken, m=maanden). Voorbeelden: '7d' voor 7 dagen, '4w' voor 4 weken.",
-        "maxUsageLabel": "Maximum Schijf Gebruik",
-        "maxUsageHelp": "Verwijder oudste clips wanneer de audio map meer dan dit percentage van beschikbare schijfruimte gebruikt.",
-        "minClipsLabel": "Minimum Clips per Soort",
-        "minClipsHelp": "Behoud altijd tenminste zoveel clips voor elke vogelsoort, ongeacht leeftijd of schijfgebruik. Helpt zeldzame opnames te bewaren.",
-        "keepSpectrograms": "Behoud Spectrogram Afbeeldingen",
-        "keepSpectrogramsHelp": "Behoud spectrogram afbeeldingen zelfs wanneer audio clips worden verwijderd. Spectrogrammen gebruiken minder ruimte en geven visuele referentie.",
-        "policies": {
-          "none": "Geen - Behoud Alles",
-          "age": "Leeftijd-Gebaseerd",
-          "usage": "Schijfgebruik-Gebaseerd"
-        },
-        "noRetentionTitle": "Alle Clips Bewaard",
-        "noRetentionDescription": "Audio clips worden voor onbepaalde tijd bewaard. Monitor schijfgebruik om opslagproblemen te voorkomen.",
-        "ageRetentionTitle": "Leeftijd-Gebaseerde Opruiming",
-        "ageRetentionDescription": "Clips ouder dan de opgegeven leeftijd worden automatisch verwijderd, waarbij het minimum aantal per soort behouden blijft.",
-        "usageRetentionTitle": "Gebruik-Gebaseerde Opruiming",
-        "usageRetentionDescription": "Wanneer schijfgebruik de drempelwaarde overschrijdt, worden oudste clips verwijderd totdat het gebruik binnen de limieten is."
-      },
-      "formats": {
-        "wav": "WAV",
-        "flac": "FLAC",
-        "aac": "AAC",
-        "opus": "Opus",
-        "mp3": "MP3"
-      },
-      "transport": {
-        "tcp": "TCP",
-        "udp": "UDP"
-      },
-      "filterTypes": {
-        "lowpass": "Laagorlaat Filter",
-        "highpass": "Hoogdoorlaat Filter",
-        "bandpass": "Banddoorlaat Filter",
-        "bandstop": "Bandsperfilter"
-      },
-      "errors": {
-        "devicesLoadFailed": "Laden van audio apparaten mislukt. Controleer systeem permissies.",
-        "invalidBitrate": "Ongeldige bitrate waarde",
-        "invalidRetentionPolicy": "Ongeldig bewarings beleid"
-      },
       "emptyStates": {
         "soundCard": {
           "title": "Geen Geluidskaarten Gedetecteerd",
@@ -3060,6 +2884,44 @@
           "atLeastOneModel": "Minimaal één model moet geselecteerd zijn"
         }
       },
+      "audioCapture": {
+        "title": "Audio Opname",
+        "description": "Stel audio opname bron in, geluidskaart of RTSP stream",
+        "soundCardSource": "Geluidskaart Bron",
+        "audioSourceLabel": "Audio Bron (vereist applicatie herstart om effect te hebben)",
+        "audioSourceHelp": "Selecteer het audio invoer apparaat voor vogelgeluid detectie. Wijzigingen vereisen applicatie herstart om effect te hebben.",
+        "noSoundCardCapture": "Geen geluidskaart opname",
+        "noDeviceSelected": "Geen audio apparaat geselecteerd",
+        "refreshDevices": "Vernieuwen",
+        "rtspSource": "RTSP Bron",
+        "rtspTransportLabel": "RTSP-transportprotocol",
+        "rtspTransportHelp": "TCP is betrouwbaarder maar kan hogere latentie hebben. UDP is sneller maar kan pakketverlies ervaren op slechte netwerken.",
+        "rtspUrlsLabel": "RTSP-stream-URL's",
+        "rtspUrlsHelp": "Voer één of meer RTSP stream URLs in voor netwerk audio bronnen. Formaat: rtsp://ip:port/stream. Note: Authenticatie gegevens moeten apart worden geconfigureerd in jouw RTSP server instellingen voor beveiliging.",
+        "deviceSelected": "Geluidskaart geselecteerd en klaar voor opname",
+        "availableDevices": "Beschikbare Audio Apparaten",
+        "active": "Actief",
+        "streamsConfigured": "{count} stream(s) geconfigureerd"
+      },
+      "quietHours": {
+        "title": "Stille uren",
+        "sectionTitle": "Stille uren",
+        "sectionDescription": "Pauzeer audio-opname tijdens geconfigureerde tijdvensters om het CPU-gebruik te verminderen wanneer vogels waarschijnlijk niet actief zijn.",
+        "modeLabel": "Planningsmodus",
+        "modeFixed": "Vaste tijden",
+        "modeSolar": "Zonsopgang/-ondergang",
+        "startTime": "Starttijd",
+        "endTime": "Eindtijd",
+        "startEvent": "Startgebeurtenis",
+        "endEvent": "Eindgebeurtenis",
+        "offsetMinutes": "Offset (min)",
+        "sunrise": "Zonsopgang",
+        "sunset": "Zonsondergang",
+        "fixedHint": "Opname wordt dagelijks gepauzeerd tussen start- en eindtijden. Nachtelijke vensters (bijv. 22:00 tot 06:00) worden ondersteund.",
+        "solarHint": "Tijden worden berekend op basis van zonsopgang/-ondergang op uw geconfigureerde locatie. Gebruik negatieve offsets voor vóór het evenement, positieve voor erna.",
+        "badge": "Stil",
+        "enabledBadge": "Stille uren ingeschakeld voor deze stream"
+      },
       "rtspStreams": {
         "title": "Audio Stream Configuratie",
         "description": "Configureer netwerk audio streams voor audio opname op afstand. Ondersteunt RTSP, HTTP, HLS, RTMP en UDP protocollen.",
@@ -3136,6 +2998,180 @@
           "failed": "Mislukt",
           "unknown": "Onbekend"
         }
+      },
+      "audioFilters": {
+        "title": "Audiofilters",
+        "description": "Standaard audiofilters configureren voor alle bronnen. Per-bron EQ-instellingen zijn beschikbaar in de instellingen van elke geluidskaart.",
+        "enableEqualizer": "Schakel Audio Equalizer in",
+        "enableEqualizerHelp": "Pas frequentie filtering toe om vogelroep detectie te verbeteren door ongewenste ruis en frequenties te verminderen.",
+        "filterType": "Filtertype",
+        "newFilterType": "Nieuw Filtertype",
+        "selectFilterType": "Selecteer filtertype",
+        "addFilter": "Voeg Filter toe",
+        "remove": "Verwijderen",
+        "frequencyResponse": "Frequentie Respons",
+        "cutoffFrequency": "Afsnij Frequentie",
+        "cutoffFrequencyHelp": "Frequentie waarbij de filter signalen begint te verzwakken. Vogelroepen variëren typisch van 1-10 kHz.",
+        "qFactor": "Q-factor",
+        "qFactorHelp": "Kwaliteits factor bepaalt de scherpte van de filter. Lagere waarden (0.1-1) creëren zachtere hellingen, hogere waarden (1-10) creëren steilere afsnijdingen.",
+        "gain": "Versterking",
+        "gainHelp": "Versterking of verzwakking niveau in decibels (dB).",
+        "attenuation": "Verzwakking",
+        "attenuationHelp": "Filter rolloff snelheid. Hogere waarden geven steilere verzwakking van gefilterde frequenties.",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
+        },
+        "filterHelp": "Voeg meerdere filters toe om de frequentie respons te vormen voor optimale vogel detectie in jouw omgeving.",
+        "graph": {
+          "flatResponse": "Vlakke respons (Geen filters toegepast)",
+          "frequency": "Frequentie (Hz)",
+          "gain": "Versterking (dB)"
+        }
+      },
+      "soundLevelMonitoring": {
+        "title": "Geluidsniveau Monitoring",
+        "description": "Monitor en rapporteer omgevings geluidsniveaus",
+        "enable": "Schakel Geluidsniveau Monitoring in",
+        "enableHelp": "Volg omgevingsruis niveaus om jouw opname omgeving te begrijpen en te correleren met vogel activiteits patronen.",
+        "disabled": "Geluidsniveaubewaking is uitgeschakeld",
+        "intervalLabel": "Meet Interval (seconden)",
+        "intervalHelp": "Hoe vaak geluidsniveaus worden gemeten en gerapporteerd. Lagere waarden geven meer gedetailleerde gegevens maar gebruiken meer bronnen. Minimum 5 seconden, aanbevolen 60 seconden.",
+        "dataOutputTitle": "Geluidsniveau Gegevens Output",
+        "dataOutputDescription": "Wanneer ingeschakeld, worden geluidsniveau metingen gepubliceerd via:",
+        "mqttTopic": "MQTT-topic:",
+        "sseEndpoint": "SSE-eindpunt:",
+        "prometheusMetrics": "Prometheus-metrics:"
+      },
+      "clipSettings": {
+        "title": "Clip Instellingen",
+        "description": "Configureer audio clip opname en verwerking voor geïdentificeerde vogelroepen"
+      },
+      "clipRecording": {
+        "title": "Clip Opname Instellingen",
+        "description": "Configureer audio clip opname, formaat en opslag opties voor gedetecteerde vogelroepen.",
+        "enable": "Schakel clip opname in",
+        "enableHelp": "Bewaar audio clips van gedetecteerde vogelroepen voor beoordeling, delen, of bouwen van aangepaste datasets.",
+        "disabled": "Clip opname is uitgeschakeld",
+        "captureSettings": "Opname Instellingen",
+        "lengthLabel": "Opname Lengte",
+        "lengthHelp": "Duur van audio om op te nemen voor elke detectie (10-60 seconden). Langere clips geven meer context maar gebruiken meer opslag.",
+        "preCaptureLabel": "Pre-Detectie Buffer",
+        "preCaptureHelp": "Seconden audio om op te nemen vóór de vogel werd gedetecteerd (0-{max} seconden). Zorgt ervoor dat de complete vogelroep vanaf het begin wordt opgenomen.",
+        "gainLabel": "Audio Versterking",
+        "gainHelp": "Audio versterking voor opgeslagen clips in decibels (0 tot 20 dB). Maakt opgeslagen audio clips luider voor makkelijker luisteren. Beïnvloedt detectie niet. 0 dB betekent geen versterking.",
+        "normalization": "Audio Normalisatie",
+        "normalizationEnable": "Schakel Luidheid Normalisatie in",
+        "normalizationHelp": "Pas audio niveaus automatisch aan naar EBU R128 uitzend standaard voor consistent afspeel volume over alle clips.",
+        "normalizationDisabled": "Audionormalisatie is uitgeschakeld",
+        "targetLUFSLabel": "Doel Luidheid (LUFS)",
+        "targetLUFSHelp": "Geïntegreerd luidheid doel in LUFS (Loudness Units relative to Full Scale). -23 LUFS is de EBU R128 uitzend standaard. Bereik: -40 tot -10 LUFS.",
+        "loudnessRangeLabel": "Luidheid Bereik (LU)",
+        "loudnessRangeHelp": "Maximum variatie in luidheid binnen de clip (0-20 LU). Lagere waarden creëren meer consistent volume maar kunnen dynamiek verminderen.",
+        "truePeakLabel": "Ware Piek Limiet (dBTP)",
+        "truePeakHelp": "Maximum ware piek niveau om digitale clipping te voorkomen (-10 tot 0 dBTP). -2 dBTP geeft veilige headroom voor de meeste afspeel systemen.",
+        "normalizationNote": "EBU R128 Standaard",
+        "normalizationNoteDescription": "Audio normalisatie volgt de EBU R128 uitzend standaard, zorgt voor consistent afspeel niveaus over verschillende apparaten en voorkomt clipping.",
+        "fileSettings": "Bestand Instellingen",
+        "pathLabel": "Clips Map",
+        "pathHelp": "Map waar audio clips worden opgeslagen. Relatieve paden zijn vanaf de applicatie map. Voorbeeld: 'clips/' of '/var/audio/birds/'",
+        "typeLabel": "Audio Formaat",
+        "typeHelp": "Audio formaat voor opgeslagen clips. WAV en FLAC zijn lossless (beste kwaliteit, grotere bestanden). MP3, AAC, en Opus zijn lossy (kleinere bestanden, lichte kwaliteitsverlies).",
+        "bitrateLabel": "Bitrate",
+        "bitrateHelp": "Audio compressie bitrate voor lossy formaten. Bereik: {min}-{max} kbps. Hogere waarden geven betere kwaliteit maar grotere bestanden.",
+        "losslessNote": "Lossless formaten behouden originele audio kwaliteit zonder compressie artefacten.",
+        "disabledInfo": "Schakel fragmentopname hierboven in om fragmentinstellingen, bestandsformaat en opslagopties te configureren."
+      },
+      "extendedCapture": {
+        "title": "Uitgebreide opname",
+        "description": "Neemt langere audioclips op wanneer een soort herhaaldelijk roept, en maakt één gecombineerde opname in plaats van veel korte clips.",
+        "ramWarning": "Uitgebreide opname vereist extra RAM voor audiobuffers. Niet aanbevolen voor apparaten met 512 MB RAM of minder (bijv. Raspberry Pi Zero).",
+        "enable": "Uitgebreide opname inschakelen",
+        "enableHelp": "Wanneer ingeschakeld, worden herhaalde detecties van geconfigureerde soorten samengevoegd tot één langere opname.",
+        "maxDurationLabel": "Maximale duur",
+        "maxDurationHelp": "Maximale lengte van een uitgebreide opnameclip. De opname groeit naarmate detecties doorgaan, tot deze limiet.",
+        "speciesListLabel": "Soorten voor uitgebreide opname",
+        "addSpeciesLabel": "Soort toevoegen",
+        "addSpeciesHelp": "Soorten die uitgebreide opname activeren. Ondersteunt gewone namen, wetenschappelijke namen en matching op genusniveau (bijv. \"Strix\" omvat alle Strix-uilen).",
+        "addSpeciesButton": "Toevoegen",
+        "disabled": "Uitgebreide opname is uitgeschakeld"
+      },
+      "fileSettings": {
+        "title": "Bestand Instellingen",
+        "description": "Configureer opslaglocatie en audio formaat voor opgeslagen clips.",
+        "pathLabel": "Clips Map",
+        "pathHelp": "Map waar audio clips worden opgeslagen. Relatieve paden zijn vanaf de applicatie map. Voorbeeld: 'clips/' of '/var/audio/birds/'",
+        "typeLabel": "Audio Formaat",
+        "typeHelp": "Audio formaat voor opgeslagen clips. WAV en FLAC zijn lossless (beste kwaliteit, grotere bestanden). MP3, AAC, en Opus zijn lossy (kleinere bestanden, lichte kwaliteitsverlies).",
+        "bitrateLabel": "Bitrate",
+        "bitrateHelp": "Audio compressie bitrate voor lossy formaten. Bereik: {min}-{max} kbps. Hogere waarden geven betere kwaliteit maar grotere bestanden.",
+        "losslessNote": "Lossless formaten behouden originele audio kwaliteit zonder compressie artefacten."
+      },
+      "audioNormalization": {
+        "title": "Audio Normalisatie",
+        "description": "Pas audio niveaus aan voor consistent afspeel volume over alle clips.",
+        "enable": "Luidheid Normalisatie Inschakelen",
+        "enableHelp": "Pas audio niveaus automatisch aan naar EBU R128 uitzend standaard voor consistent afspeel volume over alle clips.",
+        "disabled": "Audio normalisatie is uitgeschakeld",
+        "requiresRecording": "Schakel clip opname in op het Opname tabblad om audio normalisatie te gebruiken.",
+        "targetLUFSLabel": "Doel Luidheid (LUFS)",
+        "targetLUFSHelp": "Geïntegreerd luidheid doel in LUFS (Loudness Units relative to Full Scale). -23 LUFS is de EBU R128 uitzend standaard. Bereik: -40 tot -10 LUFS.",
+        "loudnessRangeLabel": "Luidheid Bereik (LU)",
+        "loudnessRangeHelp": "Maximum variatie in luidheid binnen de clip (0-20 LU). Lagere waarden creëren meer consistent volume maar kunnen dynamiek verminderen.",
+        "truePeakLabel": "Ware Piek Limiet (dBTP)",
+        "truePeakHelp": "Maximum ware piek niveau om digitale clipping te voorkomen (-10 tot 0 dBTP). -2 dBTP geeft veilige headroom voor de meeste afspeel systemen.",
+        "noteTitle": "EBU R128 Standaard",
+        "noteDescription": "Audio normalisatie volgt de EBU R128 uitzend standaard, zorgt voor consistent afspeel niveaus over verschillende apparaten en voorkomt clipping."
+      },
+      "audioClipRetention": {
+        "title": "Audio Clip Bewaring",
+        "description": "Configureer automatische opschoning van opgeslagen audio clips",
+        "policyLabel": "Bewarings Beleid",
+        "policyHelp": "Kies hoe audio clips automatisch worden verwijderd. Geen: behoud alle clips. Leeftijd: verwijder clips ouder dan gespecificeerd. Gebruik: verwijder oudste clips wanneer schijfgebruik limiet overschrijdt.",
+        "maxAgeLabel": "Maximum Leeftijd",
+        "maxAgeHelp": "Verwijder audio clips ouder dan deze duur. Formaat: nummer gevolgd door eenheid (h=uren, d=dagen, w=weken, m=maanden). Voorbeelden: '7d' voor 7 dagen, '4w' voor 4 weken.",
+        "maxUsageLabel": "Maximum Schijf Gebruik",
+        "maxUsageHelp": "Verwijder oudste clips wanneer de audio map meer dan dit percentage van beschikbare schijfruimte gebruikt.",
+        "minClipsLabel": "Minimum Clips per Soort",
+        "minClipsHelp": "Behoud altijd tenminste zoveel clips voor elke vogelsoort, ongeacht leeftijd of schijfgebruik. Helpt zeldzame opnames te bewaren.",
+        "keepSpectrograms": "Behoud Spectrogram Afbeeldingen",
+        "keepSpectrogramsHelp": "Behoud spectrogram afbeeldingen zelfs wanneer audio clips worden verwijderd. Spectrogrammen gebruiken minder ruimte en geven visuele referentie.",
+        "policies": {
+          "none": "Geen - Behoud Alles",
+          "age": "Leeftijd-Gebaseerd",
+          "usage": "Schijfgebruik-Gebaseerd"
+        },
+        "noRetentionTitle": "Alle Clips Bewaard",
+        "noRetentionDescription": "Audio clips worden voor onbepaalde tijd bewaard. Monitor schijfgebruik om opslagproblemen te voorkomen.",
+        "ageRetentionTitle": "Leeftijd-Gebaseerde Opruiming",
+        "ageRetentionDescription": "Clips ouder dan de opgegeven leeftijd worden automatisch verwijderd, waarbij het minimum aantal per soort behouden blijft.",
+        "usageRetentionTitle": "Gebruik-Gebaseerde Opruiming",
+        "usageRetentionDescription": "Wanneer schijfgebruik de drempelwaarde overschrijdt, worden oudste clips verwijderd totdat het gebruik binnen de limieten is."
+      },
+      "formats": {
+        "wav": "WAV",
+        "flac": "FLAC",
+        "aac": "AAC",
+        "opus": "Opus",
+        "mp3": "MP3"
+      },
+      "transport": {
+        "tcp": "TCP",
+        "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Laagorlaat Filter",
+        "highpass": "Hoogdoorlaat Filter",
+        "bandpass": "Banddoorlaat Filter",
+        "bandstop": "Bandsperfilter"
+      },
+      "errors": {
+        "devicesLoadFailed": "Laden van audio apparaten mislukt. Controleer systeem permissies.",
+        "invalidBitrate": "Ongeldige bitrate waarde",
+        "invalidRetentionPolicy": "Ongeldig bewarings beleid"
       }
     },
     "security": {
@@ -3169,9 +3205,9 @@
         "title": "Basis Authenticatie",
         "description": "Beveiligde toegang met een eenvoudig wachtwoord",
         "enableLabel": "Schakel Wachtwoord Authenticatie In",
+        "disabled": "Wachtwoordauthenticatie is uitgeschakeld",
         "passwordLabel": "Wachtwoord",
-        "passwordHelpText": "Beperk toegang tot instellingen met een wachtwoord.",
-        "disabled": "Wachtwoordauthenticatie is uitgeschakeld"
+        "passwordHelpText": "Beperk toegang tot instellingen met een wachtwoord."
       },
       "oauth": {
         "title": "Externe authenticatie",
@@ -3523,6 +3559,8 @@
         "parameters": {
           "label": "Parameters",
           "helpText": "Deze waardes worden doorgegeven aan uw commando in de vermelde volgorde",
+          "placeholder": "Klik op de knoppen hieronder om parameters toe te voegen of typ handmatig",
+          "tooltip": "Gebruik de knoppen hieronder of typ direct (kommagescheiden)",
           "availableTitle": "Beschikbare Parameters",
           "buttons": {
             "commonName": "CommonName",
@@ -3531,9 +3569,7 @@
             "time": "Tijd",
             "source": "Bron",
             "clearParameters": "Wis Parameters"
-          },
-          "placeholder": "Klik op de knoppen hieronder om parameters toe te voegen of typ handmatig",
-          "tooltip": "Gebruik de knoppen hieronder of typ direct (kommagescheiden)"
+          }
         },
         "executeDefaults": {
           "label": "Voer ook standaard acties uit (database opslag, meldingen, etc.)",
@@ -3542,6 +3578,7 @@
       },
       "add": "Toevoegen",
       "remove": "Verwijderen",
+      "suggestions": "Soortsuggesties",
       "addSpeciesToInclude": "Voeg soorten toe om op te nemen",
       "addSpeciesToIncludeLabel": "Voeg Nieuwe Soorten toe om Op te Nemen",
       "addSpeciesToExclude": "Voeg soorten toe om uit te sluiten",
@@ -3684,19 +3721,12 @@
         "resetAllError": "Resetten van drempels mislukt",
         "expand": "Gebeurtenisgeschiedenis tonen",
         "collapse": "Gebeurtenisgeschiedenis verbergen"
-      },
-      "suggestions": "Soortsuggesties"
+      }
     },
     "database": {
       "sqlitePlaceholder": "Voer SQLite database pad in",
       "mysqlHostPlaceholder": "Voer MySQL host in",
       "mysqlUsernamePlaceholder": "Voer MySQL gebruikersnaam in"
-    },
-    "tabs": {
-      "navigation": "Navigatietabbladen voor instellingen",
-      "hasChanges": "Dit tabblad heeft niet-opgeslagen wijzigingen",
-      "setAsDefault": "Als standaard instellen",
-      "defaultIndicator": "Standaard invoerbron"
     },
     "alerts": {
       "sections": {
@@ -3905,12 +3935,6 @@
           "description": "Meldt wanneer een BirdWeather-upload mislukt"
         }
       }
-    },
-    "errors": {
-      "loadFailed": "Instellingen konden niet worden geladen",
-      "saveFailed": "Instellingen konden niet worden opgeslagen",
-      "databaseStatsFailed": "Databasestatistieken konden niet worden geladen",
-      "csvDownloadFailed": "CSV-download mislukt"
     },
     "appearance": {
       "colorScheme": "Kleurenschema",
@@ -4151,17 +4175,6 @@
         "adjustedToMinimum": "Waarde is gewijzigd in de minimale waarde ({value})",
         "adjustedToMaximum": "Waarde is gewijzigd in de maximale waarde ({value})"
       },
-      "species": {
-        "suggestionsAvailable": "{count} soortsuggessies beschikbaar. Gebruik pijltoetsen om te navigeren.",
-        "noSuggestions": "Geen soortsuggessies beschikbaar.",
-        "loadingSpecies": "Soorten laden...",
-        "typePlaceholder": "Typ soorten naam..."
-      },
-      "select": {
-        "searchOptions": "Zoeken opties",
-        "noOptions": "Geen opties gevonden",
-        "searchPlaceholder": "Zoeken..."
-      },
       "rtsp": {
         "addNewStream": "Nieuwe RTSP Stream Toevoegen",
         "maxStreamsReached": "Maximum aantal RTSP streams ({max}) bereikt.",
@@ -4170,6 +4183,17 @@
       },
       "subnet": {
         "maxSubnetsReached": "Maximum aantal subnets ({max}) bereikt."
+      },
+      "species": {
+        "loadingSpecies": "Soorten laden...",
+        "typePlaceholder": "Typ soorten naam...",
+        "suggestionsAvailable": "{count} soortsuggessies beschikbaar. Gebruik pijltoetsen om te navigeren.",
+        "noSuggestions": "Geen soortsuggessies beschikbaar."
+      },
+      "select": {
+        "searchPlaceholder": "Zoeken...",
+        "searchOptions": "Zoeken opties",
+        "noOptions": "Geen opties gevonden"
       }
     },
     "datePicker": {
@@ -4264,30 +4288,6 @@
       "review": "Beoordeling",
       "download": "Ophalen"
     }
-  },
-  "terminal": {
-    "title": "Terminal",
-    "disabled": "Terminal uitgeschakeld",
-    "disabledDescription": "De browserterminal is uitgeschakeld. Schakel deze in via Instellingen → Beveiliging om deze functie te gebruiken.",
-    "connected": "Verbonden",
-    "disconnected": "Verbinding verbroken",
-    "connecting": "Verbinden...",
-    "connectionError": "Verbinding mislukt",
-    "connectionClosed": "Verbinding gesloten",
-    "securityWarning": "Waarschuwing: Deze terminal biedt directe shell-toegang tot het hostsysteem. Activeer alleen op vertrouwde netwerken.",
-    "copySelection": "Selectie kopiëren",
-    "expand": "Uitvouwen",
-    "collapse": "Invouwen",
-    "fullscreen": "Volledig scherm",
-    "exitFullscreen": "Volledig scherm verlaten",
-    "colorTheme": "Kleurenthema",
-    "themeDark": "Donker",
-    "themeLight": "Licht",
-    "themeHighContrast": "Hoog contrast",
-    "detach": "Openen in nieuw venster",
-    "detached": "Terminal is losgekoppeld",
-    "detachedDescription": "De terminal draait in een apart venster. Sluit dat venster om het hier terug te brengen.",
-    "reattach": "Opnieuw koppelen"
   },
   "quietHours": {
     "indicator": {
@@ -4631,6 +4631,17 @@
       "reinstalling": "Opnieuw installeren...",
       "reinstallComplete": "Bestanden succesvol geverifieerd",
       "geomodelBadge": "Bevat BirdNET v3.0 geomodel"
+    },
+    "bird": {
+      "title": "Bird Detection",
+      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+    },
+    "bat": {
+      "title": "Bat Detection",
+      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
     }
   },
   "restart": {

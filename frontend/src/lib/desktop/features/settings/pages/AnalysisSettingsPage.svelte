@@ -41,6 +41,7 @@
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
+  import FalsePositiveFilterControl from '$lib/desktop/components/forms/FalsePositiveFilterControl.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
@@ -277,10 +278,6 @@
     return Math.max(1, Math.ceil(required));
   }
 
-  function getFalsePositiveFilterLevelName(level: number): string {
-    return safeArrayAccess(falsePositiveFilterLevels, level)?.name ?? 'Unknown';
-  }
-
   function getFalsePositiveFilterDescription(level: number, overlap: number): string {
     const levelData = safeArrayAccess(falsePositiveFilterLevels, level);
     if (!levelData) return '';
@@ -298,23 +295,6 @@
 
   function getMinimumOverlapForLevel(level: number): number {
     return safeArrayAccess(falsePositiveFilterLevels, level)?.minOverlap ?? 0.0;
-  }
-
-  function getFalsePositiveFilterBadgeClass(level: number): string {
-    switch (level) {
-      case 1:
-        return 'bg-[var(--color-success)] text-[var(--color-success-content)]';
-      case 2:
-        return 'bg-[var(--color-info)] text-[var(--color-info-content)]';
-      case 3:
-        return 'bg-[var(--color-warning)] text-[var(--color-warning-content)]';
-      case 4:
-      case 5:
-        return 'bg-[var(--color-error)] text-[var(--color-error-content)]';
-      case 0:
-      default:
-        return 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]';
-    }
   }
 
   function updateFalsePositiveFilterLevel(newLevel: number) {
@@ -944,26 +924,20 @@
 <!-- ── Settings Tab Content ──────────────────────────────────────────── -->
 {#snippet settingsTabContent()}
   <div class="space-y-6">
-    <!-- 1. Detection Settings -->
+    <!-- 1. Bird Detection -->
     <SettingsSection
-      title={t('analysis.detection.title')}
-      description={t('analysis.detection.description')}
+      title={t('analysis.bird.title')}
+      description={t('analysis.bird.description')}
       defaultOpen={true}
       originalData={{
         threshold: store.originalData.birdnet?.threshold,
         locale: store.originalData.birdnet?.locale,
-        batThreshold: store.originalData.bat?.threshold,
-        batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
-        batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
-        batFPFilter: store.originalData.bat?.falsePositiveFilter?.level ?? 0,
+        fpFilter: store.originalData.realtime?.falsePositiveFilter,
       }}
       currentData={{
         threshold: birdnet?.threshold,
         locale: birdnet?.locale,
-        batThreshold: bat.threshold,
-        batNighttimeOnly: bat.nighttimeOnly,
-        batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
-        batFPFilter: batFPLevel,
+        fpFilter: store.formData.realtime?.falsePositiveFilter,
       }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1008,8 +982,46 @@
             {/if}
           {/snippet}
         </SelectDropdown>
+      </div>
 
-        {#if hasBatModel}
+      <!-- Bird False Positive Filter -->
+      <div class="mt-6">
+        <FalsePositiveFilterControl
+          id="false-positive-filter-level"
+          level={falsePositiveFilter.level}
+          onUpdate={updateFalsePositiveFilterLevel}
+          getDescription={level => getFalsePositiveFilterDescription(level, birdnet?.overlap ?? 0)}
+          disabled={store.isLoading || store.isSaving}
+        />
+      </div>
+
+      {#if falsePositiveFilter.level >= 4}
+        <SettingsNote>
+          <span>{t('settings.main.sections.falsePositiveFilter.hardwareNote')}</span>
+        </SettingsNote>
+      {/if}
+    </SettingsSection>
+
+    <!-- 2. Bat Detection (only when a bat model is installed) -->
+    {#if hasBatModel}
+      <SettingsSection
+        title={t('analysis.bat.title')}
+        description={t('analysis.bat.description')}
+        defaultOpen={true}
+        originalData={{
+          batThreshold: store.originalData.bat?.threshold,
+          batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
+          batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
+          batFPFilter: store.originalData.bat?.falsePositiveFilter?.level ?? 0,
+        }}
+        currentData={{
+          batThreshold: bat.threshold,
+          batNighttimeOnly: bat.nighttimeOnly,
+          batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
+          batFPFilter: batFPLevel,
+        }}
+      >
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <NumberField
             label={t('analysis.detection.batThreshold.label')}
             value={bat.threshold}
@@ -1020,6 +1032,8 @@
             disabled={store.isLoading || store.isSaving}
             helpText={t('analysis.detection.batThreshold.helpText')}
           />
+          <div></div>
+
           <Checkbox
             checked={bat.nighttimeOnly ?? true}
             label={t('analysis.detection.batNighttimeOnly.label')}
@@ -1034,99 +1048,20 @@
             disabled={store.isLoading || store.isSaving}
             onchange={updateBatUltrasonicFilter}
           />
-
-          <!-- Bat False Positive Filter -->
-          <div class="md:col-span-2">
-            <div class="min-w-0">
-              <label
-                for="bat-false-positive-filter-level"
-                class="flex items-center justify-between mb-2"
-              >
-                <span class="text-sm font-medium text-[var(--color-base-content)]">
-                  {t('analysis.detection.batFalsePositiveFilter.label')}
-                </span>
-                <span
-                  class={cn(
-                    'inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full',
-                    getFalsePositiveFilterBadgeClass(batFPLevel)
-                  )}
-                >
-                  {getFalsePositiveFilterLevelName(batFPLevel)}
-                </span>
-              </label>
-              <input
-                id="bat-false-positive-filter-level"
-                type="range"
-                aria-describedby="bat-false-positive-filter-help"
-                class="w-full h-2 bg-[var(--color-base-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
-                min={0}
-                max={5}
-                step={1}
-                value={batFPLevel}
-                oninput={e => updateBatFalsePositiveFilterLevel(parseInt(e.currentTarget.value))}
-                disabled={store.isLoading || store.isSaving}
-              />
-              <div class="mt-1">
-                <span
-                  id="bat-false-positive-filter-help"
-                  class="text-xs text-[var(--color-base-content)] opacity-60"
-                >
-                  {getBatFalsePositiveFilterDescription(batFPLevel)}
-                </span>
-              </div>
-            </div>
-          </div>
-        {/if}
-      </div>
-    </SettingsSection>
-
-    <!-- 2. False Positive Filter -->
-    <SettingsSection
-      title={t('settings.main.sections.falsePositiveFilter.title')}
-      description={t('settings.main.sections.falsePositiveFilter.description')}
-      originalData={store.originalData.realtime?.falsePositiveFilter}
-      currentData={store.formData.realtime?.falsePositiveFilter}
-    >
-      <div class="space-y-4">
-        <div class="min-w-0">
-          <label for="false-positive-filter-level" class="flex items-center justify-between mb-2">
-            <span class="text-sm font-medium text-[var(--color-base-content)]">
-              {t('settings.main.sections.falsePositiveFilter.level.label')}
-            </span>
-            <span
-              class={cn(
-                'inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full',
-                getFalsePositiveFilterBadgeClass(falsePositiveFilter.level)
-              )}
-            >
-              {getFalsePositiveFilterLevelName(falsePositiveFilter.level)}
-            </span>
-          </label>
-          <input
-            id="false-positive-filter-level"
-            type="range"
-            class="w-full h-2 bg-[var(--color-base-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
-            min={0}
-            max={5}
-            step={1}
-            value={falsePositiveFilter.level}
-            oninput={e => updateFalsePositiveFilterLevel(parseInt(e.currentTarget.value))}
-            disabled={store.isLoading || store.isSaving}
-          />
-          <div class="mt-1">
-            <span class="text-xs text-[var(--color-base-content)] opacity-60">
-              {getFalsePositiveFilterDescription(falsePositiveFilter.level, birdnet?.overlap ?? 0)}
-            </span>
-          </div>
         </div>
 
-        {#if falsePositiveFilter.level >= 4}
-          <SettingsNote>
-            <span>{t('settings.main.sections.falsePositiveFilter.hardwareNote')}</span>
-          </SettingsNote>
-        {/if}
-      </div>
-    </SettingsSection>
+        <!-- Bat False Positive Filter -->
+        <div class="mt-6">
+          <FalsePositiveFilterControl
+            id="bat-false-positive-filter-level"
+            level={batFPLevel}
+            onUpdate={updateBatFalsePositiveFilterLevel}
+            getDescription={level => getBatFalsePositiveFilterDescription(level)}
+            disabled={store.isLoading || store.isSaving}
+          />
+        </div>
+      </SettingsSection>
+    {/if}
 
     <!-- 3. Range Filter -->
     <SettingsSection
@@ -1207,92 +1142,97 @@
       </div>
 
       {#if rangeFilterStatus && rangeFilterStatus.geomodel}
-        <div
-          class="mt-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)]/50 p-4"
+        <details
+          class="mt-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)]/50"
         >
-          <h4 class="text-sm font-medium text-[var(--color-base-content)] mb-3">
+          <summary
+            class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] rounded-lg transition-colors"
+          >
             {t('analysis.rangeFilter.status.title')}
-          </h4>
+          </summary>
+          <div class="px-4 pb-4">
+            <!-- Geomodel info line -->
+            <div class="flex items-center gap-2 text-sm mb-3">
+              <span class="font-medium">
+                {t('analysis.rangeFilter.status.geomodelInfo', {
+                  version: rangeFilterStatus.geomodel.version,
+                  species: rangeFilterStatus.geomodel.totalSpecies.toLocaleString(),
+                })}
+              </span>
+              <span
+                class={cn(
+                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                  rangeFilterStatus.geomodel.autoSelected
+                    ? 'bg-[var(--color-success)]/15 text-[var(--color-success)]'
+                    : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/80'
+                )}
+              >
+                {rangeFilterStatus.geomodel.autoSelected
+                  ? t('analysis.rangeFilter.status.autoSelected')
+                  : t('analysis.rangeFilter.status.manual')}
+              </span>
+            </div>
 
-          <!-- Geomodel info line -->
-          <div class="flex items-center gap-2 text-sm mb-3">
-            <span class="font-medium">
-              {t('analysis.rangeFilter.status.geomodelInfo', {
-                version: rangeFilterStatus.geomodel.version,
-                species: rangeFilterStatus.geomodel.totalSpecies.toLocaleString(),
-              })}
-            </span>
-            <span
-              class={cn(
-                'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                rangeFilterStatus.geomodel.autoSelected
-                  ? 'bg-[var(--color-success)]/15 text-[var(--color-success)]'
-                  : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/80'
-              )}
-            >
-              {rangeFilterStatus.geomodel.autoSelected
-                ? t('analysis.rangeFilter.status.autoSelected')
-                : t('analysis.rangeFilter.status.manual')}
-            </span>
-          </div>
-
-          <!-- Per-classifier coverage table -->
-          {#if rangeFilterStatus.classifiers.length > 0}
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead>
-                  <tr class="border-b border-[var(--color-base-300)]">
-                    <th class="text-left py-2 pr-4 font-medium text-[var(--color-base-content)]/60"
-                      >{t('analysis.rangeFilter.status.classifier')}</th
-                    >
-                    <th class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
-                      >{t('analysis.rangeFilter.status.totalSpecies')}</th
-                    >
-                    <th
-                      class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
-                      title={t('analysis.rangeFilter.status.withRangeDataTooltip')}
-                      >{t('analysis.rangeFilter.status.withRangeData')}</th
-                    >
-                    <th
-                      class="text-right py-2 pl-4 font-medium text-[var(--color-base-content)]/60"
-                      title={t('analysis.rangeFilter.status.withoutRangeDataTooltip')}
-                      >{t('analysis.rangeFilter.status.withoutRangeData')}</th
-                    >
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each rangeFilterStatus.classifiers as classifier (classifier.id)}
-                    <tr class="border-b border-[var(--color-base-300)]/50 last:border-0">
-                      <td class="py-2 pr-4 font-medium">{classifier.name}</td>
-                      <td class="py-2 px-4 text-right tabular-nums"
-                        >{classifier.totalSpecies.toLocaleString()}</td
+            <!-- Per-classifier coverage table -->
+            {#if rangeFilterStatus.classifiers.length > 0}
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="border-b border-[var(--color-base-300)]">
+                      <th
+                        class="text-left py-2 pr-4 font-medium text-[var(--color-base-content)]/60"
+                        >{t('analysis.rangeFilter.status.classifier')}</th
                       >
-                      <td class="py-2 px-4 text-right tabular-nums"
-                        >{classifier.withRangeData.toLocaleString()}</td
+                      <th
+                        class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                        >{t('analysis.rangeFilter.status.totalSpecies')}</th
                       >
-                      <td class="py-2 pl-4 text-right tabular-nums"
-                        >{classifier.withoutRangeData.toLocaleString()}</td
+                      <th
+                        class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                        title={t('analysis.rangeFilter.status.withRangeDataTooltip')}
+                        >{t('analysis.rangeFilter.status.withRangeData')}</th
+                      >
+                      <th
+                        class="text-right py-2 pl-4 font-medium text-[var(--color-base-content)]/60"
+                        title={t('analysis.rangeFilter.status.withoutRangeDataTooltip')}
+                        >{t('analysis.rangeFilter.status.withoutRangeData')}</th
                       >
                     </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          {/if}
-
-          <!-- Pass unmapped species toggle -->
-          <div class="mt-3 pt-3 border-t border-[var(--color-base-300)]">
-            <Checkbox
-              label={t('analysis.rangeFilter.status.passUnmapped.label')}
-              checked={birdnet?.rangeFilter?.passUnmappedSpecies ?? false}
-              onchange={value =>
-                settingsActions.updateSection('birdnet', {
-                  rangeFilter: { ...birdnet?.rangeFilter, passUnmappedSpecies: value },
-                })}
-              helpText={t('analysis.rangeFilter.status.passUnmapped.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
+                  </thead>
+                  <tbody>
+                    {#each rangeFilterStatus.classifiers as classifier (classifier.id)}
+                      <tr class="border-b border-[var(--color-base-300)]/50 last:border-0">
+                        <td class="py-2 pr-4 font-medium">{classifier.name}</td>
+                        <td class="py-2 px-4 text-right tabular-nums"
+                          >{classifier.totalSpecies.toLocaleString()}</td
+                        >
+                        <td class="py-2 px-4 text-right tabular-nums"
+                          >{classifier.withRangeData.toLocaleString()}</td
+                        >
+                        <td class="py-2 pl-4 text-right tabular-nums"
+                          >{classifier.withoutRangeData.toLocaleString()}</td
+                        >
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {/if}
           </div>
+        </details>
+
+        <!-- Pass unmapped species toggle (always visible, outside collapsible) -->
+        <div class="mt-3">
+          <Checkbox
+            label={t('analysis.rangeFilter.status.passUnmapped.label')}
+            checked={birdnet?.rangeFilter?.passUnmappedSpecies ?? false}
+            onchange={value =>
+              settingsActions.updateSection('birdnet', {
+                rangeFilter: { ...birdnet?.rangeFilter, passUnmappedSpecies: value },
+              })}
+            helpText={t('analysis.rangeFilter.status.passUnmapped.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
         </div>
       {/if}
 
@@ -1321,13 +1261,17 @@
       originalData={store.originalData.realtime?.dynamicThreshold}
       currentData={store.formData.realtime?.dynamicThreshold}
     >
-      <Checkbox
-        checked={dynamicThreshold.enabled}
-        label={t('settings.main.sections.dynamicThreshold.enable.label')}
-        helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={value => updateDynamicThreshold('enabled', value)}
-      />
+      <SettingsNote>{t('analysis.dynamicThreshold.birdOnlyNote')}</SettingsNote>
+
+      <div class="mt-4">
+        <Checkbox
+          checked={dynamicThreshold.enabled}
+          label={t('settings.main.sections.dynamicThreshold.enable.label')}
+          helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateDynamicThreshold('enabled', value)}
+        />
+      </div>
 
       {#if dynamicThreshold.enabled}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">

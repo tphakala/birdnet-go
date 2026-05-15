@@ -4631,6 +4631,17 @@
       "reinstalling": "Reinstalling...",
       "reinstallComplete": "Files verified successfully",
       "geomodelBadge": "Includes BirdNET v3.0 geomodel"
+    },
+    "bird": {
+      "title": "Bird Detection",
+      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+    },
+    "bat": {
+      "title": "Bat Detection",
+      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
     }
   },
   "restart": {
