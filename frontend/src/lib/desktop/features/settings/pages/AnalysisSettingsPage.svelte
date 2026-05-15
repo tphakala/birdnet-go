@@ -1057,6 +1057,7 @@
               <input
                 id="bat-false-positive-filter-level"
                 type="range"
+                aria-describedby="bat-false-positive-filter-help"
                 class="w-full h-2 bg-[var(--color-base-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
                 min={0}
                 max={5}
@@ -1066,7 +1067,10 @@
                 disabled={store.isLoading || store.isSaving}
               />
               <div class="mt-1">
-                <span class="text-xs text-[var(--color-base-content)] opacity-60">
+                <span
+                  id="bat-false-positive-filter-help"
+                  class="text-xs text-[var(--color-base-content)] opacity-60"
+                >
                   {getBatFalsePositiveFilterDescription(batFPLevel)}
                 </span>
               </div>

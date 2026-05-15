@@ -1431,11 +1431,11 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 		logger.String("operation", "approve_detection"))
 
 	// Learn from each contributing model's approved detection for dynamic threshold adjustment.
-	// Only learn for models whose max confidence exceeds the base threshold to avoid
-	// lowering thresholds based on weak signals that rode on another model's strength.
+	// Only learn for models whose max confidence exceeds that model's own base threshold
+	// to avoid lowering thresholds based on weak signals that rode on another model's strength.
 	scientificName := item.Detection.Result.Species.ScientificName
-	baseThreshold := float64(p.getBaseConfidenceThreshold(settings, speciesName, scientificName, item.BestModelID))
 	for modelID, contrib := range item.ModelContributions {
+		baseThreshold := float64(p.getBaseConfidenceThreshold(settings, speciesName, scientificName, modelID))
 		if contrib.MaxConfidence >= baseThreshold {
 			p.LearnFromApprovedDetection(modelID, speciesName, scientificName, float32(contrib.MaxConfidence))
 		}
@@ -1670,6 +1670,28 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	return pendingCount, flushedCount
 }
 
+// logMinDetectionsChanges logs when bird or bat minDetections values change
+// due to a config hot-reload, helping operators verify that FP filter
+// adjustments took effect.
+func logMinDetectionsChanges(settings *conf.Settings, lastBird, lastBat *int) {
+	bird := calculateMinDetectionsFromSettings(settings)
+	bat := calculateBatMinDetections(settings)
+	if *lastBird != -1 && bird != *lastBird {
+		GetLogger().Info("bird minDetections updated due to config change",
+			logger.Int("old_value", *lastBird),
+			logger.Int("new_value", bird),
+			logger.String("operation", "pending_flusher_config_update"))
+	}
+	if *lastBat != -1 && bat != *lastBat {
+		GetLogger().Info("bat minDetections updated due to config change",
+			logger.Int("old_value", *lastBat),
+			logger.Int("new_value", bat),
+			logger.String("operation", "pending_flusher_config_update"))
+	}
+	*lastBird = bird
+	*lastBat = bat
+}
+
 // pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
 // and flushes them to the worker queue if their deadline has passed.
 func (p *Processor) pendingDetectionsFlusher() {
@@ -1681,9 +1703,12 @@ func (p *Processor) pendingDetectionsFlusher() {
 		ticker := time.NewTicker(DefaultFlushInterval)
 		defer ticker.Stop()
 
+		lastBirdMinDet, lastBatMinDet := -1, -1
+
 		for {
 			select {
 			case <-ticker.C:
+				logMinDetectionsChanges(p.currentSettings(), &lastBirdMinDet, &lastBatMinDet)
 				pendingCount, flushedCount := p.flushPendingDetections()
 
 				if pendingCount > 0 || flushedCount > 0 {
