@@ -4555,7 +4555,7 @@
           "strict": "Maximum filtering. Best when running multiple classifiers (BirdNET + Perch) for cross-validation."
         },
         "detectionCount": "{count} confirmations required. {description}",
-        "warningOff": "Without filtering, bat detections will likely include false positives. Enabling filtering significantly improves accuracy, especially when multiple models are installed."
+        "warningOff": "Without filtering there is a high probability of false positives. Enabling filtering significantly improves accuracy, especially when multiple models are installed."
       },
       "locale": {
         "label": "Species Language",
