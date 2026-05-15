@@ -11,7 +11,7 @@
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
-  import type { Detection } from '$lib/types/detection.types';
+  import type { Detection, SourceInfo } from '$lib/types/detection.types';
   import { settingsStore } from '$lib/stores/settings';
   import { getFriendlyAudioSourceName } from '$lib/utils/audioSourceLabel';
   import { cn } from '$lib/utils/cn';
@@ -19,7 +19,7 @@
   import { t } from '$lib/i18n';
 
   interface Props {
-    detection: Detection;
+    detection: Pick<Detection, 'source'> | { source?: SourceInfo | null };
     variant?: 'overlay' | 'inline';
     className?: string;
   }
@@ -29,8 +29,8 @@
   let sourceLabel = $derived(
     getFriendlyAudioSourceName(
       detection.source,
-      $settingsStore.formData.realtime?.audio?.sources,
-      $settingsStore.formData.realtime?.rtsp?.streams
+      $settingsStore?.formData?.realtime?.audio?.sources,
+      $settingsStore?.formData?.realtime?.rtsp?.streams
     )
   );
 </script>

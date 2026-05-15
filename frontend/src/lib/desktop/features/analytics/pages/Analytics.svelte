@@ -13,10 +13,8 @@
   import StatCard from '../components/ui/StatCard.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import { Mic } from '@lucide/svelte';
   import type { SourceInfo } from '$lib/types/detection.types';
-  import { settingsStore } from '$lib/stores/settings';
-  import { getFriendlyAudioSourceName } from '$lib/utils/audioSourceLabel';
+  import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
 
   const logger = getLogger('app');
 
@@ -1425,21 +1423,8 @@
                     </div>
                   </td>
                   <td>
-                    {#if detection.source}
-                      {@const label = getFriendlyAudioSourceName(
-                        detection.source,
-                        $settingsStore.formData.realtime?.audio?.sources,
-                        $settingsStore.formData.realtime?.rtsp?.streams
-                      )}
-                      {#if label}
-                        <span class="inline-flex items-center gap-1 text-xs opacity-70">
-                          <Mic class="h-3 w-3" />
-                          {label}
-                        </span>
-                      {:else}
-                        <span class="text-xs opacity-40">—</span>
-                      {/if}
-                    {:else}
+                    <SourceBadge {detection} variant="inline" />
+                    {#if !detection.source}
                       <span class="text-xs opacity-40">—</span>
                     {/if}
                   </td>
@@ -1499,19 +1484,7 @@
                     >
                       {formatPercentage(detection.confidence)}
                     </span>
-                    {#if detection.source}
-                      {@const label = getFriendlyAudioSourceName(
-                        detection.source,
-                        $settingsStore.formData.realtime?.audio?.sources,
-                        $settingsStore.formData.realtime?.rtsp?.streams
-                      )}
-                      {#if label}
-                        <span class="inline-flex items-center gap-1 text-xs opacity-70">
-                          <Mic class="h-3 w-3" />
-                          {label}
-                        </span>
-                      {/if}
-                    {/if}
+                    <SourceBadge {detection} variant="inline" />
                     <span class="text-xs opacity-70"
                       >{detection.timeOfDay || t('analytics.recentDetections.unknown')}</span
                     >
