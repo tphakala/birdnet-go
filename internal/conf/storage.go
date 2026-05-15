@@ -497,6 +497,10 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 			Build()
 	}
 	tempFileName := tempFile.Name()
+
+	// Ensure fd is closed on all exit paths (closing an already-closed file is safe).
+	defer func() { _ = tempFile.Close() }()
+
 	// Ensure the temporary file is removed in case of any failure
 	defer func() {
 		if err := os.Remove(tempFileName); err != nil && !os.IsNotExist(err) {
@@ -506,14 +510,12 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 
 	// Write the YAML data to the temporary file
 	if _, err := tempFile.Write(yamlData); err != nil {
-		// Best effort close on error path
-		_ = tempFile.Close()
 		return errors.New(err).
 			Category(errors.CategoryFileIO).
 			Context("operation", "write-temp-file").
 			Build()
 	}
-	// Close the temporary file after writing
+	// Close before rename to flush and release the fd
 	if err := tempFile.Close(); err != nil {
 		return errors.New(err).
 			Category(errors.CategoryFileIO).

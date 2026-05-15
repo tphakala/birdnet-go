@@ -848,6 +848,7 @@
     try {
       await installModel(modelId);
 
+      if (progressCleanup) progressCleanup();
       progressCleanup = subscribeInstallProgress(
         modelId,
         (progress: DownloadProgress) => {
@@ -921,6 +922,7 @@
     try {
       await reinstallModel(entry.id);
 
+      if (progressCleanup) progressCleanup();
       progressCleanup = subscribeInstallProgress(
         entry.id,
         (progress: DownloadProgress) => {

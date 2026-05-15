@@ -896,43 +896,55 @@ func GetSeasonalTrackingWithHemisphere(settings SeasonalTrackingSettings, latitu
 	return settings
 }
 
-// isDefaultSeasonConfiguration checks if the given seasons map contains
-// default season names (spring/summer/fall/winter or wet1/dry1/wet2/dry2).
-// This helps distinguish between:
-// - Default seasons that should be updated based on hemisphere
-// - Custom seasons that should be preserved
-//
-// Returns true if the seasons appear to be a default configuration,
-// false if they appear to be custom user-defined seasons.
+// isDefaultSeasonConfiguration checks if the given seasons map exactly matches
+// one of the known default season configurations (NH, SH, or equatorial).
+// Both season names AND start dates must match for the configuration to be
+// considered default. This prevents overwriting user-customized dates when
+// the user keeps the standard season names but changes the start dates.
 func isDefaultSeasonConfiguration(seasons map[string]Season) bool {
 	if len(seasons) != 4 {
 		return false
 	}
 
-	// Check for traditional season names (Northern/Southern hemisphere)
-	traditionalSeasons := []string{"spring", "summer", "fall", "winter"}
-	hasTraditional := true
-	for _, name := range traditionalSeasons {
-		if _, exists := seasons[name]; !exists {
-			hasTraditional = false
-			break
-		}
-	}
-	if hasTraditional {
+	// Check traditional season names with Northern Hemisphere dates
+	if matchesSeasonSet(seasons, map[string]Season{
+		"spring": {StartMonth: 3, StartDay: 20},
+		"summer": {StartMonth: 6, StartDay: 21},
+		"fall":   {StartMonth: 9, StartDay: 22},
+		"winter": {StartMonth: 12, StartDay: 21},
+	}) {
 		return true
 	}
 
-	// Check for equatorial season names
-	equatorialSeasons := []string{"wet1", "dry1", "wet2", "dry2"}
-	hasEquatorial := true
-	for _, name := range equatorialSeasons {
-		if _, exists := seasons[name]; !exists {
-			hasEquatorial = false
-			break
-		}
+	// Check traditional season names with Southern Hemisphere dates
+	if matchesSeasonSet(seasons, map[string]Season{
+		"spring": {StartMonth: 9, StartDay: 22},
+		"summer": {StartMonth: 12, StartDay: 21},
+		"fall":   {StartMonth: 3, StartDay: 20},
+		"winter": {StartMonth: 6, StartDay: 21},
+	}) {
+		return true
 	}
 
-	return hasEquatorial
+	// Check equatorial season names and dates
+	return matchesSeasonSet(seasons, map[string]Season{
+		"wet1": {StartMonth: 3, StartDay: 1},
+		"dry1": {StartMonth: 6, StartDay: 1},
+		"wet2": {StartMonth: 9, StartDay: 1},
+		"dry2": {StartMonth: 12, StartDay: 1},
+	})
+}
+
+// matchesSeasonSet returns true if seasons contains exactly the same entries
+// (name, StartMonth, StartDay) as expected.
+func matchesSeasonSet(seasons, expected map[string]Season) bool {
+	for name, exp := range expected {
+		got, ok := seasons[name]
+		if !ok || got.StartMonth != exp.StartMonth || got.StartDay != exp.StartDay {
+			return false
+		}
+	}
+	return true
 }
 
 // GetDefaultSeasons returns default seasons based on hemisphere
