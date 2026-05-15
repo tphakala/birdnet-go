@@ -4582,6 +4582,10 @@
       "removing": "Suppression...",
       "noInstalledModels": "Aucun modèle supplémentaire installé. Parcourez l'onglet Disponibles pour ajouter des classificateurs.",
       "noAvailableModels": "Aucun modèle supplémentaire disponible pour votre plateforme.",
+      "sections": {
+        "acoustic": "Classificateurs acoustiques",
+        "geomodel": "Géomodèles"
+      },
       "categories": {
         "wildlife": "Classificateurs de faune",
         "bird": "Classificateurs d'oiseaux",

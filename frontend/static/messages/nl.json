@@ -4582,6 +4582,10 @@
       "removing": "Verwijderen...",
       "noInstalledModels": "Geen extra modellen geïnstalleerd. Blader door het tabblad Beschikbaar om meer classificatoren toe te voegen.",
       "noAvailableModels": "Geen extra modellen beschikbaar voor uw platform.",
+      "sections": {
+        "acoustic": "Akoestische classificatoren",
+        "geomodel": "Geomodellen"
+      },
       "categories": {
         "wildlife": "Wildlifeclassificatoren",
         "bird": "Vogelclassificatoren",

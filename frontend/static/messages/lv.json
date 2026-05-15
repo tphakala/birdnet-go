@@ -4582,6 +4582,10 @@
       "removing": "Removing...",
       "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
       "noAvailableModels": "No additional models available for your platform.",
+      "sections": {
+        "acoustic": "Akustiskie klasifikatori",
+        "geomodel": "Ģeomodeļi"
+      },
       "categories": {
         "wildlife": "Wildlife Classifiers",
         "bird": "Bird Classifiers",
