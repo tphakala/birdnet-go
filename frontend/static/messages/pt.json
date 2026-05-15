@@ -1595,6 +1595,7 @@
         "dateTime": "Data e hora",
         "species": "Espécie",
         "confidence": "Confiança",
+        "source": "Fonte",
         "timeOfDay": "Hora do dia"
       },
       "noRecentDetections": "Nenhuma detecção recente encontrada",

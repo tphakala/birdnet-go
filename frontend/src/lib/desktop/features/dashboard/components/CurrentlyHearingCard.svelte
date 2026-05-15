@@ -12,7 +12,7 @@ Props:
 - className?: string - Additional CSS classes (default: '')
 -->
 <script lang="ts">
-  import { Check, X } from '@lucide/svelte';
+  import { Check, Mic, X } from '@lucide/svelte';
   import { fade } from 'svelte/transition';
   import { untrack } from 'svelte';
   import { t } from '$lib/i18n';
@@ -188,7 +188,9 @@ Props:
             <span class="text-xs text-[var(--color-base-content)]/60">
               {elapsedText}
               {#if hasMultipleSources}
-                · {detection.source}
+                <span class="inline-flex items-center gap-0.5">
+                  · <Mic class="h-3 w-3 inline" />{detection.source}
+                </span>
               {/if}
             </span>
           </div>

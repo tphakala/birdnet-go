@@ -1595,6 +1595,7 @@
         "dateTime": "Päivä ja aika",
         "species": "Laji",
         "confidence": "Luottamus",
+        "source": "Lähde",
         "timeOfDay": "Vuorokaudenaika"
       },
       "noRecentDetections": "Viimeaikaisia havaintoja ei löytynyt",

@@ -20,6 +20,7 @@
   import ConfidenceBadge from './ConfidenceBadge.svelte';
   import WeatherBadge from './WeatherBadge.svelte';
   import MoonBadge from './MoonBadge.svelte';
+  import SourceBadge from './SourceBadge.svelte';
   import PlayOverlay from './PlayOverlay.svelte';
   import SpeciesInfoBar from './SpeciesInfoBar.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
@@ -226,6 +227,7 @@
       {#if detection.weather?.moonPhaseName && detection.timeOfDay === 'night'}
         <MoonBadge moonPhaseName={detection.weather.moonPhaseName} />
       {/if}
+      <SourceBadge {detection} variant="overlay" />
     </div>
 
     <!-- Center Play Button -->

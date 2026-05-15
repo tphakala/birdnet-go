@@ -1107,6 +1107,7 @@ export type TranslationKey =
   | 'analytics.recentDetections.headers.dateTime'
   | 'analytics.recentDetections.headers.species'
   | 'analytics.recentDetections.headers.confidence'
+  | 'analytics.recentDetections.headers.source'
   | 'analytics.recentDetections.headers.timeOfDay'
   | 'analytics.recentDetections.noRecentDetections'
   | 'analytics.recentDetections.unknownSpecies'

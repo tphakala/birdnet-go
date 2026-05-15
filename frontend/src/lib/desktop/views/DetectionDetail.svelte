@@ -27,6 +27,8 @@
   import { formatLocalDateTime } from '$lib/utils/date';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
+  import { settingsStore } from '$lib/stores/settings';
+  import { getFriendlyAudioSourceName } from '$lib/utils/audioSourceLabel';
   import {
     Download,
     Camera,
@@ -37,6 +39,7 @@
     Moon,
     Sunrise,
     Sunset,
+    Mic,
   } from '@lucide/svelte';
 
   // Interface definitions for API responses
@@ -570,6 +573,23 @@
         </div>
       </div>
 
+      <!-- Audio Source -->
+      {#if det.source}
+        {@const detSourceLabel = getFriendlyAudioSourceName(
+          det.source,
+          $settingsStore.formData.realtime?.audio?.sources,
+          $settingsStore.formData.realtime?.rtsp?.streams
+        )}
+        {#if detSourceLabel}
+          <div class="meta-section">
+            <div class="meta-source-row">
+              <Mic class="w-3.5 h-3.5" />
+              <span>{detSourceLabel}</span>
+            </div>
+          </div>
+        {/if}
+      {/if}
+
       <!-- Weather -->
       {#if det.weather}
         <div class="meta-section hero-weather" aria-label="Weather conditions at time of detection">
@@ -1057,6 +1077,15 @@
   .meta-time-row .time-of-day-badge {
     margin-top: 0;
     margin-left: 0.125rem;
+  }
+
+  .meta-source-row {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-primary);
   }
 
   .meta-download {

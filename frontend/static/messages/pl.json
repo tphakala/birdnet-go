@@ -1595,6 +1595,7 @@
         "dateTime": "Data i Czas",
         "species": "Gatunek",
         "confidence": "Pewność",
+        "source": "Źródło",
         "timeOfDay": "Pora Dnia"
       },
       "noRecentDetections": "Nie znaleziono ostatnich detekcji",

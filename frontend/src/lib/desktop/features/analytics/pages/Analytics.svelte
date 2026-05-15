@@ -13,6 +13,10 @@
   import StatCard from '../components/ui/StatCard.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { Mic } from '@lucide/svelte';
+  import type { SourceInfo } from '$lib/types/detection.types';
+  import { settingsStore } from '$lib/stores/settings';
+  import { getFriendlyAudioSourceName } from '$lib/utils/audioSourceLabel';
 
   const logger = getLogger('app');
 
@@ -38,6 +42,7 @@
     scientificName: string;
     confidence: number;
     timeOfDay: string;
+    source?: SourceInfo | null;
   }
 
   // API response type (may have date/time instead of timestamp)
@@ -50,6 +55,7 @@
     scientificName: string;
     confidence: number;
     timeOfDay?: string;
+    source?: SourceInfo | null;
   }
 
   interface SpeciesData {
@@ -496,6 +502,7 @@
           confidence: detection.confidence,
           timeOfDay:
             detection.timeOfDay || (computedTimestamp ? calculateTimeOfDay(computedTimestamp) : ''),
+          source: detection.source ?? null,
         };
       });
     } catch (err) {
@@ -1366,6 +1373,7 @@
                 <th>{t('analytics.recentDetections.headers.dateTime')}</th>
                 <th>{t('analytics.recentDetections.headers.species')}</th>
                 <th>{t('analytics.recentDetections.headers.confidence')}</th>
+                <th>{t('analytics.recentDetections.headers.source')}</th>
                 <th>{t('analytics.recentDetections.headers.timeOfDay')}</th>
               </tr>
             </thead>
@@ -1416,12 +1424,31 @@
                       <span class="text-sm">{formatPercentage(detection.confidence)}</span>
                     </div>
                   </td>
+                  <td>
+                    {#if detection.source}
+                      {@const label = getFriendlyAudioSourceName(
+                        detection.source,
+                        $settingsStore.formData.realtime?.audio?.sources,
+                        $settingsStore.formData.realtime?.rtsp?.streams
+                      )}
+                      {#if label}
+                        <span class="inline-flex items-center gap-1 text-xs opacity-70">
+                          <Mic class="h-3 w-3" />
+                          {label}
+                        </span>
+                      {:else}
+                        <span class="text-xs opacity-40">—</span>
+                      {/if}
+                    {:else}
+                      <span class="text-xs opacity-40">—</span>
+                    {/if}
+                  </td>
                   <td>{detection.timeOfDay || t('analytics.recentDetections.unknown')}</td>
                 </tr>
               {:else}
                 <tr>
                   <td
-                    colspan="4"
+                    colspan="5"
                     class="text-center py-4 text-[var(--color-base-content)] opacity-50"
                     >{t('analytics.recentDetections.noRecentDetections')}</td
                   >
@@ -1472,6 +1499,19 @@
                     >
                       {formatPercentage(detection.confidence)}
                     </span>
+                    {#if detection.source}
+                      {@const label = getFriendlyAudioSourceName(
+                        detection.source,
+                        $settingsStore.formData.realtime?.audio?.sources,
+                        $settingsStore.formData.realtime?.rtsp?.streams
+                      )}
+                      {#if label}
+                        <span class="inline-flex items-center gap-1 text-xs opacity-70">
+                          <Mic class="h-3 w-3" />
+                          {label}
+                        </span>
+                      {/if}
+                    {/if}
                     <span class="text-xs opacity-70"
                       >{detection.timeOfDay || t('analytics.recentDetections.unknown')}</span
                     >

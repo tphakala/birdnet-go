@@ -1595,6 +1595,7 @@
         "dateTime": "Datum/Tijd",
         "species": "Soort",
         "confidence": "Betrouwbaarheid",
+        "source": "Bron",
         "timeOfDay": "Dagdeel"
       },
       "noRecentDetections": "Geen recente herkenning gevonden",

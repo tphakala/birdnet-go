@@ -1595,6 +1595,7 @@
         "dateTime": "Datums un laiks",
         "species": "Suga",
         "confidence": "Ticamība",
+        "source": "Avots",
         "timeOfDay": "Diennakts laiks"
       },
       "noRecentDetections": "Nesenas atpazīšanas nav atrastas",

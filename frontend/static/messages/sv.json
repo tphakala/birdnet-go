@@ -1595,6 +1595,7 @@
         "dateTime": "Datum & tid",
         "species": "Art",
         "confidence": "Konfidens",
+        "source": "Källa",
         "timeOfDay": "Tid på dygnet"
       },
       "noRecentDetections": "Inga senaste detektioner hittades",
