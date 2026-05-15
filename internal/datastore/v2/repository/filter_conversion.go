@@ -479,7 +479,12 @@ func ResolveDeviceToSourceIDs(ctx context.Context, deps *FilterLookupDeps, devic
 	device = strings.ToLower(device)
 	var sourceIDs []uint
 	for _, src := range allSources {
+		// Match against NodeName, DisplayName, and SourceURI for flexible filtering
 		if strings.Contains(strings.ToLower(src.NodeName), device) {
+			sourceIDs = append(sourceIDs, src.ID)
+		} else if src.DisplayName != nil && strings.Contains(strings.ToLower(*src.DisplayName), device) {
+			sourceIDs = append(sourceIDs, src.ID)
+		} else if strings.Contains(strings.ToLower(src.SourceURI), device) {
 			sourceIDs = append(sourceIDs, src.ID)
 		}
 	}
