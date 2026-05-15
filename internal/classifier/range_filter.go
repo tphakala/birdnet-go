@@ -65,12 +65,24 @@ func BuildRangeFilter(o *Orchestrator) error {
 			getWeekForFilter(today),
 			threshold,
 		)
+		if err != nil {
+			o.primary.mu.Unlock()
+			return errors.New(err).
+				Category(errors.CategoryValidation).
+				Context("date", today.Format(time.DateOnly)).
+				Context("latitude", settings.BirdNET.Latitude).
+				Context("longitude", settings.BirdNET.Longitude).
+				Timing("range-filter-build", time.Since(start)).
+				Build()
+		}
 
 		// Sync unmappedScore with the current PassUnmappedSpecies setting so
 		// that the legacy predictFilter path (which calls Predict()) sees the
 		// correct value without requiring a full ReloadRangeFilter.
 		// Also capture the pre-computed classifier-to-geomodel mapping to
 		// avoid rebuilding it after the lock is released.
+		// Done after the error check so that a failed prediction does not
+		// leave unmappedScore inconsistent with the inclusion list.
 		var cachedMapping []int
 		if mrf, ok := rf.(*mappedRangeFilter); ok {
 			var score float32
@@ -81,16 +93,6 @@ func BuildRangeFilter(o *Orchestrator) error {
 			cachedMapping = mrf.classifierToGeo
 		}
 		o.primary.mu.Unlock()
-
-		if err != nil {
-			return errors.New(err).
-				Category(errors.CategoryValidation).
-				Context("date", today.Format(time.DateOnly)).
-				Context("latitude", settings.BirdNET.Latitude).
-				Context("longitude", settings.BirdNET.Longitude).
-				Timing("range-filter-build", time.Since(start)).
-				Build()
-		}
 
 		includedSpecies = make([]string, 0, len(scores))
 		for _, ss := range scores {
