@@ -1213,13 +1213,18 @@ func (bn *BirdNET) ModelVersion() string {
 // NumSpecies returns the number of species this model can classify.
 // Implements ModelInstance.
 func (bn *BirdNET) NumSpecies() int {
-	return len(bn.currentSettings().BirdNET.Labels)
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+	return len(bn.Settings.BirdNET.Labels)
 }
 
-// Labels returns the full list of species labels for this model.
+// Labels returns a snapshot of the species labels for this model.
+// The returned slice is a defensive copy safe for concurrent use.
 // Implements ModelInstance.
 func (bn *BirdNET) Labels() []string {
-	return bn.currentSettings().BirdNET.Labels
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+	return slices.Clone(bn.Settings.BirdNET.Labels)
 }
 
 // Close releases resources held by the BirdNET model.
@@ -1281,13 +1286,13 @@ func (bn *BirdNET) PrimaryRangeFilterCoverage() (geomodel *GeomodelStatus, prima
 	settings := bn.currentSettings()
 	rf := settings.BirdNET.RangeFilter
 
+	bn.mu.Lock()
 	primary = ClassifierCoverage{
 		ID:           bn.ModelInfo.ID,
 		Name:         bn.ModelInfo.Name,
-		TotalSpecies: bn.NumSpecies(),
+		TotalSpecies: len(bn.Settings.BirdNET.Labels),
 	}
 
-	bn.mu.Lock()
 	mrf, isMapped := bn.rangeFilter.(*mappedRangeFilter)
 	if isMapped {
 		primary.WithRangeData = mrf.mappedCount

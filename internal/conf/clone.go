@@ -54,6 +54,7 @@ func CloneSettings(src *Settings) *Settings {
 
 	// Models.
 	dst.Models.Enabled = slices.Clone(src.Models.Enabled)
+	dst.Models.Installed = slices.Clone(src.Models.Installed)
 
 	// Realtime.Audio.
 	dst.Realtime.Audio.Sources = cloneAudioSources(src.Realtime.Audio.Sources)

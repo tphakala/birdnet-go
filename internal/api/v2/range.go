@@ -785,7 +785,9 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 
 	// Read from the latest published snapshot so the just-published rebuild
 	// result is reflected immediately.
+	c.settingsMutex.RLock()
 	settings := conf.CurrentOrFallback(c.Settings)
+	c.settingsMutex.RUnlock()
 	includedSpecies := settings.GetIncludedSpecies()
 	lastUpdated := settings.BirdNET.RangeFilter.LastUpdated
 
