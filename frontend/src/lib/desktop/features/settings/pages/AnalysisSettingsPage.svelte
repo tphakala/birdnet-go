@@ -709,19 +709,14 @@
     },
   ];
 
-  // Bat has only 4 distinct levels (fixed 50% overlap, 4 detections in window):
-  // Off=bypass, Lenient=1 det, Moderate=2 det, Strict=3 det
-  // Balanced(2 det) duplicates Moderate, Maximum(3 det) duplicates Strict.
+  // Bat has only 3 meaningful levels (fixed 50% overlap, 4 detections in window):
+  // Off=bypass (1 det), Moderate=2 det, Strict=3 det.
+  // Lenient(1 det) is functionally identical to Off, so it's excluded.
   const BAT_FP_LEVELS: FilterLevel[] = [
     {
       value: 0,
       nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.off',
       badgeClass: BADGE_OFF,
-    },
-    {
-      value: 1,
-      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.lenient',
-      badgeClass: BADGE_SUCCESS,
     },
     {
       value: 2,
