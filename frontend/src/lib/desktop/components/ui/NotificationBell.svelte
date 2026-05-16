@@ -373,8 +373,11 @@
       } else {
         new globalThis.Notification(title, options);
       }
-    } catch {
-      // Notification constructor can fail if Service Worker state changes mid-call
+    } catch (error) {
+      logger.debug('Failed to show browser notification', error, {
+        component: 'NotificationBell',
+        action: 'showBrowserNotification',
+      });
     }
   }
 
