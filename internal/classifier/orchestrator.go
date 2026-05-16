@@ -644,6 +644,9 @@ func (o *Orchestrator) Delete() {
 	if s := o.scheduler.Load(); s != nil {
 		s.stop()
 	}
+
+	CloseHeatmapService()
+
 	// Nil out references to fail fast on use-after-delete.
 	o.primary = nil
 	o.models = nil

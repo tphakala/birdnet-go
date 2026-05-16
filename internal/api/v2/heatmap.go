@@ -2,12 +2,16 @@ package api
 
 import (
 	"container/list"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
+
+	"golang.org/x/sync/singleflight"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -28,7 +32,20 @@ const (
 	heatmapMaxResolution = 5.0
 	heatmapMaxGridCells  = 50000
 	heatmapBatchSize     = 512
+	heatmapOptBatchSize  = 4096
+	heatmapMaxConcurrent = 2
 )
+
+// Valid stride values (divisors of 48)
+var validStrides = map[int]bool{
+	1: true, 2: true, 4: true, 6: true, 8: true, 12: true, 16: true, 24: true, 48: true,
+}
+
+// heatmapFlight deduplicates concurrent identical heatmap requests.
+var heatmapFlight singleflight.Group
+
+// heatmapSem limits concurrent heatmap computations to prevent memory exhaustion.
+var heatmapSem = make(chan struct{}, heatmapMaxConcurrent)
 
 // heatmapLRU is a thread-safe LRU cache for pre-encoded BNHM responses.
 // Keyed by normalized request parameters; values are ready-to-send []byte.
@@ -128,6 +145,12 @@ func heatmapCacheKey(species string, south, north, west, east, resolution float6
 // encodeBNHM encodes a heatmap grid into the BNHM binary format.
 // data layout: float32[weeks][rows][cols], little-endian.
 func encodeBNHM(cols, rows int, south, west, resolution float32, data []float32) []byte {
+	return encodeBNHMWithWeeks(cols, rows, bnhmWeeks, south, west, resolution, data)
+}
+
+// encodeBNHMWithWeeks encodes a heatmap grid with a custom week count.
+// Used when stride > 1 reduces the number of computed weeks.
+func encodeBNHMWithWeeks(cols, rows, weeks int, south, west, resolution float32, data []float32) []byte {
 	size := bnhmHeaderSize + len(data)*4
 	buf := make([]byte, size)
 
@@ -135,7 +158,7 @@ func encodeBNHM(cols, rows int, south, west, resolution float32, data []float32)
 	binary.LittleEndian.PutUint32(buf[4:8], bnhmVersion)
 	binary.LittleEndian.PutUint32(buf[8:12], uint32(cols))
 	binary.LittleEndian.PutUint32(buf[12:16], uint32(rows))
-	binary.LittleEndian.PutUint32(buf[16:20], bnhmWeeks)
+	binary.LittleEndian.PutUint32(buf[16:20], uint32(weeks))
 	binary.LittleEndian.PutUint32(buf[20:24], math.Float32bits(south))
 	binary.LittleEndian.PutUint32(buf[24:28], math.Float32bits(west))
 	binary.LittleEndian.PutUint32(buf[28:32], math.Float32bits(resolution))
@@ -207,6 +230,7 @@ type heatmapParams struct {
 	resolution float64
 	rows       int
 	cols       int
+	stride     int
 }
 
 // validateHeatmapParams parses and validates heatmap query parameters.
@@ -261,6 +285,16 @@ func (c *Controller) validateHeatmapParams(ctx echo.Context) (*heatmapParams, er
 		return nil, fmt.Errorf("grid too large: %d cells exceeds maximum %d", rows*cols, heatmapMaxGridCells)
 	}
 
+	// Parse optional stride parameter (default 1 = all 48 weeks)
+	stride := 1
+	if strideStr := ctx.QueryParam("stride"); strideStr != "" {
+		s, err := strconv.Atoi(strideStr)
+		if err != nil || !validStrides[s] {
+			return nil, fmt.Errorf("invalid stride: must be a divisor of 48 (1,2,4,6,8,12,16,24,48)")
+		}
+		stride = s
+	}
+
 	return &heatmapParams{
 		species:    species,
 		south:      south,
@@ -270,6 +304,7 @@ func (c *Controller) validateHeatmapParams(ctx echo.Context) (*heatmapParams, er
 		resolution: resolution,
 		rows:       rows,
 		cols:       cols,
+		stride:     stride,
 	}, nil
 }
 
@@ -331,6 +366,66 @@ func (c *Controller) computeHeatmapGrid(birdnet *classifier.Orchestrator, params
 	return result, nil
 }
 
+// computeHeatmapGridOptimized generates heatmap data using the dedicated
+// HeatmapInferenceService with larger batches, stride-aware week iteration,
+// and context cancellation support.
+func (c *Controller) computeHeatmapGridOptimized(ctx context.Context, service *classifier.HeatmapInferenceService, params *heatmapParams, speciesIdx int) ([]float32, error) {
+	totalCells := params.rows * params.cols
+	weeksToCompute := bnhmWeeks / params.stride
+	result := make([]float32, weeksToCompute*totalCells)
+
+	// Pre-allocate input triples; only the week value changes per iteration.
+	inputs := make([]float32, totalCells*3)
+	for row := range params.rows {
+		lat := float32(params.south + (float64(row)+0.5)*params.resolution)
+		for col := range params.cols {
+			lon := float32(params.west + (float64(col)+0.5)*params.resolution)
+			idx := (row*params.cols + col) * 3
+			inputs[idx] = lat
+			inputs[idx+1] = lon
+		}
+	}
+
+	weekIdx := 0
+	for week := 1; week <= bnhmWeeks; week += params.stride {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		weekOffset := weekIdx * totalCells
+
+		// Update week value for all grid points in-place
+		weekF := float32(week)
+		for i := 2; i < len(inputs); i += 3 {
+			inputs[i] = weekF
+		}
+
+		// Process in chunks of heatmapOptBatchSize
+		for chunkStart := 0; chunkStart < totalCells; chunkStart += heatmapOptBatchSize {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+
+			chunkEnd := chunkStart + heatmapOptBatchSize
+			if chunkEnd > totalCells {
+				chunkEnd = totalCells
+			}
+			chunkSize := chunkEnd - chunkStart
+
+			chunkInputs := inputs[chunkStart*3 : chunkEnd*3]
+			dst := result[weekOffset+chunkStart : weekOffset+chunkStart+chunkSize]
+
+			if err := service.PredictBatchExtractSpecies(ctx, chunkInputs, chunkSize, speciesIdx, dst); err != nil {
+				return nil, fmt.Errorf("heatmap inference failed at week %d chunk %d: %w", week, chunkStart, err)
+			}
+		}
+
+		weekIdx++
+	}
+
+	return result, nil
+}
+
 // initHeatmapRoutes registers the heatmap grid endpoint and hooks up
 // cache invalidation for range filter reloads.
 func (c *Controller) initHeatmapRoutes() {
@@ -362,19 +457,97 @@ func InvalidateHeatmapCache() {
 }
 
 // GetHeatmapGrid returns a compact binary grid of species probability across
-// a map viewport for all 48 BirdNET weeks.
+// a map viewport for BirdNET weeks (stride-configurable).
 func (c *Controller) GetHeatmapGrid(ctx echo.Context) error {
 	params, err := c.validateHeatmapParams(ctx)
 	if err != nil {
 		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
 	}
 
-	// Verify species exists in geomodel (atomic lookup: index + count in one lock)
+	// Check cache first (includes stride in key)
+	cache := getHeatmapCache()
+	cacheKey := heatmapCacheKey(params.species, params.south, params.north, params.west, params.east, params.resolution)
+	if params.stride > 1 {
+		cacheKey = fmt.Sprintf("%s|s%d", cacheKey, params.stride)
+	}
+
+	cached, _, hit := cache.get(cacheKey)
+	if hit {
+		c.logAPIRequest(ctx, logger.LogLevelDebug, "Heatmap cache hit", logger.String("species", params.species))
+		return ctx.Blob(http.StatusOK, "application/octet-stream", cached)
+	}
+
+	// Try the dedicated heatmap service (optimized path)
 	birdnet, err := c.getBirdNETInstance()
 	if err != nil {
 		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
 
+	service := birdnet.GetHeatmapService()
+	if service != nil {
+		return c.getHeatmapOptimized(ctx, service, params, cache, cacheKey)
+	}
+
+	// Fallback: use shared BatchRangeFilterInference (original path, stride=1 only)
+	if params.stride > 1 {
+		return c.HandleError(ctx, nil, "Stride parameter requires dedicated heatmap service (not available)", http.StatusServiceUnavailable)
+	}
+	return c.getHeatmapFallback(ctx, birdnet, params, cache, cacheKey)
+}
+
+// getHeatmapOptimized uses the dedicated HeatmapInferenceService with
+// singleflight deduplication and concurrency limiting.
+func (c *Controller) getHeatmapOptimized(ctx echo.Context, service *classifier.HeatmapInferenceService, params *heatmapParams, cache *heatmapLRU, cacheKey string) error {
+	speciesIdx, ok := service.SpeciesIndex(params.species)
+	if !ok {
+		return c.HandleError(ctx, nil, "Species not found in geomodel", http.StatusBadRequest)
+	}
+
+	reqCtx := ctx.Request().Context()
+
+	// Use singleflight to deduplicate concurrent identical requests.
+	// The shared computation uses context.Background() throughout so one
+	// caller's cancellation doesn't kill the computation for others.
+	ch := heatmapFlight.DoChan(cacheKey, func() (any, error) {
+		// Acquire concurrency semaphore (blocking; individual callers bail
+		// via the outer select on reqCtx.Done())
+		heatmapSem <- struct{}{}
+		defer func() { <-heatmapSem }()
+
+		// Snapshot cache generation for poisoning prevention
+		_, missGen, _ := cache.get(cacheKey)
+
+		data, err := c.computeHeatmapGridOptimized(context.Background(), service, params, speciesIdx)
+		if err != nil {
+			return nil, err
+		}
+
+		weeksComputed := bnhmWeeks / params.stride
+		encoded := encodeBNHMWithWeeks(params.cols, params.rows, weeksComputed,
+			float32(params.south), float32(params.west), float32(params.resolution), data)
+
+		cache.put(cacheKey, encoded, missGen)
+		return encoded, nil
+	})
+
+	select {
+	case result := <-ch:
+		if result.Err != nil {
+			return c.HandleError(ctx, result.Err, "Failed to compute heatmap grid", http.StatusInternalServerError)
+		}
+		c.logAPIRequest(ctx, logger.LogLevelInfo, "Heatmap grid computed (optimized)",
+			logger.String("species", params.species),
+			logger.Int("rows", params.rows),
+			logger.Int("cols", params.cols),
+			logger.Int("stride", params.stride))
+		return ctx.Blob(http.StatusOK, "application/octet-stream", result.Val.([]byte))
+	case <-reqCtx.Done():
+		return reqCtx.Err()
+	}
+}
+
+// getHeatmapFallback uses the original shared BatchRangeFilterInference path.
+func (c *Controller) getHeatmapFallback(ctx echo.Context, birdnet *classifier.Orchestrator, params *heatmapParams, cache *heatmapLRU, cacheKey string) error {
 	speciesIdx, numGeoSpecies, found := birdnet.GeomodelSpeciesInfo(params.species)
 	if !found {
 		return c.HandleError(ctx, nil, "Species not found in geomodel", http.StatusBadRequest)
@@ -383,30 +556,17 @@ func (c *Controller) GetHeatmapGrid(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Geomodel labels not available", http.StatusInternalServerError)
 	}
 
-	// Check cache; on miss, snapshot generation to guard against cache poisoning
-	// if invalidation fires during the slow computation below.
-	cache := getHeatmapCache()
-	cacheKey := heatmapCacheKey(params.species, params.south, params.north, params.west, params.east, params.resolution)
+	_, missGen, _ := cache.get(cacheKey)
 
-	cached, missGen, hit := cache.get(cacheKey)
-	if hit {
-		c.logAPIRequest(ctx, logger.LogLevelDebug, "Heatmap cache hit", logger.String("species", params.species))
-		return ctx.Blob(http.StatusOK, "application/octet-stream", cached)
-	}
-
-	// Compute grid
 	data, err := c.computeHeatmapGrid(birdnet, params, speciesIdx, numGeoSpecies)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to compute heatmap grid", http.StatusInternalServerError)
 	}
 
-	// Encode BNHM
 	encoded := encodeBNHM(params.cols, params.rows, float32(params.south), float32(params.west), float32(params.resolution), data)
-
-	// Cache only if generation unchanged since miss
 	cache.put(cacheKey, encoded, missGen)
 
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Heatmap grid computed",
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Heatmap grid computed (fallback)",
 		logger.String("species", params.species),
 		logger.Int("rows", params.rows),
 		logger.Int("cols", params.cols))
