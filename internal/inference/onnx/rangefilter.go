@@ -165,6 +165,9 @@ func (r *RangeFilter) PredictBatchRaw(inputs []float32, batchSize int) ([]float3
 
 	data := outputTensor.GetData()
 	totalScores := batchSize * numSpecies
+	if len(data) < totalScores {
+		return nil, fmt.Errorf("birdnet: range filter batch output has %d values, expected %d", len(data), totalScores)
+	}
 	scores := make([]float32, totalScores)
 	copy(scores, data[:totalScores])
 	return scores, nil

@@ -292,7 +292,7 @@ func findONNXRuntimeLibrary() string {
 // Resets initialization state so InitONNXRuntime can be called again.
 func DestroyONNXRuntime() error {
 	ortInitMu.Lock()
+	defer ortInitMu.Unlock()
 	ortInitialized = false
-	ortInitMu.Unlock()
 	return ort.DestroyORT()
 }
