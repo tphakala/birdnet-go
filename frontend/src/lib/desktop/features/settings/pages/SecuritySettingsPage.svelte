@@ -92,6 +92,7 @@
       publicAccess: {
         liveAudio: false,
       },
+      privateMode: false,
     }
   );
 
@@ -358,7 +359,14 @@
     )
   );
 
-  let exceptionsHasChanges = $derived(subnetBypassHasChanges || publicAccessHasChanges);
+  let privateModeHasChanges = $derived(
+    (store.originalData.security?.privateMode ?? false) !==
+      (store.formData.security?.privateMode ?? false)
+  );
+
+  let exceptionsHasChanges = $derived(
+    subnetBypassHasChanges || publicAccessHasChanges || privateModeHasChanges
+  );
 
   // Canonical base URL for redirect URIs (uses configured host/baseUrl)
   // This is what gets persisted to config.yaml for OAuth callbacks
@@ -591,6 +599,10 @@
     settingsActions.updateSection('security', {
       publicAccess: { ...(settings.publicAccess ?? {}), liveAudio: checked },
     });
+  }
+
+  function updatePrivateMode(checked: boolean) {
+    settingsActions.updateSection('security', { privateMode: checked });
   }
 
   // Terminal toggle — reads from webServer section of the settings store
@@ -1332,6 +1344,14 @@
       currentData={store.formData.security?.publicAccess}
     >
       <div class="space-y-4">
+        <Checkbox
+          checked={settings.privateMode ?? false}
+          label={t('settings.security.privateMode.label')}
+          helpText={t('settings.security.privateMode.help')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={updatePrivateMode}
+        />
+
         <Checkbox
           checked={settings.publicAccess?.liveAudio ?? false}
           label={t('settings.security.publicAccess.liveAudioLabel')}

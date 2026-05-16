@@ -11,6 +11,7 @@
 
 import { loggers } from '$lib/utils/logger';
 import {
+  appState,
   getCsrfToken as getAppStateCsrfToken,
   isGuestMode,
   isSentryEnabled,
@@ -109,6 +110,10 @@ function redirectToLogin(): Promise<never> {
     }
 
     logger.info('Session expired (401) — redirecting to login');
+    // Reload the SPA from a public route. The SPA inspects the latest
+    // /api/v2/app/config on bootstrap and either renders the dashboard
+    // (when accessAllowed) or the full-screen login form (when PrivateMode
+    // is enabled and the user is unauthenticated).
     window.location.href = buildAppUrl('/ui/');
   }
   // Return a never-resolving promise so callers don't continue
@@ -447,9 +452,17 @@ export async function fetchWithCSRF<T = unknown>(
     markOnline();
 
     // Guests get an ApiError so callers handle auth-gated endpoints
-    // gracefully; session-expired users redirect to login.
+    // gracefully; session-expired users redirect to login. PrivateMode
+    // disables the guest carve-out so guests are forced to log in instead
+    // of silently rendering empty widgets. The login endpoint itself is
+    // always exempted so LoginModal can display "Invalid credentials"
+    // rather than triggering a full-page redirect.
     if (response.status === 401) {
-      if (isGuestMode()) {
+      const isLoginRequest = url === '/api/v2/auth/login' || url.startsWith('/api/v2/auth/login?');
+      if (isLoginRequest) {
+        throw new ApiError(getSecureErrorMessage(401), 401, response);
+      }
+      if (isGuestMode() && !appState.security.privateMode) {
         throw new ApiError(getSecureErrorMessage(401), 401, response);
       }
       return redirectToLogin();

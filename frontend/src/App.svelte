@@ -4,6 +4,7 @@
   import LoadingSpinner from './lib/desktop/components/ui/LoadingSpinner.svelte';
   import RootLayout from './lib/desktop/layouts/RootLayout.svelte';
   import DashboardPage from './lib/desktop/features/dashboard/pages/DashboardPage.svelte'; // Keep dashboard for initial load
+  import LoginModal from './lib/desktop/components/modals/LoginModal.svelte';
   import type { Component } from 'svelte';
   import { getLogger } from './lib/utils/logger';
   import { createSafeMap } from './lib/utils/security';
@@ -65,8 +66,27 @@
   // Configuration derived from centralized appState
   let securityEnabled = $derived(appState.security.enabled);
   let accessAllowed = $derived(appState.security.accessAllowed);
+  let privateMode = $derived(appState.security.privateMode);
   let version = $derived(appState.version);
   let authConfig = $derived(appState.security.authConfig);
+
+  // When PrivateMode is enabled and the user is not authenticated, render
+  // only a full-screen login form. The SPA shell loads at any /ui/* route
+  // (those routes are publicly served) but the user cannot reach any data
+  // or controls until they log in. The data layer is enforced server-side.
+  let requireLogin = $derived(privateMode && securityEnabled && !accessAllowed);
+
+  // After login, send the user back to the page they originally requested.
+  // Reading navigation.currentPath makes this $derived re-evaluate on every
+  // client-side route change so the redirect target always reflects the
+  // current view (which is what the user expects when they log in mid-session).
+  let postLoginRedirect = $derived.by(() => {
+    const path = navigation.currentPath || '/ui/';
+    if (typeof window !== 'undefined') {
+      return path + window.location.search;
+    }
+    return path;
+  });
 
   // App initialization state
   let appInitialized = $derived(appState.initialized);
@@ -575,6 +595,11 @@
         </p>
       {/if}
     </div>
+  </div>
+  <!-- Private mode: force login form before any app UI is visible -->
+{:else if requireLogin}
+  <div class="flex h-screen w-full items-center justify-center bg-base-200">
+    <LoginModal isOpen={true} onClose={() => {}} redirectUrl={postLoginRedirect} {authConfig} />
   </div>
   <!-- Show fatal error page if initialization failed -->
 {:else if appError}

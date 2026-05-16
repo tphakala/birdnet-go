@@ -57,6 +57,7 @@ interface AppConfigResponse {
     publicAccess?: {
       liveAudio: boolean;
     };
+    privateMode?: boolean;
   };
   version: string;
   freshInstall?: boolean;
@@ -120,6 +121,7 @@ interface AppState {
     publicAccess: {
       liveAudio: boolean;
     };
+    privateMode: boolean;
   };
 }
 
@@ -148,6 +150,7 @@ const DEFAULT_STATE: AppState = {
     publicAccess: {
       liveAudio: false,
     },
+    privateMode: false,
   },
 };
 
@@ -257,6 +260,7 @@ export async function initApp(): Promise<boolean> {
         publicAccess: {
           liveAudio: config.security.publicAccess?.liveAudio ?? false,
         },
+        privateMode: config.security.privateMode ?? false,
       };
 
       appState.freshInstall = config.freshInstall ?? false;

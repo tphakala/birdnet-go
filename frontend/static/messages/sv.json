@@ -3372,6 +3372,10 @@
         "liveAudioHelp": "När aktiverad kan vem som helst lyssna på liveaudioströmmar utan att logga in. Inställningar och borttagning kräver fortfarande autentisering.",
         "warningText": "Att aktivera offentlig åtkomst exponerar funktionerna för alla som kan nå denna server. Aktivera bara om du litar på din nätverksmiljö."
       },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
         "host": "Till exempel localhost:8080 eller example.domain.com",

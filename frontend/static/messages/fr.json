@@ -3372,6 +3372,10 @@
         "liveAudioHelp": "Lorsqu'activé, n'importe qui peut écouter les flux audio en direct sans se connecter. Les paramètres et la suppression nécessitent toujours une authentification.",
         "warningText": "L'activation des fonctionnalités d'accès public les expose à quiconque peut accéder à ce serveur. N'activez que si vous faites confiance à votre environnement réseau."
       },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
         "host": "Par exemple, localhost:8080 ou example.domain.com",

@@ -6,7 +6,13 @@ vi.unmock('$lib/utils/logger');
 // Mock appState module to control CSRF token and security state in tests
 let mockCsrfToken = '';
 let mockGuestMode = false;
+let mockPrivateMode = false;
 vi.mock('$lib/stores/appState.svelte', () => ({
+  appState: {
+    get security() {
+      return { privateMode: mockPrivateMode };
+    },
+  },
   getCsrfToken: () => mockCsrfToken,
   isGuestMode: () => mockGuestMode,
   isSentryEnabled: () => false,
@@ -25,6 +31,7 @@ describe('API utilities', () => {
     // Set up a default CSRF token for all tests to prevent warning logs
     mockCsrfToken = 'test-csrf-token-default';
     mockGuestMode = false;
+    mockPrivateMode = false;
   });
 
   afterEach(() => {
@@ -295,6 +302,45 @@ describe('API utilities', () => {
       });
       // Should NOT redirect
       expect(window.location.href).not.toBe('/ui/');
+    });
+
+    it('throws ApiError instead of redirecting when the login endpoint returns 401', async () => {
+      // The login endpoint is the only place a user can recover from 401;
+      // redirecting away would prevent LoginModal from showing the error.
+      mockPrivateMode = true;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+      });
+
+      await expect(fetchWithCSRF('/api/v2/auth/login')).rejects.toMatchObject({
+        message: 'errors.api.unauthorized',
+        status: 401,
+      });
+      expect(window.location.href).not.toBe('/ui/');
+    });
+
+    it('redirects to login in private mode even when in guest mode', async () => {
+      mockGuestMode = true;
+      mockPrivateMode = true;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+      });
+
+      const result = await Promise.race([
+        fetchWithCSRF('/api/test').then(() => 'resolved'),
+        new Promise<string>(resolve => setTimeout(() => resolve('pending'), 50)),
+      ]);
+
+      expect(result).toBe('pending');
+      expect(window.location.href).toBe('/ui/');
     });
   });
 

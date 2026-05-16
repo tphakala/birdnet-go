@@ -498,6 +498,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// Removing duplicate CORS here to avoid conflicts with global CORS configuration
 	c.Group.Use(middleware.BodyLimit("1M")) // Limit request body to 1MB to prevent DoS attacks
 	c.Group.Use(c.LoggingMiddleware())      // Use custom structured logging middleware
+	c.Group.Use(c.privateModeAuth)          // Gate all API endpoints behind auth when PrivateMode is enabled
 
 	// NOTE: CSRF token is provided by the /app/config endpoint using middleware.EnsureCSRFToken()
 	// which handles Echo v4.15.0's Sec-Fetch-Site optimization that may skip token generation

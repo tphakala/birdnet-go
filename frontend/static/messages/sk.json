@@ -3372,6 +3372,10 @@
         "liveAudioHelp": "Keď je povolené, ktokoľvek môže počúvať živé audio streamy bez prihlásenia. Nastavenia a mazanie stále vyžadujú overenie.",
         "warningText": "Povolenie funkcií verejného prístupu ich sprístupní komukoľvek, kto sa môže pripojiť k tomuto serveru. Povoľte iba ak dôverujete svojmu sieťovému prostrediu."
       },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.priklad.sk:5500",
         "host": "Napríklad localhost:8080 alebo priklad.domena.sk",

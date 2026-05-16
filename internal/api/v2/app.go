@@ -58,6 +58,10 @@ type SecurityConfigDTO struct {
 	AccessAllowed bool            `json:"accessAllowed"`
 	AuthConfig    AuthConfigDTO   `json:"authConfig"`
 	PublicAccess  PublicAccessDTO `json:"publicAccess"`
+	// PrivateMode mirrors Security.PrivateMode so the frontend knows to
+	// redirect to login on any 401 instead of silently treating gated
+	// endpoints as graceful guest-mode limitations.
+	PrivateMode bool `json:"privateMode"`
 }
 
 // PublicAccessDTO exposes which features are accessible without authentication.
@@ -154,6 +158,7 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 			PublicAccess: PublicAccessDTO{
 				LiveAudio: c.Settings.Security.PublicAccess.LiveAudio,
 			},
+			PrivateMode: c.Settings.Security.PrivateMode,
 		},
 		Version:         c.Settings.Version,
 		BasePath:        basePath,
