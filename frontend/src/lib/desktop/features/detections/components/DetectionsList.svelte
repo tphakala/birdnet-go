@@ -547,6 +547,7 @@
     {:else if error}
       <div class="px-4 py-8">
         <div
+          role="alert"
           class="flex items-center gap-3 p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] border border-[var(--color-error)]/20"
         >
           <XCircle class="size-6 shrink-0" />

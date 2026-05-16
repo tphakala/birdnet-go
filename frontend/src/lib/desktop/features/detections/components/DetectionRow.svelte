@@ -408,9 +408,14 @@
       </div>
       <!-- Mobile-only quick play button -->
       <div class="mt-2 md:hidden">
-        <Button variant="primary" size="xs" aria-label="Play audio" onclick={playMobileAudio}>
+        <Button
+          variant="primary"
+          size="xs"
+          aria-label={t('detections.row.playAudio')}
+          onclick={playMobileAudio}
+        >
           <Volume2 class="h-4 w-4" />
-          Play
+          {t('detections.row.play')}
         </Button>
       </div>
     </div>

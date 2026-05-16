@@ -888,7 +888,9 @@
       }
     },
     "row": {
-      "viewDetails": "Wyświetl szczegóły dla {species}"
+      "viewDetails": "Wyświetl szczegóły dla {species}",
+      "play": "Odtwórz",
+      "playAudio": "Odtwórz dźwięk"
     },
     "media": {
       "title": "Nagranie i Spektrogram",

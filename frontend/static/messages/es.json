@@ -888,7 +888,9 @@
       }
     },
     "row": {
-      "viewDetails": "Ver detalles para {species}"
+      "viewDetails": "Ver detalles para {species}",
+      "play": "Reproducir",
+      "playAudio": "Reproducir audio"
     },
     "media": {
       "title": "Grabación y espectrograma",

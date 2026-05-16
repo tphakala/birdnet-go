@@ -888,7 +888,9 @@
       }
     },
     "row": {
-      "viewDetails": "Visa detaljer för {species}"
+      "viewDetails": "Visa detaljer för {species}",
+      "play": "Spela upp",
+      "playAudio": "Spela upp ljud"
     },
     "media": {
       "title": "Inspelning och spektrogram",

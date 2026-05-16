@@ -888,7 +888,9 @@
       }
     },
     "row": {
-      "viewDetails": "Zobraziť podrobnosti pre {species}"
+      "viewDetails": "Zobraziť podrobnosti pre {species}",
+      "play": "Prehrať",
+      "playAudio": "Prehrať zvuk"
     },
     "media": {
       "title": "Nahrávka a spektrogram",

@@ -888,7 +888,9 @@
       }
     },
     "row": {
-      "viewDetails": "Details für {species} anzeigen"
+      "viewDetails": "Details für {species} anzeigen",
+      "play": "Abspielen",
+      "playAudio": "Audio abspielen"
     },
     "media": {
       "title": "Aufnahme & Spektrogramm",
