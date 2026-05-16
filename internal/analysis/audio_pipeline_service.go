@@ -1266,111 +1266,83 @@ func (p *AudioPipelineService) startWeatherPolling(metrics *observability.Metric
 }
 
 // clipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
-// It also performs periodic cleanup of log deduplicator states to prevent memory growth.
 func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
-	// Get configurable cleanup check interval, with fallback to default
+	log := GetLogger()
+
+	// Read initial interval for the startup log message.
 	retention := conf.Setting().Realtime.Audio.Export.Retention
 	checkInterval := retention.CheckInterval
 	if checkInterval <= 0 {
 		checkInterval = conf.DefaultCleanupCheckInterval
 	}
-
-	// Create a ticker that triggers at the configured interval to perform cleanup
-	ticker := time.NewTicker(time.Duration(checkInterval) * time.Minute)
-	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
-
-	// Get the shared disk manager logger
-	diskManagerLogger := diskmanager.GetLogger()
-
-	policy := retention.Policy
-	GetLogger().Info("clip cleanup monitor initialized",
-		logger.String("policy", policy),
+	log.Info("clip cleanup monitor initialized",
+		logger.String("policy", retention.Policy),
 		logger.Int("check_interval_minutes", checkInterval),
 		logger.String("operation", "clip_cleanup_init"))
-	diskManagerLogger.Info("Cleanup timer started",
-		logger.String("policy", policy),
-		logger.Int("interval_minutes", checkInterval),
-		logger.String("timestamp", time.Now().Format(time.RFC3339)))
 
 	for {
+		// Re-read interval each iteration so hot-reload takes effect.
+		interval := conf.Setting().Realtime.Audio.Export.Retention.CheckInterval
+		if interval <= 0 {
+			interval = conf.DefaultCleanupCheckInterval
+		}
+		timer := time.NewTimer(time.Duration(interval) * time.Minute)
+
 		select {
 		case <-quitChan:
-			// Handle quit signal to stop the monitor
-			diskManagerLogger.Info("Cleanup timer stopped",
-				logger.String("reason", "quit signal received"),
-				logger.String("timestamp", time.Now().Format(time.RFC3339)))
+			timer.Stop()
+			log.Debug("clip cleanup monitor stopped",
+				logger.String("operation", "clip_cleanup_stop"))
 			return
 
-		case t := <-ticker.C:
-			GetLogger().Info("starting clip cleanup task",
+		case t := <-timer.C:
+			currentPolicy := conf.Setting().Realtime.Audio.Export.Retention.Policy
+			log.Info("starting clip cleanup task",
 				logger.String("timestamp", t.Format(time.RFC3339)),
-				logger.String("policy", conf.Setting().Realtime.Audio.Export.Retention.Policy),
+				logger.String("policy", currentPolicy),
 				logger.String("operation", "clip_cleanup_task"))
-			diskManagerLogger.Info("Cleanup timer triggered",
-				logger.String("timestamp", t.Format(time.RFC3339)),
-				logger.String("policy", conf.Setting().Realtime.Audio.Export.Retention.Policy))
 
-			// age based cleanup method
-			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
-				diskManagerLogger.Debug("Starting age-based cleanup via timer")
+			if currentPolicy == "age" {
 				result := diskmanager.AgeBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
-					GetLogger().Error("age-based cleanup failed",
+					log.Error("age-based cleanup failed",
 						logger.Error(result.Err),
 						logger.String("operation", "age_based_cleanup"))
-					diskManagerLogger.Error("Age-based cleanup failed",
-						logger.Error(result.Err),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				} else {
-					GetLogger().Info("age-based cleanup completed successfully",
+					log.Info("age-based cleanup completed",
 						logger.Int("clips_removed", result.ClipsRemoved),
 						logger.Int("disk_utilization_percent", result.DiskUtilization),
 						logger.String("operation", "age_based_cleanup"))
-					diskManagerLogger.Info("Age-based cleanup completed via timer",
-						logger.Int("clips_removed", result.ClipsRemoved),
-						logger.Int("disk_utilization", result.DiskUtilization),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				}
 			}
 
-			// priority based cleanup method
-			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "usage" {
-				retention := conf.Setting().Realtime.Audio.Export.Retention
+			if currentPolicy == "usage" {
+				currentRetention := conf.Setting().Realtime.Audio.Export.Retention
 				baseDir := conf.Setting().Realtime.Audio.Export.Path
 
-				// Check if we can skip cleanup
-				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&retention, baseDir)
-
+				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&currentRetention, baseDir)
 				if err != nil {
-					diskManagerLogger.Warn("Failed to check disk usage for early exit via timer",
+					log.Warn("failed to check disk usage",
 						logger.Error(err),
-						logger.Bool("continuing_with_cleanup", true))
+						logger.Bool("continuing_with_cleanup", true),
+						logger.String("operation", "usage_based_cleanup"))
 				} else if skip {
-					diskManagerLogger.Info("Disk usage below threshold via timer, skipping cleanup",
-						logger.Int("current_usage", utilization),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
-					continue // Skip to next timer tick
+					log.Debug("disk usage below threshold, skipping cleanup",
+						logger.Int("disk_utilization_percent", utilization),
+						logger.String("operation", "usage_based_cleanup"))
+					continue
 				}
 
-				// Proceed with cleanup
-				diskManagerLogger.Debug("Starting usage-based cleanup via timer")
 				result := diskmanager.UsageBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
-					GetLogger().Error("usage-based cleanup failed",
+					log.Error("usage-based cleanup failed",
 						logger.Error(result.Err),
 						logger.String("operation", "usage_based_cleanup"))
-					diskManagerLogger.Error("Usage-based cleanup failed",
-						logger.Error(result.Err),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				} else {
-					GetLogger().Info("usage-based cleanup completed successfully",
+					log.Info("usage-based cleanup completed",
 						logger.Int("clips_removed", result.ClipsRemoved),
 						logger.Int("disk_utilization_percent", result.DiskUtilization),
 						logger.String("operation", "usage_based_cleanup"))
-					diskManagerLogger.Info("Usage-based cleanup completed via timer",
-						logger.Int("clips_removed", result.ClipsRemoved),
-						logger.Int("disk_utilization", result.DiskUtilization),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				}
 			}
 		}
