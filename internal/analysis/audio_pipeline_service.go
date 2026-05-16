@@ -690,6 +690,15 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 				logger.String("operation", operation))
 			continue
 		}
+		if _, raced := p.soundLevelConsumers[sid]; raced {
+			p.soundLevelMu.Unlock()
+			p.engine.Router().RemoveRoute(sid, consumerID)
+			log.Debug("sound level consumer already registered concurrently, dropped duplicate route",
+				logger.String("source_id", sid),
+				logger.String("consumer_id", consumerID),
+				logger.String("operation", operation))
+			continue
+		}
 		if p.soundLevelConsumers == nil {
 			p.soundLevelConsumers = make(map[string]string)
 		}
