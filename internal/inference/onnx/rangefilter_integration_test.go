@@ -198,8 +198,7 @@ func BenchmarkPredictBatchRaw(b *testing.B) {
 
 	b.Run("Sequential_500", func(b *testing.B) {
 		b.ReportAllocs()
-		b.ResetTimer()
-		for range b.N {
+		for b.Loop() {
 			for _, p := range points {
 				_, err := rf.PredictRaw(p.lat, p.lon, p.week)
 				if err != nil {
@@ -211,8 +210,7 @@ func BenchmarkPredictBatchRaw(b *testing.B) {
 
 	b.Run("Batch_500", func(b *testing.B) {
 		b.ReportAllocs()
-		b.ResetTimer()
-		for range b.N {
+		for b.Loop() {
 			_, err := rf.PredictBatchRaw(batchInput, batchSize)
 			if err != nil {
 				b.Fatal(err)
