@@ -801,6 +801,25 @@
     "pagination": {
       "showing": "Zeige {from} bis {to} von {total} Ergebnissen"
     },
+    "selection": {
+      "select": "Auswählen",
+      "nSelected": "{count} ausgewählt",
+      "selectAllMatching": "Alle {count} passenden Erkennungen auswählen",
+      "allSelected": "Alle {count} ausgewählt",
+      "clear": "Auswahl aufheben",
+      "toolbarLabel": "Massenaktionen",
+      "confirmBulkDelete": "{count} Erkennungen löschen? Dies kann nicht rückgängig gemacht werden.",
+      "confirmBulkMarkCorrect": "{count} Erkennungen als korrekt markieren?",
+      "confirmBulkMarkFalsePositive": "{count} Erkennungen als Fehlalarm markieren?",
+      "confirmBulkLock": "{count} Erkennungen sperren?",
+      "confirmBulkUnlock": "{count} Erkennungen entsperren?",
+      "bulkSuccess": "{count} Erkennungen aktualisiert",
+      "bulkDeleteSuccess": "{count} Erkennungen gelöscht",
+      "bulkPartial": "{processed} aktualisiert, {skipped} übersprungen (gesperrt)",
+      "tooManyDetections": "Zu viele Erkennungen ({count}). Schränken Sie die Filter ein, um weniger als 500 auszuwählen.",
+      "bulkError": "Massenaktion fehlgeschlagen. Bitte erneut versuchen.",
+      "switchToTable": "Zur Tabellenansicht wechseln, um Erkennungen auszuwählen"
+    },
     "weather": {
       "title": "Wetterinformationen",
       "noData": "Keine Wetterdaten",

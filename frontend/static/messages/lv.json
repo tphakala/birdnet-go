@@ -801,6 +801,25 @@
     "pagination": {
       "showing": "Rāda no {from} līdz {to} no {total} rezultātiem"
     },
+    "selection": {
+      "select": "Atlasīt",
+      "nSelected": "{count} atlasīti",
+      "selectAllMatching": "Atlasīt visas {count} atbilstošās atklāšanas",
+      "allSelected": "Visas {count} atlasītas",
+      "clear": "Notīrīt atlasi",
+      "toolbarLabel": "Lielapjoma darbības",
+      "confirmBulkDelete": "Dzēst {count} atklāšanas? To nevar atsaukt.",
+      "confirmBulkMarkCorrect": "Atzīmēt {count} atklāšanas kā pareizas?",
+      "confirmBulkMarkFalsePositive": "Atzīmēt {count} atklāšanas kā viltus pozitīvas?",
+      "confirmBulkLock": "Bloķēt {count} atklāšanas?",
+      "confirmBulkUnlock": "Atbloķēt {count} atklāšanas?",
+      "bulkSuccess": "{count} atklāšanas atjauninātas",
+      "bulkDeleteSuccess": "{count} atklāšanas dzēstas",
+      "bulkPartial": "{processed} atjauninātas, {skipped} izlaistas (bloķētas)",
+      "tooManyDetections": "Pārāk daudz atklāšanu ({count}). Sašauriniet filtrus, lai atlasītu mazāk par 500.",
+      "bulkError": "Lielapjoma darbība neizdevās. Lūdzu, mēģiniet vēlreiz.",
+      "switchToTable": "Pārslēdzieties uz tabulas skatu, lai atlasītu atklāšanas"
+    },
     "weather": {
       "title": "Laikapstākļu informācija",
       "noData": "Nav laikapstākļu datu",

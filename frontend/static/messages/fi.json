@@ -801,6 +801,25 @@
     "pagination": {
       "showing": "Näytetään {from}-{to} / {total} tuloksesta"
     },
+    "selection": {
+      "select": "Valitse",
+      "nSelected": "{count} valittu",
+      "selectAllMatching": "Valitse kaikki {count} vastaavaa havaintoa",
+      "allSelected": "Kaikki {count} valittu",
+      "clear": "Tyhjennä valinta",
+      "toolbarLabel": "Joukkotoiminnot",
+      "confirmBulkDelete": "Poistetaanko {count} havaintoa? Tätä ei voi perua.",
+      "confirmBulkMarkCorrect": "Merkitäänkö {count} havaintoa oikeiksi?",
+      "confirmBulkMarkFalsePositive": "Merkitäänkö {count} havaintoa virheellisiksi?",
+      "confirmBulkLock": "Lukitaanko {count} havaintoa?",
+      "confirmBulkUnlock": "Avataanko {count} havainnon lukitus?",
+      "bulkSuccess": "{count} havaintoa päivitetty",
+      "bulkDeleteSuccess": "{count} havaintoa poistettu",
+      "bulkPartial": "{processed} päivitetty, {skipped} ohitettu (lukittu)",
+      "tooManyDetections": "Liian monta havaintoa ({count}). Rajaa suodattimia valitaksesi alle 500.",
+      "bulkError": "Joukkotoiminto epäonnistui. Yritä uudelleen.",
+      "switchToTable": "Vaihda taulukkonäkymään valitaksesi havaintoja"
+    },
     "weather": {
       "title": "Säätiedot",
       "noData": "Ei säätietoja",

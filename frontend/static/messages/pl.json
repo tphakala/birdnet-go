@@ -801,6 +801,25 @@
     "pagination": {
       "showing": "Pokazywanie {from} do {to} z {total} wyników"
     },
+    "selection": {
+      "select": "Zaznacz",
+      "nSelected": "Zaznaczono: {count}",
+      "selectAllMatching": "Zaznacz wszystkie {count} pasujących detekcji",
+      "allSelected": "Wszystkie {count} zaznaczone",
+      "clear": "Wyczyść zaznaczenie",
+      "toolbarLabel": "Operacje zbiorcze",
+      "confirmBulkDelete": "Usunąć {count} detekcji? Tej operacji nie można cofnąć.",
+      "confirmBulkMarkCorrect": "Oznaczyć {count} detekcji jako poprawne?",
+      "confirmBulkMarkFalsePositive": "Oznaczyć {count} detekcji jako fałszywie pozytywne?",
+      "confirmBulkLock": "Zablokować {count} detekcji?",
+      "confirmBulkUnlock": "Odblokować {count} detekcji?",
+      "bulkSuccess": "Zaktualizowano {count} detekcji",
+      "bulkDeleteSuccess": "Usunięto {count} detekcji",
+      "bulkPartial": "{processed} zaktualizowano, {skipped} pominięto (zablokowane)",
+      "tooManyDetections": "Zbyt wiele detekcji ({count}). Zawęź filtry, aby zaznaczyć mniej niż 500.",
+      "bulkError": "Operacja zbiorcza nie powiodła się. Spróbuj ponownie.",
+      "switchToTable": "Przełącz na widok tabeli, aby zaznaczyć detekcje"
+    },
     "weather": {
       "title": "Informacje o pogodzie",
       "noData": "Brak danych o pogodzie",

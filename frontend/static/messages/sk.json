@@ -801,6 +801,25 @@
     "pagination": {
       "showing": "Zobrazuje sa {from} až {to} z {total} výsledkov"
     },
+    "selection": {
+      "select": "Vybrať",
+      "nSelected": "{count} vybraných",
+      "selectAllMatching": "Vybrať všetkých {count} zodpovedajúcich detekcií",
+      "allSelected": "Všetkých {count} vybraných",
+      "clear": "Zrušiť výber",
+      "toolbarLabel": "Hromadné akcie",
+      "confirmBulkDelete": "Odstrániť {count} detekcií? Túto akciu nie je možné vrátiť.",
+      "confirmBulkMarkCorrect": "Označiť {count} detekcií ako správne?",
+      "confirmBulkMarkFalsePositive": "Označiť {count} detekcií ako falošne pozitívne?",
+      "confirmBulkLock": "Zamknúť {count} detekcií?",
+      "confirmBulkUnlock": "Odomknúť {count} detekcií?",
+      "bulkSuccess": "{count} detekcií aktualizovaných",
+      "bulkDeleteSuccess": "{count} detekcií odstránených",
+      "bulkPartial": "{processed} aktualizovaných, {skipped} preskočených (zamknuté)",
+      "tooManyDetections": "Príliš veľa detekcií ({count}). Zúžte filtre na menej ako 500.",
+      "bulkError": "Hromadná operácia zlyhala. Skúste to znova.",
+      "switchToTable": "Prepnite na zobrazenie tabuľky na výber detekcií"
+    },
     "weather": {
       "title": "Informácie o počasí",
       "noData": "Žiadne údaje o počasí",

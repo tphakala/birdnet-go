@@ -801,6 +801,25 @@
     "pagination": {
       "showing": "Viser {from} til {to} af {total} resultater"
     },
+    "selection": {
+      "select": "Vælg",
+      "nSelected": "{count} valgt",
+      "selectAllMatching": "Vælg alle {count} matchende registreringer",
+      "allSelected": "Alle {count} valgt",
+      "clear": "Ryd valg",
+      "toolbarLabel": "Massehandlinger",
+      "confirmBulkDelete": "Slet {count} registreringer? Dette kan ikke fortrydes.",
+      "confirmBulkMarkCorrect": "Markér {count} registreringer som korrekte?",
+      "confirmBulkMarkFalsePositive": "Markér {count} registreringer som falsk positive?",
+      "confirmBulkLock": "Lås {count} registreringer?",
+      "confirmBulkUnlock": "Lås {count} registreringer op?",
+      "bulkSuccess": "{count} registreringer opdateret",
+      "bulkDeleteSuccess": "{count} registreringer slettet",
+      "bulkPartial": "{processed} opdateret, {skipped} sprunget over (låst)",
+      "tooManyDetections": "For mange registreringer ({count}). Indsnævr dine filtre for at vælge færre end 500.",
+      "bulkError": "Massehandling mislykkedes. Prøv igen.",
+      "switchToTable": "Skift til tabelvisning for at vælge registreringer"
+    },
     "weather": {
       "title": "Vejrinformation",
       "noData": "Ingen vejrdata",

@@ -801,6 +801,25 @@
     "pagination": {
       "showing": "{from} - {to} / {total} találat"
     },
+    "selection": {
+      "select": "Kijelölés",
+      "nSelected": "{count} kijelölve",
+      "selectAllMatching": "Mind a(z) {count} egyező detektálás kijelölése",
+      "allSelected": "Mind a(z) {count} kijelölve",
+      "clear": "Kijelölés törlése",
+      "toolbarLabel": "Tömeges műveletek",
+      "confirmBulkDelete": "Törli a(z) {count} detektálást? Ez nem vonható vissza.",
+      "confirmBulkMarkCorrect": "Megjelöli a(z) {count} detektálást helyesként?",
+      "confirmBulkMarkFalsePositive": "Megjelöli a(z) {count} detektálást téves pozitívként?",
+      "confirmBulkLock": "Zárolás: {count} detektálás?",
+      "confirmBulkUnlock": "Zárolás feloldása: {count} detektálás?",
+      "bulkSuccess": "{count} detektálás frissítve",
+      "bulkDeleteSuccess": "{count} detektálás törölve",
+      "bulkPartial": "{processed} frissítve, {skipped} kihagyva (zárolva)",
+      "tooManyDetections": "Túl sok detektálás ({count}). Szűkítse a szűrőket, hogy 500-nál kevesebbet jelöljön ki.",
+      "bulkError": "A tömeges művelet sikertelen. Kérjük, próbálja újra.",
+      "switchToTable": "Váltson táblázat nézetre a detektálások kijelöléséhez"
+    },
     "weather": {
       "title": "Időjárási információ",
       "noData": "Nincs időjárási adat",

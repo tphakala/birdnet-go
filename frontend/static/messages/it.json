@@ -801,6 +801,25 @@
     "pagination": {
       "showing": "Visualizzati da {from} a {to} di {total} risultati"
     },
+    "selection": {
+      "select": "Seleziona",
+      "nSelected": "{count} selezionati",
+      "selectAllMatching": "Seleziona tutti i {count} rilevamenti corrispondenti",
+      "allSelected": "Tutti i {count} selezionati",
+      "clear": "Cancella selezione",
+      "toolbarLabel": "Azioni di massa",
+      "confirmBulkDelete": "Eliminare {count} rilevamenti? Questa azione non può essere annullata.",
+      "confirmBulkMarkCorrect": "Contrassegnare {count} rilevamenti come corretti?",
+      "confirmBulkMarkFalsePositive": "Contrassegnare {count} rilevamenti come falso positivo?",
+      "confirmBulkLock": "Bloccare {count} rilevamenti?",
+      "confirmBulkUnlock": "Sbloccare {count} rilevamenti?",
+      "bulkSuccess": "{count} rilevamenti aggiornati",
+      "bulkDeleteSuccess": "{count} rilevamenti eliminati",
+      "bulkPartial": "{processed} aggiornati, {skipped} saltati (bloccati)",
+      "tooManyDetections": "Troppi rilevamenti ({count}). Restringi i filtri per selezionarne meno di 500.",
+      "bulkError": "Operazione di massa fallita. Riprova.",
+      "switchToTable": "Passa alla vista tabella per selezionare i rilevamenti"
+    },
     "weather": {
       "title": "Informazioni Meteo",
       "noData": "Nessun dato meteo",

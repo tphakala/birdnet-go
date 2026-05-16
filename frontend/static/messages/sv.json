@@ -801,6 +801,25 @@
     "pagination": {
       "showing": "Visar {from} till {to} av {total} resultat"
     },
+    "selection": {
+      "select": "Välj",
+      "nSelected": "{count} valda",
+      "selectAllMatching": "Välj alla {count} matchande detekteringar",
+      "allSelected": "Alla {count} valda",
+      "clear": "Rensa val",
+      "toolbarLabel": "Massåtgärder",
+      "confirmBulkDelete": "Ta bort {count} detekteringar? Detta kan inte ångras.",
+      "confirmBulkMarkCorrect": "Markera {count} detekteringar som korrekta?",
+      "confirmBulkMarkFalsePositive": "Markera {count} detekteringar som falskt positiva?",
+      "confirmBulkLock": "Lås {count} detekteringar?",
+      "confirmBulkUnlock": "Lås upp {count} detekteringar?",
+      "bulkSuccess": "{count} detekteringar uppdaterade",
+      "bulkDeleteSuccess": "{count} detekteringar borttagna",
+      "bulkPartial": "{processed} uppdaterade, {skipped} överhoppade (låsta)",
+      "tooManyDetections": "För många detekteringar ({count}). Begränsa dina filter för att välja färre än 500.",
+      "bulkError": "Massåtgärden misslyckades. Försök igen.",
+      "switchToTable": "Byt till tabellvy för att välja detekteringar"
+    },
     "weather": {
       "title": "Väderinformation",
       "noData": "Inga väderdata",

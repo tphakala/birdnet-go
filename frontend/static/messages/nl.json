@@ -801,6 +801,25 @@
     "pagination": {
       "showing": "Toont {from} tot {to} van {total} resultaten"
     },
+    "selection": {
+      "select": "Selecteren",
+      "nSelected": "{count} geselecteerd",
+      "selectAllMatching": "Alle {count} overeenkomende detecties selecteren",
+      "allSelected": "Alle {count} geselecteerd",
+      "clear": "Selectie wissen",
+      "toolbarLabel": "Bulkacties",
+      "confirmBulkDelete": "{count} detecties verwijderen? Dit kan niet ongedaan worden gemaakt.",
+      "confirmBulkMarkCorrect": "{count} detecties als correct markeren?",
+      "confirmBulkMarkFalsePositive": "{count} detecties als fout-positief markeren?",
+      "confirmBulkLock": "{count} detecties vergrendelen?",
+      "confirmBulkUnlock": "{count} detecties ontgrendelen?",
+      "bulkSuccess": "{count} detecties bijgewerkt",
+      "bulkDeleteSuccess": "{count} detecties verwijderd",
+      "bulkPartial": "{processed} bijgewerkt, {skipped} overgeslagen (vergrendeld)",
+      "tooManyDetections": "Te veel detecties ({count}). Verfijn uw filters om minder dan 500 te selecteren.",
+      "bulkError": "Bulkbewerking mislukt. Probeer het opnieuw.",
+      "switchToTable": "Schakel naar tabelweergave om detecties te selecteren"
+    },
     "weather": {
       "title": "Weerinformatie",
       "noData": "Geen weergegevens",

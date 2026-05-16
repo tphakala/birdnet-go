@@ -801,6 +801,25 @@
     "pagination": {
       "showing": "Mostrando {from} a {to} de {total} resultados"
     },
+    "selection": {
+      "select": "Seleccionar",
+      "nSelected": "{count} seleccionadas",
+      "selectAllMatching": "Seleccionar las {count} detecciones coincidentes",
+      "allSelected": "Todas las {count} seleccionadas",
+      "clear": "Limpiar selección",
+      "toolbarLabel": "Acciones masivas",
+      "confirmBulkDelete": "¿Eliminar {count} detecciones? Esta acción no se puede deshacer.",
+      "confirmBulkMarkCorrect": "¿Marcar {count} detecciones como correctas?",
+      "confirmBulkMarkFalsePositive": "¿Marcar {count} detecciones como falso positivo?",
+      "confirmBulkLock": "¿Bloquear {count} detecciones?",
+      "confirmBulkUnlock": "¿Desbloquear {count} detecciones?",
+      "bulkSuccess": "{count} detecciones actualizadas",
+      "bulkDeleteSuccess": "{count} detecciones eliminadas",
+      "bulkPartial": "{processed} actualizadas, {skipped} omitidas (bloqueadas)",
+      "tooManyDetections": "Demasiadas detecciones ({count}). Reduce los filtros para seleccionar menos de 500.",
+      "bulkError": "La operación masiva falló. Por favor, inténtalo de nuevo.",
+      "switchToTable": "Cambia a vista de tabla para seleccionar detecciones"
+    },
     "weather": {
       "title": "Información meteorológica",
       "noData": "Sin datos meteorológicos",
