@@ -198,17 +198,14 @@ type ONNXRangeFilterOptions struct {
 	Labels []string
 }
 
-// Compile-time check: onnxRangeFilter satisfies BatchRangeFilter.
-var _ BatchRangeFilter = (*onnxRangeFilter)(nil)
-
-// onnxRangeFilter implements RangeFilter using an ONNX Runtime session.
+// onnxRangeFilter implements BatchRangeFilter using an ONNX Runtime session.
 type onnxRangeFilter struct {
 	filter     *ort.RangeFilter
 	numSpecies int
 }
 
-// NewONNXRangeFilter creates a RangeFilter backed by an ONNX Runtime meta model.
-func NewONNXRangeFilter(modelPath string, opts ONNXRangeFilterOptions) (RangeFilter, error) {
+// NewONNXRangeFilter creates a BatchRangeFilter backed by an ONNX Runtime meta model.
+func NewONNXRangeFilter(modelPath string, opts ONNXRangeFilterOptions) (BatchRangeFilter, error) {
 	if len(opts.Labels) == 0 {
 		return nil, fmt.Errorf("ONNX range filter requires labels")
 	}
