@@ -104,6 +104,9 @@ func resolveRangeFilterLabels(cfg *rangeFilterConfig) ([]string, error) {
 // PredictRaw runs inference and returns raw species occurrence scores as a flat []float32 slice.
 // This is used by adapters that handle their own label pairing and filtering.
 func (r *RangeFilter) PredictRaw(latitude, longitude, week float32) ([]float32, error) {
+	if r.session == nil {
+		return nil, ErrSessionClosed
+	}
 	input := []float32{latitude, longitude, week}
 
 	inputTensor, err := ort.NewTensor(ort.NewShape(1, 3), input)
@@ -133,8 +136,54 @@ func (r *RangeFilter) PredictRaw(latitude, longitude, week float32) ([]float32, 
 	return scores, nil
 }
 
+// PredictBatchRaw runs inference on multiple location/week inputs in a single batch.
+// inputs is a flat slice of [lat, lon, week] triples: len(inputs) must equal batchSize * 3.
+// Returns a flat slice of [batchSize * numSpecies] scores in row-major order.
+func (r *RangeFilter) PredictBatchRaw(inputs []float32, batchSize int) ([]float32, error) {
+	if r.session == nil {
+		return nil, ErrSessionClosed
+	}
+	if batchSize <= 0 {
+		return nil, ErrEmptyRangeFilterBatch
+	}
+	expected := batchSize * 3
+	if len(inputs) != expected {
+		return nil, &RangeFilterBatchInputError{Expected: expected, Got: len(inputs)}
+	}
+
+	numSpecies := len(r.labels)
+
+	inputTensor, err := ort.NewTensor(ort.NewShape(int64(batchSize), 3), inputs)
+	if err != nil {
+		return nil, fmt.Errorf("birdnet: failed to create range filter batch input tensor: %w", err)
+	}
+	defer func() { _ = inputTensor.Destroy() }()
+
+	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(int64(batchSize), int64(numSpecies)))
+	if err != nil {
+		return nil, fmt.Errorf("birdnet: failed to create range filter batch output tensor: %w", err)
+	}
+	defer func() { _ = outputTensor.Destroy() }()
+
+	if err := r.session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor}); err != nil {
+		return nil, fmt.Errorf("birdnet: range filter batch inference failed: %w", err)
+	}
+
+	data := outputTensor.GetData()
+	totalScores := batchSize * numSpecies
+	if len(data) < totalScores {
+		return nil, fmt.Errorf("birdnet: range filter batch output has %d values, expected %d", len(data), totalScores)
+	}
+	scores := make([]float32, totalScores)
+	copy(scores, data[:totalScores])
+	return scores, nil
+}
+
 // Predict runs the range filter and returns labeled species occurrence scores.
 func (r *RangeFilter) Predict(latitude, longitude float32, month, day int) ([]LocationScore, error) {
+	if r.session == nil {
+		return nil, ErrSessionClosed
+	}
 	if err := ValidateCoordinates(latitude, longitude); err != nil {
 		return nil, err
 	}
@@ -238,11 +287,21 @@ func ValidateDate(month, day int) error {
 // filterPredictions removes predictions for species with location scores below threshold.
 // If rerank is true, confidence is multiplied by location score and results are re-sorted.
 func filterPredictions(predictions []Prediction, scores []LocationScore, threshold float32, rerank bool) []Prediction {
+	scoreMap := buildScoreMap(scores)
+	return filterPredictionsWithMap(predictions, scoreMap, threshold, rerank)
+}
+
+// buildScoreMap creates a species-to-score lookup map from location scores.
+func buildScoreMap(scores []LocationScore) map[string]float32 {
 	scoreMap := make(map[string]float32, len(scores))
 	for _, s := range scores {
 		scoreMap[s.Species] = s.Score
 	}
+	return scoreMap
+}
 
+// filterPredictionsWithMap filters predictions using a pre-built score map.
+func filterPredictionsWithMap(predictions []Prediction, scoreMap map[string]float32, threshold float32, rerank bool) []Prediction {
 	var result []Prediction
 	for _, p := range predictions {
 		locScore, ok := scoreMap[p.Species]
@@ -272,9 +331,10 @@ func filterPredictions(predictions []Prediction, scores []LocationScore, thresho
 
 // filterBatchPredictions applies filterPredictions to each batch of predictions.
 func filterBatchPredictions(batches [][]Prediction, scores []LocationScore, threshold float32, rerank bool) [][]Prediction {
+	scoreMap := buildScoreMap(scores)
 	result := make([][]Prediction, len(batches))
 	for i, batch := range batches {
-		result[i] = filterPredictions(batch, scores, threshold, rerank)
+		result[i] = filterPredictionsWithMap(batch, scoreMap, threshold, rerank)
 	}
 	return result
 }

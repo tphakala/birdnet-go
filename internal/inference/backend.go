@@ -59,3 +59,13 @@ type RangeFilter interface {
 	// Close releases all runtime resources.
 	Close()
 }
+
+// BatchRangeFilter extends RangeFilter with batch inference support.
+// Implementations are NOT goroutine-safe; callers must synchronize access.
+type BatchRangeFilter interface {
+	RangeFilter
+	// PredictBatch runs inference on multiple location/week inputs in a single batch.
+	// inputs is a flat slice of [lat, lon, week] triples: len(inputs) must equal batchSize * 3.
+	// Returns a flat slice of [batchSize * numSpecies] scores in row-major order.
+	PredictBatch(inputs []float32, batchSize int) ([]float32, error)
+}

@@ -258,6 +258,9 @@ func (c *Classifier) PredictRaw(audio []float32) ([]float32, error) {
 // PredictRawWithEmbeddings runs inference and returns both raw logits and embedding vector.
 // Returns nil embeddings if the model does not produce embeddings.
 func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddings []float32, err error) {
+	if c.session == nil {
+		return nil, nil, ErrSessionClosed
+	}
 	if len(audio) != c.config.SampleCount {
 		return nil, nil, &InputSizeError{Expected: c.config.SampleCount, Got: len(audio)}
 	}
@@ -315,6 +318,9 @@ func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddin
 // The audio slice must contain exactly Config().SampleCount float32 samples
 // (mono, at the model's sample rate, normalized to [-1.0, 1.0]).
 func (c *Classifier) Predict(audio []float32) (*Result, error) {
+	if c.session == nil {
+		return nil, ErrSessionClosed
+	}
 	if len(audio) != c.config.SampleCount {
 		return nil, &InputSizeError{Expected: c.config.SampleCount, Got: len(audio)}
 	}
@@ -352,6 +358,9 @@ func (c *Classifier) Predict(audio []float32) (*Result, error) {
 // PredictBatch runs inference on multiple audio segments in a single batch.
 // Each segment must contain exactly Config().SampleCount samples.
 func (c *Classifier) PredictBatch(segments [][]float32) ([]*Result, error) {
+	if c.session == nil {
+		return nil, ErrSessionClosed
+	}
 	if len(segments) == 0 {
 		return nil, ErrEmptyBatch
 	}
