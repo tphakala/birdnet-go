@@ -310,6 +310,50 @@ func TestSaveReview_UpdatedAtChangesOnUpsert(t *testing.T) {
 		"UpdatedAt should advance on upsert: first=%v, second=%v", firstUpdated, second.UpdatedAt)
 }
 
+func TestSearch_IncludedHoursOnSQLite(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	// Insert detections at known UTC hours.
+	// 2026-05-16 08:30:00 UTC = hour 8
+	createTestDetection(t, db, time.Date(2026, 5, 16, 8, 30, 0, 0, time.UTC).Unix())
+	// 2026-05-16 14:00:00 UTC = hour 14
+	createTestDetection(t, db, time.Date(2026, 5, 16, 14, 0, 0, 0, time.UTC).Unix())
+	// 2026-05-16 22:15:00 UTC = hour 22
+	createTestDetection(t, db, time.Date(2026, 5, 16, 22, 15, 0, 0, time.UTC).Unix())
+
+	// Filter for hour 14 only (UTC offset = 0).
+	results, total, err := repo.Search(ctx, &SearchFilters{
+		IncludedHours:  []int{14},
+		TimezoneOffset: 0,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, results, 1)
+	assert.Equal(t, time.Date(2026, 5, 16, 14, 0, 0, 0, time.UTC).Unix(), results[0].DetectedAt)
+
+	// Filter for multiple hours.
+	results, total, err = repo.Search(ctx, &SearchFilters{
+		IncludedHours:  []int{8, 22},
+		TimezoneOffset: 0,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), total)
+	assert.Len(t, results, 2)
+
+	// Negative timezone offset: UTC-5 (New York) shifts hours back by 5.
+	// The 08:30 UTC detection becomes local hour 3, the 14:00 UTC becomes hour 9.
+	results, total, err = repo.Search(ctx, &SearchFilters{
+		IncludedHours:  []int{9},
+		TimezoneOffset: -5 * 3600,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, results, 1)
+	assert.Equal(t, time.Date(2026, 5, 16, 14, 0, 0, 0, time.UTC).Unix(), results[0].DetectedAt)
+}
+
 func TestSaveReview_ConcurrentUpsertNoDuplicates(t *testing.T) {
 	db := setupDetectionTestDB(t)
 	ctx := t.Context()
