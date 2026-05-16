@@ -146,6 +146,13 @@ func (c *Controller) initDetectionRoutes() {
 	detectionGroup.POST("/:id/lock", c.LockDetection)
 	detectionGroup.POST("/ignore", c.IgnoreSpecies)
 	detectionGroup.GET("/ignored", c.GetExcludedSpecies)
+
+	// Batch operation endpoints
+	batchGroup := detectionGroup.Group("/batch")
+	batchGroup.POST("/delete", c.BatchDeleteDetections)
+	batchGroup.POST("/review", c.BatchReviewDetections)
+	batchGroup.POST("/lock", c.BatchLockDetections)
+	batchGroup.POST("/resolve", c.BatchResolveDetections)
 }
 
 // CommentResponse represents a comment on a detection in the API response
