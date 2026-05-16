@@ -30,18 +30,33 @@
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
+  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
+  import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import Pagination from '$lib/desktop/components/ui/Pagination.svelte';
+  import SelectionToolbar from '$lib/desktop/components/ui/SelectionToolbar.svelte';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import ViewToggle from '$lib/desktop/components/ui/ViewToggle.svelte';
   import { t } from '$lib/i18n';
+  import { auth } from '$lib/stores/auth';
+  import { toastActions } from '$lib/stores/toast';
   import type { DetectionSortBy, DetectionsListData } from '$lib/types/detection.types';
+  import { fetchWithCSRF } from '$lib/utils/api';
   import { cn } from '$lib/utils/cn';
-  import { XCircle } from '@lucide/svelte';
+  import {
+    CheckSquare,
+    CircleCheck,
+    CircleX,
+    Lock,
+    LockOpen,
+    Trash2,
+    XCircle,
+  } from '@lucide/svelte';
   import { untrack } from 'svelte';
+  import { useSelectionMode } from '../composables/useSelectionMode.svelte';
   import DetectionCardMobile from './DetectionCardMobile.svelte';
   import DetectionRow from './DetectionRow.svelte';
   import DetectionsCardView from './DetectionsCardView.svelte';
@@ -100,6 +115,7 @@
   });
 
   function handlePageChange(page: number) {
+    selection.clear();
     if (onPageChange && data) {
       onPageChange(page);
     }
@@ -115,6 +131,7 @@
   function handleNumResultsChange(value: string | string[]) {
     const numResults = parseInt(value as string);
     if (isNaN(numResults) || ![10, 25, 50, 100].includes(numResults)) return;
+    selection.clear();
     selectedNumResults = String(numResults);
     onNumResultsChange?.(numResults);
   }
@@ -197,6 +214,7 @@
 
   function handleSort(field: string) {
     if (!isSortField(field)) return;
+    selection.clear();
     if (sortField === field) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
@@ -233,9 +251,173 @@
     selectedSpeciesName = '';
     selectedDetectionId = undefined;
   }
+
+  // Selection mode
+  let canEdit = $derived(!$auth.security.enabled || $auth.security.accessAllowed);
+  const selection = useSelectionMode(data?.totalResults ?? 0);
+
+  const pageIds = $derived((data?.notes ?? []).map(d => String(d.id)));
+
+  const headerChecked = $derived(selection.allOnPageSelected(pageIds));
+
+  function handleToggleSelect(id: string, shiftKey: boolean) {
+    selection.toggleWithShift(id, pageIds, shiftKey);
+  }
+
+  function handleRowClick(id: string, event: MouseEvent) {
+    if (selection.selectionActive) {
+      selection.toggleWithShift(id, pageIds, event.shiftKey);
+    }
+  }
+
+  // Bulk action modal
+  let showBulkConfirmModal = $state(false);
+  let bulkConfirmConfig = $state({
+    title: '',
+    message: '',
+    confirmLabel: '',
+    onConfirm: async () => {},
+  });
+
+  async function executeBulkAction(endpoint: string, body: Record<string, unknown>) {
+    try {
+      const resp = await fetchWithCSRF(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const result = resp as { processed: number; skipped: number };
+      if (result.skipped > 0) {
+        toastActions.info(
+          t('detections.selection.bulkPartial', {
+            processed: result.processed,
+            skipped: result.skipped,
+          })
+        );
+      } else {
+        toastActions.success(t('detections.selection.bulkSuccess', { count: result.processed }));
+      }
+      selection.deactivate();
+      onRefresh?.();
+    } catch {
+      toastActions.error(t('dashboard.recentDetections.errors.deleteFailed'));
+    }
+  }
+
+  function getActionIds(): { ids: string[] } | null {
+    if (selection.allMatchingSelected) {
+      return null;
+    }
+    return { ids: selection.getSelectedIds() };
+  }
+
+  async function resolveAllMatchingIds(): Promise<string[] | null> {
+    if (!data) return null;
+    try {
+      const resp = await fetchWithCSRF('/api/v2/detections/batch/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          queryType: data.queryType,
+          species: data.species,
+          date: data.date,
+          search: data.search,
+        }),
+      });
+      const result = resp as { ids: string[]; count: number };
+      return result.ids;
+    } catch {
+      toastActions.error(t('detections.selection.tooManyDetections', { count: 0 }));
+      return null;
+    }
+  }
+
+  async function getIdsForBulkAction(): Promise<string[] | null> {
+    const direct = getActionIds();
+    if (direct !== null) return direct.ids;
+    return resolveAllMatchingIds();
+  }
+
+  function handleBulkDelete() {
+    bulkConfirmConfig = {
+      title: t('dashboard.recentDetections.modals.deleteDetection', { species: '' }),
+      message: t('detections.selection.confirmBulkDelete', { count: selection.selectedCount }),
+      confirmLabel: t('common.buttons.delete'),
+      onConfirm: async () => {
+        const ids = await getIdsForBulkAction();
+        if (ids) await executeBulkAction('/api/v2/detections/batch/delete', { ids });
+      },
+    };
+    showBulkConfirmModal = true;
+  }
+
+  function handleBulkMarkCorrect() {
+    bulkConfirmConfig = {
+      title: t('dashboard.recentDetections.actions.markCorrect'),
+      message: t('detections.selection.confirmBulkMarkCorrect', { count: selection.selectedCount }),
+      confirmLabel: t('common.buttons.confirm'),
+      onConfirm: async () => {
+        const ids = await getIdsForBulkAction();
+        if (ids)
+          await executeBulkAction('/api/v2/detections/batch/review', { ids, verified: 'correct' });
+      },
+    };
+    showBulkConfirmModal = true;
+  }
+
+  function handleBulkMarkFalsePositive() {
+    bulkConfirmConfig = {
+      title: t('dashboard.recentDetections.actions.markFalsePositive'),
+      message: t('detections.selection.confirmBulkMarkFalsePositive', {
+        count: selection.selectedCount,
+      }),
+      confirmLabel: t('common.buttons.confirm'),
+      onConfirm: async () => {
+        const ids = await getIdsForBulkAction();
+        if (ids)
+          await executeBulkAction('/api/v2/detections/batch/review', {
+            ids,
+            verified: 'false_positive',
+          });
+      },
+    };
+    showBulkConfirmModal = true;
+  }
+
+  function handleBulkLock() {
+    bulkConfirmConfig = {
+      title: t('dashboard.recentDetections.modals.lockDetection'),
+      message: t('detections.selection.confirmBulkLock', { count: selection.selectedCount }),
+      confirmLabel: t('common.buttons.confirm'),
+      onConfirm: async () => {
+        const ids = await getIdsForBulkAction();
+        if (ids) await executeBulkAction('/api/v2/detections/batch/lock', { ids, locked: true });
+      },
+    };
+    showBulkConfirmModal = true;
+  }
+
+  function handleBulkUnlock() {
+    bulkConfirmConfig = {
+      title: t('dashboard.recentDetections.modals.unlockDetection'),
+      message: t('detections.selection.confirmBulkUnlock', { count: selection.selectedCount }),
+      confirmLabel: t('common.buttons.confirm'),
+      onConfirm: async () => {
+        const ids = await getIdsForBulkAction();
+        if (ids) await executeBulkAction('/api/v2/detections/batch/lock', { ids, locked: false });
+      },
+    };
+    showBulkConfirmModal = true;
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && selection.selectionActive) {
+      selection.deactivate();
+    }
+  }
 </script>
 
-<div class={cn(className)}>
+<div class={cn(className)} onkeydown={handleKeydown}>
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <div class="flex justify-between items-center">
       <!-- Title -->
@@ -245,6 +427,26 @@
 
       <!-- Controls: view toggle + results selector -->
       <div class="flex items-center gap-3">
+        {#if canEdit}
+          <div class="hidden md:block">
+            <button
+              type="button"
+              class={cn(
+                'inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                selection.selectionActive
+                  ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)]'
+                  : 'border border-[var(--color-base-300)] text-[var(--color-base-content)] hover:bg-[var(--color-base-200)]'
+              )}
+              onclick={() =>
+                selection.selectionActive ? selection.deactivate() : selection.activate()}
+              aria-pressed={selection.selectionActive}
+            >
+              <CheckSquare class="size-4" />
+              <span>{t('detections.selection.select')}</span>
+            </button>
+          </div>
+        {/if}
+
         <!-- View toggle (hidden on mobile - always shows mobile cards) -->
         <div class="hidden md:block">
           <ViewToggle view={viewMode} onViewChange={handleViewChange} />
@@ -262,6 +464,62 @@
       </div>
     </div>
   </div>
+
+  {#if selection.selectionActive && selection.selectedCount > 0}
+    <SelectionToolbar
+      selectedCount={selection.selectedCount}
+      totalCount={data?.totalResults ?? 0}
+      allSelected={selection.allMatchingSelected}
+      allOnPageSelected={selection.allOnPageSelected(pageIds)}
+      pageSize={data?.itemsPerPage ?? 25}
+      onSelectAll={() => selection.selectAllMatching()}
+      onClear={() => selection.clear()}
+    >
+      {#snippet actions()}
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm hover:bg-[var(--color-base-200)] transition-colors"
+          onclick={handleBulkMarkCorrect}
+          title={t('dashboard.recentDetections.actions.markCorrect')}
+        >
+          <CircleCheck class="size-4 text-[var(--color-success)]" />
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm hover:bg-[var(--color-base-200)] transition-colors"
+          onclick={handleBulkMarkFalsePositive}
+          title={t('dashboard.recentDetections.actions.markFalsePositive')}
+        >
+          <CircleX class="size-4 text-[var(--color-error)]" />
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm hover:bg-[var(--color-base-200)] transition-colors"
+          onclick={handleBulkLock}
+          title={t('dashboard.recentDetections.modals.lockDetection')}
+        >
+          <Lock class="size-4" />
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm hover:bg-[var(--color-base-200)] transition-colors"
+          onclick={handleBulkUnlock}
+          title={t('dashboard.recentDetections.modals.unlockDetection')}
+        >
+          <LockOpen class="size-4" />
+        </button>
+        <div class="w-px h-5 bg-[var(--color-base-300)] mx-1"></div>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors"
+          onclick={handleBulkDelete}
+          title={t('dashboard.recentDetections.actions.deleteDetection')}
+        >
+          <Trash2 class="size-4" />
+        </button>
+      {/snippet}
+    </SelectionToolbar>
+  {/if}
 
   <!-- ARIA live region for accessibility -->
   <div class="sr-only" aria-live="polite">
@@ -309,6 +567,16 @@
             <caption class="sr-only">{t('detections.table.caption')}</caption>
             <thead>
               <tr class="detection-header-list">
+                {#if selection.selectionActive}
+                  <th scope="col" class="w-10 text-center">
+                    <Checkbox
+                      checked={headerChecked}
+                      size="sm"
+                      variant="primary"
+                      onchange={() => selection.toggleAllOnPage(pageIds)}
+                    />
+                  </th>
+                {/if}
                 <SortableHeader
                   label={t('detections.headers.dateTime')}
                   field="dateTime"
@@ -346,19 +614,36 @@
             </thead>
             <tbody class="divide-y divide-[var(--color-base-200)]">
               {#each data.notes as detection (detection.id)}
-                <tr>
+                <tr
+                  class={cn(
+                    selection.selectionActive &&
+                      selection.isSelected(String(detection.id)) &&
+                      'bg-[var(--color-primary)]/5',
+                    selection.selectionActive && 'cursor-pointer'
+                  )}
+                  onclick={e => handleRowClick(String(detection.id), e)}
+                >
                   <DetectionRow
                     {detection}
                     {onDetailsClick}
                     {onRefresh}
                     onPlayMobileAudio={handlePlayMobileAudio}
+                    selectionActive={selection.selectionActive}
+                    selected={selection.isSelected(String(detection.id))}
+                    onToggleSelect={handleToggleSelect}
                   />
                 </tr>
               {/each}
             </tbody>
           </table>
         {:else}
-          <DetectionsCardView detections={data.notes} {onRefresh} />
+          <DetectionsCardView
+            detections={data.notes}
+            {onRefresh}
+            selectionActive={selection.selectionActive}
+            selectedIds={id => selection.isSelected(id)}
+            onToggleSelect={handleToggleSelect}
+          />
         {/if}
       </div>
 
@@ -409,4 +694,16 @@
       />
     </div>
   {/if}
+
+  <ConfirmModal
+    isOpen={showBulkConfirmModal}
+    title={bulkConfirmConfig.title}
+    message={bulkConfirmConfig.message}
+    confirmLabel={bulkConfirmConfig.confirmLabel}
+    onClose={() => (showBulkConfirmModal = false)}
+    onConfirm={async () => {
+      await bulkConfirmConfig.onConfirm();
+      showBulkConfirmModal = false;
+    }}
+  />
 </div>

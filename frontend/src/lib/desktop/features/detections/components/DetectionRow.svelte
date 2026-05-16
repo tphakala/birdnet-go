@@ -29,6 +29,7 @@
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
   import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
+  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import { Volume2 } from '@lucide/svelte';
   import SpectrogramPlayer from '$lib/desktop/components/media/SpectrogramPlayer.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
@@ -58,6 +59,9 @@
       speciesName: string;
       detectionId: number;
     }) => void;
+    selectionActive?: boolean;
+    selected?: boolean;
+    onToggleSelect?: (_id: string, _shiftKey: boolean) => void;
   }
 
   let {
@@ -66,6 +70,9 @@
     onDetailsClick,
     onRefresh,
     onPlayMobileAudio,
+    selectionActive = false,
+    selected = false,
+    onToggleSelect,
   }: Props = $props();
 
   // Resolve the audio source label, falling back to the current settings when
@@ -272,6 +279,17 @@
 </script>
 
 <!-- DetectionRow now returns table cells for proper table structure -->
+{#if selectionActive}
+  <td class="w-10 text-center" onclick={e => e.stopPropagation()}>
+    <Checkbox
+      checked={selected}
+      size="sm"
+      variant="primary"
+      onchange={() => onToggleSelect?.(String(detection.id), false)}
+    />
+  </td>
+{/if}
+
 <!-- Date & Time -->
 <td class="text-sm">
   <span>{detection.date} {detection.time}</span>
