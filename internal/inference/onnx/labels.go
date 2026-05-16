@@ -11,8 +11,9 @@ import (
 	"strings"
 )
 
-// LoadLabels reads species labels from a file. Supports .txt (one per line),
-// .csv (auto-detects label column), and .json (array or object formats).
+// LoadLabels reads species labels from a file. Supports .csv (auto-detects
+// label column) and .json (array or object formats). Files with .txt or
+// unknown/missing extensions are parsed as plain text (one label per line).
 func LoadLabels(path string) ([]string, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // Path provided by caller
 	if err != nil {
