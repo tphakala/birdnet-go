@@ -19,7 +19,7 @@ const (
 	bnhmMagic      = "BNHM"
 	bnhmVersion    = 1
 	bnhmHeaderSize = 40
-	bnhmWeeks      = 48
+	bnhmWeeks      = weeksPerYear // 48 BirdNET weeks, matches range.go
 )
 
 // Heatmap validation constraints
@@ -262,26 +262,30 @@ func (c *Controller) validateHeatmapParams(ctx echo.Context) (*heatmapParams, er
 // computeHeatmapGrid generates the heatmap data by running batch geomodel inference
 // for each week across all grid points, then extracting the target species scores.
 // Returns float32[weeks][rows][cols] in flat layout.
-func (c *Controller) computeHeatmapGrid(params *heatmapParams, speciesIdx, numGeoSpecies int) ([]float32, error) {
+func (c *Controller) computeHeatmapGrid(birdnet *classifier.Orchestrator, params *heatmapParams, speciesIdx, numGeoSpecies int) ([]float32, error) {
+	log := GetLogger()
 	totalCells := params.rows * params.cols
 	result := make([]float32, bnhmWeeks*totalCells)
 
-	birdnet, err := c.getBirdNETInstance()
-	if err != nil {
-		return nil, err
+	// Pre-allocate input triples once; only the week value changes per iteration.
+	inputs := make([]float32, totalCells*3)
+	for row := range params.rows {
+		lat := float32(params.south + (float64(row)+0.5)*params.resolution)
+		for col := range params.cols {
+			lon := float32(params.west + (float64(col)+0.5)*params.resolution)
+			idx := (row*params.cols + col) * 3
+			inputs[idx] = lat
+			inputs[idx+1] = lon
+		}
 	}
 
 	for week := 1; week <= bnhmWeeks; week++ {
 		weekOffset := (week - 1) * totalCells
 
-		// Build input triples for all grid points in this week
-		inputs := make([]float32, 0, totalCells*3)
-		for row := range params.rows {
-			lat := params.south + (float64(row)+0.5)*params.resolution
-			for col := range params.cols {
-				lon := params.west + (float64(col)+0.5)*params.resolution
-				inputs = append(inputs, float32(lat), float32(lon), float32(week))
-			}
+		// Update week value for all grid points in-place
+		weekF := float32(week)
+		for i := 2; i < len(inputs); i += 3 {
+			inputs[i] = weekF
 		}
 
 		// Process in chunks of heatmapBatchSize to release the lock between calls
@@ -296,6 +300,15 @@ func (c *Controller) computeHeatmapGrid(params *heatmapParams, speciesIdx, numGe
 			scores, err := birdnet.BatchRangeFilterInference(chunkInputs, chunkSize)
 			if err != nil {
 				return nil, fmt.Errorf("batch inference failed at week %d chunk %d: %w", week, chunkStart, err)
+			}
+
+			expectedLen := chunkSize * numGeoSpecies
+			if len(scores) < expectedLen {
+				log.Warn("PredictBatch returned fewer scores than expected",
+					logger.Int("expected", expectedLen),
+					logger.Int("got", len(scores)),
+					logger.Int("week", week),
+					logger.Int("chunk_start", chunkStart))
 			}
 
 			// Extract the target species score from each point's output
@@ -349,22 +362,19 @@ func (c *Controller) GetHeatmapGrid(ctx echo.Context) error {
 		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
 	}
 
-	// Verify species exists in geomodel
+	// Verify species exists in geomodel (atomic lookup: index + count in one lock)
 	birdnet, err := c.getBirdNETInstance()
 	if err != nil {
 		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
 
-	speciesIdx, found := birdnet.GeomodelSpeciesIndex(params.species)
+	speciesIdx, numGeoSpecies, found := birdnet.GeomodelSpeciesInfo(params.species)
 	if !found {
 		return c.HandleError(ctx, nil, "Species not found in geomodel", http.StatusBadRequest)
 	}
-
-	labels := birdnet.GeomodelLabels()
-	if len(labels) == 0 {
+	if numGeoSpecies == 0 {
 		return c.HandleError(ctx, nil, "Geomodel labels not available", http.StatusInternalServerError)
 	}
-	numGeoSpecies := len(labels)
 
 	// Check cache
 	cache := getHeatmapCache()
@@ -376,7 +386,7 @@ func (c *Controller) GetHeatmapGrid(ctx echo.Context) error {
 	}
 
 	// Compute grid
-	data, err := c.computeHeatmapGrid(params, speciesIdx, numGeoSpecies)
+	data, err := c.computeHeatmapGrid(birdnet, params, speciesIdx, numGeoSpecies)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to compute heatmap grid", http.StatusInternalServerError)
 	}
