@@ -106,6 +106,16 @@ func TestShouldReportToSentry_FiltersNoteNotFound(t *testing.T) {
 	assert.False(t, shouldReportToSentry(ee))
 }
 
+func TestShouldReportToSentry_FiltersEBirdTaxonomyNotFound(t *testing.T) {
+	t.Parallel()
+	// Non-bird species (e.g., Canis latrans) are expected to be absent from eBird
+	ee := New(fmt.Errorf("species not found in eBird taxonomy: Canis latrans")).
+		Component("ebird").
+		Category(CategoryNotFound).
+		Build()
+	assert.False(t, shouldReportToSentry(ee))
+}
+
 func TestShouldReportToSentry_AllowsNetworkCategoryCodeBugs(t *testing.T) {
 	t.Parallel()
 	// Network category error that is NOT environmental noise should still report

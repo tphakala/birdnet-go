@@ -140,8 +140,10 @@ func DefaultCSRFSkipper(c echo.Context) bool {
 		return isSafeHTTPMethod(c.Request().Method)
 	}
 
-	// Skip for auth endpoints (login needs to work before CSRF token exists)
+	// Skip for auth endpoints (login needs to work before CSRF token exists,
+	// logout must work even with expired CSRF tokens on long-lived pages)
 	if path == "/api/v2/auth/login" ||
+		path == "/api/v2/auth/logout" ||
 		strings.HasPrefix(path, "/api/v2/auth/callback") {
 		return true
 	}
