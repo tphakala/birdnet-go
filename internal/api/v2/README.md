@@ -94,12 +94,15 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 ### Control Operations (`control.go`)
 
-| Method | Route                     | Handler               | Auth | Description                    |
-| ------ | ------------------------- | --------------------- | ---- | ------------------------------ |
-| POST   | `/control/restart`        | `RestartAnalysis`     | ✅   | Restart analysis engine        |
-| POST   | `/control/reload`         | `ReloadModel`         | ✅   | Reload BirdNET model           |
-| POST   | `/control/rebuild-filter` | `RebuildFilter`       | ✅   | Rebuild range filter           |
-| GET    | `/control/actions`        | `GetAvailableActions` | ✅   | List available control actions |
+| Method | Route                          | Handler               | Auth | Description                           |
+| ------ | ------------------------------ | --------------------- | ---- | ------------------------------------- |
+| POST   | `/control/restart`             | `RestartAnalysis`     | ✅   | Restart analysis engine               |
+| POST   | `/control/reload`              | `ReloadModel`         | ✅   | Reload BirdNET model                  |
+| POST   | `/control/rebuild-filter`      | `RebuildFilter`       | ✅   | Rebuild range filter                  |
+| POST   | `/control/restart-server`      | `RestartServer`       | ✅   | Restart the server binary             |
+| POST   | `/control/restart-container`   | `RestartContainer`    | ✅   | Restart the container (container only)|
+| POST   | `/control/restart-source/:id`  | `RestartAudioSource`  | ✅   | Restart a single audio source by ID   |
+| GET    | `/control/actions`             | `GetAvailableActions` | ✅   | List available control actions        |
 
 ### Debug (`debug.go`)
 

@@ -134,7 +134,14 @@ type Controller struct {
 	// Stored atomically because it is set during pipeline Start() and read
 	// concurrently by HTTP handlers.
 	audioWatchdog atomic.Pointer[audiocore.LivenessWatchdog]
+
+	// sourceRestarter restarts a single audio source by ID. Set during
+	// pipeline Start() and called by the restart-source control endpoint.
+	sourceRestarter atomic.Pointer[SourceRestarterFunc]
 }
+
+// SourceRestarterFunc restarts a single audio source identified by sourceID.
+type SourceRestarterFunc func(sourceID string) error
 
 // ShutdownRequester allows triggering a programmatic shutdown.
 type ShutdownRequester interface {
