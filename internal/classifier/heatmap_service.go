@@ -17,6 +17,7 @@ import (
 const (
 	heatmapIntraOpThreads = 4
 	heatmapInterOpThreads = 2
+	heatmapCoordWidth     = 2 // [lat, lon] per grid cell
 )
 
 // HeatmapInferenceService provides dedicated batch inference for heatmap
@@ -24,31 +25,25 @@ const (
 // its own ONNX session with multi-threaded configuration optimized for
 // throughput rather than latency.
 type HeatmapInferenceService struct {
-	mu       sync.RWMutex
-	session  atomic.Pointer[ort.DynamicAdvancedSession]
-	labels   []string
-	indexMap map[string]int // species label -> index in output
-	inflight sync.WaitGroup
-	closed   atomic.Bool
+	mu         sync.RWMutex
+	session    atomic.Pointer[ort.DynamicAdvancedSession]
+	labels     []string
+	indexMap   map[string]int // species label -> index in output
+	inputName  string         // ONNX input tensor name (from model metadata)
+	outputName string         // ONNX output tensor name (from model metadata)
+	inflight   sync.WaitGroup
+	closed     atomic.Bool
 }
 
-// NewHeatmapInferenceService creates a heatmap inference service with a
-// dedicated multi-threaded ONNX session.
-func NewHeatmapInferenceService(modelPath string, labels []string) (*HeatmapInferenceService, error) {
-	session, err := createHeatmapSession(modelPath)
-	if err != nil {
-		return nil, err
-	}
-
-	s := &HeatmapInferenceService{
-		labels: labels,
-	}
-	s.session.Store(session)
-	s.indexMap = buildSpeciesIndexMap(labels)
-	return s, nil
+// heatmapModelMeta holds tensor name metadata extracted from a geomodel ONNX file.
+type heatmapModelMeta struct {
+	inputNames  []string
+	outputNames []string
+	inputName   string // first input tensor name (for IoBinding)
+	outputName  string // first output tensor name (for IoBinding)
 }
 
-func createHeatmapSession(modelPath string) (*ort.DynamicAdvancedSession, error) {
+func loadHeatmapModelMeta(modelPath string) (*heatmapModelMeta, error) {
 	inputInfos, outputInfos, err := ort.GetInputOutputInfo(modelPath)
 	if err != nil {
 		return nil, errors.Newf("heatmap service: failed to load model metadata: %v", err).
@@ -56,7 +51,6 @@ func createHeatmapSession(modelPath string) (*ort.DynamicAdvancedSession, error)
 			Category(errors.CategoryModelInit).
 			Build()
 	}
-
 	if len(inputInfos) == 0 || len(outputInfos) == 0 {
 		return nil, errors.Newf("heatmap service: model has no input or output tensors").
 			Component("classifier.heatmap_service").
@@ -73,6 +67,38 @@ func createHeatmapSession(modelPath string) (*ort.DynamicAdvancedSession, error)
 		outputNames[i] = outputInfos[i].Name
 	}
 
+	return &heatmapModelMeta{
+		inputNames:  inputNames,
+		outputNames: outputNames,
+		inputName:   inputInfos[0].Name,
+		outputName:  outputInfos[0].Name,
+	}, nil
+}
+
+// NewHeatmapInferenceService creates a heatmap inference service with a
+// dedicated multi-threaded ONNX session.
+func NewHeatmapInferenceService(modelPath string, labels []string) (*HeatmapInferenceService, error) {
+	meta, err := loadHeatmapModelMeta(modelPath)
+	if err != nil {
+		return nil, err
+	}
+
+	session, err := createHeatmapSession(modelPath, meta.inputNames, meta.outputNames)
+	if err != nil {
+		return nil, err
+	}
+
+	s := &HeatmapInferenceService{
+		labels:     labels,
+		inputName:  meta.inputName,
+		outputName: meta.outputName,
+	}
+	s.session.Store(session)
+	s.indexMap = buildSpeciesIndexMap(labels)
+	return s, nil
+}
+
+func createHeatmapSession(modelPath string, inputNames, outputNames []string) (*ort.DynamicAdvancedSession, error) {
 	sessOpts, err := ort.NewSessionOptions()
 	if err != nil {
 		return nil, errors.Newf("heatmap service: failed to create session options: %v", err).
@@ -114,31 +140,44 @@ func buildSpeciesIndexMap(labels []string) map[string]int {
 	return m
 }
 
-// PredictBatchExtractSpecies runs batch inference and extracts only the target
-// species scores, avoiding a full output copy. This is the primary hot path
-// for heatmap computation.
-func (s *HeatmapInferenceService) PredictBatchExtractSpecies(ctx context.Context, inputs []float32, batchSize, speciesIdx int, dst []float32) error {
+// ComputeGridWithBinding runs batch inference across all weeks for a grid,
+// reusing pre-allocated tensors via IoBinding. The chunks-outer/weeks-inner
+// loop order minimizes coordinate copies and partial-batch rebinding.
+//
+// coords contains [lat, lon] pairs (totalCells * 2 floats).
+// result is the output buffer sized [weeksComputed * totalCells].
+func (s *HeatmapInferenceService) ComputeGridWithBinding(
+	ctx context.Context,
+	coords []float32,
+	totalCells int,
+	speciesIdx int,
+	stride int,
+	totalWeeks int,
+	batchSize int,
+	result []float32,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	const inputWidth = 3
-	if batchSize <= 0 || len(inputs) != batchSize*inputWidth {
-		return errors.Newf("heatmap service: inputs length %d does not match batchSize %d * %d",
-			len(inputs), batchSize, inputWidth).
-			Component("classifier.heatmap_service").
-			Category(errors.CategoryValidation).
-			Build()
-	}
-	if len(dst) < batchSize {
-		return errors.Newf("heatmap service: dst length %d < batchSize %d", len(dst), batchSize).
+	const coordWidth = heatmapCoordWidth
+	if totalCells <= 0 || len(coords) != totalCells*coordWidth {
+		return errors.Newf("heatmap service: coords length %d does not match totalCells %d * %d",
+			len(coords), totalCells, coordWidth).
 			Component("classifier.heatmap_service").
 			Category(errors.CategoryValidation).
 			Build()
 	}
 
-	// Check closed before Add to follow WaitGroup contract: Add must not race
-	// with Wait when counter is zero. Close/Rebuild set closed before Wait.
+	weeksToCompute := totalWeeks / stride
+	expectedResultLen := weeksToCompute * totalCells
+	if len(result) < expectedResultLen {
+		return errors.Newf("heatmap service: result length %d < expected %d", len(result), expectedResultLen).
+			Component("classifier.heatmap_service").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
 	if s.closed.Load() {
 		return errors.Newf("heatmap service: session closed").
 			Component("classifier.heatmap_service").
@@ -157,9 +196,10 @@ func (s *HeatmapInferenceService) PredictBatchExtractSpecies(ctx context.Context
 			Build()
 	}
 
-	// Read numSpecies under RLock to prevent race with Rebuild
 	s.mu.RLock()
 	numSpecies := len(s.labels)
+	inputName := s.inputName
+	outputName := s.outputName
 	s.mu.RUnlock()
 
 	if speciesIdx < 0 || speciesIdx >= numSpecies {
@@ -169,7 +209,12 @@ func (s *HeatmapInferenceService) PredictBatchExtractSpecies(ctx context.Context
 			Build()
 	}
 
-	inputTensor, err := ort.NewTensor(ort.NewShape(int64(batchSize), 3), inputs)
+	effectiveBatch := min(totalCells, batchSize)
+
+	inputData := make([]float32, effectiveBatch*3)
+	outputData := make([]float32, effectiveBatch*numSpecies)
+
+	inputTensor, err := ort.NewTensor(ort.NewShape(int64(effectiveBatch), 3), inputData)
 	if err != nil {
 		return errors.Newf("heatmap service: failed to create input tensor: %v", err).
 			Component("classifier.heatmap_service").
@@ -178,7 +223,7 @@ func (s *HeatmapInferenceService) PredictBatchExtractSpecies(ctx context.Context
 	}
 	defer func() { _ = inputTensor.Destroy() }()
 
-	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(int64(batchSize), int64(numSpecies)))
+	outputTensor, err := ort.NewTensor(ort.NewShape(int64(effectiveBatch), int64(numSpecies)), outputData)
 	if err != nil {
 		return errors.Newf("heatmap service: failed to create output tensor: %v", err).
 			Component("classifier.heatmap_service").
@@ -187,18 +232,190 @@ func (s *HeatmapInferenceService) PredictBatchExtractSpecies(ctx context.Context
 	}
 	defer func() { _ = outputTensor.Destroy() }()
 
-	if err := session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor}); err != nil {
-		return errors.Newf("heatmap service: inference failed: %v", err).
+	binding, err := session.CreateIoBinding()
+	if err != nil {
+		return errors.Newf("heatmap service: failed to create IoBinding: %v", err).
+			Component("classifier.heatmap_service").
+			Category(errors.CategoryModelLoad).
+			Build()
+	}
+	defer func() { _ = binding.Destroy() }()
+
+	if err := binding.BindInput(inputName, inputTensor); err != nil {
+		return errors.Newf("heatmap service: failed to bind input: %v", err).
+			Component("classifier.heatmap_service").
+			Category(errors.CategoryModelLoad).
+			Build()
+	}
+	if err := binding.BindOutput(outputName, outputTensor); err != nil {
+		return errors.Newf("heatmap service: failed to bind output: %v", err).
 			Component("classifier.heatmap_service").
 			Category(errors.CategoryModelLoad).
 			Build()
 	}
 
-	// Extract target species score directly from tensor-backed memory.
-	// CRITICAL: complete extraction before outputTensor.Destroy() in defer.
-	data := outputTensor.GetData()
-	for i := range batchSize {
-		dst[i] = data[i*numSpecies+speciesIdx]
+	gp := &gridParams{
+		session:    session,
+		binding:    binding,
+		inputName:  inputName,
+		outputName: outputName,
+		inputData:  inputData,
+		outputData: outputData,
+		coords:     coords,
+		result:     result,
+		totalCells: totalCells,
+		numSpecies: numSpecies,
+		speciesIdx: speciesIdx,
+		stride:     stride,
+		totalWeeks: totalWeeks,
+	}
+
+	for chunkStart := 0; chunkStart < totalCells; chunkStart += effectiveBatch {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if s.closed.Load() {
+			return errSessionClosedDuringComputation
+		}
+
+		chunkEnd := min(chunkStart+effectiveBatch, totalCells)
+		chunkSize := chunkEnd - chunkStart
+
+		if err := s.processChunk(ctx, gp, chunkStart, chunkSize, effectiveBatch); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// gridParams groups the state shared across chunks during grid computation.
+type gridParams struct {
+	session    *ort.DynamicAdvancedSession
+	binding    *ort.IoBinding
+	inputName  string
+	outputName string
+	inputData  []float32
+	outputData []float32
+	coords     []float32
+	result     []float32
+	totalCells int
+	numSpecies int
+	speciesIdx int
+	stride     int
+	totalWeeks int
+}
+
+var errSessionClosedDuringComputation = errors.Newf("heatmap service: session closed during computation").
+	Component("classifier.heatmap_service").
+	Category(errors.CategoryValidation).
+	Build()
+
+// processChunk runs the inner week loop for one spatial chunk. For the last
+// (potentially partial) chunk it creates smaller tensors and rebinds.
+func (s *HeatmapInferenceService) processChunk(
+	ctx context.Context,
+	gp *gridParams,
+	chunkStart, chunkSize, effectiveBatch int,
+) error {
+	const coordWidth = heatmapCoordWidth
+
+	for i := range chunkSize {
+		srcIdx := (chunkStart + i) * coordWidth
+		dstIdx := i * 3
+		gp.inputData[dstIdx] = gp.coords[srcIdx]
+		gp.inputData[dstIdx+1] = gp.coords[srcIdx+1]
+	}
+
+	if chunkSize < effectiveBatch {
+		return s.processPartialChunk(ctx, gp, chunkStart, chunkSize)
+	}
+
+	return s.runWeekLoop(ctx, gp, chunkStart, chunkSize)
+}
+
+// processPartialChunk handles the last chunk when it is smaller than the
+// batch size. Creates smaller tensor wrappers over the existing buffers
+// and rebinds them for inference. Does not restore the full-size binding
+// because partial chunks are always the final iteration of the outer loop.
+func (s *HeatmapInferenceService) processPartialChunk(
+	ctx context.Context,
+	gp *gridParams,
+	chunkStart, chunkSize int,
+) error {
+	partialInput, err := ort.NewTensor(
+		ort.NewShape(int64(chunkSize), 3), gp.inputData[:chunkSize*3])
+	if err != nil {
+		return errors.Newf("heatmap service: failed to create partial input tensor: %v", err).
+			Component("classifier.heatmap_service").
+			Category(errors.CategoryModelLoad).
+			Build()
+	}
+	defer func() { _ = partialInput.Destroy() }()
+
+	partialOutput, err := ort.NewTensor(
+		ort.NewShape(int64(chunkSize), int64(gp.numSpecies)),
+		gp.outputData[:chunkSize*gp.numSpecies])
+	if err != nil {
+		return errors.Newf("heatmap service: failed to create partial output tensor: %v", err).
+			Component("classifier.heatmap_service").
+			Category(errors.CategoryModelLoad).
+			Build()
+	}
+	defer func() { _ = partialOutput.Destroy() }()
+
+	if err := gp.binding.BindInput(gp.inputName, partialInput); err != nil {
+		return errors.Newf("heatmap service: failed to bind partial input: %v", err).
+			Component("classifier.heatmap_service").
+			Category(errors.CategoryModelLoad).
+			Build()
+	}
+	if err := gp.binding.BindOutput(gp.outputName, partialOutput); err != nil {
+		return errors.Newf("heatmap service: failed to bind partial output: %v", err).
+			Component("classifier.heatmap_service").
+			Category(errors.CategoryModelLoad).
+			Build()
+	}
+
+	return s.runWeekLoop(ctx, gp, chunkStart, chunkSize)
+}
+
+// runWeekLoop iterates over all weeks for a single chunk, running inference
+// and extracting the target species scores.
+func (s *HeatmapInferenceService) runWeekLoop(
+	ctx context.Context,
+	gp *gridParams,
+	chunkStart, chunkSize int,
+) error {
+	weekIdx := 0
+	for week := 1; week <= gp.totalWeeks; week += gp.stride {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if s.closed.Load() {
+			return errSessionClosedDuringComputation
+		}
+
+		weekF := float32(week)
+		limit := chunkSize * 3
+		for i := 2; i < limit; i += 3 {
+			gp.inputData[i] = weekF
+		}
+
+		if err := gp.session.RunWithBinding(gp.binding); err != nil {
+			return errors.Newf("heatmap service: inference failed at week %d chunk %d: %v",
+				week, chunkStart, err).
+				Component("classifier.heatmap_service").
+				Category(errors.CategoryModelLoad).
+				Build()
+		}
+
+		weekOffset := weekIdx * gp.totalCells
+		for i := range chunkSize {
+			gp.result[weekOffset+chunkStart+i] = gp.outputData[i*gp.numSpecies+gp.speciesIdx]
+		}
+
+		weekIdx++
 	}
 
 	return nil
@@ -222,7 +439,12 @@ func (s *HeatmapInferenceService) SpeciesIndex(label string) (int, bool) {
 // Rebuild replaces the ONNX session with a new one for an updated model.
 // Waits for all in-flight inferences to complete before destroying the old session.
 func (s *HeatmapInferenceService) Rebuild(modelPath string, labels []string) error {
-	newSession, err := createHeatmapSession(modelPath)
+	meta, err := loadHeatmapModelMeta(modelPath)
+	if err != nil {
+		return err
+	}
+
+	newSession, err := createHeatmapSession(modelPath, meta.inputNames, meta.outputNames)
 	if err != nil {
 		return err
 	}
@@ -231,6 +453,8 @@ func (s *HeatmapInferenceService) Rebuild(modelPath string, labels []string) err
 	oldSession := s.session.Swap(newSession)
 	s.labels = labels
 	s.indexMap = buildSpeciesIndexMap(labels)
+	s.inputName = meta.inputName
+	s.outputName = meta.outputName
 	s.mu.Unlock()
 
 	// Wait for in-flight inferences on old session to finish

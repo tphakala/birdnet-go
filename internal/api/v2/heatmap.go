@@ -367,60 +367,26 @@ func (c *Controller) computeHeatmapGrid(birdnet *classifier.Orchestrator, params
 }
 
 // computeHeatmapGridOptimized generates heatmap data using the dedicated
-// HeatmapInferenceService with larger batches, stride-aware week iteration,
-// and context cancellation support.
+// HeatmapInferenceService with IoBinding for tensor reuse across all weeks.
 func (c *Controller) computeHeatmapGridOptimized(ctx context.Context, service *classifier.HeatmapInferenceService, params *heatmapParams, speciesIdx int) ([]float32, error) {
 	totalCells := params.rows * params.cols
 	weeksToCompute := bnhmWeeks / params.stride
 	result := make([]float32, weeksToCompute*totalCells)
 
-	// Pre-allocate input triples; only the week value changes per iteration.
-	inputs := make([]float32, totalCells*3)
+	coords := make([]float32, totalCells*2)
 	for row := range params.rows {
 		lat := float32(params.south + (float64(row)+0.5)*params.resolution)
 		for col := range params.cols {
 			lon := float32(params.west + (float64(col)+0.5)*params.resolution)
-			idx := (row*params.cols + col) * 3
-			inputs[idx] = lat
-			inputs[idx+1] = lon
+			idx := (row*params.cols + col) * 2
+			coords[idx] = lat
+			coords[idx+1] = lon
 		}
 	}
 
-	weekIdx := 0
-	for week := 1; week <= bnhmWeeks; week += params.stride {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-
-		weekOffset := weekIdx * totalCells
-
-		// Update week value for all grid points in-place
-		weekF := float32(week)
-		for i := 2; i < len(inputs); i += 3 {
-			inputs[i] = weekF
-		}
-
-		// Process in chunks of heatmapOptBatchSize
-		for chunkStart := 0; chunkStart < totalCells; chunkStart += heatmapOptBatchSize {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-
-			chunkEnd := chunkStart + heatmapOptBatchSize
-			if chunkEnd > totalCells {
-				chunkEnd = totalCells
-			}
-			chunkSize := chunkEnd - chunkStart
-
-			chunkInputs := inputs[chunkStart*3 : chunkEnd*3]
-			dst := result[weekOffset+chunkStart : weekOffset+chunkStart+chunkSize]
-
-			if err := service.PredictBatchExtractSpecies(ctx, chunkInputs, chunkSize, speciesIdx, dst); err != nil {
-				return nil, fmt.Errorf("heatmap inference failed at week %d chunk %d: %w", week, chunkStart, err)
-			}
-		}
-
-		weekIdx++
+	if err := service.ComputeGridWithBinding(ctx, coords, totalCells, speciesIdx,
+		params.stride, bnhmWeeks, heatmapOptBatchSize, result); err != nil {
+		return nil, fmt.Errorf("heatmap grid computation failed: %w", err)
 	}
 
 	return result, nil
