@@ -108,6 +108,19 @@ type AudioSettings struct {
 
 	Equalizer  EqualizerSettings `yaml:"equalizer" json:"equalizer"`                             // equalizer settings (global default)
 	QuietHours QuietHoursConfig  `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"` // quiet hours (global default, legacy)
+	Watchdog   WatchdogSettings  `yaml:"watchdog" json:"watchdog" mapstructure:"watchdog"`       // liveness watchdog tuning (0 = use default)
+}
+
+// WatchdogSettings holds user-tunable parameters for the audio liveness watchdog.
+// All fields are in seconds (except MaxRetries which is a count). Zero values
+// mean "use production default", so existing configs work without changes.
+type WatchdogSettings struct {
+	CheckInterval     int `yaml:"checkInterval" json:"checkInterval" mapstructure:"checkInterval"`             // tick period (default 10s)
+	SilenceThreshold  int `yaml:"silenceThreshold" json:"silenceThreshold" mapstructure:"silenceThreshold"`    // silence before alarm (default 30s)
+	MaxRetries        int `yaml:"maxRetries" json:"maxRetries" mapstructure:"maxRetries"`                      // restart attempts before escalation (default 3)
+	RetryBackoff      int `yaml:"retryBackoff" json:"retryBackoff" mapstructure:"retryBackoff"`                // wait between retries (default 5s)
+	Cooldown          int `yaml:"cooldown" json:"cooldown" mapstructure:"cooldown"`                            // alarm suppression after recovery (default 60s)
+	EscalationTimeout int `yaml:"escalationTimeout" json:"escalationTimeout" mapstructure:"escalationTimeout"` // time in ESCALATED before FAILED (default 60s)
 }
 
 // FindSourceByID returns a pointer to the AudioSourceConfig matching the given

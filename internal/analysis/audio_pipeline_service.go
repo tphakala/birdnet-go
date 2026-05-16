@@ -95,6 +95,31 @@ func (p *AudioPipelineService) Name() string {
 	return audioPipelineServiceName
 }
 
+// buildLivenessConfig creates a LivenessConfig from user settings, falling back
+// to production defaults for any zero-valued field.
+func buildLivenessConfig(ws conf.WatchdogSettings) audiocore.LivenessConfig {
+	cfg := audiocore.DefaultLivenessConfig()
+	if ws.CheckInterval > 0 {
+		cfg.CheckInterval = time.Duration(ws.CheckInterval) * time.Second
+	}
+	if ws.SilenceThreshold > 0 {
+		cfg.SilenceThreshold = time.Duration(ws.SilenceThreshold) * time.Second
+	}
+	if ws.MaxRetries > 0 {
+		cfg.MaxRetries = ws.MaxRetries
+	}
+	if ws.RetryBackoff > 0 {
+		cfg.RetryBackoff = time.Duration(ws.RetryBackoff) * time.Second
+	}
+	if ws.Cooldown > 0 {
+		cfg.CooldownAfterRecov = time.Duration(ws.Cooldown) * time.Second
+	}
+	if ws.EscalationTimeout > 0 {
+		cfg.EscalationTimeout = time.Duration(ws.EscalationTimeout) * time.Second
+	}
+	return cfg
+}
+
 // Watchdog returns the audio liveness watchdog, or nil if not started.
 func (p *AudioPipelineService) Watchdog() *audiocore.LivenessWatchdog {
 	return p.watchdog
@@ -280,15 +305,16 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 		},
 	}
 	p.watchdog = audiocore.NewLivenessWatchdog(
-		audiocore.DefaultLivenessConfig(),
+		buildLivenessConfig(settings.Realtime.Audio.Watchdog),
 		p.engine.Router(),
 		watchdogCallbacks,
 	)
 	p.watchdog.Start()
 
-	// Expose the watchdog to the API controller for the /health/audio endpoint.
+	// Expose the watchdog and source restarter to the API controller.
 	if ctrl := p.apiService.APIController(); ctrl != nil {
 		ctrl.SetAudioWatchdog(p.watchdog)
+		ctrl.SetSourceRestarter(p.RestartSource)
 	}
 
 	// Inject suncalc into the orchestrator for bat nighttime scheduling.

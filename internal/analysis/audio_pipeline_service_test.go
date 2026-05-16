@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/app"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -117,4 +118,57 @@ func TestResolveModelTargets_KnownButNotLoaded(t *testing.T) {
 	targets := resolveModelTargets([]string{"birdnet", "perch_v2"}, loaded)
 	require.Len(t, targets, 1, "only birdnet should resolve, perch_v2 is not loaded")
 	assert.Equal(t, "BirdNET_V2.4", targets[0].ID)
+}
+
+func TestBuildLivenessConfig_AllDefaults(t *testing.T) {
+	t.Parallel()
+
+	cfg := buildLivenessConfig(conf.WatchdogSettings{})
+	defaults := audiocore.DefaultLivenessConfig()
+
+	assert.Equal(t, defaults.CheckInterval, cfg.CheckInterval)
+	assert.Equal(t, defaults.SilenceThreshold, cfg.SilenceThreshold)
+	assert.Equal(t, defaults.MaxRetries, cfg.MaxRetries)
+	assert.Equal(t, defaults.RetryBackoff, cfg.RetryBackoff)
+	assert.Equal(t, defaults.CooldownAfterRecov, cfg.CooldownAfterRecov)
+	assert.Equal(t, defaults.EscalationTimeout, cfg.EscalationTimeout)
+}
+
+func TestBuildLivenessConfig_CustomValues(t *testing.T) {
+	t.Parallel()
+
+	ws := conf.WatchdogSettings{
+		CheckInterval:     5,
+		SilenceThreshold:  60,
+		MaxRetries:        5,
+		RetryBackoff:      10,
+		Cooldown:          120,
+		EscalationTimeout: 90,
+	}
+	cfg := buildLivenessConfig(ws)
+
+	assert.Equal(t, 5*time.Second, cfg.CheckInterval)
+	assert.Equal(t, 60*time.Second, cfg.SilenceThreshold)
+	assert.Equal(t, 5, cfg.MaxRetries)
+	assert.Equal(t, 10*time.Second, cfg.RetryBackoff)
+	assert.Equal(t, 120*time.Second, cfg.CooldownAfterRecov)
+	assert.Equal(t, 90*time.Second, cfg.EscalationTimeout)
+}
+
+func TestBuildLivenessConfig_PartialOverride(t *testing.T) {
+	t.Parallel()
+
+	ws := conf.WatchdogSettings{
+		SilenceThreshold: 45,
+		MaxRetries:       10,
+	}
+	cfg := buildLivenessConfig(ws)
+	defaults := audiocore.DefaultLivenessConfig()
+
+	assert.Equal(t, defaults.CheckInterval, cfg.CheckInterval, "unset field should use default")
+	assert.Equal(t, 45*time.Second, cfg.SilenceThreshold)
+	assert.Equal(t, 10, cfg.MaxRetries)
+	assert.Equal(t, defaults.RetryBackoff, cfg.RetryBackoff, "unset field should use default")
+	assert.Equal(t, defaults.CooldownAfterRecov, cfg.CooldownAfterRecov, "unset field should use default")
+	assert.Equal(t, defaults.EscalationTimeout, cfg.EscalationTimeout, "unset field should use default")
 }
