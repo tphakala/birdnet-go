@@ -1,4 +1,3 @@
-// internal/api/v2/detections_batch.go
 package api
 
 import (
@@ -8,6 +7,19 @@ import (
 
 	"github.com/labstack/echo/v4"
 )
+
+// deduplicateIDs returns a new slice with duplicate IDs removed, preserving order.
+func deduplicateIDs(ids []string) []string {
+	seen := make(map[string]struct{}, len(ids))
+	result := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, exists := seen[id]; !exists {
+			seen[id] = struct{}{}
+			result = append(result, id)
+		}
+	}
+	return result
+}
 
 // maxBatchSize is the maximum number of detection IDs allowed in a single batch request.
 const maxBatchSize = 500
@@ -65,8 +77,9 @@ func (c *Controller) BatchDeleteDetections(ctx echo.Context) error {
 			"Batch size exceeds maximum", http.StatusBadRequest)
 	}
 
+	ids := deduplicateIDs(req.IDs)
 	var processed, skipped int
-	for _, idStr := range req.IDs {
+	for _, idStr := range ids {
 		note, err := c.DS.Get(idStr)
 		if err != nil {
 			skipped++
@@ -120,8 +133,9 @@ func (c *Controller) BatchReviewDetections(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("verified field is required"), "Verification status is required", http.StatusBadRequest)
 	}
 
+	ids := deduplicateIDs(req.IDs)
 	var processed, skipped int
-	for _, idStr := range req.IDs {
+	for _, idStr := range ids {
 		note, err := c.DS.Get(idStr)
 		if err != nil {
 			skipped++
@@ -129,12 +143,6 @@ func (c *Controller) BatchReviewDetections(ctx echo.Context) error {
 		}
 
 		if note.Locked {
-			skipped++
-			continue
-		}
-
-		isLocked, lockErr := c.DS.IsNoteLocked(idStr)
-		if lockErr != nil || isLocked {
 			skipped++
 			continue
 		}
@@ -170,8 +178,9 @@ func (c *Controller) BatchLockDetections(ctx echo.Context) error {
 			"Batch size exceeds maximum", http.StatusBadRequest)
 	}
 
+	ids := deduplicateIDs(req.IDs)
 	var processed, skipped int
-	for _, idStr := range req.IDs {
+	for _, idStr := range ids {
 		note, err := c.DS.Get(idStr)
 		if err != nil {
 			skipped++
@@ -222,10 +231,9 @@ func (c *Controller) BatchResolveDetections(ctx echo.Context) error {
 	}
 
 	if totalCount > int64(maxBatchSize) {
-		return ctx.JSON(http.StatusBadRequest, map[string]any{
-			"count": totalCount,
-			"error": "too many matching detections",
-		})
+		return c.HandleError(ctx,
+			fmt.Errorf("query matched %d detections, maximum is %d", totalCount, maxBatchSize),
+			"Too many matching detections, narrow your filters", http.StatusBadRequest)
 	}
 
 	ids := make([]string, 0, len(notes))

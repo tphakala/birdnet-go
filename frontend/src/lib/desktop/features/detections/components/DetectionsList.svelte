@@ -46,6 +46,7 @@
   import type { DetectionSortBy, DetectionsListData } from '$lib/types/detection.types';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { cn } from '$lib/utils/cn';
+  import { loggers } from '$lib/utils/logger';
   import {
     CheckSquare,
     CircleCheck,
@@ -281,134 +282,120 @@
 
   async function executeBulkAction(endpoint: string, body: Record<string, unknown>) {
     try {
-      const resp = await fetchWithCSRF(endpoint, {
+      const resp = await fetchWithCSRF<{ processed: number; skipped: number }>(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const result = resp as { processed: number; skipped: number };
-      if (result.skipped > 0) {
+      if (resp.skipped > 0) {
         toastActions.info(
           t('detections.selection.bulkPartial', {
-            processed: result.processed,
-            skipped: result.skipped,
+            processed: resp.processed,
+            skipped: resp.skipped,
           })
         );
       } else {
-        toastActions.success(t('detections.selection.bulkSuccess', { count: result.processed }));
+        toastActions.success(t('detections.selection.bulkSuccess', { count: resp.processed }));
       }
       selection.deactivate();
       onRefresh?.();
-    } catch {
+    } catch (err) {
+      loggers.ui.error('Bulk action failed:', err);
       toastActions.error(t('dashboard.recentDetections.errors.deleteFailed'));
     }
   }
 
-  function getActionIds(): { ids: string[] } | null {
-    if (selection.allMatchingSelected) {
-      return null;
+  async function getIdsForBulkAction(): Promise<string[] | null> {
+    if (!selection.allMatchingSelected) {
+      const ids = selection.getSelectedIds();
+      return ids.length > 0 ? ids : null;
     }
-    return { ids: selection.getSelectedIds() };
-  }
-
-  async function resolveAllMatchingIds(): Promise<string[] | null> {
     if (!data) return null;
     try {
-      const resp = await fetchWithCSRF('/api/v2/detections/batch/resolve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          queryType: data.queryType,
-          species: data.species,
-          date: data.date,
-          search: data.search,
-        }),
-      });
-      const result = resp as { ids: string[]; count: number };
-      return result.ids;
-    } catch {
-      toastActions.error(t('detections.selection.tooManyDetections', { count: 0 }));
+      const resp = await fetchWithCSRF<{ ids: string[]; count: number }>(
+        '/api/v2/detections/batch/resolve',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            queryType: data.queryType,
+            species: data.species,
+            date: data.date,
+            search: data.search,
+            hour: data.hour !== undefined ? String(data.hour) : undefined,
+          }),
+        }
+      );
+      return resp.ids;
+    } catch (err) {
+      loggers.ui.error('Failed to resolve matching detections:', err);
+      toastActions.error(t('detections.selection.tooManyDetections', { count: data.totalResults }));
       return null;
     }
   }
 
-  async function getIdsForBulkAction(): Promise<string[] | null> {
-    const direct = getActionIds();
-    if (direct !== null) return direct.ids;
-    return resolveAllMatchingIds();
-  }
-
-  function handleBulkDelete() {
+  function openBulkConfirm(
+    title: string,
+    messageKey: string,
+    confirmLabel: string,
+    endpoint: string,
+    extraBody: Record<string, unknown> = {}
+  ) {
     bulkConfirmConfig = {
-      title: t('dashboard.recentDetections.modals.deleteDetection', { species: '' }),
-      message: t('detections.selection.confirmBulkDelete', { count: selection.selectedCount }),
-      confirmLabel: t('common.buttons.delete'),
+      title,
+      message: t(messageKey, { count: selection.selectedCount }),
+      confirmLabel,
       onConfirm: async () => {
         const ids = await getIdsForBulkAction();
-        if (ids) await executeBulkAction('/api/v2/detections/batch/delete', { ids });
+        if (ids) await executeBulkAction(endpoint, { ids, ...extraBody });
       },
     };
     showBulkConfirmModal = true;
   }
 
-  function handleBulkMarkCorrect() {
-    bulkConfirmConfig = {
-      title: t('dashboard.recentDetections.actions.markCorrect'),
-      message: t('detections.selection.confirmBulkMarkCorrect', { count: selection.selectedCount }),
-      confirmLabel: t('common.buttons.confirm'),
-      onConfirm: async () => {
-        const ids = await getIdsForBulkAction();
-        if (ids)
-          await executeBulkAction('/api/v2/detections/batch/review', { ids, verified: 'correct' });
-      },
-    };
-    showBulkConfirmModal = true;
-  }
+  const handleBulkDelete = () =>
+    openBulkConfirm(
+      t('dashboard.recentDetections.modals.deleteDetection', { species: '' }),
+      'detections.selection.confirmBulkDelete',
+      t('common.buttons.delete'),
+      '/api/v2/detections/batch/delete'
+    );
 
-  function handleBulkMarkFalsePositive() {
-    bulkConfirmConfig = {
-      title: t('dashboard.recentDetections.actions.markFalsePositive'),
-      message: t('detections.selection.confirmBulkMarkFalsePositive', {
-        count: selection.selectedCount,
-      }),
-      confirmLabel: t('common.buttons.confirm'),
-      onConfirm: async () => {
-        const ids = await getIdsForBulkAction();
-        if (ids)
-          await executeBulkAction('/api/v2/detections/batch/review', {
-            ids,
-            verified: 'false_positive',
-          });
-      },
-    };
-    showBulkConfirmModal = true;
-  }
+  const handleBulkMarkCorrect = () =>
+    openBulkConfirm(
+      t('dashboard.recentDetections.actions.markCorrect'),
+      'detections.selection.confirmBulkMarkCorrect',
+      t('common.buttons.confirm'),
+      '/api/v2/detections/batch/review',
+      { verified: 'correct' }
+    );
 
-  function handleBulkLock() {
-    bulkConfirmConfig = {
-      title: t('dashboard.recentDetections.modals.lockDetection'),
-      message: t('detections.selection.confirmBulkLock', { count: selection.selectedCount }),
-      confirmLabel: t('common.buttons.confirm'),
-      onConfirm: async () => {
-        const ids = await getIdsForBulkAction();
-        if (ids) await executeBulkAction('/api/v2/detections/batch/lock', { ids, locked: true });
-      },
-    };
-    showBulkConfirmModal = true;
-  }
+  const handleBulkMarkFalsePositive = () =>
+    openBulkConfirm(
+      t('dashboard.recentDetections.actions.markFalsePositive'),
+      'detections.selection.confirmBulkMarkFalsePositive',
+      t('common.buttons.confirm'),
+      '/api/v2/detections/batch/review',
+      { verified: 'false_positive' }
+    );
 
-  function handleBulkUnlock() {
-    bulkConfirmConfig = {
-      title: t('dashboard.recentDetections.modals.unlockDetection'),
-      message: t('detections.selection.confirmBulkUnlock', { count: selection.selectedCount }),
-      confirmLabel: t('common.buttons.confirm'),
-      onConfirm: async () => {
-        const ids = await getIdsForBulkAction();
-        if (ids) await executeBulkAction('/api/v2/detections/batch/lock', { ids, locked: false });
-      },
-    };
-    showBulkConfirmModal = true;
-  }
+  const handleBulkLock = () =>
+    openBulkConfirm(
+      t('dashboard.recentDetections.modals.lockDetection'),
+      'detections.selection.confirmBulkLock',
+      t('common.buttons.confirm'),
+      '/api/v2/detections/batch/lock',
+      { locked: true }
+    );
+
+  const handleBulkUnlock = () =>
+    openBulkConfirm(
+      t('dashboard.recentDetections.modals.unlockDetection'),
+      'detections.selection.confirmBulkUnlock',
+      t('common.buttons.confirm'),
+      '/api/v2/detections/batch/lock',
+      { locked: false }
+    );
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape' && selection.selectionActive) {
@@ -482,6 +469,7 @@
           class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm hover:bg-[var(--color-base-200)] transition-colors"
           onclick={handleBulkMarkCorrect}
           title={t('dashboard.recentDetections.actions.markCorrect')}
+          aria-label={t('dashboard.recentDetections.actions.markCorrect')}
         >
           <CircleCheck class="size-4 text-[var(--color-success)]" />
         </button>
@@ -490,6 +478,7 @@
           class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm hover:bg-[var(--color-base-200)] transition-colors"
           onclick={handleBulkMarkFalsePositive}
           title={t('dashboard.recentDetections.actions.markFalsePositive')}
+          aria-label={t('dashboard.recentDetections.actions.markFalsePositive')}
         >
           <CircleX class="size-4 text-[var(--color-error)]" />
         </button>
@@ -498,6 +487,7 @@
           class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm hover:bg-[var(--color-base-200)] transition-colors"
           onclick={handleBulkLock}
           title={t('dashboard.recentDetections.modals.lockDetection')}
+          aria-label={t('dashboard.recentDetections.modals.lockDetection')}
         >
           <Lock class="size-4" />
         </button>
@@ -506,15 +496,17 @@
           class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm hover:bg-[var(--color-base-200)] transition-colors"
           onclick={handleBulkUnlock}
           title={t('dashboard.recentDetections.modals.unlockDetection')}
+          aria-label={t('dashboard.recentDetections.modals.unlockDetection')}
         >
           <LockOpen class="size-4" />
         </button>
-        <div class="w-px h-5 bg-[var(--color-base-300)] mx-1"></div>
+        <div class="w-px h-5 bg-[var(--color-base-300)] mx-1" role="separator"></div>
         <button
           type="button"
           class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors"
           onclick={handleBulkDelete}
           title={t('dashboard.recentDetections.actions.deleteDetection')}
+          aria-label={t('dashboard.recentDetections.actions.deleteDetection')}
         >
           <Trash2 class="size-4" />
         </button>

@@ -54,7 +54,7 @@ export function useSelectionMode(getTotalMatchingCount: () => number) {
   }
 
   function toggleAllOnPage(pageIds: string[]) {
-    const allSelected = pageIds.every(id => selectedIds.has(id));
+    const allSelected = allMatchingSelectedFlag || pageIds.every(id => selectedIds.has(id));
     allMatchingSelectedFlag = false;
     if (allSelected) {
       for (const id of pageIds) {

@@ -115,7 +115,6 @@ func TestBatchReviewDetections(t *testing.T) {
 			body: BatchReviewRequest{IDs: []string{"1", "2"}, Verified: "false_positive"},
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "1").Return(datastore.Note{ID: 1, Locked: false}, nil)
-				m.On("IsNoteLocked", "1").Return(false, nil)
 				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
 				m.On("Get", "2").Return(datastore.Note{ID: 2, Locked: true}, nil)
 			},
@@ -133,7 +132,6 @@ func TestBatchReviewDetections(t *testing.T) {
 			body: BatchReviewRequest{IDs: []string{"1"}, Verified: "correct"},
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "1").Return(datastore.Note{ID: 1, Locked: false}, nil)
-				m.On("IsNoteLocked", "1").Return(false, nil)
 				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
 			},
 			expectedStatus: http.StatusOK,
