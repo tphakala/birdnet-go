@@ -315,43 +315,60 @@ func TestSearch_IncludedHoursOnSQLite(t *testing.T) {
 	ctx := t.Context()
 	repo := &detectionRepository{db: db}
 
-	// Insert detections at known UTC hours.
-	// 2026-05-16 08:30:00 UTC = hour 8
-	createTestDetection(t, db, time.Date(2026, 5, 16, 8, 30, 0, 0, time.UTC).Unix())
-	// 2026-05-16 14:00:00 UTC = hour 14
-	createTestDetection(t, db, time.Date(2026, 5, 16, 14, 0, 0, 0, time.UTC).Unix())
-	// 2026-05-16 22:15:00 UTC = hour 22
-	createTestDetection(t, db, time.Date(2026, 5, 16, 22, 15, 0, 0, time.UTC).Unix())
+	t08 := time.Date(2026, 5, 16, 8, 30, 0, 0, time.UTC).Unix()
+	t14 := time.Date(2026, 5, 16, 14, 0, 0, 0, time.UTC).Unix()
+	t22 := time.Date(2026, 5, 16, 22, 15, 0, 0, time.UTC).Unix()
+	createTestDetection(t, db, t08)
+	createTestDetection(t, db, t14)
+	createTestDetection(t, db, t22)
 
-	// Filter for hour 14 only (UTC offset = 0).
-	results, total, err := repo.Search(ctx, &SearchFilters{
-		IncludedHours:  []int{14},
-		TimezoneOffset: 0,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), total)
-	require.Len(t, results, 1)
-	assert.Equal(t, time.Date(2026, 5, 16, 14, 0, 0, 0, time.UTC).Unix(), results[0].DetectedAt)
+	tests := []struct {
+		name           string
+		includedHours  []int
+		timezoneOffset int
+		wantTotal      int64
+		wantDetectedAt []int64
+	}{
+		{
+			name:           "single hour UTC",
+			includedHours:  []int{14},
+			timezoneOffset: 0,
+			wantTotal:      1,
+			wantDetectedAt: []int64{t14},
+		},
+		{
+			name:           "multiple hours UTC",
+			includedHours:  []int{8, 22},
+			timezoneOffset: 0,
+			wantTotal:      2,
+			wantDetectedAt: []int64{t08, t22},
+		},
+		{
+			name:           "negative timezone offset UTC-5",
+			includedHours:  []int{9},
+			timezoneOffset: -5 * 3600,
+			wantTotal:      1,
+			wantDetectedAt: []int64{t14},
+		},
+	}
 
-	// Filter for multiple hours.
-	results, total, err = repo.Search(ctx, &SearchFilters{
-		IncludedHours:  []int{8, 22},
-		TimezoneOffset: 0,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, int64(2), total)
-	assert.Len(t, results, 2)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			results, total, err := repo.Search(ctx, &SearchFilters{
+				IncludedHours:  tc.includedHours,
+				TimezoneOffset: tc.timezoneOffset,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantTotal, total)
+			require.Len(t, results, len(tc.wantDetectedAt))
 
-	// Negative timezone offset: UTC-5 (New York) shifts hours back by 5.
-	// The 08:30 UTC detection becomes local hour 3, the 14:00 UTC becomes hour 9.
-	results, total, err = repo.Search(ctx, &SearchFilters{
-		IncludedHours:  []int{9},
-		TimezoneOffset: -5 * 3600,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), total)
-	require.Len(t, results, 1)
-	assert.Equal(t, time.Date(2026, 5, 16, 14, 0, 0, 0, time.UTC).Unix(), results[0].DetectedAt)
+			got := make([]int64, 0, len(results))
+			for _, d := range results {
+				got = append(got, d.DetectedAt)
+			}
+			assert.ElementsMatch(t, tc.wantDetectedAt, got)
+		})
+	}
 }
 
 func TestSaveReview_ConcurrentUpsertNoDuplicates(t *testing.T) {
