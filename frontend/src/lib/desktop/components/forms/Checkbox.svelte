@@ -2,10 +2,11 @@
   import { cn } from '$lib/utils/cn.js';
   import type { Snippet } from 'svelte';
   import { safeGet } from '$lib/utils/security';
-  import { Check } from '@lucide/svelte';
+  import { Check, Minus } from '@lucide/svelte';
 
   interface Props {
     checked: boolean;
+    indeterminate?: boolean;
     disabled?: boolean;
     label?: string;
     id?: string;
@@ -15,11 +16,12 @@
     helpText?: string;
     tooltip?: string;
     children?: Snippet;
-    onchange?: (_checked: boolean) => void;
+    onchange?: (_checked: boolean, _event: Event) => void;
   }
 
   let {
     checked = $bindable(),
+    indeterminate = false,
     disabled = false,
     label,
     id,
@@ -34,15 +36,29 @@
   }: Props = $props();
 
   let showTooltip = $state(false);
+  let inputEl = $state<HTMLInputElement | null>(null);
 
   // Generate unique IDs for accessibility
   const helpTextId = `checkbox-help-${Math.random().toString(36).substr(2, 9)}`;
   const tooltipId = `checkbox-tooltip-${Math.random().toString(36).substr(2, 9)}`;
 
+  let lastClickEvent: MouseEvent | null = null;
+
+  $effect(() => {
+    if (inputEl) {
+      inputEl.indeterminate = indeterminate;
+    }
+  });
+
+  function handleClick(event: MouseEvent) {
+    lastClickEvent = event;
+  }
+
   function handleChange(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
     checked = target.checked;
-    onchange?.(checked);
+    onchange?.(checked, lastClickEvent ?? event);
+    lastClickEvent = null;
   }
 
   // Native Tailwind size classes for the checkbox box
@@ -84,9 +100,11 @@
     <input
       type="checkbox"
       {id}
+      bind:this={inputEl}
       bind:checked
       {disabled}
       class="sr-only peer"
+      onclick={handleClick}
       onchange={handleChange}
       aria-describedby={helpText ? helpTextId : undefined}
     />
@@ -99,11 +117,19 @@
         'peer-focus-visible:outline-2 peer-focus-visible:outline-[var(--color-primary)] peer-focus-visible:outline-offset-2',
         'peer-disabled:opacity-50 peer-disabled:cursor-not-allowed',
         safeGet(sizeClasses, size, ''),
-        checked && safeGet(variantBgClasses, variant, ''),
-        checked && 'border-transparent'
+        (checked || indeterminate) && safeGet(variantBgClasses, variant, ''),
+        (checked || indeterminate) && 'border-transparent'
       )}
     >
-      {#if checked}
+      {#if indeterminate}
+        <Minus
+          class={cn(
+            safeGet(iconSizeClasses, size, ''),
+            safeGet(variantContentClasses, variant, '')
+          )}
+          strokeWidth={3}
+        />
+      {:else if checked}
         <Check
           class={cn(
             safeGet(iconSizeClasses, size, ''),

@@ -30,6 +30,7 @@
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
   import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
   import { Volume2 } from '@lucide/svelte';
   import SpectrogramPlayer from '$lib/desktop/components/media/SpectrogramPlayer.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
@@ -285,7 +286,8 @@
       checked={selected}
       size="sm"
       variant="primary"
-      onchange={() => onToggleSelect?.(String(detection.id), false)}
+      onchange={(_checked, event) =>
+        onToggleSelect?.(String(detection.id), (event as MouseEvent).shiftKey ?? false)}
     />
   </td>
 {/if}
@@ -406,10 +408,10 @@
       </div>
       <!-- Mobile-only quick play button -->
       <div class="mt-2 md:hidden">
-        <button class="btn btn-primary btn-xs" aria-label="Play audio" onclick={playMobileAudio}>
+        <Button variant="primary" size="xs" aria-label="Play audio" onclick={playMobileAudio}>
           <Volume2 class="h-4 w-4" />
           Play
-        </button>
+        </Button>
       </div>
     </div>
   </div>
