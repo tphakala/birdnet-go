@@ -78,11 +78,17 @@ func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier
 
 // Predict runs ONNX inference, returning raw logits (pre-activation).
 func (c *onnxClassifier) Predict(samples []float32) ([]float32, error) {
+	if c.classifier == nil {
+		return nil, ort.ErrSessionClosed
+	}
 	return c.classifier.PredictRaw(samples)
 }
 
 // PredictWithEmbeddings runs ONNX inference, returning both raw logits and embedding vector.
 func (c *onnxClassifier) PredictWithEmbeddings(samples []float32) (logits, embeddings []float32, err error) {
+	if c.classifier == nil {
+		return nil, nil, ort.ErrSessionClosed
+	}
 	return c.classifier.PredictRawWithEmbeddings(samples)
 }
 
@@ -156,6 +162,9 @@ func NewONNXCustomClassifier(modelPath string, opts ONNXCustomClassifierOptions)
 
 // PredictEmbedding runs inference on an embedding vector.
 func (c *onnxCustomClassifier) PredictEmbedding(embeddings []float32) ([]float32, error) {
+	if c.classifier == nil {
+		return nil, ort.ErrSessionClosed
+	}
 	return c.classifier.PredictRaw(embeddings)
 }
 
@@ -213,6 +222,9 @@ func NewONNXRangeFilter(modelPath string, opts ONNXRangeFilterOptions) (RangeFil
 
 // Predict returns species occurrence scores for a geographic location and week.
 func (r *onnxRangeFilter) Predict(latitude, longitude, week float32) ([]float32, error) {
+	if r.filter == nil {
+		return nil, ort.ErrSessionClosed
+	}
 	return r.filter.PredictRaw(latitude, longitude, week)
 }
 
@@ -220,6 +232,9 @@ func (r *onnxRangeFilter) Predict(latitude, longitude, week float32) ([]float32,
 // inputs is a flat slice of [lat, lon, week] triples: len(inputs) must equal batchSize * 3.
 // Returns a flat slice of [batchSize * numSpecies] scores in row-major order.
 func (r *onnxRangeFilter) PredictBatch(inputs []float32, batchSize int) ([]float32, error) {
+	if r.filter == nil {
+		return nil, ort.ErrSessionClosed
+	}
 	return r.filter.PredictBatchRaw(inputs, batchSize)
 }
 
