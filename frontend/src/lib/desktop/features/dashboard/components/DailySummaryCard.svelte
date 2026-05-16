@@ -358,7 +358,14 @@ Responsive Breakpoints:
         if (selectedDate === currentDate) {
           hourlyWeather = data;
           // Build hour-keyed map for O(1) lookup
-          hourlyWeatherMap = new Map(data.map(w => [parseInt(w.time.split(':')[0], 10), w]));
+          hourlyWeatherMap = new Map(
+            data
+              .filter(
+                (w): w is typeof w & { time: string } =>
+                  typeof w.time === 'string' && w.time.includes(':')
+              )
+              .map(w => [parseInt(w.time.split(':')[0], 10), w])
+          );
         }
       });
     }
