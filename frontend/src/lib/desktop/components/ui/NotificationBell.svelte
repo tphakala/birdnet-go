@@ -349,15 +349,32 @@
     }
   }
 
-  // Show browser notification
-  function showBrowserNotification(notification: Notification) {
-    if ('Notification' in globalThis.window && globalThis.Notification.permission === 'granted') {
-      const translated = translateNotification(notification);
-      new globalThis.Notification(sanitizeNotificationMessage(translated.title), {
-        body: sanitizeNotificationMessage(translated.message),
-        icon: buildAppUrl(NOTIFICATION_ICON_PATH),
-        tag: notification.id,
-      });
+  // Show browser notification (Service Worker-aware)
+  async function showBrowserNotification(notification: Notification) {
+    if (
+      !('Notification' in globalThis.window) ||
+      globalThis.Notification.permission !== 'granted'
+    ) {
+      return;
+    }
+
+    const translated = translateNotification(notification);
+    const options = {
+      body: sanitizeNotificationMessage(translated.message),
+      icon: buildAppUrl(NOTIFICATION_ICON_PATH),
+      tag: notification.id,
+    };
+    const title = sanitizeNotificationMessage(translated.title);
+
+    try {
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.showNotification(title, options);
+      } else {
+        new globalThis.Notification(title, options);
+      }
+    } catch {
+      // Notification constructor can fail if Service Worker state changes mid-call
     }
   }
 
