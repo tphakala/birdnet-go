@@ -370,7 +370,7 @@ func (c *Controller) computeHeatmapGrid(birdnet *classifier.Orchestrator, params
 // HeatmapInferenceService with IoBinding for tensor reuse across all weeks.
 func (c *Controller) computeHeatmapGridOptimized(ctx context.Context, service *classifier.HeatmapInferenceService, params *heatmapParams) ([]float32, error) {
 	totalCells := params.rows * params.cols
-	weeksToCompute := bnhmWeeks / params.stride
+	weeksToCompute := (bnhmWeeks + params.stride - 1) / params.stride
 	result := make([]float32, weeksToCompute*totalCells)
 
 	coords := make([]float32, totalCells*2)
@@ -486,7 +486,7 @@ func (c *Controller) getHeatmapOptimized(ctx echo.Context, service *classifier.H
 			return nil, err
 		}
 
-		weeksComputed := bnhmWeeks / params.stride
+		weeksComputed := (bnhmWeeks + params.stride - 1) / params.stride
 		encoded := encodeBNHMWithWeeks(params.cols, params.rows, weeksComputed,
 			float32(params.south), float32(params.west), float32(params.resolution), data)
 

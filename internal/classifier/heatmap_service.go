@@ -169,7 +169,14 @@ func (s *HeatmapInferenceService) ComputeGridWithBinding(
 			Build()
 	}
 
-	weeksToCompute := totalWeeks / stride
+	if stride <= 0 || totalWeeks <= 0 || batchSize <= 0 {
+		return errors.Newf("heatmap service: stride, totalWeeks, and batchSize must be > 0").
+			Component("classifier.heatmap_service").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	weeksToCompute := (totalWeeks + stride - 1) / stride
 	expectedResultLen := weeksToCompute * totalCells
 	if len(result) < expectedResultLen {
 		return errors.Newf("heatmap service: result length %d < expected %d", len(result), expectedResultLen).
