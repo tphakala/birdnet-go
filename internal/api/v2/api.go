@@ -129,6 +129,11 @@ type Controller struct {
 	// This is primarily used in testing to ensure proper setup before assertions.
 	// Only created when routes are initialized (production mode or specific tests).
 	goroutinesStarted chan struct{} // signals when all background goroutines have started (nil if routes not initialized)
+
+	// audioWatchdog provides liveness state for audio health endpoints.
+	// Stored atomically because it is set during pipeline Start() and read
+	// concurrently by HTTP handlers.
+	audioWatchdog atomic.Pointer[audiocore.LivenessWatchdog]
 }
 
 // ShutdownRequester allows triggering a programmatic shutdown.
@@ -609,6 +614,7 @@ func (c *Controller) initRoutes() {
 		{"settings routes", c.initSettingsRoutes},
 		{"filesystem routes", c.initFileSystemRoutes},
 		{"stream health routes", c.initStreamHealthRoutes},
+		{"audio health routes", c.initAudioHealthRoutes},
 		{"quiet hours routes", c.initQuietHoursRoutes},
 		{"audio level routes", c.initAudioLevelRoutes},
 		{"hls streaming routes", c.initHLSRoutes},

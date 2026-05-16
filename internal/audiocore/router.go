@@ -4,7 +4,9 @@ package audiocore
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -141,6 +143,10 @@ type AudioRouter struct {
 	// ctx and cancel control the lifetime of all drainer goroutines.
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	// lastDispatch stores the most recent Dispatch timestamp per source ID.
+	// Key: string (sourceID), Value: *atomic.Int64 (UnixNano).
+	lastDispatch sync.Map
 }
 
 // NewAudioRouter creates an AudioRouter ready to accept routes and dispatch
@@ -272,6 +278,8 @@ func (r *AudioRouter) RemoveAllRoutes(sourceID string) {
 		r.stopRoute(rt)
 	}
 
+	r.ClearDispatchTime(sourceID)
+
 	if len(routes) > 0 {
 		r.log.Info("all routes removed",
 			logger.String("source_id", sourceID),
@@ -339,6 +347,9 @@ func (r *AudioRouter) UpdateFilterChain(sourceID string, build FilterChainBuilde
 func (r *AudioRouter) Dispatch(frame AudioFrame) { //nolint:gocritic // hugeParam: signature required by AudioDispatcher interface
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
+	// Record frame arrival for liveness monitoring.
+	r.getOrCreateDispatchTimestamp(frame.SourceID).Store(time.Now().UnixNano())
 
 	for _, rt := range r.routes[frame.SourceID] {
 		// Retain BEFORE attempting the send so the drainer cannot observe a
@@ -412,6 +423,47 @@ func (r *AudioRouter) Routes(sourceID string) []RouteInfo {
 		})
 	}
 	return infos
+}
+
+// LastDispatchTime returns the last time Dispatch was called for sourceID.
+// Returns zero time if the source has never dispatched.
+func (r *AudioRouter) LastDispatchTime(sourceID string) time.Time {
+	if v, ok := r.lastDispatch.Load(sourceID); ok {
+		nanos := v.(*atomic.Int64).Load()
+		if nanos > 0 {
+			return time.Unix(0, nanos)
+		}
+	}
+	return time.Time{}
+}
+
+// ResetDispatchTime sets the last dispatch time for sourceID to now.
+// Used when quiet hours end to avoid false alarms from stale timestamps.
+func (r *AudioRouter) ResetDispatchTime(sourceID string) {
+	ts := r.getOrCreateDispatchTimestamp(sourceID)
+	ts.Store(time.Now().UnixNano())
+}
+
+// ClearDispatchTime removes the dispatch timestamp for sourceID.
+// Called when a source is permanently removed.
+func (r *AudioRouter) ClearDispatchTime(sourceID string) {
+	r.lastDispatch.Delete(sourceID)
+}
+
+// ActiveSourceIDs returns the source IDs that have active routes.
+func (r *AudioRouter) ActiveSourceIDs() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return slices.Collect(maps.Keys(r.routes))
+}
+
+func (r *AudioRouter) getOrCreateDispatchTimestamp(sourceID string) *atomic.Int64 {
+	if v, ok := r.lastDispatch.Load(sourceID); ok {
+		return v.(*atomic.Int64)
+	}
+	ts := &atomic.Int64{}
+	actual, _ := r.lastDispatch.LoadOrStore(sourceID, ts)
+	return actual.(*atomic.Int64)
 }
 
 // Close stops all drainer goroutines and closes every registered consumer.

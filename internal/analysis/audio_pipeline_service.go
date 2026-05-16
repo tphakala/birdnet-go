@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/weather"
@@ -48,6 +49,7 @@ type AudioPipelineService struct {
 	apiService *APIServerService
 	engine     *engine.AudioEngine
 
+	watchdog            *audiocore.LivenessWatchdog
 	bufferMgr           *BufferManager
 	ctrlMonitor         *ControlMonitor
 	quietHoursScheduler *schedule.QuietHoursScheduler
@@ -84,6 +86,11 @@ func NewAudioPipelineService(settings *conf.Settings, bnAnalyzer *BirdNETAnalyze
 // Name returns a human-readable identifier for logging and diagnostics.
 func (p *AudioPipelineService) Name() string {
 	return audioPipelineServiceName
+}
+
+// Watchdog returns the audio liveness watchdog, or nil if not started.
+func (p *AudioPipelineService) Watchdog() *audiocore.LivenessWatchdog {
+	return p.watchdog
 }
 
 // Start initializes and starts the audio capture pipeline, buffer management,
@@ -224,6 +231,59 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	p.engine.SetScheduler(p.quietHoursScheduler)
 	p.quietHoursScheduler.Start()
 
+	// Start audio liveness watchdog for detecting silent capture deaths.
+	notifSvc := notification.GetService()
+	watchdogCallbacks := audiocore.LivenessCallbacks{
+		RestartSource: p.RestartSource,
+		Escalate: func(_ string) {
+			select {
+			case p.restartChan <- struct{}{}:
+			default:
+			}
+		},
+		Notify: func(sourceID string, state audiocore.LivenessState, msg string) {
+			if notifSvc == nil {
+				return
+			}
+			priority := notification.PriorityHigh
+			title := "Audio source " + msg
+			body := "Source " + sourceID + ": " + msg
+			if state == audiocore.StateFailed || state == audiocore.StateEscalated {
+				priority = notification.PriorityCritical
+			}
+			if _, err := notifSvc.CreateWithComponent(
+				notification.TypeSystem, priority,
+				title, body, "audiocore.liveness",
+			); err != nil {
+				audiocore.GetLogger().Warn("failed to send liveness notification",
+					logger.Error(err),
+					logger.String("operation", "liveness_notify"))
+			}
+		},
+		IsQuietHours: func(sourceID string) bool {
+			if p.quietHoursScheduler == nil {
+				return false
+			}
+			src, ok := p.engine.Registry().Get(sourceID)
+			if ok && src.Type == audiocore.SourceTypeAudioCard {
+				return p.quietHoursScheduler.IsSoundCardSuppressed()
+			}
+			suppressed := p.quietHoursScheduler.GetSuppressedStreams()
+			return suppressed[sourceID]
+		},
+	}
+	p.watchdog = audiocore.NewLivenessWatchdog(
+		audiocore.DefaultLivenessConfig(),
+		p.engine.Router(),
+		watchdogCallbacks,
+	)
+	p.watchdog.Start()
+
+	// Expose the watchdog to the API controller for the /health/audio endpoint.
+	if ctrl := p.apiService.APIController(); ctrl != nil {
+		ctrl.SetAudioWatchdog(p.watchdog)
+	}
+
 	// Inject suncalc into the orchestrator for bat nighttime scheduling.
 	bn.SetSunCalc(p.apiService.SunCalc())
 
@@ -319,6 +379,12 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 
 	// NOTE: FFmpeg manager shutdown is handled by engine.Stop() in serve.go.
 
+	// Stop liveness watchdog before quiet hours scheduler so that
+	// IsQuietHours callbacks do not race with scheduler teardown.
+	if p.watchdog != nil {
+		p.watchdog.Stop()
+	}
+
 	// Stop quiet hours scheduler.
 	if p.quietHoursScheduler != nil {
 		p.quietHoursScheduler.Stop()
@@ -369,6 +435,97 @@ func (p *AudioPipelineService) restartAudioCapture() {
 	// Re-add sources, register consumers, and update buffer monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
 	p.setupAudioSources(audioLevelChan, "restart")
+}
+
+// RestartSource tears down and reinitializes a single audio source.
+// Follows the same cleanup pattern as reconfigureChangedSources: remove routes,
+// clean up overrun trackers, untrack sound level, stop capture, then re-add.
+func (p *AudioPipelineService) RestartSource(sourceID string) error {
+	log := audiocore.GetLogger()
+	log.Info("restarting single audio source",
+		logger.String("source_id", sourceID),
+		logger.String("operation", "restart_source"))
+
+	registry := p.engine.Registry()
+
+	// Save connection string before removal (needed to look up config).
+	// ConnectionStringByID reads the private field directly from the registry,
+	// unlike Get() which returns a copy with the field cleared for safety.
+	connStr, ok := registry.ConnectionStringByID(sourceID)
+	if !ok {
+		return fmt.Errorf("restart source: source %s not found in registry", sourceID)
+	}
+
+	// 1. Clean up overrun tracker state.
+	RemoveOverrunTrackers(sourceID)
+
+	// 2. Untrack sound level consumer (engine.RemoveSource removes the route).
+	p.untrackSoundLevelConsumer(sourceID)
+
+	// 3. Remove source from engine (stops capture, removes routes, deallocates buffers, unregisters).
+	if err := p.engine.RemoveSource(sourceID); err != nil {
+		log.Error("failed to remove source during restart",
+			logger.String("source_id", sourceID),
+			logger.Error(err),
+			logger.String("operation", "restart_source"))
+		return fmt.Errorf("restart source: remove failed: %w", err)
+	}
+
+	// 5. Rebuild source config from current settings.
+	sourceConfigs := p.buildSourceConfigsWithModels()
+	var targetConfig *sourceConfigWithModels
+	for i := range sourceConfigs {
+		if sourceConfigs[i].config.ConnectionString == connStr {
+			targetConfig = &sourceConfigs[i]
+			break
+		}
+	}
+	if targetConfig == nil {
+		log.Warn("source config no longer in settings after removal",
+			logger.String("source_id", sourceID),
+			logger.String("operation", "restart_source"))
+		return fmt.Errorf("restart source: config for %s no longer exists in settings", sourceID)
+	}
+
+	// 6. Re-add source via engine.
+	if err := p.engine.AddSource(targetConfig.config); err != nil {
+		log.Error("failed to re-add source during restart",
+			logger.String("source_id", sourceID),
+			logger.Error(err),
+			logger.String("operation", "restart_source"))
+		return fmt.Errorf("restart source: add failed: %w", err)
+	}
+
+	// The source may get a new ID from the registry. Look it up.
+	newSrc, found := registry.GetByConnection(connStr)
+	if !found {
+		return fmt.Errorf("restart source: source re-added but not found in registry")
+	}
+	newSourceID := newSrc.ID
+
+	// 7. Re-register consumers and monitors.
+	audioLevelChan := p.apiService.AudioLevelChan()
+	sourceModelMap := map[string][]string{newSourceID: targetConfig.modelIDs}
+	p.registerConsumersForSources([]string{newSourceID}, sourceModelMap, audioLevelChan, "restart_source")
+	p.registerSoundLevelConsumers([]string{newSourceID}, "restart_source")
+
+	// Update buffer monitors.
+	if monErr := p.bufferMgr.AddMonitor(newSourceID); monErr != nil {
+		log.Warn("buffer monitor update failed during source restart",
+			logger.String("source_id", newSourceID),
+			logger.Error(monErr),
+			logger.String("operation", "restart_source"))
+	}
+
+	// Reset dispatch timestamp so watchdog starts fresh.
+	p.engine.Router().ResetDispatchTime(newSourceID)
+
+	log.Info("single source restart complete",
+		logger.String("old_source_id", sourceID),
+		logger.String("new_source_id", newSourceID),
+		logger.String("operation", "restart_source"))
+
+	return nil
 }
 
 // removeAllSources removes all audio sources from the engine.
