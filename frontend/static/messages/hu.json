@@ -424,7 +424,7 @@
       },
       "buffer": {
         "overloadTitle": "Hang elemzés túlterhelve",
-        "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a '{sourceName}' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
+        "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a ''{sourceName}'' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
       },
       "alert": {
         "firedTitle": "{rule_name}",

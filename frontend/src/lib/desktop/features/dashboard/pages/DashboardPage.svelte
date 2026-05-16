@@ -376,7 +376,11 @@ Performance Optimizations:
         buildAppUrl(`/api/v2/analytics/species/daily?date=${selectedDate}&limit=${summaryLimit}`)
       );
       if (!response.ok) {
-        throw new Error(t('dashboard.errors.dailySummaryFetch', { status: response.statusText }));
+        throw new Error(
+          t('dashboard.errors.dailySummaryFetch', {
+            status: response.statusText || `HTTP ${response.status}`,
+          })
+        );
       }
       const data = await response.json();
 
@@ -460,7 +464,9 @@ Performance Optimizations:
       );
       if (!response.ok) {
         throw new Error(
-          t('dashboard.errors.recentDetectionsFetch', { status: response.statusText })
+          t('dashboard.errors.recentDetectionsFetch', {
+            status: response.statusText || `HTTP ${response.status}`,
+          })
         );
       }
       const rawData = await response.json();
@@ -1235,7 +1241,9 @@ Performance Optimizations:
       )
         .then(response => {
           if (!response.ok) {
-            throw new Error(`Batch preload failed: ${response.statusText}`);
+            throw new Error(
+              `Batch preload failed: ${response.statusText || `HTTP ${response.status}`}`
+            );
           }
           return response.json();
         })

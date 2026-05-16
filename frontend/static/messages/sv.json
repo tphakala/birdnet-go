@@ -424,7 +424,7 @@
       },
       "buffer": {
         "overloadTitle": "Ljudanalys överbelastad",
-        "overloadMessage": "Ditt system förlorar {dropRate}% av ljudsamplingarna för källa '{sourceName}' eftersom det inte kan hålla jämna steg med analysen. Minska BirdNET-överlappningsvärdet i detektionsinställningarna eller överväg att uppgradera till en snabbare CPU."
+        "overloadMessage": "Ditt system förlorar {dropRate}% av ljudsamplingarna för källa ''{sourceName}'' eftersom det inte kan hålla jämna steg med analysen. Minska BirdNET-överlappningsvärdet i detektionsinställningarna eller överväg att uppgradera till en snabbare CPU."
       },
       "alert": {
         "firedTitle": "{rule_name}",

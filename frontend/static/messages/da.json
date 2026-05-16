@@ -424,7 +424,7 @@
       },
       "buffer": {
         "overloadTitle": "Lydanalyse overbelastet",
-        "overloadMessage": "Dit system dropper {dropRate}% af lydprøverne for kilden '{sourceName}', fordi det ikke kan følge med analysen. Reducer BirdNET-overlapværdien i detektionsindstillingerne eller overvej at opgradere til en hurtigere CPU."
+        "overloadMessage": "Dit system dropper {dropRate}% af lydprøverne for kilden ''{sourceName}'', fordi det ikke kan følge med analysen. Reducer BirdNET-overlapværdien i detektionsindstillingerne eller overvej at opgradere til en hurtigere CPU."
       },
       "alert": {
         "firedTitle": "{rule_name}",
