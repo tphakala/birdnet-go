@@ -362,7 +362,7 @@ Responsive Breakpoints:
             data
               .filter(
                 (w): w is typeof w & { time: string } =>
-                  typeof w.time === 'string' && w.time.includes(':')
+                  !!w && typeof w.time === 'string' && w.time.includes(':')
               )
               .map(w => [parseInt(w.time.split(':')[0], 10), w])
           );

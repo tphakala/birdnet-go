@@ -424,7 +424,7 @@
       },
       "buffer": {
         "overloadTitle": "Audio analīze pārslogota",
-        "overloadMessage": "Jūsu sistēma izlaiž {dropRate}% audio paraugu avotam '{sourceName}', jo tā nespēj sekot līdzi analīzei. Samaziniet BirdNET pārklāšanās vērtību noteikšanas iestatījumos vai apsveriet jaudīgāka procesora izmantošanu."
+        "overloadMessage": "Jūsu sistēma izlaiž {dropRate}% audio paraugu avotam ''{sourceName}'', jo tā nespēj sekot līdzi analīzei. Samaziniet BirdNET pārklāšanās vērtību noteikšanas iestatījumos vai apsveriet jaudīgāka procesora izmantošanu."
       },
       "alert": {
         "firedTitle": "{rule_name}",
