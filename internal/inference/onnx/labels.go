@@ -28,14 +28,12 @@ func LoadLabels(path string) ([]string, error) {
 
 func loadLabelsFromBytes(data []byte, ext string) ([]string, error) {
 	switch ext {
-	case ".txt":
-		return loadLabelsText(data)
 	case ".csv":
 		return loadLabelsCSV(data)
 	case ".json":
 		return loadLabelsJSON(data)
 	default:
-		return nil, &LabelLoadError{Path: "(bytes)", Reason: "unsupported label file extension: " + ext}
+		return loadLabelsText(data)
 	}
 }
 
