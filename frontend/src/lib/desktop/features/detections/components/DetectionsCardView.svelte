@@ -51,6 +51,7 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-2 sm:p-4">
   {#each detections as detection (detection.id)}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class={cn('relative', selectionActive && 'cursor-pointer')}
       onclick={e => {
@@ -58,10 +59,17 @@
           onToggleSelect?.(String(detection.id), e.shiftKey);
         }
       }}
+      onkeydown={e => {
+        if (selectionActive && e.key === ' ') {
+          e.preventDefault();
+          onToggleSelect?.(String(detection.id), e.shiftKey);
+        }
+      }}
       role={selectionActive ? 'option' : undefined}
       aria-selected={selectionActive ? selectedIds(String(detection.id)) : undefined}
     >
       {#if selectionActive}
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="absolute top-2 left-2 z-10" onclick={e => e.stopPropagation()}>
           <Checkbox
             checked={selectedIds(String(detection.id))}

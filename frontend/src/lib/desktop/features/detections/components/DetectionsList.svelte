@@ -254,7 +254,7 @@
 
   // Selection mode
   let canEdit = $derived(!$auth.security.enabled || $auth.security.accessAllowed);
-  const selection = useSelectionMode(data?.totalResults ?? 0);
+  const selection = useSelectionMode(() => data?.totalResults ?? 0);
 
   const pageIds = $derived((data?.notes ?? []).map(d => String(d.id)));
 
@@ -417,6 +417,7 @@
   }
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class={cn(className)} onkeydown={handleKeydown}>
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <div class="flex justify-between items-center">

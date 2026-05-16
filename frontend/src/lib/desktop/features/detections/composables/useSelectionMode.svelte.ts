@@ -1,6 +1,6 @@
 import { SvelteSet } from 'svelte/reactivity';
 
-export function useSelectionMode(totalMatchingCount: number) {
+export function useSelectionMode(getTotalMatchingCount: () => number) {
   let selectionActive = $state(false);
   let selectedIds = $state(new SvelteSet<string>());
   let allMatchingSelectedFlag = $state(false);
@@ -8,7 +8,7 @@ export function useSelectionMode(totalMatchingCount: number) {
 
   const selectedCount = $derived(
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- allMatchingSelectedFlag is $state(false), ESLint cannot infer rune type
-    allMatchingSelectedFlag ? totalMatchingCount : selectedIds.size
+    allMatchingSelectedFlag ? getTotalMatchingCount() : selectedIds.size
   );
 
   function activate() {

@@ -4,7 +4,7 @@ import { useSelectionMode } from './useSelectionMode.svelte';
 
 describe('useSelectionMode', () => {
   function createSelection(totalMatchingCount = 100) {
-    return useSelectionMode(totalMatchingCount);
+    return useSelectionMode(() => totalMatchingCount);
   }
 
   it('starts inactive with empty selection', () => {
