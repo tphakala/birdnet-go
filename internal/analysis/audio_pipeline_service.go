@@ -59,6 +59,13 @@ type AudioPipelineService struct {
 	doneOnce            sync.Once
 	wg                  sync.WaitGroup
 
+	// sourcesMu serializes operations that mutate the set of active audio
+	// sources: restartAudioCapture (restart loop goroutine), RestartSource
+	// (watchdog goroutine), and reconfigureChangedSources (control monitor
+	// goroutine). Without this, concurrent execution can cause duplicate
+	// source initialization and conflicting router states.
+	sourcesMu sync.Mutex
+
 	// soundLevelMu guards soundLevelConsumers. It is held only while mutating
 	// the map; router and engine calls happen outside the critical section so
 	// that Router.RemoveRoute (which itself takes a write lock and waits for
@@ -426,6 +433,9 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 // restartAudioCapture restarts the audio capture by removing and re-adding
 // all sources via the AudioEngine.
 func (p *AudioPipelineService) restartAudioCapture() {
+	p.sourcesMu.Lock()
+	defer p.sourcesMu.Unlock()
+
 	audiocore.GetLogger().Info("restarting audio capture",
 		logger.String("operation", "restart_audio_capture"))
 
@@ -441,6 +451,9 @@ func (p *AudioPipelineService) restartAudioCapture() {
 // Follows the same cleanup pattern as reconfigureChangedSources: remove routes,
 // clean up overrun trackers, untrack sound level, stop capture, then re-add.
 func (p *AudioPipelineService) RestartSource(sourceID string) error {
+	p.sourcesMu.Lock()
+	defer p.sourcesMu.Unlock()
+
 	log := audiocore.GetLogger()
 	log.Info("restarting single audio source",
 		logger.String("source_id", sourceID),
@@ -962,6 +975,9 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 // changed are touched - unchanged streams keep their capture buffers and
 // source IDs intact.
 func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan audiocore.AudioLevelData) {
+	p.sourcesMu.Lock()
+	defer p.sourcesMu.Unlock()
+
 	log := audiocore.GetLogger()
 
 	// Build desired config keyed by connection string, including model IDs.
