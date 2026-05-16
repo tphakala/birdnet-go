@@ -123,6 +123,22 @@ type LivenessCallbacks struct {
 	IsQuietHours func(sourceID string) bool
 }
 
+// livenessAction describes a callback to execute outside the mutex.
+type livenessAction struct {
+	sourceID string
+	kind     actionKind
+	state    LivenessState
+	msg      string
+}
+
+type actionKind int
+
+const (
+	actionNotify actionKind = iota
+	actionRestart
+	actionEscalate
+)
+
 // LivenessWatchdog monitors audio sources for silence and drives a tiered
 // recovery state machine. It queries the AudioRouter for frame timestamps
 // and invokes callbacks for restart/escalation/notification.
@@ -205,7 +221,9 @@ func (w *LivenessWatchdog) run(ctx context.Context) {
 	}
 }
 
-// checkAll evaluates every active source and cleans up stale entries.
+// checkAll evaluates every active source, collects pending actions under the
+// mutex, then executes callbacks (restart, escalate, notify) outside the mutex
+// so that long-running operations like RestartSource do not block Snapshot().
 func (w *LivenessWatchdog) checkAll() {
 	activeIDs := w.router.ActiveSourceIDs()
 	activeSet := make(map[string]struct{}, len(activeIDs))
@@ -213,10 +231,10 @@ func (w *LivenessWatchdog) checkAll() {
 		activeSet[id] = struct{}{}
 	}
 
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	var actions []livenessAction
 
-	// Ensure every active source has a tracking entry.
+	w.mu.Lock()
+
 	now := time.Now()
 	for _, id := range activeIDs {
 		if _, ok := w.sources[id]; !ok {
@@ -227,14 +245,12 @@ func (w *LivenessWatchdog) checkAll() {
 		}
 	}
 
-	// Remove sources that are no longer active.
 	for id := range w.sources {
 		if _, ok := activeSet[id]; !ok {
 			delete(w.sources, id)
 		}
 	}
 
-	// Evaluate each source, handling quiet hours per-source.
 	for _, id := range activeIDs {
 		h := w.sources[id]
 		if h == nil {
@@ -243,7 +259,6 @@ func (w *LivenessWatchdog) checkAll() {
 
 		quietNow := w.callbacks.IsQuietHours != nil && w.callbacks.IsQuietHours(id)
 
-		// Handle per-source quiet hours transition.
 		if h.wasQuietHours && !quietNow {
 			w.router.ResetDispatchTime(id)
 			h.state = StateHealthy
@@ -258,70 +273,72 @@ func (w *LivenessWatchdog) checkAll() {
 			continue
 		}
 
-		w.checkSource(id)
+		actions = w.checkSource(id, now, actions)
 	}
+
+	w.mu.Unlock()
+
+	w.executeActions(actions)
 }
 
-// checkSource drives the state machine for a single source.
-// The caller must hold w.mu.
+// checkSource drives the state machine for a single source. State transitions
+// happen under the mutex; callbacks are collected into actions for deferred
+// execution. The caller must hold w.mu.
 //
 //nolint:gocognit // state machine is inherently complex; splitting would obscure the flow
-func (w *LivenessWatchdog) checkSource(sourceID string) {
+func (w *LivenessWatchdog) checkSource(sourceID string, now time.Time, actions []livenessAction) []livenessAction {
 	h := w.sources[sourceID]
 	if h == nil {
-		return
+		return actions
 	}
 
-	now := time.Now()
 	lastFrame := w.router.LastDispatchTime(sourceID)
-	framesFlowing := !lastFrame.IsZero() && now.Sub(lastFrame) < w.cfg.SilenceThreshold
+
+	// A source that has never dispatched is still initializing; skip it to
+	// avoid false alarms during RTSP connection setup or device enumeration.
+	if lastFrame.IsZero() {
+		return actions
+	}
+
+	framesFlowing := now.Sub(lastFrame) < w.cfg.SilenceThreshold
 
 	switch h.state {
 	case StateHealthy:
 		if framesFlowing {
-			return
+			return actions
 		}
-		// In cooldown after recovery: suppress alarm.
 		if !h.cooldownEnd.IsZero() && now.Before(h.cooldownEnd) {
-			return
+			return actions
 		}
-		// Silence detected.
+
+		silenceDur := now.Sub(lastFrame)
 		h.state = StateAlarmed
 		h.stateEntered = now
 		h.retries = 0
 
 		w.log.Error("audio source silence detected",
 			logger.String("source_id", sourceID),
-			logger.Duration("silence", now.Sub(lastFrame)),
+			logger.Duration("silence", silenceDur),
 		)
-		// Emit Sentry error for observability.
-		_ = errors.Newf("audio source silence detected: %s", sourceID).
-			Component("audiocore.liveness").
-			Category(errors.CategoryAudioSource).
-			Context("source_id", sourceID).
-			Context("silence_duration", now.Sub(lastFrame).String()).
-			Build()
-
-		if w.callbacks.Notify != nil {
-			w.callbacks.Notify(sourceID, StateAlarmed, "silence detected")
-		}
+		actions = append(actions, livenessAction{
+			sourceID: sourceID, kind: actionNotify,
+			state: StateAlarmed, msg: "silence detected",
+		})
 
 	case StateAlarmed:
 		if framesFlowing {
-			w.recover(h, sourceID)
-			return
+			actions = w.collectRecover(h, sourceID, now, actions)
+			return actions
 		}
-		// Transition to RECOVERING and attempt first restart.
 		h.state = StateRecovering
 		h.stateEntered = now
-		w.attemptRestart(h, sourceID)
+		actions = w.collectRestart(h, sourceID, now, actions)
 
 	case StateRecovering:
 		if framesFlowing {
-			w.recover(h, sourceID)
-			return
+			actions = w.collectRecover(h, sourceID, now, actions)
+			return actions
 		}
-		// Check if retries are exhausted.
 		if h.retries >= w.cfg.MaxRetries {
 			h.state = StateEscalated
 			h.stateEntered = now
@@ -337,24 +354,21 @@ func (w *LivenessWatchdog) checkSource(sourceID string) {
 				Context("retries_exhausted", h.retries).
 				Build()
 
-			if w.callbacks.Escalate != nil {
-				w.callbacks.Escalate(sourceID)
-			}
-			if w.callbacks.Notify != nil {
-				w.callbacks.Notify(sourceID, StateEscalated, "retries exhausted")
-			}
-			return
+			actions = append(actions,
+				livenessAction{sourceID: sourceID, kind: actionEscalate},
+				livenessAction{sourceID: sourceID, kind: actionNotify, state: StateEscalated, msg: "retries exhausted"},
+			)
+			return actions
 		}
-		// Wait for backoff before retrying.
 		if now.Sub(h.lastRestart) < w.cfg.RetryBackoff {
-			return
+			return actions
 		}
-		w.attemptRestart(h, sourceID)
+		actions = w.collectRestart(h, sourceID, now, actions)
 
 	case StateEscalated:
 		if framesFlowing {
-			w.recover(h, sourceID)
-			return
+			actions = w.collectRecover(h, sourceID, now, actions)
+			return actions
 		}
 		if now.Sub(h.stateEntered) >= w.cfg.EscalationTimeout {
 			h.state = StateFailed
@@ -363,24 +377,26 @@ func (w *LivenessWatchdog) checkSource(sourceID string) {
 			w.log.Error("audio source failed",
 				logger.String("source_id", sourceID),
 			)
-			if w.callbacks.Notify != nil {
-				w.callbacks.Notify(sourceID, StateFailed, "escalation timeout elapsed")
-			}
+			actions = append(actions, livenessAction{
+				sourceID: sourceID, kind: actionNotify,
+				state: StateFailed, msg: "escalation timeout elapsed",
+			})
 		}
 
 	case StateFailed:
-		// Terminal state, but recovery is still possible if frames resume.
 		if framesFlowing {
-			w.recover(h, sourceID)
+			actions = w.collectRecover(h, sourceID, now, actions)
 		}
 	}
+
+	return actions
 }
 
-// attemptRestart calls the RestartSource callback and updates retry tracking.
+// collectRestart updates retry tracking and appends a restart action.
 // The caller must hold w.mu.
-func (w *LivenessWatchdog) attemptRestart(h *sourceHealth, sourceID string) {
+func (w *LivenessWatchdog) collectRestart(h *sourceHealth, sourceID string, now time.Time, actions []livenessAction) []livenessAction {
 	h.retries++
-	h.lastRestart = time.Now()
+	h.lastRestart = now
 
 	w.log.Info("attempting source restart",
 		logger.String("source_id", sourceID),
@@ -388,23 +404,18 @@ func (w *LivenessWatchdog) attemptRestart(h *sourceHealth, sourceID string) {
 		logger.Int("max_retries", w.cfg.MaxRetries),
 	)
 
-	if w.callbacks.RestartSource != nil {
-		if err := w.callbacks.RestartSource(sourceID); err != nil {
-			w.log.Error("source restart failed",
-				logger.String("source_id", sourceID),
-				logger.Error(err),
-			)
-		}
-	}
+	return append(actions, livenessAction{
+		sourceID: sourceID, kind: actionRestart,
+	})
 }
 
-// recover transitions a source back to HEALTHY with a cooldown period.
+// collectRecover transitions a source back to HEALTHY and appends a notify action.
 // The caller must hold w.mu.
-func (w *LivenessWatchdog) recover(h *sourceHealth, sourceID string) {
+func (w *LivenessWatchdog) collectRecover(h *sourceHealth, sourceID string, now time.Time, actions []livenessAction) []livenessAction {
 	prevState := h.state
 	h.state = StateHealthy
-	h.stateEntered = time.Now()
-	h.cooldownEnd = time.Now().Add(w.cfg.CooldownAfterRecov)
+	h.stateEntered = now
+	h.cooldownEnd = now.Add(w.cfg.CooldownAfterRecov)
 	h.retries = 0
 
 	w.log.Info("audio source recovered",
@@ -412,7 +423,34 @@ func (w *LivenessWatchdog) recover(h *sourceHealth, sourceID string) {
 		logger.String("from_state", prevState.String()),
 	)
 
-	if w.callbacks.Notify != nil {
-		w.callbacks.Notify(sourceID, StateHealthy, "recovered")
+	return append(actions, livenessAction{
+		sourceID: sourceID, kind: actionNotify,
+		state: StateHealthy, msg: "recovered",
+	})
+}
+
+// executeActions runs collected callbacks outside the mutex.
+func (w *LivenessWatchdog) executeActions(actions []livenessAction) {
+	for i := range actions {
+		a := &actions[i]
+		switch a.kind {
+		case actionRestart:
+			if w.callbacks.RestartSource != nil {
+				if err := w.callbacks.RestartSource(a.sourceID); err != nil {
+					w.log.Error("source restart failed",
+						logger.String("source_id", a.sourceID),
+						logger.Error(err),
+					)
+				}
+			}
+		case actionEscalate:
+			if w.callbacks.Escalate != nil {
+				w.callbacks.Escalate(a.sourceID)
+			}
+		case actionNotify:
+			if w.callbacks.Notify != nil {
+				w.callbacks.Notify(a.sourceID, a.state, a.msg)
+			}
+		}
 	}
 }

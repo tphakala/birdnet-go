@@ -248,7 +248,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			priority := notification.PriorityHigh
 			title := "Audio source " + msg
 			body := "Source " + sourceID + ": " + msg
-			if state == audiocore.StateFailed || state == audiocore.StateEscalated || state == audiocore.StateAlarmed {
+			if state == audiocore.StateFailed || state == audiocore.StateEscalated {
 				priority = notification.PriorityCritical
 			}
 			if _, err := notifSvc.CreateWithComponent(
@@ -456,16 +456,13 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 		return fmt.Errorf("restart source: source %s not found in registry", sourceID)
 	}
 
-	// 1. Remove routes for the source.
-	p.engine.Router().RemoveAllRoutes(sourceID)
-
-	// 2. Clean up overrun tracker state.
+	// 1. Clean up overrun tracker state.
 	RemoveOverrunTrackers(sourceID)
 
-	// 3. Untrack sound level consumer (route already removed above).
+	// 2. Untrack sound level consumer (engine.RemoveSource removes the route).
 	p.untrackSoundLevelConsumer(sourceID)
 
-	// 4. Remove source from engine (stops capture, deallocates buffers, unregisters).
+	// 3. Remove source from engine (stops capture, removes routes, deallocates buffers, unregisters).
 	if err := p.engine.RemoveSource(sourceID); err != nil {
 		log.Error("failed to remove source during restart",
 			logger.String("source_id", sourceID),

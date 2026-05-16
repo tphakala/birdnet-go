@@ -278,6 +278,8 @@ func (r *AudioRouter) RemoveAllRoutes(sourceID string) {
 		r.stopRoute(rt)
 	}
 
+	r.ClearDispatchTime(sourceID)
+
 	if len(routes) > 0 {
 		r.log.Info("all routes removed",
 			logger.String("source_id", sourceID),

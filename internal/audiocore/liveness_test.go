@@ -257,12 +257,15 @@ func TestLiveness_QuietHoursSuppressesAlarm(t *testing.T) {
 		defer r.Close()
 
 		cfg := fastConfig()
+		var mu sync.Mutex
 		notifyCalled := false
 
 		w := NewLivenessWatchdog(cfg, r, LivenessCallbacks{
 			IsQuietHours: func(_ string) bool { return true },
 			Notify: func(_ string, _ LivenessState, _ string) {
+				mu.Lock()
 				notifyCalled = true
+				mu.Unlock()
 			},
 		})
 
@@ -274,12 +277,13 @@ func TestLiveness_QuietHoursSuppressesAlarm(t *testing.T) {
 		time.Sleep(cfg.SilenceThreshold + 3*cfg.CheckInterval)
 
 		snaps := w.Snapshot()
-		// During quiet hours no sources should be tracked (checkAll returns early).
 		for _, s := range snaps {
 			assert.Equal(t, "HEALTHY", s.State,
 				"no alarm should be raised during quiet hours")
 		}
+		mu.Lock()
 		assert.False(t, notifyCalled, "notify should not be called during quiet hours")
+		mu.Unlock()
 	})
 }
 

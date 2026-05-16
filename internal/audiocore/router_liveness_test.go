@@ -57,4 +57,26 @@ func TestRouter_ActiveSourceIDs(t *testing.T) {
 	defer r.Close()
 
 	assert.Empty(t, r.ActiveSourceIDs())
+
+	consumer := &nullConsumer{id: "test-consumer", sampleRate: 48000}
+	require.NoError(t, r.AddRoute("src-1", consumer, 48000, 0, nil))
+
+	ids := r.ActiveSourceIDs()
+	assert.Len(t, ids, 1)
+	assert.Contains(t, ids, "src-1")
+}
+
+func TestRouter_ClearDispatchTime_OnRemoveAllRoutes(t *testing.T) {
+	r := NewAudioRouter(GetLogger(), nil)
+	defer r.Close()
+
+	consumer := &nullConsumer{id: "test-consumer", sampleRate: 48000}
+	require.NoError(t, r.AddRoute("src-1", consumer, 48000, 0, nil))
+
+	r.Dispatch(AudioFrame{SourceID: "src-1", Data: []byte{0, 0}})
+	require.False(t, r.LastDispatchTime("src-1").IsZero())
+
+	r.RemoveAllRoutes("src-1")
+	assert.True(t, r.LastDispatchTime("src-1").IsZero(),
+		"dispatch timestamp should be cleared when all routes are removed")
 }
