@@ -283,7 +283,11 @@
     onConfirm: async () => {},
   });
 
-  async function executeBulkAction(endpoint: string, body: Record<string, unknown>) {
+  async function executeBulkAction(
+    endpoint: string,
+    body: Record<string, unknown>,
+    successKey = 'detections.selection.bulkSuccess'
+  ) {
     try {
       const resp = await fetchWithCSRF<{ processed: number; skipped: number }>(endpoint, {
         method: 'POST',
@@ -298,7 +302,7 @@
           })
         );
       } else {
-        toastActions.success(t('detections.selection.bulkSuccess', { count: resp.processed }));
+        toastActions.success(t(successKey, { count: resp.processed }));
       }
       selection.deactivate();
       onRefresh?.();
@@ -326,6 +330,7 @@
             date: data.date,
             search: data.search,
             hour: data.hour !== undefined ? String(data.hour) : undefined,
+            duration: data.duration !== undefined ? data.duration : undefined,
           }),
         }
       );
@@ -350,7 +355,8 @@
     messageKey: string,
     confirmLabel: string,
     endpoint: string,
-    extraBody: Record<string, unknown> = {}
+    extraBody: Record<string, unknown> = {},
+    successKey = 'detections.selection.bulkSuccess'
   ) {
     bulkConfirmConfig = {
       title,
@@ -358,7 +364,7 @@
       confirmLabel,
       onConfirm: async () => {
         const ids = await getIdsForBulkAction();
-        if (ids) await executeBulkAction(endpoint, { ids, ...extraBody });
+        if (ids) await executeBulkAction(endpoint, { ids, ...extraBody }, successKey);
       },
     };
     showBulkConfirmModal = true;
@@ -366,10 +372,12 @@
 
   const handleBulkDelete = () =>
     openBulkConfirm(
-      t('dashboard.recentDetections.modals.deleteDetection', { species: '' }),
+      t('common.delete'),
       'detections.selection.confirmBulkDelete',
       t('common.buttons.delete'),
-      '/api/v2/detections/batch/delete'
+      '/api/v2/detections/batch/delete',
+      {},
+      'detections.selection.bulkDeleteSuccess'
     );
 
   const handleBulkMarkCorrect = () =>

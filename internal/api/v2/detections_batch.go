@@ -48,6 +48,7 @@ type BatchResolveRequest struct {
 	Date      string `json:"date,omitempty"`
 	Search    string `json:"search,omitempty"`
 	Hour      string `json:"hour,omitempty"`
+	Duration  int    `json:"duration,omitempty"`
 }
 
 // BatchResult represents the outcome of a batch operation.
@@ -215,12 +216,18 @@ func (c *Controller) BatchResolveDetections(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
 
+	duration := req.Duration
+	if duration == 0 && req.Hour != "" {
+		duration = 1
+	}
+
 	params := &detectionQueryParams{
 		QueryType:  req.QueryType,
 		Species:    req.Species,
 		Date:       req.Date,
 		Search:     req.Search,
 		Hour:       req.Hour,
+		Duration:   duration,
 		NumResults: maxBatchSize + 1,
 		Offset:     0,
 	}

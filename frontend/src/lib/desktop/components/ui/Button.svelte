@@ -17,18 +17,15 @@
   import { cn } from '$lib/utils/cn';
   import { safeGet } from '$lib/utils/security';
   import type { Snippet } from 'svelte';
+  import type { HTMLButtonAttributes } from 'svelte/elements';
 
   type ButtonVariant = 'default' | 'primary' | 'success' | 'warning' | 'error' | 'ghost';
   type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
-  interface Props {
+  interface Props extends HTMLButtonAttributes {
     variant?: ButtonVariant;
     size?: ButtonSize;
-    disabled?: boolean;
-    type?: 'button' | 'submit' | 'reset';
-    title?: string;
     className?: string;
-    onclick?: (_e: MouseEvent) => void;
     children: Snippet;
   }
 
@@ -41,6 +38,7 @@
     className = '',
     onclick,
     children,
+    ...rest
   }: Props = $props();
 
   const sizeClasses: Record<ButtonSize, string> = {
@@ -70,6 +68,7 @@
   {type}
   {disabled}
   {title}
+  {...rest}
   class={cn(
     'inline-flex items-center justify-center rounded-lg font-medium transition-colors',
     'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
