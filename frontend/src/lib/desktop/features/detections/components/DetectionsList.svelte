@@ -267,6 +267,7 @@
 
   function handleRowClick(id: string, event: MouseEvent) {
     if (selection.selectionActive) {
+      if ((event.target as HTMLElement).closest('button, a, input, label')) return;
       selection.toggleWithShift(id, pageIds, event.shiftKey);
     }
   }
@@ -301,7 +302,7 @@
       onRefresh?.();
     } catch (err) {
       loggers.ui.error('Bulk action failed:', err);
-      toastActions.error(t('dashboard.recentDetections.errors.deleteFailed'));
+      toastActions.error(t('detections.selection.bulkError'));
     }
   }
 
@@ -329,7 +330,15 @@
       return resp.ids;
     } catch (err) {
       loggers.ui.error('Failed to resolve matching detections:', err);
-      toastActions.error(t('detections.selection.tooManyDetections', { count: data.totalResults }));
+      const isTooMany =
+        err instanceof Error && err.message.includes('Too many matching detections');
+      if (isTooMany) {
+        toastActions.error(
+          t('detections.selection.tooManyDetections', { count: data.totalResults })
+        );
+      } else {
+        toastActions.error(t('detections.selection.bulkError'));
+      }
       return null;
     }
   }
@@ -397,15 +406,19 @@
       { locked: false }
     );
 
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape' && selection.selectionActive) {
-      selection.deactivate();
+  $effect(() => {
+    if (!selection.selectionActive) return;
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        selection.deactivate();
+      }
     }
-  }
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  });
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class={cn(className)} onkeydown={handleKeydown}>
+<div class={cn(className)}>
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <div class="flex justify-between items-center">
       <!-- Title -->

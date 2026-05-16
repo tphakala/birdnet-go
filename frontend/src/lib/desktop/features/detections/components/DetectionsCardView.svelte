@@ -51,9 +51,10 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-2 sm:p-4">
   {#each detections as detection (detection.id)}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_no_noninteractive_tabindex -->
     <div
       class={cn('relative', selectionActive && 'cursor-pointer')}
+      tabindex={selectionActive ? 0 : undefined}
       onclick={e => {
         if (selectionActive) {
           onToggleSelect?.(String(detection.id), e.shiftKey);

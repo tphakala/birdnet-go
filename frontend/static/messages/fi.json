@@ -816,7 +816,8 @@
       "bulkSuccess": "{count} detections updated",
       "bulkDeleteSuccess": "{count} detections deleted",
       "bulkPartial": "{processed} updated, {skipped} skipped (locked)",
-      "tooManyDetections": "Too many detections ({count}). Narrow your filters to select fewer than 500."
+      "tooManyDetections": "Too many detections ({count}). Narrow your filters to select fewer than 500.",
+      "bulkError": "Bulk operation failed. Please try again."
     },
     "weather": {
       "title": "Säätiedot",

@@ -76,6 +76,7 @@ func TestBatchDeleteDetections(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			mockDS.ExpectedCalls = nil
+			mockDS.Calls = nil
 			tc.mockSetup(&mockDS.Mock)
 
 			bodyBytes, err := json.Marshal(tc.body)
@@ -172,6 +173,7 @@ func TestBatchReviewDetections(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			mockDS.ExpectedCalls = nil
+			mockDS.Calls = nil
 			tc.mockSetup(&mockDS.Mock)
 
 			bodyBytes, err := json.Marshal(tc.body)
@@ -258,6 +260,7 @@ func TestBatchLockDetections(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			mockDS.ExpectedCalls = nil
+			mockDS.Calls = nil
 			tc.mockSetup(&mockDS.Mock)
 
 			bodyBytes, err := json.Marshal(tc.body)
@@ -352,6 +355,7 @@ func TestBatchResolveDetections(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			mockDS.ExpectedCalls = nil
+			mockDS.Calls = nil
 			tc.mockSetup(&mockDS.Mock)
 
 			bodyBytes, err := json.Marshal(tc.body)
@@ -369,6 +373,8 @@ func TestBatchResolveDetections(t *testing.T) {
 			if tc.checkResult != nil {
 				tc.checkResult(t, rec)
 			}
+
+			mockDS.AssertExpectations(t)
 		})
 	}
 }
