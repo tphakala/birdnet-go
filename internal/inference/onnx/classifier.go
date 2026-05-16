@@ -228,7 +228,7 @@ func resolveLabels(cfg *classifierConfig) ([]string, error) {
 		return cfg.labels, nil
 	}
 	if cfg.labelsPath != "" {
-		return loadLabels(cfg.labelsPath)
+		return LoadLabels(cfg.labelsPath)
 	}
 	return nil, ErrLabelsRequired
 }

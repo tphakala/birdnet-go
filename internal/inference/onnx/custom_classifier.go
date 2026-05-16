@@ -100,7 +100,7 @@ func (b *CustomClassifierBuilder) Build() (*CustomClassifier, error) {
 	case len(b.labels) > 0:
 		labels = b.labels
 	case b.labelsPath != "":
-		labels, err = loadLabels(b.labelsPath)
+		labels, err = LoadLabels(b.labelsPath)
 		if err != nil {
 			return nil, err
 		}
