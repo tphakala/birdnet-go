@@ -469,25 +469,38 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 		}
 	}
 
-	// Clean up shared embeddings, geomodel, and taxonomy files if no other dependent models remain.
-	mm.cleanupSharedFiles(log, catalogID, &entry, HasEmbeddingsFiles, isEmbeddingsRole, "embeddings")
-	mm.cleanupSharedFiles(log, catalogID, &entry, HasGeomodelFiles, isGeomodelRole, "geomodel")
-	mm.cleanupSharedFiles(log, catalogID, &entry, HasTaxonomyFiles, isTaxonomyRole, "taxonomy")
-
-	// Labels are intentionally retained on disk.
-
+	// Update installed map and config BEFORE reloading range filter so the
+	// reload sees the cleared geomodel path and does not re-acquire the handle.
 	delete(mm.installed, catalogID)
-
 	mm.applyConfigForUninstall(&entry)
 
-	// If geomodel was cleared during uninstall, reload the range filter
-	// so the primary model falls back to the embedded TFLite filter.
+	// Reload range filter with updated config (geomodel cleared), then delete files.
+	// Skip geomodel file deletion if reload fails (session may still hold handles).
+	geomodelReloadOK := true
 	if mm.orchestrator != nil && HasGeomodelFiles(&entry) {
 		if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
-			log.Warn("Failed to hot-reload range filter after geomodel uninstall",
+			geomodelReloadOK = false
+			log.Warn("Range filter reload failed after geomodel uninstall, retaining geomodel files",
 				logger.String("catalog_id", catalogID),
 				logger.Error(err))
 		}
+	}
+
+	// Clean up shared embeddings, geomodel, and taxonomy files if no other dependent models remain.
+	mm.cleanupSharedFiles(log, catalogID, &entry, HasEmbeddingsFiles, isEmbeddingsRole, "embeddings")
+	if geomodelReloadOK {
+		mm.cleanupSharedFiles(log, catalogID, &entry, HasGeomodelFiles, isGeomodelRole, "geomodel")
+	}
+	mm.cleanupSharedFiles(log, catalogID, &entry, HasTaxonomyFiles, isTaxonomyRole, "taxonomy")
+
+	// Remove the per-model subdirectory if it is now empty (labels are retained,
+	// so Remove will fail with ENOTEMPTY if any remain, which is the desired behavior).
+	if err := os.Remove(subdir); err == nil {
+		log.Info("Removed empty model directory",
+			logger.String("path", subdir))
+	} else if !os.IsNotExist(err) {
+		log.Debug("Model directory not removed (likely non-empty)",
+			logger.String("path", subdir))
 	}
 
 	log.Info("Model uninstalled",
@@ -501,7 +514,7 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 // depends on the same files.
 // hasFiles checks whether a catalog entry depends on this kind of shared file.
 // matchRole checks whether a CatalogFile belongs to this kind.
-// The caller must hold mm.mu, and catalogID must still be in mm.installed.
+// The caller must hold mm.mu.
 func (mm *ModelManager) cleanupSharedFiles(log logger.Logger, catalogID string, entry *CatalogEntry, hasFiles func(*CatalogEntry) bool, matchRole func(string) bool, label string) {
 	if !hasFiles(entry) {
 		return

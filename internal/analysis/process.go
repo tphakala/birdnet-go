@@ -42,6 +42,8 @@ const (
 // When the window expires and enough overruns have accumulated, a single Sentry event is sent.
 type bufferOverrunTracker struct {
 	mu           sync.Mutex
+	source       string
+	modelID      string
 	overrunCount int64
 	windowStart  time.Time
 	maxElapsed   time.Duration
@@ -67,7 +69,7 @@ func getOverrunTracker(source, modelID string) *bufferOverrunTracker {
 	if t, ok := overrunTrackers[key]; ok {
 		return t
 	}
-	t := &bufferOverrunTracker{}
+	t := &bufferOverrunTracker{source: source, modelID: modelID}
 	overrunTrackers[key] = t
 	return t
 }
@@ -127,9 +129,11 @@ func recordBufferOverrun(tracker *bufferOverrunTracker, elapsed, bufferLen time.
 
 	// Check if window has expired
 	if now.Sub(tracker.windowStart) >= bufferOverrunReportCooldown {
-		// Window expired — report if threshold met
+		// Window expired; report if threshold met
 		if tracker.overrunCount >= bufferOverrunMinCount {
 			reportBufferOverruns(
+				tracker.source,
+				tracker.modelID,
 				tracker.overrunCount,
 				tracker.maxElapsed,
 				tracker.bufferLength,
@@ -151,12 +155,14 @@ func recordBufferOverrun(tracker *bufferOverrunTracker, elapsed, bufferLen time.
 }
 
 // reportBufferOverruns sends a rate-limited Sentry event with overrun statistics.
-func reportBufferOverruns(count int64, maxElapsed, bufferLen, window time.Duration) {
+func reportBufferOverruns(source, modelID string, count int64, maxElapsed, bufferLen, window time.Duration) {
 	if !telemetry.IsTelemetryEnabled() {
 		return
 	}
 
 	extras := map[string]any{
+		"source":                   source,
+		"model_id":                 modelID,
 		"overrun_count":            count,
 		"max_elapsed_ms":           maxElapsed.Milliseconds(),
 		"buffer_length_ms":         bufferLen.Milliseconds(),
