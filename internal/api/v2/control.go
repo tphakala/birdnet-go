@@ -272,6 +272,10 @@ func (c *Controller) RestartContainer(ctx echo.Context) error {
 
 // SetSourceRestarter injects the function used by the restart-source endpoint.
 func (c *Controller) SetSourceRestarter(fn SourceRestarterFunc) {
+	if fn == nil {
+		c.sourceRestarter.Store(nil)
+		return
+	}
 	c.sourceRestarter.Store(&fn)
 }
 
