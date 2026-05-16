@@ -401,6 +401,56 @@ func (c *panicOnWriteConsumer) Write(_ AudioFrame) error { //nolint:gocritic // 
 	panic("consumer exploded")
 }
 
+// panicOnWriteCloseTracker panics on Write and tracks whether Close was called.
+type panicOnWriteCloseTracker struct {
+	id         string
+	sampleRate int
+	closed     atomic.Bool
+}
+
+func (c *panicOnWriteCloseTracker) ID() string      { return c.id }
+func (c *panicOnWriteCloseTracker) SampleRate() int { return c.sampleRate }
+func (c *panicOnWriteCloseTracker) BitDepth() int   { return 16 }
+func (c *panicOnWriteCloseTracker) Channels() int   { return 1 }
+func (c *panicOnWriteCloseTracker) Close() error    { c.closed.Store(true); return nil }
+func (c *panicOnWriteCloseTracker) Write(_ AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
+	panic("consumer exploded")
+}
+
+// TestDrainRoutePanicCallsClose verifies that when a consumer panics during
+// Write, the panic recovery handler still calls Close() on the consumer so
+// that resources (file descriptors, CGO allocations) are released.
+func TestDrainRoutePanicCallsClose(t *testing.T) {
+	t.Parallel()
+
+	router := NewAudioRouter(GetLogger(), nil)
+	t.Cleanup(func() { router.Close() })
+
+	consumer := &panicOnWriteCloseTracker{
+		id:         "panic-close-tracker",
+		sampleRate: 48000,
+	}
+
+	err := router.AddRoute("src1", consumer, 48000, 0.0, nil)
+	require.NoError(t, err)
+
+	// Dispatch a frame; the consumer will panic on Write, triggering recovery.
+	router.Dispatch(AudioFrame{
+		SourceID:   "src1",
+		Data:       make([]byte, 100),
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+		Timestamp:  time.Now(),
+	})
+
+	// The drainer should recover from the panic and call Close().
+	require.Eventually(t, func() bool {
+		return consumer.closed.Load()
+	}, 2*time.Second, 10*time.Millisecond,
+		"expected Close() to be called on consumer after panic recovery")
+}
+
 // TestRouter_DrainRouteAppliesGain verifies that per-route gain amplifies,
 // attenuates, or leaves audio data unchanged depending on the dB value.
 func TestRouter_DrainRouteAppliesGain(t *testing.T) {

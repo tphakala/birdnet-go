@@ -583,11 +583,33 @@ func (r *AudioRouter) drainRoute(route *Route) {
 			// per panicking route would stay outstanding (the slices still
 			// GC, so this is pool-efficiency rather than a hard leak).
 			drainInboxRefs(route.inbox)
-			// Goroutine returns here. The route is removed from the map.
-			// Note: consumer and resampler are intentionally NOT closed here
-			// to avoid potential secondary panics during cleanup. They will
-			// be reclaimed by GC. The stopped channel is closed by the outer
-			// defer for consistency.
+			// Best-effort Close of consumer and resampler, each wrapped
+			// in its own recover to prevent secondary panics from
+			// propagating.
+			if route.resampler != nil {
+				func() {
+					defer func() {
+						if rp := recover(); rp != nil {
+							r.log.Warn("secondary panic closing resampler after drainer panic",
+								logger.String("source_id", route.SourceID),
+								logger.String("consumer_id", route.Consumer.ID()),
+								logger.Any("secondary_panic", rp))
+						}
+					}()
+					_ = route.resampler.Close()
+				}()
+			}
+			func() {
+				defer func() {
+					if rp := recover(); rp != nil {
+						r.log.Warn("secondary panic closing consumer after drainer panic",
+							logger.String("source_id", route.SourceID),
+							logger.String("consumer_id", route.Consumer.ID()),
+							logger.Any("secondary_panic", rp))
+					}
+				}()
+				_ = route.Consumer.Close()
+			}()
 		}
 	}()
 	for {
