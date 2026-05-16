@@ -783,6 +783,9 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to rebuild range filter", http.StatusInternalServerError)
 	}
 
+	// Invalidate heatmap cache since the geomodel data has changed
+	InvalidateHeatmapCache()
+
 	// Read from the latest published snapshot so the just-published rebuild
 	// result is reflected immediately.
 	c.settingsMutex.RLock()

@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -512,7 +513,35 @@ func (o *Orchestrator) ReloadRangeFilter() error {
 	if err := primary.ReloadRangeFilter(); err != nil {
 		return err
 	}
-	return BuildRangeFilter(o)
+	if err := BuildRangeFilter(o); err != nil {
+		return err
+	}
+	o.notifyRangeFilterReload()
+	return nil
+}
+
+// rangeFilterReloadFn is an optional callback invoked after the range filter
+// is reloaded. Used by the API layer to invalidate caches.
+var (
+	rangeFilterReloadMu sync.Mutex
+	rangeFilterReloadFn func()
+)
+
+// OnRangeFilterReload registers a callback that fires after every successful
+// range filter reload. Only one callback is supported; later calls replace earlier ones.
+func OnRangeFilterReload(fn func()) {
+	rangeFilterReloadMu.Lock()
+	rangeFilterReloadFn = fn
+	rangeFilterReloadMu.Unlock()
+}
+
+func (o *Orchestrator) notifyRangeFilterReload() {
+	rangeFilterReloadMu.Lock()
+	fn := rangeFilterReloadFn
+	rangeFilterReloadMu.Unlock()
+	if fn != nil {
+		fn()
+	}
 }
 
 // ReloadBatFilter rebuilds the bat model's high-pass filter from current settings.
@@ -796,6 +825,116 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	}
 
 	return nil
+}
+
+// BatchRangeFilterInference runs batch geomodel inference on multiple location/week
+// inputs. The caller provides a flat slice of [lat, lon, week] triples and a batch
+// size. Returns a flat slice of [batchSize * numGeoSpecies] scores in row-major order.
+//
+// The method acquires primary.mu for the duration of one PredictBatch call. Callers
+// that need to process many grid points should chunk externally and call this method
+// once per chunk, allowing the detection pipeline to interleave between calls.
+func (o *Orchestrator) BatchRangeFilterInference(inputs []float32, batchSize int) ([]float32, error) {
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+
+	if primary == nil {
+		return nil, errors.Newf("primary model not available").
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	primary.mu.Lock()
+	defer primary.mu.Unlock()
+
+	rf := primary.rangeFilter
+	if rf == nil {
+		return nil, errors.Newf("range filter not loaded").
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	// Unwrap mappedRangeFilter to get the inner BatchRangeFilter.
+	mrf, ok := rf.(*mappedRangeFilter)
+	if !ok {
+		return nil, errors.Newf("range filter does not support batch inference").
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	brf, ok := mrf.inner.(inference.BatchRangeFilter)
+	if !ok {
+		return nil, errors.Newf("underlying range filter does not support batch inference").
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	return brf.PredictBatch(inputs, batchSize)
+}
+
+// GeomodelLabels returns the geomodel's full label set. Returns nil if no
+// range filter is loaded or the filter is not a mapped range filter.
+func (o *Orchestrator) GeomodelLabels() []string {
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+
+	if primary == nil {
+		return nil
+	}
+
+	primary.mu.Lock()
+	defer primary.mu.Unlock()
+
+	rf := primary.rangeFilter
+	if rf == nil {
+		return nil
+	}
+
+	mrf, ok := rf.(*mappedRangeFilter)
+	if !ok {
+		return nil
+	}
+
+	return mrf.geomodelLabels
+}
+
+// GeomodelSpeciesIndex returns the index of the given label in the geomodel's
+// label set. Returns (index, true) if found, or (0, false) if the label does
+// not exist in the geomodel or no range filter is loaded.
+func (o *Orchestrator) GeomodelSpeciesIndex(label string) (int, bool) {
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+
+	if primary == nil {
+		return 0, false
+	}
+
+	primary.mu.Lock()
+	defer primary.mu.Unlock()
+
+	rf := primary.rangeFilter
+	if rf == nil {
+		return 0, false
+	}
+
+	mrf, ok := rf.(*mappedRangeFilter)
+	if !ok {
+		return 0, false
+	}
+
+	for i, l := range mrf.geomodelLabels {
+		if l == label {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // Debug prints debug messages if debug mode is enabled.
