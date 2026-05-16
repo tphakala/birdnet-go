@@ -175,22 +175,27 @@ func (w *LivenessWatchdog) Start() {
 		w.mu.Unlock()
 		return
 	}
-	w.started = true
-	w.mu.Unlock()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	w.cancel = cancel
 	w.done = make(chan struct{})
+	w.started = true
+	w.mu.Unlock()
+
 	go w.run(ctx)
 }
 
 // Stop signals the monitoring goroutine to exit and waits for it to finish.
 func (w *LivenessWatchdog) Stop() {
-	if w.cancel != nil {
-		w.cancel()
+	w.mu.Lock()
+	cancel := w.cancel
+	done := w.done
+	w.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
 	}
-	if w.done != nil {
-		<-w.done
+	if done != nil {
+		<-done
 	}
 }
 
