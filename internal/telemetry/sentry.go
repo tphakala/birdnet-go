@@ -508,11 +508,12 @@ func removePrivacyExtraFields(extra map[string]any) int {
 		"max_attempts":      true,
 		// HTTP response diagnostics (numeric, no PII)
 		"status_code": true,
-		// Audio processing performance diagnostics (numeric only)
+		// Audio processing performance diagnostics (numeric + identifiers)
 		"overrun_count":            true,
 		"max_elapsed_ms":           true,
 		"buffer_length_ms":         true,
 		"reporting_window_minutes": true,
+		"model_id":                 true, // classifier model registry identifier
 		// Audiocore diagnostic fields (identifiers, enumerations, numeric values)
 		"source_id": true, // opaque source identifier (uuid-based)
 		"source":    true, // alias used by capture buffer

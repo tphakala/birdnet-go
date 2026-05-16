@@ -586,12 +586,15 @@ func (o *Orchestrator) ReloadModel() error {
 			Build()
 	}
 
-	entry.mu.Lock()
-	if err := primary.ReloadModel(); err != nil {
-		entry.mu.Unlock()
-		return err
+	var reloadErr error
+	func() {
+		entry.mu.Lock()
+		defer entry.mu.Unlock()
+		reloadErr = primary.ReloadModel()
+	}()
+	if reloadErr != nil {
+		return reloadErr
 	}
-	entry.mu.Unlock()
 
 	// Step 2: write lock to re-sync shared state and re-key if model ID changed.
 	o.mu.Lock()

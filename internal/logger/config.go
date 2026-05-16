@@ -154,7 +154,15 @@ func applyConfigDefaults(cfg *LoggingConfig) {
 	ensureModuleOutput(cfg, "spectrogram.prerenderer", DefaultSpectrogramLogPath) // Same file
 
 	// Classifier orchestrator and scheduler logs
-	ensureModuleOutput(cfg, "birdnet", DefaultClassifierLogPath)
+	// ConsoleAlso is true so bat scheduler transitions and model reload events
+	// are visible in journal/container environments.
+	if _, exists := cfg.ModuleOutputs["birdnet"]; !exists {
+		cfg.ModuleOutputs["birdnet"] = ModuleOutput{
+			Enabled:     true,
+			FilePath:    DefaultClassifierLogPath,
+			ConsoleAlso: true,
+		}
+	}
 
 	// Action processing logs (command execution, database saves, notifications)
 	// ConsoleAlso is true so errors are visible in container environments
