@@ -159,6 +159,7 @@
 
   function handleViewChange(mode: 'table' | 'cards') {
     viewMode = mode;
+    if (mode === 'cards') selection.deactivate();
     try {
       localStorage.setItem(VIEW_STORAGE_KEY, mode);
     } catch {
@@ -436,10 +437,16 @@
                 'inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
                 selection.selectionActive
                   ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)]'
-                  : 'border border-[var(--color-base-300)] text-[var(--color-base-content)] hover:bg-[var(--color-base-200)]'
+                  : viewMode === 'cards'
+                    ? 'border border-[var(--color-base-300)] text-[var(--color-base-content)]/40 cursor-not-allowed'
+                    : 'border border-[var(--color-base-300)] text-[var(--color-base-content)] hover:bg-[var(--color-base-200)]'
               )}
-              onclick={() =>
-                selection.selectionActive ? selection.deactivate() : selection.activate()}
+              onclick={() => {
+                if (viewMode === 'cards') return;
+                selection.selectionActive ? selection.deactivate() : selection.activate();
+              }}
+              disabled={viewMode === 'cards'}
+              title={viewMode === 'cards' ? t('detections.selection.switchToTable') : undefined}
               aria-pressed={selection.selectionActive}
             >
               <CheckSquare class="size-4" />
@@ -479,49 +486,49 @@
       {#snippet actions()}
         <button
           type="button"
-          class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm hover:bg-[var(--color-base-200)] transition-colors"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium
+                 text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
           onclick={handleBulkMarkCorrect}
-          title={t('dashboard.recentDetections.actions.markCorrect')}
-          aria-label={t('dashboard.recentDetections.actions.markCorrect')}
         >
-          <CircleCheck class="size-4 text-[var(--color-success)]" />
+          <CircleCheck class="size-3.5 text-[var(--color-success)]" />
+          <span>{t('dashboard.recentDetections.actions.markCorrect')}</span>
         </button>
         <button
           type="button"
-          class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm hover:bg-[var(--color-base-200)] transition-colors"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium
+                 text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
           onclick={handleBulkMarkFalsePositive}
-          title={t('dashboard.recentDetections.actions.markFalsePositive')}
-          aria-label={t('dashboard.recentDetections.actions.markFalsePositive')}
         >
-          <CircleX class="size-4 text-[var(--color-error)]" />
+          <CircleX class="size-3.5 text-[var(--color-error)]" />
+          <span>{t('dashboard.recentDetections.actions.markFalsePositive')}</span>
         </button>
         <button
           type="button"
-          class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm hover:bg-[var(--color-base-200)] transition-colors"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium
+                 text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
           onclick={handleBulkLock}
-          title={t('dashboard.recentDetections.modals.lockDetection')}
-          aria-label={t('dashboard.recentDetections.modals.lockDetection')}
         >
-          <Lock class="size-4" />
+          <Lock class="size-3.5" />
+          <span>{t('dashboard.recentDetections.modals.lockDetection')}</span>
         </button>
         <button
           type="button"
-          class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm hover:bg-[var(--color-base-200)] transition-colors"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium
+                 text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
           onclick={handleBulkUnlock}
-          title={t('dashboard.recentDetections.modals.unlockDetection')}
-          aria-label={t('dashboard.recentDetections.modals.unlockDetection')}
         >
-          <LockOpen class="size-4" />
+          <LockOpen class="size-3.5" />
+          <span>{t('dashboard.recentDetections.modals.unlockDetection')}</span>
         </button>
         <div class="w-px h-5 bg-[var(--color-base-300)] mx-1" role="separator"></div>
         <button
           type="button"
-          class="inline-flex items-center gap-1 px-2 py-1 rounded text-sm text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium
+                 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors"
           onclick={handleBulkDelete}
-          title={t('dashboard.recentDetections.actions.deleteDetection')}
-          aria-label={t('dashboard.recentDetections.actions.deleteDetection')}
         >
-          <Trash2 class="size-4" />
+          <Trash2 class="size-3.5" />
+          <span>{t('dashboard.recentDetections.actions.deleteDetection')}</span>
         </button>
       {/snippet}
     </SelectionToolbar>
@@ -643,13 +650,7 @@
             </tbody>
           </table>
         {:else}
-          <DetectionsCardView
-            detections={data.notes}
-            {onRefresh}
-            selectionActive={selection.selectionActive}
-            selectedIds={id => selection.isSelected(id)}
-            onToggleSelect={handleToggleSelect}
-          />
+          <DetectionsCardView detections={data.notes} {onRefresh} />
         {/if}
       </div>
 

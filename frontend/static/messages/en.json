@@ -817,7 +817,8 @@
       "bulkDeleteSuccess": "{count} detections deleted",
       "bulkPartial": "{processed} updated, {skipped} skipped (locked)",
       "tooManyDetections": "Too many detections ({count}). Narrow your filters to select fewer than 500.",
-      "bulkError": "Bulk operation failed. Please try again."
+      "bulkError": "Bulk operation failed. Please try again.",
+      "switchToTable": "Switch to table view to select detections"
     },
     "weather": {
       "title": "Weather Information",
