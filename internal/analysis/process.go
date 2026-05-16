@@ -213,14 +213,9 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 			Build()
 	}
 
-	// Run inference on the specified model via the Orchestrator.
-	inferenceStart := time.Now()
-	results, err := bn.PredictModel(ctx, modelID, sampleData)
-	inferenceDuration := time.Since(inferenceStart)
-
-	// Return float32 buffer to pool after prediction. The Manager's lazy
-	// per-size pool map routes the slice back to the pool sized for its
-	// actual length, so non-standard sizes are handled too.
+	// Defer pool return so the buffer is reclaimed even if PredictModel panics.
+	// The Manager's lazy per-size pool map routes the slice back to the pool
+	// sized for its actual length, so non-standard sizes are handled too.
 	//
 	// INVARIANT: bn.PredictModel must copy the samples into the model's
 	// input tensor before returning; it must not retain a reference to
@@ -231,9 +226,14 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 	// internal/classifier for the implementing side.
 	if conf.BitDepth == 16 && len(sampleData) > 0 {
 		if pool := bufMgr.Float32PoolFor(len(sampleData[0])); pool != nil {
-			pool.Put(sampleData[0])
+			defer pool.Put(sampleData[0])
 		}
 	}
+
+	// Run inference on the specified model via the Orchestrator.
+	inferenceStart := time.Now()
+	results, err := bn.PredictModel(ctx, modelID, sampleData)
+	inferenceDuration := time.Since(inferenceStart)
 
 	// Record inference duration metric (always, even on error)
 	pm := processMetrics.Load()
