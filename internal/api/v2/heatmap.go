@@ -54,42 +54,53 @@ func newHeatmapLRU(maxEntries int) *heatmapLRU {
 	}
 }
 
-func (c *heatmapLRU) get(key string) ([]byte, bool) {
+// get returns the cached value and true on hit. On miss it returns the current
+// generation so the caller can pass it to put for generation-aware insertion.
+func (c *heatmapLRU) get(key string) (value []byte, gen uint64, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	elem, ok := c.items[key]
-	if !ok {
-		return nil, false
+	currentGen := c.generation.Load()
+
+	elem, found := c.items[key]
+	if !found {
+		return nil, currentGen, false
 	}
 
 	entry := elem.Value.(*heatmapCacheEntry)
-	if entry.generation != c.generation.Load() {
+	if entry.generation != currentGen {
 		c.order.Remove(elem)
 		delete(c.items, key)
-		return nil, false
+		return nil, currentGen, false
 	}
 
 	c.order.MoveToFront(elem)
-	return entry.value, true
+	return entry.value, currentGen, true
 }
 
-func (c *heatmapLRU) put(key string, value []byte) {
+// put stores a value only if the generation has not changed since the cache miss.
+// This prevents stale computation results from poisoning the cache when an
+// invalidation fires between the miss and the put.
+func (c *heatmapLRU) put(key string, value []byte, expectedGen uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.generation.Load() != expectedGen {
+		return
+	}
 
 	if elem, ok := c.items[key]; ok {
 		c.order.MoveToFront(elem)
 		entry := elem.Value.(*heatmapCacheEntry)
 		entry.value = value
-		entry.generation = c.generation.Load()
+		entry.generation = expectedGen
 		return
 	}
 
 	entry := &heatmapCacheEntry{
 		key:        key,
 		value:      value,
-		generation: c.generation.Load(),
+		generation: expectedGen,
 	}
 	elem := c.order.PushFront(entry)
 	c.items[key] = elem
@@ -226,6 +237,9 @@ func (c *Controller) validateHeatmapParams(ctx echo.Context) (*heatmapParams, er
 		return nil, fmt.Errorf("invalid resolution parameter: %w", err)
 	}
 
+	if math.IsNaN(south) || math.IsNaN(north) || math.IsNaN(west) || math.IsNaN(east) || math.IsNaN(resolution) {
+		return nil, fmt.Errorf("parameters must not be NaN")
+	}
 	if south < -90 || south > 90 || north < -90 || north > 90 {
 		return nil, fmt.Errorf("latitude must be between -90 and 90")
 	}
@@ -376,11 +390,13 @@ func (c *Controller) GetHeatmapGrid(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Geomodel labels not available", http.StatusInternalServerError)
 	}
 
-	// Check cache
+	// Check cache; on miss, snapshot generation to guard against cache poisoning
+	// if invalidation fires during the slow computation below.
 	cache := getHeatmapCache()
 	cacheKey := heatmapCacheKey(params.species, params.south, params.north, params.west, params.east, params.resolution)
 
-	if cached, ok := cache.get(cacheKey); ok {
+	cached, missGen, hit := cache.get(cacheKey)
+	if hit {
 		c.logAPIRequest(ctx, logger.LogLevelDebug, "Heatmap cache hit", logger.String("species", params.species))
 		return ctx.Blob(http.StatusOK, "application/octet-stream", cached)
 	}
@@ -394,8 +410,8 @@ func (c *Controller) GetHeatmapGrid(ctx echo.Context) error {
 	// Encode BNHM
 	encoded := encodeBNHM(params.cols, params.rows, float32(params.south), float32(params.west), float32(params.resolution), data)
 
-	// Cache the result
-	cache.put(cacheKey, encoded)
+	// Cache only if generation unchanged since miss
+	cache.put(cacheKey, encoded, missGen)
 
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "Heatmap grid computed",
 		logger.String("species", params.species),

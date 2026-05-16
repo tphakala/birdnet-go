@@ -134,18 +134,19 @@ func TestHeatmapLRU_BasicOperations(t *testing.T) {
 	cache := newHeatmapLRU(3)
 
 	// Miss on empty cache
-	_, ok := cache.get("key1")
+	_, gen, ok := cache.get("key1")
 	assert.False(t, ok)
 
 	// Put and get
-	cache.put("key1", []byte("value1"))
-	val, ok := cache.get("key1")
+	cache.put("key1", []byte("value1"), gen)
+	val, _, ok := cache.get("key1")
 	assert.True(t, ok)
 	assert.Equal(t, []byte("value1"), val)
 
 	// Overwrite existing
-	cache.put("key1", []byte("updated"))
-	val, ok = cache.get("key1")
+	_, gen, _ = cache.get("key1")
+	cache.put("key1", []byte("updated"), gen)
+	val, _, ok = cache.get("key1")
 	assert.True(t, ok)
 	assert.Equal(t, []byte("updated"), val)
 }
@@ -155,18 +156,19 @@ func TestHeatmapLRU_Eviction(t *testing.T) {
 
 	cache := newHeatmapLRU(2)
 
-	cache.put("key1", []byte("v1"))
-	cache.put("key2", []byte("v2"))
-	cache.put("key3", []byte("v3")) // should evict key1
+	_, gen, _ := cache.get("key1")
+	cache.put("key1", []byte("v1"), gen)
+	cache.put("key2", []byte("v2"), gen)
+	cache.put("key3", []byte("v3"), gen) // should evict key1
 
-	_, ok := cache.get("key1")
+	_, _, ok := cache.get("key1")
 	assert.False(t, ok, "key1 should have been evicted")
 
-	val, ok := cache.get("key2")
+	val, _, ok := cache.get("key2")
 	assert.True(t, ok)
 	assert.Equal(t, []byte("v2"), val)
 
-	val, ok = cache.get("key3")
+	val, _, ok = cache.get("key3")
 	assert.True(t, ok)
 	assert.Equal(t, []byte("v3"), val)
 }
@@ -176,19 +178,20 @@ func TestHeatmapLRU_LRUOrder(t *testing.T) {
 
 	cache := newHeatmapLRU(2)
 
-	cache.put("key1", []byte("v1"))
-	cache.put("key2", []byte("v2"))
+	_, gen, _ := cache.get("key1")
+	cache.put("key1", []byte("v1"), gen)
+	cache.put("key2", []byte("v2"), gen)
 
 	// Access key1 to make it most recently used
 	cache.get("key1")
 
 	// Adding key3 should evict key2 (least recently used)
-	cache.put("key3", []byte("v3"))
+	cache.put("key3", []byte("v3"), gen)
 
-	_, ok := cache.get("key2")
+	_, _, ok := cache.get("key2")
 	assert.False(t, ok, "key2 should have been evicted")
 
-	val, ok := cache.get("key1")
+	val, _, ok := cache.get("key1")
 	assert.True(t, ok)
 	assert.Equal(t, []byte("v1"), val)
 }
@@ -198,21 +201,48 @@ func TestHeatmapLRU_GenerationInvalidation(t *testing.T) {
 
 	cache := newHeatmapLRU(10)
 
-	cache.put("key1", []byte("v1"))
-	cache.put("key2", []byte("v2"))
+	_, gen, _ := cache.get("key1")
+	cache.put("key1", []byte("v1"), gen)
+	cache.put("key2", []byte("v2"), gen)
 
 	// Invalidate
 	cache.invalidate()
 
 	// Old entries should be treated as stale
-	_, ok := cache.get("key1")
+	_, _, ok := cache.get("key1")
 	assert.False(t, ok, "key1 should be stale after invalidation")
 
 	// New entries after invalidation should work
-	cache.put("key3", []byte("v3"))
-	val, ok := cache.get("key3")
+	_, newGen, _ := cache.get("key3")
+	cache.put("key3", []byte("v3"), newGen)
+	val, _, ok := cache.get("key3")
 	assert.True(t, ok)
 	assert.Equal(t, []byte("v3"), val)
+}
+
+func TestHeatmapLRU_PutRejectsStaleGeneration(t *testing.T) {
+	t.Parallel()
+
+	cache := newHeatmapLRU(10)
+
+	// Get generation before invalidation
+	_, oldGen, _ := cache.get("key1")
+
+	// Invalidate bumps generation
+	cache.invalidate()
+
+	// Put with old generation should be rejected (prevents cache poisoning)
+	cache.put("key1", []byte("stale-data"), oldGen)
+
+	_, _, ok := cache.get("key1")
+	assert.False(t, ok, "stale-generation put should be rejected")
+
+	// Put with current generation should succeed
+	_, newGen, _ := cache.get("key1")
+	cache.put("key1", []byte("fresh-data"), newGen)
+	val, _, ok := cache.get("key1")
+	assert.True(t, ok)
+	assert.Equal(t, []byte("fresh-data"), val)
 }
 
 func TestHeatmapCacheKey(t *testing.T) {
@@ -226,24 +256,26 @@ func TestInvalidateHeatmapCache_ClearsEntries(t *testing.T) {
 	t.Parallel()
 
 	cache := newHeatmapLRU(10)
-	cache.put("k1", []byte("data1"))
-	cache.put("k2", []byte("data2"))
+	_, gen, _ := cache.get("k1")
+	cache.put("k1", []byte("data1"), gen)
+	cache.put("k2", []byte("data2"), gen)
 
 	// Entries exist before invalidation
-	_, ok := cache.get("k1")
+	_, _, ok := cache.get("k1")
 	assert.True(t, ok)
 
 	cache.invalidate()
 
 	// Entries are stale after invalidation
-	_, ok = cache.get("k1")
+	_, _, ok = cache.get("k1")
 	assert.False(t, ok)
-	_, ok = cache.get("k2")
+	_, _, ok = cache.get("k2")
 	assert.False(t, ok)
 
 	// New entries work after invalidation
-	cache.put("k3", []byte("data3"))
-	val, ok := cache.get("k3")
+	_, newGen, _ := cache.get("k3")
+	cache.put("k3", []byte("data3"), newGen)
+	val, _, ok := cache.get("k3")
 	assert.True(t, ok)
 	assert.Equal(t, []byte("data3"), val)
 }
