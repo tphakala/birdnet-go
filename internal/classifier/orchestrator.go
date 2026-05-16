@@ -875,6 +875,20 @@ func (o *Orchestrator) lockedMappedRangeFilter() (*BirdNET, *mappedRangeFilter, 
 // chunk externally and call this method once per chunk, allowing the detection
 // pipeline to interleave between calls.
 func (o *Orchestrator) BatchRangeFilterInference(inputs []float32, batchSize int) ([]float32, error) {
+	const inputWidth = 3 // [lat, lon, week]
+	if batchSize <= 0 {
+		return nil, errors.Newf("batchSize must be positive, got %d", batchSize).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+	if len(inputs) != batchSize*inputWidth {
+		return nil, errors.Newf("inputs length %d does not match batchSize %d * %d", len(inputs), batchSize, inputWidth).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
 	primary, mrf, err := o.lockedMappedRangeFilter()
 	if err != nil {
 		return nil, err

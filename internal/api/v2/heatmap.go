@@ -277,7 +277,6 @@ func (c *Controller) validateHeatmapParams(ctx echo.Context) (*heatmapParams, er
 // for each week across all grid points, then extracting the target species scores.
 // Returns float32[weeks][rows][cols] in flat layout.
 func (c *Controller) computeHeatmapGrid(birdnet *classifier.Orchestrator, params *heatmapParams, speciesIdx, numGeoSpecies int) ([]float32, error) {
-	log := GetLogger()
 	totalCells := params.rows * params.cols
 	result := make([]float32, bnhmWeeks*totalCells)
 
@@ -317,20 +316,14 @@ func (c *Controller) computeHeatmapGrid(birdnet *classifier.Orchestrator, params
 			}
 
 			expectedLen := chunkSize * numGeoSpecies
-			if len(scores) < expectedLen {
-				log.Warn("PredictBatch returned fewer scores than expected",
-					logger.Int("expected", expectedLen),
-					logger.Int("got", len(scores)),
-					logger.Int("week", week),
-					logger.Int("chunk_start", chunkStart))
+			if len(scores) != expectedLen {
+				return nil, fmt.Errorf("batch inference size mismatch at week %d chunk %d: got %d scores, want %d",
+					week, chunkStart, len(scores), expectedLen)
 			}
 
 			// Extract the target species score from each point's output
 			for i := range chunkSize {
-				scoreIdx := i*numGeoSpecies + speciesIdx
-				if scoreIdx < len(scores) {
-					result[weekOffset+chunkStart+i] = scores[scoreIdx]
-				}
+				result[weekOffset+chunkStart+i] = scores[i*numGeoSpecies+speciesIdx]
 			}
 		}
 	}
