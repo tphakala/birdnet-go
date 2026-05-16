@@ -1,14 +1,13 @@
 package classifier
 
 import (
-	"bufio"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
+	onnx "github.com/tphakala/birdnet-go/internal/inference/onnx"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -145,7 +144,7 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 
 	// Load geomodel labels from file
 	log.Debug("V3 geomodel: loading labels", logger.String("path", labelsPath))
-	geoLabels, err := loadLabelsFromFile(labelsPath)
+	geoLabels, err := onnx.LoadLabels(labelsPath)
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
@@ -203,26 +202,4 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 
 	bn.rangeFilter = mapped
 	return nil
-}
-
-// loadLabelsFromFile reads species labels from a text file, one per line.
-func loadLabelsFromFile(path string) ([]string, error) {
-	f, err := os.Open(path) //nolint:gosec // G304: path is from application settings
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-
-	var labels []string
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			labels = append(labels, line)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return labels, nil
 }

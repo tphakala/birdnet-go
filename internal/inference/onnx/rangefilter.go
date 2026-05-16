@@ -7,6 +7,9 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
+// DefaultRangeFilterThreshold is the minimum location score for a species to pass the range filter.
+const DefaultRangeFilterThreshold float32 = 0.03
+
 // RangeFilter uses the BirdNET meta model to filter species by geographic location and date.
 type RangeFilter struct {
 	session   *ort.DynamicAdvancedSession
@@ -20,7 +23,7 @@ func NewRangeFilter(modelPath string, opts ...RangeFilterOption) (*RangeFilter, 
 		return nil, ErrModelPathRequired
 	}
 
-	cfg := &rangeFilterConfig{threshold: 0.03}
+	cfg := &rangeFilterConfig{threshold: DefaultRangeFilterThreshold}
 	for _, opt := range opts {
 		opt(cfg)
 	}
@@ -92,7 +95,7 @@ func resolveRangeFilterLabels(cfg *rangeFilterConfig) ([]string, error) {
 		return cfg.labels, nil
 	}
 	if cfg.labelsPath != "" {
-		return loadLabels(cfg.labelsPath)
+		return LoadLabels(cfg.labelsPath)
 	}
 	return nil, ErrLabelsRequired
 }
