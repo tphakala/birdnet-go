@@ -51,18 +51,12 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-2 sm:p-4">
   {#each detections as detection (detection.id)}
-    <!-- svelte-ignore a11y_no_static_element_interactions a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class={cn('relative', selectionActive && 'cursor-pointer')}
-      tabindex={selectionActive ? 0 : undefined}
       onclick={e => {
         if (selectionActive) {
-          onToggleSelect?.(String(detection.id), e.shiftKey);
-        }
-      }}
-      onkeydown={e => {
-        if (selectionActive && e.key === ' ') {
-          e.preventDefault();
+          if ((e.target as HTMLElement).closest('button, a, input, label')) return;
           onToggleSelect?.(String(detection.id), e.shiftKey);
         }
       }}
