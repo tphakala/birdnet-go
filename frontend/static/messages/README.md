@@ -7,14 +7,20 @@ This directory contains translation files for the BirdNET-Go frontend applicatio
 Translation files are organized by language code:
 
 - `en.json` - English (default)
+- `cs.json` - Czech
+- `da.json` - Danish
 - `de.json` - German
 - `es.json` - Spanish
 - `fi.json` - Finnish
 - `fr.json` - French
+- `hu.json` - Hungarian
+- `it.json` - Italian
+- `lv.json` - Latvian
 - `nl.json` - Dutch
 - `pl.json` - Polish
 - `pt.json` - Portuguese
 - `sk.json` - Slovak
+- `sv.json` - Swedish
 
 ## Translation Key Organization
 

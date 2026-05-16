@@ -655,7 +655,7 @@
   }
 
   .progress-ring-fill {
-    stroke: rgb(59 130 246);
+    stroke: var(--color-primary);
     stroke-linecap: round;
     transition: stroke-dashoffset 0.1s linear;
   }
@@ -702,8 +702,8 @@
     left: 50%;
     transform: translateX(-50%);
     font-size: 0.75rem;
-    color: rgb(239 68 68);
-    background-color: rgb(254 242 242 / 0.95);
+    color: var(--color-error);
+    background-color: color-mix(in srgb, var(--color-error) 10%, var(--color-base-100));
     padding: 0.125rem 0.5rem;
     border-radius: 0.25rem;
     white-space: nowrap;
@@ -711,8 +711,8 @@
     pointer-events: auto;
   }
 
-  :global(.dark) .error-indicator {
-    background-color: rgb(127 29 29 / 0.9);
-    color: rgb(254 202 202);
+  :global([data-theme='dark']) .error-indicator {
+    background-color: color-mix(in srgb, var(--color-error) 30%, var(--color-base-300));
+    color: color-mix(in srgb, var(--color-error) 40%, white);
   }
 </style>

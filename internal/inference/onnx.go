@@ -48,18 +48,19 @@ func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier
 	if opts.SkipLabelValidation {
 		classifierOpts = append(classifierOpts, ort.WithSkipLabelValidation())
 	}
-	var configErr error
-	if opts.Threads > 0 {
-		threads := opts.Threads
-		classifierOpts = append(classifierOpts, ort.WithSessionOptions(func(so *ortlib.SessionOptions) {
-			if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
-				configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
-			}
-			if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
-				configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
-			}
-		}))
+	threads := opts.Threads
+	if threads <= 0 {
+		threads = runtime.NumCPU()
 	}
+	var configErr error
+	classifierOpts = append(classifierOpts, ort.WithSessionOptions(func(so *ortlib.SessionOptions) {
+		if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
+			configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
+		}
+		if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
+			configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
+		}
+	}))
 	classifier, err := ort.NewClassifier(modelPath, classifierOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ONNX classifier: %w", err)
@@ -77,11 +78,17 @@ func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier
 
 // Predict runs ONNX inference, returning raw logits (pre-activation).
 func (c *onnxClassifier) Predict(samples []float32) ([]float32, error) {
+	if c.classifier == nil {
+		return nil, ort.ErrSessionClosed
+	}
 	return c.classifier.PredictRaw(samples)
 }
 
 // PredictWithEmbeddings runs ONNX inference, returning both raw logits and embedding vector.
 func (c *onnxClassifier) PredictWithEmbeddings(samples []float32) (logits, embeddings []float32, err error) {
+	if c.classifier == nil {
+		return nil, nil, ort.ErrSessionClosed
+	}
 	return c.classifier.PredictRawWithEmbeddings(samples)
 }
 
@@ -125,18 +132,19 @@ func NewONNXCustomClassifier(modelPath string, opts ONNXCustomClassifierOptions)
 		return nil, fmt.Errorf("ONNX custom classifier requires labels or labels path")
 	}
 
-	var configErr error
-	if opts.Threads > 0 {
-		threads := opts.Threads
-		builder = builder.SessionOptions(func(so *ortlib.SessionOptions) {
-			if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
-				configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
-			}
-			if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
-				configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
-			}
-		})
+	threads := opts.Threads
+	if threads <= 0 {
+		threads = runtime.NumCPU()
 	}
+	var configErr error
+	builder = builder.SessionOptions(func(so *ortlib.SessionOptions) {
+		if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
+			configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
+		}
+		if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
+			configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
+		}
+	})
 
 	cc, err := builder.Build()
 	if err != nil {
@@ -154,16 +162,25 @@ func NewONNXCustomClassifier(modelPath string, opts ONNXCustomClassifierOptions)
 
 // PredictEmbedding runs inference on an embedding vector.
 func (c *onnxCustomClassifier) PredictEmbedding(embeddings []float32) ([]float32, error) {
+	if c.classifier == nil {
+		return nil, ort.ErrSessionClosed
+	}
 	return c.classifier.PredictRaw(embeddings)
 }
 
 // NumClasses returns the number of output classes.
 func (c *onnxCustomClassifier) NumClasses() int {
+	if c.classifier == nil {
+		return 0
+	}
 	return c.classifier.NumClasses()
 }
 
 // Labels returns the classification labels.
 func (c *onnxCustomClassifier) Labels() []string {
+	if c.classifier == nil {
+		return nil
+	}
 	return c.classifier.Labels()
 }
 
@@ -181,14 +198,14 @@ type ONNXRangeFilterOptions struct {
 	Labels []string
 }
 
-// onnxRangeFilter implements RangeFilter using an ONNX Runtime session.
+// onnxRangeFilter implements BatchRangeFilter using an ONNX Runtime session.
 type onnxRangeFilter struct {
 	filter     *ort.RangeFilter
 	numSpecies int
 }
 
-// NewONNXRangeFilter creates a RangeFilter backed by an ONNX Runtime meta model.
-func NewONNXRangeFilter(modelPath string, opts ONNXRangeFilterOptions) (RangeFilter, error) {
+// NewONNXRangeFilter creates a BatchRangeFilter backed by an ONNX Runtime meta model.
+func NewONNXRangeFilter(modelPath string, opts ONNXRangeFilterOptions) (BatchRangeFilter, error) {
 	if len(opts.Labels) == 0 {
 		return nil, fmt.Errorf("ONNX range filter requires labels")
 	}
@@ -208,7 +225,20 @@ func NewONNXRangeFilter(modelPath string, opts ONNXRangeFilterOptions) (RangeFil
 
 // Predict returns species occurrence scores for a geographic location and week.
 func (r *onnxRangeFilter) Predict(latitude, longitude, week float32) ([]float32, error) {
+	if r.filter == nil {
+		return nil, ort.ErrSessionClosed
+	}
 	return r.filter.PredictRaw(latitude, longitude, week)
+}
+
+// PredictBatch runs batch inference on multiple location/week inputs.
+// inputs is a flat slice of [lat, lon, week] triples: len(inputs) must equal batchSize * 3.
+// Returns a flat slice of [batchSize * numSpecies] scores in row-major order.
+func (r *onnxRangeFilter) PredictBatch(inputs []float32, batchSize int) ([]float32, error) {
+	if r.filter == nil {
+		return nil, ort.ErrSessionClosed
+	}
+	return r.filter.PredictBatchRaw(inputs, batchSize)
 }
 
 // NumSpecies returns the number of species in the range filter model output.
@@ -280,7 +310,7 @@ func findONNXRuntimeLibrary() string {
 // Resets initialization state so InitONNXRuntime can be called again.
 func DestroyONNXRuntime() error {
 	ortInitMu.Lock()
+	defer ortInitMu.Unlock()
 	ortInitialized = false
-	ortInitMu.Unlock()
 	return ort.DestroyORT()
 }

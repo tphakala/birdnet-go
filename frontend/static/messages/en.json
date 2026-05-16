@@ -154,7 +154,8 @@
         "verifiedCorrect": "Verified Correct",
         "falsePositive": "False Positive",
         "notReviewed": "Not Reviewed",
-        "locked": "Locked"
+        "locked": "Locked",
+        "unlikely": "Unlikely"
       },
       "form": {
         "correctDetection": "Correct Detection",
@@ -423,7 +424,7 @@
       },
       "buffer": {
         "overloadTitle": "Audio Analysis Overloaded",
-        "overloadMessage": "Your system is dropping {dropRate}% of audio samples for source '{sourceName}' because it cannot keep up with analysis. Reduce the BirdNET overlap value in detection settings or consider upgrading to a faster CPU."
+        "overloadMessage": "Your system is dropping {dropRate}% of audio samples for source ''{sourceName}'' because it cannot keep up with analysis. Reduce the BirdNET overlap value in detection settings or consider upgrading to a faster CPU."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -513,7 +514,8 @@
       "false": "False",
       "unverified": "Unverified",
       "locked": "Locked",
-      "unlocked": "Unlocked"
+      "unlocked": "Unlocked",
+      "unlikely": "Unlikely"
     },
     "review": {
       "review": "Review",
@@ -641,7 +643,8 @@
         "verified": "Verified",
         "false": "False",
         "unverified": "Unverified",
-        "locked": "Locked"
+        "locked": "Locked",
+        "unlikely": "Unlikely"
       },
       "modals": {
         "showSpecies": "Show Species {species}",
@@ -798,6 +801,25 @@
     "pagination": {
       "showing": "Showing {from} to {to} of {total} results"
     },
+    "selection": {
+      "select": "Select",
+      "nSelected": "{count} selected",
+      "selectAllMatching": "Select all {count} matching detections",
+      "allSelected": "All {count} selected",
+      "clear": "Clear selection",
+      "toolbarLabel": "Bulk actions",
+      "confirmBulkDelete": "Delete {count} detections? This cannot be undone.",
+      "confirmBulkMarkCorrect": "Mark {count} detections as correct?",
+      "confirmBulkMarkFalsePositive": "Mark {count} detections as false positive?",
+      "confirmBulkLock": "Lock {count} detections?",
+      "confirmBulkUnlock": "Unlock {count} detections?",
+      "bulkSuccess": "{count} detections updated",
+      "bulkDeleteSuccess": "{count} detections deleted",
+      "bulkPartial": "{processed} updated, {skipped} skipped (locked)",
+      "tooManyDetections": "Too many detections ({count}). Narrow your filters to select fewer than 500.",
+      "bulkError": "Bulk operation failed. Please try again.",
+      "switchToTable": "Switch to table view to select detections"
+    },
     "weather": {
       "title": "Weather Information",
       "noData": "No weather data",
@@ -820,26 +842,56 @@
         "pressure": "hPa"
       },
       "conditions": {
-        "clearsky_day": "Clear Sky",
-        "clearsky_night": "Clear Sky",
-        "fair_day": "Fair",
-        "fair_night": "Fair",
-        "partlycloudy_day": "Partly Cloudy",
-        "partlycloudy_night": "Partly Cloudy",
+        "clearsky": "Clear Sky",
         "cloudy": "Cloudy",
-        "rainshowers_day": "Rain Showers",
-        "rainshowers_night": "Rain Showers",
-        "rain": "Rain",
-        "thunder": "Thunderstorm",
-        "sleet": "Sleet",
-        "snow": "Snow",
+        "fair": "Fair",
         "fog": "Fog",
+        "heavyrain": "Heavy Rain",
+        "heavyrainandthunder": "Heavy Rain and Thunder",
+        "heavyrainshowers": "Heavy Rain Showers",
+        "heavyrainshowersandthunder": "Heavy Rain Showers and Thunder",
+        "heavysleet": "Heavy Sleet",
+        "heavysleetandthunder": "Heavy Sleet and Thunder",
+        "heavysleetshowers": "Heavy Sleet Showers",
+        "heavysleetshowersandthunder": "Heavy Sleet Showers and Thunder",
+        "heavysnow": "Heavy Snow",
+        "heavysnowandthunder": "Heavy Snow and Thunder",
+        "heavysnowshowers": "Heavy Snow Showers",
+        "heavysnowshowersandthunder": "Heavy Snow Showers and Thunder",
+        "lightrain": "Light Rain",
+        "lightrainandthunder": "Light Rain and Thunder",
+        "lightrainshowers": "Light Rain Showers",
+        "lightrainshowersandthunder": "Light Rain Showers and Thunder",
+        "lightsleet": "Light Sleet",
+        "lightsleetandthunder": "Light Sleet and Thunder",
+        "lightsleetshowers": "Light Sleet Showers",
+        "lightsnow": "Light Snow",
+        "lightsnowandthunder": "Light Snow and Thunder",
+        "lightsnowshowers": "Light Snow Showers",
+        "lightssleetshowersandthunder": "Light Sleet Showers and Thunder",
+        "lightssnowshowersandthunder": "Light Snow Showers and Thunder",
+        "partlycloudy": "Partly Cloudy",
+        "rain": "Rain",
+        "rainandthunder": "Rain and Thunder",
+        "rainshowers": "Rain Showers",
+        "rainshowersandthunder": "Rain Showers and Thunder",
+        "sleet": "Sleet",
+        "sleetandthunder": "Sleet and Thunder",
+        "sleetshowers": "Sleet Showers",
+        "sleetshowersandthunder": "Sleet Showers and Thunder",
+        "snow": "Snow",
+        "snowandthunder": "Snow and Thunder",
+        "snowshowers": "Snow Showers",
+        "snowshowersandthunder": "Snow Showers and Thunder",
+        "thunder": "Thunderstorm",
         "unknown": "Unknown"
       }
     },
     "row": {
       "viewDetails": "View details for {species}",
-      "openDetailFromStatus": "Open detail page for {species}"
+      "openDetailFromStatus": "Open detail page for {species}",
+      "play": "Play",
+      "playAudio": "Play audio"
     },
     "media": {
       "title": "Recording & Spectrogram",
@@ -1774,7 +1826,17 @@
           },
           "hardwareNote": "Strict and Maximum levels require higher overlap settings and more CPU resources. RPi 4 or better hardware is required for these levels.",
           "overlapAdjusted": "Overlap setting automatically adjusted to {overlap}s to meet filter requirements",
-          "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level"
+          "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level",
+          "levelNames": {
+            "off": "Off",
+            "lenient": "Lenient",
+            "moderate": "Moderate",
+            "balanced": "Balanced",
+            "strict": "Strict",
+            "maximum": "Maximum",
+            "unknown": "Unknown"
+          },
+          "warningOff": "With filtering disabled, any detection above the confidence threshold is accepted immediately. This typically produces several false positives per day. Even lenient filtering significantly improves result quality."
         },
         "rangeFilter": {
           "title": "Range Filter",
@@ -2408,8 +2470,11 @@
             "name": "Gotify",
             "server": {
               "label": "Server URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "Your Gotify server hostname (without https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Your Gotify server hostname and port"
+            },
+            "protocol": {
+              "label": "Protocol"
             },
             "token": {
               "label": "Application Token",
@@ -4511,6 +4576,29 @@
         "label": "Bat Detection Threshold",
         "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
       },
+      "batFilter": {
+        "label": "Bat Audio High-Pass Filter",
+        "helpText": "Filters out human-audible frequencies before bat analysis to reduce false positives from bird songs and ambient noise."
+      },
+      "batNighttimeOnly": {
+        "label": "Nighttime Only",
+        "helpText": "When enabled, bat detection runs only between civil dusk and civil dawn. Requires location to be configured. Disable to run bat detection around the clock."
+      },
+      "batUltrasonicFilter": {
+        "label": "Post Detection Validation",
+        "helpText": "When enabled, bat detections are validated by analyzing ultrasonic energy patterns in the source audio. Detections that lack bat echolocation characteristics are tagged as unlikely."
+      },
+      "batFalsePositiveFilter": {
+        "label": "Bat False Positive Filter",
+        "helpText": "Requires multiple confirmations of a bat detection within a sliding window before accepting it. Higher levels require more confirmations, reducing false positives. The bat model uses a fixed 50% overlap, so no overlap adjustment is needed.",
+        "levels": {
+          "off": "No filtering; accepts any bat detection immediately.",
+          "moderate": "Good balance for most setups. Significantly reduces false positives.",
+          "strict": "Maximum filtering for highest accuracy."
+        },
+        "detectionCount": "{count} confirmations required. {description}",
+        "warningOff": "Without filtering there is a high probability of false positives. Enabling filtering significantly improves accuracy."
+      },
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."
@@ -4519,15 +4607,21 @@
     "rangeFilter": {
       "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
       "status": {
-        "title": "Active Range Filter",
-        "model": "Model",
+        "title": "Range Filter Overview",
+        "geomodelInfo": "BirdNET Geomodel {version} - {species} known species",
         "autoSelected": "Auto-selected",
         "manual": "Manual",
-        "classifierModel": "Classifier",
-        "mappedSpecies": "Mapped Species",
-        "unmappedSpecies": "Unmapped Species",
+        "classifier": "Classifier",
         "totalSpecies": "Total Species",
-        "noFilter": "No range filter active"
+        "withRangeData": "With Range Data",
+        "withoutRangeData": "Without Range Data",
+        "withRangeDataTooltip": "Species that the geomodel can evaluate for geographic probability at your location",
+        "withoutRangeDataTooltip": "Species without geographic data in the geomodel, handled by the unmapped species setting below",
+        "noFilter": "No range filter active",
+        "passUnmapped": {
+          "label": "Allow species without range data",
+          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+        }
       }
     },
     "advanced": {
@@ -4552,6 +4646,10 @@
       "removing": "Removing...",
       "noInstalledModels": "No additional models installed. Browse the Available tab to add more classifiers.",
       "noAvailableModels": "No additional models available for your platform.",
+      "sections": {
+        "acoustic": "Acoustic Classifiers",
+        "geomodel": "Geomodels"
+      },
       "categories": {
         "wildlife": "Wildlife Classifiers",
         "bird": "Bird Classifiers",
@@ -4593,6 +4691,17 @@
       "reinstalling": "Reinstalling...",
       "reinstallComplete": "Files verified successfully",
       "geomodelBadge": "Includes BirdNET v3.0 geomodel"
+    },
+    "bird": {
+      "title": "Bird Detection",
+      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
+    },
+    "bat": {
+      "title": "Bat Detection",
+      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
     }
   },
   "restart": {

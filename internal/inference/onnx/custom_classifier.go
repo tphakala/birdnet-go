@@ -100,7 +100,7 @@ func (b *CustomClassifierBuilder) Build() (*CustomClassifier, error) {
 	case len(b.labels) > 0:
 		labels = b.labels
 	case b.labelsPath != "":
-		labels, err = loadLabels(b.labelsPath)
+		labels, err = LoadLabels(b.labelsPath)
 		if err != nil {
 			return nil, err
 		}
@@ -146,6 +146,9 @@ func (c *CustomClassifier) Predict(embeddings []float32) ([]Prediction, error) {
 // PredictRaw runs inference on a single embedding vector and returns all
 // sigmoid-applied scores as a flat array (no topK filtering).
 func (c *CustomClassifier) PredictRaw(embeddings []float32) ([]float32, error) {
+	if c.session == nil {
+		return nil, ErrSessionClosed
+	}
 	if len(embeddings) != c.inputDim {
 		return nil, &EmbeddingDimMismatchError{Expected: c.inputDim, Got: len(embeddings)}
 	}
@@ -172,6 +175,9 @@ func (c *CustomClassifier) PredictRaw(embeddings []float32) ([]float32, error) {
 
 // PredictBatch runs inference on multiple embedding vectors in a single batch.
 func (c *CustomClassifier) PredictBatch(embeddings [][]float32) ([][]Prediction, error) {
+	if c.session == nil {
+		return nil, ErrSessionClosed
+	}
 	if len(embeddings) == 0 {
 		return nil, ErrEmptyBatch
 	}

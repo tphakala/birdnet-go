@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/weather"
@@ -48,6 +49,7 @@ type AudioPipelineService struct {
 	apiService *APIServerService
 	engine     *engine.AudioEngine
 
+	watchdog            *audiocore.LivenessWatchdog
 	bufferMgr           *BufferManager
 	ctrlMonitor         *ControlMonitor
 	quietHoursScheduler *schedule.QuietHoursScheduler
@@ -56,6 +58,13 @@ type AudioPipelineService struct {
 	done                chan struct{}
 	doneOnce            sync.Once
 	wg                  sync.WaitGroup
+
+	// sourcesMu serializes operations that mutate the set of active audio
+	// sources: restartAudioCapture (restart loop goroutine), RestartSource
+	// (watchdog goroutine), and reconfigureChangedSources (control monitor
+	// goroutine). Without this, concurrent execution can cause duplicate
+	// source initialization and conflicting router states.
+	sourcesMu sync.Mutex
 
 	// soundLevelMu guards soundLevelConsumers. It is held only while mutating
 	// the map; router and engine calls happen outside the critical section so
@@ -84,6 +93,36 @@ func NewAudioPipelineService(settings *conf.Settings, bnAnalyzer *BirdNETAnalyze
 // Name returns a human-readable identifier for logging and diagnostics.
 func (p *AudioPipelineService) Name() string {
 	return audioPipelineServiceName
+}
+
+// buildLivenessConfig creates a LivenessConfig from user settings, falling back
+// to production defaults for any zero-valued field.
+func buildLivenessConfig(ws conf.WatchdogSettings) audiocore.LivenessConfig {
+	cfg := audiocore.DefaultLivenessConfig()
+	if ws.CheckInterval > 0 {
+		cfg.CheckInterval = time.Duration(ws.CheckInterval) * time.Second
+	}
+	if ws.SilenceThreshold > 0 {
+		cfg.SilenceThreshold = time.Duration(ws.SilenceThreshold) * time.Second
+	}
+	if ws.MaxRetries > 0 {
+		cfg.MaxRetries = ws.MaxRetries
+	}
+	if ws.RetryBackoff > 0 {
+		cfg.RetryBackoff = time.Duration(ws.RetryBackoff) * time.Second
+	}
+	if ws.Cooldown > 0 {
+		cfg.CooldownAfterRecov = time.Duration(ws.Cooldown) * time.Second
+	}
+	if ws.EscalationTimeout > 0 {
+		cfg.EscalationTimeout = time.Duration(ws.EscalationTimeout) * time.Second
+	}
+	return cfg
+}
+
+// Watchdog returns the audio liveness watchdog, or nil if not started.
+func (p *AudioPipelineService) Watchdog() *audiocore.LivenessWatchdog {
+	return p.watchdog
 }
 
 // Start initializes and starts the audio capture pipeline, buffer management,
@@ -224,6 +263,63 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	p.engine.SetScheduler(p.quietHoursScheduler)
 	p.quietHoursScheduler.Start()
 
+	// Start audio liveness watchdog for detecting silent capture deaths.
+	notifSvc := notification.GetService()
+	watchdogCallbacks := audiocore.LivenessCallbacks{
+		RestartSource: p.RestartSource,
+		Escalate: func(_ string) {
+			select {
+			case p.restartChan <- struct{}{}:
+			default:
+			}
+		},
+		Notify: func(sourceID string, state audiocore.LivenessState, msg string) {
+			if notifSvc == nil {
+				return
+			}
+			priority := notification.PriorityHigh
+			title := "Audio source " + msg
+			body := "Source " + sourceID + ": " + msg
+			if state == audiocore.StateFailed || state == audiocore.StateEscalated {
+				priority = notification.PriorityCritical
+			}
+			if _, err := notifSvc.CreateWithComponent(
+				notification.TypeSystem, priority,
+				title, body, "audiocore.liveness",
+			); err != nil {
+				audiocore.GetLogger().Warn("failed to send liveness notification",
+					logger.Error(err),
+					logger.String("operation", "liveness_notify"))
+			}
+		},
+		IsQuietHours: func(sourceID string) bool {
+			if p.quietHoursScheduler == nil {
+				return false
+			}
+			src, ok := p.engine.Registry().Get(sourceID)
+			if ok && src.Type == audiocore.SourceTypeAudioCard {
+				return p.quietHoursScheduler.IsSoundCardSuppressed()
+			}
+			suppressed := p.quietHoursScheduler.GetSuppressedStreams()
+			return suppressed[sourceID]
+		},
+	}
+	p.watchdog = audiocore.NewLivenessWatchdog(
+		buildLivenessConfig(settings.Realtime.Audio.Watchdog),
+		p.engine.Router(),
+		watchdogCallbacks,
+	)
+	p.watchdog.Start()
+
+	// Expose the watchdog and source restarter to the API controller.
+	if ctrl := p.apiService.APIController(); ctrl != nil {
+		ctrl.SetAudioWatchdog(p.watchdog)
+		ctrl.SetSourceRestarter(p.RestartSource)
+	}
+
+	// Inject suncalc into the orchestrator for bat nighttime scheduling.
+	bn.SetSunCalc(p.apiService.SunCalc())
+
 	// Publish application started alert event.
 	alerting.TryPublish(&alerting.AlertEvent{
 		ObjectType: alerting.ObjectTypeApplication,
@@ -316,6 +412,12 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 
 	// NOTE: FFmpeg manager shutdown is handled by engine.Stop() in serve.go.
 
+	// Stop liveness watchdog before quiet hours scheduler so that
+	// IsQuietHours callbacks do not race with scheduler teardown.
+	if p.watchdog != nil {
+		p.watchdog.Stop()
+	}
+
 	// Stop quiet hours scheduler.
 	if p.quietHoursScheduler != nil {
 		p.quietHoursScheduler.Stop()
@@ -357,6 +459,9 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 // restartAudioCapture restarts the audio capture by removing and re-adding
 // all sources via the AudioEngine.
 func (p *AudioPipelineService) restartAudioCapture() {
+	p.sourcesMu.Lock()
+	defer p.sourcesMu.Unlock()
+
 	audiocore.GetLogger().Info("restarting audio capture",
 		logger.String("operation", "restart_audio_capture"))
 
@@ -366,6 +471,100 @@ func (p *AudioPipelineService) restartAudioCapture() {
 	// Re-add sources, register consumers, and update buffer monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
 	p.setupAudioSources(audioLevelChan, "restart")
+}
+
+// RestartSource tears down and reinitializes a single audio source.
+// Follows the same cleanup pattern as reconfigureChangedSources: remove routes,
+// clean up overrun trackers, untrack sound level, stop capture, then re-add.
+func (p *AudioPipelineService) RestartSource(sourceID string) error {
+	p.sourcesMu.Lock()
+	defer p.sourcesMu.Unlock()
+
+	log := audiocore.GetLogger()
+	log.Info("restarting single audio source",
+		logger.String("source_id", sourceID),
+		logger.String("operation", "restart_source"))
+
+	registry := p.engine.Registry()
+
+	// Save connection string before removal (needed to look up config).
+	// ConnectionStringByID reads the private field directly from the registry,
+	// unlike Get() which returns a copy with the field cleared for safety.
+	connStr, ok := registry.ConnectionStringByID(sourceID)
+	if !ok {
+		return fmt.Errorf("restart source: source %s not found in registry", sourceID)
+	}
+
+	// 1. Clean up overrun tracker state.
+	RemoveOverrunTrackers(sourceID)
+
+	// 2. Untrack sound level consumer (engine.RemoveSource removes the route).
+	p.untrackSoundLevelConsumer(sourceID)
+
+	// 3. Remove source from engine (stops capture, removes routes, deallocates buffers, unregisters).
+	if err := p.engine.RemoveSource(sourceID); err != nil {
+		log.Error("failed to remove source during restart",
+			logger.String("source_id", sourceID),
+			logger.Error(err),
+			logger.String("operation", "restart_source"))
+		return fmt.Errorf("restart source: remove failed: %w", err)
+	}
+
+	// 5. Rebuild source config from current settings.
+	sourceConfigs := p.buildSourceConfigsWithModels()
+	var targetConfig *sourceConfigWithModels
+	for i := range sourceConfigs {
+		if sourceConfigs[i].config.ConnectionString == connStr {
+			targetConfig = &sourceConfigs[i]
+			break
+		}
+	}
+	if targetConfig == nil {
+		log.Warn("source config no longer in settings after removal",
+			logger.String("source_id", sourceID),
+			logger.String("operation", "restart_source"))
+		return fmt.Errorf("restart source: config for %s no longer exists in settings", sourceID)
+	}
+
+	// 6. Re-add source via engine.
+	if err := p.engine.AddSource(targetConfig.config); err != nil {
+		log.Error("failed to re-add source during restart",
+			logger.String("source_id", sourceID),
+			logger.Error(err),
+			logger.String("operation", "restart_source"))
+		return fmt.Errorf("restart source: add failed: %w", err)
+	}
+
+	// The source may get a new ID from the registry. Look it up.
+	newSrc, found := registry.GetByConnection(connStr)
+	if !found {
+		return fmt.Errorf("restart source: source re-added but not found in registry")
+	}
+	newSourceID := newSrc.ID
+
+	// 7. Re-register consumers and monitors.
+	audioLevelChan := p.apiService.AudioLevelChan()
+	sourceModelMap := map[string][]string{newSourceID: targetConfig.modelIDs}
+	p.registerConsumersForSources([]string{newSourceID}, sourceModelMap, audioLevelChan, "restart_source")
+	p.registerSoundLevelConsumers([]string{newSourceID}, "restart_source")
+
+	// Update buffer monitors.
+	if monErr := p.bufferMgr.AddMonitor(newSourceID); monErr != nil {
+		log.Warn("buffer monitor update failed during source restart",
+			logger.String("source_id", newSourceID),
+			logger.Error(monErr),
+			logger.String("operation", "restart_source"))
+	}
+
+	// Reset dispatch timestamp so watchdog starts fresh.
+	p.engine.Router().ResetDispatchTime(newSourceID)
+
+	log.Info("single source restart complete",
+		logger.String("old_source_id", sourceID),
+		logger.String("new_source_id", newSourceID),
+		logger.String("operation", "restart_source"))
+
+	return nil
 }
 
 // removeAllSources removes all audio sources from the engine.
@@ -384,6 +583,7 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 	// router state so the next registerSoundLevelConsumers call (e.g. after
 	// restartAudioCapture) does not skip sources due to stale entries.
 	p.untrackAllSoundLevelConsumers()
+	ResetOverrunTrackers()
 }
 
 // setupAudioSources builds source configs from current settings, adds them to
@@ -524,6 +724,14 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 			p.soundLevelMu.Unlock()
 			p.engine.Router().RemoveRoute(sid, consumerID)
 			log.Debug("sound level disabled mid-register, dropped route",
+				logger.String("source_id", sid),
+				logger.String("consumer_id", consumerID),
+				logger.String("operation", operation))
+			continue
+		}
+		if _, raced := p.soundLevelConsumers[sid]; raced {
+			p.soundLevelMu.Unlock()
+			log.Debug("sound level consumer already registered concurrently, skipping",
 				logger.String("source_id", sid),
 				logger.String("consumer_id", consumerID),
 				logger.String("operation", operation))
@@ -792,6 +1000,9 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 // changed are touched - unchanged streams keep their capture buffers and
 // source IDs intact.
 func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan audiocore.AudioLevelData) {
+	p.sourcesMu.Lock()
+	defer p.sourcesMu.Unlock()
+
 	log := audiocore.GetLogger()
 
 	// Build desired config keyed by connection string, including model IDs.
@@ -892,22 +1103,24 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	}
 	var removedCount int
 	for _, src := range registry.List() {
-		if !keepIDs[src.ID] {
-			removedCount++
-			log.Info("removing stream no longer in config",
-				logger.String("source_id", src.ID),
-				logger.String("operation", "reconfigure_diff"))
-			if err := p.engine.RemoveSource(src.ID); err != nil {
-				log.Warn("failed to remove source during reconfigure",
-					logger.String("source_id", src.ID),
-					logger.Error(err))
-			}
-			// engine.RemoveSource also removes the soundlevel route. Drop the
-			// tracking entry so the idempotency check in
-			// registerSoundLevelConsumers does not skip this ID if the same
-			// source is re-added later.
-			p.untrackSoundLevelConsumer(src.ID)
+		if keepIDs[src.ID] {
+			continue
 		}
+		removedCount++
+		log.Info("removing stream no longer in config",
+			logger.String("source_id", src.ID),
+			logger.String("operation", "reconfigure_diff"))
+		if err := p.engine.RemoveSource(src.ID); err != nil {
+			log.Warn("failed to remove source during reconfigure",
+				logger.String("source_id", src.ID),
+				logger.Error(err))
+		}
+		// engine.RemoveSource also removes the soundlevel route. Drop the
+		// tracking entry so the idempotency check in
+		// registerSoundLevelConsumers does not skip this ID if the same
+		// source is re-added later.
+		p.untrackSoundLevelConsumer(src.ID)
+		RemoveOverrunTrackers(src.ID)
 	}
 
 	// Register consumers and monitors only for newly added sources.
@@ -1103,111 +1316,83 @@ func (p *AudioPipelineService) startWeatherPolling(metrics *observability.Metric
 }
 
 // clipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
-// It also performs periodic cleanup of log deduplicator states to prevent memory growth.
 func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
-	// Get configurable cleanup check interval, with fallback to default
+	log := GetLogger()
+
+	// Read initial interval for the startup log message.
 	retention := conf.Setting().Realtime.Audio.Export.Retention
 	checkInterval := retention.CheckInterval
 	if checkInterval <= 0 {
 		checkInterval = conf.DefaultCleanupCheckInterval
 	}
-
-	// Create a ticker that triggers at the configured interval to perform cleanup
-	ticker := time.NewTicker(time.Duration(checkInterval) * time.Minute)
-	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
-
-	// Get the shared disk manager logger
-	diskManagerLogger := diskmanager.GetLogger()
-
-	policy := retention.Policy
-	GetLogger().Info("clip cleanup monitor initialized",
-		logger.String("policy", policy),
+	log.Info("clip cleanup monitor initialized",
+		logger.String("policy", retention.Policy),
 		logger.Int("check_interval_minutes", checkInterval),
 		logger.String("operation", "clip_cleanup_init"))
-	diskManagerLogger.Info("Cleanup timer started",
-		logger.String("policy", policy),
-		logger.Int("interval_minutes", checkInterval),
-		logger.String("timestamp", time.Now().Format(time.RFC3339)))
 
 	for {
+		// Re-read interval each iteration so hot-reload takes effect.
+		interval := conf.Setting().Realtime.Audio.Export.Retention.CheckInterval
+		if interval <= 0 {
+			interval = conf.DefaultCleanupCheckInterval
+		}
+		timer := time.NewTimer(time.Duration(interval) * time.Minute)
+
 		select {
 		case <-quitChan:
-			// Handle quit signal to stop the monitor
-			diskManagerLogger.Info("Cleanup timer stopped",
-				logger.String("reason", "quit signal received"),
-				logger.String("timestamp", time.Now().Format(time.RFC3339)))
+			timer.Stop()
+			log.Debug("clip cleanup monitor stopped",
+				logger.String("operation", "clip_cleanup_stop"))
 			return
 
-		case t := <-ticker.C:
-			GetLogger().Info("starting clip cleanup task",
+		case t := <-timer.C:
+			currentPolicy := conf.Setting().Realtime.Audio.Export.Retention.Policy
+			log.Info("starting clip cleanup task",
 				logger.String("timestamp", t.Format(time.RFC3339)),
-				logger.String("policy", conf.Setting().Realtime.Audio.Export.Retention.Policy),
+				logger.String("policy", currentPolicy),
 				logger.String("operation", "clip_cleanup_task"))
-			diskManagerLogger.Info("Cleanup timer triggered",
-				logger.String("timestamp", t.Format(time.RFC3339)),
-				logger.String("policy", conf.Setting().Realtime.Audio.Export.Retention.Policy))
 
-			// age based cleanup method
-			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
-				diskManagerLogger.Debug("Starting age-based cleanup via timer")
+			if currentPolicy == "age" {
 				result := diskmanager.AgeBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
-					GetLogger().Error("age-based cleanup failed",
+					log.Error("age-based cleanup failed",
 						logger.Error(result.Err),
 						logger.String("operation", "age_based_cleanup"))
-					diskManagerLogger.Error("Age-based cleanup failed",
-						logger.Error(result.Err),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				} else {
-					GetLogger().Info("age-based cleanup completed successfully",
+					log.Info("age-based cleanup completed",
 						logger.Int("clips_removed", result.ClipsRemoved),
 						logger.Int("disk_utilization_percent", result.DiskUtilization),
 						logger.String("operation", "age_based_cleanup"))
-					diskManagerLogger.Info("Age-based cleanup completed via timer",
-						logger.Int("clips_removed", result.ClipsRemoved),
-						logger.Int("disk_utilization", result.DiskUtilization),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				}
 			}
 
-			// priority based cleanup method
-			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "usage" {
-				retention := conf.Setting().Realtime.Audio.Export.Retention
+			if currentPolicy == "usage" {
+				currentRetention := conf.Setting().Realtime.Audio.Export.Retention
 				baseDir := conf.Setting().Realtime.Audio.Export.Path
 
-				// Check if we can skip cleanup
-				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&retention, baseDir)
-
+				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&currentRetention, baseDir)
 				if err != nil {
-					diskManagerLogger.Warn("Failed to check disk usage for early exit via timer",
+					log.Warn("failed to check disk usage",
 						logger.Error(err),
-						logger.Bool("continuing_with_cleanup", true))
+						logger.Bool("continuing_with_cleanup", true),
+						logger.String("operation", "usage_based_cleanup"))
 				} else if skip {
-					diskManagerLogger.Info("Disk usage below threshold via timer, skipping cleanup",
-						logger.Int("current_usage", utilization),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
-					continue // Skip to next timer tick
+					log.Debug("disk usage below threshold, skipping cleanup",
+						logger.Int("disk_utilization_percent", utilization),
+						logger.String("operation", "usage_based_cleanup"))
+					continue
 				}
 
-				// Proceed with cleanup
-				diskManagerLogger.Debug("Starting usage-based cleanup via timer")
 				result := diskmanager.UsageBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
-					GetLogger().Error("usage-based cleanup failed",
+					log.Error("usage-based cleanup failed",
 						logger.Error(result.Err),
 						logger.String("operation", "usage_based_cleanup"))
-					diskManagerLogger.Error("Usage-based cleanup failed",
-						logger.Error(result.Err),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				} else {
-					GetLogger().Info("usage-based cleanup completed successfully",
+					log.Info("usage-based cleanup completed",
 						logger.Int("clips_removed", result.ClipsRemoved),
 						logger.Int("disk_utilization_percent", result.DiskUtilization),
 						logger.String("operation", "usage_based_cleanup"))
-					diskManagerLogger.Info("Usage-based cleanup completed via timer",
-						logger.Int("clips_removed", result.ClipsRemoved),
-						logger.Int("disk_utilization", result.DiskUtilization),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				}
 			}
 		}

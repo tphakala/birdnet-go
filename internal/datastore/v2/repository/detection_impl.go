@@ -604,9 +604,13 @@ func (r *detectionRepository) buildSearchFilters(query *gorm.DB, filters *Search
 	}
 	if len(filters.IncludedHours) > 0 {
 		// Extract local hour from Unix timestamp using timezone offset.
-		// Formula: FLOOR((detected_at + offset) / 3600) % 24
-		// FLOOR() ensures integer results on both SQLite and MySQL.
-		hourExpr := fmt.Sprintf("FLOOR((detected_at + %d) / 3600) %% 24", filters.TimezoneOffset)
+		detTable := r.tableName()
+		var hourExpr string
+		if r.isMySQL {
+			hourExpr = fmt.Sprintf("FLOOR((%s.detected_at + %d) / 3600) %% 24", detTable, filters.TimezoneOffset)
+		} else {
+			hourExpr = fmt.Sprintf("CAST((%s.detected_at + %d) / 3600 AS INTEGER) %% 24", detTable, filters.TimezoneOffset)
+		}
 		query = query.Where(hourExpr+" IN ?", filters.IncludedHours)
 	}
 	if filters.MinConfidence != nil {

@@ -138,7 +138,7 @@ func (p *Processor) convertThresholdsForPersistence(settings *conf.Settings) (db
 		// Extract model name and species name from composite key
 		modelName, speciesName := splitDynamicThresholdKey(compositeKey)
 
-		baseThreshold := p.getBaseConfidenceThreshold(settings, speciesName, "")
+		baseThreshold := p.getBaseConfidenceThreshold(settings, speciesName, "", modelName)
 		dbThresholds = append(dbThresholds, datastore.DynamicThreshold{
 			SpeciesName:    speciesName,
 			ModelName:      modelName,

@@ -55,6 +55,15 @@ type Manager interface {
 	Exists() bool
 	// IsMySQL returns true if this is a MySQL manager.
 	IsMySQL() bool
+	// TablePrefix returns the prefix applied to every v2 table name. It is
+	// non-empty (currently "v2_") only on MySQL deployments that are still
+	// in the v1→v2 migration window — there, v2 tables coexist alongside
+	// the legacy v1 schema and need the prefix to avoid name collisions.
+	// On SQLite, on fresh-install MySQL, and on any future cutover where
+	// the prefix is dropped, this returns "". Code that builds raw-SQL
+	// table references MUST consult this to stay correct under all three
+	// deployment modes.
+	TablePrefix() string
 }
 
 // Config holds database configuration for the v2 manager.

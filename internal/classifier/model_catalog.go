@@ -10,6 +10,7 @@ const (
 	CategoryWildlife = "wildlife"
 	CategoryBird     = "bird"
 	CategoryBat      = "bat"
+	CategoryGeomodel = "geomodel"
 )
 
 // CatalogFile role constants.
@@ -31,7 +32,7 @@ type CatalogEntry struct {
 	Author          string        // model author or organization
 	License         string        // license identifier (e.g., "Apache-2.0")
 	CommercialUse   bool          // whether commercial use is permitted
-	Category        string        // "wildlife", "bird", or "bat"
+	Category        string        // "wildlife", "bird", "bat", or "geomodel"
 	Region          string        // geographic region, or empty for global models
 	SpeciesCount    int           // number of species the model can identify
 	Version         string        // model version string
@@ -121,6 +122,25 @@ var EmbeddedCatalog = []CatalogEntry{
 			{RemotePath: "BSG_birds_Finland_v4_4_distribution.bin", LocalName: "BSG_birds_Finland_v4_4_distribution.bin", Role: RoleData, SHA256: "0617f19f3eca7f7bc409e3d853d742a171a835464862dc3ced2f5b72ef3093f5", SizeBytes: 25828768},
 			{RemotePath: "BSG_birds_Finland_v4_4_migration.csv", LocalName: "BSG_birds_Finland_v4_4_migration.csv", Role: RoleData, SHA256: "a3fdbfc744645f6945def7fbfa3ee19e347c31d1b46ae78fba75e7059b54a86b", SizeBytes: 17054},
 		},
+	},
+
+	// Geomodels (spatiotemporal species occurrence prediction)
+	{
+		ID:              "birdnet-geomodel-v3",
+		Name:            "BirdNET Geomodel v3.0",
+		Description:     "Spatiotemporal species occurrence prediction for post-filtering acoustic detections. Predicts which species are likely at a given location and week of the year.",
+		Author:          "Stefan Kahl, Cornell Lab of Ornithology",
+		License:         "CC BY-SA 4.0",
+		CommercialUse:   true,
+		Category:        CategoryGeomodel,
+		Region:          "",
+		SpeciesCount:    12012,
+		Version:         "3.0.2",
+		GeomodelVersion: "v3",
+		RegistryID:      "",
+		UpstreamURL:     "https://github.com/birdnet-team/geomodel",
+		HuggingFaceRepo: geomodelHuggingFaceRepo,
+		Files:           geomodelFiles(),
 	},
 
 	// Bat models (BattyBirdNET family by rdz-oss)
@@ -224,6 +244,20 @@ func isTaxonomyRole(role string) bool { return role == RoleTaxonomy }
 // isSharedRole reports whether the given file role stores into models/shared/.
 func isSharedRole(role string) bool {
 	return role == RoleEmbeddings || role == RoleTaxonomy || isGeomodelRole(role)
+}
+
+// IsSharedOnly reports whether all files in a catalog entry use shared roles
+// (stored in models/shared/ rather than a per-model subdirectory).
+func IsSharedOnly(entry *CatalogEntry) bool {
+	if len(entry.Files) == 0 {
+		return false
+	}
+	for _, f := range entry.Files {
+		if !isSharedRole(f.Role) {
+			return false
+		}
+	}
+	return true
 }
 
 // HasTaxonomyFiles reports whether a catalog entry includes shared taxonomy files.
@@ -339,7 +373,7 @@ func VisibleCatalog() []CatalogEntry {
 }
 
 // CatalogByCategory groups visible catalog entries by their Category field
-// (e.g., "bird", "bat") and returns the resulting map.
+// (e.g., "wildlife", "bird", "bat", "geomodel") and returns the resulting map.
 func CatalogByCategory() map[string][]CatalogEntry {
 	visible := VisibleCatalog()
 	grouped := make(map[string][]CatalogEntry)

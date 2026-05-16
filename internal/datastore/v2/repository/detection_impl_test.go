@@ -310,6 +310,67 @@ func TestSaveReview_UpdatedAtChangesOnUpsert(t *testing.T) {
 		"UpdatedAt should advance on upsert: first=%v, second=%v", firstUpdated, second.UpdatedAt)
 }
 
+func TestSearch_IncludedHoursOnSQLite(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	t08 := time.Date(2026, 5, 16, 8, 30, 0, 0, time.UTC).Unix()
+	t14 := time.Date(2026, 5, 16, 14, 0, 0, 0, time.UTC).Unix()
+	t22 := time.Date(2026, 5, 16, 22, 15, 0, 0, time.UTC).Unix()
+	createTestDetection(t, db, t08)
+	createTestDetection(t, db, t14)
+	createTestDetection(t, db, t22)
+
+	tests := []struct {
+		name           string
+		includedHours  []int
+		timezoneOffset int
+		wantTotal      int64
+		wantDetectedAt []int64
+	}{
+		{
+			name:           "single hour UTC",
+			includedHours:  []int{14},
+			timezoneOffset: 0,
+			wantTotal:      1,
+			wantDetectedAt: []int64{t14},
+		},
+		{
+			name:           "multiple hours UTC",
+			includedHours:  []int{8, 22},
+			timezoneOffset: 0,
+			wantTotal:      2,
+			wantDetectedAt: []int64{t08, t22},
+		},
+		{
+			name:           "negative timezone offset UTC-5",
+			includedHours:  []int{9},
+			timezoneOffset: -5 * 3600,
+			wantTotal:      1,
+			wantDetectedAt: []int64{t14},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			results, total, err := repo.Search(ctx, &SearchFilters{
+				IncludedHours:  tc.includedHours,
+				TimezoneOffset: tc.timezoneOffset,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantTotal, total)
+			require.Len(t, results, len(tc.wantDetectedAt))
+
+			got := make([]int64, 0, len(results))
+			for _, d := range results {
+				got = append(got, d.DetectedAt)
+			}
+			assert.ElementsMatch(t, tc.wantDetectedAt, got)
+		})
+	}
+}
+
 func TestSaveReview_ConcurrentUpsertNoDuplicates(t *testing.T) {
 	db := setupDetectionTestDB(t)
 	ctx := t.Context()

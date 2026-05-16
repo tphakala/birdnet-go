@@ -19,11 +19,6 @@ const (
 	maxBodyPreviewSize = 200 // Maximum characters to show in error logs
 )
 
-// Sentinel errors for weather operations
-var (
-	ErrWeatherDataNotModified = errors.Newf("weather data not modified").Component("weather").Category(errors.CategoryNotFound).Build()
-)
-
 // YrResponse represents the structure of the Yr.no API response
 type YrResponse struct {
 	Properties struct {
@@ -204,9 +199,11 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 	}
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept-Encoding", "gzip")
+	p.mu.Lock()
 	if p.lastModified != "" {
 		req.Header.Set("If-Modified-Since", p.lastModified)
 	}
+	p.mu.Unlock()
 
 	// Execute request with retry
 	body, err := p.executeWithRetry(req, providerLogger)
@@ -264,7 +261,10 @@ func (p *YrNoProvider) executeWithRetry(req *http.Request, log logger.Logger) ([
 		}
 
 		if result.notModified {
-			log.Info("Weather data not modified since last fetch", logger.String("last_modified", p.lastModified))
+			p.mu.Lock()
+			lm := p.lastModified
+			p.mu.Unlock()
+			log.Info("Weather data not modified since last fetch", logger.String("last_modified", lm))
 			return nil, ErrWeatherDataNotModified
 		}
 
@@ -275,7 +275,9 @@ func (p *YrNoProvider) executeWithRetry(req *http.Request, log logger.Logger) ([
 
 		// Success
 		if result.lastMod != "" {
+			p.mu.Lock()
 			p.lastModified = result.lastMod
+			p.mu.Unlock()
 		}
 		return result.body, nil
 	}

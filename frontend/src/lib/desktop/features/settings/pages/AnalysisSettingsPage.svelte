@@ -41,6 +41,9 @@
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
+  import FalsePositiveFilterControl, {
+    type FilterLevel,
+  } from '$lib/desktop/components/forms/FalsePositiveFilterControl.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
@@ -73,6 +76,7 @@
     Loader2,
     RefreshCw,
     Radar,
+    Globe,
     XCircle,
     X,
     Check,
@@ -136,10 +140,20 @@
     }
   );
   let falsePositiveFilter = $derived($realtimeSettings?.falsePositiveFilter ?? { level: 0 });
-  let bat = $derived($batSettings ?? { enabled: false, threshold: 0.5 });
+  let bat = $derived(
+    $batSettings ?? {
+      enabled: false,
+      threshold: 0.5,
+      filterEnabled: false,
+      nighttimeOnly: true,
+      falsePositiveFilter: { level: 0 },
+      ultrasonicFilter: { enabled: true },
+    }
+  );
 
   // Check if a bat model is installed
   const hasBatModel = $derived(catalog.some(e => e.installed && e.category === 'bat'));
+  const batFPLevel = $derived(bat.falsePositiveFilter?.level ?? 0);
 
   // ── Derived catalog views ─────────────────────────────────────────────
   const installedEntries = $derived(catalog.filter(e => e.installed));
@@ -151,6 +165,9 @@
   );
   const availableBats = $derived(
     catalog.filter(e => !e.installed && e.compatible && e.category === 'bat')
+  );
+  const availableGeomodels = $derived(
+    catalog.filter(e => !e.installed && e.compatible && e.category === 'geomodel')
   );
 
   // ── BirdNET locale loading ────────────────────────────────────────────
@@ -203,42 +220,36 @@
   const falsePositiveFilterLevels = [
     {
       value: 0,
-      name: 'Off',
       descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.off',
       minOverlap: 0.0,
       threshold: 0.0,
     },
     {
       value: 1,
-      name: 'Lenient',
       descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.lenient',
       minOverlap: 2.0,
       threshold: 0.2,
     },
     {
       value: 2,
-      name: 'Moderate',
       descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.moderate',
       minOverlap: 2.2,
       threshold: 0.3,
     },
     {
       value: 3,
-      name: 'Balanced',
       descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.balanced',
       minOverlap: 2.4,
       threshold: 0.5,
     },
     {
       value: 4,
-      name: 'Strict',
       descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.strict',
       minOverlap: 2.7,
       threshold: 0.6,
     },
     {
       value: 5,
-      name: 'Maximum',
       descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.maximum',
       minOverlap: 2.8,
       threshold: 0.7,
@@ -263,10 +274,6 @@
     return Math.max(1, Math.ceil(required));
   }
 
-  function getFalsePositiveFilterLevelName(level: number): string {
-    return safeArrayAccess(falsePositiveFilterLevels, level)?.name ?? 'Unknown';
-  }
-
   function getFalsePositiveFilterDescription(level: number, overlap: number): string {
     const levelData = safeArrayAccess(falsePositiveFilterLevels, level);
     if (!levelData) return '';
@@ -284,23 +291,6 @@
 
   function getMinimumOverlapForLevel(level: number): number {
     return safeArrayAccess(falsePositiveFilterLevels, level)?.minOverlap ?? 0.0;
-  }
-
-  function getFalsePositiveFilterBadgeClass(level: number): string {
-    switch (level) {
-      case 1:
-        return 'bg-[var(--color-success)] text-[var(--color-success-content)]';
-      case 2:
-        return 'bg-[var(--color-info)] text-[var(--color-info-content)]';
-      case 3:
-        return 'bg-[var(--color-warning)] text-[var(--color-warning-content)]';
-      case 4:
-      case 5:
-        return 'bg-[var(--color-error)] text-[var(--color-error-content)]';
-      case 0:
-      default:
-        return 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]';
-    }
   }
 
   function updateFalsePositiveFilterLevel(newLevel: number) {
@@ -340,16 +330,23 @@
     label?: string;
   }
 
-  interface RangeFilterStatus {
-    model: string;
-    modelPath: string;
-    labelsPath: string;
+  interface GeomodelStatus {
+    version: string;
+    totalSpecies: number;
     autoSelected: boolean;
-    classifierModel: string;
-    geomodelSpecies: number;
-    classifierSpecies: number;
-    mappedSpecies: number;
-    unmappedSpecies: number;
+  }
+
+  interface ClassifierCoverage {
+    id: string;
+    name: string;
+    totalSpecies: number;
+    withRangeData: number;
+    withoutRangeData: number;
+  }
+
+  interface RangeFilterStatus {
+    geomodel: GeomodelStatus | null;
+    classifiers: ClassifierCoverage[];
     passUnmappedSpecies: boolean;
     threshold: number;
     locationConfigured: boolean;
@@ -469,8 +466,11 @@
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let loadingDelayTimer: ReturnType<typeof setTimeout> | undefined;
+  let rangeFilterAbortController: AbortController | null = null;
 
   function debouncedTestRangeFilter() {
+    rangeFilterAbortController?.abort();
+    rangeFilterAbortController = null;
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       testCurrentRangeFilter();
@@ -500,6 +500,7 @@
     }, 100);
 
     rangeFilterState.error = null;
+    rangeFilterAbortController = new AbortController();
 
     try {
       const data = await api.post<{ count: number; species?: RangeFilterSpecies[] }>(
@@ -508,7 +509,8 @@
           latitude: birdnet?.latitude,
           longitude: birdnet?.longitude,
           threshold: birdnet?.rangeFilter?.threshold,
-        }
+        },
+        { signal: rangeFilterAbortController.signal }
       );
 
       rangeFilterState.speciesCount = data.count;
@@ -517,12 +519,14 @@
         rangeFilterState.species = data.species || [];
       }
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       logger.error('Failed to test range filter:', err);
       rangeFilterState.error = t('settings.main.errors.rangeFilterTestFailed');
       rangeFilterState.speciesCount = null;
     } finally {
       clearTimeout(loadingDelayTimer);
       rangeFilterState.testing = false;
+      rangeFilterAbortController = null;
     }
   }
 
@@ -563,6 +567,7 @@
     return () => {
       clearTimeout(debounceTimer);
       clearTimeout(loadingDelayTimer);
+      rangeFilterAbortController?.abort();
     };
   });
 
@@ -656,6 +661,117 @@
     settingsActions.updateSection('bat', { threshold: value });
   }
 
+  function updateBatNighttimeOnly(value: boolean) {
+    settingsActions.updateSection('bat', { nighttimeOnly: value });
+  }
+
+  function updateBatUltrasonicFilter(value: boolean) {
+    settingsActions.updateSection('bat', {
+      ultrasonicFilter: { ...bat.ultrasonicFilter, enabled: value },
+    });
+  }
+
+  function updateBatFalsePositiveFilterLevel(newLevel: number) {
+    settingsActions.updateSection('bat', {
+      falsePositiveFilter: { level: newLevel },
+    });
+  }
+
+  // ── FP filter level definitions for the shared component ─────────────
+  const BADGE_OFF = 'bg-black/5 dark:bg-white/5 text-[var(--color-base-content)]';
+  const BADGE_SUCCESS = 'bg-[var(--color-success)] text-[var(--color-success-content)]';
+  const BADGE_INFO = 'bg-[var(--color-info)] text-[var(--color-info-content)]';
+  const BADGE_WARNING = 'bg-[var(--color-warning)] text-[var(--color-warning-content)]';
+  const BADGE_ERROR = 'bg-[var(--color-error)] text-[var(--color-error-content)]';
+
+  const BIRD_FP_LEVELS: FilterLevel[] = [
+    {
+      value: 0,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.off',
+      badgeClass: BADGE_OFF,
+    },
+    {
+      value: 1,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.lenient',
+      badgeClass: BADGE_SUCCESS,
+    },
+    {
+      value: 2,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.moderate',
+      badgeClass: BADGE_INFO,
+    },
+    {
+      value: 3,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.balanced',
+      badgeClass: BADGE_WARNING,
+    },
+    {
+      value: 4,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.strict',
+      badgeClass: BADGE_ERROR,
+    },
+    {
+      value: 5,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.maximum',
+      badgeClass: BADGE_ERROR,
+    },
+  ];
+
+  // Bat has only 3 meaningful levels (fixed 50% overlap, 4 detections in window):
+  // Off=bypass (1 det), Moderate=2 det, Strict=3 det.
+  // Lenient(1 det) is functionally identical to Off, so it's excluded.
+  const BAT_FP_LEVELS: FilterLevel[] = [
+    {
+      value: 0,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.off',
+      badgeClass: BADGE_OFF,
+    },
+    {
+      value: 2,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.moderate',
+      badgeClass: BADGE_INFO,
+    },
+    {
+      value: 4,
+      nameKey: 'settings.main.sections.falsePositiveFilter.levelNames.strict',
+      badgeClass: BADGE_ERROR,
+    },
+  ];
+
+  // Bat FP filter calculation helpers.
+  // The bat model uses a fixed 50% overlap (1.5s step for 3s clip),
+  // yielding 4 possible detections in a 6-second reference window.
+  const BAT_MAX_DETECTIONS_IN_WINDOW = 4;
+
+  function calculateBatMinDetections(level: number): number {
+    if (level === 0) return 1;
+    const levelData = safeArrayAccess(falsePositiveFilterLevels, level);
+    if (!levelData) return 1;
+    const required = BAT_MAX_DETECTIONS_IN_WINDOW * levelData.threshold - FLOAT_EPSILON;
+    return Math.max(1, Math.ceil(required));
+  }
+
+  const BAT_FP_DESCRIPTION_KEYS: Record<number, string> = {
+    0: 'analysis.detection.batFalsePositiveFilter.levels.off',
+    2: 'analysis.detection.batFalsePositiveFilter.levels.moderate',
+    4: 'analysis.detection.batFalsePositiveFilter.levels.strict',
+  };
+
+  function getBatFalsePositiveFilterDescription(level: number): string {
+    // eslint-disable-next-line security/detect-object-injection
+    const descKey = BAT_FP_DESCRIPTION_KEYS[level];
+    if (!descKey) return '';
+
+    const baseDescription = t(descKey);
+    if (level === 0) return baseDescription;
+
+    const minDet = calculateBatMinDetections(level);
+    return t('analysis.detection.batFalsePositiveFilter.detectionCount', {
+      count: minDet.toString(),
+      description: baseDescription,
+    });
+  }
+
   function updateThreshold(value: number) {
     settingsActions.updateSection('birdnet', { threshold: value });
   }
@@ -740,6 +856,7 @@
     try {
       await installModel(modelId);
 
+      if (progressCleanup) progressCleanup();
       progressCleanup = subscribeInstallProgress(
         modelId,
         (progress: DownloadProgress) => {
@@ -813,6 +930,7 @@
     try {
       await reinstallModel(entry.id);
 
+      if (progressCleanup) progressCleanup();
       progressCleanup = subscribeInstallProgress(
         entry.id,
         (progress: DownloadProgress) => {
@@ -879,20 +997,20 @@
 <!-- ── Settings Tab Content ──────────────────────────────────────────── -->
 {#snippet settingsTabContent()}
   <div class="space-y-6">
-    <!-- 1. Detection Settings -->
+    <!-- 1. Bird Detection -->
     <SettingsSection
-      title={t('analysis.detection.title')}
-      description={t('analysis.detection.description')}
+      title={t('analysis.bird.title')}
+      description={t('analysis.bird.description')}
       defaultOpen={true}
       originalData={{
         threshold: store.originalData.birdnet?.threshold,
         locale: store.originalData.birdnet?.locale,
-        batThreshold: store.originalData.bat?.threshold,
+        fpFilter: store.originalData.realtime?.falsePositiveFilter?.level ?? 0,
       }}
       currentData={{
         threshold: birdnet?.threshold,
         locale: birdnet?.locale,
-        batThreshold: bat.threshold,
+        fpFilter: falsePositiveFilter.level,
       }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -937,8 +1055,52 @@
             {/if}
           {/snippet}
         </SelectDropdown>
+      </div>
 
-        {#if hasBatModel}
+      <!-- Bird False Positive Filter -->
+      <div class="mt-6">
+        <FalsePositiveFilterControl
+          id="false-positive-filter-level"
+          level={falsePositiveFilter.level}
+          levels={BIRD_FP_LEVELS}
+          onUpdate={updateFalsePositiveFilterLevel}
+          getDescription={level => getFalsePositiveFilterDescription(level, birdnet?.overlap ?? 0)}
+          disabled={store.isLoading || store.isSaving}
+        />
+      </div>
+
+      {#if falsePositiveFilter.level === 0}
+        <SettingsNote>
+          {#snippet icon()}<AlertTriangle class="size-4 text-[var(--color-warning)]" />{/snippet}
+          <span>{t('settings.main.sections.falsePositiveFilter.warningOff')}</span>
+        </SettingsNote>
+      {:else if falsePositiveFilter.level >= 4}
+        <SettingsNote>
+          <span>{t('settings.main.sections.falsePositiveFilter.hardwareNote')}</span>
+        </SettingsNote>
+      {/if}
+    </SettingsSection>
+
+    <!-- 2. Bat Detection (only when a bat model is installed) -->
+    {#if hasBatModel}
+      <SettingsSection
+        title={t('analysis.bat.title')}
+        description={t('analysis.bat.description')}
+        defaultOpen={true}
+        originalData={{
+          batThreshold: store.originalData.bat?.threshold,
+          batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
+          batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
+          batFPFilter: store.originalData.bat?.falsePositiveFilter?.level ?? 0,
+        }}
+        currentData={{
+          batThreshold: bat.threshold,
+          batNighttimeOnly: bat.nighttimeOnly,
+          batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
+          batFPFilter: batFPLevel,
+        }}
+      >
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <NumberField
             label={t('analysis.detection.batThreshold.label')}
             value={bat.threshold}
@@ -949,57 +1111,44 @@
             disabled={store.isLoading || store.isSaving}
             helpText={t('analysis.detection.batThreshold.helpText')}
           />
-        {/if}
-      </div>
-    </SettingsSection>
+          <div></div>
 
-    <!-- 2. False Positive Filter -->
-    <SettingsSection
-      title={t('settings.main.sections.falsePositiveFilter.title')}
-      description={t('settings.main.sections.falsePositiveFilter.description')}
-      originalData={store.originalData.realtime?.falsePositiveFilter}
-      currentData={store.formData.realtime?.falsePositiveFilter}
-    >
-      <div class="space-y-4">
-        <div class="min-w-0">
-          <label for="false-positive-filter-level" class="flex items-center justify-between mb-2">
-            <span class="text-sm font-medium text-[var(--color-base-content)]">
-              {t('settings.main.sections.falsePositiveFilter.level.label')}
-            </span>
-            <span
-              class={cn(
-                'inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full',
-                getFalsePositiveFilterBadgeClass(falsePositiveFilter.level)
-              )}
-            >
-              {getFalsePositiveFilterLevelName(falsePositiveFilter.level)}
-            </span>
-          </label>
-          <input
-            id="false-positive-filter-level"
-            type="range"
-            class="w-full h-2 bg-[var(--color-base-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
-            min={0}
-            max={5}
-            step={1}
-            value={falsePositiveFilter.level}
-            oninput={e => updateFalsePositiveFilterLevel(parseInt(e.currentTarget.value))}
+          <Checkbox
+            checked={bat.nighttimeOnly ?? true}
+            label={t('analysis.detection.batNighttimeOnly.label')}
+            helpText={t('analysis.detection.batNighttimeOnly.helpText')}
             disabled={store.isLoading || store.isSaving}
+            onchange={updateBatNighttimeOnly}
           />
-          <div class="mt-1">
-            <span class="text-xs text-[var(--color-base-content)] opacity-60">
-              {getFalsePositiveFilterDescription(falsePositiveFilter.level, birdnet?.overlap ?? 0)}
-            </span>
-          </div>
+          <Checkbox
+            checked={bat.ultrasonicFilter?.enabled ?? true}
+            label={t('analysis.detection.batUltrasonicFilter.label')}
+            helpText={t('analysis.detection.batUltrasonicFilter.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={updateBatUltrasonicFilter}
+          />
         </div>
 
-        {#if falsePositiveFilter.level >= 4}
+        <!-- Bat False Positive Filter -->
+        <div class="mt-6">
+          <FalsePositiveFilterControl
+            id="bat-false-positive-filter-level"
+            level={batFPLevel}
+            levels={BAT_FP_LEVELS}
+            onUpdate={updateBatFalsePositiveFilterLevel}
+            getDescription={level => getBatFalsePositiveFilterDescription(level)}
+            disabled={store.isLoading || store.isSaving}
+          />
+        </div>
+
+        {#if batFPLevel === 0}
           <SettingsNote>
-            <span>{t('settings.main.sections.falsePositiveFilter.hardwareNote')}</span>
+            {#snippet icon()}<AlertTriangle class="size-4 text-[var(--color-warning)]" />{/snippet}
+            <span>{t('analysis.detection.batFalsePositiveFilter.warningOff')}</span>
           </SettingsNote>
         {/if}
-      </div>
-    </SettingsSection>
+      </SettingsSection>
+    {/if}
 
     <!-- 3. Range Filter -->
     <SettingsSection
@@ -1008,7 +1157,7 @@
       originalData={store.originalData.birdnet?.rangeFilter}
       currentData={birdnet?.rangeFilter}
     >
-      <SettingsNote>{t('analysis.rangeFilter.birdOnlyNote')}</SettingsNote>
+      <SettingsNote><span>{t('analysis.rangeFilter.birdOnlyNote')}</span></SettingsNote>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
         <NumberField
@@ -1079,65 +1228,98 @@
         </div>
       </div>
 
-      {#if rangeFilterStatus && rangeFilterStatus.model}
-        <div
-          class="mt-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)]/50 p-4"
+      {#if rangeFilterStatus && rangeFilterStatus.geomodel}
+        <details
+          class="mt-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)]/50"
         >
-          <h4 class="text-sm font-medium text-[var(--color-base-content)] mb-3">
+          <summary
+            class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] rounded-lg transition-colors"
+          >
             {t('analysis.rangeFilter.status.title')}
-          </h4>
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm">
-            <div>
-              <span class="text-[var(--color-base-content)]/60"
-                >{t('analysis.rangeFilter.status.model')}</span
-              >
-              <span class="ml-2 font-medium">{rangeFilterStatus.model}</span>
-            </div>
-            <div>
-              <span class="text-[var(--color-base-content)]/60"
-                >{t('analysis.rangeFilter.status.classifierModel')}</span
-              >
-              <span class="ml-2 font-medium">{rangeFilterStatus.classifierModel}</span>
-            </div>
-            <div>
+          </summary>
+          <div class="px-4 pb-4">
+            <!-- Geomodel info line -->
+            <div class="flex items-center gap-2 text-sm mb-3">
+              <span class="font-medium">
+                {t('analysis.rangeFilter.status.geomodelInfo', {
+                  version: rangeFilterStatus.geomodel.version,
+                  species: rangeFilterStatus.geomodel.totalSpecies.toLocaleString(),
+                })}
+              </span>
               <span
                 class={cn(
                   'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                  rangeFilterStatus.autoSelected
+                  rangeFilterStatus.geomodel.autoSelected
                     ? 'bg-[var(--color-success)]/15 text-[var(--color-success)]'
                     : 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/80'
                 )}
               >
-                {rangeFilterStatus.autoSelected
+                {rangeFilterStatus.geomodel.autoSelected
                   ? t('analysis.rangeFilter.status.autoSelected')
                   : t('analysis.rangeFilter.status.manual')}
               </span>
             </div>
-            <div>
-              <span class="text-[var(--color-base-content)]/60"
-                >{t('analysis.rangeFilter.status.mappedSpecies')}</span
-              >
-              <span class="ml-2 font-medium tabular-nums"
-                >{rangeFilterStatus.mappedSpecies.toLocaleString()}</span
-              >
-            </div>
-            <div>
-              <span class="text-[var(--color-base-content)]/60"
-                >{t('analysis.rangeFilter.status.unmappedSpecies')}</span
-              >
-              <span class="ml-2 font-medium tabular-nums"
-                >{rangeFilterStatus.unmappedSpecies.toLocaleString()}</span
-              >
-            </div>
-            <div>
-              <span class="text-[var(--color-base-content)]/60"
-                >{t('analysis.rangeFilter.status.totalSpecies')}</span
-              >
-              <span class="ml-2 font-medium tabular-nums"
-                >{rangeFilterStatus.geomodelSpecies.toLocaleString()}</span
-              >
-            </div>
+
+            <!-- Per-classifier coverage table -->
+            {#if rangeFilterStatus.classifiers.length > 0}
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="border-b border-[var(--color-base-300)]">
+                      <th
+                        class="text-left py-2 pr-4 font-medium text-[var(--color-base-content)]/60"
+                        >{t('analysis.rangeFilter.status.classifier')}</th
+                      >
+                      <th
+                        class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                        >{t('analysis.rangeFilter.status.totalSpecies')}</th
+                      >
+                      <th
+                        class="text-right py-2 px-4 font-medium text-[var(--color-base-content)]/60"
+                        title={t('analysis.rangeFilter.status.withRangeDataTooltip')}
+                        >{t('analysis.rangeFilter.status.withRangeData')}</th
+                      >
+                      <th
+                        class="text-right py-2 pl-4 font-medium text-[var(--color-base-content)]/60"
+                        title={t('analysis.rangeFilter.status.withoutRangeDataTooltip')}
+                        >{t('analysis.rangeFilter.status.withoutRangeData')}</th
+                      >
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each rangeFilterStatus.classifiers as classifier (classifier.id)}
+                      <tr class="border-b border-[var(--color-base-300)]/50 last:border-0">
+                        <td class="py-2 pr-4 font-medium">{classifier.name}</td>
+                        <td class="py-2 px-4 text-right tabular-nums"
+                          >{classifier.totalSpecies.toLocaleString()}</td
+                        >
+                        <td class="py-2 px-4 text-right tabular-nums"
+                          >{classifier.withRangeData.toLocaleString()}</td
+                        >
+                        <td class="py-2 pl-4 text-right tabular-nums"
+                          >{classifier.withoutRangeData.toLocaleString()}</td
+                        >
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {/if}
           </div>
+        </details>
+
+        <!-- Pass unmapped species toggle (always visible, outside collapsible) -->
+        <div class="mt-3">
+          <Checkbox
+            label={t('analysis.rangeFilter.status.passUnmapped.label')}
+            checked={birdnet?.rangeFilter?.passUnmappedSpecies ?? false}
+            onchange={value =>
+              settingsActions.updateSection('birdnet', {
+                rangeFilter: { ...birdnet?.rangeFilter, passUnmappedSpecies: value },
+              })}
+            helpText={t('analysis.rangeFilter.status.passUnmapped.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
         </div>
       {/if}
 
@@ -1166,13 +1348,17 @@
       originalData={store.originalData.realtime?.dynamicThreshold}
       currentData={store.formData.realtime?.dynamicThreshold}
     >
-      <Checkbox
-        checked={dynamicThreshold.enabled}
-        label={t('settings.main.sections.dynamicThreshold.enable.label')}
-        helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={value => updateDynamicThreshold('enabled', value)}
-      />
+      <SettingsNote><span>{t('analysis.dynamicThreshold.birdOnlyNote')}</span></SettingsNote>
+
+      <div class="mt-4">
+        <Checkbox
+          checked={dynamicThreshold.enabled}
+          label={t('settings.main.sections.dynamicThreshold.enable.label')}
+          helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateDynamicThreshold('enabled', value)}
+        />
+      </div>
 
       {#if dynamicThreshold.enabled}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
@@ -1349,7 +1535,9 @@
                 <img src={logo} alt="" class="size-10 shrink-0 rounded-lg" />
               {:else}
                 <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-                  {#if entry.category === 'bat'}
+                  {#if entry.category === 'geomodel'}
+                    <Globe size={24} class="text-[var(--color-primary)]" />
+                  {:else if entry.category === 'bat'}
                     <Radar size={24} class="text-[var(--color-primary)]" />
                   {:else}
                     <BrainCircuit size={24} class="text-[var(--color-primary)]" />
@@ -1361,10 +1549,21 @@
                 <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
                   {entry.description}
                 </p>
-                <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
+                {#if entry.upstreamUrl}
+                  <a
+                    href={entry.upstreamUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="mt-1 inline-block text-xs text-[var(--color-primary)]/80 hover:text-[var(--color-primary)] transition-colors"
+                  >
+                    {entry.author}
+                  </a>
+                {:else}
+                  <p class="mt-1 text-xs text-[var(--color-base-content)]/80">{entry.author}</p>
+                {/if}
               </div>
             </div>
-            <!-- Progress bar (shown during reinstall) -->
+            <!-- Progress bar (shown during reinstall, not for companion entries) -->
             {#if reinstallProgress}
               <div class="mt-3 space-y-1.5">
                 {#if reinstallProgress.status === 'complete'}
@@ -1418,9 +1617,31 @@
               <div class="text-[var(--color-base-content)]/80">
                 {t('analysis.gallery.species', { count: entry.speciesCount })}
               </div>
+              <div class="text-[var(--color-base-content)]/80">
+                {t('analysis.gallery.license.license')}
+              </div>
+              <div>
+                {#if entry.commercialUse}
+                  <span
+                    class="inline-flex items-center gap-1 rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs text-[var(--color-success)]"
+                    title={t('analysis.gallery.license.commercialUseAllowed')}
+                  >
+                    <Shield class="size-3" />
+                    {entry.license}
+                  </span>
+                {:else}
+                  <span
+                    class="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs text-[var(--color-warning)]"
+                    title={t('analysis.gallery.license.nonCommercialOnly')}
+                  >
+                    <ShieldAlert class="size-3" />
+                    {entry.license}
+                  </span>
+                {/if}
+              </div>
             </div>
-            <!-- Geomodel badge -->
-            {#if entry.hasGeomodel}
+            <!-- Geomodel badge (for acoustic classifiers that bundle a geomodel) -->
+            {#if entry.hasGeomodel && entry.category !== 'geomodel'}
               <div class="mt-2">
                 <span
                   class="inline-flex items-center gap-1 rounded-full bg-[var(--color-info)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-info)]"
@@ -1486,7 +1707,9 @@
         <img src={logo} alt="" class="size-10 shrink-0 rounded-lg" />
       {:else}
         <div class="shrink-0 rounded-lg bg-[var(--color-primary)]/10 p-2.5">
-          {#if entry.category === 'bat'}
+          {#if entry.category === 'geomodel'}
+            <Globe size={24} class="text-[var(--color-primary)]" />
+          {:else if entry.category === 'bat'}
             <Radar size={24} class="text-[var(--color-primary)]" />
           {:else}
             <BrainCircuit size={24} class="text-[var(--color-primary)]" />
@@ -1515,7 +1738,7 @@
       </div>
     </div>
 
-    <!-- Progress bar (shown during install) -->
+    <!-- Progress bar (shown during install, not for companion entries) -->
     {#if progress}
       <div class="mt-3 space-y-1.5">
         {#if progress.status === 'complete'}
@@ -1584,8 +1807,8 @@
       </div>
     </div>
 
-    <!-- Geomodel badge -->
-    {#if entry.hasGeomodel}
+    <!-- Geomodel badge (for acoustic classifiers that bundle a geomodel) -->
+    {#if entry.hasGeomodel && entry.category !== 'geomodel'}
       <div class="mt-2">
         <span
           class="inline-flex items-center gap-1 rounded-full bg-[var(--color-info)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-info)]"
@@ -1640,55 +1863,75 @@
         </button>
       </div>
     {:else}
-      <!-- Wildlife Classifiers -->
-      {#if availableWildlife.length > 0}
-        <div>
-          <h3
-            class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
-          >
-            {t('analysis.gallery.categories.wildlife')}
-          </h3>
+      <!-- Acoustic Classifiers section -->
+      {#if availableWildlife.length > 0 || availableBirds.length > 0 || availableBats.length > 0}
+        <div class="space-y-4">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-[var(--color-base-content)]">
+            {t('analysis.gallery.sections.acoustic')}
+          </h2>
+
+          {#if availableWildlife.length > 0}
+            <div>
+              <h3
+                class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
+              >
+                {t('analysis.gallery.categories.wildlife')}
+              </h3>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {#each availableWildlife as entry (entry.id)}
+                  {@render modelCard(entry)}
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if availableBirds.length > 0}
+            <div>
+              <h3
+                class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
+              >
+                {t('analysis.gallery.categories.bird')}
+              </h3>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {#each availableBirds as entry (entry.id)}
+                  {@render modelCard(entry)}
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if availableBats.length > 0}
+            <div>
+              <h3
+                class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
+              >
+                {t('analysis.gallery.categories.bat')}
+              </h3>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {#each availableBats as entry (entry.id)}
+                  {@render modelCard(entry)}
+                {/each}
+              </div>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      <!-- Geomodels section -->
+      {#if availableGeomodels.length > 0}
+        <div class="space-y-4">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-[var(--color-base-content)]">
+            {t('analysis.gallery.sections.geomodel')}
+          </h2>
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {#each availableWildlife as entry (entry.id)}
+            {#each availableGeomodels as entry (entry.id)}
               {@render modelCard(entry)}
             {/each}
           </div>
         </div>
       {/if}
 
-      <!-- Bird Classifiers -->
-      {#if availableBirds.length > 0}
-        <div>
-          <h3
-            class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
-          >
-            {t('analysis.gallery.categories.bird')}
-          </h3>
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {#each availableBirds as entry (entry.id)}
-              {@render modelCard(entry)}
-            {/each}
-          </div>
-        </div>
-      {/if}
-
-      <!-- Bat Classifiers -->
-      {#if availableBats.length > 0}
-        <div>
-          <h3
-            class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
-          >
-            {t('analysis.gallery.categories.bat')}
-          </h3>
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {#each availableBats as entry (entry.id)}
-              {@render modelCard(entry)}
-            {/each}
-          </div>
-        </div>
-      {/if}
-
-      {#if availableWildlife.length === 0 && availableBirds.length === 0 && availableBats.length === 0}
+      {#if availableWildlife.length === 0 && availableBirds.length === 0 && availableBats.length === 0 && availableGeomodels.length === 0}
         <p class="py-8 text-center text-sm text-[var(--color-base-content)]/80">
           {t('analysis.gallery.noAvailableModels')}
         </p>
@@ -1880,7 +2123,7 @@
         <button
           type="button"
           class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-          aria-label="Close modal"
+          aria-label={t('common.aria.closeModal')}
           onclick={() => (rangeFilterState.showModal = false)}
         >
           <X class="size-5" />

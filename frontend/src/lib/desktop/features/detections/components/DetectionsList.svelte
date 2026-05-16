@@ -30,18 +30,35 @@
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
+  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
+  import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import Pagination from '$lib/desktop/components/ui/Pagination.svelte';
+  import SelectionToolbar from '$lib/desktop/components/ui/SelectionToolbar.svelte';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import ViewToggle from '$lib/desktop/components/ui/ViewToggle.svelte';
   import { t } from '$lib/i18n';
+  import { auth } from '$lib/stores/auth';
+  import { toastActions } from '$lib/stores/toast';
   import type { DetectionSortBy, DetectionsListData } from '$lib/types/detection.types';
+  import { fetchWithCSRF } from '$lib/utils/api';
   import { cn } from '$lib/utils/cn';
-  import { XCircle } from '@lucide/svelte';
+  import { loggers } from '$lib/utils/logger';
+  import {
+    CheckSquare,
+    CircleCheck,
+    CircleX,
+    Lock,
+    LockOpen,
+    Trash2,
+    XCircle,
+  } from '@lucide/svelte';
   import { untrack } from 'svelte';
+  import { useSelectionMode } from '../composables/useSelectionMode.svelte';
   import DetectionCardMobile from './DetectionCardMobile.svelte';
   import DetectionRow from './DetectionRow.svelte';
   import DetectionsCardView from './DetectionsCardView.svelte';
@@ -100,6 +117,7 @@
   });
 
   function handlePageChange(page: number) {
+    selection.clear();
     if (onPageChange && data) {
       onPageChange(page);
     }
@@ -115,6 +133,7 @@
   function handleNumResultsChange(value: string | string[]) {
     const numResults = parseInt(value as string);
     if (isNaN(numResults) || ![10, 25, 50, 100].includes(numResults)) return;
+    selection.clear();
     selectedNumResults = String(numResults);
     onNumResultsChange?.(numResults);
   }
@@ -141,6 +160,7 @@
 
   function handleViewChange(mode: 'table' | 'cards') {
     viewMode = mode;
+    if (mode === 'cards') selection.deactivate();
     try {
       localStorage.setItem(VIEW_STORAGE_KEY, mode);
     } catch {
@@ -197,6 +217,7 @@
 
   function handleSort(field: string) {
     if (!isSortField(field)) return;
+    selection.clear();
     if (sortField === field) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
@@ -233,6 +254,179 @@
     selectedSpeciesName = '';
     selectedDetectionId = undefined;
   }
+
+  // Selection mode
+  let canEdit = $derived(!$auth.security.enabled || $auth.security.accessAllowed);
+  const selection = useSelectionMode(() => data?.totalResults ?? 0);
+
+  const pageIds = $derived((data?.notes ?? []).map(d => String(d.id)));
+
+  const headerChecked = $derived(selection.allOnPageSelected(pageIds));
+  const headerIndeterminate = $derived(selection.someOnPageSelected(pageIds));
+
+  function handleToggleSelect(id: string, shiftKey: boolean) {
+    selection.toggleWithShift(id, pageIds, shiftKey);
+  }
+
+  function handleRowClick(id: string, event: MouseEvent) {
+    if (selection.selectionActive) {
+      if ((event.target as HTMLElement).closest('button, a, input, label')) return;
+      selection.toggleWithShift(id, pageIds, event.shiftKey);
+    }
+  }
+
+  // Bulk action modal
+  let showBulkConfirmModal = $state(false);
+  let bulkConfirmConfig = $state({
+    title: '',
+    message: '',
+    confirmLabel: '',
+    onConfirm: async () => {},
+  });
+
+  async function executeBulkAction(
+    endpoint: string,
+    body: Record<string, unknown>,
+    successKey = 'detections.selection.bulkSuccess'
+  ) {
+    try {
+      const resp = await fetchWithCSRF<{ processed: number; skipped: number }>(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (resp.skipped > 0) {
+        toastActions.info(
+          t('detections.selection.bulkPartial', {
+            processed: resp.processed,
+            skipped: resp.skipped,
+          })
+        );
+      } else {
+        toastActions.success(t(successKey, { count: resp.processed }));
+      }
+      selection.deactivate();
+      onRefresh?.();
+    } catch (err) {
+      loggers.ui.error('Bulk action failed:', err);
+      toastActions.error(t('detections.selection.bulkError'));
+    }
+  }
+
+  async function getIdsForBulkAction(): Promise<string[] | null> {
+    if (!selection.allMatchingSelected) {
+      const ids = selection.getSelectedIds();
+      return ids.length > 0 ? ids : null;
+    }
+    if (!data) return null;
+    try {
+      const resp = await fetchWithCSRF<{ ids: string[]; count: number }>(
+        '/api/v2/detections/batch/resolve',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            queryType: data.queryType,
+            species: data.species,
+            date: data.date,
+            search: data.search,
+            hour: data.hour !== undefined ? String(data.hour) : undefined,
+            duration: data.duration !== undefined ? data.duration : undefined,
+          }),
+        }
+      );
+      return resp.ids;
+    } catch (err) {
+      loggers.ui.error('Failed to resolve matching detections:', err);
+      const isTooMany =
+        err instanceof Error && err.message.includes('Too many matching detections');
+      if (isTooMany) {
+        toastActions.error(
+          t('detections.selection.tooManyDetections', { count: data.totalResults })
+        );
+      } else {
+        toastActions.error(t('detections.selection.bulkError'));
+      }
+      return null;
+    }
+  }
+
+  function openBulkConfirm(
+    title: string,
+    messageKey: string,
+    confirmLabel: string,
+    endpoint: string,
+    extraBody: Record<string, unknown> = {},
+    successKey = 'detections.selection.bulkSuccess'
+  ) {
+    bulkConfirmConfig = {
+      title,
+      message: t(messageKey, { count: selection.selectedCount }),
+      confirmLabel,
+      onConfirm: async () => {
+        const ids = await getIdsForBulkAction();
+        if (ids) await executeBulkAction(endpoint, { ids, ...extraBody }, successKey);
+      },
+    };
+    showBulkConfirmModal = true;
+  }
+
+  const handleBulkDelete = () =>
+    openBulkConfirm(
+      t('common.delete'),
+      'detections.selection.confirmBulkDelete',
+      t('common.buttons.delete'),
+      '/api/v2/detections/batch/delete',
+      {},
+      'detections.selection.bulkDeleteSuccess'
+    );
+
+  const handleBulkMarkCorrect = () =>
+    openBulkConfirm(
+      t('dashboard.recentDetections.actions.markCorrect'),
+      'detections.selection.confirmBulkMarkCorrect',
+      t('common.buttons.confirm'),
+      '/api/v2/detections/batch/review',
+      { verified: 'correct' }
+    );
+
+  const handleBulkMarkFalsePositive = () =>
+    openBulkConfirm(
+      t('dashboard.recentDetections.actions.markFalsePositive'),
+      'detections.selection.confirmBulkMarkFalsePositive',
+      t('common.buttons.confirm'),
+      '/api/v2/detections/batch/review',
+      { verified: 'false_positive' }
+    );
+
+  const handleBulkLock = () =>
+    openBulkConfirm(
+      t('dashboard.recentDetections.modals.lockDetection'),
+      'detections.selection.confirmBulkLock',
+      t('common.buttons.confirm'),
+      '/api/v2/detections/batch/lock',
+      { locked: true }
+    );
+
+  const handleBulkUnlock = () =>
+    openBulkConfirm(
+      t('dashboard.recentDetections.modals.unlockDetection'),
+      'detections.selection.confirmBulkUnlock',
+      t('common.buttons.confirm'),
+      '/api/v2/detections/batch/lock',
+      { locked: false }
+    );
+
+  $effect(() => {
+    if (!selection.selectionActive) return;
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        selection.deactivate();
+      }
+    }
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  });
 </script>
 
 <div class={cn(className)}>
@@ -245,6 +439,32 @@
 
       <!-- Controls: view toggle + results selector -->
       <div class="flex items-center gap-3">
+        {#if canEdit}
+          <div class="hidden md:block">
+            <button
+              type="button"
+              class={cn(
+                'inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                selection.selectionActive
+                  ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)]'
+                  : viewMode === 'cards'
+                    ? 'border border-[var(--color-base-300)] text-[var(--color-base-content)]/40 cursor-not-allowed'
+                    : 'border border-[var(--color-base-300)] text-[var(--color-base-content)] hover:bg-[var(--color-base-200)]'
+              )}
+              onclick={() => {
+                if (viewMode === 'cards') return;
+                selection.selectionActive ? selection.deactivate() : selection.activate();
+              }}
+              disabled={viewMode === 'cards'}
+              title={viewMode === 'cards' ? t('detections.selection.switchToTable') : undefined}
+              aria-pressed={selection.selectionActive}
+            >
+              <CheckSquare class="size-4" />
+              <span>{t('detections.selection.select')}</span>
+            </button>
+          </div>
+        {/if}
+
         <!-- View toggle (hidden on mobile - always shows mobile cards) -->
         <div class="hidden md:block">
           <ViewToggle view={viewMode} onViewChange={handleViewChange} />
@@ -253,7 +473,7 @@
         <SelectDropdown
           options={RESULTS_OPTIONS}
           value={selectedNumResults}
-          size="xs"
+          size="sm"
           menuSize="sm"
           variant="button"
           className="w-22"
@@ -262,6 +482,42 @@
       </div>
     </div>
   </div>
+
+  {#if selection.selectionActive && selection.selectedCount > 0}
+    <SelectionToolbar
+      selectedCount={selection.selectedCount}
+      totalCount={data?.totalResults ?? 0}
+      allSelected={selection.allMatchingSelected}
+      allOnPageSelected={selection.allOnPageSelected(pageIds)}
+      pageSize={data?.itemsPerPage ?? 25}
+      onSelectAll={() => selection.selectAllMatching()}
+      onClear={() => selection.clear()}
+    >
+      {#snippet actions()}
+        <Button variant="default" size="sm" onclick={handleBulkMarkCorrect}>
+          <CircleCheck class="size-4 text-[var(--color-success)]" />
+          {t('dashboard.recentDetections.actions.markCorrect')}
+        </Button>
+        <Button variant="default" size="sm" onclick={handleBulkMarkFalsePositive}>
+          <CircleX class="size-4 text-[var(--color-error)]" />
+          {t('dashboard.recentDetections.actions.markFalsePositive')}
+        </Button>
+        <Button variant="default" size="sm" onclick={handleBulkLock}>
+          <Lock class="size-4" />
+          {t('dashboard.recentDetections.modals.lockDetection')}
+        </Button>
+        <Button variant="default" size="sm" onclick={handleBulkUnlock}>
+          <LockOpen class="size-4" />
+          {t('dashboard.recentDetections.modals.unlockDetection')}
+        </Button>
+        <div class="w-px h-6 bg-[var(--color-base-300)] mx-1" role="separator"></div>
+        <Button variant="default" size="sm" onclick={handleBulkDelete}>
+          <Trash2 class="size-4 text-[var(--color-error)]" />
+          {t('dashboard.recentDetections.actions.deleteDetection')}
+        </Button>
+      {/snippet}
+    </SelectionToolbar>
+  {/if}
 
   <!-- ARIA live region for accessibility -->
   <div class="sr-only" aria-live="polite">
@@ -290,8 +546,11 @@
       </div>
     {:else if error}
       <div class="px-4 py-8">
-        <div class="alert alert-error">
-          <XCircle class="size-6" />
+        <div
+          role="alert"
+          class="flex items-center gap-3 p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] border border-[var(--color-error)]/20"
+        >
+          <XCircle class="size-6 shrink-0" />
           <span>{error}</span>
         </div>
       </div>
@@ -309,6 +568,17 @@
             <caption class="sr-only">{t('detections.table.caption')}</caption>
             <thead>
               <tr class="detection-header-list">
+                {#if selection.selectionActive}
+                  <th scope="col" class="w-10 text-center">
+                    <Checkbox
+                      checked={headerChecked}
+                      indeterminate={headerIndeterminate}
+                      size="sm"
+                      variant="primary"
+                      onchange={() => selection.toggleAllOnPage(pageIds)}
+                    />
+                  </th>
+                {/if}
                 <SortableHeader
                   label={t('detections.headers.dateTime')}
                   field="dateTime"
@@ -346,12 +616,23 @@
             </thead>
             <tbody class="divide-y divide-[var(--color-base-200)]">
               {#each data.notes as detection (detection.id)}
-                <tr>
+                <tr
+                  class={cn(
+                    selection.selectionActive &&
+                      selection.isSelected(String(detection.id)) &&
+                      'bg-[var(--color-primary)]/5',
+                    selection.selectionActive && 'cursor-pointer'
+                  )}
+                  onclick={e => handleRowClick(String(detection.id), e)}
+                >
                   <DetectionRow
                     {detection}
                     {onDetailsClick}
                     {onRefresh}
                     onPlayMobileAudio={handlePlayMobileAudio}
+                    selectionActive={selection.selectionActive}
+                    selected={selection.isSelected(String(detection.id))}
+                    onToggleSelect={handleToggleSelect}
                   />
                 </tr>
               {/each}
@@ -409,4 +690,16 @@
       />
     </div>
   {/if}
+
+  <ConfirmModal
+    isOpen={showBulkConfirmModal}
+    title={bulkConfirmConfig.title}
+    message={bulkConfirmConfig.message}
+    confirmLabel={bulkConfirmConfig.confirmLabel}
+    onClose={() => (showBulkConfirmModal = false)}
+    onConfirm={async () => {
+      await bulkConfirmConfig.onConfirm();
+      showBulkConfirmModal = false;
+    }}
+  />
 </div>

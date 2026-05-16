@@ -180,3 +180,119 @@ func TestMappedRangeFilter_Close(t *testing.T) {
 	mapped.Close()
 	assert.True(t, inner.closed, "Close should delegate to inner filter")
 }
+
+func TestMappedRangeFilter_GeomodelLabelsStored(t *testing.T) {
+	t.Parallel()
+
+	geomodelLabels := []string{
+		"Parus major_Great Tit",
+		"Turdus merula_Amsel",
+		"Corvus corax_Northern Raven",
+		"Erithacus rubecula_Robin",
+	}
+
+	inner := &fakeRangeFilter{scores: make([]float32, len(geomodelLabels))}
+	mapped := newMappedRangeFilter(inner, []string{"Parus major_Great Tit"}, geomodelLabels, 0.0)
+
+	require.Len(t, mapped.geomodelLabels, len(geomodelLabels), "geomodelLabels field should be populated with all geomodel labels")
+	assert.Equal(t, geomodelLabels, mapped.geomodelLabels)
+}
+
+func TestMappedRangeFilter_PredictSpeciesScores(t *testing.T) {
+	t.Parallel()
+
+	// geomodel scores: species A=0.8, B=0.9, C=0.3, D=0.05
+	// threshold=0.1, so A, B, C pass; D does not
+	geomodelLabels := []string{
+		"Parus major_Great Tit",
+		"Turdus merula_Amsel",
+		"Erithacus rubecula_Robin",
+		"Ficedula hypoleuca_Pied Flycatcher",
+	}
+	inner := &fakeRangeFilter{
+		scores: []float32{0.8, 0.9, 0.3, 0.05},
+	}
+
+	// classifier labels can differ from geomodel labels
+	classifierLabels := []string{"Parus major_Titmouse"}
+	mapped := newMappedRangeFilter(inner, classifierLabels, geomodelLabels, 0.0)
+
+	included, err := mapped.PredictSpeciesScores(60.0, 25.0, 20.0, 0.1)
+	require.NoError(t, err)
+
+	// species D (score 0.05) is below threshold; A, B, C should be included
+	require.Len(t, included, 3)
+	assert.Equal(t, "Parus major_Great Tit", included[0].Label)
+	assert.InDelta(t, 0.8, included[0].Score, 0.001)
+	assert.Equal(t, "Turdus merula_Amsel", included[1].Label)
+	assert.InDelta(t, 0.9, included[1].Score, 0.001)
+	assert.Equal(t, "Erithacus rubecula_Robin", included[2].Label)
+	assert.InDelta(t, 0.3, included[2].Score, 0.001)
+}
+
+func TestMappedRangeFilter_PredictSpeciesScores_EmptyResult(t *testing.T) {
+	t.Parallel()
+
+	geomodelLabels := []string{
+		"Parus major_Great Tit",
+		"Turdus merula_Amsel",
+	}
+	inner := &fakeRangeFilter{
+		scores: []float32{0.05, 0.08},
+	}
+
+	mapped := newMappedRangeFilter(inner, []string{"Parus major_Titmouse"}, geomodelLabels, 0.0)
+
+	// threshold of 0.5 means no species pass
+	included, err := mapped.PredictSpeciesScores(60.0, 25.0, 20.0, 0.5)
+	require.NoError(t, err)
+	assert.Empty(t, included, "no species should pass a high threshold")
+}
+
+func TestMappedRangeFilter_PredictSpeciesScores_PropagatesError(t *testing.T) {
+	t.Parallel()
+
+	inner := &fakeRangeFilter{
+		err: assert.AnError,
+	}
+	mapped := newMappedRangeFilter(inner, []string{"A_B"}, []string{"A_B"}, 0.0)
+
+	_, err := mapped.PredictSpeciesScores(60.0, 25.0, 20.0, 0.1)
+	assert.Error(t, err)
+}
+
+func TestComputeGeomodelCoverage(t *testing.T) {
+	t.Parallel()
+
+	classifierLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Erithacus rubecula_European Robin",
+		"Ficedula hypoleuca_Pied Flycatcher",
+	}
+	geomodelLabels := []string{
+		"Parus major_Great Tit",
+		"Turdus merula_Amsel",
+		"Corvus corax_Northern Raven",
+		"Erithacus rubecula_Robin",
+	}
+
+	withRange, withoutRange := ComputeGeomodelCoverage(classifierLabels, geomodelLabels)
+	assert.Equal(t, 3, withRange, "3 classifier species match geomodel by scientific name")
+	assert.Equal(t, 1, withoutRange, "1 classifier species has no geomodel match")
+}
+
+func TestComputeGeomodelCoverage_EmptyInputs(t *testing.T) {
+	t.Parallel()
+
+	withRange, withoutRange := ComputeGeomodelCoverage(nil, nil)
+	assert.Zero(t, withRange)
+	assert.Zero(t, withoutRange)
+
+	withRange, withoutRange = ComputeGeomodelCoverage(
+		[]string{"Turdus merula_Blackbird"},
+		nil,
+	)
+	assert.Zero(t, withRange)
+	assert.Equal(t, 1, withoutRange)
+}

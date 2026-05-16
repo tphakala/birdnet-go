@@ -85,6 +85,7 @@ const (
 // Action targets identify where notifications are sent.
 const (
 	TargetBell = "bell"
+	TargetPush = "push"
 )
 
 // Built-in rule i18n key constants.

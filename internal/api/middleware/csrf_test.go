@@ -167,8 +167,10 @@ func TestDefaultCSRFSkipper(t *testing.T) {
 		{"GET auth callback", http.MethodGet, "/api/v2/auth/callback/google", true},
 		{"GET social OAuth", http.MethodGet, "/auth/google", true},
 
+		// Logout — skipped (must work even with expired CSRF tokens)
+		{"POST auth logout", http.MethodPost, "/api/v2/auth/logout", true},
+
 		// Regular API paths — never skipped
-		{"GET auth logout", http.MethodGet, "/api/v2/auth/logout", false},
 		{"GET detections", http.MethodGet, "/api/v2/detections/1", false},
 		{"POST settings", http.MethodPost, "/api/v2/settings", false},
 	}

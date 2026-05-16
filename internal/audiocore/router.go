@@ -4,7 +4,9 @@ package audiocore
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -141,6 +143,10 @@ type AudioRouter struct {
 	// ctx and cancel control the lifetime of all drainer goroutines.
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	// lastDispatch stores the most recent Dispatch timestamp per source ID.
+	// Key: string (sourceID), Value: *atomic.Int64 (UnixNano).
+	lastDispatch sync.Map
 }
 
 // NewAudioRouter creates an AudioRouter ready to accept routes and dispatch
@@ -272,6 +278,8 @@ func (r *AudioRouter) RemoveAllRoutes(sourceID string) {
 		r.stopRoute(rt)
 	}
 
+	r.ClearDispatchTime(sourceID)
+
 	if len(routes) > 0 {
 		r.log.Info("all routes removed",
 			logger.String("source_id", sourceID),
@@ -339,6 +347,9 @@ func (r *AudioRouter) UpdateFilterChain(sourceID string, build FilterChainBuilde
 func (r *AudioRouter) Dispatch(frame AudioFrame) { //nolint:gocritic // hugeParam: signature required by AudioDispatcher interface
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
+	// Record frame arrival for liveness monitoring.
+	r.getOrCreateDispatchTimestamp(frame.SourceID).Store(time.Now().UnixNano())
 
 	for _, rt := range r.routes[frame.SourceID] {
 		// Retain BEFORE attempting the send so the drainer cannot observe a
@@ -414,6 +425,47 @@ func (r *AudioRouter) Routes(sourceID string) []RouteInfo {
 	return infos
 }
 
+// LastDispatchTime returns the last time Dispatch was called for sourceID.
+// Returns zero time if the source has never dispatched.
+func (r *AudioRouter) LastDispatchTime(sourceID string) time.Time {
+	if v, ok := r.lastDispatch.Load(sourceID); ok {
+		nanos := v.(*atomic.Int64).Load()
+		if nanos > 0 {
+			return time.Unix(0, nanos)
+		}
+	}
+	return time.Time{}
+}
+
+// ResetDispatchTime sets the last dispatch time for sourceID to now.
+// Used when quiet hours end to avoid false alarms from stale timestamps.
+func (r *AudioRouter) ResetDispatchTime(sourceID string) {
+	ts := r.getOrCreateDispatchTimestamp(sourceID)
+	ts.Store(time.Now().UnixNano())
+}
+
+// ClearDispatchTime removes the dispatch timestamp for sourceID.
+// Called when a source is permanently removed.
+func (r *AudioRouter) ClearDispatchTime(sourceID string) {
+	r.lastDispatch.Delete(sourceID)
+}
+
+// ActiveSourceIDs returns the source IDs that have active routes.
+func (r *AudioRouter) ActiveSourceIDs() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return slices.Collect(maps.Keys(r.routes))
+}
+
+func (r *AudioRouter) getOrCreateDispatchTimestamp(sourceID string) *atomic.Int64 {
+	if v, ok := r.lastDispatch.Load(sourceID); ok {
+		return v.(*atomic.Int64)
+	}
+	ts := &atomic.Int64{}
+	actual, _ := r.lastDispatch.LoadOrStore(sourceID, ts)
+	return actual.(*atomic.Int64)
+}
+
 // Close stops all drainer goroutines and closes every registered consumer.
 // It is safe to call Close multiple times: context.CancelFunc is idempotent,
 // and the map is atomically swapped under the lock so subsequent calls see an
@@ -451,21 +503,43 @@ func (r *AudioRouter) stopRoute(route *Route) {
 
 	select {
 	case <-route.stopped:
-		// Drainer exited cleanly — safe to close resources.
+		// Drainer exited cleanly or via recovered panic. Close resources
+		// with panic guards so a misbehaving Close() cannot crash the
+		// caller (RemoveRoute, RemoveAllRoutes, or router.Close).
 		if route.resampler != nil {
-			if err := route.resampler.Close(); err != nil {
-				r.log.Debug("resampler close error",
+			func() {
+				defer func() {
+					if rp := recover(); rp != nil {
+						r.log.Warn("panic closing resampler in stopRoute",
+							logger.String("source_id", route.SourceID),
+							logger.String("consumer_id", route.Consumer.ID()),
+							logger.Any("panic", rp))
+					}
+				}()
+				if err := route.resampler.Close(); err != nil {
+					r.log.Debug("resampler close error",
+						logger.String("source_id", route.SourceID),
+						logger.String("consumer_id", route.Consumer.ID()),
+						logger.Error(err))
+				}
+			}()
+		}
+		func() {
+			defer func() {
+				if rp := recover(); rp != nil {
+					r.log.Warn("panic closing consumer in stopRoute",
+						logger.String("source_id", route.SourceID),
+						logger.String("consumer_id", route.Consumer.ID()),
+						logger.Any("panic", rp))
+				}
+			}()
+			if err := route.Consumer.Close(); err != nil {
+				r.log.Debug("consumer close error",
 					logger.String("source_id", route.SourceID),
 					logger.String("consumer_id", route.Consumer.ID()),
 					logger.Error(err))
 			}
-		}
-		if err := route.Consumer.Close(); err != nil {
-			r.log.Debug("consumer close error",
-				logger.String("source_id", route.SourceID),
-				logger.String("consumer_id", route.Consumer.ID()),
-				logger.Error(err))
-		}
+		}()
 	case <-time.After(drainerStopTimeout):
 		// Drainer is leaked and may still reference the resampler/consumer.
 		// Do NOT close them — leave for GC to reclaim.
@@ -509,7 +583,11 @@ func (r *AudioRouter) drainRoute(route *Route) {
 				Priority(errors.PriorityCritical).
 				Build()
 			// Remove the dead route from the map so HasConsumers/Dispatch
-			// stop sending frames to an inbox nobody drains.
+			// stop sending frames to an inbox nobody drains. Track whether
+			// we found it: if router.Close() already snapshotted and cleared
+			// the map, the route won't be here and stopRoute will handle
+			// resource cleanup instead.
+			removed := false
 			r.mu.Lock()
 			routes := r.routes[route.SourceID]
 			for i, rt := range routes {
@@ -522,6 +600,7 @@ func (r *AudioRouter) drainRoute(route *Route) {
 				if len(r.routes[route.SourceID]) == 0 {
 					delete(r.routes, route.SourceID)
 				}
+				removed = true
 				break
 			}
 			r.mu.Unlock()
@@ -531,11 +610,35 @@ func (r *AudioRouter) drainRoute(route *Route) {
 			// per panicking route would stay outstanding (the slices still
 			// GC, so this is pool-efficiency rather than a hard leak).
 			drainInboxRefs(route.inbox)
-			// Goroutine returns here. The route is removed from the map.
-			// Note: consumer and resampler are intentionally NOT closed here
-			// to avoid potential secondary panics during cleanup. They will
-			// be reclaimed by GC. The stopped channel is closed by the outer
-			// defer for consistency.
+			// Only close resources if we successfully removed the route.
+			// If the route was not in the map (router.Close() already took
+			// ownership), stopRoute will close them after route.stopped fires.
+			if removed {
+				if route.resampler != nil {
+					func() {
+						defer func() {
+							if rp := recover(); rp != nil {
+								r.log.Warn("secondary panic closing resampler after drainer panic",
+									logger.String("source_id", route.SourceID),
+									logger.String("consumer_id", route.Consumer.ID()),
+									logger.Any("secondary_panic", rp))
+							}
+						}()
+						_ = route.resampler.Close()
+					}()
+				}
+				func() {
+					defer func() {
+						if rp := recover(); rp != nil {
+							r.log.Warn("secondary panic closing consumer after drainer panic",
+								logger.String("source_id", route.SourceID),
+								logger.String("consumer_id", route.Consumer.ID()),
+								logger.Any("secondary_panic", rp))
+						}
+					}()
+					_ = route.Consumer.Close()
+				}()
+			}
 		}
 	}()
 	for {

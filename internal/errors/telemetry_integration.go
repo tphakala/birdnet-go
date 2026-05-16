@@ -223,11 +223,12 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		}
 	}
 
-	// Filter out "note not found" errors — these are expected transient conditions caused by
-	// race between write commit and read, or retention cleanup deleting records between
-	// ID assignment and lookup. Not code bugs.
+	// Filter out expected not-found conditions that are not code bugs:
+	// - "note not found": transient race between write commit and read, or retention cleanup
+	// - "not found in ebird taxonomy": non-bird species (e.g., Canis latrans) detected by BirdNET
 	if ee.Category == CategoryNotFound {
-		if strings.Contains(errorMsg, "note not found") {
+		if strings.Contains(errorMsg, "note not found") ||
+			strings.Contains(errorMsg, "not found in ebird taxonomy") {
 			return false
 		}
 	}

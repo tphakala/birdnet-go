@@ -434,7 +434,7 @@ Source: LGPL-3.0
 
 ### github.com/tphakala/go-tflite
 
-License: https://github.com/tphakala/go-tflite/blob/aedbd0bca261/LICENSE
+License: https://github.com/tphakala/go-tflite/blob/29408e53fff7/LICENSE
 Source: MIT
 
 ### github.com/tphakala/simd
@@ -539,7 +539,7 @@ Source: BSD-3-Clause
 
 ### gonum.org/v1/gonum/dsp/fourier
 
-License: https://github.com/gonum/gonum/blob/v0.17.0/LICENSE
+License: Unknown
 Source: BSD-3-Clause
 
 ### google.golang.org/api

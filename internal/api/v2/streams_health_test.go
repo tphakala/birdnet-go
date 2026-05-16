@@ -25,8 +25,9 @@ func TestCreateHealthSnapshot(t *testing.T) {
 			LastErrorContext:   nil,
 		}
 
-		snapshot := createHealthSnapshot(health)
+		snapshot := createHealthSnapshot("rtsp://test/stream", health)
 
+		assert.Equal(t, "rtsp://test/stream", snapshot.RawURL)
 		assert.True(t, snapshot.IsHealthy)
 		assert.Equal(t, "running", snapshot.ProcessState)
 		assert.Equal(t, 0, snapshot.RestartCount)
@@ -48,8 +49,9 @@ func TestCreateHealthSnapshot(t *testing.T) {
 			},
 		}
 
-		snapshot := createHealthSnapshot(health)
+		snapshot := createHealthSnapshot("rtsp://test/unhealthy", health)
 
+		assert.Equal(t, "rtsp://test/unhealthy", snapshot.RawURL)
 		assert.False(t, snapshot.IsHealthy)
 		assert.Equal(t, "circuit_open", snapshot.ProcessState)
 		assert.Equal(t, 5, snapshot.RestartCount)
@@ -68,7 +70,7 @@ func TestCreateHealthSnapshot(t *testing.T) {
 			LastErrorContext:   nil,
 		}
 
-		snapshot := createHealthSnapshot(health)
+		snapshot := createHealthSnapshot("rtsp://test/stream", health)
 
 		assert.Empty(t, snapshot.LastErrorType)
 		assert.True(t, snapshot.IsHealthy)
@@ -86,7 +88,7 @@ func TestCreateHealthSnapshot(t *testing.T) {
 			},
 		}
 
-		snapshot := createHealthSnapshot(health)
+		snapshot := createHealthSnapshot("rtsp://test/stream", health)
 
 		assert.Equal(t, "backoff", snapshot.ProcessState)
 		assert.Equal(t, 3, snapshot.RestartCount)
@@ -107,7 +109,7 @@ func TestHasHealthChanged(t *testing.T) {
 		}
 		current := prev
 
-		assert.False(t, hasHealthChanged(prev, current))
+		assert.False(t, hasHealthChanged(&prev, &current))
 	})
 
 	t.Run("health status changed", func(t *testing.T) {
@@ -122,7 +124,7 @@ func TestHasHealthChanged(t *testing.T) {
 		current := prev
 		current.IsHealthy = false
 
-		assert.True(t, hasHealthChanged(prev, current))
+		assert.True(t, hasHealthChanged(&prev, &current))
 	})
 
 	t.Run("process state changed", func(t *testing.T) {
@@ -137,7 +139,7 @@ func TestHasHealthChanged(t *testing.T) {
 		current := prev
 		current.ProcessState = "circuit_open"
 
-		assert.True(t, hasHealthChanged(prev, current))
+		assert.True(t, hasHealthChanged(&prev, &current))
 	})
 
 	t.Run("error type changed", func(t *testing.T) {
@@ -152,7 +154,7 @@ func TestHasHealthChanged(t *testing.T) {
 		current := prev
 		current.LastErrorType = testErrorTypeTimeout
 
-		assert.True(t, hasHealthChanged(prev, current))
+		assert.True(t, hasHealthChanged(&prev, &current))
 	})
 
 	t.Run("restart count increased", func(t *testing.T) {
@@ -167,7 +169,7 @@ func TestHasHealthChanged(t *testing.T) {
 		current := prev
 		current.RestartCount = 4
 
-		assert.True(t, hasHealthChanged(prev, current))
+		assert.True(t, hasHealthChanged(&prev, &current))
 	})
 
 	t.Run("data flow status changed", func(t *testing.T) {
@@ -182,7 +184,7 @@ func TestHasHealthChanged(t *testing.T) {
 		current := prev
 		current.IsReceivingData = false
 
-		assert.True(t, hasHealthChanged(prev, current))
+		assert.True(t, hasHealthChanged(&prev, &current))
 	})
 
 	t.Run("total bytes changed but not tracked as change", func(t *testing.T) {
@@ -198,7 +200,7 @@ func TestHasHealthChanged(t *testing.T) {
 		current.TotalBytesReceived = 2048
 
 		// Byte count changes should NOT trigger hasHealthChanged
-		assert.False(t, hasHealthChanged(prev, current))
+		assert.False(t, hasHealthChanged(&prev, &current))
 	})
 
 	t.Run("multiple changes simultaneously", func(t *testing.T) {
@@ -219,7 +221,7 @@ func TestHasHealthChanged(t *testing.T) {
 			TotalBytesReceived: 1024,
 		}
 
-		assert.True(t, hasHealthChanged(prev, current))
+		assert.True(t, hasHealthChanged(&prev, &current))
 	})
 }
 
@@ -241,7 +243,7 @@ func TestDetermineEventType(t *testing.T) {
 			IsReceivingData: false,
 		}
 
-		eventType := determineEventType(prev, current)
+		eventType := determineEventType(&prev, &current)
 		assert.Equal(t, "state_change", eventType)
 	})
 
@@ -258,7 +260,7 @@ func TestDetermineEventType(t *testing.T) {
 		current.LastErrorType = ""
 		current.IsReceivingData = true
 
-		eventType := determineEventType(prev, current)
+		eventType := determineEventType(&prev, &current)
 		assert.Equal(t, "health_recovered", eventType)
 	})
 
@@ -274,7 +276,7 @@ func TestDetermineEventType(t *testing.T) {
 		current.IsHealthy = false
 		current.LastErrorType = testErrorTypeTimeout
 
-		eventType := determineEventType(prev, current)
+		eventType := determineEventType(&prev, &current)
 		assert.Equal(t, "health_degraded", eventType)
 	})
 
@@ -289,7 +291,7 @@ func TestDetermineEventType(t *testing.T) {
 		current := prev
 		current.LastErrorType = testErrorTypeTimeout
 
-		eventType := determineEventType(prev, current)
+		eventType := determineEventType(&prev, &current)
 		assert.Equal(t, "error_detected", eventType)
 	})
 
@@ -304,7 +306,7 @@ func TestDetermineEventType(t *testing.T) {
 		current := prev
 		current.LastErrorType = "rtsp_404"
 
-		eventType := determineEventType(prev, current)
+		eventType := determineEventType(&prev, &current)
 		assert.Equal(t, "error_detected", eventType)
 	})
 
@@ -319,7 +321,7 @@ func TestDetermineEventType(t *testing.T) {
 		current := prev
 		current.RestartCount = 3
 
-		eventType := determineEventType(prev, current)
+		eventType := determineEventType(&prev, &current)
 		assert.Equal(t, "stream_restarted", eventType)
 	})
 
@@ -334,7 +336,7 @@ func TestDetermineEventType(t *testing.T) {
 		current := prev
 		current.IsReceivingData = true
 
-		eventType := determineEventType(prev, current)
+		eventType := determineEventType(&prev, &current)
 		assert.Equal(t, "data_flow_resumed", eventType)
 	})
 
@@ -349,7 +351,7 @@ func TestDetermineEventType(t *testing.T) {
 		current := prev
 		current.IsReceivingData = false
 
-		eventType := determineEventType(prev, current)
+		eventType := determineEventType(&prev, &current)
 		assert.Equal(t, "data_flow_stopped", eventType)
 	})
 
@@ -365,7 +367,7 @@ func TestDetermineEventType(t *testing.T) {
 		}
 		current := prev
 
-		eventType := determineEventType(prev, current)
+		eventType := determineEventType(&prev, &current)
 		assert.Equal(t, "status_update", eventType)
 	})
 }

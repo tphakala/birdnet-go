@@ -12,6 +12,7 @@
     "refresh": "Obnoviť",
     "delete": "Odstrániť",
     "edit": "Upraviť",
+    "enabled": "Povolené",
     "search": "Hľadať",
     "filter": "Filter",
     "sort": "Zoradiť",
@@ -153,7 +154,8 @@
         "verifiedCorrect": "Overené ako správne",
         "falsePositive": "Falošne pozitívne",
         "notReviewed": "Neskontrolované",
-        "locked": "Uzamknuté"
+        "locked": "Uzamknuté",
+        "unlikely": "Nepravdepodobné"
       },
       "form": {
         "correctDetection": "Správna detekcia",
@@ -422,7 +424,7 @@
       },
       "buffer": {
         "overloadTitle": "Analýza zvuku preťažená",
-        "overloadMessage": "Váš systém zahadzuje {dropRate} % zvukových vzoriek zo zdroja '{sourceName}', pretože nestíha analýzu. Znížte hodnotu prekrytia BirdNET v nastaveniach detekcie alebo zvážte rýchlejší procesor."
+        "overloadMessage": "Váš systém zahadzuje {dropRate} % zvukových vzoriek zo zdroja ''{sourceName}'', pretože nestíha analýzu. Znížte hodnotu prekrytia BirdNET v nastaveniach detekcie alebo zvážte rýchlejší procesor."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -512,7 +514,8 @@
       "false": "Falošné",
       "unverified": "Neoverené",
       "locked": "Uzamknuté",
-      "unlocked": "Odomknuté"
+      "unlocked": "Odomknuté",
+      "unlikely": "Nepravdepodobné"
     },
     "review": {
       "review": "Overiť",
@@ -640,7 +643,8 @@
         "verified": "Overené",
         "false": "Falošné",
         "unverified": "Neoverené",
-        "locked": "Uzamknuté"
+        "locked": "Uzamknuté",
+        "unlikely": "Nepravdepodobné"
       },
       "modals": {
         "showSpecies": "Zobraziť druh {species}",
@@ -656,6 +660,8 @@
       },
       "actions": {
         "menuLabel": "Akcie pre {species}",
+        "markCorrect": "Správne",
+        "markFalsePositive": "Nesprávne",
         "review": "Skontrolovať detekciu",
         "showSpecies": "Zobraziť druh",
         "ignoreSpecies": "Ignorovať druh",
@@ -761,12 +767,18 @@
     "headers": {
       "dateTime": "Dátum a čas",
       "weather": "Počasie",
+      "source": "Zdroj",
       "species": "Druh",
       "confidence": "Istota",
       "thumbnail": "Náhľad",
       "status": "Stav",
       "recording": "Nahrávka",
       "actions": "Akcie"
+    },
+    "viewToggle": {
+      "label": "Režim zobrazenia",
+      "table": "Zobrazenie tabuľky",
+      "cards": "Zobrazenie kariet"
     },
     "status": {
       "locked": "Uzamknuté"
@@ -788,6 +800,25 @@
     },
     "pagination": {
       "showing": "Zobrazuje sa {from} až {to} z {total} výsledkov"
+    },
+    "selection": {
+      "select": "Vybrať",
+      "nSelected": "{count} vybraných",
+      "selectAllMatching": "Vybrať všetkých {count} zodpovedajúcich detekcií",
+      "allSelected": "Všetkých {count} vybraných",
+      "clear": "Zrušiť výber",
+      "toolbarLabel": "Hromadné akcie",
+      "confirmBulkDelete": "Odstrániť {count} detekcií? Túto akciu nie je možné vrátiť.",
+      "confirmBulkMarkCorrect": "Označiť {count} detekcií ako správne?",
+      "confirmBulkMarkFalsePositive": "Označiť {count} detekcií ako falošne pozitívne?",
+      "confirmBulkLock": "Zamknúť {count} detekcií?",
+      "confirmBulkUnlock": "Odomknúť {count} detekcií?",
+      "bulkSuccess": "{count} detekcií aktualizovaných",
+      "bulkDeleteSuccess": "{count} detekcií odstránených",
+      "bulkPartial": "{processed} aktualizovaných, {skipped} preskočených (zamknuté)",
+      "tooManyDetections": "Príliš veľa detekcií ({count}). Zúžte filtre na menej ako 500.",
+      "bulkError": "Hromadná operácia zlyhala. Skúste to znova.",
+      "switchToTable": "Prepnite na zobrazenie tabuľky na výber detekcií"
     },
     "weather": {
       "title": "Informácie o počasí",
@@ -811,25 +842,56 @@
         "pressure": "hPa"
       },
       "conditions": {
-        "clearsky_day": "Jasno",
-        "clearsky_night": "Jasno",
-        "fair_day": "Skoro jasno",
-        "fair_night": "Skoro jasno",
-        "partlycloudy_day": "Polooblačno",
-        "partlycloudy_night": "Polooblačno",
+        "clearsky": "Jasno",
         "cloudy": "Zamračené",
-        "rainshowers_day": "Prehánky",
-        "rainshowers_night": "Prehánky",
-        "rain": "Dážď",
-        "thunder": "Búrka",
-        "sleet": "Dážď so snehom",
-        "snow": "Sneženie",
+        "fair": "Skoro jasno",
         "fog": "Hmla",
+        "heavyrain": "Silný dážď",
+        "heavyrainandthunder": "Silný dážď s búrkou",
+        "heavyrainshowers": "Silné prehánky",
+        "heavyrainshowersandthunder": "Silné prehánky s búrkou",
+        "heavysleet": "Silný dážď so snehom",
+        "heavysleetandthunder": "Silný dážď so snehom a búrkou",
+        "heavysleetshowers": "Silné prehánky s dažďom a snehom",
+        "heavysleetshowersandthunder": "Silné prehánky s dažďom, snehom a búrkou",
+        "heavysnow": "Silné sneženie",
+        "heavysnowandthunder": "Silné sneženie s búrkou",
+        "heavysnowshowers": "Silné snehové prehánky",
+        "heavysnowshowersandthunder": "Silné snehové prehánky s búrkou",
+        "lightrain": "Slabý dážď",
+        "lightrainandthunder": "Slabý dážď s búrkou",
+        "lightrainshowers": "Slabé prehánky",
+        "lightrainshowersandthunder": "Slabé prehánky s búrkou",
+        "lightsleet": "Slabý dážď so snehom",
+        "lightsleetandthunder": "Slabý dážď so snehom a búrkou",
+        "lightsleetshowers": "Slabé prehánky s dažďom a snehom",
+        "lightsnow": "Slabé sneženie",
+        "lightsnowandthunder": "Slabé sneženie s búrkou",
+        "lightsnowshowers": "Slabé snehové prehánky",
+        "lightssleetshowersandthunder": "Slabé prehánky s dažďom, snehom a búrkou",
+        "lightssnowshowersandthunder": "Slabé snehové prehánky s búrkou",
+        "partlycloudy": "Polooblačno",
+        "rain": "Dážď",
+        "rainandthunder": "Dážď s búrkou",
+        "rainshowers": "Prehánky",
+        "rainshowersandthunder": "Prehánky s búrkou",
+        "sleet": "Dážď so snehom",
+        "sleetandthunder": "Dážď so snehom a búrkou",
+        "sleetshowers": "Prehánky s dažďom a snehom",
+        "sleetshowersandthunder": "Prehánky s dažďom, snehom a búrkou",
+        "snow": "Sneženie",
+        "snowandthunder": "Sneženie s búrkou",
+        "snowshowers": "Snehové prehánky",
+        "snowshowersandthunder": "Snehové prehánky s búrkou",
+        "thunder": "Búrka",
         "unknown": "Neznáme"
       }
     },
     "row": {
-      "viewDetails": "Zobraziť podrobnosti pre {species}"
+      "viewDetails": "Zobraziť podrobnosti pre {species}",
+      "openDetailFromStatus": "Open detail page for {species}",
+      "play": "Prehrať",
+      "playAudio": "Prehrať zvuk"
     },
     "media": {
       "title": "Nahrávka a spektrogram",
@@ -873,10 +935,23 @@
       "noIdProvided": "Nebolo poskytnuté žiadne ID detekcie.",
       "fetchFailed": "Nepodarilo sa načítať detekcie"
     },
-    "viewToggle": {
-      "label": "Režim zobrazenia",
-      "table": "Zobrazenie tabuľky",
-      "cards": "Zobrazenie kariet"
+    "reanalyze": {
+      "title": "Reanalyze this clip",
+      "running": "Analyzing…",
+      "noPredictions": "No predictions returned.",
+      "colSpecies": "Species",
+      "button": "Reanalyze",
+      "buttonAriaLabel": "Reanalyze {species} clip with another model",
+      "descriptionMulti": "Below is how every loaded classifier scored this clip. Click 'Use this' on the row you think is right to update the detection.",
+      "multiModelSummary": "{models} • {duration} of audio",
+      "useThis": "Use this",
+      "useThisAriaLabel": "Apply this species ({species}) as the corrected detection",
+      "noModelForCorrection": "No model has scored this species; cannot apply.",
+      "correctionApplied": "Detection updated to {species}.",
+      "confirmTitle": "Replace detection with {species}?",
+      "confirmBody": "This updates the detection's species, model, and confidence in place, and marks it as verified. Existing review status is overwritten.",
+      "confirmApply": "Yes, apply correction",
+      "applying": "Applying…"
     }
   },
   "species": {
@@ -1087,6 +1162,86 @@
         "detections": "Detekcie",
         "fetchFailed": "Nepodarilo sa získať štatistiky databázy"
       },
+      "dashboard": {
+        "title": "Prehľad databázy",
+        "fetchFailed": "Nepodarilo sa načítať prehľad databázy",
+        "loading": "Načítavanie...",
+        "metrics": {
+          "readLatency": "Latencia čítania",
+          "writeLatency": "Latencia zápisu",
+          "queriesPerSec": "Dotazy/sek",
+          "database": "Databáza",
+          "avg": "priemer",
+          "max": "max",
+          "lastHour": "{count} za poslednú hodinu",
+          "slowQueries": "{count} pomalých"
+        },
+        "details": {
+          "title": "Podrobnosti databázy",
+          "engine": "Motor",
+          "journal": "Denník",
+          "pageSize": "Veľkosť stránky",
+          "cacheHit": "Zásah cache",
+          "integrity": "Integrita",
+          "lastVacuum": "Posledný VACUUM"
+        },
+        "locksWal": {
+          "title": "Zámky a WAL",
+          "lockWaits": "Čakania na zámok",
+          "lockTimeouts": "Časové limity zámkov",
+          "avgWait": "Priemer čakania",
+          "busyTimeouts": "Časové limity zaneprázdnenia",
+          "walSize": "Veľkosť WAL",
+          "checkpoints": "Kontrolné body",
+          "freelistPages": "Stránky voľného zoznamu",
+          "cacheSize": "Veľkosť cache"
+        },
+        "connectionPool": {
+          "title": "Pool pripojení",
+          "poolUsage": "Využitie poolu",
+          "active": "aktívny",
+          "idle": "nečinný",
+          "waiting": "čakajúci",
+          "totalCreated": "Celkom vytvorené",
+          "connErrors": "Chyby pripojenia",
+          "threads": "Vlákna",
+          "running": "beží",
+          "cached": "v cache"
+        },
+        "innodb": {
+          "title": "InnoDB a zámky",
+          "bufferPoolHitRate": "Úspešnosť buffer poolu",
+          "bufferPoolSize": "Veľkosť buffer poolu",
+          "lockWaits": "Čakania na zámok",
+          "deadlocks": "Deadlocky",
+          "avgLockWait": "Priemer čakania na zámok",
+          "tableLocksWaited": "Čakané zámky tabuliek",
+          "tableLocksImmediate": "Okamžité zámky tabuliek"
+        },
+        "detectionRate": {
+          "title": "Miera detekcií (24h)",
+          "chartLabel": "Miera detekcií za 24 hodín",
+          "detectionsTooltip": "{count} detekcií",
+          "perHour": "/hod",
+          "min": "min",
+          "avg": "priemer",
+          "max": "max",
+          "lastBackup": "Posledná záloha",
+          "backupSize": "Veľkosť zálohy",
+          "createBackup": "Vytvoriť zálohu",
+          "mysqlHost": "Hostiteľ",
+          "mysqlBackupNote": "MySQL zálohy by mali byť spravované cez mysqldump alebo vaše MySQL administračné nástroje."
+        },
+        "tables": {
+          "title": "Tabuľky",
+          "total": "Celkom",
+          "table": "Tabuľka",
+          "engine": "Motor",
+          "rows": "Riadky",
+          "size": "Veľkosť",
+          "usage": "Využitie"
+        }
+      },
       "backup": {
         "download": "Stiahnuť zálohu",
         "downloading": "Sťahuje sa...",
@@ -1171,6 +1326,29 @@
           "calculating": "Výpočet...",
           "dirtyWriteFailed": "{count} záznamov sa nepodarilo zapísať — budú zosúladené počas validácie"
         },
+        "details": {
+          "title": "Podrobnosti databázy",
+          "detections": "{count} detekcií",
+          "lastBackup": "Posledná záloha: {date}",
+          "noBackups": "Žiadne zálohy",
+          "integrity": "Integrita: {status}"
+        },
+        "strip": {
+          "legacy": "Legacy",
+          "v2Target": "V2 (Cieľ)",
+          "active": "Aktívny",
+          "migration": "Migrácia",
+          "complete": "Dokončené",
+          "recordsMigrated": "{count} záznamov migrovaných",
+          "readyToMigrate": "Pripravené na migráciu",
+          "recordsInLegacy": "{count} záznamov v legacy",
+          "comparingRecords": "Porovnávanie počtu záznamov...",
+          "validationFailed": "Validácia zlyhala",
+          "rate": "Frekvencia",
+          "recPerSec": "{rate} záz/s",
+          "dayAvg": "~{count} / denný priemer",
+          "dayHistory": "História za 30 dní"
+        },
         "phase": {
           "indicator": "Fáza {current} z {total}: ",
           "detections": "Migrujú sa primárne detekcie",
@@ -1219,8 +1397,8 @@
           "resumeFailed": "Nepodarilo sa pokračovať v migrácii",
           "cancelFailed": "Nepodarilo sa zrušiť migráciu",
           "rollbackFailed": "Nepodarilo sa vykonať rollback migrácie",
-          "fetchFailed": "Nepodarilo sa získať stav migrácie",
-          "retryValidationFailed": "Nepodarilo sa zopakovať validáciu"
+          "retryValidationFailed": "Nepodarilo sa zopakovať validáciu",
+          "fetchFailed": "Nepodarilo sa získať stav migrácie"
         },
         "worker": {
           "running": "Worker beží",
@@ -1236,6 +1414,19 @@
           "warningsCount": "{count} varovaní",
           "running": "Prebiehajú kontroly pred migráciou...",
           "checkingStep": "Krok {current} z {total}",
+          "passedCount": "{passed}/{total} úspešných",
+          "criticalCount": "{count} kritických",
+          "warningCount": "{count} upozornení",
+          "rerun": "Spustiť znova",
+          "showDetails": "Zobraziť podrobnosti",
+          "hideDetails": "Skryť podrobnosti",
+          "status": {
+            "passed": "Úspešné",
+            "failed": "Zlyhané",
+            "error": "Chyba",
+            "warning": "Upozornenie",
+            "skipped": "Preskočené"
+          },
           "errors": {
             "fetchFailed": "Nepodarilo sa získať prerekvizity"
           },
@@ -1279,123 +1470,7 @@
             "mysql_timeout": {
               "name": "MySQL Timeout"
             }
-          },
-          "passedCount": "{passed}/{total} úspešných",
-          "criticalCount": "{count} kritických",
-          "warningCount": "{count} upozornení",
-          "rerun": "Spustiť znova",
-          "showDetails": "Zobraziť podrobnosti",
-          "hideDetails": "Skryť podrobnosti",
-          "status": {
-            "passed": "Úspešné",
-            "failed": "Zlyhané",
-            "error": "Chyba",
-            "warning": "Upozornenie",
-            "skipped": "Preskočené"
           }
-        },
-        "details": {
-          "title": "Podrobnosti databázy",
-          "detections": "{count} detekcií",
-          "lastBackup": "Posledná záloha: {date}",
-          "noBackups": "Žiadne zálohy",
-          "integrity": "Integrita: {status}"
-        },
-        "strip": {
-          "legacy": "Legacy",
-          "v2Target": "V2 (Cieľ)",
-          "active": "Aktívny",
-          "migration": "Migrácia",
-          "complete": "Dokončené",
-          "recordsMigrated": "{count} záznamov migrovaných",
-          "readyToMigrate": "Pripravené na migráciu",
-          "recordsInLegacy": "{count} záznamov v legacy",
-          "comparingRecords": "Porovnávanie počtu záznamov...",
-          "validationFailed": "Validácia zlyhala",
-          "rate": "Frekvencia",
-          "recPerSec": "{rate} záz/s",
-          "dayAvg": "~{count} / denný priemer",
-          "dayHistory": "História za 30 dní"
-        }
-      },
-      "dashboard": {
-        "title": "Prehľad databázy",
-        "fetchFailed": "Nepodarilo sa načítať prehľad databázy",
-        "loading": "Načítavanie...",
-        "metrics": {
-          "readLatency": "Latencia čítania",
-          "writeLatency": "Latencia zápisu",
-          "queriesPerSec": "Dotazy/sek",
-          "database": "Databáza",
-          "avg": "priemer",
-          "max": "max",
-          "lastHour": "{count} za poslednú hodinu",
-          "slowQueries": "{count} pomalých"
-        },
-        "details": {
-          "title": "Podrobnosti databázy",
-          "engine": "Motor",
-          "journal": "Denník",
-          "pageSize": "Veľkosť stránky",
-          "cacheHit": "Zásah cache",
-          "integrity": "Integrita",
-          "lastVacuum": "Posledný VACUUM"
-        },
-        "locksWal": {
-          "title": "Zámky a WAL",
-          "lockWaits": "Čakania na zámok",
-          "lockTimeouts": "Časové limity zámkov",
-          "avgWait": "Priemer čakania",
-          "busyTimeouts": "Časové limity zaneprázdnenia",
-          "walSize": "Veľkosť WAL",
-          "checkpoints": "Kontrolné body",
-          "freelistPages": "Stránky voľného zoznamu",
-          "cacheSize": "Veľkosť cache"
-        },
-        "connectionPool": {
-          "title": "Pool pripojení",
-          "poolUsage": "Využitie poolu",
-          "active": "aktívny",
-          "idle": "nečinný",
-          "waiting": "čakajúci",
-          "totalCreated": "Celkom vytvorené",
-          "connErrors": "Chyby pripojenia",
-          "threads": "Vlákna",
-          "running": "beží",
-          "cached": "v cache"
-        },
-        "innodb": {
-          "title": "InnoDB a zámky",
-          "bufferPoolHitRate": "Úspešnosť buffer poolu",
-          "bufferPoolSize": "Veľkosť buffer poolu",
-          "lockWaits": "Čakania na zámok",
-          "deadlocks": "Deadlocky",
-          "avgLockWait": "Priemer čakania na zámok",
-          "tableLocksWaited": "Čakané zámky tabuliek",
-          "tableLocksImmediate": "Okamžité zámky tabuliek"
-        },
-        "detectionRate": {
-          "title": "Miera detekcií (24h)",
-          "chartLabel": "Miera detekcií za 24 hodín",
-          "detectionsTooltip": "{count} detekcií",
-          "perHour": "/hod",
-          "min": "min",
-          "avg": "priemer",
-          "max": "max",
-          "lastBackup": "Posledná záloha",
-          "backupSize": "Veľkosť zálohy",
-          "createBackup": "Vytvoriť zálohu",
-          "mysqlHost": "Hostiteľ",
-          "mysqlBackupNote": "MySQL zálohy by mali byť spravované cez mysqldump alebo vaše MySQL administračné nástroje."
-        },
-        "tables": {
-          "title": "Tabuľky",
-          "total": "Celkom",
-          "table": "Tabuľka",
-          "engine": "Motor",
-          "rows": "Riadky",
-          "size": "Veľkosť",
-          "usage": "Využitie"
         }
       }
     },
@@ -1409,12 +1484,12 @@
       "available": "dost.",
       "min": "Min",
       "max": "Max",
+      "limit": "Limit",
       "tempUnavailable": "Nedostupná",
       "online": "Online",
       "uptime": "Doba behu",
       "host": "Hostiteľ",
       "model": "Model",
-      "limit": "Limit",
       "inference": "Inferencia",
       "avgTime": "Priemer",
       "noInference": "Žiadne dáta",
@@ -1428,6 +1503,30 @@
       "free": "voľné",
       "ram": "RAM"
     }
+  },
+  "terminal": {
+    "title": "Terminál",
+    "disabled": "Terminál je zakázaný",
+    "disabledDescription": "Terminál prehliadača je zakázaný. Povoľte ho v Nastavenia → Zabezpečenie pre použitie tejto funkcie.",
+    "connected": "Pripojené",
+    "disconnected": "Odpojené",
+    "connecting": "Pripája sa...",
+    "connectionError": "Pripojenie zlyhalo",
+    "connectionClosed": "Pripojenie zatvorené",
+    "securityWarning": "Upozornenie: Tento terminál poskytuje priamy prístup k shellu hostiteľského systému. Povoľte iba v dôveryhodných sieťach.",
+    "copySelection": "Kopírovať výber",
+    "expand": "Rozbaliť",
+    "collapse": "Zbaliť",
+    "fullscreen": "Celá obrazovka",
+    "exitFullscreen": "Ukončiť celú obrazovku",
+    "colorTheme": "Farebná téma",
+    "themeDark": "Tmavá",
+    "themeLight": "Svetlá",
+    "themeHighContrast": "Vysoký kontrast",
+    "detach": "Otvoriť v novom okne",
+    "detached": "Terminál je odpojený",
+    "detachedDescription": "Terminál beží v samostatnom okne. Zatvorte ho, aby ste ho vrátili sem.",
+    "reattach": "Pripojiť späť"
   },
   "analytics": {
     "title": "Prehľad",
@@ -1615,6 +1714,7 @@
     "title": "Nastavenia - BirdNET-Go",
     "loading": "Načítavajú sa nastavenia...",
     "sections": {
+      "analysis": "Analýza",
       "node": "Hlavné",
       "userinterface": "Rozhranie",
       "audio": "Zvuk",
@@ -1638,6 +1738,12 @@
       "savingAriaLabel": "Ukladajú sa zmeny...",
       "unsavedChanges": "Neuložené zmeny",
       "toolbar": "Akcie nastavení"
+    },
+    "errors": {
+      "loadFailed": "Nepodarilo sa načítať nastavenia",
+      "saveFailed": "Nepodarilo sa uložiť nastavenia",
+      "databaseStatsFailed": "Nepodarilo sa načítať štatistiky databázy",
+      "csvDownloadFailed": "Nepodarilo sa stiahnuť CSV"
     },
     "card": {
       "changed": "zmenené",
@@ -1720,7 +1826,17 @@
           },
           "hardwareNote": "Prísne a maximálne úrovne vyžadujú vyššie nastavenia prekrytia a viac prostriedkov CPU. Pre tieto úrovne sa vyžaduje hardvér RPi 4 alebo lepší.",
           "overlapAdjusted": "Nastavenie prekrytia bolo automaticky upravené na {overlap}s, aby spĺňalo požiadavky filtra",
-          "overlapReduced": "Nastavenie prekrytia bolo znížené na {overlap}s, aby zodpovedalo úrovni filtra"
+          "overlapReduced": "Nastavenie prekrytia bolo znížené na {overlap}s, aby zodpovedalo úrovni filtra",
+          "levelNames": {
+            "off": "Vypnutý",
+            "lenient": "Nízky",
+            "moderate": "Mierny",
+            "balanced": "Vyvážený",
+            "strict": "Prísny",
+            "maximum": "Maximum",
+            "unknown": "Neznámy"
+          },
+          "warningOff": "Bez filtrovania sa každá detekcia nad prahom spoľahlivosti ihneď akceptuje. To zvyčajne spôsobuje niekoľko falošných pozitív denne. Aj nízke filtrovanie výrazne zlepšuje kvalitu výsledkov."
         },
         "rangeFilter": {
           "title": "Filter rozsahu",
@@ -2354,8 +2470,11 @@
             "name": "Gotify",
             "server": {
               "label": "URL servera",
-              "placeholder": "gotify.example.com",
-              "helpText": "Hostname vášho Gotify servera (bez https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Názov hostiteľa a port vášho servera Gotify"
+            },
+            "protocol": {
+              "label": "Protokol"
             },
             "token": {
               "label": "Token aplikácie",
@@ -2769,6 +2888,10 @@
           "refresh": "Obnoviť zariadenia"
         }
       },
+      "noSources": {
+        "warning": "Žiadne nakonfigurované zdroje zvuku",
+        "description": "BirdNET-Go potrebuje zvukový vstup na detekciu vtákov. Nakonfigurujte aspoň jeden zdroj na karte Zvuková karta alebo Streamy."
+      },
       "soundCards": {
         "summary": "{count} zdroj(e/ov) zvukovej karty",
         "addSource": "Pridať zvukovú kartu",
@@ -2813,10 +2936,6 @@
           "recommendedSampleRate": "{rate}kHz odporúčané pre najlepšie výsledky",
           "atLeastOneModel": "Musí byť vybraný aspoň jeden model"
         }
-      },
-      "noSources": {
-        "warning": "Žiadne nakonfigurované zdroje zvuku",
-        "description": "BirdNET-Go potrebuje zvukový vstup na detekciu vtákov. Nakonfigurujte aspoň jeden zdroj na karte Zvuková karta alebo Streamy."
       },
       "audioCapture": {
         "title": "Konfigurácia zvukovej karty",
@@ -3291,7 +3410,7 @@
         "modeAutoTLSDescription": "Automatický certifikát cez Let's Encrypt",
         "modeManualDescription": "Nahrať vlastný certifikát a kľúč",
         "modeSelfSignedDescription": "Vygenerovať samopodpísaný certifikát",
-        "portLabel": "HTTPS Port",
+        "portLabel": "Port HTTPS",
         "portHelpText": "Port pre HTTPS pripojenia (predvolený: 8443)",
         "redirectToHttps": "Presmerovať HTTP na HTTPS",
         "autoTLSRequirements": "Vyžaduje dostupnosť portov 80 a 443. Na Linuxe proces potrebuje root alebo schopnosť CAP_NET_BIND_SERVICE.",
@@ -3493,6 +3612,8 @@
         "parameters": {
           "label": "Parametre",
           "helpText": "Tieto hodnoty budú odovzdané vášmu príkazu v uvedenom poradí",
+          "placeholder": "Kliknite na tlačidlá nižšie pre pridanie parametrov alebo zadajte ručne",
+          "tooltip": "Použite tlačidlá nižšie alebo zadajte priamo (oddelené čiarkou)",
           "availableTitle": "Dostupné parametre",
           "buttons": {
             "commonName": "CommonName",
@@ -3501,9 +3622,7 @@
             "time": "Čas",
             "source": "Zdroj",
             "clearParameters": "Vymazať parametre"
-          },
-          "placeholder": "Kliknite na tlačidlá nižšie pre pridanie parametrov alebo zadajte ručne",
-          "tooltip": "Použite tlačidlá nižšie alebo zadajte priamo (oddelené čiarkou)"
+          }
         },
         "executeDefaults": {
           "label": "Spustiť aj predvolené akcie (uloženie do databázy, upozornenia atď.)",
@@ -3512,6 +3631,7 @@
       },
       "add": "Pridať",
       "remove": "Odstrániť",
+      "suggestions": "Návrhy druhov",
       "addSpeciesToInclude": "Pridať druh na zahrnutie",
       "addSpeciesToIncludeLabel": "Pridať nový druh na zahrnutie",
       "addSpeciesToExclude": "Pridať druh na vylúčenie",
@@ -3654,8 +3774,7 @@
         "resetAllError": "Nepodarilo sa resetovať prahy",
         "expand": "Zobraziť históriu udalostí",
         "collapse": "Skryť históriu udalostí"
-      },
-      "suggestions": "Návrhy druhov"
+      }
     },
     "database": {
       "sqlitePlaceholder": "Zadajte cestu k databáze SQLite",
@@ -3870,12 +3989,6 @@
         }
       }
     },
-    "errors": {
-      "loadFailed": "Nepodarilo sa načítať nastavenia",
-      "saveFailed": "Nepodarilo sa uložiť nastavenia",
-      "databaseStatsFailed": "Nepodarilo sa načítať štatistiky databázy",
-      "csvDownloadFailed": "Nepodarilo sa stiahnuť CSV"
-    },
     "appearance": {
       "colorScheme": "Farebná schéma",
       "colorSchemeDescription": "Vyberte farebnú schému pre rozhranie",
@@ -3997,13 +4110,13 @@
     "labels": {
       "showPassword": "Zobraziť heslo",
       "hidePassword": "Skryť heslo",
-      "copyToClipboard": "Kopírovať do schránky",
-      "clearSelection": "Vymazať výber",
-      "selectOption": "Vyberte možnosť",
       "secretSet": "Nastaviť",
       "changeSecret": "Zmeniť",
       "cancelChange": "Zrušiť",
-      "enterNewSecret": "Zadajte novú hodnotu"
+      "enterNewSecret": "Zadajte novú hodnotu",
+      "copyToClipboard": "Kopírovať do schránky",
+      "clearSelection": "Vymazať výber",
+      "selectOption": "Vyberte možnosť"
     },
     "help": {
       "passwordStrength": "Sila hesla: {strength}",
@@ -4178,7 +4291,7 @@
         "extracting": "Extrahovanie klipu...",
         "extractError": "Nepodarilo sa extrahovať klip",
         "formatLabel": "Formát",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Prehrať výber",
@@ -4228,30 +4341,6 @@
       "review": "Skontrolovať",
       "download": "Stiahnuť"
     }
-  },
-  "terminal": {
-    "title": "Terminál",
-    "disabled": "Terminál je zakázaný",
-    "disabledDescription": "Terminál prehliadača je zakázaný. Povoľte ho v Nastavenia → Zabezpečenie pre použitie tejto funkcie.",
-    "connected": "Pripojené",
-    "disconnected": "Odpojené",
-    "connecting": "Pripája sa...",
-    "connectionError": "Pripojenie zlyhalo",
-    "connectionClosed": "Pripojenie zatvorené",
-    "securityWarning": "Upozornenie: Tento terminál poskytuje priamy prístup k shellu hostiteľského systému. Povoľte iba v dôveryhodných sieťach.",
-    "copySelection": "Kopírovať výber",
-    "expand": "Rozbaliť",
-    "collapse": "Zbaliť",
-    "fullscreen": "Celá obrazovka",
-    "exitFullscreen": "Ukončiť celú obrazovku",
-    "colorTheme": "Farebná téma",
-    "themeDark": "Tmavá",
-    "themeLight": "Svetlá",
-    "themeHighContrast": "Vysoký kontrast",
-    "detach": "Otvoriť v novom okne",
-    "detached": "Terminál je odpojený",
-    "detachedDescription": "Terminál beží v samostatnom okne. Zatvorte ho, aby ste ho vrátili sem.",
-    "reattach": "Pripojiť späť"
   },
   "quietHours": {
     "indicator": {
@@ -4468,6 +4557,151 @@
         "outro": "Tento prístup zabezpečuje kvalitu dát pre vedecký výskum a zároveň maximalizuje vaše učenie a radosť z pozorovania vtákov.",
         "acknowledge": "Rozumiem"
       }
+    }
+  },
+  "analysis": {
+    "title": "Analýza",
+    "tabs": {
+      "settings": "Nastavenia",
+      "models": "Modely"
+    },
+    "detection": {
+      "title": "Nastavenia detekcie",
+      "description": "Nastavte prahové hodnoty spoľahlivosti a jazyk klasifikácie druhov.",
+      "confidenceThreshold": {
+        "label": "Confidence Threshold",
+        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+      },
+      "batThreshold": {
+        "label": "Prah detekcie netopierov",
+        "helpText": "Minimálne skóre spoľahlivosti pre detekcie druhov netopierov. Platí len pre klasifikačné modely netopierov."
+      },
+      "batFilter": {
+        "label": "Horný priepustný filter pre netopiere",
+        "helpText": "Filtruje počuteľné frekvencie pred analýzou netopierov na zníženie falošných detekcií spôsobených spevom vtákov a okolitým hlukom."
+      },
+      "batNighttimeOnly": {
+        "label": "Iba v noci",
+        "helpText": "Keď je povolené, detekcia netopierov beží iba medzi občianskym súmrakom a občianskym svitaním. Vyžaduje nakonfigurovanú polohu. Vypnite pre nepretržitú detekciu."
+      },
+      "batUltrasonicFilter": {
+        "label": "Overenie po detekcii",
+        "helpText": "Keď je zapnuté, detekcie netopierov sa overujú analýzou ultrazvukových energetických vzorcov v zdrojovom zvuku. Detekcie bez charakteristík echolokácie sú označené ako nepravdepodobné."
+      },
+      "batFalsePositiveFilter": {
+        "label": "Filter falošne pozitívnych netopierov",
+        "helpText": "Vyžaduje viacero potvrdení detekcie netopiera v posuvnom okne pred jej prijatím. Vyššie úrovne vyžadujú viac potvrdení, čím sa znižujú falošné pozitíva. Model netopierov používa pevné 50% prekrývanie, takže úprava prekrývania nie je potrebná.",
+        "levels": {
+          "off": "Žiadne filtrovanie; akceptuje akúkoľvek detekciu netopiera okamžite.",
+          "moderate": "Dobrá rovnováha pre väčšinu nastavení. Výrazne znižuje falošné pozitíva.",
+          "strict": "Maximálne filtrovanie pre najvyššiu presnosť."
+        },
+        "detectionCount": "Vyžaduje sa {count} potvrdení. {description}",
+        "warningOff": "Bez filtrovania je vysoká pravdepodobnosť falošných pozitív. Zapnutie filtrovania výrazne zlepšuje presnosť."
+      },
+      "locale": {
+        "label": "Jazyk druhov",
+        "helpText": "Jazyk používaný pre bežné názvy druhov v rozhraní."
+      }
+    },
+    "rangeFilter": {
+      "birdOnlyNote": "Filter rozsahu sa vzťahuje len na klasifikátory vtákov. Modely netopierov používajú vlastné zoznamy druhov.",
+      "status": {
+        "title": "Prehľad filtra rozsahu",
+        "geomodelInfo": "BirdNET Geomodel {version} - {species} známych druhov",
+        "autoSelected": "Automaticky vybrané",
+        "manual": "Manuálne",
+        "classifier": "Klasifikátor",
+        "totalSpecies": "Celkový počet druhov",
+        "withRangeData": "S údajmi o rozsahu",
+        "withoutRangeData": "Bez údajov o rozsahu",
+        "withRangeDataTooltip": "Druhy, pre ktoré geomodel môže vyhodnotiť geografickú pravdepodobnosť na vašej polohe",
+        "withoutRangeDataTooltip": "Druhy bez geografických údajov v geomodeli, spravované nastavením nemapovaných druhov nižšie",
+        "noFilter": "Žiadny aktívny filter rozsahu",
+        "passUnmapped": {
+          "label": "Povoliť druhy bez údajov o rozsahu",
+          "helpText": "Povoliť detekcie druhov, pre ktoré geomodel nemá geografické údaje. Ak je vypnuté, tieto druhy sa vždy odfiltrujú."
+        }
+      }
+    },
+    "advanced": {
+      "title": "Pokročilé",
+      "description": "Konfigurácia spracovania a vlastných modelov."
+    },
+    "gallery": {
+      "title": "Galéria modelov",
+      "description": "Správa klasifikačných modelov pre detekciu vtákov a netopierov.",
+      "tabs": {
+        "installed": "Nainštalované",
+        "available": "Dostupné"
+      },
+      "loading": "Načítavajú sa modely...",
+      "retry": "Skúsiť znova",
+      "builtIn": "Vstavaný",
+      "builtInDescription": "Vstavaný klasifikátor vtáčích druhov od tímu BirdNET.",
+      "species": "{count} druhov",
+      "install": "Inštalovať",
+      "installing": "Inštaluje sa...",
+      "remove": "Odstrániť",
+      "removing": "Odstraňovanie...",
+      "noInstalledModels": "Žiadne ďalšie modely nie sú nainštalované. Prejdite na kartu Dostupné a pridajte ďalšie klasifikátory.",
+      "noAvailableModels": "Pre vašu platformu nie sú k dispozícii žiadne ďalšie modely.",
+      "sections": {
+        "acoustic": "Akustické klasifikátory",
+        "geomodel": "Geomodely"
+      },
+      "categories": {
+        "wildlife": "Klasifikátory voľne žijúcich živočíchov",
+        "bird": "Klasifikátory vtákov",
+        "bat": "Klasifikátory netopierov"
+      },
+      "progress": {
+        "downloading": "Sťahovanie...",
+        "verifying": "Overovanie...",
+        "loading": "Načítava sa...",
+        "complete": "Úspešne nainštalované",
+        "failed": "Zlyhanie"
+      },
+      "license": {
+        "title": "Licenčná zmluva",
+        "model": "Model",
+        "author": "Autor",
+        "license": "Licencia",
+        "commercialUse": "Komerčné využitie",
+        "downloadSize": "Veľkosť na stiahnutie",
+        "allowed": "Povolené",
+        "notAllowed": "Nepovolené",
+        "commercialUseAllowed": "Komerčné využitie povolené",
+        "nonCommercialOnly": "Len nekomerčné využitie",
+        "nonCommercialWarning": "Tento model je licencovaný len na nekomerčné použitie. Inštaláciou súhlasíte s licenčnými podmienkami.",
+        "acceptAndInstall": "Prijať a inštalovať"
+      },
+      "removeDialog": {
+        "title": "Odstrániť {name}?",
+        "confirmation": "Tým sa odstránia súbory modelu z disku. Údaje štítkov pre existujúce detekcie sa zachovajú."
+      },
+      "errors": {
+        "catalogLoadFailed": "Nepodarilo sa načítať katalóg modelov",
+        "installFailed": "Nepodarilo sa spustiť inštaláciu modelu",
+        "removeFailed": "Nepodarilo sa odstrániť model"
+      },
+      "regionLabel": "Región",
+      "speciesLabel": "Druhy",
+      "reinstall": "Preinštalovať",
+      "reinstalling": "Preinštalovanie...",
+      "reinstallComplete": "Súbory úspešne overené",
+      "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel"
+    },
+    "bird": {
+      "title": "Detekcia vtákov",
+      "description": "Nakonfigurujte prah spoľahlivosti, jazyk druhov a filtrovanie falošných pozitív pre klasifikátory vtákov."
+    },
+    "bat": {
+      "title": "Detekcia netopierov",
+      "description": "Nakonfigurujte prah, plánovanie a filtrovanie falošných pozitív pre klasifikátory netopierov."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dynamický prah sa vzťahuje len na klasifikátory vtákov."
     }
   },
   "restart": {

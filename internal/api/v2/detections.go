@@ -148,6 +148,13 @@ func (c *Controller) initDetectionRoutes() {
 	detectionGroup.POST("/:id/correct-species", c.CorrectDetectionSpecies)
 	detectionGroup.POST("/ignore", c.IgnoreSpecies)
 	detectionGroup.GET("/ignored", c.GetExcludedSpecies)
+
+	// Batch operation endpoints
+	batchGroup := detectionGroup.Group("/batch")
+	batchGroup.POST("/delete", c.BatchDeleteDetections)
+	batchGroup.POST("/review", c.BatchReviewDetections)
+	batchGroup.POST("/lock", c.BatchLockDetections)
+	batchGroup.POST("/resolve", c.BatchResolveDetections)
 }
 
 // CommentResponse represents a comment on a detection in the API response
@@ -173,6 +180,7 @@ type DetectionResponse struct {
 	Confidence         float64           `json:"confidence"`
 	Verified           string            `json:"verified"`
 	Locked             bool              `json:"locked"`
+	Unlikely           bool              `json:"unlikely,omitempty"`
 	Comments           []CommentResponse `json:"comments,omitempty"`
 	Weather            *WeatherInfo      `json:"weather,omitempty"`
 	ClipName           string            `json:"clipName,omitempty"` // Relative path of saved audio clip; empty when no clip is on disk
@@ -657,6 +665,7 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 		Confidence:     note.Confidence,
 		ClipName:       note.ClipName,
 		Locked:         note.Locked,
+		Unlikely:       note.Unlikely,
 	}
 
 	// populate source info if available

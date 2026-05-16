@@ -6,6 +6,7 @@ package analysis
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,11 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
-var (
-	processMetrics      *metrics.MyAudioMetrics // Global metrics instance for audio processing operations
-	processMetricsMutex sync.RWMutex            // Mutex for thread-safe access to processMetrics
-	processMetricsOnce  sync.Once               // Ensures metrics are only set once
-)
+var processMetrics atomic.Pointer[metrics.MyAudioMetrics]
 
 const (
 	// Float32BufferSize is the number of float32 samples in a standard buffer.
@@ -45,6 +42,8 @@ const (
 // When the window expires and enough overruns have accumulated, a single Sentry event is sent.
 type bufferOverrunTracker struct {
 	mu           sync.Mutex
+	source       string
+	modelID      string
 	overrunCount int64
 	windowStart  time.Time
 	maxElapsed   time.Duration
@@ -70,9 +69,46 @@ func getOverrunTracker(source, modelID string) *bufferOverrunTracker {
 	if t, ok := overrunTrackers[key]; ok {
 		return t
 	}
-	t := &bufferOverrunTracker{}
+	t := &bufferOverrunTracker{source: source, modelID: modelID}
 	overrunTrackers[key] = t
 	return t
+}
+
+// CleanupOverrunTrackers removes tracker entries that have been idle longer than maxAge.
+func CleanupOverrunTrackers(maxAge time.Duration) {
+	now := time.Now()
+	overrunTrackersMu.Lock()
+	defer overrunTrackersMu.Unlock()
+	for key, tracker := range overrunTrackers {
+		tracker.mu.Lock()
+		idle := !tracker.windowStart.IsZero() && now.Sub(tracker.windowStart) > maxAge
+		noActivity := tracker.windowStart.IsZero() && tracker.overrunCount == 0
+		tracker.mu.Unlock()
+		if idle || noActivity {
+			delete(overrunTrackers, key)
+		}
+	}
+}
+
+// ResetOverrunTrackers removes all tracker entries. Called when audio sources
+// are reconfigured to prevent stale entries from accumulating.
+func ResetOverrunTrackers() {
+	overrunTrackersMu.Lock()
+	clear(overrunTrackers)
+	overrunTrackersMu.Unlock()
+}
+
+// RemoveOverrunTrackers removes all tracker entries for the given source ID.
+// Called when a source is removed to prevent unbounded map growth.
+func RemoveOverrunTrackers(sourceID string) {
+	prefix := sourceID + ":"
+	overrunTrackersMu.Lock()
+	defer overrunTrackersMu.Unlock()
+	for key := range overrunTrackers {
+		if strings.HasPrefix(key, prefix) {
+			delete(overrunTrackers, key)
+		}
+	}
 }
 
 // lastQueueOverflowReport tracks the last time a queue overflow was reported to Sentry.
@@ -93,9 +129,11 @@ func recordBufferOverrun(tracker *bufferOverrunTracker, elapsed, bufferLen time.
 
 	// Check if window has expired
 	if now.Sub(tracker.windowStart) >= bufferOverrunReportCooldown {
-		// Window expired — report if threshold met
+		// Window expired; report if threshold met
 		if tracker.overrunCount >= bufferOverrunMinCount {
 			reportBufferOverruns(
+				tracker.source,
+				tracker.modelID,
 				tracker.overrunCount,
 				tracker.maxElapsed,
 				tracker.bufferLength,
@@ -117,12 +155,14 @@ func recordBufferOverrun(tracker *bufferOverrunTracker, elapsed, bufferLen time.
 }
 
 // reportBufferOverruns sends a rate-limited Sentry event with overrun statistics.
-func reportBufferOverruns(count int64, maxElapsed, bufferLen, window time.Duration) {
+func reportBufferOverruns(source, modelID string, count int64, maxElapsed, bufferLen, window time.Duration) {
 	if !telemetry.IsTelemetryEnabled() {
 		return
 	}
 
 	extras := map[string]any{
+		"source":                   source,
+		"model_id":                 modelID,
 		"overrun_count":            count,
 		"max_elapsed_ms":           maxElapsed.Milliseconds(),
 		"buffer_length_ms":         bufferLen.Milliseconds(),
@@ -137,14 +177,9 @@ func reportBufferOverruns(count int64, maxElapsed, bufferLen, window time.Durati
 }
 
 // SetProcessMetrics sets the metrics instance for audio processing operations.
-// This function is thread-safe and ensures metrics are only set once per process lifetime.
-// Subsequent calls will be ignored due to sync.Once (idempotent behavior).
+// Thread-safe; only the first call wins (subsequent calls are no-ops).
 func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
-	processMetricsOnce.Do(func() {
-		processMetricsMutex.Lock()
-		defer processMetricsMutex.Unlock()
-		processMetrics = myAudioMetrics
-	})
+	processMetrics.CompareAndSwap(nil, myAudioMetrics)
 }
 
 // ProcessData processes the given audio data to detect bird species, logs the
@@ -178,14 +213,9 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 			Build()
 	}
 
-	// Run inference on the specified model via the Orchestrator.
-	inferenceStart := time.Now()
-	results, err := bn.PredictModel(ctx, modelID, sampleData)
-	inferenceDuration := time.Since(inferenceStart)
-
-	// Return float32 buffer to pool after prediction. The Manager's lazy
-	// per-size pool map routes the slice back to the pool sized for its
-	// actual length, so non-standard sizes are handled too.
+	// Defer pool return so the buffer is reclaimed even if PredictModel panics.
+	// The Manager's lazy per-size pool map routes the slice back to the pool
+	// sized for its actual length, so non-standard sizes are handled too.
 	//
 	// INVARIANT: bn.PredictModel must copy the samples into the model's
 	// input tensor before returning; it must not retain a reference to
@@ -196,14 +226,17 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 	// internal/classifier for the implementing side.
 	if conf.BitDepth == 16 && len(sampleData) > 0 {
 		if pool := bufMgr.Float32PoolFor(len(sampleData[0])); pool != nil {
-			pool.Put(sampleData[0])
+			defer pool.Put(sampleData[0])
 		}
 	}
 
+	// Run inference on the specified model via the Orchestrator.
+	inferenceStart := time.Now()
+	results, err := bn.PredictModel(ctx, modelID, sampleData)
+	inferenceDuration := time.Since(inferenceStart)
+
 	// Record inference duration metric (always, even on error)
-	processMetricsMutex.RLock()
-	pm := processMetrics
-	processMetricsMutex.RUnlock()
+	pm := processMetrics.Load()
 	if pm != nil {
 		pm.RecordAudioInferenceDuration(source, inferenceDuration.Seconds())
 	}
@@ -255,26 +288,22 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 		}
 	}
 
-	// Get the current settings
-	settings := conf.Setting()
+	// Derive the analysis buffer interval from the model's spec. If
+	// inference exceeds this interval the pipeline falls behind real-time.
+	effectiveBufferDuration := 3 * time.Second / 2 // fallback: BirdNET v2.4
+	if spec, ok := bn.ModelSpecFor(modelID); ok {
+		effectiveBufferDuration = spec.BufferInterval()
+	}
 
-	// Calculate the effective buffer duration
-	bufferDuration := 3 * time.Second // base duration
-	overlapDuration := time.Duration(settings.BirdNET.Overlap * float64(time.Second))
-	effectiveBufferDuration := bufferDuration - overlapDuration
-
-	// Check if processing time exceeds effective buffer duration
 	if elapsedTime > effectiveBufferDuration {
-		log.Warn("BirdNET processing time exceeded buffer length",
+		log.Warn("processing time exceeded buffer interval",
 			logger.Duration("elapsed_time", elapsedTime),
-			logger.Duration("buffer_length", effectiveBufferDuration),
+			logger.Duration("buffer_interval", effectiveBufferDuration),
+			logger.String("model_id", modelID),
 			logger.String("source", source))
 		recordBufferOverrun(getOverrunTracker(source, modelID), elapsedTime, effectiveBufferDuration)
 
-		// Record Prometheus metrics for observability
-		processMetricsMutex.RLock()
-		m := processMetrics
-		processMetricsMutex.RUnlock()
+		m := processMetrics.Load()
 		if m != nil {
 			m.RecordBirdNETProcessingOverrun(source, elapsedTime.Seconds(), effectiveBufferDuration.Seconds())
 		}

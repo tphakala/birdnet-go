@@ -48,7 +48,7 @@ Performance Optimizations:
   import type { PendingDetection } from '$lib/types/pending.types';
   import {
     getLocalDateString,
-    isFutureDate,
+    getDateInTimezone,
     parseHour,
     parseLocalDateString,
   } from '$lib/utils/date';
@@ -163,6 +163,12 @@ Performance Optimizations:
   let summaryLimit = $state(30); // Default from backend (conf/defaults.go) - species count limit for daily summary
   let configLoaded = $state(false); // Gates reactive preloading until config is loaded
   let pendingDetections = $state<PendingDetection[]>([]);
+
+  // Server timezone from sun times API, used for date navigation constraints.
+  // When the server is ahead of the browser (e.g., server in Sydney, browser in California),
+  // the server's "today" may be the browser's "tomorrow". Without this, the date picker
+  // blocks navigation to the server's current date (#3005).
+  let serverTimezone = $state('');
 
   // Subscribe to edit mode store
   let isEditing = $derived($dashboardEditMode);
@@ -370,7 +376,11 @@ Performance Optimizations:
         buildAppUrl(`/api/v2/analytics/species/daily?date=${selectedDate}&limit=${summaryLimit}`)
       );
       if (!response.ok) {
-        throw new Error(t('dashboard.errors.dailySummaryFetch', { status: response.statusText }));
+        throw new Error(
+          t('dashboard.errors.dailySummaryFetch', {
+            status: response.statusText || `HTTP ${response.status}`,
+          })
+        );
       }
       const data = await response.json();
 
@@ -454,7 +464,9 @@ Performance Optimizations:
       );
       if (!response.ok) {
         throw new Error(
-          t('dashboard.errors.recentDetectionsFetch', { status: response.statusText })
+          t('dashboard.errors.recentDetectionsFetch', {
+            status: response.statusText || `HTTP ${response.status}`,
+          })
         );
       }
       const rawData = await response.json();
@@ -801,8 +813,8 @@ Performance Optimizations:
         handleDateChangeWithCleanup();
         fetchDailySummary();
       } else if (!urlDate) {
-        // If no date in URL, use current date
-        const currentDate = getLocalDateString();
+        // If no date in URL, use current date (server timezone when available)
+        const currentDate = serverTodayDate;
         if (currentDate !== selectedDate) {
           selectedDate = currentDate;
           handleDateChangeWithCleanup();
@@ -891,7 +903,7 @@ Performance Optimizations:
     if (!date) return;
     date.setDate(date.getDate() + 1);
     const newDateString = getLocalDateString(date);
-    if (!isFutureDate(newDateString)) {
+    if (newDateString <= serverTodayDate) {
       selectedDate = newDateString;
       persistDate(newDateString);
       handleDateChangeWithCleanup();
@@ -916,9 +928,9 @@ Performance Optimizations:
    * Clears both URL parameter and localStorage to show current date
    */
   function goToToday() {
-    // Reset date persistence and navigate to today
+    // Reset date persistence and navigate to today (using server timezone when available)
     resetDateToToday();
-    const currentDate = getLocalDateString();
+    const currentDate = serverTodayDate;
     selectedDate = currentDate;
     handleDateChangeWithCleanup();
     fetchDailySummary();
@@ -937,8 +949,24 @@ Performance Optimizations:
     }
   }
 
+  // Minute-level tick so serverTodayDate recomputes across midnight
+  let nowTick = $state(Date.now());
+  $effect(() => {
+    const id = setInterval(() => {
+      nowTick = Date.now();
+    }, 60_000);
+    return () => clearInterval(id);
+  });
+
+  // Server-aware "today" date: uses server timezone when known, falls back to browser local.
+  // All date comparisons that gate navigation or SSE updates should use this, not getLocalDateString().
+  const serverTodayDate = $derived.by(() => {
+    void nowTick;
+    return serverTimezone ? getDateInTimezone(serverTimezone) : getLocalDateString();
+  });
+
   // Derived state to check if we're viewing today's data
-  const isViewingToday = $derived(selectedDate === getLocalDateString());
+  const isViewingToday = $derived(selectedDate === serverTodayDate);
 
   // Location availability for banner map toggle
   let birdnet = $derived($birdnetSettings);
@@ -1002,14 +1030,14 @@ Performance Optimizations:
     }
 
     // Additional safety check: ensure detection is for today and matches selected date
-    if (detection.date !== selectedDate && detection.date !== getLocalDateString()) {
+    if (detection.date !== selectedDate && detection.date !== serverTodayDate) {
       logger.debug(
         'Skipping daily summary update - detection date mismatch:',
         detection.date,
         'vs',
         selectedDate,
         'today:',
-        getLocalDateString()
+        serverTodayDate
       );
       return;
     }
@@ -1174,11 +1202,11 @@ Performance Optimizations:
     prevDate.setDate(prevDate.getDate() - 1);
     dates.push(getLocalDateString(prevDate));
 
-    // Next date (only if not future)
+    // Next date (only if not past the server's today)
     const nextDate = new Date(base);
     nextDate.setDate(nextDate.getDate() + 1);
     const nextDateString = getLocalDateString(nextDate);
-    if (!isFutureDate(nextDateString)) {
+    if (nextDateString <= serverTodayDate) {
       dates.push(nextDateString);
     }
 
@@ -1213,7 +1241,9 @@ Performance Optimizations:
       )
         .then(response => {
           if (!response.ok) {
-            throw new Error(`Batch preload failed: ${response.statusText}`);
+            throw new Error(
+              `Batch preload failed: ${response.statusText || `HTTP ${response.status}`}`
+            );
           }
           return response.json();
         })
@@ -1571,6 +1601,9 @@ Performance Optimizations:
           onNextDay={nextDay}
           onGoToToday={goToToday}
           onDateChange={handleDateChange}
+          onServerTimezone={tz => {
+            serverTimezone = tz;
+          }}
         />
       {:else if element.type === 'currently-hearing'}
         <CurrentlyHearingCard detections={isViewingToday ? pendingDetections : []} />

@@ -27,15 +27,22 @@ frontend/
 │   ├── pages/
 │   ├── stores/
 │   └── utils/
-├── static/messages/       # Translation files (JSON)
+├── static/messages/       # Translation files (15 locales)
 │   ├── en.json           # English (primary)
+│   ├── cs.json           # Czech
+│   ├── da.json           # Danish
 │   ├── de.json           # German
 │   ├── es.json           # Spanish
 │   ├── fi.json           # Finnish
 │   ├── fr.json           # French
+│   ├── hu.json           # Hungarian
+│   ├── it.json           # Italian
+│   ├── lv.json           # Latvian
 │   ├── nl.json           # Dutch
 │   ├── pl.json           # Polish
-│   └── pt.json           # Portuguese
+│   ├── pt.json           # Portuguese
+│   ├── sk.json           # Slovak
+│   └── sv.json           # Swedish
 └── dist/
 ```
 
@@ -48,13 +55,20 @@ All translation files are in `frontend/static/messages/`:
 ```bash
 frontend/static/messages/
 ├── en.json  # English (primary - update this first)
+├── cs.json  # Czech
+├── da.json  # Danish
 ├── de.json  # German
 ├── es.json  # Spanish
 ├── fi.json  # Finnish
 ├── fr.json  # French
+├── hu.json  # Hungarian
+├── it.json  # Italian
+├── lv.json  # Latvian
 ├── nl.json  # Dutch
 ├── pl.json  # Polish
-└── pt.json  # Portuguese
+├── pt.json  # Portuguese
+├── sk.json  # Slovak
+└── sv.json  # Swedish
 ```
 
 ### Adding New Translation Keys
@@ -62,8 +76,8 @@ frontend/static/messages/
 **CRITICAL: When adding new translation keys, you MUST update ALL language files.**
 
 1. Add the key to `en.json` first (English is the source of truth)
-2. Add translations to ALL other language files (de, es, fi, fr, nl, pl, pt)
-3. Use the same key structure across all files
+2. Run `npm run i18n:sync` to propagate new keys to all locale files
+3. Translate the new keys in each locale file (sync fills English as fallback)
 
 ```bash
 # Quick check for missing keys

@@ -12,6 +12,7 @@
     "refresh": "Uppdatera",
     "delete": "Radera",
     "edit": "Redigera",
+    "enabled": "Aktiverad",
     "search": "Sök",
     "filter": "Filter",
     "sort": "Sortera",
@@ -153,7 +154,8 @@
         "verifiedCorrect": "Verifierad korrekt",
         "falsePositive": "Falskt positiv",
         "notReviewed": "Ej granskad",
-        "locked": "Låst"
+        "locked": "Låst",
+        "unlikely": "Osannolik"
       },
       "form": {
         "correctDetection": "Korrekt detektion",
@@ -422,7 +424,7 @@
       },
       "buffer": {
         "overloadTitle": "Ljudanalys överbelastad",
-        "overloadMessage": "Ditt system förlorar {dropRate}% av ljudsamplingarna för källa '{sourceName}' eftersom det inte kan hålla jämna steg med analysen. Minska BirdNET-överlappningsvärdet i detektionsinställningarna eller överväg att uppgradera till en snabbare CPU."
+        "overloadMessage": "Ditt system förlorar {dropRate}% av ljudsamplingarna för källa ''{sourceName}'' eftersom det inte kan hålla jämna steg med analysen. Minska BirdNET-överlappningsvärdet i detektionsinställningarna eller överväg att uppgradera till en snabbare CPU."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -512,7 +514,8 @@
       "false": "Falsk",
       "unverified": "Overifierad",
       "locked": "Låst",
-      "unlocked": "Olåst"
+      "unlocked": "Olåst",
+      "unlikely": "Osannolik"
     },
     "review": {
       "review": "Granska",
@@ -640,7 +643,8 @@
         "verified": "Verifierad",
         "false": "Falsk",
         "unverified": "Overifierad",
-        "locked": "Låst"
+        "locked": "Låst",
+        "unlikely": "Osannolik"
       },
       "modals": {
         "showSpecies": "Visa art {species}",
@@ -656,6 +660,8 @@
       },
       "actions": {
         "menuLabel": "Åtgärder för {species}",
+        "markCorrect": "Korrekt",
+        "markFalsePositive": "Felaktig",
         "review": "Granska detektering",
         "showSpecies": "Visa art",
         "ignoreSpecies": "Ignorera art",
@@ -761,6 +767,7 @@
     "headers": {
       "dateTime": "Datum och tid",
       "weather": "Väder",
+      "source": "Källa",
       "species": "Art",
       "confidence": "Konfidens",
       "thumbnail": "Miniatyrbild",
@@ -794,6 +801,25 @@
     "pagination": {
       "showing": "Visar {from} till {to} av {total} resultat"
     },
+    "selection": {
+      "select": "Välj",
+      "nSelected": "{count} valda",
+      "selectAllMatching": "Välj alla {count} matchande detekteringar",
+      "allSelected": "Alla {count} valda",
+      "clear": "Rensa val",
+      "toolbarLabel": "Massåtgärder",
+      "confirmBulkDelete": "Ta bort {count} detekteringar? Detta kan inte ångras.",
+      "confirmBulkMarkCorrect": "Markera {count} detekteringar som korrekta?",
+      "confirmBulkMarkFalsePositive": "Markera {count} detekteringar som falskt positiva?",
+      "confirmBulkLock": "Lås {count} detekteringar?",
+      "confirmBulkUnlock": "Lås upp {count} detekteringar?",
+      "bulkSuccess": "{count} detekteringar uppdaterade",
+      "bulkDeleteSuccess": "{count} detekteringar borttagna",
+      "bulkPartial": "{processed} uppdaterade, {skipped} överhoppade (låsta)",
+      "tooManyDetections": "För många detekteringar ({count}). Begränsa dina filter för att välja färre än 500.",
+      "bulkError": "Massåtgärden misslyckades. Försök igen.",
+      "switchToTable": "Byt till tabellvy för att välja detekteringar"
+    },
     "weather": {
       "title": "Väderinformation",
       "noData": "Inga väderdata",
@@ -816,25 +842,56 @@
         "pressure": "hPa"
       },
       "conditions": {
-        "clearsky_day": "Klar himmel",
-        "clearsky_night": "Klar himmel",
-        "fair_day": "Vackert väder",
-        "fair_night": "Vackert väder",
-        "partlycloudy_day": "Delvis molnigt",
-        "partlycloudy_night": "Delvis molnigt",
+        "clearsky": "Klar himmel",
         "cloudy": "Molnigt",
-        "rainshowers_day": "Regnskurar",
-        "rainshowers_night": "Regnskurar",
-        "rain": "Regn",
-        "thunder": "Åskväder",
-        "sleet": "Snöblandat regn",
-        "snow": "Snö",
+        "fair": "Vackert väder",
         "fog": "Dimma",
+        "heavyrain": "Kraftigt regn",
+        "heavyrainandthunder": "Kraftigt regn och åska",
+        "heavyrainshowers": "Kraftiga regnskurar",
+        "heavyrainshowersandthunder": "Kraftiga regnskurar och åska",
+        "heavysleet": "Kraftigt snöblandat regn",
+        "heavysleetandthunder": "Kraftigt snöblandat regn och åska",
+        "heavysleetshowers": "Kraftiga snöblandade regnskurar",
+        "heavysleetshowersandthunder": "Kraftiga snöblandade regnskurar och åska",
+        "heavysnow": "Kraftigt snöfall",
+        "heavysnowandthunder": "Kraftigt snöfall och åska",
+        "heavysnowshowers": "Kraftiga snöbyar",
+        "heavysnowshowersandthunder": "Kraftiga snöbyar och åska",
+        "lightrain": "Lätt regn",
+        "lightrainandthunder": "Lätt regn och åska",
+        "lightrainshowers": "Lätta regnskurar",
+        "lightrainshowersandthunder": "Lätta regnskurar och åska",
+        "lightsleet": "Lätt snöblandat regn",
+        "lightsleetandthunder": "Lätt snöblandat regn och åska",
+        "lightsleetshowers": "Lätta snöblandade regnskurar",
+        "lightsnow": "Lätt snö",
+        "lightsnowandthunder": "Lätt snö och åska",
+        "lightsnowshowers": "Lätta snöbyar",
+        "lightssleetshowersandthunder": "Lätta snöblandade regnskurar och åska",
+        "lightssnowshowersandthunder": "Lätta snöbyar och åska",
+        "partlycloudy": "Delvis molnigt",
+        "rain": "Regn",
+        "rainandthunder": "Regn och åska",
+        "rainshowers": "Regnskurar",
+        "rainshowersandthunder": "Regnskurar och åska",
+        "sleet": "Snöblandat regn",
+        "sleetandthunder": "Snöblandat regn och åska",
+        "sleetshowers": "Snöblandade regnskurar",
+        "sleetshowersandthunder": "Snöblandade regnskurar och åska",
+        "snow": "Snö",
+        "snowandthunder": "Snö och åska",
+        "snowshowers": "Snöbyar",
+        "snowshowersandthunder": "Snöbyar och åska",
+        "thunder": "Åskväder",
         "unknown": "Okänt"
       }
     },
     "row": {
-      "viewDetails": "Visa detaljer för {species}"
+      "viewDetails": "Visa detaljer för {species}",
+      "openDetailFromStatus": "Open detail page for {species}",
+      "play": "Spela upp",
+      "playAudio": "Spela upp ljud"
     },
     "media": {
       "title": "Inspelning och spektrogram",
@@ -877,6 +934,24 @@
       "loadFailed": "Kunde inte ladda detektering (Fel {status}). Prova att uppdatera sidan.",
       "noIdProvided": "Inget detekterings-ID angavs.",
       "fetchFailed": "Kunde inte hämta detekteringar"
+    },
+    "reanalyze": {
+      "title": "Reanalyze this clip",
+      "running": "Analyzing…",
+      "noPredictions": "No predictions returned.",
+      "colSpecies": "Species",
+      "button": "Reanalyze",
+      "buttonAriaLabel": "Reanalyze {species} clip with another model",
+      "descriptionMulti": "Below is how every loaded classifier scored this clip. Click 'Use this' on the row you think is right to update the detection.",
+      "multiModelSummary": "{models} • {duration} of audio",
+      "useThis": "Use this",
+      "useThisAriaLabel": "Apply this species ({species}) as the corrected detection",
+      "noModelForCorrection": "No model has scored this species; cannot apply.",
+      "correctionApplied": "Detection updated to {species}.",
+      "confirmTitle": "Replace detection with {species}?",
+      "confirmBody": "This updates the detection's species, model, and confidence in place, and marks it as verified. Existing review status is overwritten.",
+      "confirmApply": "Yes, apply correction",
+      "applying": "Applying…"
     }
   },
   "species": {
@@ -1639,6 +1714,7 @@
     "title": "Inställningar - BirdNET-Go",
     "loading": "Laddar inställningar...",
     "sections": {
+      "analysis": "Analys",
       "node": "Allmänt",
       "userinterface": "Gränssnitt",
       "audio": "Ljud",
@@ -1750,7 +1826,17 @@
           },
           "hardwareNote": "Strikt- och maximumnivåer kräver högre överlappningsinställningar och mer CPU-resurser. RPi 4 eller bättre hårdvara krävs för dessa nivåer.",
           "overlapAdjusted": "Överlappningsinställningen justerades automatiskt till {overlap}s för att uppfylla filterkraven",
-          "overlapReduced": "Överlappningsinställningen minskades till {overlap}s för att matcha filternivån"
+          "overlapReduced": "Överlappningsinställningen minskades till {overlap}s för att matcha filternivån",
+          "levelNames": {
+            "off": "Av",
+            "lenient": "Låg",
+            "moderate": "Måttlig",
+            "balanced": "Balanserad",
+            "strict": "Strikt",
+            "maximum": "Maximum",
+            "unknown": "Okänd"
+          },
+          "warningOff": "Utan filtrering accepteras varje detektering över konfidenströskeln omedelbart. Detta ger vanligtvis flera falska positiva per dag. Även låg filtrering förbättrar resultatkvaliteten avsevärt."
         },
         "rangeFilter": {
           "title": "Områdesfilter",
@@ -2384,8 +2470,11 @@
             "name": "Gotify",
             "server": {
               "label": "Server-URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "Ditt Gotify-servervärdnamn (utan https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Ditt Gotify-servernamn och port"
+            },
+            "protocol": {
+              "label": "Protokoll"
             },
             "token": {
               "label": "Applikationstoken",
@@ -2799,6 +2888,10 @@
           "refresh": "Uppdatera enheter"
         }
       },
+      "noSources": {
+        "warning": "Inga ljudkällor konfigurerade",
+        "description": "BirdNET-Go behöver en ljudingång för att detektera fåglar. Konfigurera minst en källa i fliken Ljudkort eller Strömmar."
+      },
       "soundCards": {
         "summary": "{count} ljudkortskälla/-or",
         "addSource": "Lägg till ljudkort",
@@ -2843,10 +2936,6 @@
           "recommendedSampleRate": "{rate}kHz rekommenderat för bästa resultat",
           "atLeastOneModel": "Minst en modell måste väljas"
         }
-      },
-      "noSources": {
-        "warning": "Inga ljudkällor konfigurerade",
-        "description": "BirdNET-Go behöver en ljudingång för att detektera fåglar. Konfigurera minst en källa i fliken Ljudkort eller Strömmar."
       },
       "audioCapture": {
         "title": "Ljudkortskonfiguration",
@@ -4021,13 +4110,13 @@
     "labels": {
       "showPassword": "Visa lösenord",
       "hidePassword": "Dölj lösenord",
-      "copyToClipboard": "Kopiera till urklipp",
-      "clearSelection": "Rensa val",
-      "selectOption": "Välj ett alternativ",
       "secretSet": "Inställd",
       "changeSecret": "Ändra",
       "cancelChange": "Avbryt",
-      "enterNewSecret": "Ange nytt värde"
+      "enterNewSecret": "Ange nytt värde",
+      "copyToClipboard": "Kopiera till urklipp",
+      "clearSelection": "Rensa val",
+      "selectOption": "Välj ett alternativ"
     },
     "help": {
       "passwordStrength": "Lösenordsstyrka: {strength}",
@@ -4128,11 +4217,11 @@
       "spectrogramLoading": "Laddar spektrogram...",
       "spectrogramLoaded": "Spektrogram laddat",
       "spectrogramLoadingAria": "Laddar spektrogram",
+      "spectrogramAlt": "Ljudspektrogram",
       "spectrogramGeneratingAria": "Genererar spektrogram",
       "generating": "Genererar...",
       "queuePosition": "Kö: {position}",
-      "loadError": "Kunde inte ladda ljud",
-      "spectrogramAlt": "Ljudspektrogram"
+      "loadError": "Kunde inte ladda ljud"
     },
     "forms": {
       "numberField": {
@@ -4468,6 +4557,151 @@
         "outro": "Detta tillvägagångssätt säkerställer datakvalitet för vetenskaplig forskning samtidigt som det maximerar ditt lärande och din glädje av fåglar.",
         "acknowledge": "Jag förstår"
       }
+    }
+  },
+  "analysis": {
+    "title": "Analys",
+    "tabs": {
+      "settings": "Inställningar",
+      "models": "Modeller"
+    },
+    "detection": {
+      "title": "Detektionsinställningar",
+      "description": "Konfigurera konfidenströsklar och språk för artklassificering.",
+      "confidenceThreshold": {
+        "label": "Confidence Threshold",
+        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+      },
+      "batThreshold": {
+        "label": "Tröskel för fladdermöss-detektion",
+        "helpText": "Minsta konfidenspoäng för detektering av fladdermusarter. Gäller endast för klassificeringsmodeller för fladdermöss."
+      },
+      "batFilter": {
+        "label": "Högpassfilter för fladdermöss-ljud",
+        "helpText": "Filtrerar bort hörbara frekvenser före fladdermöss-analysen för att minska falska positiva resultat från fågelsång och omgivningsljud."
+      },
+      "batNighttimeOnly": {
+        "label": "Endast nattetid",
+        "helpText": "När aktiverat körs fladdermöss-detektering endast mellan borgerlig skymning och borgerlig gryning. Kräver konfigurerad plats. Inaktivera för att köra detektering dygnet runt."
+      },
+      "batUltrasonicFilter": {
+        "label": "Validering efter detektion",
+        "helpText": "När aktiverat valideras fladdermusdetektioner genom att analysera ultraljudsenergi i källljudet. Detektioner utan ekolokationsegenskaper markeras som osannolika."
+      },
+      "batFalsePositiveFilter": {
+        "label": "Fladdermus falskt-positiv filter",
+        "helpText": "Kräver flera bekräftelser av en fladdermusdetektion inom ett glidande fönster innan den accepteras. Högre nivåer kräver fler bekräftelser, vilket minskar falska positiva. Fladdermusmodellen använder en fast 50% överlappning, så ingen överlappningsjustering behövs.",
+        "levels": {
+          "off": "Ingen filtrering; accepterar varje fladdermusdetektering omedelbart.",
+          "moderate": "Bra balans för de flesta uppsättningar. Minskar falska positiva avsevärt.",
+          "strict": "Maximal filtrering för högsta noggrannhet."
+        },
+        "detectionCount": "{count} bekräftelser krävs. {description}",
+        "warningOff": "Utan filtrering finns det hög sannolikhet för falska positiva. Att aktivera filtrering förbättrar noggrannheten avsevärt."
+      },
+      "locale": {
+        "label": "Artspråk",
+        "helpText": "Språk som används för arternas vardagliga namn i gränssnittet."
+      }
+    },
+    "rangeFilter": {
+      "birdOnlyNote": "Områdesfilter gäller bara fågelklassificerare. Fladdermusmodeller använder egna artlistor.",
+      "status": {
+        "title": "Områdesfilter översikt",
+        "geomodelInfo": "BirdNET Geomodell {version} - {species} kända arter",
+        "autoSelected": "Automatiskt vald",
+        "manual": "Manuell",
+        "classifier": "Klassificerare",
+        "totalSpecies": "Totalt antal arter",
+        "withRangeData": "Med områdesdata",
+        "withoutRangeData": "Utan områdesdata",
+        "withRangeDataTooltip": "Arter som geomodellen kan utvärdera för geografisk sannolikhet vid din plats",
+        "withoutRangeDataTooltip": "Arter utan geografiska data i geomodellen, hanteras av inställningen för ej kartlagda arter nedan",
+        "noFilter": "Inget områdesfilter aktivt",
+        "passUnmapped": {
+          "label": "Tillåt arter utan områdesdata",
+          "helpText": "Tillåt detektioner av arter som geomodellen saknar geografiska data för. När inaktiverad filtreras dessa arter alltid bort."
+        }
+      }
+    },
+    "advanced": {
+      "title": "Avancerat",
+      "description": "Bearbetning och anpassad modellkonfiguration."
+    },
+    "gallery": {
+      "title": "Modellgalleri",
+      "description": "Hantera klassificeringsmodeller för fågel- och fladdermusdetektion.",
+      "tabs": {
+        "installed": "Installerade",
+        "available": "Tillgängliga"
+      },
+      "loading": "Laddar modeller...",
+      "retry": "Försök igen",
+      "builtIn": "Inbyggd",
+      "builtInDescription": "Inbyggd fågelartsklassificerare från BirdNET-teamet.",
+      "species": "{count} arter",
+      "install": "Installera",
+      "installing": "Installerar...",
+      "remove": "Ta bort",
+      "removing": "Tar bort...",
+      "noInstalledModels": "Inga ytterligare modeller installerade. Bläddra i fliken Tillgängliga för att lägga till fler klassificerare.",
+      "noAvailableModels": "Inga ytterligare modeller tillgängliga för din plattform.",
+      "sections": {
+        "acoustic": "Akustiska klassificerare",
+        "geomodel": "Geomodeller"
+      },
+      "categories": {
+        "wildlife": "Viltklassificerare",
+        "bird": "Fågelklassificerare",
+        "bat": "Fladdermusklassificerare"
+      },
+      "progress": {
+        "downloading": "Laddar ner...",
+        "verifying": "Verifierar...",
+        "loading": "Laddar...",
+        "complete": "Installerad",
+        "failed": "Misslyckades"
+      },
+      "license": {
+        "title": "Licensavtal",
+        "model": "Modell",
+        "author": "Upphovsperson",
+        "license": "Licens",
+        "commercialUse": "Kommersiellt bruk",
+        "downloadSize": "Nedladdningsstorlek",
+        "allowed": "Tillåtet",
+        "notAllowed": "Ej tillåtet",
+        "commercialUseAllowed": "Kommersiellt bruk tillåtet",
+        "nonCommercialOnly": "Endast icke-kommersiellt bruk",
+        "nonCommercialWarning": "Denna modell är licensierad enbart för icke-kommersiellt bruk. Genom att installera godkänner du att följa licensvillkoren.",
+        "acceptAndInstall": "Acceptera och installera"
+      },
+      "removeDialog": {
+        "title": "Ta bort {name}?",
+        "confirmation": "Detta tar bort modellfilerna från disken. Etikettdata behålls för befintliga detektioner."
+      },
+      "errors": {
+        "catalogLoadFailed": "Kunde inte ladda modellkatalogen",
+        "installFailed": "Kunde inte starta modellinstallation",
+        "removeFailed": "Kunde inte ta bort modell"
+      },
+      "regionLabel": "Region",
+      "speciesLabel": "Arter",
+      "reinstall": "Installera om",
+      "reinstalling": "Installerar om...",
+      "reinstallComplete": "Filer verifierade",
+      "geomodelBadge": "Inkluderar BirdNET v3.0 geomodell"
+    },
+    "bird": {
+      "title": "Fågeldetektering",
+      "description": "Konfigurera konfidenströskel, artspråk och filtrering av falska positiva för fågelklassificerare."
+    },
+    "bat": {
+      "title": "Fladdermusdetektering",
+      "description": "Konfigurera tröskel, schemaläggning och filtrering av falska positiva för fladdermusklassificerare."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dynamiskt tröskelvärde gäller endast fågelklassificerare."
     }
   },
   "restart": {

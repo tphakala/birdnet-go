@@ -59,6 +59,17 @@ func TestGetSunsetTime(t *testing.T) {
 	assert.False(t, sunset.IsZero(), "sunset time is zero")
 }
 
+func TestLocationName(t *testing.T) {
+	sc := newTestSunCalc()
+
+	name := sc.LocationName()
+	assert.Equal(t, "Europe/Helsinki", name, "expected IANA timezone for Helsinki coordinates")
+
+	// Sydney coordinates
+	scSydney := NewSunCalc(-33.8688, 151.2093)
+	assert.Equal(t, "Australia/Sydney", scSydney.LocationName(), "expected IANA timezone for Sydney coordinates")
+}
+
 func TestCacheConsistency(t *testing.T) {
 	sc := newTestSunCalc()
 	date := midsummerDate()
@@ -76,4 +87,66 @@ func TestCacheConsistency(t *testing.T) {
 	assert.True(t, exists, "cache entry not found after calculation")
 
 	assert.True(t, entry.times.Sunrise.Equal(times1.Sunrise), "cached sunrise time doesn't match calculated time")
+}
+
+func TestCacheEviction(t *testing.T) {
+	sc := newTestSunCalc()
+
+	// Fill cache beyond maxCacheEntries
+	baseDate := time.Date(2020, 1, 1, 12, 0, 0, 0, time.UTC)
+	for i := range maxCacheEntries {
+		d := baseDate.AddDate(0, 0, i)
+		_, err := sc.GetSunEventTimes(d)
+		require.NoError(t, err)
+	}
+
+	sc.lock.RLock()
+	assert.Len(t, sc.cache, maxCacheEntries, "cache should be at capacity")
+	sc.lock.RUnlock()
+
+	// One more entry should trigger eviction (clear + re-add)
+	nextDate := baseDate.AddDate(0, 0, maxCacheEntries)
+	_, err := sc.GetSunEventTimes(nextDate)
+	require.NoError(t, err)
+
+	sc.lock.RLock()
+	assert.Len(t, sc.cache, 1, "cache should contain only the new entry after eviction")
+	sc.lock.RUnlock()
+}
+
+func TestConcurrentAccess(t *testing.T) {
+	sc := newTestSunCalc()
+	date := midsummerDate()
+
+	// Run many goroutines requesting the same date concurrently.
+	// This exercises the double-check pattern and verifies no races.
+	const goroutines = 50
+	results := make(chan SunEventTimes, goroutines)
+	errs := make(chan error, goroutines)
+
+	for range goroutines {
+		go func() {
+			times, err := sc.GetSunEventTimes(date)
+			if err != nil {
+				errs <- err
+				return
+			}
+			results <- times
+		}()
+	}
+
+	var first SunEventTimes
+	for i := range goroutines {
+		select {
+		case err := <-errs:
+			t.Fatalf("goroutine %d returned error: %v", i, err)
+		case times := <-results:
+			if i == 0 {
+				first = times
+			} else {
+				assert.True(t, first.Sunrise.Equal(times.Sunrise),
+					"goroutine %d returned different sunrise", i)
+			}
+		}
+	}
 }

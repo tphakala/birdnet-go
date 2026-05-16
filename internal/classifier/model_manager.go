@@ -121,7 +121,13 @@ func (mm *ModelManager) ScanInstalled() {
 				labelsFile = f.LocalName
 			}
 		}
+
+		// Shared-only entries (e.g. geomodels): all files live in models/shared/.
+		// Detect these by checking that every file is a shared role and all exist.
 		if modelFile == "" {
+			if mm.scanSharedOnlyEntry(log, entry) {
+				continue
+			}
 			continue
 		}
 
@@ -323,6 +329,44 @@ func (mm *ModelManager) IsInstalled(catalogID string) bool {
 	return ok
 }
 
+// scanSharedOnlyEntry checks whether a catalog entry whose files all live in
+// models/shared/ (e.g. geomodels) is installed. If all shared files exist on
+// disk, it registers the entry in mm.installed and returns true. The caller
+// must hold mm.mu.
+func (mm *ModelManager) scanSharedOnlyEntry(log logger.Logger, entry *CatalogEntry) bool {
+	if !IsSharedOnly(entry) {
+		return false
+	}
+	sharedDir := filepath.Join(mm.modelsDir, "shared")
+	var modelPath, labelsPath string
+	for _, f := range entry.Files {
+		p := filepath.Join(sharedDir, f.LocalName)
+		if _, err := os.Stat(p); err != nil {
+			return false
+		}
+		switch f.Role {
+		case RoleGeomodelModel:
+			modelPath = p
+		case RoleGeomodelLabels:
+			labelsPath = p
+		}
+	}
+	if modelPath == "" {
+		return false
+	}
+	mm.installed[entry.ID] = InstalledModel{
+		CatalogID:   entry.ID,
+		ModelPath:   modelPath,
+		LabelsPath:  labelsPath,
+		InstalledAt: fileModTime(modelPath),
+		Version:     entry.Version,
+	}
+	log.Debug("Found installed shared-only model",
+		logger.String("catalog_id", entry.ID),
+		logger.String("path", modelPath))
+	return true
+}
+
 // ListInstalled returns a copy of all installed models.
 func (mm *ModelManager) ListInstalled() []InstalledModel {
 	mm.mu.RLock()
@@ -425,25 +469,38 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 		}
 	}
 
-	// Clean up shared embeddings, geomodel, and taxonomy files if no other dependent models remain.
-	mm.cleanupSharedFiles(log, catalogID, &entry, HasEmbeddingsFiles, isEmbeddingsRole, "embeddings")
-	mm.cleanupSharedFiles(log, catalogID, &entry, HasGeomodelFiles, isGeomodelRole, "geomodel")
-	mm.cleanupSharedFiles(log, catalogID, &entry, HasTaxonomyFiles, isTaxonomyRole, "taxonomy")
-
-	// Labels are intentionally retained on disk.
-
+	// Update installed map and config BEFORE reloading range filter so the
+	// reload sees the cleared geomodel path and does not re-acquire the handle.
 	delete(mm.installed, catalogID)
-
 	mm.applyConfigForUninstall(&entry)
 
-	// If geomodel was cleared during uninstall, reload the range filter
-	// so the primary model falls back to the embedded TFLite filter.
+	// Reload range filter with updated config (geomodel cleared), then delete files.
+	// Skip geomodel file deletion if reload fails (session may still hold handles).
+	geomodelReloadOK := true
 	if mm.orchestrator != nil && HasGeomodelFiles(&entry) {
 		if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
-			log.Warn("Failed to hot-reload range filter after geomodel uninstall",
+			geomodelReloadOK = false
+			log.Warn("Range filter reload failed after geomodel uninstall, retaining geomodel files",
 				logger.String("catalog_id", catalogID),
 				logger.Error(err))
 		}
+	}
+
+	// Clean up shared embeddings, geomodel, and taxonomy files if no other dependent models remain.
+	mm.cleanupSharedFiles(log, catalogID, &entry, HasEmbeddingsFiles, isEmbeddingsRole, "embeddings")
+	if geomodelReloadOK {
+		mm.cleanupSharedFiles(log, catalogID, &entry, HasGeomodelFiles, isGeomodelRole, "geomodel")
+	}
+	mm.cleanupSharedFiles(log, catalogID, &entry, HasTaxonomyFiles, isTaxonomyRole, "taxonomy")
+
+	// Remove the per-model subdirectory if it is now empty (labels are retained,
+	// so Remove will fail with ENOTEMPTY if any remain, which is the desired behavior).
+	if err := os.Remove(subdir); err == nil {
+		log.Info("Removed empty model directory",
+			logger.String("path", subdir))
+	} else if !os.IsNotExist(err) {
+		log.Debug("Model directory not removed (likely non-empty)",
+			logger.String("path", subdir))
 	}
 
 	log.Info("Model uninstalled",
@@ -457,7 +514,7 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 // depends on the same files.
 // hasFiles checks whether a catalog entry depends on this kind of shared file.
 // matchRole checks whether a CatalogFile belongs to this kind.
-// The caller must hold mm.mu, and catalogID must still be in mm.installed.
+// The caller must hold mm.mu.
 func (mm *ModelManager) cleanupSharedFiles(log logger.Logger, catalogID string, entry *CatalogEntry, hasFiles func(*CatalogEntry) bool, matchRole func(string) bool, label string) {
 	if !hasFiles(entry) {
 		return
@@ -595,17 +652,20 @@ func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, base
 func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEntry, baseURL string, progress chan<- DownloadState, cleanupOnFailure bool) error {
 	log := GetLogger()
 
-	// Create model subdirectory.
+	// Create model subdirectory only if the entry has non-shared files.
+	// Shared-only entries (e.g. geomodels) store all files in models/shared/.
 	subdir := filepath.Join(mm.modelsDir, entry.ID)
-	if err := os.MkdirAll(subdir, 0o755); err != nil {
-		mkdirErr := errors.Newf("failed to create model directory %s: %v", subdir, err).
-			Component("classifier.model_manager").
-			Category(errors.CategoryFileIO).
-			Context("catalog_id", entry.ID).
-			Context("directory", subdir).
-			Build()
-		mm.markFailed(entry.ID, mkdirErr, progress)
-		return mkdirErr
+	if !IsSharedOnly(entry) {
+		if err := os.MkdirAll(subdir, 0o755); err != nil {
+			mkdirErr := errors.Newf("failed to create model directory %s: %v", subdir, err).
+				Component("classifier.model_manager").
+				Category(errors.CategoryFileIO).
+				Context("catalog_id", entry.ID).
+				Context("directory", subdir).
+				Build()
+			mm.markFailed(entry.ID, mkdirErr, progress)
+			return mkdirErr
+		}
 	}
 
 	// Track files we downloaded so we can clean up on failure.
@@ -717,6 +777,9 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 		}
 	}
 
+	// For shared-only entries (e.g. geomodels), derive paths from shared files.
+	modelPath, labelsPath = resolveSharedPaths(entry, modelPath, labelsPath, fileDestPath)
+
 	// Record as installed.
 	mm.mu.Lock()
 	mm.installed[entry.ID] = InstalledModel{
@@ -769,6 +832,23 @@ func (mm *ModelManager) hotLoadAfterInstall(log logger.Logger, entry *CatalogEnt
 				logger.Error(err))
 		}
 	}
+}
+
+// resolveSharedPaths fills in modelPath and labelsPath for shared-only entries
+// (e.g. geomodels) that have no RoleModel or RoleLabels files.
+func resolveSharedPaths(entry *CatalogEntry, modelPath, labelsPath string, destPath func(CatalogFile) string) (resolvedModel, resolvedLabels string) {
+	if modelPath != "" {
+		return modelPath, labelsPath
+	}
+	for _, f := range entry.Files {
+		switch f.Role {
+		case RoleGeomodelModel:
+			modelPath = destPath(f)
+		case RoleGeomodelLabels:
+			labelsPath = destPath(f)
+		}
+	}
+	return modelPath, labelsPath
 }
 
 // sendProgress sends a non-blocking status update to the progress channel.

@@ -34,6 +34,7 @@ export function createEmptySettings(): SettingsFormData {
       locationConfigured: false,
       rangeFilter: {
         threshold: 0.03,
+        passUnmappedSpecies: false,
         speciesCount: null,
         species: [],
       },

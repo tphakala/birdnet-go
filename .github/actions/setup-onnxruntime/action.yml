@@ -52,12 +52,41 @@ runs:
           darwin-arm64)
             curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-osx-arm64-${VERSION}.tgz" \
               -o /tmp/onnxruntime.tgz
-            tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
-            rm /tmp/onnxruntime.tgz
+            # BSD tar on macOS treats ./ as a path component, so --strip-components=1
+            # only strips ./ instead of the full directory prefix. Use cp instead.
+            TMPDIR_ORT=$(mktemp -d)
+            tar -xzf /tmp/onnxruntime.tgz -C "$TMPDIR_ORT"
+            cp -R "$TMPDIR_ORT"/onnxruntime-*/* /tmp/onnxruntime/
+            rm -rf "$TMPDIR_ORT" /tmp/onnxruntime.tgz
             ;;
           *)
             echo "::error::Unsupported platform: ${{ inputs.target-platform }}"
             exit 1
+            ;;
+        esac
+
+    - name: Verify download and repair symlinks
+      shell: bash
+      run: |
+        if [ ! -d /tmp/onnxruntime/lib ]; then
+          echo "::error::ONNX Runtime lib directory missing at /tmp/onnxruntime/lib"
+          echo "Contents of /tmp/onnxruntime:"
+          ls -laR /tmp/onnxruntime 2>/dev/null || echo "(directory does not exist)"
+          exit 1
+        fi
+        echo "ONNX Runtime lib contents:"
+        ls -la /tmp/onnxruntime/lib/
+
+        # Repair dylib symlink if broken or missing after cache restore
+        case "${{ inputs.target-platform }}" in
+          darwin-arm64)
+            if [ ! -e /tmp/onnxruntime/lib/libonnxruntime.dylib ]; then
+              target=$(find /tmp/onnxruntime/lib -maxdepth 1 -name 'libonnxruntime.*.dylib' -not -name '*.dSYM' -type f | head -1)
+              if [ -n "$target" ]; then
+                ln -sf "$(basename "$target")" /tmp/onnxruntime/lib/libonnxruntime.dylib
+                echo "Repaired missing symlink: libonnxruntime.dylib -> $(basename "$target")"
+              fi
+            fi
             ;;
         esac
 

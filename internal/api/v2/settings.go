@@ -2097,6 +2097,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, "info", toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", "info", toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, "warning", toastDurationExtended},
+	{"Bat filter", "reconfigure_bat_filter", batFilterSettingsChanged, "", "", "", 0},
 }
 
 // handleSettingsChanges checks if important settings have changed and triggers appropriate actions
@@ -2110,7 +2111,9 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 			if check.action != "" {
 				reconfigActions = append(reconfigActions, check.action)
 			}
-			_ = c.SendToastWithKey(check.toast, check.toastTyp, check.duration, check.toastKey, nil)
+			if check.toast != "" || check.toastKey != "" {
+				_ = c.SendToastWithKey(check.toast, check.toastTyp, check.duration, check.toastKey, nil)
+			}
 		}
 	}
 
@@ -2419,6 +2422,13 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	}
 
 	return false
+}
+
+// batFilterSettingsChanged checks if bat high-pass filter settings have changed.
+func batFilterSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return oldSettings.Bat.FilterEnabled != currentSettings.Bat.FilterEnabled ||
+		oldSettings.Bat.FilterCutoffHz != currentSettings.Bat.FilterCutoffHz ||
+		oldSettings.Bat.FilterPassCount != currentSettings.Bat.FilterPassCount
 }
 
 // LocaleData represents a locale with its code and full name

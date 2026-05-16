@@ -91,6 +91,7 @@ export interface FalsePositiveFilterSettings {
 
 export interface RangeFilterSettings {
   threshold: number;
+  passUnmappedSpecies: boolean;
   speciesCount: number | null;
   species: string[];
 }
@@ -113,6 +114,14 @@ export interface BatSettings {
   enabled: boolean;
   threshold: number;
   locale?: string;
+  filterEnabled: boolean;
+  nighttimeOnly: boolean;
+  falsePositiveFilter?: {
+    level: number;
+  };
+  ultrasonicFilter?: {
+    enabled: boolean;
+  };
 }
 
 export interface SQLiteSettings {
@@ -838,6 +847,7 @@ function createEmptySettings(): SettingsFormData {
       locationConfigured: false,
       rangeFilter: {
         threshold: 0.03,
+        passUnmappedSpecies: false,
         speciesCount: null,
         species: [],
       },
@@ -845,6 +855,11 @@ function createEmptySettings(): SettingsFormData {
     bat: {
       enabled: false,
       threshold: 0.5,
+      filterEnabled: false,
+      nighttimeOnly: true,
+      ultrasonicFilter: {
+        enabled: true,
+      },
     },
     realtime: {
       interval: 15,
