@@ -131,7 +131,9 @@ type Controller struct {
 	goroutinesStarted chan struct{} // signals when all background goroutines have started (nil if routes not initialized)
 
 	// audioWatchdog provides liveness state for audio health endpoints.
-	audioWatchdog *audiocore.LivenessWatchdog
+	// Stored atomically because it is set during pipeline Start() and read
+	// concurrently by HTTP handlers.
+	audioWatchdog atomic.Pointer[audiocore.LivenessWatchdog]
 }
 
 // ShutdownRequester allows triggering a programmatic shutdown.

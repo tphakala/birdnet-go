@@ -151,8 +151,9 @@ type LivenessWatchdog struct {
 	mu      sync.Mutex
 	sources map[string]*sourceHealth
 
-	cancel context.CancelFunc
-	done   chan struct{}
+	cancel  context.CancelFunc
+	done    chan struct{}
+	started bool
 }
 
 // NewLivenessWatchdog creates a watchdog that is ready to start.
@@ -166,8 +167,17 @@ func NewLivenessWatchdog(cfg LivenessConfig, router *AudioRouter, cb LivenessCal
 	}
 }
 
-// Start launches the monitoring goroutine. It is safe to call Start only once.
+// Start launches the monitoring goroutine. Safe to call multiple times;
+// subsequent calls are no-ops.
 func (w *LivenessWatchdog) Start() {
+	w.mu.Lock()
+	if w.started {
+		w.mu.Unlock()
+		return
+	}
+	w.started = true
+	w.mu.Unlock()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	w.cancel = cancel
 	w.done = make(chan struct{})

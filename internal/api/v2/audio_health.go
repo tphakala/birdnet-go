@@ -1,4 +1,3 @@
-// internal/api/v2/audio_health.go
 package api
 
 import (
@@ -20,18 +19,19 @@ func (c *Controller) initAudioHealthRoutes() {
 
 // SetAudioWatchdog injects the liveness watchdog for the health endpoint.
 func (c *Controller) SetAudioWatchdog(w *audiocore.LivenessWatchdog) {
-	c.audioWatchdog = w
+	c.audioWatchdog.Store(w)
 }
 
 // GetAudioHealth returns the current liveness state for all monitored audio sources.
 func (c *Controller) GetAudioHealth(ctx echo.Context) error {
-	if c.audioWatchdog == nil {
+	w := c.audioWatchdog.Load()
+	if w == nil {
 		return ctx.JSON(http.StatusOK, AudioHealthResponse{
 			Sources: []audiocore.SourceHealthSnapshot{},
 		})
 	}
 
 	return ctx.JSON(http.StatusOK, AudioHealthResponse{
-		Sources: c.audioWatchdog.Snapshot(),
+		Sources: w.Snapshot(),
 	})
 }
