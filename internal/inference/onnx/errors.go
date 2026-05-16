@@ -9,6 +9,7 @@ var (
 	ErrModelPathRequired = errors.New("birdnet: model path is required")
 	ErrLabelsRequired    = errors.New("birdnet: labels are required")
 	ErrEmptyBatch        = errors.New("birdnet: batch must contain at least one segment")
+	ErrSessionClosed     = errors.New("birdnet: session is closed")
 )
 
 type InputSizeError struct {

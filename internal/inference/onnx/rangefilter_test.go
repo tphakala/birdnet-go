@@ -3,14 +3,26 @@ package onnx
 import (
 	"testing"
 
+	ort "github.com/yalue/onnxruntime_go"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// newTestRangeFilter creates a RangeFilter with a non-nil (but unusable) session
+// for testing input validation paths that must pass the nil-session guard.
+func newTestRangeFilter(t *testing.T, numLabels int) *RangeFilter {
+	t.Helper()
+	return &RangeFilter{
+		session: &ort.DynamicAdvancedSession{},
+		labels:  make([]string, numLabels),
+	}
+}
+
 func TestPredictBatchRaw_EmptyBatch(t *testing.T) {
 	t.Parallel()
 
-	r := &RangeFilter{labels: make([]string, 10)}
+	r := newTestRangeFilter(t, 10)
 
 	_, err := r.PredictBatchRaw([]float32{1, 2, 3}, 0)
 	require.Error(t, err)
@@ -20,7 +32,7 @@ func TestPredictBatchRaw_EmptyBatch(t *testing.T) {
 func TestPredictBatchRaw_NegativeBatchSize(t *testing.T) {
 	t.Parallel()
 
-	r := &RangeFilter{labels: make([]string, 10)}
+	r := newTestRangeFilter(t, 10)
 
 	_, err := r.PredictBatchRaw([]float32{1, 2, 3}, -1)
 	require.Error(t, err)
@@ -30,7 +42,7 @@ func TestPredictBatchRaw_NegativeBatchSize(t *testing.T) {
 func TestPredictBatchRaw_InputLengthMismatch(t *testing.T) {
 	t.Parallel()
 
-	r := &RangeFilter{labels: make([]string, 10)}
+	r := newTestRangeFilter(t, 10)
 
 	tests := []struct {
 		name      string
@@ -89,4 +101,31 @@ func TestErrEmptyRangeFilterBatch_Message(t *testing.T) {
 	t.Parallel()
 
 	assert.Contains(t, ErrEmptyRangeFilterBatch.Error(), "at least one input")
+}
+
+func TestRangeFilter_SessionClosed(t *testing.T) {
+	t.Parallel()
+
+	r := &RangeFilter{labels: make([]string, 10)}
+
+	t.Run("PredictRaw", func(t *testing.T) {
+		t.Parallel()
+		_, err := r.PredictRaw(60.0, 25.0, 20.0)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrSessionClosed)
+	})
+
+	t.Run("PredictBatchRaw", func(t *testing.T) {
+		t.Parallel()
+		_, err := r.PredictBatchRaw([]float32{60, 25, 20}, 1)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrSessionClosed)
+	})
+
+	t.Run("Predict", func(t *testing.T) {
+		t.Parallel()
+		_, err := r.Predict(60.0, 25.0, 6, 15)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrSessionClosed)
+	})
 }
