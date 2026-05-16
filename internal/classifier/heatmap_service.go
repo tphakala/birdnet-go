@@ -137,16 +137,17 @@ func (s *HeatmapInferenceService) PredictBatchExtractSpecies(ctx context.Context
 			Build()
 	}
 
-	s.inflight.Add(1)
-	defer s.inflight.Done()
-
-	// Re-check closed after inflight.Add to prevent use-after-free on shutdown
+	// Check closed before Add to follow WaitGroup contract: Add must not race
+	// with Wait when counter is zero. Close/Rebuild set closed before Wait.
 	if s.closed.Load() {
 		return errors.Newf("heatmap service: session closed").
 			Component("classifier.heatmap_service").
 			Category(errors.CategoryValidation).
 			Build()
 	}
+
+	s.inflight.Add(1)
+	defer s.inflight.Done()
 
 	session := s.session.Load()
 	if session == nil {

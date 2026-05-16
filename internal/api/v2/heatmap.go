@@ -427,12 +427,15 @@ func (c *Controller) computeHeatmapGridOptimized(ctx context.Context, service *c
 }
 
 // initHeatmapRoutes registers the heatmap grid endpoint and hooks up
-// cache invalidation for range filter reloads.
+// cache invalidation and service rebuild for range filter reloads.
 func (c *Controller) initHeatmapRoutes() {
 	c.Group.GET("/range/heatmap", c.GetHeatmapGrid)
 
 	classifier.OnRangeFilterReload(func() {
 		InvalidateHeatmapCache()
+		// Close the dedicated heatmap service so it gets re-created with the
+		// new model on the next request (lazy init in GetHeatmapService).
+		classifier.CloseHeatmapService()
 	})
 }
 
