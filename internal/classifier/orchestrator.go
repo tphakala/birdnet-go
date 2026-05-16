@@ -513,11 +513,7 @@ func (o *Orchestrator) ReloadRangeFilter() error {
 	if err := primary.ReloadRangeFilter(); err != nil {
 		return err
 	}
-	if err := BuildRangeFilter(o); err != nil {
-		return err
-	}
-	o.notifyRangeFilterReload()
-	return nil
+	return BuildRangeFilter(o)
 }
 
 // rangeFilterReloadFn is an optional callback invoked after the range filter

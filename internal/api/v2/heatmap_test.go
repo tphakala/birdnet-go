@@ -252,7 +252,7 @@ func TestHeatmapCacheKey(t *testing.T) {
 	assert.Equal(t, "Turdus_merula_Eurasian_Blackbird|59.500000|70.000000|19.000000|31.500000|0.500000", key)
 }
 
-func TestInvalidateHeatmapCache_ClearsEntries(t *testing.T) {
+func TestHeatmapLRU_InvalidationClearsEntries(t *testing.T) {
 	t.Parallel()
 
 	cache := newHeatmapLRU(10)
