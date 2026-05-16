@@ -183,6 +183,9 @@ type ONNXRangeFilterOptions struct {
 	Labels []string
 }
 
+// Compile-time check: onnxRangeFilter satisfies BatchRangeFilter.
+var _ BatchRangeFilter = (*onnxRangeFilter)(nil)
+
 // onnxRangeFilter implements RangeFilter using an ONNX Runtime session.
 type onnxRangeFilter struct {
 	filter     *ort.RangeFilter
@@ -211,6 +214,13 @@ func NewONNXRangeFilter(modelPath string, opts ONNXRangeFilterOptions) (RangeFil
 // Predict returns species occurrence scores for a geographic location and week.
 func (r *onnxRangeFilter) Predict(latitude, longitude, week float32) ([]float32, error) {
 	return r.filter.PredictRaw(latitude, longitude, week)
+}
+
+// PredictBatch runs batch inference on multiple location/week inputs.
+// inputs is a flat slice of [lat, lon, week] triples: len(inputs) must equal batchSize * 3.
+// Returns a flat slice of [batchSize * numSpecies] scores in row-major order.
+func (r *onnxRangeFilter) PredictBatch(inputs []float32, batchSize int) ([]float32, error) {
+	return r.filter.PredictBatchRaw(inputs, batchSize)
 }
 
 // NumSpecies returns the number of species in the range filter model output.

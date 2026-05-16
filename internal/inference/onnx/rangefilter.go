@@ -133,6 +133,43 @@ func (r *RangeFilter) PredictRaw(latitude, longitude, week float32) ([]float32, 
 	return scores, nil
 }
 
+// PredictBatchRaw runs inference on multiple location/week inputs in a single batch.
+// inputs is a flat slice of [lat, lon, week] triples: len(inputs) must equal batchSize * 3.
+// Returns a flat slice of [batchSize * numSpecies] scores in row-major order.
+func (r *RangeFilter) PredictBatchRaw(inputs []float32, batchSize int) ([]float32, error) {
+	if batchSize <= 0 {
+		return nil, ErrEmptyRangeFilterBatch
+	}
+	expected := batchSize * 3
+	if len(inputs) != expected {
+		return nil, &RangeFilterBatchInputError{Expected: expected, Got: len(inputs)}
+	}
+
+	numSpecies := len(r.labels)
+
+	inputTensor, err := ort.NewTensor(ort.NewShape(int64(batchSize), 3), inputs)
+	if err != nil {
+		return nil, fmt.Errorf("birdnet: failed to create range filter batch input tensor: %w", err)
+	}
+	defer func() { _ = inputTensor.Destroy() }()
+
+	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(int64(batchSize), int64(numSpecies)))
+	if err != nil {
+		return nil, fmt.Errorf("birdnet: failed to create range filter batch output tensor: %w", err)
+	}
+	defer func() { _ = outputTensor.Destroy() }()
+
+	if err := r.session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor}); err != nil {
+		return nil, fmt.Errorf("birdnet: range filter batch inference failed: %w", err)
+	}
+
+	data := outputTensor.GetData()
+	totalScores := batchSize * numSpecies
+	scores := make([]float32, totalScores)
+	copy(scores, data[:totalScores])
+	return scores, nil
+}
+
 // Predict runs the range filter and returns labeled species occurrence scores.
 func (r *RangeFilter) Predict(latitude, longitude float32, month, day int) ([]LocationScore, error) {
 	if err := ValidateCoordinates(latitude, longitude); err != nil {
