@@ -150,7 +150,7 @@ func (s *HeatmapInferenceService) ComputeGridWithBinding(
 	ctx context.Context,
 	coords []float32,
 	totalCells int,
-	speciesIdx int,
+	speciesLabel string,
 	stride int,
 	totalWeeks int,
 	batchSize int,
@@ -188,7 +188,16 @@ func (s *HeatmapInferenceService) ComputeGridWithBinding(
 	s.inflight.Add(1)
 	defer s.inflight.Done()
 
+	// Snapshot session and metadata together under RLock to prevent mismatch
+	// during Rebuild (which swaps session and updates names atomically).
+	s.mu.RLock()
 	session := s.session.Load()
+	numSpecies := len(s.labels)
+	inputName := s.inputName
+	outputName := s.outputName
+	speciesIdx, speciesFound := s.indexMap[speciesLabel]
+	s.mu.RUnlock()
+
 	if session == nil {
 		return errors.Newf("heatmap service: session not available").
 			Component("classifier.heatmap_service").
@@ -196,14 +205,8 @@ func (s *HeatmapInferenceService) ComputeGridWithBinding(
 			Build()
 	}
 
-	s.mu.RLock()
-	numSpecies := len(s.labels)
-	inputName := s.inputName
-	outputName := s.outputName
-	s.mu.RUnlock()
-
-	if speciesIdx < 0 || speciesIdx >= numSpecies {
-		return errors.Newf("heatmap service: speciesIdx %d out of range [0, %d)", speciesIdx, numSpecies).
+	if !speciesFound {
+		return errors.Newf("heatmap service: species %q not found in geomodel", speciesLabel).
 			Component("classifier.heatmap_service").
 			Category(errors.CategoryValidation).
 			Build()

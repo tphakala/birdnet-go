@@ -368,7 +368,7 @@ func (c *Controller) computeHeatmapGrid(birdnet *classifier.Orchestrator, params
 
 // computeHeatmapGridOptimized generates heatmap data using the dedicated
 // HeatmapInferenceService with IoBinding for tensor reuse across all weeks.
-func (c *Controller) computeHeatmapGridOptimized(ctx context.Context, service *classifier.HeatmapInferenceService, params *heatmapParams, speciesIdx int) ([]float32, error) {
+func (c *Controller) computeHeatmapGridOptimized(ctx context.Context, service *classifier.HeatmapInferenceService, params *heatmapParams) ([]float32, error) {
 	totalCells := params.rows * params.cols
 	weeksToCompute := bnhmWeeks / params.stride
 	result := make([]float32, weeksToCompute*totalCells)
@@ -384,7 +384,7 @@ func (c *Controller) computeHeatmapGridOptimized(ctx context.Context, service *c
 		}
 	}
 
-	if err := service.ComputeGridWithBinding(ctx, coords, totalCells, speciesIdx,
+	if err := service.ComputeGridWithBinding(ctx, coords, totalCells, params.species,
 		params.stride, bnhmWeeks, heatmapOptBatchSize, result); err != nil {
 		return nil, fmt.Errorf("heatmap grid computation failed: %w", err)
 	}
@@ -467,11 +467,6 @@ func (c *Controller) GetHeatmapGrid(ctx echo.Context) error {
 // getHeatmapOptimized uses the dedicated HeatmapInferenceService with
 // singleflight deduplication and concurrency limiting.
 func (c *Controller) getHeatmapOptimized(ctx echo.Context, service *classifier.HeatmapInferenceService, params *heatmapParams, cache *heatmapLRU, cacheKey string) error {
-	speciesIdx, ok := service.SpeciesIndex(params.species)
-	if !ok {
-		return c.HandleError(ctx, nil, "Species not found in geomodel", http.StatusBadRequest)
-	}
-
 	reqCtx := ctx.Request().Context()
 
 	// Use singleflight to deduplicate concurrent identical requests.
@@ -486,7 +481,7 @@ func (c *Controller) getHeatmapOptimized(ctx echo.Context, service *classifier.H
 		// Snapshot cache generation for poisoning prevention
 		_, missGen, _ := cache.get(cacheKey)
 
-		data, err := c.computeHeatmapGridOptimized(context.Background(), service, params, speciesIdx)
+		data, err := c.computeHeatmapGridOptimized(context.Background(), service, params)
 		if err != nil {
 			return nil, err
 		}
