@@ -31,7 +31,7 @@ This directory contains the internationalization (i18n) message files for BirdNE
 
 **When adding or modifying translations, ALL translation files must be updated.**
 
-Add new keys to `en.json` first, then run `npm run i18n:sync` from the `frontend/` directory to propagate the key structure to all 14 locale files (da, de, en, es, fi, fr, hu, it, lv, nl, pl, pt, sk, sv). The sync script fills missing keys with the English value as fallback; translate those fallbacks afterward.
+Add new keys to `en.json` first, then run `npm run i18n:sync` from the `frontend/` directory to propagate the key structure to all 15 locale files (cs, da, de, en, es, fi, fr, hu, it, lv, nl, pl, pt, sk, sv). The sync script fills missing keys with the English value as fallback; translate those fallbacks afterward.
 
 The pre-commit hook runs `i18n:sync --check` and blocks commits if locale files are out of sync.
 

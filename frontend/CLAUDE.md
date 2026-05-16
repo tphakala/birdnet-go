@@ -27,8 +27,9 @@ frontend/
 │   ├── pages/
 │   ├── stores/
 │   └── utils/
-├── static/messages/       # Translation files (14 locales)
+├── static/messages/       # Translation files (15 locales)
 │   ├── en.json           # English (primary)
+│   ├── cs.json           # Czech
 │   ├── da.json           # Danish
 │   ├── de.json           # German
 │   ├── es.json           # Spanish
@@ -54,6 +55,7 @@ All translation files are in `frontend/static/messages/`:
 ```bash
 frontend/static/messages/
 ├── en.json  # English (primary - update this first)
+├── cs.json  # Czech
 ├── da.json  # Danish
 ├── de.json  # German
 ├── es.json  # Spanish
