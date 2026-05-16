@@ -170,11 +170,17 @@ func (c *onnxCustomClassifier) PredictEmbedding(embeddings []float32) ([]float32
 
 // NumClasses returns the number of output classes.
 func (c *onnxCustomClassifier) NumClasses() int {
+	if c.classifier == nil {
+		return 0
+	}
 	return c.classifier.NumClasses()
 }
 
 // Labels returns the classification labels.
 func (c *onnxCustomClassifier) Labels() []string {
+	if c.classifier == nil {
+		return nil
+	}
 	return c.classifier.Labels()
 }
 
