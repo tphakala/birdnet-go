@@ -888,7 +888,9 @@
       }
     },
     "row": {
-      "viewDetails": "Vis detaljer for {species}"
+      "viewDetails": "Vis detaljer for {species}",
+      "play": "Afspil",
+      "playAudio": "Afspil lyd"
     },
     "media": {
       "title": "Optagelse og spektrogram",

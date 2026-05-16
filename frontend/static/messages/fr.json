@@ -888,7 +888,9 @@
       }
     },
     "row": {
-      "viewDetails": "Voir les détails pour {species}"
+      "viewDetails": "Voir les détails pour {species}",
+      "play": "Lire",
+      "playAudio": "Lire l'audio"
     },
     "media": {
       "title": "Enregistrement et spectrogramme",

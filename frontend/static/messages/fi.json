@@ -888,7 +888,9 @@
       }
     },
     "row": {
-      "viewDetails": "Näytä {species} tiedot"
+      "viewDetails": "Näytä {species} tiedot",
+      "play": "Toista",
+      "playAudio": "Toista ääni"
     },
     "media": {
       "title": "Tallenne ja spektrogrammi",

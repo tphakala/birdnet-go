@@ -262,6 +262,7 @@
   const pageIds = $derived((data?.notes ?? []).map(d => String(d.id)));
 
   const headerChecked = $derived(selection.allOnPageSelected(pageIds));
+  const headerIndeterminate = $derived(selection.someOnPageSelected(pageIds));
 
   function handleToggleSelect(id: string, shiftKey: boolean) {
     selection.toggleWithShift(id, pageIds, shiftKey);
@@ -545,8 +546,11 @@
       </div>
     {:else if error}
       <div class="px-4 py-8">
-        <div class="alert alert-error">
-          <XCircle class="size-6" />
+        <div
+          role="alert"
+          class="flex items-center gap-3 p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] border border-[var(--color-error)]/20"
+        >
+          <XCircle class="size-6 shrink-0" />
           <span>{error}</span>
         </div>
       </div>
@@ -568,6 +572,7 @@
                   <th scope="col" class="w-10 text-center">
                     <Checkbox
                       checked={headerChecked}
+                      indeterminate={headerIndeterminate}
                       size="sm"
                       variant="primary"
                       onchange={() => selection.toggleAllOnPage(pageIds)}

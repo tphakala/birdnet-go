@@ -888,7 +888,9 @@
       }
     },
     "row": {
-      "viewDetails": "{species} részleteinek megtekintése"
+      "viewDetails": "{species} részleteinek megtekintése",
+      "play": "Lejátszás",
+      "playAudio": "Hang lejátszása"
     },
     "media": {
       "title": "Felvétel és spektrogram",

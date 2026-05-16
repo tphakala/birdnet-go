@@ -888,7 +888,9 @@
       }
     },
     "row": {
-      "viewDetails": "View details for {species}"
+      "viewDetails": "View details for {species}",
+      "play": "Play",
+      "playAudio": "Play audio"
     },
     "media": {
       "title": "Recording & Spectrogram",

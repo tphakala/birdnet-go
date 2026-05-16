@@ -40,7 +40,7 @@ describe('Checkbox', () => {
     const checkbox = screen.getByRole('checkbox');
     await fireEvent.click(checkbox);
 
-    expect(onchange).toHaveBeenCalledWith(true);
+    expect(onchange).toHaveBeenCalledWith(true, expect.any(Object));
   });
 
   it('renders disabled state', () => {

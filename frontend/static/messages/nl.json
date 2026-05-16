@@ -888,7 +888,9 @@
       }
     },
     "row": {
-      "viewDetails": "Bekijk details voor {species}"
+      "viewDetails": "Bekijk details voor {species}",
+      "play": "Afspelen",
+      "playAudio": "Geluid afspelen"
     },
     "media": {
       "title": "Geluid opname & Spectrogram",

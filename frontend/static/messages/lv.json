@@ -888,7 +888,9 @@
       }
     },
     "row": {
-      "viewDetails": "Skatīt informāciju par sugu {species}"
+      "viewDetails": "Skatīt informāciju par sugu {species}",
+      "play": "Atskaņot",
+      "playAudio": "Atskaņot audio"
     },
     "media": {
       "title": "Ieraksts un spektrogramma",
