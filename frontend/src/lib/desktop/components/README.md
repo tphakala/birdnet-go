@@ -100,6 +100,7 @@ This folder contains **shared components** used across the application. Feature-
 - `ActionMenu.svelte` - Dropdown action menu
 - `AudioLevelIndicator.svelte` - Audio level visualization
 - `Badge.svelte` - Status/count badges
+- `Button.svelte` - Reusable button with variant (default, primary, success, warning, error, ghost) and size (xs, sm, md, lg) support
 - `Card.svelte` - Generic card container
 - `CollapsibleCard.svelte` - Collapsible card container
 - `CollapsibleSection.svelte` - Collapsible content section

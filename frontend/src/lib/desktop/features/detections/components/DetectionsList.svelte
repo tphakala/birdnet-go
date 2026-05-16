@@ -34,6 +34,7 @@
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import Pagination from '$lib/desktop/components/ui/Pagination.svelte';
@@ -484,52 +485,27 @@
       onClear={() => selection.clear()}
     >
       {#snippet actions()}
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium
-                 text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
-          onclick={handleBulkMarkCorrect}
-        >
-          <CircleCheck class="size-3.5 text-[var(--color-success)]" />
-          <span>{t('dashboard.recentDetections.actions.markCorrect')}</span>
-        </button>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium
-                 text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
-          onclick={handleBulkMarkFalsePositive}
-        >
-          <CircleX class="size-3.5 text-[var(--color-error)]" />
-          <span>{t('dashboard.recentDetections.actions.markFalsePositive')}</span>
-        </button>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium
-                 text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
-          onclick={handleBulkLock}
-        >
+        <Button variant="success" size="xs" onclick={handleBulkMarkCorrect}>
+          <CircleCheck class="size-3.5" />
+          {t('dashboard.recentDetections.actions.markCorrect')}
+        </Button>
+        <Button variant="warning" size="xs" onclick={handleBulkMarkFalsePositive}>
+          <CircleX class="size-3.5" />
+          {t('dashboard.recentDetections.actions.markFalsePositive')}
+        </Button>
+        <Button variant="default" size="xs" onclick={handleBulkLock}>
           <Lock class="size-3.5" />
-          <span>{t('dashboard.recentDetections.modals.lockDetection')}</span>
-        </button>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium
-                 text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
-          onclick={handleBulkUnlock}
-        >
+          {t('dashboard.recentDetections.modals.lockDetection')}
+        </Button>
+        <Button variant="default" size="xs" onclick={handleBulkUnlock}>
           <LockOpen class="size-3.5" />
-          <span>{t('dashboard.recentDetections.modals.unlockDetection')}</span>
-        </button>
-        <div class="w-px h-5 bg-[var(--color-base-300)] mx-1" role="separator"></div>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium
-                 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors"
-          onclick={handleBulkDelete}
-        >
+          {t('dashboard.recentDetections.modals.unlockDetection')}
+        </Button>
+        <div class="w-px h-6 bg-[var(--color-base-300)] mx-1" role="separator"></div>
+        <Button variant="error" size="xs" onclick={handleBulkDelete}>
           <Trash2 class="size-3.5" />
-          <span>{t('dashboard.recentDetections.actions.deleteDetection')}</span>
-        </button>
+          {t('dashboard.recentDetections.actions.deleteDetection')}
+        </Button>
       {/snippet}
     </SelectionToolbar>
   {/if}
