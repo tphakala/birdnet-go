@@ -279,6 +279,11 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	)
 	p.watchdog.Start()
 
+	// Expose the watchdog to the API controller for the /health/audio endpoint.
+	if ctrl := p.apiService.APIController(); ctrl != nil {
+		ctrl.SetAudioWatchdog(p.watchdog)
+	}
+
 	// Inject suncalc into the orchestrator for bat nighttime scheduling.
 	bn.SetSunCalc(p.apiService.SunCalc())
 
