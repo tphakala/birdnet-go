@@ -119,6 +119,7 @@ This folder contains **shared components** used across the application. Feature-
 - `ProgressCard.svelte` - Progress display card
 - `SearchBox.svelte` - Search input box
 - `Select.svelte` - Select dropdown
+- `SelectionToolbar.svelte` - Sticky toolbar for multiselect list views (selection count, select-all banner, action slot)
 - `SkeletonDailySummary.svelte` - Loading skeleton for daily summary cards
 - `StatusPill.svelte` - Status pill indicator
 - `SystemInfoCard.svelte` - System information display
