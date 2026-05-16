@@ -6,6 +6,7 @@ package analysis
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -93,6 +94,19 @@ func ResetOverrunTrackers() {
 	overrunTrackersMu.Lock()
 	clear(overrunTrackers)
 	overrunTrackersMu.Unlock()
+}
+
+// RemoveOverrunTrackers removes all tracker entries for the given source ID.
+// Called when a source is removed to prevent unbounded map growth.
+func RemoveOverrunTrackers(sourceID string) {
+	prefix := sourceID + ":"
+	overrunTrackersMu.Lock()
+	defer overrunTrackersMu.Unlock()
+	for key := range overrunTrackers {
+		if strings.HasPrefix(key, prefix) {
+			delete(overrunTrackers, key)
+		}
+	}
 }
 
 // lastQueueOverflowReport tracks the last time a queue overflow was reported to Sentry.

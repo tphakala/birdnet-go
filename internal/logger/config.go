@@ -60,6 +60,7 @@ const (
 	DefaultImageproviderLogPath = "logs/imageprovider.log"
 	DefaultSpectrogramLogPath   = "logs/spectrogram.log"
 	DefaultActionsLogPath       = "logs/actions.log"
+	DefaultClassifierLogPath    = "logs/classifier.log"
 	DefaultMaxSize              = 100   // MB before rotation
 	DefaultMaxAge               = 30    // days to keep rotated files
 	DefaultMaxRotatedFiles      = 10    // max number of rotated files
@@ -151,6 +152,9 @@ func applyConfigDefaults(cfg *LoggingConfig) {
 	// Spectrogram generation logs
 	ensureModuleOutput(cfg, "spectrogram", DefaultSpectrogramLogPath)
 	ensureModuleOutput(cfg, "spectrogram.prerenderer", DefaultSpectrogramLogPath) // Same file
+
+	// Classifier orchestrator and scheduler logs
+	ensureModuleOutput(cfg, "birdnet", DefaultClassifierLogPath)
 
 	// Action processing logs (command execution, database saves, notifications)
 	// ConsoleAlso is true so errors are visible in container environments

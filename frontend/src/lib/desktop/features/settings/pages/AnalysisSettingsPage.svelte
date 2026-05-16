@@ -466,8 +466,11 @@
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let loadingDelayTimer: ReturnType<typeof setTimeout> | undefined;
+  let rangeFilterAbortController: AbortController | null = null;
 
   function debouncedTestRangeFilter() {
+    rangeFilterAbortController?.abort();
+    rangeFilterAbortController = null;
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       testCurrentRangeFilter();
@@ -497,6 +500,7 @@
     }, 100);
 
     rangeFilterState.error = null;
+    rangeFilterAbortController = new AbortController();
 
     try {
       const data = await api.post<{ count: number; species?: RangeFilterSpecies[] }>(
@@ -505,7 +509,8 @@
           latitude: birdnet?.latitude,
           longitude: birdnet?.longitude,
           threshold: birdnet?.rangeFilter?.threshold,
-        }
+        },
+        { signal: rangeFilterAbortController.signal }
       );
 
       rangeFilterState.speciesCount = data.count;
@@ -514,12 +519,14 @@
         rangeFilterState.species = data.species || [];
       }
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       logger.error('Failed to test range filter:', err);
       rangeFilterState.error = t('settings.main.errors.rangeFilterTestFailed');
       rangeFilterState.speciesCount = null;
     } finally {
       clearTimeout(loadingDelayTimer);
       rangeFilterState.testing = false;
+      rangeFilterAbortController = null;
     }
   }
 
@@ -560,6 +567,7 @@
     return () => {
       clearTimeout(debounceTimer);
       clearTimeout(loadingDelayTimer);
+      rangeFilterAbortController?.abort();
     };
   });
 
