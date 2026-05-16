@@ -503,21 +503,43 @@ func (r *AudioRouter) stopRoute(route *Route) {
 
 	select {
 	case <-route.stopped:
-		// Drainer exited cleanly — safe to close resources.
+		// Drainer exited cleanly or via recovered panic. Close resources
+		// with panic guards so a misbehaving Close() cannot crash the
+		// caller (RemoveRoute, RemoveAllRoutes, or router.Close).
 		if route.resampler != nil {
-			if err := route.resampler.Close(); err != nil {
-				r.log.Debug("resampler close error",
+			func() {
+				defer func() {
+					if rp := recover(); rp != nil {
+						r.log.Warn("panic closing resampler in stopRoute",
+							logger.String("source_id", route.SourceID),
+							logger.String("consumer_id", route.Consumer.ID()),
+							logger.Any("panic", rp))
+					}
+				}()
+				if err := route.resampler.Close(); err != nil {
+					r.log.Debug("resampler close error",
+						logger.String("source_id", route.SourceID),
+						logger.String("consumer_id", route.Consumer.ID()),
+						logger.Error(err))
+				}
+			}()
+		}
+		func() {
+			defer func() {
+				if rp := recover(); rp != nil {
+					r.log.Warn("panic closing consumer in stopRoute",
+						logger.String("source_id", route.SourceID),
+						logger.String("consumer_id", route.Consumer.ID()),
+						logger.Any("panic", rp))
+				}
+			}()
+			if err := route.Consumer.Close(); err != nil {
+				r.log.Debug("consumer close error",
 					logger.String("source_id", route.SourceID),
 					logger.String("consumer_id", route.Consumer.ID()),
 					logger.Error(err))
 			}
-		}
-		if err := route.Consumer.Close(); err != nil {
-			r.log.Debug("consumer close error",
-				logger.String("source_id", route.SourceID),
-				logger.String("consumer_id", route.Consumer.ID()),
-				logger.Error(err))
-		}
+		}()
 	case <-time.After(drainerStopTimeout):
 		// Drainer is leaked and may still reference the resampler/consumer.
 		// Do NOT close them — leave for GC to reclaim.
@@ -561,7 +583,11 @@ func (r *AudioRouter) drainRoute(route *Route) {
 				Priority(errors.PriorityCritical).
 				Build()
 			// Remove the dead route from the map so HasConsumers/Dispatch
-			// stop sending frames to an inbox nobody drains.
+			// stop sending frames to an inbox nobody drains. Track whether
+			// we found it: if router.Close() already snapshotted and cleared
+			// the map, the route won't be here and stopRoute will handle
+			// resource cleanup instead.
+			removed := false
 			r.mu.Lock()
 			routes := r.routes[route.SourceID]
 			for i, rt := range routes {
@@ -574,6 +600,7 @@ func (r *AudioRouter) drainRoute(route *Route) {
 				if len(r.routes[route.SourceID]) == 0 {
 					delete(r.routes, route.SourceID)
 				}
+				removed = true
 				break
 			}
 			r.mu.Unlock()
@@ -583,33 +610,35 @@ func (r *AudioRouter) drainRoute(route *Route) {
 			// per panicking route would stay outstanding (the slices still
 			// GC, so this is pool-efficiency rather than a hard leak).
 			drainInboxRefs(route.inbox)
-			// Best-effort Close of consumer and resampler, each wrapped
-			// in its own recover to prevent secondary panics from
-			// propagating.
-			if route.resampler != nil {
+			// Only close resources if we successfully removed the route.
+			// If the route was not in the map (router.Close() already took
+			// ownership), stopRoute will close them after route.stopped fires.
+			if removed {
+				if route.resampler != nil {
+					func() {
+						defer func() {
+							if rp := recover(); rp != nil {
+								r.log.Warn("secondary panic closing resampler after drainer panic",
+									logger.String("source_id", route.SourceID),
+									logger.String("consumer_id", route.Consumer.ID()),
+									logger.Any("secondary_panic", rp))
+							}
+						}()
+						_ = route.resampler.Close()
+					}()
+				}
 				func() {
 					defer func() {
 						if rp := recover(); rp != nil {
-							r.log.Warn("secondary panic closing resampler after drainer panic",
+							r.log.Warn("secondary panic closing consumer after drainer panic",
 								logger.String("source_id", route.SourceID),
 								logger.String("consumer_id", route.Consumer.ID()),
 								logger.Any("secondary_panic", rp))
 						}
 					}()
-					_ = route.resampler.Close()
+					_ = route.Consumer.Close()
 				}()
 			}
-			func() {
-				defer func() {
-					if rp := recover(); rp != nil {
-						r.log.Warn("secondary panic closing consumer after drainer panic",
-							logger.String("source_id", route.SourceID),
-							logger.String("consumer_id", route.Consumer.ID()),
-							logger.Any("secondary_panic", rp))
-					}
-				}()
-				_ = route.Consumer.Close()
-			}()
 		}
 	}()
 	for {
