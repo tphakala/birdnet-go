@@ -439,27 +439,41 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		labels []string
 	}
 
-	var tasks []modelTask
+	type entryRef struct {
+		id    string
+		entry *modelEntry
+	}
+
+	var refs []entryRef
 	o.mu.RLock()
 	for id, entry := range o.models {
-		if entry.instance == nil || id == primary.ModelInfo.ID {
+		if id == primary.ModelInfo.ID || id == RegistryIDBat {
 			continue
 		}
-		if id == RegistryIDBat {
+		refs = append(refs, entryRef{id: id, entry: entry})
+	}
+	o.mu.RUnlock()
+
+	var tasks []modelTask
+	for _, ref := range refs {
+		ref.entry.mu.Lock()
+		if ref.entry.instance == nil {
+			ref.entry.mu.Unlock()
 			continue
 		}
-		info, exists := ModelRegistry[id]
-		name := id
+		info, exists := ModelRegistry[ref.id]
+		name := ref.id
 		if exists {
 			name = info.Name
 		}
+		labels := ref.entry.instance.Labels()
+		ref.entry.mu.Unlock()
 		tasks = append(tasks, modelTask{
-			id:     id,
+			id:     ref.id,
 			name:   name,
-			labels: entry.instance.Labels(),
+			labels: labels,
 		})
 	}
-	o.mu.RUnlock()
 
 	for _, task := range tasks {
 		cov := ClassifierCoverage{
@@ -792,27 +806,39 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 // ModelInfos returns ModelInfo for all registered models. Thread-safe.
 // Used by the pipeline to build ModelTarget lists for buffer fan-out.
 func (o *Orchestrator) ModelInfos() []ModelInfo {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-
-	if o.models == nil {
-		return nil
+	type entryRef struct {
+		id    string
+		entry *modelEntry
 	}
 
-	infos := make([]ModelInfo, 0, len(o.models))
+	o.mu.RLock()
+	if o.models == nil {
+		o.mu.RUnlock()
+		return nil
+	}
+	refs := make([]entryRef, 0, len(o.models))
 	for id, entry := range o.models {
-		if entry.instance == nil {
+		refs = append(refs, entryRef{id: id, entry: entry})
+	}
+	o.mu.RUnlock()
+
+	infos := make([]ModelInfo, 0, len(refs))
+	for _, ref := range refs {
+		ref.entry.mu.Lock()
+		if ref.entry.instance == nil {
+			ref.entry.mu.Unlock()
 			continue
 		}
-		info, exists := ModelRegistry[id]
+		info, exists := ModelRegistry[ref.id]
 		if !exists {
 			info = ModelInfo{
-				ID:         entry.instance.ModelID(),
-				Name:       entry.instance.ModelName(),
-				Spec:       entry.instance.Spec(),
-				NumSpecies: entry.instance.NumSpecies(),
+				ID:         ref.entry.instance.ModelID(),
+				Name:       ref.entry.instance.ModelName(),
+				Spec:       ref.entry.instance.Spec(),
+				NumSpecies: ref.entry.instance.NumSpecies(),
 			}
 		}
+		ref.entry.mu.Unlock()
 		infos = append(infos, info)
 	}
 	return infos

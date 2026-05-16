@@ -387,6 +387,7 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 	// router state so the next registerSoundLevelConsumers call (e.g. after
 	// restartAudioCapture) does not skip sources due to stale entries.
 	p.untrackAllSoundLevelConsumers()
+	ResetOverrunTrackers()
 }
 
 // setupAudioSources builds source configs from current settings, adds them to
@@ -895,22 +896,24 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	}
 	var removedCount int
 	for _, src := range registry.List() {
-		if !keepIDs[src.ID] {
-			removedCount++
-			log.Info("removing stream no longer in config",
-				logger.String("source_id", src.ID),
-				logger.String("operation", "reconfigure_diff"))
-			if err := p.engine.RemoveSource(src.ID); err != nil {
-				log.Warn("failed to remove source during reconfigure",
-					logger.String("source_id", src.ID),
-					logger.Error(err))
-			}
-			// engine.RemoveSource also removes the soundlevel route. Drop the
-			// tracking entry so the idempotency check in
-			// registerSoundLevelConsumers does not skip this ID if the same
-			// source is re-added later.
-			p.untrackSoundLevelConsumer(src.ID)
+		if keepIDs[src.ID] {
+			continue
 		}
+		removedCount++
+		log.Info("removing stream no longer in config",
+			logger.String("source_id", src.ID),
+			logger.String("operation", "reconfigure_diff"))
+		if err := p.engine.RemoveSource(src.ID); err != nil {
+			log.Warn("failed to remove source during reconfigure",
+				logger.String("source_id", src.ID),
+				logger.Error(err))
+		}
+		// engine.RemoveSource also removes the soundlevel route. Drop the
+		// tracking entry so the idempotency check in
+		// registerSoundLevelConsumers does not skip this ID if the same
+		// source is re-added later.
+		p.untrackSoundLevelConsumer(src.ID)
+		RemoveOverrunTrackers(src.ID)
 	}
 
 	// Register consumers and monitors only for newly added sources.
