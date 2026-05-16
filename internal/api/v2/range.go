@@ -777,7 +777,7 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
 
-	// Rebuild the range filter
+	// Rebuild the range filter (triggers heatmap cache invalidation via callback)
 	err = classifier.BuildRangeFilter(birdnetInstance)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to rebuild range filter", http.StatusInternalServerError)

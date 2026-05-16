@@ -623,6 +623,7 @@ func (c *Controller) initRoutes() {
 		{"auth routes", c.initAuthRoutes},
 		{"media routes", c.initMediaRoutes},
 		{"range routes", c.initRangeRoutes},
+		{"heatmap routes", c.initHeatmapRoutes},
 		{"sse routes", c.initSSERoutes},
 		{"metrics history routes", c.initMetricsHistoryRoutes},
 		{"notification routes", c.initNotificationRoutes},

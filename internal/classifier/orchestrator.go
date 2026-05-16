@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -515,6 +516,30 @@ func (o *Orchestrator) ReloadRangeFilter() error {
 	return BuildRangeFilter(o)
 }
 
+// rangeFilterReloadFn is an optional callback invoked after the range filter
+// is reloaded. Used by the API layer to invalidate caches.
+var (
+	rangeFilterReloadMu sync.Mutex
+	rangeFilterReloadFn func()
+)
+
+// OnRangeFilterReload registers a callback that fires after every successful
+// range filter reload. Only one callback is supported; later calls replace earlier ones.
+func OnRangeFilterReload(fn func()) {
+	rangeFilterReloadMu.Lock()
+	rangeFilterReloadFn = fn
+	rangeFilterReloadMu.Unlock()
+}
+
+func (o *Orchestrator) notifyRangeFilterReload() {
+	rangeFilterReloadMu.Lock()
+	fn := rangeFilterReloadFn
+	rangeFilterReloadMu.Unlock()
+	if fn != nil {
+		fn()
+	}
+}
+
 // ReloadBatFilter rebuilds the bat model's high-pass filter from current settings.
 func (o *Orchestrator) ReloadBatFilter() {
 	o.mu.RLock()
@@ -796,6 +821,104 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	}
 
 	return nil
+}
+
+// lockedMappedRangeFilter snapshots primary under o.mu.RLock, then acquires
+// primary.mu and unwraps the range filter to *mappedRangeFilter.
+// The caller MUST defer primary.mu.Unlock() after using the returned filter.
+// Returns (primary, mappedRangeFilter, error). On error, no locks are held.
+func (o *Orchestrator) lockedMappedRangeFilter() (*BirdNET, *mappedRangeFilter, error) {
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+
+	if primary == nil {
+		return nil, nil, errors.Newf("primary model not available").
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	primary.mu.Lock()
+
+	rf := primary.rangeFilter
+	if rf == nil {
+		primary.mu.Unlock()
+		return nil, nil, errors.Newf("range filter not loaded").
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	mrf, ok := rf.(*mappedRangeFilter)
+	if !ok {
+		primary.mu.Unlock()
+		return nil, nil, errors.Newf("range filter does not support batch inference").
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	return primary, mrf, nil
+}
+
+// BatchRangeFilterInference runs batch geomodel inference on multiple location/week
+// inputs. The caller provides a flat slice of [lat, lon, week] triples and a batch
+// size. Returns a flat slice of [batchSize * numGeoSpecies] scores in row-major order.
+//
+// Acquires primary.mu (not inferenceMu) because the range filter and classifier use
+// independent ONNX sessions. Callers that need to process many grid points should
+// chunk externally and call this method once per chunk, allowing the detection
+// pipeline to interleave between calls.
+func (o *Orchestrator) BatchRangeFilterInference(inputs []float32, batchSize int) ([]float32, error) {
+	const inputWidth = 3 // [lat, lon, week]
+	if batchSize <= 0 {
+		return nil, errors.Newf("batchSize must be positive, got %d", batchSize).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+	if len(inputs) != batchSize*inputWidth {
+		return nil, errors.Newf("inputs length %d does not match batchSize %d * %d", len(inputs), batchSize, inputWidth).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	primary, mrf, err := o.lockedMappedRangeFilter()
+	if err != nil {
+		return nil, err
+	}
+	defer primary.mu.Unlock()
+
+	brf, ok := mrf.inner.(inference.BatchRangeFilter)
+	if !ok {
+		return nil, errors.Newf("underlying range filter does not support batch inference").
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	return brf.PredictBatch(inputs, batchSize)
+}
+
+// GeomodelSpeciesInfo looks up a species label in the geomodel and returns
+// its index and the total number of geomodel species, atomically under a
+// single lock acquisition. This avoids TOCTOU issues from separate calls.
+// Returns (speciesIndex, numGeoSpecies, true) on success, or (0, 0, false)
+// if the species is not found or no range filter is loaded.
+func (o *Orchestrator) GeomodelSpeciesInfo(label string) (speciesIdx, numGeoSpecies int, found bool) {
+	primary, mrf, err := o.lockedMappedRangeFilter()
+	if err != nil {
+		return 0, 0, false
+	}
+	defer primary.mu.Unlock()
+
+	idx, ok := mrf.geomodelIndex[label]
+	if !ok {
+		return 0, 0, false
+	}
+	return idx, len(mrf.geomodelLabels), true
 }
 
 // Debug prints debug messages if debug mode is enabled.

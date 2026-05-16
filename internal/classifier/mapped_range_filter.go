@@ -13,11 +13,12 @@ import (
 // changing predictFilter() or any downstream code.
 type mappedRangeFilter struct {
 	inner           inference.RangeFilter
-	classifierToGeo []int    // classifierIndex -> geomodelIndex; -1 means no match
-	numClassifier   int      // len(classifierLabels)
-	mappedCount     int      // number of classifier species with a geomodel match
-	unmappedScore   float32  // score for classifier species absent from geomodel
-	geomodelLabels  []string // geomodel label set in geomodel output order
+	classifierToGeo []int          // classifierIndex -> geomodelIndex; -1 means no match
+	numClassifier   int            // len(classifierLabels)
+	mappedCount     int            // number of classifier species with a geomodel match
+	unmappedScore   float32        // score for classifier species absent from geomodel
+	geomodelLabels  []string       // geomodel label set in geomodel output order
+	geomodelIndex   map[string]int // label -> index for O(1) lookup
 }
 
 // buildSpeciesMapping creates the classifier-to-geomodel index mapping by
@@ -78,6 +79,11 @@ func newMappedRangeFilter(inner inference.RangeFilter, classifierLabels, geomode
 			mapped++
 		}
 	}
+	geoIdx := make(map[string]int, len(geomodelLabels))
+	for i, label := range geomodelLabels {
+		geoIdx[label] = i
+	}
+
 	return &mappedRangeFilter{
 		inner:           inner,
 		classifierToGeo: mapping,
@@ -85,6 +91,7 @@ func newMappedRangeFilter(inner inference.RangeFilter, classifierLabels, geomode
 		mappedCount:     mapped,
 		unmappedScore:   unmappedScore,
 		geomodelLabels:  geomodelLabels,
+		geomodelIndex:   geoIdx,
 	}
 }
 

@@ -174,6 +174,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 	}
 
 	conf.UpdateIncludedSpecies(includedSpecies)
+	o.notifyRangeFilterReload()
 	return nil
 }
 
