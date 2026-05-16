@@ -464,7 +464,7 @@
         <SelectDropdown
           options={RESULTS_OPTIONS}
           value={selectedNumResults}
-          size="xs"
+          size="sm"
           menuSize="sm"
           variant="button"
           className="w-22"
@@ -485,25 +485,25 @@
       onClear={() => selection.clear()}
     >
       {#snippet actions()}
-        <Button variant="default" size="xs" onclick={handleBulkMarkCorrect}>
-          <CircleCheck class="size-3.5 text-[var(--color-success)]" />
+        <Button variant="default" size="sm" onclick={handleBulkMarkCorrect}>
+          <CircleCheck class="size-4 text-[var(--color-success)]" />
           {t('dashboard.recentDetections.actions.markCorrect')}
         </Button>
-        <Button variant="default" size="xs" onclick={handleBulkMarkFalsePositive}>
-          <CircleX class="size-3.5 text-[var(--color-error)]" />
+        <Button variant="default" size="sm" onclick={handleBulkMarkFalsePositive}>
+          <CircleX class="size-4 text-[var(--color-error)]" />
           {t('dashboard.recentDetections.actions.markFalsePositive')}
         </Button>
-        <Button variant="default" size="xs" onclick={handleBulkLock}>
-          <Lock class="size-3.5" />
+        <Button variant="default" size="sm" onclick={handleBulkLock}>
+          <Lock class="size-4" />
           {t('dashboard.recentDetections.modals.lockDetection')}
         </Button>
-        <Button variant="default" size="xs" onclick={handleBulkUnlock}>
-          <LockOpen class="size-3.5" />
+        <Button variant="default" size="sm" onclick={handleBulkUnlock}>
+          <LockOpen class="size-4" />
           {t('dashboard.recentDetections.modals.unlockDetection')}
         </Button>
         <div class="w-px h-6 bg-[var(--color-base-300)] mx-1" role="separator"></div>
-        <Button variant="default" size="xs" onclick={handleBulkDelete}>
-          <Trash2 class="size-3.5 text-[var(--color-error)]" />
+        <Button variant="default" size="sm" onclick={handleBulkDelete}>
+          <Trash2 class="size-4 text-[var(--color-error)]" />
           {t('dashboard.recentDetections.actions.deleteDetection')}
         </Button>
       {/snippet}
