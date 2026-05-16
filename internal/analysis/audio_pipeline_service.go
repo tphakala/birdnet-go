@@ -371,6 +371,100 @@ func (p *AudioPipelineService) restartAudioCapture() {
 	p.setupAudioSources(audioLevelChan, "restart")
 }
 
+// RestartSource tears down and reinitializes a single audio source.
+// Follows the same cleanup pattern as reconfigureChangedSources: remove routes,
+// clean up overrun trackers, untrack sound level, stop capture, then re-add.
+func (p *AudioPipelineService) RestartSource(sourceID string) error {
+	log := audiocore.GetLogger()
+	log.Info("restarting single audio source",
+		logger.String("source_id", sourceID),
+		logger.String("operation", "restart_source"))
+
+	registry := p.engine.Registry()
+
+	// Save connection string before removal (needed to look up config).
+	// ConnectionStringByID reads the private field directly from the registry,
+	// unlike Get() which returns a copy with the field cleared for safety.
+	connStr, ok := registry.ConnectionStringByID(sourceID)
+	if !ok {
+		return fmt.Errorf("restart source: source %s not found in registry", sourceID)
+	}
+
+	// 1. Remove routes for the source.
+	p.engine.Router().RemoveAllRoutes(sourceID)
+
+	// 2. Clean up overrun tracker state.
+	RemoveOverrunTrackers(sourceID)
+
+	// 3. Untrack sound level consumer (route already removed above).
+	p.untrackSoundLevelConsumer(sourceID)
+
+	// 4. Remove source from engine (stops capture, deallocates buffers, unregisters).
+	if err := p.engine.RemoveSource(sourceID); err != nil {
+		log.Error("failed to remove source during restart",
+			logger.String("source_id", sourceID),
+			logger.Error(err),
+			logger.String("operation", "restart_source"))
+		return fmt.Errorf("restart source: remove failed: %w", err)
+	}
+
+	// 5. Rebuild source config from current settings.
+	sourceConfigs := p.buildSourceConfigsWithModels()
+	var targetConfig *sourceConfigWithModels
+	for i := range sourceConfigs {
+		if sourceConfigs[i].config.ConnectionString == connStr {
+			targetConfig = &sourceConfigs[i]
+			break
+		}
+	}
+	if targetConfig == nil {
+		log.Warn("source config no longer in settings after removal",
+			logger.String("source_id", sourceID),
+			logger.String("operation", "restart_source"))
+		return fmt.Errorf("restart source: config for %s no longer exists in settings", sourceID)
+	}
+
+	// 6. Re-add source via engine.
+	if err := p.engine.AddSource(targetConfig.config); err != nil {
+		log.Error("failed to re-add source during restart",
+			logger.String("source_id", sourceID),
+			logger.Error(err),
+			logger.String("operation", "restart_source"))
+		return fmt.Errorf("restart source: add failed: %w", err)
+	}
+
+	// The source may get a new ID from the registry. Look it up.
+	newSrc, found := registry.GetByConnection(connStr)
+	if !found {
+		return fmt.Errorf("restart source: source re-added but not found in registry")
+	}
+	newSourceID := newSrc.ID
+
+	// 7. Re-register consumers and monitors.
+	audioLevelChan := p.apiService.AudioLevelChan()
+	sourceModelMap := map[string][]string{newSourceID: targetConfig.modelIDs}
+	p.registerConsumersForSources([]string{newSourceID}, sourceModelMap, audioLevelChan, "restart_source")
+	p.registerSoundLevelConsumers([]string{newSourceID}, "restart_source")
+
+	// Update buffer monitors.
+	if monErr := p.bufferMgr.AddMonitor(newSourceID); monErr != nil {
+		log.Warn("buffer monitor update failed during source restart",
+			logger.String("source_id", newSourceID),
+			logger.Error(monErr),
+			logger.String("operation", "restart_source"))
+	}
+
+	// Reset dispatch timestamp so watchdog starts fresh.
+	p.engine.Router().ResetDispatchTime(newSourceID)
+
+	log.Info("single source restart complete",
+		logger.String("old_source_id", sourceID),
+		logger.String("new_source_id", newSourceID),
+		logger.String("operation", "restart_source"))
+
+	return nil
+}
+
 // removeAllSources removes all audio sources from the engine.
 // The operation parameter is used for log messages to distinguish callers.
 func (p *AudioPipelineService) removeAllSources(operation string) {
