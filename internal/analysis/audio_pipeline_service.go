@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/weather"
@@ -48,6 +49,7 @@ type AudioPipelineService struct {
 	apiService *APIServerService
 	engine     *engine.AudioEngine
 
+	watchdog            *audiocore.LivenessWatchdog
 	bufferMgr           *BufferManager
 	ctrlMonitor         *ControlMonitor
 	quietHoursScheduler *schedule.QuietHoursScheduler
@@ -84,6 +86,11 @@ func NewAudioPipelineService(settings *conf.Settings, bnAnalyzer *BirdNETAnalyze
 // Name returns a human-readable identifier for logging and diagnostics.
 func (p *AudioPipelineService) Name() string {
 	return audioPipelineServiceName
+}
+
+// Watchdog returns the audio liveness watchdog, or nil if not started.
+func (p *AudioPipelineService) Watchdog() *audiocore.LivenessWatchdog {
+	return p.watchdog
 }
 
 // Start initializes and starts the audio capture pipeline, buffer management,
@@ -224,6 +231,54 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	p.engine.SetScheduler(p.quietHoursScheduler)
 	p.quietHoursScheduler.Start()
 
+	// Start audio liveness watchdog for detecting silent capture deaths.
+	notifSvc := notification.GetService()
+	watchdogCallbacks := audiocore.LivenessCallbacks{
+		RestartSource: p.RestartSource,
+		Escalate: func(_ string) {
+			select {
+			case p.restartChan <- struct{}{}:
+			default:
+			}
+		},
+		Notify: func(sourceID string, state audiocore.LivenessState, msg string) {
+			if notifSvc == nil {
+				return
+			}
+			priority := notification.PriorityHigh
+			title := "Audio source " + msg
+			body := "Source " + sourceID + ": " + msg
+			if state == audiocore.StateFailed || state == audiocore.StateEscalated || state == audiocore.StateAlarmed {
+				priority = notification.PriorityCritical
+			}
+			if _, err := notifSvc.CreateWithComponent(
+				notification.TypeSystem, priority,
+				title, body, "audiocore.liveness",
+			); err != nil {
+				audiocore.GetLogger().Warn("failed to send liveness notification",
+					logger.Error(err),
+					logger.String("operation", "liveness_notify"))
+			}
+		},
+		IsQuietHours: func(sourceID string) bool {
+			if p.quietHoursScheduler == nil {
+				return false
+			}
+			src, ok := p.engine.Registry().Get(sourceID)
+			if ok && src.Type == audiocore.SourceTypeAudioCard {
+				return p.quietHoursScheduler.IsSoundCardSuppressed()
+			}
+			suppressed := p.quietHoursScheduler.GetSuppressedStreams()
+			return suppressed[sourceID]
+		},
+	}
+	p.watchdog = audiocore.NewLivenessWatchdog(
+		audiocore.DefaultLivenessConfig(),
+		p.engine.Router(),
+		watchdogCallbacks,
+	)
+	p.watchdog.Start()
+
 	// Inject suncalc into the orchestrator for bat nighttime scheduling.
 	bn.SetSunCalc(p.apiService.SunCalc())
 
@@ -318,6 +373,12 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 	cleanupHLSWithTimeout(ctx)
 
 	// NOTE: FFmpeg manager shutdown is handled by engine.Stop() in serve.go.
+
+	// Stop liveness watchdog before quiet hours scheduler so that
+	// IsQuietHours callbacks do not race with scheduler teardown.
+	if p.watchdog != nil {
+		p.watchdog.Stop()
+	}
 
 	// Stop quiet hours scheduler.
 	if p.quietHoursScheduler != nil {
