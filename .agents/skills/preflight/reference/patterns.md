@@ -98,6 +98,146 @@ if !ok {
 }
 ```
 
+## Nil Guards on Stored Function Fields
+
+Structs that accept function-typed fields (closures, callbacks, check functions) via constructors must nil-check them before calling. Current callers may always provide non-nil, but future callers, test code, or partial initialization paths may not.
+
+```go
+// BAD: Panics if checkFn was never set
+type HealthCheck struct {
+    name    string
+    checkFn func() (bool, string)
+}
+
+func (h *HealthCheck) Run() HealthResult {
+    ok, msg := h.checkFn()  // Panic if checkFn is nil
+    return HealthResult{Name: h.name, Healthy: ok, Message: msg}
+}
+
+// GOOD: Nil guard before calling stored function
+func (h *HealthCheck) Run() HealthResult {
+    if h.checkFn == nil {
+        return HealthResult{Name: h.name, Healthy: false, Message: "check function not configured"}
+    }
+    ok, msg := h.checkFn()
+    return HealthResult{Name: h.name, Healthy: ok, Message: msg}
+}
+```
+
+```go
+// BAD: Multiple stored functions, any could be nil
+type Monitor struct {
+    collectFn  func() []Metric
+    reportFn   func([]Metric) error
+    cleanupFn  func()
+}
+
+func (m *Monitor) Execute() error {
+    metrics := m.collectFn()     // Panic
+    err := m.reportFn(metrics)   // Panic
+    m.cleanupFn()                // Panic
+    return err
+}
+
+// GOOD: Guard each function call
+func (m *Monitor) Execute() error {
+    if m.collectFn == nil {
+        return nil
+    }
+    metrics := m.collectFn()
+    if m.reportFn != nil {
+        if err := m.reportFn(metrics); err != nil {
+            return err
+        }
+    }
+    if m.cleanupFn != nil {
+        m.cleanupFn()
+    }
+    return nil
+}
+```
+
+**When to flag:** Any struct that stores `func(...)` fields and calls them in methods without nil checks. Especially important for exported types where callers outside the package control construction.
+
+**When NOT to flag:** Function fields set in the same unexported constructor that always provides non-nil, with no other construction path. But still prefer the guard for defense in depth.
+
+**Search patterns:**
+```bash
+# Find structs with function-typed fields
+grep -rn 'func(' --include="*.go" | grep -v '_test.go' | grep '^\s\+\w\+\s\+func('
+
+# Find method calls on struct fields that look like functions
+grep -rn '\.\(checkFn\|handler\|callback\|onEvent\|reportFn\|collectFn\)(' --include="*.go"
+```
+
+## Constructor Input Validation
+
+Constructors that accept size, capacity, or count parameters must validate the input. Zero or negative values can cause division-by-zero panics, infinite loops, or silent misbehavior.
+
+```go
+// BAD: Division by zero when maxSize is 0
+type RingBuffer struct {
+    data    []Entry
+    maxSize int
+    pos     int
+}
+
+func NewRingBuffer(maxSize int) *RingBuffer {
+    return &RingBuffer{
+        data:    make([]Entry, 0, maxSize),
+        maxSize: maxSize,
+    }
+}
+
+func (rb *RingBuffer) Add(e Entry) {
+    rb.pos = (rb.pos + 1) % rb.maxSize  // Panic: division by zero
+    rb.data[rb.pos] = e
+}
+
+// GOOD: Validate and enforce minimum
+func NewRingBuffer(maxSize int) *RingBuffer {
+    if maxSize <= 0 {
+        maxSize = 64
+    }
+    return &RingBuffer{
+        data:    make([]Entry, 0, maxSize),
+        maxSize: maxSize,
+    }
+}
+```
+
+```go
+// BAD: Negative limit causes unexpected behavior
+func (q *Queue) Drain(limit int) []Item {
+    var out []Item
+    for i := 0; i < limit; i++ {  // Negative limit: loop never runs (silent no-op)
+        item, ok := q.Pop()
+        if !ok {
+            break
+        }
+        out = append(out, item)
+    }
+    return out
+}
+
+// GOOD: Guard against invalid input
+func (q *Queue) Drain(limit int) []Item {
+    if limit <= 0 {
+        return nil
+    }
+    // ...
+}
+```
+
+**Search patterns:**
+```bash
+# Find constructors with size/capacity parameters
+grep -rn 'func New.*\(.*\(size\|capacity\|max\|limit\|count\|bufSize\)' --include="*.go"
+
+# Find modulo operations (potential division by zero)
+grep -rn '%\s*[a-z]' --include="*.go" | grep -v '_test.go'
+```
+
 ## Race Conditions
 
 **Go:**
@@ -402,6 +542,83 @@ grep -rn "TODO\|FIXME\|HACK\|XXX" --include="*.go" --include="*.ts" --include="*
 ```
 
 Evaluate each: Critical (security/auth/crypto/data) must be implemented or feature removed. High (error handling/validation) should block merge. Low (optimization/refactoring) acceptable with tracking ticket.
+
+## Shallow Copy of Reference Types in Concurrent Collections
+
+When storing structs that contain maps or slices into concurrent-safe collections, a shallow copy leaves reference types shared between caller and buffer. This creates a data race: the caller can mutate the map/slice after Add() returns, corrupting the stored entry.
+
+```go
+// BAD: Fields map shared between caller and buffer
+type LogEntry struct {
+    Message string
+    Fields  map[string]string
+}
+
+type ErrorRingBuffer struct {
+    mu      sync.Mutex
+    entries []LogEntry
+}
+
+func (rb *ErrorRingBuffer) Add(entry LogEntry) {
+    rb.mu.Lock()
+    defer rb.mu.Unlock()
+    rb.entries = append(rb.entries, entry)  // Shallow copy: Fields map is shared
+}
+
+// Caller can still mutate entry.Fields after Add returns, corrupting the buffer
+
+// GOOD: Deep copy reference-typed fields on store
+func (rb *ErrorRingBuffer) Add(entry LogEntry) {
+    rb.mu.Lock()
+    defer rb.mu.Unlock()
+    stored := LogEntry{
+        Message: entry.Message,
+        Fields:  maps.Clone(entry.Fields),
+    }
+    rb.entries = append(rb.entries, stored)
+}
+```
+
+```go
+// BAD: Returning stored struct exposes internal map to caller mutation
+func (rb *ErrorRingBuffer) Recent(n int) []LogEntry {
+    rb.mu.Lock()
+    defer rb.mu.Unlock()
+    return rb.entries[len(rb.entries)-n:]  // Caller gets direct reference
+}
+
+// GOOD: Clone on read too
+func (rb *ErrorRingBuffer) Recent(n int) []LogEntry {
+    rb.mu.Lock()
+    defer rb.mu.Unlock()
+    start := len(rb.entries) - n
+    if start < 0 {
+        start = 0
+    }
+    out := make([]LogEntry, len(rb.entries)-start)
+    for i, e := range rb.entries[start:] {
+        out[i] = LogEntry{
+            Message: e.Message,
+            Fields:  maps.Clone(e.Fields),
+        }
+    }
+    return out
+}
+```
+
+**When to flag:** Any Add/Put/Store method on a mutex-protected or channel-based collection where the stored type contains map or slice fields. Also flag accessor methods (Get/Recent/All) that return stored structs with reference fields without cloning.
+
+**Search patterns:**
+```bash
+# Find structs with map fields stored in concurrent collections
+grep -rn 'map\[' --include="*.go" | grep -v '_test.go' | grep 'struct'
+
+# Find Add/Store methods on mutex-protected types
+grep -rn 'func.*Add\|func.*Store\|func.*Put' --include="*.go" | grep -v '_test.go'
+
+# Find types with both mutex and slice/map fields
+grep -rn 'sync.Mutex\|sync.RWMutex' -l --include="*.go" | xargs grep -l 'map\[\|^\s*\w\+\s\+\[\]'
+```
 
 ## Common Bugs
 
@@ -1081,6 +1298,95 @@ let species = $derived(
 ```
 
 **Review action:** When new settings/config fields are added, verify the frontend handles existing saved configs missing the new fields.
+
+## Stub/Placeholder Return Values Causing Misleading Status
+
+When wiring stub or placeholder functions into a system that interprets return values as health/status signals, a stub returning "failure" causes permanent degraded status for users with that feature enabled. Stubs should signal "not available" or "skip", not "broken".
+
+```go
+// BAD: Stub returns false, which the health system interprets as "unhealthy"
+func NewHealthChecker() *HealthChecker {
+    hc := &HealthChecker{}
+    // MQTT not yet wired up
+    hc.mqttCheck = func() (bool, string) {
+        return false, ""  // StatusWarning for every user with MQTT enabled
+    }
+    return hc
+}
+
+// GOOD: Stub signals "not available" so health system skips it
+func NewHealthChecker() *HealthChecker {
+    hc := &HealthChecker{}
+    hc.mqttCheck = nil  // Health system nil-checks and skips
+    return hc
+}
+
+// GOOD (alternative): Return a "not configured" status the consumer handles
+func NewHealthChecker() *HealthChecker {
+    hc := &HealthChecker{}
+    hc.mqttCheck = func() (bool, string) {
+        return true, "not configured"  // Healthy but unconfigured
+    }
+    return hc
+}
+```
+
+**Review action:** When a new stub/placeholder function is wired into an existing system:
+1. Trace the return value to its consumer
+2. Ask: "What status does this return value map to?"
+3. If it maps to warning/error/degraded, the stub is lying about system state
+
+**Search patterns:**
+```bash
+# Find functions returning hardcoded false (potential misleading stubs)
+grep -rn 'return false' --include="*.go" | grep -v '_test.go' | grep 'func\|check\|health\|status'
+
+# Find placeholder/stub comments near return statements
+grep -rn 'stub\|placeholder\|not yet\|TODO.*wire\|not implemented' -A3 --include="*.go" | grep 'return'
+```
+
+## Inconsistent Error Response Patterns
+
+When a project has a standardized error handler (e.g., c.HandleError, respondWithError, writeError), new API handlers must use it instead of ad-hoc error responses. Inconsistent patterns break error middleware, monitoring, and client error parsing.
+
+```go
+// BAD: Ad-hoc JSON error response, bypasses standardized handler
+func (h *Handler) GetDiagnostics(ctx echo.Context) error {
+    report, err := h.service.GetReport()
+    if err != nil {
+        return ctx.JSON(http.StatusNotFound, map[string]string{
+            "error": "report not available",
+        })
+    }
+    return ctx.JSON(http.StatusOK, report)
+}
+
+// GOOD: Use the project's standardized error handler
+func (h *Handler) GetDiagnostics(ctx echo.Context) error {
+    report, err := h.service.GetReport()
+    if err != nil {
+        return h.HandleError(ctx, err, http.StatusNotFound, "report not available")
+    }
+    return ctx.JSON(http.StatusOK, report)
+}
+```
+
+**Review action:** When reviewing a new API handler:
+1. Find how sibling handlers in the same file/package return errors
+2. If they use a shared error handler, the new handler must too
+3. Search for the error handler function to understand the standard pattern
+
+**Search patterns:**
+```bash
+# Find ad-hoc JSON error responses (may bypass standard handler)
+grep -rn 'ctx.JSON.*Status\|c.JSON.*Error\|w.WriteHeader.*http.Status' --include="*.go" | grep -i 'error\|fail\|not.found'
+
+# Find the project's standard error handler
+grep -rn 'func.*HandleError\|func.*respondWithError\|func.*writeError' --include="*.go"
+
+# Compare error patterns across handlers in the same package
+grep -rn 'return.*JSON\|return.*HandleError\|return.*Error(' --include="*.go"
+```
 
 ## Frontend: daisyUI Class Usage
 

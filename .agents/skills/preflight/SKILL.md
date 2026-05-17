@@ -51,18 +51,21 @@ Review changes for bugs that cause crashes, data loss, or security incidents.
 
 **Correctness:**
 1. **Potential panics** (Go): nil pointer dereferences, index out of bounds, type assertions without ok check, closing nil channels, map/slice access on nil.
-2. **Race conditions**: shared state without mutex, concurrent map access, goroutines capturing loop vars (pre-1.22), missing await (TS), stale closures, async $effect() races (Svelte).
-3. **Resource leaks**: unclosed files/connections/channels, missing defer, goroutines that never exit, event listeners not removed, timers/intervals not cleared, subscriptions not unsubscribed.
-4. **Data corruption**: missing transactions for multi-step operations, partial writes without rollback, concurrent modifications without locking.
-5. **Common bugs**: Go (= vs :=, missing rows.Err(), modify slice while iterating, defer in loop, missing return after http.Error), TS (truthy on 0/"", .find() without undefined check, unwaited promise, == vs ===), Svelte ($state destructuring, $effect for derived values, missing cleanup, $state.raw mutation).
+2. **Nil guards on stored function fields**: when a struct stores function-typed fields (closures, callbacks, check functions), the Run/Execute/Handle method must nil-check them before calling. Even if current callers always provide non-nil, future callers or test code may not. Especially important for exported types in reusable packages.
+3. **Constructor input validation**: constructors accepting size, capacity, or count parameters must validate > 0 (prevents division-by-zero panics). Methods accepting count/limit parameters must guard against negative values.
+4. **Race conditions**: shared state without mutex, concurrent map access, goroutines capturing loop vars (pre-1.22), missing await (TS), stale closures, async $effect() races (Svelte).
+5. **Resource leaks**: unclosed files/connections/channels, missing defer, goroutines that never exit, event listeners not removed, timers/intervals not cleared, subscriptions not unsubscribed.
+6. **Data corruption**: missing transactions for multi-step operations, partial writes without rollback, concurrent modifications without locking.
+7. **Common bugs**: Go (= vs :=, missing rows.Err(), modify slice while iterating, defer in loop, missing return after http.Error), TS (truthy on 0/"", .find() without undefined check, unwaited promise, == vs ===), Svelte ($state destructuring, $effect for derived values, missing cleanup, $state.raw mutation).
 
 **Safety:**
-6. **Security**: SQL/command/path injection, XSS (@html without sanitize, innerHTML), hardcoded secrets, insecure crypto, missing auth/authz, CORS misconfiguration.
-7. **Sensitive data in telemetry**: raw err.Error() containing file paths, connection strings, or credentials sent to Sentry/logging without scrubbing. Check scrubbing covers all components individually and consistently across all callsites.
-8. **Protocol violations**: wrong HTTP status codes, missing Content-Type headers, API contract violations.
-9. **Shutdown races**: drain/close without blocking new connections, missing atomic shutdown flag, expected shutdown errors (http.ErrServerClosed) logged as real errors, nil channel close, double-close of resources.
-10. **Missing context propagation**: goroutines without ctx or panic recovery, semaphore acquisition without context deadline, context.Background() where parent ctx exists.
-11. **Critical TODOs**: TODO/FIXME in auth, validation, crypto, or transaction paths that skip essential implementation. Flag as Critical when the code proceeds without security checks.
+8. **Security**: SQL/command/path injection, XSS (@html without sanitize, innerHTML), hardcoded secrets, insecure crypto, missing auth/authz, CORS misconfiguration.
+9. **Sensitive data in telemetry**: raw err.Error() containing file paths, connection strings, or credentials sent to Sentry/logging without scrubbing. Check scrubbing covers all components individually and consistently across all callsites.
+10. **Shallow copy of reference types in concurrent collections**: when storing structs containing maps or slices in concurrent-safe collections (ring buffers, sync.Map, channel-based queues), deep copy the reference types using maps.Clone/slices.Clone. When returning stored structs via accessor methods, clone reference-typed fields to prevent data races with callers.
+11. **Protocol violations**: wrong HTTP status codes, missing Content-Type headers, API contract violations.
+12. **Shutdown races**: drain/close without blocking new connections, missing atomic shutdown flag, expected shutdown errors (http.ErrServerClosed) logged as real errors, nil channel close, double-close of resources.
+13. **Missing context propagation**: goroutines without ctx or panic recovery, semaphore acquisition without context deadline, context.Background() where parent ctx exists.
+14. **Critical TODOs**: TODO/FIXME in auth, validation, crypto, or transaction paths that skip essential implementation. Flag as Critical when the code proceeds without security checks.
 
 ### Reviewer 3: Quality & Patterns
 
@@ -92,15 +95,17 @@ Review changes for code smells and recurring patterns from past production issue
 17. **Inconsistent guard patterns**: one function checks a guard (telemetry opt-in, shutdown flag, nil check) but sibling functions with same contract don't. When a guard exists, check all siblings.
 18. **Go API design smells**: exported function returning unexported type, context.Context not first parameter, dead code branches (both paths produce same result), Get* that mutates / Set* that doesn't.
 19. **Documentation contradicting code**: help text, comments, or README describing behavior opposite to what code does. Pay special attention after refactors.
+20. **Stub/placeholder return values causing misleading status**: when wiring stub or placeholder functions, verify the stub's return value doesn't trigger a degraded/warning status in the consumer. Stubs should return "not available" / nil / skip signals, not "failure" signals that cause permanent warnings for users with that feature enabled.
+21. **Inconsistent error response patterns**: when a new API handler returns errors, verify it uses the project's standardized error handler (e.g., c.HandleError) rather than ad-hoc ctx.JSON error responses. Search for the error pattern used in sibling handlers.
 
 **Frontend-specific (only when .svelte or frontend .ts files changed):**
-20. **daisyUI classes**: this project uses native Tailwind v4.1 only. Flag btn, card, modal, drawer, navbar, alert, badge, tooltip, dropdown, menu, tabs, toggle, avatar, etc.
-21. **Malformed Tailwind CSS variable classes**: suffix outside brackets like `[var(--color-X)]-content` instead of `[var(--color-X-content)]`. Silent failure, no build/runtime error.
-22. **Binding to read-only $derived**: bind:checked/bind:value on $derived values causes runtime errors on interaction.
-23. **Invalid Svelte 5 reactivity**: destructuring $state (breaks tracking), $effect for derived values (use $derived), assigning $state to locals, mutating $state.raw, missing $effect cleanup, Svelte 4 `$:` syntax.
-24. **Duplicate keys**: non-unique display fields (name, label, title) used as {#each} keys or <option> values when unique IDs exist. Causes each_key_duplicate crash.
-25. **Hardcoded user-facing strings**: all user-facing text must use the i18n library.
-26. **Partial settings/config objects**: frontend deriving state from backend settings without merging over defaults. New fields on existing config objects will be undefined.
+22. **daisyUI classes**: this project uses native Tailwind v4.1 only. Flag btn, card, modal, drawer, navbar, alert, badge, tooltip, dropdown, menu, tabs, toggle, avatar, etc.
+23. **Malformed Tailwind CSS variable classes**: suffix outside brackets like `[var(--color-X)]-content` instead of `[var(--color-X-content)]`. Silent failure, no build/runtime error.
+24. **Binding to read-only $derived**: bind:checked/bind:value on $derived values causes runtime errors on interaction.
+25. **Invalid Svelte 5 reactivity**: destructuring $state (breaks tracking), $effect for derived values (use $derived), assigning $state to locals, mutating $state.raw, missing $effect cleanup, Svelte 4 `$:` syntax.
+26. **Duplicate keys**: non-unique display fields (name, label, title) used as {#each} keys or <option> values when unique IDs exist. Causes each_key_duplicate crash.
+27. **Hardcoded user-facing strings**: all user-facing text must use the i18n library.
+28. **Partial settings/config objects**: frontend deriving state from backend settings without merging over defaults. New fields on existing config objects will be undefined.
 
 ### Reviewer 4: i18n Translation Integrity
 
