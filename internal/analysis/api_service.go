@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/monitor"
@@ -171,6 +172,9 @@ func (s *APIServerService) Start(_ context.Context) error {
 		api.WithSunCalc(s.sunCalc),
 		api.WithV2Manager(s.dbService.V2Manager()),
 		api.WithAudioEngine(s.engine),
+	}
+	if buf := health.GlobalErrorBuffer(); buf != nil {
+		serverOpts = append(serverOpts, api.WithHealthErrorBuffer(buf))
 	}
 	if mm := s.bnAnalyzer.ModelManager(); mm != nil {
 		serverOpts = append(serverOpts, api.WithModelManager(mm))

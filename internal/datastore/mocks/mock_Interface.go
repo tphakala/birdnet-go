@@ -177,6 +177,62 @@ func (_c *MockInterface_Close_Call) RunAndReturn(run func() error) *MockInterfac
 	return _c
 }
 
+// CountDetectionsSince provides a mock function with given fields: since
+func (_m *MockInterface) CountDetectionsSince(since time.Time) (int, error) {
+	ret := _m.Called(since)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CountDetectionsSince")
+	}
+
+	var r0 int
+	var r1 error
+	if rf, ok := ret.Get(0).(func(time.Time) (int, error)); ok {
+		return rf(since)
+	}
+	if rf, ok := ret.Get(0).(func(time.Time) int); ok {
+		r0 = rf(since)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	if rf, ok := ret.Get(1).(func(time.Time) error); ok {
+		r1 = rf(since)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_CountDetectionsSince_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CountDetectionsSince'
+type MockInterface_CountDetectionsSince_Call struct {
+	*mock.Call
+}
+
+// CountDetectionsSince is a helper method to define mock.On call
+//   - since time.Time
+func (_e *MockInterface_Expecter) CountDetectionsSince(since interface{}) *MockInterface_CountDetectionsSince_Call {
+	return &MockInterface_CountDetectionsSince_Call{Call: _e.mock.On("CountDetectionsSince", since)}
+}
+
+func (_c *MockInterface_CountDetectionsSince_Call) Run(run func(since time.Time)) *MockInterface_CountDetectionsSince_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockInterface_CountDetectionsSince_Call) Return(_a0 int, _a1 error) *MockInterface_CountDetectionsSince_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_CountDetectionsSince_Call) RunAndReturn(run func(time.Time) (int, error)) *MockInterface_CountDetectionsSince_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CountHourlyDetections provides a mock function with given fields: date, hour, duration
 func (_m *MockInterface) CountHourlyDetections(date string, hour string, duration int) (int64, error) {
 	ret := _m.Called(date, hour, duration)

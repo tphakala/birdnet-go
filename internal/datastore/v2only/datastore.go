@@ -437,6 +437,19 @@ func (ds *Datastore) PingWithLatency() (time.Duration, error) {
 	return time.Since(start), nil
 }
 
+// CountDetectionsSince returns the number of detections recorded since the given time.
+func (ds *Datastore) CountDetectionsSince(since time.Time) (int, error) {
+	db := ds.manager.DB()
+	if db == nil {
+		return 0, datastore.ErrDBNotConnected
+	}
+	var count int64
+	if err := db.Model(&entities.Detection{}).Where("detected_at >= ?", since.Unix()).Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("count detections failed: %w", err)
+	}
+	return int(count), nil
+}
+
 // GetDatabaseStats returns database statistics.
 func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	ctx := context.Background()

@@ -321,7 +321,8 @@ func (m *mockStore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 		Connected: true,
 	}, nil
 }
-func (m *mockStore) PingWithLatency() (time.Duration, error) { return 0, nil }
+func (m *mockStore) PingWithLatency() (time.Duration, error)       { return 0, nil }
+func (m *mockStore) CountDetectionsSince(_ time.Time) (int, error) { return 0, nil }
 
 func (m *mockStore) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
 	return nil, nil

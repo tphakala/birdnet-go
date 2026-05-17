@@ -207,6 +207,15 @@ func WithModelManager(mm *classifier.ModelManager) Option {
 	}
 }
 
+// WithHealthErrorBuffer injects a shared ErrorRingBuffer created at startup.
+// When set, initDiagnosticsRoutes uses this buffer instead of creating its own,
+// enabling the logger to feed errors into the same buffer the health checks read.
+func WithHealthErrorBuffer(buf *health.ErrorRingBuffer) Option {
+	return func(c *Controller) {
+		c.healthErrors = buf
+	}
+}
+
 // parseIPFromHeader attempts to parse a valid IP from a header value.
 // Returns the IP string if valid, empty string otherwise.
 func parseIPFromHeader(headerValue string) string {

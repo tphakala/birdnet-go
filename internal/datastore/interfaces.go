@@ -223,6 +223,8 @@ type Interface interface {
 	GetDatabaseStats() (*DatabaseStats, error)
 	// PingWithLatency executes a trivial query (SELECT 1) and returns the round-trip time.
 	PingWithLatency() (time.Duration, error)
+	// CountDetectionsSince returns the number of detections recorded since the given time.
+	CountDetectionsSince(since time.Time) (int, error)
 	// SchemaVersion returns the datastore schema version ("legacy" or "v2").
 	SchemaVersion() string
 	// UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
@@ -266,6 +268,18 @@ func (ds *DataStore) PingWithLatency() (time.Duration, error) {
 		return 0, fmt.Errorf("database ping failed: %w", err)
 	}
 	return time.Since(start), nil
+}
+
+// CountDetectionsSince returns the number of detections recorded since the given time.
+func (ds *DataStore) CountDetectionsSince(since time.Time) (int, error) {
+	if ds.DB == nil {
+		return 0, ErrDBNotConnected
+	}
+	var count int64
+	if err := ds.DB.Model(&Note{}).Where("begin_time >= ?", since).Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("count detections failed: %w", err)
+	}
+	return int(count), nil
 }
 
 // NewDataStore creates a new DataStore instance based on the provided configuration context.
