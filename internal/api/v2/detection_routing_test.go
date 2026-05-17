@@ -95,7 +95,7 @@ func TestNeedsAdvancedRouting(t *testing.T) {
 			expected: true,
 		},
 
-		// --- Cross-type filter checks (the bug from Forgejo #708) ---
+		// --- Cross-type filter checks (date/hour/species/search on non-native query types) ---
 
 		// Species on non-species query types
 		{
