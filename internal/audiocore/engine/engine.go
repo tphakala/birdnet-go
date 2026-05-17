@@ -50,6 +50,9 @@ const (
 
 	// defaultChannels is used when a source config has no channel count set.
 	defaultChannels = 1
+
+	// defaultBitDepth is used when a source config has no bit depth set.
+	defaultBitDepth = 16
 )
 
 // Config holds the configuration needed to create an AudioEngine.
@@ -283,13 +286,17 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 	if channels <= 0 {
 		channels = defaultChannels
 	}
+	bitDepth := src.BitDepth
+	if bitDepth <= 0 {
+		bitDepth = defaultBitDepth
+	}
 	streamCfg := &ffmpeg.StreamConfig{
 		SourceID:         sourceID,
 		SourceName:       src.DisplayName,
 		URL:              url,
 		Type:             string(src.Type),
 		SampleRate:       sampleRate,
-		BitDepth:         src.BitDepth,
+		BitDepth:         bitDepth,
 		Channels:         channels,
 		FFmpegPath:       e.ffmpegPath,
 		Transport:        transport,
@@ -381,6 +388,10 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 	if channels <= 0 {
 		channels = defaultChannels
 	}
+	bitDepth := cfg.BitDepth
+	if bitDepth <= 0 {
+		bitDepth = defaultBitDepth
+	}
 
 	e.logger.Info("allocated primary analysis buffer",
 		logger.String("source_id", sourceID),
@@ -415,7 +426,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 			URL:              cfg.ConnectionString,
 			Type:             string(cfg.Type),
 			SampleRate:       sampleRate,
-			BitDepth:         cfg.BitDepth,
+			BitDepth:         bitDepth,
 			Channels:         channels,
 			FFmpegPath:       e.ffmpegPath,
 			Transport:        e.transport,
@@ -436,14 +447,14 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 	} else if cfg.Type == audiocore.SourceTypeAudioCard {
 		devCfg := audiocore.DeviceConfig{
 			SampleRate: sampleRate,
-			BitDepth:   cfg.BitDepth,
+			BitDepth:   bitDepth,
 			Channels:   channels,
 		}
 		e.logger.Info("starting audio card capture",
 			logger.String("source_id", sourceID),
 			logger.String("device_id", cfg.ConnectionString),
 			logger.Int("sample_rate", sampleRate),
-			logger.Int("bit_depth", cfg.BitDepth),
+			logger.Int("bit_depth", bitDepth),
 			logger.Int("channels", channels))
 		if err := e.deviceMgr.StartCapture(sourceID, cfg.ConnectionString, devCfg); err != nil {
 			e.logger.Error("audio card capture failed",
@@ -464,7 +475,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 
 	// 6. Sync defaulted audio params back to registry so downstream consumers
 	// see the effective values (not the raw config which may have been zero).
-	e.registry.UpdateAudioParams(sourceID, sampleRate, cfg.BitDepth, channels)
+	e.registry.UpdateAudioParams(sourceID, sampleRate, bitDepth, channels)
 
 	e.logger.Info("source added",
 		logger.String("source_id", sourceID),
@@ -561,6 +572,10 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	if channels <= 0 {
 		channels = defaultChannels
 	}
+	bitDepth := newCfg.BitDepth
+	if bitDepth <= 0 {
+		bitDepth = defaultBitDepth
+	}
 	if err := e.bufferMgr.AllocateAnalysis(
 		sourceID,
 		e.primaryModelID,
@@ -612,7 +627,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			URL:              newCfg.ConnectionString,
 			Type:             string(newType),
 			SampleRate:       sampleRate,
-			BitDepth:         newCfg.BitDepth,
+			BitDepth:         bitDepth,
 			Channels:         channels,
 			FFmpegPath:       e.ffmpegPath,
 			Transport:        e.transport,
@@ -621,7 +636,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			Debug:            e.debug,
 		}
 		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
-			// Source stays registered; mark it as errored so callers can see the failure.
+			e.bufferMgr.DeallocateSource(sourceID)
 			_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 			return errors.New(err).
 				Component("audiocore.engine").
@@ -633,11 +648,11 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	} else if newType == audiocore.SourceTypeAudioCard {
 		devCfg := audiocore.DeviceConfig{
 			SampleRate: sampleRate,
-			BitDepth:   newCfg.BitDepth,
+			BitDepth:   bitDepth,
 			Channels:   channels,
 		}
 		if err := e.deviceMgr.StartCapture(sourceID, newCfg.ConnectionString, devCfg); err != nil {
-			// Source stays registered; mark it as errored so callers can see the failure.
+			e.bufferMgr.DeallocateSource(sourceID)
 			_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 			return errors.New(err).
 				Component("audiocore.engine").
@@ -649,7 +664,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	}
 
 	// 6. Update registry so downstream consumers see the new audio params.
-	e.registry.UpdateAudioParams(sourceID, sampleRate, newCfg.BitDepth, channels)
+	e.registry.UpdateAudioParams(sourceID, sampleRate, bitDepth, channels)
 
 	e.logger.Info("source reconfigured",
 		logger.String("source_id", sourceID),

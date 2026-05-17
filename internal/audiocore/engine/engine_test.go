@@ -383,3 +383,116 @@ func TestErrEngineStopped_IsSentinel(t *testing.T) {
 	assert.True(t, errors.Is(ErrEngineStopped, ErrEngineStopped))
 	assert.Contains(t, ErrEngineStopped.Error(), "stop requested")
 }
+
+// TestEngine_AddSource_ZeroAudioParams verifies that zero-value SampleRate,
+// BitDepth, and Channels are defaulted before being stored in the registry
+// and passed to stream/device configs.
+func TestEngine_AddSource_ZeroAudioParams(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		sampleRate       int
+		bitDepth         int
+		channels         int
+		expectSampleRate int
+		expectBitDepth   int
+		expectChannels   int
+	}{
+		{
+			name:             "all zero defaults",
+			sampleRate:       0,
+			bitDepth:         0,
+			channels:         0,
+			expectSampleRate: defaultSampleRate,
+			expectBitDepth:   defaultBitDepth,
+			expectChannels:   defaultChannels,
+		},
+		{
+			name:             "negative values default",
+			sampleRate:       -1,
+			bitDepth:         -1,
+			channels:         -1,
+			expectSampleRate: defaultSampleRate,
+			expectBitDepth:   defaultBitDepth,
+			expectChannels:   defaultChannels,
+		},
+		{
+			name:             "explicit values preserved",
+			sampleRate:       96000,
+			bitDepth:         24,
+			channels:         2,
+			expectSampleRate: 96000,
+			expectBitDepth:   24,
+			expectChannels:   2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			eng, stop := newTestEngine(t)
+			defer stop()
+
+			sourceID := fmt.Sprintf("test_zero_%s", tt.name)
+			cfg := &audiocore.SourceConfig{
+				ID:               sourceID,
+				DisplayName:      "Zero Params Test",
+				Type:             audiocore.SourceTypeRTSP,
+				ConnectionString: "rtsp://192.168.1.100/zero",
+				SampleRate:       tt.sampleRate,
+				BitDepth:         tt.bitDepth,
+				Channels:         tt.channels,
+			}
+
+			err := eng.AddSource(cfg)
+			require.NoError(t, err)
+
+			src, ok := eng.Registry().Get(sourceID)
+			require.True(t, ok, "source should be registered")
+			assert.Equal(t, tt.expectSampleRate, src.SampleRate,
+				"registry SampleRate should be defaulted")
+			assert.Equal(t, tt.expectBitDepth, src.BitDepth,
+				"registry BitDepth should be defaulted")
+			assert.Equal(t, tt.expectChannels, src.Channels,
+				"registry Channels should be defaulted")
+		})
+	}
+}
+
+// TestEngine_ReconfigureSource_ZeroAudioParams verifies that zero-value
+// audio parameters are defaulted during reconfiguration and the registry
+// is updated with the effective values.
+func TestEngine_ReconfigureSource_ZeroAudioParams(t *testing.T) {
+	t.Parallel()
+	eng, stop := newTestEngine(t)
+	defer stop()
+
+	cfg := &audiocore.SourceConfig{
+		ID:               "test_reconfig_zero",
+		DisplayName:      "Reconfigure Zero Test",
+		Type:             audiocore.SourceTypeRTSP,
+		ConnectionString: "rtsp://192.168.1.100/zero",
+		SampleRate:       48000,
+		BitDepth:         16,
+		Channels:         1,
+	}
+	require.NoError(t, eng.AddSource(cfg))
+
+	newCfg := &audiocore.SourceConfig{
+		ConnectionString: "rtsp://192.168.1.100/zero_v2",
+		SampleRate:       0,
+		BitDepth:         0,
+		Channels:         0,
+	}
+	require.NoError(t, eng.ReconfigureSource("test_reconfig_zero", newCfg))
+
+	src, ok := eng.Registry().Get("test_reconfig_zero")
+	require.True(t, ok)
+	assert.Equal(t, defaultSampleRate, src.SampleRate,
+		"registry SampleRate should be defaulted after reconfigure")
+	assert.Equal(t, defaultBitDepth, src.BitDepth,
+		"registry BitDepth should be defaulted after reconfigure")
+	assert.Equal(t, defaultChannels, src.Channels,
+		"registry Channels should be defaulted after reconfigure")
+}
