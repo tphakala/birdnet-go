@@ -32,6 +32,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -134,6 +135,11 @@ type Controller struct {
 	// Stored atomically because it is set during pipeline Start() and read
 	// concurrently by HTTP handlers.
 	audioWatchdog atomic.Pointer[audiocore.LivenessWatchdog]
+
+	// Health check infrastructure for the diagnostics endpoints.
+	healthRegistry *health.Registry
+	healthReports  *health.ReportStore
+	healthErrors   *health.ErrorRingBuffer
 
 	// sourceRestarter restarts a single audio source by ID. Set during
 	// pipeline Start() and called by the restart-source control endpoint.
@@ -642,6 +648,7 @@ func (c *Controller) initRoutes() {
 		{"model routes", c.initModelRoutes},
 		{"insights routes", c.initInsightsRoutes},
 		{"tls routes", c.initTLSRoutes},
+		{"diagnostics routes", c.initDiagnosticsRoutes},
 	}
 
 	for _, initializer := range routeInitializers {
