@@ -151,8 +151,7 @@ func (b *ErrorRingBuffer) CountSince(since time.Time) int {
 	defer b.mu.RUnlock()
 	count := 0
 	for i := range b.count {
-		idx := (b.head - 1 - i + b.maxSize) % b.maxSize
-		if !b.entries[idx].Timestamp.Before(since) {
+		if !b.entries[i].Timestamp.Before(since) {
 			count++
 		}
 	}
