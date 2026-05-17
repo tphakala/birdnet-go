@@ -508,8 +508,18 @@ func (s *QuietHoursScheduler) IsSoundCardSuppressed() bool {
 	return s.soundCardSuppressed
 }
 
+// IsStreamSuppressed reports whether the given runtime sourceID is currently
+// suppressed by quiet hours.
+func (s *QuietHoursScheduler) IsStreamSuppressed(sourceID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.suppressed[sourceID]
+}
+
 // GetSuppressedStreams returns a map of stream URLs to their suppression state.
-// Only streams currently suppressed by quiet hours are included.
+// Only streams currently suppressed by quiet hours are included. The keys are
+// configured stream URLs when available, falling back to runtime sourceIDs for
+// legacy entries.
 func (s *QuietHoursScheduler) GetSuppressedStreams() map[string]bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
