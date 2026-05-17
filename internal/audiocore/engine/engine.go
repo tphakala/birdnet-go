@@ -47,6 +47,9 @@ const (
 
 	// defaultSampleRate is used when a source config has no sample rate set.
 	defaultSampleRate = 48000
+
+	// defaultChannels is used when a source config has no channel count set.
+	defaultChannels = 1
 )
 
 // Config holds the configuration needed to create an AudioEngine.
@@ -191,9 +194,7 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 		debug:                cfg.Debug,
 		captureBufferSeconds: captureBufferSecs(cfg.CaptureBufferSeconds),
 	}
-	if scheduler != nil {
-		e.scheduler.Store(scheduler)
-	}
+	e.SetScheduler(scheduler)
 	return e
 }
 
@@ -232,6 +233,76 @@ func (e *AudioEngine) Scheduler() *schedule.QuietHoursScheduler {
 // resources (SunCalc, ControlChan) only available after service startup.
 func (e *AudioEngine) SetScheduler(s *schedule.QuietHoursScheduler) {
 	e.scheduler.Store(s)
+	if s != nil {
+		s.SetStreamManager(func() schedule.StreamManager { return e })
+	}
+}
+
+// GetActiveStreamIDs returns the runtime source IDs currently tracked by FFmpeg.
+func (e *AudioEngine) GetActiveStreamIDs() []string {
+	return e.ffmpegMgr.GetActiveStreamIDs()
+}
+
+// GetActiveStreamURLs returns active runtime sourceID -> raw stream URL.
+func (e *AudioEngine) GetActiveStreamURLs() map[string]string {
+	ids := e.ffmpegMgr.GetActiveStreamIDs()
+	urls := make(map[string]string, len(ids))
+	for _, sourceID := range ids {
+		if url, ok := e.registry.ConnectionStringByID(sourceID); ok {
+			urls[sourceID] = url
+		}
+	}
+	return urls
+}
+
+// StopStream stops the FFmpeg stream for sourceID while keeping the registered
+// source, routes, and buffers available for a later quiet-hours restart.
+func (e *AudioEngine) StopStream(sourceID string) error {
+	if err := e.ffmpegMgr.StopStream(sourceID); err != nil {
+		return err
+	}
+	_ = e.registry.UpdateState(sourceID, audiocore.SourceStopped)
+	return nil
+}
+
+// StartStream restarts a quiet-hours-suppressed FFmpeg stream under its
+// existing runtime sourceID.
+func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
+	src, ok := e.registry.Get(sourceID)
+	if !ok {
+		return fmt.Errorf("restart stream: %w: %s", audiocore.ErrSourceNotFound, sourceID)
+	}
+	if transport == "" {
+		transport = e.transport
+	}
+	sampleRate := src.SampleRate
+	if sampleRate <= 0 {
+		sampleRate = defaultSampleRate
+	}
+	channels := src.Channels
+	if channels <= 0 {
+		channels = defaultChannels
+	}
+	streamCfg := &ffmpeg.StreamConfig{
+		SourceID:         sourceID,
+		SourceName:       src.DisplayName,
+		URL:              url,
+		Type:             string(src.Type),
+		SampleRate:       sampleRate,
+		BitDepth:         src.BitDepth,
+		Channels:         channels,
+		FFmpegPath:       e.ffmpegPath,
+		Transport:        transport,
+		FFmpegParameters: e.ffmpegParameters,
+		LogLevel:         e.logLevel,
+		Debug:            e.debug,
+	}
+	if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
+		_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
+		return err
+	}
+	_ = e.registry.UpdateState(sourceID, audiocore.SourceRunning)
+	return nil
 }
 
 // SetPrimaryModel sets the model identifier and analysis buffer dimensions

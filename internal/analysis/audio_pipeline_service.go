@@ -300,8 +300,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			if ok && src.Type == audiocore.SourceTypeAudioCard {
 				return p.quietHoursScheduler.IsSoundCardSuppressed()
 			}
-			suppressed := p.quietHoursScheduler.GetSuppressedStreams()
-			return suppressed[sourceID]
+			return p.quietHoursScheduler.IsStreamSuppressed(sourceID)
 		},
 	}
 	p.watchdog = audiocore.NewLivenessWatchdog(

@@ -37,14 +37,18 @@ const (
 	SignalQuietHoursStartSoundCard = "quiet_hours_start_soundcard"
 )
 
-// streamManager is the interface used by the scheduler to stop/start streams.
+// StreamManager is the interface used by the scheduler to stop/start streams.
 // Implemented by a wrapper around ffmpeg.Manager; can be replaced with a mock in tests.
 //
-// sourceID is the unique identifier for the stream (typically the stream URL).
+// sourceID is the unique runtime identifier for the stream (for example,
+// "rtsp_<hash>"). It is not necessarily the configured stream URL.
 // url is the stream URL. transport is the RTSP transport protocol (e.g., "tcp").
-type streamManager interface {
+type StreamManager interface {
 	// GetActiveStreamIDs returns the sourceIDs of all currently active streams.
 	GetActiveStreamIDs() []string
+
+	// GetActiveStreamURLs returns active sourceID -> configured stream URL.
+	GetActiveStreamURLs() map[string]string
 
 	// StopStream stops the stream identified by sourceID.
 	StopStream(sourceID string) error
@@ -92,12 +96,17 @@ type QuietHoursScheduler struct {
 
 	// getManager returns the stream manager used by Evaluate.
 	// Overridden in tests to inject a mock.
-	getManager func() streamManager
+	getManager func() StreamManager
 
 	// Track which streams are currently suppressed by quiet hours.
-	// Key is the stream sourceID (URL), value is true if currently suppressed.
+	// Key is the runtime stream sourceID, value is true if currently suppressed.
 	suppressed map[string]bool
-	mu         sync.Mutex
+
+	// Tracks configured stream URL -> runtime sourceID for streams stopped by
+	// quiet hours. Stopped streams are no longer active in the stream manager, so
+	// the scheduler must keep this mapping to restart the same sourceID later.
+	suppressedURLs map[string]string
+	mu             sync.Mutex
 
 	// Sound card suppression state.
 	soundCardSuppressed bool
@@ -119,18 +128,19 @@ func NewQuietHoursScheduler(cfg QuietHoursConfig) *QuietHoursScheduler {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &QuietHoursScheduler{
-		ctx:         ctx,
-		cancel:      cancel,
-		sunCalc:     cfg.SunCalc,
-		controlChan: cfg.ControlChan,
-		log:         log,
-		suppressed:  make(map[string]bool),
+		ctx:            ctx,
+		cancel:         cancel,
+		sunCalc:        cfg.SunCalc,
+		controlChan:    cfg.ControlChan,
+		log:            log,
+		suppressed:     make(map[string]bool),
+		suppressedURLs: make(map[string]string),
 	}
 }
 
 // SetStreamManager overrides the stream manager used by Evaluate.
 // Intended for testing; call before Start.
-func (s *QuietHoursScheduler) SetStreamManager(fn func() streamManager) {
+func (s *QuietHoursScheduler) SetStreamManager(fn func() StreamManager) {
 	s.getManager = fn
 }
 
@@ -203,25 +213,41 @@ func (s *QuietHoursScheduler) Evaluate() {
 	for _, id := range manager.GetActiveStreamIDs() {
 		activeStreams[id] = true
 	}
+	activeSourceIDByURL := make(map[string]string)
+	for sourceID, url := range manager.GetActiveStreamURLs() {
+		activeSourceIDByURL[url] = sourceID
+	}
 
 	// Phase 1: Determine actions under lock (no external calls).
 	var actions []streamAction
 	var soundCardSignal string // "" = no action
 
 	s.mu.Lock()
+	if s.suppressedURLs == nil {
+		s.suppressedURLs = make(map[string]string)
+	}
 
 	for _, stream := range settings.Realtime.RTSP.AllStreams() {
 		if !stream.IsEnabled() {
-			delete(s.suppressed, stream.URL)
+			if sourceID, ok := s.suppressedURLs[stream.URL]; ok {
+				delete(s.suppressed, sourceID)
+				delete(s.suppressedURLs, stream.URL)
+			}
 			continue
 		}
-		// Use URL as the sourceID (mirrors the old behaviour).
-		sourceID := stream.URL
+		activeSourceID, isActive := activeSourceIDByURL[stream.URL]
+		if !isActive && activeStreams[stream.URL] {
+			// Backward compatibility for tests or legacy managers that still use
+			// the URL as the sourceID and cannot expose sourceID -> URL metadata.
+			activeSourceID = stream.URL
+			isActive = true
+		}
+		suppressedSourceID, isSuppressed := s.suppressedURLs[stream.URL]
 
 		if !stream.QuietHours.Enabled {
-			if s.suppressed[sourceID] {
+			if isSuppressed {
 				actions = append(actions, streamAction{
-					sourceID:  sourceID,
+					sourceID:  suppressedSourceID,
 					url:       stream.URL,
 					name:      stream.Name,
 					transport: stream.Transport,
@@ -233,16 +259,16 @@ func (s *QuietHoursScheduler) Evaluate() {
 
 		inQuietHours := s.isInQuietHours(&stream.QuietHours, now)
 
-		if inQuietHours && activeStreams[sourceID] && !s.suppressed[sourceID] {
+		if inQuietHours && isActive && !s.suppressed[activeSourceID] {
 			actions = append(actions, streamAction{
-				sourceID: sourceID,
+				sourceID: activeSourceID,
 				url:      stream.URL,
 				name:     stream.Name,
 				stop:     true,
 			})
-		} else if !inQuietHours && s.suppressed[sourceID] {
+		} else if !inQuietHours && isSuppressed {
 			actions = append(actions, streamAction{
-				sourceID:  sourceID,
+				sourceID:  suppressedSourceID,
 				url:       stream.URL,
 				name:      stream.Name,
 				transport: stream.Transport,
@@ -252,13 +278,14 @@ func (s *QuietHoursScheduler) Evaluate() {
 	}
 
 	// Clean up suppressed entries for streams no longer in config.
-	configuredIDs := make(map[string]bool, len(settings.Realtime.RTSP.Streams))
+	configuredURLs := make(map[string]bool, len(settings.Realtime.RTSP.Streams))
 	for _, stream := range settings.Realtime.RTSP.EnabledStreams() {
-		configuredIDs[stream.URL] = true
+		configuredURLs[stream.URL] = true
 	}
-	for id := range s.suppressed {
-		if !configuredIDs[id] {
-			delete(s.suppressed, id)
+	for url, sourceID := range s.suppressedURLs {
+		if !configuredURLs[url] {
+			delete(s.suppressed, sourceID)
+			delete(s.suppressedURLs, url)
 		}
 	}
 
@@ -282,6 +309,7 @@ func (s *QuietHoursScheduler) Evaluate() {
 			} else {
 				s.mu.Lock()
 				s.suppressed[action.sourceID] = true
+				s.suppressedURLs[action.url] = action.sourceID
 				s.mu.Unlock()
 			}
 		} else {
@@ -295,6 +323,7 @@ func (s *QuietHoursScheduler) Evaluate() {
 			} else {
 				s.mu.Lock()
 				delete(s.suppressed, action.sourceID)
+				delete(s.suppressedURLs, action.url)
 				s.mu.Unlock()
 			}
 		}
@@ -479,14 +508,31 @@ func (s *QuietHoursScheduler) IsSoundCardSuppressed() bool {
 	return s.soundCardSuppressed
 }
 
-// GetSuppressedStreams returns a map of stream sourceIDs to their suppression state.
-// Only streams currently suppressed by quiet hours are included.
+// IsStreamSuppressed reports whether the given runtime sourceID is currently
+// suppressed by quiet hours.
+func (s *QuietHoursScheduler) IsStreamSuppressed(sourceID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.suppressed[sourceID]
+}
+
+// GetSuppressedStreams returns a map of stream URLs to their suppression state.
+// Only streams currently suppressed by quiet hours are included. The keys are
+// configured stream URLs when available, falling back to runtime sourceIDs for
+// legacy entries.
 func (s *QuietHoursScheduler) GetSuppressedStreams() map[string]bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	result := make(map[string]bool, len(s.suppressed))
+	reported := make(map[string]bool, len(s.suppressedURLs))
+	for url, sourceID := range s.suppressedURLs {
+		if s.suppressed[sourceID] {
+			result[url] = true
+			reported[sourceID] = true
+		}
+	}
 	for id, suppressed := range s.suppressed {
-		if suppressed {
+		if suppressed && !reported[id] {
 			result[id] = true
 		}
 	}
