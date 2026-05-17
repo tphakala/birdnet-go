@@ -35,6 +35,7 @@
   let Search = $state<Component | null>(null);
   let About = $state<Component | null>(null);
   let Help = $state<Component | null>(null);
+  let ReportBug = $state<Component | null>(null);
   let System = $state<Component | null>(null);
   let Settings = $state<Component | null>(null);
   let Notifications = $state<Component | null>(null);
@@ -124,6 +125,12 @@
     },
     { route: 'about', page: 'about', titleKey: 'navigation.about', component: 'about' },
     { route: 'help', page: 'help', titleKey: 'navigation.helpAndSupport', component: 'help' },
+    {
+      route: 'report-bug',
+      page: 'help/report-bug',
+      titleKey: 'navigation.reportBug',
+      component: 'report-bug',
+    },
     { route: 'system', page: 'system', titleKey: 'navigation.system', component: 'system' },
     { route: 'settings', page: 'settings', titleKey: 'navigation.settings', component: 'settings' },
   ];
@@ -196,6 +203,12 @@
           if (!Help) {
             const module = await import('./lib/desktop/views/Help.svelte');
             Help = module.default;
+          }
+          break;
+        case 'report-bug':
+          if (!ReportBug) {
+            const module = await import('./lib/desktop/views/ReportBug.svelte');
+            ReportBug = module.default;
           }
           break;
         case 'system':
@@ -307,6 +320,7 @@
     [uiPath('detections')]: findRouteConfig('detections'),
     [uiPath('about')]: findRouteConfig('about'),
     [uiPath('help')]: findRouteConfig('help'),
+    [uiPath('help', 'report-bug')]: findRouteConfig('report-bug'),
     [uiPath('system')]: findRouteConfig('system'),
     [uiPath('settings')]: findRouteConfig('settings'),
   });
@@ -585,6 +599,8 @@
       {@render renderRoute(About)}
     {:else if currentRoute === 'help'}
       {@render renderRoute(Help)}
+    {:else if currentRoute === 'report-bug'}
+      {@render renderRoute(ReportBug)}
     {:else if currentRoute === 'system'}
       {@render renderRoute(System)}
     {:else if currentRoute === 'settings'}

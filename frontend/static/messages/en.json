@@ -4718,5 +4718,47 @@
       "title": "Quick Links",
       "releases": "Release Notes"
     }
+  },
+  "reportBug": {
+    "title": "Report a Bug",
+    "subtitle": "Help us fix issues by providing the information we need",
+    "systemInfo": {
+      "title": "Your System Information",
+      "description": "This information helps identify your setup. Copy it into your bug report.",
+      "version": "Version",
+      "buildDate": "Build date",
+      "os": "Operating system",
+      "copy": "Copy to clipboard",
+      "copied": "Copied!"
+    },
+    "whatToInclude": {
+      "title": "What to Include in Your Report",
+      "description": "A good bug report helps us fix your issue quickly. Please include the following:",
+      "step1": {
+        "title": "Clear description of the problem",
+        "description": "What happened, what you expected to happen, and how to reproduce the issue."
+      },
+      "step2": {
+        "title": "Your installation method",
+        "description": "How you installed BirdNET-Go: install.sh script, Docker Compose, manual build, or other."
+      },
+      "step3": {
+        "title": "System information",
+        "description": "Copy the system details shown above, including your version, OS, and build date."
+      },
+      "step4": {
+        "title": "Support dump",
+        "description": "Generate and upload a support dump below. This captures logs and configuration that greatly speed up troubleshooting."
+      }
+    },
+    "supportDump": {
+      "title": "Generate Support Dump",
+      "description": "Uploading a support dump with your bug report greatly helps with troubleshooting and providing a fix. It captures your configuration and recent logs with sensitive data removed."
+    },
+    "openIssue": {
+      "title": "Open a GitHub Issue",
+      "description": "Once you have gathered the information above and generated a support dump, open an issue on GitHub to describe the problem.",
+      "button": "Open Issue on GitHub"
+    }
   }
 }

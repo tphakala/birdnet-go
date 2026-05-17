@@ -4718,5 +4718,47 @@
       "title": "Liens rapides",
       "releases": "Notes de version"
     }
+  },
+  "reportBug": {
+    "title": "Signaler un bug",
+    "subtitle": "Aidez-nous à corriger les problèmes en fournissant les informations nécessaires",
+    "systemInfo": {
+      "title": "Vos informations système",
+      "description": "Ces informations aident à identifier votre configuration. Copiez-les dans votre rapport de bug.",
+      "version": "Version",
+      "buildDate": "Date de compilation",
+      "os": "Système d'exploitation",
+      "copy": "Copier dans le presse-papiers",
+      "copied": "Copié !"
+    },
+    "whatToInclude": {
+      "title": "Que faut-il inclure dans votre rapport",
+      "description": "Un bon rapport de bug nous aide à résoudre votre problème rapidement. Veuillez inclure les éléments suivants :",
+      "step1": {
+        "title": "Description claire du problème",
+        "description": "Ce qui s'est passé, ce que vous attendiez et comment reproduire le problème."
+      },
+      "step2": {
+        "title": "Votre méthode d'installation",
+        "description": "Comment vous avez installé BirdNET-Go : script install.sh, Docker Compose, compilation manuelle ou autre."
+      },
+      "step3": {
+        "title": "Informations système",
+        "description": "Copiez les détails système affichés ci-dessus, y compris la version, le système d'exploitation et la date de compilation."
+      },
+      "step4": {
+        "title": "Rapport de support",
+        "description": "Générez et téléchargez un rapport de support ci-dessous. Il capture les journaux et la configuration qui accélèrent considérablement le diagnostic."
+      }
+    },
+    "supportDump": {
+      "title": "Générer un rapport de support",
+      "description": "Télécharger un rapport de support avec votre signalement aide considérablement au diagnostic. Il capture votre configuration et les journaux récents avec les données sensibles supprimées."
+    },
+    "openIssue": {
+      "title": "Ouvrir un ticket sur GitHub",
+      "description": "Une fois les informations ci-dessus rassemblées et le rapport de support généré, ouvrez un ticket sur GitHub pour décrire le problème.",
+      "button": "Ouvrir un ticket sur GitHub"
+    }
   }
 }

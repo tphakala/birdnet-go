@@ -79,11 +79,7 @@ Performance Optimizations:
   } from '@lucide/svelte';
   import { flyout } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
-  import {
-    GITHUB_REPO_URL,
-    GITHUB_ISSUES_URL,
-    GITHUB_DISCUSSIONS_URL,
-  } from '$lib/utils/externalUrls';
+  import { GITHUB_REPO_URL, GITHUB_DISCUSSIONS_URL } from '$lib/utils/externalUrls';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { resetDateToToday } from '$lib/utils/datePersistence';
   import LoginModal from '../components/modals/LoginModal.svelte';
@@ -252,6 +248,7 @@ Performance Optimizations:
     systemTerminal: actualRoute === '/ui/system/terminal',
     help: actualRoute.startsWith('/ui/help'),
     helpExact: actualRoute === '/ui/help',
+    helpReportBug: actualRoute === '/ui/help/report-bug',
     settings: actualRoute.startsWith('/ui/settings'),
     settingsAnalysis: actualRoute === '/ui/settings/analysis',
     settingsMain: actualRoute === '/ui/settings/main',
@@ -296,6 +293,7 @@ Performance Optimizations:
     search: onNavigate ? '/search' : '/ui/search',
     about: onNavigate ? '/about' : '/ui/about',
     help: onNavigate ? '/help' : '/ui/help',
+    helpReportBug: onNavigate ? '/help/report-bug' : '/ui/help/report-bug',
     systemOverview: onNavigate ? '/system' : '/ui/system',
     systemDatabase: onNavigate ? '/system/database' : '/ui/system/database',
     systemTerminal: onNavigate ? '/system/terminal' : '/ui/system/terminal',
@@ -860,17 +858,18 @@ Performance Optimizations:
                     >
                       <LifeBuoy class="size-4 shrink-0" />{t('navigation.helpAndSupport')}
                     </button>
-                    <a
-                      href={GITHUB_ISSUES_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150 text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover"
-                      aria-label={t('navigation.reportBugAriaLabel')}
+                    <button
+                      onclick={() => navigate(navigationUrls.helpReportBug)}
+                      class={cn(
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.helpReportBug
+                          ? 'menu-subitem-active'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                      )}
                     >
                       <Bug class="size-4 shrink-0" />
                       {t('navigation.reportBug')}
-                      <ExternalLink class="size-3 opacity-40 ml-auto" />
-                    </a>
+                    </button>
                     <a
                       href={GITHUB_DISCUSSIONS_URL}
                       target="_blank"
@@ -923,19 +922,20 @@ Performance Optimizations:
                   >
                     <LifeBuoy class="size-4 shrink-0" />{t('navigation.helpAndSupport')}
                   </button>
-                  <a
-                    href="https://github.com/tphakala/birdnet-go/issues/new/choose"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150 text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover"
-                    aria-label={t('navigation.reportBugAriaLabel')}
+                  <button
+                    onclick={() => navigate(navigationUrls.helpReportBug)}
+                    class={cn(
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.helpReportBug
+                        ? 'menu-subitem-active'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                    )}
                   >
                     <Bug class="size-4 shrink-0" />
                     {t('navigation.reportBug')}
-                    <ExternalLink class="size-3 opacity-40 ml-auto" />
-                  </a>
+                  </button>
                   <a
-                    href="https://github.com/tphakala/birdnet-go/discussions"
+                    href={GITHUB_DISCUSSIONS_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                     class="flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150 text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover"

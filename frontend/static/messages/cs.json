@@ -4718,5 +4718,47 @@
       "title": "Rychlé odkazy",
       "releases": "Poznámky k vydání"
     }
+  },
+  "reportBug": {
+    "title": "Nahlásit chybu",
+    "subtitle": "Pomozte nám opravit problémy poskytnutím potřebných informací",
+    "systemInfo": {
+      "title": "Informace o vašem systému",
+      "description": "Tyto informace pomáhají identifikovat vaše nastavení. Zkopírujte je do hlášení chyby.",
+      "version": "Verze",
+      "buildDate": "Datum sestavení",
+      "os": "Operační systém",
+      "copy": "Kopírovat do schránky",
+      "copied": "Zkopírováno!"
+    },
+    "whatToInclude": {
+      "title": "Co zahrnout do hlášení",
+      "description": "Dobré hlášení chyby nám pomůže rychle vyřešit váš problém. Uveďte prosím následující:",
+      "step1": {
+        "title": "Jasný popis problému",
+        "description": "Co se stalo, co jste očekávali a jak problém reprodukovat."
+      },
+      "step2": {
+        "title": "Způsob instalace",
+        "description": "Jak jste nainstalovali BirdNET-Go: skript install.sh, Docker Compose, ruční sestavení nebo jinak."
+      },
+      "step3": {
+        "title": "Systémové informace",
+        "description": "Zkopírujte systémové údaje zobrazené výše, včetně verze, OS a data sestavení."
+      },
+      "step4": {
+        "title": "Diagnostický balíček",
+        "description": "Vygenerujte a nahrajte diagnostický balíček níže. Zachytí logy a konfiguraci, které výrazně urychlí řešení problému."
+      }
+    },
+    "supportDump": {
+      "title": "Generovat diagnostický balíček",
+      "description": "Nahrání diagnostického balíčku k hlášení chyby výrazně pomáhá při řešení problémů. Zachytí vaši konfiguraci a nedávné logy s odstraněnými citlivými údaji."
+    },
+    "openIssue": {
+      "title": "Otevřít hlášení na GitHubu",
+      "description": "Jakmile shromáždíte výše uvedené informace a vygenerujete diagnostický balíček, otevřete hlášení na GitHubu a popište problém.",
+      "button": "Otevřít hlášení na GitHubu"
+    }
   }
 }

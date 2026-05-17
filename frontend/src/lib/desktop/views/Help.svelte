@@ -1,6 +1,5 @@
 <script lang="ts">
   import Card from '$lib/desktop/components/ui/Card.svelte';
-  import SupportDumpCard from '$lib/desktop/components/ui/SupportDumpCard.svelte';
   import {
     Bug,
     MessageCircleQuestion,
@@ -11,20 +10,14 @@
   } from '@lucide/svelte';
   import GithubIcon from '$lib/desktop/components/ui/GithubIcon.svelte';
   import { t } from '$lib/i18n';
+  import { navigation } from '$lib/stores/navigation.svelte';
   import {
     GITHUB_REPO_URL,
-    GITHUB_ISSUES_URL,
     GITHUB_DISCUSSIONS_URL,
     GITHUB_RELEASES_URL,
   } from '$lib/utils/externalUrls';
 
   const LICENSE_URL = 'https://creativecommons.org/licenses/by-nc-sa/4.0/';
-
-  let diagnosticsEl = $state<HTMLDivElement | null>(null);
-
-  function scrollToDiagnostics() {
-    diagnosticsEl?.scrollIntoView({ behavior: 'smooth' });
-  }
 </script>
 
 <div class="col-span-12 space-y-4">
@@ -51,25 +44,14 @@
       {t('help.reportBug.description')}
     </p>
 
-    <div class="mt-4 flex flex-wrap gap-3">
+    <div class="mt-4">
       <button
-        onclick={scrollToDiagnostics}
-        class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2"
-      >
-        <LifeBuoy class="size-4" />
-        {t('settings.support.sections.diagnostics.title')}
-      </button>
-      <a
-        href={GITHUB_ISSUES_URL}
-        target="_blank"
-        rel="noopener noreferrer"
+        onclick={() => navigation.navigate('/ui/help/report-bug')}
         class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:bg-[var(--color-primary-hover)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2"
-        aria-label={t('navigation.reportBugAriaLabel')}
       >
         <Bug class="size-4" />
         {t('navigation.reportBug')}
-        <ExternalLink class="size-3 opacity-60" />
-      </a>
+      </button>
     </div>
   </Card>
 
@@ -94,20 +76,7 @@
     </div>
   </Card>
 
-  <!-- Card 3: Diagnostics -->
-  <div bind:this={diagnosticsEl}>
-    <Card
-      title={t('settings.support.sections.diagnostics.title')}
-      className="bg-[var(--color-base-100)] shadow-sm"
-    >
-      <p class="text-[var(--color-base-content)] opacity-80 mb-4">
-        {t('help.diagnostics.description')}
-      </p>
-      <SupportDumpCard />
-    </Card>
-  </div>
-
-  <!-- Card 4: Quick Links -->
+  <!-- Card 3: Quick Links -->
   <Card title={t('help.quickLinks.title')} className="bg-[var(--color-base-100)] shadow-sm">
     <div class="space-y-3">
       <a

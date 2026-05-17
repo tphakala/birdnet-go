@@ -4718,5 +4718,47 @@
       "title": "Pikalinkit",
       "releases": "Julkaisutiedot"
     }
+  },
+  "reportBug": {
+    "title": "Ilmoita virheestä",
+    "subtitle": "Auta meitä korjaamaan ongelmia antamalla tarvittavat tiedot",
+    "systemInfo": {
+      "title": "Järjestelmätietosi",
+      "description": "Nämä tiedot auttavat tunnistamaan asennuksesi. Kopioi ne virheraporttiin.",
+      "version": "Versio",
+      "buildDate": "Käännöspäivä",
+      "os": "Käyttöjärjestelmä",
+      "copy": "Kopioi leikepöydälle",
+      "copied": "Kopioitu!"
+    },
+    "whatToInclude": {
+      "title": "Mitä raporttiin tulee sisällyttää",
+      "description": "Hyvä virheraportti auttaa meitä korjaamaan ongelmasi nopeasti. Sisällytä seuraavat tiedot:",
+      "step1": {
+        "title": "Selkeä kuvaus ongelmasta",
+        "description": "Mitä tapahtui, mitä odotit tapahtuvan ja miten ongelma toistetaan."
+      },
+      "step2": {
+        "title": "Asennustapasi",
+        "description": "Miten asensit BirdNET-Go:n: install.sh-skripti, Docker Compose, manuaalinen käännös tai muu."
+      },
+      "step3": {
+        "title": "Järjestelmätiedot",
+        "description": "Kopioi yllä näkyvät järjestelmätiedot, mukaan lukien versio, käyttöjärjestelmä ja käännöspäivä."
+      },
+      "step4": {
+        "title": "Tukipaketti",
+        "description": "Luo ja lataa tukipaketti alla. Se tallentaa lokit ja asetukset, jotka nopeuttavat merkittävästi vianmääritystä."
+      }
+    },
+    "supportDump": {
+      "title": "Luo tukipaketti",
+      "description": "Tukipaketin lataaminen virheraportin yhteydessä auttaa merkittävästi vianmäärityksessä. Se tallentaa asetuksesi ja viimeisimmät lokit arkaluontoiset tiedot poistettuna."
+    },
+    "openIssue": {
+      "title": "Avaa GitHub-raportti",
+      "description": "Kun olet kerännyt yllä olevat tiedot ja luonut tukipaketin, avaa raportti GitHubissa ongelman kuvaamiseksi.",
+      "button": "Avaa raportti GitHubissa"
+    }
   }
 }
