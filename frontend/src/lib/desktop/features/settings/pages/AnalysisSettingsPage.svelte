@@ -27,6 +27,7 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { downloadBlob } from '$lib/utils/fileHelpers';
   import type { CatalogEntry, DownloadProgress } from '$lib/types/models';
   import {
     fetchCatalog,
@@ -628,14 +629,7 @@
       }
 
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      downloadBlob(blob, filename);
 
       toastActions.success(t('settings.main.sections.rangeFilter.csvDownloaded'));
     } catch (err) {

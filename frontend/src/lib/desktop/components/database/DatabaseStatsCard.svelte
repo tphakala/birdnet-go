@@ -20,6 +20,7 @@
   import { connectionState } from '$lib/stores/connectionState.svelte';
   import { formatBytes } from '$lib/utils/formatters';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { downloadBlob } from '$lib/utils/fileHelpers';
   import { Database, Download, X } from '@lucide/svelte';
 
   interface DatabaseStats {
@@ -287,12 +288,7 @@
 
       // Trigger browser download
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, filename);
 
       // Reset state after successful download
       resetBackupState();

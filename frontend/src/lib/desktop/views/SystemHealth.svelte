@@ -17,7 +17,9 @@
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
+  import { copyToClipboard } from '$lib/utils/clipboard';
   import { getLocalDateString, getLocalTimeString } from '$lib/utils/date';
+  import { downloadBlob } from '$lib/utils/fileHelpers';
 
   type HealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown' | 'skipped';
   type HealthCategory =
@@ -154,43 +156,20 @@
   }
 
   async function copyReport() {
-    const text = buildTextReport();
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        const ok = document.execCommand('copy');
-        document.body.removeChild(textarea);
-        if (!ok) return;
-      }
-      copied = true;
-      if (copyTimer !== null) clearTimeout(copyTimer);
-      copyTimer = setTimeout(() => {
-        copied = false;
-        copyTimer = null;
-      }, 2000);
-    } catch {
-      // Clipboard access denied or unavailable
-    }
+    const ok = await copyToClipboard(buildTextReport());
+    if (!ok) return;
+    copied = true;
+    if (copyTimer !== null) clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => {
+      copied = false;
+      copyTimer = null;
+    }, 2000);
   }
 
   function downloadJSON() {
     if (!report) return;
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `health-report-${report.id?.slice(0, 8) ?? 'unknown'}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `health-report-${report.id?.slice(0, 8) ?? 'unknown'}.json`);
   }
 </script>
 

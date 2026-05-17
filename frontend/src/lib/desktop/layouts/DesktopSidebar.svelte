@@ -54,7 +54,6 @@ Performance Optimizations:
     Settings,
     LogOut,
     LogIn,
-    ChevronDown,
     ChevronsLeft,
     ChevronsRight,
     LineChart,
@@ -78,8 +77,9 @@ Performance Optimizations:
     ExternalLink,
     Activity,
   } from '@lucide/svelte';
-  import { flyout } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
+  import CollapsibleNavSection from './CollapsibleNavSection.svelte';
+  import type { NavItem } from './CollapsibleNavSection.svelte';
   import { GITHUB_REPO_URL, GITHUB_DISCUSSIONS_URL } from '$lib/utils/externalUrls';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { resetDateToToday } from '$lib/utils/datePersistence';
@@ -125,17 +125,8 @@ Performance Optimizations:
   let systemExpanded = $state(false);
   let helpExpanded = $state(false);
 
-  // Flyout state for collapsed mode
-  let analyticsFlyoutOpen = $state(false);
-  let settingsFlyoutOpen = $state(false);
-  let systemFlyoutOpen = $state(false);
-  let helpFlyoutOpen = $state(false);
-
-  // Flyout position (for fixed positioning to escape overflow container)
-  let analyticsFlyoutPosition = $state({ top: 0, left: 0 });
-  let settingsFlyoutPosition = $state({ top: 0, left: 0 });
-  let systemFlyoutPosition = $state({ top: 0, left: 0 });
-  let helpFlyoutPosition = $state({ top: 0, left: 0 });
+  // Single flyout state (mutual exclusion built-in)
+  let activeFlyout = $state<string | null>(null);
 
   // Tooltip state for fixed positioning (escapes overflow containers)
   let tooltipText = $state('');
@@ -159,71 +150,8 @@ Performance Optimizations:
     tooltipVisible = false;
   }
 
-  // Button refs for position calculation
-  let analyticsButtonRef = $state<HTMLButtonElement | null>(null);
-  let settingsButtonRef = $state<HTMLButtonElement | null>(null);
-  let systemButtonRef = $state<HTMLButtonElement | null>(null);
-  let helpButtonRef = $state<HTMLButtonElement | null>(null);
-
-  // Toggle flyout with position calculation
-  function toggleAnalyticsFlyout() {
-    hideTooltip(); // Hide tooltip when opening flyout
-    if (!analyticsFlyoutOpen && analyticsButtonRef) {
-      const rect = analyticsButtonRef.getBoundingClientRect();
-      analyticsFlyoutPosition = {
-        top: rect.top,
-        left: rect.right + 8, // 8px gap (ml-2)
-      };
-    }
-    analyticsFlyoutOpen = !analyticsFlyoutOpen;
-    settingsFlyoutOpen = false;
-    systemFlyoutOpen = false;
-    helpFlyoutOpen = false;
-  }
-
-  function toggleSettingsFlyout() {
-    hideTooltip(); // Hide tooltip when opening flyout
-    if (!settingsFlyoutOpen && settingsButtonRef) {
-      const rect = settingsButtonRef.getBoundingClientRect();
-      settingsFlyoutPosition = {
-        top: rect.top,
-        left: rect.right + 8, // 8px gap (ml-2)
-      };
-    }
-    settingsFlyoutOpen = !settingsFlyoutOpen;
-    analyticsFlyoutOpen = false;
-    systemFlyoutOpen = false;
-    helpFlyoutOpen = false;
-  }
-
-  function toggleSystemFlyout() {
-    hideTooltip(); // Hide tooltip when opening flyout
-    if (!systemFlyoutOpen && systemButtonRef) {
-      const rect = systemButtonRef.getBoundingClientRect();
-      systemFlyoutPosition = {
-        top: rect.top,
-        left: rect.right + 8, // 8px gap (ml-2)
-      };
-    }
-    systemFlyoutOpen = !systemFlyoutOpen;
-    analyticsFlyoutOpen = false;
-    settingsFlyoutOpen = false;
-    helpFlyoutOpen = false;
-  }
-
-  function toggleHelpFlyout() {
-    hideTooltip();
-    if (!helpFlyoutOpen && helpButtonRef) {
-      const rect = helpButtonRef.getBoundingClientRect();
-      helpFlyoutPosition = {
-        top: rect.top,
-        left: rect.right + 8,
-      };
-    }
-    helpFlyoutOpen = !helpFlyoutOpen;
-    analyticsFlyoutOpen = false;
-    settingsFlyoutOpen = false;
-    systemFlyoutOpen = false;
+  function toggleFlyout(sectionId: string) {
+    activeFlyout = activeFlyout === sectionId ? null : sectionId;
   }
 
   // Get collapsed state from store (using $ prefix for auto-subscription)
@@ -278,10 +206,7 @@ Performance Optimizations:
   function handleClickOutside(event: MouseEvent) {
     const target = event.target as HTMLElement;
     if (!target.closest('.flyout-container')) {
-      analyticsFlyoutOpen = false;
-      settingsFlyoutOpen = false;
-      systemFlyoutOpen = false;
-      helpFlyoutOpen = false;
+      activeFlyout = null;
     }
   }
 
@@ -312,15 +237,147 @@ Performance Optimizations:
     settingsUserInterface: onNavigate ? '/settings/userinterface' : '/ui/settings/userinterface',
   });
 
+  // Nav item definitions for collapsible sections
+  let analyticsItems: NavItem[] = $derived([
+    {
+      icon: LineChart,
+      label: t('analytics.title'),
+      url: navigationUrls.analytics,
+      routeKey: 'analyticsExact',
+    },
+    {
+      icon: Bird,
+      label: t('analytics.species.title'),
+      url: navigationUrls.analyticsSpecies,
+      routeKey: 'analyticsSpecies',
+    },
+    {
+      icon: TrendingUp,
+      label: t('analytics.advanced.title'),
+      url: navigationUrls.analyticsAdvanced,
+      routeKey: 'analyticsAdvanced',
+    },
+  ]);
+
+  let systemItems: NavItem[] = $derived([
+    {
+      icon: Monitor,
+      label: t('system.sections.overview'),
+      url: navigationUrls.systemOverview,
+      routeKey: 'systemOverview',
+    },
+    {
+      icon: Database,
+      label: t('system.sections.database'),
+      url: navigationUrls.systemDatabase,
+      routeKey: 'systemDatabase',
+    },
+    {
+      icon: Terminal,
+      label: t('system.sections.terminal'),
+      url: navigationUrls.systemTerminal,
+      routeKey: 'systemTerminal',
+    },
+    {
+      icon: Activity,
+      label: t('navigation.health'),
+      url: navigationUrls.systemHealth,
+      routeKey: 'systemHealth',
+    },
+  ]);
+
+  let helpItems: NavItem[] = $derived([
+    {
+      icon: LifeBuoy,
+      label: t('navigation.helpAndSupport'),
+      url: navigationUrls.help,
+      routeKey: 'helpExact',
+    },
+    {
+      icon: Bug,
+      label: t('navigation.reportBug'),
+      url: navigationUrls.helpReportBug,
+      routeKey: 'helpReportBug',
+    },
+    {
+      type: 'link',
+      icon: MessageCircleQuestion,
+      label: t('navigation.askQuestion'),
+      href: GITHUB_DISCUSSIONS_URL,
+      ariaLabel: t('navigation.askQuestionAriaLabel'),
+      trailingIcon: ExternalLink,
+    },
+  ]);
+
+  let settingsItems: NavItem[] = $derived([
+    {
+      icon: SlidersHorizontal,
+      label: t('settings.sections.node'),
+      url: navigationUrls.settingsMain,
+      routeKey: 'settingsMain',
+    },
+    {
+      icon: Paintbrush,
+      label: t('settings.sections.userinterface'),
+      url: navigationUrls.settingsUserInterface,
+      routeKey: 'settingsUserInterface',
+    },
+    {
+      icon: Volume2,
+      label: t('settings.sections.audio'),
+      url: navigationUrls.settingsAudio,
+      routeKey: 'settingsAudio',
+    },
+    {
+      icon: Brain,
+      label: t('settings.sections.analysis'),
+      url: navigationUrls.settingsAnalysis,
+      routeKey: 'settingsAnalysis',
+    },
+    {
+      icon: Bird,
+      label: t('settings.sections.species'),
+      url: navigationUrls.settingsSpecies,
+      routeKey: 'settingsSpecies',
+    },
+    {
+      icon: Filter,
+      label: t('settings.sections.filters'),
+      url: navigationUrls.settingsFilters,
+      routeKey: 'settingsFilters',
+    },
+    {
+      icon: Bell,
+      label: t('settings.sections.notifications'),
+      url: navigationUrls.settingsNotifications,
+      routeKey: 'settingsNotifications',
+    },
+    {
+      icon: Puzzle,
+      label: t('settings.sections.integration'),
+      url: navigationUrls.settingsIntegrations,
+      routeKey: 'settingsIntegrations',
+    },
+    {
+      icon: Shield,
+      label: t('settings.sections.security'),
+      url: navigationUrls.settingsSecurity,
+      routeKey: 'settingsSecurity',
+    },
+    {
+      icon: LifeBuoy,
+      label: t('settings.sections.support'),
+      url: navigationUrls.settingsSupport,
+      routeKey: 'settingsSupport',
+    },
+  ]);
+
   function navigate(url: string) {
     if (url === navigationUrls.dashboard) {
       resetDateToToday();
     }
     // Close flyouts on navigation
-    analyticsFlyoutOpen = false;
-    settingsFlyoutOpen = false;
-    systemFlyoutOpen = false;
-    helpFlyoutOpen = false;
+    activeFlyout = null;
     // Close the mobile drawer on navigation by unchecking the toggle.
     // Dispatch a synthetic event so Svelte's bind:checked stays in sync.
     const drawer = document.getElementById('my-drawer') as HTMLInputElement | null;
@@ -487,145 +544,23 @@ Performance Optimizations:
         {/if}
 
         <!-- Analytics (Collapsible) -->
-        <div class="flex flex-col relative flyout-container">
-          {#if isCollapsed}
-            <!-- Collapsed: Icon with flyout -->
-            <div class="relative">
-              <button
-                bind:this={analyticsButtonRef}
-                onclick={toggleAnalyticsFlyout}
-                onmouseenter={e =>
-                  !analyticsFlyoutOpen && showTooltip(e, t('navigation.analytics'))}
-                onmouseleave={hideTooltip}
-                class={cn(
-                  menuItemBase,
-                  menuItemCollapsed,
-                  routeCache.analytics
-                    ? 'text-[var(--color-primary)]'
-                    : 'text-[var(--color-base-content)]/80',
-                  'hover:text-[var(--color-base-content)] hover:menu-hover'
-                )}
-                aria-expanded={analyticsFlyoutOpen}
-                aria-label={t('navigation.analyticsSubmenu')}
-              >
-                <BarChart3 class="size-5 shrink-0" />
-              </button>
-            </div>
-            <!-- Flyout submenu (fixed positioning to escape overflow container) -->
-            {#if analyticsFlyoutOpen}
-              <div
-                in:flyout
-                out:flyout={{ duration: 100 }}
-                class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
-                style:top="{analyticsFlyoutPosition.top}px"
-                style:left="{analyticsFlyoutPosition.left}px"
-              >
-                <div
-                  class="px-3 py-2 border-b border-[var(--color-base-200)] font-medium text-sm text-[var(--color-base-content)]"
-                >
-                  {t('navigation.analytics')}
-                </div>
-                <div class="p-1 max-h-[calc(100vh-8rem)] overflow-y-auto">
-                  <button
-                    onclick={() => navigate(navigationUrls.analytics)}
-                    class={cn(
-                      'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.analyticsExact
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <LineChart class="size-4 shrink-0" />{t('analytics.title')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.analyticsSpecies)}
-                    class={cn(
-                      'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.analyticsSpecies
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Bird class="size-4 shrink-0" />{t('analytics.species.title')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.analyticsAdvanced)}
-                    class={cn(
-                      'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.analyticsAdvanced
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <TrendingUp class="size-4 shrink-0" />{t('analytics.advanced.title')}
-                  </button>
-                </div>
-              </div>
-            {/if}
-          {:else}
-            <!-- Expanded: Regular collapsible -->
-            <button
-              onclick={() => (analyticsExpanded = !analyticsExpanded)}
-              class={cn(
-                menuItemBase,
-                routeCache.analytics
-                  ? 'text-[var(--color-primary)]'
-                  : 'text-[var(--color-base-content)]/80',
-                'hover:text-[var(--color-base-content)] hover:menu-hover'
-              )}
-              aria-expanded={analyticsExpanded}
-            >
-              <BarChart3 class="size-5 shrink-0" />
-              <span class="flex-1">{t('navigation.analytics')}</span>
-              <ChevronDown
-                class={cn('size-4 shrink-0 transition-transform duration-200', {
-                  'rotate-180': analyticsExpanded,
-                })}
-              />
-            </button>
-
-            {#if analyticsExpanded}
-              <div
-                class="ml-4 pl-4 border-l-2 border-[var(--color-primary)] mt-1 flex flex-col gap-0.5"
-                style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
-              >
-                <button
-                  onclick={() => navigate(navigationUrls.analytics)}
-                  class={cn(
-                    'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                    routeCache.analyticsExact
-                      ? 'menu-subitem-active'
-                      : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                  )}
-                >
-                  <LineChart class="size-4 shrink-0" />{t('analytics.title')}
-                </button>
-                <button
-                  onclick={() => navigate(navigationUrls.analyticsSpecies)}
-                  class={cn(
-                    'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                    routeCache.analyticsSpecies
-                      ? 'menu-subitem-active'
-                      : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                  )}
-                >
-                  <Bird class="size-4 shrink-0" />{t('analytics.species.title')}
-                </button>
-                <button
-                  onclick={() => navigate(navigationUrls.analyticsAdvanced)}
-                  class={cn(
-                    'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                    routeCache.analyticsAdvanced
-                      ? 'menu-subitem-active'
-                      : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                  )}
-                >
-                  <TrendingUp class="size-4 shrink-0" />{t('analytics.advanced.title')}
-                </button>
-              </div>
-            {/if}
-          {/if}
-        </div>
+        <CollapsibleNavSection
+          icon={BarChart3}
+          label={t('navigation.analytics')}
+          ariaLabel={t('navigation.analyticsSubmenu')}
+          items={analyticsItems}
+          {isCollapsed}
+          expanded={analyticsExpanded}
+          routeActive={routeCache.analytics}
+          {routeCache}
+          onToggleExpanded={() => (analyticsExpanded = !analyticsExpanded)}
+          onNavigate={navigate}
+          {showTooltip}
+          {hideTooltip}
+          {activeFlyout}
+          sectionId="analytics"
+          onToggleFlyout={toggleFlyout}
+        />
 
         <!-- Search -->
         <div class="relative">
@@ -672,603 +607,61 @@ Performance Optimizations:
           <div class="my-2 border-t border-[var(--color-base-200)]/50"></div>
 
           <!-- System (Collapsible) -->
-          <div class="flex flex-col relative flyout-container">
-            {#if isCollapsed}
-              <!-- Collapsed: Icon with flyout -->
-              <div class="relative">
-                <button
-                  bind:this={systemButtonRef}
-                  onclick={toggleSystemFlyout}
-                  onmouseenter={e => !systemFlyoutOpen && showTooltip(e, t('navigation.system'))}
-                  onmouseleave={hideTooltip}
-                  class={cn(
-                    menuItemBase,
-                    menuItemCollapsed,
-                    routeCache.system
-                      ? 'text-[var(--color-primary)]'
-                      : 'text-[var(--color-base-content)]/80',
-                    'hover:text-[var(--color-base-content)] hover:menu-hover'
-                  )}
-                  aria-expanded={systemFlyoutOpen}
-                  aria-label={t('navigation.systemSubmenu')}
-                >
-                  <Cpu class="size-5 shrink-0" />
-                </button>
-              </div>
-              <!-- Flyout submenu (fixed positioning to escape overflow container) -->
-              {#if systemFlyoutOpen}
-                <div
-                  in:flyout
-                  out:flyout={{ duration: 100 }}
-                  class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
-                  style:top="{systemFlyoutPosition.top}px"
-                  style:left="{systemFlyoutPosition.left}px"
-                >
-                  <div
-                    class="px-3 py-2 border-b border-[var(--color-base-200)] font-medium text-sm text-[var(--color-base-content)]"
-                  >
-                    {t('navigation.system')}
-                  </div>
-                  <div class="p-1 max-h-[calc(100vh-8rem)] overflow-y-auto">
-                    <button
-                      onclick={() => navigate(navigationUrls.systemOverview)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.systemOverview
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Monitor class="size-4 shrink-0" />{t('system.sections.overview')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.systemDatabase)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.systemDatabase
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Database class="size-4 shrink-0" />{t('system.sections.database')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.systemTerminal)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.systemTerminal
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Terminal class="size-4 shrink-0" />{t('system.sections.terminal')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.systemHealth)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.systemHealth
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Activity class="size-4 shrink-0" />{t('navigation.health')}
-                    </button>
-                  </div>
-                </div>
-              {/if}
-            {:else}
-              <!-- Expanded: Regular collapsible -->
-              <button
-                onclick={() => (systemExpanded = !systemExpanded)}
-                class={cn(
-                  menuItemBase,
-                  routeCache.system
-                    ? 'text-[var(--color-primary)]'
-                    : 'text-[var(--color-base-content)]/80',
-                  'hover:text-[var(--color-base-content)] hover:menu-hover'
-                )}
-                aria-expanded={systemExpanded}
-              >
-                <Cpu class="size-5 shrink-0" />
-                <span class="flex-1">{t('navigation.system')}</span>
-                <ChevronDown
-                  class={cn('size-4 shrink-0 transition-transform duration-200', {
-                    'rotate-180': systemExpanded,
-                  })}
-                />
-              </button>
-
-              {#if systemExpanded}
-                <div
-                  class="ml-4 pl-4 border-l-2 border-[var(--color-primary)] mt-1 flex flex-col gap-0.5"
-                  style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
-                >
-                  <button
-                    onclick={() => navigate(navigationUrls.systemOverview)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.systemOverview
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Monitor class="size-4 shrink-0" />{t('system.sections.overview')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.systemDatabase)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.systemDatabase
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Database class="size-4 shrink-0" />{t('system.sections.database')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.systemTerminal)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.systemTerminal
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Terminal class="size-4 shrink-0" />{t('system.sections.terminal')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.systemHealth)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.systemHealth
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Activity class="size-4 shrink-0" />{t('navigation.health')}
-                  </button>
-                </div>
-              {/if}
-            {/if}
-          </div>
+          <CollapsibleNavSection
+            icon={Cpu}
+            label={t('navigation.system')}
+            ariaLabel={t('navigation.systemSubmenu')}
+            items={systemItems}
+            {isCollapsed}
+            expanded={systemExpanded}
+            routeActive={routeCache.system}
+            {routeCache}
+            onToggleExpanded={() => (systemExpanded = !systemExpanded)}
+            onNavigate={navigate}
+            {showTooltip}
+            {hideTooltip}
+            {activeFlyout}
+            sectionId="system"
+            onToggleFlyout={toggleFlyout}
+          />
 
           <!-- Help (Collapsible) -->
-          <div class="flex flex-col relative flyout-container">
-            {#if isCollapsed}
-              <!-- Collapsed: Icon with flyout -->
-              <div class="relative">
-                <button
-                  bind:this={helpButtonRef}
-                  onclick={toggleHelpFlyout}
-                  onmouseenter={e => !helpFlyoutOpen && showTooltip(e, t('navigation.help'))}
-                  onmouseleave={hideTooltip}
-                  class={cn(
-                    menuItemBase,
-                    menuItemCollapsed,
-                    routeCache.help
-                      ? 'text-[var(--color-primary)]'
-                      : 'text-[var(--color-base-content)]/80',
-                    'hover:text-[var(--color-base-content)] hover:menu-hover'
-                  )}
-                  aria-expanded={helpFlyoutOpen}
-                  aria-label={t('navigation.helpSubmenu')}
-                >
-                  <CircleHelp class="size-5 shrink-0" />
-                </button>
-              </div>
-              <!-- Flyout submenu -->
-              {#if helpFlyoutOpen}
-                <div
-                  in:flyout
-                  out:flyout={{ duration: 100 }}
-                  class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
-                  style:top="{helpFlyoutPosition.top}px"
-                  style:left="{helpFlyoutPosition.left}px"
-                >
-                  <div
-                    class="px-3 py-2 border-b border-[var(--color-base-200)] font-medium text-sm text-[var(--color-base-content)]"
-                  >
-                    {t('navigation.help')}
-                  </div>
-                  <div class="p-1 max-h-[calc(100vh-8rem)] overflow-y-auto">
-                    <button
-                      onclick={() => navigate(navigationUrls.help)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.helpExact
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <LifeBuoy class="size-4 shrink-0" />{t('navigation.helpAndSupport')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.helpReportBug)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.helpReportBug
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Bug class="size-4 shrink-0" />
-                      {t('navigation.reportBug')}
-                    </button>
-                    <a
-                      href={GITHUB_DISCUSSIONS_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150 text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover"
-                      aria-label={t('navigation.askQuestionAriaLabel')}
-                    >
-                      <MessageCircleQuestion class="size-4 shrink-0" />
-                      {t('navigation.askQuestion')}
-                      <ExternalLink class="size-3 opacity-40 ml-auto" />
-                    </a>
-                  </div>
-                </div>
-              {/if}
-            {:else}
-              <!-- Expanded: Regular collapsible -->
-              <button
-                onclick={() => (helpExpanded = !helpExpanded)}
-                class={cn(
-                  menuItemBase,
-                  routeCache.help
-                    ? 'text-[var(--color-primary)]'
-                    : 'text-[var(--color-base-content)]/80',
-                  'hover:text-[var(--color-base-content)] hover:menu-hover'
-                )}
-                aria-expanded={helpExpanded}
-              >
-                <CircleHelp class="size-5 shrink-0" />
-                <span class="flex-1">{t('navigation.help')}</span>
-                <ChevronDown
-                  class={cn('size-4 shrink-0 transition-transform duration-200', {
-                    'rotate-180': helpExpanded,
-                  })}
-                />
-              </button>
-
-              {#if helpExpanded}
-                <div
-                  class="ml-4 pl-4 border-l-2 mt-1 flex flex-col gap-0.5"
-                  style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
-                >
-                  <button
-                    onclick={() => navigate(navigationUrls.help)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.helpExact
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <LifeBuoy class="size-4 shrink-0" />{t('navigation.helpAndSupport')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.helpReportBug)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.helpReportBug
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Bug class="size-4 shrink-0" />
-                    {t('navigation.reportBug')}
-                  </button>
-                  <a
-                    href={GITHUB_DISCUSSIONS_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150 text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover"
-                    aria-label={t('navigation.askQuestionAriaLabel')}
-                  >
-                    <MessageCircleQuestion class="size-4 shrink-0" />
-                    {t('navigation.askQuestion')}
-                    <ExternalLink class="size-3 opacity-40 ml-auto" />
-                  </a>
-                </div>
-              {/if}
-            {/if}
-          </div>
+          <CollapsibleNavSection
+            icon={CircleHelp}
+            label={t('navigation.help')}
+            ariaLabel={t('navigation.helpSubmenu')}
+            items={helpItems}
+            {isCollapsed}
+            expanded={helpExpanded}
+            routeActive={routeCache.help}
+            {routeCache}
+            onToggleExpanded={() => (helpExpanded = !helpExpanded)}
+            onNavigate={navigate}
+            {showTooltip}
+            {hideTooltip}
+            {activeFlyout}
+            sectionId="help"
+            onToggleFlyout={toggleFlyout}
+          />
 
           <!-- Settings (Collapsible) -->
-          <div class="flex flex-col relative flyout-container">
-            {#if isCollapsed}
-              <!-- Collapsed: Icon with flyout -->
-              <div class="relative">
-                <button
-                  bind:this={settingsButtonRef}
-                  onclick={toggleSettingsFlyout}
-                  onmouseenter={e =>
-                    !settingsFlyoutOpen && showTooltip(e, t('navigation.settings'))}
-                  onmouseleave={hideTooltip}
-                  class={cn(
-                    menuItemBase,
-                    menuItemCollapsed,
-                    routeCache.settings
-                      ? 'text-[var(--color-primary)]'
-                      : 'text-[var(--color-base-content)]/80',
-                    'hover:text-[var(--color-base-content)] hover:menu-hover'
-                  )}
-                  aria-expanded={settingsFlyoutOpen}
-                  aria-label={t('navigation.settingsSubmenu')}
-                >
-                  <Settings class="size-5 shrink-0" />
-                </button>
-              </div>
-              <!-- Flyout submenu (fixed positioning to escape overflow container) -->
-              {#if settingsFlyoutOpen}
-                <div
-                  in:flyout
-                  out:flyout={{ duration: 100 }}
-                  class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
-                  style:top="{settingsFlyoutPosition.top}px"
-                  style:left="{settingsFlyoutPosition.left}px"
-                >
-                  <div
-                    class="px-3 py-2 border-b border-[var(--color-base-200)] font-medium text-sm text-[var(--color-base-content)]"
-                  >
-                    {t('navigation.settings')}
-                  </div>
-                  <div class="p-1 max-h-[calc(100vh-8rem)] overflow-y-auto">
-                    <button
-                      onclick={() => navigate(navigationUrls.settingsMain)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.settingsMain
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <SlidersHorizontal class="size-4 shrink-0" />{t('settings.sections.node')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.settingsUserInterface)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.settingsUserInterface
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Paintbrush class="size-4 shrink-0" />{t('settings.sections.userinterface')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.settingsAudio)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.settingsAudio
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Volume2 class="size-4 shrink-0" />{t('settings.sections.audio')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.settingsAnalysis)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.settingsAnalysis
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Brain class="size-4 shrink-0" />{t('settings.sections.analysis')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.settingsSpecies)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.settingsSpecies
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Bird class="size-4 shrink-0" />{t('settings.sections.species')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.settingsFilters)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.settingsFilters
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Filter class="size-4 shrink-0" />{t('settings.sections.filters')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.settingsNotifications)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.settingsNotifications
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Bell class="size-4 shrink-0" />{t('settings.sections.notifications')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.settingsIntegrations)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.settingsIntegrations
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Puzzle class="size-4 shrink-0" />{t('settings.sections.integration')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.settingsSecurity)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.settingsSecurity
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Shield class="size-4 shrink-0" />{t('settings.sections.security')}
-                    </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.settingsSupport)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.settingsSupport
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <LifeBuoy class="size-4 shrink-0" />{t('settings.sections.support')}
-                    </button>
-                  </div>
-                </div>
-              {/if}
-            {:else}
-              <!-- Expanded: Regular collapsible -->
-              <button
-                onclick={() => (settingsExpanded = !settingsExpanded)}
-                class={cn(
-                  menuItemBase,
-                  routeCache.settings
-                    ? 'text-[var(--color-primary)]'
-                    : 'text-[var(--color-base-content)]/80',
-                  'hover:text-[var(--color-base-content)] hover:menu-hover'
-                )}
-                aria-expanded={settingsExpanded}
-              >
-                <Settings class="size-5 shrink-0" />
-                <span class="flex-1">{t('navigation.settings')}</span>
-                <ChevronDown
-                  class={cn('size-4 shrink-0 transition-transform duration-200', {
-                    'rotate-180': settingsExpanded,
-                  })}
-                />
-              </button>
-
-              {#if settingsExpanded}
-                <div
-                  class="ml-4 pl-4 border-l-2 mt-1 flex flex-col gap-0.5"
-                  style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
-                >
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsMain)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.settingsMain
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <SlidersHorizontal class="size-4 shrink-0" />{t('settings.sections.node')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsUserInterface)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.settingsUserInterface
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Paintbrush class="size-4 shrink-0" />{t('settings.sections.userinterface')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsAudio)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.settingsAudio
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Volume2 class="size-4 shrink-0" />{t('settings.sections.audio')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsAnalysis)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.settingsAnalysis
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Brain class="size-4 shrink-0" />{t('settings.sections.analysis')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsSpecies)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.settingsSpecies
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Bird class="size-4 shrink-0" />{t('settings.sections.species')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsFilters)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.settingsFilters
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Filter class="size-4 shrink-0" />{t('settings.sections.filters')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsNotifications)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.settingsNotifications
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Bell class="size-4 shrink-0" />{t('settings.sections.notifications')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsIntegrations)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.settingsIntegrations
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Puzzle class="size-4 shrink-0" />{t('settings.sections.integration')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsSecurity)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.settingsSecurity
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Shield class="size-4 shrink-0" />{t('settings.sections.security')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsSupport)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.settingsSupport
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <LifeBuoy class="size-4 shrink-0" />{t('settings.sections.support')}
-                  </button>
-                </div>
-              {/if}
-            {/if}
-          </div>
+          <CollapsibleNavSection
+            icon={Settings}
+            label={t('navigation.settings')}
+            ariaLabel={t('navigation.settingsSubmenu')}
+            items={settingsItems}
+            {isCollapsed}
+            expanded={settingsExpanded}
+            routeActive={routeCache.settings}
+            {routeCache}
+            onToggleExpanded={() => (settingsExpanded = !settingsExpanded)}
+            onNavigate={navigate}
+            {showTooltip}
+            {hideTooltip}
+            {activeFlyout}
+            sectionId="settings"
+            onToggleFlyout={toggleFlyout}
+          />
         {/if}
       </div>
     </div>

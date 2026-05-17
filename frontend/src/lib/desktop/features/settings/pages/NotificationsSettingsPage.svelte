@@ -20,6 +20,7 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { downloadBlob } from '$lib/utils/fileHelpers';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
@@ -1245,12 +1246,7 @@
     try {
       const data = await exportAlertRules();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'alert-rules.json';
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, 'alert-rules.json');
       showRuleStatus(t('settings.alerts.status.exported'), 'success');
     } catch (err) {
       logger.error('Failed to export rules', err, { component: 'NotificationsSettingsPage' });
