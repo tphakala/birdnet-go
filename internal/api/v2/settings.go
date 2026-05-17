@@ -2147,7 +2147,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 func (c *Controller) sendReconfigActions(actions []string, debugEnabled bool) {
 	defer func() {
 		if r := recover(); r != nil {
-			GetLogger().Warn("Recovered from send on closed controlChan during shutdown",
+			c.logWarnIfEnabled("Recovered from send on closed controlChan during shutdown",
 				logger.Any("panic", r))
 		}
 	}()
