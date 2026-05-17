@@ -152,11 +152,11 @@ func (c *MigrationStatusCheck) Run(_ context.Context) health.Result {
 
 // DatabasePerformanceCheck measures a simple database query latency and reports degradation.
 type DatabasePerformanceCheck struct {
-	queryTimer func() (time.Duration, error)
+	queryTimer func(ctx context.Context) (time.Duration, error)
 }
 
 // NewDatabasePerformanceCheck creates a DatabasePerformanceCheck using the given latency probe.
-func NewDatabasePerformanceCheck(queryTimer func() (time.Duration, error)) *DatabasePerformanceCheck {
+func NewDatabasePerformanceCheck(queryTimer func(ctx context.Context) (time.Duration, error)) *DatabasePerformanceCheck {
 	return &DatabasePerformanceCheck{queryTimer: queryTimer}
 }
 
@@ -173,14 +173,14 @@ const warnQueryLatency = 100 * time.Millisecond
 const critQueryLatency = 500 * time.Millisecond
 
 // Run measures query latency and reports degradation.
-func (c *DatabasePerformanceCheck) Run(_ context.Context) health.Result {
+func (c *DatabasePerformanceCheck) Run(ctx context.Context) health.Result {
 	start := time.Now()
 
 	if c.queryTimer == nil {
 		return skippedResult(c.Name(), c.Category(), start)
 	}
 
-	elapsed, err := c.queryTimer()
+	elapsed, err := c.queryTimer(ctx)
 	if err != nil {
 		return health.Result{
 			Name:       c.Name(),

@@ -1529,7 +1529,7 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	}
 
 	// Get database stats from the datastore
-	stats, err := c.DS.GetDatabaseStats()
+	stats, err := c.DS.GetDatabaseStats(ctx.Request().Context())
 
 	// Handle errors first
 	isPartialStats := false

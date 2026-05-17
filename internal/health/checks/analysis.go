@@ -134,11 +134,11 @@ func (c *InferenceLatencyCheck) Run(_ context.Context) health.Result {
 
 // DetectionRateCheck monitors whether detections are occurring at expected intervals.
 type DetectionRateCheck struct {
-	getRecentCount func(hours int) (int, error)
+	getRecentCount func(ctx context.Context, hours int) (int, error)
 }
 
 // NewDetectionRateCheck creates a DetectionRateCheck using the given count provider.
-func NewDetectionRateCheck(getRecentCount func(hours int) (int, error)) *DetectionRateCheck {
+func NewDetectionRateCheck(getRecentCount func(ctx context.Context, hours int) (int, error)) *DetectionRateCheck {
 	return &DetectionRateCheck{getRecentCount: getRecentCount}
 }
 
@@ -149,15 +149,15 @@ func (c *DetectionRateCheck) Name() string { return "detection_rate" }
 func (c *DetectionRateCheck) Category() health.Category { return health.CategoryAnalysis }
 
 // Run checks recent detection counts for signs of stalled analysis.
-func (c *DetectionRateCheck) Run(_ context.Context) health.Result {
+func (c *DetectionRateCheck) Run(ctx context.Context) health.Result {
 	start := time.Now()
 
 	if c.getRecentCount == nil {
 		return skippedResult(c.Name(), c.Category(), start)
 	}
 
-	count6h, err6h := c.getRecentCount(6)
-	count24h, err24h := c.getRecentCount(24)
+	count6h, err6h := c.getRecentCount(ctx, 6)
+	count24h, err24h := c.getRecentCount(ctx, 24)
 
 	if err6h != nil || err24h != nil {
 		var errParts []string
