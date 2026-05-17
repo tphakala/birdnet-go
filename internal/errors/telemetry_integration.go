@@ -166,15 +166,13 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		return true
 	}
 
-	// Database operations frequently observe context.Canceled and
-	// context.DeadlineExceeded during graceful shutdown and request-timeout
-	// conditions (e.g. an HTTP client disconnects mid-query, or a caller's
-	// ctx.Done() fires while a long row iteration is in progress). These are
-	// not code bugs — the query layer correctly surfaces the cancellation to
-	// the caller, and the caller is expected to handle it. Suppressing here
-	// prevents hundreds of duplicate "[database] context canceled" events
-	// per day from drowning legitimate database errors.
-	if ee.Category == CategoryDatabase && isContextCancellation(ee.Err) {
+	// Database and system operations frequently observe context.Canceled and
+	// context.DeadlineExceeded during graceful shutdown and client-disconnect
+	// conditions (e.g. an HTTP client disconnects mid-query, or Sox/FFmpeg is
+	// killed when the requesting client navigates away). These are not code
+	// bugs; suppressing here prevents hundreds of duplicate events per day
+	// from drowning legitimate errors.
+	if (ee.Category == CategoryDatabase || ee.Category == CategorySystem) && isContextCancellation(ee.Err) {
 		return false
 	}
 
