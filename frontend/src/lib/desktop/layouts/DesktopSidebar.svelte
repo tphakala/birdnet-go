@@ -76,6 +76,7 @@ Performance Optimizations:
     Bug,
     MessageCircleQuestion,
     ExternalLink,
+    Activity,
   } from '@lucide/svelte';
   import { flyout } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
@@ -249,6 +250,7 @@ Performance Optimizations:
     help: actualRoute.startsWith('/ui/help'),
     helpExact: actualRoute === '/ui/help',
     helpReportBug: actualRoute === '/ui/help/report-bug',
+    helpSystemHealth: actualRoute === '/ui/help/system-health',
     settings: actualRoute.startsWith('/ui/settings'),
     settingsAnalysis: actualRoute === '/ui/settings/analysis',
     settingsMain: actualRoute === '/ui/settings/main',
@@ -294,6 +296,7 @@ Performance Optimizations:
     about: onNavigate ? '/about' : '/ui/about',
     help: onNavigate ? '/help' : '/ui/help',
     helpReportBug: onNavigate ? '/help/report-bug' : '/ui/help/report-bug',
+    helpSystemHealth: onNavigate ? '/help/system-health' : '/ui/help/system-health',
     systemOverview: onNavigate ? '/system' : '/ui/system',
     systemDatabase: onNavigate ? '/system/database' : '/ui/system/database',
     systemTerminal: onNavigate ? '/system/terminal' : '/ui/system/terminal',
@@ -870,6 +873,18 @@ Performance Optimizations:
                       <Bug class="size-4 shrink-0" />
                       {t('navigation.reportBug')}
                     </button>
+                    <button
+                      onclick={() => navigate(navigationUrls.helpSystemHealth)}
+                      class={cn(
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.helpSystemHealth
+                          ? 'menu-subitem-active'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                      )}
+                    >
+                      <Activity class="size-4 shrink-0" />
+                      {t('navigation.systemHealth')}
+                    </button>
                     <a
                       href={GITHUB_DISCUSSIONS_URL}
                       target="_blank"
@@ -933,6 +948,18 @@ Performance Optimizations:
                   >
                     <Bug class="size-4 shrink-0" />
                     {t('navigation.reportBug')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.helpSystemHealth)}
+                    class={cn(
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.helpSystemHealth
+                        ? 'menu-subitem-active'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                    )}
+                  >
+                    <Activity class="size-4 shrink-0" />
+                    {t('navigation.systemHealth')}
                   </button>
                   <a
                     href={GITHUB_DISCUSSIONS_URL}
