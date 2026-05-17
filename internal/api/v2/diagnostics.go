@@ -112,11 +112,11 @@ func (c *Controller) registerHealthChecks() {
 			avgMS = float64(totalUs) / float64(count) / 1000.0
 			// max used as p99 approximation; true p99 requires histogram data
 			p99MS = float64(maxUs) / 1000.0
-			overlap := c.currentSettings().BirdNET.Overlap
-			if overlap <= 0 {
-				overlap = 3.0 // full 3s analysis window when no overlap
+			stride := 3.0 - c.currentSettings().BirdNET.Overlap
+			if stride <= 0 {
+				stride = 3.0
 			}
-			windowMS = overlap * 1000.0
+			windowMS = stride * 1000.0
 			return avgMS, p99MS, windowMS
 		}),
 		checks.NewDetectionRateCheck(nil), // TODO: wire to datastore (PR 2)
