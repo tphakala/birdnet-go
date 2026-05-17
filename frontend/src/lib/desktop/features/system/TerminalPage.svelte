@@ -270,9 +270,16 @@
 
   function toggleFullscreen() {
     if (!cardElement) return;
-    // State is updated by the fullscreenchange listener — no eager assignment needed.
+    // State is updated by the fullscreenchange listener.
     if (!document.fullscreenElement) {
-      cardElement.requestFullscreen().catch(() => {});
+      if (typeof cardElement.requestFullscreen === 'function') {
+        cardElement.requestFullscreen().catch(() => {});
+      } else {
+        const el = cardElement as unknown as { webkitRequestFullscreen?: () => void };
+        if (typeof el.webkitRequestFullscreen === 'function') {
+          el.webkitRequestFullscreen();
+        }
+      }
     } else {
       document.exitFullscreen().catch(() => {});
     }
