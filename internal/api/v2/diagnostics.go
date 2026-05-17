@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -121,12 +122,12 @@ func (c *Controller) registerHealthChecks() {
 			windowMS = stride * 1000.0
 			return avgMS, p99MS, windowMS
 		}),
-		checks.NewDetectionRateCheck(func(hours int) (int, error) {
+		checks.NewDetectionRateCheck(func(ctx context.Context, hours int) (int, error) {
 			if c.DS == nil {
 				return 0, errors.NewStd("datastore unavailable")
 			}
 			since := time.Now().Add(-time.Duration(hours) * time.Hour)
-			return c.DS.CountDetectionsSince(since)
+			return c.DS.CountDetectionsSince(ctx, since)
 		}),
 		checks.NewQueueDepthCheck(func() (int, int) {
 			q := classifier.ResultsQueue
@@ -152,11 +153,11 @@ func (c *Controller) registerHealthChecks() {
 			}
 			return true, dbType + " (auto-migrated at startup)", nil
 		}),
-		checks.NewDatabasePerformanceCheck(func() (time.Duration, error) {
+		checks.NewDatabasePerformanceCheck(func(ctx context.Context) (time.Duration, error) {
 			if c.DS == nil {
 				return 0, errors.NewStd("datastore unavailable")
 			}
-			return c.DS.PingWithLatency()
+			return c.DS.PingWithLatency(ctx)
 		}),
 
 		// Network checks

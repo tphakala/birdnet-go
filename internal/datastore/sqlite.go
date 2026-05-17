@@ -623,7 +623,7 @@ func (s *SQLiteStore) SchemaVersion() string {
 // GetDatabaseStats returns basic runtime statistics about the SQLite database.
 // Returns partial stats with ErrDBNotConnected if the database is unreachable.
 // The Connected field in the returned stats indicates if the DB is reachable.
-func (s *SQLiteStore) GetDatabaseStats() (*DatabaseStats, error) {
+func (s *SQLiteStore) GetDatabaseStats(ctx context.Context) (*DatabaseStats, error) {
 	// Defensive guard for nil Settings (e.g., in custom test setups)
 	location := ""
 	if s.Settings != nil {
@@ -646,18 +646,18 @@ func (s *SQLiteStore) GetDatabaseStats() (*DatabaseStats, error) {
 		return stats, ErrDBNotConnected
 	}
 
-	if err := sqlDB.Ping(); err != nil {
+	if err := sqlDB.PingContext(ctx); err != nil {
 		return stats, ErrDBNotConnected
 	}
 	stats.Connected = true
 
 	// Get database size (ignore errors, size stays 0)
-	if size, sizeErr := s.getDatabaseSize(); sizeErr == nil {
+	if size, sizeErr := s.getDatabaseSize(ctx); sizeErr == nil {
 		stats.SizeBytes = size
 	}
 
 	// Get total detections (ignore errors, count stays 0)
-	if count, countErr := s.getTableRowCount("notes"); countErr == nil {
+	if count, countErr := s.getTableRowCount(ctx, "notes"); countErr == nil {
 		stats.TotalDetections = count
 	}
 

@@ -315,14 +315,16 @@ func (m *mockStore) DeleteExpiredNotificationHistory(before time.Time) (int64, e
 
 func (m *mockStore) SchemaVersion() string     { return datastore.SchemaVersionLegacy }
 func (m *mockStore) UpdateNameMaps(_ []string) {}
-func (m *mockStore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
+func (m *mockStore) GetDatabaseStats(_ context.Context) (*datastore.DatabaseStats, error) {
 	return &datastore.DatabaseStats{
 		Type:      "mock",
 		Connected: true,
 	}, nil
 }
-func (m *mockStore) PingWithLatency() (time.Duration, error)       { return 0, nil }
-func (m *mockStore) CountDetectionsSince(_ time.Time) (int, error) { return 0, nil }
+func (m *mockStore) PingWithLatency(_ context.Context) (time.Duration, error) { return 0, nil }
+func (m *mockStore) CountDetectionsSince(_ context.Context, _ time.Time) (int, error) {
+	return 0, nil
+}
 
 func (m *mockStore) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
 	return nil, nil

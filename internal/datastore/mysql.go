@@ -265,7 +265,7 @@ func (m *MySQLStore) SchemaVersion() string {
 // GetDatabaseStats returns basic runtime statistics about the MySQL database.
 // Returns partial stats with ErrDBNotConnected if the database is unreachable.
 // The Connected field in the returned stats indicates if the DB is reachable.
-func (m *MySQLStore) GetDatabaseStats() (*DatabaseStats, error) {
+func (m *MySQLStore) GetDatabaseStats(ctx context.Context) (*DatabaseStats, error) {
 	// Defensive guard for nil Settings (e.g., in custom test setups)
 	location := ""
 	if m.Settings != nil {
@@ -291,18 +291,18 @@ func (m *MySQLStore) GetDatabaseStats() (*DatabaseStats, error) {
 		return stats, ErrDBNotConnected
 	}
 
-	if err := sqlDB.Ping(); err != nil {
+	if err := sqlDB.PingContext(ctx); err != nil {
 		return stats, ErrDBNotConnected
 	}
 	stats.Connected = true
 
 	// Get database size (ignore errors, size stays 0)
-	if size, sizeErr := m.getDatabaseSize(); sizeErr == nil {
+	if size, sizeErr := m.getDatabaseSize(ctx); sizeErr == nil {
 		stats.SizeBytes = size
 	}
 
 	// Get total detections (ignore errors, count stays 0)
-	if count, countErr := m.getTableRowCount("notes"); countErr == nil {
+	if count, countErr := m.getTableRowCount(ctx, "notes"); countErr == nil {
 		stats.TotalDetections = count
 	}
 

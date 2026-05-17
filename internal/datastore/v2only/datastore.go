@@ -424,35 +424,34 @@ func (ds *Datastore) SchemaVersion() string {
 }
 
 // PingWithLatency executes SELECT 1 and returns the round-trip time.
-func (ds *Datastore) PingWithLatency() (time.Duration, error) {
+func (ds *Datastore) PingWithLatency(ctx context.Context) (time.Duration, error) {
 	db := ds.manager.DB()
 	if db == nil {
 		return 0, datastore.ErrDBNotConnected
 	}
 	start := time.Now()
 	var result int
-	if err := db.Raw("SELECT 1").Scan(&result).Error; err != nil {
+	if err := db.WithContext(ctx).Raw("SELECT 1").Scan(&result).Error; err != nil {
 		return 0, fmt.Errorf("database ping failed: %w", err)
 	}
 	return time.Since(start), nil
 }
 
 // CountDetectionsSince returns the number of detections recorded since the given time.
-func (ds *Datastore) CountDetectionsSince(since time.Time) (int, error) {
+func (ds *Datastore) CountDetectionsSince(ctx context.Context, since time.Time) (int, error) {
 	db := ds.manager.DB()
 	if db == nil {
 		return 0, datastore.ErrDBNotConnected
 	}
 	var count int64
-	if err := db.Model(&entities.Detection{}).Where("detected_at >= ?", since.Unix()).Count(&count).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&entities.Detection{}).Where("detected_at >= ?", since.Unix()).Count(&count).Error; err != nil {
 		return 0, fmt.Errorf("count detections failed: %w", err)
 	}
 	return int(count), nil
 }
 
 // GetDatabaseStats returns database statistics.
-func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
-	ctx := context.Background()
+func (ds *Datastore) GetDatabaseStats(ctx context.Context) (*datastore.DatabaseStats, error) {
 	count, err := ds.detection.CountAll(ctx)
 	if err != nil {
 		return nil, err
@@ -474,12 +473,12 @@ func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	if !ds.manager.IsMySQL() {
 		var pageCount, pageSize int64
 		db := ds.manager.DB()
-		db.Raw("PRAGMA page_count").Scan(&pageCount)
-		db.Raw("PRAGMA page_size").Scan(&pageSize)
+		db.WithContext(ctx).Raw("PRAGMA page_count").Scan(&pageCount)
+		db.WithContext(ctx).Raw("PRAGMA page_size").Scan(&pageSize)
 		stats.SizeBytes = pageCount * pageSize
 	} else {
 		db := ds.manager.DB()
-		db.Raw(`
+		db.WithContext(ctx).Raw(`
 			SELECT SUM(DATA_LENGTH + INDEX_LENGTH)
 			FROM information_schema.TABLES
 			WHERE TABLE_SCHEMA = DATABASE()

@@ -220,11 +220,11 @@ type Interface interface {
 	GetActiveNotificationHistory(after time.Time) ([]NotificationHistory, error)
 	DeleteExpiredNotificationHistory(before time.Time) (int64, error) // Returns count deleted
 	// Database stats method for runtime statistics
-	GetDatabaseStats() (*DatabaseStats, error)
+	GetDatabaseStats(ctx context.Context) (*DatabaseStats, error)
 	// PingWithLatency executes a trivial query (SELECT 1) and returns the round-trip time.
-	PingWithLatency() (time.Duration, error)
+	PingWithLatency(ctx context.Context) (time.Duration, error)
 	// CountDetectionsSince returns the number of detections recorded since the given time.
-	CountDetectionsSince(since time.Time) (int, error)
+	CountDetectionsSince(ctx context.Context, since time.Time) (int, error)
 	// SchemaVersion returns the datastore schema version ("legacy" or "v2").
 	SchemaVersion() string
 	// UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
@@ -258,25 +258,25 @@ type DataStore struct {
 }
 
 // PingWithLatency executes SELECT 1 and returns the round-trip time.
-func (ds *DataStore) PingWithLatency() (time.Duration, error) {
+func (ds *DataStore) PingWithLatency(ctx context.Context) (time.Duration, error) {
 	if ds.DB == nil {
 		return 0, ErrDBNotConnected
 	}
 	start := time.Now()
 	var result int
-	if err := ds.DB.Raw("SELECT 1").Scan(&result).Error; err != nil {
+	if err := ds.DB.WithContext(ctx).Raw("SELECT 1").Scan(&result).Error; err != nil {
 		return 0, fmt.Errorf("database ping failed: %w", err)
 	}
 	return time.Since(start), nil
 }
 
 // CountDetectionsSince returns the number of detections recorded since the given time.
-func (ds *DataStore) CountDetectionsSince(since time.Time) (int, error) {
+func (ds *DataStore) CountDetectionsSince(ctx context.Context, since time.Time) (int, error) {
 	if ds.DB == nil {
 		return 0, ErrDBNotConnected
 	}
 	var count int64
-	if err := ds.DB.Model(&Note{}).Where("begin_time >= ?", since).Count(&count).Error; err != nil {
+	if err := ds.DB.WithContext(ctx).Model(&Note{}).Where("begin_time >= ?", since).Count(&count).Error; err != nil {
 		return 0, fmt.Errorf("count detections failed: %w", err)
 	}
 	return int(count), nil

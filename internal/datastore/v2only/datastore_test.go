@@ -703,7 +703,7 @@ func TestV2OnlyDatastore_GetDatabaseStats(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get stats
-	stats, err := ds.GetDatabaseStats()
+	stats, err := ds.GetDatabaseStats(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "sqlite", stats.Type)
 	assert.Equal(t, int64(1), stats.TotalDetections)
