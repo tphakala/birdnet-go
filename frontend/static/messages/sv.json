@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Undermeny för analys",
     "settingsSubmenu": "Undermeny för inställningar",
     "systemSubmenu": "Undermeny för system",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Hjälp",
+    "helpSubmenu": "Hjälp-undermeny",
+    "helpAndSupport": "Hjälp och support",
+    "reportBug": "Rapportera bugg",
+    "askQuestion": "Ställ en fråga",
+    "reportBugAriaLabel": "Rapportera en bugg på GitHub (öppnas i nytt fönster)",
+    "askQuestionAriaLabel": "Ställ en fråga på GitHub Discussions (öppnas i nytt fönster)",
+    "viewOnGithubAriaLabel": "Visa BirdNET-Go på GitHub (öppnas i nytt fönster)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,67 @@
     "bannerMessage": "Konfigurationsändringar kräver en omstart:",
     "bannerAction": "Starta om nu",
     "restartFailed": "Det gick inte att starta om"
+  },
+  "help": {
+    "title": "Hjälp och support",
+    "subtitle": "Få hjälp, rapportera problem och anslut till gemenskapen",
+    "reportBug": {
+      "description": "Om du stöter på ett problem, generera först ett supportpaket för att samla systeminformation och loggar, öppna sedan en felrapport på GitHub."
+    },
+    "askQuestion": {
+      "description": "Har du en fråga om installation, funktioner eller användning? GitHub Discussions är det bästa stället att få hjälp från gemenskapen."
+    },
+    "diagnostics": {
+      "description": "Generera ett supportpaket för att hjälpa till med felsökning. Det samlar din systemkonfiguration och senaste loggar."
+    },
+    "quickLinks": {
+      "title": "Snabblänkar",
+      "releases": "Versionsanteckningar"
+    }
+  },
+  "reportBug": {
+    "title": "Rapportera bugg",
+    "subtitle": "Hjälp oss åtgärda problem genom att tillhandahålla nödvändig information",
+    "systemInfo": {
+      "title": "Din systeminformation",
+      "description": "Denna information hjälper till att identifiera din konfiguration. Kopiera den till din felrapport.",
+      "version": "Version",
+      "buildDate": "Byggnationsdatum",
+      "os": "Operativsystem",
+      "copy": "Kopiera till urklipp",
+      "copied": "Kopierat!",
+      "architecture": "Arkitektur",
+      "hardware": "Hårdvara",
+      "environment": "Miljö"
+    },
+    "whatToInclude": {
+      "title": "Vad din rapport bör innehålla",
+      "description": "En bra felrapport hjälper oss att lösa ditt problem snabbt. Inkludera gärna följande:",
+      "step1": {
+        "title": "Tydlig beskrivning av problemet",
+        "description": "Vad som hände, vad du förväntade dig och hur problemet kan återskapas."
+      },
+      "step2": {
+        "title": "Din installationsmetod",
+        "description": "Hur du installerade BirdNET-Go: install.sh-skript, Docker Compose, manuellt bygge eller annat."
+      },
+      "step3": {
+        "title": "Systeminformation",
+        "description": "Kopiera systemdetaljerna som visas ovan, inklusive version, operativsystem och byggnationsdatum."
+      },
+      "step4": {
+        "title": "Supportpaket",
+        "description": "Generera och ladda upp ett supportpaket nedan. Det samlar loggar och konfiguration som avsevärt snabbar på felsökningen."
+      }
+    },
+    "supportDump": {
+      "title": "Generera supportpaket",
+      "description": "Att ladda upp ett supportpaket med din felrapport underlättar avsevärt vid felsökning. Det samlar din konfiguration och senaste loggar med känsliga uppgifter borttagna."
+    },
+    "openIssue": {
+      "title": "Öppna ett GitHub-ärende",
+      "description": "När du har samlat informationen ovan och genererat ett supportpaket, öppna ett ärende på GitHub för att beskriva problemet.",
+      "button": "Öppna ärende på GitHub"
+    }
   }
 }

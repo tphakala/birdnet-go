@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Podmenu analityki",
     "settingsSubmenu": "Podmenu ustawień",
     "systemSubmenu": "Podmenu systemu",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Pomoc",
+    "helpSubmenu": "Podmenu pomocy",
+    "helpAndSupport": "Pomoc i wsparcie",
+    "reportBug": "Zgłoś błąd",
+    "askQuestion": "Zadaj pytanie",
+    "reportBugAriaLabel": "Zgłoś błąd na GitHubie (otwiera się w nowym oknie)",
+    "askQuestionAriaLabel": "Zadaj pytanie na GitHub Discussions (otwiera się w nowym oknie)",
+    "viewOnGithubAriaLabel": "Zobacz BirdNET-Go na GitHubie (otwiera się w nowym oknie)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,67 @@
     "bannerMessage": "Zmiany konfiguracji wymagają ponownego uruchomienia:",
     "bannerAction": "Uruchom ponownie teraz",
     "restartFailed": "Nie udało się zainicjować ponownego uruchomienia"
+  },
+  "help": {
+    "title": "Pomoc i wsparcie",
+    "subtitle": "Uzyskaj pomoc, zgłoś problemy i połącz się ze społecznością",
+    "reportBug": {
+      "description": "Jeśli napotkasz problem, najpierw wygeneruj pakiet wsparcia, aby przechwycić informacje o systemie i logi, a następnie otwórz zgłoszenie błędu na GitHubie."
+    },
+    "askQuestion": {
+      "description": "Masz pytanie dotyczące konfiguracji, funkcji lub użytkowania? Forum GitHub Discussions to najlepsze miejsce, aby uzyskać pomoc od społeczności."
+    },
+    "diagnostics": {
+      "description": "Wygeneruj pakiet wsparcia, aby pomóc w diagnozowaniu problemów. Przechwytuje konfigurację systemu i ostatnie logi."
+    },
+    "quickLinks": {
+      "title": "Szybkie linki",
+      "releases": "Informacje o wydaniu"
+    }
+  },
+  "reportBug": {
+    "title": "Zgłoś błąd",
+    "subtitle": "Pomóż nam naprawić problemy, dostarczając potrzebne informacje",
+    "systemInfo": {
+      "title": "Informacje o systemie",
+      "description": "Te informacje pomagają zidentyfikować twoją konfigurację. Skopiuj je do zgłoszenia błędu.",
+      "version": "Wersja",
+      "buildDate": "Data kompilacji",
+      "os": "System operacyjny",
+      "copy": "Kopiuj do schowka",
+      "copied": "Skopiowano!",
+      "architecture": "Architektura",
+      "hardware": "Sprzęt",
+      "environment": "Środowisko"
+    },
+    "whatToInclude": {
+      "title": "Co zawrzeć w zgłoszeniu",
+      "description": "Dobre zgłoszenie błędu pomaga nam szybko rozwiązać problem. Podaj następujące informacje:",
+      "step1": {
+        "title": "Jasny opis problemu",
+        "description": "Co się stało, czego oczekiwałeś i jak odtworzyć problem."
+      },
+      "step2": {
+        "title": "Metoda instalacji",
+        "description": "Jak zainstalowałeś BirdNET-Go: skrypt install.sh, Docker Compose, ręczna kompilacja lub inaczej."
+      },
+      "step3": {
+        "title": "Informacje o systemie",
+        "description": "Skopiuj szczegóły systemu wyświetlone powyżej, w tym wersję, system operacyjny i datę kompilacji."
+      },
+      "step4": {
+        "title": "Pakiet wsparcia",
+        "description": "Wygeneruj i prześlij pakiet wsparcia poniżej. Przechwytuje logi i konfigurację, które znacząco przyspieszają rozwiązywanie problemów."
+      }
+    },
+    "supportDump": {
+      "title": "Generuj pakiet wsparcia",
+      "description": "Przesłanie pakietu wsparcia ze zgłoszeniem błędu znacząco pomaga w diagnostyce. Przechwytuje konfigurację i ostatnie logi z usuniętymi danymi wrażliwymi."
+    },
+    "openIssue": {
+      "title": "Otwórz zgłoszenie na GitHubie",
+      "description": "Po zebraniu powyższych informacji i wygenerowaniu pakietu wsparcia, otwórz zgłoszenie na GitHubie, aby opisać problem.",
+      "button": "Otwórz zgłoszenie na GitHubie"
+    }
   }
 }

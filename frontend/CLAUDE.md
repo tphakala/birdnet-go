@@ -13,6 +13,7 @@
 - **NEVER use `any` type**
 - **NEVER create inline SVGs** - use `@lucide/svelte` icons
 - **NEVER use `toISOString()` for dates** - use `getLocalDateString()`
+- **NEVER use Secure Context APIs without fallback** - BirdNET-Go commonly runs on plain HTTP in home networks. `crypto.randomUUID()` and `navigator.clipboard` are undefined on non-HTTPS. Use `Math.random().toString(36).slice(2, 10)` for unique IDs. For clipboard, check `navigator.clipboard?.writeText` and fall back to textarea + `document.execCommand('copy')`
 - **Use D3.js for ALL charting/plotting** - unless specific requirement for custom approach
 - **Run `npm run check:all` before EVERY commit**
 

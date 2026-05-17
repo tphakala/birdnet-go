@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Undermenu for analyse",
     "settingsSubmenu": "Undermenu for indstillinger",
     "systemSubmenu": "Undermenu for system",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Hjælp",
+    "helpSubmenu": "Hjælp-undermenu",
+    "helpAndSupport": "Hjælp og support",
+    "reportBug": "Rapportér fejl",
+    "askQuestion": "Stil et spørgsmål",
+    "reportBugAriaLabel": "Rapportér en fejl på GitHub (åbner i nyt vindue)",
+    "askQuestionAriaLabel": "Stil et spørgsmål på GitHub Discussions (åbner i nyt vindue)",
+    "viewOnGithubAriaLabel": "Se BirdNET-Go på GitHub (åbner i nyt vindue)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,67 @@
     "bannerMessage": "Konfigurationsændringer kræver en genstart:",
     "bannerAction": "Genstart nu",
     "restartFailed": "Kunne ikke starte genstart"
+  },
+  "help": {
+    "title": "Hjælp og support",
+    "subtitle": "Få hjælp, rapportér problemer og forbind med fællesskabet",
+    "reportBug": {
+      "description": "Hvis du støder på et problem, skal du først generere en supportpakke for at indfange systeminfo og logfiler, og derefter åbne en fejlrapport på GitHub."
+    },
+    "askQuestion": {
+      "description": "Har du et spørgsmål om opsætning, funktioner eller brug? GitHub Discussions er det bedste sted at få hjælp fra fællesskabet."
+    },
+    "diagnostics": {
+      "description": "Generér en supportpakke for at hjælpe med fejlfinding. Den indfanger din systemkonfiguration og seneste logfiler."
+    },
+    "quickLinks": {
+      "title": "Hurtige links",
+      "releases": "Udgivelsesnoter"
+    }
+  },
+  "reportBug": {
+    "title": "Rapportér fejl",
+    "subtitle": "Hjælp os med at løse problemer ved at give de nødvendige oplysninger",
+    "systemInfo": {
+      "title": "Dine systemoplysninger",
+      "description": "Disse oplysninger hjælper med at identificere din opsætning. Kopiér dem til din fejlrapport.",
+      "version": "Version",
+      "buildDate": "Byggedato",
+      "os": "Operativsystem",
+      "copy": "Kopiér til udklipsholder",
+      "copied": "Kopieret!",
+      "architecture": "Arkitektur",
+      "hardware": "Hardware",
+      "environment": "Miljø"
+    },
+    "whatToInclude": {
+      "title": "Hvad din rapport skal indeholde",
+      "description": "En god fejlrapport hjælper os med at løse dit problem hurtigt. Inkludér venligst følgende:",
+      "step1": {
+        "title": "Klar beskrivelse af problemet",
+        "description": "Hvad der skete, hvad du forventede, og hvordan problemet kan genskabes."
+      },
+      "step2": {
+        "title": "Din installationsmetode",
+        "description": "Hvordan du installerede BirdNET-Go: install.sh-script, Docker Compose, manuel bygning eller andet."
+      },
+      "step3": {
+        "title": "Systemoplysninger",
+        "description": "Kopiér systemdetaljerne vist ovenfor, herunder version, OS og byggedato."
+      },
+      "step4": {
+        "title": "Supportpakke",
+        "description": "Generér og upload en supportpakke nedenfor. Den indfanger logfiler og konfiguration, der markant fremskynder fejlfinding."
+      }
+    },
+    "supportDump": {
+      "title": "Generér supportpakke",
+      "description": "Upload af en supportpakke med din fejlrapport hjælper markant med fejlfinding. Den indfanger din konfiguration og seneste logfiler med følsomme data fjernet."
+    },
+    "openIssue": {
+      "title": "Åbn en GitHub-sag",
+      "description": "Når du har samlet ovenstående oplysninger og genereret en supportpakke, åbn en sag på GitHub for at beskrive problemet.",
+      "button": "Åbn sag på GitHub"
+    }
   }
 }

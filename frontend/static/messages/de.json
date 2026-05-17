@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Analysen-Untermenü",
     "settingsSubmenu": "Einstellungen-Untermenü",
     "systemSubmenu": "System-Untermenü",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Hilfe",
+    "helpSubmenu": "Hilfe-Untermenü",
+    "helpAndSupport": "Hilfe & Support",
+    "reportBug": "Fehler melden",
+    "askQuestion": "Frage stellen",
+    "reportBugAriaLabel": "Einen Fehler auf GitHub melden (öffnet in neuem Fenster)",
+    "askQuestionAriaLabel": "Eine Frage in GitHub Discussions stellen (öffnet in neuem Fenster)",
+    "viewOnGithubAriaLabel": "BirdNET-Go auf GitHub ansehen (öffnet in neuem Fenster)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,67 @@
     "bannerMessage": "Konfigurationsänderungen erfordern einen Neustart:",
     "bannerAction": "Jetzt neu starten",
     "restartFailed": "Neustart konnte nicht eingeleitet werden"
+  },
+  "help": {
+    "title": "Hilfe & Support",
+    "subtitle": "Hilfe erhalten, Probleme melden und mit der Community verbinden",
+    "reportBug": {
+      "description": "Wenn Sie auf ein Problem stoßen, erstellen Sie zunächst ein Support-Paket mit Systeminformationen und Protokollen und eröffnen Sie dann einen Fehlerbericht auf GitHub."
+    },
+    "askQuestion": {
+      "description": "Haben Sie eine Frage zur Einrichtung, zu Funktionen oder zur Nutzung? Das GitHub Discussions Forum ist der beste Ort, um Hilfe von der Community zu erhalten."
+    },
+    "diagnostics": {
+      "description": "Erstellen Sie ein Support-Paket zur Fehlerdiagnose. Es erfasst Ihre Systemkonfiguration und aktuelle Protokolle."
+    },
+    "quickLinks": {
+      "title": "Schnellzugriff",
+      "releases": "Versionshinweise"
+    }
+  },
+  "reportBug": {
+    "title": "Fehler melden",
+    "subtitle": "Helfen Sie uns, Probleme zu beheben, indem Sie die benötigten Informationen bereitstellen",
+    "systemInfo": {
+      "title": "Ihre Systeminformationen",
+      "description": "Diese Informationen helfen bei der Identifizierung Ihrer Konfiguration. Kopieren Sie sie in Ihren Fehlerbericht.",
+      "version": "Version",
+      "buildDate": "Build-Datum",
+      "os": "Betriebssystem",
+      "copy": "In Zwischenablage kopieren",
+      "copied": "Kopiert!",
+      "architecture": "Architektur",
+      "hardware": "Hardware",
+      "environment": "Umgebung"
+    },
+    "whatToInclude": {
+      "title": "Was Ihr Bericht enthalten sollte",
+      "description": "Ein guter Fehlerbericht hilft uns, Ihr Problem schnell zu beheben. Bitte geben Sie Folgendes an:",
+      "step1": {
+        "title": "Klare Beschreibung des Problems",
+        "description": "Was passiert ist, was Sie erwartet haben und wie das Problem reproduziert werden kann."
+      },
+      "step2": {
+        "title": "Ihre Installationsmethode",
+        "description": "Wie Sie BirdNET-Go installiert haben: install.sh-Skript, Docker Compose, manueller Build oder anders."
+      },
+      "step3": {
+        "title": "Systeminformationen",
+        "description": "Kopieren Sie die oben angezeigten Systemdetails, einschließlich Version, Betriebssystem und Build-Datum."
+      },
+      "step4": {
+        "title": "Support-Paket",
+        "description": "Erstellen und laden Sie unten ein Support-Paket hoch. Es erfasst Protokolle und Konfigurationen, die die Fehlerbehebung erheblich beschleunigen."
+      }
+    },
+    "supportDump": {
+      "title": "Support-Paket erstellen",
+      "description": "Das Hochladen eines Support-Pakets mit Ihrem Fehlerbericht hilft erheblich bei der Fehlerbehebung. Es erfasst Ihre Konfiguration und aktuelle Protokolle mit entfernten sensiblen Daten."
+    },
+    "openIssue": {
+      "title": "GitHub-Issue erstellen",
+      "description": "Sobald Sie die obigen Informationen gesammelt und ein Support-Paket erstellt haben, eröffnen Sie ein Issue auf GitHub, um das Problem zu beschreiben.",
+      "button": "Issue auf GitHub erstellen"
+    }
   }
 }

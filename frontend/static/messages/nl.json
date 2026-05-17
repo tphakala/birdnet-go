@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Statistiek submenu",
     "settingsSubmenu": "Instellingen submenu",
     "systemSubmenu": "Systeemmenu",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Help",
+    "helpSubmenu": "Help-submenu",
+    "helpAndSupport": "Help en ondersteuning",
+    "reportBug": "Bug melden",
+    "askQuestion": "Stel een vraag",
+    "reportBugAriaLabel": "Meld een bug op GitHub (opent in nieuw venster)",
+    "askQuestionAriaLabel": "Stel een vraag op GitHub Discussions (opent in nieuw venster)",
+    "viewOnGithubAriaLabel": "Bekijk BirdNET-Go op GitHub (opent in nieuw venster)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,67 @@
     "bannerMessage": "Configuratiewijzigingen vereisen een herstart:",
     "bannerAction": "Nu herstarten",
     "restartFailed": "Kan herstart niet starten"
+  },
+  "help": {
+    "title": "Help en ondersteuning",
+    "subtitle": "Krijg hulp, meld problemen en maak verbinding met de community",
+    "reportBug": {
+      "description": "Als u een probleem tegenkomt, genereer dan eerst een ondersteuningspakket om systeeminformatie en logboeken vast te leggen en open vervolgens een bugrapport op GitHub."
+    },
+    "askQuestion": {
+      "description": "Heeft u een vraag over de installatie, functies of het gebruik? Het GitHub Discussions forum is de beste plek om hulp te krijgen van de community."
+    },
+    "diagnostics": {
+      "description": "Genereer een ondersteuningspakket om problemen te diagnosticeren. Het legt uw systeemconfiguratie en recente logboeken vast."
+    },
+    "quickLinks": {
+      "title": "Snelle links",
+      "releases": "Release-opmerkingen"
+    }
+  },
+  "reportBug": {
+    "title": "Bug melden",
+    "subtitle": "Help ons problemen op te lossen door de benodigde informatie te verstrekken",
+    "systemInfo": {
+      "title": "Uw systeeminformatie",
+      "description": "Deze informatie helpt bij het identificeren van uw configuratie. Kopieer deze naar uw bugrapport.",
+      "version": "Versie",
+      "buildDate": "Bouwdatum",
+      "os": "Besturingssysteem",
+      "copy": "Kopiëren naar klembord",
+      "copied": "Gekopieerd!",
+      "architecture": "Architectuur",
+      "hardware": "Hardware",
+      "environment": "Omgeving"
+    },
+    "whatToInclude": {
+      "title": "Wat u in uw rapport moet opnemen",
+      "description": "Een goed bugrapport helpt ons uw probleem snel op te lossen. Neem het volgende op:",
+      "step1": {
+        "title": "Duidelijke beschrijving van het probleem",
+        "description": "Wat er gebeurde, wat u verwachtte en hoe het probleem kan worden gereproduceerd."
+      },
+      "step2": {
+        "title": "Uw installatiemethode",
+        "description": "Hoe u BirdNET-Go heeft geïnstalleerd: install.sh-script, Docker Compose, handmatige build of anders."
+      },
+      "step3": {
+        "title": "Systeeminformatie",
+        "description": "Kopieer de hierboven getoonde systeemdetails, inclusief versie, besturingssysteem en bouwdatum."
+      },
+      "step4": {
+        "title": "Ondersteuningspakket",
+        "description": "Genereer en upload hieronder een ondersteuningspakket. Het legt logboeken en configuratie vast die het oplossen van problemen aanzienlijk versnellen."
+      }
+    },
+    "supportDump": {
+      "title": "Ondersteuningspakket genereren",
+      "description": "Het uploaden van een ondersteuningspakket bij uw bugrapport helpt aanzienlijk bij het oplossen van problemen. Het legt uw configuratie en recente logboeken vast met gevoelige gegevens verwijderd."
+    },
+    "openIssue": {
+      "title": "GitHub-issue openen",
+      "description": "Zodra u de bovenstaande informatie heeft verzameld en een ondersteuningspakket heeft gegenereerd, open een issue op GitHub om het probleem te beschrijven.",
+      "button": "Issue openen op GitHub"
+    }
   }
 }

@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Podponuka analytiky",
     "settingsSubmenu": "Podponuka nastavení",
     "systemSubmenu": "Podponuka systému",
-    "systemTerminal": "Terminál"
+    "systemTerminal": "Terminál",
+    "help": "Pomoc",
+    "helpSubmenu": "Podmenu pomoci",
+    "helpAndSupport": "Pomoc a podpora",
+    "reportBug": "Nahlásiť chybu",
+    "askQuestion": "Položiť otázku",
+    "reportBugAriaLabel": "Nahlásiť chybu na GitHube (otvorí sa v novom okne)",
+    "askQuestionAriaLabel": "Položiť otázku na GitHub Discussions (otvorí sa v novom okne)",
+    "viewOnGithubAriaLabel": "Zobraziť BirdNET-Go na GitHube (otvorí sa v novom okne)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,67 @@
     "bannerMessage": "Zmeny konfigurácie vyžadujú reštart:",
     "bannerAction": "Reštartovať teraz",
     "restartFailed": "Nepodarilo sa spustiť reštart"
+  },
+  "help": {
+    "title": "Pomoc a podpora",
+    "subtitle": "Získajte pomoc, nahláste problémy a spojte sa s komunitou",
+    "reportBug": {
+      "description": "Ak narazíte na problém, najprv vygenerujte diagnostický balíček na zachytenie systémových informácií a záznamov, potom otvorte hlásenie chyby na GitHube."
+    },
+    "askQuestion": {
+      "description": "Máte otázku ohľadom nastavenia, funkcií alebo používania? Fórum GitHub Discussions je najlepšie miesto na získanie pomoci od komunity."
+    },
+    "diagnostics": {
+      "description": "Vygenerujte diagnostický balíček na pomoc s riešením problémov. Zachytí konfiguráciu systému a posledné záznamy."
+    },
+    "quickLinks": {
+      "title": "Rýchle odkazy",
+      "releases": "Poznámky k vydaniu"
+    }
+  },
+  "reportBug": {
+    "title": "Nahlásiť chybu",
+    "subtitle": "Pomôžte nám opraviť problémy poskytnutím potrebných informácií",
+    "systemInfo": {
+      "title": "Informácie o vašom systéme",
+      "description": "Tieto informácie pomáhajú identifikovať vaše nastavenie. Skopírujte ich do hlásenia chyby.",
+      "version": "Verzia",
+      "buildDate": "Dátum zostavenia",
+      "os": "Operačný systém",
+      "copy": "Kopírovať do schránky",
+      "copied": "Skopírované!",
+      "architecture": "Architektúra",
+      "hardware": "Hardvér",
+      "environment": "Prostredie"
+    },
+    "whatToInclude": {
+      "title": "Čo zahrnúť do hlásenia",
+      "description": "Dobré hlásenie chyby nám pomôže rýchlo vyriešiť váš problém. Uveďte prosím nasledujúce:",
+      "step1": {
+        "title": "Jasný popis problému",
+        "description": "Čo sa stalo, čo ste očakávali a ako problém reprodukovať."
+      },
+      "step2": {
+        "title": "Spôsob inštalácie",
+        "description": "Ako ste nainštalovali BirdNET-Go: skript install.sh, Docker Compose, manuálne zostavenie alebo inak."
+      },
+      "step3": {
+        "title": "Systémové informácie",
+        "description": "Skopírujte systémové údaje zobrazené vyššie, vrátane verzie, OS a dátumu zostavenia."
+      },
+      "step4": {
+        "title": "Diagnostický balíček",
+        "description": "Vygenerujte a nahrajte diagnostický balíček nižšie. Zachytí záznamy a konfiguráciu, ktoré výrazne urýchlia riešenie problému."
+      }
+    },
+    "supportDump": {
+      "title": "Vygenerovať diagnostický balíček",
+      "description": "Nahranie diagnostického balíčka k hláseniu chyby výrazne pomáha pri riešení problémov. Zachytí vašu konfiguráciu a nedávne záznamy s odstránenými citlivými údajmi."
+    },
+    "openIssue": {
+      "title": "Otvoriť hlásenie na GitHube",
+      "description": "Keď zhromaždíte vyššie uvedené informácie a vygenerujete diagnostický balíček, otvorte hlásenie na GitHube a opíšte problém.",
+      "button": "Otvoriť hlásenie na GitHube"
+    }
   }
 }

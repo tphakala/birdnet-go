@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Sottomenu analisi",
     "settingsSubmenu": "Sottomenu impostazioni",
     "systemSubmenu": "Sottomenu sistema",
-    "systemTerminal": "Terminale"
+    "systemTerminal": "Terminale",
+    "help": "Aiuto",
+    "helpSubmenu": "Sottomenu aiuto",
+    "helpAndSupport": "Aiuto e supporto",
+    "reportBug": "Segnala un bug",
+    "askQuestion": "Fai una domanda",
+    "reportBugAriaLabel": "Segnala un bug su GitHub (si apre in una nuova finestra)",
+    "askQuestionAriaLabel": "Fai una domanda su GitHub Discussions (si apre in una nuova finestra)",
+    "viewOnGithubAriaLabel": "Visualizza BirdNET-Go su GitHub (si apre in una nuova finestra)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,67 @@
     "bannerMessage": "Le modifiche alla configurazione richiedono un riavvio:",
     "bannerAction": "Riavvia ora",
     "restartFailed": "Impossibile avviare il riavvio"
+  },
+  "help": {
+    "title": "Aiuto e supporto",
+    "subtitle": "Ottieni aiuto, segnala problemi e connettiti con la comunità",
+    "reportBug": {
+      "description": "Se riscontri un problema, genera prima un pacchetto di supporto per acquisire le informazioni di sistema e i log, poi apri una segnalazione bug su GitHub."
+    },
+    "askQuestion": {
+      "description": "Hai una domanda sulla configurazione, le funzionalità o l'utilizzo? Il forum GitHub Discussions è il posto migliore per ottenere aiuto dalla comunità."
+    },
+    "diagnostics": {
+      "description": "Genera un pacchetto di supporto per aiutare a diagnosticare i problemi. Acquisisce la configurazione del sistema e i log recenti."
+    },
+    "quickLinks": {
+      "title": "Link rapidi",
+      "releases": "Note di rilascio"
+    }
+  },
+  "reportBug": {
+    "title": "Segnala un bug",
+    "subtitle": "Aiutaci a risolvere i problemi fornendo le informazioni necessarie",
+    "systemInfo": {
+      "title": "Le tue informazioni di sistema",
+      "description": "Queste informazioni aiutano a identificare la tua configurazione. Copiale nella segnalazione.",
+      "version": "Versione",
+      "buildDate": "Data di build",
+      "os": "Sistema operativo",
+      "copy": "Copia negli appunti",
+      "copied": "Copiato!",
+      "architecture": "Architettura",
+      "hardware": "Hardware",
+      "environment": "Ambiente"
+    },
+    "whatToInclude": {
+      "title": "Cosa includere nella segnalazione",
+      "description": "Una buona segnalazione ci aiuta a risolvere il tuo problema rapidamente. Includi quanto segue:",
+      "step1": {
+        "title": "Descrizione chiara del problema",
+        "description": "Cosa è successo, cosa ti aspettavi e come riprodurre il problema."
+      },
+      "step2": {
+        "title": "Il tuo metodo di installazione",
+        "description": "Come hai installato BirdNET-Go: script install.sh, Docker Compose, build manuale o altro."
+      },
+      "step3": {
+        "title": "Informazioni di sistema",
+        "description": "Copia i dettagli di sistema mostrati sopra, inclusi versione, sistema operativo e data di build."
+      },
+      "step4": {
+        "title": "Pacchetto di supporto",
+        "description": "Genera e carica un pacchetto di supporto qui sotto. Cattura log e configurazione che velocizzano significativamente la risoluzione dei problemi."
+      }
+    },
+    "supportDump": {
+      "title": "Genera pacchetto di supporto",
+      "description": "Caricare un pacchetto di supporto con la segnalazione aiuta significativamente nella diagnosi. Cattura la configurazione e i log recenti con i dati sensibili rimossi."
+    },
+    "openIssue": {
+      "title": "Apri una segnalazione su GitHub",
+      "description": "Una volta raccolte le informazioni sopra e generato il pacchetto di supporto, apri una segnalazione su GitHub per descrivere il problema.",
+      "button": "Apri segnalazione su GitHub"
+    }
   }
 }
