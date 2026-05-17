@@ -47,6 +47,9 @@ const (
 	queryTypeHourly  = "hourly"
 	queryTypeSpecies = "species"
 	queryTypeSearch  = "search"
+
+	// Default sort order for non-hourly query types
+	sortByDateDesc = "date_desc"
 )
 
 // Regex to validate YYYY-MM-DD format and check for unwanted characters
@@ -614,7 +617,7 @@ func (p *detectionQueryParams) needsAdvancedRouting() bool {
 	}
 
 	if p.SortBy != "" {
-		if p.QueryType == queryTypeHourly || p.SortBy != "date_desc" {
+		if p.QueryType == queryTypeHourly || p.SortBy != sortByDateDesc {
 			return true
 		}
 	}
@@ -638,7 +641,7 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 		params.HourRange != "" || params.Verified != "" ||
 		params.Location != "" || params.Locked != "" ||
 		params.Date != "" || params.StartDate != "" || params.EndDate != "" ||
-		(params.SortBy != "" && params.SortBy != "date_desc")
+		(params.SortBy != "" && params.SortBy != sortByDateDesc)
 
 	// Resolve locale common names to scientific names before routing so every
 	// query type benefits without per-case duplication.
