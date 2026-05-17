@@ -111,7 +111,9 @@ func (d *ActionDispatcher) dispatchNotification(target, title, message string, r
 				logger.String("target", target),
 				logger.Uint64("rule_id", uint64(rule.ID)),
 				logger.Error(err))
-			d.telemetry.ReportDispatchFailed(target, err.Error())
+			if d.telemetry != nil {
+				d.telemetry.ReportDispatchFailed(target, err.Error())
+			}
 		}
 		return
 	}
@@ -127,7 +129,9 @@ func (d *ActionDispatcher) dispatchNotification(target, title, message string, r
 			logger.String("target", target),
 			logger.Uint64("rule_id", uint64(rule.ID)),
 			logger.Error(err))
-		d.telemetry.ReportDispatchFailed(target, err.Error())
+		if d.telemetry != nil {
+			d.telemetry.ReportDispatchFailed(target, err.Error())
+		}
 	}
 }
 
