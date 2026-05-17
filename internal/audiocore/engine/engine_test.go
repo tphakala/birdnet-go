@@ -496,3 +496,37 @@ func TestEngine_ReconfigureSource_ZeroAudioParams(t *testing.T) {
 	assert.Equal(t, defaultChannels, src.Channels,
 		"registry Channels should be defaulted after reconfigure")
 }
+
+// TestEngine_StartStream_ZeroBitDepthFallback verifies that StartStream
+// applies the defaultBitDepth fallback when the registry has zero BitDepth.
+// In practice this can't happen because AddSource always defaults, but
+// StartStream must be independently safe.
+func TestEngine_StartStream_ZeroBitDepthFallback(t *testing.T) {
+	t.Parallel()
+	eng, stop := newTestEngine(t)
+	defer stop()
+
+	cfg := &audiocore.SourceConfig{
+		ID:               "test_startstream_bitdepth",
+		DisplayName:      "StartStream BitDepth Test",
+		Type:             audiocore.SourceTypeRTSP,
+		ConnectionString: "rtsp://192.168.1.100/stream",
+		SampleRate:       48000,
+		BitDepth:         16,
+		Channels:         1,
+	}
+	require.NoError(t, eng.AddSource(cfg))
+
+	// Stop the stream started by AddSource so we can restart it.
+	require.NoError(t, eng.FFmpegManager().StopStream("test_startstream_bitdepth"))
+
+	// Manually zero out BitDepth in the registry to simulate an edge case.
+	eng.Registry().UpdateAudioParams("test_startstream_bitdepth", 48000, 0, 1)
+
+	// StartStream should not fail even with zero BitDepth in registry.
+	err := eng.StartStream("test_startstream_bitdepth", "rtsp://192.168.1.100/stream2", "")
+	require.NoError(t, err)
+
+	health := eng.FFmpegManager().AllStreamHealth()
+	assert.Contains(t, health, "test_startstream_bitdepth")
+}
