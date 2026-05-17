@@ -36,6 +36,7 @@
   let About = $state<Component | null>(null);
   let Help = $state<Component | null>(null);
   let ReportBug = $state<Component | null>(null);
+  let SystemHealth = $state<Component | null>(null);
   let System = $state<Component | null>(null);
   let Settings = $state<Component | null>(null);
   let Notifications = $state<Component | null>(null);
@@ -132,6 +133,12 @@
       component: 'report-bug',
     },
     { route: 'system', page: 'system', titleKey: 'navigation.system', component: 'system' },
+    {
+      route: 'system-health',
+      page: 'system/health',
+      titleKey: 'health.title',
+      component: 'system-health',
+    },
     { route: 'settings', page: 'settings', titleKey: 'navigation.settings', component: 'settings' },
   ];
 
@@ -209,6 +216,12 @@
           if (!ReportBug) {
             const module = await import('./lib/desktop/views/ReportBug.svelte');
             ReportBug = module.default;
+          }
+          break;
+        case 'system-health':
+          if (!SystemHealth) {
+            const module = await import('./lib/desktop/views/SystemHealth.svelte');
+            SystemHealth = module.default;
           }
           break;
         case 'system':
@@ -322,6 +335,7 @@
     [uiPath('help')]: findRouteConfig('help'),
     [uiPath('help', 'report-bug')]: findRouteConfig('report-bug'),
     [uiPath('system')]: findRouteConfig('system'),
+    [uiPath('system', 'health')]: findRouteConfig('system-health'),
     [uiPath('settings')]: findRouteConfig('settings'),
   });
 
@@ -377,6 +391,15 @@
 
     // Handle system and settings subpages
     if (UI_SYSTEM_PREFIX_RE.test(path)) {
+      const normalizedPath = path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
+      const exactMatch = pathToRouteMap.get(normalizedPath);
+      if (exactMatch) {
+        currentRoute = exactMatch.route;
+        currentPage = exactMatch.page;
+        pageTitleKey = exactMatch.titleKey;
+        if (exactMatch.component) loadComponent(exactMatch.component);
+        return;
+      }
       handleSubpageRouting(path, 'system', systemSubpages, 'pageTitle.systemNotAvailable');
       return;
     }
@@ -601,6 +624,8 @@
       {@render renderRoute(Help)}
     {:else if currentRoute === 'report-bug'}
       {@render renderRoute(ReportBug)}
+    {:else if currentRoute === 'system-health'}
+      {@render renderRoute(SystemHealth)}
     {:else if currentRoute === 'system'}
       {@render renderRoute(System)}
     {:else if currentRoute === 'settings'}

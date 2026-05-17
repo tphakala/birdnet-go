@@ -236,7 +236,8 @@
     "askQuestion": "Esitä kysymys",
     "reportBugAriaLabel": "Ilmoita virheestä GitHubissa (avautuu uuteen ikkunaan)",
     "askQuestionAriaLabel": "Esitä kysymys GitHub Discussions -foorumilla (avautuu uuteen ikkunaan)",
-    "viewOnGithubAriaLabel": "Näytä BirdNET-Go GitHubissa (avautuu uuteen ikkunaan)"
+    "viewOnGithubAriaLabel": "Näytä BirdNET-Go GitHubissa (avautuu uuteen ikkunaan)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4762,6 +4763,54 @@
       "title": "Avaa GitHub-raportti",
       "description": "Kun olet kerännyt yllä olevat tiedot ja luonut tukipaketin, avaa raportti GitHubissa ongelman kuvaamiseksi.",
       "button": "Avaa raportti GitHubissa"
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
+    "runDiagnostics": "Run Diagnostics",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
     }
   }
 }

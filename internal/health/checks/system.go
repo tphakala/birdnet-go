@@ -341,17 +341,12 @@ func (c *UptimeCheck) Run(_ context.Context) health.Result {
 
 	uptime := time.Since(*c.startTime)
 
-	const critThreshold = 5 * time.Minute
-	const warnThreshold = time.Hour
+	const warnThreshold = 5 * time.Minute
 
 	status := health.StatusHealthy
 	msg := fmt.Sprintf("Uptime OK (%.0f seconds)", uptime.Seconds())
 
-	switch {
-	case uptime < critThreshold:
-		status = health.StatusCritical
-		msg = fmt.Sprintf("Process started very recently (%.0f seconds ago), possible crash loop", uptime.Seconds())
-	case uptime < warnThreshold:
+	if uptime < warnThreshold {
 		status = health.StatusWarning
 		msg = fmt.Sprintf("Process started recently (%.0f seconds ago)", uptime.Seconds())
 	}
