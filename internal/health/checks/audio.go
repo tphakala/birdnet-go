@@ -233,15 +233,3 @@ func (c *CaptureBufferCheck) Category() health.Category { return health.Category
 func (c *CaptureBufferCheck) Run(_ context.Context) health.Result {
 	return skippedResult(c.Name(), c.Category(), time.Now())
 }
-
-// skippedResult is a helper that builds a StatusSkipped Result for checks without available data.
-func skippedResult(name string, category health.Category, start time.Time) health.Result {
-	return health.Result{
-		Name:       name,
-		Category:   category,
-		Status:     health.StatusSkipped,
-		Message:    "Metrics not yet available",
-		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
-		Timestamp:  time.Now(),
-	}
-}

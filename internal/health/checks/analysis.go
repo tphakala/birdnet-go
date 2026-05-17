@@ -143,6 +143,10 @@ func (c *DetectionRateCheck) Category() health.Category { return health.Category
 func (c *DetectionRateCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
+	if c.getRecentCount == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
 	count6h, err6h := c.getRecentCount(6)
 	count24h, err24h := c.getRecentCount(24)
 

@@ -3,7 +3,6 @@ package health
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 )
 
@@ -49,16 +48,6 @@ type Result struct {
 	Details    map[string]any `json:"details,omitempty"`
 	DurationMS float64        `json:"duration_ms"`
 	Timestamp  time.Time      `json:"timestamp"`
-}
-
-// MarshalJSON customizes JSON output for Result.
-func (r *Result) MarshalJSON() ([]byte, error) {
-	type Alias Result
-	return json.Marshal(&struct {
-		*Alias
-	}{
-		Alias: (*Alias)(r),
-	})
 }
 
 // Check is the interface all health checks implement.

@@ -57,7 +57,9 @@ func (c *DiskSpaceCheck) Run(_ context.Context) health.Result {
 	for _, p := range c.paths {
 		usage, err := disk.Usage(p)
 		if err != nil {
-			worst = health.StatusWarning
+			if health.StatusCritical != worst {
+				worst = health.StatusWarning
+			}
 			messages = append(messages, fmt.Sprintf("%s: unable to read (%v)", p, err))
 			continue
 		}

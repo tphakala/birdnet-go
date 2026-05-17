@@ -132,14 +132,7 @@ func (c *NotificationProvidersCheck) Category() health.Category { return health.
 
 // Run returns StatusSkipped because notification probe infrastructure is not yet available.
 func (c *NotificationProvidersCheck) Run(_ context.Context) health.Result {
-	return health.Result{
-		Name:       c.Name(),
-		Category:   c.Category(),
-		Status:     health.StatusSkipped,
-		Message:    "Probe infrastructure not yet available",
-		DurationMS: 0,
-		Timestamp:  time.Now(),
-	}
+	return skippedResult(c.Name(), c.Category(), time.Now())
 }
 
 // WeatherCheck verifies connectivity to the configured weather provider.

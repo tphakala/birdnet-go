@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -54,7 +53,6 @@ func (c *PathAccessCheck) Run(_ context.Context) health.Result {
 
 	for label, path := range c.paths {
 		access := "ok"
-		tmpPath := filepath.Join(path, ".health_check_tmp")
 		f, err := os.CreateTemp(path, ".health_check_tmp_*")
 		if err != nil {
 			access = "inaccessible"
@@ -63,7 +61,6 @@ func (c *PathAccessCheck) Run(_ context.Context) health.Result {
 			name := f.Name()
 			_ = f.Close()
 			_ = os.Remove(name)
-			_ = tmpPath // suppress unused warning
 		}
 		results = append(results, pathResult{Label: label, Path: path, Access: access})
 	}

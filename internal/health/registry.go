@@ -42,27 +42,7 @@ func (r *Registry) RunAll(ctx context.Context) []Result {
 	copy(checks, r.checks)
 	r.mu.RUnlock()
 
-	results := make([]Result, len(checks))
-	var wg sync.WaitGroup
-
-	for i, c := range checks {
-		wg.Add(1)
-		go func(idx int, check Check) {
-			defer wg.Done()
-			checkCtx, cancel := context.WithTimeout(ctx, DefaultTimeout)
-			defer cancel()
-			start := time.Now()
-			result := check.Run(checkCtx)
-			result.DurationMS = float64(time.Since(start).Microseconds()) / 1000.0
-			if result.Timestamp.IsZero() {
-				result.Timestamp = time.Now()
-			}
-			results[idx] = result
-		}(i, c)
-	}
-
-	wg.Wait()
-	return results
+	return runChecks(ctx, checks)
 }
 
 // RunCategory executes only checks matching the given category.
@@ -76,10 +56,15 @@ func (r *Registry) RunCategory(ctx context.Context, cat Category) []Result {
 	}
 	r.mu.RUnlock()
 
-	results := make([]Result, len(filtered))
+	return runChecks(ctx, filtered)
+}
+
+// runChecks executes the given checks in parallel with per-check timeout.
+func runChecks(ctx context.Context, checks []Check) []Result {
+	results := make([]Result, len(checks))
 	var wg sync.WaitGroup
 
-	for i, c := range filtered {
+	for i, c := range checks {
 		wg.Add(1)
 		go func(idx int, check Check) {
 			defer wg.Done()

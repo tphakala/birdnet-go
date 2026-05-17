@@ -74,9 +74,7 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewInferenceLatencyCheck(func() (float64, float64, float64) {
 			return 0, 0, 0 // TODO: wire to actual inference stats
 		}),
-		checks.NewDetectionRateCheck(func(hours int) (int, error) {
-			return 0, fmt.Errorf("not yet wired") // TODO: wire to datastore
-		}),
+		checks.NewDetectionRateCheck(nil), // TODO: wire to datastore
 		checks.NewQueueDepthCheck(func() (int, int) {
 			return 0, 100 // TODO: wire to actual queue
 		}),
@@ -99,9 +97,7 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewMigrationStatusCheck(func() (bool, string, error) {
 			return true, "current", nil // TODO: wire to migration checker
 		}),
-		checks.NewDatabasePerformanceCheck(func() (time.Duration, error) {
-			return 0, fmt.Errorf("not yet wired") // TODO: wire to datastore
-		}),
+		checks.NewDatabasePerformanceCheck(nil), // TODO: wire to datastore
 
 		// Network checks
 		checks.NewMQTTCheck(

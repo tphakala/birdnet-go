@@ -37,7 +37,11 @@ func (c *RecentErrorsCheck) Category() health.Category { return health.CategoryL
 func (c *RecentErrorsCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
-	since := time.Now().Add(-recentErrorWindow)
+	if c.errorBuffer.Count() == 0 {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	since := start.Add(-recentErrorWindow)
 	count := c.errorBuffer.CountSince(since)
 
 	status := health.StatusHealthy
@@ -94,10 +98,13 @@ func (c *ErrorTrendCheck) Category() health.Category { return health.CategoryLog
 // Run compares recent versus previous error counts and warns on an increasing trend.
 func (c *ErrorTrendCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
-	now := time.Now()
 
-	midpoint := now.Add(-trendHalfWindow)
-	periodStart := now.Add(-2 * trendHalfWindow)
+	if c.errorBuffer.Count() == 0 {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	midpoint := start.Add(-trendHalfWindow)
+	periodStart := start.Add(-2 * trendHalfWindow)
 
 	recent := c.errorBuffer.CountSince(midpoint)
 	total := c.errorBuffer.CountSince(periodStart)
@@ -153,6 +160,10 @@ func (c *CriticalEventsCheck) Category() health.Category { return health.Categor
 // Run scans recent log entries for fatal or panic-level events and fails if any are found.
 func (c *CriticalEventsCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
+
+	if c.errorBuffer.Count() == 0 {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
 
 	entries := c.errorBuffer.Recent(criticalEventLookback)
 

@@ -168,6 +168,10 @@ const critQueryLatency = 500 * time.Millisecond
 func (c *DatabasePerformanceCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
+	if c.queryTimer == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
 	elapsed, err := c.queryTimer()
 	if err != nil {
 		return health.Result{
