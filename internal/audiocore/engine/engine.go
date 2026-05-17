@@ -462,6 +462,10 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 	}
 	// File-type sources: registered + buffers allocated, but no long-running capture.
 
+	// 6. Sync defaulted audio params back to registry so downstream consumers
+	// see the effective values (not the raw config which may have been zero).
+	e.registry.UpdateAudioParams(sourceID, sampleRate, cfg.BitDepth, channels)
+
 	e.logger.Info("source added",
 		logger.String("source_id", sourceID),
 		logger.String("type", cfg.Type.String()),
