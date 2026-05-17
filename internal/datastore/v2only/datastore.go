@@ -1048,7 +1048,7 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		return nil, err
 	}
 	startTime := t.Unix()
-	endTime := t.Add(24 * time.Hour).Unix()
+	endTime := t.AddDate(0, 0, 1).Unix()
 
 	// Use provided limit or fall back to config value
 	reportCount := limit
@@ -1150,7 +1150,7 @@ func (ds *Datastore) GetHourlyOccurrences(date, commonName string, minConfidence
 	}
 
 	startTime := t.Unix()
-	endTime := t.Add(24 * time.Hour).Unix()
+	endTime := t.AddDate(0, 0, 1).Unix()
 
 	// Single query with IN clause for all label IDs (multi-model support)
 	return ds.detection.GetHourlyOccurrences(ctx, labelIDs, startTime, endTime, minConfidenceNormalized)
@@ -1301,7 +1301,7 @@ func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int,
 			} else {
 				// No hour specified - search the full day (matches legacy behavior)
 				start := t.Unix()
-				end := t.Add(24 * time.Hour).Unix()
+				end := t.AddDate(0, 0, 1).Unix()
 				startTime = &start
 				endTime = &end
 			}
@@ -1869,7 +1869,7 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 			} else {
 				// No hour specified - search the full day (matches legacy behavior)
 				start := t.Unix()
-				end := t.Add(24 * time.Hour).Unix()
+				end := t.AddDate(0, 0, 1).Unix()
 				startTime = &start
 				endTime = &end
 			}
@@ -2309,7 +2309,7 @@ func (ds *Datastore) parseDateRange(startDate, endDate string) (start, end int64
 			return 0, 0, fmt.Errorf("invalid end date format: %w", parseErr)
 		}
 		// End time is exclusive (start of next day) - use with < in queries
-		end = t.Add(24 * time.Hour).Unix()
+		end = t.AddDate(0, 0, 1).Unix()
 	}
 
 	// When no end date specified, use max int64 to include all records.
