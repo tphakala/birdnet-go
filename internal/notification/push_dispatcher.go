@@ -284,6 +284,12 @@ func (d *pushDispatcher) runDispatchLoop(ctx context.Context, ch <-chan *Notific
 					logger.String("type", string(notif.Type)))
 				continue
 			}
+			if notif.DeliveryTarget == DeliveryTargetBell {
+				d.log.Debug("skipping bell-only notification in dispatch loop",
+					logger.String("operation", "dispatch_loop"),
+					logger.String("notification_id", notif.ID))
+				continue
+			}
 			d.log.Debug("notification received in dispatch loop, dispatching to providers",
 				logger.String("operation", "dispatch_loop"),
 				logger.String("notification_id", notif.ID),
@@ -308,6 +314,13 @@ func (d *pushDispatcher) startHealthChecker(ctx context.Context) {
 }
 
 func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
+	if notif.DeliveryTarget == DeliveryTargetBell {
+		d.log.Debug("skipping bell-only notification in push dispatch",
+			logger.String("operation", "dispatch"),
+			logger.String("notification_id", notif.ID))
+		return
+	}
+
 	matchedCount := 0
 	for i := range d.providers {
 		ep := &d.providers[i]

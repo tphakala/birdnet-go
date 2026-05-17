@@ -1274,3 +1274,74 @@ func TestIsPrivateOrLocalURL(t *testing.T) {
 		})
 	}
 }
+
+func newTestDispatcher(t *testing.T, fp *fakeProvider) *pushDispatcher {
+	t.Helper()
+	log := logger.NewSlogLogger(nil, logger.LogLevelError, nil)
+	return &pushDispatcher{
+		providers: []enhancedProvider{
+			{prov: fp, name: fp.name},
+		},
+		log:               log,
+		enabled:           true,
+		maxConcurrentJobs: defaultMaxConcurrentJobs,
+		concurrencySem:    semaphore.NewWeighted(defaultMaxConcurrentJobs),
+		errorSuppressor:   NewErrorSuppressor(log, nil),
+	}
+}
+
+func TestPushDispatcher_SkipsBellOnlyNotification(t *testing.T) {
+	t.Parallel()
+
+	fp := newFakeProvider("test-push", true)
+	d := newTestDispatcher(t, fp)
+
+	bellNotif := NewNotification(TypeDetection, PriorityHigh, "Bell Only", "Should be skipped").
+		WithDeliveryTarget(DeliveryTargetBell)
+
+	d.dispatch(t.Context(), bellNotif)
+
+	select {
+	case <-fp.recvCh:
+		require.Fail(t, "bell-only notification should not reach push provider")
+	default:
+		// expected: dispatch returns synchronously for bell-only, nothing received
+	}
+}
+
+func TestPushDispatcher_ForwardsPushNotification(t *testing.T) {
+	t.Parallel()
+
+	fp := newFakeProvider("test-push", true)
+	d := newTestDispatcher(t, fp)
+
+	pushNotif := NewNotification(TypeDetection, PriorityHigh, "Push Target", "Should be forwarded").
+		WithDeliveryTarget(DeliveryTargetPush)
+
+	d.dispatch(t.Context(), pushNotif)
+
+	select {
+	case received := <-fp.recvCh:
+		assert.Equal(t, "Push Target", received.Title)
+	case <-time.After(500 * time.Millisecond):
+		require.Fail(t, "push-targeted notification should reach push provider")
+	}
+}
+
+func TestPushDispatcher_ForwardsNoTargetNotification(t *testing.T) {
+	t.Parallel()
+
+	fp := newFakeProvider("test-push", true)
+	d := newTestDispatcher(t, fp)
+
+	notif := NewNotification(TypeDetection, PriorityHigh, "No Target", "Backwards compat")
+
+	d.dispatch(t.Context(), notif)
+
+	select {
+	case received := <-fp.recvCh:
+		assert.Equal(t, "No Target", received.Title)
+	case <-time.After(500 * time.Millisecond):
+		require.Fail(t, "no-target notification should reach push provider (backwards compat)")
+	}
+}
