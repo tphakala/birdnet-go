@@ -42,9 +42,6 @@ const (
 	// + pre-capture offset. Matches conf.DefaultCaptureBufferSeconds.
 	defaultCaptureBufferSeconds = conf.DefaultCaptureBufferSeconds
 
-	// defaultBytesPerSample is the default PCM bytes per sample (16-bit).
-	defaultBytesPerSample = 2
-
 	// defaultSampleRate is used when a source config has no sample rate set.
 	defaultSampleRate = 48000
 
@@ -53,6 +50,9 @@ const (
 
 	// defaultBitDepth is used when a source config has no bit depth set.
 	defaultBitDepth = 16
+
+	// defaultBytesPerSample is the default PCM bytes per sample, derived from defaultBitDepth.
+	defaultBytesPerSample = defaultBitDepth / 8
 )
 
 // Config holds the configuration needed to create an AudioEngine.
