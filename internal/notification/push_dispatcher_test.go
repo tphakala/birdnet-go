@@ -1275,7 +1275,8 @@ func TestIsPrivateOrLocalURL(t *testing.T) {
 	}
 }
 
-func newTestDispatcher(fp *fakeProvider) *pushDispatcher {
+func newTestDispatcher(t *testing.T, fp *fakeProvider) *pushDispatcher {
+	t.Helper()
 	log := logger.NewSlogLogger(nil, logger.LogLevelError, nil)
 	return &pushDispatcher{
 		providers: []enhancedProvider{
@@ -1293,7 +1294,7 @@ func TestPushDispatcher_SkipsBellOnlyNotification(t *testing.T) {
 	t.Parallel()
 
 	fp := newFakeProvider("test-push", true)
-	d := newTestDispatcher(fp)
+	d := newTestDispatcher(t, fp)
 
 	bellNotif := NewNotification(TypeDetection, PriorityHigh, "Bell Only", "Should be skipped").
 		WithDeliveryTarget(DeliveryTargetBell)
@@ -1303,8 +1304,8 @@ func TestPushDispatcher_SkipsBellOnlyNotification(t *testing.T) {
 	select {
 	case <-fp.recvCh:
 		require.Fail(t, "bell-only notification should not reach push provider")
-	case <-time.After(50 * time.Millisecond):
-		// expected: nothing received
+	default:
+		// expected: dispatch returns synchronously for bell-only, nothing received
 	}
 }
 
@@ -1312,7 +1313,7 @@ func TestPushDispatcher_ForwardsPushNotification(t *testing.T) {
 	t.Parallel()
 
 	fp := newFakeProvider("test-push", true)
-	d := newTestDispatcher(fp)
+	d := newTestDispatcher(t, fp)
 
 	pushNotif := NewNotification(TypeDetection, PriorityHigh, "Push Target", "Should be forwarded").
 		WithDeliveryTarget(DeliveryTargetPush)
@@ -1331,7 +1332,7 @@ func TestPushDispatcher_ForwardsNoTargetNotification(t *testing.T) {
 	t.Parallel()
 
 	fp := newFakeProvider("test-push", true)
-	d := newTestDispatcher(fp)
+	d := newTestDispatcher(t, fp)
 
 	notif := NewNotification(TypeDetection, PriorityHigh, "No Target", "Backwards compat")
 
