@@ -603,11 +603,9 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 }
 
 // needsAdvancedRouting reports whether the query parameters require routing
-// through the advanced search path instead of the dedicated hourly/species
-// handlers. It checks for a non-default sort (for hourly queries ANY explicit
-// sort is non-default since the handler natively sorts by time ASC; for other
-// types only sorts other than date_desc are non-default) and for cross-type
-// filters that the simple handlers would silently ignore.
+// through the advanced search path instead of the dedicated handlers.
+// It checks for advanced filters, non-default sort, and cross-type parameters
+// that the simple handlers would silently ignore.
 func (p *detectionQueryParams) needsAdvancedRouting() bool {
 	if p.Confidence != "" || p.TimeOfDay != "" ||
 		p.HourRange != "" || p.Verified != "" ||
@@ -629,20 +627,19 @@ func (p *detectionQueryParams) needsAdvancedRouting() bool {
 		return true
 	}
 
+	// Date and Hour are handled natively by hourly and species handlers.
+	// For search and default query types, they must trigger advanced routing.
+	if p.QueryType != queryTypeHourly && p.QueryType != queryTypeSpecies {
+		if p.Date != "" || p.Hour != "" {
+			return true
+		}
+	}
+
 	return false
 }
 
 // getDetectionsByQueryType retrieves detections based on the query type
 func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]datastore.Note, int64, error) {
-	// Check if advanced filters are present (non-default sort counts as advanced).
-	// Date parameters are included so that ?date=2025-03-07 without an explicit
-	// queryType routes through the advanced search path instead of being ignored.
-	hasAdvancedFilters := params.Confidence != "" || params.TimeOfDay != "" ||
-		params.HourRange != "" || params.Verified != "" ||
-		params.Location != "" || params.Locked != "" ||
-		params.Date != "" || params.StartDate != "" || params.EndDate != "" ||
-		(params.SortBy != "" && params.SortBy != sortByDateDesc)
-
 	// Resolve locale common names to scientific names before routing so every
 	// query type benefits without per-case duplication.
 	if resolved, hit := c.resolveSpeciesToScientific(params.Species); hit {
@@ -664,12 +661,12 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 		}
 		return c.getSpeciesDetections(params.Species, params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
 	case queryTypeSearch:
-		if hasAdvancedFilters {
+		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
 		}
 		return c.getSearchDetections(params.Search, params.NumResults, params.Offset)
-	default: // "all" or any other value
-		if hasAdvancedFilters {
+	default:
+		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
 		}
 		return c.getAllDetections(params.NumResults, params.Offset)
