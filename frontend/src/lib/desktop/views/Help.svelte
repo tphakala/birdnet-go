@@ -1,6 +1,7 @@
 <script lang="ts">
   import Card from '$lib/desktop/components/ui/Card.svelte';
   import {
+    Activity,
     Bug,
     MessageCircleQuestion,
     ExternalLink,
@@ -54,7 +55,24 @@
     </div>
   </Card>
 
-  <!-- Card 2: Ask a Question -->
+  <!-- Card 2: System Health -->
+  <Card title={t('health.title')} className="bg-[var(--color-base-100)] shadow-sm">
+    <p class="text-[var(--color-base-content)] opacity-80">
+      {t('health.subtitle')}
+    </p>
+
+    <div class="mt-4">
+      <button
+        onclick={() => navigation.navigate('/ui/help/system-health')}
+        class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:bg-[var(--color-primary-hover)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2"
+      >
+        <Activity class="size-4" />
+        {t('health.title')}
+      </button>
+    </div>
+  </Card>
+
+  <!-- Card 3: Ask a Question -->
   <Card title={t('navigation.askQuestion')} className="bg-[var(--color-base-100)] shadow-sm">
     <p class="text-[var(--color-base-content)] opacity-80">
       {t('help.askQuestion.description')}
