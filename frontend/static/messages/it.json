@@ -4729,7 +4729,10 @@
       "buildDate": "Data di build",
       "os": "Sistema operativo",
       "copy": "Copia negli appunti",
-      "copied": "Copiato!"
+      "copied": "Copiato!",
+      "architecture": "Architettura",
+      "hardware": "Hardware",
+      "environment": "Ambiente"
     },
     "whatToInclude": {
       "title": "Cosa includere nella segnalazione",

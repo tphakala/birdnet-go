@@ -4729,7 +4729,10 @@
       "buildDate": "Dátum zostavenia",
       "os": "Operačný systém",
       "copy": "Kopírovať do schránky",
-      "copied": "Skopírované!"
+      "copied": "Skopírované!",
+      "architecture": "Architektúra",
+      "hardware": "Hardvér",
+      "environment": "Prostredie"
     },
     "whatToInclude": {
       "title": "Čo zahrnúť do hlásenia",

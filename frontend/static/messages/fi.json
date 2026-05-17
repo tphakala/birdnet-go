@@ -4729,7 +4729,10 @@
       "buildDate": "Käännöspäivä",
       "os": "Käyttöjärjestelmä",
       "copy": "Kopioi leikepöydälle",
-      "copied": "Kopioitu!"
+      "copied": "Kopioitu!",
+      "architecture": "Arkkitehtuuri",
+      "hardware": "Laitteisto",
+      "environment": "Ympäristö"
     },
     "whatToInclude": {
       "title": "Mitä raporttiin tulee sisällyttää",

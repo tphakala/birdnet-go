@@ -4729,7 +4729,10 @@
       "buildDate": "Būvējuma datums",
       "os": "Operētājsistēma",
       "copy": "Kopēt starpliktuvē",
-      "copied": "Nokopēts!"
+      "copied": "Nokopēts!",
+      "architecture": "Arhitektūra",
+      "hardware": "Aparatūra",
+      "environment": "Vide"
     },
     "whatToInclude": {
       "title": "Ko iekļaut ziņojumā",

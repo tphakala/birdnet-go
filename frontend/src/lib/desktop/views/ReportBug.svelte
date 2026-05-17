@@ -11,38 +11,55 @@
     version: string;
     buildDate: string;
     os: string;
+    architecture: string;
+    hardware: string;
+    environment: string;
   }
 
   let systemInfo = $state<SystemInfo>({
     version: '',
     buildDate: '',
     os: '',
+    architecture: '',
+    hardware: '',
+    environment: '',
   });
 
   let copied = $state(false);
 
   async function fetchSystemInfo() {
-    try {
-      const response = await fetch(buildAppUrl('/api/v2/health'));
-      if (response.ok) {
-        const data = await response.json();
-        systemInfo.version = data.version || '';
-        systemInfo.buildDate = data.build_date || '';
-        systemInfo.os = data.os || '';
-      }
-    } catch {
-      // Non-critical
+    const [healthRes, sysRes] = await Promise.allSettled([
+      fetch(buildAppUrl('/api/v2/health')),
+      fetch(buildAppUrl('/api/v2/system/info')),
+    ]);
+
+    if (healthRes.status === 'fulfilled' && healthRes.value.ok) {
+      const data = await healthRes.value.json();
+      systemInfo.version = data.version || '';
+      systemInfo.buildDate = data.build_date || '';
+    }
+
+    if (sysRes.status === 'fulfilled' && sysRes.value.ok) {
+      const data = await sysRes.value.json();
+      systemInfo.os = data.os_display || '';
+      systemInfo.architecture = data.architecture || '';
+      systemInfo.hardware = data.system_model || '';
+      systemInfo.environment = data.environment || '';
     }
   }
 
   function copySystemInfo() {
-    const text = [
+    const lines = [
       `Version: ${systemInfo.version || 'unknown'}`,
       `Build: ${systemInfo.buildDate || 'unknown'}`,
       `OS: ${systemInfo.os || 'unknown'}`,
-      `Browser: ${navigator.userAgent}`,
-    ].join('\n');
-    navigator.clipboard.writeText(text).then(() => {
+      `Architecture: ${systemInfo.architecture || 'unknown'}`,
+    ];
+    if (systemInfo.hardware) lines.push(`Hardware: ${systemInfo.hardware}`);
+    if (systemInfo.environment) lines.push(`Environment: ${systemInfo.environment}`);
+    lines.push(`Browser: ${navigator.userAgent}`);
+
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
       copied = true;
       setTimeout(() => {
         copied = false;
@@ -98,6 +115,28 @@
         >
         <span class="ml-2">{systemInfo.os || '...'}</span>
       </div>
+      <div>
+        <span class="text-[var(--color-base-content)] opacity-60"
+          >{t('reportBug.systemInfo.architecture')}:</span
+        >
+        <span class="ml-2">{systemInfo.architecture || '...'}</span>
+      </div>
+      {#if systemInfo.hardware}
+        <div>
+          <span class="text-[var(--color-base-content)] opacity-60"
+            >{t('reportBug.systemInfo.hardware')}:</span
+          >
+          <span class="ml-2">{systemInfo.hardware}</span>
+        </div>
+      {/if}
+      {#if systemInfo.environment}
+        <div>
+          <span class="text-[var(--color-base-content)] opacity-60"
+            >{t('reportBug.systemInfo.environment')}:</span
+          >
+          <span class="ml-2">{systemInfo.environment}</span>
+        </div>
+      {/if}
     </div>
 
     <div class="mt-3">

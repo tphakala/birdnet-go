@@ -4729,7 +4729,10 @@
       "buildDate": "Data kompilacji",
       "os": "System operacyjny",
       "copy": "Kopiuj do schowka",
-      "copied": "Skopiowano!"
+      "copied": "Skopiowano!",
+      "architecture": "Architektura",
+      "hardware": "Sprzęt",
+      "environment": "Środowisko"
     },
     "whatToInclude": {
       "title": "Co zawrzeć w zgłoszeniu",

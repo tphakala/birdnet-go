@@ -4729,7 +4729,10 @@
       "buildDate": "Build-Datum",
       "os": "Betriebssystem",
       "copy": "In Zwischenablage kopieren",
-      "copied": "Kopiert!"
+      "copied": "Kopiert!",
+      "architecture": "Architektur",
+      "hardware": "Hardware",
+      "environment": "Umgebung"
     },
     "whatToInclude": {
       "title": "Was Ihr Bericht enthalten sollte",

@@ -4729,7 +4729,10 @@
       "buildDate": "Build dátum",
       "os": "Operációs rendszer",
       "copy": "Másolás a vágólapra",
-      "copied": "Másolva!"
+      "copied": "Másolva!",
+      "architecture": "Architektúra",
+      "hardware": "Hardver",
+      "environment": "Környezet"
     },
     "whatToInclude": {
       "title": "Mit tartalmazzon a jelentés",

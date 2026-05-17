@@ -4729,7 +4729,10 @@
       "buildDate": "Byggnationsdatum",
       "os": "Operativsystem",
       "copy": "Kopiera till urklipp",
-      "copied": "Kopierat!"
+      "copied": "Kopierat!",
+      "architecture": "Arkitektur",
+      "hardware": "Hårdvara",
+      "environment": "Miljö"
     },
     "whatToInclude": {
       "title": "Vad din rapport bör innehålla",

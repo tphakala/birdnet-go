@@ -4729,7 +4729,10 @@
       "buildDate": "Build date",
       "os": "Operating system",
       "copy": "Copy to clipboard",
-      "copied": "Copied!"
+      "copied": "Copied!",
+      "architecture": "Architecture",
+      "hardware": "Hardware",
+      "environment": "Environment"
     },
     "whatToInclude": {
       "title": "What to Include in Your Report",

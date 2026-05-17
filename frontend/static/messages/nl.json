@@ -4729,7 +4729,10 @@
       "buildDate": "Bouwdatum",
       "os": "Besturingssysteem",
       "copy": "Kopiëren naar klembord",
-      "copied": "Gekopieerd!"
+      "copied": "Gekopieerd!",
+      "architecture": "Architectuur",
+      "hardware": "Hardware",
+      "environment": "Omgeving"
     },
     "whatToInclude": {
       "title": "Wat u in uw rapport moet opnemen",

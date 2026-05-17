@@ -4729,7 +4729,10 @@
       "buildDate": "Data de compilação",
       "os": "Sistema operacional",
       "copy": "Copiar para a área de transferência",
-      "copied": "Copiado!"
+      "copied": "Copiado!",
+      "architecture": "Arquitetura",
+      "hardware": "Hardware",
+      "environment": "Ambiente"
     },
     "whatToInclude": {
       "title": "O que incluir no seu relatório",
