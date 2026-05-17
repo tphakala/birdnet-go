@@ -247,10 +247,10 @@ Performance Optimizations:
     systemOverview: actualRoute === '/ui/system',
     systemDatabase: actualRoute === '/ui/system/database',
     systemTerminal: actualRoute === '/ui/system/terminal',
+    systemHealth: actualRoute === '/ui/system/health',
     help: actualRoute.startsWith('/ui/help'),
     helpExact: actualRoute === '/ui/help',
     helpReportBug: actualRoute === '/ui/help/report-bug',
-    helpSystemHealth: actualRoute === '/ui/help/system-health',
     settings: actualRoute.startsWith('/ui/settings'),
     settingsAnalysis: actualRoute === '/ui/settings/analysis',
     settingsMain: actualRoute === '/ui/settings/main',
@@ -296,10 +296,10 @@ Performance Optimizations:
     about: onNavigate ? '/about' : '/ui/about',
     help: onNavigate ? '/help' : '/ui/help',
     helpReportBug: onNavigate ? '/help/report-bug' : '/ui/help/report-bug',
-    helpSystemHealth: onNavigate ? '/help/system-health' : '/ui/help/system-health',
     systemOverview: onNavigate ? '/system' : '/ui/system',
     systemDatabase: onNavigate ? '/system/database' : '/ui/system/database',
     systemTerminal: onNavigate ? '/system/terminal' : '/ui/system/terminal',
+    systemHealth: onNavigate ? '/system/health' : '/ui/system/health',
     settingsAnalysis: onNavigate ? '/settings/analysis' : '/ui/settings/analysis',
     settingsMain: onNavigate ? '/settings/main' : '/ui/settings/main',
     settingsAudio: onNavigate ? '/settings/audio' : '/ui/settings/audio',
@@ -743,6 +743,17 @@ Performance Optimizations:
                     >
                       <Terminal class="size-4 shrink-0" />{t('system.sections.terminal')}
                     </button>
+                    <button
+                      onclick={() => navigate(navigationUrls.systemHealth)}
+                      class={cn(
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.systemHealth
+                          ? 'menu-subitem-active'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                      )}
+                    >
+                      <Activity class="size-4 shrink-0" />{t('navigation.health')}
+                    </button>
                   </div>
                 </div>
               {/if}
@@ -805,6 +816,17 @@ Performance Optimizations:
                     )}
                   >
                     <Terminal class="size-4 shrink-0" />{t('system.sections.terminal')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.systemHealth)}
+                    class={cn(
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.systemHealth
+                        ? 'menu-subitem-active'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                    )}
+                  >
+                    <Activity class="size-4 shrink-0" />{t('navigation.health')}
                   </button>
                 </div>
               {/if}
@@ -873,18 +895,6 @@ Performance Optimizations:
                       <Bug class="size-4 shrink-0" />
                       {t('navigation.reportBug')}
                     </button>
-                    <button
-                      onclick={() => navigate(navigationUrls.helpSystemHealth)}
-                      class={cn(
-                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                        routeCache.helpSystemHealth
-                          ? 'menu-subitem-active'
-                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                      )}
-                    >
-                      <Activity class="size-4 shrink-0" />
-                      {t('navigation.systemHealth')}
-                    </button>
                     <a
                       href={GITHUB_DISCUSSIONS_URL}
                       target="_blank"
@@ -948,18 +958,6 @@ Performance Optimizations:
                   >
                     <Bug class="size-4 shrink-0" />
                     {t('navigation.reportBug')}
-                  </button>
-                  <button
-                    onclick={() => navigate(navigationUrls.helpSystemHealth)}
-                    class={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.helpSystemHealth
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
-                  >
-                    <Activity class="size-4 shrink-0" />
-                    {t('navigation.systemHealth')}
                   </button>
                   <a
                     href={GITHUB_DISCUSSIONS_URL}

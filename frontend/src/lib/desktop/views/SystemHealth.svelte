@@ -14,6 +14,7 @@
     Clock,
     Loader2,
   } from '@lucide/svelte';
+  import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
 
@@ -67,6 +68,12 @@
   let copied = $state(false);
   let copyTimer: ReturnType<typeof setTimeout> | null = null;
 
+  onMount(() => {
+    return () => {
+      if (copyTimer !== null) clearTimeout(copyTimer);
+    };
+  });
+
   let groupedResults = $derived.by(() => {
     if (!report) return new Map<HealthCategory, DiagnosticsResult[]>();
     const groups = new Map<HealthCategory, DiagnosticsResult[]>();
@@ -114,11 +121,11 @@
   function buildTextReport(): string {
     if (!report) return '';
     const lines: string[] = [];
-    lines.push(`BirdNET-Go System Health Report`);
-    lines.push(`Status: ${report.status}`);
-    lines.push(`Time: ${new Date(report.started_at).toLocaleString()}`);
-    lines.push(`Duration: ${report.duration_ms.toFixed(0)}ms`);
-    lines.push(`Checks: ${report.total_checks}`);
+    lines.push(t('health.export.reportTitle'));
+    lines.push(`${t('health.export.statusLabel')}: ${t(`health.status.${report.status}`)}`);
+    lines.push(`${t('health.export.timeLabel')}: ${new Date(report.started_at).toLocaleString()}`);
+    lines.push(`${t('health.export.durationLabel')}: ${report.duration_ms.toFixed(0)}ms`);
+    lines.push(`${t('health.export.checksLabel')}: ${report.total_checks}`);
     lines.push('');
 
     for (const [cat, results] of groupedResults) {
@@ -165,7 +172,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `health-report-${report.id.slice(0, 8)}.json`;
+    a.download = `health-report-${report.id?.slice(0, 8) ?? 'unknown'}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

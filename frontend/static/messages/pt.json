@@ -237,7 +237,7 @@
     "reportBugAriaLabel": "Reportar um erro no GitHub (abre em nova janela)",
     "askQuestionAriaLabel": "Fazer uma pergunta no GitHub Discussions (abre em nova janela)",
     "viewOnGithubAriaLabel": "Ver BirdNET-Go no GitHub (abre em nova janela)",
-    "systemHealth": "System Health"
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4787,7 +4787,7 @@
       "system": "System",
       "audio": "Audio Pipeline",
       "analysis": "Analysis",
-      "streams": "RTSP Streams",
+      "streams": "Audio Streams",
       "database": "Database",
       "network": "Network",
       "config": "Configuration",
@@ -4804,6 +4804,13 @@
       "title": "Recent Errors",
       "noErrors": "No recent errors",
       "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
     }
   }
 }

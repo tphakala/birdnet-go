@@ -102,7 +102,10 @@ func (c *Controller) registerHealthChecks() {
 			nil, // TODO: wire actual BirdWeather status
 		),
 		checks.NewNotificationProvidersCheck(),
-		checks.NewWeatherCheck(func() bool { return false }), // TODO: wire to weather config
+		checks.NewWeatherCheck(func() bool {
+			p := c.currentSettings().Realtime.Weather.Provider
+			return p != "" && p != "none"
+		}),
 
 		// Config checks
 		checks.NewPathAccessCheck(map[string]string{

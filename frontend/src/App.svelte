@@ -132,13 +132,13 @@
       titleKey: 'navigation.reportBug',
       component: 'report-bug',
     },
+    { route: 'system', page: 'system', titleKey: 'navigation.system', component: 'system' },
     {
       route: 'system-health',
-      page: 'help/system-health',
+      page: 'system/health',
       titleKey: 'health.title',
       component: 'system-health',
     },
-    { route: 'system', page: 'system', titleKey: 'navigation.system', component: 'system' },
     { route: 'settings', page: 'settings', titleKey: 'navigation.settings', component: 'settings' },
   ];
 
@@ -334,8 +334,8 @@
     [uiPath('about')]: findRouteConfig('about'),
     [uiPath('help')]: findRouteConfig('help'),
     [uiPath('help', 'report-bug')]: findRouteConfig('report-bug'),
-    [uiPath('help', 'system-health')]: findRouteConfig('system-health'),
     [uiPath('system')]: findRouteConfig('system'),
+    [uiPath('system', 'health')]: findRouteConfig('system-health'),
     [uiPath('settings')]: findRouteConfig('settings'),
   });
 
@@ -391,6 +391,14 @@
 
     // Handle system and settings subpages
     if (UI_SYSTEM_PREFIX_RE.test(path)) {
+      const exactMatch = pathToRouteMap.get(path);
+      if (exactMatch) {
+        currentRoute = exactMatch.route;
+        currentPage = exactMatch.page;
+        pageTitleKey = exactMatch.titleKey;
+        if (exactMatch.component) loadComponent(exactMatch.component);
+        return;
+      }
       handleSubpageRouting(path, 'system', systemSubpages, 'pageTitle.systemNotAvailable');
       return;
     }

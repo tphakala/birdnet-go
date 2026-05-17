@@ -237,7 +237,7 @@
     "reportBugAriaLabel": "Hiba bejelentése a GitHubon (új ablakban nyílik meg)",
     "askQuestionAriaLabel": "Kérdés feltevése a GitHub Discussions oldalon (új ablakban nyílik meg)",
     "viewOnGithubAriaLabel": "BirdNET-Go megtekintése a GitHubon (új ablakban nyílik meg)",
-    "systemHealth": "System Health"
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4787,7 +4787,7 @@
       "system": "System",
       "audio": "Audio Pipeline",
       "analysis": "Analysis",
-      "streams": "RTSP Streams",
+      "streams": "Audio Streams",
       "database": "Database",
       "network": "Network",
       "config": "Configuration",
@@ -4804,6 +4804,13 @@
       "title": "Recent Errors",
       "noErrors": "No recent errors",
       "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
     }
   }
 }
