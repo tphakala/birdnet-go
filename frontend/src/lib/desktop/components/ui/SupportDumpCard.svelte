@@ -15,7 +15,7 @@
 
   const logger = loggers.settings;
 
-  const instanceId = crypto.randomUUID().slice(0, 8);
+  const instanceId = Math.random().toString(36).slice(2, 10);
   const githubIssueInputId = `githubIssueNumber-${instanceId}`;
   const userMessageInputId = `userMessage-${instanceId}`;
 
