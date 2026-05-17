@@ -3,12 +3,15 @@
 package api
 
 import (
+	"context"
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"go.uber.org/goleak"
 )
@@ -68,6 +71,64 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 
 	// Close control channel to prevent any lingering goroutines
 	close(controlChan)
+}
+
+// TestSendReconfigActionsExitsOnShutdown verifies that sendReconfigActions
+// stops sending when the controller context is cancelled during shutdown.
+func TestSendReconfigActionsExitsOnShutdown(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	controlChan := make(chan string, 1)
+	c := &Controller{
+		controlChan: controlChan,
+		ctx:         ctx,
+		cancel:      cancel,
+		apiLogger:   logger.Global().Module("api"),
+	}
+
+	actions := []string{"action_one", "action_two", "action_three"}
+
+	// Read the first action, then cancel context before the goroutine can
+	// finish sending all three.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.sendReconfigActions(actions, false)
+	}()
+
+	first := <-controlChan
+	assert.Equal(t, "action_one", first)
+	cancel()
+	<-done
+
+	// At most one more action may have been buffered before ctx check.
+	remaining := len(controlChan)
+	assert.LessOrEqual(t, remaining, 1, "should stop sending after context cancellation")
+}
+
+// TestSendReconfigActionsRecoverOnClosedChannel verifies that the recover
+// guard catches a send-on-closed-channel panic (the shutdown TOCTOU race).
+func TestSendReconfigActionsRecoverOnClosedChannel(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	controlChan := make(chan string, 1)
+	c := &Controller{
+		controlChan: controlChan,
+		ctx:         ctx,
+		cancel:      cancel,
+		apiLogger:   logger.Global().Module("api"),
+	}
+
+	close(controlChan)
+
+	// Must not panic.
+	assert.NotPanics(t, func() {
+		c.sendReconfigActions([]string{"boom"}, false)
+	})
 }
 
 // TestGoroutineCleanupWithoutRoutes verifies that creating a controller without
