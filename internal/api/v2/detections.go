@@ -44,8 +44,12 @@ const (
 	minHourRangeParts     = 2                // Minimum parts for hour range parsing
 
 	// queryType values for detection queries
+	queryTypeHourly  = "hourly"
 	queryTypeSpecies = "species"
 	queryTypeSearch  = "search"
+
+	// Default sort order for non-hourly query types
+	sortByDateDesc = "date_desc"
 )
 
 // Regex to validate YYYY-MM-DD format and check for unwanted characters
@@ -365,7 +369,7 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 	}
 
 	// Validate hour parameter based on query type
-	if params.QueryType == "hourly" {
+	if params.QueryType == queryTypeHourly {
 		// Hourly queries require a single valid integer hour (0-23), not a range
 		if params.Hour == "" {
 			return nil, echo.NewHTTPError(http.StatusBadRequest, "hour parameter is required for hourly query type")
@@ -598,6 +602,36 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, response)
 }
 
+// needsAdvancedRouting reports whether the query parameters require routing
+// through the advanced search path instead of the dedicated hourly/species
+// handlers. It checks for a non-default sort (for hourly queries ANY explicit
+// sort is non-default since the handler natively sorts by time ASC; for other
+// types only sorts other than date_desc are non-default) and for cross-type
+// filters that the simple handlers would silently ignore.
+func (p *detectionQueryParams) needsAdvancedRouting() bool {
+	if p.Confidence != "" || p.TimeOfDay != "" ||
+		p.HourRange != "" || p.Verified != "" ||
+		p.Location != "" || p.Locked != "" ||
+		p.StartDate != "" || p.EndDate != "" {
+		return true
+	}
+
+	if p.SortBy != "" {
+		if p.QueryType == queryTypeHourly || p.SortBy != sortByDateDesc {
+			return true
+		}
+	}
+
+	if p.QueryType != queryTypeSpecies && p.Species != "" {
+		return true
+	}
+	if p.QueryType != queryTypeSearch && p.Search != "" {
+		return true
+	}
+
+	return false
+}
+
 // getDetectionsByQueryType retrieves detections based on the query type
 func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]datastore.Note, int64, error) {
 	// Check if advanced filters are present (non-default sort counts as advanced).
@@ -607,7 +641,7 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 		params.HourRange != "" || params.Verified != "" ||
 		params.Location != "" || params.Locked != "" ||
 		params.Date != "" || params.StartDate != "" || params.EndDate != "" ||
-		(params.SortBy != "" && params.SortBy != "date_desc")
+		(params.SortBy != "" && params.SortBy != sortByDateDesc)
 
 	// Resolve locale common names to scientific names before routing so every
 	// query type benefits without per-case duplication.
@@ -618,23 +652,14 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 		params.Search = resolved
 	}
 
-	// Filters beyond what the simple hourly/species query functions support.
-	// Separated from hasAdvancedFilters because date is always present for
-	// hourly and species queries and should not force the advanced path.
-	hasNonDefaultSort := params.SortBy != "" && params.SortBy != "date_desc"
-	hasExtraFilters := params.Confidence != "" || params.TimeOfDay != "" ||
-		params.HourRange != "" || params.Verified != "" ||
-		params.Location != "" || params.Locked != "" ||
-		params.StartDate != "" || params.EndDate != ""
-
 	switch params.QueryType {
-	case "hourly":
-		if hasNonDefaultSort || hasExtraFilters {
+	case queryTypeHourly:
+		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
 		}
 		return c.getHourlyDetections(params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
 	case queryTypeSpecies:
-		if hasNonDefaultSort || hasExtraFilters {
+		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
 		}
 		return c.getSpeciesDetections(params.Species, params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
