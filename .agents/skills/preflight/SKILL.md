@@ -154,7 +154,7 @@ When done, summarize:
 
 Before pushing or creating a PR, verify each item by actually executing the commands and observing passing output. Do NOT check boxes based on expectation; run the command, read the output, confirm it passes.
 
-```
+```markdown
 ## Preflight Certification
 
 - [ ] Single concern: PR contains exactly ONE feature, ONE fix, or ONE refactor

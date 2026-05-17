@@ -1325,7 +1325,7 @@ done
 ```
 
 **Example finding:**
-```
+```text
 === fi.json: MISSING KEYS ===
 wizard.steps.locationLanguage.geolocationRequiresHttps
 wizard.steps.locationLanguage.geolocationDenied
@@ -1352,7 +1352,7 @@ done
 ```
 
 **Example finding:**
-```
+```text
 === de.json: ENGLISH PLACEHOLDERS ===
 common.loading=Loading...
 settings.audio.captureLength=Capture Length
@@ -1418,7 +1418,7 @@ done
 ```
 
 **Example:**
-```
+```text
 en.json:   "common": { "actions": { "download": "Download" } }
 fi.json:   "common": { "actions": "Toiminnot" }
                         ^^^^^^^^^ scalar where en.json has an object
