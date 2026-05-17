@@ -4,8 +4,20 @@
   import { Bug, ExternalLink, Info, ClipboardCopy, CheckCircle } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
-  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { api } from '$lib/utils/api';
   import { GITHUB_ISSUES_URL } from '$lib/utils/externalUrls';
+
+  interface HealthResponse {
+    version?: string;
+    build_date?: string;
+  }
+
+  interface SystemInfoResponse {
+    os_display?: string;
+    architecture?: string;
+    system_model?: string;
+    environment?: string;
+  }
 
   interface SystemInfo {
     version: string;
@@ -26,25 +38,24 @@
   });
 
   let copied = $state(false);
+  let copyTimer: ReturnType<typeof setTimeout> | null = null;
 
   async function fetchSystemInfo() {
-    const [healthRes, sysRes] = await Promise.allSettled([
-      fetch(buildAppUrl('/api/v2/health')),
-      fetch(buildAppUrl('/api/v2/system/info')),
+    const [healthResult, sysResult] = await Promise.allSettled([
+      api.get<HealthResponse>('/api/v2/health'),
+      api.get<SystemInfoResponse>('/api/v2/system/info'),
     ]);
 
-    if (healthRes.status === 'fulfilled' && healthRes.value.ok) {
-      const data = await healthRes.value.json();
-      systemInfo.version = data.version || '';
-      systemInfo.buildDate = data.build_date || '';
+    if (healthResult.status === 'fulfilled') {
+      systemInfo.version = healthResult.value.version || '';
+      systemInfo.buildDate = healthResult.value.build_date || '';
     }
 
-    if (sysRes.status === 'fulfilled' && sysRes.value.ok) {
-      const data = await sysRes.value.json();
-      systemInfo.os = data.os_display || '';
-      systemInfo.architecture = data.architecture || '';
-      systemInfo.hardware = data.system_model || '';
-      systemInfo.environment = data.environment || '';
+    if (sysResult.status === 'fulfilled') {
+      systemInfo.os = sysResult.value.os_display || '';
+      systemInfo.architecture = sysResult.value.architecture || '';
+      systemInfo.hardware = sysResult.value.system_model || '';
+      systemInfo.environment = sysResult.value.environment || '';
     }
   }
 
@@ -74,8 +85,9 @@
         document.body.removeChild(textarea);
       }
       copied = true;
-      setTimeout(() => {
+      copyTimer = setTimeout(() => {
         copied = false;
+        copyTimer = null;
       }, 2000);
     } catch {
       // Clipboard access denied or unavailable
@@ -84,6 +96,9 @@
 
   onMount(() => {
     fetchSystemInfo();
+    return () => {
+      if (copyTimer !== null) clearTimeout(copyTimer);
+    };
   });
 </script>
 

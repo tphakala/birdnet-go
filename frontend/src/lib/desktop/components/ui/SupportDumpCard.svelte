@@ -7,11 +7,13 @@
   import { loggers } from '$lib/utils/logger';
   import { api } from '$lib/utils/api';
 
-  interface Props {
+  import type { HTMLAttributes } from 'svelte/elements';
+
+  interface Props extends HTMLAttributes<HTMLDivElement> {
     className?: string;
   }
 
-  let { className = '' }: Props = $props();
+  let { className = '', ...rest }: Props = $props();
 
   const logger = loggers.settings;
 
@@ -20,6 +22,13 @@
   const userMessageInputId = `userMessage-${instanceId}`;
 
   let timers: ReturnType<typeof setTimeout>[] = [];
+
+  function clearTimers() {
+    for (const timer of timers) {
+      clearTimeout(timer);
+    }
+    timers = [];
+  }
 
   function safeTimeout(fn: () => void, ms: number) {
     const id = setTimeout(fn, ms);
@@ -43,11 +52,13 @@
     uploadToSentry: true,
   });
 
-  // Derived state for generate button disabled logic
+  let normalizedGithubIssue = $derived(supportDump.githubIssueNumber.trim());
+  let hasValidGithubIssue = $derived(/^#?\d+$/.test(normalizedGithubIssue));
+
   let generateButtonDisabled = $derived(
     generating ||
       (!supportDump.includeLogs && !supportDump.includeConfig && !supportDump.includeSystemInfo) ||
-      (supportDump.uploadToSentry && !supportDump.githubIssueNumber)
+      (supportDump.uploadToSentry && !hasValidGithubIssue)
   );
 
   // API State Management
@@ -68,9 +79,7 @@
 
   onMount(() => {
     loadSystemId();
-    return () => {
-      timers.forEach(clearTimeout);
-    };
+    return clearTimers;
   });
 
   async function loadSystemId() {
@@ -93,7 +102,7 @@
   }
 
   async function generateSupportDump() {
-    if (supportDump.uploadToSentry && !supportDump.githubIssueNumber) {
+    if (supportDump.uploadToSentry && !hasValidGithubIssue) {
       updateStatus(
         t('settings.support.supportReport.statusMessages.githubIssueRequired'),
         'error',
@@ -102,6 +111,7 @@
       return;
     }
 
+    clearTimers();
     generating = true;
     statusMessage = '';
     statusType = 'info';
@@ -121,9 +131,7 @@
         include_logs: supportDump.includeLogs,
         include_config: supportDump.includeConfig,
         include_system_info: supportDump.includeSystemInfo,
-        github_issue_number: supportDump.githubIssueNumber
-          ? supportDump.githubIssueNumber.replace('#', '')
-          : '',
+        github_issue_number: hasValidGithubIssue ? normalizedGithubIssue.replace(/^#/, '') : '',
         user_message: supportDump.userMessage,
         upload_to_sentry: supportDump.uploadToSentry,
       });
@@ -205,7 +213,7 @@
   }
 </script>
 
-<div class={className}>
+<div class={className} {...rest}>
   <div class="space-y-4">
     <div class="rounded-lg overflow-hidden bg-[var(--color-base-200)]">
       <div class="p-6">
