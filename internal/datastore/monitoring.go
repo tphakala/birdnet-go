@@ -125,8 +125,7 @@ func (ds *DataStore) getDatabaseSize(ctx context.Context) (int64, error) {
 	// SQLite-specific query
 	if strings.ToLower(ds.DB.Name()) == "sqlite" {
 		// For SQLite, we use page_count * page_size
-		err := ds.DB.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Row().Scan(&size)
-		if err != nil {
+		if err := ds.DB.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Scan(&size).Error; err != nil {
 			return 0, fmt.Errorf("failed to get SQLite database size: %w", err)
 		}
 		return size, nil
