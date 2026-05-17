@@ -236,16 +236,17 @@ func (n *Notification) Clone() *Notification {
 	}
 
 	clone := &Notification{
-		ID:         n.ID,
-		Type:       n.Type,
-		Priority:   n.Priority,
-		Status:     n.Status,
-		Title:      n.Title,
-		Message:    n.Message,
-		Component:  n.Component,
-		Timestamp:  n.Timestamp,
-		TitleKey:   n.TitleKey,
-		MessageKey: n.MessageKey,
+		ID:             n.ID,
+		Type:           n.Type,
+		Priority:       n.Priority,
+		Status:         n.Status,
+		Title:          n.Title,
+		Message:        n.Message,
+		Component:      n.Component,
+		Timestamp:      n.Timestamp,
+		TitleKey:       n.TitleKey,
+		MessageKey:     n.MessageKey,
+		DeliveryTarget: n.DeliveryTarget,
 	}
 
 	// Deep copy ExpiresAt

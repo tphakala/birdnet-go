@@ -337,6 +337,39 @@ func TestCreateWithMetadata_PushTarget_StillBroadcasts(t *testing.T) {
 	}
 }
 
+func TestClone_PreservesDeliveryTarget(t *testing.T) {
+	t.Parallel()
+
+	original := NewNotification(TypeDetection, PriorityHigh, "Test", "Clone test").
+		WithDeliveryTarget(DeliveryTargetPush)
+
+	clone := original.Clone()
+
+	assert.Equal(t, DeliveryTargetPush, clone.DeliveryTarget, "Clone must preserve DeliveryTarget")
+}
+
+func TestCreateWithMetadata_PushTarget_BroadcastPreservesTarget(t *testing.T) {
+	t.Parallel()
+
+	service := createTestService()
+	ch, _ := service.Subscribe()
+	defer service.Unsubscribe(ch)
+
+	notif := NewNotification(TypeDetection, PriorityHigh, "Push Via Broadcast", "Should preserve target").
+		WithDeliveryTarget(DeliveryTargetPush)
+
+	err := service.CreateWithMetadata(notif)
+	require.NoError(t, err)
+
+	select {
+	case received := <-ch:
+		assert.Equal(t, DeliveryTargetPush, received.DeliveryTarget,
+			"broadcast must preserve DeliveryTarget through Clone")
+	case <-time.After(100 * time.Millisecond):
+		require.Fail(t, "should have received notification")
+	}
+}
+
 // Benchmark for CreateWithMetadata performance
 func BenchmarkService_CreateWithMetadata(b *testing.B) {
 	config := &ServiceConfig{

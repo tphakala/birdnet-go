@@ -1275,13 +1275,9 @@ func TestIsPrivateOrLocalURL(t *testing.T) {
 	}
 }
 
-func TestPushDispatcher_SkipsBellOnlyNotification(t *testing.T) {
-	t.Parallel()
-
-	fp := newFakeProvider("test-push", true)
+func newTestDispatcher(fp *fakeProvider) *pushDispatcher {
 	log := logger.NewSlogLogger(nil, logger.LogLevelError, nil)
-
-	d := &pushDispatcher{
+	return &pushDispatcher{
 		providers: []enhancedProvider{
 			{prov: fp, name: fp.name},
 		},
@@ -1291,6 +1287,13 @@ func TestPushDispatcher_SkipsBellOnlyNotification(t *testing.T) {
 		concurrencySem:    semaphore.NewWeighted(defaultMaxConcurrentJobs),
 		errorSuppressor:   NewErrorSuppressor(log, nil),
 	}
+}
+
+func TestPushDispatcher_SkipsBellOnlyNotification(t *testing.T) {
+	t.Parallel()
+
+	fp := newFakeProvider("test-push", true)
+	d := newTestDispatcher(fp)
 
 	bellNotif := NewNotification(TypeDetection, PriorityHigh, "Bell Only", "Should be skipped").
 		WithDeliveryTarget(DeliveryTargetBell)
@@ -1309,18 +1312,7 @@ func TestPushDispatcher_ForwardsPushNotification(t *testing.T) {
 	t.Parallel()
 
 	fp := newFakeProvider("test-push", true)
-	log := logger.NewSlogLogger(nil, logger.LogLevelError, nil)
-
-	d := &pushDispatcher{
-		providers: []enhancedProvider{
-			{prov: fp, name: fp.name},
-		},
-		log:               log,
-		enabled:           true,
-		maxConcurrentJobs: defaultMaxConcurrentJobs,
-		concurrencySem:    semaphore.NewWeighted(defaultMaxConcurrentJobs),
-		errorSuppressor:   NewErrorSuppressor(log, nil),
-	}
+	d := newTestDispatcher(fp)
 
 	pushNotif := NewNotification(TypeDetection, PriorityHigh, "Push Target", "Should be forwarded").
 		WithDeliveryTarget(DeliveryTargetPush)
@@ -1339,18 +1331,7 @@ func TestPushDispatcher_ForwardsNoTargetNotification(t *testing.T) {
 	t.Parallel()
 
 	fp := newFakeProvider("test-push", true)
-	log := logger.NewSlogLogger(nil, logger.LogLevelError, nil)
-
-	d := &pushDispatcher{
-		providers: []enhancedProvider{
-			{prov: fp, name: fp.name},
-		},
-		log:               log,
-		enabled:           true,
-		maxConcurrentJobs: defaultMaxConcurrentJobs,
-		concurrencySem:    semaphore.NewWeighted(defaultMaxConcurrentJobs),
-		errorSuppressor:   NewErrorSuppressor(log, nil),
-	}
+	d := newTestDispatcher(fp)
 
 	notif := NewNotification(TypeDetection, PriorityHigh, "No Target", "Backwards compat")
 
