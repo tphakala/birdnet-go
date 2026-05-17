@@ -47,6 +47,9 @@ const (
 
 	// defaultSampleRate is used when a source config has no sample rate set.
 	defaultSampleRate = 48000
+
+	// defaultChannels is used when a source config has no channel count set.
+	defaultChannels = 1
 )
 
 // Config holds the configuration needed to create an AudioEngine.
@@ -191,9 +194,7 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 		debug:                cfg.Debug,
 		captureBufferSeconds: captureBufferSecs(cfg.CaptureBufferSeconds),
 	}
-	if scheduler != nil {
-		e.scheduler.Store(scheduler)
-	}
+	e.SetScheduler(scheduler)
 	return e
 }
 
@@ -280,7 +281,7 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 	}
 	channels := src.Channels
 	if channels <= 0 {
-		channels = 1
+		channels = defaultChannels
 	}
 	streamCfg := &ffmpeg.StreamConfig{
 		SourceID:         sourceID,
