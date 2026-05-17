@@ -391,7 +391,8 @@
 
     // Handle system and settings subpages
     if (UI_SYSTEM_PREFIX_RE.test(path)) {
-      const exactMatch = pathToRouteMap.get(path);
+      const normalizedPath = path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
+      const exactMatch = pathToRouteMap.get(normalizedPath);
       if (exactMatch) {
         currentRoute = exactMatch.route;
         currentPage = exactMatch.page;

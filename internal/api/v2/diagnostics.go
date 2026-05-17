@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
 )
@@ -104,7 +105,7 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewNotificationProvidersCheck(),
 		checks.NewWeatherCheck(func() bool {
 			p := c.currentSettings().Realtime.Weather.Provider
-			return p != "" && p != "none"
+			return p != "" && p != string(conf.WeatherNone)
 		}),
 
 		// Config checks

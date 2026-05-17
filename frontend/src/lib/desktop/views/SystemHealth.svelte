@@ -17,6 +17,7 @@
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
+  import { getLocalDateString, getLocalTimeString } from '$lib/utils/date';
 
   type HealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown' | 'skipped';
   type HealthCategory =
@@ -77,10 +78,20 @@
   let groupedResults = $derived.by(() => {
     if (!report) return new Map<HealthCategory, DiagnosticsResult[]>();
     const groups = new Map<HealthCategory, DiagnosticsResult[]>();
+    const seen = new Set<HealthCategory>();
     for (const cat of categoryOrder) {
       const results = report.results.filter(r => r.category === cat);
       if (results.length > 0) {
         groups.set(cat, results);
+      }
+      seen.add(cat);
+    }
+    for (const r of report.results) {
+      if (!seen.has(r.category)) {
+        const existing = groups.get(r.category) ?? [];
+        existing.push(r);
+        groups.set(r.category, existing);
+        seen.add(r.category);
       }
     }
     return groups;
@@ -123,7 +134,9 @@
     const lines: string[] = [];
     lines.push(t('health.export.reportTitle'));
     lines.push(`${t('health.export.statusLabel')}: ${t(`health.status.${report.status}`)}`);
-    lines.push(`${t('health.export.timeLabel')}: ${new Date(report.started_at).toLocaleString()}`);
+    lines.push(
+      `${t('health.export.timeLabel')}: ${getLocalDateString(new Date(report.started_at))} ${getLocalTimeString(new Date(report.started_at))}`
+    );
     lines.push(`${t('health.export.durationLabel')}: ${report.duration_ms.toFixed(0)}ms`);
     lines.push(`${t('health.export.checksLabel')}: ${report.total_checks}`);
     lines.push('');
@@ -152,8 +165,9 @@
         textarea.style.opacity = '0';
         document.body.appendChild(textarea);
         textarea.select();
-        document.execCommand('copy');
+        const ok = document.execCommand('copy');
         document.body.removeChild(textarea);
+        if (!ok) return;
       }
       copied = true;
       if (copyTimer !== null) clearTimeout(copyTimer);
@@ -219,6 +233,7 @@
     <Card className="bg-[var(--color-base-100)] shadow-sm">
       <div
         role="alert"
+        aria-live="assertive"
         class="flex items-center gap-3 p-3 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]"
       >
         <XCircle class="size-5 shrink-0 text-[var(--color-error)]" />
@@ -243,7 +258,7 @@
   {#if report}
     <!-- Summary Bar -->
     <Card className="bg-[var(--color-base-100)] shadow-sm">
-      <div class="flex flex-wrap items-center gap-4">
+      <div class="flex flex-wrap items-center gap-4 pt-6">
         <div class="flex items-center gap-2">
           <StatusPill
             variant={statusToVariant(report.status)}
