@@ -77,8 +77,8 @@
   }
 
   const menuItemBase =
-    'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150';
-  const menuItemCollapsed = 'justify-center';
+    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 w-full text-left';
+  const menuItemCollapsed = 'justify-center px-0';
   const subitemClass =
     'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150';
 </script>
