@@ -599,19 +599,34 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, response)
 }
 
-// needsAdvancedRouting checks whether the query parameters require routing
+// needsAdvancedRouting reports whether the query parameters require routing
 // through the advanced search path instead of the dedicated hourly/species
-// handlers. It returns two flags: whether a non-default sort is requested and
-// whether filters beyond what the simple handlers support are present.
-func (p *detectionQueryParams) needsAdvancedRouting() (hasNonDefaultSort, hasExtraFilters bool) {
-	hasNonDefaultSort = p.SortBy != "" && (p.QueryType == queryTypeHourly || p.SortBy != "date_desc")
-	hasExtraFilters = p.Confidence != "" || p.TimeOfDay != "" ||
+// handlers. It checks for a non-default sort (for hourly queries ANY explicit
+// sort is non-default since the handler natively sorts by time ASC; for other
+// types only sorts other than date_desc are non-default) and for cross-type
+// filters that the simple handlers would silently ignore.
+func (p *detectionQueryParams) needsAdvancedRouting() bool {
+	if p.Confidence != "" || p.TimeOfDay != "" ||
 		p.HourRange != "" || p.Verified != "" ||
 		p.Location != "" || p.Locked != "" ||
-		p.StartDate != "" || p.EndDate != "" ||
-		(p.QueryType == queryTypeHourly && p.Species != "") ||
-		(p.QueryType != queryTypeSearch && p.Search != "")
-	return
+		p.StartDate != "" || p.EndDate != "" {
+		return true
+	}
+
+	if p.SortBy != "" {
+		if p.QueryType == queryTypeHourly || p.SortBy != "date_desc" {
+			return true
+		}
+	}
+
+	if p.QueryType != queryTypeSpecies && p.Species != "" {
+		return true
+	}
+	if p.QueryType != queryTypeSearch && p.Search != "" {
+		return true
+	}
+
+	return false
 }
 
 // getDetectionsByQueryType retrieves detections based on the query type
@@ -634,16 +649,14 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 		params.Search = resolved
 	}
 
-	hasNonDefaultSort, hasExtraFilters := params.needsAdvancedRouting()
-
 	switch params.QueryType {
 	case queryTypeHourly:
-		if hasNonDefaultSort || hasExtraFilters {
+		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
 		}
 		return c.getHourlyDetections(params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
 	case queryTypeSpecies:
-		if hasNonDefaultSort || hasExtraFilters {
+		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
 		}
 		return c.getSpeciesDetections(params.Species, params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
