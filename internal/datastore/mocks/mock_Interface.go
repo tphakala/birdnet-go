@@ -3765,6 +3765,61 @@ func (_c *MockInterface_Optimize_Call) RunAndReturn(run func(context.Context) er
 	return _c
 }
 
+// PingWithLatency provides a mock function with no fields
+func (_m *MockInterface) PingWithLatency() (time.Duration, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for PingWithLatency")
+	}
+
+	var r0 time.Duration
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (time.Duration, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() time.Duration); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(time.Duration)
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_PingWithLatency_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PingWithLatency'
+type MockInterface_PingWithLatency_Call struct {
+	*mock.Call
+}
+
+// PingWithLatency is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) PingWithLatency() *MockInterface_PingWithLatency_Call {
+	return &MockInterface_PingWithLatency_Call{Call: _e.mock.On("PingWithLatency")}
+}
+
+func (_c *MockInterface_PingWithLatency_Call) Run(run func()) *MockInterface_PingWithLatency_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_PingWithLatency_Call) Return(_a0 time.Duration, _a1 error) *MockInterface_PingWithLatency_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_PingWithLatency_Call) RunAndReturn(run func() (time.Duration, error)) *MockInterface_PingWithLatency_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Save provides a mock function with given fields: note, results
 func (_m *MockInterface) Save(note *datastore.Note, results []datastore.Results) error {
 	ret := _m.Called(note, results)

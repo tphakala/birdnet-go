@@ -423,6 +423,20 @@ func (ds *Datastore) SchemaVersion() string {
 	return datastore.SchemaVersionV2
 }
 
+// PingWithLatency executes SELECT 1 and returns the round-trip time.
+func (ds *Datastore) PingWithLatency() (time.Duration, error) {
+	db := ds.manager.DB()
+	if db == nil {
+		return 0, datastore.ErrDBNotConnected
+	}
+	start := time.Now()
+	var result int
+	if err := db.Raw("SELECT 1").Scan(&result).Error; err != nil {
+		return 0, fmt.Errorf("database ping failed: %w", err)
+	}
+	return time.Since(start), nil
+}
+
 // GetDatabaseStats returns database statistics.
 func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	ctx := context.Background()

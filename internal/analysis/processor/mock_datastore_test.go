@@ -355,6 +355,7 @@ func (m *ActionMockDatastore) UpdateNameMaps(_ []string) {}
 func (m *ActionMockDatastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	return &datastore.DatabaseStats{Type: "mock", Connected: true}, nil
 }
+func (m *ActionMockDatastore) PingWithLatency() (time.Duration, error) { return 0, nil }
 
 // Migration bulk fetch methods
 func (m *ActionMockDatastore) GetAllReviews() ([]datastore.NoteReview, error)   { return nil, nil }

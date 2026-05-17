@@ -221,6 +221,8 @@ type Interface interface {
 	DeleteExpiredNotificationHistory(before time.Time) (int64, error) // Returns count deleted
 	// Database stats method for runtime statistics
 	GetDatabaseStats() (*DatabaseStats, error)
+	// PingWithLatency executes a trivial query (SELECT 1) and returns the round-trip time.
+	PingWithLatency() (time.Duration, error)
 	// SchemaVersion returns the datastore schema version ("legacy" or "v2").
 	SchemaVersion() string
 	// UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
@@ -251,6 +253,19 @@ type DataStore struct {
 	monitoringCancel context.CancelFunc // Function to cancel monitoring
 	monitoringMu     sync.Mutex         // Mutex to protect monitoring state
 	monitoringWg     sync.WaitGroup     // WaitGroup for monitoring goroutines
+}
+
+// PingWithLatency executes SELECT 1 and returns the round-trip time.
+func (ds *DataStore) PingWithLatency() (time.Duration, error) {
+	if ds.DB == nil {
+		return 0, ErrDBNotConnected
+	}
+	start := time.Now()
+	var result int
+	if err := ds.DB.Raw("SELECT 1").Scan(&result).Error; err != nil {
+		return 0, fmt.Errorf("database ping failed: %w", err)
+	}
+	return time.Since(start), nil
 }
 
 // NewDataStore creates a new DataStore instance based on the provided configuration context.
