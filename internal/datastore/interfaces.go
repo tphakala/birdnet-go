@@ -221,6 +221,8 @@ type Interface interface {
 	DeleteExpiredNotificationHistory(before time.Time) (int64, error) // Returns count deleted
 	// Database stats method for runtime statistics
 	GetDatabaseStats() (*DatabaseStats, error)
+	// PingWithLatency executes a trivial query (SELECT 1) and returns the round-trip time.
+	PingWithLatency() (time.Duration, error)
 	// SchemaVersion returns the datastore schema version ("legacy" or "v2").
 	SchemaVersion() string
 	// UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.

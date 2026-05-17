@@ -2,6 +2,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -9,10 +10,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/shirou/gopsutil/v3/host"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // diagnosticsStatusResponse is the quick health summary returned by GET /status.
@@ -48,12 +52,29 @@ func (c *Controller) registerHealthChecks() {
 		return w.Snapshot()
 	}
 
+	getStreamHealthInfos := c.buildStreamHealthProvider()
+
 	c.healthRegistry.RegisterAll(
 		// System checks
 		checks.NewDiskSpaceCheck(c.getDataPaths()),
 		checks.NewMemoryCheck(),
 		checks.NewCPULoadCheck(GetCachedCPUUsage),
-		checks.NewTemperatureCheck(nil), // TODO: wire to platform temperature sensor
+		checks.NewTemperatureCheck(func() (float64, error) {
+			temps, err := host.SensorsTemperatures()
+			if err != nil {
+				return 0, err
+			}
+			if len(temps) == 0 {
+				return 0, errNoTempSensors
+			}
+			var maxTemp float64
+			for _, t := range temps {
+				if t.Temperature > maxTemp {
+					maxTemp = t.Temperature
+				}
+			}
+			return maxTemp, nil
+		}),
 		checks.NewUptimeCheck(c.startTime),
 
 		// Audio checks
@@ -66,23 +87,40 @@ func (c *Controller) registerHealthChecks() {
 
 		// Analysis checks
 		checks.NewModelLoadedCheck(
-			func() bool { return true }, // model is always loaded if server is running
+			func() bool { return true },
 			func() string { return c.currentSettings().BirdNET.ModelPath },
 		),
-		checks.NewInferenceLatencyCheck(nil), // TODO: wire to actual inference stats
-		checks.NewDetectionRateCheck(nil),    // TODO: wire to datastore
-		checks.NewQueueDepthCheck(nil),       // TODO: wire to actual queue
+		checks.NewInferenceLatencyCheck(func() (avgMS, p99MS, windowMS float64) {
+			counters := classifier.GetInferenceCounters()
+			snapshots := counters.PeekAll()
+			if len(snapshots) == 0 {
+				return 0, 0, 0
+			}
+			var totalUs, maxUs, count int64
+			for _, s := range snapshots {
+				totalUs += s.InvokeTotalUs
+				count += s.InvokeCount
+				if s.InvokeMaxUs > maxUs {
+					maxUs = s.InvokeMaxUs
+				}
+			}
+			if count == 0 {
+				return 0, 0, 0
+			}
+			avgMS = float64(totalUs) / float64(count) / 1000.0
+			p99MS = float64(maxUs) / 1000.0
+			windowMS = c.currentSettings().BirdNET.Overlap * 1000.0
+			return avgMS, p99MS, windowMS
+		}),
+		checks.NewDetectionRateCheck(nil), // TODO: wire to datastore (PR 2)
+		checks.NewQueueDepthCheck(func() (int, int) {
+			return len(classifier.ResultsQueue), cap(classifier.ResultsQueue)
+		}),
 
 		// Stream checks
-		checks.NewStreamConnectivityCheck(func() []checks.StreamHealthInfo {
-			return nil // TODO: wire to RTSP manager
-		}),
-		checks.NewStreamErrorRateCheck(func() []checks.StreamHealthInfo {
-			return nil // TODO: wire to RTSP manager
-		}),
-		checks.NewFFmpegHealthCheck(func() []checks.StreamHealthInfo {
-			return nil // TODO: wire to RTSP manager
-		}),
+		checks.NewStreamConnectivityCheck(getStreamHealthInfos),
+		checks.NewStreamErrorRateCheck(getStreamHealthInfos),
+		checks.NewFFmpegHealthCheck(getStreamHealthInfos),
 
 		// Database checks
 		checks.NewDatabaseSizeCheck(func() string {
@@ -91,12 +129,20 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewMigrationStatusCheck(func() (bool, string, error) {
 			return true, "current", nil // TODO: wire to migration checker
 		}),
-		checks.NewDatabasePerformanceCheck(nil), // TODO: wire to datastore
+		checks.NewDatabasePerformanceCheck(func() (time.Duration, error) {
+			return c.DS.PingWithLatency()
+		}),
 
 		// Network checks
 		checks.NewMQTTCheck(
 			func() bool { return c.currentSettings().Realtime.MQTT.Enabled },
-			nil, // TODO: wire actual MQTT connection status
+			func() bool {
+				client := c.Processor.GetMQTTClient()
+				if client == nil {
+					return false
+				}
+				return client.IsConnected()
+			},
 		),
 		checks.NewBirdWeatherCheck(
 			func() bool { return c.currentSettings().Realtime.Birdweather.Enabled },
@@ -123,6 +169,50 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewErrorTrendCheck(c.healthErrors),
 		checks.NewCriticalEventsCheck(c.healthErrors),
 	)
+}
+
+// errNoTempSensors is returned when no temperature sensors are found on the system.
+var errNoTempSensors = fmt.Errorf("no temperature sensors found")
+
+// buildStreamHealthProvider returns a closure that bridges the FFmpegManager's
+// stream health data to the checks.StreamHealthInfo format. The closure
+// nil-checks c.engine at call time because it is set after Controller init.
+func (c *Controller) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
+	return func() []checks.StreamHealthInfo {
+		if c.engine == nil {
+			return nil
+		}
+		mgr := c.engine.FFmpegManager()
+		if mgr == nil {
+			return nil
+		}
+		healthMap := mgr.AllStreamHealth()
+		if len(healthMap) == 0 {
+			return nil
+		}
+		registry := c.engine.Registry()
+		infos := make([]checks.StreamHealthInfo, 0, len(healthMap))
+		for sourceID, sh := range healthMap {
+			url := sourceID
+			if registry != nil {
+				if connStr, ok := registry.ConnectionStringByID(sourceID); ok {
+					url = privacy.SanitizeStreamUrl(connStr)
+				}
+			}
+			errMsg := ""
+			if sh.Error != nil {
+				errMsg = sh.Error.Error()
+			}
+			infos = append(infos, checks.StreamHealthInfo{
+				URL:          url,
+				IsHealthy:    sh.IsHealthy,
+				ProcessState: sh.ProcessState.String(),
+				RestartCount: sh.RestartCount,
+				Error:        errMsg,
+			})
+		}
+		return infos
+	}
 }
 
 // getDataPaths returns filesystem paths that should be monitored for disk space.

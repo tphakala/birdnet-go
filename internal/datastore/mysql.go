@@ -262,6 +262,16 @@ func (m *MySQLStore) SchemaVersion() string {
 	return SchemaVersionLegacy
 }
 
+// PingWithLatency executes SELECT 1 and returns the round-trip time.
+func (m *MySQLStore) PingWithLatency() (time.Duration, error) {
+	start := time.Now()
+	var result int
+	if err := m.DB.Raw("SELECT 1").Scan(&result).Error; err != nil {
+		return 0, err
+	}
+	return time.Since(start), nil
+}
+
 // GetDatabaseStats returns basic runtime statistics about the MySQL database.
 // Returns partial stats with ErrDBNotConnected if the database is unreachable.
 // The Connected field in the returned stats indicates if the DB is reachable.

@@ -353,6 +353,7 @@ func (m *MockDatastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 		Connected: true,
 	}, nil
 }
+func (m *MockDatastore) PingWithLatency() (time.Duration, error) { return 0, nil }
 
 // Migration bulk fetch methods
 func (m *MockDatastore) GetAllReviews() ([]datastore.NoteReview, error) {
