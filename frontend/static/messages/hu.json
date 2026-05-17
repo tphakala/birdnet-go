@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Elemzés almenü",
     "settingsSubmenu": "Beállítások almenü",
     "systemSubmenu": "Rendszer almenü",
-    "systemTerminal": "Terminál"
+    "systemTerminal": "Terminál",
+    "help": "Súgó",
+    "helpSubmenu": "Súgó almenü",
+    "helpAndSupport": "Súgó és támogatás",
+    "reportBug": "Hiba bejelentése",
+    "askQuestion": "Kérdés feltevése",
+    "reportBugAriaLabel": "Hiba bejelentése a GitHubon (új ablakban nyílik meg)",
+    "askQuestionAriaLabel": "Kérdés feltevése a GitHub Discussions oldalon (új ablakban nyílik meg)",
+    "viewOnGithubAriaLabel": "BirdNET-Go megtekintése a GitHubon (új ablakban nyílik meg)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,22 @@
     "bannerMessage": "A konfigurációs változtatásokhoz újraindítás szükséges:",
     "bannerAction": "Újraindítás most",
     "restartFailed": "Az újraindítás kezdeményezése sikertelen"
+  },
+  "help": {
+    "title": "Súgó és támogatás",
+    "subtitle": "Kérjen segítséget, jelentsen problémákat és csatlakozzon a közösséghez",
+    "reportBug": {
+      "description": "Ha problémát tapasztal, először hozzon létre egy támogatási csomagot a rendszerinformációk és naplók rögzítéséhez, majd nyisson hibajelentést a GitHubon."
+    },
+    "askQuestion": {
+      "description": "Kérdése van a beállítással, funkciókkal vagy használattal kapcsolatban? A GitHub Discussions fórum a legjobb hely, ahol segítséget kaphat a közösségtől."
+    },
+    "diagnostics": {
+      "description": "Hozzon létre egy támogatási csomagot a problémák diagnosztizálásához. Ez rögzíti a rendszerkonfigurációt és a legutóbbi naplókat."
+    },
+    "quickLinks": {
+      "title": "Gyors hivatkozások",
+      "releases": "Kiadási megjegyzések"
+    }
   }
 }

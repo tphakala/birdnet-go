@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Sous-menu analyses",
     "settingsSubmenu": "Sous-menu paramètres",
     "systemSubmenu": "Sous-menu système",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Aide",
+    "helpSubmenu": "Sous-menu d'aide",
+    "helpAndSupport": "Aide et support",
+    "reportBug": "Signaler un bug",
+    "askQuestion": "Poser une question",
+    "reportBugAriaLabel": "Signaler un bug sur GitHub (ouvre dans une nouvelle fenêtre)",
+    "askQuestionAriaLabel": "Poser une question sur GitHub Discussions (ouvre dans une nouvelle fenêtre)",
+    "viewOnGithubAriaLabel": "Voir BirdNET-Go sur GitHub (ouvre dans une nouvelle fenêtre)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,22 @@
     "bannerMessage": "Les modifications de configuration nécessitent un redémarrage :",
     "bannerAction": "Redémarrer maintenant",
     "restartFailed": "Échec du lancement du redémarrage"
+  },
+  "help": {
+    "title": "Aide et support",
+    "subtitle": "Obtenez de l'aide, signalez des problèmes et connectez-vous avec la communauté",
+    "reportBug": {
+      "description": "Si vous rencontrez un problème, générez d'abord un rapport de support pour capturer les informations système et les journaux, puis ouvrez un rapport de bug sur GitHub."
+    },
+    "askQuestion": {
+      "description": "Vous avez une question sur la configuration, les fonctionnalités ou l'utilisation ? Le forum GitHub Discussions est le meilleur endroit pour obtenir de l'aide de la communauté."
+    },
+    "diagnostics": {
+      "description": "Générez un rapport de support pour aider au diagnostic des problèmes. Il capture votre configuration système et les journaux récents."
+    },
+    "quickLinks": {
+      "title": "Liens rapides",
+      "releases": "Notes de version"
+    }
   }
 }

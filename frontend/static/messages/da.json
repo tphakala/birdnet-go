@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Undermenu for analyse",
     "settingsSubmenu": "Undermenu for indstillinger",
     "systemSubmenu": "Undermenu for system",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Hjælp",
+    "helpSubmenu": "Hjælp-undermenu",
+    "helpAndSupport": "Hjælp og support",
+    "reportBug": "Rapportér fejl",
+    "askQuestion": "Stil et spørgsmål",
+    "reportBugAriaLabel": "Rapportér en fejl på GitHub (åbner i nyt vindue)",
+    "askQuestionAriaLabel": "Stil et spørgsmål på GitHub Discussions (åbner i nyt vindue)",
+    "viewOnGithubAriaLabel": "Se BirdNET-Go på GitHub (åbner i nyt vindue)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,22 @@
     "bannerMessage": "Konfigurationsændringer kræver en genstart:",
     "bannerAction": "Genstart nu",
     "restartFailed": "Kunne ikke starte genstart"
+  },
+  "help": {
+    "title": "Hjælp og support",
+    "subtitle": "Få hjælp, rapportér problemer og forbind med fællesskabet",
+    "reportBug": {
+      "description": "Hvis du støder på et problem, skal du først generere en supportpakke for at indfange systeminfo og logfiler, og derefter åbne en fejlrapport på GitHub."
+    },
+    "askQuestion": {
+      "description": "Har du et spørgsmål om opsætning, funktioner eller brug? GitHub Discussions er det bedste sted at få hjælp fra fællesskabet."
+    },
+    "diagnostics": {
+      "description": "Generér en supportpakke for at hjælpe med fejlfinding. Den indfanger din systemkonfiguration og seneste logfiler."
+    },
+    "quickLinks": {
+      "title": "Hurtige links",
+      "releases": "Udgivelsesnoter"
+    }
   }
 }

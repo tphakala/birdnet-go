@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Statistiek submenu",
     "settingsSubmenu": "Instellingen submenu",
     "systemSubmenu": "Systeemmenu",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Help",
+    "helpSubmenu": "Help-submenu",
+    "helpAndSupport": "Help en ondersteuning",
+    "reportBug": "Bug melden",
+    "askQuestion": "Stel een vraag",
+    "reportBugAriaLabel": "Meld een bug op GitHub (opent in nieuw venster)",
+    "askQuestionAriaLabel": "Stel een vraag op GitHub Discussions (opent in nieuw venster)",
+    "viewOnGithubAriaLabel": "Bekijk BirdNET-Go op GitHub (opent in nieuw venster)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,22 @@
     "bannerMessage": "Configuratiewijzigingen vereisen een herstart:",
     "bannerAction": "Nu herstarten",
     "restartFailed": "Kan herstart niet starten"
+  },
+  "help": {
+    "title": "Help en ondersteuning",
+    "subtitle": "Krijg hulp, meld problemen en maak verbinding met de community",
+    "reportBug": {
+      "description": "Als u een probleem tegenkomt, genereer dan eerst een ondersteuningspakket om systeeminformatie en logboeken vast te leggen en open vervolgens een bugrapport op GitHub."
+    },
+    "askQuestion": {
+      "description": "Heeft u een vraag over de installatie, functies of het gebruik? Het GitHub Discussions forum is de beste plek om hulp te krijgen van de community."
+    },
+    "diagnostics": {
+      "description": "Genereer een ondersteuningspakket om problemen te diagnosticeren. Het legt uw systeemconfiguratie en recente logboeken vast."
+    },
+    "quickLinks": {
+      "title": "Snelle links",
+      "releases": "Release-opmerkingen"
+    }
   }
 }

@@ -72,9 +72,18 @@ Performance Optimizations:
     LifeBuoy,
     Paintbrush,
     Brain,
+    CircleHelp,
+    Bug,
+    MessageCircleQuestion,
+    ExternalLink,
   } from '@lucide/svelte';
   import { flyout } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
+  import {
+    GITHUB_REPO_URL,
+    GITHUB_ISSUES_URL,
+    GITHUB_DISCUSSIONS_URL,
+  } from '$lib/utils/externalUrls';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { resetDateToToday } from '$lib/utils/datePersistence';
   import LoginModal from '../components/modals/LoginModal.svelte';
@@ -117,16 +126,19 @@ Performance Optimizations:
   let analyticsExpanded = $state(false);
   let settingsExpanded = $state(false);
   let systemExpanded = $state(false);
+  let helpExpanded = $state(false);
 
   // Flyout state for collapsed mode
   let analyticsFlyoutOpen = $state(false);
   let settingsFlyoutOpen = $state(false);
   let systemFlyoutOpen = $state(false);
+  let helpFlyoutOpen = $state(false);
 
   // Flyout position (for fixed positioning to escape overflow container)
   let analyticsFlyoutPosition = $state({ top: 0, left: 0 });
   let settingsFlyoutPosition = $state({ top: 0, left: 0 });
   let systemFlyoutPosition = $state({ top: 0, left: 0 });
+  let helpFlyoutPosition = $state({ top: 0, left: 0 });
 
   // Tooltip state for fixed positioning (escapes overflow containers)
   let tooltipText = $state('');
@@ -154,6 +166,7 @@ Performance Optimizations:
   let analyticsButtonRef = $state<HTMLButtonElement | null>(null);
   let settingsButtonRef = $state<HTMLButtonElement | null>(null);
   let systemButtonRef = $state<HTMLButtonElement | null>(null);
+  let helpButtonRef = $state<HTMLButtonElement | null>(null);
 
   // Toggle flyout with position calculation
   function toggleAnalyticsFlyout() {
@@ -168,6 +181,7 @@ Performance Optimizations:
     analyticsFlyoutOpen = !analyticsFlyoutOpen;
     settingsFlyoutOpen = false;
     systemFlyoutOpen = false;
+    helpFlyoutOpen = false;
   }
 
   function toggleSettingsFlyout() {
@@ -182,6 +196,7 @@ Performance Optimizations:
     settingsFlyoutOpen = !settingsFlyoutOpen;
     analyticsFlyoutOpen = false;
     systemFlyoutOpen = false;
+    helpFlyoutOpen = false;
   }
 
   function toggleSystemFlyout() {
@@ -196,6 +211,22 @@ Performance Optimizations:
     systemFlyoutOpen = !systemFlyoutOpen;
     analyticsFlyoutOpen = false;
     settingsFlyoutOpen = false;
+    helpFlyoutOpen = false;
+  }
+
+  function toggleHelpFlyout() {
+    hideTooltip();
+    if (!helpFlyoutOpen && helpButtonRef) {
+      const rect = helpButtonRef.getBoundingClientRect();
+      helpFlyoutPosition = {
+        top: rect.top,
+        left: rect.right + 8,
+      };
+    }
+    helpFlyoutOpen = !helpFlyoutOpen;
+    analyticsFlyoutOpen = false;
+    settingsFlyoutOpen = false;
+    systemFlyoutOpen = false;
   }
 
   // Get collapsed state from store (using $ prefix for auto-subscription)
@@ -219,6 +250,8 @@ Performance Optimizations:
     systemOverview: actualRoute === '/ui/system',
     systemDatabase: actualRoute === '/ui/system/database',
     systemTerminal: actualRoute === '/ui/system/terminal',
+    help: actualRoute.startsWith('/ui/help'),
+    helpExact: actualRoute === '/ui/help',
     settings: actualRoute.startsWith('/ui/settings'),
     settingsAnalysis: actualRoute === '/ui/settings/analysis',
     settingsMain: actualRoute === '/ui/settings/main',
@@ -238,6 +271,7 @@ Performance Optimizations:
       if (routeCache.analytics) analyticsExpanded = true;
       if (routeCache.settings) settingsExpanded = true;
       if (routeCache.system) systemExpanded = true;
+      if (routeCache.help) helpExpanded = true;
     }
   });
 
@@ -248,6 +282,7 @@ Performance Optimizations:
       analyticsFlyoutOpen = false;
       settingsFlyoutOpen = false;
       systemFlyoutOpen = false;
+      helpFlyoutOpen = false;
     }
   }
 
@@ -260,6 +295,7 @@ Performance Optimizations:
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
     search: onNavigate ? '/search' : '/ui/search',
     about: onNavigate ? '/about' : '/ui/about',
+    help: onNavigate ? '/help' : '/ui/help',
     systemOverview: onNavigate ? '/system' : '/ui/system',
     systemDatabase: onNavigate ? '/system/database' : '/ui/system/database',
     systemTerminal: onNavigate ? '/system/terminal' : '/ui/system/terminal',
@@ -283,6 +319,7 @@ Performance Optimizations:
     analyticsFlyoutOpen = false;
     settingsFlyoutOpen = false;
     systemFlyoutOpen = false;
+    helpFlyoutOpen = false;
     // Close the mobile drawer on navigation by unchecking the toggle.
     // Dispatch a synthetic event so Svelte's bind:checked stays in sync.
     const drawer = document.getElementById('my-drawer') as HTMLInputElement | null;
@@ -322,6 +359,7 @@ Performance Optimizations:
       analyticsExpanded = false;
       settingsExpanded = false;
       systemExpanded = false;
+      helpExpanded = false;
     }
   });
 
@@ -365,7 +403,7 @@ Performance Optimizations:
         <button
           onclick={() => navigate(navigationUrls.dashboard)}
           class={cn('flex items-center gap-3 group', isCollapsed && 'justify-center')}
-          aria-label="BirdNET-Go Home"
+          aria-label={t('navigation.dashboard')}
         >
           <LogoBadge size="md" variant={logoVariant} />
           {#if !isCollapsed}
@@ -772,6 +810,146 @@ Performance Optimizations:
             {/if}
           </div>
 
+          <!-- Help (Collapsible) -->
+          <div class="flex flex-col relative flyout-container">
+            {#if isCollapsed}
+              <!-- Collapsed: Icon with flyout -->
+              <div class="relative">
+                <button
+                  bind:this={helpButtonRef}
+                  onclick={toggleHelpFlyout}
+                  onmouseenter={e => !helpFlyoutOpen && showTooltip(e, t('navigation.help'))}
+                  onmouseleave={hideTooltip}
+                  class={cn(
+                    menuItemBase,
+                    menuItemCollapsed,
+                    routeCache.help
+                      ? 'text-[var(--color-primary)]'
+                      : 'text-[var(--color-base-content)]/80',
+                    'hover:text-[var(--color-base-content)] hover:menu-hover'
+                  )}
+                  aria-expanded={helpFlyoutOpen}
+                  aria-label={t('navigation.helpSubmenu')}
+                >
+                  <CircleHelp class="size-5 shrink-0" />
+                </button>
+              </div>
+              <!-- Flyout submenu -->
+              {#if helpFlyoutOpen}
+                <div
+                  in:flyout
+                  out:flyout={{ duration: 100 }}
+                  class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
+                  style:top="{helpFlyoutPosition.top}px"
+                  style:left="{helpFlyoutPosition.left}px"
+                >
+                  <div
+                    class="px-3 py-2 border-b border-[var(--color-base-200)] font-medium text-sm text-[var(--color-base-content)]"
+                  >
+                    {t('navigation.help')}
+                  </div>
+                  <div class="p-1 max-h-[calc(100vh-8rem)] overflow-y-auto">
+                    <button
+                      onclick={() => navigate(navigationUrls.help)}
+                      class={cn(
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.helpExact
+                          ? 'menu-subitem-active'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                      )}
+                    >
+                      <LifeBuoy class="size-4 shrink-0" />{t('navigation.helpAndSupport')}
+                    </button>
+                    <a
+                      href={GITHUB_ISSUES_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150 text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover"
+                      aria-label={t('navigation.reportBugAriaLabel')}
+                    >
+                      <Bug class="size-4 shrink-0" />
+                      {t('navigation.reportBug')}
+                      <ExternalLink class="size-3 opacity-40 ml-auto" />
+                    </a>
+                    <a
+                      href={GITHUB_DISCUSSIONS_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150 text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover"
+                      aria-label={t('navigation.askQuestionAriaLabel')}
+                    >
+                      <MessageCircleQuestion class="size-4 shrink-0" />
+                      {t('navigation.askQuestion')}
+                      <ExternalLink class="size-3 opacity-40 ml-auto" />
+                    </a>
+                  </div>
+                </div>
+              {/if}
+            {:else}
+              <!-- Expanded: Regular collapsible -->
+              <button
+                onclick={() => (helpExpanded = !helpExpanded)}
+                class={cn(
+                  menuItemBase,
+                  routeCache.help
+                    ? 'text-[var(--color-primary)]'
+                    : 'text-[var(--color-base-content)]/80',
+                  'hover:text-[var(--color-base-content)] hover:menu-hover'
+                )}
+                aria-expanded={helpExpanded}
+              >
+                <CircleHelp class="size-5 shrink-0" />
+                <span class="flex-1">{t('navigation.help')}</span>
+                <ChevronDown
+                  class={cn('size-4 shrink-0 transition-transform duration-200', {
+                    'rotate-180': helpExpanded,
+                  })}
+                />
+              </button>
+
+              {#if helpExpanded}
+                <div
+                  class="ml-4 pl-4 border-l-2 mt-1 flex flex-col gap-0.5"
+                  style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
+                >
+                  <button
+                    onclick={() => navigate(navigationUrls.help)}
+                    class={cn(
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.helpExact
+                        ? 'menu-subitem-active'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                    )}
+                  >
+                    <LifeBuoy class="size-4 shrink-0" />{t('navigation.helpAndSupport')}
+                  </button>
+                  <a
+                    href="https://github.com/tphakala/birdnet-go/issues/new/choose"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150 text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover"
+                    aria-label={t('navigation.reportBugAriaLabel')}
+                  >
+                    <Bug class="size-4 shrink-0" />
+                    {t('navigation.reportBug')}
+                    <ExternalLink class="size-3 opacity-40 ml-auto" />
+                  </a>
+                  <a
+                    href="https://github.com/tphakala/birdnet-go/discussions"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150 text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover"
+                    aria-label={t('navigation.askQuestionAriaLabel')}
+                  >
+                    <MessageCircleQuestion class="size-4 shrink-0" />
+                    {t('navigation.askQuestion')}
+                    <ExternalLink class="size-3 opacity-40 ml-auto" />
+                  </a>
+                </div>
+              {/if}
+            {/if}
+          </div>
+
           <!-- Settings (Collapsible) -->
           <div class="flex flex-col relative flyout-container">
             {#if isCollapsed}
@@ -1121,11 +1299,11 @@ Performance Optimizations:
       {#if !isCollapsed}
         <div class="mt-3 text-center">
           <a
-            href="https://github.com/tphakala/birdnet-go"
+            href={GITHUB_REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
             class="text-xs text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)]/80 transition-colors duration-150"
-            aria-label="View BirdNET-Go repository on GitHub (opens in new window)"
+            aria-label={t('navigation.viewOnGithubAriaLabel')}
           >
             {version}
           </a>

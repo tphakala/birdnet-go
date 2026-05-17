@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Podnabídka analýzy",
     "settingsSubmenu": "Podnabídka nastavení",
     "systemSubmenu": "Podnabídka systému",
-    "systemTerminal": "Terminál"
+    "systemTerminal": "Terminál",
+    "help": "Nápověda",
+    "helpSubmenu": "Podmenu nápovědy",
+    "helpAndSupport": "Nápověda a podpora",
+    "reportBug": "Nahlásit chybu",
+    "askQuestion": "Položit dotaz",
+    "reportBugAriaLabel": "Nahlásit chybu na GitHubu (otevře se v novém okně)",
+    "askQuestionAriaLabel": "Položit dotaz na GitHub Discussions (otevře se v novém okně)",
+    "viewOnGithubAriaLabel": "Zobrazit BirdNET-Go na GitHubu (otevře se v novém okně)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,22 @@
     "bannerMessage": "Změny konfigurace vyžadují restart, aby se projevily:",
     "bannerAction": "Restartovat nyní",
     "restartFailed": "Restart se nepodařilo spustit"
+  },
+  "help": {
+    "title": "Nápověda a podpora",
+    "subtitle": "Získejte pomoc, nahlaste problémy a spojte se s komunitou",
+    "reportBug": {
+      "description": "Pokud narazíte na problém, nejprve vygenerujte diagnostický balíček s informacemi o systému a logy, poté otevřete hlášení chyby na GitHubu."
+    },
+    "askQuestion": {
+      "description": "Máte dotaz ohledně nastavení, funkcí nebo používání? Fórum GitHub Discussions je nejlepší místo, kde získáte pomoc od komunity."
+    },
+    "diagnostics": {
+      "description": "Vygenerujte diagnostický balíček pro pomoc s řešením problémů. Zachytí konfiguraci systému a poslední logy."
+    },
+    "quickLinks": {
+      "title": "Rychlé odkazy",
+      "releases": "Poznámky k vydání"
+    }
   }
 }

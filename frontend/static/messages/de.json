@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Analysen-Untermenü",
     "settingsSubmenu": "Einstellungen-Untermenü",
     "systemSubmenu": "System-Untermenü",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Hilfe",
+    "helpSubmenu": "Hilfe-Untermenü",
+    "helpAndSupport": "Hilfe & Support",
+    "reportBug": "Fehler melden",
+    "askQuestion": "Frage stellen",
+    "reportBugAriaLabel": "Einen Fehler auf GitHub melden (öffnet in neuem Fenster)",
+    "askQuestionAriaLabel": "Eine Frage in GitHub Discussions stellen (öffnet in neuem Fenster)",
+    "viewOnGithubAriaLabel": "BirdNET-Go auf GitHub ansehen (öffnet in neuem Fenster)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,22 @@
     "bannerMessage": "Konfigurationsänderungen erfordern einen Neustart:",
     "bannerAction": "Jetzt neu starten",
     "restartFailed": "Neustart konnte nicht eingeleitet werden"
+  },
+  "help": {
+    "title": "Hilfe & Support",
+    "subtitle": "Hilfe erhalten, Probleme melden und mit der Community verbinden",
+    "reportBug": {
+      "description": "Wenn Sie auf ein Problem stoßen, erstellen Sie zunächst ein Support-Paket mit Systeminformationen und Protokollen und eröffnen Sie dann einen Fehlerbericht auf GitHub."
+    },
+    "askQuestion": {
+      "description": "Haben Sie eine Frage zur Einrichtung, zu Funktionen oder zur Nutzung? Das GitHub Discussions Forum ist der beste Ort, um Hilfe von der Community zu erhalten."
+    },
+    "diagnostics": {
+      "description": "Erstellen Sie ein Support-Paket zur Fehlerdiagnose. Es erfasst Ihre Systemkonfiguration und aktuelle Protokolle."
+    },
+    "quickLinks": {
+      "title": "Schnellzugriff",
+      "releases": "Versionshinweise"
+    }
   }
 }

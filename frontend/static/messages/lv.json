@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Analītikas apakšizvēlne",
     "settingsSubmenu": "Iestatījumu apakšizvēlne",
     "systemSubmenu": "Sistēmas apakšizvēlne",
-    "systemTerminal": "Terminālis"
+    "systemTerminal": "Terminālis",
+    "help": "Palīdzība",
+    "helpSubmenu": "Palīdzības apakšizvēlne",
+    "helpAndSupport": "Palīdzība un atbalsts",
+    "reportBug": "Ziņot par kļūdu",
+    "askQuestion": "Uzdot jautājumu",
+    "reportBugAriaLabel": "Ziņot par kļūdu GitHub (atveras jaunā logā)",
+    "askQuestionAriaLabel": "Uzdot jautājumu GitHub Discussions (atveras jaunā logā)",
+    "viewOnGithubAriaLabel": "Skatīt BirdNET-Go GitHub (atveras jaunā logā)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,22 @@
     "bannerMessage": "Konfigurācijas izmaiņām nepieciešama restartēšana:",
     "bannerAction": "Restartēt tagad",
     "restartFailed": "Neizdevās sākt restartēšanu"
+  },
+  "help": {
+    "title": "Palīdzība un atbalsts",
+    "subtitle": "Saņemiet palīdzību, ziņojiet par problēmām un sazinieties ar kopienu",
+    "reportBug": {
+      "description": "Ja saskaraties ar problēmu, vispirms izveidojiet atbalsta pakotni, lai saglabātu sistēmas informāciju un žurnālus, pēc tam atveriet kļūdas ziņojumu GitHub."
+    },
+    "askQuestion": {
+      "description": "Vai jums ir jautājums par iestatīšanu, funkcijām vai lietošanu? GitHub Discussions forums ir labākā vieta, kur saņemt palīdzību no kopienas."
+    },
+    "diagnostics": {
+      "description": "Izveidojiet atbalsta pakotni, lai palīdzētu diagnosticēt problēmas. Tā saglabā jūsu sistēmas konfigurāciju un jaunākos žurnālus."
+    },
+    "quickLinks": {
+      "title": "Ātrās saites",
+      "releases": "Laidiena piezīmes"
+    }
   }
 }

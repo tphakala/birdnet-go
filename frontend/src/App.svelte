@@ -34,6 +34,7 @@
   let Species = $state<Component | null>(null);
   let Search = $state<Component | null>(null);
   let About = $state<Component | null>(null);
+  let Help = $state<Component | null>(null);
   let System = $state<Component | null>(null);
   let Settings = $state<Component | null>(null);
   let Notifications = $state<Component | null>(null);
@@ -122,6 +123,7 @@
       component: 'detection-detail',
     },
     { route: 'about', page: 'about', titleKey: 'navigation.about', component: 'about' },
+    { route: 'help', page: 'help', titleKey: 'navigation.helpAndSupport', component: 'help' },
     { route: 'system', page: 'system', titleKey: 'navigation.system', component: 'system' },
     { route: 'settings', page: 'settings', titleKey: 'navigation.settings', component: 'settings' },
   ];
@@ -188,6 +190,12 @@
           if (!About) {
             const module = await import('./lib/desktop/views/About.svelte');
             About = module.default;
+          }
+          break;
+        case 'help':
+          if (!Help) {
+            const module = await import('./lib/desktop/views/Help.svelte');
+            Help = module.default;
           }
           break;
         case 'system':
@@ -298,6 +306,7 @@
     [uiPath('search')]: findRouteConfig('search'),
     [uiPath('detections')]: findRouteConfig('detections'),
     [uiPath('about')]: findRouteConfig('about'),
+    [uiPath('help')]: findRouteConfig('help'),
     [uiPath('system')]: findRouteConfig('system'),
     [uiPath('settings')]: findRouteConfig('settings'),
   });
@@ -574,6 +583,8 @@
       {@render renderRoute(Search)}
     {:else if currentRoute === 'about'}
       {@render renderRoute(About)}
+    {:else if currentRoute === 'help'}
+      {@render renderRoute(Help)}
     {:else if currentRoute === 'system'}
       {@render renderRoute(System)}
     {:else if currentRoute === 'settings'}

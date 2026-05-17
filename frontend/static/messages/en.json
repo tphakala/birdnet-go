@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Analytics submenu",
     "settingsSubmenu": "Settings submenu",
     "systemSubmenu": "System submenu",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Help",
+    "helpSubmenu": "Help submenu",
+    "helpAndSupport": "Help & Support",
+    "reportBug": "Report Bug",
+    "askQuestion": "Ask a Question",
+    "reportBugAriaLabel": "Report a bug on GitHub (opens in new window)",
+    "askQuestionAriaLabel": "Ask a question on GitHub Discussions (opens in new window)",
+    "viewOnGithubAriaLabel": "View BirdNET-Go on GitHub (opens in new window)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,22 @@
     "bannerMessage": "Configuration changes require a restart to take effect:",
     "bannerAction": "Restart Now",
     "restartFailed": "Failed to initiate restart"
+  },
+  "help": {
+    "title": "Help & Support",
+    "subtitle": "Get help, report issues, and connect with the community",
+    "reportBug": {
+      "description": "If you encounter a problem, generate a support dump first to capture your system info and logs, then open a bug report on GitHub to describe the issue."
+    },
+    "askQuestion": {
+      "description": "Have a question about setup, features, or usage? The GitHub Discussions forum is the best place to get help from the community."
+    },
+    "diagnostics": {
+      "description": "Generate a support dump to help diagnose issues. This captures your system configuration and recent logs."
+    },
+    "quickLinks": {
+      "title": "Quick Links",
+      "releases": "Release Notes"
+    }
   }
 }

@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Sottomenu analisi",
     "settingsSubmenu": "Sottomenu impostazioni",
     "systemSubmenu": "Sottomenu sistema",
-    "systemTerminal": "Terminale"
+    "systemTerminal": "Terminale",
+    "help": "Aiuto",
+    "helpSubmenu": "Sottomenu aiuto",
+    "helpAndSupport": "Aiuto e supporto",
+    "reportBug": "Segnala un bug",
+    "askQuestion": "Fai una domanda",
+    "reportBugAriaLabel": "Segnala un bug su GitHub (si apre in una nuova finestra)",
+    "askQuestionAriaLabel": "Fai una domanda su GitHub Discussions (si apre in una nuova finestra)",
+    "viewOnGithubAriaLabel": "Visualizza BirdNET-Go su GitHub (si apre in una nuova finestra)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,22 @@
     "bannerMessage": "Le modifiche alla configurazione richiedono un riavvio:",
     "bannerAction": "Riavvia ora",
     "restartFailed": "Impossibile avviare il riavvio"
+  },
+  "help": {
+    "title": "Aiuto e supporto",
+    "subtitle": "Ottieni aiuto, segnala problemi e connettiti con la comunità",
+    "reportBug": {
+      "description": "Se riscontri un problema, genera prima un pacchetto di supporto per acquisire le informazioni di sistema e i log, poi apri una segnalazione bug su GitHub."
+    },
+    "askQuestion": {
+      "description": "Hai una domanda sulla configurazione, le funzionalità o l'utilizzo? Il forum GitHub Discussions è il posto migliore per ottenere aiuto dalla comunità."
+    },
+    "diagnostics": {
+      "description": "Genera un pacchetto di supporto per aiutare a diagnosticare i problemi. Acquisisce la configurazione del sistema e i log recenti."
+    },
+    "quickLinks": {
+      "title": "Link rapidi",
+      "releases": "Note di rilascio"
+    }
   }
 }

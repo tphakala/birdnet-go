@@ -228,7 +228,15 @@
     "analyticsSubmenu": "Analytiikan alavalikko",
     "settingsSubmenu": "Asetusten alavalikko",
     "systemSubmenu": "Järjestelmän alavalikko",
-    "systemTerminal": "Terminaali"
+    "systemTerminal": "Terminaali",
+    "help": "Ohje",
+    "helpSubmenu": "Ohje-alavalikko",
+    "helpAndSupport": "Ohje ja tuki",
+    "reportBug": "Ilmoita virheestä",
+    "askQuestion": "Esitä kysymys",
+    "reportBugAriaLabel": "Ilmoita virheestä GitHubissa (avautuu uuteen ikkunaan)",
+    "askQuestionAriaLabel": "Esitä kysymys GitHub Discussions -foorumilla (avautuu uuteen ikkunaan)",
+    "viewOnGithubAriaLabel": "Näytä BirdNET-Go GitHubissa (avautuu uuteen ikkunaan)"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4693,5 +4701,22 @@
     "bannerMessage": "Asetusten muutokset vaativat uudelleenkäynnistyksen:",
     "bannerAction": "Käynnistä uudelleen nyt",
     "restartFailed": "Uudelleenkäynnistyksen aloittaminen epäonnistui"
+  },
+  "help": {
+    "title": "Ohje ja tuki",
+    "subtitle": "Saa apua, ilmoita ongelmista ja ota yhteyttä yhteisöön",
+    "reportBug": {
+      "description": "Jos kohtaat ongelman, luo ensin tukipaketti järjestelmätietojen ja lokien tallentamiseksi ja avaa sitten virheraportti GitHubissa."
+    },
+    "askQuestion": {
+      "description": "Onko sinulla kysyttävää asennuksesta, ominaisuuksista tai käytöstä? GitHub Discussions -foorumi on paras paikka saada apua yhteisöltä."
+    },
+    "diagnostics": {
+      "description": "Luo tukipaketti ongelmien diagnosoimiseksi. Se tallentaa järjestelmäkokoonpanon ja viimeisimmät lokit."
+    },
+    "quickLinks": {
+      "title": "Pikalinkit",
+      "releases": "Julkaisutiedot"
+    }
   }
 }
