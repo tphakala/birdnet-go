@@ -30,9 +30,10 @@ func inactiveQuietWindow() (start, end string) {
 	return fmt.Sprintf("%02d:00", h), fmt.Sprintf("%02d:01", h)
 }
 
-// mockManager implements streamManager for testing Evaluate().
+// mockManager implements StreamManager for testing Evaluate().
 type mockManager struct {
 	activeStreams []string
+	streamURLs    map[string]string
 	stopped       []string
 	started       []struct{ sourceID, url, transport string }
 	stopErr       error
@@ -41,6 +42,10 @@ type mockManager struct {
 
 func (m *mockManager) GetActiveStreamIDs() []string {
 	return m.activeStreams
+}
+
+func (m *mockManager) GetActiveStreamURLs() map[string]string {
+	return m.streamURLs
 }
 
 func (m *mockManager) StopStream(sourceID string) error {
@@ -59,7 +64,7 @@ func newTestScheduler(t *testing.T, mock *mockManager) *QuietHoursScheduler {
 	s := NewQuietHoursScheduler(QuietHoursConfig{
 		ControlChan: make(chan string, 1),
 	})
-	s.SetStreamManager(func() streamManager { return mock })
+	s.SetStreamManager(func() StreamManager { return mock })
 	return s
 }
 
@@ -345,8 +350,12 @@ func TestGetSolarEventTime(t *testing.T) {
 
 // TestQuietHours_Evaluate verifies suppression during quiet hours.
 func TestQuietHours_Evaluate(t *testing.T) {
-	t.Run("stops stream during quiet hours", func(t *testing.T) {
-		mock := &mockManager{activeStreams: []string{"rtsp://cam1"}}
+	t.Run("stops stream during quiet hours using production source id", func(t *testing.T) {
+		const sourceID = "rtsp_abc123"
+		mock := &mockManager{
+			activeStreams: []string{sourceID},
+			streamURLs:    map[string]string{sourceID: "rtsp://cam1"},
+		}
 
 		settings := conf.GetTestSettings()
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
@@ -365,12 +374,14 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		s := newTestScheduler(t, mock)
 		s.Evaluate()
 
-		assert.Equal(t, []string{"rtsp://cam1"}, mock.stopped, "should stop stream during quiet hours")
+		assert.Equal(t, []string{sourceID}, mock.stopped, "should stop stream during quiet hours")
 		assert.Empty(t, mock.started, "should not start any streams")
-		assert.True(t, s.suppressed["rtsp://cam1"], "stream should be marked suppressed")
+		assert.True(t, s.suppressed[sourceID], "stream should be marked suppressed by runtime source ID")
+		assert.Equal(t, sourceID, s.suppressedURLs["rtsp://cam1"], "configured URL should map to stopped source ID")
 	})
 
-	t.Run("restarts stream after quiet hours", func(t *testing.T) {
+	t.Run("restarts stream after quiet hours using stopped source id", func(t *testing.T) {
+		const sourceID = "rtsp_abc123"
 		mock := &mockManager{activeStreams: []string{}}
 
 		qhStart, qhEnd := inactiveQuietWindow()
@@ -389,18 +400,21 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		setTestSettings(t, settings)
 
 		s := newTestScheduler(t, mock)
-		s.suppressed["rtsp://cam1"] = true // previously suppressed
+		s.suppressed[sourceID] = true // previously suppressed
+		s.suppressedURLs["rtsp://cam1"] = sourceID
 		s.Evaluate()
 
 		assert.Empty(t, mock.stopped, "should not stop any streams")
 		assert.Len(t, mock.started, 1, "should restart previously suppressed stream")
-		assert.Equal(t, "rtsp://cam1", mock.started[0].sourceID)
+		assert.Equal(t, sourceID, mock.started[0].sourceID)
 		assert.Equal(t, "rtsp://cam1", mock.started[0].url)
 		assert.Equal(t, "tcp", mock.started[0].transport)
-		assert.False(t, s.suppressed["rtsp://cam1"], "stream should no longer be suppressed")
+		assert.False(t, s.suppressed[sourceID], "stream should no longer be suppressed")
+		assert.NotContains(t, s.suppressedURLs, "rtsp://cam1", "URL mapping should be cleared after restart")
 	})
 
 	t.Run("disabled quiet hours restores suppressed stream", func(t *testing.T) {
+		const sourceID = "rtsp_abc123"
 		mock := &mockManager{activeStreams: []string{}}
 
 		settings := conf.GetTestSettings()
@@ -413,15 +427,20 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		setTestSettings(t, settings)
 
 		s := newTestScheduler(t, mock)
-		s.suppressed["rtsp://cam1"] = true // was suppressed
+		s.suppressed[sourceID] = true // was suppressed
+		s.suppressedURLs["rtsp://cam1"] = sourceID
 		s.Evaluate()
 
 		assert.Len(t, mock.started, 1, "should restart stream when quiet hours disabled")
-		assert.Equal(t, "rtsp://cam1", mock.started[0].sourceID)
+		assert.Equal(t, sourceID, mock.started[0].sourceID)
 	})
 
 	t.Run("disabled stream is ignored and stale suppression is cleared", func(t *testing.T) {
-		mock := &mockManager{activeStreams: []string{"rtsp://cam1"}}
+		const sourceID = "rtsp_abc123"
+		mock := &mockManager{
+			activeStreams: []string{sourceID},
+			streamURLs:    map[string]string{sourceID: "rtsp://cam1"},
+		}
 
 		settings := conf.GetTestSettings()
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
@@ -441,16 +460,22 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		setTestSettings(t, settings)
 
 		s := newTestScheduler(t, mock)
-		s.suppressed["rtsp://cam1"] = true
+		s.suppressed[sourceID] = true
+		s.suppressedURLs["rtsp://cam1"] = sourceID
 		s.Evaluate()
 
 		assert.Empty(t, mock.stopped, "disabled streams should not be stopped by quiet hours")
 		assert.Empty(t, mock.started, "disabled streams should not be restarted by quiet hours")
-		assert.False(t, s.suppressed["rtsp://cam1"], "stale suppression should be cleared for disabled streams")
+		assert.False(t, s.suppressed[sourceID], "stale suppression should be cleared for disabled streams")
+		assert.NotContains(t, s.suppressedURLs, "rtsp://cam1", "stale URL mapping should be cleared")
 	})
 
 	t.Run("no action when not in quiet hours", func(t *testing.T) {
-		mock := &mockManager{activeStreams: []string{"rtsp://cam1"}}
+		const sourceID = "rtsp_abc123"
+		mock := &mockManager{
+			activeStreams: []string{sourceID},
+			streamURLs:    map[string]string{sourceID: "rtsp://cam1"},
+		}
 
 		qhStart, qhEnd := inactiveQuietWindow()
 		settings := conf.GetTestSettings()
@@ -478,7 +503,7 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		s := NewQuietHoursScheduler(QuietHoursConfig{
 			ControlChan: make(chan string, 1),
 		})
-		s.SetStreamManager(func() streamManager { return nil })
+		s.SetStreamManager(func() StreamManager { return nil })
 		// Should not panic.
 		s.Evaluate()
 	})
@@ -557,8 +582,12 @@ func TestGetSuppressedStreams(t *testing.T) {
 
 	s := &QuietHoursScheduler{
 		suppressed: map[string]bool{
-			"rtsp://cam1": true,
-			"rtsp://cam2": false,
+			"rtsp_abc123": true,
+			"rtsp_def456": false,
+		},
+		suppressedURLs: map[string]string{
+			"rtsp://cam1": "rtsp_abc123",
+			"rtsp://cam2": "rtsp_def456",
 		},
 	}
 
