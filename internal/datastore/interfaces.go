@@ -263,7 +263,7 @@ func (ds *DataStore) PingWithLatency() (time.Duration, error) {
 	start := time.Now()
 	var result int
 	if err := ds.DB.Raw("SELECT 1").Scan(&result).Error; err != nil {
-		return 0, err
+		return 0, fmt.Errorf("database ping failed: %w", err)
 	}
 	return time.Since(start), nil
 }

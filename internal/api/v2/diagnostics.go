@@ -112,7 +112,11 @@ func (c *Controller) registerHealthChecks() {
 			avgMS = float64(totalUs) / float64(count) / 1000.0
 			// max used as p99 approximation; true p99 requires histogram data
 			p99MS = float64(maxUs) / 1000.0
-			windowMS = c.currentSettings().BirdNET.Overlap * 1000.0
+			overlap := c.currentSettings().BirdNET.Overlap
+			if overlap <= 0 {
+				overlap = 3.0 // full 3s analysis window when no overlap
+			}
+			windowMS = overlap * 1000.0
 			return avgMS, p99MS, windowMS
 		}),
 		checks.NewDetectionRateCheck(nil), // TODO: wire to datastore (PR 2)
@@ -134,6 +138,9 @@ func (c *Controller) registerHealthChecks() {
 			return true, "current", nil // TODO: wire to migration checker
 		}),
 		checks.NewDatabasePerformanceCheck(func() (time.Duration, error) {
+			if c.DS == nil {
+				return 0, errors.NewStd("datastore unavailable")
+			}
 			return c.DS.PingWithLatency()
 		}),
 
