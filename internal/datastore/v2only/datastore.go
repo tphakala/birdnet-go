@@ -472,16 +472,13 @@ func (ds *Datastore) GetDatabaseStats(ctx context.Context) (*datastore.DatabaseS
 	// Get database size (best-effort); guard against nil DB after concurrent Close()
 	if db := ds.manager.DB(); db != nil {
 		if !ds.manager.IsMySQL() {
-			var pageCount, pageSize int64
-			db.WithContext(ctx).Raw("PRAGMA page_count").Scan(&pageCount)
-			db.WithContext(ctx).Raw("PRAGMA page_size").Scan(&pageSize)
-			stats.SizeBytes = pageCount * pageSize
+			_ = db.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Scan(&stats.SizeBytes).Error
 		} else {
-			db.WithContext(ctx).Raw(`
+			_ = db.WithContext(ctx).Raw(`
 				SELECT SUM(DATA_LENGTH + INDEX_LENGTH)
 				FROM information_schema.TABLES
 				WHERE TABLE_SCHEMA = DATABASE()
-			`).Scan(&stats.SizeBytes)
+			`).Scan(&stats.SizeBytes).Error
 		}
 	}
 

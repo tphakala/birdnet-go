@@ -107,7 +107,7 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 				}
 
 				// Update active lock count
-				if lockCount, err := ds.getActiveLockCount(); err == nil && metrics != nil {
+				if lockCount, err := ds.getActiveLockCount(ctx); err == nil && metrics != nil {
 					metrics.UpdateActiveLockCount(lockCount)
 				} else if err != nil {
 					GetLogger().Error("Failed to get active lock count",
@@ -164,9 +164,9 @@ func (ds *DataStore) getTableRowCount(ctx context.Context, table string) (int64,
 }
 
 // getActiveLockCount returns the number of active note locks
-func (ds *DataStore) getActiveLockCount() (int, error) {
+func (ds *DataStore) getActiveLockCount(ctx context.Context) (int, error) {
 	var count int64
-	err := ds.DB.Model(&NoteLock{}).Count(&count).Error
+	err := ds.DB.WithContext(ctx).Model(&NoteLock{}).Count(&count).Error
 	if err != nil {
 		return 0, fmt.Errorf("failed to count active locks: %w", err)
 	}
