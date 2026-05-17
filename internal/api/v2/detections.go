@@ -267,12 +267,12 @@ type detectionQueryParams struct {
 // advancedSearchCacheKey generates a deterministic cache key for advanced search queries.
 // Includes all filter parameters to avoid cache collisions.
 func (p *detectionQueryParams) advancedSearchCacheKey() string {
-	return fmt.Sprintf("adv_search:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s",
+	return fmt.Sprintf("adv_search:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%d",
 		p.Search, p.NumResults, p.Offset,
 		p.Confidence, p.TimeOfDay, p.HourRange,
 		p.Verified, p.Location, p.Locked,
 		p.Species, p.Date, p.StartDate+":"+p.EndDate,
-		p.SortBy)
+		p.SortBy, p.QueryType, p.Hour, p.Duration)
 }
 
 // parseDetectionQueryParams extracts and validates query parameters from the request
@@ -337,6 +337,8 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 			"date_desc":       {},
 			"date_asc":        {},
 			"species_asc":     {},
+			"species_desc":    {},
+			"confidence_asc":  {},
 			"confidence_desc": {},
 			"status":          {},
 		}
@@ -613,19 +615,32 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 		params.Search = resolved
 	}
 
+	// Filters beyond what the simple hourly/species query functions support.
+	// Separated from hasAdvancedFilters because date is always present for
+	// hourly and species queries and should not force the advanced path.
+	hasNonDefaultSort := params.SortBy != "" && params.SortBy != "date_desc"
+	hasExtraFilters := params.Confidence != "" || params.TimeOfDay != "" ||
+		params.HourRange != "" || params.Verified != "" ||
+		params.Location != "" || params.Locked != "" ||
+		params.StartDate != "" || params.EndDate != ""
+
 	switch params.QueryType {
 	case "hourly":
+		if hasNonDefaultSort || hasExtraFilters {
+			return c.getSearchDetectionsAdvanced(params)
+		}
 		return c.getHourlyDetections(params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
 	case queryTypeSpecies:
+		if hasNonDefaultSort || hasExtraFilters {
+			return c.getSearchDetectionsAdvanced(params)
+		}
 		return c.getSpeciesDetections(params.Species, params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
 	case queryTypeSearch:
-		// Use advanced search if filters are present
 		if hasAdvancedFilters {
 			return c.getSearchDetectionsAdvanced(params)
 		}
 		return c.getSearchDetections(params.Search, params.NumResults, params.Offset)
 	default: // "all" or any other value
-		// Check if there are filters even without explicit search text
 		if hasAdvancedFilters {
 			return c.getSearchDetectionsAdvanced(params)
 		}
@@ -1012,9 +1027,13 @@ func (c *Controller) buildAdvancedSearchFilters(params *detectionQueryParams) da
 		hourParam = params.Hour
 	}
 	if hourFilter := parseHourFilter(hourParam); hourFilter != nil {
+		endHour := hourFilter.End
+		if hourFilter.Start == hourFilter.End && params.Duration > 1 {
+			endHour = (hourFilter.Start + params.Duration - 1) % 24
+		}
 		filters.Hour = &datastore.HourFilter{
 			Start: hourFilter.Start,
-			End:   hourFilter.End,
+			End:   endHour,
 		}
 	}
 

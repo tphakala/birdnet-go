@@ -177,6 +177,10 @@
         return { field: 'dateTime', direction: 'asc' };
       case 'species_asc':
         return { field: 'species', direction: 'asc' };
+      case 'species_desc':
+        return { field: 'species', direction: 'desc' };
+      case 'confidence_asc':
+        return { field: 'confidence', direction: 'asc' };
       case 'confidence_desc':
         return { field: 'confidence', direction: 'desc' };
       case 'status':
@@ -192,9 +196,9 @@
       case 'dateTime':
         return direction === 'asc' ? 'date_asc' : 'date_desc';
       case 'species':
-        return 'species_asc';
+        return direction === 'asc' ? 'species_asc' : 'species_desc';
       case 'confidence':
-        return 'confidence_desc';
+        return direction === 'asc' ? 'confidence_asc' : 'confidence_desc';
       case 'status':
         return 'status';
     }
@@ -224,11 +228,7 @@
       sortField = field;
       sortDirection = field === 'dateTime' ? 'desc' : 'asc';
     }
-    const newBackendSort = toBackendSortBy(sortField, sortDirection);
-    // For columns with a fixed backend direction, snap the visual direction to match
-    const parsed = parseSortBy(newBackendSort);
-    sortDirection = parsed.direction;
-    onSortChange?.(newBackendSort);
+    onSortChange?.(toBackendSortBy(sortField, sortDirection));
   }
 
   // Mobile audio player state
