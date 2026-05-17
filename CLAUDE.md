@@ -92,6 +92,7 @@ ast-grep --pattern "export let $PROP" --rewrite "let { $PROP } = \$props()" --la
 
 ## Pre-Commit Checklist
 
+0. Run preflight quality gate: `/preflight` (or follow `.agents/skills/preflight/SKILL.md`)
 1. Run linters: `golangci-lint run -v` / `npm run check:all`
 2. Run tests: `go test -race -v` / `npm test`
 3. Check open PRs to avoid conflicts

@@ -402,6 +402,19 @@ Project guidelines are in CLAUDE.md files (see [Getting Started](#getting-starte
 3. CLAUDE.md files provide automatic context
 4. Ask Claude for help with specific tasks
 
+### Quality Gate (Mandatory for AI-Assisted PRs)
+
+If you're using an AI coding tool to generate your PR, you **must** run the preflight quality gate before pushing. Manual contributors are encouraged to review the checklist too. The gate is defined in `.agents/skills/preflight/SKILL.md` and catches the issues that reviewers would otherwise flag.
+
+- **Claude Code**: Run `/preflight` before pushing
+- **Codex, Gemini CLI, Windsurf**: The skill auto-discovers from `.agents/skills/`
+- **Cursor, Copilot**: `AGENTS.md` instructs your tool to run the gate
+- **Manual check**: Read `.agents/skills/preflight/SKILL.md` and follow its process
+
+Each PR must contain **exactly one feature, one fix, or one refactor**. PRs that batch multiple concerns will not be merged. If your task spans multiple changes, split them into separate branches and PRs.
+
+PRs that skip preflight typically require 5-10 review rounds. Running preflight locally takes minutes and usually results in a clean first review.
+
 **Questions?** Join [Discord](https://discord.gg/gcSCFGUtsd) to discuss AI-assisted development.
 
 ## Submitting Changes
@@ -470,6 +483,7 @@ Brief description of changes.
 - [ ] Frontend tests pass (`task frontend-test`)
 - [ ] Linting passes
 - [ ] Manual testing completed
+- [ ] Preflight quality gate passed (AI-assisted PRs)
 
 ## Related Issues
 
