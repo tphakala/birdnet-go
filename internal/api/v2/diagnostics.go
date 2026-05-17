@@ -131,13 +131,20 @@ func (c *Controller) registerHealthChecks() {
 // getDataPaths returns filesystem paths that should be monitored for disk space.
 func (c *Controller) getDataPaths() []string {
 	settings := c.currentSettings()
+	seen := make(map[string]struct{})
 	var paths []string
-	if settings.Output.SQLite.Path != "" {
-		paths = append(paths, filepath.Dir(settings.Output.SQLite.Path))
+	addPath := func(p string) {
+		dir := filepath.Dir(p)
+		if _, ok := seen[dir]; !ok {
+			seen[dir] = struct{}{}
+			paths = append(paths, dir)
+		}
 	}
-	// Add log file directory if file output is configured
+	if settings.Output.SQLite.Path != "" {
+		addPath(settings.Output.SQLite.Path)
+	}
 	if settings.Logging.FileOutput != nil && settings.Logging.FileOutput.Path != "" {
-		paths = append(paths, filepath.Dir(settings.Logging.FileOutput.Path))
+		addPath(settings.Logging.FileOutput.Path)
 	}
 	if len(paths) == 0 {
 		paths = append(paths, ".")
