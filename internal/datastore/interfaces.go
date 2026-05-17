@@ -2433,10 +2433,14 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 		query = query.Order("notes.date ASC, notes.time ASC")
 	case "species_asc":
 		query = query.Order("notes.common_name ASC")
+	case "species_desc":
+		query = query.Order("notes.common_name DESC")
+	case "confidence_asc":
+		query = query.Order("notes.confidence ASC")
 	case "confidence_desc":
 		query = query.Order("notes.confidence DESC")
 	default:
-		query = query.Order("notes.date DESC, notes.time DESC") // Default sort by date, newest first
+		query = query.Order("notes.date DESC, notes.time DESC")
 	}
 
 	// Apply pagination (PerPage and Page are already sanitised)

@@ -303,6 +303,9 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 	if duration <= 0 {
 		duration = 1
 	}
+	if duration > 24 {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "duration must be between 1 and 24 hours")
+	}
 	params.Duration = duration
 
 	// Validate dates

@@ -134,6 +134,10 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 			query = query.Order("date ASC, time ASC")
 		case "species_asc":
 			query = query.Order("common_name ASC")
+		case "species_desc":
+			query = query.Order("common_name DESC")
+		case "confidence_asc":
+			query = query.Order("confidence ASC")
 		case "confidence_desc":
 			query = query.Order("confidence DESC")
 		case "status":
