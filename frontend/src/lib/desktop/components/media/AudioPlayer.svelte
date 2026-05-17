@@ -301,7 +301,7 @@
 
   // Convert mouse/touch X position to time in seconds
   const xToTime = (clientX: number): number => {
-    if (!playerContainer || duration <= 0) return 0;
+    if (!playerContainer || !isFinite(duration) || duration <= 0) return 0;
     const rect = playerContainer.getBoundingClientRect();
     const relativeX = Math.max(0, Math.min(clientX - rect.left, rect.width));
     return (relativeX / rect.width) * duration;
@@ -309,7 +309,7 @@
 
   // Convert time in seconds to percentage of container width
   const timeToPercent = (timeSec: number): number => {
-    if (duration <= 0) return 0;
+    if (!isFinite(duration) || duration <= 0) return 0;
     return (timeSec / duration) * 100;
   };
 
@@ -372,7 +372,7 @@
   };
 
   const handleSelectionMouseDown = (e: MouseEvent) => {
-    if (!enableClipExtraction || duration <= 0) return;
+    if (!enableClipExtraction || !isFinite(duration) || duration <= 0) return;
     if (e.button !== 0) return;
 
     // Ignore clicks on interactive elements (toolbar buttons, controls, sliders, popups, etc.)
@@ -521,7 +521,7 @@
   };
 
   const handleSelectionTouchStart = (e: TouchEvent) => {
-    if (!enableClipExtraction || duration <= 0 || !e.touches[0]) return;
+    if (!enableClipExtraction || !isFinite(duration) || duration <= 0 || !e.touches[0]) return;
 
     // Ignore touches on interactive elements (buttons, sliders, popups, etc.)
     const target = e.target as HTMLElement;
@@ -920,7 +920,7 @@
     extractionFormat = format;
     if (selectionStartSec === null || selectionEndSec === null) {
       // No selection — export full file (guard against unloaded metadata)
-      if (duration <= 0) return;
+      if (!isFinite(duration) || duration <= 0) return;
       extractClip(0, duration);
     } else {
       extractClip();
@@ -1020,7 +1020,7 @@
   };
 
   const handleProgressClick = (event: MouseEvent) => {
-    if (!audioElement || duration <= 0) return;
+    if (!audioElement || !isFinite(duration) || duration <= 0) return;
 
     // Use the toolbar's own progress bar if the event target is inside one,
     // otherwise fall back to playerContainer (always rendered).

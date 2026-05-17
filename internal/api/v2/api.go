@@ -926,6 +926,11 @@ func (c *Controller) reportErrorToTelemetry(ctx echo.Context, err error, message
 		}
 	}
 
+	// Client disconnects and request timeouts are not server bugs.
+	if err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+		return
+	}
+
 	path := ctx.Request().URL.Path
 	method := ctx.Request().Method
 

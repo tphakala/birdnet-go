@@ -266,7 +266,7 @@
 
   // Seek to position when clicking on the overlay area
   function handleSeek(event: MouseEvent) {
-    if (!audioElement || !overlayElement || duration === 0) return;
+    if (!audioElement || !overlayElement || !isFinite(duration) || duration <= 0) return;
 
     const rect = overlayElement.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
@@ -475,7 +475,7 @@
   aria-valuetext={`${formatTime(currentTime)} of ${formatTime(duration)}`}
   onmousedown={handleMouseDown}
   onkeydown={e => {
-    if (!audioElement || duration === 0) return;
+    if (!audioElement || !isFinite(duration) || duration <= 0) return;
     const SMALL_SKIP = 5;
     const LARGE_SKIP = 10;
 

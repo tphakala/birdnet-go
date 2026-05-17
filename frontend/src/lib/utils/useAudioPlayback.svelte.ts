@@ -274,7 +274,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   }
 
   function seek(timeSec: number) {
-    if (!audioElement || duration <= 0) return;
+    if (!audioElement || !isFinite(duration) || duration <= 0) return;
     const clamped = Math.max(0, Math.min(timeSec, duration));
     audioElement.currentTime = clamped;
     currentTime = clamped;
