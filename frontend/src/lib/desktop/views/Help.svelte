@@ -15,9 +15,8 @@
     GITHUB_REPO_URL,
     GITHUB_DISCUSSIONS_URL,
     GITHUB_RELEASES_URL,
+    LICENSE_URL,
   } from '$lib/utils/externalUrls';
-
-  const LICENSE_URL = 'https://creativecommons.org/licenses/by-nc-sa/4.0/';
 </script>
 
 <div class="col-span-12 space-y-4">

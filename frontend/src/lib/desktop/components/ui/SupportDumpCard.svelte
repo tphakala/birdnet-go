@@ -164,7 +164,7 @@
           );
         }
 
-        setTimeout(() => {
+        safeTimeout(() => {
           statusMessage = '';
           statusType = 'info';
           progressPercent = 0;
@@ -196,7 +196,7 @@
     progressPercent = percent;
 
     if (type === 'info' && percent < 90) {
-      setTimeout(() => {
+      safeTimeout(() => {
         if (generating && progressPercent < 90) {
           progressPercent = Math.min(progressPercent + 10, 90);
         }

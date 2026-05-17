@@ -48,7 +48,7 @@
     }
   }
 
-  function copySystemInfo() {
+  async function copySystemInfo() {
     const lines = [
       `Version: ${systemInfo.version || 'unknown'}`,
       `Build: ${systemInfo.buildDate || 'unknown'}`,
@@ -59,12 +59,27 @@
     if (systemInfo.environment) lines.push(`Environment: ${systemInfo.environment}`);
     lines.push(`Browser: ${navigator.userAgent}`);
 
-    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+    const text = lines.join('\n');
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
       copied = true;
       setTimeout(() => {
         copied = false;
       }, 2000);
-    });
+    } catch {
+      // Clipboard access denied or unavailable
+    }
   }
 
   onMount(() => {
