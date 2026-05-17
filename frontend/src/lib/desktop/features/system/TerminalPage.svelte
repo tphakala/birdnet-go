@@ -18,6 +18,7 @@
   import { FitAddon } from '@xterm/addon-fit';
   import { t } from '$lib/i18n';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { settingsStore } from '$lib/stores/settings';
   import {
     TerminalSquare,
@@ -101,7 +102,7 @@
   let activeThemeId = $state<TerminalThemeId>(loadThemeId());
 
   // Use originalData (server-confirmed state) so the terminal only shows as
-  // enabled after the user has actually saved their settings — formData reflects
+  // enabled after the user has actually saved their settings - formData reflects
   // unsaved local changes and would cause a 403 if connected before saving.
   let isEnabled = $derived($settingsStore.originalData.webServer?.enableTerminal ?? false);
 
@@ -215,7 +216,7 @@
       }
     });
 
-    // Handle container resize — fitAddon.fit() triggers term.onResize which sends
+    // Handle container resize - fitAddon.fit() triggers term.onResize which sends
     // the resize message to the backend.
     resizeObserver = new ResizeObserver(() => {
       fitAddon?.fit();
@@ -248,12 +249,10 @@
     if (!term) return;
     const text = term.getSelection();
     if (text) {
-      try {
-        await navigator.clipboard.writeText(text);
+      const ok = await copyToClipboard(text);
+      if (ok) {
         isCopied = true;
-        setTimeout(() => (isCopied = false), 2000);
-      } catch {
-        // Clipboard write can fail if the document isn't focused
+        setTimeout(() => (isCopied = false), COPY_FEEDBACK_TIMEOUT_MS);
       }
     }
     term.focus();
@@ -301,7 +300,7 @@
     if (!popup) return; // popup blocker
 
     // Transfer WebSocket ownership to the popup BEFORE setting isDetached.
-    // isDetached is $state and tracked by the connect $effect — setting it
+    // isDetached is $state and tracked by the connect $effect - setting it
     // would trigger cleanup() which calls ws?.close(). By nulling ws first,
     // cleanup becomes a no-op for the WebSocket.
     const detachedWs = ws;
@@ -317,7 +316,7 @@
     term = null;
     fitAddon = null;
 
-    // Build popup HTML via concatenation — template literals with style tags
+    // Build popup HTML via concatenation - template literals with style tags
     // and interpolation confuse the Svelte CSS preprocessor.
     const popupHtml =
       '<!DOCTYPE html><html lang="' +
@@ -438,7 +437,7 @@
     // Create a new Terminal in the popup
     const popupContainer = popup.document.getElementById('terminal');
     if (!popupContainer) {
-      // Popup DOM failed — close the popup, restore ws, and reconnect inline
+      // Popup DOM failed - close the popup, restore ws, and reconnect inline
       popup.close();
       ws = detachedWs;
       popoutWindow = null;
@@ -570,26 +569,25 @@
       copyBtn?.addEventListener('click', () => {
         const text = popupTerm.getSelection();
         if (text) {
-          navigator.clipboard
-            .writeText(text)
-            .then(() => {
-              copyBtn.classList.add('copied');
-              copyBtn.innerHTML =
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-              popup.setTimeout(() => {
-                copyBtn.classList.remove('copied');
+          void copyToClipboard(text, doc)
+            .then(ok => {
+              if (ok && !popup.closed) {
+                copyBtn.classList.add('copied');
                 copyBtn.innerHTML =
-                  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
-              }, 2000);
+                  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+                popup.setTimeout(() => {
+                  copyBtn.classList.remove('copied');
+                  copyBtn.innerHTML =
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+                }, COPY_FEEDBACK_TIMEOUT_MS);
+              }
             })
-            .catch(() => {
-              // Clipboard write can fail if the document isn't focused
-            });
+            .catch(() => {});
         }
         popupTerm.focus();
       });
 
-      // ── Reattach button — close popup, reconnect inline ──
+      // ── Reattach button - close popup, reconnect inline ──
       reattachBtn?.addEventListener('click', () => {
         popup.close();
       });
@@ -707,7 +705,7 @@
   // Reactively connect when the terminal becomes enabled and the container is
   // bound. This handles both initial mount (isEnabled already true) and the
   // case where the user enables the terminal and saves settings while already
-  // on this page — onMount would miss that second scenario.
+  // on this page - onMount would miss that second scenario.
   $effect(() => {
     if (isEnabled && terminalContainer && !term) {
       connect();
@@ -740,7 +738,7 @@
       </div>
     </div>
   {:else if isDetached}
-    <!-- Detached state — terminal is in a separate window -->
+    <!-- Detached state - terminal is in a separate window -->
     <div class="flex flex-col items-center justify-center h-full gap-4 opacity-60">
       <ExternalLink class="size-12" />
       <div class="text-center">
@@ -749,7 +747,7 @@
       </div>
     </div>
   {:else}
-    <!-- Terminal card — constrained height by default, fills parent when expanded or fullscreen -->
+    <!-- Terminal card - constrained height by default, fills parent when expanded or fullscreen -->
     <div
       bind:this={cardElement}
       class="flex flex-col rounded-xl border overflow-hidden"
@@ -811,7 +809,7 @@
           {/if}
         </div>
 
-        <!-- Action buttons — tabindex -1 prevents stealing focus from terminal -->
+        <!-- Action buttons - tabindex -1 prevents stealing focus from terminal -->
         <div class="flex items-center gap-1">
           <!-- Theme selector -->
           <div class="relative theme-menu-wrapper">
@@ -945,7 +943,7 @@
         </div>
       </div>
 
-      <!-- Terminal container — FitAddon reads .xterm padding, not container padding -->
+      <!-- Terminal container - FitAddon reads .xterm padding, not container padding -->
       <div
         bind:this={terminalContainer}
         class="overflow-hidden"
@@ -972,7 +970,7 @@
     border-color: transparent;
   }
 
-  /* xterm's viewport background — set dynamically via inline style on the
+  /* xterm's viewport background - set dynamically via inline style on the
      container, but we still need the !important override so xterm's own
      default (#000) doesn't win. Inherit from parent's inline background. */
   :global(.xterm .xterm-viewport) {
@@ -980,7 +978,7 @@
     overflow-y: auto !important;
   }
 
-  /* Hide the scrollbar track entirely — keep scroll functional but invisible.
+  /* Hide the scrollbar track entirely - keep scroll functional but invisible.
      The thin scrollbar + transparent track avoids the dead-space gutter. */
   :global(.xterm .xterm-viewport::-webkit-scrollbar) {
     width: 6px;
