@@ -255,6 +255,19 @@ type DataStore struct {
 	monitoringWg     sync.WaitGroup     // WaitGroup for monitoring goroutines
 }
 
+// PingWithLatency executes SELECT 1 and returns the round-trip time.
+func (ds *DataStore) PingWithLatency() (time.Duration, error) {
+	if ds.DB == nil {
+		return 0, ErrDBNotConnected
+	}
+	start := time.Now()
+	var result int
+	if err := ds.DB.Raw("SELECT 1").Scan(&result).Error; err != nil {
+		return 0, err
+	}
+	return time.Since(start), nil
+}
+
 // NewDataStore creates a new DataStore instance based on the provided configuration context.
 func New(settings *conf.Settings) Interface {
 	// Create a SunCalc instance to be shared by all datastore implementations

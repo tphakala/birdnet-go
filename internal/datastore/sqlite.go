@@ -623,16 +623,6 @@ func (s *SQLiteStore) SchemaVersion() string {
 // GetDatabaseStats returns basic runtime statistics about the SQLite database.
 // Returns partial stats with ErrDBNotConnected if the database is unreachable.
 // The Connected field in the returned stats indicates if the DB is reachable.
-// PingWithLatency executes SELECT 1 and returns the round-trip time.
-func (s *SQLiteStore) PingWithLatency() (time.Duration, error) {
-	start := time.Now()
-	var result int
-	if err := s.DB.Raw("SELECT 1").Scan(&result).Error; err != nil {
-		return 0, err
-	}
-	return time.Since(start), nil
-}
-
 func (s *SQLiteStore) GetDatabaseStats() (*DatabaseStats, error) {
 	// Defensive guard for nil Settings (e.g., in custom test setups)
 	location := ""

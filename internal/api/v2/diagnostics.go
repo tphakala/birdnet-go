@@ -2,7 +2,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -61,10 +61,12 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewCPULoadCheck(GetCachedCPUUsage),
 		checks.NewTemperatureCheck(func() (float64, error) {
 			temps, err := host.SensorsTemperatures()
-			if err != nil {
-				return 0, err
-			}
+			// gopsutil returns partial results with warnings when some sensors
+			// are unreadable (common on RPi). Use data if available.
 			if len(temps) == 0 {
+				if err != nil {
+					return 0, err
+				}
 				return 0, errNoTempSensors
 			}
 			var maxTemp float64
@@ -108,13 +110,15 @@ func (c *Controller) registerHealthChecks() {
 				return 0, 0, 0
 			}
 			avgMS = float64(totalUs) / float64(count) / 1000.0
+			// max used as p99 approximation; true p99 requires histogram data
 			p99MS = float64(maxUs) / 1000.0
 			windowMS = c.currentSettings().BirdNET.Overlap * 1000.0
 			return avgMS, p99MS, windowMS
 		}),
 		checks.NewDetectionRateCheck(nil), // TODO: wire to datastore (PR 2)
 		checks.NewQueueDepthCheck(func() (int, int) {
-			return len(classifier.ResultsQueue), cap(classifier.ResultsQueue)
+			q := classifier.ResultsQueue
+			return len(q), cap(q)
 		}),
 
 		// Stream checks
@@ -137,6 +141,9 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewMQTTCheck(
 			func() bool { return c.currentSettings().Realtime.MQTT.Enabled },
 			func() bool {
+				if c.Processor == nil {
+					return false
+				}
 				client := c.Processor.GetMQTTClient()
 				if client == nil {
 					return false
@@ -172,7 +179,7 @@ func (c *Controller) registerHealthChecks() {
 }
 
 // errNoTempSensors is returned when no temperature sensors are found on the system.
-var errNoTempSensors = fmt.Errorf("no temperature sensors found")
+var errNoTempSensors = errors.NewStd("no temperature sensors found")
 
 // buildStreamHealthProvider returns a closure that bridges the FFmpegManager's
 // stream health data to the checks.StreamHealthInfo format. The closure
