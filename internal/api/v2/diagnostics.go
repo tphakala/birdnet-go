@@ -2,7 +2,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -53,9 +52,7 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewDiskSpaceCheck(c.getDataPaths()),
 		checks.NewMemoryCheck(),
 		checks.NewCPULoadCheck(GetCachedCPUUsage),
-		checks.NewTemperatureCheck(func() (float64, error) {
-			return 0, fmt.Errorf("not available")
-		}),
+		checks.NewTemperatureCheck(nil), // TODO: wire to platform temperature sensor
 		checks.NewUptimeCheck(c.startTime),
 
 		// Audio checks
@@ -71,13 +68,9 @@ func (c *Controller) registerHealthChecks() {
 			func() bool { return true }, // model is always loaded if server is running
 			func() string { return c.currentSettings().BirdNET.ModelPath },
 		),
-		checks.NewInferenceLatencyCheck(func() (float64, float64, float64) {
-			return 0, 0, 0 // TODO: wire to actual inference stats
-		}),
-		checks.NewDetectionRateCheck(nil), // TODO: wire to datastore
-		checks.NewQueueDepthCheck(func() (int, int) {
-			return 0, 100 // TODO: wire to actual queue
-		}),
+		checks.NewInferenceLatencyCheck(nil), // TODO: wire to actual inference stats
+		checks.NewDetectionRateCheck(nil),    // TODO: wire to datastore
+		checks.NewQueueDepthCheck(nil),       // TODO: wire to actual queue
 
 		// Stream checks
 		checks.NewStreamConnectivityCheck(func() []checks.StreamHealthInfo {
