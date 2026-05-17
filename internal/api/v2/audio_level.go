@@ -342,7 +342,11 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 
 		case <-activityCheck.C:
 			// Prune sources that have been removed/disabled since the session started.
-			registry := c.engine.Registry()
+			eng := c.engine.Load()
+			if eng == nil {
+				continue
+			}
+			registry := eng.Registry()
 			pruned := registry != nil && c.pruneRemovedSources(registry, levels, lastUpdateTime, lastNonZeroTime)
 			// Check for inactive sources and zero them out.
 			if updated := c.checkSourceActivity(levels, lastUpdateTime, lastNonZeroTime); updated || pruned {
@@ -381,7 +385,11 @@ func createAudioLevelEntry(sourceID, displayName string) audiocore.AudioLevelDat
 // initializeAudioLevels creates the initial levels map with configured sources
 func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audiocore.AudioLevelData {
 	levels := make(map[string]audiocore.AudioLevelData)
-	registry := c.engine.Registry()
+	eng := c.engine.Load()
+	if eng == nil {
+		return levels
+	}
+	registry := eng.Registry()
 	if registry == nil {
 		return levels
 	}
@@ -440,7 +448,11 @@ func (c *Controller) updateAudioLevel(
 	isAuthenticated bool,
 ) {
 	now := time.Now()
-	registry := c.engine.Registry()
+	eng := c.engine.Load()
+	var registry *audiocore.SourceRegistry
+	if eng != nil {
+		registry = eng.Registry()
+	}
 
 	// Determine display name based on authentication
 	if registry != nil {
