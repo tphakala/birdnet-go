@@ -24,11 +24,7 @@
   } from '@lucide/svelte';
   import GithubIcon from '$lib/desktop/components/ui/GithubIcon.svelte';
   import { dropdown } from '$lib/utils/transitions';
-  import {
-    GITHUB_REPO_URL,
-    GITHUB_ISSUES_URL,
-    GITHUB_DISCUSSIONS_URL,
-  } from '$lib/utils/externalUrls';
+  import { GITHUB_REPO_URL, GITHUB_DISCUSSIONS_URL } from '$lib/utils/externalUrls';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
 
   const logger = getLogger('dashboard');
@@ -239,17 +235,16 @@
         <div class="my-1 border-t border-[var(--color-base-content)]/10" aria-hidden="true"></div>
 
         <!-- Report Bug -->
-        <a
-          href={GITHUB_ISSUES_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          onclick={() => {
+            isOpen = false;
+            navigation.navigate('/ui/help/report-bug');
+          }}
           class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
-          aria-label={t('navigation.reportBugAriaLabel')}
         >
           <Bug class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
-          <span class="flex-1">{t('navigation.reportBug')}</span>
-          <ExternalLink class="size-3 text-[var(--color-base-content)]/40" />
-        </a>
+          <span>{t('navigation.reportBug')}</span>
+        </button>
 
         <!-- Ask a Question -->
         <a

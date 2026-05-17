@@ -206,7 +206,7 @@
     if (type === 'info' && percent < 90) {
       safeTimeout(() => {
         if (generating && progressPercent < 90) {
-          progressPercent = Math.min(progressPercent + 10, 90);
+          updateStatus(message, type, Math.min(progressPercent + 10, 90));
         }
       }, 1000);
     }
@@ -299,9 +299,12 @@
                 bind:value={supportDump.githubIssueNumber}
                 class="block w-full px-3 py-1.5 text-sm bg-[var(--color-base-100)] text-[var(--color-base-content)] border rounded-md transition-all focus:outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 class:border-[var(--color-error)]={supportDump.uploadToSentry &&
-                  !supportDump.githubIssueNumber}
+                  normalizedGithubIssue.length > 0 &&
+                  !hasValidGithubIssue}
                 class:border-[var(--border-200)]={!(
-                  supportDump.uploadToSentry && !supportDump.githubIssueNumber
+                  supportDump.uploadToSentry &&
+                  normalizedGithubIssue.length > 0 &&
+                  !hasValidGithubIssue
                 )}
                 placeholder={t('settings.support.supportReport.githubIssue.placeholder')}
                 pattern="#?[0-9]+"
