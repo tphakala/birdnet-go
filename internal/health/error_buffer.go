@@ -144,16 +144,17 @@ func (b *ErrorRingBuffer) Count() int {
 }
 
 // CountSince returns the number of entries at or after the given time.
+// All valid entries are scanned because insertion order may not match
+// chronological order under concurrent writers.
 func (b *ErrorRingBuffer) CountSince(since time.Time) int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	count := 0
 	for i := range b.count {
 		idx := (b.head - 1 - i + b.maxSize) % b.maxSize
-		if b.entries[idx].Timestamp.Before(since) {
-			break
+		if !b.entries[idx].Timestamp.Before(since) {
+			count++
 		}
-		count++
 	}
 	return count
 }
