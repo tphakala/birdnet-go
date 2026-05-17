@@ -981,9 +981,18 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 
 // getSearchDetectionsAdvanced handles advanced search with filters
 func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) ([]datastore.Note, int64, error) {
+	cacheKey := params.advancedSearchCacheKey()
+
+	if cachedData, found := c.detectionCache.Get(cacheKey); found {
+		cachedResult := cachedData.(struct {
+			Notes []datastore.Note
+			Total int64
+		})
+		return cachedResult.Notes, cachedResult.Total, nil
+	}
+
 	filters := c.buildAdvancedSearchFilters(params)
 
-	// Use the advanced search method
 	notes, totalCount, err := c.DS.SearchNotesAdvanced(&filters)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to perform advanced search",
@@ -993,8 +1002,7 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 		return nil, 0, err
 	}
 
-	// Cache the results with key that includes all filter parameters
-	c.detectionCache.Set(params.advancedSearchCacheKey(), struct {
+	c.detectionCache.Set(cacheKey, struct {
 		Notes []datastore.Note
 		Total int64
 	}{notes, totalCount}, cache.DefaultExpiration)
