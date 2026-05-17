@@ -14,11 +14,13 @@ import (
 
 type mockNotifCreator struct {
 	calls []struct {
+		target         string
 		notifType      notification.Type
 		title, message string
 		eventProps     map[string]any
 	}
 	keyCalls []struct {
+		target                   string
 		notifType                notification.Type
 		title, message, titleKey string
 		titleParams              map[string]any
@@ -27,11 +29,13 @@ type mockNotifCreator struct {
 		eventProps               map[string]any
 	}
 	testCalls []struct {
+		target         string
 		notifType      notification.Type
 		title, message string
 		eventProps     map[string]any
 	}
 	testKeyCalls []struct {
+		target                   string
 		notifType                notification.Type
 		title, message, titleKey string
 		titleParams              map[string]any
@@ -41,51 +45,55 @@ type mockNotifCreator struct {
 	}
 }
 
-func (m *mockNotifCreator) CreateAndBroadcast(notifType notification.Type, title, message string, eventProps map[string]any) error {
+func (m *mockNotifCreator) CreateAndBroadcast(target string, notifType notification.Type, title, message string, eventProps map[string]any) error {
 	m.calls = append(m.calls, struct {
+		target         string
 		notifType      notification.Type
 		title, message string
 		eventProps     map[string]any
-	}{notifType, title, message, eventProps})
+	}{target, notifType, title, message, eventProps})
 	return nil
 }
 
 func (m *mockNotifCreator) CreateAndBroadcastWithKeys(
-	notifType notification.Type, title, message, titleKey string, titleParams map[string]any,
+	target string, notifType notification.Type, title, message, titleKey string, titleParams map[string]any,
 	messageKey string, messageParams map[string]any, eventProps map[string]any,
 ) error {
 	m.keyCalls = append(m.keyCalls, struct {
+		target                   string
 		notifType                notification.Type
 		title, message, titleKey string
 		titleParams              map[string]any
 		messageKey               string
 		messageParams            map[string]any
 		eventProps               map[string]any
-	}{notifType, title, message, titleKey, titleParams, messageKey, messageParams, eventProps})
+	}{target, notifType, title, message, titleKey, titleParams, messageKey, messageParams, eventProps})
 	return nil
 }
 
-func (m *mockNotifCreator) CreateAndBroadcastTest(notifType notification.Type, title, message string, eventProps map[string]any) error {
+func (m *mockNotifCreator) CreateAndBroadcastTest(target string, notifType notification.Type, title, message string, eventProps map[string]any) error {
 	m.testCalls = append(m.testCalls, struct {
+		target         string
 		notifType      notification.Type
 		title, message string
 		eventProps     map[string]any
-	}{notifType, title, message, eventProps})
+	}{target, notifType, title, message, eventProps})
 	return nil
 }
 
 func (m *mockNotifCreator) CreateAndBroadcastTestWithKeys(
-	notifType notification.Type, title, message, titleKey string, titleParams map[string]any,
+	target string, notifType notification.Type, title, message, titleKey string, titleParams map[string]any,
 	messageKey string, messageParams map[string]any, eventProps map[string]any,
 ) error {
 	m.testKeyCalls = append(m.testKeyCalls, struct {
+		target                   string
 		notifType                notification.Type
 		title, message, titleKey string
 		titleParams              map[string]any
 		messageKey               string
 		messageParams            map[string]any
 		eventProps               map[string]any
-	}{notifType, title, message, titleKey, titleParams, messageKey, messageParams, eventProps})
+	}{target, notifType, title, message, titleKey, titleParams, messageKey, messageParams, eventProps})
 	return nil
 }
 
@@ -113,6 +121,7 @@ func TestDispatcher_BellAction(t *testing.T) {
 	dispatcher.Dispatch(rule, event)
 
 	require.Len(t, mock.calls, 1)
+	assert.Equal(t, TargetBell, mock.calls[0].target)
 	assert.Equal(t, notification.TypeWarning, mock.calls[0].notifType, "stream disconnect should use TypeWarning")
 	assert.Equal(t, "Stream lost", mock.calls[0].title)
 	assert.Equal(t, "A stream disconnected", mock.calls[0].message)
@@ -141,6 +150,7 @@ func TestDispatcher_DefaultTemplate_UsesKeys(t *testing.T) {
 
 	assert.Empty(t, mock.calls, "default template should use CreateAndBroadcastWithKeys")
 	require.Len(t, mock.keyCalls, 1)
+	assert.Equal(t, TargetBell, mock.keyCalls[0].target)
 	assert.Equal(t, MsgAlertFiredTitle, mock.keyCalls[0].titleKey)
 	assert.Equal(t, "CPU High", mock.keyCalls[0].titleParams["rule_name"])
 	assert.Equal(t, RuleKeyHighCPUName, mock.keyCalls[0].titleParams["rule_name_key"])
@@ -249,6 +259,7 @@ func TestDispatcher_PushAction(t *testing.T) {
 	dispatcher.Dispatch(rule, event)
 
 	require.Len(t, mock.calls, 1, "push target should create a notification")
+	assert.Equal(t, TargetPush, mock.calls[0].target)
 	assert.Equal(t, notification.TypeDetection, mock.calls[0].notifType)
 	assert.Equal(t, "Pigeon detected", mock.calls[0].title)
 	assert.Equal(t, "A pigeon was seen", mock.calls[0].message)
@@ -279,6 +290,7 @@ func TestDispatcher_PushAction_DefaultTemplate(t *testing.T) {
 
 	assert.Empty(t, mock.calls, "push with default template should use keyed variant")
 	require.Len(t, mock.keyCalls, 1)
+	assert.Equal(t, TargetPush, mock.keyCalls[0].target)
 	assert.Equal(t, notification.TypeDetection, mock.keyCalls[0].notifType)
 	assert.Equal(t, MsgAlertDetectionOccurred, mock.keyCalls[0].messageKey)
 }
@@ -308,7 +320,9 @@ func TestDispatcher_BellAndPush_DefaultTemplates_Deduplicated(t *testing.T) {
 	dispatcher.Dispatch(rule, event)
 
 	assert.Empty(t, mock.calls, "deduplicated actions should not produce non-keyed calls")
-	assert.Len(t, mock.keyCalls, 1, "bell+push with identical default templates should deduplicate to one notification")
+	require.Len(t, mock.keyCalls, 2, "bell+push with default templates should dispatch once per target")
+	assert.Equal(t, TargetBell, mock.keyCalls[0].target)
+	assert.Equal(t, TargetPush, mock.keyCalls[1].target)
 }
 
 func TestDispatcher_BellCustom_PushDefault(t *testing.T) {
@@ -336,7 +350,9 @@ func TestDispatcher_BellCustom_PushDefault(t *testing.T) {
 	dispatcher.Dispatch(rule, event)
 
 	require.Len(t, mock.calls, 1, "bell with custom template should dispatch")
+	assert.Equal(t, TargetBell, mock.calls[0].target)
 	require.Len(t, mock.keyCalls, 1, "push with default template should also dispatch")
+	assert.Equal(t, TargetPush, mock.keyCalls[0].target)
 }
 
 func TestDispatcher_BellDefault_PushCustom(t *testing.T) {
@@ -364,7 +380,9 @@ func TestDispatcher_BellDefault_PushCustom(t *testing.T) {
 	dispatcher.Dispatch(rule, event)
 
 	require.Len(t, mock.keyCalls, 1, "bell with default template should dispatch")
+	assert.Equal(t, TargetBell, mock.keyCalls[0].target)
 	require.Len(t, mock.calls, 1, "push with custom template should also dispatch")
+	assert.Equal(t, TargetPush, mock.calls[0].target)
 }
 
 func TestDispatcher_BellAndPush_DifferentTemplates(t *testing.T) {
@@ -684,6 +702,7 @@ func TestDispatchTest_CustomTemplate_UsesTestMethod(t *testing.T) {
 	assert.Empty(t, mock.calls, "DispatchTest should not use CreateAndBroadcast")
 	assert.Empty(t, mock.keyCalls, "DispatchTest should not use CreateAndBroadcastWithKeys")
 	require.Len(t, mock.testCalls, 1)
+	assert.Equal(t, TargetBell, mock.testCalls[0].target)
 	assert.Equal(t, notification.TypeWarning, mock.testCalls[0].notifType, "stream disconnect test should use TypeWarning")
 	assert.Equal(t, "Stream lost", mock.testCalls[0].title)
 	assert.Equal(t, "A stream disconnected", mock.testCalls[0].message)
@@ -838,6 +857,7 @@ func TestDispatchTest_DefaultTemplate_UsesTestKeysMethod(t *testing.T) {
 	assert.Empty(t, mock.keyCalls, "DispatchTest should not use CreateAndBroadcastWithKeys")
 	require.Len(t, mock.testKeyCalls, 1)
 	call := mock.testKeyCalls[0]
+	assert.Equal(t, TargetBell, call.target)
 	assert.Equal(t, notification.TypeDetection, call.notifType, "detection test event should use TypeDetection")
 	assert.Equal(t, MsgAlertFiredTitle, call.titleKey)
 	assert.Equal(t, "New species detected", call.titleParams["rule_name"])

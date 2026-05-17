@@ -68,6 +68,13 @@ const (
 	MetadataKeyIsToast = "isToast"
 )
 
+// Delivery target constants control where a notification is routed.
+const (
+	DeliveryTargetAll  = ""     // default: deliver to all channels
+	DeliveryTargetBell = "bell" // in-app notification store only
+	DeliveryTargetPush = "push" // push providers only
+)
+
 // isToastNotification checks if a notification is a toast notification
 // by examining its metadata for the isToast flag
 func isToastNotification(notif *Notification) bool {
@@ -115,6 +122,12 @@ type Notification struct {
 	// MessageParams contains interpolation parameters for the message translation.
 	// Values must be scalar types (string, int, float64, bool) for safe frontend interpolation.
 	MessageParams map[string]any `json:"message_params,omitempty"`
+
+	// DeliveryTarget controls where this notification is delivered.
+	// Empty string means "all channels" (backwards-compatible default).
+	// Set to "bell" for in-app only, "push" for push providers only.
+	// Transient routing field; never serialized or persisted.
+	DeliveryTarget string `json:"-"`
 }
 
 // NewNotification creates a new notification with a unique ID and timestamp
@@ -168,6 +181,12 @@ func (n *Notification) WithTitleKey(key string, params map[string]any) *Notifica
 func (n *Notification) WithMessageKey(key string, params map[string]any) *Notification {
 	n.MessageKey = key
 	n.MessageParams = sanitizeParams(params)
+	return n
+}
+
+// WithDeliveryTarget sets the delivery target and returns the notification for chaining.
+func (n *Notification) WithDeliveryTarget(target string) *Notification {
+	n.DeliveryTarget = target
 	return n
 }
 

@@ -18,19 +18,20 @@ import (
 // alerting and notification subsystems.
 type notificationAdapter struct{}
 
-func (a *notificationAdapter) CreateAndBroadcast(notifType notification.Type, title, message string, eventProps map[string]any) error {
+func (a *notificationAdapter) CreateAndBroadcast(target string, notifType notification.Type, title, message string, eventProps map[string]any) error {
 	svc := notification.GetService()
 	if svc == nil {
 		return nil // notification service not yet initialized
 	}
 	title, message = applyDetectionTemplates(notifType, title, message, eventProps)
-	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message)
+	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message).
+		WithDeliveryTarget(target)
 	notif = enrichFromEventProps(notif, notifType, eventProps)
 	return svc.CreateWithMetadata(notif)
 }
 
 func (a *notificationAdapter) CreateAndBroadcastWithKeys(
-	notifType notification.Type, title, message, titleKey string, titleParams map[string]any,
+	target string, notifType notification.Type, title, message, titleKey string, titleParams map[string]any,
 	messageKey string, messageParams map[string]any, eventProps map[string]any,
 ) error {
 	svc := notification.GetService()
@@ -39,6 +40,7 @@ func (a *notificationAdapter) CreateAndBroadcastWithKeys(
 	}
 	title, message = applyDetectionTemplates(notifType, title, message, eventProps)
 	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message).
+		WithDeliveryTarget(target).
 		WithTitleKey(titleKey, titleParams)
 	if messageKey != "" {
 		notif = notif.WithMessageKey(messageKey, messageParams)
@@ -47,18 +49,19 @@ func (a *notificationAdapter) CreateAndBroadcastWithKeys(
 	return svc.CreateWithMetadata(notif)
 }
 
-func (a *notificationAdapter) CreateAndBroadcastTest(notifType notification.Type, title, message string, eventProps map[string]any) error {
+func (a *notificationAdapter) CreateAndBroadcastTest(target string, notifType notification.Type, title, message string, eventProps map[string]any) error {
 	svc := notification.GetService()
 	if svc == nil {
 		return nil // notification service not yet initialized
 	}
-	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message)
+	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message).
+		WithDeliveryTarget(target)
 	notif = enrichFromEventProps(notif, notifType, eventProps)
 	return svc.CreateWithMetadata(notif)
 }
 
 func (a *notificationAdapter) CreateAndBroadcastTestWithKeys(
-	notifType notification.Type, title, message, titleKey string, titleParams map[string]any,
+	target string, notifType notification.Type, title, message, titleKey string, titleParams map[string]any,
 	messageKey string, messageParams map[string]any, eventProps map[string]any,
 ) error {
 	svc := notification.GetService()
@@ -66,6 +69,7 @@ func (a *notificationAdapter) CreateAndBroadcastTestWithKeys(
 		return nil // notification service not yet initialized
 	}
 	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message).
+		WithDeliveryTarget(target).
 		WithTitleKey(titleKey, titleParams)
 	if messageKey != "" {
 		notif = notif.WithMessageKey(messageKey, messageParams)

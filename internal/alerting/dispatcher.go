@@ -20,12 +20,12 @@ import (
 // notifications with template metadata (bg_image_url, bg_confidence_percent, etc.)
 // for webhook templates.
 type NotificationCreator interface {
-	CreateAndBroadcast(notifType notification.Type, title, message string, eventProps map[string]any) error
-	CreateAndBroadcastWithKeys(notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any, eventProps map[string]any) error
+	CreateAndBroadcast(target string, notifType notification.Type, title, message string, eventProps map[string]any) error
+	CreateAndBroadcastWithKeys(target string, notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any, eventProps map[string]any) error
 	// CreateAndBroadcastTest creates a notification for a test rule fire.
-	CreateAndBroadcastTest(notifType notification.Type, title, message string, eventProps map[string]any) error
+	CreateAndBroadcastTest(target string, notifType notification.Type, title, message string, eventProps map[string]any) error
 	// CreateAndBroadcastTestWithKeys is the i18n-aware variant of CreateAndBroadcastTest.
-	CreateAndBroadcastTestWithKeys(notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any, eventProps map[string]any) error
+	CreateAndBroadcastTestWithKeys(target string, notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any, eventProps map[string]any) error
 }
 
 // ActionDispatcher routes alert rule actions to the notification bell
@@ -60,7 +60,7 @@ func (d *ActionDispatcher) dispatchInternal(rule *entities.AlertRule, event *Ale
 	if event == nil {
 		event = &AlertEvent{}
 	}
-	defaultDispatched := false
+	defaultDispatchedForTarget := make(map[string]bool, 2)
 	for i := range rule.Actions {
 		action := &rule.Actions[i]
 		title := renderTitle(action.TemplateTitle, rule, event)
@@ -69,15 +69,12 @@ func (d *ActionDispatcher) dispatchInternal(rule *entities.AlertRule, event *Ale
 		switch action.Target {
 		case TargetBell, TargetPush:
 			hasCustomTemplate := action.TemplateTitle != "" || action.TemplateMessage != ""
-			// Both targets broadcast through the same path. Deduplicate
-			// only when multiple actions use default templates, since
-			// they produce identical notifications.
-			if !hasCustomTemplate && defaultDispatched {
+			if !hasCustomTemplate && defaultDispatchedForTarget[action.Target] {
 				continue
 			}
 			d.dispatchNotification(action.Target, title, message, rule, event, hasCustomTemplate, isTest)
 			if !hasCustomTemplate {
-				defaultDispatched = true
+				defaultDispatchedForTarget[action.Target] = true
 			}
 		default:
 			d.log.Warn("unknown alert action target",
@@ -102,11 +99,11 @@ func (d *ActionDispatcher) dispatchNotification(target, title, message string, r
 		var err error
 		if isTest {
 			err = d.notifCreator.CreateAndBroadcastTestWithKeys(
-				notifType, title, fallbackMsg, titleKey, titleParams, msgKey, msgParams, event.Properties,
+				target, notifType, title, fallbackMsg, titleKey, titleParams, msgKey, msgParams, event.Properties,
 			)
 		} else {
 			err = d.notifCreator.CreateAndBroadcastWithKeys(
-				notifType, title, fallbackMsg, titleKey, titleParams, msgKey, msgParams, event.Properties,
+				target, notifType, title, fallbackMsg, titleKey, titleParams, msgKey, msgParams, event.Properties,
 			)
 		}
 		if err != nil {
@@ -121,9 +118,9 @@ func (d *ActionDispatcher) dispatchNotification(target, title, message string, r
 
 	var err error
 	if isTest {
-		err = d.notifCreator.CreateAndBroadcastTest(notifType, title, message, event.Properties)
+		err = d.notifCreator.CreateAndBroadcastTest(target, notifType, title, message, event.Properties)
 	} else {
-		err = d.notifCreator.CreateAndBroadcast(notifType, title, message, event.Properties)
+		err = d.notifCreator.CreateAndBroadcast(target, notifType, title, message, event.Properties)
 	}
 	if err != nil {
 		d.log.Error("failed to dispatch notification",
