@@ -275,9 +275,14 @@
       if (typeof cardElement.requestFullscreen === 'function') {
         cardElement.requestFullscreen().catch(() => {});
       } else {
-        const el = cardElement as unknown as { webkitRequestFullscreen?: () => void };
+        const el = cardElement as unknown as {
+          webkitRequestFullscreen?: () => void | Promise<void>;
+        };
         if (typeof el.webkitRequestFullscreen === 'function') {
-          el.webkitRequestFullscreen();
+          const result = el.webkitRequestFullscreen();
+          if (result instanceof Promise) {
+            result.catch(() => {});
+          }
         }
       }
     } else {

@@ -595,9 +595,12 @@
     } else if (typeof cardEl.requestFullscreen === 'function') {
       cardEl.requestFullscreen().catch(() => {});
     } else {
-      const el = cardEl as unknown as { webkitRequestFullscreen?: () => void };
+      const el = cardEl as unknown as { webkitRequestFullscreen?: () => void | Promise<void> };
       if (typeof el.webkitRequestFullscreen === 'function') {
-        el.webkitRequestFullscreen();
+        const result = el.webkitRequestFullscreen();
+        if (result instanceof Promise) {
+          result.catch(() => {});
+        }
       }
     }
   }
