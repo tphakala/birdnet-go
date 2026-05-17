@@ -236,7 +236,8 @@
     "askQuestion": "Hacer una pregunta",
     "reportBugAriaLabel": "Reportar un error en GitHub (abre en una nueva ventana)",
     "askQuestionAriaLabel": "Hacer una pregunta en GitHub Discussions (abre en una nueva ventana)",
-    "viewOnGithubAriaLabel": "Ver BirdNET-Go en GitHub (abre en una nueva ventana)"
+    "viewOnGithubAriaLabel": "Ver BirdNET-Go en GitHub (abre en una nueva ventana)",
+    "systemHealth": "System Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -4762,6 +4763,47 @@
       "title": "Abrir issue en GitHub",
       "description": "Una vez que hayas recopilado la información anterior y generado un paquete de soporte, abre un issue en GitHub para describir el problema.",
       "button": "Abrir issue en GitHub"
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
+    "runDiagnostics": "Run Diagnostics",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "RTSP Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
     }
   }
 }
