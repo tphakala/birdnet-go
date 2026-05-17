@@ -57,6 +57,7 @@ func TestPrepareSettingsForSave_EnabledWithExistingSeasons(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			settings := &Settings{}
+			settings.BirdNET.LocationConfigured = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = maps.Clone(customSeasons)
 
@@ -96,6 +97,7 @@ func TestPrepareSettingsForSave_NorthernHemisphere(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			settings := &Settings{}
+			settings.BirdNET.LocationConfigured = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
 
@@ -131,6 +133,7 @@ func TestPrepareSettingsForSave_SouthernHemisphere(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			settings := &Settings{}
+			settings.BirdNET.LocationConfigured = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
 
@@ -177,6 +180,7 @@ func TestPrepareSettingsForSave_CorrectsSouthernHemisphere(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			settings := &Settings{}
+			settings.BirdNET.LocationConfigured = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = maps.Clone(nhDefaults)
 
@@ -208,6 +212,7 @@ func TestPrepareSettingsForSave_PreservesNorthernForNorthern(t *testing.T) {
 	}
 
 	settings := &Settings{}
+	settings.BirdNET.LocationConfigured = true
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = maps.Clone(nhDefaults)
 
@@ -231,6 +236,7 @@ func TestPrepareSettingsForSave_EquatorialRegion(t *testing.T) {
 	}{
 		{"slightly north", 5.0},
 		{"slightly south", -5.0},
+		{"exact equator", 0.0},
 		{"northern threshold boundary", NorthernHemisphereThreshold - 0.1},
 		{"southern threshold boundary", SouthernHemisphereThreshold + 0.1},
 	}
@@ -239,6 +245,7 @@ func TestPrepareSettingsForSave_EquatorialRegion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			settings := &Settings{}
+			settings.BirdNET.LocationConfigured = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
 
@@ -251,9 +258,10 @@ func TestPrepareSettingsForSave_EquatorialRegion(t *testing.T) {
 	}
 }
 
-// TestPrepareSettingsForSave_SkipsUnconfiguredLatitude verifies that latitude 0
-// (location not yet configured) preserves existing seasons without adjustment.
-func TestPrepareSettingsForSave_SkipsUnconfiguredLatitude(t *testing.T) {
+// TestPrepareSettingsForSave_SkipsUnconfiguredLocation verifies that
+// LocationConfigured=false preserves existing seasons without adjustment,
+// even when a non-zero latitude is provided.
+func TestPrepareSettingsForSave_SkipsUnconfiguredLocation(t *testing.T) {
 	t.Parallel()
 
 	nhDefaults := map[string]Season{
@@ -264,14 +272,17 @@ func TestPrepareSettingsForSave_SkipsUnconfiguredLatitude(t *testing.T) {
 	}
 
 	settings := &Settings{}
+	// LocationConfigured deliberately left false (zero value)
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = maps.Clone(nhDefaults)
 
-	result := prepareSettingsForSave(settings, 0.0)
+	// Pass southern hemisphere latitude to verify that LocationConfigured
+	// gates the adjustment, not the latitude value itself.
+	result := prepareSettingsForSave(settings, -33.9)
 
 	spring := result.Realtime.SpeciesTracking.SeasonalTracking.Seasons["spring"]
 	assert.Equal(t, 3, spring.StartMonth,
-		"Seasons should be unchanged when latitude is 0 (unconfigured)")
+		"Seasons should be unchanged when LocationConfigured is false")
 }
 
 // TestPrepareSettingsForSave_PreservesCustomSeasonNames verifies that non-standard
@@ -285,6 +296,7 @@ func TestPrepareSettingsForSave_PreservesCustomSeasonNames(t *testing.T) {
 	}
 
 	settings := &Settings{}
+	settings.BirdNET.LocationConfigured = true
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = maps.Clone(customSeasons)
 
@@ -305,6 +317,7 @@ func TestPrepareSettingsForSave_PreservesCustomSeasonNames(t *testing.T) {
 func TestPrepareSettingsForSave_DoesNotMutateInput(t *testing.T) {
 	t.Parallel()
 	originalSettings := &Settings{}
+	originalSettings.BirdNET.LocationConfigured = true
 	originalSettings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 	originalSettings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
 
@@ -336,6 +349,7 @@ func TestPrepareSettingsForSave_DifferentLatitudes(t *testing.T) {
 		t.Run(lat.expectedHemisphere, func(t *testing.T) {
 			t.Parallel()
 			settings := &Settings{}
+			settings.BirdNET.LocationConfigured = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
 
@@ -350,6 +364,7 @@ func TestPrepareSettingsForSave_DifferentLatitudes(t *testing.T) {
 // BenchmarkPrepareSettingsForSave benchmarks the preparation function.
 func BenchmarkPrepareSettingsForSave(b *testing.B) {
 	settings := &Settings{}
+	settings.BirdNET.LocationConfigured = true
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
 
@@ -363,6 +378,7 @@ func BenchmarkPrepareSettingsForSave(b *testing.B) {
 // BenchmarkPrepareSettingsForSave_WithExistingSeasons benchmarks with existing seasons.
 func BenchmarkPrepareSettingsForSave_WithExistingSeasons(b *testing.B) {
 	settings := &Settings{}
+	settings.BirdNET.LocationConfigured = true
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = map[string]Season{
 		"winter": {StartMonth: 1, StartDay: 1},
