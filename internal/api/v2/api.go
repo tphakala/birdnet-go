@@ -99,7 +99,9 @@ type Controller struct {
 	audioLevelChan chan audiocore.AudioLevelData
 
 	// engine provides access to the unified audio subsystem (sources, buffers, routing).
-	engine *engine.AudioEngine
+	// Stored atomically: written once via WithAudioEngine after Controller init,
+	// read concurrently by HTTP handlers.
+	engine atomic.Pointer[engine.AudioEngine]
 
 	// V2Manager provides access to the v2 normalized database for stats and backup
 	V2Manager datastoreV2.Manager
@@ -196,7 +198,7 @@ func WithV2Manager(mgr datastoreV2.Manager) Option {
 // WithAudioEngine sets the AudioEngine for audio subsystem access.
 func WithAudioEngine(e *engine.AudioEngine) Option {
 	return func(c *Controller) {
-		c.engine = e
+		c.engine.Store(e)
 	}
 }
 
@@ -812,7 +814,6 @@ func (c *Controller) Shutdown() {
 	c.Debug("API Controller shutdown complete")
 }
 
-// SetShutdownRequester sets the shutdown requester for programmatic restart.
 // SetShutdownRequester sets the shutdown requester for programmatic restart.
 // Thread-safe: may be called after the HTTP server starts accepting requests.
 func (c *Controller) SetShutdownRequester(sr ShutdownRequester) {

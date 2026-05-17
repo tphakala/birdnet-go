@@ -293,11 +293,12 @@ func (c *Controller) RestartAudioSource(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	if c.engine == nil {
+	eng := c.engine.Load()
+	if eng == nil {
 		return c.HandleError(ctx, fmt.Errorf("audio engine not initialized"),
 			"Audio engine not available", http.StatusInternalServerError)
 	}
-	if _, ok := c.engine.Registry().Get(sourceID); !ok {
+	if _, ok := eng.Registry().Get(sourceID); !ok {
 		return c.HandleError(ctx, fmt.Errorf("source %s not found", sourceID),
 			"Audio source not found", http.StatusNotFound)
 	}

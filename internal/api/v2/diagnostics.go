@@ -205,13 +205,14 @@ var errNoTempSensors = errors.NewStd("no temperature sensors found")
 
 // buildStreamHealthProvider returns a closure that bridges the FFmpegManager's
 // stream health data to the checks.StreamHealthInfo format. The closure
-// nil-checks c.engine at call time because it is set after Controller init.
+// atomically loads c.engine at call time because it is set after Controller init.
 func (c *Controller) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 	return func() []checks.StreamHealthInfo {
-		if c.engine == nil {
+		eng := c.engine.Load()
+		if eng == nil {
 			return nil
 		}
-		mgr := c.engine.FFmpegManager()
+		mgr := eng.FFmpegManager()
 		if mgr == nil {
 			return nil
 		}
@@ -219,7 +220,7 @@ func (c *Controller) buildStreamHealthProvider() func() []checks.StreamHealthInf
 		if len(healthMap) == 0 {
 			return nil
 		}
-		registry := c.engine.Registry()
+		registry := eng.Registry()
 		infos := make([]checks.StreamHealthInfo, 0, len(healthMap))
 		for sourceID, sh := range healthMap {
 			url := sourceID
