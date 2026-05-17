@@ -63,7 +63,11 @@ func NewReportStore(maxSize int) *ReportStore {
 }
 
 // Save stores a report. If the store is full, the oldest report is evicted.
+// Nil reports are silently ignored.
 func (s *ReportStore) Save(report *DiagnosticsReport) {
+	if report == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.reports) >= s.maxSize {

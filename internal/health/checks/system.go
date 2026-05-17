@@ -192,6 +192,10 @@ func (c *CPULoadCheck) Category() health.Category { return health.CategorySystem
 func (c *CPULoadCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
+	if c.getCPU == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
 	percents := c.getCPU()
 	if len(percents) == 0 {
 		return health.Result{
@@ -258,6 +262,10 @@ func (c *TemperatureCheck) Category() health.Category { return health.CategorySy
 // Run executes the temperature check.
 func (c *TemperatureCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
+
+	if c.getTemp == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
 
 	tempC, err := c.getTemp()
 	if err != nil {

@@ -102,11 +102,11 @@ func (c *Controller) registerHealthChecks() {
 		// Network checks
 		checks.NewMQTTCheck(
 			func() bool { return c.currentSettings().Realtime.MQTT.Enabled },
-			func() bool { return false }, // TODO: wire actual MQTT connection status
+			nil, // TODO: wire actual MQTT connection status
 		),
 		checks.NewBirdWeatherCheck(
 			func() bool { return c.currentSettings().Realtime.Birdweather.Enabled },
-			func() (bool, string) { return false, "status check not yet wired" },
+			nil, // TODO: wire actual BirdWeather status
 		),
 		checks.NewNotificationProvidersCheck(),
 		checks.NewWeatherCheck(func() bool { return false }), // TODO: wire to weather config
@@ -180,9 +180,7 @@ func (c *Controller) GetDiagnosticsReport(ctx echo.Context) error {
 	id := ctx.Param("id")
 	report, ok := c.healthReports.Get(id)
 	if !ok {
-		return ctx.JSON(http.StatusNotFound, map[string]string{
-			"error": "report not found",
-		})
+		return c.HandleError(ctx, nil, "report not found", http.StatusNotFound)
 	}
 	return ctx.JSON(http.StatusOK, report)
 }

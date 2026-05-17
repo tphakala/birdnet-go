@@ -106,6 +106,10 @@ func (c *ConfigConsistencyCheck) Category() health.Category { return health.Cate
 func (c *ConfigConsistencyCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
+	if c.validate == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
 	issues := c.validate()
 	if len(issues) == 0 {
 		return health.Result{
@@ -158,6 +162,10 @@ const critBudgetPercent = 0.95
 // Run checks disk usage against the configured budget.
 func (c *DiskBudgetCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
+
+	if c.isEnabled == nil || c.getUsage == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
 
 	if !c.isEnabled() {
 		return health.Result{

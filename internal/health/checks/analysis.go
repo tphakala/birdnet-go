@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/health"
@@ -28,6 +29,10 @@ func (c *ModelLoadedCheck) Category() health.Category { return health.CategoryAn
 // Run verifies that the analysis model is loaded.
 func (c *ModelLoadedCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
+
+	if c.isLoaded == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
 
 	name := ""
 	if c.modelName != nil {
@@ -81,6 +86,10 @@ func (c *InferenceLatencyCheck) Category() health.Category { return health.Categ
 // Run evaluates inference latency against the analysis window duration.
 func (c *InferenceLatencyCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
+
+	if c.getStats == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
 
 	avgMS, p99MS, windowMS := c.getStats()
 
@@ -151,10 +160,14 @@ func (c *DetectionRateCheck) Run(_ context.Context) health.Result {
 	count24h, err24h := c.getRecentCount(24)
 
 	if err6h != nil || err24h != nil {
-		msg := "Unable to query detection counts"
+		var errParts []string
 		if err6h != nil {
-			msg = fmt.Sprintf("Detection count query failed: %v", err6h)
+			errParts = append(errParts, fmt.Sprintf("6h: %v", err6h))
 		}
+		if err24h != nil {
+			errParts = append(errParts, fmt.Sprintf("24h: %v", err24h))
+		}
+		msg := fmt.Sprintf("Detection count query failed: %s", strings.Join(errParts, "; "))
 		return health.Result{
 			Name:       c.Name(),
 			Category:   c.Category(),
@@ -214,6 +227,10 @@ func (c *QueueDepthCheck) Category() health.Category { return health.CategoryAna
 // Run evaluates queue utilization.
 func (c *QueueDepthCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
+
+	if c.getQueueStats == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
 
 	depth, capacity := c.getQueueStats()
 

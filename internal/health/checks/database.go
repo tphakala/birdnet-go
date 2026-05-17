@@ -32,6 +32,10 @@ const warnSizeBytes int64 = 1 << 30
 func (c *DatabaseSizeCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
+	if c.getDBPath == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
 	path := c.getDBPath()
 	if path == "" {
 		return health.Result{
@@ -102,6 +106,10 @@ func (c *MigrationStatusCheck) Category() health.Category { return health.Catego
 // Run verifies that all database migrations have been applied.
 func (c *MigrationStatusCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
+
+	if c.checkMigration == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
 
 	upToDate, version, err := c.checkMigration()
 	if err != nil {

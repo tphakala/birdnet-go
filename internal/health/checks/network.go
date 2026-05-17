@@ -28,6 +28,10 @@ func (c *MQTTCheck) Category() health.Category { return health.CategoryNetwork }
 func (c *MQTTCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
+	if c.isEnabled == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
 	if !c.isEnabled() {
 		return health.Result{
 			Name:       c.Name(),
@@ -37,6 +41,10 @@ func (c *MQTTCheck) Run(_ context.Context) health.Result {
 			DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 			Timestamp:  time.Now(),
 		}
+	}
+
+	if c.isConnected == nil {
+		return skippedResult(c.Name(), c.Category(), start)
 	}
 
 	if !c.isConnected() {
@@ -82,6 +90,10 @@ func (c *BirdWeatherCheck) Category() health.Category { return health.CategoryNe
 func (c *BirdWeatherCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
+	if c.isEnabled == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
 	if !c.isEnabled() {
 		return health.Result{
 			Name:       c.Name(),
@@ -91,6 +103,10 @@ func (c *BirdWeatherCheck) Run(_ context.Context) health.Result {
 			DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 			Timestamp:  time.Now(),
 		}
+	}
+
+	if c.getStatus == nil {
+		return skippedResult(c.Name(), c.Category(), start)
 	}
 
 	connected, statusMsg := c.getStatus()
@@ -155,6 +171,10 @@ func (c *WeatherCheck) Category() health.Category { return health.CategoryNetwor
 // Run returns StatusSkipped when disabled, or StatusSkipped with a not-yet-available message when enabled.
 func (c *WeatherCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
+
+	if c.isEnabled == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
 
 	if !c.isEnabled() {
 		return health.Result{

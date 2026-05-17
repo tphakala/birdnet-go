@@ -21,18 +21,25 @@ func NewRegistry() *Registry {
 	return &Registry{}
 }
 
-// Register adds a check to the registry.
+// Register adds a check to the registry. Nil checks are silently ignored.
 func (r *Registry) Register(c Check) {
+	if c == nil {
+		return
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.checks = append(r.checks, c)
 }
 
-// RegisterAll adds multiple checks at once.
+// RegisterAll adds multiple checks at once. Nil checks are silently ignored.
 func (r *Registry) RegisterAll(checks ...Check) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.checks = append(r.checks, checks...)
+	for _, c := range checks {
+		if c != nil {
+			r.checks = append(r.checks, c)
+		}
+	}
 }
 
 // RunAll executes all checks in parallel with per-check timeout.
