@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import Button from './lib/desktop/components/ui/Button.svelte';
+  import LoadingSpinner from './lib/desktop/components/ui/LoadingSpinner.svelte';
   import RootLayout from './lib/desktop/layouts/RootLayout.svelte';
   import DashboardPage from './lib/desktop/features/dashboard/pages/DashboardPage.svelte'; // Keep dashboard for initial load
   import type { Component } from 'svelte';
@@ -563,12 +565,12 @@
 
 <!-- Show loading screen during initialization -->
 {#if appLoading || (!appInitialized && !appError)}
-  <div class="flex h-screen w-full items-center justify-center bg-base-200">
+  <div class="flex h-screen w-full items-center justify-center bg-[var(--color-base-200)]">
     <div class="flex flex-col items-center gap-4">
-      <span class="loading loading-spinner loading-lg text-primary"></span>
-      <p class="text-base-content/70">{t('common.loading')}</p>
+      <LoadingSpinner size="lg" />
+      <p class="text-[var(--color-base-content)]/70">{t('common.loading')}</p>
       {#if appState.retryCount > 0}
-        <p class="text-sm text-warning">
+        <p class="text-sm text-[var(--color-warning)]">
           {t('common.retrying')} ({appState.retryCount}/{MAX_RETRIES})...
         </p>
       {/if}
@@ -576,19 +578,21 @@
   </div>
   <!-- Show fatal error page if initialization failed -->
 {:else if appError}
-  <div class="flex min-h-screen flex-col items-center justify-center bg-base-200 p-4">
-    <div class="card max-w-lg bg-base-100 shadow-xl">
-      <div class="card-body items-center text-center">
-        <div class="mb-4 text-6xl text-error">500</div>
-        <h2 class="card-title text-error">{t('error.server.title')}</h2>
-        <p class="text-base-content/70">{t('error.server.description')}</p>
-        <div class="mt-4 rounded-lg bg-base-200 p-4 text-left">
-          <p class="font-mono text-sm text-error">{appError}</p>
+  <div
+    class="flex min-h-screen flex-col items-center justify-center bg-[var(--color-base-200)] p-4"
+  >
+    <div class="max-w-lg rounded-lg bg-[var(--color-base-100)] shadow-xl">
+      <div class="flex flex-col items-center p-6 text-center">
+        <div class="mb-4 text-6xl text-[var(--color-error)]">500</div>
+        <h2 class="text-xl font-semibold text-[var(--color-error)]">{t('error.server.title')}</h2>
+        <p class="mt-1 text-[var(--color-base-content)]/70">{t('error.server.description')}</p>
+        <div class="mt-4 w-full rounded-lg bg-[var(--color-base-200)] p-4 text-left">
+          <p class="font-mono text-sm text-[var(--color-error)]">{appError}</p>
         </div>
-        <div class="card-actions mt-6">
-          <button class="btn btn-primary" onclick={() => window.location.reload()}>
+        <div class="mt-6">
+          <Button variant="primary" size="md" onclick={() => window.location.reload()}>
             {t('common.retry')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

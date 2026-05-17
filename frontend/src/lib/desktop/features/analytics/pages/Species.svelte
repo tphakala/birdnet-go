@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
+  import { downloadBlob } from '$lib/utils/fileHelpers';
   import { loggers } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { onMount } from 'svelte';
@@ -357,16 +358,7 @@
 
     // Create and download file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-
-    link.setAttribute('href', url);
-    link.setAttribute('download', `birdnet-species-${getLocalDateString()}.csv`);
-    link.style.visibility = 'hidden';
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadBlob(blob, `birdnet-species-${getLocalDateString()}.csv`);
   }
 
   let searchDebounce: ReturnType<typeof setTimeout> | undefined;

@@ -5,6 +5,7 @@
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
+  import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { GITHUB_ISSUES_URL } from '$lib/utils/externalUrls';
 
   interface HealthResponse {
@@ -70,28 +71,14 @@
     if (systemInfo.environment) lines.push(`Environment: ${systemInfo.environment}`);
     lines.push(`Browser: ${navigator.userAgent}`);
 
-    const text = lines.join('\n');
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-      }
-      copied = true;
-      copyTimer = setTimeout(() => {
-        copied = false;
-        copyTimer = null;
-      }, 2000);
-    } catch {
-      // Clipboard access denied or unavailable
-    }
+    const ok = await copyToClipboard(lines.join('\n'));
+    if (!ok) return;
+    copied = true;
+    if (copyTimer !== null) clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => {
+      copied = false;
+      copyTimer = null;
+    }, COPY_FEEDBACK_TIMEOUT_MS);
   }
 
   onMount(() => {
