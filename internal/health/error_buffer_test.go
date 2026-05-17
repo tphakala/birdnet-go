@@ -128,6 +128,30 @@ func TestErrorRingBuffer_CountSince(t *testing.T) {
 	assert.Equal(t, 5, buf.CountSince(base.Add(-time.Second)))
 }
 
+func TestErrorRingBuffer_CountSince_OutOfOrder(t *testing.T) {
+	t.Parallel()
+	buf := NewErrorRingBuffer(10)
+	base := time.Now()
+
+	// Simulate out-of-order timestamps from concurrent callers:
+	// entries added as: t+0, t+3, t+1, t+4, t+2
+	buf.Add(makeEntry("msg-0", base))
+	buf.Add(makeEntry("msg-3", base.Add(3*time.Second)))
+	buf.Add(makeEntry("msg-1", base.Add(1*time.Second)))
+	buf.Add(makeEntry("msg-4", base.Add(4*time.Second)))
+	buf.Add(makeEntry("msg-2", base.Add(2*time.Second)))
+
+	// Count entries at or after base+2s: msg-3 (t+3), msg-4 (t+4), msg-2 (t+2) = 3
+	cutoff := base.Add(2 * time.Second)
+	assert.Equal(t, 3, buf.CountSince(cutoff))
+
+	// All entries should be counted regardless of insertion order.
+	assert.Equal(t, 5, buf.CountSince(base))
+
+	// Future cutoff: none.
+	assert.Equal(t, 0, buf.CountSince(base.Add(10*time.Second)))
+}
+
 func TestErrorRingBuffer_Clear(t *testing.T) {
 	t.Parallel()
 	buf := NewErrorRingBuffer(5)
