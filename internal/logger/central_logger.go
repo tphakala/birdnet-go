@@ -127,11 +127,14 @@ type CentralLogger struct {
 	mainWriter    *BufferedFileWriter            // Main log file writer (if file output enabled)
 	moduleWriters map[string]*BufferedFileWriter // Per-module buffered writers
 	moduleLevels  map[string]slog.Level          // Per-module log levels
+	extraHandlers []slog.Handler                 // Additional handlers injected at construction
 	mu            sync.RWMutex                   // Protects concurrent access
 }
 
-// NewCentralLogger creates a centralized logger with module routing
-func NewCentralLogger(cfg *LoggingConfig) (*CentralLogger, error) {
+// NewCentralLogger creates a centralized logger with module routing.
+// Optional extraHandlers are appended to the base handler chain so they
+// receive every log record (e.g. a health-check error buffer handler).
+func NewCentralLogger(cfg *LoggingConfig, extraHandlers ...slog.Handler) (*CentralLogger, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("logging config cannot be nil")
 	}
@@ -161,6 +164,7 @@ func NewCentralLogger(cfg *LoggingConfig) (*CentralLogger, error) {
 		timezone:      tz,
 		moduleWriters: make(map[string]*BufferedFileWriter),
 		moduleLevels:  make(map[string]slog.Level),
+		extraHandlers: extraHandlers,
 	}
 
 	// Parse module levels
@@ -249,6 +253,13 @@ func (cl *CentralLogger) createBaseHandler() error {
 	if len(handlers) == 0 {
 		// Fallback to stdout text handler if nothing is configured
 		handlers = append(handlers, newTextHandler(os.Stdout, parseLogLevel(cl.config.DefaultLevel), cl.timezone))
+	}
+
+	// Append any extra handlers injected at construction (e.g. health error buffer)
+	for _, h := range cl.extraHandlers {
+		if h != nil {
+			handlers = append(handlers, h)
+		}
 	}
 
 	if len(handlers) == 1 {

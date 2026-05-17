@@ -7,6 +7,32 @@ import (
 	"time"
 )
 
+// DefaultErrorBufferSize is the default capacity for the health error ring buffer.
+const DefaultErrorBufferSize = 500
+
+// globalErrorBuffer holds the process-wide ErrorRingBuffer that is shared
+// between the logger (writer) and the health checks (reader). Set once at
+// startup via SetGlobalErrorBuffer.
+var (
+	globalErrorBuffer   *ErrorRingBuffer
+	globalErrorBufferMu sync.Mutex
+)
+
+// SetGlobalErrorBuffer stores the shared error buffer. Call this once from
+// main before starting the logger.
+func SetGlobalErrorBuffer(buf *ErrorRingBuffer) {
+	globalErrorBufferMu.Lock()
+	defer globalErrorBufferMu.Unlock()
+	globalErrorBuffer = buf
+}
+
+// GlobalErrorBuffer returns the shared error buffer, or nil if not yet set.
+func GlobalErrorBuffer() *ErrorRingBuffer {
+	globalErrorBufferMu.Lock()
+	defer globalErrorBufferMu.Unlock()
+	return globalErrorBuffer
+}
+
 // LogEntry represents a captured log entry from the application logger.
 type LogEntry struct {
 	Level     string         `json:"level"`

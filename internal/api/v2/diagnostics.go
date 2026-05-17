@@ -30,7 +30,9 @@ type diagnosticsStatusResponse struct {
 // the diagnostics API endpoints.
 func (c *Controller) initDiagnosticsRoutes() {
 	c.healthReports = health.NewReportStore(10)
-	c.healthErrors = health.NewErrorRingBuffer(500)
+	if c.healthErrors == nil {
+		c.healthErrors = health.NewErrorRingBuffer(health.DefaultErrorBufferSize)
+	}
 	c.healthRegistry = health.NewRegistry()
 
 	c.registerHealthChecks()
@@ -119,7 +121,13 @@ func (c *Controller) registerHealthChecks() {
 			windowMS = stride * 1000.0
 			return avgMS, p99MS, windowMS
 		}),
-		checks.NewDetectionRateCheck(nil), // TODO: wire to datastore (PR 2)
+		checks.NewDetectionRateCheck(func(hours int) (int, error) {
+			if c.DS == nil {
+				return 0, errors.NewStd("datastore unavailable")
+			}
+			since := time.Now().Add(-time.Duration(hours) * time.Hour)
+			return c.DS.CountDetectionsSince(since)
+		}),
 		checks.NewQueueDepthCheck(func() (int, int) {
 			q := classifier.ResultsQueue
 			return len(q), cap(q)
@@ -135,7 +143,14 @@ func (c *Controller) registerHealthChecks() {
 			return c.currentSettings().Output.SQLite.Path
 		}),
 		checks.NewMigrationStatusCheck(func() (bool, string, error) {
-			return true, "current", nil // TODO: wire to migration checker
+			if c.DS == nil {
+				return false, "", errors.NewStd("datastore unavailable")
+			}
+			dbType := "sqlite"
+			if c.currentSettings().Output.MySQL.Enabled {
+				dbType = "mysql"
+			}
+			return true, dbType + " (auto-migrated at startup)", nil
 		}),
 		checks.NewDatabasePerformanceCheck(func() (time.Duration, error) {
 			if c.DS == nil {

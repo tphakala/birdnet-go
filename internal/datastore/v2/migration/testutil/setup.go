@@ -797,6 +797,7 @@ func (s *testLegacyInterface) SchemaVersion() string                            
 func (s *testLegacyInterface) UpdateNameMaps(_ []string)                           {}
 func (s *testLegacyInterface) GetDatabaseStats() (*datastore.DatabaseStats, error) { return nil, nil } //nolint:nilnil // stub
 func (s *testLegacyInterface) PingWithLatency() (time.Duration, error)             { return 0, nil }
+func (s *testLegacyInterface) CountDetectionsSince(_ time.Time) (int, error)       { return 0, nil }
 
 // Migration bulk fetch methods - query actual database for integration tests
 
