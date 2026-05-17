@@ -2124,11 +2124,16 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 	}
 	reconfigActions = append(reconfigActions, audioActions...)
 
-	// Trigger reconfigurations asynchronously
+	// Trigger reconfigurations asynchronously.
+	// Capture debug flag from the settings snapshot so the goroutine never
+	// reads c.Settings (which may be overwritten by a concurrent update).
 	if len(reconfigActions) > 0 {
+		debugEnabled := currentSettings.WebServer.Debug
 		go func(actions []string) {
 			for _, action := range actions {
-				c.Debug("Asynchronously executing action: %s", action)
+				if debugEnabled {
+					c.logDebugIfEnabled("Asynchronously executing action", logger.String("action", action))
+				}
 				c.controlChan <- action
 				time.Sleep(actionDelay)
 			}
