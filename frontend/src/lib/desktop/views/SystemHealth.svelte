@@ -17,7 +17,7 @@
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
-  import { copyToClipboard } from '$lib/utils/clipboard';
+  import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { getLocalDateString, getLocalTimeString } from '$lib/utils/date';
   import { downloadBlob } from '$lib/utils/fileHelpers';
 
@@ -163,7 +163,7 @@
     copyTimer = setTimeout(() => {
       copied = false;
       copyTimer = null;
-    }, 2000);
+    }, COPY_FEEDBACK_TIMEOUT_MS);
   }
 
   function downloadJSON() {
