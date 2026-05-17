@@ -21,13 +21,16 @@ func NewErrorBufferHandler(buffer *ErrorRingBuffer, minLevel slog.Level) *ErrorB
 
 // Enabled reports whether the handler accepts records at the given level.
 func (h *ErrorBufferHandler) Enabled(_ context.Context, level slog.Level) bool {
-	return level >= h.level
+	return h != nil && h.buffer != nil && level >= h.level
 }
 
 // Handle extracts key fields from the record and adds a LogEntry to the buffer.
 //
 //nolint:gocritic // slog.Handler interface requires record by value, not pointer
 func (h *ErrorBufferHandler) Handle(_ context.Context, record slog.Record) error {
+	if h == nil || h.buffer == nil {
+		return nil
+	}
 	entry := LogEntry{
 		Level:     slogLevelToString(record.Level),
 		Message:   record.Message,

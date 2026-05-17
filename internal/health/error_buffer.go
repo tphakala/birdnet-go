@@ -19,10 +19,17 @@ var (
 )
 
 // SetGlobalErrorBuffer stores the shared error buffer. Call this once from
-// main before starting the logger.
+// main before starting the logger. Subsequent calls are no-ops, and nil
+// arguments are ignored.
 func SetGlobalErrorBuffer(buf *ErrorRingBuffer) {
+	if buf == nil {
+		return
+	}
 	globalErrorBufferMu.Lock()
 	defer globalErrorBufferMu.Unlock()
+	if globalErrorBuffer != nil {
+		return
+	}
 	globalErrorBuffer = buf
 }
 

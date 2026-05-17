@@ -67,8 +67,10 @@ func TestErrorBufferHandler_SkipsBelowLevel(t *testing.T) {
 	buf := NewErrorRingBuffer(10)
 	h := NewErrorBufferHandler(buf, slog.LevelWarn)
 
-	record := slog.NewRecord(time.Now(), slog.LevelInfo, "just info", 0)
-	assert.False(t, h.Enabled(t.Context(), record.Level))
+	l := slog.New(h)
+	l.Info("just info", slog.String("request_id", "abc-123"))
+
+	assert.False(t, h.Enabled(t.Context(), slog.LevelInfo))
 	assert.Equal(t, 0, buf.Count())
 }
 

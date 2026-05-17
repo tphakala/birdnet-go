@@ -309,8 +309,16 @@ func (cl *CentralLogger) Module(name string) Logger {
 			consoleLevel := parseLogLevel(cl.config.Console.Level)
 			handlers = append(handlers, newTextHandler(os.Stdout, consoleLevel, cl.timezone))
 		}
+
+		// Include extra handlers (e.g. health error buffer) so modules with
+		// dedicated file output still feed into the shared diagnostics buffer.
+		for _, h := range cl.extraHandlers {
+			if h != nil {
+				handlers = append(handlers, h)
+			}
+		}
 	} else {
-		// Use base handler (console + main file)
+		// Use base handler (console + main file + extra handlers)
 		handlers = append(handlers, cl.baseHandler)
 	}
 
