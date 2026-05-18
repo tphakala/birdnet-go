@@ -143,9 +143,12 @@ if [ -n "$TZ" ]; then
 
     # Validate timezone exists in tzdata
     if [ -f "/usr/share/zoneinfo/$TZ" ]; then
-        ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime 2>/dev/null || true
-        echo "$TZ" > /etc/timezone 2>/dev/null || true
-        echo "Timezone configured: $TZ"
+        if ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime 2>/dev/null; then
+            echo "$TZ" > /etc/timezone 2>/dev/null || true
+            echo "Timezone configured: $TZ"
+        else
+            echo "Timezone $TZ requested (system config skipped in rootless mode)"
+        fi
     else
         echo "ERROR: Timezone '$TZ' not found" >&2
         echo "  Available timezones: ls /usr/share/zoneinfo/" >&2
