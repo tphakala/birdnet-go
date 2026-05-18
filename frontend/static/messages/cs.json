@@ -435,6 +435,10 @@
         "overloadTitle": "Analýza zvuku přetížena",
         "overloadMessage": "Váš systém zahazuje {dropRate} % zvukových vzorků ze zdroje „{sourceName}“, protože nestíhá analýzu. Snižte hodnotu překryvu BirdNET v nastavení detekce nebo zvažte výkonnější procesor."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime není k dispozici",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} je vyžadován pro {modelName}, ale nebyl nalezen. Ověřte, že libonnxruntime.so je nainstalován na očekávané cestě."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuální hodnota: {value} % (práh: {threshold} %)",
@@ -4677,7 +4681,10 @@
       "reinstall": "Přeinstalovat",
       "reinstalling": "Přeinstalování…",
       "reinstallComplete": "Soubory úspěšně ověřeny",
-      "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel"
+      "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Vyžaduje ONNX Runtime, který není v tomto systému k dispozici.",
+      "onnxRuntimeMissing": "ONNX Runtime není k dispozici. Tento model nelze spustit.",
+      "unavailable": "Nedostupné"
     },
     "bird": {
       "title": "Detekce ptáků",

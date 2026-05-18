@@ -74,6 +74,7 @@
     Package,
     BrainCircuit,
     AlertTriangle,
+    TriangleAlert,
     Loader2,
     RefreshCw,
     Radar,
@@ -159,16 +160,12 @@
   // ── Derived catalog views ─────────────────────────────────────────────
   const installedEntries = $derived(catalog.filter(e => e.installed));
   const availableWildlife = $derived(
-    catalog.filter(e => !e.installed && e.compatible && e.category === 'wildlife')
+    catalog.filter(e => !e.installed && e.category === 'wildlife')
   );
-  const availableBirds = $derived(
-    catalog.filter(e => !e.installed && e.compatible && e.category === 'bird')
-  );
-  const availableBats = $derived(
-    catalog.filter(e => !e.installed && e.compatible && e.category === 'bat')
-  );
+  const availableBirds = $derived(catalog.filter(e => !e.installed && e.category === 'bird'));
+  const availableBats = $derived(catalog.filter(e => !e.installed && e.category === 'bat'));
   const availableGeomodels = $derived(
-    catalog.filter(e => !e.installed && e.compatible && e.category === 'geomodel')
+    catalog.filter(e => !e.installed && e.category === 'geomodel')
   );
 
   // ── BirdNET locale loading ────────────────────────────────────────────
@@ -1595,6 +1592,15 @@
                 {/if}
               </div>
             {/if}
+            <!-- Incompatible warning for installed models -->
+            {#if !entry.compatible}
+              <div
+                class="mt-3 flex items-start gap-2 rounded-lg bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-400"
+              >
+                <XCircle class="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{entry.incompatibleReason || t('analysis.gallery.onnxRuntimeMissing')}</span>
+              </div>
+            {/if}
             <!-- Metadata grid -->
             <div
               class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
@@ -1693,7 +1699,10 @@
   {@const progress = isInstalling ? downloadProgress : null}
   {@const logo = getModelLogo(entry.id)}
   <div
-    class="flex h-full flex-col rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4"
+    class={cn(
+      'flex h-full flex-col rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4',
+      !entry.compatible && 'opacity-60'
+    )}
   >
     <!-- Header: logo + name/description/author -->
     <div class="flex items-start gap-3">
@@ -1767,6 +1776,16 @@
       </div>
     {/if}
 
+    <!-- Incompatible warning banner -->
+    {#if !entry.compatible}
+      <div
+        class="mt-3 flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400"
+      >
+        <TriangleAlert class="h-4 w-4 shrink-0 mt-0.5" />
+        <span>{entry.incompatibleReason || t('analysis.gallery.onnxRuntimeRequired')}</span>
+      </div>
+    {/if}
+
     <!-- Metadata grid -->
     <div
       class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
@@ -1816,7 +1835,7 @@
     <div class="mt-auto flex items-center justify-end pt-3">
       <button
         onclick={() => openLicenseDialog(entry)}
-        disabled={isInstalling || installingId !== null}
+        disabled={!entry.compatible || isInstalling || installingId !== null}
         class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:opacity-50"
         aria-label="{t('analysis.gallery.install')} {entry.name}"
       >

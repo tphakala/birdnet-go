@@ -435,6 +435,10 @@
         "overloadTitle": "Analisi audio sovraccaricata",
         "overloadMessage": "Il sistema sta scartando il {dropRate} % dei campioni audio della sorgente ''{sourceName}'' perché non riesce a tenere il passo con l'analisi. Riduci il valore di sovrapposizione BirdNET nelle impostazioni di rilevamento o considera l'aggiornamento a una CPU più veloce."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime non disponibile",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} è richiesto per {modelName} ma non è stato trovato. Verificare che libonnxruntime.so sia installato nel percorso previsto."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valore attuale: {value}% (soglia: {threshold}%)",
@@ -4677,7 +4681,10 @@
       "reinstall": "Reinstalla",
       "reinstalling": "Reinstallazione...",
       "reinstallComplete": "File verificati con successo",
-      "geomodelBadge": "Include il geomodel BirdNET v3.0"
+      "geomodelBadge": "Include il geomodel BirdNET v3.0",
+      "onnxRuntimeRequired": "Richiede ONNX Runtime che non è disponibile su questo sistema.",
+      "onnxRuntimeMissing": "ONNX Runtime non è disponibile. Questo modello non può essere eseguito.",
+      "unavailable": "Non disponibile"
     },
     "bird": {
       "title": "Rilevamento uccelli",

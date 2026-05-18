@@ -435,6 +435,10 @@
         "overloadTitle": "Hang elemzés túlterhelve",
         "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a ''{sourceName}'' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
       },
+      "ort": {
+        "unavailableTitle": "Az ONNX Runtime nem elérhető",
+        "unavailableMessage": "Az ONNX Runtime {requiredVersion} szükséges a(z) {modelName} modellhez, de nem található. Ellenőrizze, hogy a libonnxruntime.so telepítve van-e a várt elérési úton."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Jelenlegi érték: {value}% (küszöbérték: {threshold}%)",
@@ -4677,7 +4681,10 @@
       "reinstall": "Újratelepítés",
       "reinstalling": "Újratelepítés...",
       "reinstallComplete": "Fájlok sikeresen ellenőrizve",
-      "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt"
+      "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt",
+      "onnxRuntimeRequired": "ONNX Runtime szükséges, amely nem elérhető ezen a rendszeren.",
+      "onnxRuntimeMissing": "Az ONNX Runtime nem elérhető. Ez a modell nem futtatható.",
+      "unavailable": "Nem elérhető"
     },
     "bird": {
       "title": "Madárészlelés",

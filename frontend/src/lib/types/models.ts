@@ -18,6 +18,7 @@ export interface CatalogEntry {
   upstreamUrl?: string;
   installed: boolean;
   compatible: boolean;
+  incompatibleReason?: string;
   totalSizeBytes: number;
   hasGeomodel: boolean;
 }

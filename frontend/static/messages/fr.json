@@ -435,6 +435,10 @@
         "overloadTitle": "Analyse audio surchargée",
         "overloadMessage": "Votre système perd {dropRate} % des échantillons audio de la source ''{sourceName}'' car il ne peut pas suivre le rythme de l'analyse. Réduisez la valeur de chevauchement BirdNET dans les paramètres de détection ou envisagez de passer à un processeur plus rapide."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime non disponible",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} est requis pour {modelName} mais n'a pas été trouvé. Vérifiez que libonnxruntime.so est installé à l'emplacement attendu."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valeur actuelle : {value}% (seuil : {threshold}%)",
@@ -4677,7 +4681,10 @@
       "reinstall": "Réinstaller",
       "reinstalling": "Réinstallation...",
       "reinstallComplete": "Fichiers vérifiés avec succès",
-      "geomodelBadge": "Inclut le BirdNET v3.0 geomodel"
+      "geomodelBadge": "Inclut le BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Nécessite ONNX Runtime qui n'est pas disponible sur ce système.",
+      "onnxRuntimeMissing": "ONNX Runtime n'est pas disponible. Ce modèle ne peut pas fonctionner.",
+      "unavailable": "Indisponible"
     },
     "bird": {
       "title": "Détection des oiseaux",

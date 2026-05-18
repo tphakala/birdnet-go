@@ -273,3 +273,63 @@ func (c *QueueDepthCheck) Run(_ context.Context) health.Result {
 		Timestamp:  time.Now(),
 	}
 }
+
+// ORTAvailabilityCheck verifies that the ONNX Runtime library is available
+// and version-compatible for models that require it (Perch, geomodel, bat).
+type ORTAvailabilityCheck struct {
+	getStatus func() (available, initialized bool, version, libraryPath, errMsg string)
+}
+
+// NewORTAvailabilityCheck creates an ORTAvailabilityCheck using the given status provider.
+func NewORTAvailabilityCheck(getStatus func() (available, initialized bool, version, libraryPath, errMsg string)) *ORTAvailabilityCheck {
+	return &ORTAvailabilityCheck{getStatus: getStatus}
+}
+
+// Name returns the check identifier.
+func (c *ORTAvailabilityCheck) Name() string { return "ort_availability" }
+
+// Category returns the analysis category.
+func (c *ORTAvailabilityCheck) Category() health.Category { return health.CategoryAnalysis }
+
+// Run checks ONNX Runtime availability and version compatibility.
+func (c *ORTAvailabilityCheck) Run(_ context.Context) health.Result {
+	start := time.Now()
+
+	if c.getStatus == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	available, initialized, version, libPath, errMsg := c.getStatus()
+
+	details := map[string]any{
+		"initialized":  initialized,
+		"version":      version,
+		"library_path": libPath,
+	}
+
+	if available {
+		msg := fmt.Sprintf("ONNX Runtime %s available", version)
+		if !initialized {
+			msg = "ONNX Runtime library found (not yet initialized)"
+		}
+		return health.Result{
+			Name:       c.Name(),
+			Category:   c.Category(),
+			Status:     health.StatusHealthy,
+			Message:    msg,
+			Details:    details,
+			DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+			Timestamp:  time.Now(),
+		}
+	}
+
+	return health.Result{
+		Name:       c.Name(),
+		Category:   c.Category(),
+		Status:     health.StatusWarning,
+		Message:    errMsg,
+		Details:    details,
+		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+		Timestamp:  time.Now(),
+	}
+}

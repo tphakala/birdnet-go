@@ -435,6 +435,10 @@
         "overloadTitle": "Lydanalyse overbelastet",
         "overloadMessage": "Dit system dropper {dropRate}% af lydprøverne for kilden ''{sourceName}'', fordi det ikke kan følge med analysen. Reducer BirdNET-overlapværdien i detektionsindstillingerne eller overvej at opgradere til en hurtigere CPU."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime ikke tilgængelig",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} er påkrævet til {modelName}, men blev ikke fundet. Kontrollér, at libonnxruntime.so er installeret på den forventede sti."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuel værdi: {value}% (grænse: {threshold}%)",
@@ -4677,7 +4681,10 @@
       "reinstall": "Geninstaller",
       "reinstalling": "Geninstallerer...",
       "reinstallComplete": "Filer verificeret succesfuldt",
-      "geomodelBadge": "Inkluderer BirdNET v3.0 geomodel"
+      "geomodelBadge": "Inkluderer BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Kræver ONNX Runtime, som ikke er tilgængelig på dette system.",
+      "onnxRuntimeMissing": "ONNX Runtime er ikke tilgængelig. Denne model kan ikke køre.",
+      "unavailable": "Ikke tilgængelig"
     },
     "bird": {
       "title": "Fugleregistrering",

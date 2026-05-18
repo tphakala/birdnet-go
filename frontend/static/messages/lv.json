@@ -435,6 +435,10 @@
         "overloadTitle": "Audio analīze pārslogota",
         "overloadMessage": "Jūsu sistēma izlaiž {dropRate}% audio paraugu avotam ''{sourceName}'', jo tā nespēj sekot līdzi analīzei. Samaziniet BirdNET pārklāšanās vērtību noteikšanas iestatījumos vai apsveriet jaudīgāka procesora izmantošanu."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime nav pieejams",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Pārliecinieties, ka libonnxruntime.so ir instalēts paredzētajā ceļā."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Pašreizējā vērtība: {value}% (slieksnis: {threshold}%)",
@@ -4677,7 +4681,10 @@
       "reinstall": "Pārinstalēt",
       "reinstalling": "Pārinstalē...",
       "reinstallComplete": "Faili veiksmīgi pārbaudīti",
-      "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis"
+      "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis",
+      "onnxRuntimeRequired": "Nepieciešams ONNX Runtime, kas šajā sistēmā nav pieejams.",
+      "onnxRuntimeMissing": "ONNX Runtime nav pieejams. Šo modeli nevar palaist.",
+      "unavailable": "Nav pieejams"
     },
     "bird": {
       "title": "Putnu noteikšana",
