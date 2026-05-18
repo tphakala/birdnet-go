@@ -3,6 +3,7 @@ import { createDebounce } from './debounce';
 
 describe('createDebounce', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.useFakeTimers();
   });
 

@@ -3,6 +3,7 @@ import { getStoredValue, setStoredValue, removeStoredValue } from './storage';
 
 describe('storage', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     localStorage.clear();
     vi.restoreAllMocks();
   });
