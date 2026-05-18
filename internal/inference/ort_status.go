@@ -68,7 +68,7 @@ func CheckORTAvailability(configuredPath string) ORTStatus {
 	}
 
 	// If we could determine the version and it is incompatible, reject early.
-	// If version is empty (e.g. Windows/macOS where filename lacks version),
+	// If version is empty (e.g. Windows where filename lacks version),
 	// be optimistic: the library exists, actual compatibility is verified at
 	// init time when the binding calls OrtGetApiBase.
 	if version != "" && !isVersionCompatible(version) {
@@ -123,10 +123,19 @@ func inferVersionFromPath(libPath string) string {
 
 	base := filepath.Base(resolved)
 
-	// Look for a version suffix after ".so." (Linux convention).
-	// Example: "libonnxruntime.so.1.25.1" -> "1.25.1"
+	// Linux convention: "libonnxruntime.so.1.25.1" -> "1.25.1"
 	if idx := strings.Index(base, ".so."); idx >= 0 {
 		return base[idx+len(".so."):]
+	}
+
+	// macOS convention: "libonnxruntime.1.25.1.dylib" -> "1.25.1"
+	if strings.HasSuffix(base, ".dylib") {
+		name := strings.TrimSuffix(base, ".dylib")
+		for i := range len(name) {
+			if name[i] == '.' && i+1 < len(name) && name[i+1] >= '0' && name[i+1] <= '9' {
+				return name[i+1:]
+			}
+		}
 	}
 
 	return ""
