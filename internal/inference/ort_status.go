@@ -36,18 +36,19 @@ type ORTStatus struct {
 // configuredPath is the user-configured library path (may be empty).
 // The function never mutates global ORT state.
 func CheckORTAvailability(configuredPath string) ORTStatus {
-	// Fast path: ORT is already loaded and running.
+	// Fast path: ORT is already loaded and running. Trust the init even if
+	// GetVersion returns empty (it succeeded, so the library is compatible).
 	if IsORTInitialized() {
 		version := ortlib.GetVersion()
 		status := ORTStatus{
+			Available:   true,
 			Initialized: true,
 			Version:     version,
 		}
-		if msg := versionError(version); msg != "" {
-			status.Error = msg
-			return status
+		if version != "" && !isVersionCompatible(version) {
+			status.Available = false
+			status.Error = versionError(version)
 		}
-		status.Available = true
 		return status
 	}
 
@@ -61,16 +62,20 @@ func CheckORTAvailability(configuredPath string) ORTStatus {
 
 	version := inferVersionFromPath(libPath)
 	status := ORTStatus{
+		Available:   true,
 		LibraryPath: libPath,
 		Version:     version,
 	}
 
-	if msg := versionError(version); msg != "" {
-		status.Error = msg
-		return status
+	// If we could determine the version and it is incompatible, reject early.
+	// If version is empty (e.g. Windows/macOS where filename lacks version),
+	// be optimistic: the library exists, actual compatibility is verified at
+	// init time when the binding calls OrtGetApiBase.
+	if version != "" && !isVersionCompatible(version) {
+		status.Available = false
+		status.Error = versionError(version)
 	}
 
-	status.Available = true
 	return status
 }
 
