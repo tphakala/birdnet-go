@@ -62,7 +62,7 @@
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
-  import { formatBytes } from '$lib/utils/formatters';
+  import { formatBytes, formatNumber } from '$lib/utils/formatters';
   import { safeArrayAccess } from '$lib/utils/security';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
@@ -1177,7 +1177,7 @@
               class:opacity-60={rangeFilterState.testing}
             >
               {rangeFilterState.speciesCount !== null
-                ? rangeFilterState.speciesCount.toLocaleString()
+                ? formatNumber(rangeFilterState.speciesCount)
                 : '-'}
             </div>
             {#if rangeFilterState.testing}
@@ -1234,7 +1234,7 @@
               <span class="font-medium">
                 {t('analysis.rangeFilter.status.geomodelInfo', {
                   version: rangeFilterStatus.geomodel.version,
-                  species: rangeFilterStatus.geomodel.totalSpecies.toLocaleString(),
+                  species: formatNumber(rangeFilterStatus.geomodel.totalSpecies),
                 })}
               </span>
               <span
@@ -1282,13 +1282,13 @@
                       <tr class="border-b border-[var(--color-base-300)]/50 last:border-0">
                         <td class="py-2 pr-4 font-medium">{classifier.name}</td>
                         <td class="py-2 px-4 text-right tabular-nums"
-                          >{classifier.totalSpecies.toLocaleString()}</td
+                          >{formatNumber(classifier.totalSpecies)}</td
                         >
                         <td class="py-2 px-4 text-right tabular-nums"
-                          >{classifier.withRangeData.toLocaleString()}</td
+                          >{formatNumber(classifier.withRangeData)}</td
                         >
                         <td class="py-2 pl-4 text-right tabular-nums"
-                          >{classifier.withoutRangeData.toLocaleString()}</td
+                          >{formatNumber(classifier.withoutRangeData)}</td
                         >
                       </tr>
                     {/each}

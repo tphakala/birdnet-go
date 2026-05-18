@@ -2,54 +2,20 @@
  * Sidebar state store with localStorage persistence
  *
  * Manages the collapsed/expanded state of the desktop sidebar.
- * Only applies to desktop viewports (≥1024px) - mobile uses drawer overlay.
+ * Only applies to desktop viewports (>=1024px) - mobile uses drawer overlay.
  */
 import { writable, get } from 'svelte/store';
+import { getStoredValue, setStoredValue } from '$lib/utils/storage';
 
 const STORAGE_KEY = 'sidebar-collapsed';
 
-// Check if we're in a browser environment
-const isBrowser = typeof window !== 'undefined';
-
-/**
- * Get initial collapsed state from localStorage
- * Defaults to false (expanded) if no preference is stored
- */
-function getInitialState(): boolean {
-  if (!isBrowser) return false;
-
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored !== null) {
-      return stored === 'true';
-    }
-  } catch {
-    // localStorage not available (e.g., private browsing)
-  }
-
-  return false; // Default to expanded
-}
-
-/**
- * Save collapsed state to localStorage
- */
-function saveState(collapsed: boolean): void {
-  if (!isBrowser) return;
-
-  try {
-    localStorage.setItem(STORAGE_KEY, String(collapsed));
-  } catch {
-    // localStorage not available
-  }
-}
-
 function createSidebarStore() {
-  const store = writable<boolean>(getInitialState());
+  const store = writable<boolean>(getStoredValue(STORAGE_KEY, false));
   const { subscribe, set, update } = store;
 
   // Auto-persist to localStorage whenever the store value changes
-  if (isBrowser) {
-    subscribe(saveState);
+  if (typeof window !== 'undefined') {
+    subscribe(value => setStoredValue(STORAGE_KEY, value));
   }
 
   return {

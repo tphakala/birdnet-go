@@ -5,37 +5,26 @@
  * Persisted in localStorage under 'logo-style'.
  */
 import { writable } from 'svelte/store';
+import { getStoredValue, setStoredValue } from '$lib/utils/storage';
 
 export type LogoStyle = 'gradient' | 'solid';
 
 const STORAGE_KEY = 'logo-style';
 const DEFAULT_STYLE: LogoStyle = 'gradient';
 
-function getInitialStyle(): LogoStyle {
-  if (typeof window === 'undefined') return DEFAULT_STYLE;
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'gradient' || stored === 'solid') return stored;
-  } catch {
-    // localStorage unavailable (private browsing, storage full)
-  }
-  return DEFAULT_STYLE;
-}
+const isValidStyle = (v: unknown): v is LogoStyle =>
+  typeof v === 'string' && ['gradient', 'solid'].includes(v);
 
 function createLogoStyleStore() {
-  const { subscribe, set } = writable<LogoStyle>(getInitialStyle());
+  const { subscribe, set } = writable<LogoStyle>(
+    getStoredValue(STORAGE_KEY, DEFAULT_STYLE, isValidStyle)
+  );
 
   return {
     subscribe,
     setStyle(style: LogoStyle) {
       set(style);
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem(STORAGE_KEY, style);
-        } catch {
-          // localStorage unavailable (private browsing, storage full)
-        }
-      }
+      setStoredValue(STORAGE_KEY, style);
     },
   };
 }

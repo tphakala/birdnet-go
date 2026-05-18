@@ -13,48 +13,27 @@
  */
 import type { DashboardLayout } from './settings';
 import { writable } from 'svelte/store';
-import { getLogger } from '$lib/utils/logger';
-
-const logger = getLogger('dashboard');
+import { getStoredValue, setStoredValue, removeStoredValue } from '$lib/utils/storage';
 
 /** localStorage key for the guest dashboard layout */
 export const GUEST_LAYOUT_KEY = 'birdnet-go:guest-dashboard-layout';
 
-/**
- * Reads the guest dashboard layout from localStorage.
- * Returns null if no layout is stored or if the stored value is invalid.
- */
-function readFromStorage(): DashboardLayout | null {
-  if (typeof window === 'undefined') return null;
-
-  try {
-    const raw = localStorage.getItem(GUEST_LAYOUT_KEY);
-    if (!raw) return null;
-
-    const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'elements' in parsed &&
-      Array.isArray((parsed as DashboardLayout).elements)
-    ) {
-      return parsed as DashboardLayout;
-    }
-
-    // Stored data doesn't look like a valid layout - remove it
-    localStorage.removeItem(GUEST_LAYOUT_KEY);
-    return null;
-  } catch (error) {
-    logger.warn('Failed to parse guest dashboard layout from localStorage:', error);
-    return null;
-  }
+function isValidLayout(v: unknown): v is DashboardLayout {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'elements' in v &&
+    Array.isArray((v as DashboardLayout).elements)
+  );
 }
 
 /**
  * Reactive Svelte store for the guest dashboard layout.
  * Hydrated from localStorage on creation; subscribers are notified on changes.
  */
-export const guestDashboardLayout = writable<DashboardLayout | null>(readFromStorage());
+export const guestDashboardLayout = writable<DashboardLayout | null>(
+  getStoredValue<DashboardLayout | null>(GUEST_LAYOUT_KEY, null, isValidLayout)
+);
 
 /**
  * Saves a layout for guest users.
@@ -63,13 +42,7 @@ export const guestDashboardLayout = writable<DashboardLayout | null>(readFromSto
  */
 export function saveGuestLayout(layout: DashboardLayout): void {
   guestDashboardLayout.set(layout);
-
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(GUEST_LAYOUT_KEY, JSON.stringify(layout));
-  } catch (error) {
-    logger.warn('Failed to save guest dashboard layout to localStorage:', error);
-  }
+  setStoredValue(GUEST_LAYOUT_KEY, layout);
 }
 
 /**
@@ -79,11 +52,5 @@ export function saveGuestLayout(layout: DashboardLayout): void {
  */
 export function clearGuestLayout(): void {
   guestDashboardLayout.set(null);
-
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.removeItem(GUEST_LAYOUT_KEY);
-  } catch (error) {
-    logger.warn('Failed to clear guest dashboard layout from localStorage:', error);
-  }
+  removeStoredValue(GUEST_LAYOUT_KEY);
 }

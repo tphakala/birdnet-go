@@ -6,6 +6,7 @@
  * Works alongside the theme store (light/dark) independently.
  */
 import { writable } from 'svelte/store';
+import { getStoredValue, setStoredValue } from '$lib/utils/storage';
 
 export type SchemeId = 'blue' | 'forest' | 'amber' | 'violet' | 'rose' | 'custom';
 
@@ -29,42 +30,27 @@ const VALID_SCHEMES: ReadonlyArray<string> = [
   'custom',
 ];
 
-function isValidScheme(value: string): value is SchemeId {
-  return VALID_SCHEMES.includes(value);
+function isValidScheme(value: unknown): value is SchemeId {
+  return typeof value === 'string' && VALID_SCHEMES.includes(value);
+}
+
+function isValidCustomColors(v: unknown): v is CustomColors {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'primary' in v &&
+    'accent' in v &&
+    typeof (v as CustomColors).primary === 'string' &&
+    typeof (v as CustomColors).accent === 'string'
+  );
 }
 
 function getInitialScheme(): SchemeId {
-  if (typeof window === 'undefined') return DEFAULT_SCHEME;
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && isValidScheme(stored)) return stored;
-  } catch {
-    // localStorage unavailable (private browsing, storage full)
-  }
-  return DEFAULT_SCHEME;
+  return getStoredValue(STORAGE_KEY, DEFAULT_SCHEME, isValidScheme);
 }
 
 function getInitialCustomColors(): CustomColors {
-  if (typeof window === 'undefined') return DEFAULT_CUSTOM;
-  try {
-    const stored = localStorage.getItem(CUSTOM_COLORS_KEY);
-    if (stored) {
-      const parsed: unknown = JSON.parse(stored);
-      if (
-        typeof parsed === 'object' &&
-        parsed !== null &&
-        'primary' in parsed &&
-        'accent' in parsed &&
-        typeof (parsed as CustomColors).primary === 'string' &&
-        typeof (parsed as CustomColors).accent === 'string'
-      ) {
-        return parsed as CustomColors;
-      }
-    }
-  } catch {
-    // Invalid JSON, use defaults
-  }
-  return DEFAULT_CUSTOM;
+  return getStoredValue(CUSTOM_COLORS_KEY, DEFAULT_CUSTOM, isValidCustomColors);
 }
 
 /**
@@ -88,11 +74,7 @@ function getContrastColor(hex: string): string {
 function applyScheme(scheme: SchemeId): void {
   if (typeof window === 'undefined') return;
   document.documentElement.setAttribute('data-scheme', scheme);
-  try {
-    localStorage.setItem(STORAGE_KEY, scheme);
-  } catch {
-    // localStorage unavailable (private browsing, storage full)
-  }
+  setStoredValue(STORAGE_KEY, scheme);
 }
 
 function applyCustomColors(colors: CustomColors): void {
@@ -102,11 +84,7 @@ function applyCustomColors(colors: CustomColors): void {
   root.setProperty('--custom-primary-content', getContrastColor(colors.primary));
   root.setProperty('--custom-accent', colors.accent);
   root.setProperty('--custom-accent-content', getContrastColor(colors.accent));
-  try {
-    localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(colors));
-  } catch {
-    // localStorage unavailable (private browsing, storage full)
-  }
+  setStoredValue(CUSTOM_COLORS_KEY, colors);
 }
 
 function createSchemeStore() {

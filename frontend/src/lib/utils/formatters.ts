@@ -70,6 +70,20 @@ export function formatTime(seconds: number): string {
   return `${minutes}:${String(secs).padStart(2, '0')}`;
 }
 
+/** Format a Date as time-of-day (e.g., "14:30" or "2:30 PM"). */
+export function formatTimeOfDay(
+  date: Date | string | number | null | undefined,
+  use24h: boolean = true
+): string {
+  const d = toValidDate(date);
+  if (!d) return '';
+  return d.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: !use24h,
+  });
+}
+
 /**
  * Format uptime in seconds to human readable string
  */
