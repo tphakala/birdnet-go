@@ -118,7 +118,7 @@ if [ "$RUNNING_AS_ROOT" = true ]; then
         check_and_chown "$USER_HOME/.config"
     fi
     if [ ! -L "$USER_HOME/.config/birdnet-go" ]; then
-        su - "$USER_NAME" -c "ln -sf /config ~/.config/birdnet-go"
+        gosu "$USER_NAME" ln -sf /config "$USER_HOME/.config/birdnet-go"
     fi
 else
     # In rootless mode, create symlink in current user's home if it exists
@@ -128,6 +128,33 @@ else
             ln -sf /config "$HOME/.config/birdnet-go" 2>/dev/null || true
         fi
     fi
+fi
+
+# Configure timezone if TZ environment variable is set
+if [ -n "$TZ" ]; then
+    echo "Timezone configuration: TZ=$TZ"
+
+    # Warn about legacy timezone formats
+    if [[ "$TZ" == US/* ]] || [[ "$TZ" == Etc/* ]]; then
+        echo "WARNING: Using legacy timezone format '$TZ'"
+        echo "  Consider canonical format (e.g., 'America/Denver' instead of 'US/Mountain')"
+        echo "  Legacy names may be removed in future Debian releases"
+    fi
+
+    # Validate timezone exists in tzdata
+    if [ -f "/usr/share/zoneinfo/$TZ" ]; then
+        ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime 2>/dev/null || true
+        echo "$TZ" > /etc/timezone 2>/dev/null || true
+        echo "Timezone configured: $TZ"
+    else
+        echo "ERROR: Timezone '$TZ' not found" >&2
+        echo "  Available timezones: ls /usr/share/zoneinfo/" >&2
+        echo "  Falling back to UTC" >&2
+        ln -snf "/usr/share/zoneinfo/UTC" /etc/localtime 2>/dev/null || true
+        echo "UTC" > /etc/timezone 2>/dev/null || true
+    fi
+else
+    echo "No TZ environment variable set, using container default (UTC)"
 fi
 
 # If audio device present, ensure permissions are correct

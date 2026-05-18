@@ -34,9 +34,10 @@ Copy the appropriate example file to `.env` and customize for your setup.
 ## Entrypoint Script
 
 - **`entrypoint-podman.sh`** - Podman-optimized entrypoint script
-  - Handles rootless container execution
-  - Manages user/group permissions without requiring gosu
-  - Optimized for Podman's user namespace handling
+  - Handles both rootful and rootless container execution
+  - Uses gosu for privilege dropping in rootful mode
+  - Includes pre-flight checks (disk space, config writability)
+  - Timezone configuration support via TZ environment variable
 
 ## Installation
 
