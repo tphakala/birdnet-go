@@ -1580,17 +1580,28 @@ func (c *Controller) getV2ManagerStats(ctx context.Context) (*datastore.Database
 			c.logWarnIfEnabled("Failed to get v2 SQLite database size", logger.Error(err))
 		}
 	} else {
-		if err := db.WithContext(ctx).Raw(`
-			SELECT COALESCE(SUM(data_length + index_length), 0)
-			FROM information_schema.TABLES
-			WHERE table_schema = DATABASE()
-		`).Scan(&stats.SizeBytes).Error; err != nil {
-			c.logWarnIfEnabled("Failed to get v2 MySQL database size", logger.Error(err))
+		prefix := mgr.TablePrefix()
+		if prefix != "" {
+			if err := db.WithContext(ctx).Raw(`
+				SELECT COALESCE(SUM(data_length + index_length), 0)
+				FROM information_schema.TABLES
+				WHERE table_schema = DATABASE() AND table_name LIKE ?
+			`, prefix+"%").Scan(&stats.SizeBytes).Error; err != nil {
+				c.logWarnIfEnabled("Failed to get v2 MySQL database size", logger.Error(err))
+			}
+		} else {
+			if err := db.WithContext(ctx).Raw(`
+				SELECT COALESCE(SUM(data_length + index_length), 0)
+				FROM information_schema.TABLES
+				WHERE table_schema = DATABASE()
+			`).Scan(&stats.SizeBytes).Error; err != nil {
+				c.logWarnIfEnabled("Failed to get v2 MySQL database size", logger.Error(err))
+			}
 		}
 	}
 
 	var count int64
-	if err := db.WithContext(ctx).Table("detections").Count(&count).Error; err != nil {
+	if err := db.WithContext(ctx).Table(mgr.TablePrefix() + "detections").Count(&count).Error; err != nil {
 		c.logWarnIfEnabled("Failed to count v2 detections", logger.Error(err))
 	} else {
 		stats.TotalDetections = count
