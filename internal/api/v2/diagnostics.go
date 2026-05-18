@@ -123,11 +123,12 @@ func (c *Controller) registerHealthChecks() {
 			return avgMS, p99MS, windowMS
 		}),
 		checks.NewDetectionRateCheck(func(ctx context.Context, hours int) (int, error) {
-			if c.DS == nil {
+			ds := c.DS
+			if ds == nil {
 				return 0, errors.NewStd("datastore unavailable")
 			}
 			since := time.Now().Add(-time.Duration(hours) * time.Hour)
-			return c.DS.CountDetectionsSince(ctx, since)
+			return ds.CountDetectionsSince(ctx, since)
 		}),
 		checks.NewQueueDepthCheck(func() (int, int) {
 			q := classifier.ResultsQueue
@@ -154,10 +155,11 @@ func (c *Controller) registerHealthChecks() {
 			return true, dbType + " (auto-migrated at startup)", nil
 		}),
 		checks.NewDatabasePerformanceCheck(func(ctx context.Context) (time.Duration, error) {
-			if c.DS == nil {
+			ds := c.DS
+			if ds == nil {
 				return 0, errors.NewStd("datastore unavailable")
 			}
-			return c.DS.PingWithLatency(ctx)
+			return ds.PingWithLatency(ctx)
 		}),
 
 		// Network checks
