@@ -435,6 +435,10 @@
         "overloadTitle": "Analiza dźwięku przeciążona",
         "overloadMessage": "System odrzuca {dropRate} % próbek dźwięku ze źródła ''{sourceName}'', ponieważ nie nadąża z analizą. Zmniejsz wartość nakładania BirdNET w ustawieniach wykrywania lub rozważ wymianę procesora na szybszy."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime Not Available",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. Check that libonnxruntime.so is installed at the expected path."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",

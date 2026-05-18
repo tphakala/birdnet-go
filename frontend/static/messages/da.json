@@ -435,6 +435,10 @@
         "overloadTitle": "Lydanalyse overbelastet",
         "overloadMessage": "Dit system dropper {dropRate}% af lydprøverne for kilden ''{sourceName}'', fordi det ikke kan følge med analysen. Reducer BirdNET-overlapværdien i detektionsindstillingerne eller overvej at opgradere til en hurtigere CPU."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime Not Available",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. Check that libonnxruntime.so is installed at the expected path."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuel værdi: {value}% (grænse: {threshold}%)",

@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -20,6 +21,21 @@ func (o *Orchestrator) loadPerch(threads int) error {
 		if labelPath == "" {
 			labelPath = l
 		}
+	}
+
+	// Pre-check ORT availability before attempting Perch load.
+	ortStatus := inference.CheckORTAvailability(o.Settings.BirdNET.ONNXRuntimePath)
+	if !ortStatus.Available {
+		log.Warn("Perch v2 requires ONNX Runtime which is not available",
+			logger.String("error", ortStatus.Error))
+		emitORTUnavailableNotification("Perch v2", ortStatus.Error)
+		return errors.Newf("Perch v2 requires ONNX Runtime %s: %s",
+			inference.ORTRequiredVersion(), ortStatus.Error).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryModelInit).
+			Context("model", "Perch_V2").
+			Context("ort_error", ortStatus.Error).
+			Build()
 	}
 
 	cfg := PerchConfig{

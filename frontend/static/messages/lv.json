@@ -435,6 +435,10 @@
         "overloadTitle": "Audio analīze pārslogota",
         "overloadMessage": "Jūsu sistēma izlaiž {dropRate}% audio paraugu avotam ''{sourceName}'', jo tā nespēj sekot līdzi analīzei. Samaziniet BirdNET pārklāšanās vērtību noteikšanas iestatījumos vai apsveriet jaudīgāka procesora izmantošanu."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime Not Available",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. Check that libonnxruntime.so is installed at the expected path."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Pašreizējā vērtība: {value}% (slieksnis: {threshold}%)",

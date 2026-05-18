@@ -435,6 +435,10 @@
         "overloadTitle": "Audio Analysis Overloaded",
         "overloadMessage": "Your system is dropping {dropRate}% of audio samples for source ''{sourceName}'' because it cannot keep up with analysis. Reduce the BirdNET overlap value in detection settings or consider upgrading to a faster CPU."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime Not Available",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. Check that libonnxruntime.so is installed at the expected path."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
