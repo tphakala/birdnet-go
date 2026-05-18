@@ -17,6 +17,7 @@
   @component
 -->
 <script lang="ts">
+  import { generateId } from '$lib/utils/uuid';
   import {
     Settings,
     Trash2,
@@ -174,7 +175,7 @@
             enabled: editEqualizer.enabled,
             filters: editEqualizer.filters.map(f => ({
               ...f,
-              id: f.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 11)),
+              id: f.id || generateId(),
             })),
           }
         : undefined;

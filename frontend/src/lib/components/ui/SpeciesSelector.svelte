@@ -3,6 +3,7 @@
   import type { Snippet } from 'svelte';
   import { createEventDispatcher, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
+  import { generateId } from '$lib/utils/uuid';
   import { X, Trash2, Plus, Search, TriangleAlert } from '@lucide/svelte';
   import type { Species } from '$lib/types/species';
 
@@ -238,11 +239,7 @@
   // Initialize dropdownId on client mount to avoid SSR hydration mismatch
   $effect(() => {
     if (typeof window !== 'undefined' && dropdownId === '') {
-      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        dropdownId = `species-dropdown-${crypto.randomUUID().slice(0, 8)}`;
-      } else {
-        dropdownId = `species-dropdown-${Math.random().toString(36).slice(2, 9)}`;
-      }
+      dropdownId = generateId('species-dropdown');
     }
   });
 

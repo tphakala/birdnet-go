@@ -1,5 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
+  import { generateId } from '$lib/utils/uuid';
   import { tick } from 'svelte';
   import {
     filterSpeciesForAutocomplete,
@@ -46,9 +47,8 @@
   let editingValue = $state('');
   let draggedIndex = $state<number | null>(null);
   let dragOverIndex = $state<number | null>(null);
-  // Generate unique IDs for accessibility - use crypto.randomUUID() with fallback
-  let inputId = `species-input-${crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)}`;
-  let listId = `species-list-${crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)}`;
+  let inputId = generateId('species-input');
+  let listId = generateId('species-list');
 
   // Derived
   let canAddMore = $derived(!maxItems || species.length < maxItems);

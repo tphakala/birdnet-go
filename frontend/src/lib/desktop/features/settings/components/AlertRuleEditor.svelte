@@ -15,6 +15,7 @@
   @component
 -->
 <script lang="ts">
+  import { generateId } from '$lib/utils/uuid';
   import {
     Plus,
     Trash2,
@@ -71,8 +72,7 @@
     duration_sec: number;
   }
 
-  const newConditionId = () =>
-    crypto?.randomUUID?.() ?? Math.random().toString(36).substring(2, 11);
+  const newConditionId = () => generateId();
 
   interface EditorAction {
     target: string;

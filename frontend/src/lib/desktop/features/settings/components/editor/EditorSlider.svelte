@@ -11,6 +11,8 @@
   @component
 -->
 <script lang="ts">
+  import { generateId } from '$lib/utils/uuid';
+
   interface Props {
     label: string;
     value: number;
@@ -35,8 +37,7 @@
     id,
   }: Props = $props();
 
-  // Unique suffix per instance to prevent ID collisions when labels repeat
-  const idSuffix = crypto?.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2, 10);
+  const idSuffix = generateId();
 
   const fieldId = $derived(
     id ||

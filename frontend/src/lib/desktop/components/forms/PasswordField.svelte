@@ -1,19 +1,12 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
+  import { generateId } from '$lib/utils/uuid';
   import type { HTMLAttributes } from 'svelte/elements';
   import { Eye, EyeOff, Pencil, X, TriangleAlert } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
   /** The redacted placeholder the backend sends for configured secrets. */
   const REDACTED_VALUE = '**********';
-
-  // Generate unique ID using crypto.randomUUID for SSR compatibility
-  const generateUniqueId = () => {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return `password-field-${crypto.randomUUID()}`;
-    }
-    return `password-field-${Math.random().toString(36).substr(2, 9)}-${Date.now()}`;
-  };
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -48,8 +41,8 @@
     ...rest
   }: Props = $props();
 
-  // Generate unique ID for this component instance (captured at creation, intentionally non-reactive)
-  const fieldId = (() => name || generateUniqueId())();
+  const generatedFieldId = generateId('password-field');
+  const fieldId = $derived(name || generatedFieldId);
 
   let showPassword = $state(false);
 
