@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
+	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -132,6 +133,10 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewQueueDepthCheck(func() (int, int) {
 			q := classifier.ResultsQueue
 			return len(q), cap(q)
+		}),
+		checks.NewORTAvailabilityCheck(func() (available, initialized bool, version, libraryPath, errMsg string) {
+			status := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
+			return status.Available, status.Initialized, status.Version, status.LibraryPath, status.Error
 		}),
 
 		// Stream checks
