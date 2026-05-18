@@ -1,5 +1,5 @@
 <script lang="ts">
-  /* global AnalyserNode, ResizeObserver, performance, requestAnimationFrame, cancelAnimationFrame */
+  /* global AnalyserNode, ResizeObserver, ResizeObserverEntry, performance, requestAnimationFrame, cancelAnimationFrame */
   /**
    * SpectrogramCanvas — Pure waterfall spectrogram renderer
    *
@@ -16,6 +16,7 @@
     type ColorMapName,
   } from '$lib/utils/spectrogramColorMaps';
   import { loggers } from '$lib/utils/logger';
+  import { createDebounce } from '$lib/utils/debounce';
 
   const logger = loggers.audio;
   /** Interval between debug time markers on the waterfall (seconds) */
@@ -114,24 +115,19 @@
   // ResizeObserver with debouncing (100ms)
   $effect(() => {
     if (!containerEl) return;
-
-    let resizeTimer: ReturnType<typeof setTimeout>;
-    const observer = new ResizeObserver(entries => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        for (const entry of entries) {
-          const { width, height } = entry.contentRect;
-          if (width > 0 && height > 0) {
-            cssWidth = Math.round(width);
-            cssHeight = Math.round(height);
-          }
+    const handleResize = createDebounce((entries: ResizeObserverEntry[]) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          cssWidth = Math.round(width);
+          cssHeight = Math.round(height);
         }
-      }, 100);
-    });
-
+      }
+    }, 100);
+    const observer = new ResizeObserver(entries => handleResize(entries));
     observer.observe(containerEl);
     return () => {
-      clearTimeout(resizeTimer);
+      handleResize.cancel();
       observer.disconnect();
     };
   });

@@ -60,6 +60,7 @@ Performance Optimizations:
   } from '$lib/utils/datePersistence';
   import { getLogger } from '$lib/utils/logger';
   import { cn } from '$lib/utils/cn.js';
+  import { createDebounce } from '$lib/utils/debounce';
   import { safeArrayAccess, isPlainObject } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
@@ -326,7 +327,14 @@ Performance Optimizations:
 
   // Debouncing for rapid daily summary updates
   let updateQueue = $state(new Map<string, Detection>());
-  let updateTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const flushUpdateQueue = createDebounce(() => {
+    const sortedUpdates = Array.from(updateQueue.entries()).sort(([a], [b]) => a.localeCompare(b));
+    sortedUpdates.forEach(([_, queuedDetection]) => {
+      updateDailySummary(queuedDetection);
+    });
+    updateQueue.clear();
+  }, 150);
 
   // Daily summary response caching for performance optimization
   interface CachedDailySummary {
@@ -836,9 +844,7 @@ Performance Optimizations:
       }
 
       // Clean up debounce timer
-      if (updateTimer) {
-        clearTimeout(updateTimer);
-      }
+      flushUpdateQueue.cancel();
 
       // Clean up SSE fetch throttling timer
       if (sseFetchTimer) {
@@ -847,10 +853,7 @@ Performance Optimizations:
       }
 
       // Clean up preload debounce timer
-      if (preloadDebounceTimer) {
-        clearTimeout(preloadDebounceTimer);
-        preloadDebounceTimer = null;
-      }
+      debouncedPreload.cancel();
 
       // Clean up animation timers
       animationCleanupTimers.forEach(timer => clearTimeout(timer));
@@ -877,10 +880,7 @@ Performance Optimizations:
   // Enhanced date change handler with cleanup
   function handleDateChangeWithCleanup() {
     // Clear pending updates for old date
-    if (updateTimer) {
-      clearTimeout(updateTimer);
-      updateTimer = null;
-    }
+    flushUpdateQueue.cancel();
     updateQueue.clear();
 
     // Clear animations
@@ -1001,24 +1001,8 @@ Performance Optimizations:
     // Use scientificName as key since species_code may be empty in v2 schema.
     updateQueue.set(detection.scientificName, detection);
 
-    // Clear existing timer and set new one
-    if (updateTimer) {
-      clearTimeout(updateTimer);
-    }
-
-    updateTimer = setTimeout(() => {
-      // Process all queued updates in order of species code for consistency
-      const sortedUpdates = Array.from(updateQueue.entries()).sort(([a], [b]) =>
-        a.localeCompare(b)
-      );
-
-      sortedUpdates.forEach(([_, queuedDetection]) => {
-        updateDailySummary(queuedDetection);
-      });
-
-      updateQueue.clear();
-      updateTimer = null;
-    }, 150); // Batch updates within 150ms window
+    // Debounce: batch updates within 150ms window
+    flushUpdateQueue();
   }
 
   // Incremental daily summary update when new detection arrives via SSE
@@ -1189,7 +1173,6 @@ Performance Optimizations:
 
   // Preloading cache for batch requests - use $state.raw() for performance
   const preloadCache = $state.raw(new Set<string>());
-  let preloadDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Generate adjacent dates for preloading
   function getAdjacentDates(baseDate: string): string[] {
@@ -1305,22 +1288,13 @@ Performance Optimizations:
     });
   }
 
-  // Trigger batch preload of adjacent dates with debouncing
+  const debouncedPreload = createDebounce((baseDate: string) => {
+    logger.debug(`Triggering batch adjacent preload for ${baseDate}`);
+    batchPreloadAdjacentDates(baseDate);
+  }, 150);
+
   function triggerAdjacentPreload(baseDate: string = selectedDate) {
-    // Clear existing debounce timer
-    if (preloadDebounceTimer) {
-      clearTimeout(preloadDebounceTimer);
-    }
-
-    // Debounce preloading to avoid excessive requests during rapid date changes
-    preloadDebounceTimer = setTimeout(() => {
-      logger.debug(`Triggering batch adjacent preload for ${baseDate}`);
-
-      // Use batch preloading for better performance
-      batchPreloadAdjacentDates(baseDate);
-
-      preloadDebounceTimer = null;
-    }, 150); // Wait 150ms for settling
+    debouncedPreload(baseDate);
   }
 
   // Reactive preloading - triggers when selectedDate changes or config finishes loading
