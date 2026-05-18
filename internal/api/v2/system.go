@@ -1479,9 +1479,8 @@ func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
 }
 
 // GetDatabaseStats handles GET /api/v2/system/database/stats
-// This endpoint returns statistics for the primary database.
-// In v2-only mode (fresh install or post-migration), it returns v2 database stats.
-// In legacy mode, it returns legacy database stats.
+// Delegates to c.DS.GetDatabaseStats which returns the correct stats
+// for the active store (legacy SQLite/MySQL or v2only.Datastore).
 func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.logInfoIfEnabled("Getting database statistics",
@@ -1489,8 +1488,8 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 		logger.String("ip", ip),
 	)
 
-	// Check if datastore is available
-	if c.DS == nil {
+	ds := c.DS
+	if ds == nil {
 		c.logErrorIfEnabled("Datastore not available",
 			logger.String("path", path),
 			logger.String("ip", ip),
@@ -1498,8 +1497,7 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("datastore not available"), "Database not configured", http.StatusServiceUnavailable)
 	}
 
-	// Get database stats from the datastore
-	stats, err := c.DS.GetDatabaseStats(ctx.Request().Context())
+	stats, err := ds.GetDatabaseStats(ctx.Request().Context())
 
 	// Handle errors first
 	isPartialStats := false
@@ -1556,38 +1554,45 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 
 // getV2ManagerStats retrieves v2 database statistics directly from V2Manager.
 func (c *Controller) getV2ManagerStats(ctx context.Context) (*datastore.DatabaseStats, bool) {
-	if c.V2Manager == nil || !c.V2Manager.Exists() {
+	mgr := c.V2Manager
+	if mgr == nil || !mgr.Exists() {
 		return nil, false
 	}
 
 	stats := &datastore.DatabaseStats{
 		Type:      datastore.DialectSQLite,
-		Location:  c.V2Manager.Path(),
+		Location:  mgr.Path(),
 		Connected: true,
 	}
 
-	if c.V2Manager.IsMySQL() {
+	if mgr.IsMySQL() {
 		stats.Type = datastore.DialectMySQL
 	}
 
-	db := c.V2Manager.DB()
+	db := mgr.DB()
 	if db == nil {
 		stats.Connected = false
 		return stats, true
 	}
 
-	if !c.V2Manager.IsMySQL() {
-		_ = db.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Scan(&stats.SizeBytes).Error
+	if !mgr.IsMySQL() {
+		if err := db.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Scan(&stats.SizeBytes).Error; err != nil {
+			c.logWarnIfEnabled("Failed to get v2 SQLite database size", logger.Error(err))
+		}
 	} else {
-		_ = db.WithContext(ctx).Raw(`
+		if err := db.WithContext(ctx).Raw(`
 			SELECT COALESCE(SUM(data_length + index_length), 0)
 			FROM information_schema.TABLES
 			WHERE table_schema = DATABASE()
-		`).Scan(&stats.SizeBytes).Error
+		`).Scan(&stats.SizeBytes).Error; err != nil {
+			c.logWarnIfEnabled("Failed to get v2 MySQL database size", logger.Error(err))
+		}
 	}
 
 	var count int64
-	if err := db.WithContext(ctx).Table("detections").Count(&count).Error; err == nil {
+	if err := db.WithContext(ctx).Table("detections").Count(&count).Error; err != nil {
+		c.logWarnIfEnabled("Failed to count v2 detections", logger.Error(err))
+	} else {
 		stats.TotalDetections = count
 	}
 
@@ -1650,11 +1655,12 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 		dbPath = c.Settings.Output.SQLite.Path
 
 		// Get the underlying GORM DB from the datastore
-		if c.DS == nil {
+		ds := c.DS
+		if ds == nil {
 			return c.HandleError(ctx, fmt.Errorf("datastore not available"),
 				"Database not configured", http.StatusServiceUnavailable)
 		}
-		sqliteStore, ok := c.DS.(*datastore.SQLiteStore)
+		sqliteStore, ok := ds.(*datastore.SQLiteStore)
 		if !ok {
 			return c.HandleError(ctx, fmt.Errorf("unsupported datastore type"),
 				"Cannot perform backup on this datastore type", http.StatusInternalServerError)
@@ -1662,17 +1668,18 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 		gormDB = sqliteStore.DB
 	} else {
 		// V2 database
-		if c.V2Manager == nil {
+		mgr := c.V2Manager
+		if mgr == nil {
 			return c.HandleError(ctx, fmt.Errorf("v2 not available"),
 				"V2 database not initialized", http.StatusNotFound)
 		}
-		if c.V2Manager.IsMySQL() {
+		if mgr.IsMySQL() {
 			return c.HandleError(ctx, fmt.Errorf("not sqlite"),
 				"Backup download only available for SQLite databases. Use MySQL tools for MySQL backup.",
 				http.StatusBadRequest)
 		}
-		dbPath = c.V2Manager.Path()
-		gormDB = c.V2Manager.DB()
+		dbPath = mgr.Path()
+		gormDB = mgr.DB()
 	}
 
 	// Verify we have a valid database handle before proceeding
