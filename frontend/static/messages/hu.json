@@ -4677,7 +4677,10 @@
       "reinstall": "Újratelepítés",
       "reinstalling": "Újratelepítés...",
       "reinstallComplete": "Fájlok sikeresen ellenőrizve",
-      "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt"
+      "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt",
+      "onnxRuntimeRequired": "Requires ONNX Runtime which is not available on this system.",
+      "onnxRuntimeMissing": "ONNX Runtime is not available. This model cannot run.",
+      "unavailable": "Unavailable"
     },
     "bird": {
       "title": "Madárészlelés",

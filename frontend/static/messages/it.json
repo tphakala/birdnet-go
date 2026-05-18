@@ -4677,7 +4677,10 @@
       "reinstall": "Reinstalla",
       "reinstalling": "Reinstallazione...",
       "reinstallComplete": "File verificati con successo",
-      "geomodelBadge": "Include il geomodel BirdNET v3.0"
+      "geomodelBadge": "Include il geomodel BirdNET v3.0",
+      "onnxRuntimeRequired": "Requires ONNX Runtime which is not available on this system.",
+      "onnxRuntimeMissing": "ONNX Runtime is not available. This model cannot run.",
+      "unavailable": "Unavailable"
     },
     "bird": {
       "title": "Rilevamento uccelli",

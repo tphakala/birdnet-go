@@ -4677,7 +4677,10 @@
       "reinstall": "Pārinstalēt",
       "reinstalling": "Pārinstalē...",
       "reinstallComplete": "Faili veiksmīgi pārbaudīti",
-      "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis"
+      "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis",
+      "onnxRuntimeRequired": "Requires ONNX Runtime which is not available on this system.",
+      "onnxRuntimeMissing": "ONNX Runtime is not available. This model cannot run.",
+      "unavailable": "Unavailable"
     },
     "bird": {
       "title": "Putnu noteikšana",

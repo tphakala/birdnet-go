@@ -4677,7 +4677,10 @@
       "reinstall": "Opnieuw installeren",
       "reinstalling": "Opnieuw installeren...",
       "reinstallComplete": "Bestanden succesvol geverifieerd",
-      "geomodelBadge": "Bevat BirdNET v3.0 geomodel"
+      "geomodelBadge": "Bevat BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Requires ONNX Runtime which is not available on this system.",
+      "onnxRuntimeMissing": "ONNX Runtime is not available. This model cannot run.",
+      "unavailable": "Unavailable"
     },
     "bird": {
       "title": "Vogeldetectie",

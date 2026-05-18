@@ -4677,7 +4677,10 @@
       "reinstall": "Installera om",
       "reinstalling": "Installerar om...",
       "reinstallComplete": "Filer verifierade",
-      "geomodelBadge": "Inkluderar BirdNET v3.0 geomodell"
+      "geomodelBadge": "Inkluderar BirdNET v3.0 geomodell",
+      "onnxRuntimeRequired": "Requires ONNX Runtime which is not available on this system.",
+      "onnxRuntimeMissing": "ONNX Runtime is not available. This model cannot run.",
+      "unavailable": "Unavailable"
     },
     "bird": {
       "title": "Fågeldetektering",
