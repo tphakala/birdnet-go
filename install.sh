@@ -147,6 +147,17 @@ sanitize_for_logs() {
     | sed -E 's#(password|passwd|pwd|token|secret|api[_-]?key)["'"'"']?\s*[:=]\s*[^"'"'"'[:space:]]+#\1: ***#Ig'
 }
 
+# Prevent sed injection from user-supplied values (RTSP URLs, device names, passwords).
+sed_escape_replacement() {
+    printf '%s' "$1" | tr -d '\n\r' | sed -e 's/[\\|&]/\\&/g'
+}
+
+# Prevent sed injection from user-supplied lat/lon and port values.
+validate_numeric() {
+    local value="$1"
+    [[ "$value" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]
+}
+
 # Function to log messages with timestamps
 log_message() {
     local level="$1"
@@ -2400,9 +2411,9 @@ convert_relative_to_absolute_path() {
     # Only convert if path is relative (doesn't start with /)
     if [[ ! "$current_path" =~ ^/ ]]; then
         print_message "Converting relative path '${current_path}' to absolute path '${abs_path}'" "$YELLOW"
-        # Use line-specific sed to replace just the clips path line
-        # Corrected sed command for replacement
-        sed -i "${clip_path_line}s|^\([[:space:]]*path:[[:space:]]*\).*|\1${abs_path}        # path to audio clip export directory|" "$config_file"
+        local escaped_path
+        escaped_path=$(sed_escape_replacement "$abs_path")
+        sed -i "${clip_path_line}s|^\([[:space:]]*path:[[:space:]]*\).*|\1${escaped_path}        # path to audio clip export directory|" "$config_file"
         return 0
     else
         print_message "Path '${current_path}' is already absolute, skipping conversion" "$GREEN"
@@ -2837,12 +2848,13 @@ configure_sound_card() {
             print_message "✅ Selected capture device: " "$GREEN" "nonewline"
             print_message "$ALSA_CARD"
 
-            # Update config file with the friendly name
-            sed -i "s/source: \"sysdefault\"/source: \"${ALSA_CARD}\"/" "$CONFIG_FILE"
+            # Update audio sources config with the selected device (new multi-source format)
+            local escaped_card
+            escaped_card=$(sed_escape_replacement "$ALSA_CARD")
+            sed -i "s|device: \"sysdefault\"|device: \"${escaped_card}\"|" "$CONFIG_FILE"
             log_command_result "sed audio device configuration" $? "updating config file"
-            # Comment out RTSP section
-            sed -i '/rtsp:/,/      # - rtsp/s/^/#/' "$CONFIG_FILE"
-            log_command_result "sed comment RTSP section" $? "disabling RTSP configuration"
+            sed -i "s|name: \"Sound Card 1\"|name: \"${escaped_card}\"|" "$CONFIG_FILE"
+            log_command_result "sed audio source name" $? "updating source name in config"
                 
             AUDIO_ENV="--device /dev/snd"
             return 0
@@ -2851,6 +2863,30 @@ configure_sound_card() {
             print_message "❌ Invalid selection. Please try again." "$RED"
         fi
     done
+}
+
+# Add an RTSP stream to the rtsp.streams section and disable the default sound card source.
+# Usage: configure_rtsp_in_config <url> [stream_name]
+configure_rtsp_in_config() {
+    local url="$1"
+    local stream_name="${2:-RTSP Stream}"
+
+    local escaped_url
+    escaped_url=$(sed_escape_replacement "$url")
+    local escaped_name
+    escaped_name=$(sed_escape_replacement "$stream_name")
+
+    # Add stream entry to the rtsp.streams section (replaces empty array)
+    sed -i "s|    streams: \[\].*|    streams:\n      - name: \"${escaped_name}\"\n        url: \"${escaped_url}\"\n        enabled: true\n        type: rtsp\n        transport: tcp|" "$CONFIG_FILE"
+    log_command_result "sed RTSP stream configuration" $? "adding RTSP stream to config"
+
+    # Comment out default sound card source (RTSP replaces local capture)
+    sed -i \
+        -e '/^      - name: "Sound Card 1"/s/^/# /' \
+        -e '/^        device: "sysdefault"/s/^/# /' \
+        -e '/^        gain: 0/s/^/# /' \
+        "$CONFIG_FILE"
+    log_command_result "sed disable sound card source" $? "commenting out default audio source"
 }
 
 # Function to configure RTSP stream
@@ -2865,11 +2901,7 @@ configure_rtsp_stream_silent() {
         exit 1
     fi
 
-    # Replace the default sound card device with the RTSP URL in the sources list
-    sed -i "s|device: sysdefault|device: ${url}|" "$CONFIG_FILE"
-
-    # Also try the commented RTSP example line if present
-    sed -i "s|# - rtsp://user:password@example.com/stream1|      - ${url}|" "$CONFIG_FILE"
+    configure_rtsp_in_config "$url"
 
     AUDIO_ENV="--device /dev/snd"
     log_message "INFO" "Silent RTSP configuration completed"
@@ -2905,12 +2937,8 @@ configure_rtsp_stream() {
             log_message "INFO" "RTSP connection test successful, configuring RTSP audio input"
             print_message "✅ RTSP connection successful!" "$GREEN"
             
-            # Update config file
-            sed -i "s|# - rtsp://user:password@example.com/stream1|      - ${RTSP_URL}|" "$CONFIG_FILE"
-            log_command_result "sed RTSP URL configuration" $? "adding RTSP URL to config"
-            # Comment out audio source section
-            sed -i '/source: "sysdefault"/s/^/#/' "$CONFIG_FILE"
-            log_command_result "sed comment audio source" $? "disabling audio source"
+            # Add RTSP stream to config and disable default sound card source
+            configure_rtsp_in_config "$RTSP_URL"
             
             # MODIFIED: Always include device mapping even with RTSP
             AUDIO_ENV="--device /dev/snd"
@@ -2936,7 +2964,13 @@ configure_audio_format() {
     # Silent mode: use default AAC
     if [ "$SILENT_MODE" = "true" ]; then
         local format="${BIRDNET_AUDIO_FORMAT:-aac}"
-        sed -i "s/type: wav/type: $format/" "$CONFIG_FILE"
+        # Validate format against allowed values
+        case "$format" in
+            wav|flac|aac|mp3|opus) ;;
+            *) log_message "WARN" "Invalid BIRDNET_AUDIO_FORMAT: $format, defaulting to aac"
+               format="aac" ;;
+        esac
+        sed -i "s|type: wav|type: $format|" "$CONFIG_FILE"
         print_message "🔇 Silent mode: audio format set to $format" "$YELLOW"
         return
     fi
@@ -2971,8 +3005,8 @@ configure_audio_format() {
     print_message "✅ Selected audio format: " "$GREEN" "nonewline"
     print_message "$format"
 
-    # Update config file
-    sed -i "s/type: wav/type: $format/" "$CONFIG_FILE"
+    # Update config file (format is from hardcoded case, safe)
+    sed -i "s|type: wav|type: $format|" "$CONFIG_FILE"
 }
 
 # Function to configure locale
@@ -2980,7 +3014,12 @@ configure_locale() {
     # Silent mode: use env var or default to en-uk
     if [ "$SILENT_MODE" = "true" ]; then
         local locale="${BIRDNET_LOCALE:-en-uk}"
-        sed -i "s/locale: [a-zA-Z0-9_-]*/locale: ${locale}/" "$CONFIG_FILE"
+        # Validate locale contains only safe characters
+        if [[ ! "$locale" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            log_message "ERROR" "Invalid BIRDNET_LOCALE format: $locale"
+            locale="en-uk"
+        fi
+        sed -i "s|locale: [a-zA-Z0-9_-]*|locale: ${locale}|" "$CONFIG_FILE"
         print_message "🔇 Silent mode: locale set to $locale" "$YELLOW"
         return
     fi
@@ -3013,8 +3052,8 @@ configure_locale() {
             LOCALE_CODE="${locale_codes[$((selection-1))]}"
             print_message "✅ Selected language: " "$GREEN" "nonewline"
             print_message "${locale_names[$((selection-1))]}"
-            # Update config file - fixed to replace the entire locale value
-            sed -i "s/locale: [a-zA-Z0-9_-]*/locale: ${LOCALE_CODE}/" "$CONFIG_FILE"
+            # Update config file (LOCALE_CODE is from hardcoded array, safe)
+            sed -i "s|locale: [a-zA-Z0-9_-]*|locale: ${LOCALE_CODE}|" "$CONFIG_FILE"
             break
         else
             print_message "❌ Invalid selection. Please try again." "$RED"
@@ -3330,11 +3369,16 @@ configure_location() {
     if [ "$SILENT_MODE" = "true" ]; then
         local lat="${BIRDNET_LATITUDE:-0.000}"
         local lon="${BIRDNET_LONGITUDE:-0.000}"
-        sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
-        sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
+        if ! validate_numeric "$lat" || ! validate_numeric "$lon"; then
+            log_message "ERROR" "Invalid coordinates: lat=$lat lon=$lon (must be numeric)"
+            print_message "❌ Invalid BIRDNET_LATITUDE or BIRDNET_LONGITUDE (must be numeric)" "$RED"
+            exit 1
+        fi
+        sed -i "s|latitude: 00.000|latitude: $lat|" "$CONFIG_FILE"
+        sed -i "s|longitude: 00.000|longitude: $lon|" "$CONFIG_FILE"
         # Also handle configs where location was previously set
-        sed -i -E "s/^(\\s*latitude:\\s*)[0-9.-]+/\\1$lat/" "$CONFIG_FILE"
-        sed -i -E "s/^(\\s*longitude:\\s*)[0-9.-]+/\\1$lon/" "$CONFIG_FILE"
+        sed -i -E "s|^(\\s*latitude:\\s*)[0-9.-]+|\\1$lat|" "$CONFIG_FILE"
+        sed -i -E "s|^(\\s*longitude:\\s*)[0-9.-]+|\\1$lon|" "$CONFIG_FILE"
         print_message "🔇 Silent mode: location set to $lat, $lon" "$YELLOW"
         return
     fi
@@ -3380,10 +3424,10 @@ configure_location() {
             else
                 print_message "✅ Using IP-based location" "$GREEN"
             fi
-            # Update config file and return
-            sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
+            # Update config file and return (IP-derived values are numeric, safe for sed)
+            sed -i "s|latitude: 00.000|latitude: $lat|" "$CONFIG_FILE"
             local sed_result=$?
-            sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
+            sed -i "s|longitude: 00.000|longitude: $lon|" "$CONFIG_FILE"
             sed_result=$((sed_result + $?))
             log_command_result "sed latitude/longitude update" "$sed_result" "updating location coordinates in config file"
             return
@@ -3484,11 +3528,11 @@ configure_location() {
         esac
     done
 
-    # Update config file
+    # Update config file (lat/lon are already validated as numeric above)
     log_message "INFO" "Location configured manually, updating config file"
-    sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
+    sed -i "s|latitude: 00.000|latitude: $lat|" "$CONFIG_FILE"
     local sed_result=$?
-    sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
+    sed -i "s|longitude: 00.000|longitude: $lon|" "$CONFIG_FILE"
     sed_result=$((sed_result + $?))
     log_command_result "sed latitude/longitude update" "$sed_result" "updating location coordinates in config file"
 }
@@ -3502,8 +3546,11 @@ configure_auth() {
         if [ -n "$BIRDNET_PASSWORD" ]; then
             local password_hash
             password_hash=$(echo -n "$BIRDNET_PASSWORD" | htpasswd -niB "" | cut -d: -f2)
+            local escaped_hash
+            escaped_hash=$(sed_escape_replacement "$password_hash")
             sed -i "s|enabled: false    # true to enable basic auth|enabled: true    # true to enable basic auth|" "$CONFIG_FILE"
-            sed -i "s|password: \"\"|password: \"$password_hash\"|" "$CONFIG_FILE"
+            sed -i "s|password: \"\"|password: \"${escaped_hash}\"|" "$CONFIG_FILE"
+            unset password_hash escaped_hash
             print_message "🔇 Silent mode: password protection enabled" "$YELLOW"
         else
             print_message "🔇 Silent mode: no password set (BIRDNET_PASSWORD not provided)" "$YELLOW"
@@ -3529,13 +3576,18 @@ configure_auth() {
                 log_message "INFO" "Password confirmed, generating hash and updating config"
                 # Generate password hash (using bcrypt)
                 password_hash=$(echo -n "$password" | htpasswd -niB "" | cut -d: -f2)
-                
-                # Update config file - using different delimiter for sed
+                local escaped_hash
+                escaped_hash=$(sed_escape_replacement "$password_hash")
+
+                # Update config file
                 sed -i "s|enabled: false    # true to enable basic auth|enabled: true    # true to enable basic auth|" "$CONFIG_FILE"
                 log_command_result "sed enable auth" $? "enabling authentication"
-                sed -i "s|password: \"\"|password: \"$password_hash\"|" "$CONFIG_FILE"
+                sed -i "s|password: \"\"|password: \"${escaped_hash}\"|" "$CONFIG_FILE"
                 log_command_result "sed password hash" $? "setting password hash"
-                
+
+                # Clear sensitive variables from shell memory
+                unset password password2 password_hash escaped_hash
+
                 log_message "INFO" "Password protection configured successfully"
                 print_message "✅ Password protection enabled successfully!" "$GREEN"
                 print_message "If you forget your password, you can reset it by editing:" "$YELLOW"
@@ -3680,10 +3732,14 @@ configure_web_port() {
     # Use env var if set, otherwise default
     WEB_PORT="${BIRDNET_WEB_PORT:-8080}"
 
-    # Update config file with port
-    sed -i -E "s/^(\\s*port:\\s*)[0-9]+/\\1$WEB_PORT/" "$CONFIG_FILE"
+    # Validate port is a positive integer
+    if ! [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || [ "$WEB_PORT" -lt 1 ] || [ "$WEB_PORT" -gt 65535 ]; then
+        log_message "WARN" "Invalid BIRDNET_WEB_PORT: $WEB_PORT, defaulting to 8080"
+        WEB_PORT="8080"
+    fi
 
-    # Port validation already done in prerequisites section
+    # Update config file with port (validated as numeric, safe for sed)
+    sed -i -E "s|^(\\s*port:\\s*)[0-9]+|\\1$WEB_PORT|" "$CONFIG_FILE"
 }
 
 # Generate systemd service content
