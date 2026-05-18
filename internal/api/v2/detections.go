@@ -743,7 +743,7 @@ func (c *Controller) applySpeciesTrackingMetadata(detection *DetectionResponse, 
 	if proc == nil {
 		return
 	}
-	tracker := proc.NewSpeciesTracker
+	tracker := proc.GetNewSpeciesTracker()
 	if tracker == nil {
 		return
 	}

@@ -491,7 +491,7 @@ func (c *Controller) batchFetchSpeciesStatus(scientificNames []string, statusTim
 	if proc == nil || len(scientificNames) == 0 {
 		return nil
 	}
-	tracker := proc.NewSpeciesTracker
+	tracker := proc.GetNewSpeciesTracker()
 	if tracker == nil {
 		return nil
 	}

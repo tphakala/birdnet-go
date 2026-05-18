@@ -882,7 +882,7 @@ func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imagepr
 	// recently-first-seen species.
 	// Snapshot processor and tracker to avoid TOCTOU race.
 	if proc := c.Processor; proc != nil {
-		if tracker := proc.NewSpeciesTracker; tracker != nil {
+		if tracker := proc.GetNewSpeciesTracker(); tracker != nil {
 			status := tracker.GetSpeciesStatus(note.ScientificName, time.Now())
 			detection.IsNewSpecies = !status.FirstSeenTime.IsZero() &&
 				note.Date == status.FirstSeenTime.Format(time.DateOnly)
