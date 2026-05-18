@@ -738,14 +738,20 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 // Without this, all detections of a recently-first-seen species would incorrectly
 // show isNewSpecies=true instead of only the actual first detection.
 func (c *Controller) applySpeciesTrackingMetadata(detection *DetectionResponse, scientificName, detectionDate string) {
-	if c.Processor == nil || c.Processor.NewSpeciesTracker == nil {
+	// Snapshot processor and tracker to avoid TOCTOU race
+	proc := c.Processor
+	if proc == nil {
+		return
+	}
+	tracker := proc.GetNewSpeciesTracker()
+	if tracker == nil {
 		return
 	}
 	// GetSpeciesStatus is called with time.Now() intentionally: the "days since"
 	// counters (DaysSinceFirstSeen, DaysThisYear, DaysThisSeason) describe the
 	// species' current tracking state, not the state at the detection's time.
 	// The boolean flags (IsNew*) are computed below using date comparison instead.
-	status := c.Processor.NewSpeciesTracker.GetSpeciesStatus(scientificName, time.Now())
+	status := tracker.GetSpeciesStatus(scientificName, time.Now())
 
 	// Set flags based on whether THIS detection's date matches the first-seen date
 	// for each tracking period, rather than using the tracker's window-based "IsNew" flag.

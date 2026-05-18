@@ -2806,11 +2806,12 @@ func (c *Controller) GetSpeciesImageInfo(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("scientific name contains only whitespace"), "Valid scientific name is required", http.StatusBadRequest)
 	}
 
-	if c.BirdImageCache == nil {
+	cache := c.BirdImageCache
+	if cache == nil {
 		return c.HandleError(ctx, ErrImageProviderNotAvailable, "Image service unavailable", http.StatusServiceUnavailable)
 	}
 
-	birdImage, err := c.BirdImageCache.Get(scientificName)
+	birdImage, err := cache.Get(scientificName)
 	if err != nil {
 		if errors.Is(err, imageprovider.ErrImageNotFound) {
 			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
@@ -2852,12 +2853,13 @@ func (c *Controller) ServeSpeciesImageProxy(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("invalid scientific name"), "Invalid species name", http.StatusBadRequest)
 	}
 
-	if c.BirdImageCache == nil {
+	cache := c.BirdImageCache
+	if cache == nil {
 		return c.HandleError(ctx, ErrImageProviderNotAvailable, "Image service unavailable", http.StatusServiceUnavailable)
 	}
 
 	// Look up metadata to know which provider owns this image
-	birdImage, err := c.BirdImageCache.Get(scientificName)
+	birdImage, err := cache.Get(scientificName)
 	if err != nil {
 		if errors.Is(err, imageprovider.ErrImageNotFound) {
 			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
@@ -2873,7 +2875,7 @@ func (c *Controller) ServeSpeciesImageProxy(ctx echo.Context) error {
 	}
 
 	// Get the file cache from the BirdImageCache
-	fileCache := c.BirdImageCache.GetFileCache()
+	fileCache := cache.GetFileCache()
 	if fileCache == nil {
 		// No file cache configured, redirect to external URL
 		return ctx.Redirect(http.StatusFound, birdImage.URL)
@@ -2881,7 +2883,7 @@ func (c *Controller) ServeSpeciesImageProxy(ctx echo.Context) error {
 
 	provider := birdImage.SourceProvider
 	if provider == "" {
-		provider = c.BirdImageCache.GetProviderName()
+		provider = cache.GetProviderName()
 	}
 
 	// Try to serve from file cache

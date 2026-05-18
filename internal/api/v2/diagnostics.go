@@ -171,10 +171,11 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewMQTTCheck(
 			func() bool { return c.currentSettings().Realtime.MQTT.Enabled },
 			func() bool {
-				if c.Processor == nil {
+				proc := c.Processor
+				if proc == nil {
 					return false
 				}
-				client := c.Processor.GetMQTTClient()
+				client := proc.GetMQTTClient()
 				if client == nil {
 					return false
 				}

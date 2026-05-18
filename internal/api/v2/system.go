@@ -224,8 +224,8 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	// Check if processor is available
-	if c.Processor == nil {
+	proc := c.Processor
+	if proc == nil {
 		c.logErrorIfEnabled("Processor not available for job queue stats",
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -233,8 +233,8 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("processor not available"), "Processor not available", http.StatusInternalServerError)
 	}
 
-	// Check if job queue is available
-	if c.Processor.JobQueue == nil {
+	jq := proc.JobQueue
+	if jq == nil {
 		c.logErrorIfEnabled("Job queue not available",
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -242,8 +242,7 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("job queue not available"), "Job queue not available", http.StatusInternalServerError)
 	}
 
-	// Get job queue stats
-	stats := c.Processor.JobQueue.GetStats()
+	stats := jq.GetStats()
 
 	// Convert to JSON
 	jsonStats, err := stats.ToJSON()
@@ -808,19 +807,21 @@ func getDeviceBaseName(device string) string {
 	return base
 }
 
+// remoteFsTypes maps filesystem types that are network mounts.
+var remoteFsTypes = map[string]bool{
+	"nfs":        true,
+	"nfs4":       true,
+	"cifs":       true,
+	"smbfs":      true,
+	"sshfs":      true,
+	"fuse.sshfs": true,
+	"afs":        true,
+	"9p":         true,
+	"ncpfs":      true,
+}
+
 // isRemoteFilesystem returns true if the filesystem is a network mount
 func isRemoteFilesystem(fstype string) bool {
-	remoteFsTypes := map[string]bool{
-		"nfs":        true,
-		"nfs4":       true,
-		"cifs":       true,
-		"smbfs":      true,
-		"sshfs":      true,
-		"fuse.sshfs": true,
-		"afs":        true,
-		"9p":         true,
-		"ncpfs":      true,
-	}
 	return remoteFsTypes[fstype]
 }
 
@@ -1442,22 +1443,18 @@ var fsTypeCategories = map[string]FileSystemCategory{
 	"rpc_pipefs":  SpecialFS,
 }
 
+// skipFsPrefixes lists filesystem type prefixes that indicate virtual or system filesystems.
+var skipFsPrefixes = [...]string{"fuse", "cgroup", "proc", "sys", "dev"}
+
 // skipFilesystem returns true if the filesystem type should be skipped
 func skipFilesystem(fstype string) bool {
-	// Check if we have a category for this filesystem type
 	if _, exists := fsTypeCategories[fstype]; exists {
 		return true
 	}
 
-	// Additional checks for common patterns in filesystem types
-	// that might indicate a virtual or system filesystem
-	if len(fstype) >= minRequiredElements {
-		// Check for common filesystem type prefixes
-		commonPrefixes := []string{"fuse", "cgroup", "proc", "sys", "dev"}
-		for _, prefix := range commonPrefixes {
-			if len(fstype) >= len(prefix) && fstype[:len(prefix)] == prefix {
-				return true
-			}
+	for _, prefix := range skipFsPrefixes {
+		if strings.HasPrefix(fstype, prefix) {
+			return true
 		}
 	}
 

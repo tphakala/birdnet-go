@@ -183,15 +183,16 @@ func (c *Controller) GetSpeciesInfo(ctx echo.Context) error {
 
 // getSpeciesInfo retrieves species information including rarity status
 func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) (*SpeciesInfo, error) {
-	// Get the BirdNET instance from the processor
-	if c.Processor == nil || c.Processor.Bn == nil {
+	// Snapshot to avoid TOCTOU race on c.Processor
+	proc := c.Processor
+	if proc == nil || proc.Bn == nil {
 		return nil, errors.Newf("BirdNET processor not available").
 			Category(errors.CategorySystem).
 			Component("api-species").
 			Build()
 	}
 
-	bn := c.Processor.Bn
+	bn := proc.Bn
 
 	// Find the full label for this species from BirdNET labels
 	var matchedLabel string
@@ -583,16 +584,17 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 		logger.String("path", ctx.Request().URL.Path),
 	)
 
-	// Check if BirdNET processor is available
-	if c.Processor == nil || c.Processor.Bn == nil {
+	// Snapshot to avoid TOCTOU race on c.Processor
+	proc := c.Processor
+	if proc == nil || proc.Bn == nil {
 		return c.HandleError(ctx, errors.Newf("BirdNET processor not available").
 			Category(errors.CategorySystem).
 			Component("api-species").
 			Build(), "BirdNET service unavailable", http.StatusServiceUnavailable)
 	}
 
-	// Check if BirdImageCache is available
-	if c.BirdImageCache == nil {
+	cache := c.BirdImageCache
+	if cache == nil {
 		return c.HandleError(ctx, errors.Newf("image service unavailable").
 			Category(errors.CategorySystem).
 			Component("api-species").
@@ -600,7 +602,7 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 	}
 
 	// Get species name from the taxonomy map using the species code
-	bn := c.Processor.Bn
+	bn := proc.Bn
 	speciesName, exists := classifier.GetSpeciesNameFromCode(bn.TaxonomyMap, speciesCode)
 
 	if !exists {
