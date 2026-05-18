@@ -93,10 +93,12 @@ func (c *Controller) parseSpeciesParam(ctx echo.Context) (string, error) {
 func (c *Controller) requireProcessor(ctx echo.Context) (*processor.Processor, error) {
 	proc := c.Processor
 	if proc == nil {
-		return nil, c.HandleError(ctx, errors.Newf("processor not available").
+		err := errors.Newf("processor not available").
 			Category(errors.CategorySystem).
 			Component("api-dynamic-thresholds").
-			Build(), "Processor not available", http.StatusServiceUnavailable)
+			Build()
+		_ = c.HandleError(ctx, err, "Processor not available", http.StatusServiceUnavailable)
+		return nil, err
 	}
 	return proc, nil
 }
