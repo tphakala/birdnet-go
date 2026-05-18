@@ -15,6 +15,13 @@ var (
 	ortInitialized bool
 )
 
+// IsORTInitialized reports whether the ONNX Runtime has been successfully initialized. Thread-safe.
+func IsORTInitialized() bool {
+	ortInitMu.Lock()
+	defer ortInitMu.Unlock()
+	return ortInitialized
+}
+
 // ONNXClassifierOptions configures the ONNX species classifier.
 type ONNXClassifierOptions struct {
 	// Labels is the species label list. Required.
