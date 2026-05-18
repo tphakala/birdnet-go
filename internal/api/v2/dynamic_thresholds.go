@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -86,15 +87,18 @@ func (c *Controller) parseSpeciesParam(ctx echo.Context) (string, error) {
 	return species, nil
 }
 
-// requireProcessor checks if the processor is available and returns an error if not.
-func (c *Controller) requireProcessor(ctx echo.Context) error {
-	if c.Processor == nil {
-		return c.HandleError(ctx, errors.Newf("processor not available").
+// requireProcessor snapshots c.Processor and returns it if non-nil.
+// Callers must use the returned pointer for all subsequent accesses
+// to avoid a TOCTOU race between the nil check and usage.
+func (c *Controller) requireProcessor(ctx echo.Context) (*processor.Processor, error) {
+	proc := c.Processor
+	if proc == nil {
+		return nil, c.HandleError(ctx, errors.Newf("processor not available").
 			Category(errors.CategorySystem).
 			Component("api-dynamic-thresholds").
 			Build(), "Processor not available", http.StatusServiceUnavailable)
 	}
-	return nil
+	return proc, nil
 }
 
 // applyMemoryOverlay updates a threshold response with in-memory data.
@@ -219,10 +223,11 @@ func (c *Controller) addDatabaseThresholds(thresholdMap map[string]*DynamicThres
 // addMemoryThresholds adds/updates thresholds from processor memory.
 // If processor is unavailable, this function returns early without modification.
 func (c *Controller) addMemoryThresholds(thresholdMap map[string]*DynamicThresholdResponse) {
-	if c.Processor == nil {
+	proc := c.Processor
+	if proc == nil {
 		return
 	}
-	memoryData := c.Processor.GetDynamicThresholdData()
+	memoryData := proc.GetDynamicThresholdData()
 	baseThreshold := c.currentSettings().BirdNET.Threshold
 
 	for _, dt := range memoryData {
@@ -315,9 +320,11 @@ func (c *Controller) GetDynamicThreshold(ctx echo.Context) error {
 		IsActive:       dt.ExpiresAt.After(time.Now()),
 	}
 
-	// Try to get more current data from processor memory
-	if c.Processor != nil {
-		for _, md := range c.Processor.GetDynamicThresholdData() {
+	// Try to get more current data from processor memory.
+	// Snapshot c.Processor to avoid a TOCTOU race between the nil check and usage.
+	proc := c.Processor
+	if proc != nil {
+		for _, md := range proc.GetDynamicThresholdData() {
 			if strings.EqualFold(md.SpeciesName, species) {
 				applyMemoryOverlay(&response, md.Level, md.HighConfCount, md.CurrentValue, md.ExpiresAt, md.IsActive, md.ScientificName)
 				break
@@ -371,7 +378,8 @@ func (c *Controller) GetThresholdEvents(ctx echo.Context) error {
 // ResetDynamicThreshold resets a single species threshold
 // DELETE /api/v2/dynamic-thresholds/:species
 func (c *Controller) ResetDynamicThreshold(ctx echo.Context) error {
-	if err := c.requireProcessor(ctx); err != nil {
+	proc, err := c.requireProcessor(ctx)
+	if err != nil {
 		return err
 	}
 
@@ -381,7 +389,7 @@ func (c *Controller) ResetDynamicThreshold(ctx echo.Context) error {
 	}
 
 	// Use processor's reset method which handles both memory and database
-	if err := c.Processor.ResetDynamicThreshold(species); err != nil {
+	if err := proc.ResetDynamicThreshold(species); err != nil {
 		return c.HandleError(ctx, err, "Failed to reset threshold", http.StatusInternalServerError)
 	}
 
@@ -395,7 +403,8 @@ func (c *Controller) ResetDynamicThreshold(ctx echo.Context) error {
 // ResetAllDynamicThresholds resets all dynamic thresholds
 // DELETE /api/v2/dynamic-thresholds?confirm=true
 func (c *Controller) ResetAllDynamicThresholds(ctx echo.Context) error {
-	if err := c.requireProcessor(ctx); err != nil {
+	proc, err := c.requireProcessor(ctx)
+	if err != nil {
 		return err
 	}
 
@@ -409,7 +418,7 @@ func (c *Controller) ResetAllDynamicThresholds(ctx echo.Context) error {
 	}
 
 	// Use processor's reset all method which handles both memory and database
-	count, err := c.Processor.ResetAllDynamicThresholds()
+	count, err := proc.ResetAllDynamicThresholds()
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to reset all thresholds", http.StatusInternalServerError)
 	}

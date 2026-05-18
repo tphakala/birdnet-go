@@ -28,7 +28,7 @@ func (c *DiskSpaceCheck) Name() string { return "disk_space" }
 func (c *DiskSpaceCheck) Category() health.Category { return health.CategorySystem }
 
 // Run executes the disk space check against all configured paths.
-func (c *DiskSpaceCheck) Run(_ context.Context) health.Result {
+func (c *DiskSpaceCheck) Run(ctx context.Context) health.Result {
 	start := time.Now()
 
 	if len(c.paths) == 0 {
@@ -55,7 +55,7 @@ func (c *DiskSpaceCheck) Run(_ context.Context) health.Result {
 	pathDetails := make([]pathInfo, 0, len(c.paths))
 
 	for _, p := range c.paths {
-		usage, err := disk.Usage(p)
+		usage, err := disk.UsageWithContext(ctx, p)
 		if err != nil {
 			if health.StatusCritical != worst {
 				worst = health.StatusWarning
@@ -120,10 +120,10 @@ func (c *MemoryCheck) Name() string { return "memory" }
 func (c *MemoryCheck) Category() health.Category { return health.CategorySystem }
 
 // Run executes the memory check.
-func (c *MemoryCheck) Run(_ context.Context) health.Result {
+func (c *MemoryCheck) Run(ctx context.Context) health.Result {
 	start := time.Now()
 
-	vm, err := mem.VirtualMemory()
+	vm, err := mem.VirtualMemoryWithContext(ctx)
 	if err != nil {
 		return health.Result{
 			Name:       c.Name(),

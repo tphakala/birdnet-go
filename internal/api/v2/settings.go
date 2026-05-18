@@ -2502,12 +2502,13 @@ func capitalizeProviderName(name string) string {
 func (c *Controller) collectImageProviders(ctx echo.Context) (providers []ImageProviderOption, count int) {
 	providers = []ImageProviderOption{{Value: "auto", Display: "Auto (Default)"}}
 
-	if c.BirdImageCache == nil {
+	cache := c.BirdImageCache
+	if cache == nil {
 		c.logAPIRequest(ctx, logger.LogLevelWarn, "BirdImageCache is nil, cannot get provider names")
 		return providers, count
 	}
 
-	registry := c.BirdImageCache.GetRegistry()
+	registry := cache.GetRegistry()
 	if registry == nil {
 		c.logAPIRequest(ctx, logger.LogLevelWarn, "ImageProviderRegistry is nil, cannot get provider names")
 		return providers, count
