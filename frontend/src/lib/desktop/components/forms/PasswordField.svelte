@@ -41,7 +41,8 @@
     ...rest
   }: Props = $props();
 
-  const fieldId = name || generateId('password-field');
+  const generatedFieldId = generateId('password-field');
+  const fieldId = $derived(name || generatedFieldId);
 
   let showPassword = $state(false);
 
