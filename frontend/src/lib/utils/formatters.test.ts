@@ -8,6 +8,7 @@ import {
   formatDateTime,
   formatDateForInput,
   formatTime,
+  formatTimeOfDay,
   formatUptime,
   formatNumber,
   formatPercentage,
@@ -335,6 +336,40 @@ describe('formatters', () => {
       expect(parsedJan1).not.toBeNull();
       expect(formatDateForInput(parsedDec31 as Date)).toBe(dec31);
       expect(formatDateForInput(parsedJan1 as Date)).toBe(jan1);
+    });
+  });
+
+  describe('formatTimeOfDay', () => {
+    it('returns empty string for null input', () => {
+      expect(formatTimeOfDay(null)).toBe('');
+    });
+
+    it('returns empty string for undefined input', () => {
+      expect(formatTimeOfDay(undefined)).toBe('');
+    });
+
+    it('formats Date object with 24h clock by default', () => {
+      const date = new Date('2024-08-25T14:30:00');
+      const result = formatTimeOfDay(date);
+      expect(result).toBeTruthy();
+      expect(result).toMatch(/\d{1,2}:\d{2}/);
+    });
+
+    it('formats Date object with 12h clock when use24h is false', () => {
+      const date = new Date('2024-08-25T14:30:00');
+      const result = formatTimeOfDay(date, false);
+      expect(result).toBeTruthy();
+      expect(result).toMatch(/\d{1,2}:\d{2}/);
+    });
+
+    it('formats ISO date string input', () => {
+      const result = formatTimeOfDay('2024-08-25T14:30:00');
+      expect(result).toBeTruthy();
+      expect(result).toMatch(/\d{1,2}:\d{2}/);
+    });
+
+    it('returns empty string for invalid date string', () => {
+      expect(formatTimeOfDay('not-a-date')).toBe('');
     });
   });
 });
