@@ -245,6 +245,16 @@ func (c *Controller) ReinstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "model "+catalogID+" is not installed", http.StatusBadRequest)
 	}
 
+	// Reject reinstall of ONNX-dependent models when ORT is unavailable.
+	if entry.RequiresONNX {
+		ortStatus := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
+		if !ortStatus.Available {
+			return c.HandleError(ctx, nil,
+				"model requires ONNX Runtime "+inference.ORTRequiredVersion()+": "+ortStatus.Error,
+				http.StatusConflict)
+		}
+	}
+
 	// Start async reinstall in a background goroutine.
 	progressChan := make(chan classifier.DownloadState, 16)
 	c.wg.Go(func() {
