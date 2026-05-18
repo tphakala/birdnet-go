@@ -807,22 +807,14 @@ func getDeviceBaseName(device string) string {
 	return base
 }
 
-// remoteFsTypes maps filesystem types that are network mounts.
-var remoteFsTypes = map[string]bool{
-	"nfs":        true,
-	"nfs4":       true,
-	"cifs":       true,
-	"smbfs":      true,
-	"sshfs":      true,
-	"fuse.sshfs": true,
-	"afs":        true,
-	"9p":         true,
-	"ncpfs":      true,
-}
-
 // isRemoteFilesystem returns true if the filesystem is a network mount
 func isRemoteFilesystem(fstype string) bool {
-	return remoteFsTypes[fstype]
+	switch fstype {
+	case "nfs", "nfs4", "cifs", "smbfs", "sshfs", "fuse.sshfs", "afs", "9p", "ncpfs":
+		return true
+	default:
+		return false
+	}
 }
 
 // isReadOnlyMount returns true if the filesystem is mounted as read-only
