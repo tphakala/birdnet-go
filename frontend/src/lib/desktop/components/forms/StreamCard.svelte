@@ -19,6 +19,7 @@
 -->
 <script lang="ts">
   import { getContext } from 'svelte';
+  import { generateId } from '$lib/utils/uuid';
   import {
     Settings,
     Trash2,
@@ -333,7 +334,7 @@
               enabled: editEqualizer.enabled,
               filters: editEqualizer.filters.map(f => ({
                 ...f,
-                id: f.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)),
+                id: f.id || generateId(),
               })),
             }
           : undefined;

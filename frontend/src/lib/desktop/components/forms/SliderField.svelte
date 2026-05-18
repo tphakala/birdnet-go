@@ -1,17 +1,8 @@
 <script lang="ts">
   import FormField from './FormField.svelte';
   import { cn } from '$lib/utils/cn.js';
+  import { generateId } from '$lib/utils/uuid';
   import type { HTMLAttributes } from 'svelte/elements';
-
-  // Generate unique ID using crypto.randomUUID for SSR compatibility
-  const generateUniqueId = () => {
-    // Use crypto.randomUUID if available (modern browsers and Node.js 14.17+)
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return `slider-field-${crypto.randomUUID()}`;
-    }
-    // Fallback for older environments
-    return `slider-field-${Math.random().toString(36).substr(2, 9)}-${Date.now()}`;
-  };
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -48,8 +39,7 @@
     ...rest
   }: Props = $props();
 
-  // Generate unique ID for proper label association - each component instance gets its own ID
-  const fieldId = generateUniqueId();
+  const fieldId = generateId('slider-field');
 
   let displayValue = $derived(formatValue ? formatValue(value) : `${value}${unit}`);
 

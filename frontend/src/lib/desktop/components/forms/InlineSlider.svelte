@@ -31,6 +31,7 @@
 -->
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
+  import { generateId } from '$lib/utils/uuid';
 
   interface Props {
     label: string;
@@ -64,15 +65,7 @@
     helpText = '',
   }: Props = $props();
 
-  // Generate unique suffix once on component creation (not reactive)
-  const generatedIdSuffix = (() => {
-    // Use crypto.randomUUID if available (modern browsers)
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    // Fallback for older browsers
-    return `${Math.random().toString(36).slice(2, 11)}-${Date.now()}`;
-  })();
+  const generatedIdSuffix = generateId();
 
   // Derived IDs - react to prop changes while maintaining stable suffix
   const inputId = $derived(id || `inline-slider-${generatedIdSuffix}`);

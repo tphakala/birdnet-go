@@ -18,6 +18,7 @@
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { generateId } from '$lib/utils/uuid';
   import { fetchDeviceCapabilities as fetchCapabilities } from '$lib/utils/audio/sampleRate';
   import { toastActions } from '$lib/stores/toast';
   import { cn } from '$lib/utils/cn';
@@ -185,7 +186,7 @@
             enabled: newEqualizer.enabled,
             filters: newEqualizer.filters.map(f => ({
               ...f,
-              id: f.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 11)),
+              id: f.id || generateId(),
             })),
           }
         : undefined;
