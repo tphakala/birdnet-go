@@ -61,6 +61,7 @@ Performance Optimizations:
   import { getLogger } from '$lib/utils/logger';
   import { cn } from '$lib/utils/cn.js';
   import { createDebounce } from '$lib/utils/debounce';
+  import { getStoredValue, setStoredValue } from '$lib/utils/storage';
   import { safeArrayAccess, isPlainObject } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
@@ -288,28 +289,16 @@ Performance Optimizations:
     50: 48,
   };
 
-  // Function to get initial detection limit from localStorage
   function getInitialDetectionLimit(): number {
-    if (typeof window !== 'undefined') {
-      const savedLimit = localStorage.getItem('recentDetectionLimit');
-      if (savedLimit) {
-        const parsed = parseInt(savedLimit, 10);
-        if (!isNaN(parsed)) {
-          // Check if it's a valid new value
-          if (VALID_DETECTION_LIMITS.includes(parsed)) {
-            return parsed;
-          }
-          // Migrate old values to new ones
-          const migrated = Object.hasOwn(LIMIT_MIGRATION_MAP, parsed)
-            ? LIMIT_MIGRATION_MAP[parsed as keyof typeof LIMIT_MIGRATION_MAP]
-            : undefined;
-          if (migrated !== undefined) {
-            // Update localStorage with migrated value
-            localStorage.setItem('recentDetectionLimit', migrated.toString());
-            return migrated;
-          }
-        }
-      }
+    const stored = getStoredValue('recentDetectionLimit', DEFAULT_DETECTION_LIMIT);
+    if (typeof stored !== 'number' || isNaN(stored)) return DEFAULT_DETECTION_LIMIT;
+    if (VALID_DETECTION_LIMITS.includes(stored)) return stored;
+    const migrated = Object.hasOwn(LIMIT_MIGRATION_MAP, stored)
+      ? LIMIT_MIGRATION_MAP[stored as keyof typeof LIMIT_MIGRATION_MAP]
+      : undefined;
+    if (migrated !== undefined) {
+      setStoredValue('recentDetectionLimit', migrated);
+      return migrated;
     }
     return DEFAULT_DETECTION_LIMIT;
   }
