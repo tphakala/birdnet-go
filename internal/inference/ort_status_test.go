@@ -2,6 +2,7 @@ package inference
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -64,6 +65,40 @@ func TestInferVersionFromPath(t *testing.T) {
 		require.NoError(t, os.WriteFile(versioned, nil, 0o644))
 		require.NoError(t, os.Symlink(versioned, link))
 		assert.Equal(t, "1.25.1", inferVersionFromPath(link))
+	})
+
+	t.Run("macOS dylib with version", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		dylib := filepath.Join(dir, "libonnxruntime.1.25.1.dylib")
+		require.NoError(t, os.WriteFile(dylib, nil, 0o644))
+		assert.Equal(t, "1.25.1", inferVersionFromPath(dylib))
+	})
+
+	t.Run("macOS dylib symlink to versioned", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		versioned := filepath.Join(dir, "libonnxruntime.1.25.1.dylib")
+		link := filepath.Join(dir, "libonnxruntime.dylib")
+		require.NoError(t, os.WriteFile(versioned, nil, 0o644))
+		require.NoError(t, os.Symlink(versioned, link))
+		assert.Equal(t, "1.25.1", inferVersionFromPath(link))
+	})
+
+	t.Run("macOS dylib with dotted prefix", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		dylib := filepath.Join(dir, "my.custom.lib.1.25.1.dylib")
+		require.NoError(t, os.WriteFile(dylib, nil, 0o644))
+		assert.Equal(t, "1.25.1", inferVersionFromPath(dylib))
+	})
+
+	t.Run("macOS dylib without version", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		dylib := filepath.Join(dir, "libonnxruntime.dylib")
+		require.NoError(t, os.WriteFile(dylib, nil, 0o644))
+		assert.Empty(t, inferVersionFromPath(dylib))
 	})
 
 	t.Run("windows dll", func(t *testing.T) {

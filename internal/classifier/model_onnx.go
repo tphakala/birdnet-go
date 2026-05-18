@@ -16,6 +16,21 @@ func (bn *BirdNET) initializeONNXModel() error {
 	start := time.Now()
 	log := GetLogger()
 
+	// Pre-check ORT availability before attempting model load.
+	ortStatus := inference.CheckORTAvailability(bn.Settings.BirdNET.ONNXRuntimePath)
+	if !ortStatus.Available {
+		log.Warn("ONNX classifier requires ONNX Runtime which is not available",
+			logger.String("error", ortStatus.Error))
+		emitORTUnavailableNotification("BirdNET ONNX Classifier", ortStatus.Error)
+		return errors.Newf("ONNX classifier requires ONNX Runtime %s: %s",
+			inference.ORTRequiredVersion(), ortStatus.Error).
+			Category(errors.CategoryModelInit).
+			Context("model", "onnx_classifier").
+			Context("ort_error", ortStatus.Error).
+			Timing("ort-check", time.Since(start)).
+			Build()
+	}
+
 	// Initialize ONNX Runtime if not already done
 	if err := inference.InitONNXRuntime(bn.Settings.BirdNET.ONNXRuntimePath); err != nil {
 		return errors.New(err).
@@ -56,6 +71,22 @@ func (bn *BirdNET) initializeONNXMetaModel() error {
 	}
 
 	start := time.Now()
+	log := GetLogger()
+
+	// Pre-check ORT availability before attempting range filter load.
+	ortStatus := inference.CheckORTAvailability(settings.BirdNET.ONNXRuntimePath)
+	if !ortStatus.Available {
+		log.Warn("ONNX range filter requires ONNX Runtime which is not available",
+			logger.String("error", ortStatus.Error))
+		emitORTUnavailableNotification("BirdNET Range Filter", ortStatus.Error)
+		return errors.Newf("ONNX range filter requires ONNX Runtime %s: %s",
+			inference.ORTRequiredVersion(), ortStatus.Error).
+			Category(errors.CategoryModelInit).
+			Context("model", "range_filter").
+			Context("ort_error", ortStatus.Error).
+			Timing("ort-check", time.Since(start)).
+			Build()
+	}
 
 	// Ensure ONNX Runtime is initialized (idempotent - may already be init from classifier)
 	if err := inference.InitONNXRuntime(settings.BirdNET.ONNXRuntimePath); err != nil {
