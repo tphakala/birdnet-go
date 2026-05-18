@@ -3377,8 +3377,8 @@ configure_location() {
         sed -i "s|latitude: 00.000|latitude: $lat|" "$CONFIG_FILE"
         sed -i "s|longitude: 00.000|longitude: $lon|" "$CONFIG_FILE"
         # Also handle configs where location was previously set
-        sed -i -E "s|^(\\s*latitude:\\s*)[0-9.-]+|\\1$lat|" "$CONFIG_FILE"
-        sed -i -E "s|^(\\s*longitude:\\s*)[0-9.-]+|\\1$lon|" "$CONFIG_FILE"
+        sed -i -E "s|^([[:space:]]*latitude:[[:space:]]*)[0-9.-]+|\\1$lat|" -- "$CONFIG_FILE"
+        sed -i -E "s|^([[:space:]]*longitude:[[:space:]]*)[0-9.-]+|\\1$lon|" -- "$CONFIG_FILE"
         print_message "🔇 Silent mode: location set to $lat, $lon" "$YELLOW"
         return
     fi
@@ -3429,6 +3429,9 @@ configure_location() {
             local sed_result=$?
             sed -i "s|longitude: 00.000|longitude: $lon|" "$CONFIG_FILE"
             sed_result=$((sed_result + $?))
+            # Also handle configs where location was previously set
+            sed -i -E "s|^([[:space:]]*latitude:[[:space:]]*)[0-9.-]+|\\1$lat|" -- "$CONFIG_FILE"
+            sed -i -E "s|^([[:space:]]*longitude:[[:space:]]*)[0-9.-]+|\\1$lon|" -- "$CONFIG_FILE"
             log_command_result "sed latitude/longitude update" "$sed_result" "updating location coordinates in config file"
             return
         else
@@ -3534,6 +3537,9 @@ configure_location() {
     local sed_result=$?
     sed -i "s|longitude: 00.000|longitude: $lon|" "$CONFIG_FILE"
     sed_result=$((sed_result + $?))
+    # Also handle configs where location was previously set
+    sed -i -E "s|^([[:space:]]*latitude:[[:space:]]*)[0-9.-]+|\\1$lat|" -- "$CONFIG_FILE"
+    sed -i -E "s|^([[:space:]]*longitude:[[:space:]]*)[0-9.-]+|\\1$lon|" -- "$CONFIG_FILE"
     log_command_result "sed latitude/longitude update" "$sed_result" "updating location coordinates in config file"
 }
 
@@ -3550,7 +3556,7 @@ configure_auth() {
             escaped_hash=$(sed_escape_replacement "$password_hash")
             sed -i "s|enabled: false    # true to enable basic auth|enabled: true    # true to enable basic auth|" "$CONFIG_FILE"
             sed -i "s|password: \"\"|password: \"${escaped_hash}\"|" "$CONFIG_FILE"
-            unset password_hash escaped_hash
+            unset BIRDNET_PASSWORD password_hash escaped_hash
             print_message "🔇 Silent mode: password protection enabled" "$YELLOW"
         else
             print_message "🔇 Silent mode: no password set (BIRDNET_PASSWORD not provided)" "$YELLOW"
@@ -3739,7 +3745,7 @@ configure_web_port() {
     fi
 
     # Update config file with port (validated as numeric, safe for sed)
-    sed -i -E "s|^(\\s*port:\\s*)[0-9]+|\\1$WEB_PORT|" "$CONFIG_FILE"
+    sed -i -E "s|^([[:space:]]*port:[[:space:]]*)[0-9]+|\\1$WEB_PORT|" -- "$CONFIG_FILE"
 }
 
 # Generate systemd service content
