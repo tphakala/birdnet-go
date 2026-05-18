@@ -107,6 +107,9 @@ func (c *Controller) GetModelCatalog(ctx echo.Context) error {
 	visible := classifier.VisibleCatalog()
 	catalog := make([]CatalogEntryResponse, 0, len(visible))
 
+	// Check ORT availability once, reuse for all entries that require ONNX.
+	ortStatus := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
+
 	for i := range visible {
 		entry := &visible[i]
 
@@ -125,12 +128,9 @@ func (c *Controller) GetModelCatalog(ctx echo.Context) error {
 		// Models requiring ONNX Runtime are incompatible when ORT is absent.
 		compatible := true
 		incompatibleReason := ""
-		if entry.RequiresONNX {
-			ortStatus := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
-			if !ortStatus.Available {
-				compatible = false
-				incompatibleReason = ortStatus.Error
-			}
+		if entry.RequiresONNX && !ortStatus.Available {
+			compatible = false
+			incompatibleReason = ortStatus.Error
 		}
 
 		catalog = append(catalog, CatalogEntryResponse{
@@ -182,6 +182,16 @@ func (c *Controller) InstallModel(ctx echo.Context) error {
 
 	if c.ModelManager == nil {
 		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
+	}
+
+	// Reject installation of ONNX-dependent models when ORT is unavailable.
+	if entry.RequiresONNX {
+		ortStatus := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
+		if !ortStatus.Available {
+			return c.HandleError(ctx, nil,
+				"model requires ONNX Runtime "+inference.ORTRequiredVersion()+": "+ortStatus.Error,
+				http.StatusConflict)
+		}
 	}
 
 	// Start async install in a background goroutine.

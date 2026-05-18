@@ -74,12 +74,6 @@ func CheckORTAvailability(configuredPath string) ORTStatus {
 	return status
 }
 
-// IsORTAvailable is a convenience predicate that returns true when a
-// compatible ONNX Runtime library is present or already loaded.
-func IsORTAvailable(configuredPath string) bool {
-	return CheckORTAvailability(configuredPath).Available
-}
-
 // ORTRequiredVersion returns a human-readable version string describing the
 // required ONNX Runtime version (e.g. "1.25.x").
 func ORTRequiredVersion() string {
@@ -135,9 +129,13 @@ func inferVersionFromPath(libPath string) string {
 
 // isVersionCompatible checks whether version starts with RequiredORTAPIMajor
 // followed by a dot (ensuring "1.25" matches "1.25.x" but not "1.250").
+// Also accepts an exact major.minor match without a patch version.
 func isVersionCompatible(version string) bool {
 	if version == "" {
 		return false
+	}
+	if version == RequiredORTAPIMajor {
+		return true
 	}
 	return strings.HasPrefix(version, RequiredORTAPIMajor+".")
 }

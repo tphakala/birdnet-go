@@ -19,6 +19,7 @@ func TestIsVersionCompatible(t *testing.T) {
 		{name: "patch 1", version: "1.25.1", want: true},
 		{name: "patch 0", version: "1.25.0", want: true},
 		{name: "patch 99", version: "1.25.99", want: true},
+		{name: "exact major.minor", version: "1.25", want: true},
 		{name: "older minor", version: "1.24.4", want: false},
 		{name: "newer minor", version: "1.26.0", want: false},
 		{name: "major bump", version: "2.0.0", want: false},
