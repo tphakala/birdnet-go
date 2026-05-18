@@ -4714,7 +4714,7 @@
     "title": "Aiuto e supporto",
     "subtitle": "Ottieni aiuto, segnala problemi e connettiti con la comunità",
     "reportBug": {
-      "description": "Se riscontri un problema, genera prima un pacchetto di supporto per acquisire le informazioni di sistema e i log, poi apri una segnalazione bug su GitHub."
+      "description": "Se riscontri un problema, apri prima una segnalazione bug su GitHub per descrivere il problema, poi genera un pacchetto di supporto con il numero della segnalazione per facilitare la diagnosi."
     },
     "askQuestion": {
       "description": "Hai una domanda sulla configurazione, le funzionalità o l'utilizzo? Il forum GitHub Discussions è il posto migliore per ottenere aiuto dalla comunità."
@@ -4762,14 +4762,14 @@
         "description": "Genera e carica un pacchetto di supporto qui sotto. Cattura log e configurazione che velocizzano significativamente la risoluzione dei problemi."
       }
     },
-    "supportDump": {
-      "title": "Genera pacchetto di supporto",
-      "description": "Caricare un pacchetto di supporto con la segnalazione aiuta significativamente nella diagnosi. Cattura la configurazione e i log recenti con i dati sensibili rimossi."
-    },
     "openIssue": {
       "title": "Apri una segnalazione su GitHub",
-      "description": "Una volta raccolte le informazioni sopra e generato il pacchetto di supporto, apri una segnalazione su GitHub per descrivere il problema.",
+      "description": "Apri una segnalazione su GitHub per descrivere il problema. Avrai bisogno del numero della segnalazione nel passaggio successivo.",
       "button": "Apri segnalazione su GitHub"
+    },
+    "supportDump": {
+      "title": "Genera pacchetto di supporto",
+      "description": "Dopo aver creato la segnalazione, genera un pacchetto di supporto e inserisci il numero della segnalazione GitHub. Questo collega la diagnostica alla segnalazione bug e facilita la risoluzione."
     }
   },
   "health": {

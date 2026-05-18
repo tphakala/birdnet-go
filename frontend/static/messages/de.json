@@ -4714,7 +4714,7 @@
     "title": "Hilfe & Support",
     "subtitle": "Hilfe erhalten, Probleme melden und mit der Community verbinden",
     "reportBug": {
-      "description": "Wenn Sie auf ein Problem stoßen, erstellen Sie zunächst ein Support-Paket mit Systeminformationen und Protokollen und eröffnen Sie dann einen Fehlerbericht auf GitHub."
+      "description": "Wenn Sie auf ein Problem stoßen, eröffnen Sie einen Fehlerbericht auf GitHub, um das Problem zu beschreiben, und erstellen Sie dann ein Support-Paket mit der Issue-Nummer zur Fehlerbehebung."
     },
     "askQuestion": {
       "description": "Haben Sie eine Frage zur Einrichtung, zu Funktionen oder zur Nutzung? Das GitHub Discussions Forum ist der beste Ort, um Hilfe von der Community zu erhalten."
@@ -4762,14 +4762,14 @@
         "description": "Erstellen und laden Sie unten ein Support-Paket hoch. Es erfasst Protokolle und Konfigurationen, die die Fehlerbehebung erheblich beschleunigen."
       }
     },
-    "supportDump": {
-      "title": "Support-Paket erstellen",
-      "description": "Das Hochladen eines Support-Pakets mit Ihrem Fehlerbericht hilft erheblich bei der Fehlerbehebung. Es erfasst Ihre Konfiguration und aktuelle Protokolle mit entfernten sensiblen Daten."
-    },
     "openIssue": {
       "title": "GitHub-Issue erstellen",
-      "description": "Sobald Sie die obigen Informationen gesammelt und ein Support-Paket erstellt haben, eröffnen Sie ein Issue auf GitHub, um das Problem zu beschreiben.",
+      "description": "Eröffnen Sie ein Issue auf GitHub, um das Problem zu beschreiben. Sie benötigen die Issue-Nummer im nächsten Schritt.",
       "button": "Issue auf GitHub erstellen"
+    },
+    "supportDump": {
+      "title": "Support-Paket erstellen",
+      "description": "Erstellen Sie nach dem Eröffnen des Issues ein Support-Paket und geben Sie die GitHub-Issue-Nummer ein. Dies verknüpft Ihre Diagnose mit dem Fehlerbericht und hilft bei der Fehlerbehebung."
     }
   },
   "health": {

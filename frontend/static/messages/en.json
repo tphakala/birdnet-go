@@ -4714,7 +4714,7 @@
     "title": "Help & Support",
     "subtitle": "Get help, report issues, and connect with the community",
     "reportBug": {
-      "description": "If you encounter a problem, generate a support dump first to capture your system info and logs, then open a bug report on GitHub to describe the issue."
+      "description": "If you encounter a problem, open a bug report on GitHub to describe the issue, then generate a support dump with the issue number to help with troubleshooting."
     },
     "askQuestion": {
       "description": "Have a question about setup, features, or usage? The GitHub Discussions forum is the best place to get help from the community."
@@ -4762,14 +4762,14 @@
         "description": "Generate and upload a support dump below. This captures logs and configuration that greatly speed up troubleshooting."
       }
     },
-    "supportDump": {
-      "title": "Generate Support Dump",
-      "description": "Uploading a support dump with your bug report greatly helps with troubleshooting and providing a fix. It captures your configuration and recent logs with sensitive data removed."
-    },
     "openIssue": {
       "title": "Open a GitHub Issue",
-      "description": "Once you have gathered the information above and generated a support dump, open an issue on GitHub to describe the problem.",
+      "description": "Open an issue on GitHub to describe the problem. You will need the issue number for the next step.",
       "button": "Open Issue on GitHub"
+    },
+    "supportDump": {
+      "title": "Generate Support Dump",
+      "description": "After filing your issue, generate a support dump and enter the GitHub issue number. This links your diagnostics to the bug report and helps with troubleshooting."
     }
   },
   "health": {

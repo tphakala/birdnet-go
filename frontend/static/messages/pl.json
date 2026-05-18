@@ -4714,7 +4714,7 @@
     "title": "Pomoc i wsparcie",
     "subtitle": "Uzyskaj pomoc, zgłoś problemy i połącz się ze społecznością",
     "reportBug": {
-      "description": "Jeśli napotkasz problem, najpierw wygeneruj pakiet wsparcia, aby przechwycić informacje o systemie i logi, a następnie otwórz zgłoszenie błędu na GitHubie."
+      "description": "Jeśli napotkasz problem, otwórz najpierw zgłoszenie błędu na GitHubie, aby opisać problem, a następnie wygeneruj pakiet wsparcia z numerem zgłoszenia, aby pomóc w diagnostyce."
     },
     "askQuestion": {
       "description": "Masz pytanie dotyczące konfiguracji, funkcji lub użytkowania? Forum GitHub Discussions to najlepsze miejsce, aby uzyskać pomoc od społeczności."
@@ -4762,14 +4762,14 @@
         "description": "Wygeneruj i prześlij pakiet wsparcia poniżej. Przechwytuje logi i konfigurację, które znacząco przyspieszają rozwiązywanie problemów."
       }
     },
-    "supportDump": {
-      "title": "Generuj pakiet wsparcia",
-      "description": "Przesłanie pakietu wsparcia ze zgłoszeniem błędu znacząco pomaga w diagnostyce. Przechwytuje konfigurację i ostatnie logi z usuniętymi danymi wrażliwymi."
-    },
     "openIssue": {
       "title": "Otwórz zgłoszenie na GitHubie",
-      "description": "Po zebraniu powyższych informacji i wygenerowaniu pakietu wsparcia, otwórz zgłoszenie na GitHubie, aby opisać problem.",
+      "description": "Otwórz zgłoszenie na GitHubie, aby opisać problem. Numer zgłoszenia będzie potrzebny w następnym kroku.",
       "button": "Otwórz zgłoszenie na GitHubie"
+    },
+    "supportDump": {
+      "title": "Generuj pakiet wsparcia",
+      "description": "Po utworzeniu zgłoszenia wygeneruj pakiet wsparcia i wprowadź numer zgłoszenia GitHub. To powiąże diagnostykę ze zgłoszeniem błędu i pomoże w rozwiązaniu."
     }
   },
   "health": {

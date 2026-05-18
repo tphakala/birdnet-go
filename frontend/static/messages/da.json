@@ -4714,7 +4714,7 @@
     "title": "Hjælp og support",
     "subtitle": "Få hjælp, rapportér problemer og forbind med fællesskabet",
     "reportBug": {
-      "description": "Hvis du støder på et problem, skal du først generere en supportpakke for at indfange systeminfo og logfiler, og derefter åbne en fejlrapport på GitHub."
+      "description": "Hvis du støder på et problem, åbn en fejlrapport på GitHub for at beskrive problemet, og generer derefter en supportpakke med sagsnummeret for at hjælpe med fejlfinding."
     },
     "askQuestion": {
       "description": "Har du et spørgsmål om opsætning, funktioner eller brug? GitHub Discussions er det bedste sted at få hjælp fra fællesskabet."
@@ -4762,14 +4762,14 @@
         "description": "Generér og upload en supportpakke nedenfor. Den indfanger logfiler og konfiguration, der markant fremskynder fejlfinding."
       }
     },
-    "supportDump": {
-      "title": "Generér supportpakke",
-      "description": "Upload af en supportpakke med din fejlrapport hjælper markant med fejlfinding. Den indfanger din konfiguration og seneste logfiler med følsomme data fjernet."
-    },
     "openIssue": {
       "title": "Åbn en GitHub-sag",
-      "description": "Når du har samlet ovenstående oplysninger og genereret en supportpakke, åbn en sag på GitHub for at beskrive problemet.",
+      "description": "Åbn en sag på GitHub for at beskrive problemet. Du skal bruge sagsnummeret i næste trin.",
       "button": "Åbn sag på GitHub"
+    },
+    "supportDump": {
+      "title": "Generér supportpakke",
+      "description": "Efter oprettelse af din sag, generer en supportpakke og indtast GitHub-sagsnummeret. Dette kobler din diagnostik til fejlrapporten og hjælper med fejlfinding."
     }
   },
   "health": {

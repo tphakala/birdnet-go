@@ -4714,7 +4714,7 @@
     "title": "Nápověda a podpora",
     "subtitle": "Získejte pomoc, nahlaste problémy a spojte se s komunitou",
     "reportBug": {
-      "description": "Pokud narazíte na problém, nejprve vygenerujte diagnostický balíček s informacemi o systému a logy, poté otevřete hlášení chyby na GitHubu."
+      "description": "Pokud narazíte na problém, otevřete hlášení chyby na GitHubu a popište problém, poté vygenerujte diagnostický balíček s číslem hlášení pro usnadnění řešení."
     },
     "askQuestion": {
       "description": "Máte dotaz ohledně nastavení, funkcí nebo používání? Fórum GitHub Discussions je nejlepší místo, kde získáte pomoc od komunity."
@@ -4762,14 +4762,14 @@
         "description": "Vygenerujte a nahrajte diagnostický balíček níže. Zachytí logy a konfiguraci, které výrazně urychlí řešení problému."
       }
     },
-    "supportDump": {
-      "title": "Generovat diagnostický balíček",
-      "description": "Nahrání diagnostického balíčku k hlášení chyby výrazně pomáhá při řešení problémů. Zachytí vaši konfiguraci a nedávné logy s odstraněnými citlivými údaji."
-    },
     "openIssue": {
       "title": "Otevřít hlášení na GitHubu",
-      "description": "Jakmile shromáždíte výše uvedené informace a vygenerujete diagnostický balíček, otevřete hlášení na GitHubu a popište problém.",
+      "description": "Otevřete hlášení na GitHubu a popište problém. Číslo hlášení budete potřebovat v dalším kroku.",
       "button": "Otevřít hlášení na GitHubu"
+    },
+    "supportDump": {
+      "title": "Generovat diagnostický balíček",
+      "description": "Po vytvoření hlášení vygenerujte diagnostický balíček a zadejte číslo GitHub hlášení. Tím propojíte diagnostiku s hlášením chyby a usnadníte řešení."
     }
   },
   "health": {

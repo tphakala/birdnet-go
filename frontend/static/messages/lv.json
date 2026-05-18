@@ -4714,7 +4714,7 @@
     "title": "Palīdzība un atbalsts",
     "subtitle": "Saņemiet palīdzību, ziņojiet par problēmām un sazinieties ar kopienu",
     "reportBug": {
-      "description": "Ja saskaraties ar problēmu, vispirms izveidojiet atbalsta pakotni, lai saglabātu sistēmas informāciju un žurnālus, pēc tam atveriet kļūdas ziņojumu GitHub."
+      "description": "Ja saskaraties ar problēmu, vispirms atveriet kļūdas ziņojumu GitHub, lai aprakstītu problēmu, pēc tam izveidojiet atbalsta pakotni ar ziņojuma numuru, lai palīdzētu problēmu novēršanā."
     },
     "askQuestion": {
       "description": "Vai jums ir jautājums par iestatīšanu, funkcijām vai lietošanu? GitHub Discussions forums ir labākā vieta, kur saņemt palīdzību no kopienas."
@@ -4762,14 +4762,14 @@
         "description": "Izveidojiet un augšupielādējiet atbalsta pakotni zemāk. Tā saglabā žurnālus un konfigurāciju, kas ievērojami paātrina problēmu novēršanu."
       }
     },
-    "supportDump": {
-      "title": "Izveidot atbalsta pakotni",
-      "description": "Atbalsta pakotnes augšupielāde kopā ar kļūdas ziņojumu ievērojami palīdz problēmu novēršanā. Tā saglabā jūsu konfigurāciju un jaunākos žurnālus ar noņemtiem sensitīviem datiem."
-    },
     "openIssue": {
       "title": "Atvērt GitHub ziņojumu",
-      "description": "Kad esat savācis iepriekš minēto informāciju un izveidojis atbalsta pakotni, atveriet ziņojumu GitHub, lai aprakstītu problēmu.",
+      "description": "Atveriet ziņojumu GitHub, lai aprakstītu problēmu. Ziņojuma numurs būs nepieciešams nākamajā solī.",
       "button": "Atvērt ziņojumu GitHub"
+    },
+    "supportDump": {
+      "title": "Izveidot atbalsta pakotni",
+      "description": "Pēc ziņojuma izveidošanas izveidojiet atbalsta pakotni un ievadiet GitHub ziņojuma numuru. Tas savieno diagnostiku ar kļūdas ziņojumu un palīdz problēmu novēršanā."
     }
   },
   "health": {

@@ -4714,7 +4714,7 @@
     "title": "Help en ondersteuning",
     "subtitle": "Krijg hulp, meld problemen en maak verbinding met de community",
     "reportBug": {
-      "description": "Als u een probleem tegenkomt, genereer dan eerst een ondersteuningspakket om systeeminformatie en logboeken vast te leggen en open vervolgens een bugrapport op GitHub."
+      "description": "Als u een probleem tegenkomt, open eerst een bugrapport op GitHub om het probleem te beschrijven en genereer vervolgens een ondersteuningspakket met het issuenummer om te helpen bij het oplossen."
     },
     "askQuestion": {
       "description": "Heeft u een vraag over de installatie, functies of het gebruik? Het GitHub Discussions forum is de beste plek om hulp te krijgen van de community."
@@ -4762,14 +4762,14 @@
         "description": "Genereer en upload hieronder een ondersteuningspakket. Het legt logboeken en configuratie vast die het oplossen van problemen aanzienlijk versnellen."
       }
     },
-    "supportDump": {
-      "title": "Ondersteuningspakket genereren",
-      "description": "Het uploaden van een ondersteuningspakket bij uw bugrapport helpt aanzienlijk bij het oplossen van problemen. Het legt uw configuratie en recente logboeken vast met gevoelige gegevens verwijderd."
-    },
     "openIssue": {
       "title": "GitHub-issue openen",
-      "description": "Zodra u de bovenstaande informatie heeft verzameld en een ondersteuningspakket heeft gegenereerd, open een issue op GitHub om het probleem te beschrijven.",
+      "description": "Open een issue op GitHub om het probleem te beschrijven. U heeft het issuenummer nodig voor de volgende stap.",
       "button": "Issue openen op GitHub"
+    },
+    "supportDump": {
+      "title": "Ondersteuningspakket genereren",
+      "description": "Genereer na het aanmaken van uw issue een ondersteuningspakket en voer het GitHub-issuenummer in. Dit koppelt uw diagnostiek aan het bugrapport en helpt bij het oplossen."
     }
   },
   "health": {

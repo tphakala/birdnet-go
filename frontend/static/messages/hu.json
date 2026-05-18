@@ -4714,7 +4714,7 @@
     "title": "Súgó és támogatás",
     "subtitle": "Kérjen segítséget, jelentsen problémákat és csatlakozzon a közösséghez",
     "reportBug": {
-      "description": "Ha problémát tapasztal, először hozzon létre egy támogatási csomagot a rendszerinformációk és naplók rögzítéséhez, majd nyisson hibajelentést a GitHubon."
+      "description": "Ha problémát tapasztal, nyisson hibajelentést a GitHubon a probléma leírásához, majd hozzon létre egy támogatási csomagot a hibajelentés számával a hibaelhárítás segítéséhez."
     },
     "askQuestion": {
       "description": "Kérdése van a beállítással, funkciókkal vagy használattal kapcsolatban? A GitHub Discussions fórum a legjobb hely, ahol segítséget kaphat a közösségtől."
@@ -4762,14 +4762,14 @@
         "description": "Hozzon létre és töltsön fel egy támogatási csomagot alább. Ez rögzíti a naplókat és a konfigurációt, amelyek jelentősen felgyorsítják a hibaelhárítást."
       }
     },
-    "supportDump": {
-      "title": "Támogatási csomag létrehozása",
-      "description": "A támogatási csomag feltöltése a hibajelentéssel együtt jelentősen segíti a hibaelhárítást. Rögzíti a konfigurációt és a legutóbbi naplókat az érzékeny adatok eltávolításával."
-    },
     "openIssue": {
       "title": "GitHub issue megnyitása",
-      "description": "Miután összegyűjtötte a fenti információkat és létrehozta a támogatási csomagot, nyisson egy issue-t a GitHubon a probléma leírásához.",
+      "description": "Nyisson egy issue-t a GitHubon a probléma leírásához. Az issue számára szüksége lesz a következő lépésben.",
       "button": "Issue megnyitása a GitHubon"
+    },
+    "supportDump": {
+      "title": "Támogatási csomag létrehozása",
+      "description": "A hibajelentés létrehozása után hozzon létre egy támogatási csomagot és adja meg a GitHub issue számát. Ez összekapcsolja a diagnosztikát a hibajelentéssel és segíti a hibaelhárítást."
     }
   },
   "health": {

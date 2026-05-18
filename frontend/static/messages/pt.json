@@ -4714,7 +4714,7 @@
     "title": "Ajuda e suporte",
     "subtitle": "Obtenha ajuda, reporte problemas e conecte-se com a comunidade",
     "reportBug": {
-      "description": "Se encontrar um problema, primeiro gere um pacote de suporte para capturar as informações do sistema e os registros, depois abra um relatório de erro no GitHub."
+      "description": "Se encontrar um problema, abra primeiro um relatório de erro no GitHub para descrever o problema, depois gere um pacote de suporte com o número do issue para ajudar na resolução."
     },
     "askQuestion": {
       "description": "Tem uma pergunta sobre configuração, funcionalidades ou utilização? O fórum GitHub Discussions é o melhor local para obter ajuda da comunidade."
@@ -4762,14 +4762,14 @@
         "description": "Gere e envie um pacote de suporte abaixo. Ele captura registros e configuração que aceleram significativamente a resolução de problemas."
       }
     },
-    "supportDump": {
-      "title": "Gerar pacote de suporte",
-      "description": "Enviar um pacote de suporte com seu relatório de erro ajuda significativamente na resolução de problemas. Ele captura sua configuração e registros recentes com dados sensíveis removidos."
-    },
     "openIssue": {
       "title": "Abrir issue no GitHub",
-      "description": "Depois de reunir as informações acima e gerar um pacote de suporte, abra um issue no GitHub para descrever o problema.",
+      "description": "Abra um issue no GitHub para descrever o problema. Vai precisar do número do issue no próximo passo.",
       "button": "Abrir issue no GitHub"
+    },
+    "supportDump": {
+      "title": "Gerar pacote de suporte",
+      "description": "Após criar o issue, gere um pacote de suporte e insira o número do issue do GitHub. Isto liga os seus diagnósticos ao relatório de erro e ajuda na resolução."
     }
   },
   "health": {
