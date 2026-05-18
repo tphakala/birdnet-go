@@ -50,6 +50,7 @@
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
+  import { formatNumber } from '$lib/utils/formatters';
   import { Settings, MapPin, Database, XCircle, X, Maximize2, RefreshCw } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -1510,7 +1511,7 @@
                 {t('settings.main.sections.database.stats.totalDetections')}
               </div>
               <div class="text-lg font-semibold mt-1">
-                {databaseStats.data.total_detections.toLocaleString()}
+                {formatNumber(databaseStats.data.total_detections)}
               </div>
             </div>
           </div>

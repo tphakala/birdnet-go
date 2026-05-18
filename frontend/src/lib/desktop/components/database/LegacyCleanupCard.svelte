@@ -9,7 +9,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import type { LegacyStatus } from '$lib/types/legacy';
-  import { formatBytes, formatDate } from '$lib/utils/formatters';
+  import { formatBytes, formatDate, formatNumber } from '$lib/utils/formatters';
 
   interface Props {
     status: LegacyStatus | null;
@@ -136,7 +136,7 @@
                 {t('system.database.legacy.cleanup.records')}
               </span>
               <span class="font-medium text-[var(--color-base-content)]">
-                {status.total_records.toLocaleString()}
+                {formatNumber(status.total_records)}
                 {t('system.database.legacy.cleanup.detections')}
               </span>
             </div>

@@ -32,6 +32,7 @@
   } from '@lucide/svelte';
   import PrerequisitesChecklist from './PrerequisitesChecklist.svelte';
   import type { MigrationStatus, PrerequisitesState } from '$lib/types/migration';
+  import { formatNumber } from '$lib/utils/formatters';
 
   interface Props {
     status: MigrationStatus | null;
@@ -237,7 +238,7 @@
             ></div>
           </div>
           <div class="mt-2 text-sm text-[var(--color-base-content)]/70">
-            {status.migrated_records.toLocaleString()} / {status.total_records.toLocaleString()}
+            {formatNumber(status.migrated_records)} / {formatNumber(status.total_records)}
             {t('system.database.migration.progress.records')}
           </div>
         </div>
@@ -397,7 +398,7 @@
             <div class="mt-3">
               <div class="flex justify-between text-sm mb-1.5 text-[var(--color-base-content)]">
                 <span
-                  >{status.migrated_records.toLocaleString()} / {status.total_records.toLocaleString()}
+                  >{formatNumber(status.migrated_records)} / {formatNumber(status.total_records)}
                   {t('system.database.migration.progress.records')}</span
                 >
                 <span class="font-medium">{status.progress_percent.toFixed(1)}%</span>
@@ -431,7 +432,9 @@
           <div>
             <div class="flex justify-between text-sm mb-2 text-[var(--color-base-content)]">
               <span
-                >{status.migrated_records.toLocaleString()} / {status.total_records.toLocaleString()}</span
+                >{formatNumber(status.migrated_records)} / {formatNumber(
+                  status.total_records
+                )}</span
               >
               <span class="font-medium">{status.progress_percent.toFixed(1)}%</span>
             </div>

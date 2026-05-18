@@ -31,6 +31,7 @@
   import { toastActions } from '$lib/stores/toast';
   import { api, ApiError } from '$lib/utils/api';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { formatDate } from '$lib/utils/formatters';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -434,7 +435,7 @@
     if (diff < 604800000)
       return t('notifications.timeAgo.daysAgo', { days: Math.floor(diff / 86400000) });
 
-    return date.toLocaleDateString();
+    return formatDate(date);
   }
 
   onMount(() => {

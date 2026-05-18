@@ -2,6 +2,7 @@
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
+  import { formatNumber, formatDateTime } from '$lib/utils/formatters';
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess, safeGet } from '$lib/utils/security';
   import { XCircle } from '@lucide/svelte';
@@ -182,22 +183,9 @@
     newSpecies: null,
   };
 
-  // Format number with thousand separators using safe built-in method
-  function formatNumber(number: number): string {
-    return number.toLocaleString('en-US');
-  }
-
   // Format percentage
   function formatPercentage(value: number): string {
     return (value * 100).toFixed(1) + '%';
-  }
-
-  // Format datetime for display
-  function formatDateTime(dateString: string): string {
-    if (!dateString) return '';
-    const date = parseLocalDateString(dateString);
-    if (!date) return '';
-    return date.toLocaleString();
   }
 
   // Format date for input (YYYY-MM-DD)

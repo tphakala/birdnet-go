@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
-  import { parseLocalDateString } from '$lib/utils/date';
+  import { formatDate } from '$lib/utils/formatters';
   import { ChevronRight } from '@lucide/svelte';
 
   interface SpeciesData {
@@ -26,13 +26,6 @@
 
   function formatPercentage(value: number): string {
     return (value * 100).toFixed(1) + '%';
-  }
-
-  function formatDate(dateString: string): string {
-    if (!dateString) return '';
-    const date = parseLocalDateString(dateString);
-    if (!date) return '';
-    return date.toLocaleDateString();
   }
 
   let imageLoadFailed = $state(false);
