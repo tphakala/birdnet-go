@@ -1489,36 +1489,6 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 		logger.String("ip", ip),
 	)
 
-	// In enhanced database mode, return v2 database stats as the primary database
-	if isV2OnlyMode {
-		c.logInfoIfEnabled("Running in enhanced database mode, returning v2 database as primary",
-			logger.String("path", path),
-			logger.String("ip", ip),
-		)
-		// Get v2 database stats
-		v2Stats, ok := c.getV2Stats(path, ip)
-		if ok {
-			// Return v2 stats as the primary database stats
-			return ctx.JSON(http.StatusOK, &datastore.DatabaseStats{
-				Type:            v2Stats.Type,
-				Location:        v2Stats.Location,
-				SizeBytes:       v2Stats.SizeBytes,
-				TotalDetections: v2Stats.TotalDetections,
-				Connected:       v2Stats.Connected,
-			})
-		}
-		// V2 database not available, return disconnected state
-		c.logWarnIfEnabled("Enhanced database mode but v2 database not available",
-			logger.String("path", path),
-			logger.String("ip", ip),
-		)
-		return ctx.JSON(http.StatusOK, &datastore.DatabaseStats{
-			Type:      "none",
-			Connected: false,
-			Location:  "",
-		})
-	}
-
 	// Check if datastore is available
 	if c.DS == nil {
 		c.logErrorIfEnabled("Datastore not available",
@@ -1584,92 +1554,44 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, stats)
 }
 
-// V2DatabaseStatsResponse represents v2 database statistics.
-type V2DatabaseStatsResponse struct {
-	Type            string `json:"type"`
-	Location        string `json:"location"`
-	SizeBytes       int64  `json:"size_bytes"`
-	TotalDetections int64  `json:"total_detections"`
-	Connected       bool   `json:"connected"`
-}
-
-// getV2Stats is a helper method that retrieves v2 database statistics.
-// It returns the stats and a boolean indicating if stats were successfully retrieved.
-// If the v2 database is not available, it returns nil and false.
-func (c *Controller) getV2Stats(logPath, logIP string) (*V2DatabaseStatsResponse, bool) {
-	// Check if V2Manager is available
-	if c.V2Manager == nil {
-		c.logInfoIfEnabled("V2 database not initialized",
-			logger.String("path", logPath), logger.String("ip", logIP))
+// getV2ManagerStats retrieves v2 database statistics directly from V2Manager.
+func (c *Controller) getV2ManagerStats(ctx context.Context) (*datastore.DatabaseStats, bool) {
+	if c.V2Manager == nil || !c.V2Manager.Exists() {
 		return nil, false
 	}
 
-	// Check if database exists
-	if !c.V2Manager.Exists() {
-		c.logInfoIfEnabled("V2 database does not exist yet",
-			logger.String("path", logPath), logger.String("ip", logIP))
-		return nil, false
-	}
-
-	// Build response
-	response := &V2DatabaseStatsResponse{
+	stats := &datastore.DatabaseStats{
 		Type:      datastore.DialectSQLite,
 		Location:  c.V2Manager.Path(),
 		Connected: true,
 	}
 
-	// Adjust type for MySQL
 	if c.V2Manager.IsMySQL() {
-		response.Type = datastore.DialectMySQL
+		stats.Type = datastore.DialectMySQL
 	}
 
-	// Get database size
 	db := c.V2Manager.DB()
+	if db == nil {
+		stats.Connected = false
+		return stats, true
+	}
+
 	if !c.V2Manager.IsMySQL() {
-		// SQLite: get file size
-		if fi, err := os.Stat(c.V2Manager.Path()); err == nil {
-			response.SizeBytes = fi.Size()
-		}
-	} else if db != nil {
-		// MySQL: query information_schema for database size
-		// Extract database name from location (format: host:port/database)
-		location := c.V2Manager.Path()
-		if idx := strings.LastIndex(location, "/"); idx != -1 {
-			dbName := location[idx+1:]
-			var sizeBytes int64
-			err := db.Raw(`
-				SELECT COALESCE(SUM(data_length + index_length), 0) as size
-				FROM information_schema.TABLES
-				WHERE table_schema = ?
-			`, dbName).Scan(&sizeBytes).Error
-			if err == nil {
-				response.SizeBytes = sizeBytes
-			} else {
-				c.logWarnIfEnabled("Failed to get MySQL database size",
-					logger.Error(err), logger.String("path", logPath), logger.String("ip", logIP))
-			}
-		}
+		_ = db.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Scan(&stats.SizeBytes).Error
+	} else {
+		_ = db.WithContext(ctx).Raw(`
+			SELECT COALESCE(SUM(data_length + index_length), 0)
+			FROM information_schema.TABLES
+			WHERE table_schema = DATABASE()
+		`).Scan(&stats.SizeBytes).Error
 	}
 
-	// Count total detections from v2 database
-	if db != nil {
-		var count int64
-		if err := db.Table("detections").Count(&count).Error; err == nil {
-			response.TotalDetections = count
-		} else {
-			c.logWarnIfEnabled("Failed to count v2 detections",
-				logger.Error(err), logger.String("path", logPath), logger.String("ip", logIP))
-		}
+	var count int64
+	if err := db.WithContext(ctx).Table("detections").Count(&count).Error; err == nil {
+		stats.TotalDetections = count
 	}
 
-	c.logInfoIfEnabled("V2 database statistics retrieved successfully",
-		logger.String("type", response.Type),
-		logger.Any("size_bytes", response.SizeBytes),
-		logger.Any("total_detections", response.TotalDetections),
-		logger.Bool("connected", response.Connected),
-		logger.String("path", logPath), logger.String("ip", logIP))
-
-	return response, true
+	return stats, true
 }
 
 // GetV2DatabaseStats handles GET /api/v2/system/database/v2/stats
@@ -1678,7 +1600,7 @@ func (c *Controller) GetV2DatabaseStats(ctx echo.Context) error {
 	c.logInfoIfEnabled("Getting v2 database statistics",
 		logger.String("path", path), logger.String("ip", ip))
 
-	stats, ok := c.getV2Stats(path, ip)
+	stats, ok := c.getV2ManagerStats(ctx.Request().Context())
 	if !ok {
 		return c.HandleError(ctx, fmt.Errorf("v2 database not available"),
 			"V2 database not initialized", http.StatusNotFound)
