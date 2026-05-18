@@ -436,8 +436,8 @@
         "overloadMessage": "Järjestelmäsi hylkää {dropRate} % lähteen ''{sourceName}'' ääninäytteistä, koska se ei pysy analyysin tahdissa. Pienennä BirdNET-päällekkäisyysarvoa tunnistusasetuksista tai harkitse nopeamman suorittimen hankkimista."
       },
       "ort": {
-        "unavailableTitle": "ONNX Runtime Not Available",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. Check that libonnxruntime.so is installed at the expected path."
+        "unavailableTitle": "ONNX Runtime ei ole käytettävissä",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} vaaditaan mallille {modelName}, mutta sitä ei löytynyt. Varmista, että libonnxruntime.so on asennettu odotettuun sijaintiin."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -4682,9 +4682,9 @@
       "reinstalling": "Asennetaan uudelleen...",
       "reinstallComplete": "Tiedostot tarkistettu onnistuneesti",
       "geomodelBadge": "Sisältää BirdNET v3.0 -geomallin",
-      "onnxRuntimeRequired": "Requires ONNX Runtime which is not available on this system.",
-      "onnxRuntimeMissing": "ONNX Runtime is not available. This model cannot run.",
-      "unavailable": "Unavailable"
+      "onnxRuntimeRequired": "Vaatii ONNX Runtimen, joka ei ole käytettävissä tässä järjestelmässä.",
+      "onnxRuntimeMissing": "ONNX Runtime ei ole käytettävissä. Tätä mallia ei voi suorittaa.",
+      "unavailable": "Ei käytettävissä"
     },
     "bird": {
       "title": "Lintuhavainnot",

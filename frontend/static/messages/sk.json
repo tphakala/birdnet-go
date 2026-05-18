@@ -436,8 +436,8 @@
         "overloadMessage": "Váš systém zahadzuje {dropRate} % zvukových vzoriek zo zdroja ''{sourceName}'', pretože nestíha analýzu. Znížte hodnotu prekrytia BirdNET v nastaveniach detekcie alebo zvážte rýchlejší procesor."
       },
       "ort": {
-        "unavailableTitle": "ONNX Runtime Not Available",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. Check that libonnxruntime.so is installed at the expected path."
+        "unavailableTitle": "ONNX Runtime nie je k dispozícii",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} je vyžadovaný pre {modelName}, ale nebol nájdený. Skontrolujte, či je libonnxruntime.so nainštalovaný na očakávanej ceste."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -4682,9 +4682,9 @@
       "reinstalling": "Preinštalovanie...",
       "reinstallComplete": "Súbory úspešne overené",
       "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel",
-      "onnxRuntimeRequired": "Requires ONNX Runtime which is not available on this system.",
-      "onnxRuntimeMissing": "ONNX Runtime is not available. This model cannot run.",
-      "unavailable": "Unavailable"
+      "onnxRuntimeRequired": "Vyžaduje ONNX Runtime, ktorý nie je v tomto systéme k dispozícii.",
+      "onnxRuntimeMissing": "ONNX Runtime nie je k dispozícii. Tento model nie je možné spustiť.",
+      "unavailable": "Nedostupné"
     },
     "bird": {
       "title": "Detekcia vtákov",

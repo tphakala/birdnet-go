@@ -436,8 +436,8 @@
         "overloadMessage": "Jūsu sistēma izlaiž {dropRate}% audio paraugu avotam ''{sourceName}'', jo tā nespēj sekot līdzi analīzei. Samaziniet BirdNET pārklāšanās vērtību noteikšanas iestatījumos vai apsveriet jaudīgāka procesora izmantošanu."
       },
       "ort": {
-        "unavailableTitle": "ONNX Runtime Not Available",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. Check that libonnxruntime.so is installed at the expected path."
+        "unavailableTitle": "ONNX Runtime nav pieejams",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Pārliecinieties, ka libonnxruntime.so ir instalēts paredzētajā ceļā."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -4682,9 +4682,9 @@
       "reinstalling": "Pārinstalē...",
       "reinstallComplete": "Faili veiksmīgi pārbaudīti",
       "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis",
-      "onnxRuntimeRequired": "Requires ONNX Runtime which is not available on this system.",
-      "onnxRuntimeMissing": "ONNX Runtime is not available. This model cannot run.",
-      "unavailable": "Unavailable"
+      "onnxRuntimeRequired": "Nepieciešams ONNX Runtime, kas šajā sistēmā nav pieejams.",
+      "onnxRuntimeMissing": "ONNX Runtime nav pieejams. Šo modeli nevar palaist.",
+      "unavailable": "Nav pieejams"
     },
     "bird": {
       "title": "Putnu noteikšana",

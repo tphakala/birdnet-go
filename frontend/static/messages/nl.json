@@ -436,8 +436,8 @@
         "overloadMessage": "Uw systeem verliest {dropRate} % van de audiosamples van bron ''{sourceName}'' omdat het de analyse niet kan bijhouden. Verlaag de BirdNET-overlappingswaarde in de detectie-instellingen of overweeg een snellere CPU."
       },
       "ort": {
-        "unavailableTitle": "ONNX Runtime Not Available",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. Check that libonnxruntime.so is installed at the expected path."
+        "unavailableTitle": "ONNX Runtime niet beschikbaar",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} is vereist voor {modelName}, maar werd niet gevonden. Controleer of libonnxruntime.so is geïnstalleerd op het verwachte pad."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -4682,9 +4682,9 @@
       "reinstalling": "Opnieuw installeren...",
       "reinstallComplete": "Bestanden succesvol geverifieerd",
       "geomodelBadge": "Bevat BirdNET v3.0 geomodel",
-      "onnxRuntimeRequired": "Requires ONNX Runtime which is not available on this system.",
-      "onnxRuntimeMissing": "ONNX Runtime is not available. This model cannot run.",
-      "unavailable": "Unavailable"
+      "onnxRuntimeRequired": "Vereist ONNX Runtime dat niet beschikbaar is op dit systeem.",
+      "onnxRuntimeMissing": "ONNX Runtime is niet beschikbaar. Dit model kan niet worden uitgevoerd.",
+      "unavailable": "Niet beschikbaar"
     },
     "bird": {
       "title": "Vogeldetectie",
