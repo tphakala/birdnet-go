@@ -110,6 +110,14 @@ func (m *Manager) AllocateCapture(sourceID string, durationSeconds, sampleRate, 
 	return nil
 }
 
+// DeallocateAnalysis removes the AnalysisBuffer for a single (sourceID,
+// modelID) pair. It is a no-op if no buffer exists for that key.
+func (m *Manager) DeallocateAnalysis(sourceID, modelID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.analysisBuffers, bufferKey{sourceID: sourceID, modelID: modelID})
+}
+
 // DeallocateSource removes all AnalysisBuffers (across all models) and the
 // CaptureBuffer for the given sourceID in a single atomic operation. It is
 // safe to call for sourceIDs that were never allocated; the method is a no-op

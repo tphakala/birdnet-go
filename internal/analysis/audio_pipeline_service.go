@@ -13,6 +13,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
@@ -1006,6 +1007,41 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 		running.Channels != desired.Channels
 }
 
+// sourceModelsChanged reports whether the set of models currently active for a
+// source (as reflected by allocated analysis buffers) differs from the desired
+// config model set. Only models that are both resolvable and loaded are
+// considered; unknown or unloaded config IDs are ignored so that a model
+// appearing in the config but not yet installed does not trigger a spurious
+// rebuild on every hot-reload cycle.
+func sourceModelsChanged(bufMgr *buffer.Manager, sourceID string, desiredConfigIDs []string, loadedModels map[string]classifier.ModelInfo, primaryModelID string) bool {
+	currentBuffers := bufMgr.AnalysisBuffers(sourceID)
+
+	desiredSet := make(map[string]bool, len(desiredConfigIDs))
+	for _, configID := range desiredConfigIDs {
+		registryID, known := classifier.ResolveConfigModelID(configID)
+		if !known {
+			continue
+		}
+		if _, loaded := loadedModels[registryID]; loaded {
+			desiredSet[registryID] = true
+		}
+	}
+	// Empty desired list means the source falls back to the primary model.
+	if len(desiredSet) == 0 {
+		desiredSet[primaryModelID] = true
+	}
+
+	if len(currentBuffers) != len(desiredSet) {
+		return true
+	}
+	for modelID := range currentBuffers {
+		if !desiredSet[modelID] {
+			return true
+		}
+	}
+	return false
+}
+
 // reconfigureChangedSources diffs the currently running sources against the
 // desired config from settings. Only sources that were added, removed, or
 // changed are touched - unchanged streams keep their capture buffers and
@@ -1023,6 +1059,21 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		desired[scm.config.ConnectionString] = scm
 	}
 
+	// Build a lookup of loaded models for model-change detection.
+	// The bnAnalyzer may be nil in minimal test setups that only exercise
+	// the add/remove paths; model-change detection is skipped in that case.
+	var loadedModels map[string]classifier.ModelInfo
+	var primaryModelID string
+	if p.bnAnalyzer != nil {
+		modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
+		loadedModels = make(map[string]classifier.ModelInfo, len(modelInfoSlice))
+		for i := range modelInfoSlice {
+			loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
+		}
+		primaryModelID = p.bnAnalyzer.BirdNET().ModelInfo.ID
+	}
+	bufMgr := p.engine.BufferManager()
+
 	// Determine which desired configs already have a running source.
 	// Registry.List() returns copies with cleared connectionStrings for
 	// security, so we look up sources via GetByConnection on the desired
@@ -1033,6 +1084,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	var newSourceIDs []string
 	var gainChangedIDs []string
 	var reconfiguredIDs []string
+	var modelChangedIDs []string
 	var keptCount int
 
 	for connStr, scm := range desired {
@@ -1049,11 +1101,13 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				logger.Int("model_count", len(scm.modelIDs)),
 				logger.String("operation", "reconfigure_diff"))
 
-			// Detect audio parameter changes (sample rate, bit depth, channels)
-			// that require a full source reconfigure (stop + route removal +
-			// buffer realloc + restart). ReconfigureSource handles everything,
-			// so skip the gain-only route rebuild for this source.
-			if sourceNeedsReconfigure(src, scm.config) {
+			// Classify the kind of change needed, from most to least
+			// disruptive. Model changes are checked before gain-only
+			// changes so that a simultaneous gain + model update takes
+			// the model-change path (which also handles gain).
+			switch {
+			case sourceNeedsReconfigure(src, scm.config):
+				// Audio parameter change: full stop + restart.
 				log.Info("audio parameters changed, reconfiguring source",
 					logger.String("source_id", src.ID),
 					logger.Int("old_sample_rate", src.SampleRate),
@@ -1064,9 +1118,6 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				if src.Gain != scm.config.Gain {
 					registry.UpdateGain(src.ID, scm.config.Gain)
 				}
-				// ReconfigureSource removes all routes; clear the sound level
-				// tracking entry so re-registration is not blocked by the
-				// idempotency check.
 				p.untrackSoundLevelConsumer(src.ID)
 				if err := p.engine.ReconfigureSource(src.ID, scm.config); err != nil {
 					log.Error("failed to reconfigure source",
@@ -1076,8 +1127,9 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				} else {
 					reconfiguredIDs = append(reconfiguredIDs, src.ID)
 				}
-			} else if src.Gain != scm.config.Gain {
-				// Gain-only change: update registry and rebuild routes (no restart needed).
+
+			case src.Gain != scm.config.Gain:
+				// Gain-only change: rebuild routes, keep capture running.
 				log.Info("gain changed for kept source, rebuilding routes",
 					logger.String("source_id", src.ID),
 					logger.Float64("old_gain_db", src.Gain),
@@ -1085,6 +1137,14 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					logger.String("operation", "reconfigure_diff"))
 				registry.UpdateGain(src.ID, scm.config.Gain)
 				gainChangedIDs = append(gainChangedIDs, src.ID)
+
+			case loadedModels != nil && sourceModelsChanged(bufMgr, src.ID, scm.modelIDs, loadedModels, primaryModelID):
+				// Model assignment changed (e.g., Perch added/removed):
+				// rebuild the consumer/buffer/monitor layer, keep capture running.
+				log.Info("model assignment changed for kept source, rebuilding consumers",
+					logger.String("source_id", src.ID),
+					logger.String("operation", "reconfigure_diff"))
+				modelChangedIDs = append(modelChangedIDs, src.ID)
 			}
 
 			// Sync display name if the config name changed (e.g., stream renamed in UI).
@@ -1170,6 +1230,20 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		p.registerSoundLevelConsumers(gainChangedIDs, "gain_change")
 	}
 
+	// Rebuild routes for sources whose model assignment changed (e.g.,
+	// Perch added or removed). The capture device stays running; routes
+	// are torn down, stale analysis buffers are deallocated, and
+	// consumers are re-created with the new model targets.
+	if len(modelChangedIDs) > 0 {
+		for _, sid := range modelChangedIDs {
+			p.engine.Router().RemoveAllRoutes(sid)
+			p.untrackSoundLevelConsumer(sid)
+			deallocateStaleAnalysisBuffers(bufMgr, sid, sourceModelMap[sid], primaryModelID)
+		}
+		p.registerConsumersForSources(modelChangedIDs, sourceModelMap, audioLevelChan, "model_change")
+		p.registerSoundLevelConsumers(modelChangedIDs, "model_change")
+	}
+
 	// Sync monitors for ALL active sources (kept + new) so UpdateMonitors
 	// receives the full desired state and removes stale monitors correctly.
 	allActiveIDs := slices.Collect(maps.Values(alreadyRunning))
@@ -1188,6 +1262,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		logger.Int("added", len(newSourceIDs)),
 		logger.Int("removed", removedCount),
 		logger.Int("gain_changed", len(gainChangedIDs)),
+		logger.Int("model_changed", len(modelChangedIDs)),
 		logger.String("operation", "reconfigure_diff"))
 }
 
@@ -1285,6 +1360,26 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 	}
 
 	return result
+}
+
+// deallocateStaleAnalysisBuffers removes analysis buffers for models that are
+// no longer assigned to a source. This prevents memory leaks when models are
+// removed from a source's config via hot-reload.
+func deallocateStaleAnalysisBuffers(bufMgr *buffer.Manager, sourceID string, desiredConfigIDs []string, primaryModelID string) {
+	desiredSet := make(map[string]bool, len(desiredConfigIDs))
+	for _, configID := range desiredConfigIDs {
+		if regID, known := classifier.ResolveConfigModelID(configID); known {
+			desiredSet[regID] = true
+		}
+	}
+	if len(desiredSet) == 0 {
+		desiredSet[primaryModelID] = true
+	}
+	for modelID := range bufMgr.AnalysisBuffers(sourceID) {
+		if !desiredSet[modelID] {
+			bufMgr.DeallocateAnalysis(sourceID, modelID)
+		}
+	}
 }
 
 // resolveModelTargets converts config-level model IDs to ModelTarget entries
