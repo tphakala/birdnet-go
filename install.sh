@@ -1750,12 +1750,16 @@ migrate_installation() {
     fi
     # Force-remove container to release SQLite locks
     if command_exists docker; then
-        docker rm -f birdnet-go 2>/dev/null || true
+        sudo docker rm -f birdnet-go 2>/dev/null || true
     fi
 
     # Step 2: Copy data
     print_message "📋 Copying data..." "$YELLOW"
-    mkdir -p "$dest_path"
+    mkdir -p -- "$dest_path" || {
+        print_message "❌ Failed to create destination directory" "$RED"
+        log_message "ERROR" "Migration mkdir failed: $dest_path"
+        return 1
+    }
     if ! sudo cp -a "${source_path}/." "$dest_path/"; then
         print_message "❌ Failed to copy data, rolling back" "$RED"
         sudo rm -rf -- "$dest_path"
@@ -1838,6 +1842,7 @@ migrate_installation() {
     send_telemetry_event "info" "Root migration completed" "info" "step=migrate,source=root_home"
 
     MIGRATION_DONE="true"
+    load_telemetry_config
     return 0
 }
 
@@ -1893,8 +1898,9 @@ check_existing_installation_owner() {
     # Method 3: Scan /root and other users' home directories for birdnet-go-app
     if [ "$found_other_install" = false ]; then
         # Check /root separately since it's typically mode 700 and requires sudo
-        # Try non-interactive first, fall back to interactive for first-run (no cached credentials)
-        if [ "$HOME" != "/root" ] && { sudo -n test -f "/root/birdnet-go-app/config/config.yaml" 2>/dev/null || sudo test -f "/root/birdnet-go-app/config/config.yaml" 2>/dev/null; }; then
+        # Try non-interactive first; fall back to interactive only in non-silent mode
+        # (interactive sudo would hang in automated/CI environments)
+        if [ "$HOME" != "/root" ] && { sudo -n test -f "/root/birdnet-go-app/config/config.yaml" 2>/dev/null || { [ "$SILENT_MODE" != "true" ] && sudo test -f "/root/birdnet-go-app/config/config.yaml" 2>/dev/null; }; }; then
             found_other_install=true
             other_user="root"
             other_path="/root/birdnet-go-app"
@@ -5813,8 +5819,8 @@ if [ "$SILENT_MODE" = "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PR
     fi
 fi
 
-# Menu loop for existing installations (skipped in silent mode)
-if [ "$SILENT_MODE" != "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; }; then
+# Menu loop for existing installations (skipped in silent mode and after migration)
+if [ "$SILENT_MODE" != "true" ] && [ "$MIGRATION_DONE" != "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; }; then
     while true; do
         # Display menu based on installation type
         print_message ""  # Add spacing
