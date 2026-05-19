@@ -1709,11 +1709,11 @@ migrate_installation() {
         return 1
     fi
 
-    # Pre-flight: verify destination does not already have data
-    if [ -f "${dest_path}/config/config.yaml" ]; then
+    # Pre-flight: verify destination does not already contain data
+    if [ -d "$dest_path" ] && [ -n "$(ls -A "$dest_path" 2>/dev/null)" ]; then
         print_message "❌ Destination already contains BirdNET-Go data" "$RED"
-        print_message "   Remove $dest_path first if you want to re-migrate." "$YELLOW"
-        log_message "ERROR" "Migration destination already has config: $dest_path"
+        print_message "   Remove or empty $dest_path first if you want to re-migrate." "$YELLOW"
+        log_message "ERROR" "Migration destination is not empty: $dest_path"
         send_telemetry_event "error" "Root migration failed: destination exists" "error" "step=migrate,reason=dest_exists"
         return 1
     fi
@@ -1732,10 +1732,10 @@ migrate_installation() {
             # Require 10% safety margin
             local required_kb=$(( source_size_kb + source_size_kb / 10 ))
             if [ "$dest_available_kb" -lt "$required_kb" ]; then
-                local source_mb=$(( source_size_kb / 1024 ))
+                local required_mb=$(( required_kb / 1024 ))
                 local available_mb=$(( dest_available_kb / 1024 ))
                 print_message "❌ Not enough disk space for migration" "$RED"
-                print_message "   Need ~${source_mb} MB, only ${available_mb} MB available on destination" "$YELLOW"
+                print_message "   Need ~${required_mb} MB (including 10% buffer), only ${available_mb} MB available" "$YELLOW"
                 log_message "ERROR" "Migration failed: insufficient disk space (need ${source_size_kb}KB, have ${dest_available_kb}KB)"
                 send_telemetry_event "error" "Root migration failed: insufficient disk space" "error" "step=migrate,reason=disk_space"
                 return 1
@@ -1757,8 +1757,9 @@ migrate_installation() {
     print_message "📋 Copying data..." "$YELLOW"
     mkdir -p "$dest_path"
     if ! sudo cp -a "${source_path}/." "$dest_path/"; then
-        print_message "❌ Failed to copy data" "$RED"
-        log_message "ERROR" "Migration cp -a failed"
+        print_message "❌ Failed to copy data, rolling back" "$RED"
+        sudo rm -rf -- "$dest_path"
+        log_message "ERROR" "Migration cp -a failed, rolled back"
         send_telemetry_event "error" "Root migration failed: copy error" "error" "step=migrate,reason=copy_failed"
         return 1
     fi
@@ -1768,7 +1769,7 @@ migrate_installation() {
     print_message "🔧 Fixing file ownership..." "$YELLOW"
     if ! sudo chown -R "$USER:$USER" "$dest_path/"; then
         print_message "❌ Failed to change file ownership, rolling back copy" "$RED"
-        rm -rf "$dest_path"
+        sudo rm -rf -- "$dest_path"
         log_message "ERROR" "Migration chown failed, rolled back"
         send_telemetry_event "error" "Root migration failed: chown error" "error" "step=migrate,reason=chown_failed"
         return 1
@@ -1807,7 +1808,7 @@ migrate_installation() {
 
     if [ "$validation_ok" = false ]; then
         print_message "❌ Migration validation failed, rolling back copy" "$RED"
-        rm -rf "$dest_path"
+        sudo rm -rf -- "$dest_path"
         log_message "ERROR" "Migration validation failed, rolled back"
         send_telemetry_event "error" "Root migration failed: validation error" "error" "step=migrate,reason=validation_failed"
         return 1
@@ -1836,6 +1837,7 @@ migrate_installation() {
     log_message "INFO" "Migration completed successfully"
     send_telemetry_event "info" "Root migration completed" "info" "step=migrate,source=root_home"
 
+    MIGRATION_DONE="true"
     return 0
 }
 
@@ -1891,8 +1893,8 @@ check_existing_installation_owner() {
     # Method 3: Scan /root and other users' home directories for birdnet-go-app
     if [ "$found_other_install" = false ]; then
         # Check /root separately since it's typically mode 700 and requires sudo
-        # Use sudo -n (non-interactive) to avoid password prompts during scanning
-        if [ "$HOME" != "/root" ] && sudo -n test -f "/root/birdnet-go-app/config/config.yaml" 2>/dev/null; then
+        # Try non-interactive first, fall back to interactive for first-run (no cached credentials)
+        if [ "$HOME" != "/root" ] && { sudo -n test -f "/root/birdnet-go-app/config/config.yaml" 2>/dev/null || sudo test -f "/root/birdnet-go-app/config/config.yaml" 2>/dev/null; }; then
             found_other_install=true
             other_user="root"
             other_path="/root/birdnet-go-app"
@@ -5260,6 +5262,8 @@ COCKPIT_PORT=9090  # Default Cockpit port
 AUDIO_ENV="--device /dev/snd"
 # Flag for fresh installation
 FRESH_INSTALL="false"
+# Flag for completed migration (prevents silent mode from overwriting migrated config)
+MIGRATION_DONE="false"
 # Configured timezone (will be set during configuration)
 CONFIGURED_TZ=""
 
@@ -5801,7 +5805,12 @@ if [ "$SILENT_MODE" = "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PR
         fi
         print_message "⚠️ Update failed, proceeding with fresh installation" "$YELLOW"
     fi
-    FRESH_INSTALL="true"
+    # After migration, preserve the migrated config by skipping fresh-install overwrite
+    if [ "$MIGRATION_DONE" = "true" ]; then
+        FRESH_INSTALL="false"
+    else
+        FRESH_INSTALL="true"
+    fi
 fi
 
 # Menu loop for existing installations (skipped in silent mode)
