@@ -4818,6 +4818,13 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Nejčastější chyby",
+      "errorCount": "Počet",
+      "errorComponent": "Komponenta",
+      "errorLevel": "Úroveň",
+      "errorMessage": "Zpráva"
     }
   }
 }

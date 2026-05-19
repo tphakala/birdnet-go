@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -76,7 +77,7 @@ func (c *Controller) registerHealthChecks() {
 				}
 				return 0, errNoTempSensors
 			}
-			var maxTemp float64
+			maxTemp := math.Inf(-1)
 			for _, t := range temps {
 				if t.Temperature > maxTemp {
 					maxTemp = t.Temperature

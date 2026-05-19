@@ -108,27 +108,32 @@ func (c *Controller) SetAudioLevelChan(ch chan audiocore.AudioLevelData) {
 	})
 }
 
+// cleanupBroadcaster closes all subscriber channels and clears stale audio levels.
+// Called when the broadcaster exits (context cancel or source channel close).
+func cleanupBroadcaster() {
+	audioLevelMgr.subscribersMu.Lock()
+	for ch := range audioLevelMgr.subscribers {
+		close(ch)
+		delete(audioLevelMgr.subscribers, ch)
+	}
+	audioLevelMgr.subscribersMu.Unlock()
+
+	audioLevelMgr.latestLevelsMu.Lock()
+	clear(audioLevelMgr.latestLevels)
+	audioLevelMgr.latestLevelsMu.Unlock()
+}
+
 // runAudioLevelBroadcaster reads from the source channel and broadcasts to all subscribers.
 // This allows multiple SSE clients to receive the same audio level data.
 func runAudioLevelBroadcaster(ctx context.Context, sourceChan chan audiocore.AudioLevelData) {
 	for {
 		select {
 		case <-ctx.Done():
+			cleanupBroadcaster()
 			return
 		case data, ok := <-sourceChan:
 			if !ok {
-				// Source channel closed, close all subscriber channels
-				audioLevelMgr.subscribersMu.Lock()
-				for ch := range audioLevelMgr.subscribers {
-					close(ch)
-					delete(audioLevelMgr.subscribers, ch)
-				}
-				audioLevelMgr.subscribersMu.Unlock()
-
-				// Clear stale levels so health checks don't report dead sources
-				audioLevelMgr.latestLevelsMu.Lock()
-				clear(audioLevelMgr.latestLevels)
-				audioLevelMgr.latestLevelsMu.Unlock()
+				cleanupBroadcaster()
 				return
 			}
 

@@ -4818,6 +4818,13 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Biežākās kļūdas",
+      "errorCount": "Skaits",
+      "errorComponent": "Komponents",
+      "errorLevel": "Līmenis",
+      "errorMessage": "Ziņojums"
     }
   }
 }

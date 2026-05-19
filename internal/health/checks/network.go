@@ -166,7 +166,7 @@ func (c *NotificationProvidersCheck) Run(_ context.Context) health.Result {
 			Name:       c.Name(),
 			Category:   c.Category(),
 			Status:     health.StatusSkipped,
-			Message:    "No notification providers configured",
+			Message:    "Notification health checks disabled",
 			DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 			Timestamp:  time.Now(),
 		}

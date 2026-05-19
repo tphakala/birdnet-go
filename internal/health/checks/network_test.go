@@ -64,14 +64,14 @@ func TestNotificationProvidersCheck_NilClosure(t *testing.T) {
 	assert.Equal(t, health.StatusSkipped, result.Status)
 }
 
-func TestNotificationProvidersCheck_NoProviders(t *testing.T) {
+func TestNotificationProvidersCheck_HealthCheckDisabled(t *testing.T) {
 	t.Parallel()
 	check := NewNotificationProvidersCheck(func() (int, int, string) {
 		return 0, 0, ""
 	})
 	result := check.Run(t.Context())
 	assert.Equal(t, health.StatusSkipped, result.Status)
-	assert.Contains(t, result.Message, "No notification providers")
+	assert.Contains(t, result.Message, "health checks disabled")
 }
 
 func TestNotificationProvidersCheck_AllHealthy(t *testing.T) {
