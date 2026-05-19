@@ -1422,8 +1422,11 @@ func (p *AudioPipelineService) startWeatherPolling(metrics *observability.Metric
 		return
 	}
 
+	weather.RegisterService(weatherService)
+
 	p.wg.Go(func() {
 		weatherService.StartPolling(p.done)
+		weather.UnregisterService()
 	})
 }
 

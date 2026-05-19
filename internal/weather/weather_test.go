@@ -1366,3 +1366,79 @@ func TestWundergroundProvider_HTTP401_AuthFailed(t *testing.T) {
 	assert.ErrorIs(t, err, ErrWeatherAuthFailed,
 		"HTTP 401 should return ErrWeatherAuthFailed sentinel")
 }
+
+func TestService_Status_Healthy(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{providerName: "yrno"}
+	ok, msg := svc.Status()
+	assert.True(t, ok)
+	assert.Contains(t, msg, "healthy")
+	assert.Contains(t, msg, "yrno")
+}
+
+func TestService_Status_Backoff(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{providerName: "openweather"}
+	svc.backoff.recordFailure()
+	svc.backoff.recordFailure()
+
+	ok, msg := svc.Status()
+	assert.False(t, ok)
+	assert.Contains(t, msg, "backing off")
+	assert.Contains(t, msg, "2 failures")
+}
+
+func TestService_Status_AuthDisabled(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{providerName: "openweather"}
+	svc.backoff.mu.Lock()
+	svc.backoff.authDisabled = true
+	svc.backoff.mu.Unlock()
+
+	ok, msg := svc.Status()
+	assert.False(t, ok)
+	assert.Contains(t, msg, "auth disabled")
+}
+
+func TestGetStatus_NoService(t *testing.T) {
+	globalServiceMu.Lock()
+	saved := globalService
+	globalService = nil
+	globalServiceMu.Unlock()
+	t.Cleanup(func() {
+		globalServiceMu.Lock()
+		globalService = saved
+		globalServiceMu.Unlock()
+	})
+
+	ok, msg := GetStatus()
+	assert.True(t, ok)
+	assert.Contains(t, msg, "not started")
+}
+
+func TestRegisterUnregisterService(t *testing.T) {
+	globalServiceMu.Lock()
+	saved := globalService
+	globalServiceMu.Unlock()
+	t.Cleanup(func() {
+		globalServiceMu.Lock()
+		globalService = saved
+		globalServiceMu.Unlock()
+	})
+
+	svc := &Service{providerName: "test-provider"}
+	RegisterService(svc)
+
+	ok, msg := GetStatus()
+	assert.True(t, ok)
+	assert.Contains(t, msg, "test-provider")
+
+	UnregisterService()
+
+	ok, msg = GetStatus()
+	assert.True(t, ok)
+	assert.Contains(t, msg, "not started")
+}

@@ -313,6 +313,20 @@ func (d *pushDispatcher) startHealthChecker(ctx context.Context) {
 	}
 }
 
+// GetAllPushProviderHealth returns health status for all registered push
+// notification providers. Returns nil when the push dispatcher or its health
+// checker has not been initialized.
+func GetAllPushProviderHealth() []ProviderHealth {
+	dispatcherMu.Lock()
+	pd := globalPushDispatcher
+	dispatcherMu.Unlock()
+
+	if pd == nil || pd.healthChecker == nil {
+		return nil
+	}
+	return pd.healthChecker.GetAllProviderHealth()
+}
+
 func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 	if notif.DeliveryTarget == DeliveryTargetBell {
 		d.log.Debug("skipping bell-only notification in push dispatch",

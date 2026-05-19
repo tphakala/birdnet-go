@@ -131,13 +131,17 @@ func (c *BirdWeatherCheck) Run(_ context.Context) health.Result {
 	}
 }
 
-// NotificationProvidersCheck reports the connectivity state of configured notification providers.
-// Probe infrastructure is not yet available; this check always returns StatusSkipped.
-type NotificationProvidersCheck struct{}
+// NotificationProvidersCheck reports the connectivity state of configured
+// notification providers. The getHealth closure returns (total, healthy, summaryMsg)
+// aggregated from the push dispatcher's health checker.
+type NotificationProvidersCheck struct {
+	getHealth func() (total, healthy int, summaryMsg string)
+}
 
 // NewNotificationProvidersCheck creates a NotificationProvidersCheck.
-func NewNotificationProvidersCheck() *NotificationProvidersCheck {
-	return &NotificationProvidersCheck{}
+// getHealth returns (total, healthy, summaryMsg); nil means health data unavailable.
+func NewNotificationProvidersCheck(getHealth func() (total, healthy int, summaryMsg string)) *NotificationProvidersCheck {
+	return &NotificationProvidersCheck{getHealth: getHealth}
 }
 
 // Name returns the check identifier.
@@ -146,20 +150,62 @@ func (c *NotificationProvidersCheck) Name() string { return "notification_provid
 // Category returns the network category.
 func (c *NotificationProvidersCheck) Category() health.Category { return health.CategoryNetwork }
 
-// Run returns StatusSkipped because notification probe infrastructure is not yet available.
+// Run evaluates notification provider health. Returns Skipped when no providers
+// are configured, Healthy when all providers are OK, Warning when some fail,
+// and Critical when all fail.
 func (c *NotificationProvidersCheck) Run(_ context.Context) health.Result {
-	return skippedResult(c.Name(), c.Category(), time.Now())
+	start := time.Now()
+
+	if c.getHealth == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	total, healthy, summaryMsg := c.getHealth()
+	if total == 0 {
+		return health.Result{
+			Name:       c.Name(),
+			Category:   c.Category(),
+			Status:     health.StatusSkipped,
+			Message:    "No notification providers configured",
+			DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+			Timestamp:  time.Now(),
+		}
+	}
+
+	unhealthy := total - healthy
+	status := health.StatusHealthy
+	switch {
+	case unhealthy == total:
+		status = health.StatusCritical
+	case unhealthy > 0:
+		status = health.StatusWarning
+	}
+
+	return health.Result{
+		Name:     c.Name(),
+		Category: c.Category(),
+		Status:   status,
+		Message:  summaryMsg,
+		Details: map[string]any{
+			"total":     total,
+			"healthy":   healthy,
+			"unhealthy": unhealthy,
+		},
+		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+		Timestamp:  time.Now(),
+	}
 }
 
 // WeatherCheck verifies connectivity to the configured weather provider.
-// Probe infrastructure is not yet available; enabled instances return StatusSkipped.
 type WeatherCheck struct {
 	isEnabled func() bool
+	getStatus func() (bool, string)
 }
 
-// NewWeatherCheck creates a WeatherCheck using the given enable predicate.
-func NewWeatherCheck(isEnabled func() bool) *WeatherCheck {
-	return &WeatherCheck{isEnabled: isEnabled}
+// NewWeatherCheck creates a WeatherCheck using the given enable predicate and
+// status provider. getStatus must return (ok, statusMessage).
+func NewWeatherCheck(isEnabled func() bool, getStatus func() (bool, string)) *WeatherCheck {
+	return &WeatherCheck{isEnabled: isEnabled, getStatus: getStatus}
 }
 
 // Name returns the check identifier.
@@ -168,7 +214,7 @@ func (c *WeatherCheck) Name() string { return "weather" }
 // Category returns the network category.
 func (c *WeatherCheck) Category() health.Category { return health.CategoryNetwork }
 
-// Run returns StatusSkipped when disabled, or StatusSkipped with a not-yet-available message when enabled.
+// Run verifies weather provider connectivity when the integration is enabled.
 func (c *WeatherCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
@@ -187,11 +233,21 @@ func (c *WeatherCheck) Run(_ context.Context) health.Result {
 		}
 	}
 
+	if c.getStatus == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	ok, statusMsg := c.getStatus()
+	status := health.StatusHealthy
+	if !ok {
+		status = health.StatusWarning
+	}
+
 	return health.Result{
 		Name:       c.Name(),
 		Category:   c.Category(),
-		Status:     health.StatusSkipped,
-		Message:    "Probe infrastructure not yet available",
+		Status:     status,
+		Message:    statusMsg,
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
 	}
