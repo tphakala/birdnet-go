@@ -6,6 +6,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestExtractScientificName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"standard label", "Turdus merula_Common Blackbird", "Turdus merula"},
+		{"with species code", "Parus major_Great Tit_gretit1", "Parus major"},
+		{"locale label", "Picus viridis_vihertikka", "Picus viridis"},
+		{"no underscore", "NoUnderscore", "NoUnderscore"},
+		{"extra underscores", "Sci_Common_Extra", "Sci"},
+		{"scientific name only", "Turdus merula", "Turdus merula"},
+		{"non-species label", "noise", "noise"},
+		{"empty string", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, ExtractScientificName(tt.input))
+		})
+	}
+}
+
 func TestParseSpeciesString(t *testing.T) {
 	t.Parallel()
 

@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/inference/tflite"
@@ -618,7 +619,7 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	}
 	scores := make(map[string]float64, len(speciesScores))
 	for _, s := range speciesScores {
-		scores[strings.ToLower(ExtractScientificName(s.Label))] = s.Score
+		scores[strings.ToLower(detection.ExtractScientificName(s.Label))] = s.Score
 	}
 
 	// WRITE PATH: double-check, evict old entries, and publish new results
@@ -1148,7 +1149,7 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	// Try to get cached scores first
 	cachedScores, err := bn.getCachedSpeciesScores(detectionTime)
 	if err == nil && len(cachedScores) > 0 {
-		if occurrence, found := cachedScores[strings.ToLower(ExtractScientificName(species))]; found {
+		if occurrence, found := cachedScores[strings.ToLower(detection.ExtractScientificName(species))]; found {
 			// Clamp the score to [0.0, 1.0] range
 			if occurrence < 0.0 {
 				return 0.0
@@ -1169,9 +1170,9 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	}
 
 	// Look for the species in the scores
-	targetSci := strings.ToLower(ExtractScientificName(species))
+	targetSci := strings.ToLower(detection.ExtractScientificName(species))
 	for _, score := range speciesScores {
-		if strings.ToLower(ExtractScientificName(score.Label)) == targetSci {
+		if strings.ToLower(detection.ExtractScientificName(score.Label)) == targetSci {
 			// Clamp the score to [0.0, 1.0] range
 			if score.Score < 0.0 {
 				return 0.0
