@@ -27,13 +27,13 @@ type mappedRangeFilter struct {
 func buildSpeciesMapping(classifierLabels, geomodelLabels []string) []int {
 	geoIndex := make(map[string]int, len(geomodelLabels))
 	for i, label := range geomodelLabels {
-		sci := extractScientificName(label)
+		sci := ExtractScientificName(label)
 		geoIndex[strings.ToLower(sci)] = i
 	}
 
 	mapping := make([]int, len(classifierLabels))
 	for i, label := range classifierLabels {
-		sci := extractScientificName(label)
+		sci := ExtractScientificName(label)
 		if idx, ok := geoIndex[strings.ToLower(sci)]; ok {
 			mapping[i] = idx
 		} else {
@@ -57,11 +57,11 @@ func ComputeGeomodelCoverage(classifierLabels, geomodelLabels []string) (withRan
 	return withRangeData, withoutRangeData
 }
 
-// extractScientificName returns the scientific name portion from a
+// ExtractScientificName returns the scientific name portion from a
 // "ScientificName_CommonName" label string.
-func extractScientificName(label string) string {
-	if idx := strings.IndexByte(label, '_'); idx >= 0 {
-		return label[:idx]
+func ExtractScientificName(label string) string {
+	if sci, _, ok := strings.Cut(label, "_"); ok {
+		return sci
 	}
 	return label
 }

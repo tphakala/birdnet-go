@@ -22,7 +22,7 @@ func TestExtractScientificName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.expected, extractScientificName(tt.label))
+			assert.Equal(t, tt.expected, ExtractScientificName(tt.label))
 		})
 	}
 }
