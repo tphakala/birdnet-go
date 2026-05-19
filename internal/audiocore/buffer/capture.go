@@ -111,6 +111,20 @@ func NewCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sourceID 
 	}, nil
 }
 
+// Capacity returns the total buffer size in bytes.
+func (cb *CaptureBuffer) Capacity() int {
+	cb.lock.Lock()
+	defer cb.lock.Unlock()
+	return cb.bufferSize
+}
+
+// UsedBytes returns the number of bytes currently stored in the buffer.
+func (cb *CaptureBuffer) UsedBytes() int {
+	cb.lock.Lock()
+	defer cb.lock.Unlock()
+	return cb.writtenBytes
+}
+
 // Write appends PCM data to the circular buffer. The first call records a
 // wall-clock anchor time for external APIs. The monotonic totalBytesWritten
 // counter is always advanced, providing jitter-free byte offset calculations.

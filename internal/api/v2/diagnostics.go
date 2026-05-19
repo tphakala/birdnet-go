@@ -86,10 +86,10 @@ func (c *Controller) registerHealthChecks() {
 		// Audio checks
 		checks.NewSourceStatusCheck(snapshotProvider),
 		checks.NewPipelineLivenessCheck(snapshotProvider),
-		checks.NewBufferDropsCheck(),
-		checks.NewAudioLevelCheck(),
-		checks.NewBufferOverrunCheck(),
-		checks.NewCaptureBufferCheck(),
+		checks.NewBufferDropsCheck(c.buildDropStatsProvider()),
+		checks.NewAudioLevelCheck(c.buildAudioLevelProvider()),
+		checks.NewBufferOverrunCheck(c.buildOverrunStatsProvider()),
+		checks.NewCaptureBufferCheck(c.buildCaptureBufferHealthProvider()),
 
 		// Analysis checks
 		checks.NewModelLoadedCheck(
@@ -248,6 +248,112 @@ func (c *Controller) buildStreamHealthProvider() func() []checks.StreamHealthInf
 				ProcessState: sh.ProcessState.String(),
 				RestartCount: sh.RestartCount,
 				Error:        errMsg,
+			})
+		}
+		return infos
+	}
+}
+
+// buildDropStatsProvider returns a closure that aggregates per-source frame
+// drop counts from the audio router. Returns nil before the engine starts.
+func (c *Controller) buildDropStatsProvider() func() checks.DropStats {
+	return func() checks.DropStats {
+		eng := c.engine.Load()
+		if eng == nil {
+			return nil
+		}
+		router := eng.Router()
+		if router == nil {
+			return nil
+		}
+		sourceIDs := router.ActiveSourceIDs()
+		if len(sourceIDs) == 0 {
+			return nil
+		}
+		stats := make(checks.DropStats, len(sourceIDs))
+		for _, sid := range sourceIDs {
+			var totalDrops int64
+			for _, ri := range router.Routes(sid) {
+				totalDrops += ri.Drops
+			}
+			stats[sid] = totalDrops
+		}
+		return stats
+	}
+}
+
+// buildAudioLevelProvider returns a closure that reads the latest audio level
+// per source from the global audio level manager.
+func (c *Controller) buildAudioLevelProvider() func() []checks.AudioLevelInfo {
+	return func() []checks.AudioLevelInfo {
+		levels := LatestAudioLevels()
+		if len(levels) == 0 {
+			return nil
+		}
+		infos := make([]checks.AudioLevelInfo, 0, len(levels))
+		for _, l := range levels {
+			infos = append(infos, checks.AudioLevelInfo{
+				Source:   l.Source,
+				Level:    l.Level,
+				Clipping: l.Clipping,
+			})
+		}
+		return infos
+	}
+}
+
+// buildOverrunStatsProvider returns a closure that aggregates per-source write
+// error counts from the audio router. Write errors indicate downstream
+// processing could not keep up (overrun condition).
+func (c *Controller) buildOverrunStatsProvider() func() checks.OverrunStats {
+	return func() checks.OverrunStats {
+		eng := c.engine.Load()
+		if eng == nil {
+			return nil
+		}
+		router := eng.Router()
+		if router == nil {
+			return nil
+		}
+		sourceIDs := router.ActiveSourceIDs()
+		if len(sourceIDs) == 0 {
+			return nil
+		}
+		stats := make(checks.OverrunStats, len(sourceIDs))
+		for _, sid := range sourceIDs {
+			var totalErrors int64
+			for _, ri := range router.Routes(sid) {
+				totalErrors += ri.Errors
+			}
+			stats[sid] = totalErrors
+		}
+		return stats
+	}
+}
+
+// buildCaptureBufferHealthProvider returns a closure that reads capture buffer
+// utilization from the buffer manager.
+func (c *Controller) buildCaptureBufferHealthProvider() func() []checks.CaptureBufferInfo {
+	return func() []checks.CaptureBufferInfo {
+		eng := c.engine.Load()
+		if eng == nil {
+			return nil
+		}
+		mgr := eng.BufferManager()
+		if mgr == nil {
+			return nil
+		}
+		snapshots := mgr.CaptureBufferHealthAll()
+		if len(snapshots) == 0 {
+			return nil
+		}
+		infos := make([]checks.CaptureBufferInfo, 0, len(snapshots))
+		for _, s := range snapshots {
+			infos = append(infos, checks.CaptureBufferInfo{
+				SourceID:  s.SourceID,
+				Capacity:  s.Capacity,
+				Used:      s.Used,
+				FillRatio: s.FillRatio,
 			})
 		}
 		return infos

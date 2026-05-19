@@ -227,6 +227,38 @@ func (m *Manager) BytePoolFor(size int) *BytePool {
 	return pool
 }
 
+// CaptureBufferHealth holds a snapshot of a single capture buffer's utilization.
+type CaptureBufferHealth struct {
+	SourceID  string
+	Capacity  int
+	Used      int
+	FillRatio float64
+}
+
+// CaptureBufferHealthAll returns utilization snapshots for every allocated
+// capture buffer. The returned slice is safe to read without further locking.
+func (m *Manager) CaptureBufferHealthAll() []CaptureBufferHealth {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	infos := make([]CaptureBufferHealth, 0, len(m.captureBuffers))
+	for sourceID, cb := range m.captureBuffers {
+		capacity := cb.Capacity()
+		used := cb.UsedBytes()
+		var ratio float64
+		if capacity > 0 {
+			ratio = float64(used) / float64(capacity)
+		}
+		infos = append(infos, CaptureBufferHealth{
+			SourceID:  sourceID,
+			Capacity:  capacity,
+			Used:      used,
+			FillRatio: ratio,
+		})
+	}
+	return infos
+}
+
 // Float64PoolFor returns a Float64Pool for the given slice length, creating
 // one lazily if needed. Returns nil for non-positive sizes. Thread-safe via a
 // dedicated mutex.
