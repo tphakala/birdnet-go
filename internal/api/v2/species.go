@@ -275,7 +275,7 @@ func (c *Controller) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLa
 	found := false
 	targetSci := classifier.ExtractScientificName(speciesLabel)
 	for _, ss := range speciesScores {
-		if classifier.ExtractScientificName(ss.Label) == targetSci {
+		if strings.EqualFold(classifier.ExtractScientificName(ss.Label), targetSci) {
 			score = ss.Score
 			found = true
 			break

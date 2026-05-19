@@ -618,7 +618,7 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	}
 	scores := make(map[string]float64, len(speciesScores))
 	for _, s := range speciesScores {
-		scores[ExtractScientificName(s.Label)] = s.Score
+		scores[strings.ToLower(ExtractScientificName(s.Label))] = s.Score
 	}
 
 	// WRITE PATH: double-check, evict old entries, and publish new results
@@ -1148,7 +1148,7 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	// Try to get cached scores first
 	cachedScores, err := bn.getCachedSpeciesScores(detectionTime)
 	if err == nil && len(cachedScores) > 0 {
-		if occurrence, found := cachedScores[ExtractScientificName(species)]; found {
+		if occurrence, found := cachedScores[strings.ToLower(ExtractScientificName(species))]; found {
 			// Clamp the score to [0.0, 1.0] range
 			if occurrence < 0.0 {
 				return 0.0
@@ -1169,9 +1169,9 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	}
 
 	// Look for the species in the scores
-	targetSci := ExtractScientificName(species)
+	targetSci := strings.ToLower(ExtractScientificName(species))
 	for _, score := range speciesScores {
-		if ExtractScientificName(score.Label) == targetSci {
+		if strings.ToLower(ExtractScientificName(score.Label)) == targetSci {
 			// Clamp the score to [0.0, 1.0] range
 			if score.Score < 0.0 {
 				return 0.0
