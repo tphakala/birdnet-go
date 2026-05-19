@@ -1603,14 +1603,16 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 		// to avoid the fallback chain and potential infinite loop
 		img, err := cache.fetchAndStore(scientificName)
 		if err != nil {
-			if !errors.Is(err, ErrImageNotFound) {
-				// Transient/real error — do NOT mark species exhausted.
+			if errors.Is(err, ErrImageNotFound) {
+				log.Info("Fallback provider has no image",
+					logger.String("provider", name),
+					logger.String("species", scientificName))
+			} else {
 				allFallbacksNotFound = false
+				log.Warn("Fallback provider failed to get image",
+					logger.String("provider", name),
+					logger.Error(err))
 			}
-			// Log error but continue trying other fallbacks
-			log.Warn("Fallback provider failed to get image",
-				logger.String("provider", name),
-				logger.Error(err))
 			return true // Continue ranging
 		}
 
