@@ -1130,6 +1130,18 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					reconfiguredIDs = append(reconfiguredIDs, src.ID)
 				}
 
+			case loadedModels != nil && sourceModelsChanged(bufMgr, src.ID, scm.modelIDs, loadedModels, primaryModelID):
+				// Model assignment changed (e.g., Perch added/removed):
+				// rebuild the consumer/buffer/monitor layer, keep capture running.
+				// Also pick up any simultaneous gain change.
+				if src.Gain != scm.config.Gain {
+					registry.UpdateGain(src.ID, scm.config.Gain)
+				}
+				log.Info("model assignment changed for kept source, rebuilding consumers",
+					logger.String("source_id", src.ID),
+					logger.String("operation", "reconfigure_diff"))
+				modelChangedIDs = append(modelChangedIDs, src.ID)
+
 			case src.Gain != scm.config.Gain:
 				// Gain-only change: rebuild routes, keep capture running.
 				log.Info("gain changed for kept source, rebuilding routes",
@@ -1139,14 +1151,6 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					logger.String("operation", "reconfigure_diff"))
 				registry.UpdateGain(src.ID, scm.config.Gain)
 				gainChangedIDs = append(gainChangedIDs, src.ID)
-
-			case loadedModels != nil && sourceModelsChanged(bufMgr, src.ID, scm.modelIDs, loadedModels, primaryModelID):
-				// Model assignment changed (e.g., Perch added/removed):
-				// rebuild the consumer/buffer/monitor layer, keep capture running.
-				log.Info("model assignment changed for kept source, rebuilding consumers",
-					logger.String("source_id", src.ID),
-					logger.String("operation", "reconfigure_diff"))
-				modelChangedIDs = append(modelChangedIDs, src.ID)
 			}
 
 			// Sync display name if the config name changed (e.g., stream renamed in UI).
