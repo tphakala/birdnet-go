@@ -66,16 +66,18 @@
         {t('detections.selection.nSelected', { count: selectedCount })}
       {/if}
     </span>
-    <button
-      type="button"
-      class="inline-flex items-center justify-center w-6 h-6 rounded-full
-             text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)]
-             hover:bg-[var(--color-base-300)] transition-colors"
-      onclick={onClear}
-      aria-label={t('detections.selection.clear')}
-    >
-      <X class="size-3.5" />
-    </button>
+    {#if selectedCount > 0}
+      <button
+        type="button"
+        class="inline-flex items-center justify-center w-6 h-6 rounded-full
+               text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)]
+               hover:bg-[var(--color-base-300)] transition-colors"
+        onclick={onClear}
+        aria-label={t('detections.selection.clear')}
+      >
+        <X class="size-3.5" />
+      </button>
+    {/if}
   </div>
 
   {#if showSelectAllBanner}
@@ -92,7 +94,7 @@
   {/if}
 
   {#if actions}
-    <div class="ml-auto flex items-center gap-1">
+    <div class="ml-auto flex flex-wrap items-center justify-end gap-1">
       {@render actions()}
     </div>
   {/if}
