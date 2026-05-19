@@ -3,10 +3,58 @@ package checks
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/health"
 )
+
+// maxTopErrors is the maximum number of grouped error patterns returned in details.
+const maxTopErrors = 10
+
+// errorGroup represents a set of identical errors grouped by component and message.
+type errorGroup struct {
+	Component    string         `json:"component,omitempty"`
+	Message      string         `json:"message"`
+	Count        int            `json:"count"`
+	Level        string         `json:"level"`
+	SampleFields map[string]any `json:"sample_fields,omitempty"`
+}
+
+// groupErrors groups log entries by (Component, Message), sorted by count descending, capped at maxTopErrors.
+func groupErrors(entries []health.LogEntry) []errorGroup {
+	type key struct{ component, message string }
+	seen := make(map[key]*errorGroup)
+	var order []key
+
+	for i := range entries {
+		k := key{entries[i].Component, entries[i].Message}
+		if g, ok := seen[k]; ok {
+			g.Count++
+		} else {
+			seen[k] = &errorGroup{
+				Component:    entries[i].Component,
+				Message:      entries[i].Message,
+				Count:        1,
+				Level:        entries[i].Level,
+				SampleFields: entries[i].Fields,
+			}
+			order = append(order, k)
+		}
+	}
+
+	groups := make([]errorGroup, 0, len(order))
+	for _, k := range order {
+		groups = append(groups, *seen[k])
+	}
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].Count > groups[j].Count
+	})
+	if len(groups) > maxTopErrors {
+		groups = groups[:maxTopErrors]
+	}
+	return groups
+}
 
 // recentErrorWindow is the lookback period used by RecentErrorsCheck.
 const recentErrorWindow = time.Hour
@@ -56,14 +104,19 @@ func (c *RecentErrorsCheck) Run(_ context.Context) health.Result {
 		msg = fmt.Sprintf("Elevated error count (%d errors in last hour)", count)
 	}
 
+	details := map[string]any{
+		"count_last_hour": count,
+	}
+	if status != health.StatusHealthy {
+		entries := c.errorBuffer.EntriesSince(since)
+		details["top_errors"] = groupErrors(entries)
+	}
 	return health.Result{
-		Name:     c.Name(),
-		Category: c.Category(),
-		Status:   status,
-		Message:  msg,
-		Details: map[string]any{
-			"count_last_hour": count,
-		},
+		Name:       c.Name(),
+		Category:   c.Category(),
+		Status:     status,
+		Message:    msg,
+		Details:    details,
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
 	}
@@ -124,15 +177,20 @@ func (c *ErrorTrendCheck) Run(_ context.Context) health.Result {
 		msg = fmt.Sprintf("Error rate increasing (recent=%d, previous=0)", recent)
 	}
 
+	details := map[string]any{
+		"recent_30m":   recent,
+		"previous_30m": previous,
+	}
+	if status != health.StatusHealthy {
+		entries := c.errorBuffer.EntriesSince(midpoint)
+		details["top_errors"] = groupErrors(entries)
+	}
 	return health.Result{
-		Name:     c.Name(),
-		Category: c.Category(),
-		Status:   status,
-		Message:  msg,
-		Details: map[string]any{
-			"recent_30m":   recent,
-			"previous_30m": previous,
-		},
+		Name:       c.Name(),
+		Category:   c.Category(),
+		Status:     status,
+		Message:    msg,
+		Details:    details,
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
 	}
