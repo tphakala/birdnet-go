@@ -124,6 +124,11 @@ func runAudioLevelBroadcaster(ctx context.Context, sourceChan chan audiocore.Aud
 					delete(audioLevelMgr.subscribers, ch)
 				}
 				audioLevelMgr.subscribersMu.Unlock()
+
+				// Clear stale levels so health checks don't report dead sources
+				audioLevelMgr.latestLevelsMu.Lock()
+				clear(audioLevelMgr.latestLevels)
+				audioLevelMgr.latestLevelsMu.Unlock()
 				return
 			}
 

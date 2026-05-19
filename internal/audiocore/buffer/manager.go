@@ -244,7 +244,7 @@ func (m *Manager) CaptureBufferHealthAll() []CaptureBufferHealth {
 	infos := make([]CaptureBufferHealth, 0, len(m.captureBuffers))
 	for sourceID, cb := range m.captureBuffers {
 		capacity := cb.Capacity()
-		used := cb.UsedBytes()
+		used := cb.WrittenBytes()
 		var ratio float64
 		if capacity > 0 {
 			ratio = float64(used) / float64(capacity)
