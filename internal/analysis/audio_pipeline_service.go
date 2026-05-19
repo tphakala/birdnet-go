@@ -937,6 +937,18 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			}
 		}
 
+		// Log final model-to-source assignment for diagnostics.
+		modelIDs := make([]string, len(targets))
+		for i, t := range targets {
+			modelIDs[i] = t.ModelID
+		}
+		log.Info("registering models for audio source",
+			logger.String("source_id", sid),
+			logger.String("source_name", sourceName),
+			logger.String("models", strings.Join(modelIDs, ", ")),
+			logger.Int("model_count", len(targets)),
+			logger.String("operation", operation))
+
 		// Use per-source sample rate when available; fall back to global constant.
 		sourceSampleRate := conf.SampleRate
 		if src != nil && src.SampleRate > 0 {
@@ -1029,6 +1041,13 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			alreadyRunning[connStr] = src.ID
 			sourceModelMap[src.ID] = scm.modelIDs
 			keptCount++
+
+			log.Info("reconfigure: source model assignment",
+				logger.String("source_id", src.ID),
+				logger.String("source_name", src.DisplayName),
+				logger.String("models", strings.Join(scm.modelIDs, ", ")),
+				logger.Int("model_count", len(scm.modelIDs)),
+				logger.String("operation", "reconfigure_diff"))
 
 			// Detect audio parameter changes (sample rate, bit depth, channels)
 			// that require a full source reconfigure (stop + route removal +
