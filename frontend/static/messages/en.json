@@ -4818,6 +4818,13 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Top error patterns",
+      "errorCount": "Count",
+      "errorComponent": "Component",
+      "errorLevel": "Level",
+      "errorMessage": "Message"
     }
   }
 }

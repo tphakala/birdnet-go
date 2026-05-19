@@ -4818,6 +4818,13 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Leggyakoribb hibák",
+      "errorCount": "Darab",
+      "errorComponent": "Komponens",
+      "errorLevel": "Szint",
+      "errorMessage": "Üzenet"
     }
   }
 }

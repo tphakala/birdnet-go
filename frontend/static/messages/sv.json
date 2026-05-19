@@ -4818,6 +4818,13 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Vanligaste felen",
+      "errorCount": "Antal",
+      "errorComponent": "Komponent",
+      "errorLevel": "Nivå",
+      "errorMessage": "Meddelande"
     }
   }
 }
