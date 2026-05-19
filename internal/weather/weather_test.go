@@ -1415,7 +1415,7 @@ func TestGetStatus_NoService(t *testing.T) {
 	})
 
 	ok, msg := GetStatus()
-	assert.True(t, ok)
+	assert.False(t, ok)
 	assert.Contains(t, msg, "not started")
 }
 
@@ -1439,6 +1439,6 @@ func TestRegisterUnregisterService(t *testing.T) {
 	UnregisterService()
 
 	ok, msg = GetStatus()
-	assert.True(t, ok)
+	assert.False(t, ok)
 	assert.Contains(t, msg, "not started")
 }

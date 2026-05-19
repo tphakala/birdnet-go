@@ -42,7 +42,7 @@ func GetStatus() (ok bool, msg string) {
 	globalServiceMu.RUnlock()
 
 	if svc == nil {
-		return true, "Weather service not started"
+		return false, "Weather service not started"
 	}
 	return svc.Status()
 }

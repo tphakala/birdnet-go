@@ -226,7 +226,7 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewWeatherCheck(
 			func() bool {
 				p := c.currentSettings().Realtime.Weather.Provider
-				return p != "" && p != string(conf.WeatherNone)
+				return p != string(conf.WeatherNone)
 			},
 			weather.GetStatus,
 		),
