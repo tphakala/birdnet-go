@@ -60,12 +60,12 @@
   const getPillStyles = (variant: StatusVariant) => {
     const varName = safeGet(cssVarNames, variant, '--color-base-content');
     return variant === 'neutral'
-      ? `background-color: color-mix(in srgb, var(${varName}) 5%, transparent); ` +
-          `color: color-mix(in srgb, var(${varName}) 60%, transparent); ` +
-          `border-color: color-mix(in srgb, var(${varName}) 10%, transparent);`
-      : `background-color: color-mix(in srgb, var(${varName}) 10%, transparent); ` +
+      ? `background-color: color-mix(in srgb, var(${varName}) 8%, transparent); ` +
+          `color: color-mix(in srgb, var(${varName}) 70%, transparent); ` +
+          `border-color: color-mix(in srgb, var(${varName}) 15%, transparent);`
+      : `background-color: color-mix(in srgb, var(${varName}) 15%, transparent); ` +
           `color: var(${varName}); ` +
-          `border-color: color-mix(in srgb, var(${varName}) 20%, transparent);`;
+          `border-color: color-mix(in srgb, var(${varName}) 30%, transparent);`;
   };
 
   // Dot color styles using CSS variables
@@ -78,9 +78,9 @@
 
   // Size styles for the pill
   const sizeStyles: Record<StatusSize, string> = {
-    xs: 'text-[10px] px-1.5 py-0.5 gap-1',
-    sm: 'text-xs px-2 py-1 gap-1.5',
-    md: 'text-sm px-2.5 py-1.5 gap-2',
+    xs: 'text-[11px] px-2 py-0.5 gap-1',
+    sm: 'text-xs px-2.5 py-1 gap-1.5',
+    md: 'text-sm px-3 py-1.5 gap-2',
   };
 
   // Dot sizes

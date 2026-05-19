@@ -93,7 +93,6 @@
         const existing = groups.get(r.category) ?? [];
         existing.push(r);
         groups.set(r.category, existing);
-        seen.add(r.category);
       }
     }
     return groups;
@@ -113,6 +112,7 @@
   }
 
   async function runDiagnostics() {
+    if (running) return;
     running = true;
     error = null;
     try {
@@ -323,7 +323,7 @@
               <StatusPill
                 variant={statusToVariant(result.status)}
                 label={t(`health.status.${result.status}`)}
-                size="xs"
+                size="sm"
               />
               <div class="flex-1 min-w-0">
                 <span class="text-sm font-medium">{formatCheckName(result.name)}</span>
