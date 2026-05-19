@@ -895,25 +895,20 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			modelInfos = primaryTargets
 		}
 
-		// Allocate analysis buffers for secondary models. The engine
-		// already allocates a buffer for the primary model in AddSource(),
-		// so only non-primary models need allocation here. Track which
-		// models have usable buffers so we only create targets for them.
+		// Ensure analysis buffers exist for all target models. The engine
+		// pre-allocates the primary model's buffer in AddSource(), so it
+		// usually exists already. Use HasAnalysis for all models uniformly
+		// to handle the case where a prior model-change reconfigure
+		// deallocated a buffer that is now needed again.
 		allocatedModels := make(map[string]bool, len(modelInfos))
-		allocatedModels[primaryInfo.ID] = true // pre-allocated by engine
 		for i := range modelInfos {
-			if modelInfos[i].ID == primaryInfo.ID {
-				continue
-			}
-			// If the analysis buffer already exists (e.g., gain-only reconfigure),
-			// skip allocation and mark the model as usable.
 			if bufMgr.HasAnalysis(sid, modelInfos[i].ID) {
 				allocatedModels[modelInfos[i].ID] = true
 				continue
 			}
 			clipBytes, overlapBytes, readSize := modelInfos[i].Spec.BufferDimensions()
 			if allocErr := bufMgr.AllocateAnalysis(sid, modelInfos[i].ID, clipBytes, overlapBytes, readSize); allocErr != nil {
-				log.Warn("failed to allocate analysis buffer for secondary model",
+				log.Warn("failed to allocate analysis buffer",
 					logger.String("source_id", sid),
 					logger.String("model_id", modelInfos[i].ID),
 					logger.Error(allocErr),
@@ -921,7 +916,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				continue
 			}
 			allocatedModels[modelInfos[i].ID] = true
-			log.Info("allocated analysis buffer for secondary model",
+			log.Info("allocated analysis buffer",
 				logger.String("source_id", sid),
 				logger.String("model_id", modelInfos[i].ID),
 				logger.Int("clip_bytes", clipBytes),
