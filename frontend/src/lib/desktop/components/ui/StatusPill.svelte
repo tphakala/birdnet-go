@@ -20,6 +20,7 @@
 </script>
 
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import { safeGet } from '$lib/utils/security';
 
@@ -34,6 +35,8 @@
     showDot?: boolean;
     /** Pulse animation for the dot (useful for connecting/loading states) */
     pulse?: boolean;
+    /** Optional leading icon snippet, rendered in place of the dot */
+    leadingIcon?: Snippet;
     /** Additional CSS classes */
     className?: string;
   }
@@ -44,6 +47,7 @@
     size = 'sm',
     showDot = true,
     pulse = false,
+    leadingIcon,
     className = '',
   }: Props = $props();
 
@@ -99,7 +103,11 @@
   )}
   style={getPillStyles(variant)}
 >
-  {#if showDot}
+  {#if leadingIcon}
+    <span class="flex-shrink-0 flex items-center" aria-hidden="true">
+      {@render leadingIcon()}
+    </span>
+  {:else if showDot}
     <span
       class={cn(
         'rounded-full flex-shrink-0',
