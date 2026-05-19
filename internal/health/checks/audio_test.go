@@ -119,6 +119,13 @@ func TestAudioLevelCheck_PartialSilence(t *testing.T) {
 	assert.Contains(t, result.Message, "Silence detected on 1")
 }
 
+func TestBufferOverrunCheck_NilStats(t *testing.T) {
+	t.Parallel()
+	check := NewBufferOverrunCheck(func() OverrunStats { return nil })
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
+}
+
 func TestBufferOverrunCheck_NilProvider(t *testing.T) {
 	t.Parallel()
 	check := NewBufferOverrunCheck(nil)

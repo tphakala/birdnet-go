@@ -291,24 +291,28 @@ func (c *Controller) buildAudioLevelProvider() func() []checks.AudioLevelInfo {
 			return nil
 		}
 
-		// Filter to active sources so removed sources don't produce stale data
-		var activeSources map[string]struct{}
-		if eng := c.engine.Load(); eng != nil {
-			if router := eng.Router(); router != nil {
-				ids := router.ActiveSourceIDs()
-				activeSources = make(map[string]struct{}, len(ids))
-				for _, id := range ids {
-					activeSources[id] = struct{}{}
-				}
-			}
+		// Require engine/router so checks skip cleanly before startup and after teardown.
+		eng := c.engine.Load()
+		if eng == nil {
+			return nil
+		}
+		router := eng.Router()
+		if router == nil {
+			return nil
+		}
+		ids := router.ActiveSourceIDs()
+		if len(ids) == 0 {
+			return nil
+		}
+		activeSources := make(map[string]struct{}, len(ids))
+		for _, id := range ids {
+			activeSources[id] = struct{}{}
 		}
 
 		infos := make([]checks.AudioLevelInfo, 0, len(levels))
 		for _, l := range levels {
-			if activeSources != nil {
-				if _, ok := activeSources[l.Source]; !ok {
-					continue
-				}
+			if _, ok := activeSources[l.Source]; !ok {
+				continue
 			}
 			infos = append(infos, checks.AudioLevelInfo{
 				Source:   l.Source,
