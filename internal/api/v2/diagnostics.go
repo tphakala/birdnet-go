@@ -371,10 +371,9 @@ func (c *Controller) buildCaptureBufferHealthProvider() func() []checks.CaptureB
 		infos := make([]checks.CaptureBufferInfo, 0, len(snapshots))
 		for _, s := range snapshots {
 			infos = append(infos, checks.CaptureBufferInfo{
-				SourceID:  s.SourceID,
-				Capacity:  s.Capacity,
-				Used:      s.Used,
-				FillRatio: s.FillRatio,
+				SourceID:    s.SourceID,
+				Capacity:    s.Capacity,
+				Initialized: s.Initialized,
 			})
 		}
 		return infos

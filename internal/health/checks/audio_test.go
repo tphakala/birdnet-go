@@ -173,48 +173,37 @@ func TestCaptureBufferCheck_Healthy(t *testing.T) {
 	t.Parallel()
 	check := NewCaptureBufferCheck(func() []CaptureBufferInfo {
 		return []CaptureBufferInfo{
-			{SourceID: "src1", Capacity: 1000, Used: 500, FillRatio: 0.50},
+			{SourceID: "src1", Capacity: 96000, Initialized: true},
 		}
 	})
 	result := check.Run(t.Context())
 	assert.Equal(t, health.StatusHealthy, result.Status)
-	assert.Contains(t, result.Message, "healthy")
+	assert.Contains(t, result.Message, "allocated")
 }
 
-func TestCaptureBufferCheck_Warning(t *testing.T) {
+func TestCaptureBufferCheck_Uninitialized(t *testing.T) {
 	t.Parallel()
 	check := NewCaptureBufferCheck(func() []CaptureBufferInfo {
 		return []CaptureBufferInfo{
-			{SourceID: "src1", Capacity: 1000, Used: 850, FillRatio: 0.85},
+			{SourceID: "src1", Capacity: 96000, Initialized: false},
 		}
 	})
 	result := check.Run(t.Context())
 	assert.Equal(t, health.StatusWarning, result.Status)
-	assert.Contains(t, result.Message, "80%")
-}
-
-func TestCaptureBufferCheck_Critical(t *testing.T) {
-	t.Parallel()
-	check := NewCaptureBufferCheck(func() []CaptureBufferInfo {
-		return []CaptureBufferInfo{
-			{SourceID: "src1", Capacity: 1000, Used: 960, FillRatio: 0.96},
-		}
-	})
-	result := check.Run(t.Context())
-	assert.Equal(t, health.StatusCritical, result.Status)
+	assert.Contains(t, result.Message, "not yet initialized")
 }
 
 func TestCaptureBufferCheck_Details(t *testing.T) {
 	t.Parallel()
 	check := NewCaptureBufferCheck(func() []CaptureBufferInfo {
 		return []CaptureBufferInfo{
-			{SourceID: "src1", Capacity: 1000, Used: 300, FillRatio: 0.30},
-			{SourceID: "src2", Capacity: 2000, Used: 1800, FillRatio: 0.90},
+			{SourceID: "src1", Capacity: 96000, Initialized: true},
+			{SourceID: "src2", Capacity: 48000, Initialized: true},
 		}
 	})
 	result := check.Run(t.Context())
 	require.NotNil(t, result.Details)
 	assert.Equal(t, 2, result.Details["buffers"])
-	assert.Equal(t, 1, result.Details["warn_count"])
-	assert.Equal(t, 0, result.Details["crit_count"])
+	assert.Equal(t, 144000, result.Details["total_capacity"])
+	assert.Equal(t, 0, result.Details["uninitialized"])
 }

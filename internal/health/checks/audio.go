@@ -323,15 +323,17 @@ func (c *BufferOverrunCheck) Run(_ context.Context) health.Result {
 	}, start)
 }
 
-// CaptureBufferInfo holds utilization data for a single capture buffer.
+// CaptureBufferInfo holds status data for a single capture buffer.
 type CaptureBufferInfo struct {
-	SourceID  string  `json:"source_id"`
-	Capacity  int     `json:"capacity"`
-	Used      int     `json:"used"`
-	FillRatio float64 `json:"fill_ratio"`
+	SourceID    string `json:"source_id"`
+	Capacity    int    `json:"capacity"`
+	Initialized bool   `json:"initialized"`
 }
 
 // CaptureBufferCheck monitors the health of the audio capture buffers.
+// Capture buffers are circular (ring) buffers that are always "full" after
+// warmup, so fill ratio is not a meaningful health metric. Instead, this
+// check verifies that buffers exist and are allocated for all active sources.
 type CaptureBufferCheck struct {
 	getBufferHealth func() []CaptureBufferInfo
 }
@@ -347,7 +349,7 @@ func (c *CaptureBufferCheck) Name() string { return "capture_buffer" }
 // Category returns the audio category.
 func (c *CaptureBufferCheck) Category() health.Category { return health.CategoryAudio }
 
-// Run evaluates capture buffer utilization across all sources.
+// Run verifies that capture buffers are allocated for all active sources.
 func (c *CaptureBufferCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
@@ -360,35 +362,21 @@ func (c *CaptureBufferCheck) Run(_ context.Context) health.Result {
 		return skippedResult(c.Name(), c.Category(), start)
 	}
 
-	const warnRatio = 0.80
-	const critRatio = 0.95
-
-	warnCount := 0
-	critCount := 0
-	var maxRatio float64
-
+	uninitCount := 0
+	var totalCapacity int
 	for _, b := range buffers {
-		if b.FillRatio > maxRatio {
-			maxRatio = b.FillRatio
-		}
-		switch {
-		case b.FillRatio >= critRatio:
-			critCount++
-		case b.FillRatio >= warnRatio:
-			warnCount++
+		totalCapacity += b.Capacity
+		if !b.Initialized {
+			uninitCount++
 		}
 	}
 
 	status := health.StatusHealthy
-	msg := fmt.Sprintf("Capture buffers healthy across %d source(s) (max fill %.0f%%)", len(buffers), maxRatio*100)
+	msg := fmt.Sprintf("%d capture buffer(s) allocated (%d KB total)", len(buffers), totalCapacity/1024)
 
-	switch {
-	case critCount > 0:
-		status = health.StatusCritical
-		msg = fmt.Sprintf("%d capture buffer(s) near capacity (>%.0f%% full)", critCount, critRatio*100)
-	case warnCount > 0:
+	if uninitCount > 0 {
 		status = health.StatusWarning
-		msg = fmt.Sprintf("%d capture buffer(s) above %.0f%% utilization", warnCount, warnRatio*100)
+		msg = fmt.Sprintf("%d of %d capture buffer(s) not yet initialized", uninitCount, len(buffers))
 	}
 
 	return health.Result{
@@ -397,10 +385,9 @@ func (c *CaptureBufferCheck) Run(_ context.Context) health.Result {
 		Status:   status,
 		Message:  msg,
 		Details: map[string]any{
-			"buffers":    len(buffers),
-			"max_fill":   maxRatio,
-			"warn_count": warnCount,
-			"crit_count": critCount,
+			"buffers":        len(buffers),
+			"total_capacity": totalCapacity,
+			"uninitialized":  uninitCount,
 		},
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
