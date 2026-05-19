@@ -37,7 +37,7 @@ const defaultModelVersionString = ModelNameBirdNETv24 + " FP32"
 // Scores are immutable once stored - callers must not mutate the returned map.
 type speciesCacheEntry struct {
 	key    string             // Composite cache key: date + rounded lat/lon + model id
-	scores map[string]float64 // Species occurrence scores keyed by label
+	scores map[string]float64 // Species occurrence scores keyed by scientific name
 }
 
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
@@ -1169,8 +1169,9 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	}
 
 	// Look for the species in the scores
+	targetSci := ExtractScientificName(species)
 	for _, score := range speciesScores {
-		if ExtractScientificName(score.Label) == ExtractScientificName(species) {
+		if ExtractScientificName(score.Label) == targetSci {
 			// Clamp the score to [0.0, 1.0] range
 			if score.Score < 0.0 {
 				return 0.0

@@ -60,8 +60,8 @@ func ComputeGeomodelCoverage(classifierLabels, geomodelLabels []string) (withRan
 // ExtractScientificName returns the scientific name portion from a
 // "ScientificName_CommonName" label string.
 func ExtractScientificName(label string) string {
-	if idx := strings.IndexByte(label, '_'); idx >= 0 {
-		return label[:idx]
+	if sci, _, ok := strings.Cut(label, "_"); ok {
+		return sci
 	}
 	return label
 }
