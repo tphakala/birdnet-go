@@ -206,3 +206,55 @@ func TestErrorRingBuffer_ConcurrentAdd(t *testing.T) {
 	assert.LessOrEqual(t, count, maxSize)
 	assert.Positive(t, count)
 }
+
+func TestErrorRingBuffer_EntriesSince(t *testing.T) {
+	t.Parallel()
+	buf := NewErrorRingBuffer(10)
+	base := time.Now()
+
+	for i := range 5 {
+		buf.Add(&LogEntry{
+			Level:     "error",
+			Message:   fmt.Sprintf("msg-%d", i),
+			Component: "test",
+			Timestamp: base.Add(time.Duration(i) * time.Second),
+		})
+	}
+
+	// Entries at or after base+2s: messages 2, 3, 4
+	entries := buf.EntriesSince(base.Add(2 * time.Second))
+	assert.Len(t, entries, 3)
+	for _, e := range entries {
+		assert.False(t, e.Timestamp.Before(base.Add(2*time.Second)))
+	}
+
+	// Future cutoff: none
+	assert.Empty(t, buf.EntriesSince(base.Add(10*time.Second)))
+
+	// Past cutoff: all entries
+	assert.Len(t, buf.EntriesSince(base.Add(-time.Second)), 5)
+}
+
+func TestErrorRingBuffer_EntriesSince_Empty(t *testing.T) {
+	t.Parallel()
+	buf := NewErrorRingBuffer(10)
+	assert.Empty(t, buf.EntriesSince(time.Now()))
+}
+
+func TestErrorRingBuffer_EntriesSince_ClonesEntries(t *testing.T) {
+	t.Parallel()
+	buf := NewErrorRingBuffer(10)
+	buf.Add(&LogEntry{
+		Level:   "error",
+		Message: "original",
+		Fields:  map[string]any{"key": "value"},
+	})
+
+	entries := buf.EntriesSince(time.Time{})
+	require.Len(t, entries, 1)
+
+	// Mutating returned entry should not affect buffer
+	entries[0].Fields["key"] = "mutated"
+	original := buf.Entries()
+	assert.Equal(t, "value", original[0].Fields["key"])
+}
