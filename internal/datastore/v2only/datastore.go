@@ -549,11 +549,11 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 
 		// Build predLabels slice from map, preserving order
 		predLabels = make([]*entities.Label, len(results))
-		for i, r := range results {
-			sciName := detection.ExtractScientificName(r.Species)
+		for i := range results {
+			sciName := speciesNames[i]
 			lbl, ok := labelMap[sciName]
 			if !ok {
-				return fmt.Errorf("label not found for species %s after batch creation", r.Species)
+				return fmt.Errorf("label not found for species %s after batch creation", results[i].Species)
 			}
 			predLabels[i] = lbl
 		}

@@ -1170,9 +1170,9 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	}
 
 	// Look for the species in the scores
-	targetSci := strings.ToLower(detection.ExtractScientificName(species))
+	targetSci := detection.ExtractScientificName(species)
 	for _, score := range speciesScores {
-		if strings.ToLower(detection.ExtractScientificName(score.Label)) == targetSci {
+		if strings.EqualFold(detection.ExtractScientificName(score.Label), targetSci) {
 			// Clamp the score to [0.0, 1.0] range
 			if score.Score < 0.0 {
 				return 0.0
