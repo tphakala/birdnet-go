@@ -225,7 +225,7 @@ jobs:
     with:
       tag-strategy: "nightly"
       version: ${{ needs.get-version.outputs.version }}
-      create-latest-tag: false
+      create-latest-tag: true
       platforms: '["linux/amd64", "linux/arm64"]'
       push-to-ghcr: true
       push-to-dockerhub: true
