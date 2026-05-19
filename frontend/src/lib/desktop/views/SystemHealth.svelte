@@ -13,6 +13,7 @@
     SkipForward,
     Clock,
     Loader2,
+    Info,
   } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
@@ -173,6 +174,20 @@
   }
 </script>
 
+{#snippet statusIcon(status: HealthStatus, sizeClass: string)}
+  {#if status === 'healthy'}
+    <CheckCircle class={sizeClass} />
+  {:else if status === 'warning'}
+    <AlertTriangle class={sizeClass} />
+  {:else if status === 'critical'}
+    <XCircle class={sizeClass} />
+  {:else if status === 'skipped'}
+    <SkipForward class={sizeClass} />
+  {:else}
+    <Info class={sizeClass} />
+  {/if}
+{/snippet}
+
 <div class="col-span-12 space-y-4">
   <!-- Page Header -->
   <Card className="bg-[var(--color-base-100)] shadow-sm">
@@ -243,7 +258,13 @@
             variant={statusToVariant(report.status)}
             label={t(`health.status.${report.status}`)}
             size="md"
-          />
+          >
+            {#snippet leadingIcon()}
+              {#if report}
+                {@render statusIcon(report.status, 'size-4')}
+              {/if}
+            {/snippet}
+          </StatusPill>
         </div>
 
         <div class="flex items-center gap-3 text-sm text-[var(--color-base-content)] opacity-70">
@@ -324,7 +345,11 @@
                 variant={statusToVariant(result.status)}
                 label={t(`health.status.${result.status}`)}
                 size="sm"
-              />
+              >
+                {#snippet leadingIcon()}
+                  {@render statusIcon(result.status, 'size-3.5')}
+                {/snippet}
+              </StatusPill>
               <div class="flex-1 min-w-0">
                 <span class="text-sm font-medium">{formatCheckName(result.name)}</span>
                 <p class="text-xs text-[var(--color-base-content)] opacity-60 truncate">

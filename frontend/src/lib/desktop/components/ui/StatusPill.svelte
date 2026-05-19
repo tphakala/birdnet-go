@@ -68,7 +68,7 @@
           `color: color-mix(in srgb, var(${varName}) 70%, transparent); ` +
           `border-color: color-mix(in srgb, var(${varName}) 15%, transparent);`
       : `background-color: color-mix(in srgb, var(${varName}) 15%, transparent); ` +
-          `color: var(${varName}); ` +
+          `color: color-mix(in srgb, var(${varName}) 70%, black); ` +
           `border-color: color-mix(in srgb, var(${varName}) 30%, transparent);`;
   };
 
