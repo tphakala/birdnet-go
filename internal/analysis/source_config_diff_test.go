@@ -182,6 +182,47 @@ func TestSourceModelsChanged(t *testing.T) {
 	}
 }
 
+func TestResolveDesiredModelSet(t *testing.T) {
+	t.Parallel()
+
+	loaded := map[string]classifier.ModelInfo{
+		"BirdNET_V2.4": {ID: "BirdNET_V2.4"},
+		"Perch_V2":     {ID: "Perch_V2"},
+	}
+
+	t.Run("resolves known loaded models", func(t *testing.T) {
+		t.Parallel()
+		set := resolveDesiredModelSet([]string{"birdnet", "perch_v2"}, loaded, "BirdNET_V2.4")
+		assert.True(t, set["BirdNET_V2.4"])
+		assert.True(t, set["Perch_V2"])
+		assert.Len(t, set, 2)
+	})
+
+	t.Run("skips unknown config IDs", func(t *testing.T) {
+		t.Parallel()
+		set := resolveDesiredModelSet([]string{"birdnet", "unknown"}, loaded, "BirdNET_V2.4")
+		assert.True(t, set["BirdNET_V2.4"])
+		assert.Len(t, set, 1)
+	})
+
+	t.Run("skips unloaded models", func(t *testing.T) {
+		t.Parallel()
+		onlyBirdnet := map[string]classifier.ModelInfo{
+			"BirdNET_V2.4": {ID: "BirdNET_V2.4"},
+		}
+		set := resolveDesiredModelSet([]string{"birdnet", "perch_v2"}, onlyBirdnet, "BirdNET_V2.4")
+		assert.True(t, set["BirdNET_V2.4"])
+		assert.Len(t, set, 1)
+	})
+
+	t.Run("empty config falls back to primary", func(t *testing.T) {
+		t.Parallel()
+		set := resolveDesiredModelSet(nil, loaded, "BirdNET_V2.4")
+		assert.True(t, set["BirdNET_V2.4"])
+		assert.Len(t, set, 1)
+	})
+}
+
 func TestSourceModelsChanged_UnloadedModelIgnored(t *testing.T) {
 	t.Parallel()
 

@@ -1007,6 +1007,27 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 		running.Channels != desired.Channels
 }
 
+// resolveDesiredModelSet resolves config-level model IDs to registry IDs,
+// filtering out models that are unknown or not loaded. When the resolved set
+// is empty the primary model is used as a fallback, matching the behavior of
+// registerConsumersForSources.
+func resolveDesiredModelSet(desiredConfigIDs []string, loadedModels map[string]classifier.ModelInfo, primaryModelID string) map[string]bool {
+	set := make(map[string]bool, len(desiredConfigIDs))
+	for _, configID := range desiredConfigIDs {
+		registryID, known := classifier.ResolveConfigModelID(configID)
+		if !known {
+			continue
+		}
+		if _, loaded := loadedModels[registryID]; loaded {
+			set[registryID] = true
+		}
+	}
+	if len(set) == 0 {
+		set[primaryModelID] = true
+	}
+	return set
+}
+
 // sourceModelsChanged reports whether the set of models currently active for a
 // source (as reflected by allocated analysis buffers) differs from the desired
 // config model set. Only models that are both resolvable and loaded are
@@ -1015,21 +1036,7 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 // rebuild on every hot-reload cycle.
 func sourceModelsChanged(bufMgr *buffer.Manager, sourceID string, desiredConfigIDs []string, loadedModels map[string]classifier.ModelInfo, primaryModelID string) bool {
 	currentBuffers := bufMgr.AnalysisBuffers(sourceID)
-
-	desiredSet := make(map[string]bool, len(desiredConfigIDs))
-	for _, configID := range desiredConfigIDs {
-		registryID, known := classifier.ResolveConfigModelID(configID)
-		if !known {
-			continue
-		}
-		if _, loaded := loadedModels[registryID]; loaded {
-			desiredSet[registryID] = true
-		}
-	}
-	// Empty desired list means the source falls back to the primary model.
-	if len(desiredSet) == 0 {
-		desiredSet[primaryModelID] = true
-	}
+	desiredSet := resolveDesiredModelSet(desiredConfigIDs, loadedModels, primaryModelID)
 
 	if len(currentBuffers) != len(desiredSet) {
 		return true
@@ -1238,7 +1245,8 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		for _, sid := range modelChangedIDs {
 			p.engine.Router().RemoveAllRoutes(sid)
 			p.untrackSoundLevelConsumer(sid)
-			deallocateStaleAnalysisBuffers(bufMgr, sid, sourceModelMap[sid], primaryModelID)
+			desiredSet := resolveDesiredModelSet(sourceModelMap[sid], loadedModels, primaryModelID)
+			deallocateStaleAnalysisBuffers(bufMgr, sid, desiredSet)
 		}
 		p.registerConsumersForSources(modelChangedIDs, sourceModelMap, audioLevelChan, "model_change")
 		p.registerSoundLevelConsumers(modelChangedIDs, "model_change")
@@ -1363,18 +1371,10 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 }
 
 // deallocateStaleAnalysisBuffers removes analysis buffers for models that are
-// no longer assigned to a source. This prevents memory leaks when models are
-// removed from a source's config via hot-reload.
-func deallocateStaleAnalysisBuffers(bufMgr *buffer.Manager, sourceID string, desiredConfigIDs []string, primaryModelID string) {
-	desiredSet := make(map[string]bool, len(desiredConfigIDs))
-	for _, configID := range desiredConfigIDs {
-		if regID, known := classifier.ResolveConfigModelID(configID); known {
-			desiredSet[regID] = true
-		}
-	}
-	if len(desiredSet) == 0 {
-		desiredSet[primaryModelID] = true
-	}
+// no longer in the desired set. The desiredSet should be pre-built via
+// resolveDesiredModelSet to ensure consistent filtering with the change
+// detection in sourceModelsChanged.
+func deallocateStaleAnalysisBuffers(bufMgr *buffer.Manager, sourceID string, desiredSet map[string]bool) {
 	for modelID := range bufMgr.AnalysisBuffers(sourceID) {
 		if !desiredSet[modelID] {
 			bufMgr.DeallocateAnalysis(sourceID, modelID)
