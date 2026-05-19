@@ -94,38 +94,9 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewBufferOverrunCheck(c.buildOverrunStatsProvider()),
 		checks.NewCaptureBufferCheck(c.buildCaptureBufferHealthProvider()),
 
-		// Analysis checks
-		checks.NewModelLoadedCheck(
-			func() bool { return true },
-			func() string { return c.currentSettings().BirdNET.ModelPath },
-		),
-		checks.NewInferenceLatencyCheck(func() (avgMS, p99MS, windowMS float64) {
-			counters := classifier.GetInferenceCounters()
-			snapshots := counters.PeekAll()
-			if len(snapshots) == 0 {
-				return 0, 0, 0
-			}
-			var totalUs, maxUs, count int64
-			for _, s := range snapshots {
-				totalUs += s.InvokeTotalUs
-				count += s.InvokeCount
-				if s.InvokeMaxUs > maxUs {
-					maxUs = s.InvokeMaxUs
-				}
-			}
-			if count == 0 {
-				return 0, 0, 0
-			}
-			avgMS = float64(totalUs) / float64(count) / 1000.0
-			// max used as p99 approximation; true p99 requires histogram data
-			p99MS = float64(maxUs) / 1000.0
-			stride := 3.0 - c.currentSettings().BirdNET.Overlap
-			if stride <= 0 {
-				stride = 3.0
-			}
-			windowMS = stride * 1000.0
-			return avgMS, p99MS, windowMS
-		}),
+		// Analysis checks (multi-model aware)
+		checks.NewModelsLoadedCheck(c.buildModelLoadInfoProvider()),
+		checks.NewPerModelInferenceLatencyCheck(c.buildPerModelInferenceProvider()),
 		checks.NewDetectionRateCheck(func(ctx context.Context, hours int) (int, error) {
 			ds := c.DS
 			if ds == nil {
@@ -246,6 +217,84 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewErrorTrendCheck(c.healthErrors),
 		checks.NewCriticalEventsCheck(c.healthErrors),
 	)
+}
+
+// buildModelLoadInfoProvider returns a closure that queries the orchestrator for
+// all loaded models and converts them to the health check's ModelLoadInfo format.
+func (c *Controller) buildModelLoadInfoProvider() func() []checks.ModelLoadInfo {
+	return func() []checks.ModelLoadInfo {
+		p := c.Processor
+		if p == nil {
+			return nil
+		}
+		bn := p.GetBirdNET()
+		if bn == nil {
+			return nil
+		}
+		infos := bn.ModelInfos()
+		result := make([]checks.ModelLoadInfo, 0, len(infos))
+		for i := range infos {
+			m := &infos[i]
+			result = append(result, checks.ModelLoadInfo{
+				ID:      m.ID,
+				Name:    m.DisplayName(),
+				Loaded:  true,
+				Backend: m.Backend,
+				SpecInfo: fmt.Sprintf("%dkHz, %ss clips",
+					m.Spec.SampleRate/1000,
+					strconv.FormatFloat(m.Spec.ClipLength.Seconds(), 'f', -1, 64)),
+			})
+		}
+		return result
+	}
+}
+
+// buildPerModelInferenceProvider returns a closure that queries per-model
+// inference counters and model specs to produce per-model latency stats.
+// Each model's analysis window is derived from its own BufferInterval
+// (ClipLength / 2), not from a global setting.
+func (c *Controller) buildPerModelInferenceProvider() func() []checks.ModelInferenceInfo {
+	return func() []checks.ModelInferenceInfo {
+		p := c.Processor
+		if p == nil {
+			return nil
+		}
+		bn := p.GetBirdNET()
+		if bn == nil {
+			return nil
+		}
+		counters := classifier.GetInferenceCounters()
+		snapshots := counters.PeekAll()
+		if len(snapshots) == 0 {
+			return nil
+		}
+		infos := bn.ModelInfos()
+		infoMap := make(map[string]*classifier.ModelInfo, len(infos))
+		for i := range infos {
+			infoMap[infos[i].ID] = &infos[i]
+		}
+		result := make([]checks.ModelInferenceInfo, 0, len(snapshots))
+		for modelID, s := range snapshots {
+			mi, ok := infoMap[modelID]
+			if !ok {
+				continue
+			}
+			var avgMS, p99MS float64
+			if s.InvokeCount > 0 {
+				avgMS = float64(s.InvokeTotalUs) / float64(s.InvokeCount) / 1000.0
+			}
+			p99MS = float64(s.InvokeMaxUs) / 1000.0
+			windowMS := float64(mi.Spec.BufferInterval().Milliseconds())
+			result = append(result, checks.ModelInferenceInfo{
+				ModelID:   modelID,
+				ModelName: mi.DisplayName(),
+				AvgMS:     avgMS,
+				P99MS:     p99MS,
+				WindowMS:  windowMS,
+			})
+		}
+		return result
+	}
 }
 
 // errNoTempSensors is returned when no temperature sensors are found on the system.

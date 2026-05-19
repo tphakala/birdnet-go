@@ -57,18 +57,28 @@ type Check interface {
 	Run(ctx context.Context) Result
 }
 
+// MultiResultCheck is implemented by checks that produce multiple results
+// at run time, such as per-model health checks. The registry detects this
+// interface and calls RunMulti instead of Run when present.
+type MultiResultCheck interface {
+	Check
+	RunMulti(ctx context.Context) []Result
+}
+
 // WorstStatus returns the most severe status from a slice of results.
 func WorstStatus(results []Result) Status {
 	worst := StatusHealthy
 	for _, r := range results {
-		if severity(r.Status) > severity(worst) {
+		if Severity(r.Status) > Severity(worst) {
 			worst = r.Status
 		}
 	}
 	return worst
 }
 
-func severity(s Status) int {
+// Severity returns the numeric severity of a status for comparison.
+// Higher values indicate more severe conditions.
+func Severity(s Status) int {
 	switch s {
 	case StatusHealthy:
 		return 0

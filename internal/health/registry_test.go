@@ -190,3 +190,64 @@ func TestRegistry_Categories_Empty(t *testing.T) {
 	r := NewRegistry()
 	assert.Empty(t, r.Categories())
 }
+
+// mockMultiCheck implements both Check and MultiResultCheck.
+type mockMultiCheck struct {
+	name     string
+	category Category
+	results  []Result
+}
+
+func (m *mockMultiCheck) Name() string       { return m.name }
+func (m *mockMultiCheck) Category() Category { return m.category }
+func (m *mockMultiCheck) Run(_ context.Context) Result {
+	if len(m.results) == 0 {
+		return Result{Name: m.name, Category: m.category, Status: StatusUnknown}
+	}
+	return m.results[0]
+}
+func (m *mockMultiCheck) RunMulti(_ context.Context) []Result { return m.results }
+
+func TestRegistry_RunAll_MultiResultCheck(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+	r.RegisterAll(
+		&mockCheck{
+			name:     "single",
+			category: CategorySystem,
+			result:   Result{Name: "single", Category: CategorySystem, Status: StatusHealthy},
+		},
+		&mockMultiCheck{
+			name:     "multi",
+			category: CategoryAnalysis,
+			results: []Result{
+				{Name: "model_a", Category: CategoryAnalysis, Status: StatusHealthy},
+				{Name: "model_b", Category: CategoryAnalysis, Status: StatusWarning},
+			},
+		},
+	)
+
+	results := r.RunAll(t.Context())
+
+	require.Len(t, results, 3)
+	byName := make(map[string]Result, len(results))
+	for _, res := range results {
+		byName[res.Name] = res
+	}
+	assert.Equal(t, StatusHealthy, byName["single"].Status)
+	assert.Equal(t, StatusHealthy, byName["model_a"].Status)
+	assert.Equal(t, StatusWarning, byName["model_b"].Status)
+}
+
+func TestRegistry_RunAll_MultiResultCheck_Empty(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+	r.Register(&mockMultiCheck{
+		name:     "empty_multi",
+		category: CategoryAnalysis,
+		results:  nil,
+	})
+
+	results := r.RunAll(t.Context())
+	assert.Empty(t, results)
+}
