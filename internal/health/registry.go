@@ -94,7 +94,9 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 			dur := float64(time.Since(start).Microseconds()) / 1000.0
 			now := time.Now()
 			for j := range rs {
-				rs[j].DurationMS = dur
+				if rs[j].DurationMS == 0 {
+					rs[j].DurationMS = dur
+				}
 				if rs[j].Timestamp.IsZero() {
 					rs[j].Timestamp = now
 				}
@@ -105,7 +107,7 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 
 	wg.Wait()
 
-	var results []Result
+	results := make([]Result, 0, len(checks))
 	for _, o := range outputs {
 		results = append(results, o.results...)
 	}

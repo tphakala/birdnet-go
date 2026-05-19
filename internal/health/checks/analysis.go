@@ -9,6 +9,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/health"
 )
 
+const (
+	latencyCriticalRatio = 0.90
+	latencyWarningRatio  = 0.50
+)
+
 // ModelLoadInfo describes a loaded model for health reporting.
 type ModelLoadInfo struct {
 	ID       string
@@ -37,7 +42,13 @@ func (c *ModelsLoadedCheck) Category() health.Category { return health.CategoryA
 
 // Run returns a single aggregate result (worst status across all models).
 func (c *ModelsLoadedCheck) Run(ctx context.Context) health.Result {
-	return worstResult(c.Name(), c.Category(), c.RunMulti(ctx))
+	start := time.Now()
+	r := worstResult(c.Name(), c.Category(), c.RunMulti(ctx))
+	r.DurationMS = float64(time.Since(start).Microseconds()) / 1000
+	if r.Timestamp.IsZero() {
+		r.Timestamp = time.Now()
+	}
+	return r
 }
 
 // RunMulti returns one result per loaded model.
@@ -118,7 +129,13 @@ func (c *PerModelInferenceLatencyCheck) Category() health.Category { return heal
 
 // Run returns a single aggregate result (worst status across all models).
 func (c *PerModelInferenceLatencyCheck) Run(ctx context.Context) health.Result {
-	return worstResult(c.Name(), c.Category(), c.RunMulti(ctx))
+	start := time.Now()
+	r := worstResult(c.Name(), c.Category(), c.RunMulti(ctx))
+	r.DurationMS = float64(time.Since(start).Microseconds()) / 1000
+	if r.Timestamp.IsZero() {
+		r.Timestamp = time.Now()
+	}
+	return r
 }
 
 // RunMulti evaluates each model's inference latency independently.
@@ -165,14 +182,14 @@ func (c *PerModelInferenceLatencyCheck) RunMulti(_ context.Context) []health.Res
 		msg := fmt.Sprintf("%s latency OK (p99=%.1fms, window=%.1fms)", s.ModelName, s.P99MS, s.WindowMS)
 
 		switch {
-		case ratio >= 0.90:
+		case ratio >= latencyCriticalRatio:
 			status = health.StatusCritical
-			msg = fmt.Sprintf("%s p99 (%.1fms) exceeds 90%% of analysis window (%.1fms)",
-				s.ModelName, s.P99MS, s.WindowMS)
-		case ratio >= 0.50:
+			msg = fmt.Sprintf("%s p99 (%.1fms) exceeds %.0f%% of analysis window (%.1fms)",
+				s.ModelName, s.P99MS, latencyCriticalRatio*100, s.WindowMS)
+		case ratio >= latencyWarningRatio:
 			status = health.StatusWarning
-			msg = fmt.Sprintf("%s p99 (%.1fms) exceeds 50%% of analysis window (%.1fms)",
-				s.ModelName, s.P99MS, s.WindowMS)
+			msg = fmt.Sprintf("%s p99 (%.1fms) exceeds %.0f%% of analysis window (%.1fms)",
+				s.ModelName, s.P99MS, latencyWarningRatio*100, s.WindowMS)
 		}
 
 		results = append(results, health.Result{
