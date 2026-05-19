@@ -79,16 +79,16 @@ func TestWorstStatus_MixedStatuses(t *testing.T) {
 func TestSeverityOrdering(t *testing.T) {
 	t.Parallel()
 	// Verify the ordering: healthy < skipped == unknown < warning < critical
-	assert.Less(t, severity(StatusHealthy), severity(StatusSkipped))
-	assert.Less(t, severity(StatusHealthy), severity(StatusUnknown))
-	assert.Equal(t, severity(StatusSkipped), severity(StatusUnknown))
-	assert.Less(t, severity(StatusSkipped), severity(StatusWarning))
-	assert.Less(t, severity(StatusUnknown), severity(StatusWarning))
-	assert.Less(t, severity(StatusWarning), severity(StatusCritical))
+	assert.Less(t, Severity(StatusHealthy), Severity(StatusSkipped))
+	assert.Less(t, Severity(StatusHealthy), Severity(StatusUnknown))
+	assert.Equal(t, Severity(StatusSkipped), Severity(StatusUnknown))
+	assert.Less(t, Severity(StatusSkipped), Severity(StatusWarning))
+	assert.Less(t, Severity(StatusUnknown), Severity(StatusWarning))
+	assert.Less(t, Severity(StatusWarning), Severity(StatusCritical))
 }
 
 func TestSeverityUnknownStatus(t *testing.T) {
 	t.Parallel()
 	// An unrecognised status string should map to severity 0 (same as healthy)
-	assert.Equal(t, severity(StatusHealthy), severity(Status("bogus")))
+	assert.Equal(t, Severity(StatusHealthy), Severity(Status("bogus")))
 }

@@ -2,10 +2,40 @@ package checks
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/health"
 )
+
+// sanitizeID converts a model ID into a safe check-name suffix by
+// lowercasing and replacing non-alphanumeric characters with underscores.
+func sanitizeID(id string) string {
+	return strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			return r
+		}
+		if r >= 'A' && r <= 'Z' {
+			return r - 'A' + 'a'
+		}
+		return '_'
+	}, id)
+}
+
+// worstResult returns the result with the most severe status, or a skipped
+// result if the slice is empty. Used by MultiResultCheck.Run() implementations.
+func worstResult(name string, cat health.Category, results []health.Result) health.Result {
+	if len(results) == 0 {
+		return skippedResult(name, cat, time.Now())
+	}
+	worst := results[0]
+	for _, r := range results[1:] {
+		if health.Severity(r.Status) > health.Severity(worst.Status) {
+			worst = r
+		}
+	}
+	return worst
+}
 
 // skippedResult builds a StatusSkipped Result for checks without available data.
 func skippedResult(name string, category health.Category, start time.Time) health.Result {

@@ -67,8 +67,13 @@ func (r *Registry) RunCategory(ctx context.Context, cat Category) []Result {
 }
 
 // runChecks executes the given checks in parallel with per-check timeout.
+// Checks that implement MultiResultCheck produce multiple results per check;
+// all results are flattened into the returned slice in registration order.
 func runChecks(ctx context.Context, checks []Check) []Result {
-	results := make([]Result, len(checks))
+	type checkOutput struct {
+		results []Result
+	}
+	outputs := make([]checkOutput, len(checks))
 	var wg sync.WaitGroup
 
 	for i, c := range checks {
@@ -78,16 +83,32 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 			checkCtx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 			defer cancel()
 			start := time.Now()
-			result := check.Run(checkCtx)
-			result.DurationMS = float64(time.Since(start).Microseconds()) / 1000.0
-			if result.Timestamp.IsZero() {
-				result.Timestamp = time.Now()
+
+			var rs []Result
+			if mc, ok := check.(MultiResultCheck); ok {
+				rs = mc.RunMulti(checkCtx)
+			} else {
+				rs = []Result{check.Run(checkCtx)}
 			}
-			results[idx] = result
+
+			dur := float64(time.Since(start).Microseconds()) / 1000.0
+			now := time.Now()
+			for j := range rs {
+				rs[j].DurationMS = dur
+				if rs[j].Timestamp.IsZero() {
+					rs[j].Timestamp = now
+				}
+			}
+			outputs[idx] = checkOutput{results: rs}
 		}(i, c)
 	}
 
 	wg.Wait()
+
+	var results []Result
+	for _, o := range outputs {
+		results = append(results, o.results...)
+	}
 	return results
 }
 
