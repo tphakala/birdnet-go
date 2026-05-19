@@ -102,8 +102,10 @@
     switch (level) {
       case 'fatal':
       case 'panic':
-        return 'var(--color-error)';
       case 'error':
+        return 'var(--color-error)';
+      case 'warn':
+      case 'warning':
         return 'var(--color-warning)';
       default:
         return 'var(--color-base-content)';
