@@ -1982,6 +1982,7 @@ check_existing_installation_owner() {
                     ;;
                 2)
                     log_message "WARN" "User chose fresh installation despite existing install at $other_path"
+                    FRESH_INSTALL="true"
                     ;;
                 *)
                     print_message "Installation cancelled." "$NC"
@@ -5945,29 +5946,34 @@ check_data_directory_space "$DATA_DIR"
 # Download base config file
 download_base_config
 
-# Now lets query user for configuration
-print_message "\n🔧 Now lets configure some basic settings" "$YELLOW"
+# Skip configuration steps after migration (config already has user's settings)
+if [ "$MIGRATION_DONE" = "true" ]; then
+    print_message "\n✅ Using migrated configuration settings" "$GREEN"
+else
+    # Now lets query user for configuration
+    print_message "\n🔧 Now lets configure some basic settings" "$YELLOW"
 
-# Configure web port
-configure_web_port
+    # Configure web port
+    configure_web_port
 
-# Configure audio input
-configure_audio_input
+    # Configure audio input
+    configure_audio_input
 
-# Configure audio format
-configure_audio_format
+    # Configure audio format
+    configure_audio_format
 
-# Configure location (this will also detect timezone)
-configure_location
+    # Configure location (this will also detect timezone)
+    configure_location
 
-# Configure timezone (now with smart detection from location)
-configure_timezone
+    # Configure timezone (now with smart detection from location)
+    configure_timezone
 
-# Configure locale
-configure_locale
+    # Configure locale
+    configure_locale
 
-# Configure security
-configure_auth
+    # Configure security
+    configure_auth
+fi
 
 # Configure telemetry (only if not already configured or fresh install)
 if [ "$FRESH_INSTALL" = "true" ] || [ "$TELEMETRY_CONFIGURED" = "false" ]; then
