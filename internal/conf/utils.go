@@ -311,7 +311,6 @@ func RunningInContainer() bool {
 	// Check cgroup for hints of container runtime.
 	file, err := os.Open("/proc/self/cgroup")
 	if err != nil {
-		fmt.Println("Error opening /proc/self/cgroup:", err)
 		return false
 	}
 	defer func() {
