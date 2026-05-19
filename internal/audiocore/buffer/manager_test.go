@@ -252,6 +252,33 @@ func TestManager_HasAnalysis(t *testing.T) {
 	assert.False(t, m.HasAnalysis("source-2", "birdnet"))
 }
 
+func TestManager_DeallocateAnalysis(t *testing.T) {
+	t.Parallel()
+
+	m := buffer.NewManager(newTestLogger())
+
+	// Allocate two models for the same source.
+	require.NoError(t, m.AllocateAnalysis("src-1", "birdnet", managerTestCapacity, managerTestOverlapSize, managerTestReadSize))
+	require.NoError(t, m.AllocateAnalysis("src-1", "perch_v2", managerTestCapacity, managerTestOverlapSize, managerTestReadSize))
+
+	// Deallocate only the Perch buffer.
+	m.DeallocateAnalysis("src-1", "perch_v2")
+
+	assert.True(t, m.HasAnalysis("src-1", "birdnet"), "birdnet buffer should still exist")
+	assert.False(t, m.HasAnalysis("src-1", "perch_v2"), "perch buffer should be gone")
+}
+
+func TestManager_DeallocateAnalysis_NonExistent(t *testing.T) {
+	t.Parallel()
+
+	m := buffer.NewManager(newTestLogger())
+
+	// Should not panic when deallocating a buffer that was never allocated.
+	assert.NotPanics(t, func() {
+		m.DeallocateAnalysis("nonexistent", "nonexistent")
+	})
+}
+
 // ---------------------------------------------------------------------------
 // Per-size Float32Pool tests
 // ---------------------------------------------------------------------------
