@@ -128,6 +128,15 @@ jobs:
             cp /tmp/onnxruntime/lib/libonnxruntime.dylib artifacts/
           fi
           
+          # Copy platform-specific README
+          if [ "${{ matrix.goos }}" = "linux" ]; then
+            cp dist/README-linux.md artifacts/README.md
+          elif [ "${{ matrix.goos }}" = "windows" ]; then
+            cp dist/README-windows.md artifacts/README.md
+          elif [ "${{ matrix.goos }}" = "darwin" ]; then
+            cp dist/README-darwin.md artifacts/README.md
+          fi
+
           # Create tarball
           cd artifacts
           tar czf ../birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}.tar.gz *
