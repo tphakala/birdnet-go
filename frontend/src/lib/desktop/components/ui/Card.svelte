@@ -48,7 +48,7 @@
     </div>
   {/if}
 
-  <div class={cn(padding ? 'px-6 pb-6' : '')}>
+  <div class={cn(padding ? (title || description || header ? 'px-6 pb-6' : 'p-6') : '')}>
     {#if children}
       {@render children()}
     {/if}

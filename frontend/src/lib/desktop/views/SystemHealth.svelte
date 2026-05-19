@@ -191,7 +191,7 @@
 <div class="col-span-12 space-y-4">
   <!-- Page Header -->
   <Card className="bg-[var(--color-base-100)] shadow-sm">
-    <div class="flex flex-col items-center text-center pt-2">
+    <div class="flex flex-col items-center text-center">
       <div
         class="w-20 h-20 rounded-full bg-gradient-to-b from-[var(--surface-200)] to-[var(--color-base-100)] flex items-center justify-center border border-[var(--border-100)]"
       >
@@ -252,7 +252,7 @@
   {#if report}
     <!-- Summary Bar -->
     <Card className="bg-[var(--color-base-100)] shadow-sm">
-      <div class="flex flex-wrap items-center gap-4 pt-6">
+      <div class="flex flex-wrap items-center gap-4">
         <div class="flex items-center gap-2">
           <StatusPill
             variant={statusToVariant(report.status)}
