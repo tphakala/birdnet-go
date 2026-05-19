@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -18,7 +19,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
 	"github.com/tphakala/birdnet-go/internal/inference"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/weather"
 )
 
 // diagnosticsStatusResponse is the quick health summary returned by GET /status.
@@ -184,13 +187,49 @@ func (c *Controller) registerHealthChecks() {
 		),
 		checks.NewBirdWeatherCheck(
 			func() bool { return c.currentSettings().Realtime.Birdweather.Enabled },
-			nil, // TODO: wire actual BirdWeather status
+			func() (bool, string) {
+				proc := c.Processor
+				if proc == nil {
+					return false, "Processor unavailable"
+				}
+				bw := proc.GetBwClient()
+				if bw == nil {
+					return false, "BirdWeather client not initialized"
+				}
+				return bw.Status()
+			},
 		),
-		checks.NewNotificationProvidersCheck(),
-		checks.NewWeatherCheck(func() bool {
-			p := c.currentSettings().Realtime.Weather.Provider
-			return p != "" && p != string(conf.WeatherNone)
+		checks.NewNotificationProvidersCheck(func() (int, int, string) {
+			providers := notification.GetAllPushProviderHealth()
+			if len(providers) == 0 {
+				return 0, 0, ""
+			}
+			total := len(providers)
+			healthy := 0
+			for i := range providers {
+				if providers[i].Healthy {
+					healthy++
+				}
+			}
+			unhealthy := total - healthy
+			var msg string
+			switch unhealthy {
+			case 0:
+				msg = fmt.Sprintf("All %d providers healthy", total)
+			case total:
+				msg = fmt.Sprintf("All %d providers failing", total)
+			default:
+				msg = fmt.Sprintf("%d of %d providers unhealthy", unhealthy, total)
+			}
+			return total, healthy, msg
 		}),
+		checks.NewWeatherCheck(
+			func() bool {
+				p := c.currentSettings().Realtime.Weather.Provider
+				return p != string(conf.WeatherNone)
+			},
+			weather.GetStatus,
+		),
 
 		// Config checks
 		checks.NewPathAccessCheck(map[string]string{
