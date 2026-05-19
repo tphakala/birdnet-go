@@ -66,6 +66,10 @@ type audioLevelManager struct {
 	subscribers   map[chan audiocore.AudioLevelData]struct{}
 	subscribersMu sync.RWMutex
 
+	// Latest audio level per source for health checks (updated by broadcaster)
+	latestLevels   map[string]audiocore.AudioLevelData
+	latestLevelsMu sync.RWMutex
+
 	// Broadcaster lifecycle
 	broadcasterOnce   sync.Once
 	broadcasterCancel context.CancelFunc
@@ -79,6 +83,7 @@ const maxStreamAnonymMapSize = 100
 var audioLevelMgr = &audioLevelManager{
 	streamAnonymMap: make(map[string]string),
 	subscribers:     make(map[chan audiocore.AudioLevelData]struct{}),
+	latestLevels:    make(map[string]audiocore.AudioLevelData),
 }
 
 // SetAudioLevelChan sets the audio level channel for the controller and starts
@@ -119,8 +124,18 @@ func runAudioLevelBroadcaster(ctx context.Context, sourceChan chan audiocore.Aud
 					delete(audioLevelMgr.subscribers, ch)
 				}
 				audioLevelMgr.subscribersMu.Unlock()
+
+				// Clear stale levels so health checks don't report dead sources
+				audioLevelMgr.latestLevelsMu.Lock()
+				clear(audioLevelMgr.latestLevels)
+				audioLevelMgr.latestLevelsMu.Unlock()
 				return
 			}
+
+			// Track latest level per source for health checks
+			audioLevelMgr.latestLevelsMu.Lock()
+			audioLevelMgr.latestLevels[data.Source] = data
+			audioLevelMgr.latestLevelsMu.Unlock()
 
 			// Fan out to all subscribers (non-blocking send)
 			audioLevelMgr.subscribersMu.RLock()
@@ -157,6 +172,22 @@ func unsubscribeFromAudioLevels(ch chan audiocore.AudioLevelData) {
 	audioLevelMgr.subscribersMu.Unlock()
 	// Note: We don't close the channel here as it may still have buffered data
 	// that the handler is processing. The channel will be garbage collected.
+}
+
+// LatestAudioLevels returns a snapshot of the most recent audio level per source.
+// Safe for concurrent use; returns nil if no levels have been received.
+func LatestAudioLevels() []audiocore.AudioLevelData {
+	audioLevelMgr.latestLevelsMu.RLock()
+	defer audioLevelMgr.latestLevelsMu.RUnlock()
+
+	if len(audioLevelMgr.latestLevels) == 0 {
+		return nil
+	}
+	levels := make([]audiocore.AudioLevelData, 0, len(audioLevelMgr.latestLevels))
+	for source := range audioLevelMgr.latestLevels {
+		levels = append(levels, audioLevelMgr.latestLevels[source])
+	}
+	return levels
 }
 
 // cacheStreamAnonymName stores an anonymized name for a stream source with bounded map size.
