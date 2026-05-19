@@ -64,6 +64,15 @@ func ParseSpeciesString(species string) Species {
 	}
 }
 
+// ExtractScientificName returns the scientific name portion from a
+// "ScientificName_CommonName" label string.
+func ExtractScientificName(label string) string {
+	if sci, _, ok := strings.Cut(label, "_"); ok {
+		return sci
+	}
+	return label
+}
+
 // String returns a formatted string representation of the species.
 // Uses CommonName if available, falls back to ScientificName.
 func (s Species) String() string {
