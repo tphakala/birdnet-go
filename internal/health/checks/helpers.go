@@ -34,6 +34,8 @@ func worstResult(name string, cat health.Category, results []health.Result) heal
 			worst = r
 		}
 	}
+	worst.Name = name
+	worst.Category = cat
 	return worst
 }
 

@@ -62,7 +62,7 @@ func (c *ModelsLoadedCheck) RunMulti(_ context.Context) []health.Result {
 	models := c.getModels()
 	if len(models) == 0 {
 		return []health.Result{{
-			Name:       "model_loaded",
+			Name:       c.Name(),
 			Category:   c.Category(),
 			Status:     health.StatusCritical,
 			Message:    "No analysis models loaded",
@@ -149,7 +149,7 @@ func (c *PerModelInferenceLatencyCheck) RunMulti(_ context.Context) []health.Res
 	stats := c.getStats()
 	if len(stats) == 0 {
 		return []health.Result{{
-			Name:       "inference_latency",
+			Name:       c.Name(),
 			Category:   c.Category(),
 			Status:     health.StatusUnknown,
 			Message:    "Inference stats not available",
