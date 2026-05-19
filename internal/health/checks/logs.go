@@ -1,9 +1,10 @@
 package checks
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/health"
@@ -25,7 +26,6 @@ type errorGroup struct {
 func groupErrors(entries []health.LogEntry) []errorGroup {
 	type key struct{ component, message string }
 	seen := make(map[key]*errorGroup)
-	var order []key
 
 	for i := range entries {
 		k := key{entries[i].Component, entries[i].Message}
@@ -39,16 +39,15 @@ func groupErrors(entries []health.LogEntry) []errorGroup {
 				Level:        entries[i].Level,
 				SampleFields: entries[i].Fields,
 			}
-			order = append(order, k)
 		}
 	}
 
-	groups := make([]errorGroup, 0, len(order))
-	for _, k := range order {
-		groups = append(groups, *seen[k])
+	groups := make([]errorGroup, 0, len(seen))
+	for _, g := range seen {
+		groups = append(groups, *g)
 	}
-	sort.Slice(groups, func(i, j int) bool {
-		return groups[i].Count > groups[j].Count
+	slices.SortFunc(groups, func(a, b errorGroup) int {
+		return cmp.Compare(b.Count, a.Count)
 	})
 	if len(groups) > maxTopErrors {
 		groups = groups[:maxTopErrors]

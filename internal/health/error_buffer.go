@@ -163,7 +163,7 @@ func (b *ErrorRingBuffer) CountSince(since time.Time) int {
 func (b *ErrorRingBuffer) EntriesSince(since time.Time) []LogEntry {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	var result []LogEntry
+	result := make([]LogEntry, 0, b.count)
 	for i := range b.count {
 		if !b.entries[i].Timestamp.Before(since) {
 			result = append(result, cloneEntry(&b.entries[i]))

@@ -14,6 +14,7 @@
     Clock,
     Loader2,
     Info,
+    ChevronDown,
   } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
@@ -387,6 +388,7 @@
                   : 'cursor-default'}"
                 onclick={() => isExpandable && toggleExpand(result.name)}
                 disabled={!isExpandable}
+                aria-expanded={isExpandable ? isExpanded : undefined}
               >
                 <StatusPill
                   variant={statusToVariant(result.status)}
@@ -407,16 +409,11 @@
                   {result.duration_ms.toFixed(1)}ms
                 </span>
                 {#if isExpandable}
-                  <svg
-                    class="size-4 shrink-0 opacity-40 transition-transform"
-                    class:rotate-180={isExpanded}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
+                  <ChevronDown
+                    class="size-4 shrink-0 opacity-40 transition-transform {isExpanded
+                      ? 'rotate-180'
+                      : ''}"
+                  />
                 {/if}
               </button>
 
@@ -424,6 +421,11 @@
                 <div
                   class="mt-1 ml-3 mr-3 mb-2 rounded-lg bg-[var(--color-base-200)]/30 overflow-hidden"
                 >
+                  <p
+                    class="px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] opacity-60"
+                  >
+                    {t('health.logs.topErrors')}
+                  </p>
                   <table class="w-full text-xs">
                     <thead>
                       <tr
