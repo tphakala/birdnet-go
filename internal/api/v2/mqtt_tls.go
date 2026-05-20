@@ -132,15 +132,13 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 
 	tlsMgr := conf.GetTLSManager()
 
-	// Serialise the entire cert-save-settings sequence.
+	// Serialise the entire cert-save-settings sequence. Cannot use defer
+	// because GetMQTTTLSCertificate on the success path acquires a read lock.
 	c.settingsMutex.Lock()
-	defer c.settingsMutex.Unlock()
 
-	if err := tlsMgr.BackupAllCertificates(mqttTLSServiceName); err != nil {
-		return c.HandleError(ctx, err, "Failed to backup MQTT TLS certificates", http.StatusInternalServerError)
-	}
-
-	// Stage 1: Save new cert files. On failure, restore backups.
+	// Stage 1: Save new cert files. On failure, clean up newly written files.
+	// Cannot use BackupAllCertificates here because this handler selectively
+	// modifies some certs while leaving others untouched.
 	type pathUpdate struct {
 		caCert, clientCert, clientKey string
 		clearCA, clearClient          bool
@@ -154,7 +152,7 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 		} else {
 			path, err := tlsMgr.SaveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA, ca)
 			if err != nil {
-				tlsMgr.RestoreBackups(mqttTLSServiceName)
+				c.settingsMutex.Unlock()
 				return c.HandleError(ctx, err, "Failed to save CA certificate", http.StatusBadRequest)
 			}
 			update.caCert = path
@@ -169,12 +167,19 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 		} else {
 			certPath, err := tlsMgr.SaveCertificate(mqttTLSServiceName, conf.TLSCertTypeClient, cert)
 			if err != nil {
-				tlsMgr.RestoreBackups(mqttTLSServiceName)
+				if update.caCert != "" {
+					_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA)
+				}
+				c.settingsMutex.Unlock()
 				return c.HandleError(ctx, err, "Failed to save client certificate", http.StatusBadRequest)
 			}
 			keyPath, err := tlsMgr.SaveCertificate(mqttTLSServiceName, conf.TLSCertTypeKey, key)
 			if err != nil {
-				tlsMgr.RestoreBackups(mqttTLSServiceName)
+				_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeClient)
+				if update.caCert != "" {
+					_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA)
+				}
+				c.settingsMutex.Unlock()
 				return c.HandleError(ctx, err, "Failed to save client key", http.StatusBadRequest)
 			}
 			update.clientCert = certPath
@@ -198,7 +203,14 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 		updated.Realtime.MQTT.TLS.ClientKey = ""
 	}
 	if err := c.publishAndSaveSettings(current, updated); err != nil {
-		tlsMgr.RestoreBackups(mqttTLSServiceName)
+		if update.caCert != "" {
+			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA)
+		}
+		if update.clientCert != "" {
+			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeClient)
+			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeKey)
+		}
+		c.settingsMutex.Unlock()
 		return c.HandleError(ctx, err, "Failed to save settings after MQTT TLS certificate upload",
 			http.StatusInternalServerError)
 	}
@@ -206,7 +218,6 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 		GetLogger().Warn("Failed to trigger settings side-effects after MQTT TLS certificate change",
 			logger.Error(handleErr))
 	}
-	tlsMgr.CleanupBackups(mqttTLSServiceName)
 
 	// Stage 3: Settings saved. Now perform clears (best-effort).
 	if update.clearCA {
@@ -216,6 +227,10 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 		_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeClient)
 		_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeKey)
 	}
+
+	// Release the write lock before calling GetMQTTTLSCertificate which
+	// acquires a read lock (sync.RWMutex is not reentrant).
+	c.settingsMutex.Unlock()
 
 	return c.GetMQTTTLSCertificate(ctx)
 }
