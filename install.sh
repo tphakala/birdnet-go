@@ -5280,7 +5280,18 @@ check_not_root
 # When running as root without sudo installed (common in containers), provide a
 # shim so the script's 100+ sudo calls work without modification.
 if [ "$(id -u)" -eq 0 ] && ! command_exists sudo; then
-    sudo() { "$@"; }
+    sudo() {
+        # Strip sudo-specific flags before executing the actual command
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -n|-S|-E|-H|-P|-K|-k|-b) shift ;;
+                -u|-g|-C) shift 2 ;;
+                --) shift; break ;;
+                *) break ;;
+            esac
+        done
+        "$@"
+    }
 fi
 
 # Default paths
