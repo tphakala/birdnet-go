@@ -1462,7 +1462,16 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			return
 
 		case t := <-timer.C:
-			currentPolicy := conf.Setting().Realtime.Audio.Export.Retention.Policy
+			currentSettings := conf.Setting()
+			exportCfg := currentSettings.Realtime.Audio.Export
+			currentPolicy := exportCfg.Retention.Policy
+
+			if strings.TrimSpace(exportCfg.Path) == "" {
+				log.Debug("skipping clip cleanup: export path not configured",
+					logger.String("operation", "clip_cleanup_skip"))
+				continue
+			}
+
 			log.Info("starting clip cleanup task",
 				logger.String("timestamp", t.Format(time.RFC3339)),
 				logger.String("policy", currentPolicy),
@@ -1483,8 +1492,8 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			}
 
 			if currentPolicy == "usage" {
-				currentRetention := conf.Setting().Realtime.Audio.Export.Retention
-				baseDir := conf.Setting().Realtime.Audio.Export.Path
+				currentRetention := exportCfg.Retention
+				baseDir := exportCfg.Path
 
 				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&currentRetention, baseDir)
 				if err != nil {

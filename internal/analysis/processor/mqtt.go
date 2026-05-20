@@ -168,15 +168,20 @@ func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings 
 	log := GetLogger()
 	haSettings := settings.Realtime.MQTT.HomeAssistant
 
-	// Register the OnConnect handler
+	// Register the OnConnect handler. The handler runs in a goroutine
+	// (client.go onConnect), so the client may disconnect between the
+	// callback firing and the goroutine executing.
 	client.RegisterOnConnectHandler(func() {
+		if !client.IsConnected() {
+			log.Debug("MQTT client disconnected before HA discovery handler executed, skipping")
+			return
+		}
+
 		log.Info("MQTT connected, publishing Home Assistant discovery messages")
 
-		// Create a context for publishing
 		ctx, cancel := context.WithTimeout(context.Background(), discoveryPublishTimeout)
 		defer cancel()
 
-		// Publish discovery messages using the helper
 		if err := p.publishHomeAssistantDiscovery(ctx, client, settings); err != nil {
 			log.Error("Failed to publish Home Assistant discovery",
 				logger.Error(err))

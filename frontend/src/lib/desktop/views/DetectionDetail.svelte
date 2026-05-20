@@ -242,7 +242,7 @@
 
   // Fetch image attribution metadata
   async function fetchImageAttribution() {
-    if (!detection?.scientificName) return;
+    if (!detection?.scientificName?.trim()) return;
 
     attributionController?.abort();
     attributionController = new AbortController();
@@ -268,7 +268,7 @@
 
   // Fetch species information (public data - no auth required)
   async function fetchSpeciesInfo() {
-    if (!detection?.scientificName) return;
+    if (!detection?.scientificName?.trim()) return;
 
     speciesController?.abort();
     speciesController = new AbortController();
@@ -298,7 +298,7 @@
 
   // Fetch taxonomy information (public data - no auth required)
   async function fetchTaxonomy() {
-    if (!detection?.scientificName) return;
+    if (!detection?.scientificName?.trim()) return;
 
     taxonomyController?.abort();
     taxonomyController = new AbortController();

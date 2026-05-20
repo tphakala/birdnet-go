@@ -219,6 +219,9 @@ func (s *Service) MarkAsRead(id string) error {
 
 	notification, err := s.store.Get(id)
 	if err != nil {
+		if errors.Is(err, ErrNotificationNotFound) {
+			return nil
+		}
 		return err
 	}
 
@@ -243,6 +246,9 @@ func (s *Service) MarkAsAcknowledged(id string) error {
 
 	notification, err := s.store.Get(id)
 	if err != nil {
+		if errors.Is(err, ErrNotificationNotFound) {
+			return nil
+		}
 		return err
 	}
 
@@ -259,7 +265,11 @@ func (s *Service) Delete(id string) error {
 			Build()
 	}
 
-	return s.store.Delete(id)
+	err := s.store.Delete(id)
+	if err != nil && errors.Is(err, ErrNotificationNotFound) {
+		return nil
+	}
+	return err
 }
 
 // Subscribe creates a channel to receive real-time notifications.
