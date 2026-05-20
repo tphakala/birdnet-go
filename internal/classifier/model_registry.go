@@ -102,7 +102,7 @@ var ModelRegistry = map[string]ModelInfo{
 		Backend:          BackendONNX,
 		DetectionName:    DetectionNamePerch,
 		DetectionVersion: "V2",
-		Description:      "Perch v2 model with ~14,795 species (scientific names only)",
+		Description:      "Perch v2 multi-taxa model with ~14,795 species including birds, insects, amphibians, and mammals (scientific names only)",
 		Spec:             ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
 		ConfigAliases:    []string{conf.ModelIDPerchV2},
 		NumSpecies:       14795,
