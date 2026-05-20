@@ -200,8 +200,7 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 		updated.Realtime.MQTT.TLS.ClientKey = ""
 	}
 	if err := c.publishAndSaveSettings(current, updated); err != nil {
-		c.settingsMutex.Unlock()
-		// Clean up cert files written in stage 1.
+		// Clean up cert files written in stage 1 while still holding the lock.
 		if update.caCert != "" {
 			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA)
 		}
@@ -209,6 +208,7 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeClient)
 			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeKey)
 		}
+		c.settingsMutex.Unlock()
 		return c.HandleError(ctx, err, "Failed to save settings after MQTT TLS certificate upload",
 			http.StatusInternalServerError)
 	}
