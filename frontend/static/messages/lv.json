@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Ielādē atklāšanas informāciju...",
       "loaded": "Atklāšanas informācija ielādēta sugai {species}",
-      "error": "Kļūda, ielādējot atklāšanu: {error}"
+      "error": "Kļūda, ielādējot atklāšanu: {error}",
+      "loadingResults": "Ielādē {count} rezultātus...",
+      "thumbnailLoading": "Ielādē {species} sīktēlu...",
+      "thumbnailLoaded": "Sīktēls {species} ielādēts"
     },
     "errors": {
       "notFound": "Atklāšana nav atrasta. Tā, iespējams, ir dzēsta vai ID ir nepareizs.",

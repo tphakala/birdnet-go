@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Detektálás részleteinek betöltése...",
       "loaded": "Detektálás részletei betöltve: {species}",
-      "error": "Hiba a detektálás betöltésekor: {error}"
+      "error": "Hiba a detektálás betöltésekor: {error}",
+      "loadingResults": "{count} eredmény betöltése...",
+      "thumbnailLoading": "{species} bélyegkép betöltése...",
+      "thumbnailLoaded": "{species} bélyegkép betöltve"
     },
     "errors": {
       "notFound": "A detektálás nem található. Lehet, hogy törölték vagy az ID hibás.",

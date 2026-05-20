@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Indlæser registreringsdetaljer...",
       "loaded": "Registreringsdetaljer indlæst for {species}",
-      "error": "Fejl ved indlæsning af registrering: {error}"
+      "error": "Fejl ved indlæsning af registrering: {error}",
+      "loadingResults": "Indlæser {count} resultater...",
+      "thumbnailLoading": "Indlæser {species} miniaturebillede...",
+      "thumbnailLoaded": "Miniaturebillede af {species} indlæst"
     },
     "errors": {
       "notFound": "Registrering ikke fundet. Den kan være blevet slettet, eller ID'et er forkert.",

@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Chargement des détails de détection...",
       "loaded": "Détails de détection chargés pour {species}",
-      "error": "Erreur lors du chargement de la détection : {error}"
+      "error": "Erreur lors du chargement de la détection : {error}",
+      "loadingResults": "Chargement de {count} résultats...",
+      "thumbnailLoading": "Chargement de la miniature de {species}...",
+      "thumbnailLoaded": "Miniature de {species} chargée"
     },
     "errors": {
       "notFound": "Détection introuvable. Elle a peut-être été supprimée ou l'identifiant est incorrect.",

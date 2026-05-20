@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Herkenningsdetails laden...",
       "loaded": "Herkenningsdetails geladen voor {species}",
-      "error": "Fout bij het laden van herkenning: {error}"
+      "error": "Fout bij het laden van herkenning: {error}",
+      "loadingResults": "{count} resultaten laden...",
+      "thumbnailLoading": "{species} miniatuur laden...",
+      "thumbnailLoaded": "Miniatuur van {species} geladen"
     },
     "errors": {
       "notFound": "Detectie niet gevonden. Deze is mogelijk verwijderd of de ID is onjuist.",

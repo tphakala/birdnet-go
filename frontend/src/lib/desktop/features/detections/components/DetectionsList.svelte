@@ -533,9 +533,13 @@
   <!-- ARIA live region for accessibility -->
   <div class="sr-only" aria-live="polite">
     {#if loading}
-      Loading {selectedNumResults} results...
+      {t('detections.aria.loadingResults', { count: selectedNumResults })}
     {:else if data}
-      Showing {data.showingFrom} to {data.showingTo} of {data.totalResults} results
+      {t('detections.pagination.showing', {
+        from: data.showingFrom,
+        to: data.showingTo,
+        total: data.totalResults,
+      })}
     {/if}
   </div>
 
