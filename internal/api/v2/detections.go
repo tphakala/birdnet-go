@@ -1583,13 +1583,9 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 
 	updated := conf.CloneSettings(current)
 	if wasExcluded {
-		newExcludeList := make([]string, 0, len(updated.Realtime.Species.Exclude)-1)
-		for _, s := range updated.Realtime.Species.Exclude {
-			if s != species {
-				newExcludeList = append(newExcludeList, s)
-			}
-		}
-		updated.Realtime.Species.Exclude = newExcludeList
+		updated.Realtime.Species.Exclude = slices.DeleteFunc(updated.Realtime.Species.Exclude, func(s string) bool {
+			return s == species
+		})
 		action = "removed"
 		isExcluded = false
 	} else {
