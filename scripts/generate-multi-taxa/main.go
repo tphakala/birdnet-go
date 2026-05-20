@@ -97,7 +97,7 @@ func main() {
 	log.Printf("Loaded: %d genera, %d families, %d species", len(db.Genera), len(db.Families), len(db.SpeciesIndex))
 
 	// Add "class": "Aves" to all existing bird entries that lack it
-	addClassToExistingBirds(db)
+	backfilled := addClassToExistingBirds(db)
 
 	// Read Perch v2 labels
 	log.Printf("Reading Perch v2 labels from %s", labelsPath)
@@ -107,10 +107,15 @@ func main() {
 	}
 	log.Printf("Read %d labels", len(labels))
 
-	// Filter to species not already in the database
+	// Filter to species not already in the database, deduplicating labels
+	seen := make(map[string]bool, len(labels))
 	var unknown []string
 	for _, label := range labels {
 		key := strings.ToLower(label)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 		if _, exists := db.SpeciesIndex[key]; !exists {
 			unknown = append(unknown, label)
 		}
@@ -118,6 +123,12 @@ func main() {
 	log.Printf("Found %d species not in existing taxonomy", len(unknown))
 
 	if len(unknown) == 0 {
+		if backfilled {
+			log.Printf("No new species, but writing backfilled class fields to %s", existingPath)
+			if err := writeDatabase(existingPath, db); err != nil {
+				log.Fatalf("Failed to write database: %v", err)
+			}
+		}
 		log.Println("No new species to add. Done.")
 		return
 	}
@@ -236,19 +247,23 @@ func readLabels(path string) ([]string, error) {
 	return labels, scanner.Err()
 }
 
-func addClassToExistingBirds(db *TaxonomyDatabase) {
+func addClassToExistingBirds(db *TaxonomyDatabase) bool {
+	changed := false
 	for key, meta := range db.Genera {
 		if meta.Class == "" {
 			meta.Class = "Aves"
 			db.Genera[key] = meta
+			changed = true
 		}
 	}
 	for key, meta := range db.Families {
 		if meta.Class == "" {
 			meta.Class = "Aves"
 			db.Families[key] = meta
+			changed = true
 		}
 	}
+	return changed
 }
 
 func loadCache() *GBIFCache {
