@@ -267,8 +267,9 @@
       // Read frequency data from analyser
       analyser.getByteFrequencyData(frequencyData);
 
-      // Compute device pixels to scroll
-      scrollAccumulator += deviceScrollSpeed * deltaTime;
+      // Compute device pixels to scroll; cap deltaTime to prevent OOM after tab resume
+      const clampedDelta = Math.min(deltaTime, 0.1);
+      scrollAccumulator += deviceScrollSpeed * clampedDelta;
       const pixelsToScroll = Math.floor(scrollAccumulator);
       scrollAccumulator -= pixelsToScroll;
 

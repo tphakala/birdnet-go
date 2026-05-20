@@ -605,9 +605,9 @@
     class="w-full h-full relative focus:outline-hidden group"
     aria-expanded={dropdownOpen}
     aria-haspopup="true"
-    aria-label={t('media.audio.levelFor', {
-      source: selectedSource ? getSourceDisplayName(selectedSource) : t('media.audio.noSource'),
-    })}
+    aria-label={selectedSource
+      ? t('media.audio.levelFor', { source: getSourceDisplayName(selectedSource) })
+      : t('media.audio.levelForNoSource')}
   >
     <svg class="w-full h-full" viewBox="0 0 36 36" aria-hidden="true">
       <!-- Background circle -->
@@ -633,9 +633,9 @@
     </div>
     <!-- Screen reader announcement -->
     <div class="sr-only" aria-live="polite">
-      {t('media.audio.levelAnnouncement', { level: Math.round(smoothedVolume) })}{isClipping
-        ? t('media.audio.clippingDetected')
-        : ''}
+      {isClipping
+        ? t('media.audio.levelAnnouncementClipping', { level: Math.round(smoothedVolume) })
+        : t('media.audio.levelAnnouncement', { level: Math.round(smoothedVolume) })}
     </div>
   </button>
 
@@ -778,9 +778,9 @@
   <!-- Screen reader announcements -->
   <div aria-live="polite" class="sr-only">
     {#if isPlaying}
-      {t('media.audio.nowPlaying', {
-        source: selectedSource ? getSourceDisplayName(selectedSource) : t('media.audio.noSource'),
-      })}
+      {selectedSource
+        ? t('media.audio.nowPlaying', { source: getSourceDisplayName(selectedSource) })
+        : t('media.audio.nowPlayingNoSource')}
     {:else if !isPlaying && selectedSource}
       {t('media.audio.playbackStopped')}
     {/if}
