@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
@@ -1608,7 +1609,7 @@ func cleanupHLSStreamingFiles() error {
 			// a concurrent HLS writer creates a file between RemoveAll's
 			// internal traversal and the final parent unlink.
 			if err := os.RemoveAll(path); err != nil {
-				if strings.Contains(err.Error(), "directory not empty") {
+				if errors.Is(err, syscall.ENOTEMPTY) {
 					time.Sleep(100 * time.Millisecond)
 					err = os.RemoveAll(path)
 				}
