@@ -363,6 +363,10 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 	// 2. Allocate analysis buffer using the primary model's native dimensions.
 	// BufferConsumer resamples audio to the model's target rate before writing,
 	// so buffer size must match the model spec, not the source sample rate.
+	// Clear any stale buffers for this source ID (e.g., watchdog restart
+	// reuses the same source ID without going through ReconfigureSource).
+	e.bufferMgr.DeallocateSource(sourceID)
+
 	if err := e.bufferMgr.AllocateAnalysis(
 		sourceID,
 		e.primaryModelID,
