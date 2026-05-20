@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "Az ONNX Runtime nem elérhető",
-        "unavailableMessage": "Az ONNX Runtime {requiredVersion} szükséges a(z) {modelName} modellhez, de nem található. Ellenőrizze, hogy a libonnxruntime.so telepítve van-e a várt elérési úton."
+        "unavailableMessage": "Az ONNX Runtime {requiredVersion} szükséges a(z) {modelName} modellhez, de nem található. Lásd a telepítési útmutatót: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",

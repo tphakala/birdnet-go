@@ -14,6 +14,8 @@ import (
 // will not work unless the installed library version starts with this.
 const RequiredORTAPIMajor = "1.25"
 
+const ORTInstallGuideURL = "https://github.com/tphakala/birdnet-go/wiki/ONNX-Runtime-Installation"
+
 // ORTStatus describes the availability and version compatibility of the
 // ONNX Runtime shared library on the current system.
 type ORTStatus struct {
@@ -56,7 +58,7 @@ func CheckORTAvailability(configuredPath string) ORTStatus {
 	libPath := resolvedORTPath(configuredPath)
 	if libPath == "" || !libraryFileExists(libPath) {
 		return ORTStatus{
-			Error: "ONNX Runtime shared library not found",
+			Error: fmt.Sprintf("ONNX Runtime shared library not found; install guide: %s", ORTInstallGuideURL),
 		}
 	}
 
@@ -158,10 +160,10 @@ func isVersionCompatible(version string) bool {
 // incompatible. Returns empty string for compatible versions.
 func versionError(version string) string {
 	if version == "" {
-		return fmt.Sprintf("unable to determine ONNX Runtime version; required %s", ORTRequiredVersion())
+		return fmt.Sprintf("unable to determine ONNX Runtime version; required %s; install guide: %s", ORTRequiredVersion(), ORTInstallGuideURL)
 	}
 	if !isVersionCompatible(version) {
-		return fmt.Sprintf("ONNX Runtime version %s is incompatible; required %s", version, ORTRequiredVersion())
+		return fmt.Sprintf("ONNX Runtime version %s is incompatible; required %s; install guide: %s", version, ORTRequiredVersion(), ORTInstallGuideURL)
 	}
 	return ""
 }

@@ -27,6 +27,7 @@ func emitORTUnavailableNotification(modelName, ortError string) {
 		WithMessageKey(notification.MsgORTUnavailableMessage, map[string]any{
 			"modelName":       modelName,
 			"requiredVersion": inference.ORTRequiredVersion(),
+			"installGuideURL": inference.ORTInstallGuideURL,
 		}).
 		WithDeliveryTarget("bell")
 
