@@ -2,6 +2,7 @@ package processor
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -64,23 +65,35 @@ func createTestScript(t *testing.T, name, content string) string {
 	return scriptPath
 }
 
-// waitForExecReady retries a lightweight exec of the script until it succeeds
-// or a timeout is reached. This drains any lingering kernel write references
-// from overlayfs copy-up that cause ETXTBSY.
+// waitForExecReady retries execve() on the script until it succeeds or a
+// timeout is reached. This drains any lingering kernel write references from
+// overlayfs copy-up that cause ETXTBSY.
+//
+// The previous approach used "/bin/sh -n scriptPath", but that only reads the
+// script as a regular file argument to /bin/sh; it never calls execve() on the
+// script itself, so it could not detect ETXTBSY on the script's inode. The
+// Start+Kill pattern below calls execve() on the script directly, then
+// immediately kills the process to avoid side effects.
 func waitForExecReady(t *testing.T, scriptPath string) {
 	t.Helper()
 	backoff := 5 * time.Millisecond
 	deadline := time.Now().Add(500 * time.Millisecond)
 	for {
-		// "/bin/sh -n" parses the script without executing it.
-		out, err := exec.Command("/bin/sh", "-n", scriptPath).CombinedOutput() //nolint:gosec // test helper, path is controlled
+		cmd := exec.Command(scriptPath) //nolint:gosec // test helper, path is controlled
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		// Start() calls fork+execve on scriptPath. If a kernel write
+		// reference still exists (overlayfs copy-up), execve fails with
+		// ETXTBSY and Start() returns the error. On success we kill
+		// immediately; we only need to confirm execve() did not fail.
+		err := cmd.Start()
 		if err == nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
 			return
 		}
 		if !errors.Is(err, syscall.ETXTBSY) {
-			// Syntax error or other issue — fail immediately so the test
-			// gets a clear message instead of a mysterious ETXTBSY later.
-			require.NoError(t, err, "script syntax check failed: %s", string(out))
+			require.NoError(t, err, "script exec readiness check failed")
 		}
 		if time.Now().After(deadline) {
 			require.NoError(t, err, "script still ETXTBSY after 500ms of retries")
