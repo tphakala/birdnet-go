@@ -4215,7 +4215,8 @@
       "streamTitle": "Bird Audio Stream - {source}",
       "streamTitleDefault": "Bird Audio Stream",
       "streamArtist": "BirdNET-Go",
-      "streamAlbum": "Live Stream"
+      "streamAlbum": "Live Stream",
+      "playbackError": "Playback error: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spectrogram not yet generated",

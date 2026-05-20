@@ -4215,7 +4215,8 @@
       "streamTitle": "Madárhang stream - {source}",
       "streamTitleDefault": "Madárhang stream",
       "streamArtist": "BirdNET-Go",
-      "streamAlbum": "Élő közvetítés"
+      "streamAlbum": "Élő közvetítés",
+      "playbackError": "Lejátszási hiba: {details}"
     },
     "spectrogram": {
       "notGenerated": "A spektrogram még nincs generálva",

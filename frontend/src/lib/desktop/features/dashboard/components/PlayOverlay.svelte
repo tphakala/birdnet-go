@@ -41,7 +41,7 @@
 
   const logger = loggers.audio;
 
-  /* global Audio, AudioContext, MediaError */
+  /* global Audio, AudioContext */
 
   interface Props {
     detectionId: number;
@@ -82,6 +82,7 @@
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
   const MAX_AUDIO_RETRIES = 3;
   const AUDIO_RETRY_DELAYS = [1000, 2000, 4000];
+  const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
 
   // Web Audio API
   let audioContext: AudioContext | null = null;
@@ -365,8 +366,7 @@
       canplayTimeoutId = undefined;
     }
 
-    // Don't retry permanent errors (e.g. unsupported format)
-    const isPermanentError = audioElement?.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
+    const isPermanentError = audioElement?.error?.code === MEDIA_ERR_SRC_NOT_SUPPORTED;
 
     // Retry transparently if user initiated play and retries remain.
     // This handles the case where the audio clip is still being written

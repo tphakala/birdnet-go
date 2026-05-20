@@ -4215,7 +4215,8 @@
       "streamTitle": "Putnu audio straume - {source}",
       "streamTitleDefault": "Putnu audio straume",
       "streamArtist": "BirdNET-Go",
-      "streamAlbum": "Tiešraide"
+      "streamAlbum": "Tiešraide",
+      "playbackError": "Atskaņošanas kļūda: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogramma vēl nav ģenerēta",

@@ -21,6 +21,8 @@
   const logger = loggers.audio;
   /** Interval between debug time markers on the waterfall (seconds) */
   const DEBUG_MARKER_INTERVAL_SEC = 5;
+  /** Maximum safe canvas dimension in device pixels */
+  const MAX_CANVAS_DIM = 8192;
 
   interface Props {
     /** AnalyserNode to read frequency data from */
@@ -273,7 +275,6 @@
       if (pixelsToScroll > 0) {
         const w = deviceWidth;
         const h = deviceHeight;
-        const MAX_CANVAS_DIM = 8192;
 
         if (w > 0 && h > 0 && w <= MAX_CANVAS_DIM && h <= MAX_CANVAS_DIM) {
           // Self-blit: shift existing content left (GPU-composited)

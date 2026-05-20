@@ -4215,7 +4215,8 @@
       "streamTitle": "Flux audio d'oiseaux - {source}",
       "streamTitleDefault": "Flux audio d'oiseaux",
       "streamArtist": "BirdNET-Go",
-      "streamAlbum": "Diffusion en direct"
+      "streamAlbum": "Diffusion en direct",
+      "playbackError": "Erreur de lecture : {details}"
     },
     "spectrogram": {
       "notGenerated": "Spectrogramme pas encore généré",

@@ -4215,7 +4215,8 @@
       "streamTitle": "Stream audio uccelli - {source}",
       "streamTitleDefault": "Stream audio uccelli",
       "streamArtist": "BirdNET-Go",
-      "streamAlbum": "Diretta"
+      "streamAlbum": "Diretta",
+      "playbackError": "Errore di riproduzione: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spettrogramma non ancora generato",

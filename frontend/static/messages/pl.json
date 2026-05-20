@@ -4215,7 +4215,8 @@
       "streamTitle": "Strumień audio ptaków - {source}",
       "streamTitleDefault": "Strumień audio ptaków",
       "streamArtist": "BirdNET-Go",
-      "streamAlbum": "Transmisja na żywo"
+      "streamAlbum": "Transmisja na żywo",
+      "playbackError": "Błąd odtwarzania: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram jeszcze niegenerowany",

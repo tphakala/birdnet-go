@@ -4215,7 +4215,8 @@
       "streamTitle": "Audio stream vtákov - {source}",
       "streamTitleDefault": "Audio stream vtákov",
       "streamArtist": "BirdNET-Go",
-      "streamAlbum": "Živé vysielanie"
+      "streamAlbum": "Živé vysielanie",
+      "playbackError": "Chyba prehrávania: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram ešte nebol vygenerovaný",

@@ -4215,7 +4215,8 @@
       "streamTitle": "Transmissão de áudio de pássaros - {source}",
       "streamTitleDefault": "Transmissão de áudio de pássaros",
       "streamArtist": "BirdNET-Go",
-      "streamAlbum": "Transmissão ao vivo"
+      "streamAlbum": "Transmissão ao vivo",
+      "playbackError": "Erro de reprodução: {details}"
     },
     "spectrogram": {
       "notGenerated": "Espectrograma ainda não gerado",

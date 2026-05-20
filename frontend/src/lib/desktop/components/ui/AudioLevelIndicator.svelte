@@ -343,12 +343,12 @@
           type: data.type,
           details: data.details,
           fatal: data.fatal,
-          error: data.error.message,
+          error: data.error?.message,
         });
 
         if (data.fatal) {
           // Handle fatal HLS error
-          showStatusMessage('Playback error: ' + data.details);
+          showStatusMessage(t('media.audio.playbackError', { details: data.details }));
           stopPlayback();
         } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
           // Handle non-fatal media errors with improved categorization
@@ -369,7 +369,7 @@
             // Log unexpected media errors for investigation
             logger.warn('Unexpected non-fatal media error', {
               details: data.details,
-              error: data.error.message,
+              error: data.error?.message,
             });
           }
         }
@@ -740,7 +740,7 @@
                       dropdownOpen = false;
                     }}
                     class={cn(
-                      'btn btn-sm btn-circle btn-ghost shrink-0',
+                      'inline-flex items-center justify-center size-8 rounded-full shrink-0 transition-colors hover:bg-[var(--color-base-content)]/10',
                       playingSource === source
                         ? 'text-[var(--color-error)]'
                         : 'text-[var(--color-success)]'

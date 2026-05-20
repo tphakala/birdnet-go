@@ -4215,7 +4215,8 @@
       "streamTitle": "Lintujen äänistriimi - {source}",
       "streamTitleDefault": "Lintujen äänistriimi",
       "streamArtist": "BirdNET-Go",
-      "streamAlbum": "Suora lähetys"
+      "streamAlbum": "Suora lähetys",
+      "playbackError": "Toistovirhe: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammia ei ole vielä generoitu",

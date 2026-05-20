@@ -4215,7 +4215,8 @@
       "streamTitle": "Fågelljudström - {source}",
       "streamTitleDefault": "Fågelljudström",
       "streamArtist": "BirdNET-Go",
-      "streamAlbum": "Livestream"
+      "streamAlbum": "Livestream",
+      "playbackError": "Uppspelningsfel: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammet har inte genererats ännu",
