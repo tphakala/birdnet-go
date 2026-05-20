@@ -317,6 +317,9 @@ func findONNXRuntimeLibrary() string {
 			return path
 		}
 	}
+	if runtime.GOOS == "darwin" {
+		return "libonnxruntime.dylib"
+	}
 	return "onnxruntime"
 }
 
