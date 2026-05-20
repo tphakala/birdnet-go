@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 const mqttTLSServiceName = "mqtt"
@@ -211,7 +212,10 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to save settings after MQTT TLS certificate upload",
 			http.StatusInternalServerError)
 	}
-	_ = c.handleSettingsChanges(current, updated)
+	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
+		GetLogger().Warn("Failed to trigger settings side-effects after MQTT TLS certificate change",
+			logger.Error(handleErr))
+	}
 	c.settingsMutex.Unlock()
 
 	return c.GetMQTTTLSCertificate(ctx)
@@ -241,7 +245,10 @@ func (c *Controller) DeleteMQTTTLSCertificate(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to save settings after MQTT TLS certificate deletion",
 			http.StatusInternalServerError)
 	}
-	_ = c.handleSettingsChanges(current, updated)
+	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
+		GetLogger().Warn("Failed to trigger settings side-effects after MQTT TLS certificate change",
+			logger.Error(handleErr))
+	}
 	c.settingsMutex.Unlock()
 
 	return ctx.NoContent(http.StatusNoContent)
