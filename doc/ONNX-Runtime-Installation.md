@@ -142,7 +142,8 @@ curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSIO
 # Extract (BSD tar needs special handling)
 mkdir -p onnxruntime-tmp
 tar xzf onnxruntime.tgz -C onnxruntime-tmp
-sudo cp onnxruntime-tmp/onnxruntime-*/lib/libonnxruntime*.dylib /usr/local/lib/
+sudo cp -P onnxruntime-tmp/onnxruntime-*/lib/libonnxruntime*.dylib /usr/local/lib/
+sudo xattr -d com.apple.quarantine /usr/local/lib/libonnxruntime*.dylib 2>/dev/null || true
 rm -rf onnxruntime.tgz onnxruntime-tmp
 ```
 
