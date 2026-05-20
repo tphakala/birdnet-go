@@ -211,6 +211,7 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to save settings after MQTT TLS certificate upload",
 			http.StatusInternalServerError)
 	}
+	_ = c.handleSettingsChanges(current, updated)
 	c.settingsMutex.Unlock()
 
 	return c.GetMQTTTLSCertificate(ctx)
@@ -240,6 +241,7 @@ func (c *Controller) DeleteMQTTTLSCertificate(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to save settings after MQTT TLS certificate deletion",
 			http.StatusInternalServerError)
 	}
+	_ = c.handleSettingsChanges(current, updated)
 	c.settingsMutex.Unlock()
 
 	return ctx.NoContent(http.StatusNoContent)

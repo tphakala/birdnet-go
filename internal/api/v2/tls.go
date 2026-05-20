@@ -140,6 +140,7 @@ func (c *Controller) UploadTLSCertificate(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to save settings after TLS certificate upload",
 			http.StatusInternalServerError)
 	}
+	_ = c.handleSettingsChanges(current, updated)
 	c.settingsMutex.Unlock()
 
 	// Return certificate info
@@ -172,6 +173,7 @@ func (c *Controller) DeleteTLSCertificate(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to save settings after TLS certificate deletion",
 			http.StatusInternalServerError)
 	}
+	_ = c.handleSettingsChanges(current, updated)
 	c.settingsMutex.Unlock()
 
 	return ctx.NoContent(http.StatusNoContent)
@@ -244,6 +246,7 @@ func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to save settings after self-signed certificate generation",
 			http.StatusInternalServerError)
 	}
+	_ = c.handleSettingsChanges(current, updated)
 	c.settingsMutex.Unlock()
 
 	// Return certificate info
