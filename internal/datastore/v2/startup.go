@@ -250,13 +250,18 @@ func fallbackConsolidatedV2State(configuredPath, v2MigrationPath string) (Startu
 
 // checkMySQLMigrationState checks migration state for MySQL deployments.
 func checkMySQLMigrationState(settings *conf.Settings) StartupState {
-	// Build MySQL DSN using mysql.Config for proper credential escaping and timeouts
+	// Build MySQL DSN using mysql.Config for proper credential escaping and timeouts.
+	// AllowNativePasswords must be explicitly true because mysql.Config{} struct
+	// literals default to false (Go zero value), while mysql.NewConfig() defaults
+	// to true. MariaDB and MySQL configured with mysql_native_password require this.
 	cfg := mysql.Config{
-		User:   settings.Output.MySQL.Username,
-		Passwd: settings.Output.MySQL.Password,
-		Net:    "tcp",
-		Addr:   fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
-		DBName: settings.Output.MySQL.Database,
+		User:                 settings.Output.MySQL.Username,
+		Passwd:               settings.Output.MySQL.Password,
+		Net:                  "tcp",
+		Addr:                 fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
+		DBName:               settings.Output.MySQL.Database,
+		AllowNativePasswords: true,
+		CheckConnLiveness:    true,
 		Params: map[string]string{
 			"charset":      "utf8mb4",
 			"parseTime":    "True",
@@ -542,11 +547,13 @@ func hasUnmigratedLegacySQLite(settings *conf.Settings, log logger.Logger) bool 
 // hasUnmigratedLegacyMySQL checks for unmigrated records in a MySQL legacy database.
 func hasUnmigratedLegacyMySQL(settings *conf.Settings, log logger.Logger) bool {
 	cfg := mysql.Config{
-		User:   settings.Output.MySQL.Username,
-		Passwd: settings.Output.MySQL.Password,
-		Net:    "tcp",
-		Addr:   fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
-		DBName: settings.Output.MySQL.Database,
+		User:                 settings.Output.MySQL.Username,
+		Passwd:               settings.Output.MySQL.Password,
+		Net:                  "tcp",
+		Addr:                 fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
+		DBName:               settings.Output.MySQL.Database,
+		AllowNativePasswords: true,
+		CheckConnLiveness:    true,
 		Params: map[string]string{
 			"charset":      "utf8mb4",
 			"parseTime":    "True",
@@ -679,11 +686,13 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
 	// Build MySQL DSN
 	cfg := mysql.Config{
-		User:   settings.Output.MySQL.Username,
-		Passwd: settings.Output.MySQL.Password,
-		Net:    "tcp",
-		Addr:   fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
-		DBName: settings.Output.MySQL.Database,
+		User:                 settings.Output.MySQL.Username,
+		Passwd:               settings.Output.MySQL.Password,
+		Net:                  "tcp",
+		Addr:                 fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
+		DBName:               settings.Output.MySQL.Database,
+		AllowNativePasswords: true,
+		CheckConnLiveness:    true,
 		Params: map[string]string{
 			"charset":      "utf8mb4",
 			"parseTime":    "True",

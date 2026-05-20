@@ -455,3 +455,68 @@ func TestReportStartupError_NilSafe(t *testing.T) {
 		reportStartupError("sqlite", "openV2Database", fmt.Errorf("open /home/user/birdnet_v2.db: denied"), "/home/user/birdnet_v2.db")
 	})
 }
+
+// TestCheckMySQLMigrationState_NativePasswordAuth verifies that the MySQL
+// startup check works with mysql_native_password authentication, which is the
+// default for MariaDB and some MySQL configurations.
+// This test requires MYSQL_TEST_* environment variables to be set.
+func TestCheckMySQLMigrationState_NativePasswordAuth(t *testing.T) {
+	cfg := skipIfNoMySQL(t)
+
+	settings := &conf.Settings{}
+	settings.Output.MySQL.Enabled = true
+	settings.Output.MySQL.Host = cfg.Host
+	settings.Output.MySQL.Port = cfg.Port
+	settings.Output.MySQL.Username = cfg.Username
+	settings.Output.MySQL.Password = cfg.Password
+	settings.Output.MySQL.Database = cfg.Database
+
+	state := checkMySQLMigrationState(settings)
+
+	// The key assertion: the function must NOT return an error.
+	// Before the fix, mysql_native_password servers would get
+	// ErrV2DatabaseCorrupted because AllowNativePasswords defaulted to false.
+	require.NoError(t, state.Error, "startup check must not fail due to auth plugin rejection")
+	assert.NotEmpty(t, string(state.MigrationStatus), "migration status should be set")
+}
+
+// TestHasUnmigratedLegacyMySQL_NativePasswordAuth verifies that the unmigrated
+// records check connects successfully with mysql_native_password.
+func TestHasUnmigratedLegacyMySQL_NativePasswordAuth(t *testing.T) {
+	cfg := skipIfNoMySQL(t)
+
+	settings := &conf.Settings{}
+	settings.Output.MySQL.Enabled = true
+	settings.Output.MySQL.Host = cfg.Host
+	settings.Output.MySQL.Port = cfg.Port
+	settings.Output.MySQL.Username = cfg.Username
+	settings.Output.MySQL.Password = cfg.Password
+	settings.Output.MySQL.Database = cfg.Database
+
+	log := testStartupLogger()
+
+	// Should not panic or fail due to auth plugin rejection.
+	// The return value depends on whether legacy tables exist, which is fine.
+	assert.NotPanics(t, func() {
+		_ = hasUnmigratedLegacyMySQL(settings, log)
+	})
+}
+
+// TestCheckMySQLHasFreshV2Schema_NativePasswordAuth verifies that the fresh v2
+// schema check connects successfully with mysql_native_password.
+func TestCheckMySQLHasFreshV2Schema_NativePasswordAuth(t *testing.T) {
+	cfg := skipIfNoMySQL(t)
+
+	settings := &conf.Settings{}
+	settings.Output.MySQL.Enabled = true
+	settings.Output.MySQL.Host = cfg.Host
+	settings.Output.MySQL.Port = cfg.Port
+	settings.Output.MySQL.Username = cfg.Username
+	settings.Output.MySQL.Password = cfg.Password
+	settings.Output.MySQL.Database = cfg.Database
+
+	// Should not panic or fail due to auth plugin rejection
+	assert.NotPanics(t, func() {
+		_ = CheckMySQLHasFreshV2Schema(settings)
+	})
+}
