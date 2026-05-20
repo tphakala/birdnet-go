@@ -58,8 +58,7 @@ type Controller struct {
 	TaxonomyDB          *classifier.TaxonomyDatabase
 	controlChan         chan string
 	shutdownRequester   ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
-	shutdownMu          sync.RWMutex      // protects shutdownRequester
-	speciesExcludeMutex sync.RWMutex      // Mutex for species exclude list operations
+	shutdownMu sync.RWMutex // protects shutdownRequester
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.

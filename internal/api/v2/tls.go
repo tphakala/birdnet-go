@@ -133,7 +133,13 @@ func (c *Controller) UploadTLSCertificate(ctx echo.Context) error {
 
 	// Update TLS mode to manual
 	c.settingsMutex.Lock()
-	c.Settings.Security.TLSMode = conf.TLSModeManual
+	current := c.getSettingsOrFallback()
+	updated := conf.CloneSettings(current)
+	updated.Security.TLSMode = conf.TLSModeManual
+	if c.isGlobalOwner {
+		conf.StoreSettings(updated)
+	}
+	c.Settings = updated
 	c.settingsMutex.Unlock()
 
 	if !c.DisableSaveSettings {
@@ -165,7 +171,13 @@ func (c *Controller) DeleteTLSCertificate(ctx echo.Context) error {
 
 	// Reset TLS mode to none
 	c.settingsMutex.Lock()
-	c.Settings.Security.TLSMode = conf.TLSModeNone
+	current := c.getSettingsOrFallback()
+	updated := conf.CloneSettings(current)
+	updated.Security.TLSMode = conf.TLSModeNone
+	if c.isGlobalOwner {
+		conf.StoreSettings(updated)
+	}
+	c.Settings = updated
 	c.settingsMutex.Unlock()
 
 	if !c.DisableSaveSettings {
@@ -207,8 +219,9 @@ func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
 
 	// Collect SANs from settings
 	c.settingsMutex.RLock()
-	host := c.Settings.Security.Host
-	baseURL := c.Settings.Security.BaseURL
+	snap := c.getSettingsOrFallback()
+	host := snap.Security.Host
+	baseURL := snap.Security.BaseURL
 	c.settingsMutex.RUnlock()
 
 	sans := tlspkg.CollectSANs(host, baseURL)
@@ -236,7 +249,13 @@ func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
 
 	// Update TLS mode to self-signed
 	c.settingsMutex.Lock()
-	c.Settings.Security.TLSMode = conf.TLSModeSelfSigned
+	current := c.getSettingsOrFallback()
+	updated := conf.CloneSettings(current)
+	updated.Security.TLSMode = conf.TLSModeSelfSigned
+	if c.isGlobalOwner {
+		conf.StoreSettings(updated)
+	}
+	c.Settings = updated
 	c.settingsMutex.Unlock()
 
 	if !c.DisableSaveSettings {
