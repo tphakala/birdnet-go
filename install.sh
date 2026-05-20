@@ -1680,7 +1680,6 @@ check_not_root() {
     if [ "$(id -u)" -eq 0 ]; then
         if [ "$FORCE_ROOT" = "true" ]; then
             print_message "⚠️  Running as root (--force-root was specified)" "$YELLOW"
-            log_message "WARN" "Running as root with --force-root override"
             return 0
         fi
 
@@ -5277,6 +5276,12 @@ parse_arguments "$@"
 
 # Warn if running as root; allow bypass with --force-root (must be before $HOME-dependent path setup)
 check_not_root
+
+# When running as root without sudo installed (common in containers), provide a
+# shim so the script's 100+ sudo calls work without modification.
+if [ "$(id -u)" -eq 0 ] && ! command_exists sudo; then
+    sudo() { "$@"; }
+fi
 
 # Default paths
 CONFIG_DIR="$HOME/birdnet-go-app/config"
