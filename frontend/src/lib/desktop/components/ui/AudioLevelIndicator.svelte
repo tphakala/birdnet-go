@@ -4,6 +4,7 @@
   import { Mic, CirclePlay, CircleStop, Check } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { loggers } from '$lib/utils/logger';
+  import { t } from '$lib/i18n';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { generateSessionId } from '$lib/utils/session';
@@ -100,7 +101,7 @@
 
       audioElementRef.addEventListener('error', _e => {
         if (!playingSource) return; // Ignore errors from cleanup
-        showStatusMessage('Playback error');
+        showStatusMessage(t('media.audio.playError'));
         isPlaying = false;
         stopPlayback();
       });
@@ -257,9 +258,11 @@
     if ('mediaSession' in navigator) {
       const sourceName = source ? getSourceDisplayName(source) : '';
       navigator.mediaSession.metadata = new globalThis.MediaMetadata({
-        title: sourceName ? `Bird Audio Stream - ${sourceName}` : 'Bird Audio Stream',
-        artist: 'BirdNet-Go',
-        album: 'Live Stream',
+        title: sourceName
+          ? t('media.audio.streamTitle', { source: sourceName })
+          : t('media.audio.streamTitleDefault'),
+        artist: t('media.audio.streamArtist'),
+        album: t('media.audio.streamAlbum'),
       });
 
       navigator.mediaSession.setActionHandler('play', () => {
@@ -401,9 +404,9 @@
           audio.play().catch((err: Error) => {
             logger.error('Playback start error:', err);
             if (err.name === 'NotAllowedError') {
-              showStatusMessage('Click to play (autoplay blocked)');
+              showStatusMessage(t('media.audio.autoplayBlocked'));
             } else {
-              showStatusMessage('Playback error');
+              showStatusMessage(t('media.audio.playError'));
             }
           });
         }
@@ -418,11 +421,11 @@
       audio.play().catch((err: Error) => {
         // Handle playback start error
         if (err.name === 'NotAllowedError') {
-          showStatusMessage('Click to play (autoplay blocked)');
+          showStatusMessage(t('media.audio.autoplayBlocked'));
         }
       });
     } else {
-      showStatusMessage('HLS playback not supported in this browser');
+      showStatusMessage(t('media.audio.hlsNotSupported'));
       // HLS playback not supported
     }
   }
@@ -434,7 +437,7 @@
 
     const requestId = ++startRequestId;
     playingSource = sourceId;
-    showStatusMessage('Starting audio stream...');
+    showStatusMessage(t('media.audio.streamStarting'));
 
     const encodedSourceId = encodeURIComponent(sourceId);
 
@@ -468,8 +471,8 @@
       // Handle audio stream access error
       const message =
         error instanceof Error && error.message.includes('permission')
-          ? 'Login required to stream audio'
-          : 'Error starting stream';
+          ? t('media.audio.loginRequired')
+          : t('media.audio.streamError');
       showStatusMessage(message);
       globalThis.setTimeout(() => hideStatusMessage(), 3000);
     }
@@ -602,7 +605,9 @@
     class="w-full h-full relative focus:outline-hidden group"
     aria-expanded={dropdownOpen}
     aria-haspopup="true"
-    aria-label={`Audio level for ${selectedSource ? getSourceDisplayName(selectedSource) : 'No source'}`}
+    aria-label={t('media.audio.levelFor', {
+      source: selectedSource ? getSourceDisplayName(selectedSource) : t('media.audio.noSource'),
+    })}
   >
     <svg class="w-full h-full" viewBox="0 0 36 36" aria-hidden="true">
       <!-- Background circle -->
@@ -628,8 +633,8 @@
     </div>
     <!-- Screen reader announcement -->
     <div class="sr-only" aria-live="polite">
-      Current audio level: {Math.round(smoothedVolume)} percent{isClipping
-        ? ', clipping detected'
+      {t('media.audio.levelAnnouncement', { level: Math.round(smoothedVolume) })}{isClipping
+        ? t('media.audio.clippingDetected')
         : ''}
     </div>
   </button>
@@ -653,12 +658,12 @@
         in:dropdown
         out:dropdown={{ duration: 100 }}
         role="menu"
-        aria-label="Audio Source Selection"
+        aria-label={t('media.audio.sourceSelection')}
         class="audio-dropdown absolute top-full mt-2 w-72 sm:w-80 max-w-[calc(100vw-2rem)] bg-[var(--color-base-100)] rounded-lg shadow-xl border border-[var(--color-base-300)] overflow-hidden flex flex-col z-50"
       >
         <!-- Header -->
         <div class="flex items-center justify-between p-4 border-b border-[var(--color-base-300)]">
-          <h3 class="text-lg font-semibold">Audio Sources</h3>
+          <h3 class="text-lg font-semibold">{t('media.audio.sources')}</h3>
         </div>
 
         <!-- Source list -->
@@ -668,7 +673,7 @@
               <div class="mx-auto mb-2 opacity-50">
                 <Mic class="size-12 mx-auto" />
               </div>
-              <p>No audio sources available</p>
+              <p>{t('media.audio.noSourcesAvailable')}</p>
             </div>
           {:else}
             {#each Object.entries(levels) as [source, _data] (source)}
@@ -722,7 +727,9 @@
                       {/if}
                     </div>
                     {#if isInactive(source)}
-                      <span class="text-xs text-[var(--color-base-content)]/60">(silent)</span>
+                      <span class="text-xs text-[var(--color-base-content)]/60"
+                        >{t('media.audio.silent')}</span
+                      >
                     {/if}
                   </button>
 
@@ -739,8 +746,8 @@
                         : 'text-[var(--color-success)]'
                     )}
                     aria-label={playingSource === source
-                      ? 'Stop audio playback'
-                      : 'Start audio playback'}
+                      ? t('media.audio.stopPlayback')
+                      : t('media.audio.startPlayback')}
                   >
                     {#if playingSource !== source}
                       <CirclePlay class="size-5" />
@@ -771,11 +778,11 @@
   <!-- Screen reader announcements -->
   <div aria-live="polite" class="sr-only">
     {#if isPlaying}
-      Now playing audio from {selectedSource
-        ? getSourceDisplayName(selectedSource)
-        : 'unknown source'}
+      {t('media.audio.nowPlaying', {
+        source: selectedSource ? getSourceDisplayName(selectedSource) : t('media.audio.noSource'),
+      })}
     {:else if !isPlaying && selectedSource}
-      Audio playback stopped
+      {t('media.audio.playbackStopped')}
     {/if}
   </div>
 </div>

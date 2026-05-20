@@ -41,7 +41,7 @@
 
   const logger = loggers.audio;
 
-  /* global Audio, AudioContext */
+  /* global Audio, AudioContext, MediaError */
 
   interface Props {
     detectionId: number;
@@ -182,12 +182,12 @@
         isLoading = false;
       }
     } catch (err) {
+      isLoading = false;
       // If a retry is already queued (handleError ran before play() rejected),
       // don't overwrite the retry state with an error message.
       if (audioRetryCount > 0) return;
       logger.error('Error playing audio:', err);
       error = t('media.audio.playError');
-      isLoading = false;
     }
   }
 
@@ -365,10 +365,13 @@
       canplayTimeoutId = undefined;
     }
 
+    // Don't retry permanent errors (e.g. unsupported format)
+    const isPermanentError = audioElement?.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
+
     // Retry transparently if user initiated play and retries remain.
     // This handles the case where the audio clip is still being written
     // to disk when the user clicks play on a freshly detected species.
-    if (isLoading && audioRetryCount < MAX_AUDIO_RETRIES) {
+    if (isLoading && !isPermanentError && audioRetryCount < MAX_AUDIO_RETRIES) {
       const delay = AUDIO_RETRY_DELAYS[Math.min(audioRetryCount, AUDIO_RETRY_DELAYS.length - 1)];
       audioRetryCount++;
       logger.debug('Audio load failed, retrying', {

@@ -118,7 +118,7 @@
     const handleResize = createDebounce((entries: ResizeObserverEntry[]) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
+        if (width > 0 && height > 0 && isFinite(width) && isFinite(height)) {
           cssWidth = Math.round(width);
           cssHeight = Math.round(height);
         }
@@ -273,28 +273,31 @@
       if (pixelsToScroll > 0) {
         const w = deviceWidth;
         const h = deviceHeight;
+        const MAX_CANVAS_DIM = 8192;
 
-        // Self-blit: shift existing content left (GPU-composited)
-        ctx.drawImage(canvasEl!, -pixelsToScroll, 0);
+        if (w > 0 && h > 0 && w <= MAX_CANVAS_DIM && h <= MAX_CANVAS_DIM) {
+          // Self-blit: shift existing content left (GPU-composited)
+          ctx.drawImage(canvasEl!, -pixelsToScroll, 0);
 
-        // Draw new column(s) at right edge using device pixel dimensions
-        const imgData = ctx.createImageData(pixelsToScroll, h);
-        const data = new Uint32Array(imgData.data.buffer);
-        const currentBinMap = pixelToBinMap;
-        const currentLUT = colorLUT;
+          // Draw new column(s) at right edge using device pixel dimensions
+          const imgData = ctx.createImageData(pixelsToScroll, h);
+          const data = new Uint32Array(imgData.data.buffer);
+          const currentBinMap = pixelToBinMap;
+          const currentLUT = colorLUT;
 
-        for (let col = 0; col < pixelsToScroll; col++) {
-          for (let y = 0; y < h; y++) {
-            /* eslint-disable security/detect-object-injection -- loop indices and typed array lookups */
-            const binIndex = currentBinMap[y];
-            const magnitude = frequencyData[binIndex];
-            data[y * pixelsToScroll + col] = currentLUT[magnitude];
-            /* eslint-enable security/detect-object-injection */
+          for (let col = 0; col < pixelsToScroll; col++) {
+            for (let y = 0; y < h; y++) {
+              /* eslint-disable security/detect-object-injection -- loop indices and typed array lookups */
+              const binIndex = currentBinMap[y];
+              const magnitude = frequencyData[binIndex];
+              data[y * pixelsToScroll + col] = currentLUT[magnitude];
+              /* eslint-enable security/detect-object-injection */
+            }
           }
-        }
 
-        // putImageData works in raw device pixel coordinates (no transform needed)
-        ctx.putImageData(imgData, w - pixelsToScroll, 0);
+          // putImageData works in raw device pixel coordinates (no transform needed)
+          ctx.putImageData(imgData, w - pixelsToScroll, 0);
+        }
       }
 
       // --- Overlay: detection labels + debug time markers ---
