@@ -226,7 +226,13 @@ func (s *Service) MarkAsRead(id string) error {
 	}
 
 	notification.MarkAsRead()
-	return s.store.Update(notification)
+	if err := s.store.Update(notification); err != nil {
+		if errors.Is(err, ErrNotificationNotFound) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // MarkAllAsRead marks every unread notification as read in a single
@@ -253,7 +259,13 @@ func (s *Service) MarkAsAcknowledged(id string) error {
 	}
 
 	notification.MarkAsAcknowledged()
-	return s.store.Update(notification)
+	if err := s.store.Update(notification); err != nil {
+		if errors.Is(err, ErrNotificationNotFound) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // Delete removes a notification
