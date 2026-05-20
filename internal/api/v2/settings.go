@@ -555,6 +555,25 @@ func handlePrimitiveField(
 	return nil
 }
 
+// publishAndSaveSettings publishes updated settings and persists to disk.
+// Must be called while c.settingsMutex is held. On save failure, both the
+// atomic pointer and c.Settings are rolled back to current.
+func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) error {
+	if c.isGlobalOwner {
+		conf.StoreSettings(updated)
+	}
+	c.Settings = updated
+
+	if c.isGlobalOwner && !c.DisableSaveSettings {
+		if err := conf.SaveSettings(); err != nil {
+			conf.StoreSettings(current)
+			c.Settings = current
+			return fmt.Errorf("failed to save settings: %w", err)
+		}
+	}
+	return nil
+}
+
 // getSettingsOrFallback returns the current settings snapshot for write handlers.
 // When this controller owns the global singleton (production), it reads from
 // conf.GetSettings() so that out-of-band publishers (range filter rebuild,

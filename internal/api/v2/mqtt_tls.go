@@ -207,18 +207,16 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 		updated.Realtime.MQTT.TLS.ClientCert = ""
 		updated.Realtime.MQTT.TLS.ClientKey = ""
 	}
-	if c.isGlobalOwner {
-		conf.StoreSettings(updated)
+	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		c.settingsMutex.Unlock()
+		return c.HandleError(ctx, err, "Failed to save settings after MQTT TLS certificate upload",
+			http.StatusInternalServerError)
 	}
-	c.Settings = updated
+	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
+		GetLogger().Warn("Failed to trigger settings side-effects after MQTT TLS certificate change",
+			logger.Error(handleErr))
+	}
 	c.settingsMutex.Unlock()
-
-	if !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			c.logErrorIfEnabled("Failed to save settings after MQTT TLS certificate upload",
-				logger.Error(err))
-		}
-	}
 
 	return c.GetMQTTTLSCertificate(ctx)
 }
@@ -242,18 +240,16 @@ func (c *Controller) DeleteMQTTTLSCertificate(ctx echo.Context) error {
 	updated.Realtime.MQTT.TLS.CACert = ""
 	updated.Realtime.MQTT.TLS.ClientCert = ""
 	updated.Realtime.MQTT.TLS.ClientKey = ""
-	if c.isGlobalOwner {
-		conf.StoreSettings(updated)
+	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		c.settingsMutex.Unlock()
+		return c.HandleError(ctx, err, "Failed to save settings after MQTT TLS certificate deletion",
+			http.StatusInternalServerError)
 	}
-	c.Settings = updated
+	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
+		GetLogger().Warn("Failed to trigger settings side-effects after MQTT TLS certificate change",
+			logger.Error(handleErr))
+	}
 	c.settingsMutex.Unlock()
-
-	if !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			c.logErrorIfEnabled("Failed to save settings after MQTT TLS certificate deletion",
-				logger.Error(err))
-		}
-	}
 
 	return ctx.NoContent(http.StatusNoContent)
 }

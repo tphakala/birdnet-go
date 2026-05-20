@@ -1594,18 +1594,8 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 		isExcluded = true
 	}
 
-	if c.isGlobalOwner {
-		conf.StoreSettings(updated)
-	}
-	c.Settings = updated
-
-	if c.isGlobalOwner && !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			// Rollback so in-memory state matches disk.
-			conf.StoreSettings(current)
-			c.Settings = current
-			return "", wasExcluded, fmt.Errorf("failed to save settings: %w", err)
-		}
+	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		return "", wasExcluded, err
 	}
 
 	// Trigger side-effects (range filter rebuild, etc.) so the include list
@@ -1638,17 +1628,8 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 	updated := conf.CloneSettings(current)
 	updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
 
-	if c.isGlobalOwner {
-		conf.StoreSettings(updated)
-	}
-	c.Settings = updated
-
-	if c.isGlobalOwner && !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			conf.StoreSettings(current)
-			c.Settings = current
-			return fmt.Errorf("failed to save settings: %w", err)
-		}
+	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		return err
 	}
 
 	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
