@@ -937,7 +937,9 @@
       "loading": "Načítání podrobností detekce…",
       "loaded": "Podrobnosti detekce načteny pro {species}",
       "error": "Chyba při načítání detekce: {error}",
-      "loadingResults": "Načítání {count} výsledků..."
+      "loadingResults": "Načítání {count} výsledků...",
+      "thumbnailLoading": "Načítání náhledu {species}...",
+      "thumbnailLoaded": "Náhled {species} načten"
     },
     "errors": {
       "notFound": "Detekce nebyla nalezena. Možná byla odstraněna nebo je ID nesprávné.",

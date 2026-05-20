@@ -937,7 +937,9 @@
       "loading": "Laddar detekteringsinformation...",
       "loaded": "Detekteringsinformation laddad för {species}",
       "error": "Fel vid laddning av detektering: {error}",
-      "loadingResults": "Laddar {count} resultat..."
+      "loadingResults": "Laddar {count} resultat...",
+      "thumbnailLoading": "Laddar {species} miniatyrbild...",
+      "thumbnailLoaded": "Miniatyrbild av {species} laddad"
     },
     "errors": {
       "notFound": "Detekteringen hittades inte. Den kan ha tagits bort eller så är ID:t felaktigt.",

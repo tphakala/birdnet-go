@@ -937,7 +937,9 @@
       "loading": "Ładowanie szczegółów detekcji...",
       "loaded": "Szczegóły detekcji załadowane dla {species}",
       "error": "Błąd ładowania detekcji: {error}",
-      "loadingResults": "Ładowanie {count} wyników..."
+      "loadingResults": "Ładowanie {count} wyników...",
+      "thumbnailLoading": "Ładowanie miniatury {species}...",
+      "thumbnailLoaded": "Miniatura {species} załadowana"
     },
     "errors": {
       "notFound": "Nie znaleziono detekcji. Mogła zostać usunięta lub identyfikator jest nieprawidłowy.",

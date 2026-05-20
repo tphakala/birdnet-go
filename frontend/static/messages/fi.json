@@ -937,7 +937,9 @@
       "loading": "Ladataan havainnon tietoja...",
       "loaded": "Havainnon tiedot ladattu: {species}",
       "error": "Virhe havainnon latauksessa: {error}",
-      "loadingResults": "Ladataan {count} tulosta..."
+      "loadingResults": "Ladataan {count} tulosta...",
+      "thumbnailLoading": "Ladataan {species} pikkukuvaa...",
+      "thumbnailLoaded": "Pikkukuva {species} ladattu"
     },
     "errors": {
       "notFound": "Havaintoa ei löytynyt. Se on ehkä poistettu tai tunniste on virheellinen.",

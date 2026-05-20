@@ -937,7 +937,9 @@
       "loading": "Erkennungsdetails werden geladen...",
       "loaded": "Erkennungsdetails für {species} geladen",
       "error": "Fehler beim Laden der Erkennung: {error}",
-      "loadingResults": "Lade {count} Ergebnisse..."
+      "loadingResults": "Lade {count} Ergebnisse...",
+      "thumbnailLoading": "Lade Vorschaubild von {species}...",
+      "thumbnailLoaded": "Vorschaubild von {species} geladen"
     },
     "errors": {
       "notFound": "Erkennung nicht gefunden. Sie wurde möglicherweise gelöscht oder die ID ist falsch.",

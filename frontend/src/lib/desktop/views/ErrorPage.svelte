@@ -212,7 +212,7 @@
     }, 4000);
 
     // Create initial feather after a short delay
-    setTimeout(createFeather, 1000);
+    const initialFeatherTimeout = setTimeout(createFeather, 1000);
 
     // Add keyboard listener
     document.addEventListener('keydown', handleKeydown);
@@ -220,6 +220,7 @@
     return () => {
       if (timerInterval) clearInterval(timerInterval);
       if (featherInterval) clearInterval(featherInterval);
+      clearTimeout(initialFeatherTimeout);
       document.removeEventListener('keydown', handleKeydown);
     };
   });
