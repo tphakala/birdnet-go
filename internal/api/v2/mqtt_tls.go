@@ -193,18 +193,24 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 
 	// Stage 2: Apply all settings atomically after all I/O succeeded.
 	c.settingsMutex.Lock()
+	current := c.getSettingsOrFallback()
+	updated := conf.CloneSettings(current)
 	if update.caCert != "" {
-		c.Settings.Realtime.MQTT.TLS.CACert = update.caCert
+		updated.Realtime.MQTT.TLS.CACert = update.caCert
 	} else if update.clearCA {
-		c.Settings.Realtime.MQTT.TLS.CACert = ""
+		updated.Realtime.MQTT.TLS.CACert = ""
 	}
 	if update.clientCert != "" {
-		c.Settings.Realtime.MQTT.TLS.ClientCert = update.clientCert
-		c.Settings.Realtime.MQTT.TLS.ClientKey = update.clientKey
+		updated.Realtime.MQTT.TLS.ClientCert = update.clientCert
+		updated.Realtime.MQTT.TLS.ClientKey = update.clientKey
 	} else if update.clearClient {
-		c.Settings.Realtime.MQTT.TLS.ClientCert = ""
-		c.Settings.Realtime.MQTT.TLS.ClientKey = ""
+		updated.Realtime.MQTT.TLS.ClientCert = ""
+		updated.Realtime.MQTT.TLS.ClientKey = ""
 	}
+	if c.isGlobalOwner {
+		conf.StoreSettings(updated)
+	}
+	c.Settings = updated
 	c.settingsMutex.Unlock()
 
 	if !c.DisableSaveSettings {
@@ -231,9 +237,15 @@ func (c *Controller) DeleteMQTTTLSCertificate(ctx echo.Context) error {
 
 	// Clear all certificate paths in settings
 	c.settingsMutex.Lock()
-	c.Settings.Realtime.MQTT.TLS.CACert = ""
-	c.Settings.Realtime.MQTT.TLS.ClientCert = ""
-	c.Settings.Realtime.MQTT.TLS.ClientKey = ""
+	current := c.getSettingsOrFallback()
+	updated := conf.CloneSettings(current)
+	updated.Realtime.MQTT.TLS.CACert = ""
+	updated.Realtime.MQTT.TLS.ClientCert = ""
+	updated.Realtime.MQTT.TLS.ClientKey = ""
+	if c.isGlobalOwner {
+		conf.StoreSettings(updated)
+	}
+	c.Settings = updated
 	c.settingsMutex.Unlock()
 
 	if !c.DisableSaveSettings {

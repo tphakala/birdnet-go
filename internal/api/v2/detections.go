@@ -1593,10 +1593,7 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 		action = "removed"
 		isExcluded = false
 	} else {
-		newExcludeList := make([]string, len(updated.Realtime.Species.Exclude), len(updated.Realtime.Species.Exclude)+1)
-		copy(newExcludeList, updated.Realtime.Species.Exclude)
-		newExcludeList = append(newExcludeList, species)
-		updated.Realtime.Species.Exclude = newExcludeList
+		updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
 		action = "added"
 		isExcluded = true
 	}
@@ -1606,13 +1603,13 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 	}
 	c.Settings = updated
 
-	if err := conf.SaveSettings(); err != nil {
-		// Rollback so in-memory state matches disk.
-		if c.isGlobalOwner {
+	if c.isGlobalOwner && !c.DisableSaveSettings {
+		if err := conf.SaveSettings(); err != nil {
+			// Rollback so in-memory state matches disk.
 			conf.StoreSettings(current)
+			c.Settings = current
+			return "", wasExcluded, fmt.Errorf("failed to save settings: %w", err)
 		}
-		c.Settings = current
-		return "", wasExcluded, fmt.Errorf("failed to save settings: %w", err)
 	}
 
 	// Trigger side-effects (range filter rebuild, etc.) so the include list
@@ -1643,22 +1640,19 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 	}
 
 	updated := conf.CloneSettings(current)
-	newExcludeList := make([]string, len(updated.Realtime.Species.Exclude), len(updated.Realtime.Species.Exclude)+1)
-	copy(newExcludeList, updated.Realtime.Species.Exclude)
-	newExcludeList = append(newExcludeList, species)
-	updated.Realtime.Species.Exclude = newExcludeList
+	updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
 
 	if c.isGlobalOwner {
 		conf.StoreSettings(updated)
 	}
 	c.Settings = updated
 
-	if err := conf.SaveSettings(); err != nil {
-		if c.isGlobalOwner {
+	if c.isGlobalOwner && !c.DisableSaveSettings {
+		if err := conf.SaveSettings(); err != nil {
 			conf.StoreSettings(current)
+			c.Settings = current
+			return fmt.Errorf("failed to save settings: %w", err)
 		}
-		c.Settings = current
-		return fmt.Errorf("failed to save settings: %w", err)
 	}
 
 	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
