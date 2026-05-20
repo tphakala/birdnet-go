@@ -448,7 +448,7 @@
 
         // Stop audio playback to prevent resource leaks
         audioElement.pause();
-        audioElement.src = '';
+        audioElement.removeAttribute('src');
       }
 
       // Clean up Web Audio API using shared utilities
