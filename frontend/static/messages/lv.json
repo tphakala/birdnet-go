@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime nav pieejams",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Pārliecinieties, ka libonnxruntime.so ir instalēts paredzētajā ceļā."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Skatiet instalēšanas rokasgrāmatu: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",

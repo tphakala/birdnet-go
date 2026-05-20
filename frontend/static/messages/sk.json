@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime nie je k dispozícii",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} je vyžadovaný pre {modelName}, ale nebol nájdený. Skontrolujte, či je libonnxruntime.so nainštalovaný na očakávanej ceste."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} je vyžadovaný pre {modelName}, ale nebol nájdený. Pozrite si príručku inštalácie: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",

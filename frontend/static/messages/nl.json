@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime niet beschikbaar",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} is vereist voor {modelName}, maar werd niet gevonden. Controleer of libonnxruntime.so is geïnstalleerd op het verwachte pad."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} is vereist voor {modelName}, maar werd niet gevonden. Zie de installatiegids: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",

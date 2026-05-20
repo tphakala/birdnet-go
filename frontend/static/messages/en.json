@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime Not Available",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. Check that libonnxruntime.so is installed at the expected path."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. See the install guide: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",

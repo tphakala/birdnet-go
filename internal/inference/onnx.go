@@ -280,7 +280,7 @@ func InitONNXRuntime(libraryPath string) (err error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("failed to initialize ONNX Runtime: %v", r)
+			err = fmt.Errorf("failed to initialize ONNX Runtime: %v; install guide: %s", r, ORTInstallGuideURL)
 		}
 	}()
 
