@@ -78,7 +78,7 @@ func parseHour(hour string) (int, error) {
 
 // parseID converts a string ID to uint.
 func parseID(id string) (uint, error) {
-	parsed, err := strconv.ParseUint(id, 10, 32)
+	parsed, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("invalid ID %q: %w", id, err)
 	}

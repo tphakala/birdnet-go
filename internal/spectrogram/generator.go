@@ -300,6 +300,13 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 			Build()
 	}
 
+	// Verify the audio file is accessible before starting generation.
+	// Checked here (not in each generator method) to produce a clear error
+	// and skip the Sox->FFmpeg fallback when the file simply does not exist.
+	if _, statErr := os.Stat(audioPath); statErr != nil {
+		return fmt.Errorf("audio file inaccessible: %w", statErr)
+	}
+
 	// Ensure output directory exists using SecureFS (validates path automatically)
 	if err := g.ensureOutputDirectory(outputPath); err != nil {
 		return err
