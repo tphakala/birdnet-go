@@ -83,6 +83,79 @@ func TestValidateFFmpegPath_Invalid(t *testing.T) {
 	})
 }
 
+// TestValidateSoxPath_Valid verifies that a real, absolute sox path passes validation.
+func TestValidateSoxPath_Valid(t *testing.T) {
+	t.Parallel()
+
+	soxPath, err := exec.LookPath("sox")
+	if err != nil {
+		t.Skip("sox not found in PATH, skipping valid-path test")
+	}
+
+	// LookPath may return a relative path on some systems; resolve it.
+	if !filepath.IsAbs(soxPath) {
+		abs, absErr := filepath.Abs(soxPath)
+		require.NoError(t, absErr)
+		soxPath = abs
+	}
+
+	err = ffmpeg.ValidateSoxPath(soxPath)
+	assert.NoError(t, err, "absolute path to real sox binary should pass validation")
+}
+
+// TestValidateSoxPath_Invalid verifies that malformed or suspicious paths are rejected.
+func TestValidateSoxPath_Invalid(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{
+			name: "empty path",
+			path: "",
+		},
+		{
+			name: "relative path",
+			path: "usr/bin/sox",
+		},
+		{
+			name: "path with api prefix contamination",
+			path: "/api/v1/sox",
+		},
+		{
+			name: "path with ingress prefix contamination",
+			path: "/ingress/sox",
+		},
+		{
+			name: "path with proxy prefix contamination",
+			path: "/proxy/sox",
+		},
+		{
+			name: "path with hassio prefix contamination",
+			path: "/hassio/sox",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := ffmpeg.ValidateSoxPath(tt.path)
+			assert.Error(t, err, "path %q should fail validation", tt.path)
+		})
+	}
+
+	// ValidateSoxPath does NOT check whether the file exists; a non-existent
+	// absolute path with no proxy contamination should pass.
+	t.Run("non-existent absolute path passes (existence not checked)", func(t *testing.T) {
+		t.Parallel()
+
+		err := ffmpeg.ValidateSoxPath("/nonexistent/path/to/sox")
+		assert.NoError(t, err, "non-existent absolute path should pass path-format validation")
+	})
+}
+
 // TestGetFFmpegFormat verifies format string output for various sample rate/channel/bit-depth combinations.
 func TestGetFFmpegFormat(t *testing.T) {
 	t.Parallel()
