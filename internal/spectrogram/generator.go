@@ -436,11 +436,12 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 // Otherwise, it uses FFmpeg to convert to Sox format and pipes to Sox.
 func (g *Generator) generateWithSoxFile(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
 	soxBinary := settings.Realtime.Audio.SoxPath
-	if soxBinary == "" {
-		return errors.Newf("sox binary not configured").
+	if err := ffmpeg.ValidateSoxPath(soxBinary); err != nil {
+		return errors.Newf("invalid Sox path: %s", err).
 			Component("spectrogram").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "generate_with_sox_file").
+			Context("sox_path", soxBinary).
 			Build()
 	}
 
