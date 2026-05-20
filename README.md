@@ -49,7 +49,7 @@ BirdNET-Go is an AI solution for continuous avian monitoring and identification
 - 24/7 realtime bird and bat sound analysis of soundcard capture, analysis output to log file, SQLite or MySQL
 - Built-in model gallery with multiple AI classifiers:
   - **BirdNET v2.4** (6,500+ bird species, included by default)
-  - **Google Perch v2** (14,795 bird species)
+  - **Google Perch v2** (14,800+ species: birds, insects, amphibians, mammals, and more)
   - **BattyBirdNET** (11 regional bat classifiers covering Africa, Americas, East Asia, Europe, Middle East, South Asia, Southeast Asia, and USA)
 - **BirdNET Geomodel v3.0** for location-based species range filtering
 - Run multiple models simultaneously on separate audio sources
