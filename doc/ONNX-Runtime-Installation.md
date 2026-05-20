@@ -36,7 +36,7 @@ ldconfig -p | grep onnxruntime
 
 Expected output:
 
-```
+```text
 libonnxruntime.so (libc6,x86-64) => /usr/lib/libonnxruntime.so
 ```
 
@@ -81,7 +81,7 @@ Note: macOS System Integrity Protection strips `DYLD_LIBRARY_PATH` when launchin
 
 After extracting the archive, keep `onnxruntime.dll` in the **same directory** as `birdnet-go.exe`. Windows loads DLLs from the application directory automatically, so no additional installation is needed.
 
-```
+```text
 C:\BirdNET-Go\
   birdnet-go.exe
   onnxruntime.dll
@@ -107,10 +107,11 @@ VERSION=1.25.1
 curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-linux-x64-${VERSION}.tgz" \
   -o onnxruntime.tgz
 
-tar xzf onnxruntime.tgz --strip-components=1
-sudo cp lib/libonnxruntime*.so* /usr/lib/
+mkdir -p onnxruntime-tmp
+tar xzf onnxruntime.tgz -C onnxruntime-tmp --strip-components=1
+sudo cp onnxruntime-tmp/lib/libonnxruntime*.so* /usr/lib/
 sudo ldconfig
-rm -rf onnxruntime.tgz include lib
+rm -rf onnxruntime.tgz onnxruntime-tmp
 ```
 
 ### Linux (aarch64 / arm64)
@@ -121,10 +122,11 @@ VERSION=1.25.1
 curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-linux-aarch64-${VERSION}.tgz" \
   -o onnxruntime.tgz
 
-tar xzf onnxruntime.tgz --strip-components=1
-sudo cp lib/libonnxruntime*.so* /usr/lib/
+mkdir -p onnxruntime-tmp
+tar xzf onnxruntime.tgz -C onnxruntime-tmp --strip-components=1
+sudo cp onnxruntime-tmp/lib/libonnxruntime*.so* /usr/lib/
 sudo ldconfig
-rm -rf onnxruntime.tgz include lib
+rm -rf onnxruntime.tgz onnxruntime-tmp
 ```
 
 This covers Raspberry Pi 4/5 (64-bit OS), NVIDIA Jetson, and other ARM64 single-board computers.
@@ -140,7 +142,7 @@ curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSIO
 # Extract (BSD tar needs special handling)
 mkdir -p onnxruntime-tmp
 tar xzf onnxruntime.tgz -C onnxruntime-tmp
-cp onnxruntime-tmp/onnxruntime-*/lib/libonnxruntime*.dylib /usr/local/lib/
+sudo cp onnxruntime-tmp/onnxruntime-*/lib/libonnxruntime*.dylib /usr/local/lib/
 rm -rf onnxruntime.tgz onnxruntime-tmp
 ```
 
@@ -231,13 +233,13 @@ where.exe onnxruntime.dll
 
 When BirdNET-Go starts, it logs the ONNX Runtime version it loaded. Look for a line like:
 
-```
+```text
 ONNX Runtime initialized (version 1.25.1)
 ```
 
 If the library is missing, you will see an error like:
 
-```
+```text
 error while loading shared libraries: libonnxruntime.so: cannot open shared object file
 ```
 
