@@ -1603,14 +1603,22 @@ func cleanupHLSStreamingFiles() error {
 				logger.String("path", path),
 				logger.String("operation", "cleanup_hls_files"))
 
-			// Remove the directory and all its contents
+			// Remove the directory and all its contents.
+			// Retry once on "directory not empty" to handle the race where
+			// a concurrent HLS writer creates a file between RemoveAll's
+			// internal traversal and the final parent unlink.
 			if err := os.RemoveAll(path); err != nil {
-				log.Warn("failed to remove HLS stream directory",
-					logger.String("path", path),
-					logger.Error(err),
-					logger.String("operation", "cleanup_hls_files"))
-				cleanupErrors = append(cleanupErrors, fmt.Sprintf("%s: %v", path, err))
-				// Continue with other directories
+				if strings.Contains(err.Error(), "directory not empty") {
+					time.Sleep(100 * time.Millisecond)
+					err = os.RemoveAll(path)
+				}
+				if err != nil {
+					log.Warn("failed to remove HLS stream directory",
+						logger.String("path", path),
+						logger.Error(err),
+						logger.String("operation", "cleanup_hls_files"))
+					cleanupErrors = append(cleanupErrors, fmt.Sprintf("%s: %v", path, err))
+				}
 			}
 		}
 	}
