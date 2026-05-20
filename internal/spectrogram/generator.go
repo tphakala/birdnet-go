@@ -300,6 +300,13 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 			Build()
 	}
 
+	// Verify the audio file is accessible before starting generation.
+	// Checked here (not in each generator method) to produce a clear error
+	// and skip the Sox->FFmpeg fallback when the file simply does not exist.
+	if _, statErr := os.Stat(audioPath); statErr != nil {
+		return fmt.Errorf("audio file inaccessible: %w", statErr)
+	}
+
 	// Ensure output directory exists using SecureFS (validates path automatically)
 	if err := g.ensureOutputDirectory(outputPath); err != nil {
 		return err
@@ -470,10 +477,6 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, settings *conf.Se
 			Build()
 	}
 
-	if _, statErr := os.Stat(audioPath); statErr != nil {
-		return fmt.Errorf("audio file not found: %w", os.ErrNotExist)
-	}
-
 	// Build Sox arguments for file input
 	soxArgs := g.getSoxArgs(ctx, settings, audioPath, outputPath, width, raw, SoxInputFile, preValidatedDuration)
 
@@ -563,10 +566,6 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings 
 			Category(errors.CategoryConfiguration).
 			Context("operation", "generate_with_ffmpeg_sox_pipeline").
 			Build()
-	}
-
-	if _, statErr := os.Stat(audioPath); statErr != nil {
-		return fmt.Errorf("audio file not found: %w", os.ErrNotExist)
 	}
 
 	// FFmpeg converts audio to Sox format and pipes to Sox
@@ -796,10 +795,6 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, settings *conf.Setti
 			Context("operation", "generate_with_ffmpeg").
 			Context("ffmpeg_path", ffmpegBinary).
 			Build()
-	}
-
-	if _, statErr := os.Stat(audioPath); statErr != nil {
-		return fmt.Errorf("audio file not found: %w", os.ErrNotExist)
 	}
 
 	height := fftFriendlyHeight(width)

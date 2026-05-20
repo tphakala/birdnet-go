@@ -442,35 +442,23 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 	return nil
 }
 
-// parseNoteID validates and converts a string note ID to uint.
-func parseNoteID(id string) (uint, error) {
+// parseEntityID validates and converts a string entity ID to uint.
+// entityName is used in error messages (e.g., "note", "comment").
+func parseEntityID(id, entityName string) (uint, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return 0, validationError("note ID cannot be empty", "id", "")
+		return 0, validationError(entityName+" ID cannot be empty", "id", "")
 	}
 	val, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
-		return 0, validationError("invalid note ID format", "id", id)
-	}
-	return uint(val), nil
-}
-
-// parseCommentID validates and converts a string comment ID to uint.
-func parseCommentID(id string) (uint, error) {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return 0, validationError("comment ID cannot be empty", "id", "")
-	}
-	val, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		return 0, validationError("invalid comment ID format", "id", id)
+		return 0, validationError("invalid "+entityName+" ID format", "id", id)
 	}
 	return uint(val), nil
 }
 
 // Get retrieves a note by its ID from the database.
 func (ds *DataStore) Get(id string) (Note, error) {
-	noteID, err := parseNoteID(id)
+	noteID, err := parseEntityID(id, "note")
 	if err != nil {
 		return Note{}, err
 	}
@@ -501,7 +489,7 @@ func (ds *DataStore) Get(id string) (Note, error) {
 
 // Delete removes a note and its associated results from the database.
 func (ds *DataStore) Delete(id string) error {
-	noteID, err := parseNoteID(id)
+	noteID, err := parseEntityID(id, "note")
 	if err != nil {
 		return err
 	}
@@ -1276,12 +1264,9 @@ func (ds *DataStore) CountSpeciesDetections(species, date, hour string, duration
 // UpdateNote updates specific fields of a note. It validates the input parameters
 // and returns appropriate errors if the note doesn't exist or if the update fails.
 func (ds *DataStore) UpdateNote(id string, updates map[string]any) error {
-	if id == "" {
-		return errors.Newf("invalid id: must not be empty").
-			Component("datastore").
-			Category(errors.CategoryValidation).
-			Context("operation", "update_note").
-			Build()
+	noteID, err := parseEntityID(id, "note")
+	if err != nil {
+		return err
 	}
 	if len(updates) == 0 {
 		return errors.Newf("no updates provided").
@@ -1292,8 +1277,8 @@ func (ds *DataStore) UpdateNote(id string, updates map[string]any) error {
 	}
 
 	var rowsAffected int64
-	err := RetryOnLock(context.Background(), "update_note", func() error {
-		result := ds.DB.Model(&Note{}).Where("id = ?", id).Updates(updates)
+	err = RetryOnLock(context.Background(), "update_note", func() error {
+		result := ds.DB.Model(&Note{}).Where("id = ?", noteID).Updates(updates)
 		if result.Error != nil {
 			return result.Error
 		}
@@ -1324,7 +1309,7 @@ func (ds *DataStore) UpdateNote(id string, updates map[string]any) error {
 // GetNoteReview retrieves the review status for a note
 func (ds *DataStore) GetNoteReview(noteID string) (*NoteReview, error) {
 	var review NoteReview
-	id, err := parseNoteID(noteID)
+	id, err := parseEntityID(noteID, "note")
 	if err != nil {
 		return nil, err
 	}
@@ -1378,7 +1363,7 @@ func (ds *DataStore) SaveNoteReview(review *NoteReview) error {
 // GetNoteComments retrieves all comments for a note
 func (ds *DataStore) GetNoteComments(noteID string) ([]NoteComment, error) {
 	var comments []NoteComment
-	id, err := parseNoteID(noteID)
+	id, err := parseEntityID(noteID, "note")
 	if err != nil {
 		return nil, err
 	}
@@ -1398,7 +1383,7 @@ func (ds *DataStore) GetNoteComments(noteID string) ([]NoteComment, error) {
 
 // GetNoteResults returns the additional predictions for a note.
 func (ds *DataStore) GetNoteResults(noteID string) ([]Results, error) {
-	id, err := parseNoteID(noteID)
+	id, err := parseEntityID(noteID, "note")
 	if err != nil {
 		return nil, err
 	}
@@ -1584,7 +1569,7 @@ func (ds *DataStore) SaveNoteComment(comment *NoteComment) error {
 
 // DeleteNoteComment deletes a comment
 func (ds *DataStore) DeleteNoteComment(commentID string) error {
-	id, err := parseCommentID(commentID)
+	id, err := parseEntityID(commentID, "comment")
 	if err != nil {
 		return err
 	}
@@ -1604,7 +1589,7 @@ func (ds *DataStore) DeleteNoteComment(commentID string) error {
 
 // UpdateNoteComment updates an existing comment's entry
 func (ds *DataStore) UpdateNoteComment(commentID, entry string) error {
-	id, err := parseCommentID(commentID)
+	id, err := parseEntityID(commentID, "comment")
 	if err != nil {
 		return err
 	}
@@ -1685,7 +1670,7 @@ func (ds *DataStore) Transaction(fc func(tx *gorm.DB) error) error {
 
 // GetNoteLock retrieves the lock status for a note
 func (ds *DataStore) GetNoteLock(noteID string) (*NoteLock, error) {
-	id, err := parseNoteID(noteID)
+	id, err := parseEntityID(noteID, "note")
 	if err != nil {
 		return nil, err
 	}
@@ -1710,7 +1695,7 @@ func (ds *DataStore) GetNoteLock(noteID string) (*NoteLock, error) {
 
 // IsNoteLocked checks if a note is locked
 func (ds *DataStore) IsNoteLocked(noteID string) (bool, error) {
-	id, err := parseNoteID(noteID)
+	id, err := parseEntityID(noteID, "note")
 	if err != nil {
 		return false, err
 	}
@@ -1735,7 +1720,7 @@ func (ds *DataStore) IsNoteLocked(noteID string) (bool, error) {
 
 // LockNote creates or updates a lock for a note
 func (ds *DataStore) LockNote(noteID string) error {
-	id, err := parseNoteID(noteID)
+	id, err := parseEntityID(noteID, "note")
 	if err != nil {
 		return err
 	}
@@ -1766,7 +1751,7 @@ func (ds *DataStore) LockNote(noteID string) error {
 
 // UnlockNote removes a lock from a note
 func (ds *DataStore) UnlockNote(noteID string) error {
-	id, err := parseNoteID(noteID)
+	id, err := parseEntityID(noteID, "note")
 	if err != nil {
 		return err
 	}

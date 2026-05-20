@@ -232,6 +232,10 @@ func (c *StreamConfig) sourceType() audiocore.SourceType {
 		return audiocore.SourceTypeRTMP
 	case "udp":
 		return audiocore.SourceTypeUDP
+	case "audio_card":
+		return audiocore.SourceTypeAudioCard
+	case "file":
+		return audiocore.SourceTypeFile
 	default:
 		return audiocore.SourceTypeUnknown
 	}
