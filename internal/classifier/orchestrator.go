@@ -372,7 +372,15 @@ func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float
 // supplied settings. Additional models (except bat) contribute their full label
 // set since they have no range filter. Results are deduplicated by label.
 func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
-	scores, err := o.primary.GetProbableSpeciesWithSettings(date, week, settings)
+	// Snapshot primary under read lock to avoid racing with Delete().
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return nil, nil
+	}
+
+	scores, err := primary.GetProbableSpeciesWithSettings(date, week, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +397,7 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 
 	var refs []entryRef
 	o.mu.RLock()
-	primaryID := o.primary.ModelInfo.ID
+	primaryID := primary.ModelInfo.ID
 	for id, entry := range o.models {
 		if id == primaryID || id == RegistryIDBat {
 			continue
