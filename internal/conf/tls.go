@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // TLSCertificateType represents the type of TLS certificate/key
@@ -22,6 +23,12 @@ const (
 	TLSCertTypeServerCert TLSCertificateType = "server_cert"
 	TLSCertTypeServerKey  TLSCertificateType = "server_key"
 )
+
+// allCertTypes lists every TLS certificate type for bulk operations.
+var allCertTypes = []TLSCertificateType{
+	TLSCertTypeCA, TLSCertTypeClient, TLSCertTypeKey,
+	TLSCertTypeServerCert, TLSCertTypeServerKey,
+}
 
 // TLSManager handles TLS certificate storage and retrieval
 type TLSManager struct {
@@ -159,12 +166,24 @@ func (tm *TLSManager) SaveCertificate(service string, certType TLSCertificateTyp
 		perm = 0o644 // Certificates: read for all, write for owner
 	}
 
-	// Write file with appropriate permissions
-	if err := os.WriteFile(filePath, []byte(content), perm); err != nil {
+	// Write to a temp file in the same directory, then rename atomically.
+	// This prevents partial writes from leaving a corrupted cert on disk.
+	tmpPath := filePath + ".tmp"
+	if err := os.WriteFile(tmpPath, []byte(content), perm); err != nil {
+		_ = os.Remove(tmpPath)
 		return "", errors.New(err).
 			Component("tls-manager").
 			Category(errors.CategoryFileIO).
-			Context("operation", "write-cert").
+			Context("operation", "write-cert-tmp").
+			Context("file", tmpPath).
+			Build()
+	}
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", errors.New(err).
+			Component("tls-manager").
+			Category(errors.CategoryFileIO).
+			Context("operation", "rename-cert").
 			Context("file", filePath).
 			Build()
 	}
@@ -213,13 +232,69 @@ func (tm *TLSManager) RemoveAllCertificates(service string) error {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
-	certTypes := []TLSCertificateType{TLSCertTypeCA, TLSCertTypeClient, TLSCertTypeKey, TLSCertTypeServerCert, TLSCertTypeServerKey}
+	certTypes := allCertTypes
 	for _, certType := range certTypes {
 		if err := tm.removeCertificateUnlocked(service, certType); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// BackupAllCertificates renames all existing certificate files to .bak
+// so they can be restored if a subsequent operation fails.
+func (tm *TLSManager) BackupAllCertificates(service string) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	certTypes := allCertTypes
+	for _, certType := range certTypes {
+		path := tm.GetCertificatePath(service, certType)
+		if err := os.Rename(path, path+".bak"); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			tm.restoreBackupsUnlocked(service)
+			return errors.New(err).
+				Component("tls-manager").
+				Category(errors.CategoryFileIO).
+				Context("operation", "backup-cert").
+				Context("file", path).
+				Build()
+		}
+	}
+	return nil
+}
+
+// RestoreBackups restores all .bak files to their original paths.
+func (tm *TLSManager) RestoreBackups(service string) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	tm.restoreBackupsUnlocked(service)
+}
+
+func (tm *TLSManager) restoreBackupsUnlocked(service string) {
+	certTypes := allCertTypes
+	for _, certType := range certTypes {
+		path := tm.GetCertificatePath(service, certType)
+		bakPath := path + ".bak"
+		if err := os.Rename(bakPath, path); err != nil && !os.IsNotExist(err) {
+			GetLogger().Warn("Failed to restore certificate backup",
+				logger.String("file", path), logger.Error(err))
+		}
+	}
+}
+
+// CleanupBackups removes all .bak files after a successful operation.
+func (tm *TLSManager) CleanupBackups(service string) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	certTypes := allCertTypes
+	for _, certType := range certTypes {
+		path := tm.GetCertificatePath(service, certType)
+		_ = os.Remove(path + ".bak")
+	}
 }
 
 // validateCertificateContent validates that the content is a valid PEM-encoded certificate or key
