@@ -238,8 +238,9 @@ func readLabels(path string) ([]string, error) {
 		if line == "" {
 			continue
 		}
-		// Skip FSD50K sound events (contain underscores) and the header line
-		if strings.Contains(line, "_") {
+		// Skip FSD50K sound events (contain underscores or are single words);
+		// valid species have binomial names with at least one space
+		if strings.Contains(line, "_") || !strings.Contains(line, " ") {
 			continue
 		}
 		labels = append(labels, line)
