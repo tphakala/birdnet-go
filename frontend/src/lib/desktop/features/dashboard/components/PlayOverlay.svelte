@@ -183,12 +183,12 @@
         isLoading = false;
       }
     } catch (err) {
-      isLoading = false;
       // If a retry is already queued (handleError ran before play() rejected),
       // don't overwrite the retry state with an error message.
       if (audioRetryCount > 0) return;
       logger.error('Error playing audio:', err);
       error = t('media.audio.playError');
+      isLoading = false;
     }
   }
 

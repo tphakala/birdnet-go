@@ -23,6 +23,8 @@
   const DEBUG_MARKER_INTERVAL_SEC = 5;
   /** Maximum safe canvas dimension in device pixels */
   const MAX_CANVAS_DIM = 8192;
+  /** Maximum frame delta (seconds) accepted by RAF loop to prevent OOM after tab resume */
+  const MAX_FRAME_DELTA_SEC = 0.1;
 
   interface Props {
     /** AnalyserNode to read frequency data from */
@@ -268,7 +270,7 @@
       analyser.getByteFrequencyData(frequencyData);
 
       // Compute device pixels to scroll; cap deltaTime to prevent OOM after tab resume
-      const clampedDelta = Math.min(deltaTime, 0.1);
+      const clampedDelta = Math.min(deltaTime, MAX_FRAME_DELTA_SEC);
       scrollAccumulator += deviceScrollSpeed * clampedDelta;
       const pixelsToScroll = Math.floor(scrollAccumulator);
       scrollAccumulator -= pixelsToScroll;
