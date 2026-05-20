@@ -936,7 +936,8 @@
     "aria": {
       "loading": "Erkennungsdetails werden geladen...",
       "loaded": "Erkennungsdetails für {species} geladen",
-      "error": "Fehler beim Laden der Erkennung: {error}"
+      "error": "Fehler beim Laden der Erkennung: {error}",
+      "loadingResults": "Lade {count} Ergebnisse..."
     },
     "errors": {
       "notFound": "Erkennung nicht gefunden. Sie wurde möglicherweise gelöscht oder die ID ist falsch.",

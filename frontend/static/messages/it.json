@@ -936,7 +936,8 @@
     "aria": {
       "loading": "Caricamento dettagli rilevamento...",
       "loaded": "Dettagli rilevamento caricati per {species}",
-      "error": "Errore caricamento rilevamento: {error}"
+      "error": "Errore caricamento rilevamento: {error}",
+      "loadingResults": "Caricamento di {count} risultati..."
     },
     "errors": {
       "notFound": "Rilevamento non trovato. Potrebbe essere stato eliminato o l'ID non è corretto.",

@@ -936,7 +936,8 @@
     "aria": {
       "loading": "Načítání podrobností detekce…",
       "loaded": "Podrobnosti detekce načteny pro {species}",
-      "error": "Chyba při načítání detekce: {error}"
+      "error": "Chyba při načítání detekce: {error}",
+      "loadingResults": "Načítání {count} výsledků..."
     },
     "errors": {
       "notFound": "Detekce nebyla nalezena. Možná byla odstraněna nebo je ID nesprávné.",

@@ -81,7 +81,7 @@
   }
 
   function createFeather(): void {
-    if (isGameActive) return;
+    if (isGameActive || !zeroElement) return;
     const feather = document.createElement('div');
     feather.className = 'feather';
     feather.textContent = ['🪶', '❃', '❋'][Math.floor(Math.random() * 3)];

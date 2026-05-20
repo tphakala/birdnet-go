@@ -936,7 +936,8 @@
     "aria": {
       "loading": "Laddar detekteringsinformation...",
       "loaded": "Detekteringsinformation laddad för {species}",
-      "error": "Fel vid laddning av detektering: {error}"
+      "error": "Fel vid laddning av detektering: {error}",
+      "loadingResults": "Laddar {count} resultat..."
     },
     "errors": {
       "notFound": "Detekteringen hittades inte. Den kan ha tagits bort eller så är ID:t felaktigt.",

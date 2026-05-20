@@ -936,7 +936,8 @@
     "aria": {
       "loading": "Ladataan havainnon tietoja...",
       "loaded": "Havainnon tiedot ladattu: {species}",
-      "error": "Virhe havainnon latauksessa: {error}"
+      "error": "Virhe havainnon latauksessa: {error}",
+      "loadingResults": "Ladataan {count} tulosta..."
     },
     "errors": {
       "notFound": "Havaintoa ei löytynyt. Se on ehkä poistettu tai tunniste on virheellinen.",

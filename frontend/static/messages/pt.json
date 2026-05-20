@@ -936,7 +936,8 @@
     "aria": {
       "loading": "Carregando detalhes da detecção...",
       "loaded": "Detalhes de detecção carregados para {species}",
-      "error": "Erro ao carregar detecção: {error}"
+      "error": "Erro ao carregar detecção: {error}",
+      "loadingResults": "Carregando {count} resultados..."
     },
     "errors": {
       "notFound": "Detecção não encontrada. Pode ter sido excluída ou o ID está incorreto.",
