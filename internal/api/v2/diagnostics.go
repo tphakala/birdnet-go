@@ -204,6 +204,20 @@ func (c *Controller) registerHealthChecks() {
 		),
 
 		// Config checks
+		checks.NewToolAvailabilityCheck(func() []checks.ToolInfo {
+			s := c.currentSettings()
+			return []checks.ToolInfo{
+				{
+					Name:    "FFmpeg",
+					Path:    s.Realtime.Audio.FfmpegPath,
+					Version: s.Realtime.Audio.FfmpegVersion,
+				},
+				{
+					Name: "Sox",
+					Path: s.Realtime.Audio.SoxPath,
+				},
+			}
+		}),
 		checks.NewPathAccessCheck(map[string]string{
 			"data": filepath.Dir(c.currentSettings().Output.SQLite.Path),
 		}),
