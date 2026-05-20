@@ -25,6 +25,9 @@ BIRDNET_GO_IMAGE=""
 # Silent mode for non-interactive installation (set via --silent flag)
 SILENT_MODE="false"
 
+# Force root mode - allow running as root despite warnings (set via --force-root flag)
+FORCE_ROOT="false"
+
 # Flag to track if Docker image was changed during update/rollback
 IMAGE_CHANGED="false"
 
@@ -1672,20 +1675,30 @@ check_directory() {
     fi
 }
 
-# Function to prevent running as root
+# Function to warn against running as root (soft block with bypass)
 check_not_root() {
     if [ "$(id -u)" -eq 0 ]; then
+        if [ "$FORCE_ROOT" = "true" ]; then
+            print_message "⚠️  Running as root (--force-root was specified)" "$YELLOW"
+            return 0
+        fi
+
         print_message "" "$NC"
-        print_message "❌ This script must not be run as root or with sudo" "$RED"
+        print_message "⚠️  Running as root is strongly discouraged" "$YELLOW"
         print_message "" "$NC"
         print_message "Running as root places all data under /root/birdnet-go-app/," "$YELLOW"
         print_message "which causes settings and recordings to become inaccessible" "$YELLOW"
-        print_message "if you later run the script as your regular user." "$YELLOW"
+        print_message "if you later try to manage the application as a regular user." "$YELLOW"
         print_message "" "$NC"
-        print_message "Run the script as your regular user instead:" "$GREEN"
+        print_message "It is strongly recommended to run this script as a non-privileged user." "$GREEN"
+        print_message "The script uses sudo internally when elevated privileges are needed." "$NC"
+        print_message "" "$NC"
+        print_message "Recommended: run as your regular user instead:" "$GREEN"
         print_message "  ./install.sh" "$NC"
         print_message "" "$NC"
-        print_message "The script uses sudo internally when elevated privileges are needed." "$YELLOW"
+        print_message "To proceed as root anyway, re-run with --force-root:" "$YELLOW"
+        print_message "  ./install.sh --force-root" "$NC"
+        print_message "" "$NC"
         exit 1
     fi
 }
@@ -5187,6 +5200,7 @@ show_usage() {
     echo "                          Default: nightly"
     echo "                          Examples: latest, v1.2.3, nightly, sha256:abc123..."
     echo "  --silent                Non-interactive install using environment variables"
+    echo "  --force-root            Allow running as root (not recommended)"
     echo "  -h, --help              Show this help message"
     echo ""
     echo "SILENT MODE ENVIRONMENT VARIABLES:"
@@ -5227,6 +5241,10 @@ parse_arguments() {
                 SILENT_MODE="true"
                 shift
                 ;;
+            --force-root)
+                FORCE_ROOT="true"
+                shift
+                ;;
             -h|--help)
                 show_usage
                 exit 0
@@ -5256,8 +5274,25 @@ parse_arguments() {
 # Parse command line arguments first
 parse_arguments "$@"
 
-# Prevent running as root (must be before $HOME-dependent path setup)
+# Warn if running as root; allow bypass with --force-root (must be before $HOME-dependent path setup)
 check_not_root
+
+# When running as root without sudo installed (common in containers), provide a
+# shim so the script's 100+ sudo calls work without modification.
+if [ "$(id -u)" -eq 0 ] && ! command_exists sudo; then
+    sudo() {
+        # Strip sudo-specific flags before executing the actual command
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -n|-S|-E|-H|-P|-K|-k|-b) shift ;;
+                -u|-g|-C) shift 2 ;;
+                --) shift; break ;;
+                *) break ;;
+            esac
+        done
+        "$@"
+    }
+fi
 
 # Default paths
 CONFIG_DIR="$HOME/birdnet-go-app/config"
