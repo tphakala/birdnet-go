@@ -455,3 +455,50 @@ func TestReportStartupError_NilSafe(t *testing.T) {
 		reportStartupError("sqlite", "openV2Database", fmt.Errorf("open /home/user/birdnet_v2.db: denied"), "/home/user/birdnet_v2.db")
 	})
 }
+
+// mysqlTestSettings builds conf.Settings from a MySQLConfig for startup tests.
+func mysqlTestSettings(cfg *MySQLConfig) *conf.Settings {
+	settings := &conf.Settings{}
+	settings.Output.MySQL.Enabled = true
+	settings.Output.MySQL.Host = cfg.Host
+	settings.Output.MySQL.Port = cfg.Port
+	settings.Output.MySQL.Username = cfg.Username
+	settings.Output.MySQL.Password = cfg.Password
+	settings.Output.MySQL.Database = cfg.Database
+	return settings
+}
+
+// TestCheckMySQLMigrationState_NativePasswordAuth verifies that the MySQL
+// startup check works with mysql_native_password authentication, which is the
+// default for MariaDB and some MySQL configurations.
+func TestCheckMySQLMigrationState_NativePasswordAuth(t *testing.T) {
+	settings := mysqlTestSettings(skipIfNoMySQL(t))
+
+	state := checkMySQLMigrationState(settings)
+
+	// Before the fix, mysql_native_password servers would get
+	// ErrV2DatabaseCorrupted because AllowNativePasswords defaulted to false.
+	require.NoError(t, state.Error, "startup check must not fail due to auth plugin rejection")
+	assert.NotEmpty(t, string(state.MigrationStatus), "migration status should be set")
+}
+
+// TestHasUnmigratedLegacyMySQL_NativePasswordAuth verifies that the unmigrated
+// records check connects successfully with mysql_native_password.
+func TestHasUnmigratedLegacyMySQL_NativePasswordAuth(t *testing.T) {
+	settings := mysqlTestSettings(skipIfNoMySQL(t))
+
+	// Should not panic or fail due to auth plugin rejection.
+	assert.NotPanics(t, func() {
+		_ = hasUnmigratedLegacyMySQL(settings, testStartupLogger())
+	})
+}
+
+// TestCheckMySQLHasFreshV2Schema_NativePasswordAuth verifies that the fresh v2
+// schema check connects successfully with mysql_native_password.
+func TestCheckMySQLHasFreshV2Schema_NativePasswordAuth(t *testing.T) {
+	settings := mysqlTestSettings(skipIfNoMySQL(t))
+
+	assert.NotPanics(t, func() {
+		_ = CheckMySQLHasFreshV2Schema(settings)
+	})
+}

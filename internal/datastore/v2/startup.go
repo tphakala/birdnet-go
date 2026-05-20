@@ -248,15 +248,20 @@ func fallbackConsolidatedV2State(configuredPath, v2MigrationPath string) (Startu
 	return completedV2StartupState(), true
 }
 
-// checkMySQLMigrationState checks migration state for MySQL deployments.
-func checkMySQLMigrationState(settings *conf.Settings) StartupState {
-	// Build MySQL DSN using mysql.Config for proper credential escaping and timeouts
+// buildMySQLStartupDSN builds a MySQL DSN for startup-time checks.
+// Uses mysql.Config for proper credential escaping and timeouts.
+// AllowNativePasswords must be explicitly true because mysql.Config{} struct
+// literals default to false (Go zero value), while mysql.NewConfig() defaults
+// to true. MariaDB and MySQL configured with mysql_native_password require this.
+func buildMySQLStartupDSN(settings *conf.Settings) string {
 	cfg := mysql.Config{
-		User:   settings.Output.MySQL.Username,
-		Passwd: settings.Output.MySQL.Password,
-		Net:    "tcp",
-		Addr:   fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
-		DBName: settings.Output.MySQL.Database,
+		User:                 settings.Output.MySQL.Username,
+		Passwd:               settings.Output.MySQL.Password,
+		Net:                  "tcp",
+		Addr:                 fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
+		DBName:               settings.Output.MySQL.Database,
+		AllowNativePasswords: true,
+		CheckConnLiveness:    true,
 		Params: map[string]string{
 			"charset":      "utf8mb4",
 			"parseTime":    "True",
@@ -266,7 +271,12 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 			"writeTimeout": dbStartupTimeout,
 		},
 	}
-	dsn := cfg.FormatDSN()
+	return cfg.FormatDSN()
+}
+
+// checkMySQLMigrationState checks migration state for MySQL deployments.
+func checkMySQLMigrationState(settings *conf.Settings) StartupState {
+	dsn := buildMySQLStartupDSN(settings)
 
 	// Collect MySQL endpoint info for redaction from error messages
 	mysqlHost := settings.Output.MySQL.Host
@@ -541,22 +551,7 @@ func hasUnmigratedLegacySQLite(settings *conf.Settings, log logger.Logger) bool 
 
 // hasUnmigratedLegacyMySQL checks for unmigrated records in a MySQL legacy database.
 func hasUnmigratedLegacyMySQL(settings *conf.Settings, log logger.Logger) bool {
-	cfg := mysql.Config{
-		User:   settings.Output.MySQL.Username,
-		Passwd: settings.Output.MySQL.Password,
-		Net:    "tcp",
-		Addr:   fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
-		DBName: settings.Output.MySQL.Database,
-		Params: map[string]string{
-			"charset":      "utf8mb4",
-			"parseTime":    "True",
-			"loc":          "Local",
-			"timeout":      dbStartupTimeout,
-			"readTimeout":  dbStartupTimeout,
-			"writeTimeout": dbStartupTimeout,
-		},
-	}
-	dsn := cfg.FormatDSN()
+	dsn := buildMySQLStartupDSN(settings)
 
 	db, err := gorm.Open(gormmysql.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
@@ -677,23 +672,7 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 // This is used to determine whether to use v2_ prefix for migration mode or no prefix for fresh installs.
 // Returns true if the fresh v2 schema exists (migration_states table without prefix).
 func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
-	// Build MySQL DSN
-	cfg := mysql.Config{
-		User:   settings.Output.MySQL.Username,
-		Passwd: settings.Output.MySQL.Password,
-		Net:    "tcp",
-		Addr:   fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
-		DBName: settings.Output.MySQL.Database,
-		Params: map[string]string{
-			"charset":      "utf8mb4",
-			"parseTime":    "True",
-			"loc":          "Local",
-			"timeout":      dbStartupTimeout,
-			"readTimeout":  dbStartupTimeout,
-			"writeTimeout": dbStartupTimeout,
-		},
-	}
-	dsn := cfg.FormatDSN()
+	dsn := buildMySQLStartupDSN(settings)
 
 	db, err := gorm.Open(gormmysql.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
