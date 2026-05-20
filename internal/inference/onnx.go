@@ -294,9 +294,16 @@ func InitONNXRuntime(libraryPath string) (err error) {
 // fallback for dlopen's default search.
 func findONNXRuntimeLibrary() string {
 	var candidates []string
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		candidates = []string{"onnxruntime.dll"}
-	} else {
+	case "darwin":
+		candidates = []string{
+			"/opt/homebrew/lib/libonnxruntime.dylib",
+			"/usr/local/lib/libonnxruntime.dylib",
+			"libonnxruntime.dylib",
+		}
+	default:
 		candidates = []string{
 			"/usr/lib/libonnxruntime.so",
 			"/usr/local/lib/libonnxruntime.so",
@@ -309,6 +316,9 @@ func findONNXRuntimeLibrary() string {
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
+	}
+	if runtime.GOOS == "darwin" {
+		return "libonnxruntime.dylib"
 	}
 	return "onnxruntime"
 }

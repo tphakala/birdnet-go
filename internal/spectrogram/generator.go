@@ -436,11 +436,12 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 // Otherwise, it uses FFmpeg to convert to Sox format and pipes to Sox.
 func (g *Generator) generateWithSoxFile(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
 	soxBinary := settings.Realtime.Audio.SoxPath
-	if soxBinary == "" {
-		return errors.Newf("sox binary not configured").
+	if err := ffmpeg.ValidateSoxPath(soxBinary); err != nil {
+		return errors.Newf("invalid Sox path: %s", err).
 			Component("spectrogram").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "generate_with_sox_file").
+			Context("sox_path", soxBinary).
 			Build()
 	}
 
@@ -469,11 +470,13 @@ func (g *Generator) generateWithSoxFile(ctx context.Context, settings *conf.Sett
 // Used when the audio file format is natively supported by Sox.
 func (g *Generator) generateWithSoxDirect(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
 	soxBinary := settings.Realtime.Audio.SoxPath
-	if soxBinary == "" {
-		return errors.Newf("sox binary not configured").
+	// Validate Sox path before exec (defense-in-depth against ingress path contamination)
+	if err := ffmpeg.ValidateSoxPath(soxBinary); err != nil {
+		return errors.Newf("invalid Sox path: %s", err).
 			Component("spectrogram").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "generate_with_sox_direct").
+			Context("sox_path", soxBinary).
 			Build()
 	}
 
@@ -560,11 +563,12 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings 
 			Context("ffmpeg_path", ffmpegBinary).
 			Build()
 	}
-	if soxBinary == "" {
-		return errors.Newf("sox binary not configured").
+	if err := ffmpeg.ValidateSoxPath(soxBinary); err != nil {
+		return errors.Newf("invalid Sox path: %s", err).
 			Component("spectrogram").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "generate_with_ffmpeg_sox_pipeline").
+			Context("sox_path", soxBinary).
 			Build()
 	}
 
@@ -698,11 +702,12 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings 
 // pass 0 to fall back to conf.SampleRate (48000 Hz).
 func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Settings, pcmData []byte, outputPath string, width int, raw bool, sampleRate int) error {
 	soxBinary := settings.Realtime.Audio.SoxPath
-	if soxBinary == "" {
-		return errors.Newf("sox binary not configured").
+	if err := ffmpeg.ValidateSoxPath(soxBinary); err != nil {
+		return errors.Newf("invalid Sox path: %s", err).
 			Component("spectrogram").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "generate_with_sox_pcm").
+			Context("sox_path", soxBinary).
 			Build()
 	}
 
@@ -1142,11 +1147,11 @@ func evictOldCacheEntriesLocked() {
 // getAudioDurationViaSox calls sox --info -D to get audio duration.
 // This is ~30x faster than ffprobe for duration queries.
 func getAudioDurationViaSox(ctx context.Context, soxPath, audioPath string) (float64, error) {
-	if soxPath == "" {
-		return 0, fmt.Errorf("sox path not configured")
+	if err := ffmpeg.ValidateSoxPath(soxPath); err != nil {
+		return 0, fmt.Errorf("invalid sox path: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, soxPath, "--info", "-D", audioPath) //nolint:gosec // G204: soxPath from validated settings, args are fixed
+	cmd := exec.CommandContext(ctx, soxPath, "--info", "-D", audioPath) //nolint:gosec // G204: soxPath validated by ValidateSoxPath above, args are fixed
 
 	output, err := cmd.Output()
 	if err != nil {
