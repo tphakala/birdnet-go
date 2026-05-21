@@ -3,6 +3,8 @@ package v2
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -40,6 +42,14 @@ func reportStartupError(dbType, operation string, err error, paths ...string) {
 			"datastore-startup",
 		)
 	})
+}
+
+// logStartupDecision logs the outcome of the startup migration state check.
+func logStartupDecision(decision string, fields ...logger.Field) {
+	logger.Global().Module("datastore").Info(
+		"database startup: state determined",
+		append([]logger.Field{logger.String("decision", decision)}, fields...)...,
+	)
 }
 
 // dbStartupTimeout is the timeout for database startup operations.
@@ -101,8 +111,54 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 		v2MigrationExists = false
 	}
 
+	// Log all path check results for diagnostic visibility
+	absConfigured, _ := filepath.Abs(configuredPath)
+	absV2Migration, _ := filepath.Abs(v2MigrationPath)
+	cwd, _ := os.Getwd()
+
+	var configuredSize, v2MigrationSize int64
+	if fi, err := os.Stat(configuredPath); err == nil {
+		configuredSize = fi.Size()
+	}
+	if fi, err := os.Stat(v2MigrationPath); err == nil {
+		v2MigrationSize = fi.Size()
+	}
+
+	logger.Global().Module("datastore").Info("database startup: path check",
+		logger.String("cwd", cwd),
+		logger.String("configured_path", configuredPath),
+		logger.String("configured_abs", absConfigured),
+		logger.Bool("configured_exists", configuredExists),
+		logger.Int64("configured_size", configuredSize),
+		logger.String("v2_migration_path", v2MigrationPath),
+		logger.String("v2_migration_abs", absV2Migration),
+		logger.Bool("v2_migration_exists", v2MigrationExists),
+		logger.Int64("v2_migration_size", v2MigrationSize),
+	)
+
 	// Fresh install: neither database exists
 	if !configuredExists && !v2MigrationExists {
+		// Safety check: warn if .db files exist in the data directory.
+		// Skip if path resolution failed (absConfigured empty) to avoid scanning ".".
+		if absConfigured != "" {
+			dir := filepath.Dir(absConfigured)
+			if entries, err := os.ReadDir(dir); err == nil {
+				for _, e := range entries {
+					if e.IsDir() || !strings.HasSuffix(e.Name(), ".db") {
+						continue
+					}
+					if info, infoErr := e.Info(); infoErr == nil {
+						logger.Global().Module("datastore").Warn(
+							"fresh install detected but database files found in data directory",
+							logger.String("file", e.Name()),
+							logger.Int64("size", info.Size()),
+							logger.String("modified", info.ModTime().Format(time.RFC3339)),
+						)
+					}
+				}
+			}
+		}
+		logStartupDecision("fresh_install")
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -116,9 +172,11 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	if !v2MigrationExists {
 		if configuredExists && CheckSQLiteHasV2Schema(configuredPath) {
 			// Fresh v2 install (restart after initial fresh install)
+			logStartupDecision("v2_restart")
 			return completedV2StartupState()
 		}
 		// Configured path exists but is not v2 = legacy mode
+		logStartupDecision("legacy_mode")
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -136,8 +194,10 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	if err != nil {
 		reportStartupError("sqlite", "openV2Database", err, v2MigrationPath)
 		if fallback, ok := fallbackConsolidatedV2State(configuredPath, v2MigrationPath); ok {
+			logStartupDecision("stale_sidecar_fallback", logger.String("trigger", "openV2Database"))
 			return fallback
 		}
+		logStartupDecision("v2_corrupted", logger.String("trigger", "openV2Database"))
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -151,8 +211,10 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	if err != nil {
 		reportStartupError("sqlite", "getUnderlyingDB", err, v2MigrationPath)
 		if fallback, ok := fallbackConsolidatedV2State(configuredPath, v2MigrationPath); ok {
+			logStartupDecision("stale_sidecar_fallback", logger.String("trigger", "getUnderlyingDB"))
 			return fallback
 		}
+		logStartupDecision("v2_corrupted", logger.String("trigger", "getUnderlyingDB"))
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -169,8 +231,10 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 		// sql.DB.Close is idempotent, so the deferred close remains safe.
 		_ = sqlDB.Close()
 		if fallback, ok := fallbackConsolidatedV2State(configuredPath, v2MigrationPath); ok {
+			logStartupDecision("stale_sidecar_fallback", logger.String("trigger", "migrationTableNotFound"))
 			return fallback
 		}
+		logStartupDecision("v2_corrupted", logger.String("trigger", "migrationTableNotFound"))
 		reportStartupError("sqlite", "readMigrationState", fmt.Errorf("migration state table not found"), v2MigrationPath)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -183,8 +247,10 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	if err := db.Table(migrationTable).First(&state).Error; err != nil {
 		_ = sqlDB.Close()
 		if fallback, ok := fallbackConsolidatedV2State(configuredPath, v2MigrationPath); ok {
+			logStartupDecision("stale_sidecar_fallback", logger.String("trigger", "readMigrationState"))
 			return fallback
 		}
+		logStartupDecision("v2_corrupted", logger.String("trigger", "readMigrationState"))
 		reportStartupError("sqlite", "readMigrationState", err, v2MigrationPath)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -196,6 +262,10 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 
 	// Determine if legacy is required based on migration status
 	legacyRequired := state.State != entities.MigrationStatusCompleted
+
+	logStartupDecision("migration_"+string(state.State),
+		logger.Bool("legacy_required", legacyRequired),
+	)
 
 	return StartupState{
 		MigrationStatus: state.State,

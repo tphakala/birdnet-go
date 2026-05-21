@@ -56,13 +56,14 @@ const (
 	logTimeFormat      = "2006-01-02 15:04:05"
 
 	// Archive file names
-	diagnosticsFileName  = "collection_diagnostics.json"
-	metadataFileName     = "metadata.json"
-	configYAMLFileName   = "config.yaml"
-	systemInfoFileName   = "system_info.json"
-	databaseInfoFileName = "database_info.json"
-	appEventsFileName    = "app_events.json"
-	logReadmeFileName    = "logs/README.txt"
+	diagnosticsFileName    = "collection_diagnostics.json"
+	metadataFileName       = "metadata.json"
+	configYAMLFileName     = "config.yaml"
+	systemInfoFileName     = "system_info.json"
+	databaseInfoFileName   = "database_info.json"
+	deploymentInfoFileName = "deployment_info.json"
+	appEventsFileName      = "app_events.json"
+	logReadmeFileName      = "logs/README.txt"
 
 	// Redaction and privacy
 	redactedPlaceholder      = "[redacted]"
@@ -332,7 +333,7 @@ func (c *Collector) SetAppEventsProvider(provider AppEventsProvider) {
 // Collect gathers support data based on the provided options
 func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*SupportDump, error) {
 	// Validate options
-	if !opts.IncludeLogs && !opts.IncludeConfig && !opts.IncludeSystemInfo && !opts.IncludeDatabaseInfo && !opts.IncludeAppEvents {
+	if !opts.IncludeLogs && !opts.IncludeConfig && !opts.IncludeSystemInfo && !opts.IncludeDatabaseInfo && !opts.IncludeDeploymentInfo && !opts.IncludeAppEvents {
 		getLogger().Error("support: collection validation failed: at least one data type must be included")
 		return nil, errors.Newf("at least one data type must be included in support dump").
 			Component("support").
@@ -414,6 +415,13 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 				logger.String("dialect", dbInfo.Dialect),
 				logger.Int("table_count", len(dbInfo.Tables)))
 		}
+	}
+
+	// Collect deployment context
+	if opts.IncludeDeploymentInfo {
+		getLogger().Debug("support: collecting deployment information")
+		dump.DeploymentInfo = c.collectDeploymentInfo(ctx, opts.AnonymizePII)
+		getLogger().Debug("support: deployment information collected")
 	}
 
 	// Collect app events
@@ -573,6 +581,29 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 				Build()
 		}
 		getLogger().Debug("support: database info added successfully")
+	}
+
+	// Add deployment info if collected
+	if dump.DeploymentInfo != nil {
+		getLogger().Debug("support: adding deployment info to archive")
+		deployFile, err := w.Create(deploymentInfoFileName)
+		if err != nil {
+			getLogger().Error("support: failed to create deployment info file in archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_deployment_info_file").
+				Build()
+		}
+		if err := json.NewEncoder(deployFile).Encode(dump.DeploymentInfo); err != nil {
+			getLogger().Error("support: failed to write deployment info to archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_deployment_info").
+				Build()
+		}
+		getLogger().Debug("support: deployment info added successfully")
 	}
 
 	// Add app events if collected

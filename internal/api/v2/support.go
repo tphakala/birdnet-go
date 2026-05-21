@@ -133,15 +133,16 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 
 	// Set collection options
 	opts := support.CollectorOptions{
-		IncludeLogs:         req.IncludeLogs,
-		IncludeConfig:       req.IncludeConfig,
-		IncludeSystemInfo:   req.IncludeSystemInfo,
-		IncludeDatabaseInfo: req.IncludeDatabaseInfo,
-		IncludeAppEvents:    req.IncludeAppEvents,
-		LogDuration:         supportLogDurationWeeks * daysPerWeek * HoursPerDay * time.Hour, // 4 weeks
-		MaxLogSize:          supportMaxLogSizeMB * supportBytesPerMB,                         // 50MB to accommodate more logs
-		ScrubSensitive:      true,
-		AnonymizePII:        true,
+		IncludeLogs:           req.IncludeLogs,
+		IncludeConfig:         req.IncludeConfig,
+		IncludeSystemInfo:     req.IncludeSystemInfo,
+		IncludeDatabaseInfo:   req.IncludeDatabaseInfo,
+		IncludeDeploymentInfo: true,
+		IncludeAppEvents:      req.IncludeAppEvents,
+		LogDuration:           supportLogDurationWeeks * daysPerWeek * HoursPerDay * time.Hour, // 4 weeks
+		MaxLogSize:            supportMaxLogSizeMB * supportBytesPerMB,                         // 50MB to accommodate more logs
+		ScrubSensitive:        true,
+		AnonymizePII:          true,
 	}
 
 	// Collect data

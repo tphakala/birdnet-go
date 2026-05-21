@@ -10,17 +10,18 @@ import (
 // and system information used for troubleshooting and debugging BirdNET-Go issues.
 // The data is privacy-scrubbed before collection to remove sensitive information.
 type SupportDump struct {
-	ID           string                `json:"id"`
-	Timestamp    time.Time             `json:"timestamp"`
-	SystemID     string                `json:"system_id"`
-	Version      string                `json:"version"`
-	Logs         []LogEntry            `json:"logs"`
-	Config       map[string]any        `json:"config"`
-	SystemInfo   SystemInfo            `json:"system_info"`
-	Attachments  []AttachmentInfo      `json:"attachments"`
-	Diagnostics  CollectionDiagnostics `json:"diagnostics"`             // Diagnostic information about collection process
-	DatabaseInfo *DatabaseInfo         `json:"database_info,omitempty"` // Database schema and health diagnostics
-	AppEvents    []AppEventEntry       `json:"app_events,omitempty"`    // Recent application events
+	ID             string                `json:"id"`
+	Timestamp      time.Time             `json:"timestamp"`
+	SystemID       string                `json:"system_id"`
+	Version        string                `json:"version"`
+	Logs           []LogEntry            `json:"logs"`
+	Config         map[string]any        `json:"config"`
+	SystemInfo     SystemInfo            `json:"system_info"`
+	Attachments    []AttachmentInfo      `json:"attachments"`
+	Diagnostics    CollectionDiagnostics `json:"diagnostics"`               // Diagnostic information about collection process
+	DatabaseInfo   *DatabaseInfo         `json:"database_info,omitempty"`   // Database schema and health diagnostics
+	DeploymentInfo *DeploymentInfo       `json:"deployment_info,omitempty"` // Deployment context for troubleshooting
+	AppEvents      []AppEventEntry       `json:"app_events,omitempty"`      // Recent application events
 }
 
 // LogEntry represents a single log entry from application logs or system journals.
@@ -76,15 +77,16 @@ type AttachmentInfo struct {
 // It allows users to control which types of information are included based on
 // their privacy preferences and the specific issue being debugged.
 type CollectorOptions struct {
-	IncludeLogs         bool          `json:"include_logs"`
-	IncludeConfig       bool          `json:"include_config"`
-	IncludeSystemInfo   bool          `json:"include_system_info"`
-	IncludeDatabaseInfo bool          `json:"include_database_info"`
-	IncludeAppEvents    bool          `json:"include_app_events"`
-	LogDuration         time.Duration `json:"log_duration"`
-	MaxLogSize          int64         `json:"max_log_size"`
-	ScrubSensitive      bool          `json:"scrub_sensitive"`
-	AnonymizePII        bool          `json:"anonymize_pii"`
+	IncludeLogs           bool          `json:"include_logs"`
+	IncludeConfig         bool          `json:"include_config"`
+	IncludeSystemInfo     bool          `json:"include_system_info"`
+	IncludeDatabaseInfo   bool          `json:"include_database_info"`
+	IncludeDeploymentInfo bool          `json:"include_deployment_info"`
+	IncludeAppEvents      bool          `json:"include_app_events"`
+	LogDuration           time.Duration `json:"log_duration"`
+	MaxLogSize            int64         `json:"max_log_size"`
+	ScrubSensitive        bool          `json:"scrub_sensitive"`
+	AnonymizePII          bool          `json:"anonymize_pii"`
 }
 
 // CollectionDiagnostics contains diagnostic information about the support data collection process.
@@ -151,15 +153,16 @@ type TimeRange struct {
 // includes all data types, 4-week log window, 50MB max log size, sensitive data scrubbing and PII anonymization enabled.
 func DefaultCollectorOptions() CollectorOptions {
 	return CollectorOptions{
-		IncludeLogs:         true,
-		IncludeConfig:       true,
-		IncludeSystemInfo:   true,
-		IncludeDatabaseInfo: true,
-		IncludeAppEvents:    true,
-		LogDuration:         defaultLogDurationWeeks * 7 * 24 * time.Hour, // 4 weeks
-		MaxLogSize:          defaultMaxLogSizeMB * bytesPerMB,             // 50MB to accommodate more logs
-		ScrubSensitive:      true,
-		AnonymizePII:        true,
+		IncludeLogs:           true,
+		IncludeConfig:         true,
+		IncludeSystemInfo:     true,
+		IncludeDatabaseInfo:   true,
+		IncludeDeploymentInfo: true,
+		IncludeAppEvents:      true,
+		LogDuration:           defaultLogDurationWeeks * 7 * 24 * time.Hour, // 4 weeks
+		MaxLogSize:            defaultMaxLogSizeMB * bytesPerMB,             // 50MB to accommodate more logs
+		ScrubSensitive:        true,
+		AnonymizePII:          true,
 	}
 }
 
@@ -234,6 +237,32 @@ type MigrationStateInfo struct {
 	ErrorMessage     string  `json:"error_message,omitempty"`
 	RelatedDataError string  `json:"related_data_error,omitempty"`
 	DirtyRecordCount int64   `json:"dirty_record_count,omitempty"`
+}
+
+// DeploymentInfo contains deployment context for troubleshooting path mismatches
+// and configuration issues. Collected as part of support dumps.
+type DeploymentInfo struct {
+	WorkingDirectory   string              `json:"working_directory"`
+	SystemdServiceFile string              `json:"systemd_service_file,omitempty"`
+	DataDirectoryFiles []DataDirectoryFile `json:"data_directory_files,omitempty"`
+	DockerMounts       []DockerMount       `json:"docker_mounts,omitempty"`
+	CollectionErrors   []string            `json:"collection_errors,omitempty"`
+}
+
+// DataDirectoryFile describes a file in the data directory.
+type DataDirectoryFile struct {
+	Name     string    `json:"name"`
+	Size     int64     `json:"size"`
+	Modified time.Time `json:"modified"`
+	IsDir    bool      `json:"is_dir"`
+}
+
+// DockerMount describes a mount point visible inside a container.
+type DockerMount struct {
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+	Type        string `json:"type"`
+	Options     string `json:"options,omitempty"`
 }
 
 // AppEventEntry is a support-package-local representation of an application event.
