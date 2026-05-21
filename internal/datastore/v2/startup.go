@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -137,6 +138,24 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 
 	// Fresh install: neither database exists
 	if !configuredExists && !v2MigrationExists {
+		// Safety check: warn if .db files exist in the data directory
+		dir := filepath.Dir(absConfigured)
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, e := range entries {
+				if e.IsDir() || !strings.HasSuffix(e.Name(), ".db") {
+					continue
+				}
+				if info, infoErr := e.Info(); infoErr == nil {
+					logger.Global().Module("datastore").Warn(
+						"fresh install detected but database files found in data directory",
+						logger.String("file", e.Name()),
+						logger.Int64("size", info.Size()),
+						logger.String("modified", info.ModTime().Format(time.RFC3339)),
+					)
+				}
+			}
+		}
+		logStartupDecision("fresh_install")
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,

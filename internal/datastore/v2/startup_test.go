@@ -46,6 +46,25 @@ func TestCheckMigrationState_FreshInstall_CustomPath(t *testing.T) {
 	assert.False(t, state.LegacyRequired, "should not require legacy")
 }
 
+func TestCheckMigrationState_FreshInstall_WarnsAboutNearbyDBFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a .db file that is NOT the configured path
+	existingDB := filepath.Join(tmpDir, "old-birdnet.db")
+	require.NoError(t, os.WriteFile(existingDB, make([]byte, 1024), 0o644))
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(tmpDir, "birdnet.db")
+
+	state := CheckMigrationStateBeforeStartup(settings)
+
+	// Behavior is unchanged: still fresh install
+	assert.True(t, state.FreshInstall, "should still detect fresh install")
+	assert.False(t, state.LegacyRequired)
+	assert.NoError(t, state.Error)
+}
+
 func TestCheckMigrationState_ExistingLegacy_SQLite(t *testing.T) {
 	tmpDir := t.TempDir()
 	legacyPath := filepath.Join(tmpDir, "birdnet.db")
