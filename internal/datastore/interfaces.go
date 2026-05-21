@@ -230,6 +230,21 @@ type Interface interface {
 	// UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
 	// Called after locale or model changes. No-op for legacy datastores.
 	UpdateNameMaps(labels []string)
+
+	// Application event log (v2 only; legacy stores return nil/empty)
+	SaveAppEvent(ctx context.Context, category, eventType, message string, metadata map[string]any) error
+	GetRecentAppEvents(ctx context.Context, limit int) ([]AppEvent, error)
+	GetAppEventsSince(ctx context.Context, since time.Time, limit int) ([]AppEvent, error)
+	PruneAppEvents(ctx context.Context, retentionDays int) (int64, error)
+}
+
+// AppEvent represents an application event for the datastore.Interface boundary.
+type AppEvent struct {
+	Timestamp time.Time      `json:"timestamp"`
+	Category  string         `json:"category"`
+	EventType string         `json:"event_type"`
+	Message   string         `json:"message"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 // DatabaseStats contains basic runtime statistics about the database
