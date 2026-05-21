@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -72,6 +73,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		logger.Bool("include_logs", req.IncludeLogs),
 		logger.Bool("include_config", req.IncludeConfig),
 		logger.Bool("include_system_info", req.IncludeSystemInfo),
+		logger.Bool("include_database_info", req.IncludeDatabaseInfo),
 		logger.Bool("upload_to_sentry", req.UploadToSentry),
 		logger.String("github_issue", req.GitHubIssueNumber),
 		logger.Bool("has_user_message", req.UserMessage != ""))
@@ -107,9 +109,9 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 
 	// Wire database info provider if V2Manager is available
 	if req.IncludeDatabaseInfo && c.V2Manager != nil {
-		dialect := "sqlite"
+		dialect := datastore.DialectSQLite
 		if c.V2Manager.IsMySQL() {
-			dialect = "mysql"
+			dialect = datastore.DialectMySQL
 		}
 		dbCollector := support.NewGormDatabaseInfoCollector(
 			c.V2Manager.DB(),

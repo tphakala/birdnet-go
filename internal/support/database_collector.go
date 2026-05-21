@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -31,7 +32,11 @@ type GormDatabaseInfoCollector struct {
 }
 
 // NewGormDatabaseInfoCollector creates a collector for database diagnostics.
+// Returns nil if db is nil (caller must nil-check before use).
 func NewGormDatabaseInfoCollector(db *gorm.DB, dialect, dbPath, schemaVersion, tablePrefix string) *GormDatabaseInfoCollector {
+	if db == nil {
+		return nil
+	}
 	return &GormDatabaseInfoCollector{
 		db:            db,
 		dialect:       dialect,
@@ -39,6 +44,12 @@ func NewGormDatabaseInfoCollector(db *gorm.DB, dialect, dbPath, schemaVersion, t
 		schemaVersion: schemaVersion,
 		tablePrefix:   tablePrefix,
 	}
+}
+
+// quoteIdentifier wraps a SQL identifier in double quotes, escaping internal quotes per SQL standard.
+func quoteIdentifier(name string) string {
+	escaped := strings.ReplaceAll(name, `"`, `""`)
+	return `"` + escaped + `"`
 }
 
 // CollectDatabaseInfo gathers database schema, health, and metadata.
@@ -60,9 +71,9 @@ func (c *GormDatabaseInfoCollector) CollectDatabaseInfo(ctx context.Context) (*D
 	var collectionErrors []string
 
 	switch c.dialect {
-	case "sqlite":
+	case datastore.DialectSQLite:
 		c.collectSQLiteInfo(ctx, info, &collectionErrors, log)
-	case "mysql":
+	case datastore.DialectMySQL:
 		c.collectMySQLInfo(ctx, info, &collectionErrors, log)
 	default:
 		collectionErrors = append(collectionErrors, fmt.Sprintf("unsupported dialect: %s", c.dialect))
@@ -181,7 +192,7 @@ func (c *GormDatabaseInfoCollector) collectSQLiteTables(ctx context.Context, inf
 func (c *GormDatabaseInfoCollector) collectSQLiteTableColumns(ctx context.Context, ts *TableSchema, errs *[]string) {
 	db := c.db.WithContext(ctx)
 
-	rows, err := db.Raw(fmt.Sprintf("PRAGMA table_info('%s')", ts.Name)).Rows()
+	rows, err := db.Raw(fmt.Sprintf("PRAGMA table_info(%s)", quoteIdentifier(ts.Name))).Rows()
 	if err != nil {
 		*errs = append(*errs, fmt.Sprintf("table_info(%s): %v", ts.Name, err))
 		return
@@ -206,6 +217,9 @@ func (c *GormDatabaseInfoCollector) collectSQLiteTableColumns(ctx context.Contex
 			DefaultValue: dfltValue,
 		})
 	}
+	if err := rows.Err(); err != nil {
+		*errs = append(*errs, fmt.Sprintf("iterate table_info(%s): %v", ts.Name, err))
+	}
 	ts.Columns = columns
 }
 
@@ -221,7 +235,7 @@ func (c *GormDatabaseInfoCollector) collectSQLiteTableIndexes(ctx context.Contex
 		Partial int
 	}
 
-	rows, err := db.Raw(fmt.Sprintf("PRAGMA index_list('%s')", ts.Name)).Rows()
+	rows, err := db.Raw(fmt.Sprintf("PRAGMA index_list(%s)", quoteIdentifier(ts.Name))).Rows()
 	if err != nil {
 		*errs = append(*errs, fmt.Sprintf("index_list(%s): %v", ts.Name, err))
 		return
@@ -236,30 +250,42 @@ func (c *GormDatabaseInfoCollector) collectSQLiteTableIndexes(ctx context.Contex
 			continue
 		}
 
-		// Get columns for this index
-		var indexColumns []string
-		infoRows, err := db.Raw(fmt.Sprintf("PRAGMA index_info('%s')", ilr.Name)).Rows()
-		if err != nil {
-			*errs = append(*errs, fmt.Sprintf("index_info(%s): %v", ilr.Name, err))
-			continue
-		}
-		for infoRows.Next() {
-			var seqno, cid int
-			var colName string
-			if err := infoRows.Scan(&seqno, &cid, &colName); err != nil {
-				continue
-			}
-			indexColumns = append(indexColumns, colName)
-		}
-		_ = infoRows.Close()
-
+		indexColumns := c.collectIndexColumns(db, ilr.Name, errs)
 		indexes = append(indexes, IndexInfo{
 			Name:    ilr.Name,
 			Columns: indexColumns,
 			Unique:  ilr.Unique != 0,
 		})
 	}
+	if err := rows.Err(); err != nil {
+		*errs = append(*errs, fmt.Sprintf("iterate index_list(%s): %v", ts.Name, err))
+	}
 	ts.Indexes = indexes
+}
+
+// collectIndexColumns reads columns for a single index via PRAGMA index_info.
+func (c *GormDatabaseInfoCollector) collectIndexColumns(db *gorm.DB, indexName string, errs *[]string) []string {
+	infoRows, err := db.Raw(fmt.Sprintf("PRAGMA index_info(%s)", quoteIdentifier(indexName))).Rows()
+	if err != nil {
+		*errs = append(*errs, fmt.Sprintf("index_info(%s): %v", indexName, err))
+		return nil
+	}
+	defer func() { _ = infoRows.Close() }()
+
+	var columns []string
+	for infoRows.Next() {
+		var seqno, cid int
+		var colName string
+		if err := infoRows.Scan(&seqno, &cid, &colName); err != nil {
+			*errs = append(*errs, fmt.Sprintf("scan index_info(%s): %v", indexName, err))
+			continue
+		}
+		columns = append(columns, colName)
+	}
+	if err := infoRows.Err(); err != nil {
+		*errs = append(*errs, fmt.Sprintf("iterate index_info(%s): %v", indexName, err))
+	}
+	return columns
 }
 
 // collectTableRowCount counts rows with a per-table timeout.
@@ -268,7 +294,7 @@ func (c *GormDatabaseInfoCollector) collectTableRowCount(ctx context.Context, ts
 	defer cancel()
 
 	var count int64
-	if err := c.db.WithContext(countCtx).Raw(fmt.Sprintf("SELECT COUNT(*) FROM %q", ts.Name)).Row().Scan(&count); err != nil {
+	if err := c.db.WithContext(countCtx).Raw("SELECT COUNT(*) FROM " + quoteIdentifier(ts.Name)).Row().Scan(&count); err != nil { //nolint:gosec // table names from sqlite_master/INFORMATION_SCHEMA
 		log.Warn("support: row count timed out or failed", logger.String("table", ts.Name), logger.Error(err))
 		ts.RowCount = -1
 	} else {
@@ -277,12 +303,13 @@ func (c *GormDatabaseInfoCollector) collectTableRowCount(ctx context.Context, ts
 }
 
 // collectSQLiteIntegrityCheck runs PRAGMA quick_check with a timeout.
+// Reads all result rows (quick_check returns multiple rows when issues are found).
 func (c *GormDatabaseInfoCollector) collectSQLiteIntegrityCheck(ctx context.Context, info *DatabaseInfo, errs *[]string, _ logger.Logger) {
 	integrityCtx, cancel := context.WithTimeout(ctx, integrityTimeout)
 	defer cancel()
 
-	var result string
-	if err := c.db.WithContext(integrityCtx).Raw("PRAGMA quick_check").Row().Scan(&result); err != nil {
+	var results []string
+	if err := c.db.WithContext(integrityCtx).Raw("PRAGMA quick_check").Scan(&results).Error; err != nil {
 		if integrityCtx.Err() != nil {
 			info.IntegrityCheck = "timeout_exceeded"
 			*errs = append(*errs, "integrity check timed out")
@@ -290,9 +317,13 @@ func (c *GormDatabaseInfoCollector) collectSQLiteIntegrityCheck(ctx context.Cont
 			info.IntegrityCheck = fmt.Sprintf("error: %v", err)
 			*errs = append(*errs, fmt.Sprintf("quick_check: %v", err))
 		}
-	} else {
-		info.IntegrityCheck = result
+		return
 	}
+	result := strings.Join(results, "; ")
+	if result == "" {
+		result = "ok"
+	}
+	info.IntegrityCheck = result
 }
 
 // collectSQLiteFKViolations runs PRAGMA foreign_key_check with a timeout.
@@ -327,6 +358,9 @@ func (c *GormDatabaseInfoCollector) collectSQLiteFKViolations(ctx context.Contex
 			FKIndex:  fkIdx,
 		})
 	}
+	if err := rows.Err(); err != nil {
+		*errs = append(*errs, fmt.Sprintf("iterate fk_check: %v", err))
+	}
 	if violations != nil {
 		info.FKViolations = violations
 	}
@@ -360,27 +394,24 @@ func (c *GormDatabaseInfoCollector) collectMySQLInfo(ctx context.Context, info *
 }
 
 // collectMySQLTables enumerates MySQL tables, columns, and indexes.
-func (c *GormDatabaseInfoCollector) collectMySQLTables(ctx context.Context, info *DatabaseInfo, errs *[]string, log logger.Logger) {
+// Row counts are InnoDB estimates from TABLE_ROWS (not exact COUNT(*)) to avoid full table scans.
+func (c *GormDatabaseInfoCollector) collectMySQLTables(ctx context.Context, info *DatabaseInfo, errs *[]string, _ logger.Logger) {
 	db := c.db.WithContext(ctx)
 
 	type tableRow struct {
-		TableName string
-		TableRows int64
+		TableName string `gorm:"column:table_name"`
+		TableRows int64  `gorm:"column:table_rows"`
 	}
 
 	var tableRows []tableRow
-	query := "SELECT TABLE_NAME, IFNULL(TABLE_ROWS, 0) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE()"
+	query := "SELECT TABLE_NAME AS table_name, IFNULL(TABLE_ROWS, 0) AS table_rows FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE()"
+	rawQuery := db.Raw(query)
 	if c.tablePrefix != "" {
-		query += " AND TABLE_NAME LIKE ?"
-		if err := db.Raw(query, c.tablePrefix+"%").Scan(&tableRows).Error; err != nil {
-			*errs = append(*errs, fmt.Sprintf("list mysql tables: %v", err))
-			return
-		}
-	} else {
-		if err := db.Raw(query).Scan(&tableRows).Error; err != nil {
-			*errs = append(*errs, fmt.Sprintf("list mysql tables: %v", err))
-			return
-		}
+		rawQuery = db.Raw(query+" AND TABLE_NAME LIKE ?", c.tablePrefix+"%")
+	}
+	if err := rawQuery.Scan(&tableRows).Error; err != nil {
+		*errs = append(*errs, fmt.Sprintf("list mysql tables: %v", err))
+		return
 	}
 
 	tables := make([]TableSchema, 0, len(tableRows))
@@ -390,7 +421,6 @@ func (c *GormDatabaseInfoCollector) collectMySQLTables(ctx context.Context, info
 		c.collectMySQLTableIndexes(ctx, &ts, errs)
 		tables = append(tables, ts)
 	}
-	_ = log // used by other collectors; consistent parameter signature
 	info.Tables = tables
 }
 
@@ -424,6 +454,9 @@ func (c *GormDatabaseInfoCollector) collectMySQLTableColumns(ctx context.Context
 			PrimaryKey:   columnKey == "PRI",
 			DefaultValue: dfltValue,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		*errs = append(*errs, fmt.Sprintf("iterate mysql columns(%s): %v", ts.Name, err))
 	}
 	ts.Columns = columns
 }
@@ -462,6 +495,10 @@ func (c *GormDatabaseInfoCollector) collectMySQLTableIndexes(ctx context.Context
 			}
 			indexOrder = append(indexOrder, indexName)
 		}
+	}
+
+	if err := rows.Err(); err != nil {
+		*errs = append(*errs, fmt.Sprintf("iterate mysql indexes(%s): %v", ts.Name, err))
 	}
 
 	indexes := make([]IndexInfo, 0, len(indexOrder))
