@@ -342,6 +342,7 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 		logger.Bool("include_logs", opts.IncludeLogs),
 		logger.Bool("include_config", opts.IncludeConfig),
 		logger.Bool("include_system_info", opts.IncludeSystemInfo),
+		logger.Bool("include_database_info", opts.IncludeDatabaseInfo),
 		logger.Duration("log_duration", opts.LogDuration),
 		logger.Int64("max_log_size", opts.MaxLogSize))
 

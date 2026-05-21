@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -68,13 +69,13 @@ func TestCollectDatabaseInfo_SQLite(t *testing.T) {
 	db, dbPath := openTestDB(t)
 	seedTestSchema(t, db)
 
-	collector := NewGormDatabaseInfoCollector(db, "sqlite", dbPath, "v2", "")
+	collector := NewGormDatabaseInfoCollector(db, datastore.DialectSQLite, dbPath, "v2", "")
 	info, err := collector.CollectDatabaseInfo(t.Context())
 
 	require.NoError(t, err)
 	require.NotNil(t, info)
 
-	assert.Equal(t, "sqlite", info.Dialect)
+	assert.Equal(t, datastore.DialectSQLite, info.Dialect)
 	assert.NotEmpty(t, info.EngineVersion)
 	assert.Equal(t, "v2", info.SchemaVersion)
 	assert.Positive(t, info.DatabaseSizeBytes)
@@ -142,7 +143,7 @@ func TestCollectDatabaseInfo_FKViolations(t *testing.T) {
 	require.NoError(t, db.Exec("INSERT INTO detections (id, label_id, confidence) VALUES (100, 99999, 0.5)").Error)
 	require.NoError(t, db.Exec("PRAGMA foreign_keys = ON").Error)
 
-	collector := NewGormDatabaseInfoCollector(db, "sqlite", dbPath, "v2", "")
+	collector := NewGormDatabaseInfoCollector(db, datastore.DialectSQLite, dbPath, "v2", "")
 	info, err := collector.CollectDatabaseInfo(t.Context())
 
 	require.NoError(t, err)
@@ -169,7 +170,7 @@ func TestCollectDatabaseInfo_SchemaContamination(t *testing.T) {
 	// Add an extra column that shouldn't exist (schema contamination)
 	require.NoError(t, db.Exec("ALTER TABLE detections ADD COLUMN spurious_col TEXT").Error)
 
-	collector := NewGormDatabaseInfoCollector(db, "sqlite", dbPath, "v2", "")
+	collector := NewGormDatabaseInfoCollector(db, datastore.DialectSQLite, dbPath, "v2", "")
 	info, err := collector.CollectDatabaseInfo(t.Context())
 
 	require.NoError(t, err)
@@ -198,13 +199,13 @@ func TestCollectDatabaseInfo_EmptyDB(t *testing.T) {
 	t.Parallel()
 	db, dbPath := openTestDB(t)
 
-	collector := NewGormDatabaseInfoCollector(db, "sqlite", dbPath, "v2", "")
+	collector := NewGormDatabaseInfoCollector(db, datastore.DialectSQLite, dbPath, "v2", "")
 	info, err := collector.CollectDatabaseInfo(t.Context())
 
 	require.NoError(t, err)
 	require.NotNil(t, info)
 
-	assert.Equal(t, "sqlite", info.Dialect)
+	assert.Equal(t, datastore.DialectSQLite, info.Dialect)
 	assert.NotEmpty(t, info.EngineVersion)
 	assert.Equal(t, "ok", info.IntegrityCheck)
 	assert.Empty(t, info.FKViolations)
@@ -230,7 +231,7 @@ func TestCollectDatabaseInfo_MigrationState(t *testing.T) {
 	}
 	require.NoError(t, db.Save(&state).Error)
 
-	collector := NewGormDatabaseInfoCollector(db, "sqlite", dbPath, "v2", "")
+	collector := NewGormDatabaseInfoCollector(db, datastore.DialectSQLite, dbPath, "v2", "")
 	info, err := collector.CollectDatabaseInfo(t.Context())
 
 	require.NoError(t, err)
@@ -251,7 +252,7 @@ func TestCollectDatabaseInfo_AppMetadata(t *testing.T) {
 	require.NoError(t, db.Create(&entities.AppMetadata{Key: "wizard_completed", Value: "true"}).Error)
 	require.NoError(t, db.Create(&entities.AppMetadata{Key: "last_version", Value: "0.8.0"}).Error)
 
-	collector := NewGormDatabaseInfoCollector(db, "sqlite", dbPath, "v2", "")
+	collector := NewGormDatabaseInfoCollector(db, datastore.DialectSQLite, dbPath, "v2", "")
 	info, err := collector.CollectDatabaseInfo(t.Context())
 
 	require.NoError(t, err)
@@ -264,7 +265,7 @@ func TestCollectDatabaseInfo_PathScrubbing(t *testing.T) {
 	t.Parallel()
 	db, dbPath := openTestDB(t)
 
-	collector := NewGormDatabaseInfoCollector(db, "sqlite", dbPath, "v2", "")
+	collector := NewGormDatabaseInfoCollector(db, datastore.DialectSQLite, dbPath, "v2", "")
 	info, err := collector.CollectDatabaseInfo(t.Context())
 
 	require.NoError(t, err)
@@ -279,7 +280,7 @@ func TestArchiveIncludesDatabaseInfo(t *testing.T) {
 
 	// Create a collector with database info provider
 	collector := NewCollector(t.TempDir(), t.TempDir(), "test-system", "0.1.0")
-	dbCollector := NewGormDatabaseInfoCollector(db, "sqlite", dbPath, "v2", "")
+	dbCollector := NewGormDatabaseInfoCollector(db, datastore.DialectSQLite, dbPath, "v2", "")
 	collector.SetDatabaseInfoProvider(dbCollector)
 
 	opts := CollectorOptions{
@@ -312,7 +313,7 @@ func TestArchiveIncludesDatabaseInfo(t *testing.T) {
 		var dbInfo DatabaseInfo
 		require.NoError(t, json.NewDecoder(rc).Decode(&dbInfo))
 
-		assert.Equal(t, "sqlite", dbInfo.Dialect)
+		assert.Equal(t, datastore.DialectSQLite, dbInfo.Dialect)
 		assert.NotEmpty(t, dbInfo.Tables)
 		break
 	}
@@ -327,11 +328,11 @@ func TestCollectDatabaseInfo_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // cancel immediately
 
-	collector := NewGormDatabaseInfoCollector(db, "sqlite", dbPath, "v2", "")
+	collector := NewGormDatabaseInfoCollector(db, datastore.DialectSQLite, dbPath, "v2", "")
 	info, err := collector.CollectDatabaseInfo(ctx)
 
 	// Should still return a result (with errors noted), not fail outright
 	require.NoError(t, err)
 	require.NotNil(t, info)
-	assert.Equal(t, "sqlite", info.Dialect)
+	assert.Equal(t, datastore.DialectSQLite, info.Dialect)
 }
