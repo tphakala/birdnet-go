@@ -18,6 +18,7 @@ import argparse
 import json
 import os
 import platform
+import shutil
 import sqlite3
 import sys
 from dataclasses import dataclass, field
@@ -178,7 +179,8 @@ V2_TABLE_SCHEMAS: dict[str, tuple[str, list[str]]] = {
             author_url TEXT DEFAULT '',
             cached_at DATETIME,
             created_at DATETIME,
-            updated_at DATETIME
+            updated_at DATETIME,
+            FOREIGN KEY(label_id) REFERENCES labels(id)
         )""",
         [
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_image_cache_provider_label "
@@ -202,7 +204,8 @@ V2_TABLE_SCHEMAS: dict[str, tuple[str, list[str]]] = {
             trigger_count INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME,
             updated_at DATETIME,
-            CONSTRAINT uni_dynamic_thresholds_label_id UNIQUE (label_id)
+            CONSTRAINT uni_dynamic_thresholds_label_id UNIQUE (label_id),
+            FOREIGN KEY(label_id) REFERENCES labels(id)
         )""",
         [
             "CREATE INDEX IF NOT EXISTS idx_dynamic_thresholds_expires_at "
@@ -219,7 +222,8 @@ V2_TABLE_SCHEMAS: dict[str, tuple[str, list[str]]] = {
             last_sent DATETIME NOT NULL,
             expires_at DATETIME NOT NULL,
             created_at DATETIME,
-            updated_at DATETIME
+            updated_at DATETIME,
+            FOREIGN KEY(label_id) REFERENCES labels(id)
         )""",
         [
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_label_type "
@@ -1074,8 +1078,7 @@ class DatabaseDoctor:
 
         db_size = os.path.getsize(self.db_path)
         try:
-            stat = os.statvfs(os.path.dirname(self.db_path))
-            free_space = stat.f_bavail * stat.f_frsize
+            free_space = shutil.disk_usage(os.path.dirname(self.db_path)).free
             if free_space < db_size * BACKUP_DISK_HEADROOM:
                 return (
                     FixResult(
@@ -1395,10 +1398,10 @@ class DatabaseDoctor:
             reason = "no detection data found, resetting to idle"
 
         try:
-            conn.execute("BEGIN")
+            conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 f"UPDATE `{migration_table}` SET state = ?, "
-                f"error_message = ''",
+                f"error_message = '', updated_at = CURRENT_TIMESTAMP",
                 (target_state,),
             )
             conn.execute("COMMIT")
@@ -1471,7 +1474,10 @@ class DatabaseDoctor:
                 matches = []
                 try:
                     for entry in os.scandir(search_dir):
-                        if entry.is_file() and entry.name.startswith(basename + "."):
+                        if not entry.is_file():
+                            continue
+                        stem, ext = os.path.splitext(entry.name)
+                        if stem == basename and ext:
                             matches.append(entry.name)
                 except OSError:
                     skipped += 1
@@ -1493,7 +1499,7 @@ class DatabaseDoctor:
 
         if updates:
             try:
-                conn.execute("BEGIN")
+                conn.execute("BEGIN IMMEDIATE")
                 conn.executemany(
                     f"UPDATE `{clip_table}` SET clip_name = ? WHERE id = ?",
                     updates,
@@ -1557,7 +1563,7 @@ class DatabaseDoctor:
         recovered = 0
         if "notes" in tables:
             try:
-                conn.execute("BEGIN")
+                conn.execute("BEGIN IMMEDIATE")
                 # Only update rows where a matching label actually exists
                 # (prevents setting label_id to NULL)
                 cur = conn.execute(

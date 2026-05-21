@@ -117,7 +117,7 @@ python3 db-doctor.py /path/to/birdnet.db --json
 
 Human-readable by default. Each check prints a status line:
 
-```
+```text
 BirdNET-Go Database Doctor v1.0
 
 Database: /home/birder/birdnet-go-app/data/birdnet.db
@@ -445,7 +445,7 @@ Single file (`db-doctor.py`) for easy distribution. No package dependencies.
 
 ### Key classes
 
-```
+```text
 DatabaseDoctor
     - __init__(db_path, clips_dir=None, verbose=False)
     - diagnose() -> DiagnosticReport
