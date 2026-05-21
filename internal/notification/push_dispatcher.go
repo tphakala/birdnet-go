@@ -14,6 +14,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"golang.org/x/sync/semaphore"
@@ -581,6 +582,12 @@ func (d *pushDispatcher) logSuccess(providerName string, notif *Notification, no
 		logger.Int("attempt", attempts),
 		logger.Duration("elapsed", duration))
 
+	events.Emit(context.Background(), "notification", "delivery_attempt", "Notification delivered", map[string]any{
+		"provider": providerName,
+		"success":  true,
+		"attempts": attempts,
+	})
+
 	// Reset error suppression state on success. This logs a recovery message
 	// if the provider was in a failure state and resets the consecutive failure count.
 	if d.errorSuppressor != nil {
@@ -641,6 +648,12 @@ func (d *pushDispatcher) shouldRetry(err error, attempts int, providerName strin
 					logger.Bool("retryable", retryable))
 			}
 		}
+
+		events.Emit(context.Background(), "notification", "delivery_attempt", "Notification delivery failed", map[string]any{
+			"provider": providerName,
+			"success":  false,
+			"attempts": attempts,
+		})
 		return false
 	}
 

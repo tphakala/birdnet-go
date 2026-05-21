@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
@@ -387,6 +388,11 @@ func (a *UpdateRangeFilterAction) Execute(_ context.Context, data any) error {
 
 	// Update the species list (this also updates LastUpdated timestamp atomically)
 	conf.UpdateIncludedSpecies(includedSpecies)
+
+	events.Emit(context.Background(), "detection", "filter_reconfigured", "Range filter updated", map[string]any{
+		"species_count": len(includedSpecies),
+		"date":          today.Format(time.DateOnly),
+	})
 
 	if a.Settings.Debug {
 		GetLogger().Info("Range filter updated successfully",

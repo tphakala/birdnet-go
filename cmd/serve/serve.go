@@ -1,8 +1,10 @@
 package serve
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -10,6 +12,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/events"
 )
 
 // Command creates the serve command which starts the BirdNET-Go server.
@@ -62,6 +66,14 @@ The "realtime" command is an alias for backward compatibility.`,
 			if err := application.Start(cmd.Context()); err != nil {
 				return err
 			}
+
+			// Wire the global event emitter after all services have started
+			// (DatabaseService must be running so its datastore is available).
+			if ds := dbService.DataStore(); ds != nil {
+				events.SetDefault(events.NewEmitter(ds))
+				emitStartupEvents(cmd.Context(), settings, ds)
+			}
+
 			return application.Wait()
 		},
 	}
@@ -92,4 +104,37 @@ func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	}
 
 	return nil
+}
+
+// emitStartupEvents records the startup event and checks for version changes.
+func emitStartupEvents(ctx context.Context, settings *conf.Settings, ds datastore.Interface) {
+	events.Emit(ctx, "system", "startup", "Application started", map[string]any{
+		"version":    settings.Version,
+		"go_version": runtime.Version(),
+		"os":         runtime.GOOS,
+		"arch":       runtime.GOARCH,
+	})
+
+	// Detect version change by finding the previous startup event (skip the one
+	// we just emitted, which will be the most recent).
+	recent, err := ds.GetRecentAppEvents(ctx, 50)
+	if err != nil {
+		return
+	}
+	found := 0
+	for _, ev := range recent {
+		if ev.Category == "system" && ev.EventType == "startup" {
+			found++
+			if found < 2 {
+				continue // skip the one we just emitted
+			}
+			if prev, ok := ev.Metadata["version"].(string); ok && prev != "" && prev != settings.Version {
+				events.Emit(ctx, "system", "version_change", "Application version changed", map[string]any{
+					"previous_version": prev,
+					"current_version":  settings.Version,
+				})
+			}
+			break
+		}
+	}
 }

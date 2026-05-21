@@ -20,6 +20,7 @@ type SupportDump struct {
 	Attachments  []AttachmentInfo      `json:"attachments"`
 	Diagnostics  CollectionDiagnostics `json:"diagnostics"`             // Diagnostic information about collection process
 	DatabaseInfo *DatabaseInfo         `json:"database_info,omitempty"` // Database schema and health diagnostics
+	AppEvents    []AppEventEntry       `json:"app_events,omitempty"`    // Recent application events
 }
 
 // LogEntry represents a single log entry from application logs or system journals.
@@ -79,6 +80,7 @@ type CollectorOptions struct {
 	IncludeConfig       bool          `json:"include_config"`
 	IncludeSystemInfo   bool          `json:"include_system_info"`
 	IncludeDatabaseInfo bool          `json:"include_database_info"`
+	IncludeAppEvents    bool          `json:"include_app_events"`
 	LogDuration         time.Duration `json:"log_duration"`
 	MaxLogSize          int64         `json:"max_log_size"`
 	ScrubSensitive      bool          `json:"scrub_sensitive"`
@@ -153,6 +155,7 @@ func DefaultCollectorOptions() CollectorOptions {
 		IncludeConfig:       true,
 		IncludeSystemInfo:   true,
 		IncludeDatabaseInfo: true,
+		IncludeAppEvents:    true,
 		LogDuration:         defaultLogDurationWeeks * 7 * 24 * time.Hour, // 4 weeks
 		MaxLogSize:          defaultMaxLogSizeMB * bytesPerMB,             // 50MB to accommodate more logs
 		ScrubSensitive:      true,
@@ -231,4 +234,20 @@ type MigrationStateInfo struct {
 	ErrorMessage     string  `json:"error_message,omitempty"`
 	RelatedDataError string  `json:"related_data_error,omitempty"`
 	DirtyRecordCount int64   `json:"dirty_record_count,omitempty"`
+}
+
+// AppEventEntry is a support-package-local representation of an application event.
+// It uses plain types (no gorm dependency) for clean serialization into the support dump.
+type AppEventEntry struct {
+	Timestamp time.Time      `json:"timestamp"`
+	Category  string         `json:"category"`
+	EventType string         `json:"event_type"`
+	Message   string         `json:"message"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+}
+
+// AppEventsProvider retrieves recent application events for inclusion in support dumps.
+// Implemented by the datastore layer, consumed by the support collector.
+type AppEventsProvider interface {
+	GetRecentAppEvents(ctx context.Context, limit int) ([]AppEventEntry, error)
 }
