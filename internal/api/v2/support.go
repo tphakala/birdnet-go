@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -27,12 +28,13 @@ const (
 
 // GenerateSupportDumpRequest represents the request for generating a support dump
 type GenerateSupportDumpRequest struct {
-	IncludeLogs       bool   `json:"include_logs"`
-	IncludeConfig     bool   `json:"include_config"`
-	IncludeSystemInfo bool   `json:"include_system_info"`
-	UserMessage       string `json:"user_message"`
-	UploadToSentry    bool   `json:"upload_to_sentry"`
-	GitHubIssueNumber string `json:"github_issue_number"`
+	IncludeLogs         bool   `json:"include_logs"`
+	IncludeConfig       bool   `json:"include_config"`
+	IncludeSystemInfo   bool   `json:"include_system_info"`
+	IncludeDatabaseInfo bool   `json:"include_database_info"`
+	UserMessage         string `json:"user_message"`
+	UploadToSentry      bool   `json:"upload_to_sentry"`
+	GitHubIssueNumber   string `json:"github_issue_number"`
 }
 
 // GenerateSupportDumpResponse represents the response for support dump generation
@@ -71,15 +73,17 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		logger.Bool("include_logs", req.IncludeLogs),
 		logger.Bool("include_config", req.IncludeConfig),
 		logger.Bool("include_system_info", req.IncludeSystemInfo),
+		logger.Bool("include_database_info", req.IncludeDatabaseInfo),
 		logger.Bool("upload_to_sentry", req.UploadToSentry),
 		logger.String("github_issue", req.GitHubIssueNumber),
 		logger.Bool("has_user_message", req.UserMessage != ""))
 
 	// Set defaults if nothing is selected
-	if !req.IncludeLogs && !req.IncludeConfig && !req.IncludeSystemInfo {
+	if !req.IncludeLogs && !req.IncludeConfig && !req.IncludeSystemInfo && !req.IncludeDatabaseInfo {
 		req.IncludeLogs = true
 		req.IncludeConfig = true
 		req.IncludeSystemInfo = true
+		req.IncludeDatabaseInfo = true
 		c.logDebugIfEnabled("Set default options for support dump")
 	}
 
@@ -103,14 +107,32 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		settings.Version,
 	)
 
+	// Wire database info provider if V2Manager is available
+	if req.IncludeDatabaseInfo && c.V2Manager != nil {
+		dialect := datastore.DialectSQLite
+		if c.V2Manager.IsMySQL() {
+			dialect = datastore.DialectMySQL
+		}
+		dbCollector := support.NewGormDatabaseInfoCollector(
+			c.V2Manager.DB(),
+			dialect,
+			c.V2Manager.Path(),
+			c.DS.SchemaVersion(),
+			c.V2Manager.TablePrefix(),
+		)
+		collector.SetDatabaseInfoProvider(dbCollector)
+	}
+
 	// Set collection options
 	opts := support.CollectorOptions{
-		IncludeLogs:       req.IncludeLogs,
-		IncludeConfig:     req.IncludeConfig,
-		IncludeSystemInfo: req.IncludeSystemInfo,
-		LogDuration:       supportLogDurationWeeks * daysPerWeek * HoursPerDay * time.Hour, // 4 weeks
-		MaxLogSize:        supportMaxLogSizeMB * supportBytesPerMB,                         // 50MB to accommodate more logs
-		ScrubSensitive:    true,
+		IncludeLogs:         req.IncludeLogs,
+		IncludeConfig:       req.IncludeConfig,
+		IncludeSystemInfo:   req.IncludeSystemInfo,
+		IncludeDatabaseInfo: req.IncludeDatabaseInfo,
+		LogDuration:         supportLogDurationWeeks * daysPerWeek * HoursPerDay * time.Hour, // 4 weeks
+		MaxLogSize:          supportMaxLogSizeMB * supportBytesPerMB,                         // 50MB to accommodate more logs
+		ScrubSensitive:      true,
+		AnonymizePII:        true,
 	}
 
 	// Collect data
