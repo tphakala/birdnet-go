@@ -296,6 +296,7 @@ func (c *GormDatabaseInfoCollector) collectTableRowCount(ctx context.Context, ts
 	var count int64
 	if err := c.db.WithContext(countCtx).Raw("SELECT COUNT(*) FROM " + quoteIdentifier(ts.Name)).Row().Scan(&count); err != nil { //nolint:gosec // table names from sqlite_master/INFORMATION_SCHEMA
 		log.Warn("support: row count timed out or failed", logger.String("table", ts.Name), logger.Error(err))
+		*errs = append(*errs, fmt.Sprintf("count(%s): %v", ts.Name, err))
 		ts.RowCount = -1
 	} else {
 		ts.RowCount = count
@@ -535,9 +536,9 @@ func (c *GormDatabaseInfoCollector) collectMigrationState(ctx context.Context, i
 		msi.CompletedAt = &s
 	}
 
-	// Count dirty records if the table exists
+	// Count dirty records if the table exists (apply prefix for MySQL migration mode)
 	var dirtyCount int64
-	if err := db.Table("migration_dirty_ids").Count(&dirtyCount).Error; err == nil {
+	if err := db.Table(c.tablePrefix + "migration_dirty_ids").Count(&dirtyCount).Error; err == nil {
 		msi.DirtyRecordCount = dirtyCount
 	}
 

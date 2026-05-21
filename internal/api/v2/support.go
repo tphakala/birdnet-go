@@ -132,6 +132,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		LogDuration:         supportLogDurationWeeks * daysPerWeek * HoursPerDay * time.Hour, // 4 weeks
 		MaxLogSize:          supportMaxLogSizeMB * supportBytesPerMB,                         // 50MB to accommodate more logs
 		ScrubSensitive:      true,
+		AnonymizePII:        true,
 	}
 
 	// Collect data

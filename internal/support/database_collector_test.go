@@ -269,8 +269,9 @@ func TestCollectDatabaseInfo_PathScrubbing(t *testing.T) {
 	info, err := collector.CollectDatabaseInfo(t.Context())
 
 	require.NoError(t, err)
-	// The raw dbPath should not appear verbatim in the output
+	// The raw dbPath should not appear verbatim or as a substring in the output
 	assert.NotEqual(t, dbPath, info.DatabasePath)
+	assert.NotContains(t, info.DatabasePath, dbPath)
 }
 
 func TestArchiveIncludesDatabaseInfo(t *testing.T) {
