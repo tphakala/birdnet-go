@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -1255,11 +1256,90 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	require.NoError(t, err)
 
-	// Check that the error response contains expected fields — in non-debug mode,
+	// Check that the error response contains expected fields - in non-debug mode,
 	// Error field uses sanitized message instead of raw err.Error()
 	assert.Contains(t, errorResponse, "error")
 	assert.Equal(t, "Failed to process daily species data", errorResponse["error"])
 
 	// Assert that all expectations were met
 	mockDS.AssertExpectations(t)
+}
+
+func TestApplySpeciesStatusToSummary_NewSpeciesWindow(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+
+	tests := []struct {
+		name              string
+		status            species.SpeciesStatus
+		expectNewSpecies  bool
+		expectNewThisYear bool
+		expectNewSeason   bool
+	}{
+		{
+			name: "first seen today",
+			status: species.SpeciesStatus{
+				FirstSeenTime:   now,
+				IsNew:           true,
+				DaysSinceFirst:  0,
+				IsNewThisYear:   true,
+				IsNewThisSeason: true,
+			},
+			expectNewSpecies:  true,
+			expectNewThisYear: true,
+			expectNewSeason:   true,
+		},
+		{
+			name: "first seen 3 days ago within 7 day window",
+			status: species.SpeciesStatus{
+				FirstSeenTime:   now.AddDate(0, 0, -3),
+				IsNew:           true,
+				DaysSinceFirst:  3,
+				IsNewThisYear:   true,
+				IsNewThisSeason: true,
+			},
+			expectNewSpecies:  true,
+			expectNewThisYear: true,
+			expectNewSeason:   true,
+		},
+		{
+			name: "first seen 8 days ago outside 7 day window",
+			status: species.SpeciesStatus{
+				FirstSeenTime:   now.AddDate(0, 0, -8),
+				IsNew:           false,
+				DaysSinceFirst:  8,
+				IsNewThisYear:   false,
+				IsNewThisSeason: false,
+			},
+			expectNewSpecies:  false,
+			expectNewThisYear: false,
+			expectNewSeason:   false,
+		},
+		{
+			name: "never seen before",
+			status: species.SpeciesStatus{
+				IsNew:           true,
+				DaysSinceFirst:  0,
+				IsNewThisYear:   true,
+				IsNewThisSeason: true,
+			},
+			expectNewSpecies:  true,
+			expectNewThisYear: true,
+			expectNewSeason:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var summary SpeciesDailySummary
+			applySpeciesStatusToSummary(&summary, &tt.status)
+			assert.Equal(t, tt.expectNewSpecies, summary.IsNewSpecies, "IsNewSpecies")
+			assert.Equal(t, tt.expectNewThisYear, summary.IsNewThisYear, "IsNewThisYear")
+			assert.Equal(t, tt.expectNewSeason, summary.IsNewThisSeason, "IsNewThisSeason")
+			assert.Equal(t, tt.status.DaysSinceFirst, summary.DaysSinceFirstSeen, "DaysSinceFirstSeen")
+			assert.Equal(t, tt.status.CurrentSeason, summary.CurrentSeason, "CurrentSeason")
+		})
+	}
 }
