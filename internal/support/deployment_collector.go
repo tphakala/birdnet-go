@@ -108,8 +108,13 @@ func (c *Collector) scrubEnvironmentLine(line string) string {
 		return line
 	}
 	kvPart := line[idx+len(prefix):]
-	// Strip surrounding quotes (systemd supports Environment="KEY=value")
-	kvPart = strings.Trim(kvPart, `"'`)
+
+	// Detect and strip surrounding quotes, preserving them for output
+	var quoteChar string
+	if len(kvPart) >= 2 && (kvPart[0] == '"' || kvPart[0] == '\'') {
+		quoteChar = string(kvPart[0])
+		kvPart = kvPart[1 : len(kvPart)-1]
+	}
 
 	eqIdx := strings.IndexByte(kvPart, '=')
 	if eqIdx == -1 {
@@ -120,7 +125,7 @@ func (c *Collector) scrubEnvironmentLine(line string) string {
 	lowerKey := strings.ToLower(key)
 	for _, sensitive := range c.sensitiveKeys {
 		if isSensitiveKey(lowerKey, sensitive) {
-			return line[:idx+len(prefix)] + key + "=[REDACTED]"
+			return line[:idx+len(prefix)] + quoteChar + key + "=[REDACTED]" + quoteChar
 		}
 	}
 	return line
@@ -133,7 +138,11 @@ func (c *Collector) collectDataDirectoryListing(anonymizePII bool) ([]DataDirect
 		return nil, err
 	}
 
-	files := make([]DataDirectoryFile, 0, len(entries))
+	allocSize := len(entries)
+	if allocSize > maxDataDirEntries {
+		allocSize = maxDataDirEntries
+	}
+	files := make([]DataDirectoryFile, 0, allocSize)
 	for i, e := range entries {
 		if i >= maxDataDirEntries {
 			getLogger().Warn("data directory listing truncated",

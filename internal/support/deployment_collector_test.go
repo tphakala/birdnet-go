@@ -55,8 +55,9 @@ func TestCollectSystemdServiceFile_ScrubsQuotedEnvVars(t *testing.T) {
 	c := &Collector{sensitiveKeys: defaultSensitiveKeys()}
 	content, err := c.collectSystemdServiceFile(servicePath)
 	require.NoError(t, err)
-	assert.Contains(t, content, "MQTT_PASSWORD=[REDACTED]")
-	assert.Contains(t, content, "BIRDWEATHER_ID=[REDACTED]")
+	// Quotes must be preserved in redacted output
+	assert.Contains(t, content, `Environment="MQTT_PASSWORD=[REDACTED]"`)
+	assert.Contains(t, content, `Environment='BIRDWEATHER_ID=[REDACTED]'`)
 }
 
 // --- Data directory listing tests ---
