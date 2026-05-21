@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-SCRIPT_VERSION = "1.0.0"
+SCRIPT_VERSION = "1.1.0"
 SCHEMA_VERSION = "v2-2026-05-21"
 
 # ---------------------------------------------------------------------------
@@ -234,6 +234,217 @@ V2_TABLE_SCHEMAS: dict[str, tuple[str, list[str]]] = {
             "ON notification_histories (expires_at)",
         ],
     ),
+}
+
+# ALTER TABLE ADD COLUMN definitions for missing column repair.
+# Maps table -> column -> SQL type + constraints for ALTER TABLE ADD COLUMN.
+# Source of truth: Go entity structs in internal/datastore/v2/entities/.
+# Primary key columns are excluded (cannot be added via ALTER TABLE).
+V2_COLUMN_DEFS: dict[str, dict[str, str]] = {
+    "label_types": {
+        "name": "TEXT NOT NULL DEFAULT ''",
+    },
+    "taxonomic_classes": {
+        "name": "TEXT NOT NULL DEFAULT ''",
+    },
+    "ai_models": {
+        "name": "TEXT NOT NULL DEFAULT ''",
+        "version": "TEXT NOT NULL DEFAULT ''",
+        "variant": "TEXT NOT NULL DEFAULT 'default'",
+        "model_type": "TEXT NOT NULL DEFAULT ''",
+        "classifier_path": "TEXT",
+        "created_at": "DATETIME",
+    },
+    "labels": {
+        "scientific_name": "TEXT NOT NULL DEFAULT ''",
+        "model_id": "INTEGER NOT NULL DEFAULT 0",
+        "label_type_id": "INTEGER NOT NULL DEFAULT 0",
+        "taxonomic_class_id": "INTEGER",
+        "created_at": "DATETIME",
+    },
+    "audio_sources": {
+        "source_uri": "TEXT NOT NULL DEFAULT ''",
+        "node_name": "TEXT NOT NULL DEFAULT ''",
+        "source_type": "TEXT NOT NULL DEFAULT ''",
+        "display_name": "TEXT",
+        "config_json": "TEXT",
+        "created_at": "DATETIME",
+    },
+    "detections": {
+        "model_id": "INTEGER NOT NULL DEFAULT 0",
+        "label_id": "INTEGER NOT NULL DEFAULT 0",
+        "source_id": "INTEGER",
+        "detected_at": "INTEGER NOT NULL DEFAULT 0",
+        "begin_time": "INTEGER",
+        "end_time": "INTEGER",
+        "confidence": "REAL NOT NULL DEFAULT 0",
+        "latitude": "REAL",
+        "longitude": "REAL",
+        "clip_name": "TEXT",
+        "processing_time_ms": "INTEGER",
+        "unlikely": "NUMERIC NOT NULL DEFAULT 0",
+        "legacy_id": "INTEGER",
+    },
+    "detection_predictions": {
+        "detection_id": "INTEGER NOT NULL DEFAULT 0",
+        "label_id": "INTEGER NOT NULL DEFAULT 0",
+        "confidence": "REAL NOT NULL DEFAULT 0",
+        "rank": "INTEGER NOT NULL DEFAULT 1",
+    },
+    "detection_model_contributions": {
+        "detection_id": "INTEGER NOT NULL DEFAULT 0",
+        "model_id": "INTEGER NOT NULL DEFAULT 0",
+        "hit_count": "INTEGER NOT NULL DEFAULT 0",
+        "max_confidence": "REAL NOT NULL DEFAULT 0",
+    },
+    "detection_reviews": {
+        "detection_id": "INTEGER NOT NULL DEFAULT 0",
+        "verified": "TEXT NOT NULL DEFAULT ''",
+        "created_at": "DATETIME",
+        "updated_at": "DATETIME",
+    },
+    "detection_comments": {
+        "detection_id": "INTEGER NOT NULL DEFAULT 0",
+        "entry": "TEXT NOT NULL DEFAULT ''",
+        "created_at": "DATETIME",
+        "updated_at": "DATETIME",
+    },
+    "detection_locks": {
+        "detection_id": "INTEGER NOT NULL DEFAULT 0",
+        "locked_at": "DATETIME",
+    },
+    "image_caches": {
+        "provider_name": "TEXT NOT NULL DEFAULT 'wikimedia'",
+        "label_id": "INTEGER NOT NULL DEFAULT 0",
+        "source_provider": "TEXT NOT NULL DEFAULT 'wikimedia'",
+        "url": "TEXT DEFAULT ''",
+        "license_name": "TEXT DEFAULT ''",
+        "license_url": "TEXT DEFAULT ''",
+        "author_name": "TEXT DEFAULT ''",
+        "author_url": "TEXT DEFAULT ''",
+        "cached_at": "DATETIME",
+        "created_at": "DATETIME",
+        "updated_at": "DATETIME",
+    },
+    "dynamic_thresholds": {
+        "label_id": "INTEGER NOT NULL DEFAULT 0",
+        "level": "INTEGER NOT NULL DEFAULT 0",
+        "current_value": "REAL NOT NULL DEFAULT 0",
+        "base_threshold": "REAL NOT NULL DEFAULT 0",
+        "high_conf_count": "INTEGER NOT NULL DEFAULT 0",
+        "valid_hours": "INTEGER NOT NULL DEFAULT 0",
+        "expires_at": "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'",
+        "last_triggered": "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'",
+        "first_created": "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'",
+        "trigger_count": "INTEGER NOT NULL DEFAULT 0",
+        "created_at": "DATETIME",
+        "updated_at": "DATETIME",
+    },
+    "threshold_events": {
+        "label_id": "INTEGER NOT NULL DEFAULT 0",
+        "previous_level": "INTEGER NOT NULL DEFAULT 0",
+        "new_level": "INTEGER NOT NULL DEFAULT 0",
+        "previous_value": "REAL NOT NULL DEFAULT 0",
+        "new_value": "REAL NOT NULL DEFAULT 0",
+        "change_reason": "TEXT NOT NULL DEFAULT ''",
+        "confidence": "REAL DEFAULT 0",
+        "created_at": "DATETIME",
+    },
+    "notification_histories": {
+        "label_id": "INTEGER NOT NULL DEFAULT 0",
+        "notification_type": "TEXT NOT NULL DEFAULT 'new_species'",
+        "last_sent": "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'",
+        "expires_at": "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'",
+        "created_at": "DATETIME",
+        "updated_at": "DATETIME",
+    },
+    "alert_rules": {
+        "name": "TEXT NOT NULL DEFAULT ''",
+        "description": "TEXT DEFAULT ''",
+        "name_key": "TEXT DEFAULT ''",
+        "description_key": "TEXT DEFAULT ''",
+        "enabled": "NUMERIC NOT NULL DEFAULT 0",
+        "built_in": "NUMERIC NOT NULL DEFAULT 0",
+        "object_type": "TEXT NOT NULL DEFAULT ''",
+        "trigger_type": "TEXT NOT NULL DEFAULT ''",
+        "event_name": "TEXT DEFAULT ''",
+        "metric_name": "TEXT DEFAULT ''",
+        "cooldown_sec": "INTEGER NOT NULL DEFAULT 300",
+        "escalation_steps": "TEXT",
+        "created_at": "DATETIME",
+        "updated_at": "DATETIME",
+    },
+    "alert_conditions": {
+        "rule_id": "INTEGER NOT NULL DEFAULT 0",
+        "property": "TEXT NOT NULL DEFAULT ''",
+        "operator": "TEXT NOT NULL DEFAULT ''",
+        "value": "TEXT NOT NULL DEFAULT ''",
+        "duration_sec": "INTEGER DEFAULT 0",
+        "sort_order": "INTEGER DEFAULT 0",
+    },
+    "alert_actions": {
+        "rule_id": "INTEGER NOT NULL DEFAULT 0",
+        "target": "TEXT NOT NULL DEFAULT ''",
+        "template_title": "TEXT DEFAULT ''",
+        "template_message": "TEXT DEFAULT ''",
+        "sort_order": "INTEGER DEFAULT 0",
+    },
+    "alert_histories": {
+        "rule_id": "INTEGER NOT NULL DEFAULT 0",
+        "fired_at": "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'",
+        "event_data": "TEXT",
+        "actions": "TEXT",
+        "created_at": "DATETIME",
+    },
+    "migration_states": {
+        "state": "TEXT NOT NULL DEFAULT 'idle'",
+        "current_phase": "TEXT NOT NULL DEFAULT ''",
+        "phase_number": "INTEGER DEFAULT 0",
+        "total_phases": "INTEGER DEFAULT 0",
+        "started_at": "DATETIME",
+        "phase_started_at": "DATETIME",
+        "completed_at": "DATETIME",
+        "last_migrated_id": "INTEGER DEFAULT 0",
+        "total_records": "INTEGER DEFAULT 0",
+        "migrated_records": "INTEGER DEFAULT 0",
+        "error_message": "TEXT",
+        "related_data_error": "TEXT",
+        "updated_at": "DATETIME",
+    },
+    "migration_dirty_ids": {
+        "created_at": "DATETIME",
+    },
+    "daily_events": {
+        "date": "TEXT NOT NULL DEFAULT ''",
+        "sunrise": "INTEGER NOT NULL DEFAULT 0",
+        "sunset": "INTEGER NOT NULL DEFAULT 0",
+        "country": "TEXT NOT NULL DEFAULT ''",
+        "city_name": "TEXT NOT NULL DEFAULT ''",
+        "moon_phase": "REAL NOT NULL DEFAULT 0",
+        "moon_illumination": "REAL NOT NULL DEFAULT 0",
+    },
+    "hourly_weathers": {
+        "daily_events_id": "INTEGER NOT NULL DEFAULT 0",
+        "time": "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'",
+        "temperature": "REAL NOT NULL DEFAULT 0",
+        "feels_like": "REAL NOT NULL DEFAULT 0",
+        "temp_min": "REAL NOT NULL DEFAULT 0",
+        "temp_max": "REAL NOT NULL DEFAULT 0",
+        "pressure": "INTEGER NOT NULL DEFAULT 0",
+        "humidity": "INTEGER NOT NULL DEFAULT 0",
+        "visibility": "INTEGER NOT NULL DEFAULT 0",
+        "wind_speed": "REAL NOT NULL DEFAULT 0",
+        "wind_deg": "INTEGER NOT NULL DEFAULT 0",
+        "wind_gust": "REAL NOT NULL DEFAULT 0",
+        "clouds": "INTEGER NOT NULL DEFAULT 0",
+        "weather_main": "TEXT NOT NULL DEFAULT ''",
+        "weather_desc": "TEXT NOT NULL DEFAULT ''",
+        "weather_icon": "TEXT NOT NULL DEFAULT ''",
+        "created_at": "DATETIME",
+    },
+    "app_metadata": {
+        "value": "TEXT NOT NULL DEFAULT ''",
+    },
 }
 
 # FK integrity checks: (child_table, child_column, parent_table, parent_column)
@@ -687,19 +898,23 @@ class DatabaseDoctor:
                 message="All V2 table schemas match expected definitions",
             )
 
-        fixable = any(
+        fixable_extra = any(
             table_name in V2_TABLE_SCHEMAS
             for table_name in V2_CONTAMINATION_COLUMNS
             if any(
                 f"{table_name}: unexpected" in issue for issue in issues
             )
         )
+        fixable_missing = any(
+            any(f"{table_name}: missing" in issue for issue in issues)
+            for table_name in V2_COLUMN_DEFS
+        )
 
         return CheckResult(
             name="Schema contamination", status="fail",
-            message=f"Schema issues found",
+            message="Schema issues found",
             details=issues,
-            fixable=fixable,
+            fixable=fixable_extra or fixable_missing,
         )
 
     def _check_foreign_keys(
@@ -1297,22 +1512,76 @@ class DatabaseDoctor:
                 tables_failed += 1
                 fix_details.append(f"{table_name}: FAILED: {e}")
 
-        if tables_fixed == 0 and tables_failed == 0:
+        # Fix missing columns via ALTER TABLE ADD COLUMN.
+        # This is fast and safe (existing rows get the default value).
+        columns_added = 0
+        columns_failed = 0
+        for table_name, expected_cols in V2_EXPECTED_COLUMNS.items():
+            if table_name not in report.tables_present:
+                continue
+
+            try:
+                actual_cols = self._get_columns(conn, table_name)
+            except sqlite3.Error:
+                continue
+
+            missing = set(expected_cols) - set(actual_cols)
+            if not missing:
+                continue
+
+            table_defs = V2_COLUMN_DEFS.get(table_name, {})
+            for col in sorted(missing):
+                if col not in table_defs:
+                    fix_details.append(
+                        f"{table_name}: cannot add `{col}` (no definition)"
+                    )
+                    columns_failed += 1
+                    continue
+
+                col_def = table_defs[col]
+                try:
+                    conn.execute(
+                        f"ALTER TABLE `{table_name}` "
+                        f"ADD COLUMN `{col}` {col_def}"
+                    )
+                    columns_added += 1
+                    fix_details.append(
+                        f"{table_name}: added missing column "
+                        f"`{col}` ({col_def})"
+                    )
+                except sqlite3.Error as e:
+                    columns_failed += 1
+                    fix_details.append(
+                        f"{table_name}: FAILED to add `{col}`: {e}"
+                    )
+
+        total_fixed = tables_fixed + columns_added
+        total_failed = tables_failed + columns_failed
+
+        if total_fixed == 0 and total_failed == 0:
             return FixResult(
                 name="Schema repair", status="skipped",
-                message="No fixable schema contamination found",
+                message="No fixable schema issues found",
                 details=fix_details,
             )
 
-        if tables_failed > 0 and tables_fixed == 0:
+        if total_failed > 0 and total_fixed == 0:
             status = "failed"
         else:
             status = "applied"
 
+        parts = []
+        if tables_fixed:
+            parts.append(f"{tables_fixed} table(s) recreated")
+        if columns_added:
+            parts.append(f"{columns_added} column(s) added")
+        if total_failed:
+            parts.append(f"{total_failed} failed")
+
         return FixResult(
             name="Schema repair", status=status,
-            message=f"{tables_fixed} fixed, {tables_failed} failed",
-            rows_affected=tables_fixed,
+            message=", ".join(parts),
+            rows_affected=total_fixed,
             details=fix_details,
         )
 
