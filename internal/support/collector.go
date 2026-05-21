@@ -333,7 +333,7 @@ func (c *Collector) SetAppEventsProvider(provider AppEventsProvider) {
 // Collect gathers support data based on the provided options
 func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*SupportDump, error) {
 	// Validate options
-	if !opts.IncludeLogs && !opts.IncludeConfig && !opts.IncludeSystemInfo && !opts.IncludeDatabaseInfo && !opts.IncludeAppEvents {
+	if !opts.IncludeLogs && !opts.IncludeConfig && !opts.IncludeSystemInfo && !opts.IncludeDatabaseInfo && !opts.IncludeDeploymentInfo && !opts.IncludeAppEvents {
 		getLogger().Error("support: collection validation failed: at least one data type must be included")
 		return nil, errors.Newf("at least one data type must be included in support dump").
 			Component("support").
