@@ -416,6 +416,13 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 		}
 	}
 
+	// Collect deployment context
+	if opts.IncludeDeploymentInfo {
+		getLogger().Debug("support: collecting deployment information")
+		dump.DeploymentInfo = c.collectDeploymentInfo(ctx, opts.AnonymizePII)
+		getLogger().Debug("support: deployment information collected")
+	}
+
 	// Collect app events
 	if opts.IncludeAppEvents && c.appEventsProvider != nil {
 		getLogger().Debug("support: collecting app events")
