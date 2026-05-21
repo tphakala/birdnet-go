@@ -53,7 +53,7 @@ func (r *appEventRepository) Save(ctx context.Context, event *entities.AppEvent)
 func (r *appEventRepository) GetRecent(ctx context.Context, limit int) ([]entities.AppEvent, error) {
 	var events []entities.AppEvent
 	if err := r.db.WithContext(ctx).Table(r.tableName()).
-		Order("timestamp DESC").
+		Order("timestamp DESC, id DESC").
 		Limit(limit).
 		Find(&events).Error; err != nil {
 		return nil, fmt.Errorf("get recent app events: %w", err)
@@ -66,7 +66,7 @@ func (r *appEventRepository) GetByCategory(ctx context.Context, category string,
 	var events []entities.AppEvent
 	if err := r.db.WithContext(ctx).Table(r.tableName()).
 		Where("category = ?", category).
-		Order("timestamp DESC").
+		Order("timestamp DESC, id DESC").
 		Limit(limit).
 		Find(&events).Error; err != nil {
 		return nil, fmt.Errorf("get app events by category %q: %w", category, err)
@@ -74,12 +74,12 @@ func (r *appEventRepository) GetByCategory(ctx context.Context, category string,
 	return events, nil
 }
 
-// GetSince returns events after the given timestamp, ordered newest first.
+// GetSince returns events since the given timestamp (inclusive), ordered newest first.
 func (r *appEventRepository) GetSince(ctx context.Context, since time.Time, limit int) ([]entities.AppEvent, error) {
 	var events []entities.AppEvent
 	if err := r.db.WithContext(ctx).Table(r.tableName()).
 		Where("timestamp >= ?", since).
-		Order("timestamp DESC").
+		Order("timestamp DESC, id DESC").
 		Limit(limit).
 		Find(&events).Error; err != nil {
 		return nil, fmt.Errorf("get app events since %s: %w", since.Format(time.RFC3339), err)

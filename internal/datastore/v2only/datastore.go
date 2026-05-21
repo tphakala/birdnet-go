@@ -3127,10 +3127,12 @@ func (ds *Datastore) SaveAppEvent(ctx context.Context, category, eventType, mess
 	if len(metadata) > 0 {
 		data, err := json.Marshal(metadata)
 		if err != nil {
-			ds.log.Warn("failed to marshal app event metadata",
-				logger.String("category", category),
-				logger.String("event_type", eventType),
-				logger.Error(err))
+			if ds.log != nil {
+				ds.log.Warn("failed to marshal app event metadata",
+					logger.String("category", category),
+					logger.String("event_type", eventType),
+					logger.Error(err))
+			}
 			metadataJSON = `{"error":"failed to encode metadata"}`
 		} else {
 			metadataJSON = string(data)
@@ -3174,6 +3176,9 @@ func (ds *Datastore) GetAppEventsSince(ctx context.Context, since time.Time, lim
 func (ds *Datastore) PruneAppEvents(ctx context.Context, retentionDays int) (int64, error) {
 	if ds.appEvent == nil {
 		return 0, nil
+	}
+	if retentionDays < 0 {
+		return 0, fmt.Errorf("retentionDays must be non-negative, got %d", retentionDays)
 	}
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)
 	deleted, err := ds.appEvent.DeleteBefore(ctx, cutoff)

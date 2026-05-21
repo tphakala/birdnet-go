@@ -194,7 +194,8 @@ func TestAppEventRepository_V2Prefix(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
 
-	db.Exec("CREATE TABLE v2_app_events (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DATETIME, category VARCHAR(50), event_type VARCHAR(100), message TEXT, metadata TEXT, created_at DATETIME)")
+	err = db.Exec("CREATE TABLE v2_app_events (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DATETIME, category VARCHAR(50), event_type VARCHAR(100), message TEXT, metadata TEXT, created_at DATETIME)").Error
+	require.NoError(t, err)
 
 	repo := NewAppEventRepository(db, nil, true, false)
 	ctx := t.Context()

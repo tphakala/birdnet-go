@@ -30,7 +30,7 @@ func (e *Emitter) Emit(ctx context.Context, category, eventType, message string,
 		return
 	}
 	if err := e.store.SaveAppEvent(ctx, category, eventType, message, metadata); err != nil {
-		logger.Global().Module("events").Warn("failed to save app event",
+		logger.Global().Module("events").WithContext(ctx).Warn("failed to save app event",
 			logger.String("category", category),
 			logger.String("event_type", eventType),
 			logger.Error(err))
