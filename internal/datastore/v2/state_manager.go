@@ -132,7 +132,9 @@ func (m *StateManager) Pause() error {
 
 	// Read the current state before the update so we can emit the actual from_state.
 	var currentState entities.MigrationState
-	_ = m.db.First(&currentState)
+	if err := m.db.First(&currentState).Error; err != nil {
+		currentState.State = "unknown"
+	}
 
 	result := m.db.Model(&entities.MigrationState{}).
 		Where("id = ? AND state IN ?", migrationStateID, pausableStates).

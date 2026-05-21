@@ -2688,9 +2688,19 @@ func flattenInto(result map[string]any, prefix string, m map[string]any) {
 		if prefix != "" {
 			key = prefix + "." + k
 		}
-		if child, ok := v.(map[string]any); ok {
-			flattenInto(result, key, child)
-		} else {
+		switch val := v.(type) {
+		case map[string]any:
+			flattenInto(result, key, val)
+		case []any:
+			for i, item := range val {
+				sliceKey := fmt.Sprintf("%s.%d", key, i)
+				if child, ok := item.(map[string]any); ok {
+					flattenInto(result, sliceKey, child)
+				} else {
+					result[sliceKey] = item
+				}
+			}
+		default:
 			result[key] = v
 		}
 	}

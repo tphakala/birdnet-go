@@ -512,6 +512,7 @@ func (d *pushDispatcher) retryLoop(ctx context.Context, notif *Notification, ep 
 				"provider": ep.name,
 				"success":  false,
 				"error":    "circuit_breaker_open",
+				"attempts": attempts,
 			})
 			return
 		}
