@@ -669,6 +669,79 @@ let pos = $state({ x: 0, y: 0 });
 </script>
 ```
 
+## Non-DST-Safe Time Arithmetic
+
+Using `time.Duration` multiplication for calendar-day offsets loses or gains an hour near DST transitions. A "day" is not always 24 hours.
+
+```go
+// BAD: Loses an hour on spring-forward, gains on fall-back
+cutoff := time.Now().Add(-30 * 24 * time.Hour)
+
+// BAD: Same problem with named constant
+const thirtyDays = 30 * 24 * time.Hour
+cutoff := time.Now().Add(-thirtyDays)
+
+// GOOD: DST-safe calendar arithmetic
+cutoff := time.Now().AddDate(0, 0, -30)
+
+// GOOD: When you genuinely need exactly 24*N hours (rare - e.g., cache TTL)
+expiry := time.Now().Add(24 * time.Hour) // 24h TTL is intentionally clock-hours
+```
+
+**When to flag:** Any `N * 24 * time.Hour` (or `N * time.Hour * 24`) used to compute a date boundary, retention window, or "days ago" cutoff. These should use `AddDate(0, 0, -N)`.
+
+**When NOT to flag:** Genuine duration-based timeouts (cache TTL, request timeout, heartbeat interval) where you want exactly N hours regardless of calendar.
+
+**Search patterns:**
+```bash
+# Find day-level duration arithmetic
+grep -rn '24 \* time\.Hour\|time\.Hour \* 24' --include="*.go" | grep -v '_test.go'
+
+# Find patterns like N * 24 * time.Hour
+grep -rn '[0-9]\+ \* 24 \* time\.Hour' --include="*.go"
+```
+
+## Event Emission Ordering (Query-Before-Emit)
+
+In event-sourced patterns, emitting a new event before querying for the previous one creates a race: you may read back your own event instead of the prior state.
+
+```go
+// BAD: Race - may read back your own event as the "previous" one
+func (s *Service) RecordDeployment(ctx context.Context) error {
+    s.events.Emit(ctx, "deploy", "started", metadata)
+    prev, err := s.repo.GetLatestEvent("deploy", "started")
+    // prev might be the one we just emitted!
+    if prev != nil {
+        s.logTimeSinceLast(prev.Timestamp)
+    }
+    return err
+}
+
+// GOOD: Query first, then emit
+func (s *Service) RecordDeployment(ctx context.Context) error {
+    prev, err := s.repo.GetLatestEvent("deploy", "started")
+    if err != nil {
+        return fmt.Errorf("querying previous deployment: %w", err)
+    }
+    s.events.Emit(ctx, "deploy", "started", metadata)
+    if prev != nil {
+        s.logTimeSinceLast(prev.Timestamp)
+    }
+    return nil
+}
+```
+
+**When to flag:** Any code path that (1) emits/inserts an event, then (2) queries for the "latest" or "previous" event of the same type. The query must come before the emit.
+
+**Search patterns:**
+```bash
+# Find emit-then-query patterns (look for Emit followed by Get/Find/Query on same entity)
+grep -rn 'Emit\|EmitEvent\|PublishEvent' --include="*.go" -A10 | grep -i 'latest\|previous\|last\|recent'
+
+# Find event insertion followed by query
+grep -rn 'Create\|Insert\|Save.*Event' --include="*.go" -A10 | grep -i 'GetLatest\|FindLast\|MostRecent'
+```
+
 ---
 
 # Agent 3: Quality & Patterns Reference
@@ -1596,7 +1669,7 @@ grep -rn 'title="[^"$]*[A-Za-z]\|aria-label="[^"$]*[A-Za-z]' --include="*.svelte
 
 # Agent 4: i18n Translation Integrity Patterns
 
-Translation files live at `frontend/static/messages/`. `en.json` is the source of truth. All 14 non-English files must mirror its key structure exactly with properly translated values.
+Translation files live at `frontend/static/messages/`. `en.json` is the source of truth. All 13 non-English files must mirror its key structure exactly with properly translated values.
 
 ## Flattening JSON to Dot-Notation
 
@@ -1620,7 +1693,7 @@ cd frontend/static/messages
 # Generate sorted key lists
 jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > /tmp/en_keys.txt
 
-for lang in cs da de es fi fr hu it lv nl pl pt sk sv; do
+for lang in da de es fi fr hu it lv nl pl pt sk sv; do
   jq -r '[paths(scalars)] | .[] | join(".")' "${lang}.json" | sort > "/tmp/${lang}_keys.txt"
   missing=$(comm -23 /tmp/en_keys.txt "/tmp/${lang}_keys.txt")
   if [ -n "$missing" ]; then
@@ -1631,7 +1704,7 @@ done
 ```
 
 **Example finding:**
-```text
+```
 === fi.json: MISSING KEYS ===
 wizard.steps.locationLanguage.geolocationRequiresHttps
 wizard.steps.locationLanguage.geolocationDenied
@@ -1647,7 +1720,7 @@ Values in non-English files identical to the English value. English placeholders
 ```bash
 cd frontend/static/messages
 
-for lang in cs da de es fi fr hu it lv nl pl pt sk sv; do
+for lang in da de es fi fr hu it lv nl pl pt sk sv; do
   echo "=== ${lang}.json: ENGLISH PLACEHOLDERS ==="
   # Compare values at matching key paths
   jq -r 'paths(scalars) as $p | "\($p | join("."))=\(getpath($p))"' en.json | sort > /tmp/en_kv.txt
@@ -1658,7 +1731,7 @@ done
 ```
 
 **Example finding:**
-```text
+```
 === de.json: ENGLISH PLACEHOLDERS ===
 common.loading=Loading...
 settings.audio.captureLength=Capture Length
@@ -1689,7 +1762,7 @@ Keys present in a non-English file but absent from `en.json`. These are leftover
 ```bash
 cd frontend/static/messages
 
-for lang in cs da de es fi fr hu it lv nl pl pt sk sv; do
+for lang in da de es fi fr hu it lv nl pl pt sk sv; do
   orphaned=$(comm -13 /tmp/en_keys.txt "/tmp/${lang}_keys.txt")
   if [ -n "$orphaned" ]; then
     echo "=== ${lang}.json: ORPHANED KEYS ==="
@@ -1712,7 +1785,7 @@ jq -r '[paths | select(length > 0)] | map(join(".")) | .[]' en.json | sort -u > 
 jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > /tmp/en_scalar_paths.txt
 comm -23 /tmp/en_all_paths.txt /tmp/en_scalar_paths.txt | sort > /tmp/en_object_paths.txt
 
-for lang in cs da de es fi fr hu it lv nl pl pt sk sv; do
+for lang in da de es fi fr hu it lv nl pl pt sk sv; do
   jq -r '[paths(scalars)] | .[] | join(".")' "${lang}.json" | sort > "/tmp/${lang}_scalar.txt"
   # Flag: path is an object in en.json but a scalar in this file (or vice versa)
   mismatches=$(comm -12 /tmp/en_object_paths.txt "/tmp/${lang}_scalar.txt")
@@ -1724,7 +1797,7 @@ done
 ```
 
 **Example:**
-```text
+```
 en.json:   "common": { "actions": { "download": "Download" } }
 fi.json:   "common": { "actions": "Toiminnot" }
                         ^^^^^^^^^ scalar where en.json has an object
@@ -1740,3 +1813,350 @@ This is always a Critical finding since the i18n library will throw when travers
 | Missing keys (gaps) | **High** - broken UI strings |
 | English placeholders | **High** - untranslated UI |
 | Orphaned keys | **Low** - dead code, cleanup |
+
+---
+
+# Agent 5: Integration & Wiring Patterns
+
+Agent 5 reads full changed files (not the diff) and checks how new code integrates with existing pipelines. It receives a structured "what's new" list from the coordinator and uses grep/search to trace data flow through the codebase.
+
+## Check 1: End-to-End Data Flow
+
+For each new struct field or type, trace every stage of the pipeline: populate -> store -> serialize -> consume. Flag any stage that doesn't handle the new field.
+
+**Pattern:** A new field is added to a data struct. The collection code populates it, but the serialization/archive code was never updated to write it. The data is collected and silently dropped.
+
+```go
+// Trace a new struct field through the pipeline:
+
+// Stage 1: Population (Collect method)
+func (c *Collector) Collect(ctx context.Context, opts Options) (*Report, error) {
+    data := &Report{}
+    if opts.IncludeMetrics {
+        data.Metrics, _ = c.collectMetrics()  // Populated here
+    }
+    return data, nil
+}
+
+// Stage 2: Serialization (Export method) - CHECK THIS EXISTS
+func (c *Collector) Export(data *Report) ([]byte, error) {
+    // Does this method write data.Metrics to the output?
+    // If not: High severity - data silently dropped
+}
+
+// Stage 3: Consumption (consumer reads the export)
+// Does the consumer know how to deserialize the new data type?
+```
+
+**Search commands to trace data flow:**
+```bash
+# Find where a new struct field is read (consumed)
+grep -rn 'Metrics\|\.Metrics' --include="*.go"
+
+# Find all serialization points for a struct type
+grep -rn 'func.*Report.*\(Write\|Marshal\|Encode\|Export\|Serialize\)' --include="*.go"
+
+# Find all places a struct is constructed
+grep -rn 'Report{' --include="*.go"
+```
+
+## Check 2: Validation & Guard Completeness
+
+When a new option/flag is added to a struct, find all validation functions that enumerate the struct's fields. Flag if the new field is missing from any enumeration.
+
+**Pattern:** A new boolean flag is added to an options struct, but the validation check that enumerates all flags ("at least one must be true") only lists the original flags.
+
+```go
+// New flag added to options struct
+type ExportOptions struct {
+    IncludeHeaders  bool
+    IncludeBody     bool
+    IncludeMetadata bool
+    IncludeMetrics  bool  // NEW
+}
+
+// Validation function - does it know about the new flag?
+func (opts ExportOptions) Validate() error {
+    // BAD: Only checks original 3 flags
+    if !opts.IncludeHeaders && !opts.IncludeBody &&
+       !opts.IncludeMetadata {
+        return errors.New("at least one include option must be true")
+    }
+
+    // GOOD: Includes new flag
+    if !opts.IncludeHeaders && !opts.IncludeBody &&
+       !opts.IncludeMetadata && !opts.IncludeMetrics {
+        return errors.New("at least one include option must be true")
+    }
+    return nil
+}
+```
+
+**Search commands:**
+```bash
+# Find all validation functions for an options struct
+grep -rn 'func.*Options.*\(Validate\|validate\|check\|Check\)' --include="*.go"
+
+# Find boolean enumerations (the "at least one" pattern)
+grep -rn 'Include\|include' --include="*.go" | grep '&&\|if !'
+
+# Find switch/case that may need new cases
+grep -rn 'switch.*opts\.\|case.*opts\.' --include="*.go"
+```
+
+## Check 3: Sibling Function Consistency
+
+When a function is modified, find sibling functions and check if the same change should apply. Siblings can be identified by:
+- Same receiver type (method on same struct)
+- Same file, similar name pattern (e.g., `checkSQLite*` / `checkMySQL*`)
+- Same semantic role (both handle settings updates, both process events, both validate input)
+
+**Pattern (name-based siblings):** A logging call is added to all return points in `checkSQLiteMigrationState` but `checkMySQLMigrationState` (same file, same structure, same number of return points) gets none.
+
+**Pattern (role-based siblings):** A `settings_saved` event is emitted from `UpdateSettings` but not from `UpdateSectionSettings`. These are sibling functions performing the same domain operation (modifying settings) even though their names differ.
+
+```go
+// Sibling by name pattern:
+func checkSQLiteMigrationState(db *sql.DB) MigrationDecision { ... }  // Modified
+func checkMySQLMigrationState(db *sql.DB) MigrationDecision { ... }   // Check this!
+
+// Sibling by semantic role:
+func (h *Handler) UpdateSettings(ctx echo.Context) error {
+    // ... modifies settings, emits "settings_saved" event
+}
+func (h *Handler) UpdateSectionSettings(ctx echo.Context) error {
+    // ... also modifies settings - does it also emit the event?
+}
+```
+
+**Search commands:**
+```bash
+# Find sibling functions by name pattern
+grep -rn 'func.*check.*MigrationState\|func.*Check.*Migration' --include="*.go"
+
+# Find functions with same receiver type
+grep -rn 'func (h \*Handler)' --include="*.go" | grep -i 'update\|save\|settings'
+
+# Find all event emission sites for a specific event
+grep -rn 'Emit.*settings_saved\|Emit.*"settings"' --include="*.go"
+
+# Find functions performing same domain operation
+grep -rn 'func.*Update.*Settings\|func.*Save.*Settings\|func.*Modify.*Settings' --include="*.go"
+```
+
+## Check 4: Pipeline Stage Coverage
+
+For each new collection/provider method, trace the full pipeline and flag missing stages.
+
+**Pattern:** A new `collectMetrics()` method is added to a collector. The collect stage works, but the export stage has no code to write metrics to the output.
+
+```
+Pipeline: collect -> store in struct -> write to archive -> read from archive
+                                        ^^^^^^^^^^^^^^
+                                        Missing stage!
+```
+
+**Search commands:**
+```bash
+# Find all methods on a collector/provider type
+grep -rn 'func (c \*Collector)' --include="*.go"
+
+# Find archive/write/serialize methods
+grep -rn 'func.*\(Create\|Write\|Build\).*\(Archive\|Output\|Response\)' --include="*.go"
+
+# Find consumer/reader methods
+grep -rn 'func.*\(Read\|Parse\|Load\|Extract\).*\(Archive\|Dump\|Support\)' --include="*.go"
+```
+
+## Check 5: Constructor & Factory Consistency
+
+When a struct gains a new field, check all constructors and factory functions that create instances. Flag any that don't initialize the new field.
+
+```go
+type Config struct {
+    Host     string
+    Port     int
+    MaxRetry int  // NEW field
+}
+
+// Constructor 1 - initializes MaxRetry
+func NewConfig(host string, port int) *Config {
+    return &Config{Host: host, Port: port, MaxRetry: 3}
+}
+
+// Constructor 2 - MISSING MaxRetry initialization
+func NewConfigFromEnv() *Config {
+    return &Config{
+        Host: os.Getenv("HOST"),
+        Port: envInt("PORT", 8080),
+        // MaxRetry not set - defaults to 0, which may cause issues
+    }
+}
+
+// Factory function - also MISSING
+func DefaultConfig() *Config {
+    return &Config{Host: "localhost", Port: 8080}
+    // MaxRetry not set
+}
+```
+
+**Search commands:**
+```bash
+# Find all constructors for a type
+grep -rn 'func New.*Config\|func Default.*Config\|func.*Config{' --include="*.go"
+
+# Find struct literal construction
+grep -rn 'Config{' --include="*.go" | grep -v '_test.go'
+
+# Find factory methods returning the type
+grep -rn 'func.*\*Config' --include="*.go" | grep -v '_test.go'
+```
+
+## Check 6: Event Schema Consistency Across Emission Sites
+
+When the same event type is emitted from multiple code paths, all emissions must have a consistent metadata schema. Missing keys at some sites means consumers get inconsistent data.
+
+**Pattern:** A `delivery_attempt` event is emitted from 3 code paths with inconsistent metadata:
+- Success path: includes `attempts`, `duration`, `status`
+- Circuit-breaker path: includes `duration`, `status` but NOT `attempts`
+- Final-failure path: includes `attempts`, `status` but NOT `error`
+
+```go
+// Site 1: Success path
+events.Emit(ctx, "notification", "delivery_attempt", "success", map[string]any{
+    "attempts": attempts,
+    "duration": elapsed,
+    "status":   "delivered",
+})
+
+// Site 2: Circuit-breaker path - MISSING "attempts"
+events.Emit(ctx, "notification", "delivery_attempt", "circuit_open", map[string]any{
+    "duration": elapsed,
+    "status":   "circuit_open",
+    // "attempts" key is missing!
+})
+
+// Site 3: Final failure - MISSING "error"
+events.Emit(ctx, "notification", "delivery_attempt", "failed", map[string]any{
+    "attempts": attempts,
+    "status":   "failed",
+    // "error" key is missing (present in success path as optional)
+})
+```
+
+**Search commands:**
+```bash
+# Find ALL emission sites for a specific event type
+grep -rn 'Emit.*"delivery_attempt"\|Emit.*delivery_attempt' --include="*.go"
+
+# Find all Emit calls and group by event name
+grep -rn '\.Emit(' --include="*.go" | sort
+
+# Compare metadata keys across sites (manual review needed)
+grep -rn '\.Emit(' --include="*.go" -A5 | grep 'map\[string\]any{'
+```
+
+**Review action:** For each `Emit()` call in changed code:
+1. Extract the entity + action pair (e.g., "notification", "delivery_attempt")
+2. Search for ALL other emissions with the same pair
+3. List metadata keys at each site
+4. Flag any site missing keys present at other sites
+
+## Check 7: Recursive Type Handling in Serialization Pipelines
+
+When a function processes values via type-switch, it must handle all composite types that can appear in the input. Missing a composite type means nested data passes through unprocessed.
+
+**Pattern:** A `flattenInto` function recurses into `map[string]any` but not `[]any` slices. Sensitive fields nested inside arrays (e.g., `targets.0.password`) pass through unredacted because the redaction function never sees the leaf keys.
+
+```go
+// BAD: Handles maps but not slices - array contents pass through unprocessed
+func flattenInto(prefix string, v any, out map[string]string) {
+    switch val := v.(type) {
+    case map[string]any:
+        for k, v := range val {
+            flattenInto(prefix+"."+k, v, out)
+        }
+    case string:
+        out[prefix] = val
+    case float64:
+        out[prefix] = fmt.Sprintf("%v", val)
+    // Missing: []any - arrays are silently skipped!
+    }
+}
+
+// GOOD: Handle all composite types
+func flattenInto(prefix string, v any, out map[string]string) {
+    switch val := v.(type) {
+    case map[string]any:
+        for k, v := range val {
+            flattenInto(prefix+"."+k, v, out)
+        }
+    case []any:
+        for i, v := range val {
+            flattenInto(fmt.Sprintf("%s.%d", prefix, i), v, out)
+        }
+    case []map[string]any:
+        for i, m := range val {
+            flattenInto(fmt.Sprintf("%s.%d", prefix, i), m, out)
+        }
+    case string:
+        out[prefix] = val
+    default:
+        out[prefix] = fmt.Sprintf("%v", val)
+    }
+}
+```
+
+**Search commands:**
+```bash
+# Find type-switch on any/interface{}
+grep -rn 'switch.*:=.*\.\(type\)' --include="*.go"
+
+# Find flatten/walk/traverse functions
+grep -rn 'func.*\(flatten\|walk\|traverse\|visit\|recurse\)' --include="*.go" -i
+
+# Check if a type-switch handles both map and slice cases
+grep -rn 'case map\[string\]any' --include="*.go" -A20 | grep -c 'case \[\]any'
+
+# Find functions that feed into security operations
+grep -rn 'Sensitive\|Redact\|Scrub\|Sanitize\|Mask' --include="*.go" | grep -i 'func\|call'
+```
+
+**Review action:** For any function with a `switch v.(type)` that handles `map[string]any`:
+1. Check if `[]any` is also handled (array of mixed types)
+2. Check if `[]map[string]any` is also handled (array of objects)
+3. Assess whether the missing type could carry security-sensitive data
+4. Severity: High if the function feeds into redaction/scrubbing, Medium otherwise
+
+## General Search Strategy for Agent 5
+
+Agent 5 should use these patterns to systematically trace new code through the codebase:
+
+```bash
+# 1. For each new struct field: find all references
+grep -rn 'NewFieldName\|\.NewFieldName' --include="*.go"
+
+# 2. For each new function: find all callers
+grep -rn 'NewFunctionName(' --include="*.go"
+
+# 3. For each modified function: find siblings
+grep -rn 'func.*ReceiverType' --include="*.go"
+
+# 4. For each new event emission: find all same-type emissions
+grep -rn 'Emit.*"entity".*"action"' --include="*.go"
+
+# 5. For each new interface method: find all implementations
+grep -rn 'func.*InterfaceName\|func.*).*MethodName(' --include="*.go"
+```
+
+## Severity Guide
+
+| Category | Severity | Description |
+|----------|----------|-------------|
+| Data silently dropped | **High** | New data collected but never serialized/archived/returned |
+| Security gap in recursive processing | **High** | Sensitive data in unhandled composite types bypasses redaction |
+| Validation gap | **Medium** | New option not included in "at least one required" check |
+| Event schema inconsistency | **Medium** | Metadata keys differ across emission sites for same event |
+| Constructor missing new field | **Medium** | New field not initialized in some construction paths |
+| Sibling function asymmetry | **Medium** | Change applied to one function but not its semantic sibling |
+| Cosmetic inconsistency | **Low** | Non-functional naming or ordering differences |
