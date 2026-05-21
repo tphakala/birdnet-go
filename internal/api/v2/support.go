@@ -395,8 +395,13 @@ func (c *Controller) startAppEventPruning(ctx context.Context) {
 		return
 	}
 
-	// Prune once at startup
-	c.pruneAppEvents(ctx)
+	// Prune once at startup, but check for early cancellation first
+	select {
+	case <-ctx.Done():
+		return
+	default:
+		c.pruneAppEvents(ctx)
+	}
 
 	// Then prune daily
 	ticker := time.NewTicker(24 * time.Hour)

@@ -39,7 +39,7 @@ func (p *DatastoreAppEventsProvider) GetRecentAppEvents(ctx context.Context, lim
 		limit = supportDumpEventLimit
 	}
 
-	since := time.Now().Add(-supportDumpEventDays * 24 * time.Hour)
+	since := time.Now().AddDate(0, 0, -supportDumpEventDays)
 	events, err := p.ds.GetAppEventsSince(ctx, since, limit)
 	if err != nil {
 		return nil, err

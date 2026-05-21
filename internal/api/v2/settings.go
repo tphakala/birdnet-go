@@ -323,6 +323,15 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		}
 	}
 
+	// Emit settings_saved event with key-level diff (fire-and-forget).
+	if changes := diffSettings(current, updated); len(changes) > 0 {
+		events.Emit(context.Background(), "settings", "settings_saved", "Settings saved via UI", map[string]any{
+			"source":       "ui",
+			"change_count": len(changes),
+			"changes":      changes,
+		})
+	}
+
 	telemetry.UpdateTelemetryEnabled()
 	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
@@ -724,6 +733,15 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 			logger.String("section", section),
 			logger.Bool("publishGlobal", publishGlobal),
 			logger.Bool("disableSaveSettings", c.DisableSaveSettings))
+	}
+
+	// Emit settings_saved event with key-level diff (fire-and-forget).
+	if changes := diffSettings(current, updated); len(changes) > 0 {
+		events.Emit(context.Background(), "settings", "settings_saved", "Settings saved via UI", map[string]any{
+			"source":       "ui",
+			"change_count": len(changes),
+			"changes":      changes,
+		})
 	}
 
 	telemetry.UpdateTelemetryEnabled()
@@ -2658,19 +2676,22 @@ func settingsToFlatMap(s *conf.Settings) map[string]any {
 // flattenMap recursively flattens a nested map into dot-separated keys.
 func flattenMap(prefix string, m map[string]any) map[string]any {
 	result := make(map[string]any)
+	flattenInto(result, prefix, m)
+	return result
+}
+
+// flattenInto recursively populates result with dot-separated keys from a nested map,
+// avoiding intermediate map allocations that the previous recursive-merge approach created.
+func flattenInto(result map[string]any, prefix string, m map[string]any) {
 	for k, v := range m {
 		key := k
 		if prefix != "" {
 			key = prefix + "." + k
 		}
-		switch child := v.(type) {
-		case map[string]any:
-			for ck, cv := range flattenMap(key, child) {
-				result[ck] = cv
-			}
-		default:
+		if child, ok := v.(map[string]any); ok {
+			flattenInto(result, key, child)
+		} else {
 			result[key] = v
 		}
 	}
-	return result
 }

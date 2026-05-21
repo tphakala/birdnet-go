@@ -508,6 +508,11 @@ func (d *pushDispatcher) retryLoop(ctx context.Context, notif *Notification, ep 
 		// Handle circuit breaker open
 		if errors.Is(err, ErrCircuitBreakerOpen) {
 			d.logCircuitBreakerOpen(ep.name, notif.ID)
+			events.Emit(context.Background(), "notification", "delivery_attempt", "Notification blocked by circuit breaker", map[string]any{
+				"provider": ep.name,
+				"success":  false,
+				"error":    "circuit_breaker_open",
+			})
 			return
 		}
 

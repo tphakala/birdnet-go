@@ -130,6 +130,10 @@ func (m *StateManager) Pause() error {
 		entities.MigrationStatusMigrating,
 	}
 
+	// Read the current state before the update so we can emit the actual from_state.
+	var currentState entities.MigrationState
+	_ = m.db.First(&currentState)
+
 	result := m.db.Model(&entities.MigrationState{}).
 		Where("id = ? AND state IN ?", migrationStateID, pausableStates).
 		Update("state", entities.MigrationStatusPaused)
@@ -147,7 +151,7 @@ func (m *StateManager) Pause() error {
 	}
 
 	events.Emit(context.Background(), "migration", "state_transition", "Migration state changed", map[string]any{
-		"from_state": "pausable",
+		"from_state": string(currentState.State),
 		"to_state":   "paused",
 	})
 

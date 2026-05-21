@@ -153,7 +153,7 @@ func isURLValue(s string) bool {
 
 // MatchesSensitiveKey checks if a dot-separated key path contains any sensitive key pattern.
 func MatchesSensitiveKey(key string, sensitiveKeys []string) bool {
-	lowerKey := strings.ToLower(key)
+	lowerKey := strings.ReplaceAll(strings.ToLower(key), ".", "_")
 	for _, sensitive := range sensitiveKeys {
 		if isSensitiveKey(lowerKey, sensitive) {
 			return true

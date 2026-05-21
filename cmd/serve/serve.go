@@ -107,34 +107,30 @@ func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 }
 
 // emitStartupEvents records the startup event and checks for version changes.
+// Version change detection is done BEFORE emitting the new startup event to
+// avoid a race condition where the async persist of the new startup event
+// could appear in the query results, requiring fragile skip logic.
 func emitStartupEvents(ctx context.Context, settings *conf.Settings, ds datastore.Interface) {
+	// Check for version change BEFORE emitting new startup (avoids race with async persist)
+	recent, err := ds.GetRecentAppEvents(ctx, 50)
+	if err == nil {
+		for _, ev := range recent {
+			if ev.Category == "system" && ev.EventType == "startup" {
+				if prev, ok := ev.Metadata["version"].(string); ok && prev != "" && prev != settings.Version {
+					events.Emit(ctx, "system", "version_change", "Application version changed", map[string]any{
+						"previous_version": prev,
+						"current_version":  settings.Version,
+					})
+				}
+				break
+			}
+		}
+	}
+
 	events.Emit(ctx, "system", "startup", "Application started", map[string]any{
 		"version":    settings.Version,
 		"go_version": runtime.Version(),
 		"os":         runtime.GOOS,
 		"arch":       runtime.GOARCH,
 	})
-
-	// Detect version change by finding the previous startup event (skip the one
-	// we just emitted, which will be the most recent).
-	recent, err := ds.GetRecentAppEvents(ctx, 50)
-	if err != nil {
-		return
-	}
-	found := 0
-	for _, ev := range recent {
-		if ev.Category == "system" && ev.EventType == "startup" {
-			found++
-			if found < 2 {
-				continue // skip the one we just emitted
-			}
-			if prev, ok := ev.Metadata["version"].(string); ok && prev != "" && prev != settings.Version {
-				events.Emit(ctx, "system", "version_change", "Application version changed", map[string]any{
-					"previous_version": prev,
-					"current_version":  settings.Version,
-				})
-			}
-			break
-		}
-	}
 }

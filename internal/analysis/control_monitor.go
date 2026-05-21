@@ -697,6 +697,7 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 		cm.proc.SetNewSpeciesTracker(nil)
 		GetLogger().Info("Species tracking disabled")
 		cm.notifySuccess("Species tracking disabled")
+		emitHotReload("species_tracking")
 		return
 	}
 
