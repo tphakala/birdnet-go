@@ -12,7 +12,7 @@ import (
 // --- Systemd service file tests ---
 
 func TestCollectSystemdServiceFile_MissingFile(t *testing.T) {
-	c := &Collector{sensitiveKeys: defaultSensitiveKeys()}
+	c := &Collector{sensitiveKeys: DefaultSensitiveKeys()}
 	content, err := c.collectSystemdServiceFile("/nonexistent/path/birdnet-go.service")
 	require.NoError(t, err)
 	assert.Empty(t, content)
@@ -24,7 +24,7 @@ func TestCollectSystemdServiceFile_BasicContent(t *testing.T) {
 	serviceContent := "[Unit]\nDescription=BirdNET-Go\nAfter=network.target\n\n[Service]\nType=simple\nWorkingDirectory=/home/user/birdnet-go-app/data\nExecStart=/usr/local/bin/birdnet-go\nRestart=always\n\n[Install]\nWantedBy=multi-user.target\n"
 	require.NoError(t, os.WriteFile(servicePath, []byte(serviceContent), 0o644))
 
-	c := &Collector{sensitiveKeys: defaultSensitiveKeys()}
+	c := &Collector{sensitiveKeys: DefaultSensitiveKeys()}
 	content, err := c.collectSystemdServiceFile(servicePath)
 	require.NoError(t, err)
 	assert.Contains(t, content, "WorkingDirectory=/home/user/birdnet-go-app/data")
@@ -37,7 +37,7 @@ func TestCollectSystemdServiceFile_ScrubsSensitiveEnvVars(t *testing.T) {
 	serviceContent := "[Service]\nEnvironment=DATA_DIR=/data\nEnvironment=BIRDWEATHER_ID=abc123secret\nEnvironment=MQTT_PASSWORD=supersecret\nExecStart=/usr/local/bin/birdnet-go\n"
 	require.NoError(t, os.WriteFile(servicePath, []byte(serviceContent), 0o644))
 
-	c := &Collector{sensitiveKeys: defaultSensitiveKeys()}
+	c := &Collector{sensitiveKeys: DefaultSensitiveKeys()}
 	content, err := c.collectSystemdServiceFile(servicePath)
 	require.NoError(t, err)
 	assert.Contains(t, content, "DATA_DIR=/data")
@@ -52,7 +52,7 @@ func TestCollectSystemdServiceFile_ScrubsQuotedEnvVars(t *testing.T) {
 	serviceContent := "[Service]\nEnvironment=\"MQTT_PASSWORD=supersecret\"\nEnvironment='BIRDWEATHER_ID=abc123'\n"
 	require.NoError(t, os.WriteFile(servicePath, []byte(serviceContent), 0o644))
 
-	c := &Collector{sensitiveKeys: defaultSensitiveKeys()}
+	c := &Collector{sensitiveKeys: DefaultSensitiveKeys()}
 	content, err := c.collectSystemdServiceFile(servicePath)
 	require.NoError(t, err)
 	// Quotes must be preserved in redacted output
@@ -144,7 +144,7 @@ func TestCollectDeploymentInfo_Orchestration(t *testing.T) {
 
 	c := &Collector{
 		dataPath:      tmpDir,
-		sensitiveKeys: defaultSensitiveKeys(),
+		sensitiveKeys: DefaultSensitiveKeys(),
 	}
 	info := c.collectDeploymentInfo(t.Context(), false)
 

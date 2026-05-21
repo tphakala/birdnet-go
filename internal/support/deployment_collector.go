@@ -111,7 +111,7 @@ func (c *Collector) scrubEnvironmentLine(line string) string {
 
 	// Detect and strip surrounding quotes, preserving them for output
 	var quoteChar string
-	if len(kvPart) >= 2 && (kvPart[0] == '"' || kvPart[0] == '\'') {
+	if len(kvPart) >= 2 && (kvPart[0] == '"' || kvPart[0] == '\'') && kvPart[len(kvPart)-1] == kvPart[0] {
 		quoteChar = string(kvPart[0])
 		kvPart = kvPart[1 : len(kvPart)-1]
 	}
