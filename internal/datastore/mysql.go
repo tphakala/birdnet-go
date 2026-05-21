@@ -262,6 +262,26 @@ func (m *MySQLStore) SchemaVersion() string {
 	return SchemaVersionLegacy
 }
 
+// SaveAppEvent is a no-op for the legacy MySQL datastore.
+func (m *MySQLStore) SaveAppEvent(_ context.Context, _, _, _ string, _ map[string]any) error {
+	return nil
+}
+
+// GetRecentAppEvents is a no-op for the legacy MySQL datastore.
+func (m *MySQLStore) GetRecentAppEvents(_ context.Context, _ int) ([]AppEvent, error) {
+	return nil, nil
+}
+
+// GetAppEventsSince is a no-op for the legacy MySQL datastore.
+func (m *MySQLStore) GetAppEventsSince(_ context.Context, _ time.Time, _ int) ([]AppEvent, error) {
+	return nil, nil
+}
+
+// PruneAppEvents is a no-op for the legacy MySQL datastore.
+func (m *MySQLStore) PruneAppEvents(_ context.Context, _ int) (int64, error) {
+	return 0, nil
+}
+
 // GetDatabaseStats returns basic runtime statistics about the MySQL database.
 // Returns partial stats with ErrDBNotConnected if the database is unreachable.
 // The Connected field in the returned stats indicates if the DB is reachable.

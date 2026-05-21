@@ -18,6 +18,7 @@ package v2only
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"math"
@@ -121,6 +122,7 @@ type Datastore struct {
 	imageCache   repository.ImageCacheRepository
 	threshold    repository.DynamicThresholdRepository
 	notification repository.NotificationHistoryRepository
+	appEvent     repository.AppEventRepository
 	log          logger.Logger
 	metrics      *datastore.Metrics
 	timezone     *time.Location
@@ -163,6 +165,7 @@ type Config struct {
 	ImageCache   repository.ImageCacheRepository
 	Threshold    repository.DynamicThresholdRepository
 	Notification repository.NotificationHistoryRepository
+	AppEvent     repository.AppEventRepository
 	Logger       logger.Logger
 	Timezone     *time.Location
 	SunCalc      *suncalc.SunCalc
@@ -276,6 +279,7 @@ func New(cfg *Config) (*Datastore, error) {
 		imageCache:         cfg.ImageCache,
 		threshold:          cfg.Threshold,
 		notification:       cfg.Notification,
+		appEvent:           cfg.AppEvent,
 		log:                cfg.Logger,
 		timezone:           tz,
 		suncalc:            cfg.SunCalc,
@@ -3112,4 +3116,114 @@ func (ds *Datastore) DeleteExpiredNotificationHistory(before time.Time) (int64, 
 	}
 	ctx := context.Background()
 	return ds.notification.DeleteExpiredNotificationHistory(ctx, before)
+}
+
+// SaveAppEvent persists an application event with JSON-encoded metadata.
+func (ds *Datastore) SaveAppEvent(ctx context.Context, category, eventType, message string, metadata map[string]any) error {
+	if ds.appEvent == nil {
+		return nil
+	}
+	metadataJSON := "{}"
+	if len(metadata) > 0 {
+		data, err := json.Marshal(metadata)
+		if err != nil {
+			ds.log.Warn("failed to marshal app event metadata",
+				logger.String("category", category),
+				logger.String("event_type", eventType),
+				logger.Error(err))
+			metadataJSON = `{"error":"failed to encode metadata"}`
+		} else {
+			metadataJSON = string(data)
+		}
+	}
+	event := &entities.AppEvent{
+		Timestamp: time.Now(),
+		Category:  category,
+		EventType: eventType,
+		Message:   message,
+		Metadata:  metadataJSON,
+	}
+	return ds.appEvent.Save(ctx, event)
+}
+
+// GetRecentAppEvents returns recent application events with decoded metadata.
+func (ds *Datastore) GetRecentAppEvents(ctx context.Context, limit int) ([]datastore.AppEvent, error) {
+	if ds.appEvent == nil {
+		return nil, nil
+	}
+	v2Events, err := ds.appEvent.GetRecent(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	return convertAppEvents(v2Events), nil
+}
+
+// GetAppEventsSince returns application events since the given time.
+func (ds *Datastore) GetAppEventsSince(ctx context.Context, since time.Time, limit int) ([]datastore.AppEvent, error) {
+	if ds.appEvent == nil {
+		return nil, nil
+	}
+	v2Events, err := ds.appEvent.GetSince(ctx, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	return convertAppEvents(v2Events), nil
+}
+
+// PruneAppEvents removes events older than retentionDays and enforces the 10k row cap.
+func (ds *Datastore) PruneAppEvents(ctx context.Context, retentionDays int) (int64, error) {
+	if ds.appEvent == nil {
+		return 0, nil
+	}
+	cutoff := time.Now().AddDate(0, 0, -retentionDays)
+	deleted, err := ds.appEvent.DeleteBefore(ctx, cutoff)
+	if err != nil {
+		return deleted, err
+	}
+
+	const maxRows = 10_000
+	count, err := ds.appEvent.Count(ctx)
+	if err != nil {
+		return deleted, err
+	}
+	if count > maxRows {
+		events, err := ds.appEvent.GetRecent(ctx, maxRows+1)
+		if err != nil {
+			return deleted, err
+		}
+		if len(events) > maxRows {
+			cutoffEvent := events[maxRows]
+			extraDeleted, err := ds.appEvent.DeleteBefore(ctx, cutoffEvent.Timestamp)
+			if err != nil {
+				return deleted, err
+			}
+			deleted += extraDeleted
+		}
+	}
+
+	return deleted, nil
+}
+
+// convertAppEvents converts v2 entity events to datastore.AppEvent with decoded metadata.
+func convertAppEvents(v2Events []entities.AppEvent) []datastore.AppEvent {
+	if len(v2Events) == 0 {
+		return nil
+	}
+	result := make([]datastore.AppEvent, 0, len(v2Events))
+	for _, e := range v2Events {
+		ae := datastore.AppEvent{
+			Timestamp: e.Timestamp,
+			Category:  e.Category,
+			EventType: e.EventType,
+			Message:   e.Message,
+		}
+		if e.Metadata != "" && e.Metadata != "{}" {
+			var meta map[string]any
+			if json.Unmarshal([]byte(e.Metadata), &meta) == nil {
+				ae.Metadata = meta
+			}
+		}
+		result = append(result, ae)
+	}
+	return result
 }
