@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -18,10 +19,13 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"gopkg.in/yaml.v3"
 )
 
 // Settings validation and UI constants (file-local)
@@ -319,6 +323,15 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		}
 	}
 
+	// Emit settings_saved event with key-level diff (fire-and-forget).
+	if changes := diffSettings(current, updated); len(changes) > 0 {
+		events.Emit(context.Background(), "settings", "settings_saved", "Settings saved via UI", map[string]any{
+			"source":       "ui",
+			"change_count": len(changes),
+			"changes":      changes,
+		})
+	}
+
 	telemetry.UpdateTelemetryEnabled()
 	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
@@ -571,6 +584,16 @@ func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) err
 			return fmt.Errorf("failed to save settings: %w", err)
 		}
 	}
+
+	// Emit settings_saved event with key-level diff (fire-and-forget).
+	if changes := diffSettings(current, updated); len(changes) > 0 {
+		events.Emit(context.Background(), "settings", "settings_saved", "Settings saved via UI", map[string]any{
+			"source":       "ui",
+			"change_count": len(changes),
+			"changes":      changes,
+		})
+	}
+
 	return nil
 }
 
@@ -710,6 +733,15 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 			logger.String("section", section),
 			logger.Bool("publishGlobal", publishGlobal),
 			logger.Bool("disableSaveSettings", c.DisableSaveSettings))
+	}
+
+	// Emit settings_saved event with key-level diff (fire-and-forget).
+	if changes := diffSettings(current, updated); len(changes) > 0 {
+		events.Emit(context.Background(), "settings", "settings_saved", "Settings saved via UI", map[string]any{
+			"source":       "ui",
+			"change_count": len(changes),
+			"changes":      changes,
+		})
 	}
 
 	telemetry.UpdateTelemetryEnabled()
@@ -2586,4 +2618,90 @@ func (c *Controller) GetSystemID(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, response)
+}
+
+// diffSettings computes a key-level diff between two settings snapshots.
+// Both snapshots are YAML-marshalled, flattened to dot-separated paths, and
+// compared. Sensitive values are scrubbed. Returns nil if nothing changed.
+func diffSettings(current, updated *conf.Settings) map[string]map[string]any {
+	currentMap := settingsToFlatMap(current)
+	updatedMap := settingsToFlatMap(updated)
+
+	sensitiveKeys := support.DefaultSensitiveKeys()
+	changes := make(map[string]map[string]any)
+
+	allKeys := make(map[string]struct{}, len(currentMap)+len(updatedMap))
+	for k := range currentMap {
+		allKeys[k] = struct{}{}
+	}
+	for k := range updatedMap {
+		allKeys[k] = struct{}{}
+	}
+
+	for key := range allKeys {
+		oldVal := currentMap[key]
+		newVal := updatedMap[key]
+		if reflect.DeepEqual(oldVal, newVal) {
+			continue
+		}
+		if support.MatchesSensitiveKey(key, sensitiveKeys) {
+			changes[key] = map[string]any{"old": "[redacted]", "new": "[redacted]"}
+		} else {
+			changes[key] = map[string]any{"old": oldVal, "new": newVal}
+		}
+	}
+
+	if len(changes) == 0 {
+		return nil
+	}
+	return changes
+}
+
+// settingsToFlatMap marshals settings to YAML, unmarshals to a generic map,
+// and flattens to dot-separated keys.
+func settingsToFlatMap(s *conf.Settings) map[string]any {
+	data, err := yaml.Marshal(s)
+	if err != nil {
+		GetLogger().Warn("failed to marshal settings for diff", logger.Error(err))
+		return nil
+	}
+	var m map[string]any
+	if err := yaml.Unmarshal(data, &m); err != nil {
+		GetLogger().Warn("failed to unmarshal settings for diff", logger.Error(err))
+		return nil
+	}
+	return flattenMap("", m)
+}
+
+// flattenMap recursively flattens a nested map into dot-separated keys.
+func flattenMap(prefix string, m map[string]any) map[string]any {
+	result := make(map[string]any)
+	flattenInto(result, prefix, m)
+	return result
+}
+
+// flattenInto recursively populates result with dot-separated keys from a nested map,
+// avoiding intermediate map allocations that the previous recursive-merge approach created.
+func flattenInto(result map[string]any, prefix string, m map[string]any) {
+	for k, v := range m {
+		key := k
+		if prefix != "" {
+			key = prefix + "." + k
+		}
+		switch val := v.(type) {
+		case map[string]any:
+			flattenInto(result, key, val)
+		case []any:
+			for i, item := range val {
+				sliceKey := fmt.Sprintf("%s.%d", key, i)
+				if child, ok := item.(map[string]any); ok {
+					flattenInto(result, sliceKey, child)
+				} else {
+					result[sliceKey] = item
+				}
+			}
+		default:
+			result[key] = v
+		}
+	}
 }

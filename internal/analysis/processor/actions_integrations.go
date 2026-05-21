@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
@@ -358,7 +359,7 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 // Execute updates the range filter species list, this is run every day
 // Note: The ShouldUpdateRangeFilterToday() check in processor.go ensures this action
 // is only created once per day, preventing duplicate concurrent updates (GitHub issue #1357)
-func (a *UpdateRangeFilterAction) Execute(_ context.Context, data any) error {
+func (a *UpdateRangeFilterAction) Execute(ctx context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -387,6 +388,11 @@ func (a *UpdateRangeFilterAction) Execute(_ context.Context, data any) error {
 
 	// Update the species list (this also updates LastUpdated timestamp atomically)
 	conf.UpdateIncludedSpecies(includedSpecies)
+
+	events.Emit(ctx, "detection", "filter_reconfigured", "Range filter updated", map[string]any{
+		"species_count": len(includedSpecies),
+		"date":          today.Format(time.DateOnly),
+	})
 
 	if a.Settings.Debug {
 		GetLogger().Info("Range filter updated successfully",

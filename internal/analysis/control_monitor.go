@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -267,6 +268,7 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 func (cm *ControlMonitor) handleReconfigureBatFilter() {
 	if cm.bn != nil {
 		cm.bn.ReloadBatFilter()
+		emitHotReload("bat_filter")
 	}
 }
 
@@ -278,6 +280,7 @@ func (cm *ControlMonitor) handleRebuildRangeFilter() {
 	} else {
 		GetLogger().Info("Range filter rebuilt successfully")
 		cm.notifySuccess("Range filter rebuilt successfully")
+		emitHotReload("range_filter")
 	}
 
 	// Perform log deduplicator cleanup when range filter is rebuilt
@@ -322,6 +325,8 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		cm.apiController.UpdateCommonNameMap(labels)
 		GetLogger().Info("API controller common name map updated with new labels")
 	}
+
+	emitHotReload("birdnet_model")
 }
 
 // handleReconfigureMQTT reconfigures the MQTT connection
@@ -374,6 +379,8 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		GetLogger().Info("MQTT connection disabled")
 		cm.notifySuccess("MQTT connection disabled")
 	}
+
+	emitHotReload("mqtt")
 }
 
 // handleReconfigureStreams reconfigures audio streams using the AudioEngine.
@@ -392,6 +399,7 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 	}
 
 	audiocore.GetLogger().Info("Audio streams reconfigured successfully")
+	emitHotReload("rtsp_sources")
 }
 
 // handleReconfigureBirdWeather reconfigures the BirdWeather integration
@@ -430,6 +438,8 @@ func (cm *ControlMonitor) handleReconfigureBirdWeather() {
 		GetLogger().Info("BirdWeather integration disabled")
 		cm.notifySuccess("BirdWeather integration disabled")
 	}
+
+	emitHotReload("birdweather")
 }
 
 // handleUpdateDetectionIntervals updates event tracking intervals for species
@@ -474,6 +484,14 @@ func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
 
 	GetLogger().Info("Detection rate limits updated successfully")
 	cm.notifySuccess("Detection rate limits updated successfully")
+	emitHotReload("detection_intervals")
+}
+
+// emitHotReload records a hot-reload event for the given component.
+func emitHotReload(component string) {
+	events.Emit(context.Background(), "settings", "hot_reload", "Component reconfigured", map[string]any{
+		"component": component,
+	})
 }
 
 // notifySuccess logs a success message
@@ -523,6 +541,8 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 		GetLogger().Info("Sound level monitoring disabled")
 		cm.notifySuccess("Sound level monitoring disabled")
 	}
+
+	emitHotReload("sound_level")
 }
 
 // handleReconfigureTelemetry reconfigures the telemetry/metrics endpoint
@@ -588,6 +608,8 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 		GetLogger().Info("Telemetry endpoint disabled")
 		cm.notifySuccess("Telemetry endpoint disabled")
 	}
+
+	emitHotReload("telemetry")
 }
 
 // validateListenAddress checks if the listen address is in a valid format
@@ -675,6 +697,7 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 		cm.proc.SetNewSpeciesTracker(nil)
 		GetLogger().Info("Species tracking disabled")
 		cm.notifySuccess("Species tracking disabled")
+		emitHotReload("species_tracking")
 		return
 	}
 
@@ -712,6 +735,7 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 		logger.Int("sync_minutes", settings.Realtime.SpeciesTracking.SyncIntervalMinutes),
 		logger.String("hemisphere", hemisphere))
 	cm.notifySuccess("Species tracking reconfigured successfully")
+	emitHotReload("species_tracking")
 }
 
 // handleReconfigurePushNotifications reconfigures the push notification dispatcher.
@@ -727,6 +751,7 @@ func (cm *ControlMonitor) handleReconfigurePushNotifications() {
 
 	GetLogger().Info("Push notification providers reconfigured successfully")
 	cm.notifySuccess("Push notification providers configured successfully")
+	emitHotReload("push_notifications")
 }
 
 // handleRebuildExtendedCapture rebuilds the extended capture species filter
@@ -748,6 +773,7 @@ func (cm *ControlMonitor) handleRebuildExtendedCapture() {
 
 	GetLogger().Info("Extended capture species filter rebuilt successfully")
 	cm.notifySuccess("Extended capture species filter rebuilt successfully")
+	emitHotReload("extended_capture")
 }
 
 // handleReconfigureAudioSources reconfigures audio capture sources (sound cards)
@@ -780,6 +806,7 @@ func (cm *ControlMonitor) handleReconfigureAudioSources() {
 	}
 
 	audiocore.GetLogger().Info("Audio sources reconfigured successfully")
+	emitHotReload("audio_sources")
 }
 
 // handleRecalculateDynamicThresholds recalculates all dynamic threshold CurrentValue entries
@@ -788,6 +815,7 @@ func (cm *ControlMonitor) handleReconfigureAudioSources() {
 func (cm *ControlMonitor) handleRecalculateDynamicThresholds() {
 	if cm.proc != nil {
 		cm.proc.RecalculateDynamicThresholds()
+		emitHotReload("dynamic_thresholds")
 	}
 }
 
@@ -816,6 +844,8 @@ func (cm *ControlMonitor) handleReconfigureDynamicThresholds() {
 		GetLogger().Info("Dynamic thresholds disabled")
 		cm.notifySuccess("Dynamic thresholds disabled")
 	}
+
+	emitHotReload("dynamic_thresholds_config")
 }
 
 // handleReconfigureQuietHours triggers a re-evaluation of quiet hours after settings change.
@@ -826,6 +856,7 @@ func (cm *ControlMonitor) handleReconfigureQuietHours() {
 		cm.quietHoursScheduler.Evaluate()
 		GetLogger().Info("Quiet hours re-evaluated successfully")
 		cm.notifySuccess("Quiet hours reconfigured successfully")
+		emitHotReload("quiet_hours")
 	} else {
 		GetLogger().Warn("Quiet hours scheduler not available")
 	}
