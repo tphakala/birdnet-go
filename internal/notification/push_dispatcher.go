@@ -659,6 +659,7 @@ func (d *pushDispatcher) shouldRetry(err error, attempts int, providerName strin
 			"provider": providerName,
 			"success":  false,
 			"attempts": attempts,
+			"error":    categorizeError(err),
 		})
 		return false
 	}
