@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/analysis/species"
+	speciestracker "github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -1272,14 +1272,14 @@ func TestApplySpeciesStatusToSummary_NewSpeciesWindow(t *testing.T) {
 
 	tests := []struct {
 		name              string
-		status            species.SpeciesStatus
+		status            speciestracker.SpeciesStatus
 		expectNewSpecies  bool
 		expectNewThisYear bool
 		expectNewSeason   bool
 	}{
 		{
 			name: "first seen today",
-			status: species.SpeciesStatus{
+			status: speciestracker.SpeciesStatus{
 				FirstSeenTime:   now,
 				IsNew:           true,
 				DaysSinceFirst:  0,
@@ -1292,7 +1292,7 @@ func TestApplySpeciesStatusToSummary_NewSpeciesWindow(t *testing.T) {
 		},
 		{
 			name: "first seen 3 days ago within 7 day window",
-			status: species.SpeciesStatus{
+			status: speciestracker.SpeciesStatus{
 				FirstSeenTime:   now.AddDate(0, 0, -3),
 				IsNew:           true,
 				DaysSinceFirst:  3,
@@ -1305,7 +1305,7 @@ func TestApplySpeciesStatusToSummary_NewSpeciesWindow(t *testing.T) {
 		},
 		{
 			name: "first seen 8 days ago outside 7 day window",
-			status: species.SpeciesStatus{
+			status: speciestracker.SpeciesStatus{
 				FirstSeenTime:   now.AddDate(0, 0, -8),
 				IsNew:           false,
 				DaysSinceFirst:  8,
@@ -1318,7 +1318,7 @@ func TestApplySpeciesStatusToSummary_NewSpeciesWindow(t *testing.T) {
 		},
 		{
 			name: "never seen before",
-			status: species.SpeciesStatus{
+			status: speciestracker.SpeciesStatus{
 				IsNew:           true,
 				DaysSinceFirst:  0,
 				IsNewThisYear:   true,
