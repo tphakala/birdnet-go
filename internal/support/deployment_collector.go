@@ -8,6 +8,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
 const (
@@ -15,7 +16,6 @@ const (
 	maxServiceFileSize     = 64 * 1024 // 64KB limit for service files
 	maxDataDirEntries      = 500
 	mountInfoPath          = "/proc/1/mountinfo"
-	dockerEnvPath          = "/.dockerenv"
 	mountInfoMinFields     = 10
 	mountInfoDestIdx       = 4
 	mountInfoSeparatorSkip = 3
@@ -69,6 +69,10 @@ func (c *Collector) collectSystemdServiceFile(path string) (string, error) {
 		return "", err
 	}
 	if fi.Size() > maxServiceFileSize {
+		getLogger().Warn("systemd service file too large, skipping",
+			logger.Int64("size", fi.Size()),
+			logger.Int("limit", maxServiceFileSize),
+		)
 		return "", nil
 	}
 
@@ -104,6 +108,8 @@ func (c *Collector) scrubEnvironmentLine(line string) string {
 		return line
 	}
 	kvPart := line[idx+len(prefix):]
+	// Strip surrounding quotes (systemd supports Environment="KEY=value")
+	kvPart = strings.Trim(kvPart, `"'`)
 
 	eqIdx := strings.IndexByte(kvPart, '=')
 	if eqIdx == -1 {
@@ -156,7 +162,7 @@ func (c *Collector) collectDataDirectoryListing(anonymizePII bool) ([]DataDirect
 
 // collectDockerMounts reads container mount info from /proc/1/mountinfo.
 func (c *Collector) collectDockerMounts(_ context.Context, anonymizePII bool) ([]DockerMount, error) {
-	if _, err := os.Stat(dockerEnvPath); os.IsNotExist(err) {
+	if !sysinfo.IsContainer() {
 		return nil, nil
 	}
 

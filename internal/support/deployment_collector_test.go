@@ -46,6 +46,19 @@ func TestCollectSystemdServiceFile_ScrubsSensitiveEnvVars(t *testing.T) {
 	assert.Contains(t, content, "ExecStart=/usr/local/bin/birdnet-go")
 }
 
+func TestCollectSystemdServiceFile_ScrubsQuotedEnvVars(t *testing.T) {
+	tmpDir := t.TempDir()
+	servicePath := filepath.Join(tmpDir, "birdnet-go.service")
+	serviceContent := "[Service]\nEnvironment=\"MQTT_PASSWORD=supersecret\"\nEnvironment='BIRDWEATHER_ID=abc123'\n"
+	require.NoError(t, os.WriteFile(servicePath, []byte(serviceContent), 0o644))
+
+	c := &Collector{sensitiveKeys: defaultSensitiveKeys()}
+	content, err := c.collectSystemdServiceFile(servicePath)
+	require.NoError(t, err)
+	assert.Contains(t, content, "MQTT_PASSWORD=[REDACTED]")
+	assert.Contains(t, content, "BIRDWEATHER_ID=[REDACTED]")
+}
+
 // --- Data directory listing tests ---
 
 func TestCollectDataDirectoryListing_EmptyDir(t *testing.T) {
