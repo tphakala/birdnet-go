@@ -72,6 +72,7 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 			Database:    settings.Output.MySQL.Database,
 			UseV2Prefix: false, // NO prefix for fresh installs
 			Debug:       settings.Debug,
+			Logger:      log,
 		})
 
 	default:

@@ -411,7 +411,12 @@ func initializeV2WithSelfHealing(manager datastoreV2.Manager, v2Path string, log
 // empty and no migration is in progress.
 func isV2DatabaseSafeToDelete(dbPath string, log logger.Logger) bool {
 	// Open database in read-only mode.
-	dsn := dbPath + "?mode=ro&_journal_mode=WAL&_busy_timeout=5000"
+	// Use safe separator in case dbPath already contains query parameters.
+	sep := "?"
+	if strings.Contains(dbPath, "?") {
+		sep = "&"
+	}
+	dsn := dbPath + sep + "mode=ro&_journal_mode=WAL&_busy_timeout=5000"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gorm_logger.Default.LogMode(gorm_logger.Silent),
 	})

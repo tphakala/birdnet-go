@@ -357,6 +357,7 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 		Database:    settings.Output.MySQL.Database,
 		UseV2Prefix: true, // v2_ prefix avoids collisions with legacy auxiliary tables
 		Debug:       settings.Debug,
+		Logger:      log,
 	})
 	if err != nil {
 		return nil, errors.New(err).
@@ -461,6 +462,7 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 			Database:    settings.Output.MySQL.Database,
 			UseV2Prefix: useV2Prefix,
 			Debug:       settings.Debug,
+			Logger:      log,
 		})
 
 	default:
