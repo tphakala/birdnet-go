@@ -68,6 +68,9 @@ type AudioPipelineService struct {
 	// source initialization and conflicting router states.
 	sourcesMu sync.Mutex
 
+	// audioLevelStats aggregates audio level measurements for periodic logging.
+	audioLevelStats *AudioLevelStats
+
 	// soundLevelMu guards soundLevelConsumers. It is held only while mutating
 	// the map; router and engine calls happen outside the critical section so
 	// that Router.RemoveRoute (which itself takes a write lock and waits for
@@ -229,6 +232,10 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	proc.BufferMgr = p.engine.BufferManager()
 	proc.SetRegistry(p.engine.Registry())
 	proc.Start()
+
+	// Start periodic audio level stats logger.
+	p.audioLevelStats = NewAudioLevelStats()
+	p.audioLevelStats.Start()
 
 	// Add audio sources, register consumers, and start buffer monitors.
 	apiAudioLevelChan := p.apiService.AudioLevelChan()
@@ -423,6 +430,11 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 	if p.quietHoursScheduler != nil {
 		p.quietHoursScheduler.Stop()
 		p.quietHoursScheduler = nil
+	}
+
+	// Stop audio level stats logger.
+	if p.audioLevelStats != nil {
+		p.audioLevelStats.Stop()
 	}
 
 	// Close done channel to signal restart loop and clip cleanup goroutines.
@@ -976,6 +988,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 			continue
 		}
+		audioStats := p.audioLevelStats
 		p.wg.Go(func() {
 			for {
 				select {
@@ -983,6 +996,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 					if !ok {
 						return
 					}
+					audioStats.Record(lvl.Name, lvl.Level, lvl.Clipping)
 					select {
 					case audioLevelChan <- audiocore.AudioLevelData(lvl):
 					default:

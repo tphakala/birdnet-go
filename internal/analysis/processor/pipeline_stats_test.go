@@ -1,0 +1,75 @@
+package processor
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestPipelineStats_RecordAndReset(t *testing.T) {
+	t.Parallel()
+
+	ps := NewPipelineStats(func(id string) string {
+		if id == "src-1" {
+			return "Backyard Mic"
+		}
+		return id
+	})
+
+	ps.RecordInference("src-1", "birdnet-v2.4", 10, 2, 0.85, 0.70)
+	ps.RecordInference("src-1", "birdnet-v2.4", 8, 0, 0.55, 0.70)
+	ps.RecordInference("src-1", "perch-v2", 5, 1, 0.42, 0.70)
+
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	birdnetKey := sourceModelKey{SourceID: "src-1", ModelID: "birdnet-v2.4"}
+	perchKey := sourceModelKey{SourceID: "src-1", ModelID: "perch-v2"}
+
+	require.Contains(t, ps.stats, birdnetKey)
+	require.Contains(t, ps.stats, perchKey)
+
+	s := ps.stats[birdnetKey]
+	assert.Equal(t, 2, s.Inferences)
+	assert.Equal(t, 18, s.RawResults)
+	assert.Equal(t, 2, s.PassedFilter)
+	assert.InDelta(t, 0.85, float64(s.MaxConfidence), 0.001)
+	assert.InDelta(t, 0.70, float64(s.Threshold), 0.001)
+
+	sp := ps.stats[perchKey]
+	assert.Equal(t, 1, sp.Inferences)
+	assert.Equal(t, 5, sp.RawResults)
+	assert.Equal(t, 1, sp.PassedFilter)
+	assert.InDelta(t, 0.42, float64(sp.MaxConfidence), 0.001)
+}
+
+func TestPipelineStats_MaxConfidenceTracksHighest(t *testing.T) {
+	t.Parallel()
+
+	ps := NewPipelineStats(nil)
+
+	ps.RecordInference("src-1", "model-a", 3, 0, 0.30, 0.50)
+	ps.RecordInference("src-1", "model-a", 3, 0, 0.90, 0.50)
+	ps.RecordInference("src-1", "model-a", 3, 0, 0.60, 0.50)
+
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	key := sourceModelKey{SourceID: "src-1", ModelID: "model-a"}
+	assert.InDelta(t, 0.90, float64(ps.stats[key].MaxConfidence), 0.001)
+}
+
+func TestPipelineStats_ZeroActivitySuppressed(t *testing.T) {
+	t.Parallel()
+
+	ps := NewPipelineStats(nil)
+
+	// Record nothing, then call logAndReset manually
+	log := GetLogger()
+	ps.logAndReset(log)
+
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	assert.Empty(t, ps.stats)
+}
