@@ -13,8 +13,8 @@ const pipelineStatsInterval = 5 * time.Minute
 
 // sourceModelKey identifies a unique source+model pair for stats tracking.
 type sourceModelKey struct {
-	SourceID string
-	ModelID  string
+	sourceID string
+	modelID  string
 }
 
 // inferenceStats holds accumulated inference statistics for one source-model pair.
@@ -52,7 +52,7 @@ func (ps *PipelineStats) RecordInference(sourceID, modelID string, rawResults, p
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
-	key := sourceModelKey{SourceID: sourceID, ModelID: modelID}
+	key := sourceModelKey{sourceID: sourceID, modelID: modelID}
 	s := ps.stats[key]
 	if s == nil {
 		s = &inferenceStats{}
@@ -111,16 +111,16 @@ func (ps *PipelineStats) logAndReset(log logger.Logger) {
 			continue
 		}
 
-		sourceName := key.SourceID
+		sourceName := key.sourceID
 		if ps.displayNameFn != nil {
-			if name := ps.displayNameFn(key.SourceID); name != "" {
+			if name := ps.displayNameFn(key.sourceID); name != "" {
 				sourceName = name
 			}
 		}
 
 		log.Info("pipeline stats",
 			logger.String("source", sourceName),
-			logger.String("model", key.ModelID),
+			logger.String("model", key.modelID),
 			logger.Int("inferences", s.inferences),
 			logger.Int("raw_results", s.rawResults),
 			logger.Int("passed_filter", s.passedFilter),

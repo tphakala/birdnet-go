@@ -24,8 +24,8 @@ func TestPipelineStats_RecordAndReset(t *testing.T) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
-	birdnetKey := sourceModelKey{SourceID: "src-1", ModelID: "birdnet-v2.4"}
-	perchKey := sourceModelKey{SourceID: "src-1", ModelID: "perch-v2"}
+	birdnetKey := sourceModelKey{sourceID: "src-1", modelID: "birdnet-v2.4"}
+	perchKey := sourceModelKey{sourceID: "src-1", modelID: "perch-v2"}
 
 	require.Contains(t, ps.stats, birdnetKey)
 	require.Contains(t, ps.stats, perchKey)
@@ -56,7 +56,7 @@ func TestPipelineStats_MaxConfidenceTracksHighest(t *testing.T) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
-	key := sourceModelKey{SourceID: "src-1", ModelID: "model-a"}
+	key := sourceModelKey{sourceID: "src-1", modelID: "model-a"}
 	assert.InDelta(t, 0.90, float64(ps.stats[key].maxConfidence), 0.001)
 }
 
