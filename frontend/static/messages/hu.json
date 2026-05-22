@@ -3222,7 +3222,7 @@
       },
       "models": {
         "recommendBoth": "A legjobb fajészlelési lefedettség érdekében javasolt a BirdNET és a Perch modellek együttes futtatása.",
-        "perchOnlyWarning": "A Perch önmagában kevesebb észlelést produkál. Az érdemi eredményekhez csökkentse a megbízhatósági küszöböt 0,50-re, vagy aktiválja a BirdNET-et is a jobb lefedettség érdekében."
+        "perchOnlyWarning": "A Perch önmagában kevesebb észlelést produkál. Az érdemi eredményekhez csökkentse a megbízhatósági küszöböt 0.50-re, vagy aktiválja a BirdNET-et is a jobb lefedettség érdekében."
       }
     },
     "security": {

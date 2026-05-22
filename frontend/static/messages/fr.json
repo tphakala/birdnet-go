@@ -3222,7 +3222,7 @@
       },
       "models": {
         "recommendBoth": "Pour une meilleure couverture de détection des espèces, il est recommandé d'exécuter BirdNET et Perch ensemble.",
-        "perchOnlyWarning": "Perch seul produit moins de détections. Abaissez le seuil de confiance à 0,50 pour des résultats significatifs, ou activez BirdNET en parallèle pour une meilleure couverture."
+        "perchOnlyWarning": "Perch seul produit moins de détections. Abaissez le seuil de confiance à 0.50 pour des résultats significatifs, ou activez BirdNET en parallèle pour une meilleure couverture."
       }
     },
     "security": {

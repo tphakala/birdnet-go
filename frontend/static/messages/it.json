@@ -3222,7 +3222,7 @@
       },
       "models": {
         "recommendBoth": "Per la migliore copertura di rilevamento delle specie, si consiglia di eseguire insieme sia BirdNET che Perch.",
-        "perchOnlyWarning": "Perch da solo produce meno rilevamenti. Abbassare la soglia di confidenza a 0,50 per risultati significativi, oppure attivare BirdNET per una migliore copertura."
+        "perchOnlyWarning": "Perch da solo produce meno rilevamenti. Abbassare la soglia di confidenza a 0.50 per risultati significativi, oppure attivare BirdNET per una migliore copertura."
       }
     },
     "security": {

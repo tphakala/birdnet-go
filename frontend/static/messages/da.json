@@ -3222,7 +3222,7 @@
       },
       "models": {
         "recommendBoth": "For bedste artsdækning anbefales det at køre både BirdNET og Perch sammen.",
-        "perchOnlyWarning": "Perch alene producerer færre detektioner. Sænk konfidenströsklen til 0,50 for meningsfulde resultater, eller aktiver BirdNET ved siden af for bedste dækning."
+        "perchOnlyWarning": "Perch alene producerer færre detektioner. Sænk konfidenstærsklen til 0.50 for meningsfulde resultater, eller aktiver BirdNET ved siden af for bedste dækning."
       }
     },
     "security": {

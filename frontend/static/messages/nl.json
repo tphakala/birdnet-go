@@ -3222,7 +3222,7 @@
       },
       "models": {
         "recommendBoth": "Voor de beste soortdetectie wordt aanbevolen om zowel BirdNET als Perch samen te gebruiken.",
-        "perchOnlyWarning": "Perch alleen produceert minder detecties. Verlaag de betrouwbaarheidsdrempel naar 0,50 voor zinvolle resultaten, of activeer BirdNET erbij voor een betere dekking."
+        "perchOnlyWarning": "Perch alleen produceert minder detecties. Verlaag de betrouwbaarheidsdrempel naar 0.50 voor zinvolle resultaten, of activeer BirdNET erbij voor een betere dekking."
       }
     },
     "security": {

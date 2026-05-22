@@ -3222,7 +3222,7 @@
       },
       "models": {
         "recommendBoth": "Dla najlepszego pokrycia wykrywania gatunków zaleca się uruchamianie zarówno modelu BirdNET, jak i Perch jednocześnie.",
-        "perchOnlyWarning": "Sam Perch produkuje mniej wykryć. Obniż próg pewności do 0,50, aby uzyskać znaczące wyniki, lub włącz BirdNET obok Perch dla lepszego pokrycia."
+        "perchOnlyWarning": "Sam Perch produkuje mniej wykryć. Obniż próg pewności do 0.50, aby uzyskać znaczące wyniki, lub włącz BirdNET obok Perch dla lepszego pokrycia."
       }
     },
     "security": {

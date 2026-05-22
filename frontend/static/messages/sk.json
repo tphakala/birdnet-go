@@ -3222,7 +3222,7 @@
       },
       "models": {
         "recommendBoth": "Pre najlepšie pokrytie detekcie druhov sa odporúča spustiť oba modely BirdNET a Perch spoločne.",
-        "perchOnlyWarning": "Samotný Perch produkuje menej detekcií. Pre zmysluplné výsledky znížte prah spoľahlivosti na 0,50, alebo aktivujte aj BirdNET pre lepšie pokrytie."
+        "perchOnlyWarning": "Samotný Perch produkuje menej detekcií. Pre zmysluplné výsledky znížte prah spoľahlivosti na 0.50, alebo aktivujte aj BirdNET pre lepšie pokrytie."
       }
     },
     "security": {

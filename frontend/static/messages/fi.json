@@ -3222,7 +3222,7 @@
       },
       "models": {
         "recommendBoth": "Parhaan lajien havainnointikattavuuden saavuttamiseksi suositellaan käyttämään sekä BirdNET- että Perch-malleja yhdessä.",
-        "perchOnlyWarning": "Perch yksinään tuottaa vähemmän havaintoja. Laske luottamuskynnys arvoon 0,50 mielekkäiden tulosten saamiseksi tai ota BirdNET käyttöön rinnalle paremman kattavuuden saavuttamiseksi."
+        "perchOnlyWarning": "Perch yksinään tuottaa vähemmän havaintoja. Laske luottamuskynnys arvoon 0.50 mielekkäiden tulosten saamiseksi tai ota BirdNET käyttöön rinnalle paremman kattavuuden saavuttamiseksi."
       }
     },
     "security": {

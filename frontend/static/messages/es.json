@@ -3222,7 +3222,7 @@
       },
       "models": {
         "recommendBoth": "Para la mejor cobertura de detección de especies, se recomienda ejecutar tanto BirdNET como Perch juntos.",
-        "perchOnlyWarning": "Perch solo produce menos detecciones. Baje el umbral de confianza a 0,50 para resultados significativos, o active BirdNET junto con Perch para una mejor cobertura."
+        "perchOnlyWarning": "Perch solo produce menos detecciones. Baje el umbral de confianza a 0.50 para resultados significativos, o active BirdNET junto con Perch para una mejor cobertura."
       }
     },
     "security": {
