@@ -19,11 +19,11 @@ type sourceModelKey struct {
 
 // inferenceStats holds accumulated inference statistics for one source-model pair.
 type inferenceStats struct {
-	Inferences    int
-	RawResults    int
-	PassedFilter  int
-	MaxConfidence float32
-	Threshold     float32
+	inferences    int
+	rawResults    int
+	passedFilter  int
+	maxConfidence float32
+	threshold     float32
 }
 
 // PipelineStats accumulates per-source, per-model inference statistics
@@ -34,7 +34,8 @@ type PipelineStats struct {
 
 	displayNameFn func(sourceID string) string
 
-	cancel context.CancelFunc
+	startOnce sync.Once
+	cancel    context.CancelFunc
 }
 
 // NewPipelineStats creates a new stats accumulator. displayNameFn resolves
@@ -58,21 +59,22 @@ func (ps *PipelineStats) RecordInference(sourceID, modelID string, rawResults, p
 		ps.stats[key] = s
 	}
 
-	s.Inferences++
-	s.RawResults += rawResults
-	s.PassedFilter += passedFilter
-	if maxConfidence > s.MaxConfidence {
-		s.MaxConfidence = maxConfidence
+	s.inferences++
+	s.rawResults += rawResults
+	s.passedFilter += passedFilter
+	if maxConfidence > s.maxConfidence {
+		s.maxConfidence = maxConfidence
 	}
-	s.Threshold = threshold
+	s.threshold = threshold
 }
 
-// Start launches the periodic logging goroutine.
+// Start launches the periodic logging goroutine. Safe to call multiple times.
 func (ps *PipelineStats) Start() {
-	ctx, cancel := context.WithCancel(context.Background())
-	ps.cancel = cancel
-
-	go ps.run(ctx)
+	ps.startOnce.Do(func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		ps.cancel = cancel
+		go ps.run(ctx)
+	})
 }
 
 // Stop cancels the periodic logging goroutine.
@@ -105,7 +107,7 @@ func (ps *PipelineStats) logAndReset(log logger.Logger) {
 	ps.mu.Unlock()
 
 	for key, s := range snapshot {
-		if s.Inferences == 0 {
+		if s.inferences == 0 {
 			continue
 		}
 
@@ -119,12 +121,13 @@ func (ps *PipelineStats) logAndReset(log logger.Logger) {
 		log.Info("pipeline stats",
 			logger.String("source", sourceName),
 			logger.String("model", key.ModelID),
-			logger.Int("inferences", s.Inferences),
-			logger.Int("raw_results", s.RawResults),
-			logger.Int("passed_filter", s.PassedFilter),
-			logger.Float64("max_confidence", roundTo2(float64(s.MaxConfidence))),
-			logger.Float64("threshold", roundTo2(float64(s.Threshold))),
-			logger.String("period", pipelineStatsInterval.String()),
+			logger.Int("inferences", s.inferences),
+			logger.Int("raw_results", s.rawResults),
+			logger.Int("passed_filter", s.passedFilter),
+			logger.Float64("max_confidence", roundTo2(float64(s.maxConfidence))),
+			logger.Float64("threshold", roundTo2(float64(s.threshold))),
+			logger.Duration("period", pipelineStatsInterval),
+			logger.String("operation", "pipeline_stats_report"),
 		)
 	}
 }

@@ -23,12 +23,12 @@ func TestAudioLevelStats_BasicAccumulation(t *testing.T) {
 	require.Contains(t, als.stats, "Backyard Mic")
 	a := als.stats["Backyard Mic"]
 
-	assert.Equal(t, int64(4), a.Count)
-	assert.Equal(t, 0, a.Min)
-	assert.Equal(t, 70, a.Max)
-	assert.Equal(t, int64(150), a.Sum)
-	assert.Equal(t, int64(1), a.ZeroCount)
-	assert.Equal(t, int64(0), a.ClipCount)
+	assert.Equal(t, int64(4), a.count)
+	assert.Equal(t, 0, a.min)
+	assert.Equal(t, 70, a.max)
+	assert.Equal(t, int64(150), a.sum)
+	assert.Equal(t, int64(1), a.zeroCount)
+	assert.Equal(t, int64(0), a.clipCount)
 }
 
 func TestAudioLevelStats_ClippingTracking(t *testing.T) {
@@ -45,7 +45,7 @@ func TestAudioLevelStats_ClippingTracking(t *testing.T) {
 	defer als.mu.Unlock()
 
 	a := als.stats["Mic"]
-	assert.Equal(t, int64(2), a.ClipCount)
+	assert.Equal(t, int64(2), a.clipCount)
 }
 
 func TestAudioLevelStats_ZeroPercentage(t *testing.T) {
@@ -63,7 +63,7 @@ func TestAudioLevelStats_ZeroPercentage(t *testing.T) {
 	a := als.stats["Mic"]
 	als.mu.Unlock()
 
-	zeroPct := int(a.ZeroCount * 100 / a.Count)
+	zeroPct := int(a.zeroCount * 100 / a.count)
 	assert.Equal(t, 80, zeroPct)
 }
 
@@ -80,8 +80,8 @@ func TestAudioLevelStats_MultipleSources(t *testing.T) {
 	defer als.mu.Unlock()
 
 	require.Len(t, als.stats, 2)
-	assert.Equal(t, int64(2), als.stats["Mic A"].Count)
-	assert.Equal(t, int64(1), als.stats["Mic B"].Count)
+	assert.Equal(t, int64(2), als.stats["Mic A"].count)
+	assert.Equal(t, int64(1), als.stats["Mic B"].count)
 }
 
 func TestAudioLevelStats_LogAndResetClearsStats(t *testing.T) {

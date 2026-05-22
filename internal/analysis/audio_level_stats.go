@@ -12,12 +12,12 @@ const audioLevelStatsInterval = 5 * time.Minute
 
 // audioLevelAccum holds accumulated audio level measurements for one source.
 type audioLevelAccum struct {
-	Sum         int64
-	Count       int64
-	Min         int
-	Max         int
-	ZeroCount   int64
-	ClipCount   int64
+	sum         int64
+	count       int64
+	min         int
+	max         int
+	zeroCount   int64
+	clipCount   int64
 	initialized bool
 }
 
@@ -27,7 +27,8 @@ type AudioLevelStats struct {
 	mu    sync.Mutex
 	stats map[string]*audioLevelAccum // keyed by source display name
 
-	cancel context.CancelFunc
+	startOnce sync.Once
+	cancel    context.CancelFunc
 }
 
 // NewAudioLevelStats creates a new audio level stats aggregator.
@@ -49,34 +50,35 @@ func (als *AudioLevelStats) Record(sourceName string, level int, clipping bool) 
 	}
 
 	if !a.initialized {
-		a.Min = level
-		a.Max = level
+		a.min = level
+		a.max = level
 		a.initialized = true
 	} else {
-		if level < a.Min {
-			a.Min = level
+		if level < a.min {
+			a.min = level
 		}
-		if level > a.Max {
-			a.Max = level
+		if level > a.max {
+			a.max = level
 		}
 	}
 
-	a.Sum += int64(level)
-	a.Count++
+	a.sum += int64(level)
+	a.count++
 	if level == 0 {
-		a.ZeroCount++
+		a.zeroCount++
 	}
 	if clipping {
-		a.ClipCount++
+		a.clipCount++
 	}
 }
 
-// Start launches the periodic logging goroutine.
+// Start launches the periodic logging goroutine. Safe to call multiple times.
 func (als *AudioLevelStats) Start() {
-	ctx, cancel := context.WithCancel(context.Background())
-	als.cancel = cancel
-
-	go als.run(ctx)
+	als.startOnce.Do(func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		als.cancel = cancel
+		go als.run(ctx)
+	})
 }
 
 // Stop cancels the periodic logging goroutine.
@@ -109,23 +111,24 @@ func (als *AudioLevelStats) logAndReset(log logger.Logger) {
 	als.mu.Unlock()
 
 	for source, a := range snapshot {
-		if a.Count == 0 {
+		if a.count == 0 {
 			continue
 		}
 
-		avgLevel := int(a.Sum / a.Count)
-		zeroPct := int(a.ZeroCount * 100 / a.Count)
-		clipPct := int(a.ClipCount * 100 / a.Count)
+		avgLevel := int(a.sum / a.count)
+		zeroPct := int(a.zeroCount * 100 / a.count)
+		clipPct := int(a.clipCount * 100 / a.count)
 
 		log.Info("audio level stats",
 			logger.String("source", source),
 			logger.Int("avg_level", avgLevel),
-			logger.Int("min_level", a.Min),
-			logger.Int("max_level", a.Max),
+			logger.Int("min_level", a.min),
+			logger.Int("max_level", a.max),
 			logger.Int("zero_pct", zeroPct),
 			logger.Int("clipping_pct", clipPct),
-			logger.Int64("samples", a.Count),
-			logger.String("period", audioLevelStatsInterval.String()),
+			logger.Int64("samples", a.count),
+			logger.Duration("period", audioLevelStatsInterval),
+			logger.String("operation", "audio_level_stats_report"),
 		)
 	}
 }
