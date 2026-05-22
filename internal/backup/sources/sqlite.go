@@ -79,9 +79,9 @@ func (s *SQLiteSource) openDatabase(dbPath string, readOnly bool) (*DatabaseConn
 	// Build DSN with additional safety parameters
 	dsn := dbPath
 	if readOnly {
-		dsn += "?mode=ro&_busy_timeout=30000&_journal_mode=WAL&_sync=NORMAL"
+		dsn += "?mode=ro&_busy_timeout=30000&_journal_mode=WAL&_synchronous=NORMAL"
 	} else {
-		dsn += "?_busy_timeout=30000&_journal_mode=WAL&_sync=NORMAL"
+		dsn += "?_busy_timeout=30000&_journal_mode=WAL&_synchronous=NORMAL"
 	}
 
 	db, err := sql.Open("sqlite3", dsn)
@@ -496,7 +496,7 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	}()
 
 	// Open the destination database (using the temp path)
-	destDB, err := sql.Open("sqlite3", tempPath+"?_journal_mode=WAL&_sync=OFF") // Turn off sync for backup target
+	destDB, err := sql.Open("sqlite3", tempPath+"?_journal_mode=WAL&_synchronous=OFF") // Turn off sync for backup target
 	if err != nil {
 		return errors.New(err).
 			Component("backup").
