@@ -117,41 +117,9 @@ func (m *MySQLManager) Initialize() error {
 		return fmt.Errorf("v2 schema integrity check failed: %w", err)
 	}
 
-	// Run GORM auto-migrations for all entities
-	// Tables will be created with v2_ prefix due to NamingStrategy
-	err := m.db.AutoMigrate(
-		// Lookup tables (must be created first due to FK constraints)
-		&entities.LabelType{},
-		&entities.TaxonomicClass{},
-		// Core detection entities
-		&entities.AIModel{},
-		&entities.Label{},
-		&entities.AudioSource{},
-		&entities.Detection{},
-		&entities.DetectionPrediction{},
-		&entities.DetectionModelContribution{},
-		&entities.DetectionReview{},
-		&entities.DetectionComment{},
-		&entities.DetectionLock{},
-		&entities.MigrationState{},
-		&entities.MigrationDirtyID{},
-		// Auxiliary tables
-		&entities.DailyEvents{},
-		&entities.HourlyWeather{},
-		&entities.ImageCache{},
-		&entities.DynamicThreshold{},
-		&entities.ThresholdEvent{},
-		&entities.NotificationHistory{},
-		// Alert rules engine
-		&entities.AlertRule{},
-		&entities.AlertCondition{},
-		&entities.AlertAction{},
-		&entities.AlertHistory{},
-		// Application metadata
-		&entities.AppMetadata{},
-		// Application event log
-		&entities.AppEvent{},
-	)
+	// Run GORM auto-migrations for all entities using the shared canonical list.
+	// Tables will be created with v2_ prefix due to NamingStrategy.
+	err := m.db.AutoMigrate(v2Entities()...)
 	if err != nil {
 		reportInitFailure("mysql", "AutoMigrate", err, m.config.Host, m.config.Database, m.config.Username)
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)
