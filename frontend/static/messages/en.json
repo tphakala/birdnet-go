@@ -3219,6 +3219,10 @@
         "devicesLoadFailed": "Failed to load audio devices. Please check system permissions.",
         "invalidBitrate": "Invalid bitrate value",
         "invalidRetentionPolicy": "Invalid retention policy"
+      },
+      "models": {
+        "recommendBoth": "Running both BirdNET and Perch together is recommended for best species detection coverage.",
+        "perchOnlyWarning": "Perch alone produces fewer detections. Lower the confidence threshold to 0.50 for meaningful results, or enable BirdNET alongside for best coverage."
       }
     },
     "security": {

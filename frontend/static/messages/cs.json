@@ -3219,6 +3219,10 @@
         "devicesLoadFailed": "Nepodařilo se načíst zvuková zařízení. Zkontrolujte oprávnění systému.",
         "invalidBitrate": "Neplatná hodnota datového toku",
         "invalidRetentionPolicy": "Neplatná pravidla uchování"
+      },
+      "models": {
+        "recommendBoth": "Pro nejlepší pokrytí detekce druhů se doporučuje spustit oba modely BirdNET a Perch společně.",
+        "perchOnlyWarning": "Samotný Perch produkuje méně detekcí. Pro smysluplné výsledky snižte práh spolehlivosti na 0,50, nebo pro lepší pokrytí aktivujte i BirdNET."
       }
     },
     "security": {

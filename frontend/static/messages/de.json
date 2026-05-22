@@ -3219,6 +3219,10 @@
         "devicesLoadFailed": "Fehler beim Laden der Audiogeräte. Bitte überprüfen Sie die Systemberechtigungen.",
         "invalidBitrate": "Ungültiger Bitratenwert",
         "invalidRetentionPolicy": "Ungültige Aufbewahrungsrichtlinie"
+      },
+      "models": {
+        "recommendBoth": "Für die beste Artenerkennung wird empfohlen, sowohl BirdNET als auch Perch gemeinsam auszuführen.",
+        "perchOnlyWarning": "Perch allein erzeugt weniger Erkennungen. Senken Sie den Konfidenzschwellenwert auf 0,50 für aussagekräftige Ergebnisse, oder aktivieren Sie BirdNET für eine bessere Abdeckung."
       }
     },
     "security": {
