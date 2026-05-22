@@ -133,10 +133,17 @@ V2_EXPECTED_COLUMNS: dict[str, list[str]] = {
 
 # Tables that had schema changes between v1 and v2 (used for contamination detection).
 # Maps table name to the set of columns that should NOT exist in a clean v2 schema.
+# Includes both legacy contamination (v1 columns leaking into v2 tables) and
+# schema evolution leftovers (columns that existed in earlier v2 entity versions).
 V2_CONTAMINATION_COLUMNS: dict[str, list[str]] = {
     "image_caches": ["scientific_name"],
     "dynamic_thresholds": ["species_name", "model_name", "scientific_name"],
     "notification_histories": ["scientific_name"],
+    # Schema evolution: columns removed from v2 entities between builds
+    "ai_models": ["label_count"],
+    "labels": ["label_type", "taxonomic_class"],
+    "detections": ["created_at", "sensitivity", "threshold"],
+    "daily_events": ["created_at", "updated_at"],
 }
 
 LEGACY_V1_TABLES = {"notes", "results", "note_reviews", "note_comments", "note_locks"}
@@ -232,6 +239,95 @@ V2_TABLE_SCHEMAS: dict[str, tuple[str, list[str]]] = {
             "ON notification_histories (last_sent)",
             "CREATE INDEX IF NOT EXISTS idx_notification_histories_expires_at "
             "ON notification_histories (expires_at)",
+        ],
+    ),
+    # Schema evolution recreation templates (columns removed between builds)
+    "ai_models": (
+        """CREATE TABLE ai_models_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(50) NOT NULL,
+            version VARCHAR(20) NOT NULL,
+            variant VARCHAR(100) NOT NULL DEFAULT 'default',
+            model_type VARCHAR(20) NOT NULL,
+            classifier_path VARCHAR(500),
+            created_at DATETIME
+        )""",
+        [
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_model_identity "
+            "ON ai_models (name, version, variant)",
+        ],
+    ),
+    "labels": (
+        """CREATE TABLE labels_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scientific_name VARCHAR(200) NOT NULL,
+            model_id INTEGER NOT NULL,
+            label_type_id INTEGER NOT NULL,
+            taxonomic_class_id INTEGER,
+            created_at DATETIME,
+            FOREIGN KEY(model_id) REFERENCES ai_models(id),
+            FOREIGN KEY(label_type_id) REFERENCES label_types(id),
+            FOREIGN KEY(taxonomic_class_id) REFERENCES taxonomic_classes(id)
+        )""",
+        [
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_label_identity "
+            "ON labels (scientific_name, model_id)",
+            "CREATE INDEX IF NOT EXISTS idx_labels_model_id "
+            "ON labels (model_id)",
+            "CREATE INDEX IF NOT EXISTS idx_labels_label_type_id "
+            "ON labels (label_type_id)",
+            "CREATE INDEX IF NOT EXISTS idx_labels_taxonomic_class_id "
+            "ON labels (taxonomic_class_id)",
+        ],
+    ),
+    "detections": (
+        """CREATE TABLE detections_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_id INTEGER NOT NULL,
+            label_id INTEGER NOT NULL,
+            source_id INTEGER,
+            detected_at INTEGER NOT NULL,
+            begin_time INTEGER,
+            end_time INTEGER,
+            confidence REAL NOT NULL,
+            latitude REAL,
+            longitude REAL,
+            clip_name VARCHAR(500),
+            processing_time_ms INTEGER,
+            unlikely NUMERIC NOT NULL DEFAULT 0,
+            legacy_id INTEGER,
+            FOREIGN KEY(model_id) REFERENCES ai_models(id),
+            FOREIGN KEY(label_id) REFERENCES labels(id)
+        )""",
+        [
+            "CREATE INDEX IF NOT EXISTS idx_detection_model_label "
+            "ON detections (model_id, label_id)",
+            "CREATE INDEX IF NOT EXISTS idx_detection_label_date "
+            "ON detections (label_id, detected_at)",
+            "CREATE INDEX IF NOT EXISTS idx_detection_source "
+            "ON detections (source_id)",
+            "CREATE INDEX IF NOT EXISTS idx_detections_detected_at "
+            "ON detections (detected_at)",
+            "CREATE INDEX IF NOT EXISTS idx_detection_confidence "
+            "ON detections (detected_at, confidence)",
+            "CREATE INDEX IF NOT EXISTS idx_detections_legacy_id "
+            "ON detections (legacy_id)",
+        ],
+    ),
+    "daily_events": (
+        """CREATE TABLE daily_events_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date VARCHAR(10),
+            sunrise INTEGER,
+            sunset INTEGER,
+            country VARCHAR(100),
+            city_name VARCHAR(200),
+            moon_phase REAL,
+            moon_illumination REAL
+        )""",
+        [
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_events_date "
+            "ON daily_events (date)",
         ],
     ),
 }
