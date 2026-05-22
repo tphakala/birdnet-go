@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
-	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 func TestNewSQLiteManager(t *testing.T) {
@@ -660,7 +659,7 @@ func TestValidateV2SchemaIntegrity_DetectsContamination(t *testing.T) {
 		"image_caches should have been dropped because it was empty and contaminated")
 }
 
-func TestValidateV2SchemaIntegrity_ErrorsOnPopulatedContamination(t *testing.T) {
+func TestValidateV2SchemaIntegrity_ToleratesPopulatedContamination(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
@@ -686,13 +685,11 @@ func TestValidateV2SchemaIntegrity_ErrorsOnPopulatedContamination(t *testing.T) 
 	err = mgr.DB().Exec("ALTER TABLE image_caches ADD COLUMN bogus_column TEXT DEFAULT ''").Error
 	require.NoError(t, err)
 
-	// Run validation — should return an error for the populated contaminated table
+	// Run validation: extra columns in populated tables are tolerated (warn, not error).
+	// This changed from the original behavior (ErrV2SchemaCorrupted) to prevent
+	// the cascade failure from Discussion #3210.
 	err = mgr.validateV2SchemaIntegrity()
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrV2SchemaCorrupted),
-		"error should wrap ErrV2SchemaCorrupted, got: %v", err)
-	assert.Contains(t, err.Error(), "bogus_column",
-		"error should mention the unexpected column name")
+	require.NoError(t, err, "extra columns in populated tables should be tolerated")
 }
 
 func TestValidateV2SchemaIntegrity_PassesCleanSchema(t *testing.T) {
@@ -709,6 +706,83 @@ func TestValidateV2SchemaIntegrity_PassesCleanSchema(t *testing.T) {
 	// Run validation on a clean schema - should pass with no error
 	err = mgr.validateV2SchemaIntegrity()
 	require.NoError(t, err)
+}
+
+// TestSchemaEvolution_ExtraColumnsDoNotBlockInitialize reproduces Discussion #3210:
+// a database created on an earlier nightly has extra columns from schema evolution
+// (e.g. label_count in ai_models, label_type/taxonomic_class in labels).
+// These extra columns are harmless (GORM ignores them) and must not prevent
+// Initialize from running AutoMigrate.
+func TestSchemaEvolution_ExtraColumnsDoNotBlockInitialize(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Step 1: Create a clean v2 database
+	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	err = mgr.Initialize()
+	require.NoError(t, err)
+
+	// Step 2: Add extra columns that simulate schema evolution
+	// (columns that existed in earlier entity versions but were later removed)
+	extraColumns := []struct {
+		table  string
+		column string
+		sql    string
+	}{
+		{"ai_models", "label_count", "ALTER TABLE ai_models ADD COLUMN label_count INTEGER DEFAULT 0"},
+		{"labels", "label_type", "ALTER TABLE labels ADD COLUMN label_type TEXT DEFAULT 'species'"},
+		{"labels", "taxonomic_class", "ALTER TABLE labels ADD COLUMN taxonomic_class TEXT DEFAULT ''"},
+		{"detections", "sensitivity", "ALTER TABLE detections ADD COLUMN sensitivity REAL"},
+		{"detections", "threshold", "ALTER TABLE detections ADD COLUMN threshold REAL"},
+		{"detections", "created_at", "ALTER TABLE detections ADD COLUMN created_at DATETIME"},
+		{"daily_events", "created_at", "ALTER TABLE daily_events ADD COLUMN created_at DATETIME"},
+		{"daily_events", "updated_at", "ALTER TABLE daily_events ADD COLUMN updated_at DATETIME"},
+	}
+	for _, ec := range extraColumns {
+		err = mgr.DB().Exec(ec.sql).Error
+		require.NoError(t, err, "failed to add %s.%s", ec.table, ec.column)
+	}
+
+	// Step 3: Insert data into contaminated tables (mimics a real user's database)
+	// ai_models already has a seeded row from Initialize, so just update it with the extra column
+	err = mgr.DB().Exec("UPDATE ai_models SET label_count = 6522 WHERE name = 'BirdNET'").Error
+	require.NoError(t, err)
+	err = mgr.DB().Exec("INSERT INTO daily_events (date, sunrise, sunset, country, city_name) VALUES ('2026-05-20', 1716184800, 1716228000, 'US', 'Test City')").Error
+	require.NoError(t, err)
+
+	// Insert a label so we can insert a detection with valid FK
+	err = mgr.DB().Exec("INSERT INTO labels (scientific_name, model_id, label_type_id) VALUES ('Turdus merula', 1, 1)").Error
+	require.NoError(t, err)
+	// Insert a detection row so the table is populated (mimics 463K detections in user's DB)
+	err = mgr.DB().Exec("INSERT INTO detections (model_id, label_id, detected_at, confidence) VALUES (1, 1, 1716184800, 0.85)").Error
+	require.NoError(t, err)
+
+	// Close and reopen to simulate app restart after upgrade
+	err = mgr.Close()
+	require.NoError(t, err)
+
+	// Step 4: Re-open and Initialize (simulating upgrade to newer build)
+	mgr2, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr2.Close() })
+
+	// This is the critical assertion: Initialize must succeed despite extra columns.
+	// Before the fix, validateV2SchemaIntegrity() would return ErrV2SchemaCorrupted
+	// and block AutoMigrate from running.
+	err = mgr2.Initialize()
+	require.NoError(t, err, "Initialize must succeed with harmless extra columns from schema evolution")
+
+	// Verify that the extra columns still exist (they're harmless, not dropped)
+	var colCount int64
+	err = mgr2.DB().Raw("SELECT COUNT(*) FROM pragma_table_info('ai_models') WHERE name = 'label_count'").Scan(&colCount).Error
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), colCount, "extra columns should be preserved (harmless)")
+
+	// Verify GORM operations work despite extra columns
+	var models []entities.AIModel
+	err = mgr2.DB().Find(&models).Error
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, len(models), 1, "should be able to query with extra columns present")
 }
 
 func TestSQLiteManager_Close_NilsOutDB(t *testing.T) {
