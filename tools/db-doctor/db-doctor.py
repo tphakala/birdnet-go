@@ -245,10 +245,10 @@ V2_TABLE_SCHEMAS: dict[str, tuple[str, list[str]]] = {
     "ai_models": (
         """CREATE TABLE ai_models_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name VARCHAR(50) NOT NULL,
-            version VARCHAR(20) NOT NULL,
+            name VARCHAR(50) NOT NULL DEFAULT '',
+            version VARCHAR(20) NOT NULL DEFAULT '',
             variant VARCHAR(100) NOT NULL DEFAULT 'default',
-            model_type VARCHAR(20) NOT NULL,
+            model_type VARCHAR(20) NOT NULL DEFAULT '',
             classifier_path VARCHAR(500),
             created_at DATETIME
         )""",
@@ -260,9 +260,9 @@ V2_TABLE_SCHEMAS: dict[str, tuple[str, list[str]]] = {
     "labels": (
         """CREATE TABLE labels_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            scientific_name VARCHAR(200) NOT NULL,
-            model_id INTEGER NOT NULL,
-            label_type_id INTEGER NOT NULL,
+            scientific_name VARCHAR(200) NOT NULL DEFAULT '',
+            model_id INTEGER NOT NULL DEFAULT 0,
+            label_type_id INTEGER NOT NULL DEFAULT 0,
             taxonomic_class_id INTEGER,
             created_at DATETIME,
             FOREIGN KEY(model_id) REFERENCES ai_models(id),
@@ -283,13 +283,13 @@ V2_TABLE_SCHEMAS: dict[str, tuple[str, list[str]]] = {
     "detections": (
         """CREATE TABLE detections_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            model_id INTEGER NOT NULL,
-            label_id INTEGER NOT NULL,
+            model_id INTEGER NOT NULL DEFAULT 0,
+            label_id INTEGER NOT NULL DEFAULT 0,
             source_id INTEGER,
-            detected_at INTEGER NOT NULL,
+            detected_at INTEGER NOT NULL DEFAULT 0,
             begin_time INTEGER,
             end_time INTEGER,
-            confidence REAL NOT NULL,
+            confidence REAL NOT NULL DEFAULT 0,
             latitude REAL,
             longitude REAL,
             clip_name VARCHAR(500),
