@@ -126,6 +126,28 @@ func reportInitFailure(dbType, operation string, err error, paths ...string) {
 	})
 }
 
+// reportSchemaEvolution reports extra columns from schema evolution to Sentry telemetry.
+// These are harmless leftovers from earlier entity versions that GORM never drops.
+func reportSchemaEvolution(tableName string, unexpected []string, rowCount int64) {
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", "datastore-init")
+		scope.SetTag("db_type", "sqlite")
+		scope.SetTag("operation", "schema_evolution_detected")
+		scope.SetTag("table", tableName)
+		scope.SetFingerprint([]string{"schema-evolution", tableName})
+		scope.SetContext("schema_evolution", map[string]any{
+			"table":              tableName,
+			"unexpected_columns": unexpected,
+			"row_count":          rowCount,
+		})
+		telemetry.CaptureMessage(
+			fmt.Sprintf("Schema evolution: table %s has %d extra column(s)", tableName, len(unexpected)),
+			sentry.LevelWarning,
+			"datastore-init",
+		)
+	})
+}
+
 // SQLiteManager handles the v2 normalized database for SQLite.
 type SQLiteManager struct {
 	db     *gorm.DB
@@ -261,9 +283,9 @@ func (m *SQLiteManager) Initialize() error {
 		}
 	}
 
-	// Validate schema integrity: detect unexpected columns from legacy contamination.
+	// Validate schema integrity: detect unexpected columns from schema evolution.
 	// Empty contaminated tables are dropped so AutoMigrate can recreate them cleanly.
-	// Populated contaminated tables return ErrV2SchemaCorrupted for manual intervention.
+	// Populated tables with extra columns are tolerated (logged, reported to Sentry).
 	if err := m.validateV2SchemaIntegrity(); err != nil {
 		return fmt.Errorf("v2 schema integrity check failed: %w", err)
 	}
@@ -401,12 +423,14 @@ func (m *SQLiteManager) cleanupLegacySchemaContamination() error {
 }
 
 // validateV2SchemaIntegrity checks all v2 tables for unexpected columns that
-// indicate legacy schema contamination. For each table:
+// indicate legacy schema contamination or schema evolution leftovers. For each table:
 //   - If the table doesn't exist yet, skip (AutoMigrate will create it).
 //   - If unexpected columns are found and the table is empty, drop it so
 //     AutoMigrate can recreate it with the correct schema.
-//   - If unexpected columns are found and the table has data, return
-//     ErrV2SchemaCorrupted so the caller can trigger self-healing or notify the user.
+//   - If unexpected columns are found and the table has data, log a warning
+//     but continue. Extra columns are harmless: GORM ignores them when querying.
+//     This prevents the cascade failure from Discussion #3210 where users upgrading
+//     from older builds were blocked by columns that existed in earlier entity versions.
 func (m *SQLiteManager) validateV2SchemaIntegrity() error {
 	migrator := m.db.Migrator()
 
@@ -477,8 +501,19 @@ func (m *SQLiteManager) validateV2SchemaIntegrity() error {
 			continue
 		}
 
-		return fmt.Errorf("%w: table %s has unexpected columns %v (%d rows): manual cleanup required",
-			ErrV2SchemaCorrupted, tableName, unexpected, rowCount)
+		// Populated table with extra columns: warn but continue.
+		// Extra columns from schema evolution are harmless; GORM ignores them.
+		// Blocking initialization here causes the cascade failure described in
+		// Discussion #3210 (v2 init fails -> legacy fallback -> NOT NULL crash).
+		if m.log != nil {
+			m.log.Warn("table has extra columns from schema evolution, continuing",
+				logger.String("table", tableName),
+				logger.Any("unexpected_columns", unexpected),
+				logger.Int64("row_count", rowCount),
+				logger.String("operation", "validate_schema_integrity"))
+		}
+
+		reportSchemaEvolution(tableName, unexpected, rowCount)
 	}
 	return nil
 }
