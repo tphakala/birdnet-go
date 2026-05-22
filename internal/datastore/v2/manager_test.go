@@ -719,6 +719,7 @@ func TestSchemaEvolution_ExtraColumnsDoNotBlockInitialize(t *testing.T) {
 	// Step 1: Create a clean v2 database
 	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
 	err = mgr.Initialize()
 	require.NoError(t, err)
 

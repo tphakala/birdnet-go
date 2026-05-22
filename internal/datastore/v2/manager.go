@@ -514,13 +514,6 @@ func (m *SQLiteManager) validateV2SchemaIntegrity() error {
 		}
 
 		reportSchemaEvolution(tableName, unexpected, rowCount)
-
-		// Emit app event for support dump visibility
-		events.Emit(context.Background(), "database", "schema_evolution", "Extra columns detected from schema evolution", map[string]any{
-			"table":              tableName,
-			"unexpected_columns": unexpected,
-			"row_count":          rowCount,
-		})
 	}
 	return nil
 }
