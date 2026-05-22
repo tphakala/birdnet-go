@@ -20,6 +20,15 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
+// readOnlyDSN appends mode=ro to a SQLite path, using the correct query separator.
+func readOnlyDSN(dbPath string) string {
+	sep := "?"
+	if strings.Contains(dbPath, "?") {
+		sep = "&"
+	}
+	return dbPath + sep + "mode=ro"
+}
+
 // reportStartupError reports a startup state check failure to Sentry telemetry.
 // The paths parameter lists file paths that should be anonymized in the error message.
 func reportStartupError(dbType, operation string, err error, paths ...string) {
@@ -187,7 +196,7 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	}
 
 	// Open v2 database in read-only mode to check state
-	dsn := v2MigrationPath + "?mode=ro"
+	dsn := readOnlyDSN(v2MigrationPath)
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
@@ -554,7 +563,7 @@ func hasUnmigratedLegacySQLite(settings *conf.Settings, log logger.Logger) bool 
 	}
 
 	// Open v2 migration database read-only to get LastMigratedID
-	v2DSN := v2MigrationPath + "?mode=ro"
+	v2DSN := readOnlyDSN(v2MigrationPath)
 	v2DB, err := gorm.Open(sqlite.Open(v2DSN), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
@@ -587,7 +596,7 @@ func hasUnmigratedLegacySQLite(settings *conf.Settings, log logger.Logger) bool 
 	}
 
 	// Open legacy database read-only to count records beyond the watermark
-	legacyDSN := configuredPath + "?mode=ro"
+	legacyDSN := readOnlyDSN(configuredPath)
 	legacyDB, err := gorm.Open(sqlite.Open(legacyDSN), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
@@ -695,7 +704,7 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 		return false
 	}
 
-	dsn := dbPath + "?mode=ro"
+	dsn := readOnlyDSN(dbPath)
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
