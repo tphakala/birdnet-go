@@ -77,11 +77,13 @@ func (dc *DatabaseConnection) Close() error {
 // openDatabase opens a database connection with the given path
 func (s *SQLiteSource) openDatabase(dbPath string, readOnly bool) (*DatabaseConnection, error) {
 	// Build DSN with additional safety parameters
-	dsn := dbPath
+	sep := "?"
+	if strings.Contains(dbPath, "?") {
+		sep = "&"
+	}
+	dsn := dbPath + sep + "_busy_timeout=30000&_journal_mode=WAL&_synchronous=NORMAL"
 	if readOnly {
-		dsn += "?mode=ro&_busy_timeout=30000&_journal_mode=WAL&_synchronous=NORMAL"
-	} else {
-		dsn += "?_busy_timeout=30000&_journal_mode=WAL&_synchronous=NORMAL"
+		dsn += "&mode=ro"
 	}
 
 	db, err := sql.Open("sqlite3", dsn)
