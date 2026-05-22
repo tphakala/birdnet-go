@@ -79,11 +79,10 @@ func (s *SQLiteSource) openDatabase(dbPath string, readOnly bool) (*DatabaseConn
 	// Build DSN with additional safety parameters
 	dsn := dbPath
 	if readOnly {
-		dsn += "?mode=ro"
+		dsn += "?mode=ro&_busy_timeout=30000&_journal_mode=WAL&_sync=NORMAL"
+	} else {
+		dsn += "?_busy_timeout=30000&_journal_mode=WAL&_sync=NORMAL"
 	}
-	dsn += "&_busy_timeout=30000" // 30 second timeout
-	dsn += "&_journal_mode=WAL"   // Ensure WAL mode
-	dsn += "&_sync=NORMAL"        // Less aggressive syncing for better performance
 
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
