@@ -5,9 +5,10 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gorm_logger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 )
 
@@ -24,6 +25,7 @@ type MySQLConfig struct {
 	// Set to false for fresh installs (clean table names).
 	// Default (false) means no prefix for fresh installs.
 	UseV2Prefix bool
+	Logger      logger.Logger
 }
 
 // MySQLManager handles the v2 normalized database for MySQL.
@@ -34,6 +36,7 @@ type MySQLManager struct {
 	config      MySQLConfig
 	location    string // host:port/database for display
 	tablePrefix string // "" for fresh installs, "v2_" for migration
+	log         logger.Logger
 }
 
 // v2TablePrefix is the prefix used for all v2 tables in MySQL.
@@ -46,9 +49,16 @@ func NewMySQLManager(cfg *MySQLConfig) (*MySQLManager, error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
 
-	logLevel := logger.Silent
-	if cfg.Debug {
-		logLevel = logger.Info
+	// Create GORM logger using the adapter if a logger is provided
+	var gormLog gorm_logger.Interface
+	if cfg.Logger != nil {
+		gormLog = logger.NewGormLoggerAdapter(cfg.Logger, defaultGormSlowThreshold)
+	} else {
+		logLevel := gorm_logger.Silent
+		if cfg.Debug {
+			logLevel = gorm_logger.Info
+		}
+		gormLog = gorm_logger.Default.LogMode(logLevel)
 	}
 
 	// Determine table prefix based on configuration
@@ -58,7 +68,7 @@ func NewMySQLManager(cfg *MySQLConfig) (*MySQLManager, error) {
 	}
 
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logLevel),
+		Logger: gormLog,
 		NamingStrategy: schema.NamingStrategy{
 			TablePrefix: tablePrefix, // "" for fresh install, "v2_" for migration
 		},
@@ -84,6 +94,7 @@ func NewMySQLManager(cfg *MySQLConfig) (*MySQLManager, error) {
 		config:      *cfg,
 		location:    fmt.Sprintf("%s:%s/%s", cfg.Host, cfg.Port, cfg.Database),
 		tablePrefix: tablePrefix,
+		log:         cfg.Logger,
 	}, nil
 }
 
@@ -99,41 +110,16 @@ func (m *MySQLManager) Initialize() error {
 	// fell back to legacy mode due to the PR #2165 table name mismatch.
 	m.cleanupLegacySchemaContamination()
 
-	// Run GORM auto-migrations for all entities
-	// Tables will be created with v2_ prefix due to NamingStrategy
-	err := m.db.AutoMigrate(
-		// Lookup tables (must be created first due to FK constraints)
-		&entities.LabelType{},
-		&entities.TaxonomicClass{},
-		// Core detection entities
-		&entities.AIModel{},
-		&entities.Label{},
-		&entities.AudioSource{},
-		&entities.Detection{},
-		&entities.DetectionPrediction{},
-		&entities.DetectionModelContribution{},
-		&entities.DetectionReview{},
-		&entities.DetectionComment{},
-		&entities.DetectionLock{},
-		&entities.MigrationState{},
-		&entities.MigrationDirtyID{},
-		// Auxiliary tables
-		&entities.DailyEvents{},
-		&entities.HourlyWeather{},
-		&entities.ImageCache{},
-		&entities.DynamicThreshold{},
-		&entities.ThresholdEvent{},
-		&entities.NotificationHistory{},
-		// Alert rules engine
-		&entities.AlertRule{},
-		&entities.AlertCondition{},
-		&entities.AlertAction{},
-		&entities.AlertHistory{},
-		// Application metadata
-		&entities.AppMetadata{},
-		// Application event log
-		&entities.AppEvent{},
-	)
+	// Validate schema integrity: detect unexpected columns from schema evolution.
+	// Empty contaminated tables are dropped so AutoMigrate can recreate them cleanly.
+	// Populated tables with extra columns are tolerated (logged, reported to Sentry).
+	if err := m.validateV2SchemaIntegrity(); err != nil {
+		return fmt.Errorf("v2 schema integrity check failed: %w", err)
+	}
+
+	// Run GORM auto-migrations for all entities using the shared canonical list.
+	// Tables will be created with v2_ prefix due to NamingStrategy.
+	err := m.db.AutoMigrate(v2Entities()...)
 	if err != nil {
 		reportInitFailure("mysql", "AutoMigrate", err, m.config.Host, m.config.Database, m.config.Username)
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)
@@ -211,6 +197,11 @@ func (m *MySQLManager) cleanupLegacySchemaContamination() {
 			reportInitFailure("mysql", "dropOrphanedColumn_"+tableName+"_"+c.column, err, m.config.Host, m.config.Database, m.config.Username)
 		}
 	}
+}
+
+// validateV2SchemaIntegrity delegates to the shared validation with MySQL column listing.
+func (m *MySQLManager) validateV2SchemaIntegrity() error {
+	return validateSchemaIntegrity(m.db, m.log, "mysql", mysqlColumnLister)
 }
 
 // seedLookupTables seeds the label_types and taxonomic_classes tables with default values.
