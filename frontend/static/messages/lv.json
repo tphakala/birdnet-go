@@ -3219,6 +3219,10 @@
         "devicesLoadFailed": "Neizdevās ielādēt audio ierīces. Lūdzu, pārbaudiet sistēmas atļaujas.",
         "invalidBitrate": "Nederīga bitu pārraides ātruma vērtība",
         "invalidRetentionPolicy": "Nederīga saglabāšanas politika"
+      },
+      "models": {
+        "recommendBoth": "Labākai sugu noteikšanas pārklājumam ieteicams izmantot gan BirdNET, gan Perch modeļus kopā.",
+        "perchOnlyWarning": "Perch vien rada mazāk noteikšanu. Samaziniet ticamības slieksni līdz 0.50, lai iegūtu jēgpilnus rezultātus, vai aktivizējiet arī BirdNET labākam pārklājumam."
       }
     },
     "security": {

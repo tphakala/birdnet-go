@@ -3219,6 +3219,10 @@
         "devicesLoadFailed": "Échec du chargement des périphériques audio. Veuillez vérifier les permissions système.",
         "invalidBitrate": "Valeur de débit invalide",
         "invalidRetentionPolicy": "Politique de rétention invalide"
+      },
+      "models": {
+        "recommendBoth": "Pour une meilleure couverture de détection des espèces, il est recommandé d'exécuter BirdNET et Perch ensemble.",
+        "perchOnlyWarning": "Perch seul produit moins de détections. Abaissez le seuil de confiance à 0.50 pour des résultats significatifs, ou activez BirdNET en parallèle pour une meilleure couverture."
       }
     },
     "security": {

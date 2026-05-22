@@ -3219,6 +3219,10 @@
         "devicesLoadFailed": "Laden van audio apparaten mislukt. Controleer systeem permissies.",
         "invalidBitrate": "Ongeldige bitrate waarde",
         "invalidRetentionPolicy": "Ongeldig bewarings beleid"
+      },
+      "models": {
+        "recommendBoth": "Voor de beste soortdetectie wordt aanbevolen om zowel BirdNET als Perch samen te gebruiken.",
+        "perchOnlyWarning": "Perch alleen produceert minder detecties. Verlaag de betrouwbaarheidsdrempel naar 0.50 voor zinvolle resultaten, of activeer BirdNET erbij voor een betere dekking."
       }
     },
     "security": {

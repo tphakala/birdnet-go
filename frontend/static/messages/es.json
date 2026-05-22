@@ -3219,6 +3219,10 @@
         "devicesLoadFailed": "Error al cargar dispositivos de audio. Por favor verifica los permisos del sistema.",
         "invalidBitrate": "Valor de tasa de bits inválido",
         "invalidRetentionPolicy": "Política de retención inválida"
+      },
+      "models": {
+        "recommendBoth": "Para la mejor cobertura de detección de especies, se recomienda ejecutar tanto BirdNET como Perch juntos.",
+        "perchOnlyWarning": "Perch solo produce menos detecciones. Baje el umbral de confianza a 0.50 para resultados significativos, o active BirdNET junto con Perch para una mejor cobertura."
       }
     },
     "security": {
