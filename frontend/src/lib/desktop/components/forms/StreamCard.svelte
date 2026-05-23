@@ -168,7 +168,7 @@
     return 'Unknown';
   });
 
-  let probeResult = $state<{ sampleRate: number } | null>(null);
+  let testResult = $state<{ sampleRate: number } | null>(null);
 
   // Local editing state - initialized with defaults, synced from props in startEdit()
   let isEditing = $state(false);
@@ -321,7 +321,7 @@
       : { enabled: false, filters: [] };
     editQuietHours = { ...defaultQuietHoursConfig, ...stream.quietHours };
     showEqualizer = false;
-    probeResult = null;
+    testResult = null;
     isEditing = true;
   }
 
@@ -331,6 +331,7 @@
   }
 
   function saveEdit() {
+    if (needsTest) return;
     if (editName.trim() && editUrl.trim()) {
       const transformedEqualizer =
         editEqualizer.enabled || editEqualizer.filters.length > 0
@@ -387,10 +388,12 @@
     }
   }
 
-  let sourceSampleRate = $derived(probeResult?.sampleRate ?? 48000);
+  let urlChanged = $derived(editUrl.trim() !== stream.url);
+  let needsTest = $derived(urlChanged && !testResult);
+  let sourceSampleRate = $derived(testResult?.sampleRate ?? 48000);
 
-  function handleProbeResult(result: { sampleRate: number } | null) {
-    probeResult = result;
+  function handleTestResult(result: { sampleRate: number } | null) {
+    testResult = result;
   }
 
   function updateEnabled(enabled: boolean) {
@@ -485,7 +488,7 @@
           models={availableModels}
           selectedModels={editModels}
           {disabled}
-          onResult={handleProbeResult}
+          onResult={handleTestResult}
         />
 
         <!-- Type and Transport Row -->
@@ -587,7 +590,7 @@
             type="button"
             class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={saveEdit}
-            disabled={!editName.trim() || !editUrl.trim()}
+            disabled={!editName.trim() || !editUrl.trim() || needsTest}
           >
             <Check class="size-4" />
             {t('common.save')}

@@ -3045,10 +3045,10 @@
           "failed": "Fallito",
           "unknown": "Sconosciuto"
         },
-        "probe": {
+        "test": {
           "button": "Testa stream",
           "probing": "Test in corso...",
-          "result": "Risultato dell'analisi",
+          "result": "Risultato del test",
           "error": "Test fallito",
           "batCompatible": "Compatibile con pipistrelli",
           "batIncompatible": "Non compatibile con pipistrelli"
@@ -4459,6 +4459,16 @@
       "hostRequired": "Il parametro host è obbligatorio",
       "invalidHost": "Parametro host non valido",
       "rateLimit": "Troppi tentativi di connessione al flusso di notifiche, attendere prima di riprovare"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Corpo della richiesta non valido",
+        "urlRequired": "L'URL dello stream è obbligatorio",
+        "invalidUrl": "Formato URL non valido. Inserisci un URL completo, ad es. rtsp://host:porta/percorso",
+        "unsupportedScheme": "Schema URL non supportato \"{scheme}\". Usa rtsp, rtsps, http, https, rtmp o udp",
+        "blockedDestination": "Questa destinazione è bloccata per motivi di sicurezza",
+        "connectionFailed": "Impossibile connettersi allo stream. Verifica che l'URL sia corretto e che lo stream sia accessibile"
+      }
     },
     "debug": {
       "notEnabled": "Modalità debug non abilitata"

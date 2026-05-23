@@ -3045,10 +3045,10 @@
           "failed": "Misslyckad",
           "unknown": "Okänd"
         },
-        "probe": {
+        "test": {
           "button": "Testa ström",
           "probing": "Testar...",
-          "result": "Undersökningsresultat",
+          "result": "Testresultat",
           "error": "Test misslyckades",
           "batCompatible": "Fladdermus-kompatibel",
           "batIncompatible": "Inte fladdermus-kompatibel"
@@ -4459,6 +4459,16 @@
       "hostRequired": "Värdparameter krävs",
       "invalidHost": "Ogiltig värdparameter",
       "rateLimit": "För många anslutningsförsök till aviseringsströmmen, vänta innan du försöker igen"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Ogiltig begärandekropp",
+        "urlRequired": "Ström-URL krävs",
+        "invalidUrl": "Ogiltigt URL-format. Ange en fullständig URL, t.ex. rtsp://värd:port/sökväg",
+        "unsupportedScheme": "URL-schema \"{scheme}\" stöds inte. Använd rtsp, rtsps, http, https, rtmp eller udp",
+        "blockedDestination": "Denna destination är blockerad av säkerhetsskäl",
+        "connectionFailed": "Kunde inte ansluta till strömmen. Kontrollera att URL:en är korrekt och att strömmen är tillgänglig"
+      }
     },
     "debug": {
       "notEnabled": "Felsökningsläge är inte aktiverat"

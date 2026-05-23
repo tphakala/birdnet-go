@@ -371,7 +371,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/streams/health/:url`   | `GetStreamHealth`         | ✅   | Get detailed health status of a specific RTSP stream (settings-only; URLs sanitized) |
 | GET    | `/streams/status`        | `GetStreamsStatusSummary` | ✅   | Get high-level summary of all stream statuses with counts (settings-only)            |
 | GET    | `/streams/health/stream` | `StreamHealthUpdates`     | ✅⚡ | Real-time stream health updates via SSE (settings page, not dashboard)               |
-| POST   | `/streams/probe`         | `ProbeStream`             | ✅   | Probe a stream URL to discover audio properties (sample rate, codec, bat compatibility) |
+| POST   | `/streams/test`          | `TestStream`              | ✅   | Test a stream URL to verify connectivity and discover audio properties (sample rate, codec, bat compatibility) |
 
 ### Quiet Hours Status (`quiet_hours.go`)
 

@@ -60,7 +60,7 @@
     onResult?.(null);
     try {
       const result = await api.post<ProbeResult>(
-        '/api/v2/streams/probe',
+        '/api/v2/streams/test',
         { url: url.trim() },
         { signal: testController.signal }
       );
@@ -69,6 +69,7 @@
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
       testError = err instanceof Error ? err.message : '';
+      onResult?.(null);
     } finally {
       isTesting = false;
     }
@@ -100,10 +101,10 @@
     >
       {#if isTesting}
         <Loader2 class="size-4 animate-spin" />
-        {t('settings.audio.streams.probe.probing')}
+        {t('settings.audio.streams.test.probing')}
       {:else}
         <Search class="size-4" />
-        {t('settings.audio.streams.probe.button')}
+        {t('settings.audio.streams.test.button')}
       {/if}
     </button>
 
@@ -118,14 +119,14 @@
               class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-[var(--color-success)]/15 text-[var(--color-success)]"
             >
               <CircleCheck class="size-3" />
-              {t('settings.audio.streams.probe.batCompatible')}
+              {t('settings.audio.streams.test.batCompatible')}
             </span>
           {:else}
             <span
               class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-[var(--color-error)]/15 text-[var(--color-error)]"
             >
               <CircleX class="size-3" />
-              {t('settings.audio.streams.probe.batIncompatible')}
+              {t('settings.audio.streams.test.batIncompatible')}
             </span>
           {/if}
         {/if}
@@ -147,7 +148,7 @@
 
   {#if testError !== null}
     <p class="text-xs text-[var(--color-error)]">
-      {t('settings.audio.streams.probe.error')}{testError ? `: ${testError}` : ''}
+      {t('settings.audio.streams.test.error')}{testError ? `: ${testError}` : ''}
     </p>
   {/if}
 </div>

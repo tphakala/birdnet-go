@@ -3045,10 +3045,10 @@
           "failed": "Échouée",
           "unknown": "Inconnue"
         },
-        "probe": {
+        "test": {
           "button": "Tester le flux",
           "probing": "Test en cours...",
-          "result": "Résultat du sondage",
+          "result": "Résultat du test",
           "error": "Test échoué",
           "batCompatible": "Compatible chauves-souris",
           "batIncompatible": "Non compatible chauves-souris"
@@ -4459,6 +4459,16 @@
       "hostRequired": "Le paramètre host est requis",
       "invalidHost": "Paramètre host invalide",
       "rateLimit": "Trop de tentatives de connexion au flux de notifications, veuillez patienter avant de réessayer"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Corps de requête invalide",
+        "urlRequired": "L'URL du flux est requise",
+        "invalidUrl": "Format d'URL invalide. Saisissez une URL complète, par ex. rtsp://hôte:port/chemin",
+        "unsupportedScheme": "Schéma d'URL non pris en charge \"{scheme}\". Utilisez rtsp, rtsps, http, https, rtmp ou udp",
+        "blockedDestination": "Cette destination est bloquée pour des raisons de sécurité",
+        "connectionFailed": "Impossible de se connecter au flux. Vérifiez que l'URL est correcte et que le flux est accessible"
+      }
     },
     "debug": {
       "notEnabled": "Le mode débogage n'est pas activé"

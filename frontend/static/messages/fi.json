@@ -3045,10 +3045,10 @@
           "failed": "Epäonnistunut",
           "unknown": "Tuntematon"
         },
-        "probe": {
+        "test": {
           "button": "Testaa striimi",
           "probing": "Testataan...",
-          "result": "Tutkimuksen tulos",
+          "result": "Testitulos",
           "error": "Testi epäonnistui",
           "batCompatible": "Yhteensopiva lepakoiden kanssa",
           "batIncompatible": "Ei yhteensopiva lepakoiden kanssa"
@@ -4459,6 +4459,16 @@
       "hostRequired": "Host-parametri on pakollinen",
       "invalidHost": "Virheellinen host-parametri",
       "rateLimit": "Liian monta yhteysyritystä ilmoitusstriimiin, odota hetki ennen uutta yritystä"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Virheellinen pyyntörunko",
+        "urlRequired": "Striimin URL on pakollinen",
+        "invalidUrl": "Virheellinen URL-muoto. Syötä täydellinen URL, esim. rtsp://host:portti/polku",
+        "unsupportedScheme": "URL-skeemaa \"{scheme}\" ei tueta. Käytä rtsp, rtsps, http, https, rtmp tai udp",
+        "blockedDestination": "Tämä kohde on estetty turvallisuussyistä",
+        "connectionFailed": "Striimiin ei saatu yhteyttä. Tarkista, että URL on oikein ja striimi on saavutettavissa"
+      }
     },
     "debug": {
       "notEnabled": "Virheenkorjaustila ei ole käytössä"

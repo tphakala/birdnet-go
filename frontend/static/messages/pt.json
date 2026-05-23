@@ -3045,10 +3045,10 @@
           "failed": "Falhou",
           "unknown": "Desconhecido"
         },
-        "probe": {
+        "test": {
           "button": "Testar stream",
           "probing": "Testando...",
-          "result": "Resultado da sondagem",
+          "result": "Resultado do teste",
           "error": "Teste falhou",
           "batCompatible": "Compatível com morcegos",
           "batIncompatible": "Não compatível com morcegos"
@@ -4459,6 +4459,16 @@
       "hostRequired": "O parâmetro de host é obrigatório",
       "invalidHost": "Parâmetro de host inválido",
       "rateLimit": "Demasiadas tentativas de ligação ao fluxo de notificações, aguarde antes de tentar novamente"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Corpo do pedido inválido",
+        "urlRequired": "O URL do stream é obrigatório",
+        "invalidUrl": "Formato de URL inválido. Introduza um URL completo, por ex. rtsp://host:porta/caminho",
+        "unsupportedScheme": "Esquema de URL não suportado \"{scheme}\". Use rtsp, rtsps, http, https, rtmp ou udp",
+        "blockedDestination": "Este destino está bloqueado por razões de segurança",
+        "connectionFailed": "Não foi possível ligar ao stream. Verifique se o URL está correto e se o stream está acessível"
+      }
     },
     "debug": {
       "notEnabled": "O modo de depuração não está ativado"

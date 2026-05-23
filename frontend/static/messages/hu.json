@@ -3045,10 +3045,10 @@
           "failed": "Sikertelen",
           "unknown": "Ismeretlen"
         },
-        "probe": {
+        "test": {
           "button": "Stream tesztelése",
           "probing": "Tesztelés...",
-          "result": "Vizsgálat eredménye",
+          "result": "Teszt eredménye",
           "error": "Teszt sikertelen",
           "batCompatible": "Denevér-kompatibilis",
           "batIncompatible": "Nem denevér-kompatibilis"
@@ -4459,6 +4459,16 @@
       "hostRequired": "A host paraméter kötelező",
       "invalidHost": "Érvénytelen host paraméter",
       "rateLimit": "Túl sok értesítési stream csatlakozási kísérlet, kérjük, várjon, mielőtt újra próbálkozik"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Érvénytelen kéréstörzs",
+        "urlRequired": "A stream URL megadása kötelező",
+        "invalidUrl": "Érvénytelen URL-formátum. Adjon meg egy teljes URL-t, pl. rtsp://host:port/útvonal",
+        "unsupportedScheme": "Nem támogatott URL-séma: \"{scheme}\". Használjon rtsp, rtsps, http, https, rtmp vagy udp sémát",
+        "blockedDestination": "Ez a cél biztonsági okokból le van tiltva",
+        "connectionFailed": "Nem sikerült csatlakozni a streamhez. Ellenőrizze, hogy az URL helyes-e és a stream elérhető-e"
+      }
     },
     "debug": {
       "notEnabled": "A debug mód nincs engedélyezve"

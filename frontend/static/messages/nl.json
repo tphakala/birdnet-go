@@ -3045,7 +3045,7 @@
           "failed": "Mislukt",
           "unknown": "Onbekend"
         },
-        "probe": {
+        "test": {
           "button": "Stream testen",
           "probing": "Testen...",
           "result": "Testresultaat",
@@ -4459,6 +4459,16 @@
       "hostRequired": "Hostparameter is vereist",
       "invalidHost": "Ongeldige hostparameter",
       "rateLimit": "Te veel verbindingspogingen met de meldingsstream, wacht even voor u het opnieuw probeert"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Ongeldige aanvraagtekst",
+        "urlRequired": "Stream-URL is vereist",
+        "invalidUrl": "Ongeldig URL-formaat. Voer een volledige URL in, bijv. rtsp://host:poort/pad",
+        "unsupportedScheme": "Niet-ondersteund URL-schema \"{scheme}\". Gebruik rtsp, rtsps, http, https, rtmp of udp",
+        "blockedDestination": "Deze bestemming is geblokkeerd om veiligheidsredenen",
+        "connectionFailed": "Kan geen verbinding maken met de stream. Controleer of de URL correct is en de stream bereikbaar is"
+      }
     },
     "debug": {
       "notEnabled": "Debugmodus niet ingeschakeld"
