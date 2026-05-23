@@ -141,7 +141,7 @@ func buildProbeArgs(url string) []string {
 		"-print_format", "json",
 		"-show_streams",
 		"-select_streams", "a:0",
-		"-protocol_whitelist", "file,http,https,tcp,tls,crypto,rtsp,rtp,udp,rtmp",
+		"-protocol_whitelist", "http,https,tcp,tls,crypto,rtsp,rtp,udp,rtmp",
 		url,
 	)
 

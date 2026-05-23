@@ -35,6 +35,7 @@ func TestValidateProbeURL(t *testing.T) {
 		{"blocked localhost", "rtsp://localhost/stream", true, http.StatusForbidden},
 		{"blocked loopback IPv4", "rtsp://127.0.0.1/stream", true, http.StatusForbidden},
 		{"blocked loopback IPv6", "rtsp://[::1]/stream", true, http.StatusForbidden},
+		{"blocked unspecified IPv4", "rtsp://0.0.0.0/stream", true, http.StatusForbidden},
 		{"empty URL", "", true, http.StatusBadRequest},
 		{"no scheme", "192.168.1.1/stream", true, http.StatusBadRequest},
 		{"unknown scheme", "ftp://host/file", true, http.StatusBadRequest},

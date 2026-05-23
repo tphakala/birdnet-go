@@ -105,7 +105,7 @@ func validateProbeURL(rawURL string) error {
 	}
 
 	if ip := net.ParseIP(host); ip != nil {
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
 			return echo.NewHTTPError(http.StatusForbidden, "blocked destination")
 		}
 	}
