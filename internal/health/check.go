@@ -67,8 +67,8 @@ type MultiResultCheck interface {
 
 // WorstStatus returns the most severe actionable status from a slice of results.
 // Skipped and unknown results are ignored when actionable results (healthy,
-// warning, critical) exist. If every result is skipped or unknown, the
-// function returns StatusSkipped.
+// warning, critical) exist. If every result is non-actionable, it returns
+// StatusUnknown when any unknown result is present, otherwise StatusSkipped.
 func WorstStatus(results []Result) Status {
 	worst := StatusHealthy
 	hasActionable := false
