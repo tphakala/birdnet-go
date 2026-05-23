@@ -42,14 +42,39 @@ func TestWorstStatus_MixedStatuses(t *testing.T) {
 			want:     StatusCritical,
 		},
 		{
-			name:     "skipped beats healthy",
+			name:     "healthy with skipped stays healthy",
 			statuses: []Status{StatusHealthy, StatusSkipped},
+			want:     StatusHealthy,
+		},
+		{
+			name:     "healthy with unknown stays healthy",
+			statuses: []Status{StatusHealthy, StatusUnknown},
+			want:     StatusHealthy,
+		},
+		{
+			name:     "all skipped returns skipped",
+			statuses: []Status{StatusSkipped, StatusSkipped},
 			want:     StatusSkipped,
 		},
 		{
-			name:     "unknown beats healthy",
-			statuses: []Status{StatusHealthy, StatusUnknown},
+			name:     "all unknown returns unknown",
+			statuses: []Status{StatusUnknown, StatusUnknown},
 			want:     StatusUnknown,
+		},
+		{
+			name:     "mixed skipped and unknown returns unknown",
+			statuses: []Status{StatusSkipped, StatusUnknown},
+			want:     StatusUnknown,
+		},
+		{
+			name:     "single skipped returns skipped",
+			statuses: []Status{StatusSkipped},
+			want:     StatusSkipped,
+		},
+		{
+			name:     "warning with skipped stays warning",
+			statuses: []Status{StatusWarning, StatusSkipped},
+			want:     StatusWarning,
 		},
 		{
 			name:     "critical beats all",

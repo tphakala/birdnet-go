@@ -65,13 +65,31 @@ type MultiResultCheck interface {
 	RunMulti(ctx context.Context) []Result
 }
 
-// WorstStatus returns the most severe status from a slice of results.
+// WorstStatus returns the most severe actionable status from a slice of results.
+// Skipped and unknown results are ignored when actionable results (healthy,
+// warning, critical) exist. If every result is skipped or unknown, the
+// function returns StatusSkipped.
 func WorstStatus(results []Result) Status {
 	worst := StatusHealthy
+	hasActionable := false
+	sawUnknown := false
 	for _, r := range results {
+		if r.Status == StatusSkipped || r.Status == StatusUnknown {
+			if r.Status == StatusUnknown {
+				sawUnknown = true
+			}
+			continue
+		}
+		hasActionable = true
 		if Severity(r.Status) > Severity(worst) {
 			worst = r.Status
 		}
+	}
+	if !hasActionable && len(results) > 0 {
+		if sawUnknown {
+			return StatusUnknown
+		}
+		return StatusSkipped
 	}
 	return worst
 }
