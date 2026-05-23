@@ -3048,7 +3048,7 @@
         "test": {
           "button": "Tester le flux",
           "probing": "Test en cours...",
-          "result": "Résultat du sondage",
+          "result": "Résultat du test",
           "error": "Test échoué",
           "batCompatible": "Compatible chauves-souris",
           "batIncompatible": "Non compatible chauves-souris"

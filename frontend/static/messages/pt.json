@@ -3048,7 +3048,7 @@
         "test": {
           "button": "Testar stream",
           "probing": "Testando...",
-          "result": "Resultado da sondagem",
+          "result": "Resultado do teste",
           "error": "Teste falhou",
           "batCompatible": "Compatível com morcegos",
           "batIncompatible": "Não compatível com morcegos"

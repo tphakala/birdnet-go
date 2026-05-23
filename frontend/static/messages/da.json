@@ -3048,7 +3048,7 @@
         "test": {
           "button": "Test stream",
           "probing": "Tester...",
-          "result": "Undersøgelsesresultat",
+          "result": "Testresultat",
           "error": "Test mislykkedes",
           "batCompatible": "Kompatibel med flagermus",
           "batIncompatible": "Ikke kompatibel med flagermus"

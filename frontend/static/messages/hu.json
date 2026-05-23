@@ -3048,7 +3048,7 @@
         "test": {
           "button": "Stream tesztelése",
           "probing": "Tesztelés...",
-          "result": "Vizsgálat eredménye",
+          "result": "Teszt eredménye",
           "error": "Teszt sikertelen",
           "batCompatible": "Denevér-kompatibilis",
           "batIncompatible": "Nem denevér-kompatibilis"

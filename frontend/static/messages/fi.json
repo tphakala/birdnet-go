@@ -3048,7 +3048,7 @@
         "test": {
           "button": "Testaa striimi",
           "probing": "Testataan...",
-          "result": "Tutkimuksen tulos",
+          "result": "Testitulos",
           "error": "Testi epäonnistui",
           "batCompatible": "Yhteensopiva lepakoiden kanssa",
           "batIncompatible": "Ei yhteensopiva lepakoiden kanssa"

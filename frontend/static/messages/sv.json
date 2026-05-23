@@ -3048,7 +3048,7 @@
         "test": {
           "button": "Testa ström",
           "probing": "Testar...",
-          "result": "Undersökningsresultat",
+          "result": "Testresultat",
           "error": "Test misslyckades",
           "batCompatible": "Fladdermus-kompatibel",
           "batIncompatible": "Inte fladdermus-kompatibel"
@@ -4463,7 +4463,7 @@
     "streams": {
       "test": {
         "invalidBody": "Ogiltig begärandekropp",
-        "urlRequired": "Stream-URL krävs",
+        "urlRequired": "Ström-URL krävs",
         "invalidUrl": "Ogiltigt URL-format. Ange en fullständig URL, t.ex. rtsp://värd:port/sökväg",
         "unsupportedScheme": "URL-schema \"{scheme}\" stöds inte. Använd rtsp, rtsps, http, https, rtmp eller udp",
         "blockedDestination": "Denna destination är blockerad av säkerhetsskäl",

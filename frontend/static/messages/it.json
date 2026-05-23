@@ -3048,7 +3048,7 @@
         "test": {
           "button": "Testa stream",
           "probing": "Test in corso...",
-          "result": "Risultato dell'analisi",
+          "result": "Risultato del test",
           "error": "Test fallito",
           "batCompatible": "Compatibile con pipistrelli",
           "batIncompatible": "Non compatibile con pipistrelli"

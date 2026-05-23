@@ -3048,7 +3048,7 @@
         "test": {
           "button": "Stream testen",
           "probing": "Teste...",
-          "result": "Prüfergebnis",
+          "result": "Testergebnis",
           "error": "Test fehlgeschlagen",
           "batCompatible": "Fledermaus-kompatibel",
           "batIncompatible": "Nicht fledermaus-kompatibel"

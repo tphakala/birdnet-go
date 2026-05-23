@@ -3048,7 +3048,7 @@
         "test": {
           "button": "Testuj strumień",
           "probing": "Testowanie...",
-          "result": "Wynik badania",
+          "result": "Wynik testu",
           "error": "Test nieudany",
           "batCompatible": "Kompatybilny z nietoperzami",
           "batIncompatible": "Niekompatybilny z nietoperzami"

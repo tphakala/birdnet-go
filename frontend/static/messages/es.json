@@ -3048,7 +3048,7 @@
         "test": {
           "button": "Probar stream",
           "probing": "Probando...",
-          "result": "Resultado del sondeo",
+          "result": "Resultado de la prueba",
           "error": "Prueba fallida",
           "batCompatible": "Compatible con murciélagos",
           "batIncompatible": "No compatible con murciélagos"

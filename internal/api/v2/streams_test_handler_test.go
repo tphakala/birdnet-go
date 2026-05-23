@@ -70,6 +70,7 @@ func TestTestStreamHandler_ValidationErrors(t *testing.T) {
 		status   int
 		errorKey string
 	}{
+		{"malformed json", `{`, http.StatusBadRequest, "errors.streams.test.invalidBody"},
 		{"empty url", `{"url":""}`, http.StatusBadRequest, "errors.streams.test.urlRequired"},
 		{"file scheme", `{"url":"file:///etc/passwd"}`, http.StatusBadRequest, "errors.streams.test.unsupportedScheme"},
 		{"metadata IP", `{"url":"rtsp://169.254.169.254/"}`, http.StatusForbidden, "errors.streams.test.blockedDestination"},

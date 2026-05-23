@@ -3048,7 +3048,7 @@
         "test": {
           "button": "Testovať stream",
           "probing": "Testovanie...",
-          "result": "Výsledok prieskumu",
+          "result": "Výsledok testu",
           "error": "Test zlyhal",
           "batCompatible": "Kompatibilný s netopiermi",
           "batIncompatible": "Nekompatibilný s netopiermi"

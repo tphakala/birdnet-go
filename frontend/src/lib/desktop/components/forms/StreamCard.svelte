@@ -331,6 +331,7 @@
   }
 
   function saveEdit() {
+    if (needsTest) return;
     if (editName.trim() && editUrl.trim()) {
       const transformedEqualizer =
         editEqualizer.enabled || editEqualizer.filters.length > 0
