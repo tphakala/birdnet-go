@@ -203,9 +203,13 @@ func criticalError(err error, operation, reason string, context ...any) error {
 	return builder.Build()
 }
 
-// isDatabaseLocked checks if an error indicates database lock conditions
-// This is already defined in interfaces.go, so we'll extend it here
-func isDatabaseCorruption(err error) bool {
+// IsDatabaseCorruption reports whether err describes a SQLite corruption
+// condition such as "database disk image is malformed" or "file is not a
+// database". Callers outside the datastore package (notably the image cache
+// in internal/imageprovider) use this to disable further DB operations once
+// the underlying file is unrecoverable, instead of repeatedly failing and
+// reporting the same fatal error to Sentry.
+func IsDatabaseCorruption(err error) bool {
 	if err == nil {
 		return false
 	}

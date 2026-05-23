@@ -1304,8 +1304,9 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 	var result []sourceConfigWithModels
 
 	// Collect enabled streams so we can iterate twice: once for probing,
-	// once for building configs. EnabledStreams() returns an iterator.
-	var enabledStreams []*conf.StreamConfig
+	// once for building configs. EnabledStreams() returns an iterator;
+	// preallocate using the parent slice length as an upper bound.
+	enabledStreams := make([]*conf.StreamConfig, 0, len(settings.Realtime.RTSP.Streams))
 	for _, stream := range settings.Realtime.RTSP.EnabledStreams() {
 		enabledStreams = append(enabledStreams, stream)
 	}
