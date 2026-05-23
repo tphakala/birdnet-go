@@ -1265,10 +1265,8 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-func TestApplySpeciesStatusToSummary_NewSpeciesWindow(t *testing.T) {
+func TestApplySpeciesStatusToSummary_FlagPassThrough(t *testing.T) {
 	t.Parallel()
-
-	now := time.Now()
 
 	tests := []struct {
 		name              string
@@ -1278,53 +1276,54 @@ func TestApplySpeciesStatusToSummary_NewSpeciesWindow(t *testing.T) {
 		expectNewSeason   bool
 	}{
 		{
-			name: "first seen today",
+			name: "all flags true when tracker reports new",
 			status: speciestracker.SpeciesStatus{
-				FirstSeenTime:   now,
 				IsNew:           true,
 				DaysSinceFirst:  0,
 				IsNewThisYear:   true,
 				IsNewThisSeason: true,
+				CurrentSeason:   "spring",
 			},
 			expectNewSpecies:  true,
 			expectNewThisYear: true,
 			expectNewSeason:   true,
 		},
 		{
-			name: "first seen 3 days ago within 7 day window",
+			name: "all flags true when tracker reports in-window",
 			status: speciestracker.SpeciesStatus{
-				FirstSeenTime:   now.AddDate(0, 0, -3),
 				IsNew:           true,
 				DaysSinceFirst:  3,
 				IsNewThisYear:   true,
 				IsNewThisSeason: true,
+				CurrentSeason:   "spring",
 			},
 			expectNewSpecies:  true,
 			expectNewThisYear: true,
 			expectNewSeason:   true,
 		},
 		{
-			name: "first seen 8 days ago outside 7 day window",
+			name: "all flags false when tracker reports out-of-window",
 			status: speciestracker.SpeciesStatus{
-				FirstSeenTime:   now.AddDate(0, 0, -8),
 				IsNew:           false,
 				DaysSinceFirst:  8,
 				IsNewThisYear:   false,
 				IsNewThisSeason: false,
+				CurrentSeason:   "summer",
 			},
 			expectNewSpecies:  false,
 			expectNewThisYear: false,
 			expectNewSeason:   false,
 		},
 		{
-			name: "never seen before",
+			name: "mixed flags passed through independently",
 			status: speciestracker.SpeciesStatus{
-				IsNew:           true,
-				DaysSinceFirst:  0,
+				IsNew:           false,
+				DaysSinceFirst:  30,
 				IsNewThisYear:   true,
 				IsNewThisSeason: true,
+				CurrentSeason:   "winter",
 			},
-			expectNewSpecies:  true,
+			expectNewSpecies:  false,
 			expectNewThisYear: true,
 			expectNewSeason:   true,
 		},
