@@ -3045,7 +3045,7 @@
           "failed": "Fallito",
           "unknown": "Sconosciuto"
         },
-        "probe": {
+        "test": {
           "button": "Testa stream",
           "probing": "Test in corso...",
           "result": "Risultato dell'analisi",

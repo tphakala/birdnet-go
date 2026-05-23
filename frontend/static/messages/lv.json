@@ -3045,7 +3045,7 @@
           "failed": "Neizdevies",
           "unknown": "Nezināms"
         },
-        "probe": {
+        "test": {
           "button": "Testēt straumi",
           "probing": "Testē...",
           "result": "Pārbaudes rezultāts",

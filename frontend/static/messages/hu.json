@@ -3045,7 +3045,7 @@
           "failed": "Sikertelen",
           "unknown": "Ismeretlen"
         },
-        "probe": {
+        "test": {
           "button": "Stream tesztelése",
           "probing": "Tesztelés...",
           "result": "Vizsgálat eredménye",

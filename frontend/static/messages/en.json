@@ -3045,10 +3045,10 @@
           "failed": "Failed",
           "unknown": "Unknown"
         },
-        "probe": {
+        "test": {
           "button": "Test Stream",
           "probing": "Testing...",
-          "result": "Probe Result",
+          "result": "Test Result",
           "error": "Test failed",
           "batCompatible": "Bat compatible",
           "batIncompatible": "Not bat compatible"

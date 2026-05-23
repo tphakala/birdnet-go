@@ -3045,7 +3045,7 @@
           "failed": "Misslyckad",
           "unknown": "Okänd"
         },
-        "probe": {
+        "test": {
           "button": "Testa ström",
           "probing": "Testar...",
           "result": "Undersökningsresultat",

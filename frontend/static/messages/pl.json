@@ -3045,7 +3045,7 @@
           "failed": "Nieudane",
           "unknown": "Nieznany"
         },
-        "probe": {
+        "test": {
           "button": "Testuj strumień",
           "probing": "Testowanie...",
           "result": "Wynik badania",

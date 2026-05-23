@@ -3045,7 +3045,7 @@
           "failed": "Fejlet",
           "unknown": "Ukendt"
         },
-        "probe": {
+        "test": {
           "button": "Test stream",
           "probing": "Tester...",
           "result": "Undersøgelsesresultat",

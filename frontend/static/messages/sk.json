@@ -3045,7 +3045,7 @@
           "failed": "Zlyhalo",
           "unknown": "Neznáme"
         },
-        "probe": {
+        "test": {
           "button": "Testovať stream",
           "probing": "Testovanie...",
           "result": "Výsledok prieskumu",

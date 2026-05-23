@@ -127,8 +127,8 @@
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let nameError = $state<string | null>(null);
   let urlError = $state<string | null>(null);
-  let newProbeResult = $state<{ sampleRate: number } | null>(null);
-  let newSourceSampleRate = $derived(newProbeResult?.sampleRate ?? 48000);
+  let newTestResult = $state<{ sampleRate: number } | null>(null);
+  let newSourceSampleRate = $derived(newTestResult?.sampleRate ?? 48000);
 
   // SSE connection for real-time health updates
   let eventSource: ReconnectingEventSource | null = null;
@@ -417,7 +417,7 @@
     newStreamType = 'rtsp';
     newModels = [DEFAULT_MODEL_ID];
     newQuietHours = { ...defaultQuietHoursConfig };
-    newProbeResult = null;
+    newTestResult = null;
     clearErrors();
     showAddForm = false;
 
@@ -659,7 +659,7 @@
               models={availableModels}
               selectedModels={newModels}
               {disabled}
-              onResult={result => (newProbeResult = result)}
+              onResult={result => (newTestResult = result)}
             />
 
             <!-- Stream Type and Protocol -->
@@ -718,7 +718,7 @@
                   newTransport = 'tcp';
                   newModels = [DEFAULT_MODEL_ID];
                   newQuietHours = { ...defaultQuietHoursConfig };
-                  newProbeResult = null;
+                  newTestResult = null;
                   clearErrors();
                 }}
               >
@@ -728,7 +728,7 @@
                 type="button"
                 class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
                 onclick={addStream}
-                disabled={!newName.trim() || !newUrl.trim() || !newProbeResult || disabled}
+                disabled={!newName.trim() || !newUrl.trim() || !newTestResult || disabled}
               >
                 <Plus class="size-4" />
                 {t('settings.audio.streams.addStream')}

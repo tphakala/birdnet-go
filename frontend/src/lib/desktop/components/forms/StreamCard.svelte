@@ -168,7 +168,7 @@
     return 'Unknown';
   });
 
-  let probeResult = $state<{ sampleRate: number } | null>(null);
+  let testResult = $state<{ sampleRate: number } | null>(null);
 
   // Local editing state - initialized with defaults, synced from props in startEdit()
   let isEditing = $state(false);
@@ -321,7 +321,7 @@
       : { enabled: false, filters: [] };
     editQuietHours = { ...defaultQuietHoursConfig, ...stream.quietHours };
     showEqualizer = false;
-    probeResult = null;
+    testResult = null;
     isEditing = true;
   }
 
@@ -388,11 +388,11 @@
   }
 
   let urlChanged = $derived(editUrl.trim() !== stream.url);
-  let needsTest = $derived(urlChanged && !probeResult);
-  let sourceSampleRate = $derived(probeResult?.sampleRate ?? 48000);
+  let needsTest = $derived(urlChanged && !testResult);
+  let sourceSampleRate = $derived(testResult?.sampleRate ?? 48000);
 
-  function handleProbeResult(result: { sampleRate: number } | null) {
-    probeResult = result;
+  function handleTestResult(result: { sampleRate: number } | null) {
+    testResult = result;
   }
 
   function updateEnabled(enabled: boolean) {
@@ -487,7 +487,7 @@
           models={availableModels}
           selectedModels={editModels}
           {disabled}
-          onResult={handleProbeResult}
+          onResult={handleTestResult}
         />
 
         <!-- Type and Transport Row -->

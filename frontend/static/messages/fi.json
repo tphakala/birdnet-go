@@ -3045,7 +3045,7 @@
           "failed": "Epäonnistunut",
           "unknown": "Tuntematon"
         },
-        "probe": {
+        "test": {
           "button": "Testaa striimi",
           "probing": "Testataan...",
           "result": "Tutkimuksen tulos",

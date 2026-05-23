@@ -2,9 +2,11 @@ package api
 
 import (
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -117,7 +119,9 @@ func validateStreamTestURL(rawURL string) *streamTestValidationError {
 
 	scheme := strings.ToLower(parsed.Scheme)
 	if !allowedSchemes[scheme] {
-		supportedList := "rtsp, rtsps, http, https, rtmp, udp"
+		schemes := slices.Collect(maps.Keys(allowedSchemes))
+		slices.Sort(schemes)
+		supportedList := strings.Join(schemes, ", ")
 		return &streamTestValidationError{
 			message:  fmt.Sprintf("unsupported URL scheme %q, supported: %s", scheme, supportedList),
 			errorKey: "errors.streams.test.unsupportedScheme",

@@ -3045,7 +3045,7 @@
           "failed": "Fehlgeschlagen",
           "unknown": "Unbekannt"
         },
-        "probe": {
+        "test": {
           "button": "Stream testen",
           "probing": "Teste...",
           "result": "Prüfergebnis",
