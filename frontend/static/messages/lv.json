@@ -4460,6 +4460,16 @@
       "invalidHost": "Nederīgs resursdatora parametrs",
       "rateLimit": "Pārāk daudz paziņojumu straumes pieslēgšanās mēģinājumu, lūdzu, uzgaidiet pirms atkārtota mēģinājuma"
     },
+    "streams": {
+      "test": {
+        "invalidBody": "Nederīgs pieprasījuma saturs",
+        "urlRequired": "Straumes URL ir obligāts",
+        "invalidUrl": "Nederīgs URL formāts. Ievadiet pilnu URL, piem., rtsp://resursdators:ports/ceļš",
+        "unsupportedScheme": "Neatbalstīta URL shēma \"{scheme}\". Izmantojiet rtsp, rtsps, http, https, rtmp vai udp",
+        "blockedDestination": "Šis galamērķis ir bloķēts drošības apsvērumu dēļ",
+        "connectionFailed": "Nevarēja izveidot savienojumu ar straumi. Pārbaudiet, vai URL ir pareizs un straume ir pieejama"
+      }
+    },
     "debug": {
       "notEnabled": "Atkļūdošanas režīms nav iespējots"
     },

@@ -4460,6 +4460,16 @@
       "invalidHost": "Invalid host parameter",
       "rateLimit": "Too many notification stream connection attempts, please wait before trying again"
     },
+    "streams": {
+      "test": {
+        "invalidBody": "Invalid request body",
+        "urlRequired": "Stream URL is required",
+        "invalidUrl": "Invalid URL format. Enter a full URL like rtsp://host:port/path",
+        "unsupportedScheme": "Unsupported URL scheme \"{scheme}\". Use rtsp, rtsps, http, https, rtmp, or udp",
+        "blockedDestination": "This destination is blocked for security reasons",
+        "connectionFailed": "Could not connect to the stream. Check that the URL is correct and the stream is accessible"
+      }
+    },
     "debug": {
       "notEnabled": "Debug mode not enabled"
     },

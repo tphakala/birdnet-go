@@ -4460,6 +4460,16 @@
       "invalidHost": "Parámetro de host no válido",
       "rateLimit": "Demasiados intentos de conexión al flujo de notificaciones, espere un momento antes de intentar de nuevo"
     },
+    "streams": {
+      "test": {
+        "invalidBody": "Cuerpo de solicitud no válido",
+        "urlRequired": "La URL del stream es obligatoria",
+        "invalidUrl": "Formato de URL no válido. Introduzca una URL completa como rtsp://host:puerto/ruta",
+        "unsupportedScheme": "Esquema de URL no compatible \"{scheme}\". Use rtsp, rtsps, http, https, rtmp o udp",
+        "blockedDestination": "Este destino está bloqueado por razones de seguridad",
+        "connectionFailed": "No se pudo conectar al stream. Compruebe que la URL es correcta y que el stream es accesible"
+      }
+    },
     "debug": {
       "notEnabled": "El modo de depuración no está habilitado"
     },

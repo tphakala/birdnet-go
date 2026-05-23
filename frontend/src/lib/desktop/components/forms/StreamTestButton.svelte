@@ -60,7 +60,7 @@
     onResult?.(null);
     try {
       const result = await api.post<ProbeResult>(
-        '/api/v2/streams/probe',
+        '/api/v2/streams/test',
         { url: url.trim() },
         { signal: testController.signal }
       );

@@ -637,7 +637,7 @@ func (c *Controller) initRoutes() {
 		{"settings routes", c.initSettingsRoutes},
 		{"filesystem routes", c.initFileSystemRoutes},
 		{"stream health routes", c.initStreamHealthRoutes},
-		{"stream probe routes", c.initStreamProbeRoutes},
+		{"stream test routes", c.initStreamTestRoutes},
 		{"audio health routes", c.initAudioHealthRoutes},
 		{"quiet hours routes", c.initQuietHoursRoutes},
 		{"audio level routes", c.initAudioLevelRoutes},

@@ -4460,6 +4460,16 @@
       "invalidHost": "Neplatný parametr hostitele",
       "rateLimit": "Příliš mnoho pokusů o připojení k proudu oznámení, počkejte prosím chvíli a zkuste to znovu"
     },
+    "streams": {
+      "test": {
+        "invalidBody": "Neplatné tělo požadavku",
+        "urlRequired": "URL streamu je povinné",
+        "invalidUrl": "Neplatný formát URL. Zadejte úplnou URL, např. rtsp://host:port/cesta",
+        "unsupportedScheme": "Nepodporované schéma URL \"{scheme}\". Použijte rtsp, rtsps, http, https, rtmp nebo udp",
+        "blockedDestination": "Tento cíl je z bezpečnostních důvodů blokován",
+        "connectionFailed": "Nelze se připojit ke streamu. Zkontrolujte, zda je URL správná a stream je dostupný"
+      }
+    },
     "debug": {
       "notEnabled": "Režim ladění není povolen"
     },

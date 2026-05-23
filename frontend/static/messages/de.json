@@ -4460,6 +4460,16 @@
       "invalidHost": "Ungültiger Host-Parameter",
       "rateLimit": "Zu viele Verbindungsversuche zum Benachrichtigungsstream, bitte warten Sie einen Moment"
     },
+    "streams": {
+      "test": {
+        "invalidBody": "Ungültiger Anfragekörper",
+        "urlRequired": "Stream-URL ist erforderlich",
+        "invalidUrl": "Ungültiges URL-Format. Geben Sie eine vollständige URL ein, z. B. rtsp://host:port/pfad",
+        "unsupportedScheme": "Nicht unterstütztes URL-Schema \"{scheme}\". Verwenden Sie rtsp, rtsps, http, https, rtmp oder udp",
+        "blockedDestination": "Dieses Ziel ist aus Sicherheitsgründen gesperrt",
+        "connectionFailed": "Verbindung zum Stream konnte nicht hergestellt werden. Überprüfen Sie, ob die URL korrekt ist und der Stream erreichbar ist"
+      }
+    },
     "debug": {
       "notEnabled": "Debug-Modus nicht aktiviert"
     },

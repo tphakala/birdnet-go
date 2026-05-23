@@ -387,6 +387,8 @@
     }
   }
 
+  let urlChanged = $derived(editUrl.trim() !== stream.url);
+  let needsTest = $derived(urlChanged && !probeResult);
   let sourceSampleRate = $derived(probeResult?.sampleRate ?? 48000);
 
   function handleProbeResult(result: { sampleRate: number } | null) {
@@ -587,7 +589,7 @@
             type="button"
             class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={saveEdit}
-            disabled={!editName.trim() || !editUrl.trim()}
+            disabled={!editName.trim() || !editUrl.trim() || needsTest}
           >
             <Check class="size-4" />
             {t('common.save')}

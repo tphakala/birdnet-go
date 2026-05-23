@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,9 +10,10 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-func TestValidateProbeURL(t *testing.T) {
+func TestValidateStreamTestURL(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -39,55 +41,59 @@ func TestValidateProbeURL(t *testing.T) {
 		{"empty URL", "", true, http.StatusBadRequest},
 		{"no scheme", "192.168.1.1/stream", true, http.StatusBadRequest},
 		{"unknown scheme", "ftp://host/file", true, http.StatusBadRequest},
+		{"typo rstp scheme", "rstp://192.168.1.1/stream", true, http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := validateProbeURL(tt.url)
+			vErr := validateStreamTestURL(tt.url)
 			if !tt.wantErr {
-				assert.NoError(t, err)
+				assert.Nil(t, vErr)
 				return
 			}
-			require.Error(t, err)
-			var he *echo.HTTPError
-			require.ErrorAs(t, err, &he)
-			assert.Equal(t, tt.status, he.Code)
+			require.NotNil(t, vErr)
+			assert.Equal(t, tt.status, vErr.status)
+			assert.NotEmpty(t, vErr.errorKey)
 		})
 	}
 }
 
-func TestProbeStreamHandler_ValidationErrors(t *testing.T) {
+func TestTestStreamHandler_ValidationErrors(t *testing.T) {
 	t.Parallel()
 
 	e := echo.New()
 
 	tests := []struct {
-		name   string
-		body   string
-		status int
+		name     string
+		body     string
+		status   int
+		errorKey string
 	}{
-		{"empty url", `{"url":""}`, http.StatusBadRequest},
-		{"file scheme", `{"url":"file:///etc/passwd"}`, http.StatusBadRequest},
-		{"metadata IP", `{"url":"rtsp://169.254.169.254/"}`, http.StatusForbidden},
-		{"unknown scheme", `{"url":"ftp://host/file"}`, http.StatusBadRequest},
+		{"empty url", `{"url":""}`, http.StatusBadRequest, "errors.streams.test.urlRequired"},
+		{"file scheme", `{"url":"file:///etc/passwd"}`, http.StatusBadRequest, "errors.streams.test.unsupportedScheme"},
+		{"metadata IP", `{"url":"rtsp://169.254.169.254/"}`, http.StatusForbidden, "errors.streams.test.blockedDestination"},
+		{"unknown scheme", `{"url":"ftp://host/file"}`, http.StatusBadRequest, "errors.streams.test.unsupportedScheme"},
+		{"typo rstp", `{"url":"rstp://192.168.1.1/stream"}`, http.StatusBadRequest, "errors.streams.test.unsupportedScheme"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			req := httptest.NewRequest(http.MethodPost, "/api/v2/streams/probe",
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/streams/test",
 				strings.NewReader(tt.body))
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			rec := httptest.NewRecorder()
 			ctx := e.NewContext(req, rec)
 
-			ctrl := &Controller{}
-			err := ctrl.ProbeStream(ctx)
-			require.Error(t, err)
-			var he *echo.HTTPError
-			require.ErrorAs(t, err, &he)
-			assert.Equal(t, tt.status, he.Code)
+			ctrl := &Controller{Settings: &conf.Settings{}}
+			err := ctrl.TestStream(ctx)
+			require.NoError(t, err)
+			assert.Equal(t, tt.status, rec.Code)
+
+			var resp ErrorResponse
+			require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+			assert.Equal(t, tt.errorKey, resp.ErrorKey)
 		})
 	}
 }
