@@ -137,7 +137,7 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
 
 - Linux, Windows, and macOS
 - Single static binary with the BirdNET TFLite model embedded
-- Optional ONNX Runtime for Perch, BattyBirdNET, and Geomodel v3.0 ([install guide](doc/ONNX-Runtime-Installation.md))
+- Optional ONNX Runtime for Perch, BattyBirdNET, and BirdNET Geomodel v3.0 ([install guide](doc/ONNX-Runtime-Installation.md))
 - Multi-arch Docker images
 - Runs comfortably on a Raspberry Pi 4 or equivalent 64-bit single-board computer
 
