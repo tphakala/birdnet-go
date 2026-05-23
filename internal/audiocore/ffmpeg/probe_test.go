@@ -21,6 +21,7 @@ func TestIsLossyCodec(t *testing.T) {
 		{name: "vorbis", codec: "vorbis", expect: true},
 		{name: "ac3", codec: "ac3", expect: true},
 		{name: "eac3", codec: "eac3", expect: true},
+		{name: "wmav2", codec: "wmav2", expect: true},
 		{name: "AAC uppercase", codec: "AAC", expect: true},
 		{name: "MP3 uppercase", codec: "MP3", expect: true},
 		{name: "pcm_s16le", codec: "pcm_s16le", expect: false},

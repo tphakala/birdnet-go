@@ -14,6 +14,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
+// MinBatSampleRate is the minimum source capture rate in Hz for bat detection
+// models. Streams below this rate cannot carry ultrasonic content.
+const MinBatSampleRate = 96000
+
 // probeTimeout is the maximum time to wait for ffprobe stream probing.
 // This is separate from FFprobeTimeout (3s) used for local file validation;
 // live streams may need longer to connect and negotiate.
@@ -60,14 +64,9 @@ func ProbeStreamInfo(ctx context.Context, url string) (*StreamInfo, error) {
 	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 
-	ffprobeBinary := GetFFprobePath()
-	if ffprobeBinary == "" {
-		name := getFfprobeBinaryName()
-		found, err := exec.LookPath(name)
-		if err != nil {
-			return nil, ErrFFprobeNotAvailable
-		}
-		ffprobeBinary = found
+	ffprobeBinary, err := resolveFFprobeBinary()
+	if err != nil {
+		return nil, err
 	}
 
 	args := buildProbeArgs(url)
@@ -82,7 +81,7 @@ func ProbeStreamInfo(ctx context.Context, url string) (*StreamInfo, error) {
 		if probeCtx.Err() != nil {
 			return nil, fmt.Errorf("stream probe timed out for %s: %w", safeURL, probeCtx.Err())
 		}
-		return nil, fmt.Errorf("stream probe failed for %s: %w (stderr: %s)", safeURL, err, stderr.String())
+		return nil, fmt.Errorf("stream probe failed for %s: %w (stderr: %s)", safeURL, err, privacy.SanitizeStreamUrls(stderr.String()))
 	}
 
 	info, err := parseProbeOutput(stdout.Bytes())
@@ -142,6 +141,7 @@ func buildProbeArgs(url string) []string {
 		"-print_format", "json",
 		"-show_streams",
 		"-select_streams", "a:0",
+		"-protocol_whitelist", "file,http,https,tcp,tls,crypto,rtsp,rtp,udp,rtmp",
 		url,
 	)
 
