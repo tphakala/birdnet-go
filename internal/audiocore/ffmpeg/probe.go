@@ -112,9 +112,16 @@ func parseProbeOutput(data []byte) (*StreamInfo, error) {
 
 	stream := output.Streams[0]
 
-	sampleRate, err := strconv.Atoi(stream.SampleRate)
+	rateStr := stream.SampleRate
+	if i := strings.Index(rateStr, "/"); i != -1 {
+		rateStr = rateStr[:i]
+	}
+	sampleRate, err := strconv.Atoi(rateStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid sample rate %q: %w", stream.SampleRate, err)
+	}
+	if sampleRate <= 0 {
+		return nil, fmt.Errorf("invalid sample rate %q: must be positive", stream.SampleRate)
 	}
 
 	return &StreamInfo{

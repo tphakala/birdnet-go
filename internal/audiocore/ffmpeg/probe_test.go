@@ -89,6 +89,26 @@ func TestParseProbeOutput(t *testing.T) {
 			expectErr: true,
 		},
 		{
+			name:  "fractional sample rate",
+			input: `{"streams":[{"codec_name":"pcm_s16le","codec_type":"audio","sample_rate":"44100/1","channels":1,"bits_per_sample":16}]}`,
+			expected: &StreamInfo{
+				SampleRate: 44100,
+				Channels:   1,
+				Codec:      "pcm_s16le",
+				BitDepth:   16,
+			},
+		},
+		{
+			name:      "zero sample rate",
+			input:     `{"streams":[{"codec_name":"pcm_s16le","codec_type":"audio","sample_rate":"0","channels":1,"bits_per_sample":16}]}`,
+			expectErr: true,
+		},
+		{
+			name:      "negative sample rate",
+			input:     `{"streams":[{"codec_name":"pcm_s16le","codec_type":"audio","sample_rate":"-1","channels":1,"bits_per_sample":16}]}`,
+			expectErr: true,
+		},
+		{
 			name:      "invalid sample rate",
 			input:     `{"streams":[{"codec_name":"pcm_s16le","codec_type":"audio","sample_rate":"not_a_number","channels":1,"bits_per_sample":16}]}`,
 			expectErr: true,
