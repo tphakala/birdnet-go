@@ -1832,10 +1832,19 @@ migrate_installation() {
     fi
 
     # Step 5: Preserve timezone and clean up old systemd service
-    if [ -f "/etc/systemd/system/birdnet-go.service" ] && [ -z "$CONFIGURED_TZ" ]; then
-        CONFIGURED_TZ=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' /etc/systemd/system/birdnet-go.service 2>/dev/null | head -1)
-        if [ -n "$CONFIGURED_TZ" ]; then
-            log_message "INFO" "Preserved timezone from old service: $CONFIGURED_TZ"
+    if [ -z "$CONFIGURED_TZ" ]; then
+        local tz_service_file=""
+        if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
+            tz_service_file="/etc/systemd/system/birdnet-go.service"
+        elif [ -f "/lib/systemd/system/birdnet-go.service" ]; then
+            tz_service_file="/lib/systemd/system/birdnet-go.service"
+        fi
+        if [ -n "$tz_service_file" ]; then
+            CONFIGURED_TZ=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' "$tz_service_file" 2>/dev/null | head -1)
+            if [ -n "$CONFIGURED_TZ" ]; then
+                log_message "INFO" "Preserved timezone from old service: $CONFIGURED_TZ"
+                print_message "📍 Preserved existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+            fi
         fi
     fi
     sudo systemctl disable --now birdnet-go.service 2>/dev/null || true
@@ -4521,12 +4530,20 @@ handle_container_update() {
     print_message "🔄 Checking for updates..." "$YELLOW"
     
     # Extract existing timezone from systemd service file if updating
-    if [ -f "/etc/systemd/system/birdnet-go.service" ] && [ -z "$CONFIGURED_TZ" ]; then
-        local existing_tz=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' /etc/systemd/system/birdnet-go.service 2>/dev/null | head -1)
-        if [ -n "$existing_tz" ]; then
-            CONFIGURED_TZ="$existing_tz"
-            log_message "INFO" "Extracted existing timezone from service: $CONFIGURED_TZ"
-            print_message "📍 Using existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+    if [ -z "$CONFIGURED_TZ" ]; then
+        local tz_service_file=""
+        if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
+            tz_service_file="/etc/systemd/system/birdnet-go.service"
+        elif [ -f "/lib/systemd/system/birdnet-go.service" ]; then
+            tz_service_file="/lib/systemd/system/birdnet-go.service"
+        fi
+        if [ -n "$tz_service_file" ]; then
+            local existing_tz=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' "$tz_service_file" 2>/dev/null | head -1)
+            if [ -n "$existing_tz" ]; then
+                CONFIGURED_TZ="$existing_tz"
+                log_message "INFO" "Extracted existing timezone from service: $CONFIGURED_TZ"
+                print_message "📍 Using existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+            fi
         fi
     fi
     
