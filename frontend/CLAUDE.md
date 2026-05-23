@@ -14,6 +14,7 @@
 - **NEVER create inline SVGs** - use `@lucide/svelte` icons
 - **NEVER use `toISOString()` for dates** - use `getLocalDateString()`
 - **NEVER use Secure Context APIs without fallback** - BirdNET-Go commonly runs on plain HTTP in home networks. `crypto.randomUUID()` and `navigator.clipboard` are undefined on non-HTTPS. Use `Math.random().toString(36).slice(2, 10)` for unique IDs. For clipboard, check `navigator.clipboard?.writeText` and fall back to textarea + `document.execCommand('copy')`
+- **NEVER ship ambiguous UI states** - disabled controls, errors, and loading states must always explain *why* to the user. A disabled Save button with no tooltip is a support ticket waiting to be filed. See [UX Design Principles](#ux-design-principles) below.
 - **Use D3.js for ALL charting/plotting** - unless specific requirement for custom approach
 - **Run `npm run check:all` before EVERY commit**
 
@@ -348,6 +349,68 @@ function getCsrfToken(): string | null {
   return match?.[1] || null;
 }
 ```
+
+## UX Design Principles
+
+Every interactive element needs a deliberate UX pass before it ships. Ambiguity is the most common source of avoidable support load: each confused user opens an issue, and each issue costs far more to triage than the design review would have. BirdNET-Go is a hobby project maintained by volunteers, so preventable rework comes directly out of feature work. Catch ambiguity at design time.
+
+### No Ambiguous Disabled States
+
+When a control is disabled (button, input, toggle, link), the user MUST be able to tell *why* without guessing or clicking around. Silent disabled controls are the single biggest source of "this is broken" reports that turn out to be a missing prerequisite the user could have satisfied themselves.
+
+Required indicators when a control is disabled:
+
+- **Tooltip on hover** explaining the blocked condition (e.g., "Fill in the species name to enable Save")
+- **Inline helper text** below the control when the reason is persistent (e.g., "Save is disabled until validation passes")
+- **Visible status badge** when the reason is workflow-related (e.g., "Read-only mode", "Pending approval")
+- **`aria-describedby`** pointing at the explanation so screen readers convey the same context as sighted users
+
+```svelte
+<!-- Wrong: user has no idea why -->
+<button disabled={!canSave}>{t('common.save')}</button>
+
+<!-- Correct: reason is discoverable -->
+<button
+  type="button"
+  disabled={!canSave}
+  title={!canSave ? saveBlockedReason : undefined}
+  aria-describedby={!canSave ? 'save-help' : undefined}
+>
+  {t('common.save')}
+</button>
+{#if !canSave}
+  <p id="save-help" class="text-sm text-base-content/70">
+    {saveBlockedReason}
+  </p>
+{/if}
+```
+
+Notes:
+
+- A `title` attribute is the minimum bar, but tooltips are invisible on touch devices. Always pair it with inline helper text or a status badge for important controls like Save, Submit, or Delete.
+- Avoid native `disabled` if the user still needs keyboard focus to read the explanation. Consider `aria-disabled="true"` plus suppressed click handling so the control remains tab-focusable.
+- The reason string must be specific. "Cannot save" is useless; "Threshold must be between 0 and 1 before saving" is actionable.
+
+### General UX Rules
+
+- **Every interactive element communicates its state.** Loading, saving, validating, errored, success: each gets a visible indicator with a label, not just a bare spinner.
+- **Validation errors point to the offending field.** "Form has errors" is not enough. Show the specific reason next to the input (e.g., "Threshold must be between 0 and 1").
+- **Destructive actions need confirmation context.** "Delete?" alone is too thin. Show what will be deleted and what the consequences are (linked records, irreversible cleanup, etc.).
+- **Empty states explain how to populate them.** "No alerts configured. Click Add to create one." beats a blank list with no affordance.
+- **Loading states distinguish fetching from saving from processing.** A spinner with a label ("Saving settings...") beats a bare spinner every time.
+- **Confirm success explicitly.** Toast, inline checkmark, or status badge: the user should never have to guess whether their action took effect.
+- **Run the cold-read test.** Would a first-time user who landed on this screen know what to do next? If not, redesign before merging.
+
+### Why This Matters
+
+A bug filed because of UI ambiguity is preventable rework. Each ambiguous disabled state, unclear error, or silent failure becomes:
+
+1. A user-filed GitHub issue or support thread
+2. A reproduction effort by a maintainer
+3. A patch and release cycle
+4. Documentation or FAQ updates explaining the workaround
+
+Minutes of careful design at build time save hours of triage after release. Spend the minutes.
 
 ## Accessibility Quick Reference
 
