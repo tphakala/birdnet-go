@@ -3,6 +3,7 @@ package inference
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 
@@ -297,6 +298,14 @@ func findONNXRuntimeLibrary() string {
 	switch runtime.GOOS {
 	case "windows":
 		candidates = []string{"onnxruntime.dll"}
+		if exePath, err := os.Executable(); err == nil {
+			candidates = append([]string{filepath.Join(filepath.Dir(exePath), "onnxruntime.dll")}, candidates...)
+		}
+		for i, c := range candidates {
+			if abs, err := filepath.Abs(c); err == nil {
+				candidates[i] = abs
+			}
+		}
 	case "darwin":
 		candidates = []string{
 			"/opt/homebrew/lib/libonnxruntime.dylib",

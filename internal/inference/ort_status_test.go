@@ -138,6 +138,14 @@ func TestVersionError(t *testing.T) {
 func TestLibraryFileExists(t *testing.T) {
 	t.Parallel()
 
+	t.Run("real file with directory component", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		fakeLib := filepath.Join(dir, "onnxruntime.dll")
+		require.NoError(t, os.WriteFile(fakeLib, nil, 0o644))
+		assert.True(t, libraryFileExists(fakeLib), "libraryFileExists(%q) should be true for existing file", fakeLib)
+	})
+
 	tests := []struct {
 		name string
 		path string
@@ -146,6 +154,7 @@ func TestLibraryFileExists(t *testing.T) {
 		{name: "empty string", path: "", want: false},
 		{name: "bare dlopen name", path: "onnxruntime", want: false},
 		{name: "bare so name", path: "libonnxruntime.so", want: false},
+		{name: "bare dll name", path: "onnxruntime.dll", want: false},
 		{name: "nonexistent absolute path", path: "/nonexistent/path/libonnxruntime.so", want: false},
 	}
 
