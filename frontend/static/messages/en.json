@@ -3044,6 +3044,18 @@
           "degraded": "Degraded",
           "failed": "Failed",
           "unknown": "Unknown"
+        },
+        "probe": {
+          "button": "Probe Stream",
+          "probing": "Probing...",
+          "result": "Probe Result",
+          "error": "Probe failed",
+          "batCompatible": "Bat compatible",
+          "batIncompatible": "Not bat compatible"
+        },
+        "batWarning": "Bat models require streams with a lossless codec (PCM) and a sample rate of at least 96 kHz. Use the Probe Stream button to verify your stream meets these requirements.",
+        "codecWarning": {
+          "lossy": "Lossy codecs (AAC, Opus, MP3) destroy ultrasonic frequencies above ~20 kHz, making the stream unsuitable for bat detection."
         }
       },
       "audioFilters": {

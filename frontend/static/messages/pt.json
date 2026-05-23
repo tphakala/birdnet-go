@@ -3044,6 +3044,18 @@
           "degraded": "Degradada",
           "failed": "Falhou",
           "unknown": "Desconhecido"
+        },
+        "probe": {
+          "button": "Sondar stream",
+          "probing": "Sondando...",
+          "result": "Resultado da sondagem",
+          "error": "A sondagem falhou",
+          "batCompatible": "Compatível com morcegos",
+          "batIncompatible": "Não compatível com morcegos"
+        },
+        "batWarning": "Os modelos de morcegos requerem streams com um codec sem perdas (PCM) e uma taxa de amostragem de pelo menos 96 kHz. Use o botão Sondar stream para verificar se o seu stream atende a estes requisitos.",
+        "codecWarning": {
+          "lossy": "Codecs com perdas (AAC, Opus, MP3) destroem frequências ultrassónicas acima de ~20 kHz, tornando o stream inadequado para a deteção de morcegos."
         }
       },
       "audioFilters": {

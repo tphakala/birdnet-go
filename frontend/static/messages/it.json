@@ -3044,6 +3044,18 @@
           "degraded": "Degradato",
           "failed": "Fallito",
           "unknown": "Sconosciuto"
+        },
+        "probe": {
+          "button": "Analizza stream",
+          "probing": "Analisi in corso...",
+          "result": "Risultato dell'analisi",
+          "error": "Analisi non riuscita",
+          "batCompatible": "Compatibile con pipistrelli",
+          "batIncompatible": "Non compatibile con pipistrelli"
+        },
+        "batWarning": "I modelli per pipistrelli richiedono stream con un codec senza perdita (PCM) e una frequenza di campionamento di almeno 96 kHz. Usa il pulsante Analizza stream per verificare che il tuo stream soddisfi questi requisiti.",
+        "codecWarning": {
+          "lossy": "I codec con perdita (AAC, Opus, MP3) distruggono le frequenze ultrasoniche sopra i ~20 kHz, rendendo lo stream inadatto al rilevamento dei pipistrelli."
         }
       },
       "audioFilters": {

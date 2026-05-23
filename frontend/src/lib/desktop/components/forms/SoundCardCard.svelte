@@ -388,6 +388,7 @@
           models={availableModels}
           selectedModels={editModels}
           sourceSampleRate={editSampleRate}
+          isStream={false}
           {disabled}
           onToggle={models => (editModels = models)}
         />

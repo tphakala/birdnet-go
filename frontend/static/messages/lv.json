@@ -3044,6 +3044,18 @@
           "degraded": "Pasliktināts",
           "failed": "Neizdevies",
           "unknown": "Nezināms"
+        },
+        "probe": {
+          "button": "Pārbaudīt straumi",
+          "probing": "Pārbauda...",
+          "result": "Pārbaudes rezultāts",
+          "error": "Pārbaude neizdevās",
+          "batCompatible": "Saderīgs ar sikspārņiem",
+          "batIncompatible": "Nav saderīgs ar sikspārņiem"
+        },
+        "batWarning": "Sikspārņu modeļiem ir nepieciešamas straumes ar bezzudumu kodeku (PCM) un iztveršanas frekvenci vismaz 96 kHz. Izmantojiet pogu Pārbaudīt straumi, lai pārliecinātos, ka jūsu straume atbilst šīm prasībām.",
+        "codecWarning": {
+          "lossy": "Zudumu kodeki (AAC, Opus, MP3) iznīcina ultraskaņas frekvences virs ~20 kHz, padarot straumi nepiemērotu sikspārņu noteikšanai."
         }
       },
       "audioFilters": {
