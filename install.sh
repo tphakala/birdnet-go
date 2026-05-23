@@ -1831,7 +1831,13 @@ migrate_installation() {
         return 1
     fi
 
-    # Step 5: Clean up old systemd service and related files (new one will be created during install)
+    # Step 5: Preserve timezone and clean up old systemd service
+    if [ -f "/etc/systemd/system/birdnet-go.service" ] && [ -z "$CONFIGURED_TZ" ]; then
+        CONFIGURED_TZ=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' /etc/systemd/system/birdnet-go.service 2>/dev/null | head -1)
+        if [ -n "$CONFIGURED_TZ" ]; then
+            log_message "INFO" "Preserved timezone from old service: $CONFIGURED_TZ"
+        fi
+    fi
     sudo systemctl disable --now birdnet-go.service 2>/dev/null || true
     sudo rm -f /etc/systemd/system/birdnet-go.service
     sudo rm -f /etc/systemd/system/multi-user.target.wants/birdnet-go.service
@@ -4516,7 +4522,7 @@ handle_container_update() {
     
     # Extract existing timezone from systemd service file if updating
     if [ -f "/etc/systemd/system/birdnet-go.service" ] && [ -z "$CONFIGURED_TZ" ]; then
-        local existing_tz=$(grep -oP '(?<=--env TZ=")[^"]+' /etc/systemd/system/birdnet-go.service 2>/dev/null)
+        local existing_tz=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' /etc/systemd/system/birdnet-go.service 2>/dev/null | head -1)
         if [ -n "$existing_tz" ]; then
             CONFIGURED_TZ="$existing_tz"
             log_message "INFO" "Extracted existing timezone from service: $CONFIGURED_TZ"
