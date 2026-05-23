@@ -46,19 +46,19 @@ const tunnelProviderUnknown = "unknown"
 
 // Controller manages the API routes and handlers
 type Controller struct {
-	Echo                *echo.Echo
-	Group               *echo.Group
-	DS                  datastore.Interface           // Deprecated: Use Repo for new detection operations
-	Repo                datastore.DetectionRepository // New: Preferred for detection CRUD operations
-	Settings            *conf.Settings
-	BirdImageCache      *imageprovider.BirdImageCache
-	SunCalc             *suncalc.SunCalc
-	Processor           *processor.Processor
-	EBirdClient         *ebird.Client
-	TaxonomyDB          *classifier.TaxonomyDatabase
-	controlChan         chan string
-	shutdownRequester   ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
-	shutdownMu sync.RWMutex // protects shutdownRequester
+	Echo              *echo.Echo
+	Group             *echo.Group
+	DS                datastore.Interface           // Deprecated: Use Repo for new detection operations
+	Repo              datastore.DetectionRepository // New: Preferred for detection CRUD operations
+	Settings          *conf.Settings
+	BirdImageCache    *imageprovider.BirdImageCache
+	SunCalc           *suncalc.SunCalc
+	Processor         *processor.Processor
+	EBirdClient       *ebird.Client
+	TaxonomyDB        *classifier.TaxonomyDatabase
+	controlChan       chan string
+	shutdownRequester ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
+	shutdownMu        sync.RWMutex      // protects shutdownRequester
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.
@@ -637,6 +637,7 @@ func (c *Controller) initRoutes() {
 		{"settings routes", c.initSettingsRoutes},
 		{"filesystem routes", c.initFileSystemRoutes},
 		{"stream health routes", c.initStreamHealthRoutes},
+		{"stream probe routes", c.initStreamProbeRoutes},
 		{"audio health routes", c.initAudioHealthRoutes},
 		{"quiet hours routes", c.initQuietHoursRoutes},
 		{"audio level routes", c.initAudioLevelRoutes},
