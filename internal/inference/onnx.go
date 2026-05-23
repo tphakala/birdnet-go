@@ -297,10 +297,14 @@ func findONNXRuntimeLibrary() string {
 	var candidates []string
 	switch runtime.GOOS {
 	case "windows":
+		candidates = []string{"onnxruntime.dll"}
 		if exePath, err := os.Executable(); err == nil {
-			candidates = []string{filepath.Join(filepath.Dir(exePath), "onnxruntime.dll")}
-		} else {
-			candidates = []string{"onnxruntime.dll"}
+			candidates = append([]string{filepath.Join(filepath.Dir(exePath), "onnxruntime.dll")}, candidates...)
+		}
+		for i, c := range candidates {
+			if abs, err := filepath.Abs(c); err == nil {
+				candidates[i] = abs
+			}
 		}
 	case "darwin":
 		candidates = []string{
