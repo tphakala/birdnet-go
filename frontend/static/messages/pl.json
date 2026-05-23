@@ -3046,14 +3046,14 @@
           "unknown": "Nieznany"
         },
         "probe": {
-          "button": "Zbadaj strumień",
-          "probing": "Badanie...",
+          "button": "Testuj strumień",
+          "probing": "Testowanie...",
           "result": "Wynik badania",
-          "error": "Badanie nie powiodło się",
+          "error": "Test nieudany",
           "batCompatible": "Kompatybilny z nietoperzami",
           "batIncompatible": "Niekompatybilny z nietoperzami"
         },
-        "batWarning": "Modele nietoperzy wymagają strumieni z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz. Użyj przycisku Zbadaj strumień, aby sprawdzić, czy strumień spełnia te wymagania.",
+        "batWarning": "Modele nietoperzy wymagają strumieni z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz. Użyj przycisku Testuj strumień powyżej, aby sprawdzić kompatybilność.",
         "codecWarning": {
           "lossy": "Stratne kodeki (AAC, Opus, MP3) niszczą częstotliwości ultradźwiękowe powyżej ~20 kHz, przez co strumień jest nieodpowiedni do wykrywania nietoperzy."
         }

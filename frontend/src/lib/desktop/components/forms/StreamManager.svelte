@@ -36,6 +36,7 @@
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import type { StreamConfig, StreamType, QuietHoursConfig } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
+  import StreamTestButton from './StreamTestButton.svelte';
 
   const logger = loggers.audio;
 
@@ -126,6 +127,8 @@
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let nameError = $state<string | null>(null);
   let urlError = $state<string | null>(null);
+  let newProbeResult = $state<{ sampleRate: number } | null>(null);
+  let newSourceSampleRate = $derived(newProbeResult?.sampleRate ?? 48000);
 
   // SSE connection for real-time health updates
   let eventSource: ReconnectingEventSource | null = null;
@@ -414,6 +417,7 @@
     newStreamType = 'rtsp';
     newModels = [DEFAULT_MODEL_ID];
     newQuietHours = { ...defaultQuietHoursConfig };
+    newProbeResult = null;
     clearErrors();
     showAddForm = false;
 
@@ -649,6 +653,15 @@
               {/if}
             </div>
 
+            <!-- Test Stream -->
+            <StreamTestButton
+              url={newUrl}
+              models={availableModels}
+              selectedModels={newModels}
+              {disabled}
+              onResult={result => (newProbeResult = result)}
+            />
+
             <!-- Stream Type and Protocol -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <SelectDropdown
@@ -678,6 +691,7 @@
             <ModelCheckboxList
               models={availableModels}
               selectedModels={newModels}
+              sourceSampleRate={newSourceSampleRate}
               isStream={true}
               {disabled}
               onToggle={models => (newModels = models)}
@@ -704,6 +718,7 @@
                   newTransport = 'tcp';
                   newModels = [DEFAULT_MODEL_ID];
                   newQuietHours = { ...defaultQuietHoursConfig };
+                  newProbeResult = null;
                   clearErrors();
                 }}
               >

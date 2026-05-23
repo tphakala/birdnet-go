@@ -3046,14 +3046,14 @@
           "unknown": "Neznámé"
         },
         "probe": {
-          "button": "Prozkoumat stream",
-          "probing": "Zkoumaní...",
+          "button": "Testovat stream",
+          "probing": "Testování...",
           "result": "Výsledek průzkumu",
-          "error": "Průzkum selhal",
+          "error": "Test selhal",
           "batCompatible": "Kompatibilní s netopýry",
           "batIncompatible": "Nekompatibilní s netopýry"
         },
-        "batWarning": "Modely pro netopýry vyžadují streamy s bezeztrátovým kodekem (PCM) a vzorkovací frekvencí alespoň 96 kHz. Pomocí tlačítka Prozkoumat stream ověřte, zda váš stream splňuje tyto požadavky.",
+        "batWarning": "Modely netopýrů vyžadují streamy s bezeztrátovým kodekem (PCM) a vzorkovací frekvencí alespoň 96 kHz. Pomocí tlačítka Testovat stream výše ověřte kompatibilitu.",
         "codecWarning": {
           "lossy": "Ztrátové kodeky (AAC, Opus, MP3) ničí ultrazvukové frekvence nad ~20 kHz, čímž se stream stává nevhodným pro detekci netopýrů."
         }

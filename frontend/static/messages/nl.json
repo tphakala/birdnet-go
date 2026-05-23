@@ -3053,7 +3053,7 @@
           "batCompatible": "Vleermuis-compatibel",
           "batIncompatible": "Niet vleermuis-compatibel"
         },
-        "batWarning": "Vleermuismodellen vereisen streams met een verliesvrije codec (PCM) en een samplefrequentie van minimaal 96 kHz. Gebruik de knop Stream testen om te controleren of uw stream aan deze vereisten voldoet.",
+        "batWarning": "Vleermuismodellen vereisen streams met een verliesvrije codec (PCM) en een samplerate van minimaal 96 kHz. Gebruik de knop Stream testen hierboven om de compatibiliteit te controleren.",
         "codecWarning": {
           "lossy": "Codecs met verlies (AAC, Opus, MP3) vernietigen ultrasone frequenties boven ~20 kHz, waardoor de stream ongeschikt wordt voor vleermuisdetectie."
         }

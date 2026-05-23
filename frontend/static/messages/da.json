@@ -3046,14 +3046,14 @@
           "unknown": "Ukendt"
         },
         "probe": {
-          "button": "Undersøg stream",
-          "probing": "Undersøger...",
+          "button": "Test stream",
+          "probing": "Tester...",
           "result": "Undersøgelsesresultat",
-          "error": "Undersøgelse mislykkedes",
+          "error": "Test mislykkedes",
           "batCompatible": "Kompatibel med flagermus",
           "batIncompatible": "Ikke kompatibel med flagermus"
         },
-        "batWarning": "Flagermusmodeller kræver streams med et tabsfrit codec (PCM) og en samplerate på mindst 96 kHz. Brug knappen Undersøg stream for at bekræfte, at din stream opfylder disse krav.",
+        "batWarning": "Flagermusmodeller kræver streams med en tabsfri codec (PCM) og en samplerate på mindst 96 kHz. Brug knappen Test stream ovenfor for at verificere kompatibilitet.",
         "codecWarning": {
           "lossy": "Tabsgivende codecs (AAC, Opus, MP3) ødelægger ultralydsfrekvenser over ~20 kHz, hvilket gør streamen uegnet til detektering af flagermus."
         }
