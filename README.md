@@ -44,7 +44,9 @@
   </a>
 </p>
 
-BirdNET-Go is a self-hosted 24/7 bird (and bat) sound monitor. It runs AI classifiers locally against your soundcard or RTSP streams, stores detections in SQLite or MySQL, and presents them in a fast web UI. No cloud required, runs on a Raspberry Pi.
+**Realtime soundscape analyser for birds, wildlife, and bats.**
+
+Self-hosted, 24/7, local AI inference. BirdNET-Go ingests soundcard input or network audio streams, runs multi-model classification, and presents detections in a fast web UI. Runs on a Raspberry Pi.
 
 ## Highlights
 
