@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -1304,12 +1305,16 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 
 	// RTSP streams.
 	for _, stream := range settings.Realtime.RTSP.EnabledStreams() {
+		sampleRate := conf.SampleRate
+		if hasBatModel(stream.Models) {
+			sampleRate = p.probeStreamSampleRate(stream.URL, stream.Name)
+		}
 		result = append(result, sourceConfigWithModels{
 			config: &audiocore.SourceConfig{
 				DisplayName:      stream.Name,
 				Type:             audiocore.StreamTypeToSourceType(stream.Type),
 				ConnectionString: stream.URL,
-				SampleRate:       conf.SampleRate,
+				SampleRate:       sampleRate,
 				BitDepth:         conf.BitDepth,
 				Channels:         1,
 			},
@@ -1342,6 +1347,66 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 	}
 
 	return result
+}
+
+// hasBatModel returns true if any of the given config-level model IDs
+// resolves to a registry entry that requires high sample rate audio
+// (MinRawSampleRate > 0).
+func hasBatModel(modelIDs []string) bool {
+	for _, configID := range modelIDs {
+		registryID, ok := classifier.ResolveConfigModelID(configID)
+		if !ok {
+			continue
+		}
+		info, exists := classifier.ModelRegistry[registryID]
+		if exists && info.Spec.MinRawSampleRate > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// probeStreamSampleRate uses ffprobe to discover the actual sample rate of a
+// stream. Returns conf.SampleRate (48 kHz) on failure so the pipeline can
+// still start with a degraded configuration.
+func (p *AudioPipelineService) probeStreamSampleRate(url, name string) int {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	info, err := ffmpeg.ProbeStreamInfo(ctx, url)
+	if err != nil {
+		log := GetLogger()
+		log.Warn("stream probe failed, using default 48 kHz",
+			logger.String("stream", name),
+			logger.Error(err),
+			logger.String("operation", "probe_stream"))
+		return conf.SampleRate
+	}
+
+	log := GetLogger()
+	log.Info("probed stream audio properties",
+		logger.String("stream", name),
+		logger.Int("sample_rate", info.SampleRate),
+		logger.String("codec", info.Codec),
+		logger.Int("channels", info.Channels),
+		logger.String("operation", "probe_stream"))
+
+	if ffmpeg.IsLossyCodec(info.Codec) {
+		log.Warn("stream uses lossy codec that destroys ultrasonic content",
+			logger.String("stream", name),
+			logger.String("codec", info.Codec),
+			logger.String("operation", "probe_stream"))
+	}
+
+	if info.SampleRate < 96000 {
+		log.Warn("stream sample rate below bat model minimum (96 kHz)",
+			logger.String("stream", name),
+			logger.Int("sample_rate", info.SampleRate),
+			logger.Int("minimum", 96000),
+			logger.String("operation", "probe_stream"))
+	}
+
+	return info.SampleRate
 }
 
 // buildMonitorConfigs builds the map[sourceID][]monitorConfig needed by
