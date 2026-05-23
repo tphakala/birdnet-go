@@ -3046,14 +3046,14 @@
           "unknown": "Desconocido"
         },
         "probe": {
-          "button": "Sondear stream",
-          "probing": "Sondeando...",
+          "button": "Probar stream",
+          "probing": "Probando...",
           "result": "Resultado del sondeo",
-          "error": "El sondeo falló",
+          "error": "Prueba fallida",
           "batCompatible": "Compatible con murciélagos",
           "batIncompatible": "No compatible con murciélagos"
         },
-        "batWarning": "Los modelos de murciélagos requieren streams con un códec sin pérdida (PCM) y una tasa de muestreo de al menos 96 kHz. Use el botón Sondear stream para verificar que su stream cumple estos requisitos.",
+        "batWarning": "Los modelos de murciélagos requieren streams con un códec sin pérdida (PCM) y una tasa de muestreo de al menos 96 kHz. Use el botón Probar stream de arriba para verificar la compatibilidad.",
         "codecWarning": {
           "lossy": "Los códecs con pérdida (AAC, Opus, MP3) destruyen las frecuencias ultrasónicas por encima de ~20 kHz, haciendo el stream inadecuado para la detección de murciélagos."
         }

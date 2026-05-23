@@ -36,6 +36,7 @@
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import type { StreamConfig, StreamType, QuietHoursConfig } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
+  import StreamTestButton from './StreamTestButton.svelte';
 
   const logger = loggers.audio;
 
@@ -648,6 +649,14 @@
                 </p>
               {/if}
             </div>
+
+            <!-- Test Stream -->
+            <StreamTestButton
+              url={newUrl}
+              models={availableModels}
+              selectedModels={newModels}
+              {disabled}
+            />
 
             <!-- Stream Type and Protocol -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
