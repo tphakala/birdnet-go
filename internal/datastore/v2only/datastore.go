@@ -2642,18 +2642,22 @@ func thresholdModelName(t *entities.DynamicThreshold) string {
 // pre-built name maps. Falls back to the scientific name if no mapping exists.
 // Handles legacy concatenated "ScientificName_CommonName" format by extracting
 // only the scientific name portion before lookup.
-// Logs a warning (once per species) when the fallback is used and maps are populated,
-// to help diagnose issues where common names stop appearing.
+// Logs at info (once per species) when the fallback is used and maps are populated,
+// to help diagnose issues where common names stop appearing without surfacing
+// the benign fallback on the diagnostics health check.
 func (ds *Datastore) resolveCommonName(scientificName string) string {
 	sciName := detection.ExtractScientificName(scientificName)
 	nm := ds.loadNameMaps()
 	if cn, ok := nm.common[sciName]; ok {
 		return cn
 	}
-	// Log once per missing species when maps are populated (not during startup with empty maps)
+	// Log once per missing species when maps are populated (not during startup with empty maps).
+	// Logged at info because the fallback to the scientific name is the intended
+	// behavior; surfacing as a warning made it surface on the diagnostics health
+	// check as an "elevated error count" for benign missing translations.
 	if len(nm.common) > 0 {
 		if _, alreadyLogged := ds.loggedMissingNames.LoadOrStore(sciName, struct{}{}); !alreadyLogged {
-			ds.log.Warn("common name not found in name maps, falling back to scientific name",
+			ds.log.Info("common name not found in name maps, falling back to scientific name",
 				logger.String("scientific_name", sciName),
 				logger.Int("name_map_size", len(nm.common)))
 		}
