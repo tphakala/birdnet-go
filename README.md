@@ -81,13 +81,13 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
 - **BirdNET Geomodel v3.0** for location-based range filtering (12,012 species)
 - **Cross-model detection consensus**: agreement between models strengthens confidence and flags disagreements for review
 - **Custom classifiers**: bring your own TFLite model and label set
-- **Deep Detection** for improved accuracy on weak signals ([guide](doc/wiki/guide.md#deep-detection))
-- Per-model and per-source confidence thresholds, dynamic threshold learning, and bat false-positive filtering
+- **Configurable false-positive filtering** for accurate results: Deep Detection (repeat-confirmation within a 15-second window), per-species dynamic thresholds, location-based range filter, privacy and dog-bark filters, and per-classifier bat false-positive levels ([guide](doc/wiki/guide.md#deep-detection))
+- Per-model and per-source confidence thresholds
 
 ### Audio inputs
 
 - Soundcard capture and RTSP / RTSPS streams, including multiple sources in parallel with independent model assignment
-- Sample rates up to 384 kHz for ultrasonic bat detection
+- Sample rates up to 256 kHz for ultrasonic bat detection
 - Audio liveness watchdog with tiered recovery for flaky streams
 - Stream sample-rate probing and per-model recommendation banners in the UI
 - Audio equalizer, per-source quiet hours, daylight filter, and extended capture mode
