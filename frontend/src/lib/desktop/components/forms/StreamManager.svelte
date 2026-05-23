@@ -127,6 +127,8 @@
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let nameError = $state<string | null>(null);
   let urlError = $state<string | null>(null);
+  let newProbeResult = $state<{ sampleRate: number } | null>(null);
+  let newSourceSampleRate = $derived(newProbeResult?.sampleRate ?? 48000);
 
   // SSE connection for real-time health updates
   let eventSource: ReconnectingEventSource | null = null;
@@ -415,6 +417,7 @@
     newStreamType = 'rtsp';
     newModels = [DEFAULT_MODEL_ID];
     newQuietHours = { ...defaultQuietHoursConfig };
+    newProbeResult = null;
     clearErrors();
     showAddForm = false;
 
@@ -656,6 +659,7 @@
               models={availableModels}
               selectedModels={newModels}
               {disabled}
+              onResult={result => (newProbeResult = result)}
             />
 
             <!-- Stream Type and Protocol -->
@@ -687,6 +691,7 @@
             <ModelCheckboxList
               models={availableModels}
               selectedModels={newModels}
+              sourceSampleRate={newSourceSampleRate}
               isStream={true}
               {disabled}
               onToggle={models => (newModels = models)}
@@ -713,6 +718,7 @@
                   newTransport = 'tcp';
                   newModels = [DEFAULT_MODEL_ID];
                   newQuietHours = { ...defaultQuietHoursConfig };
+                  newProbeResult = null;
                   clearErrors();
                 }}
               >
