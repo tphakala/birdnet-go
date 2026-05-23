@@ -141,7 +141,7 @@
   {#if showBatStreamWarning}
     <div
       class="flex items-start gap-2 mt-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
-      role="alert"
+      role="status"
     >
       <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
       <span class="text-[var(--color-base-content)]">

@@ -185,7 +185,7 @@
   let isProbing = $state(false);
   let probeResult = $state<ProbeResult | null>(null);
   let probeError = $state<string | null>(null);
-  let probeController: AbortController | null = $state(null);
+  let probeController: AbortController | null = null;
 
   // Local editing state - initialized with defaults, synced from props in startEdit()
   let isEditing = $state(false);
@@ -576,7 +576,7 @@
         {#if probeResult && !probeResult.batCompatible && probeResult.sampleRate >= 96000}
           <div
             class="flex items-start gap-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
-            role="alert"
+            role="status"
           >
             <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
             <span class="text-[var(--color-base-content)]">
