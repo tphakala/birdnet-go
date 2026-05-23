@@ -724,15 +724,21 @@
               >
                 {t('common.cancel')}
               </button>
-              <button
-                type="button"
-                class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
-                onclick={addStream}
-                disabled={!newName.trim() || !newUrl.trim() || !newTestResult || disabled}
+              <span
+                title={!newTestResult && newUrl.trim()
+                  ? t('settings.audio.streams.testRequired')
+                  : undefined}
               >
-                <Plus class="size-4" />
-                {t('settings.audio.streams.addStream')}
-              </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  onclick={addStream}
+                  disabled={!newName.trim() || !newUrl.trim() || !newTestResult || disabled}
+                >
+                  <Plus class="size-4" />
+                  {t('settings.audio.streams.addStream')}
+                </button>
+              </span>
             </div>
           </div>
         </div>

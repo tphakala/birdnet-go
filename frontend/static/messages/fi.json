@@ -2992,6 +2992,7 @@
         "unknown": "tuntematon",
         "refresh": "Päivitä",
         "addStream": "Lisää striimi",
+        "testRequired": "Suorita onnistunut striimitesti ennen tallentamista",
         "deleteConfirm": "Poista tämä striimi?",
         "restartCount": "Uudelleenkäynnistetty {count} kertaa",
         "healthLoadError": "Striimin tilan lataus epäonnistui",

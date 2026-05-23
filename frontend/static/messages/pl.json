@@ -2992,6 +2992,7 @@
         "unknown": "nieznany",
         "refresh": "Odśwież",
         "addStream": "Dodaj Strumień",
+        "testRequired": "Przeprowadź udany test strumienia przed zapisaniem",
         "deleteConfirm": "Usunąć ten strumień?",
         "restartCount": "Zrestartowano {count} raz(y)",
         "healthLoadError": "Nie udało się załadować statusu strumienia",

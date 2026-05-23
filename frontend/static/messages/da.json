@@ -2992,6 +2992,7 @@
         "unknown": "ukendt",
         "refresh": "Opdater",
         "addStream": "Tilføj strøm",
+        "testRequired": "Kør en vellykket streamtest før du gemmer",
         "deleteConfirm": "Fjern denne strøm?",
         "restartCount": "Genstartet {count} gang(e)",
         "healthLoadError": "Kunne ikke indlæse strømmens sundhedsstatus",

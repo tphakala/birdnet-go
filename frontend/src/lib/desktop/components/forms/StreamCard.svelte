@@ -586,15 +586,17 @@
             <X class="size-4" />
             {t('common.cancel')}
           </button>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            onclick={saveEdit}
-            disabled={!editName.trim() || !editUrl.trim() || needsTest}
-          >
-            <Check class="size-4" />
-            {t('common.save')}
-          </button>
+          <span title={needsTest ? t('settings.audio.streams.testRequired') : undefined}>
+            <button
+              type="button"
+              class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onclick={saveEdit}
+              disabled={!editName.trim() || !editUrl.trim() || needsTest}
+            >
+              <Check class="size-4" />
+              {t('common.save')}
+            </button>
+          </span>
         </div>
       </div>
     {:else}

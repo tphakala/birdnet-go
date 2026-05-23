@@ -2992,6 +2992,7 @@
         "unknown": "ismeretlen",
         "refresh": "Frissítés",
         "addStream": "Stream hozzáadása",
+        "testRequired": "Futtasson sikeres streamtesztet a mentés előtt",
         "deleteConfirm": "Eltávolítja ezt a streamet?",
         "restartCount": "{count} alkalommal újraindítva",
         "healthLoadError": "A stream egészségi állapot betöltése sikertelen",

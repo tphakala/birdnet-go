@@ -2992,6 +2992,7 @@
         "unknown": "sconosciuto",
         "refresh": "Aggiorna",
         "addStream": "Aggiungi Flusso",
+        "testRequired": "Esegui un test dello stream riuscito prima di salvare",
         "deleteConfirm": "Rimuovere questo flusso?",
         "restartCount": "Riavviato {count} volta/e",
         "healthLoadError": "Impossibile caricare stato salute flusso",

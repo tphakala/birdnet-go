@@ -2992,6 +2992,7 @@
         "unknown": "neznámý",
         "refresh": "Obnovit",
         "addStream": "Přidat stream",
+        "testRequired": "Před uložením proveďte úspěšný test streamu",
         "deleteConfirm": "Odstranit tento stream?",
         "restartCount": "Restartováno {count}krát",
         "healthLoadError": "Nepodařilo se načíst stav streamu",

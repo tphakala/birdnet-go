@@ -2992,6 +2992,7 @@
         "unknown": "inconnu",
         "refresh": "Actualiser",
         "addStream": "Ajouter un Flux",
+        "testRequired": "Effectuez un test de flux réussi avant d'enregistrer",
         "deleteConfirm": "Supprimer ce flux ?",
         "restartCount": "Redémarré {count} fois",
         "healthLoadError": "Échec du chargement de l'état du flux",

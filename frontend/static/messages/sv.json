@@ -2992,6 +2992,7 @@
         "unknown": "okänd",
         "refresh": "Uppdatera",
         "addStream": "Lägg till ström",
+        "testRequired": "Kör ett lyckat strömtest innan du sparar",
         "deleteConfirm": "Ta bort denna ström?",
         "restartCount": "Omstartad {count} gång(er)",
         "healthLoadError": "Kunde inte ladda strömmens hälsostatus",

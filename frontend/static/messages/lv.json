@@ -2992,6 +2992,7 @@
         "unknown": "nezināma",
         "refresh": "Atsvaidzināt",
         "addStream": "Pievienot straumi",
+        "testRequired": "Pirms saglabāšanas veiciet veiksmīgu straumes testu",
         "deleteConfirm": "Noņemt šo straumi?",
         "restartCount": "Pārstartēta {count} reizi(-es)",
         "healthLoadError": "Neizdevās ielādēt straumes veselības statusu",

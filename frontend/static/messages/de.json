@@ -2992,6 +2992,7 @@
         "unknown": "unbekannt",
         "refresh": "Aktualisieren",
         "addStream": "Stream hinzufügen",
+        "testRequired": "Führen Sie einen erfolgreichen Streamtest durch, bevor Sie speichern",
         "deleteConfirm": "Diesen Stream entfernen?",
         "restartCount": "{count} Mal neu gestartet",
         "healthLoadError": "Laden des Stream-Status fehlgeschlagen",
