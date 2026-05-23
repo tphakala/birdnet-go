@@ -678,6 +678,7 @@
             <ModelCheckboxList
               models={availableModels}
               selectedModels={newModels}
+              isStream={true}
               {disabled}
               onToggle={models => (newModels = models)}
             />

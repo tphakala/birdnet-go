@@ -26,10 +26,16 @@
     Check,
     X,
     AlertCircle,
+    AlertTriangle,
     Radio,
     ChevronDown,
     Moon,
+    Search,
+    CircleCheck,
+    CircleX,
+    Loader2,
   } from '@lucide/svelte';
+  import { api } from '$lib/utils/api';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
@@ -166,6 +172,20 @@
     if (health.is_healthy && health.is_receiving_data) return 'Stable';
     return 'Unknown';
   });
+
+  interface ProbeResult {
+    sampleRate: number;
+    channels: number;
+    codec: string;
+    batCompatible: boolean;
+    warnings: string[];
+  }
+
+  // Probe state
+  let isProbing = $state(false);
+  let probeResult = $state<ProbeResult | null>(null);
+  let probeError = $state<string | null>(null);
+  let probeController: AbortController | null = null;
 
   // Local editing state - initialized with defaults, synced from props in startEdit()
   let isEditing = $state(false);
@@ -318,10 +338,15 @@
       : { enabled: false, filters: [] };
     editQuietHours = { ...defaultQuietHoursConfig, ...stream.quietHours };
     showEqualizer = false;
+    probeController?.abort();
+    probeResult = null;
+    probeError = null;
+    prevEditUrl = stream.url;
     isEditing = true;
   }
 
   function cancelEdit() {
+    probeController?.abort();
     isEditing = false;
     showDeleteConfirm = false;
   }
@@ -382,6 +407,44 @@
       cancelEdit();
     }
   }
+
+  let sourceSampleRate = $derived(probeResult?.sampleRate ?? 48000);
+
+  async function probeStream() {
+    if (!editUrl.trim()) return;
+    probeController?.abort();
+    probeController = new AbortController();
+    isProbing = true;
+    probeResult = null;
+    probeError = null;
+    try {
+      const result = await api.post<ProbeResult>(
+        '/api/v2/streams/probe',
+        { url: editUrl.trim() },
+        { signal: probeController.signal }
+      );
+      probeResult = result;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      probeError = err instanceof Error ? err.message : '';
+    } finally {
+      isProbing = false;
+    }
+  }
+
+  let prevEditUrl = '';
+  $effect(() => {
+    if (isEditing && editUrl !== prevEditUrl) {
+      if (prevEditUrl !== '') {
+        probeResult = null;
+        probeError = null;
+      }
+      prevEditUrl = editUrl;
+    }
+    return () => {
+      probeController?.abort();
+    };
+  });
 
   function updateEnabled(enabled: boolean) {
     onUpdate({ ...stream, enabled });
@@ -469,6 +532,65 @@
           />
         </div>
 
+        <!-- Probe Stream -->
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] hover:bg-[var(--color-base-300)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onclick={probeStream}
+            disabled={isProbing || !editUrl.trim()}
+          >
+            {#if isProbing}
+              <Loader2 class="size-4 animate-spin" />
+              {t('settings.audio.streams.probe.probing')}
+            {:else}
+              <Search class="size-4" />
+              {t('settings.audio.streams.probe.button')}
+            {/if}
+          </button>
+
+          {#if probeResult}
+            <div class="flex items-center gap-2 text-xs">
+              <span class="font-mono text-[var(--color-base-content)]">
+                {probeResult.sampleRate / 1000} kHz, {probeResult.codec}
+              </span>
+              {#if probeResult.batCompatible}
+                <span
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-[var(--color-success)]/15 text-[var(--color-success)]"
+                >
+                  <CircleCheck class="size-3" />
+                  {t('settings.audio.streams.probe.batCompatible')}
+                </span>
+              {:else}
+                <span
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium bg-[var(--color-error)]/15 text-[var(--color-error)]"
+                >
+                  <CircleX class="size-3" />
+                  {t('settings.audio.streams.probe.batIncompatible')}
+                </span>
+              {/if}
+            </div>
+          {/if}
+        </div>
+
+        {#if probeResult && !probeResult.batCompatible && probeResult.sampleRate >= 96000}
+          <div
+            class="flex items-start gap-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
+            role="status"
+          >
+            <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
+            <span class="text-[var(--color-base-content)]">
+              {t('settings.audio.streams.codecWarning.lossy')}
+            </span>
+          </div>
+        {/if}
+
+        {#if probeError !== null}
+          <p class="text-xs text-[var(--color-error)]">
+            {t('settings.audio.streams.probe.error')}{probeError ? `: ${probeError}` : ''}
+          </p>
+        {/if}
+
         <!-- Type and Transport Row -->
         <div class="grid grid-cols-2 gap-4">
           <div>
@@ -508,6 +630,8 @@
         <ModelCheckboxList
           models={availableModels}
           selectedModels={editModels}
+          {sourceSampleRate}
+          isStream={true}
           {disabled}
           onToggle={models => (editModels = models)}
         />

@@ -3044,6 +3044,18 @@
           "degraded": "Degradált",
           "failed": "Sikertelen",
           "unknown": "Ismeretlen"
+        },
+        "probe": {
+          "button": "Stream vizsgálat",
+          "probing": "Vizsgálat...",
+          "result": "Vizsgálat eredménye",
+          "error": "A vizsgálat sikertelen",
+          "batCompatible": "Denevér-kompatibilis",
+          "batIncompatible": "Nem denevér-kompatibilis"
+        },
+        "batWarning": "A denevérmodellek veszteségmentes kodeket (PCM) és legalább 96 kHz-es mintavételezési frekvenciájú streameket igényelnek. A Stream vizsgálat gombbal ellenőrizheti, hogy a streamje megfelel-e ezeknek a követelményeknek.",
+        "codecWarning": {
+          "lossy": "A veszteséges kodekek (AAC, Opus, MP3) megsemmisítik az ~20 kHz feletti ultrahang-frekvenciákat, így a stream alkalmatlanná válik a denevérek észlelésére."
         }
       },
       "audioFilters": {

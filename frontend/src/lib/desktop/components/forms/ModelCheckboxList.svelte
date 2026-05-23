@@ -24,6 +24,7 @@
     models: ModelOption[];
     selectedModels: string[];
     sourceSampleRate?: number;
+    isStream?: boolean;
     disabled?: boolean;
     onToggle: (_models: string[]) => void;
   }
@@ -32,6 +33,7 @@
     models,
     selectedModels,
     sourceSampleRate = 48000,
+    isStream = false,
     disabled = false,
     onToggle,
   }: Props = $props();
@@ -51,6 +53,14 @@
 
   let showPerchOnlyWarning = $derived(hasBothFamilies && selectedHasPerch && !selectedHasBirdnet);
   let showRecommendBoth = $derived(hasBothFamilies && selectedHasBirdnet && !selectedHasPerch);
+
+  let selectedHasBatModel = $derived(
+    selectedModels.some(id => {
+      const model = models.find(m => m.id === id);
+      return model?.category === 'bat';
+    })
+  );
+  let showBatStreamWarning = $derived(isStream && selectedHasBatModel);
 
   function handleToggle(modelId: string, checked: boolean) {
     if (checked) {
@@ -124,6 +134,18 @@
       <Info class="size-3.5 shrink-0 mt-0.5 text-[var(--color-info)]" />
       <span class="text-[var(--color-base-content)]">
         {t('settings.audio.models.recommendBoth')}
+      </span>
+    </div>
+  {/if}
+
+  {#if showBatStreamWarning}
+    <div
+      class="flex items-start gap-2 mt-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
+      role="status"
+    >
+      <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
+      <span class="text-[var(--color-base-content)]">
+        {t('settings.audio.streams.batWarning')}
       </span>
     </div>
   {/if}

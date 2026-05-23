@@ -3044,6 +3044,18 @@
           "degraded": "Beeinträchtigt",
           "failed": "Fehlgeschlagen",
           "unknown": "Unbekannt"
+        },
+        "probe": {
+          "button": "Stream prüfen",
+          "probing": "Wird geprüft...",
+          "result": "Prüfergebnis",
+          "error": "Prüfung fehlgeschlagen",
+          "batCompatible": "Fledermaus-kompatibel",
+          "batIncompatible": "Nicht fledermaus-kompatibel"
+        },
+        "batWarning": "Fledermausmodelle erfordern Streams mit einem verlustfreien Codec (PCM) und einer Abtastrate von mindestens 96 kHz. Verwenden Sie die Schaltfläche Stream prüfen, um zu überprüfen, ob Ihr Stream diese Anforderungen erfüllt.",
+        "codecWarning": {
+          "lossy": "Verlustbehaftete Codecs (AAC, Opus, MP3) zerstören Ultraschallfrequenzen über ~20 kHz und machen den Stream für die Fledermauserkennung ungeeignet."
         }
       },
       "audioFilters": {

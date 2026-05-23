@@ -3044,6 +3044,18 @@
           "degraded": "Verslechterd",
           "failed": "Mislukt",
           "unknown": "Onbekend"
+        },
+        "probe": {
+          "button": "Stream testen",
+          "probing": "Testen...",
+          "result": "Testresultaat",
+          "error": "Test mislukt",
+          "batCompatible": "Vleermuis-compatibel",
+          "batIncompatible": "Niet vleermuis-compatibel"
+        },
+        "batWarning": "Vleermuismodellen vereisen streams met een verliesvrije codec (PCM) en een samplefrequentie van minimaal 96 kHz. Gebruik de knop Stream testen om te controleren of uw stream aan deze vereisten voldoet.",
+        "codecWarning": {
+          "lossy": "Codecs met verlies (AAC, Opus, MP3) vernietigen ultrasone frequenties boven ~20 kHz, waardoor de stream ongeschikt wordt voor vleermuisdetectie."
         }
       },
       "audioFilters": {

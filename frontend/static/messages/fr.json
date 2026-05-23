@@ -3044,6 +3044,18 @@
           "degraded": "Dégradée",
           "failed": "Échouée",
           "unknown": "Inconnue"
+        },
+        "probe": {
+          "button": "Sonder le flux",
+          "probing": "Sondage en cours...",
+          "result": "Résultat du sondage",
+          "error": "Le sondage a échoué",
+          "batCompatible": "Compatible chauves-souris",
+          "batIncompatible": "Non compatible chauves-souris"
+        },
+        "batWarning": "Les modèles pour chauves-souris nécessitent des flux avec un codec sans perte (PCM) et un taux d'échantillonnage d'au moins 96 kHz. Utilisez le bouton Sonder le flux pour vérifier que votre flux répond à ces exigences.",
+        "codecWarning": {
+          "lossy": "Les codecs avec perte (AAC, Opus, MP3) détruisent les fréquences ultrasoniques au-dessus de ~20 kHz, rendant le flux inadapté à la détection des chauves-souris."
         }
       },
       "audioFilters": {

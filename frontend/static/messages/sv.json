@@ -3044,6 +3044,18 @@
           "degraded": "Försämrad",
           "failed": "Misslyckad",
           "unknown": "Okänd"
+        },
+        "probe": {
+          "button": "Undersök ström",
+          "probing": "Undersöker...",
+          "result": "Undersökningsresultat",
+          "error": "Undersökningen misslyckades",
+          "batCompatible": "Fladdermus-kompatibel",
+          "batIncompatible": "Inte fladdermus-kompatibel"
+        },
+        "batWarning": "Fladdermusmodeller kräver strömmar med en förlustfri codec (PCM) och en samplingsfrekvens på minst 96 kHz. Använd knappen Undersök ström för att kontrollera att din ström uppfyller dessa krav.",
+        "codecWarning": {
+          "lossy": "Förlustbringande codecs (AAC, Opus, MP3) förstör ultraljudsfrekvenser över ~20 kHz, vilket gör strömmen olämplig för fladdermusdetektion."
         }
       },
       "audioFilters": {

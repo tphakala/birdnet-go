@@ -3044,6 +3044,18 @@
           "degraded": "Heikentynyt",
           "failed": "Epäonnistunut",
           "unknown": "Tuntematon"
+        },
+        "probe": {
+          "button": "Tutki striimi",
+          "probing": "Tutkitaan...",
+          "result": "Tutkimuksen tulos",
+          "error": "Tutkinta epäonnistui",
+          "batCompatible": "Yhteensopiva lepakoiden kanssa",
+          "batIncompatible": "Ei yhteensopiva lepakoiden kanssa"
+        },
+        "batWarning": "Lepakkomallit vaativat striimejä, joissa on häviötön koodekki (PCM) ja näytteenottotaajuus vähintään 96 kHz. Käytä Tutki striimi -painiketta varmistaaksesi, että striimisi täyttää nämä vaatimukset.",
+        "codecWarning": {
+          "lossy": "Häviölliset koodekit (AAC, Opus, MP3) tuhoavat ultraäänitaajuudet yli ~20 kHz, mikä tekee striimistä soveltumattoman lepakoiden havaitsemiseen."
         }
       },
       "audioFilters": {
