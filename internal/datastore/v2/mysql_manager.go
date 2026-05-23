@@ -110,19 +110,20 @@ func (m *MySQLManager) Initialize() error {
 	// fell back to legacy mode due to the PR #2165 table name mismatch.
 	m.cleanupLegacySchemaContamination()
 
-	// Validate schema integrity: detect unexpected columns from schema evolution.
-	// Empty contaminated tables are dropped so AutoMigrate can recreate them cleanly.
-	// Populated tables with extra columns are tolerated (logged, reported to Sentry).
-	if err := m.validateV2SchemaIntegrity(); err != nil {
-		return fmt.Errorf("v2 schema integrity check failed: %w", err)
-	}
-
 	// Run GORM auto-migrations for all entities using the shared canonical list.
 	// Tables will be created with v2_ prefix due to NamingStrategy.
 	err := m.db.AutoMigrate(v2Entities()...)
 	if err != nil {
 		reportInitFailure("mysql", "AutoMigrate", err, m.config.Host, m.config.Database, m.config.Username)
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)
+	}
+
+	// Validate schema integrity AFTER AutoMigrate so missing columns indicate a real
+	// silent failure (GitHub #3211). Extra columns from schema evolution remain
+	// tolerated; missing columns surface as ErrV2SchemaCorrupted so callers can stop
+	// and not fall back to legacy mode.
+	if err := m.validateV2SchemaIntegrity(); err != nil {
+		return fmt.Errorf("v2 schema integrity check failed: %w", err)
 	}
 
 	// Initialize migration state singleton using FirstOrCreate to handle race conditions
