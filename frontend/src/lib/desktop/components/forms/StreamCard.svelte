@@ -184,7 +184,7 @@
   // Probe state
   let isProbing = $state(false);
   let probeResult = $state<ProbeResult | null>(null);
-  let probeError = $state('');
+  let probeError = $state<string | null>(null);
   let probeController: AbortController | null = $state(null);
 
   // Local editing state - initialized with defaults, synced from props in startEdit()
@@ -340,7 +340,7 @@
     showEqualizer = false;
     probeController?.abort();
     probeResult = null;
-    probeError = '';
+    probeError = null;
     prevEditUrl = stream.url;
     isEditing = true;
   }
@@ -416,7 +416,7 @@
     probeController = new AbortController();
     isProbing = true;
     probeResult = null;
-    probeError = '';
+    probeError = null;
     try {
       const result = await api.post<ProbeResult>(
         '/api/v2/streams/probe',
@@ -426,7 +426,7 @@
       probeResult = result;
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
-      probeError = err instanceof Error ? err.message : t('settings.audio.streams.probe.error');
+      probeError = err instanceof Error ? err.message : '';
     } finally {
       isProbing = false;
     }
@@ -437,7 +437,7 @@
     if (isEditing && editUrl !== prevEditUrl) {
       if (prevEditUrl !== '') {
         probeResult = null;
-        probeError = '';
+        probeError = null;
       }
       prevEditUrl = editUrl;
     }
@@ -585,9 +585,9 @@
           </div>
         {/if}
 
-        {#if probeError}
+        {#if probeError !== null}
           <p class="text-xs text-[var(--color-error)]">
-            {t('settings.audio.streams.probe.error')}: {probeError}
+            {t('settings.audio.streams.probe.error')}{probeError ? `: ${probeError}` : ''}
           </p>
         {/if}
 
