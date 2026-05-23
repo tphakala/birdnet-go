@@ -67,7 +67,7 @@ curl -fsSL https://github.com/tphakala/birdnet-go/raw/main/install.sh -o install
 bash ./install.sh
 ```
 
-Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binaries for Linux, Windows, and macOS ship with each [release](https://github.com/tphakala/birdnet-go/releases). See the [installation guide](doc/wiki/installation.md), [hardware recommendations](doc/wiki/hardware.md), and [security guide](doc/wiki/security.md) for details.
+Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binaries for Linux, Windows, and macOS ship with each [release](https://github.com/tphakala/birdnet-go/releases). See the [installation guide](https://github.com/tphakala/birdnet-go/wiki/installation.md), [hardware recommendations](https://github.com/tphakala/birdnet-go/wiki/hardware.md), and [security guide](doc/wiki/security.md) for details.
 
 ## Web Dashboard
 
@@ -83,7 +83,7 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
 - **BirdNET Geomodel v3.0** for location-based range filtering (12,012 species)
 - **Cross-model detection consensus**: agreement between models strengthens confidence and flags disagreements for review
 - **Custom classifiers**: bring your own TFLite model and label set
-- **Configurable false-positive filtering** for accurate results: Deep Detection (repeat-confirmation within a 15-second window), per-species dynamic thresholds, location-based range filter, privacy and dog-bark filters, and per-classifier bat false-positive levels ([guide](doc/wiki/guide.md#deep-detection))
+- **Configurable false-positive filtering** for accurate results: Deep Detection (repeat-confirmation within a 15-second window), per-species dynamic thresholds, location-based range filter, privacy and dog-bark filters, and per-classifier bat false-positive levels ([guide](https://github.com/tphakala/birdnet-go/wiki/BirdNET%E2%80%90Go-Guide#deep-detection))
 - Per-model and per-source confidence thresholds
 
 ### Audio inputs
@@ -100,7 +100,7 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
 - Svelte 5 + TypeScript single-page app
 - Installable as a Progressive Web App (PWA)
 - Onboarding wizard for first-run setup
-- Live spectrogram visualization for active streams ([live audio streaming](doc/wiki/guide.md#live-audio-streaming))
+- Live spectrogram visualization for active streams ([live audio streaming](https://github.com/tphakala/birdnet-go/wiki/BirdNET%E2%80%90Go-Guide#live-audio-streaming))
 - Detection heatmaps with ONNX-accelerated rendering
 - Customizable dashboard layout, color schemes, and a "Currently Hearing" card
 - Multiselect and bulk actions on the detections list
@@ -139,20 +139,23 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
 
 - Linux, Windows, and macOS
 - Single static binary with the BirdNET TFLite model embedded
-- Optional ONNX Runtime for Perch, BattyBirdNET, and BirdNET Geomodel v3.0 ([install guide](doc/ONNX-Runtime-Installation.md))
+- Optional ONNX Runtime for Perch, BattyBirdNET, and BirdNET Geomodel v3.0 ([install guide](https://github.com/tphakala/birdnet-go/wiki/ONNX-Runtime-Installation))
 - Multi-arch Docker images
 - Runs comfortably on a Raspberry Pi 4 or equivalent 64-bit single-board computer
 
 ## Documentation
 
-- [User guide](doc/wiki/guide.md)
-- [Installation](doc/wiki/installation.md)
-- [Hardware recommendations](doc/wiki/hardware.md)
+- [User guide](https://github.com/tphakala/birdnet-go/wiki/BirdNET%E2%80%90Go-Guide)
+- [Installation](https://github.com/tphakala/birdnet-go/wiki/installation.md)
+- [Hardware recommendations](https://github.com/tphakala/birdnet-go/wiki/hardware.md)
+- [ONNX Runtime installation](https://github.com/tphakala/birdnet-go/wiki/ONNX-Runtime-Installation)
+- [Detection pipeline](https://github.com/tphakala/birdnet-go/wiki/detection-pipeline.md)
+- [Database Doctor](https://github.com/tphakala/birdnet-go/wiki/Database-Doctor)
+- [Training a custom classifier](https://github.com/tphakala/birdnet-go/wiki/Training-a-Custom-Classifier)
+- [Cloudflare Tunnel](https://github.com/tphakala/birdnet-go/wiki/cloudflare_tunnel_guide.md)
 - [Security](doc/wiki/security.md)
 - [Telemetry and privacy](doc/wiki/telemetry-privacy.md)
-- [Cloudflare Tunnel](doc/wiki/cloudflare_tunnel_guide.md)
 - [RTSP troubleshooting](doc/wiki/rtsp-troubleshooting.md)
-- [Training a custom classifier](doc/wiki/training-a-custom-classifier.md)
 
 ## Development setup
 
