@@ -181,6 +181,11 @@ Join the [Discord server](https://discord.gg/gcSCFGUtsd) for support, discussion
 - [BirdNET-Go Classifiers](https://github.com/tphakala/birdnet-go-classifiers): enhanced BirdNET classifiers with additional species
 - [BattyBirdNET-Analyzer](https://github.com/rdz-oss/BattyBirdNET-Analyzer): bat classifier models, installable via the in-app gallery
 
+### Companion tools
+
+- [birda](https://github.com/tphakala/birda): fast CLI for offline bird species detection on existing audio files, using BirdNET and Perch AI models
+- [birda-gui](https://github.com/tphakala/birda-gui): desktop GUI for birda (Electron + Svelte 5) for audio analysis, detection browsing, and species visualization
+
 ### System integration
 
 - [Cockpit BirdNET-Go](https://github.com/tphakala/cockpit-birdnet-go): web-based system management plugin using the Cockpit framework
