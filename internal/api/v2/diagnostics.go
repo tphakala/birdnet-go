@@ -148,7 +148,7 @@ func (c *Controller) registerHealthChecks() {
 				return "", false
 			}
 			sqliteStore, ok := ds.(*datastore.SQLiteStore)
-			if !ok {
+			if !ok || sqliteStore == nil {
 				return "", false
 			}
 			return sqliteStore.IntegrityResult()

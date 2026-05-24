@@ -134,14 +134,6 @@ func TestIntegrityResult_AfterHealthyCheck(t *testing.T) {
 	assert.False(t, corrupted)
 }
 
-func TestCorruptionSentryThrottled(t *testing.T) {
-	store := newIntegrityTestStore(t)
-	assert.False(t, store.corruptionSentryThrottled())
-
-	store.dbCorrupted.Store(true)
-	assert.True(t, store.corruptionSentryThrottled())
-}
-
 // TestPerformStartupIntegrityCheck_CorruptedDatabase verifies the full
 // corruption detection flow using a file-based database that is deliberately
 // corrupted by overwriting bytes in the middle of the file.

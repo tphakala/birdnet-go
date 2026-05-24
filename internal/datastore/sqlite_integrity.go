@@ -1,61 +1,59 @@
 package datastore
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // performStartupIntegrityCheck runs PRAGMA quick_check synchronously during
 // Open(). If corruption is found, it attempts REINDEX auto-recovery. On
-// failure the corruption flag is latched and a deferred notification is
-// queued, but no error is returned: the application continues in degraded
-// mode so the web UI remains accessible for diagnostics.
+// failure a Sentry event is sent, the corruption flag is latched, and a
+// deferred notification is queued. No error is returned: the application
+// continues in degraded mode so the web UI remains accessible.
 func (s *SQLiteStore) performStartupIntegrityCheck() {
-	log := GetLogger()
-	log.Info("running startup database integrity check")
-
 	result := s.runQuickCheck()
 
-	// Cache the result for the health endpoint.
 	s.integrityMu.Lock()
 	s.integrityResult = result
 	s.integrityMu.Unlock()
 
 	if result == "ok" {
-		log.Info("startup integrity check passed")
+		GetLogger().Debug("startup integrity check passed")
 		return
 	}
 
-	log.Warn("startup integrity check detected corruption",
+	GetLogger().Warn("startup integrity check detected corruption",
 		logger.String("result", truncateResult(result, 200)))
 
-	// Attempt automatic recovery via REINDEX.
 	if s.attemptAutoRecovery() {
-		log.Info("REINDEX auto-recovery succeeded, database integrity restored")
+		GetLogger().Info("REINDEX auto-recovery succeeded, database integrity restored")
 		return
 	}
 
-	// Recovery failed: latch corruption flag.
-	s.dbCorrupted.Store(true)
-
-	log.Error("REINDEX auto-recovery failed, database flagged as corrupted",
+	GetLogger().Error("REINDEX auto-recovery failed, database flagged as corrupted",
 		logger.String("integrity_result", truncateResult(result, 200)))
 
-	// Report to Sentry once.
+	// Send Sentry event BEFORE latching so the suppression guard in
+	// CaptureEnhancedError does not block this first report.
 	if s.telemetry != nil {
-		s.telemetry.CaptureEnhancedError(
-			fmt.Errorf("startup integrity check failed: %s", truncateResult(result, 500)),
-			"startup_integrity_check",
-			s,
-		)
+		enhancedErr := errors.Newf("startup integrity check failed: %s", truncateResult(result, 500)).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Priority(errors.PriorityCritical).
+			Context("operation", "startup_integrity_check").
+			Context("integrity_result", truncateResult(result, 200)).
+			Build()
+		s.telemetry.CaptureEnhancedError(enhancedErr, "startup_integrity_check", s)
 	}
 
-	// Queue a deferred user notification (notification service may not be
-	// ready yet during Open()).
+	s.dbCorrupted.Store(true)
+
 	s.notifyCorruptionDeferred(result)
 }
 
@@ -76,17 +74,15 @@ func (s *SQLiteStore) runQuickCheck() string {
 // attemptAutoRecovery runs REINDEX and re-checks integrity. Returns true if
 // the database passes quick_check after reindexing.
 func (s *SQLiteStore) attemptAutoRecovery() bool {
-	log := GetLogger()
-	log.Info("attempting REINDEX auto-recovery")
+	GetLogger().Info("attempting REINDEX auto-recovery")
 
 	if err := s.DB.Exec("REINDEX").Error; err != nil {
-		log.Error("REINDEX command failed", logger.Error(err))
+		GetLogger().Error("REINDEX command failed", logger.Error(err))
 		return false
 	}
 
 	result := s.runQuickCheck()
 
-	// Update the cached result.
 	s.integrityMu.Lock()
 	s.integrityResult = result
 	s.integrityMu.Unlock()
@@ -97,8 +93,17 @@ func (s *SQLiteStore) attemptAutoRecovery() bool {
 // notifyCorruptionDeferred spawns a goroutine that polls for the notification
 // service (up to 30 seconds) and sends a persistent warning notification.
 // The notification service may not be initialized when Open() runs, so this
-// must be deferred.
+// must be deferred. The goroutine respects the monitoring context for clean
+// shutdown.
 func (s *SQLiteStore) notifyCorruptionDeferred(integrityResult string) {
+	s.monitoringMu.Lock()
+	ctx := s.monitoringCtx
+	s.monitoringMu.Unlock()
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	s.monitoringWg.Go(func() {
 		const (
 			pollInterval = 500 * time.Millisecond
@@ -112,7 +117,11 @@ func (s *SQLiteStore) notifyCorruptionDeferred(integrityResult string) {
 			if svc != nil {
 				break
 			}
-			time.Sleep(pollInterval)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(pollInterval):
+			}
 		}
 		if svc == nil {
 			GetLogger().Warn("notification service unavailable, corruption notification not sent")
@@ -137,39 +146,34 @@ func (s *SQLiteStore) notifyCorruptionDeferred(integrityResult string) {
 }
 
 // checkAndLatchCorruption inspects a runtime database error for signs of
-// corruption. On first detection it latches the corruption flag, sends a
-// single Sentry event, and queues a user notification. Returns true if the
-// error is a corruption error.
+// corruption. On first detection it sends a single Sentry event, latches the
+// corruption flag, and queues a user notification. Returns true if the error
+// is a corruption error (regardless of whether the latch was already set).
 func (s *SQLiteStore) checkAndLatchCorruption(err error, operation string) bool {
-	if err == nil {
-		return false
-	}
-	if !IsDatabaseCorruption(err) {
+	if err == nil || !IsDatabaseCorruption(err) {
 		return false
 	}
 
-	// Only act on the first detection (CompareAndSwap returns true on first flip).
-	if !s.dbCorrupted.CompareAndSwap(false, true) {
-		// Already latched; suppress duplicate processing.
+	if s.dbCorrupted.Load() {
 		return true
 	}
 
-	log := GetLogger()
-	log.Error("database corruption detected at runtime",
+	GetLogger().Error("database corruption detected at runtime",
 		logger.String("operation", operation),
 		logger.Error(err))
 
-	// Cache the result for the health endpoint.
 	s.integrityMu.Lock()
 	s.integrityResult = err.Error()
 	s.integrityMu.Unlock()
 
-	// Send one Sentry event.
+	// Send Sentry event BEFORE latching so the suppression guard in
+	// CaptureEnhancedError does not block this first report.
 	if s.telemetry != nil {
 		s.telemetry.CaptureEnhancedError(err, operation, s)
 	}
 
-	// Queue user notification.
+	s.dbCorrupted.Store(true)
+
 	s.notifyCorruptionDeferred(err.Error())
 
 	return true
@@ -181,11 +185,8 @@ func truncateResult(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
+	if maxLen < 4 {
+		return s[:maxLen]
+	}
 	return s[:maxLen-3] + "..."
-}
-
-// corruptionSentryThrottled reports whether the corruption latch is set,
-// indicating that further Sentry reports should be suppressed.
-func (s *SQLiteStore) corruptionSentryThrottled() bool {
-	return s.dbCorrupted.Load()
 }
