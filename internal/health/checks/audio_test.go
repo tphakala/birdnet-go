@@ -2,54 +2,169 @@ package checks
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/health"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
-func TestBufferDropsCheck_NilProvider(t *testing.T) {
+func newTestHealthStore(t *testing.T) *observability.HealthMetricsStore {
+	t.Helper()
+	return observability.NewHealthMetricsStore()
+}
+
+func newTestEventBuffer(t *testing.T) *observability.HealthEventBuffer {
+	t.Helper()
+	return observability.NewHealthEventBuffer(100)
+}
+
+func eventGetter(buf *observability.HealthEventBuffer) func(string, int) []observability.HealthEvent {
+	return buf.Recent
+}
+
+func TestBufferDropsCheck_NilStore(t *testing.T) {
 	t.Parallel()
-	check := NewBufferDropsCheck(nil)
+	check := NewBufferDropsCheck(nil, nil)
 	result := check.Run(t.Context())
 	assert.Equal(t, health.StatusSkipped, result.Status)
 	assert.Equal(t, "buffer_drops", result.Name)
 }
 
-func TestBufferDropsCheck_NilStats(t *testing.T) {
+func TestBufferDropsCheck_NoData(t *testing.T) {
 	t.Parallel()
-	check := NewBufferDropsCheck(func() DropStats { return nil })
+	store := newTestHealthStore(t)
+	check := NewBufferDropsCheck(store, nil)
 	result := check.Run(t.Context())
 	assert.Equal(t, health.StatusSkipped, result.Status)
 }
 
-func TestBufferDropsCheck_Healthy(t *testing.T) {
+func TestBufferDropsCheck_HealthyWithHistory(t *testing.T) {
 	t.Parallel()
-	check := NewBufferDropsCheck(func() DropStats {
-		return DropStats{"src1": 0, "src2": 0}
-	})
+	store := newTestHealthStore(t)
+	buf := newTestEventBuffer(t)
+
+	now := time.Now()
+	store.RecordAt("audio.drops.src1", 50, now.Add(-3*time.Hour))
+	buf.Add(observability.HealthEvent{Time: now.Add(-3 * time.Hour), Source: "src1", Delta: 50, Metric: "drops"})
+	store.RecordAt("audio.drops.src1", 0, now)
+
+	check := NewBufferDropsCheck(store, eventGetter(buf))
 	result := check.Run(t.Context())
 	assert.Equal(t, health.StatusHealthy, result.Status)
-	assert.Contains(t, result.Message, "No buffer drops")
+	assert.Contains(t, result.Message, "No drops in last 1h")
+	assert.Contains(t, result.Message, "50 lifetime")
 }
 
 func TestBufferDropsCheck_Warning(t *testing.T) {
 	t.Parallel()
-	check := NewBufferDropsCheck(func() DropStats {
-		return DropStats{"src1": 5, "src2": 0}
-	})
+	store := newTestHealthStore(t)
+
+	store.RecordAt("audio.drops.src1", 15, time.Now())
+
+	check := NewBufferDropsCheck(store, nil)
 	result := check.Run(t.Context())
 	assert.Equal(t, health.StatusWarning, result.Status)
-	assert.Contains(t, result.Message, "5 total")
+	assert.Contains(t, result.Message, "15 drops in last 1h")
 }
 
 func TestBufferDropsCheck_Critical(t *testing.T) {
 	t.Parallel()
-	check := NewBufferDropsCheck(func() DropStats {
-		return DropStats{"src1": 101}
-	})
+	store := newTestHealthStore(t)
+
+	store.RecordAt("audio.drops.src1", 150, time.Now())
+
+	check := NewBufferDropsCheck(store, nil)
 	result := check.Run(t.Context())
 	assert.Equal(t, health.StatusCritical, result.Status)
+}
+
+func TestBufferDropsCheck_WithWindow(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	now := time.Now()
+
+	store.RecordAt("audio.drops.src1", 20, now.Add(-3*time.Hour))
+	store.RecordAt("audio.drops.src1", 0, now)
+
+	check := NewBufferDropsCheck(store, nil)
+
+	narrowed := check.WithWindow(1 * time.Hour)
+	result := narrowed.Run(t.Context())
+	assert.Equal(t, health.StatusHealthy, result.Status)
+
+	wide := check.WithWindow(6 * time.Hour)
+	result = wide.Run(t.Context())
+	assert.Equal(t, health.StatusWarning, result.Status)
+}
+
+func TestBufferDropsCheck_SparklineInDetails(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+
+	store.RecordAt("audio.drops.src1", 10, time.Now().Add(-2*time.Hour))
+	store.RecordAt("audio.drops.src1", 5, time.Now())
+
+	check := NewBufferDropsCheck(store, nil)
+	result := check.Run(t.Context())
+
+	require.NotNil(t, result.Details)
+	assert.NotNil(t, result.Details["sparkline"])
+	assert.Equal(t, "1h", result.Details["window"])
+}
+
+func TestBufferOverrunCheck_NilStore(t *testing.T) {
+	t.Parallel()
+	check := NewBufferOverrunCheck(nil, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
+	assert.Equal(t, "buffer_overrun", result.Name)
+}
+
+func TestBufferOverrunCheck_Healthy(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	store.RecordAt("audio.overruns.src1", 0, time.Now())
+	check := NewBufferOverrunCheck(store, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusHealthy, result.Status)
+}
+
+func TestBufferOverrunCheck_NoData(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	check := NewBufferOverrunCheck(store, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
+}
+
+func TestBufferOverrunCheck_Warning(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	store.RecordAt("audio.overruns.src1", 15, time.Now())
+
+	check := NewBufferOverrunCheck(store, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusWarning, result.Status)
+}
+
+func TestBufferOverrunCheck_Critical(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	store.RecordAt("audio.overruns.src1", 60, time.Now())
+
+	check := NewBufferOverrunCheck(store, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusCritical, result.Status)
+}
+
+func TestBufferOverrunCheck_WithWindow(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	check := NewBufferOverrunCheck(store, nil)
+	narrowed := check.WithWindow(15 * time.Minute)
+	assert.NotNil(t, narrowed)
 }
 
 func TestAudioLevelCheck_NilProvider(t *testing.T) {
@@ -117,48 +232,6 @@ func TestAudioLevelCheck_PartialSilence(t *testing.T) {
 	result := check.Run(t.Context())
 	assert.Equal(t, health.StatusWarning, result.Status)
 	assert.Contains(t, result.Message, "Silence detected on 1")
-}
-
-func TestBufferOverrunCheck_NilStats(t *testing.T) {
-	t.Parallel()
-	check := NewBufferOverrunCheck(func() OverrunStats { return nil })
-	result := check.Run(t.Context())
-	assert.Equal(t, health.StatusSkipped, result.Status)
-}
-
-func TestBufferOverrunCheck_NilProvider(t *testing.T) {
-	t.Parallel()
-	check := NewBufferOverrunCheck(nil)
-	result := check.Run(t.Context())
-	assert.Equal(t, health.StatusSkipped, result.Status)
-	assert.Equal(t, "buffer_overrun", result.Name)
-}
-
-func TestBufferOverrunCheck_Healthy(t *testing.T) {
-	t.Parallel()
-	check := NewBufferOverrunCheck(func() OverrunStats {
-		return OverrunStats{"src1": 0}
-	})
-	result := check.Run(t.Context())
-	assert.Equal(t, health.StatusHealthy, result.Status)
-}
-
-func TestBufferOverrunCheck_Warning(t *testing.T) {
-	t.Parallel()
-	check := NewBufferOverrunCheck(func() OverrunStats {
-		return OverrunStats{"src1": 10}
-	})
-	result := check.Run(t.Context())
-	assert.Equal(t, health.StatusWarning, result.Status)
-}
-
-func TestBufferOverrunCheck_Critical(t *testing.T) {
-	t.Parallel()
-	check := NewBufferOverrunCheck(func() OverrunStats {
-		return OverrunStats{"src1": 51}
-	})
-	result := check.Run(t.Context())
-	assert.Equal(t, health.StatusCritical, result.Status)
 }
 
 func TestCaptureBufferCheck_NilProvider(t *testing.T) {

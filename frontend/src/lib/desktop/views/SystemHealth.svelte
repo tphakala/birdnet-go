@@ -34,6 +34,18 @@
     | 'config'
     | 'logs';
 
+  interface SparklineBucket {
+    t: string;
+    v: number;
+  }
+
+  interface RecentEvent {
+    time: string;
+    source: string;
+    delta: number;
+    metric: string;
+  }
+
   interface DiagnosticsResult {
     name: string;
     category: HealthCategory;
@@ -67,12 +79,24 @@
     'logs',
   ];
 
+  const windowPresets = ['15m', '30m', '1h', '6h', '24h', '7d'] as const;
+
   let report = $state<DiagnosticsReport | null>(null);
   let running = $state(false);
   let error = $state<string | null>(null);
   let copied = $state(false);
   let copyTimer: ReturnType<typeof setTimeout> | null = null;
   let expandedChecks = $state(new Set<string>());
+
+  function safeGetWindow(): string {
+    try {
+      return localStorage.getItem('health-eval-window') ?? '1h';
+    } catch {
+      return '1h';
+    }
+  }
+
+  let selectedWindow = $state<string>(safeGetWindow());
 
   function toggleExpand(checkName: string) {
     const next = new Set(expandedChecks);
@@ -98,6 +122,29 @@
     return topErrors as ErrorGroup[];
   }
 
+  function getSparkline(result: DiagnosticsResult): SparklineBucket[] | null {
+    const sparkline = result.details?.sparkline;
+    if (!Array.isArray(sparkline) || sparkline.length === 0) return null;
+    return sparkline as SparklineBucket[];
+  }
+
+  function getRecentEvents(result: DiagnosticsResult): RecentEvent[] | null {
+    const events = result.details?.recent_events;
+    if (!Array.isArray(events) || events.length === 0) return null;
+    return events as RecentEvent[];
+  }
+
+  function isCheckExpandable(result: DiagnosticsResult): boolean {
+    const topErrors = getTopErrors(result);
+    if (topErrors !== null && (result.status === 'warning' || result.status === 'critical')) {
+      return true;
+    }
+    if (result.details?.sparkline != null || result.details?.recent_events != null) {
+      return true;
+    }
+    return false;
+  }
+
   function levelColor(level: string): string {
     switch (level) {
       case 'fatal':
@@ -110,6 +157,34 @@
       default:
         return 'var(--color-base-content)';
     }
+  }
+
+  function statusColor(status: HealthStatus): string {
+    switch (status) {
+      case 'healthy':
+        return 'var(--color-success)';
+      case 'warning':
+        return 'var(--color-warning)';
+      case 'critical':
+        return 'var(--color-error)';
+      default:
+        return 'var(--color-base-content)';
+    }
+  }
+
+  function formatTimeAgo(isoTime: string): string {
+    const now = Date.now();
+    const then = new Date(isoTime).getTime();
+    const diffMs = now - then;
+    const diffSec = Math.floor(diffMs / 1000);
+
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
   }
 
   onMount(() => {
@@ -152,12 +227,22 @@
     }
   }
 
+  function selectWindow(w: string) {
+    selectedWindow = w;
+    localStorage.setItem('health-eval-window', w);
+    if (report) {
+      runDiagnostics();
+    }
+  }
+
   async function runDiagnostics() {
     if (running) return;
     running = true;
     error = null;
     try {
-      report = await api.post<DiagnosticsReport>('/api/v2/system/diagnostics/run');
+      report = await api.post<DiagnosticsReport>(
+        `/api/v2/system/diagnostics/run?window=${selectedWindow}`
+      );
     } catch {
       error = t('health.errors.fetchFailed');
     } finally {
@@ -228,6 +313,35 @@
   {/if}
 {/snippet}
 
+{#snippet sparklineSvg(buckets: SparklineBucket[], color: string)}
+  {@const maxVal = Math.max(...buckets.map(b => b.v), 1)}
+  {@const barWidth = 4}
+  {@const gap = 1}
+  {@const height = 20}
+  {@const totalWidth = buckets.length * (barWidth + gap) - gap}
+  <svg
+    width={totalWidth}
+    {height}
+    viewBox="0 0 {totalWidth} {height}"
+    class="inline-block align-middle"
+    role="img"
+    aria-label="Activity sparkline"
+  >
+    {#each buckets as bucket, i (bucket.t)}
+      {@const barHeight = bucket.v > 0 ? Math.max(2, (bucket.v / maxVal) * height) : 1}
+      <rect
+        x={i * (barWidth + gap)}
+        y={height - barHeight}
+        width={barWidth}
+        height={barHeight}
+        fill={color}
+        opacity={bucket.v > 0 ? 0.85 : 0.15}
+        rx="1"
+      />
+    {/each}
+  </svg>
+{/snippet}
+
 <div class="col-span-12 space-y-4">
   <!-- Page Header -->
   <Card className="bg-[var(--color-base-100)] shadow-sm">
@@ -244,7 +358,7 @@
         </p>
       </div>
 
-      <div class="mt-4">
+      <div class="mt-4 flex flex-col items-center gap-3">
         <button
           onclick={runDiagnostics}
           disabled={running}
@@ -258,6 +372,34 @@
             {t('health.runDiagnostics')}
           {/if}
         </button>
+
+        <!-- Window Selector -->
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-[var(--color-base-content)] opacity-60">
+            {t('health.window.label')}:
+          </span>
+          <div
+            class="inline-flex rounded-md border border-[var(--color-base-300)] overflow-hidden"
+            role="radiogroup"
+            aria-label={t('health.window.label')}
+          >
+            {#each windowPresets as w (w)}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selectedWindow === w}
+                disabled={running}
+                onclick={() => selectWindow(w)}
+                class="px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 {selectedWindow ===
+                w
+                  ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)]'
+                  : 'bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)]'}"
+              >
+                {t(`health.window.${w}`)}
+              </button>
+            {/each}
+          </div>
+        </div>
       </div>
     </div>
   </Card>
@@ -379,18 +521,19 @@
         <div class="space-y-2">
           {#each results as result (result.name)}
             {@const topErrors = getTopErrors(result)}
-            {@const isExpandable =
-              topErrors !== null && (result.status === 'warning' || result.status === 'critical')}
+            {@const sparkline = getSparkline(result)}
+            {@const recentEvents = getRecentEvents(result)}
+            {@const expandable = isCheckExpandable(result)}
             {@const isExpanded = expandedChecks.has(result.name)}
             <div>
               <button
                 type="button"
-                class="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg bg-[var(--color-base-200)]/50 text-left {isExpandable
+                class="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg bg-[var(--color-base-200)]/50 text-left {expandable
                   ? 'cursor-pointer hover:bg-[var(--color-base-200)]'
                   : 'cursor-default'}"
-                onclick={() => isExpandable && toggleExpand(result.name)}
-                disabled={!isExpandable}
-                aria-expanded={isExpandable ? isExpanded : undefined}
+                onclick={() => expandable && toggleExpand(result.name)}
+                disabled={!expandable}
+                aria-expanded={expandable ? isExpanded : undefined}
               >
                 <StatusPill
                   variant={statusToVariant(result.status)}
@@ -402,7 +545,12 @@
                   {/snippet}
                 </StatusPill>
                 <div class="flex-1 min-w-0">
-                  <span class="text-sm font-medium">{formatCheckName(result.name)}</span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium">{formatCheckName(result.name)}</span>
+                    {#if sparkline}
+                      {@render sparklineSvg(sparkline, statusColor(result.status))}
+                    {/if}
+                  </div>
                   <p class="text-xs text-[var(--color-base-content)] opacity-60 truncate">
                     {result.message}
                   </p>
@@ -410,7 +558,7 @@
                 <span class="text-xs text-[var(--color-base-content)] opacity-40 shrink-0">
                   {result.duration_ms.toFixed(1)}ms
                 </span>
-                {#if isExpandable}
+                {#if expandable}
                   <ChevronDown
                     class="size-4 shrink-0 opacity-40 transition-transform {isExpanded
                       ? 'rotate-180'
@@ -419,59 +567,120 @@
                 {/if}
               </button>
 
-              {#if isExpanded && topErrors}
+              <!-- Expanded Detail Panel -->
+              {#if isExpanded}
                 <div
                   class="mt-1 ml-3 mr-3 mb-2 rounded-lg bg-[var(--color-base-200)]/30 overflow-hidden"
                 >
-                  <p
-                    class="px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] opacity-60"
-                  >
-                    {t('health.logs.topErrors')}
-                  </p>
-                  <table class="w-full text-xs">
-                    <thead>
-                      <tr
-                        class="text-left text-[var(--color-base-content)] opacity-50 border-b border-[var(--color-base-200)]"
-                      >
-                        <th class="px-3 py-1.5 font-medium">{t('health.logs.errorComponent')}</th>
-                        <th class="px-3 py-1.5 font-medium">{t('health.logs.errorMessage')}</th>
-                        <th class="px-3 py-1.5 font-medium text-right"
-                          >{t('health.logs.errorCount')}</th
+                  <!-- Top Errors (for log checks) -->
+                  {#if topErrors}
+                    <p
+                      class="px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] opacity-60"
+                    >
+                      {t('health.logs.topErrors')}
+                    </p>
+                    <table class="w-full text-xs">
+                      <thead>
+                        <tr
+                          class="text-left text-[var(--color-base-content)] opacity-50 border-b border-[var(--color-base-200)]"
                         >
-                        <th class="px-3 py-1.5 font-medium">{t('health.logs.errorLevel')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {#each topErrors as group (group.component + ':' + group.message)}
-                        <tr class="border-b border-[var(--color-base-200)]/50 last:border-0">
-                          <td class="px-3 py-1.5">
-                            {#if group.component}
-                              <span
-                                class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-base-300)] text-[var(--color-base-content)]"
-                              >
-                                {group.component}
-                              </span>
-                            {:else}
-                              <span class="opacity-30">-</span>
-                            {/if}
-                          </td>
-                          <td class="px-3 py-1.5 max-w-[300px] truncate" title={group.message}>
-                            {group.message}
-                          </td>
-                          <td class="px-3 py-1.5 text-right font-mono">{group.count}</td>
-                          <td class="px-3 py-1.5">
-                            <span
-                              class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
-                              style:color={levelColor(group.level)}
-                              style:background="color-mix(in srgb, {levelColor(group.level)} 10%, transparent)"
-                            >
-                              {group.level}
-                            </span>
-                          </td>
+                          <th class="px-3 py-1.5 font-medium">{t('health.logs.errorComponent')}</th>
+                          <th class="px-3 py-1.5 font-medium">{t('health.logs.errorMessage')}</th>
+                          <th class="px-3 py-1.5 font-medium text-right"
+                            >{t('health.logs.errorCount')}</th
+                          >
+                          <th class="px-3 py-1.5 font-medium">{t('health.logs.errorLevel')}</th>
                         </tr>
-                      {/each}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {#each topErrors as group (group.component + ':' + group.message)}
+                          <tr class="border-b border-[var(--color-base-200)]/50 last:border-0">
+                            <td class="px-3 py-1.5">
+                              {#if group.component}
+                                <span
+                                  class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-base-300)] text-[var(--color-base-content)]"
+                                >
+                                  {group.component}
+                                </span>
+                              {:else}
+                                <span class="opacity-30">-</span>
+                              {/if}
+                            </td>
+                            <td class="px-3 py-1.5 max-w-[300px] truncate" title={group.message}>
+                              {group.message}
+                            </td>
+                            <td class="px-3 py-1.5 text-right font-mono">{group.count}</td>
+                            <td class="px-3 py-1.5">
+                              <span
+                                class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
+                                style:color={levelColor(group.level)}
+                                style:background="color-mix(in srgb, {levelColor(group.level)} 10%, transparent)"
+                              >
+                                {group.level}
+                              </span>
+                            </td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  {/if}
+
+                  <!-- Windowed Health Detail (for counter-based checks) -->
+                  {#if sparkline || recentEvents}
+                    <!-- Last Event Callout -->
+                    {#if result.details?.last_event}
+                      <div class="px-3 py-2 flex items-center gap-2">
+                        <Clock class="size-3.5 opacity-50" />
+                        <span class="text-xs font-medium">
+                          {t('health.detail.lastEvent')}:
+                          <span class="opacity-70" title={String(result.details.last_event)}>
+                            {formatTimeAgo(String(result.details.last_event))}
+                          </span>
+                        </span>
+                        {#if result.details?.lifetime_total != null}
+                          <span class="text-xs opacity-50">
+                            ({result.details.lifetime_total}
+                            {t('health.detail.lifetime')})
+                          </span>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    <!-- Recent Events Table -->
+                    {#if recentEvents && recentEvents.length > 0}
+                      <p
+                        class="px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] opacity-60 border-t border-[var(--color-base-200)]/50"
+                      >
+                        {t('health.detail.recentEvents')}
+                      </p>
+                      <table class="w-full text-xs">
+                        <thead>
+                          <tr
+                            class="text-left text-[var(--color-base-content)] opacity-50 border-b border-[var(--color-base-200)]"
+                          >
+                            <th class="px-3 py-1.5 font-medium">{t('health.detail.time')}</th>
+                            <th class="px-3 py-1.5 font-medium">{t('health.detail.source')}</th>
+                            <th class="px-3 py-1.5 font-medium text-right"
+                              >{t('health.detail.count')}</th
+                            >
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each recentEvents as event, idx (event.time + event.source + idx)}
+                            <tr class="border-b border-[var(--color-base-200)]/50 last:border-0">
+                              <td class="px-3 py-1.5" title={new Date(event.time).toLocaleString()}>
+                                {formatTimeAgo(event.time)}
+                              </td>
+                              <td class="px-3 py-1.5 font-mono text-[10px] truncate max-w-[200px]">
+                                {event.source}
+                              </td>
+                              <td class="px-3 py-1.5 text-right font-mono">{event.delta}</td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    {/if}
+                  {/if}
                 </div>
               {/if}
             </div>

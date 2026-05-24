@@ -39,6 +39,14 @@ type Collector struct {
 	inferenceCounters  *inferencestats.CounterMap
 	prevInferenceSnaps map[string]*inferencestats.Snapshot
 
+	// Health counter tracking (optional, set via SetHealthStore/SetHealthEvents)
+	healthStore     *HealthMetricsStore
+	healthEvents    *HealthEventBuffer
+	audioRouterFn   func() []AudioRouterSnapshot
+	streamHealthFn  func() []StreamHealthSnapshot
+	prevAudioSnaps  map[string]AudioRouterSnapshot
+	prevStreamSnaps map[string]StreamHealthSnapshot
+
 	// Track which metrics have had logged errors to avoid log spam
 	loggedErrors map[string]bool
 }
@@ -122,6 +130,8 @@ func (c *Collector) collect() {
 	if len(points) > 0 {
 		c.store.RecordBatch(points)
 	}
+
+	c.collectHealthCounters()
 }
 
 // collectCPU reads CPU usage from the injected function.
@@ -266,6 +276,43 @@ func (c *Collector) SetInferenceCounters(counters *inferencestats.CounterMap) {
 	c.inferenceCounters = counters
 }
 
+// AudioRouterSnapshot holds cumulative counter values for a single audio source.
+type AudioRouterSnapshot struct {
+	SourceID string
+	Drops    int64
+	Errors   int64
+}
+
+// StreamHealthSnapshot holds cumulative counter values for a single RTSP stream.
+type StreamHealthSnapshot struct {
+	URL          string
+	RestartCount int
+}
+
+// SetAudioRouter injects a function that provides cumulative audio counter snapshots.
+// Must be called before Start.
+func (c *Collector) SetAudioRouter(fn func() []AudioRouterSnapshot) {
+	c.audioRouterFn = fn
+}
+
+// SetStreamHealth injects a function that provides cumulative stream counter snapshots.
+// Must be called before Start.
+func (c *Collector) SetStreamHealth(fn func() []StreamHealthSnapshot) {
+	c.streamHealthFn = fn
+}
+
+// SetHealthStore sets the dedicated health metrics store for hourly bucket aggregation.
+// Must be called before Start.
+func (c *Collector) SetHealthStore(store *HealthMetricsStore) {
+	c.healthStore = store
+}
+
+// SetHealthEvents sets the event ring buffer for recording individual health events.
+// Must be called before Start.
+func (c *Collector) SetHealthEvents(buf *HealthEventBuffer) {
+	c.healthEvents = buf
+}
+
 func (c *Collector) collectInference(points map[string]float64) {
 	if c.inferenceCounters == nil {
 		return
@@ -350,6 +397,96 @@ var skipCollectorFSTypes = map[string]bool{
 // skipCollectorFS returns true for virtual/pseudo filesystem types that should not be tracked.
 func skipCollectorFS(fstype string) bool {
 	return skipCollectorFSTypes[fstype]
+}
+
+// collectHealthCounters samples cumulative audio and stream counters,
+// computes deltas from the previous snapshot, and records them into the
+// dedicated HealthMetricsStore. Follows the same delta pattern as collectDiskIO.
+func (c *Collector) collectHealthCounters() {
+	if c.healthStore == nil {
+		return
+	}
+	now := time.Now()
+	c.collectAudioHealthCounters(now)
+	c.collectStreamHealthCounters(now)
+}
+
+// collectAudioHealthCounters computes deltas for audio drops and overruns.
+func (c *Collector) collectAudioHealthCounters(now time.Time) {
+	if c.audioRouterFn == nil {
+		return
+	}
+
+	snaps := c.audioRouterFn()
+	current := make(map[string]AudioRouterSnapshot, len(snaps))
+	for _, s := range snaps {
+		current[s.SourceID] = s
+	}
+
+	if c.prevAudioSnaps != nil {
+		for id, cur := range current {
+			prev, ok := c.prevAudioSnaps[id]
+			if !ok {
+				continue
+			}
+			c.recordHealthDelta(MetricPrefixAudioDrops+id, cur.Drops, prev.Drops, id, "drops", now)
+			c.recordHealthDelta(MetricPrefixAudioOverruns+id, cur.Errors, prev.Errors, id, "overruns", now)
+		}
+	}
+
+	c.prevAudioSnaps = current
+}
+
+// collectStreamHealthCounters computes deltas for stream restart counts.
+func (c *Collector) collectStreamHealthCounters(now time.Time) {
+	if c.streamHealthFn == nil {
+		return
+	}
+
+	snaps := c.streamHealthFn()
+	current := make(map[string]StreamHealthSnapshot, len(snaps))
+	for _, s := range snaps {
+		current[s.URL] = s
+	}
+
+	if c.prevStreamSnaps != nil {
+		for url, cur := range current {
+			prev, ok := c.prevStreamSnaps[url]
+			if !ok {
+				continue
+			}
+			c.recordHealthDelta(MetricPrefixStreamRestarts+url, int64(cur.RestartCount), int64(prev.RestartCount), url, "restarts", now)
+		}
+	}
+
+	c.prevStreamSnaps = current
+}
+
+// recordHealthDelta computes the delta between current and previous counter values
+// and records it into the health store. Handles counter resets: if current < previous,
+// treat current as the delta (fresh start from zero).
+func (c *Collector) recordHealthDelta(key string, current, previous int64, source, metric string, now time.Time) {
+	var delta int64
+	if current >= previous {
+		delta = current - previous
+	} else {
+		delta = current
+	}
+
+	if delta <= 0 {
+		return
+	}
+
+	c.healthStore.RecordAt(key, delta, now)
+
+	if c.healthEvents != nil {
+		c.healthEvents.Add(HealthEvent{
+			Time:   now,
+			Source: source,
+			Delta:  delta,
+			Metric: metric,
+		})
+	}
 }
 
 // --- CPU Temperature reading (Linux-specific) ---

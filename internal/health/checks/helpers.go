@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/health"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // sanitizeID converts a model ID into a safe check-name suffix by
@@ -51,52 +52,221 @@ func skippedResult(name string, category health.Category, start time.Time) healt
 	}
 }
 
-// counterStatsConfig parameterises evalCounterStats so that structurally
-// identical drop/overrun checks can share one implementation.
-type counterStatsConfig struct {
+// windowedStatsConfig parameterises evalWindowedStats for counter-based checks.
+type windowedStatsConfig struct {
 	warnThreshold int64
 	critThreshold int64
-	totalKey      string
-	healthyMsg    string // expects %d (sources)
-	warnMsg       string // expects %d (total), %d (sources)
-	critMsg       string // expects %d (total), %d (sources)
+	metricPrefix  string
+	window        time.Duration
 }
 
-// evalCounterStats aggregates per-source int64 counters and returns a Result
-// using the thresholds and message templates in cfg.
-func evalCounterStats(
-	name string, category health.Category,
-	stats map[string]int64, cfg *counterStatsConfig,
+// sparklineBuckets is the number of hourly buckets included in the sparkline response.
+const sparklineBuckets = 24
+
+// recentEventsLimit is the number of recent events included in the response.
+const recentEventsLimit = 20
+
+// staleBucketAge is the maximum age of the latest bucket before a source is
+// considered stale and excluded from evaluation.
+const staleBucketAge = 30 * time.Second
+
+// evalWindowedStats evaluates counter-based metrics using time-windowed data from
+// the HealthMetricsStore. It sums events within the configured window, builds
+// sparkline data, and formats messages with temporal context.
+func evalWindowedStats(
+	name string,
+	category health.Category,
+	store *observability.HealthMetricsStore,
+	getEvents func(metric string, n int) []observability.HealthEvent,
+	cfg *windowedStatsConfig,
 	start time.Time,
 ) health.Result {
-	var total int64
-	for _, v := range stats {
-		total += v
+	if store == nil {
+		return skippedResult(name, category, start)
+	}
+
+	now := time.Now()
+	keys := store.KeysWithPrefix(cfg.metricPrefix)
+
+	var windowTotal int64
+	var lifetimeTotal int64
+	var lastEvent time.Time
+	perSource := make(map[string]int64, len(keys))
+	activeSources := 0
+
+	for _, key := range keys {
+		sourceID := key[len(cfg.metricPrefix):]
+
+		latestBucket := store.LatestBucketTime(key)
+		if !latestBucket.IsZero() && now.Sub(latestBucket) > time.Hour+staleBucketAge {
+			continue
+		}
+
+		activeSources++
+		wTotal := store.SumAt(key, cfg.window, now)
+		perSource[sourceID] = wTotal
+		windowTotal += wTotal
+		lifetimeTotal += store.LifetimeTotal(key)
+
+		if et := store.LastEventTime(key); !et.IsZero() && et.After(lastEvent) {
+			lastEvent = et
+		}
+	}
+
+	if len(keys) == 0 || activeSources == 0 {
+		return skippedResult(name, category, start)
 	}
 
 	status := health.StatusHealthy
-	msg := fmt.Sprintf(cfg.healthyMsg, len(stats))
-
 	switch {
-	case total >= cfg.critThreshold:
+	case windowTotal >= cfg.critThreshold:
 		status = health.StatusCritical
-		msg = fmt.Sprintf(cfg.critMsg, total, len(stats))
-	case total >= cfg.warnThreshold:
+	case windowTotal >= cfg.warnThreshold:
 		status = health.StatusWarning
-		msg = fmt.Sprintf(cfg.warnMsg, total, len(stats))
+	}
+
+	msg := formatWindowedMessage(name, windowTotal, lifetimeTotal, activeSources, lastEvent, cfg.window, now)
+
+	metricType := extractMetricType(cfg.metricPrefix)
+
+	sparkline := buildMergedSparkline(store, keys, sparklineBuckets, now)
+
+	var recentEvents []observability.HealthEvent
+	if getEvents != nil {
+		recentEvents = getEvents(metricType, recentEventsLimit)
+	}
+
+	details := map[string]any{
+		"window":         formatDuration(cfg.window),
+		"window_total":   windowTotal,
+		"lifetime_total": lifetimeTotal,
+		"sources":        activeSources,
+		"per_source":     perSource,
+	}
+	if !lastEvent.IsZero() {
+		details["last_event"] = lastEvent.Format(time.RFC3339)
+	}
+	if len(sparkline) > 0 {
+		details["sparkline"] = sparkline
+	}
+	if len(recentEvents) > 0 {
+		details["recent_events"] = recentEvents
 	}
 
 	return health.Result{
-		Name:     name,
-		Category: category,
-		Status:   status,
-		Message:  msg,
-		Details: map[string]any{
-			cfg.totalKey: total,
-			"sources":    len(stats),
-			"per_source": stats,
-		},
+		Name:       name,
+		Category:   category,
+		Status:     status,
+		Message:    msg,
+		Details:    details,
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
 	}
+}
+
+// formatWindowedMessage builds a human-readable message with temporal context.
+func formatWindowedMessage(
+	name string,
+	windowTotal, lifetimeTotal int64,
+	sources int,
+	lastEvent time.Time,
+	window time.Duration,
+	now time.Time,
+) string {
+	windowStr := formatDuration(window)
+	label := checkNameLabel(name)
+
+	if lifetimeTotal == 0 {
+		return fmt.Sprintf("No %s across %d source(s)", label, sources)
+	}
+
+	if windowTotal == 0 {
+		timeAgo := formatTimeAgo(lastEvent, now)
+		return fmt.Sprintf("No %s in last %s (%d lifetime, last: %s)", label, windowStr, lifetimeTotal, timeAgo)
+	}
+
+	timeAgo := formatTimeAgo(lastEvent, now)
+	return fmt.Sprintf("%d %s in last %s across %d source(s) (last: %s)", windowTotal, label, windowStr, sources, timeAgo)
+}
+
+// checkNameLabel converts a check name to a human-readable label.
+func checkNameLabel(name string) string {
+	switch name {
+	case "buffer_drops":
+		return "drops"
+	case "buffer_overrun":
+		return "overruns"
+	case "stream_error_rate":
+		return "restarts"
+	default:
+		return "events"
+	}
+}
+
+// formatDuration formats a duration as a compact string (e.g. "1h", "30m", "7d").
+func formatDuration(d time.Duration) string {
+	switch {
+	case d >= 24*time.Hour:
+		days := int(d / (24 * time.Hour))
+		return fmt.Sprintf("%dd", days)
+	case d >= time.Hour:
+		hours := int(d / time.Hour)
+		return fmt.Sprintf("%dh", hours)
+	default:
+		minutes := int(d / time.Minute)
+		return fmt.Sprintf("%dm", minutes)
+	}
+}
+
+// formatTimeAgo formats a time as a relative duration string.
+func formatTimeAgo(t, now time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+	d := now.Sub(t)
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds ago", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		days := int(d.Hours() / 24)
+		return fmt.Sprintf("%dd ago", days)
+	}
+}
+
+// extractMetricType extracts the metric type from a prefix like "audio.drops." -> "drops".
+func extractMetricType(prefix string) string {
+	trimmed := strings.TrimSuffix(prefix, ".")
+	if idx := strings.LastIndex(trimmed, "."); idx >= 0 {
+		return trimmed[idx+1:]
+	}
+	return trimmed
+}
+
+// buildMergedSparkline merges multiple metric keys into a single sparkline
+// of n hourly buckets, with zeros for hours without data.
+func buildMergedSparkline(store *observability.HealthMetricsStore, keys []string, n int, now time.Time) []observability.HourlyBucket {
+	startHour := now.Truncate(time.Hour).Add(-time.Duration(n-1) * time.Hour)
+
+	merged := make([]observability.HourlyBucket, n)
+	for i := range n {
+		merged[i] = observability.HourlyBucket{
+			Start: startHour.Add(time.Duration(i) * time.Hour),
+		}
+	}
+
+	for _, key := range keys {
+		buckets := store.Buckets(key, n)
+		for _, b := range buckets {
+			idx := int(b.Start.Sub(startHour) / time.Hour)
+			if idx >= 0 && idx < n {
+				merged[idx].Count += b.Count
+			}
+		}
+	}
+
+	return merged
 }

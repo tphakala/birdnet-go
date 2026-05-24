@@ -4879,6 +4879,24 @@
       "errorComponent": "Composant",
       "errorLevel": "Niveau",
       "errorMessage": "Message"
+    },
+    "window": {
+      "label": "Fenêtre d'évaluation",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Dernier événement",
+      "recentEvents": "Événements récents",
+      "time": "Heure",
+      "source": "Source",
+      "count": "Nombre",
+      "lifetime": "total",
+      "noEvents": "Aucun événement enregistré"
     }
   }
 }

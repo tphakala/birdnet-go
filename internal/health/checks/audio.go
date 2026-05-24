@@ -7,6 +7,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/health"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // SourceStatusCheck monitors the health state of audio sources via the liveness watchdog.
@@ -162,17 +163,23 @@ func (c *PipelineLivenessCheck) Run(_ context.Context) health.Result {
 	}
 }
 
-// DropStats maps source ID to cumulative frame drop count.
-type DropStats map[string]int64
+// DefaultWindow is the default evaluation window for windowed checks.
+const DefaultWindow = time.Hour
 
-// BufferDropsCheck monitors audio buffer drop statistics.
+// BufferDropsCheck monitors audio buffer drop statistics using time-windowed evaluation.
 type BufferDropsCheck struct {
-	getDropStats func() DropStats
+	store     *observability.HealthMetricsStore
+	getEvents func(metric string, n int) []observability.HealthEvent
+	window    time.Duration
 }
 
-// NewBufferDropsCheck creates a BufferDropsCheck using the given drop stats provider.
-func NewBufferDropsCheck(getDropStats func() DropStats) *BufferDropsCheck {
-	return &BufferDropsCheck{getDropStats: getDropStats}
+// NewBufferDropsCheck creates a BufferDropsCheck using the health metrics store and event getter.
+func NewBufferDropsCheck(store *observability.HealthMetricsStore, getEvents func(metric string, n int) []observability.HealthEvent) *BufferDropsCheck {
+	return &BufferDropsCheck{
+		store:     store,
+		getEvents: getEvents,
+		window:    DefaultWindow,
+	}
 }
 
 // Name returns the check identifier.
@@ -181,26 +188,22 @@ func (c *BufferDropsCheck) Name() string { return "buffer_drops" }
 // Category returns the audio category.
 func (c *BufferDropsCheck) Category() health.Category { return health.CategoryAudio }
 
-// Run evaluates audio buffer drop statistics across all sources.
+// WithWindow returns a copy of this check configured with the given evaluation window.
+func (c *BufferDropsCheck) WithWindow(d time.Duration) health.Check {
+	cp := *c
+	cp.window = d
+	return &cp
+}
+
+// Run evaluates audio buffer drop statistics within the configured time window.
 func (c *BufferDropsCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
-	if c.getDropStats == nil {
-		return skippedResult(c.Name(), c.Category(), start)
-	}
-
-	stats := c.getDropStats()
-	if stats == nil {
-		return skippedResult(c.Name(), c.Category(), start)
-	}
-
-	return evalCounterStats(c.Name(), c.Category(), stats, &counterStatsConfig{
-		warnThreshold: 1,
-		critThreshold: 101,
-		totalKey:      "total_drops",
-		healthyMsg:    "No buffer drops across %d source(s)",
-		warnMsg:       "Buffer drops detected: %d total across %d source(s)",
-		critMsg:       "High buffer drop rate: %d total drops across %d source(s)",
+	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
+		warnThreshold: 10,
+		critThreshold: 100,
+		metricPrefix:  observability.MetricPrefixAudioDrops,
+		window:        c.window,
 	}, start)
 }
 
@@ -281,17 +284,20 @@ func (c *AudioLevelCheck) Run(_ context.Context) health.Result {
 	}
 }
 
-// OverrunStats maps source ID to cumulative write error count.
-type OverrunStats map[string]int64
-
-// BufferOverrunCheck monitors audio processing overrun events.
+// BufferOverrunCheck monitors audio processing overrun events using time-windowed evaluation.
 type BufferOverrunCheck struct {
-	getOverrunStats func() OverrunStats
+	store     *observability.HealthMetricsStore
+	getEvents func(metric string, n int) []observability.HealthEvent
+	window    time.Duration
 }
 
-// NewBufferOverrunCheck creates a BufferOverrunCheck using the given overrun stats provider.
-func NewBufferOverrunCheck(getOverrunStats func() OverrunStats) *BufferOverrunCheck {
-	return &BufferOverrunCheck{getOverrunStats: getOverrunStats}
+// NewBufferOverrunCheck creates a BufferOverrunCheck using the health metrics store and event getter.
+func NewBufferOverrunCheck(store *observability.HealthMetricsStore, getEvents func(metric string, n int) []observability.HealthEvent) *BufferOverrunCheck {
+	return &BufferOverrunCheck{
+		store:     store,
+		getEvents: getEvents,
+		window:    DefaultWindow,
+	}
 }
 
 // Name returns the check identifier.
@@ -300,26 +306,22 @@ func (c *BufferOverrunCheck) Name() string { return "buffer_overrun" }
 // Category returns the audio category.
 func (c *BufferOverrunCheck) Category() health.Category { return health.CategoryAudio }
 
-// Run evaluates audio processing overrun statistics across all sources.
+// WithWindow returns a copy of this check configured with the given evaluation window.
+func (c *BufferOverrunCheck) WithWindow(d time.Duration) health.Check {
+	cp := *c
+	cp.window = d
+	return &cp
+}
+
+// Run evaluates audio processing overrun statistics within the configured time window.
 func (c *BufferOverrunCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
-	if c.getOverrunStats == nil {
-		return skippedResult(c.Name(), c.Category(), start)
-	}
-
-	stats := c.getOverrunStats()
-	if stats == nil {
-		return skippedResult(c.Name(), c.Category(), start)
-	}
-
-	return evalCounterStats(c.Name(), c.Category(), stats, &counterStatsConfig{
-		warnThreshold: 1,
-		critThreshold: 51,
-		totalKey:      "total_errors",
-		healthyMsg:    "No buffer overruns across %d source(s)",
-		warnMsg:       "Buffer overruns detected: %d errors across %d source(s)",
-		critMsg:       "High overrun rate: %d errors across %d source(s)",
+	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
+		warnThreshold: 10,
+		critThreshold: 50,
+		metricPrefix:  observability.MetricPrefixAudioOverruns,
+		window:        c.window,
 	}, start)
 }
 
