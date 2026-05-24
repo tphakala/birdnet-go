@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
@@ -140,6 +141,17 @@ func (c *Controller) registerHealthChecks() {
 				return 0, errors.NewStd("datastore unavailable")
 			}
 			return ds.PingWithLatency(ctx)
+		}),
+		checks.NewDatabaseIntegrityCheck(func() (string, bool) {
+			ds := c.DS
+			if ds == nil {
+				return "", false
+			}
+			sqliteStore, ok := ds.(*datastore.SQLiteStore)
+			if !ok {
+				return "", false
+			}
+			return sqliteStore.IntegrityResult()
 		}),
 
 		// Network checks

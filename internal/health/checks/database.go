@@ -218,3 +218,73 @@ func (c *DatabasePerformanceCheck) Run(ctx context.Context) health.Result {
 		Timestamp:  time.Now(),
 	}
 }
+
+// DatabaseIntegrityCheck reports the cached result of PRAGMA quick_check.
+// Returns critical if corruption was detected, healthy if the last check passed.
+type DatabaseIntegrityCheck struct {
+	getIntegrityResult func() (string, bool)
+}
+
+// NewDatabaseIntegrityCheck creates a DatabaseIntegrityCheck.
+// The function must return (integrityResult, isCorrupted).
+// integrityResult is "ok" or the error string from PRAGMA quick_check.
+// isCorrupted is true if the global corruption latch is set.
+func NewDatabaseIntegrityCheck(getIntegrityResult func() (string, bool)) *DatabaseIntegrityCheck {
+	return &DatabaseIntegrityCheck{getIntegrityResult: getIntegrityResult}
+}
+
+// Name returns the check identifier.
+func (c *DatabaseIntegrityCheck) Name() string { return "database_integrity" }
+
+// Category returns the database category.
+func (c *DatabaseIntegrityCheck) Category() health.Category { return health.CategoryDatabase }
+
+// Run checks the cached integrity result and reports corruption status.
+func (c *DatabaseIntegrityCheck) Run(_ context.Context) health.Result {
+	start := time.Now()
+
+	if c.getIntegrityResult == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	result, isCorrupted := c.getIntegrityResult()
+
+	if result == "" {
+		return health.Result{
+			Name:       c.Name(),
+			Category:   c.Category(),
+			Status:     health.StatusUnknown,
+			Message:    "Integrity check has not run yet",
+			DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+			Timestamp:  time.Now(),
+		}
+	}
+
+	if isCorrupted || result != "ok" {
+		return health.Result{
+			Name:     c.Name(),
+			Category: c.Category(),
+			Status:   health.StatusCritical,
+			Message:  "Database corruption detected",
+			Details: map[string]any{
+				"integrity_result": result,
+				"auto_recovery":    "failed",
+				"recovery_hint":    "Back up the database file and use Settings > Support to upload a support dump",
+			},
+			DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+			Timestamp:  time.Now(),
+		}
+	}
+
+	return health.Result{
+		Name:     c.Name(),
+		Category: c.Category(),
+		Status:   health.StatusHealthy,
+		Message:  "Database integrity check passed",
+		Details: map[string]any{
+			"integrity_result": result,
+		},
+		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+		Timestamp:  time.Now(),
+	}
+}
