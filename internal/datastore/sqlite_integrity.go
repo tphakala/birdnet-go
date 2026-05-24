@@ -191,11 +191,12 @@ func (s *SQLiteStore) checkAndLatchCorruption(err error, operation string) bool 
 // truncateResult shortens a string to maxLen characters, appending an
 // ellipsis if truncation occurred.
 func truncateResult(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
 	if maxLen < 4 {
-		return s[:maxLen]
+		return string(runes[:maxLen])
 	}
-	return s[:maxLen-3] + "..."
+	return string(runes[:maxLen-3]) + "..."
 }
