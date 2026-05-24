@@ -412,7 +412,7 @@ func (c *Controller) buildStreamHealthSnapshotProvider() func() []observability.
 		snaps := make([]observability.StreamHealthSnapshot, 0, len(healthMap))
 		for sourceID, sh := range healthMap {
 			snaps = append(snaps, observability.StreamHealthSnapshot{
-				URL:          sourceID,
+				SourceID:     sourceID,
 				RestartCount: sh.RestartCount,
 			})
 		}

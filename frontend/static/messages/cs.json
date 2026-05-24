@@ -4903,7 +4903,7 @@
       "source": "Zdroj",
       "count": "Počet",
       "lifetime": "celkem",
-      "noEvents": "Žádné zaznamenané události"
+      "sparklineLabel": "Graf aktivity"
     }
   }
 }

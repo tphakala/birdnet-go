@@ -4903,7 +4903,7 @@
       "source": "Bron",
       "count": "Aantal",
       "lifetime": "totaal",
-      "noEvents": "Geen gebeurtenissen geregistreerd"
+      "sparklineLabel": "Activiteitsgrafiek"
     }
   }
 }

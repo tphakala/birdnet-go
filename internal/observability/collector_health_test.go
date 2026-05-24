@@ -91,14 +91,14 @@ func TestCollector_StreamHealthDelta(t *testing.T) {
 
 	c.SetStreamHealth(func() []StreamHealthSnapshot {
 		return []StreamHealthSnapshot{
-			{URL: "rtsp://cam1", RestartCount: 2},
+			{SourceID: "rtsp://cam1", RestartCount: 2},
 		}
 	})
 	c.collectHealthCounters()
 
 	c.SetStreamHealth(func() []StreamHealthSnapshot {
 		return []StreamHealthSnapshot{
-			{URL: "rtsp://cam1", RestartCount: 5},
+			{SourceID: "rtsp://cam1", RestartCount: 5},
 		}
 	})
 	c.collectHealthCounters()

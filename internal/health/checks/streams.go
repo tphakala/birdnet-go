@@ -108,7 +108,11 @@ func (c *StreamErrorRateCheck) Name() string { return "stream_error_rate" }
 func (c *StreamErrorRateCheck) Category() health.Category { return health.CategoryStreams }
 
 // WithWindow returns a copy of this check configured with the given evaluation window.
+// Returns the receiver unchanged when d equals the current window to avoid an allocation.
 func (c *StreamErrorRateCheck) WithWindow(d time.Duration) health.Check {
+	if d == c.window {
+		return c
+	}
 	cp := *c
 	cp.window = d
 	return &cp

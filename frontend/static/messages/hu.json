@@ -4903,7 +4903,7 @@
       "source": "Forrás",
       "count": "Darab",
       "lifetime": "összesen",
-      "noEvents": "Nincsenek rögzített események"
+      "sparklineLabel": "Aktivitási diagram"
     }
   }
 }

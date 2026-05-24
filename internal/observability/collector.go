@@ -283,9 +283,11 @@ type AudioRouterSnapshot struct {
 	Errors   int64
 }
 
-// StreamHealthSnapshot holds cumulative counter values for a single RTSP stream.
+// StreamHealthSnapshot holds cumulative counter values for a single RTSP stream,
+// keyed by the stable internal source ID (not the raw URL) to avoid leaking
+// credentials into metric keys and to remain stable across URL changes.
 type StreamHealthSnapshot struct {
-	URL          string
+	SourceID     string
 	RestartCount int
 }
 
@@ -446,16 +448,16 @@ func (c *Collector) collectStreamHealthCounters(now time.Time) {
 	snaps := c.streamHealthFn()
 	current := make(map[string]StreamHealthSnapshot, len(snaps))
 	for _, s := range snaps {
-		current[s.URL] = s
+		current[s.SourceID] = s
 	}
 
 	if c.prevStreamSnaps != nil {
-		for url, cur := range current {
-			prev, ok := c.prevStreamSnaps[url]
+		for sourceID, cur := range current {
+			prev, ok := c.prevStreamSnaps[sourceID]
 			if !ok {
 				continue
 			}
-			c.recordHealthDelta(MetricPrefixStreamRestarts+url, int64(cur.RestartCount), int64(prev.RestartCount), url, "restarts", now)
+			c.recordHealthDelta(MetricPrefixStreamRestarts+sourceID, int64(cur.RestartCount), int64(prev.RestartCount), sourceID, "restarts", now)
 		}
 	}
 

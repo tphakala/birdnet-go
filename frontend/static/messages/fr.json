@@ -4903,7 +4903,7 @@
       "source": "Source",
       "count": "Nombre",
       "lifetime": "total",
-      "noEvents": "Aucun événement enregistré"
+      "sparklineLabel": "Graphique d'activité"
     }
   }
 }

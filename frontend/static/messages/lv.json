@@ -4903,7 +4903,7 @@
       "source": "Avots",
       "count": "Skaits",
       "lifetime": "kopā",
-      "noEvents": "Nav reģistrētu notikumu"
+      "sparklineLabel": "Aktivitātes diagramma"
     }
   }
 }

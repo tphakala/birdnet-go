@@ -4903,7 +4903,7 @@
       "source": "Kilde",
       "count": "Antal",
       "lifetime": "i alt",
-      "noEvents": "Ingen hændelser registreret"
+      "sparklineLabel": "Aktivitetsgraf"
     }
   }
 }

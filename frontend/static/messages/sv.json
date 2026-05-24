@@ -4903,7 +4903,7 @@
       "source": "Källa",
       "count": "Antal",
       "lifetime": "totalt",
-      "noEvents": "Inga händelser registrerade"
+      "sparklineLabel": "Aktivitetsdiagram"
     }
   }
 }

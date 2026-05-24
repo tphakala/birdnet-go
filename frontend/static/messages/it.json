@@ -4903,7 +4903,7 @@
       "source": "Sorgente",
       "count": "Conteggio",
       "lifetime": "totale",
-      "noEvents": "Nessun evento registrato"
+      "sparklineLabel": "Grafico di attività"
     }
   }
 }

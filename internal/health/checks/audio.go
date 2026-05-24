@@ -189,7 +189,11 @@ func (c *BufferDropsCheck) Name() string { return "buffer_drops" }
 func (c *BufferDropsCheck) Category() health.Category { return health.CategoryAudio }
 
 // WithWindow returns a copy of this check configured with the given evaluation window.
+// Returns the receiver unchanged when d equals the current window to avoid an allocation.
 func (c *BufferDropsCheck) WithWindow(d time.Duration) health.Check {
+	if d == c.window {
+		return c
+	}
 	cp := *c
 	cp.window = d
 	return &cp
@@ -307,7 +311,11 @@ func (c *BufferOverrunCheck) Name() string { return "buffer_overrun" }
 func (c *BufferOverrunCheck) Category() health.Category { return health.CategoryAudio }
 
 // WithWindow returns a copy of this check configured with the given evaluation window.
+// Returns the receiver unchanged when d equals the current window to avoid an allocation.
 func (c *BufferOverrunCheck) WithWindow(d time.Duration) health.Check {
+	if d == c.window {
+		return c
+	}
 	cp := *c
 	cp.window = d
 	return &cp

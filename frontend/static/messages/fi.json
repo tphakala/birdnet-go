@@ -4903,7 +4903,7 @@
       "source": "Lähde",
       "count": "Määrä",
       "lifetime": "yhteensä",
-      "noEvents": "Ei tallennettuja tapahtumia"
+      "sparklineLabel": "Aktiivisuuskaavio"
     }
   }
 }

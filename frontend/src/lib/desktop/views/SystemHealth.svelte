@@ -328,9 +328,9 @@
     viewBox="0 0 {totalWidth} {height}"
     class="inline-block align-middle"
     role="img"
-    aria-label="Activity sparkline"
+    aria-label={t('health.detail.sparklineLabel')}
   >
-    {#each buckets as bucket, i (bucket.t)}
+    {#each buckets as bucket, i (i)}
       {@const barHeight = bucket.v > 0 ? Math.max(2, (bucket.v / maxVal) * height) : 1}
       <rect
         x={i * (barWidth + gap)}
