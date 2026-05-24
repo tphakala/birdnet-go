@@ -249,6 +249,46 @@ func TestIsDefaultSeasonConfiguration(t *testing.T) {
 			},
 			expected: false,
 		},
+		{
+			name: "southern hemisphere defaults",
+			seasons: map[string]Season{
+				"spring": {StartMonth: 9, StartDay: 22},
+				"summer": {StartMonth: 12, StartDay: 21},
+				"fall":   {StartMonth: 3, StartDay: 20},
+				"winter": {StartMonth: 6, StartDay: 21},
+			},
+			expected: true,
+		},
+		{
+			name: "traditional names with custom winter date",
+			seasons: map[string]Season{
+				"spring": {StartMonth: 3, StartDay: 20},
+				"summer": {StartMonth: 6, StartDay: 21},
+				"fall":   {StartMonth: 9, StartDay: 22},
+				"winter": {StartMonth: 12, StartDay: 1},
+			},
+			expected: false,
+		},
+		{
+			name: "traditional names with all custom dates",
+			seasons: map[string]Season{
+				"spring": {StartMonth: 3, StartDay: 1},
+				"summer": {StartMonth: 6, StartDay: 1},
+				"fall":   {StartMonth: 9, StartDay: 1},
+				"winter": {StartMonth: 12, StartDay: 1},
+			},
+			expected: false,
+		},
+		{
+			name: "equatorial names with custom dates",
+			seasons: map[string]Season{
+				"wet1": {StartMonth: 4, StartDay: 15},
+				"dry1": {StartMonth: 7, StartDay: 15},
+				"wet2": {StartMonth: 10, StartDay: 15},
+				"dry2": {StartMonth: 1, StartDay: 15},
+			},
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {

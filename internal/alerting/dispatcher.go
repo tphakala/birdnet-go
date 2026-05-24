@@ -20,12 +20,12 @@ import (
 // notifications with template metadata (bg_image_url, bg_confidence_percent, etc.)
 // for webhook templates.
 type NotificationCreator interface {
-	CreateAndBroadcast(notifType notification.Type, title, message string, eventProps map[string]any) error
-	CreateAndBroadcastWithKeys(notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any, eventProps map[string]any) error
+	CreateAndBroadcast(target string, notifType notification.Type, title, message string, eventProps map[string]any) error
+	CreateAndBroadcastWithKeys(target string, notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any, eventProps map[string]any) error
 	// CreateAndBroadcastTest creates a notification for a test rule fire.
-	CreateAndBroadcastTest(notifType notification.Type, title, message string, eventProps map[string]any) error
+	CreateAndBroadcastTest(target string, notifType notification.Type, title, message string, eventProps map[string]any) error
 	// CreateAndBroadcastTestWithKeys is the i18n-aware variant of CreateAndBroadcastTest.
-	CreateAndBroadcastTestWithKeys(notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any, eventProps map[string]any) error
+	CreateAndBroadcastTestWithKeys(target string, notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any, eventProps map[string]any) error
 }
 
 // ActionDispatcher routes alert rule actions to the notification bell
@@ -60,15 +60,22 @@ func (d *ActionDispatcher) dispatchInternal(rule *entities.AlertRule, event *Ale
 	if event == nil {
 		event = &AlertEvent{}
 	}
+	defaultDispatchedForTarget := make(map[string]bool, 2)
 	for i := range rule.Actions {
 		action := &rule.Actions[i]
 		title := renderTitle(action.TemplateTitle, rule, event)
 		message := renderMessage(action.TemplateMessage, rule, event)
 
 		switch action.Target {
-		case TargetBell:
+		case TargetBell, TargetPush:
 			hasCustomTemplate := action.TemplateTitle != "" || action.TemplateMessage != ""
-			d.dispatchBell(title, message, rule, event, hasCustomTemplate, isTest)
+			if !hasCustomTemplate && defaultDispatchedForTarget[action.Target] {
+				continue
+			}
+			d.dispatchNotification(action.Target, title, message, rule, event, hasCustomTemplate, isTest)
+			if !hasCustomTemplate {
+				defaultDispatchedForTarget[action.Target] = true
+			}
 		default:
 			d.log.Warn("unknown alert action target",
 				logger.String("target", action.Target),
@@ -77,7 +84,7 @@ func (d *ActionDispatcher) dispatchInternal(rule *entities.AlertRule, event *Ale
 	}
 }
 
-func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.AlertRule, event *AlertEvent, hasCustomTemplate, isTest bool) {
+func (d *ActionDispatcher) dispatchNotification(target, title, message string, rule *entities.AlertRule, event *AlertEvent, hasCustomTemplate, isTest bool) {
 	if d.notifCreator == nil {
 		return
 	}
@@ -92,33 +99,39 @@ func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.Al
 		var err error
 		if isTest {
 			err = d.notifCreator.CreateAndBroadcastTestWithKeys(
-				notifType, title, fallbackMsg, titleKey, titleParams, msgKey, msgParams, event.Properties,
+				target, notifType, title, fallbackMsg, titleKey, titleParams, msgKey, msgParams, event.Properties,
 			)
 		} else {
 			err = d.notifCreator.CreateAndBroadcastWithKeys(
-				notifType, title, fallbackMsg, titleKey, titleParams, msgKey, msgParams, event.Properties,
+				target, notifType, title, fallbackMsg, titleKey, titleParams, msgKey, msgParams, event.Properties,
 			)
 		}
 		if err != nil {
-			d.log.Error("failed to create bell notification",
+			d.log.Error("failed to dispatch notification",
+				logger.String("target", target),
 				logger.Uint64("rule_id", uint64(rule.ID)),
 				logger.Error(err))
-			d.telemetry.ReportDispatchFailed(TargetBell, err.Error())
+			if d.telemetry != nil {
+				d.telemetry.ReportDispatchFailed(target, err.Error())
+			}
 		}
 		return
 	}
 
 	var err error
 	if isTest {
-		err = d.notifCreator.CreateAndBroadcastTest(notifType, title, message, event.Properties)
+		err = d.notifCreator.CreateAndBroadcastTest(target, notifType, title, message, event.Properties)
 	} else {
-		err = d.notifCreator.CreateAndBroadcast(notifType, title, message, event.Properties)
+		err = d.notifCreator.CreateAndBroadcast(target, notifType, title, message, event.Properties)
 	}
 	if err != nil {
-		d.log.Error("failed to create bell notification",
+		d.log.Error("failed to dispatch notification",
+			logger.String("target", target),
 			logger.Uint64("rule_id", uint64(rule.ID)),
 			logger.Error(err))
-		d.telemetry.ReportDispatchFailed(TargetBell, err.Error())
+		if d.telemetry != nil {
+			d.telemetry.ReportDispatchFailed(target, err.Error())
+		}
 	}
 }
 

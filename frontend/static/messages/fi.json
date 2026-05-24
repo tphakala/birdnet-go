@@ -154,7 +154,8 @@
         "verifiedCorrect": "Todennettu oikeaksi",
         "falsePositive": "Virheellinen havainto",
         "notReviewed": "Ei tarkistettu",
-        "locked": "Lukittu"
+        "locked": "Lukittu",
+        "unlikely": "Epätodennäköinen"
       },
       "form": {
         "correctDetection": "Oikea havainto",
@@ -217,7 +218,16 @@
     "analyticsSubmenu": "Analytiikan alavalikko",
     "settingsSubmenu": "Asetusten alavalikko",
     "systemSubmenu": "Järjestelmän alavalikko",
-    "systemTerminal": "Terminaali"
+    "systemTerminal": "Terminaali",
+    "help": "Ohje",
+    "helpSubmenu": "Ohje-alavalikko",
+    "helpAndSupport": "Ohje ja tuki",
+    "reportBug": "Ilmoita virheestä",
+    "askQuestion": "Esitä kysymys",
+    "reportBugAriaLabel": "Ilmoita virheestä GitHubissa (avautuu uuteen ikkunaan)",
+    "askQuestionAriaLabel": "Esitä kysymys GitHub Discussions -foorumilla (avautuu uuteen ikkunaan)",
+    "viewOnGithubAriaLabel": "Näytä BirdNET-Go GitHubissa (avautuu uuteen ikkunaan)",
+    "health": "Health"
   },
   "pageTitle": {
     "settings": "Asetukset - BirdNET-Go",
@@ -423,7 +433,7 @@
       },
       "buffer": {
         "overloadTitle": "Äänianalyysi ylikuormitettu",
-        "overloadMessage": "Järjestelmäsi hylkää {dropRate} % lähteen '{sourceName}' ääninäytteistä, koska se ei pysy analyysin tahdissa. Pienennä BirdNET-päällekkäisyysarvoa tunnistusasetuksista tai harkitse nopeamman suorittimen hankkimista."
+        "overloadMessage": "Järjestelmäsi hylkää {dropRate} % lähteen ''{sourceName}'' ääninäytteistä, koska se ei pysy analyysin tahdissa. Pienennä BirdNET-päällekkäisyysarvoa tunnistusasetuksista tai harkitse nopeamman suorittimen hankkimista."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -444,6 +454,10 @@
           "diskFull": "Levy on täynnä — vapauta tilaa",
           "permissionDenied": "Käyttö estetty — tarkista tiedosto- tai palveluoikeudet"
         }
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime ei ole käytettävissä",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} vaaditaan mallille {modelName}, mutta sitä ei löytynyt. Katso asennusohje: {installGuideURL}"
       }
     },
     "loading": "Ladataan ilmoituksia..."
@@ -513,7 +527,8 @@
       "false": "Virheellinen",
       "unverified": "Todentamaton",
       "locked": "Lukittu",
-      "unlocked": "Avoin"
+      "unlocked": "Avoin",
+      "unlikely": "Epätodennäköinen"
     },
     "review": {
       "review": "Tarkista",
@@ -641,7 +656,8 @@
         "verified": "Todennettu",
         "false": "Virheellinen",
         "unverified": "Todentamaton",
-        "locked": "Lukittu"
+        "locked": "Lukittu",
+        "unlikely": "Epätodennäköinen"
       },
       "modals": {
         "showSpecies": "Näytä laji {species}",
@@ -838,13 +854,51 @@
         "sleet": "Räntää",
         "snow": "Lunta",
         "fog": "Sumua",
-        "unknown": "Tuntematon"
+        "unknown": "Tuntematon",
+        "clearsky": "Selkeä taivas",
+        "fair": "Melko selkeää",
+        "heavyrain": "Voimakasta sadetta",
+        "heavyrainandthunder": "Voimakasta sadetta ja ukkosta",
+        "heavyrainshowers": "Voimakkaita sadekuuroja",
+        "heavyrainshowersandthunder": "Voimakkaita sadekuuroja ja ukkosta",
+        "heavysleet": "Voimakasta räntää",
+        "heavysleetandthunder": "Voimakasta räntää ja ukkosta",
+        "heavysleetshowers": "Voimakkaita räntäkuuroja",
+        "heavysleetshowersandthunder": "Voimakkaita räntäkuuroja ja ukkosta",
+        "heavysnow": "Voimakasta lumisadetta",
+        "heavysnowandthunder": "Voimakasta lumisadetta ja ukkosta",
+        "heavysnowshowers": "Voimakkaita lumikuuroja",
+        "heavysnowshowersandthunder": "Voimakkaita lumikuuroja ja ukkosta",
+        "lightrain": "Heikkoa sadetta",
+        "lightrainandthunder": "Heikkoa sadetta ja ukkosta",
+        "lightrainshowers": "Heikkoja sadekuuroja",
+        "lightrainshowersandthunder": "Heikkoja sadekuuroja ja ukkosta",
+        "lightsleet": "Heikkoa räntää",
+        "lightsleetandthunder": "Heikkoa räntää ja ukkosta",
+        "lightsleetshowers": "Heikkoja räntäkuuroja",
+        "lightsnow": "Heikkoa lumisadetta",
+        "lightsnowandthunder": "Heikkoa lumisadetta ja ukkosta",
+        "lightsnowshowers": "Heikkoja lumikuuroja",
+        "lightssleetshowersandthunder": "Heikkoja räntäkuuroja ja ukkosta",
+        "lightssnowshowersandthunder": "Heikkoja lumikuuroja ja ukkosta",
+        "partlycloudy": "Puolipilvistä",
+        "rainandthunder": "Sadetta ja ukkosta",
+        "rainshowers": "Sadekuuroja",
+        "rainshowersandthunder": "Sadekuuroja ja ukkosta",
+        "sleetandthunder": "Räntää ja ukkosta",
+        "sleetshowers": "Räntäkuuroja",
+        "sleetshowersandthunder": "Räntäkuuroja ja ukkosta",
+        "snowandthunder": "Lumisadetta ja ukkosta",
+        "snowshowers": "Lumikuuroja",
+        "snowshowersandthunder": "Lumikuuroja ja ukkosta"
       }
     },
     "row": {
       "viewDetails": "Näytä {species} tiedot",
       "openDetailFromStatus": "Avaa {species}-havainnon yksityiskohdat",
-      "openDetailFromDate": "Avaa {species}-havainnon yksityiskohdat ({date} {time})"
+      "openDetailFromDate": "Avaa {species}-havainnon yksityiskohdat ({date} {time})",
+      "play": "Toista",
+      "playAudio": "Toista ääni"
     },
     "media": {
       "title": "Tallenne ja spektrogrammi",
@@ -877,7 +931,10 @@
     "aria": {
       "loading": "Ladataan havainnon tietoja...",
       "loaded": "Havainnon tiedot ladattu: {species}",
-      "error": "Virhe havainnon latauksessa: {error}"
+      "error": "Virhe havainnon latauksessa: {error}",
+      "loadingResults": "Ladataan {count} tulosta...",
+      "thumbnailLoading": "Ladataan {species} pikkukuvaa...",
+      "thumbnailLoaded": "Pikkukuva {species} ladattu"
     },
     "viewToggle": {
       "label": "Näkymätila",
@@ -901,6 +958,25 @@
       "confirmBody": "Tämä päivittää havainnon lajin, mallin ja luottamuksen ja merkitsee sen vahvistetuksi. Olemassa oleva tarkistustila korvataan.",
       "confirmApply": "Kyllä, käytä korjausta",
       "applying": "Sovelletaan…"
+    },
+    "selection": {
+      "select": "Valitse",
+      "nSelected": "{count} valittu",
+      "selectAllMatching": "Valitse kaikki {count} vastaavaa havaintoa",
+      "allSelected": "Kaikki {count} valittu",
+      "clear": "Tyhjennä valinta",
+      "toolbarLabel": "Joukkotoiminnot",
+      "confirmBulkDelete": "Poistetaanko {count} havaintoa? Tätä ei voi perua.",
+      "confirmBulkMarkCorrect": "Merkitäänkö {count} havaintoa oikeiksi?",
+      "confirmBulkMarkFalsePositive": "Merkitäänkö {count} havaintoa virheellisiksi?",
+      "confirmBulkLock": "Lukitaanko {count} havaintoa?",
+      "confirmBulkUnlock": "Avataanko {count} havainnon lukitus?",
+      "bulkSuccess": "{count} havaintoa päivitetty",
+      "bulkDeleteSuccess": "{count} havaintoa poistettu",
+      "bulkPartial": "{processed} päivitetty, {skipped} ohitettu (lukittu)",
+      "tooManyDetections": "Liian monta havaintoa ({count}). Rajaa suodattimia valitaksesi alle 500.",
+      "bulkError": "Joukkotoiminto epäonnistui. Yritä uudelleen.",
+      "switchToTable": "Vaihda taulukkonäkymään valitaksesi havaintoja"
     }
   },
   "species": {
@@ -1432,7 +1508,7 @@
       "samples": "näytettä",
       "available": "saatav.",
       "min": "Min",
-      "max": "Max",
+      "max": "Maks",
       "limit": "Raja",
       "tempUnavailable": "Ei saatavilla",
       "online": "Verkossa",
@@ -1730,7 +1806,17 @@
           },
           "hardwareNote": "Tiukka- ja maksimitasot vaativat korkeampia päällekkäisyysasetuksia ja enemmän prosessoritehoa. RPi 4 tai parempi laitteisto vaaditaan näille tasoille.",
           "overlapAdjusted": "Päällekkäisyysasetus säädetty automaattisesti arvoon {overlap}s suodatinvaatimusten täyttämiseksi",
-          "overlapReduced": "Päällekkäisyysasetus pienennetty arvoon {overlap}s vastaamaan suodatustasoa"
+          "overlapReduced": "Päällekkäisyysasetus pienennetty arvoon {overlap}s vastaamaan suodatustasoa",
+          "levelNames": {
+            "off": "Pois",
+            "lenient": "Matala",
+            "moderate": "Kohtalainen",
+            "balanced": "Tasapainoinen",
+            "strict": "Tiukka",
+            "maximum": "Maksimi",
+            "unknown": "Tuntematon"
+          },
+          "warningOff": "Ilman suodatusta jokainen luottamuskynnyksen ylittävä havainto hyväksytään välittömästi. Tämä tuottaa tyypillisesti useita vääriä positiivisia päivässä. Jo matala suodatus parantaa tulosten laatua merkittävästi."
         },
         "rangeFilter": {
           "title": "Aluesuodatin",
@@ -2335,16 +2421,19 @@
           "gotify": {
             "name": "Gotify",
             "server": {
-              "label": "Palvelimen URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "Gotify-palvelimesi isäntänimi (ilman https://)"
+              "label": "Palvelin",
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Gotify-palvelimesi isäntänimi ja portti"
             },
             "token": {
               "label": "Sovelluksen token",
               "placeholder": "A...",
               "helpText": "Token Gotifyn sovellussivulta"
             },
-            "incomplete": "Palvelin ja token vaaditaan"
+            "incomplete": "Palvelin ja token vaaditaan",
+            "protocol": {
+              "label": "Protokolla"
+            }
           },
           "pushover": {
             "name": "Pushover",
@@ -2894,7 +2983,24 @@
           "degraded": "Heikentynyt",
           "failed": "Epäonnistunut",
           "unknown": "Tuntematon"
+        },
+        "testRequired": "Suorita onnistunut striimitesti ennen tallentamista",
+        "test": {
+          "button": "Testaa striimi",
+          "probing": "Testataan...",
+          "result": "Testitulos",
+          "error": "Testi epäonnistui",
+          "batCompatible": "Yhteensopiva lepakoiden kanssa",
+          "batIncompatible": "Ei yhteensopiva lepakoiden kanssa"
+        },
+        "batWarning": "Lepakkomallit vaativat häviöttömän koodekin (PCM) ja vähintään 96 kHz näytteenottotaajuuden. Tarkista yhteensopivuus yllä olevalla Testaa striimi -painikkeella.",
+        "codecWarning": {
+          "lossy": "Häviölliset koodekit (AAC, Opus, MP3) tuhoavat ultraäänitaajuudet yli ~20 kHz, mikä tekee striimistä soveltumattoman lepakoiden havaitsemiseen."
         }
+      },
+      "models": {
+        "recommendBoth": "Parhaan lajien havainnointikattavuuden saavuttamiseksi suositellaan käyttämään sekä BirdNET- että Perch-malleja yhdessä.",
+        "perchOnlyWarning": "Perch yksinään tuottaa vähemmän havaintoja. Laske luottamuskynnys arvoon 0.50 mielekkäiden tulosten saamiseksi tai ota BirdNET käyttöön rinnalle paremman kattavuuden saavuttamiseksi."
       }
     },
     "integration": {
@@ -3914,22 +4020,22 @@
     },
     "userInterface": {
       "tabs": {
-        "appearance": "Appearance",
-        "language": "Language & Regional",
-        "visualContent": "Visual Content",
+        "appearance": "Ulkoasu",
+        "language": "Kieli ja alue",
+        "visualContent": "Visuaalinen sisältö",
         "audioPlayback": "Äänentoisto"
       },
       "appearance": {
-        "title": "Appearance",
-        "description": "Customize the look and feel of your BirdNET-Go interface"
+        "title": "Ulkoasu",
+        "description": "Mukauta BirdNET-Go-käyttöliittymän ulkoasua"
       },
       "language": {
-        "title": "Language & Regional",
-        "description": "Language, temperature units, and regional display preferences"
+        "title": "Kieli ja alue",
+        "description": "Kieli, lämpötilayksiköt ja alueelliset näyttöasetukset"
       },
       "visualContent": {
-        "title": "Visual Content",
-        "description": "Configure bird images and spectrogram display settings"
+        "title": "Visuaalinen sisältö",
+        "description": "Lintukuvien ja spektrogramminäytön asetukset"
       },
       "audioPlayback": {
         "title": "Äänentoisto",
@@ -4109,7 +4215,31 @@
       "playbackSpeed": "Toistonopeus",
       "speed": "Nopeus",
       "loop": "Vaihda silmukka",
-      "player": "Äänisoitin"
+      "player": "Äänisoitin",
+      "autoplayBlocked": "Klikkaa toistaaksesi (automaattinen toisto estetty)",
+      "hlsNotSupported": "HLS-toisto ei ole tuettu tässä selaimessa",
+      "streamStarting": "Käynnistetään äänistriimi...",
+      "levelFor": "Äänitaso lähteelle {source}",
+      "levelForNoSource": "Äänitaso: ei lähdettä",
+      "noSource": "Ei lähdettä",
+      "levelAnnouncement": "Nykyinen äänitaso: {level} prosenttia",
+      "levelAnnouncementClipping": "Nykyinen äänitaso: {level} prosenttia, säröytyminen havaittu",
+      "sourceSelection": "Äänilähteen valinta",
+      "sources": "Äänilähteet",
+      "noSourcesAvailable": "Ei äänilähteitä saatavilla",
+      "silent": "(hiljainen)",
+      "stopPlayback": "Pysäytä äänen toisto",
+      "startPlayback": "Aloita äänen toisto",
+      "nowPlaying": "Toistetaan ääntä lähteestä {source}",
+      "nowPlayingNoSource": "Toistetaan ääntä",
+      "playbackStopped": "Äänen toisto pysäytetty",
+      "loginRequired": "Kirjautuminen vaaditaan äänen suoratoistoon",
+      "streamError": "Virhe striimin käynnistyksessä",
+      "streamTitle": "Lintujen äänistriimi - {source}",
+      "streamTitleDefault": "Lintujen äänistriimi",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Suora lähetys",
+      "playbackError": "Toistovirhe: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammia ei ole vielä generoitu",
@@ -4200,7 +4330,7 @@
         "extracting": "Puretaan leikettä...",
         "extractError": "Leikkeen purku epäonnistui",
         "formatLabel": "Muoto",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Toista valinta",
@@ -4380,6 +4510,16 @@
       "conflictData": "Tämä toiminto on ristiriidassa olemassa olevien tietojen kanssa.",
       "requestTimeout": "Pyyntö aikakatkaistiin.",
       "networkError": "Verkkovirhe. Tarkista yhteytesi."
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Virheellinen pyyntörunko",
+        "urlRequired": "Striimin URL on pakollinen",
+        "invalidUrl": "Virheellinen URL-muoto. Syötä täydellinen URL, esim. rtsp://host:portti/polku",
+        "unsupportedScheme": "URL-skeemaa \"{scheme}\" ei tueta. Käytä rtsp, rtsps, http, https, rtmp tai udp",
+        "blockedDestination": "Tämä kohde on estetty turvallisuussyistä",
+        "connectionFailed": "Striimiin ei saatu yhteyttä. Tarkista, että URL on oikein ja striimi on saavutettavissa"
+      }
     }
   },
   "weather": {
@@ -4495,8 +4635,8 @@
   "analysis": {
     "title": "Analyysi",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Asetukset",
+      "models": "Mallit"
     },
     "detection": {
       "title": "Tunnistusasetukset",
@@ -4506,18 +4646,41 @@
         "helpText": "Vähimmäisluotettavuuspisteet (0.0 - 1.0), joka vaaditaan tunnistuksen tallentamiseen."
       },
       "batThreshold": {
-        "label": "Bat Detection Threshold",
-        "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
+        "label": "Lepakkotunnistuksen kynnysarvo",
+        "helpText": "Vähimmäisluottamusarvo lepakkolajien tunnistuksille. Koskee vain lepakkoluokittelumalleja."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Lajien kieli",
+        "helpText": "Kieli, jolla lajien yleisnimistö näytetään käyttöliittymässä."
+      },
+      "batFilter": {
+        "label": "Lepakkoäänen ylipäästösuodatin",
+        "helpText": "Suodattaa kuultavat taajuudet ennen lepakkoanalyysiä vähentääkseen linnunlaulun ja taustamelun aiheuttamia vääriä tunnistuksia."
+      },
+      "batNighttimeOnly": {
+        "label": "Vain yöaikaan",
+        "helpText": "Kun käytössä, lepakkotunnistus toimii vain siviilihämärän ja siviiliaamunkoiton välillä. Vaatii, että sijainti on määritetty. Poista käytöstä, jos haluat lepakkotunnistuksen olevan käytössä ympäri vuorokauden."
+      },
+      "batUltrasonicFilter": {
+        "label": "Tunnistuksen jälkitarkistus",
+        "helpText": "Kun käytössä, lepakkotunnistukset validoidaan analysoimalla ultraäänienergiakuvioita lähdeäänitteestä. Tunnistukset, joista puuttuvat kaikuluotausominaisuudet, merkitään epätodennäköisiksi."
+      },
+      "batFalsePositiveFilter": {
+        "label": "Lepakon väärien positiivisten suodatin",
+        "helpText": "Vaatii useita vahvistuksia lepakkotunnistuksesta liukuvan ikkunan sisällä ennen kuin se hyväksytään. Korkeammat tasot vaativat enemmän vahvistuksia, mikä vähentää vääriä positiivisia. Lepakkomalli käyttää kiinteää 50 % päällekkäisyyttä, joten päällekkäisyyden säätöä ei tarvita.",
+        "levels": {
+          "off": "Ei suodatusta; hyväksyy minkä tahansa lepakkohavainnon välittömästi.",
+          "moderate": "Hyvä tasapaino useimpiin asetuksiin. Vähentää merkittävästi vääriä positiivisia.",
+          "strict": "Maksimaalinen suodatus korkeimman tarkkuuden saavuttamiseksi."
+        },
+        "detectionCount": "{count} vahvistusta vaaditaan. {description}",
+        "warningOff": "Ilman suodatusta väärien positiivisten todennäköisyys on suuri. Suodatuksen käyttöönotto parantaa tarkkuutta merkittävästi."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Aluesuodatin koskee vain lintuluokittimia. Lepakkomallit käyttävät omia lajilistojaan.",
       "status": {
-        "title": "Aktiivinen aluesuodatin",
+        "title": "Aluesuodattimen yhteenveto",
         "model": "Malli",
         "autoSelected": "Automaattisesti valittu",
         "manual": "Manuaalinen",
@@ -4525,12 +4688,22 @@
         "mappedSpecies": "Kartoitetut lajit",
         "unmappedSpecies": "Kartoittamattomat lajit",
         "totalSpecies": "Lajeja yhteensä",
-        "noFilter": "Ei aktiivista aluesuodatinta"
+        "noFilter": "Ei aktiivista aluesuodatinta",
+        "geomodelInfo": "BirdNET-geomalli {version} - {species} tunnettua lajia",
+        "classifier": "Luokittelija",
+        "withRangeData": "Aluetiedoilla",
+        "withoutRangeData": "Ilman aluetietoja",
+        "withRangeDataTooltip": "Lajit, joiden maantieteellisen todennäköisyyden geomalli voi arvioida sijainnissasi",
+        "withoutRangeDataTooltip": "Lajit, joilla ei ole maantieteellisiä tietoja geomallissa, käsitellään alla olevalla kartoittamattomien lajien asetuksella",
+        "passUnmapped": {
+          "label": "Salli lajit ilman aluetietoja",
+          "helpText": "Salli sellaisten lajien havainnot, joille geomallilla ei ole maantieteellisiä tietoja. Kun pois päältä, nämä lajit suodatetaan aina pois."
+        }
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Lisäasetukset",
+      "description": "Käsittelyn ja mukautettujen mallien asetukset."
     },
     "gallery": {
       "title": "Malligalleria",
@@ -4590,7 +4763,25 @@
       "reinstall": "Asenna uudelleen",
       "reinstalling": "Asennetaan uudelleen...",
       "reinstallComplete": "Tiedostot tarkistettu onnistuneesti",
-      "geomodelBadge": "Sisältää BirdNET v3.0 -geomallin"
+      "geomodelBadge": "Sisältää BirdNET v3.0 -geomallin",
+      "sections": {
+        "acoustic": "Akustiset luokittelijat",
+        "geomodel": "Geomallit"
+      },
+      "onnxRuntimeRequired": "Vaatii ONNX Runtimen, joka ei ole käytettävissä tässä järjestelmässä.",
+      "onnxRuntimeMissing": "ONNX Runtime ei ole käytettävissä. Tätä mallia ei voi suorittaa.",
+      "unavailable": "Ei käytettävissä"
+    },
+    "bird": {
+      "title": "Lintuhavainnot",
+      "description": "Määritä luottamuskynnys, lajikieli ja väärien positiivisten suodatus lintuluokittimille."
+    },
+    "bat": {
+      "title": "Lepakkohavainnot",
+      "description": "Määritä kynnys, ajastus ja väärien positiivisten suodatus lepakkoluokittimille."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dynaaminen kynnys koskee vain lintuluokittimia."
     }
   },
   "restart": {
@@ -4604,5 +4795,147 @@
     "bannerMessage": "Asetusten muutokset vaativat uudelleenkäynnistyksen:",
     "bannerAction": "Käynnistä uudelleen nyt",
     "restartFailed": "Uudelleenkäynnistyksen aloittaminen epäonnistui"
+  },
+  "help": {
+    "title": "Ohje ja tuki",
+    "subtitle": "Saa apua, ilmoita ongelmista ja ota yhteyttä yhteisöön",
+    "reportBug": {
+      "description": "Jos kohtaat ongelman, avaa ensin virheraportti GitHubissa ongelman kuvaamiseksi ja luo sitten tukipaketti raportin numerolla vianmäärityksen helpottamiseksi."
+    },
+    "askQuestion": {
+      "description": "Onko sinulla kysyttävää asennuksesta, ominaisuuksista tai käytöstä? GitHub Discussions -foorumi on paras paikka saada apua yhteisöltä."
+    },
+    "diagnostics": {
+      "description": "Luo tukipaketti ongelmien diagnosoimiseksi. Se tallentaa järjestelmäkokoonpanon ja viimeisimmät lokit."
+    },
+    "quickLinks": {
+      "title": "Pikalinkit",
+      "releases": "Julkaisutiedot"
+    }
+  },
+  "reportBug": {
+    "title": "Ilmoita virheestä",
+    "subtitle": "Auta meitä korjaamaan ongelmia antamalla tarvittavat tiedot",
+    "systemInfo": {
+      "title": "Järjestelmätietosi",
+      "description": "Nämä tiedot auttavat tunnistamaan asennuksesi. Kopioi ne virheraporttiin.",
+      "version": "Versio",
+      "buildDate": "Käännöspäivä",
+      "os": "Käyttöjärjestelmä",
+      "copy": "Kopioi leikepöydälle",
+      "copied": "Kopioitu!",
+      "architecture": "Arkkitehtuuri",
+      "hardware": "Laitteisto",
+      "environment": "Ympäristö"
+    },
+    "whatToInclude": {
+      "title": "Mitä raporttiin tulee sisällyttää",
+      "description": "Hyvä virheraportti auttaa meitä korjaamaan ongelmasi nopeasti. Sisällytä seuraavat tiedot:",
+      "step1": {
+        "title": "Selkeä kuvaus ongelmasta",
+        "description": "Mitä tapahtui, mitä odotit tapahtuvan ja miten ongelma toistetaan."
+      },
+      "step2": {
+        "title": "Asennustapasi",
+        "description": "Miten asensit BirdNET-Go:n: install.sh-skripti, Docker Compose, manuaalinen käännös tai muu."
+      },
+      "step3": {
+        "title": "Järjestelmätiedot",
+        "description": "Kopioi yllä näkyvät järjestelmätiedot, mukaan lukien versio, käyttöjärjestelmä ja käännöspäivä."
+      },
+      "step4": {
+        "title": "Tukipaketti",
+        "description": "Luo ja lataa tukipaketti alla. Se tallentaa lokit ja asetukset, jotka nopeuttavat merkittävästi vianmääritystä."
+      }
+    },
+    "openIssue": {
+      "title": "Avaa GitHub-raportti",
+      "description": "Avaa raportti GitHubissa ongelman kuvaamiseksi. Tarvitset raportin numeron seuraavassa vaiheessa.",
+      "button": "Avaa raportti GitHubissa"
+    },
+    "supportDump": {
+      "title": "Luo tukipaketti",
+      "description": "Raportin luomisen jälkeen luo tukipaketti ja syötä GitHub-raportin numero. Tämä yhdistää diagnostiikkatiedot virheraporttiin ja auttaa vianmäärityksessä."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "refresh": "Päivitä",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "metricFooter": {
+      "allPassing": "Kaikki kunnossa",
+      "needsAttention": "Vaatii huomiota",
+      "failing": "Epäonnistuu",
+      "allClear": "Ei ongelmia",
+      "noData": "Ei dataa",
+      "none": "Ei mitään"
+    },
+    "diagnostics": "Diagnostiikka",
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Yleisimmät virheet",
+      "errorCount": "Lukumäärä",
+      "errorComponent": "Komponentti",
+      "errorLevel": "Taso",
+      "errorMessage": "Viesti"
+    },
+    "window": {
+      "label": "Arviointijakso",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Viimeisin tapahtuma",
+      "recentEvents": "Viimeaikaiset tapahtumat",
+      "time": "Aika",
+      "source": "Lähde",
+      "count": "Määrä",
+      "lifetime": "yhteensä",
+      "sparklineLabel": "Aktiivisuuskaavio"
+    }
   }
 }

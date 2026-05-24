@@ -141,6 +141,7 @@ func ExampleValidateWebhookProvider() {
 // This function is used internally by SaveSettings to add default seasons based on latitude.
 func Example_prepareSettingsForSave() {
 	settings := &Settings{}
+	settings.BirdNET.LocationConfigured = true
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 	// No seasons defined yet
 

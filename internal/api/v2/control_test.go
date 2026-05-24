@@ -202,14 +202,14 @@ func TestGetAvailableActions(t *testing.T) {
 		require.NoError(t, err)
 
 		// Expected action count depends on container environment
-		expectedCount := 4 // base actions + restart_server
+		expectedCount := 5 // base actions + restart_server + restart_audio_source
 		if sysinfo.IsContainer() {
-			expectedCount = 5 // + restart_container
+			expectedCount = 6 // + restart_container
 		}
 		require.Len(t, actions, expectedCount, "Should have expected control actions")
 
 		// Verify actions include all expected types
-		var hasRestartAction, hasReloadAction, hasRebuildFilterAction, hasRestartServerAction, hasRestartContainerAction bool
+		var hasRestartAction, hasReloadAction, hasRebuildFilterAction, hasRestartServerAction, hasRestartContainerAction, hasRestartAudioSourceAction bool
 		for _, action := range actions {
 			switch action.Action {
 			case ActionRestartAnalysis:
@@ -227,6 +227,9 @@ func TestGetAvailableActions(t *testing.T) {
 			case ActionRestartContainer:
 				hasRestartContainerAction = true
 				assert.Contains(t, action.Description, "Restart")
+			case ActionRestartAudioSource:
+				hasRestartAudioSourceAction = true
+				assert.Contains(t, action.Description, "Restart")
 			}
 		}
 
@@ -235,6 +238,7 @@ func TestGetAvailableActions(t *testing.T) {
 		assert.True(t, hasReloadAction, "Missing reload_model action")
 		assert.True(t, hasRebuildFilterAction, "Missing rebuild_filter action")
 		assert.True(t, hasRestartServerAction, "Missing restart_server action")
+		assert.True(t, hasRestartAudioSourceAction, "Missing restart_audio_source action")
 		if sysinfo.IsContainer() {
 			assert.True(t, hasRestartContainerAction, "Missing restart_container action")
 		}

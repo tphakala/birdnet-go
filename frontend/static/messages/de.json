@@ -154,7 +154,8 @@
         "verifiedCorrect": "Als korrekt verifiziert",
         "falsePositive": "Falsch positiv",
         "notReviewed": "Nicht überprüft",
-        "locked": "Gesperrt"
+        "locked": "Gesperrt",
+        "unlikely": "Unwahrscheinlich"
       },
       "form": {
         "correctDetection": "Korrekte Erkennung",
@@ -227,7 +228,16 @@
     "analyticsSubmenu": "Analysen-Untermenü",
     "settingsSubmenu": "Einstellungen-Untermenü",
     "systemSubmenu": "System-Untermenü",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Hilfe",
+    "helpSubmenu": "Hilfe-Untermenü",
+    "helpAndSupport": "Hilfe & Support",
+    "reportBug": "Fehler melden",
+    "askQuestion": "Frage stellen",
+    "reportBugAriaLabel": "Einen Fehler auf GitHub melden (öffnet in neuem Fenster)",
+    "askQuestionAriaLabel": "Eine Frage in GitHub Discussions stellen (öffnet in neuem Fenster)",
+    "viewOnGithubAriaLabel": "BirdNET-Go auf GitHub ansehen (öffnet in neuem Fenster)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -423,7 +433,7 @@
       },
       "buffer": {
         "overloadTitle": "Audioanalyse überlastet",
-        "overloadMessage": "Ihr System verwirft {dropRate} % der Audioaufnahmen der Quelle '{sourceName}', da es mit der Analyse nicht Schritt halten kann. Reduzieren Sie den BirdNET-Überlappungswert in den Erkennungseinstellungen oder erwägen Sie ein Upgrade auf eine schnellere CPU."
+        "overloadMessage": "Ihr System verwirft {dropRate} % der Audioaufnahmen der Quelle ''{sourceName}'', da es mit der Analyse nicht Schritt halten kann. Reduzieren Sie den BirdNET-Überlappungswert in den Erkennungseinstellungen oder erwägen Sie ein Upgrade auf eine schnellere CPU."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -444,6 +454,10 @@
           "diskFull": "Festplatte voll — Speicherplatz freigeben",
           "permissionDenied": "Zugriff verweigert — Datei- oder Dienstberechtigungen prüfen"
         }
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime nicht verfügbar",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} wird für {modelName} benötigt, wurde aber nicht gefunden. Siehe Installationsanleitung: {installGuideURL}"
       }
     },
     "loading": "Benachrichtigungen werden geladen..."
@@ -513,7 +527,8 @@
       "false": "Falsch",
       "unverified": "Unverifiziert",
       "locked": "Gesperrt",
-      "unlocked": "Entsperrt"
+      "unlocked": "Entsperrt",
+      "unlikely": "Unwahrscheinlich"
     },
     "review": {
       "review": "Überprüfen",
@@ -641,7 +656,8 @@
         "verified": "Verifiziert",
         "false": "Falsch",
         "unverified": "Unverifiziert",
-        "locked": "Gesperrt"
+        "locked": "Gesperrt",
+        "unlikely": "Unwahrscheinlich"
       },
       "modals": {
         "showSpecies": "Art {species} anzeigen",
@@ -829,7 +845,43 @@
         "sleet": "Schneeregen",
         "snow": "Schnee",
         "fog": "Nebel",
-        "unknown": "Unbekannt"
+        "unknown": "Unbekannt",
+        "clearsky": "Klarer Himmel",
+        "fair": "Heiter",
+        "heavyrain": "Starker Regen",
+        "heavyrainandthunder": "Starker Regen und Gewitter",
+        "heavyrainshowers": "Starke Regenschauer",
+        "heavyrainshowersandthunder": "Starke Regenschauer und Gewitter",
+        "heavysleet": "Starker Schneeregen",
+        "heavysleetandthunder": "Starker Schneeregen und Gewitter",
+        "heavysleetshowers": "Starke Schneeregenschauer",
+        "heavysleetshowersandthunder": "Starke Schneeregenschauer und Gewitter",
+        "heavysnow": "Starker Schnee",
+        "heavysnowandthunder": "Starker Schnee und Gewitter",
+        "heavysnowshowers": "Starke Schneeschauer",
+        "heavysnowshowersandthunder": "Starke Schneeschauer und Gewitter",
+        "lightrain": "Leichter Regen",
+        "lightrainandthunder": "Leichter Regen und Gewitter",
+        "lightrainshowers": "Leichte Regenschauer",
+        "lightrainshowersandthunder": "Leichte Regenschauer und Gewitter",
+        "lightsleet": "Leichter Schneeregen",
+        "lightsleetandthunder": "Leichter Schneeregen und Gewitter",
+        "lightsleetshowers": "Leichte Schneeregenschauer",
+        "lightsnow": "Leichter Schnee",
+        "lightsnowandthunder": "Leichter Schnee und Gewitter",
+        "lightsnowshowers": "Leichte Schneeschauer",
+        "lightssleetshowersandthunder": "Leichte Schneeregenschauer und Gewitter",
+        "lightssnowshowersandthunder": "Leichte Schneeschauer und Gewitter",
+        "partlycloudy": "Teilweise bewölkt",
+        "rainandthunder": "Regen und Gewitter",
+        "rainshowers": "Regenschauer",
+        "rainshowersandthunder": "Regenschauer und Gewitter",
+        "sleetandthunder": "Schneeregen und Gewitter",
+        "sleetshowers": "Schneeregenschauer",
+        "sleetshowersandthunder": "Schneeregenschauer und Gewitter",
+        "snowandthunder": "Schnee und Gewitter",
+        "snowshowers": "Schneeschauer",
+        "snowshowersandthunder": "Schneeschauer und Gewitter"
       }
     },
     "media": {
@@ -863,12 +915,17 @@
     "row": {
       "viewDetails": "Details für {species} anzeigen",
       "openDetailFromStatus": "Detailseite für {species} öffnen",
-      "openDetailFromDate": "Detailseite für {species}, aufgenommen am {date} um {time}, öffnen"
+      "openDetailFromDate": "Detailseite für {species}, aufgenommen am {date} um {time}, öffnen",
+      "play": "Abspielen",
+      "playAudio": "Audio abspielen"
     },
     "aria": {
       "loading": "Erkennungsdetails werden geladen...",
       "loaded": "Erkennungsdetails für {species} geladen",
-      "error": "Fehler beim Laden der Erkennung: {error}"
+      "error": "Fehler beim Laden der Erkennung: {error}",
+      "loadingResults": "Lade {count} Ergebnisse...",
+      "thumbnailLoading": "Lade Vorschaubild von {species}...",
+      "thumbnailLoaded": "Vorschaubild von {species} geladen"
     },
     "errors": {
       "notFound": "Erkennung nicht gefunden. Sie wurde möglicherweise gelöscht oder die ID ist falsch.",
@@ -901,6 +958,25 @@
       "confirmBody": "Damit werden Art, Modell und Konfidenz der Erkennung direkt überschrieben und als verifiziert markiert. Ein vorhandener Reviewstatus wird überschrieben.",
       "confirmApply": "Ja, Korrektur anwenden",
       "applying": "Wird angewendet…"
+    },
+    "selection": {
+      "select": "Auswählen",
+      "nSelected": "{count} ausgewählt",
+      "selectAllMatching": "Alle {count} passenden Erkennungen auswählen",
+      "allSelected": "Alle {count} ausgewählt",
+      "clear": "Auswahl aufheben",
+      "toolbarLabel": "Massenaktionen",
+      "confirmBulkDelete": "{count} Erkennungen löschen? Dies kann nicht rückgängig gemacht werden.",
+      "confirmBulkMarkCorrect": "{count} Erkennungen als korrekt markieren?",
+      "confirmBulkMarkFalsePositive": "{count} Erkennungen als Fehlalarm markieren?",
+      "confirmBulkLock": "{count} Erkennungen sperren?",
+      "confirmBulkUnlock": "{count} Erkennungen entsperren?",
+      "bulkSuccess": "{count} Erkennungen aktualisiert",
+      "bulkDeleteSuccess": "{count} Erkennungen gelöscht",
+      "bulkPartial": "{processed} aktualisiert, {skipped} übersprungen (gesperrt)",
+      "tooManyDetections": "Zu viele Erkennungen ({count}). Schränken Sie die Filter ein, um weniger als 500 auszuwählen.",
+      "bulkError": "Massenaktion fehlgeschlagen. Bitte erneut versuchen.",
+      "switchToTable": "Zur Tabellenansicht wechseln, um Erkennungen auszuwählen"
     }
   },
   "species": {
@@ -1730,7 +1806,17 @@
           },
           "hardwareNote": "Die Stufen \"Streng\" und \"Maximum\" erfordern höhere Überlappungseinstellungen und mehr CPU-Ressourcen. RPi 4 oder bessere Hardware ist für diese Stufen erforderlich.",
           "overlapAdjusted": "Überlappungseinstellung automatisch auf {overlap}s angepasst, um die Filteranforderungen zu erfüllen",
-          "overlapReduced": "Überlappungseinstellung auf {overlap}s reduziert, um der Filterstufe zu entsprechen"
+          "overlapReduced": "Überlappungseinstellung auf {overlap}s reduziert, um der Filterstufe zu entsprechen",
+          "levelNames": {
+            "off": "Aus",
+            "lenient": "Niedrig",
+            "moderate": "Mittel",
+            "balanced": "Ausgewogen",
+            "strict": "Streng",
+            "maximum": "Maximum",
+            "unknown": "Unbekannt"
+          },
+          "warningOff": "Ohne Filterung wird jede Erkennung über dem Konfidenzschwellenwert sofort akzeptiert. Dies erzeugt typischerweise mehrere Fehlerkennungen pro Tag. Selbst eine niedrige Filterung verbessert die Ergebnisqualität erheblich."
         },
         "rangeFilter": {
           "title": "Reichweitenfilter",
@@ -2370,15 +2456,18 @@
             "name": "Gotify",
             "server": {
               "label": "Server-URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "Ihr Gotify-Server-Hostname (ohne https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Ihr Gotify-Server-Hostname und Port"
             },
             "token": {
               "label": "Anwendungstoken",
               "placeholder": "A...",
               "helpText": "Token von der Gotify Apps-Seite"
             },
-            "incomplete": "Server und Token sind erforderlich"
+            "incomplete": "Server und Token sind erforderlich",
+            "protocol": {
+              "label": "Protokoll"
+            }
           },
           "pushover": {
             "name": "Pushover",
@@ -3121,7 +3210,24 @@
           "degraded": "Beeinträchtigt",
           "failed": "Fehlgeschlagen",
           "unknown": "Unbekannt"
+        },
+        "testRequired": "Führen Sie einen erfolgreichen Streamtest durch, bevor Sie speichern",
+        "test": {
+          "button": "Stream testen",
+          "probing": "Teste...",
+          "result": "Testergebnis",
+          "error": "Test fehlgeschlagen",
+          "batCompatible": "Fledermaus-kompatibel",
+          "batIncompatible": "Nicht fledermaus-kompatibel"
+        },
+        "batWarning": "Fledermausmodelle erfordern Streams mit einem verlustfreien Codec (PCM) und einer Abtastrate von mindestens 96 kHz. Verwenden Sie die Schaltfläche Stream testen oben, um die Kompatibilität zu überprüfen.",
+        "codecWarning": {
+          "lossy": "Verlustbehaftete Codecs (AAC, Opus, MP3) zerstören Ultraschallfrequenzen über ~20 kHz und machen den Stream für die Fledermauserkennung ungeeignet."
         }
+      },
+      "models": {
+        "recommendBoth": "Für die beste Artenerkennung wird empfohlen, sowohl BirdNET als auch Perch gemeinsam auszuführen.",
+        "perchOnlyWarning": "Perch allein erzeugt weniger Erkennungen. Senken Sie den Konfidenzschwellenwert auf 0.50 für aussagekräftige Ergebnisse, oder aktivieren Sie BirdNET für eine bessere Abdeckung."
       }
     },
     "species": {
@@ -3905,7 +4011,7 @@
       "schemeForest": "Wald",
       "schemeAmber": "Bernstein",
       "schemeViolet": "Violett",
-      "schemeRose": "Rose",
+      "schemeRose": "Rosé",
       "schemeCustom": "Benutzerdefiniert",
       "customPrimary": "Primärfarbe",
       "customAccent": "Akzentfarbe",
@@ -4109,7 +4215,31 @@
       "playbackSpeed": "Wiedergabegeschwindigkeit",
       "speed": "Tempo",
       "loop": "Wiederholung umschalten",
-      "player": "Audioplayer"
+      "player": "Audioplayer",
+      "autoplayBlocked": "Klicken zum Abspielen (Autoplay blockiert)",
+      "hlsNotSupported": "HLS-Wiedergabe wird in diesem Browser nicht unterstützt",
+      "streamStarting": "Audiostream wird gestartet...",
+      "levelFor": "Audiopegel für {source}",
+      "levelForNoSource": "Audiopegel: keine Quelle",
+      "noSource": "Keine Quelle",
+      "levelAnnouncement": "Aktueller Audiopegel: {level} Prozent",
+      "levelAnnouncementClipping": "Aktueller Audiopegel: {level} Prozent, Übersteuerung erkannt",
+      "sourceSelection": "Audioquelle auswählen",
+      "sources": "Audioquellen",
+      "noSourcesAvailable": "Keine Audioquellen verfügbar",
+      "silent": "(still)",
+      "stopPlayback": "Audiowiedergabe stoppen",
+      "startPlayback": "Audiowiedergabe starten",
+      "nowPlaying": "Spielt jetzt Audio von {source}",
+      "nowPlayingNoSource": "Audio wird wiedergegeben",
+      "playbackStopped": "Audiowiedergabe gestoppt",
+      "loginRequired": "Anmeldung für Audio-Streaming erforderlich",
+      "streamError": "Fehler beim Starten des Streams",
+      "streamTitle": "Vogelaudio-Stream - {source}",
+      "streamTitleDefault": "Vogelaudio-Stream",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Livestream",
+      "playbackError": "Wiedergabefehler: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogramm noch nicht generiert",
@@ -4380,6 +4510,16 @@
       "conflictData": "Diese Aktion steht im Konflikt mit vorhandenen Daten.",
       "requestTimeout": "Zeitüberschreitung der Anfrage.",
       "networkError": "Netzwerkfehler aufgetreten. Bitte überprüfen Sie Ihre Verbindung."
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Ungültiger Anfragekörper",
+        "urlRequired": "Stream-URL ist erforderlich",
+        "invalidUrl": "Ungültiges URL-Format. Geben Sie eine vollständige URL ein, z. B. rtsp://host:port/pfad",
+        "unsupportedScheme": "Nicht unterstütztes URL-Schema \"{scheme}\". Verwenden Sie rtsp, rtsps, http, https, rtmp oder udp",
+        "blockedDestination": "Dieses Ziel ist aus Sicherheitsgründen gesperrt",
+        "connectionFailed": "Verbindung zum Stream konnte nicht hergestellt werden. Überprüfen Sie, ob die URL korrekt ist und der Stream erreichbar ist"
+      }
     }
   },
   "weather": {
@@ -4495,8 +4635,8 @@
   "analysis": {
     "title": "Analyse",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Einstellungen",
+      "models": "Modelle"
     },
     "detection": {
       "title": "Erkennungseinstellungen",
@@ -4506,18 +4646,41 @@
         "helpText": "Mindest-Konfidenzwert (0.0 - 1.0), ab dem eine Erkennung aufgezeichnet wird."
       },
       "batThreshold": {
-        "label": "Bat Detection Threshold",
-        "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
+        "label": "Fledermaus-Erkennungsschwelle",
+        "helpText": "Minimale Konfidenzbewertung für Fledermausarten-Erkennungen. Gilt nur für Fledermaus-Klassifikatormodelle."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Artensprache",
+        "helpText": "Sprache für die gebräuchlichen Artnamen in der Benutzeroberfläche."
+      },
+      "batFilter": {
+        "label": "Fledermaus-Audio-Hochpassfilter",
+        "helpText": "Filtert hörbare Frequenzen vor der Fledermausanalyse heraus, um Fehlerkennungen durch Vogelgesang und Umgebungsgeräusche zu reduzieren."
+      },
+      "batNighttimeOnly": {
+        "label": "Nur nachts",
+        "helpText": "Wenn aktiviert, wird die Fledermauserkennung nur zwischen der bürgerlichen Abenddämmerung und der Morgendämmerung durchgeführt. Erfordert eine konfigurierte Standorteinstellung. Deaktivieren, um die Fledermauserkennung rund um die Uhr auszuführen."
+      },
+      "batUltrasonicFilter": {
+        "label": "Nachträgliche Validierung",
+        "helpText": "Wenn aktiviert, werden Fledermauserkennungen durch Analyse der Ultraschall-Energiemuster in der Quellaufnahme validiert. Erkennungen ohne typische Echoortungsmerkmale werden als unwahrscheinlich markiert."
+      },
+      "batFalsePositiveFilter": {
+        "label": "Fledermaus-Falsch-Positiv-Filter",
+        "helpText": "Erfordert mehrere Bestätigungen einer Fledermauserkennung innerhalb eines gleitenden Fensters, bevor sie akzeptiert wird. Höhere Stufen erfordern mehr Bestätigungen und reduzieren Fehlerkennungen. Das Fledermausmodell verwendet eine feste 50%-Überlappung, daher ist keine Überlappungsanpassung erforderlich.",
+        "levels": {
+          "off": "Keine Filterung; akzeptiert jede Fledermauserkennung sofort.",
+          "moderate": "Gute Balance für die meisten Setups. Reduziert Fehlerkennungen erheblich.",
+          "strict": "Maximale Filterung für höchste Genauigkeit."
+        },
+        "detectionCount": "{count} Bestätigungen erforderlich. {description}",
+        "warningOff": "Ohne Filterung besteht eine hohe Wahrscheinlichkeit für Fehlerkennungen. Die Aktivierung der Filterung verbessert die Genauigkeit erheblich."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Der Reichweitenfilter gilt nur für Vogelklassifikatoren. Fledermausmodelle verwenden eigene Artenlisten.",
       "status": {
-        "title": "Aktiver Gebietsfilter",
+        "title": "Gebietsfilter-Übersicht",
         "model": "Modell",
         "autoSelected": "Automatisch ausgewählt",
         "manual": "Manuell",
@@ -4525,12 +4688,22 @@
         "mappedSpecies": "Zugeordnete Arten",
         "unmappedSpecies": "Nicht zugeordnete Arten",
         "totalSpecies": "Arten insgesamt",
-        "noFilter": "Kein Gebietsfilter aktiv"
+        "noFilter": "Kein Gebietsfilter aktiv",
+        "geomodelInfo": "BirdNET-Geomodell {version} - {species} bekannte Arten",
+        "classifier": "Klassifikator",
+        "withRangeData": "Mit Gebietsdaten",
+        "withoutRangeData": "Ohne Gebietsdaten",
+        "withRangeDataTooltip": "Arten, die das Geomodell anhand der geografischen Wahrscheinlichkeit an Ihrem Standort bewerten kann",
+        "withoutRangeDataTooltip": "Arten ohne geografische Daten im Geomodell, behandelt durch die Einstellung für nicht zugeordnete Arten unten",
+        "passUnmapped": {
+          "label": "Arten ohne Gebietsdaten zulassen",
+          "helpText": "Erkennungen von Arten zulassen, für die das Geomodell keine geografischen Daten hat. Wenn deaktiviert, werden diese Arten immer herausgefiltert."
+        }
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Erweitert",
+      "description": "Verarbeitungs- und benutzerdefinierte Modellkonfiguration."
     },
     "gallery": {
       "title": "Modellgalerie",
@@ -4590,7 +4763,25 @@
       "reinstall": "Neu installieren",
       "reinstalling": "Wird neu installiert...",
       "reinstallComplete": "Dateien erfolgreich überprüft",
-      "geomodelBadge": "Enthält BirdNET v3.0 Geomodell"
+      "geomodelBadge": "Enthält BirdNET v3.0 Geomodell",
+      "sections": {
+        "acoustic": "Akustische Klassifikatoren",
+        "geomodel": "Geomodelle"
+      },
+      "onnxRuntimeRequired": "Erfordert ONNX Runtime, das auf diesem System nicht verfügbar ist.",
+      "onnxRuntimeMissing": "ONNX Runtime ist nicht verfügbar. Dieses Modell kann nicht ausgeführt werden.",
+      "unavailable": "Nicht verfügbar"
+    },
+    "bird": {
+      "title": "Vogelerkennung",
+      "description": "Konfigurieren Sie Konfidenzschwelle, Artensprache und Falsch-Positiv-Filterung für Vogelklassifikatoren."
+    },
+    "bat": {
+      "title": "Fledermauserkennung",
+      "description": "Konfigurieren Sie Schwellenwert, Zeitplanung und Falsch-Positiv-Filterung für Fledermausklassifikatoren."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Der dynamische Schwellenwert gilt nur für Vogelklassifikatoren."
     }
   },
   "restart": {
@@ -4604,5 +4795,147 @@
     "bannerMessage": "Konfigurationsänderungen erfordern einen Neustart:",
     "bannerAction": "Jetzt neu starten",
     "restartFailed": "Neustart konnte nicht eingeleitet werden"
+  },
+  "help": {
+    "title": "Hilfe & Support",
+    "subtitle": "Hilfe erhalten, Probleme melden und mit der Community verbinden",
+    "reportBug": {
+      "description": "Wenn Sie auf ein Problem stoßen, eröffnen Sie einen Fehlerbericht auf GitHub, um das Problem zu beschreiben, und erstellen Sie dann ein Support-Paket mit der Issue-Nummer zur Fehlerbehebung."
+    },
+    "askQuestion": {
+      "description": "Haben Sie eine Frage zur Einrichtung, zu Funktionen oder zur Nutzung? Das GitHub Discussions Forum ist der beste Ort, um Hilfe von der Community zu erhalten."
+    },
+    "diagnostics": {
+      "description": "Erstellen Sie ein Support-Paket zur Fehlerdiagnose. Es erfasst Ihre Systemkonfiguration und aktuelle Protokolle."
+    },
+    "quickLinks": {
+      "title": "Schnellzugriff",
+      "releases": "Versionshinweise"
+    }
+  },
+  "reportBug": {
+    "title": "Fehler melden",
+    "subtitle": "Helfen Sie uns, Probleme zu beheben, indem Sie die benötigten Informationen bereitstellen",
+    "systemInfo": {
+      "title": "Ihre Systeminformationen",
+      "description": "Diese Informationen helfen bei der Identifizierung Ihrer Konfiguration. Kopieren Sie sie in Ihren Fehlerbericht.",
+      "version": "Version",
+      "buildDate": "Build-Datum",
+      "os": "Betriebssystem",
+      "copy": "In Zwischenablage kopieren",
+      "copied": "Kopiert!",
+      "architecture": "Architektur",
+      "hardware": "Hardware",
+      "environment": "Umgebung"
+    },
+    "whatToInclude": {
+      "title": "Was Ihr Bericht enthalten sollte",
+      "description": "Ein guter Fehlerbericht hilft uns, Ihr Problem schnell zu beheben. Bitte geben Sie Folgendes an:",
+      "step1": {
+        "title": "Klare Beschreibung des Problems",
+        "description": "Was passiert ist, was Sie erwartet haben und wie das Problem reproduziert werden kann."
+      },
+      "step2": {
+        "title": "Ihre Installationsmethode",
+        "description": "Wie Sie BirdNET-Go installiert haben: install.sh-Skript, Docker Compose, manueller Build oder anders."
+      },
+      "step3": {
+        "title": "Systeminformationen",
+        "description": "Kopieren Sie die oben angezeigten Systemdetails, einschließlich Version, Betriebssystem und Build-Datum."
+      },
+      "step4": {
+        "title": "Support-Paket",
+        "description": "Erstellen und laden Sie unten ein Support-Paket hoch. Es erfasst Protokolle und Konfigurationen, die die Fehlerbehebung erheblich beschleunigen."
+      }
+    },
+    "openIssue": {
+      "title": "GitHub-Issue erstellen",
+      "description": "Eröffnen Sie ein Issue auf GitHub, um das Problem zu beschreiben. Sie benötigen die Issue-Nummer im nächsten Schritt.",
+      "button": "Issue auf GitHub erstellen"
+    },
+    "supportDump": {
+      "title": "Support-Paket erstellen",
+      "description": "Erstellen Sie nach dem Eröffnen des Issues ein Support-Paket und geben Sie die GitHub-Issue-Nummer ein. Dies verknüpft Ihre Diagnose mit dem Fehlerbericht und hilft bei der Fehlerbehebung."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "refresh": "Aktualisieren",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "metricFooter": {
+      "allPassing": "Alles in Ordnung",
+      "needsAttention": "Erfordert Aufmerksamkeit",
+      "failing": "Fehlerhaft",
+      "allClear": "Keine Probleme",
+      "noData": "Keine Daten",
+      "none": "Keine"
+    },
+    "diagnostics": "Diagnose",
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Häufigste Fehler",
+      "errorCount": "Anzahl",
+      "errorComponent": "Komponente",
+      "errorLevel": "Stufe",
+      "errorMessage": "Nachricht"
+    },
+    "window": {
+      "label": "Auswertungszeitraum",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Letztes Ereignis",
+      "recentEvents": "Letzte Ereignisse",
+      "time": "Zeit",
+      "source": "Quelle",
+      "count": "Anzahl",
+      "lifetime": "gesamt",
+      "sparklineLabel": "Aktivitäts-Sparkline"
+    }
   }
 }

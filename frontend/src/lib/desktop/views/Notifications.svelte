@@ -31,6 +31,8 @@
   import { toastActions } from '$lib/stores/toast';
   import { api, ApiError } from '$lib/utils/api';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { formatDate } from '$lib/utils/formatters';
+  import { getStoredValue, setStoredValue } from '$lib/utils/storage';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -39,14 +41,11 @@
   // View mode: 'grouped' or 'flat' with localStorage persistence
   const STORAGE_KEY = 'notifications-view-mode';
   let viewMode = $state(
-    (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY)) || 'grouped'
+    getStoredValue(STORAGE_KEY, 'grouped', v => v === 'grouped' || v === 'flat')
   );
 
-  // Persist view mode changes to localStorage
   $effect(() => {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, viewMode);
-    }
+    setStoredValue(STORAGE_KEY, viewMode);
   });
 
   /** @type {import('$lib/utils/notifications').Notification[]} */
@@ -199,10 +198,17 @@
     }
   }
 
-  // Mark all as read
+  // Mark all notifications as read via bulk endpoint
   async function markAllAsRead() {
-    const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
-    await Promise.all(unreadIds.map(id => markAsRead(id)));
+    try {
+      await api.put('/api/v2/notifications/read-all');
+      notifications = notifications.map(n => ({ ...n, read: true, status: 'read' }));
+      hasUnread = false;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        toastActions.error(t('notifications.errors.markReadFailed'));
+      }
+    }
   }
 
   // Mark multiple notifications as read (for group actions)
@@ -427,7 +433,7 @@
     if (diff < 604800000)
       return t('notifications.timeAgo.daysAgo', { days: Math.floor(diff / 86400000) });
 
-    return date.toLocaleDateString();
+    return formatDate(date);
   }
 
   onMount(() => {

@@ -1,8 +1,10 @@
 package serve
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -10,6 +12,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/events"
 )
 
 // Command creates the serve command which starts the BirdNET-Go server.
@@ -62,6 +66,14 @@ The "realtime" command is an alias for backward compatibility.`,
 			if err := application.Start(cmd.Context()); err != nil {
 				return err
 			}
+
+			// Wire the global event emitter after all services have started
+			// (DatabaseService must be running so its datastore is available).
+			if ds := dbService.DataStore(); ds != nil {
+				events.SetDefault(events.NewEmitter(ds))
+				emitStartupEvents(cmd.Context(), settings, ds)
+			}
+
 			return application.Wait()
 		},
 	}
@@ -92,4 +104,33 @@ func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	}
 
 	return nil
+}
+
+// emitStartupEvents records the startup event and checks for version changes.
+// Version change detection is done BEFORE emitting the new startup event to
+// avoid a race condition where the async persist of the new startup event
+// could appear in the query results, requiring fragile skip logic.
+func emitStartupEvents(ctx context.Context, settings *conf.Settings, ds datastore.Interface) {
+	// Check for version change BEFORE emitting new startup (avoids race with async persist)
+	recent, err := ds.GetRecentAppEvents(ctx, 50)
+	if err == nil {
+		for _, ev := range recent {
+			if ev.Category == "system" && ev.EventType == "startup" {
+				if prev, ok := ev.Metadata["version"].(string); ok && prev != "" && prev != settings.Version {
+					events.Emit(ctx, "system", "version_change", "Application version changed", map[string]any{
+						"previous_version": prev,
+						"current_version":  settings.Version,
+					})
+				}
+				break
+			}
+		}
+	}
+
+	events.Emit(ctx, "system", "startup", "Application started", map[string]any{
+		"version":    settings.Version,
+		"go_version": runtime.Version(),
+		"os":         runtime.GOOS,
+		"arch":       runtime.GOARCH,
+	})
 }

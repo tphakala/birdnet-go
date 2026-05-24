@@ -219,11 +219,26 @@ func (s *Service) MarkAsRead(id string) error {
 
 	notification, err := s.store.Get(id)
 	if err != nil {
+		if errors.Is(err, ErrNotificationNotFound) {
+			return nil
+		}
 		return err
 	}
 
 	notification.MarkAsRead()
-	return s.store.Update(notification)
+	if err := s.store.Update(notification); err != nil {
+		if errors.Is(err, ErrNotificationNotFound) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// MarkAllAsRead marks every unread notification as read in a single
+// store-level operation. Returns the number of notifications changed.
+func (s *Service) MarkAllAsRead() (int, error) {
+	return s.store.MarkAllRead()
 }
 
 // MarkAsAcknowledged updates a notification's status to acknowledged
@@ -237,11 +252,20 @@ func (s *Service) MarkAsAcknowledged(id string) error {
 
 	notification, err := s.store.Get(id)
 	if err != nil {
+		if errors.Is(err, ErrNotificationNotFound) {
+			return nil
+		}
 		return err
 	}
 
 	notification.MarkAsAcknowledged()
-	return s.store.Update(notification)
+	if err := s.store.Update(notification); err != nil {
+		if errors.Is(err, ErrNotificationNotFound) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // Delete removes a notification
@@ -253,7 +277,11 @@ func (s *Service) Delete(id string) error {
 			Build()
 	}
 
-	return s.store.Delete(id)
+	err := s.store.Delete(id)
+	if err != nil && errors.Is(err, ErrNotificationNotFound) {
+		return nil
+	}
+	return err
 }
 
 // Subscribe creates a channel to receive real-time notifications.

@@ -12,7 +12,7 @@
   import type { Detection } from '$lib/types/detection.types';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { formatRelativeTime } from '$lib/utils/formatters';
-  import { Check } from '@lucide/svelte';
+  import { Check, CircleHelp } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
@@ -39,6 +39,7 @@
   // Check verification status (API returns verified directly on detection)
   const isVerified = $derived(detection.verified === 'correct');
   const isFalsePositive = $derived(detection.verified === 'false_positive');
+  const isUnlikely = $derived(detection.unlikely === true);
 
   // Thumbnail URL — buildAppUrl prepends the configured base path so the
   // image resolves correctly behind reverse proxies (e.g. /birdnet/...).
@@ -87,6 +88,14 @@
           >{t('dashboard.recentDetections.status.unverified')}</span
         >
       {/if}
+      {#if isUnlikely}
+        <span
+          class="unlikely-badge"
+          role="status"
+          aria-label={t('dashboard.recentDetections.status.unlikely')}
+          ><CircleHelp class="size-2.5" />{t('dashboard.recentDetections.status.unlikely')}</span
+        >
+      {/if}
     </div>
 
     <!-- Scientific name -->
@@ -115,14 +124,15 @@
 
   /* Species thumbnail */
   /* 4:3 aspect ratio to match avicommons 320×240 source images */
+  /* Colors are overlay-specific: this bar sits on a dark image, not a themed surface */
   .species-thumbnail {
     flex-shrink: 0;
     width: 3.5rem;
     height: 2.625rem;
     border-radius: 0.5rem;
     overflow: hidden;
-    border: 2px solid rgb(51 65 85 / 0.8);
-    background-color: rgb(30 41 59);
+    border: 2px solid rgb(255 255 255 / 0.15);
+    background-color: rgb(15 23 42 / 0.6);
   }
 
   .thumbnail-image {
@@ -161,8 +171,8 @@
     width: 1rem;
     height: 1rem;
     border-radius: 9999px;
-    background-color: rgb(34 197 94);
-    color: white;
+    background-color: var(--color-success);
+    color: var(--color-success-content);
   }
 
   .false-positive-badge {
@@ -171,8 +181,8 @@
     padding: 0 0.375rem;
     height: 1rem;
     border-radius: 9999px;
-    background-color: rgb(239 68 68 / 0.9);
-    color: white;
+    background-color: color-mix(in srgb, var(--color-error) 90%, transparent);
+    color: var(--color-error-content);
     font-size: 0.625rem;
     font-weight: 500;
   }
@@ -183,8 +193,21 @@
     padding: 0 0.375rem;
     height: 1rem;
     border-radius: 9999px;
-    background-color: rgb(51 65 85 / 0.8);
-    color: rgb(203 213 225);
+    background-color: rgb(255 255 255 / 0.12);
+    color: rgb(255 255 255 / 0.75);
+    font-size: 0.625rem;
+    font-weight: 500;
+  }
+
+  .unlikely-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0 0.375rem;
+    height: 1rem;
+    border-radius: 9999px;
+    background-color: color-mix(in srgb, var(--color-warning) 90%, transparent);
+    color: white;
     font-size: 0.625rem;
     font-weight: 500;
   }
@@ -192,7 +215,7 @@
   .scientific-name {
     font-size: 0.8125rem;
     font-style: italic;
-    color: rgb(148 163 184);
+    color: rgb(255 255 255 / 0.65);
     line-height: 1.3;
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
   }
@@ -216,7 +239,7 @@
 
   .relative-time {
     font-size: 0.75rem;
-    color: rgb(148 163 184);
+    color: rgb(255 255 255 / 0.65);
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
   }
 </style>

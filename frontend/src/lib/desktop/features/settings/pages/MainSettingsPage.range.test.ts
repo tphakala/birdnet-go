@@ -49,6 +49,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
         locationConfigured: true,
         rangeFilter: {
           threshold: 0.03,
+          passUnmappedSpecies: false,
           speciesCount: null,
           species: [],
         },
@@ -106,6 +107,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
         threshold: 0.05,
+        passUnmappedSpecies: false,
         speciesCount: null,
         species: [],
       },
@@ -125,6 +127,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
         threshold: 0.03,
+        passUnmappedSpecies: false,
         speciesCount: 150,
         species: ['species1', 'species2'],
       },
@@ -152,6 +155,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
         threshold: 0.04,
+        passUnmappedSpecies: false,
         speciesCount: null,
         species: [],
       },
@@ -161,6 +165,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
         threshold: 0.04,
+        passUnmappedSpecies: false,
         speciesCount: 200,
         species: ['bird1', 'bird2'],
       },
@@ -182,6 +187,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
         threshold: 0.1,
+        passUnmappedSpecies: false,
         speciesCount: 250,
         species: ['species1', 'species2'],
       },
@@ -220,6 +226,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
         threshold: 0.08,
+        passUnmappedSpecies: false,
         speciesCount: null,
         species: [],
       },
@@ -262,6 +269,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
         threshold: 0.05,
+        passUnmappedSpecies: false,
         speciesCount: null,
         species: [],
       },
@@ -304,6 +312,7 @@ describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
         locationConfigured: true,
         rangeFilter: {
           threshold: THRESHOLD,
+          passUnmappedSpecies: false,
           speciesCount: null,
           species: [],
         },

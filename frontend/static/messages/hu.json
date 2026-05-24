@@ -12,6 +12,7 @@
     "refresh": "Frissítés",
     "delete": "Törlés",
     "edit": "Szerkesztés",
+    "enabled": "Engedélyezve",
     "search": "Keresés",
     "filter": "Szűrés",
     "sort": "Rendezés",
@@ -153,7 +154,8 @@
         "verifiedCorrect": "Ellenőrizve - Helyes",
         "falsePositive": "Hamis pozitív",
         "notReviewed": "Nincs áttekintve",
-        "locked": "Zárolva"
+        "locked": "Zárolva",
+        "unlikely": "Valószínűtlen"
       },
       "form": {
         "correctDetection": "Helyes detektálás",
@@ -226,7 +228,16 @@
     "analyticsSubmenu": "Elemzés almenü",
     "settingsSubmenu": "Beállítások almenü",
     "systemSubmenu": "Rendszer almenü",
-    "systemTerminal": "Terminál"
+    "systemTerminal": "Terminál",
+    "help": "Súgó",
+    "helpSubmenu": "Súgó almenü",
+    "helpAndSupport": "Súgó és támogatás",
+    "reportBug": "Hiba bejelentése",
+    "askQuestion": "Kérdés feltevése",
+    "reportBugAriaLabel": "Hiba bejelentése a GitHubon (új ablakban nyílik meg)",
+    "askQuestionAriaLabel": "Kérdés feltevése a GitHub Discussions oldalon (új ablakban nyílik meg)",
+    "viewOnGithubAriaLabel": "BirdNET-Go megtekintése a GitHubon (új ablakban nyílik meg)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -390,17 +401,17 @@
         "reconfiguringTelemetry": "Telemetria beállítások frissítése...",
         "reconfiguringPushNotifications": "Push értesítési szolgáltatók újrakonfigurálása...",
         "reconfiguringSpeciesTracking": "Faj követés frissítése...",
+        "recalculatingThresholds": "Dinamikus küszöbértékek újraszámítása az új alapértékhez",
+        "reconfiguringDynamicThresholds": "Dinamikus küszöbértékek újrakonfigurálása...",
         "webserverRestartRequired": "Webszerver beállítások megváltoztak. Újraindítás szükséges.",
         "reconfiguringSoundLevel": "Hangszint monitorozás frissítése...",
         "reconfiguringAudioSources": "Hangforrások újrakonfigurálása...",
+        "rebuildingExtendedCapture": "Kiterjesztett rögzítési szűrő újraépítése...",
         "extendedCaptureRestartRequired": "Kiterjesztett rögzítés beállítások megváltoztak. Újraindítás szükséges.",
         "equalizerUpdateFailed": "A hang EQ beállítások frissítése sikertelen",
         "equalizerUpdated": "Hang EQ beállítások frissítve",
         "savedSuccessfully": "Beállítások sikeresen mentve",
-        "saveFailed": "A beállítások mentése sikertelen",
-        "recalculatingThresholds": "Dinamikus küszöbértékek újraszámítása az új alapértékhez",
-        "reconfiguringDynamicThresholds": "Dinamikus küszöbértékek újrakonfigurálása...",
-        "rebuildingExtendedCapture": "Kiterjesztett rögzítési szűrő újraépítése..."
+        "saveFailed": "A beállítások mentése sikertelen"
       },
       "migration": {
         "startedTitle": "Adatbázis migráció elkezdődött",
@@ -422,7 +433,11 @@
       },
       "buffer": {
         "overloadTitle": "Hang elemzés túlterhelve",
-        "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a '{sourceName}' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
+        "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a ''{sourceName}'' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
+      },
+      "ort": {
+        "unavailableTitle": "Az ONNX Runtime nem elérhető",
+        "unavailableMessage": "Az ONNX Runtime {requiredVersion} szükséges a(z) {modelName} modellhez, de nem található. Lásd a telepítési útmutatót: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -512,7 +527,17 @@
       "false": "Hamis",
       "unverified": "Ellenőrizetlen",
       "locked": "Zárolva",
-      "unlocked": "Zárolatlan"
+      "unlocked": "Zárolatlan",
+      "unlikely": "Valószínűtlen"
+    },
+    "review": {
+      "review": "Ellenőrzés",
+      "reviewDetection": "Detektálás ellenőrzése: {species}",
+      "markCorrect": "Megjelölés helyesként",
+      "markFalsePositive": "Megjelölés téves pozitívként",
+      "markedCorrect": "Detektálás helyesként megjelölve",
+      "markedFalsePositive": "Detektálás téves pozitívként megjelölve",
+      "failed": "Az ellenőrzési állapot frissítése sikertelen"
     },
     "detailsPanel": {
       "audioPlayer": "Hang lejátszó",
@@ -531,15 +556,6 @@
       "page": "{current}. oldal / {total}",
       "goToPrevious": "Előző oldal",
       "goToNext": "Következő oldal"
-    },
-    "review": {
-      "review": "Ellenőrzés",
-      "reviewDetection": "Detektálás ellenőrzése: {species}",
-      "markCorrect": "Megjelölés helyesként",
-      "markFalsePositive": "Megjelölés téves pozitívként",
-      "markedCorrect": "Detektálás helyesként megjelölve",
-      "markedFalsePositive": "Detektálás téves pozitívként megjelölve",
-      "failed": "Az ellenőrzési állapot frissítése sikertelen"
     }
   },
   "error": {
@@ -640,7 +656,8 @@
         "verified": "Ellenőrizve",
         "false": "Hamis",
         "unverified": "Ellenőrizetlen",
-        "locked": "Zárolva"
+        "locked": "Zárolva",
+        "unlikely": "Valószínűtlen"
       },
       "modals": {
         "showSpecies": "{species} faj megjelenítése",
@@ -656,6 +673,8 @@
       },
       "actions": {
         "menuLabel": "Műveletek: {species}",
+        "markCorrect": "Megjelölés helyesként",
+        "markFalsePositive": "Megjelölés téves pozitívként",
         "review": "Detektálás áttekintése",
         "showSpecies": "Faj megjelenítése",
         "ignoreSpecies": "Faj figyelmen kívül hagyása",
@@ -761,6 +780,7 @@
     "headers": {
       "dateTime": "Dátum és idő",
       "weather": "Időjárás",
+      "source": "Forrás",
       "species": "Faj",
       "confidence": "Megbízhatóság",
       "thumbnail": "Miniatűr",
@@ -794,6 +814,25 @@
     "pagination": {
       "showing": "{from} - {to} / {total} találat"
     },
+    "selection": {
+      "select": "Kijelölés",
+      "nSelected": "{count} kijelölve",
+      "selectAllMatching": "Mind a(z) {count} egyező detektálás kijelölése",
+      "allSelected": "Mind a(z) {count} kijelölve",
+      "clear": "Kijelölés törlése",
+      "toolbarLabel": "Tömeges műveletek",
+      "confirmBulkDelete": "Törli a(z) {count} detektálást? Ez nem vonható vissza.",
+      "confirmBulkMarkCorrect": "Megjelöli a(z) {count} detektálást helyesként?",
+      "confirmBulkMarkFalsePositive": "Megjelöli a(z) {count} detektálást téves pozitívként?",
+      "confirmBulkLock": "Zárolás: {count} detektálás?",
+      "confirmBulkUnlock": "Zárolás feloldása: {count} detektálás?",
+      "bulkSuccess": "{count} detektálás frissítve",
+      "bulkDeleteSuccess": "{count} detektálás törölve",
+      "bulkPartial": "{processed} frissítve, {skipped} kihagyva (zárolva)",
+      "tooManyDetections": "Túl sok detektálás ({count}). Szűkítse a szűrőket, hogy 500-nál kevesebbet jelöljön ki.",
+      "bulkError": "A tömeges művelet sikertelen. Kérjük, próbálja újra.",
+      "switchToTable": "Váltson táblázat nézetre a detektálások kijelöléséhez"
+    },
     "weather": {
       "title": "Időjárási információ",
       "noData": "Nincs időjárási adat",
@@ -816,25 +855,55 @@
         "pressure": "hPa"
       },
       "conditions": {
-        "clearsky_day": "Derült",
-        "clearsky_night": "Derült",
-        "fair_day": "Változóan felhős",
-        "fair_night": "Változóan felhős",
-        "partlycloudy_day": "Felhős",
-        "partlycloudy_night": "Felhős",
+        "clearsky": "Derült",
         "cloudy": "Borult",
-        "rainshowers_day": "Záporok",
-        "rainshowers_night": "Záporok",
-        "rain": "Eső",
-        "thunder": "Zivatar",
-        "sleet": "Havaseső",
-        "snow": "Hó",
+        "fair": "Változóan felhős",
         "fog": "Köd",
+        "heavyrain": "Erős eső",
+        "heavyrainandthunder": "Erős eső és zivatar",
+        "heavyrainshowers": "Erős záporok",
+        "heavyrainshowersandthunder": "Erős záporok és zivatar",
+        "heavysleet": "Erős havaseső",
+        "heavysleetandthunder": "Erős havaseső és zivatar",
+        "heavysleetshowers": "Erős havas eső záporok",
+        "heavysleetshowersandthunder": "Erős havas eső záporok és zivatar",
+        "heavysnow": "Erős havazás",
+        "heavysnowandthunder": "Erős havazás és zivatar",
+        "heavysnowshowers": "Erős hózáporok",
+        "heavysnowshowersandthunder": "Erős hózáporok és zivatar",
+        "lightrain": "Enyhe eső",
+        "lightrainandthunder": "Enyhe eső és zivatar",
+        "lightrainshowers": "Enyhe záporok",
+        "lightrainshowersandthunder": "Enyhe záporok és zivatar",
+        "lightsleet": "Enyhe havaseső",
+        "lightsleetandthunder": "Enyhe havaseső és zivatar",
+        "lightsleetshowers": "Enyhe havas eső záporok",
+        "lightsnow": "Enyhe havazás",
+        "lightsnowandthunder": "Enyhe havazás és zivatar",
+        "lightsnowshowers": "Enyhe hózáporok",
+        "lightssleetshowersandthunder": "Enyhe havas eső záporok és zivatar",
+        "lightssnowshowersandthunder": "Enyhe hózáporok és zivatar",
+        "partlycloudy": "Felhős",
+        "rain": "Eső",
+        "rainandthunder": "Eső és zivatar",
+        "rainshowers": "Záporok",
+        "rainshowersandthunder": "Záporok és zivatar",
+        "sleet": "Havaseső",
+        "sleetandthunder": "Havaseső és zivatar",
+        "sleetshowers": "Havas eső záporok",
+        "sleetshowersandthunder": "Havas eső záporok és zivatar",
+        "snow": "Hó",
+        "snowandthunder": "Havazás és zivatar",
+        "snowshowers": "Hózáporok",
+        "snowshowersandthunder": "Hózáporok és zivatar",
+        "thunder": "Zivatar",
         "unknown": "Ismeretlen"
       }
     },
     "row": {
-      "viewDetails": "{species} részleteinek megtekintése"
+      "viewDetails": "{species} részleteinek megtekintése",
+      "play": "Lejátszás",
+      "playAudio": "Hang lejátszása"
     },
     "media": {
       "title": "Felvétel és spektrogram",
@@ -867,7 +936,10 @@
     "aria": {
       "loading": "Detektálás részleteinek betöltése...",
       "loaded": "Detektálás részletei betöltve: {species}",
-      "error": "Hiba a detektálás betöltésekor: {error}"
+      "error": "Hiba a detektálás betöltésekor: {error}",
+      "loadingResults": "{count} eredmény betöltése...",
+      "thumbnailLoading": "{species} bélyegkép betöltése...",
+      "thumbnailLoaded": "{species} bélyegkép betöltve"
     },
     "errors": {
       "notFound": "A detektálás nem található. Lehet, hogy törölték vagy az ID hibás.",
@@ -933,11 +1005,11 @@
       "frequencyRange": "Frekvencia tartomány",
       "colorMap": "Színtérkép",
       "gain": "Erősítés",
+      "gainTooltip": "Spektrogram megjelenítési erősítés",
       "mute": "Némítás",
       "unmute": "Némítás feloldása",
       "frequencyRangeMin": "Minimum frekvencia",
       "frequencyRangeMax": "Maximum frekvencia",
-      "gainTooltip": "Spektrogram megjelenítési erősítés",
       "audioMonitor": "Hangmonitor"
     },
     "error": {
@@ -1636,6 +1708,7 @@
     "title": "Beállítások - BirdNET-Go",
     "loading": "Beállítások betöltése...",
     "sections": {
+      "analysis": "Elemzés",
       "node": "Általános",
       "userinterface": "Felület",
       "audio": "Hang",
@@ -1676,7 +1749,6 @@
       "setAsDefault": "Beállítás alapértelmezettként",
       "defaultIndicator": "Alapértelmezett bemeneti forrás"
     },
-    "restartRequired": "Néhány változtatáshoz szerver újraindítás szükséges. Kérjük, indítsa újra a BirdNET-Go-t.",
     "main": {
       "tabs": {
         "general": "Általános",
@@ -1748,7 +1820,17 @@
           },
           "hardwareNote": "A szigorú és maximális szintek nagyobb átfedési beállításokat és több CPU erőforrást igényelnek. Ezekhez a szintekhez RPi 4 vagy jobb hardver szükséges.",
           "overlapAdjusted": "Az átfedési beállítás automatikusan {overlap}s-re állítva a szűrési követelményeknek megfelelően",
-          "overlapReduced": "Az átfedési beállítás {overlap}s-re csökkentve a szűrési szintnek megfelelően"
+          "overlapReduced": "Az átfedési beállítás {overlap}s-re csökkentve a szűrési szintnek megfelelően",
+          "levelNames": {
+            "off": "Ki",
+            "lenient": "Enyhe",
+            "moderate": "Mérsékelt",
+            "balanced": "Kiegyensúlyozott",
+            "strict": "Szigorú",
+            "maximum": "Maximum",
+            "unknown": "Ismeretlen"
+          },
+          "warningOff": "Szűrés nélkül a megbízhatósági küszöb feletti minden észlelés azonnal elfogadásra kerül. Ez általában naponta több hamis pozitívat eredményez. Már az enyhe szűrés is jelentősen javítja az eredmények minőségét."
         },
         "rangeFilter": {
           "title": "Tartomány szűrő",
@@ -2382,8 +2464,11 @@
             "name": "Gotify",
             "server": {
               "label": "Szerver URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "A Gotify szerver hostname (https:// nélkül)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "A Gotify szervered hosztneve és portja"
+            },
+            "protocol": {
+              "label": "Protokoll"
             },
             "token": {
               "label": "Alkalmazás token",
@@ -2797,6 +2882,10 @@
           "refresh": "Eszközök frissítése"
         }
       },
+      "noSources": {
+        "warning": "Nincs hang forrás konfigurálva",
+        "description": "A BirdNET-Go-nak hang bemenetre van szüksége a madarak érzékeléséhez. Kérjük, konfiguráljon legalább egy forrást a Hangszűrő kártya vagy Streamek lapon."
+      },
       "soundCards": {
         "summary": "{count} hangkártya forrás(ok)",
         "addSource": "Hangkártya hozzáadása",
@@ -2841,10 +2930,6 @@
           "recommendedSampleRate": "{rate}kHz ajánlott a legjobb eredményekhez",
           "atLeastOneModel": "Legalább egy modellt ki kell választani"
         }
-      },
-      "noSources": {
-        "warning": "Nincs hang forrás konfigurálva",
-        "description": "A BirdNET-Go-nak hang bemenetre van szüksége a madarak érzékeléséhez. Kérjük, konfiguráljon legalább egy forrást a Hangszűrő kártya vagy Streamek lapon."
       },
       "audioCapture": {
         "title": "Hangszűrő kártya konfiguráció",
@@ -2907,6 +2992,7 @@
         "unknown": "ismeretlen",
         "refresh": "Frissítés",
         "addStream": "Stream hozzáadása",
+        "testRequired": "Futtasson sikeres streamtesztet a mentés előtt",
         "deleteConfirm": "Eltávolítja ezt a streamet?",
         "restartCount": "{count} alkalommal újraindítva",
         "healthLoadError": "A stream egészségi állapot betöltése sikertelen",
@@ -2959,6 +3045,18 @@
           "degraded": "Degradált",
           "failed": "Sikertelen",
           "unknown": "Ismeretlen"
+        },
+        "test": {
+          "button": "Stream tesztelése",
+          "probing": "Tesztelés...",
+          "result": "Teszt eredménye",
+          "error": "Teszt sikertelen",
+          "batCompatible": "Denevér-kompatibilis",
+          "batIncompatible": "Nem denevér-kompatibilis"
+        },
+        "batWarning": "A denevérmodellek veszteségmentes kodeket (PCM) és legalább 96 kHz-es mintavételezési frekvenciát igényelnek. Használja a fenti Stream tesztelése gombot a kompatibilitás ellenőrzéséhez.",
+        "codecWarning": {
+          "lossy": "A veszteséges kodekek (AAC, Opus, MP3) megsemmisítik az ~20 kHz feletti ultrahang-frekvenciákat, így a stream alkalmatlanná válik a denevérek észlelésére."
         }
       },
       "audioFilters": {
@@ -3134,6 +3232,10 @@
         "devicesLoadFailed": "A hang eszközök betöltése sikertelen. Kérjük, ellenőrizze a rendszer engedélyeket.",
         "invalidBitrate": "Érvénytelen bitráta érték",
         "invalidRetentionPolicy": "Érvénytelen megőrzési szabályzat"
+      },
+      "models": {
+        "recommendBoth": "A legjobb fajészlelési lefedettség érdekében javasolt a BirdNET és a Perch modellek együttes futtatása.",
+        "perchOnlyWarning": "A Perch önmagában kevesebb észlelést produkál. Az érdemi eredményekhez csökkentse a megbízhatósági küszöböt 0.50-re, vagy aktiválja a BirdNET-et is a jobb lefedettség érdekében."
       }
     },
     "security": {
@@ -3854,6 +3956,7 @@
         }
       },
       "v2Required": "A riasztási szabályokhoz a bővített adatbázis séma szükséges. Az adatbázist a Rendszer alatti Adatbázis oldalról migrálhatja.",
+      "v2RequiredLink": "Rendszer adatbázis oldal.",
       "builtInRules": {
         "newSpecies": {
           "name": "Új faj detektálva",
@@ -3895,8 +3998,7 @@
           "name": "BirdWeather feltöltés sikertelen",
           "description": "Értesít, amikor egy BirdWeather feltöltés sikertelen"
         }
-      },
-      "v2RequiredLink": "Rendszer adatbázis oldal."
+      }
     },
     "appearance": {
       "colorScheme": "Szín séma",
@@ -3938,7 +4040,8 @@
         "defaultGainHelpText": "Kezdeti erősítés a felvételek lejátszásakor. A madár hangok gyakran halkak, ezért 6-12 dB erősítés ajánlott.",
         "defaultGainUnit": "dB"
       }
-    }
+    },
+    "restartRequired": "Néhány változtatáshoz szerver újraindítás szükséges. Kérjük, indítsa újra a BirdNET-Go-t."
   },
   "auth": {
     "login": "Bejelentkezés",
@@ -4018,13 +4121,13 @@
     "labels": {
       "showPassword": "Jelszó megjelenítése",
       "hidePassword": "Jelszó elrejtése",
-      "copyToClipboard": "Másolás vágólapra",
-      "clearSelection": "Kijelölés törlése",
-      "selectOption": "Opció kiválasztása",
       "secretSet": "Beállítva",
       "changeSecret": "Módosítás",
       "cancelChange": "Mégse",
-      "enterNewSecret": "Új érték megadása"
+      "enterNewSecret": "Új érték megadása",
+      "copyToClipboard": "Másolás vágólapra",
+      "clearSelection": "Kijelölés törlése",
+      "selectOption": "Opció kiválasztása"
     },
     "help": {
       "passwordStrength": "Jelszó erőssége: {strength}",
@@ -4108,7 +4211,31 @@
       "playbackSpeed": "Lejátszási sebesség",
       "speed": "Sebesség",
       "loop": "Ismétlés be/ki",
-      "player": "Hang lejátszó"
+      "player": "Hang lejátszó",
+      "autoplayBlocked": "Kattintson a lejátszáshoz (automatikus lejátszás letiltva)",
+      "hlsNotSupported": "A HLS lejátszás nem támogatott ebben a böngészőben",
+      "streamStarting": "Audio stream indítása...",
+      "levelFor": "Hangszint: {source}",
+      "levelForNoSource": "Hangszint: nincs forrás",
+      "noSource": "Nincs forrás",
+      "levelAnnouncement": "Jelenlegi hangszint: {level} százalék",
+      "levelAnnouncementClipping": "Jelenlegi hangszint: {level} százalék, túlvezérlés észlelve",
+      "sourceSelection": "Hangforrás kiválasztása",
+      "sources": "Hangforrások",
+      "noSourcesAvailable": "Nem érhető el hangforrás",
+      "silent": "(néma)",
+      "stopPlayback": "Hang lejátszás leállítása",
+      "startPlayback": "Hang lejátszás indítása",
+      "nowPlaying": "Hang lejátszása innen: {source}",
+      "nowPlayingNoSource": "Hang lejátszása folyamatban",
+      "playbackStopped": "Hang lejátszás leállítva",
+      "loginRequired": "Bejelentkezés szükséges az audio streameléshez",
+      "streamError": "Hiba a stream indításakor",
+      "streamTitle": "Madárhang stream - {source}",
+      "streamTitleDefault": "Madárhang stream",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Élő közvetítés",
+      "playbackError": "Lejátszási hiba: {details}"
     },
     "spectrogram": {
       "notGenerated": "A spektrogram még nincs generálva",
@@ -4199,7 +4326,7 @@
         "extracting": "Részlet kivonása...",
         "extractError": "A részlet kivonása sikertelen",
         "formatLabel": "Formátum",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Kijelölés lejátszása",
@@ -4334,6 +4461,16 @@
       "invalidHost": "Érvénytelen host paraméter",
       "rateLimit": "Túl sok értesítési stream csatlakozási kísérlet, kérjük, várjon, mielőtt újra próbálkozik"
     },
+    "streams": {
+      "test": {
+        "invalidBody": "Érvénytelen kéréstörzs",
+        "urlRequired": "A stream URL megadása kötelező",
+        "invalidUrl": "Érvénytelen URL-formátum. Adjon meg egy teljes URL-t, pl. rtsp://host:port/útvonal",
+        "unsupportedScheme": "Nem támogatott URL-séma: \"{scheme}\". Használjon rtsp, rtsps, http, https, rtmp vagy udp sémát",
+        "blockedDestination": "Ez a cél biztonsági okokból le van tiltva",
+        "connectionFailed": "Nem sikerült csatlakozni a streamhez. Ellenőrizze, hogy az URL helyes-e és a stream elérhető-e"
+      }
+    },
     "debug": {
       "notEnabled": "A debug mód nincs engedélyezve"
     },
@@ -4467,6 +4604,154 @@
       }
     }
   },
+  "analysis": {
+    "title": "Elemzés",
+    "tabs": {
+      "settings": "Beállítások",
+      "models": "Modellek"
+    },
+    "detection": {
+      "title": "Detektálási beállítások",
+      "description": "Megbízhatósági küszöbértékek és nyelv beállítása a fajok osztályozásához.",
+      "confidenceThreshold": {
+        "label": "Confidence Threshold",
+        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+      },
+      "batThreshold": {
+        "label": "Denevér-észlelési küszöb",
+        "helpText": "Minimális megbízhatósági pontszám a denevérfajok észleléséhez. Csak a denevérosztályozó modellekre vonatkozik."
+      },
+      "batFilter": {
+        "label": "Denevér hang felüláteresztő szűrő",
+        "helpText": "Kiszűri az emberi fül számára hallható frekvenciákat a denevérelemzés előtt, hogy csökkentse a madárdal és a környezeti zaj okozta téves észleléseket."
+      },
+      "batNighttimeOnly": {
+        "label": "Csak éjszaka",
+        "helpText": "Ha engedélyezve van, a denevérészlelés csak polgári alkony és polgári hajnal között fut. A helyszín konfigurálása szükséges. Kapcsolja ki az éjjel-nappali denevérészleléshez."
+      },
+      "batUltrasonicFilter": {
+        "label": "Utólagos érzékelés-ellenőrzés",
+        "helpText": "Bekapcsolva a denevérészleléseket az ultrahang-energiaminták elemzésével ellenőrzi a forrásanyagban. Az echolokációs jellemzőkkel nem rendelkező észleléseket valószínűtlenként jelöli meg."
+      },
+      "batFalsePositiveFilter": {
+        "label": "Denevér hamis pozitív szűrő",
+        "helpText": "Több megerősítést igényel egy denevérészleléshez egy csúszó ablakon belül, mielőtt elfogadná. A magasabb szintek több megerősítést igényelnek, csökkentve a hamis pozitívokat. A denevérmodell fix 50%-os átfedést használ, így átfedés-beállítás nem szükséges.",
+        "levels": {
+          "off": "Nincs szűrés; bármely denevérészlelés azonnal elfogadásra kerül.",
+          "moderate": "Jó egyensúly a legtöbb beállításhoz. Jelentősen csökkenti a hamis pozitívakat.",
+          "strict": "Maximális szűrés a legmagasabb pontosság érdekében."
+        },
+        "detectionCount": "{count} megerősítés szükséges. {description}",
+        "warningOff": "Szűrés nélkül nagy a hamis pozitívak valószínűsége. A szűrés engedélyezése jelentősen javítja a pontosságot."
+      },
+      "locale": {
+        "label": "Fajok nyelve",
+        "helpText": "A fajok köznapi neveihez használt nyelv a felületen."
+      }
+    },
+    "rangeFilter": {
+      "birdOnlyNote": "A területszűrő csak madár osztályozókra vonatkozik. A denevérmodellek saját fajlistákat használnak.",
+      "status": {
+        "title": "Területszűrő áttekintés",
+        "geomodelInfo": "BirdNET Geomodell {version} - {species} ismert faj",
+        "autoSelected": "Automatikusan kiválasztott",
+        "manual": "Kézi",
+        "classifier": "Osztályozó",
+        "totalSpecies": "Összes faj",
+        "withRangeData": "Területi adattal",
+        "withoutRangeData": "Területi adat nélkül",
+        "withRangeDataTooltip": "Fajok, amelyeket a geomodell ki tud értékelni földrajzi valószínűség szempontjából az Ön helyén",
+        "withoutRangeDataTooltip": "Fajok földrajzi adat nélkül a geomodellben, az alábbi nem térképezett fajok beállítás kezeli",
+        "noFilter": "Nincs aktív területszűrő",
+        "passUnmapped": {
+          "label": "Területi adat nélküli fajok engedélyezése",
+          "helpText": "Engedélyezze azon fajok detektálását, amelyekhez a geomodellnek nincs földrajzi adata. Kikapcsolva ezek a fajok mindig kiszűrésre kerülnek."
+        }
+      }
+    },
+    "advanced": {
+      "title": "Haladó",
+      "description": "Feldolgozási és egyéni modell beállítások."
+    },
+    "gallery": {
+      "title": "Modellgaléria",
+      "description": "Osztályozó modellek kezelése madár- és denevérdetektáláshoz.",
+      "tabs": {
+        "installed": "Telepített",
+        "available": "Elérhető"
+      },
+      "loading": "Modellek betöltése...",
+      "retry": "Újra",
+      "builtIn": "Beépített",
+      "builtInDescription": "A BirdNET csapat beépített madárfaj-osztályozója.",
+      "species": "{count} faj",
+      "install": "Telepítés",
+      "installing": "Telepítés...",
+      "remove": "Eltávolítás",
+      "removing": "Eltávolítás...",
+      "noInstalledModels": "Nincs további telepített modell. Az Elérhető fülön böngészhet további osztályozók között.",
+      "noAvailableModels": "Nincs további elérhető modell az Ön platformjához.",
+      "sections": {
+        "acoustic": "Akusztikus osztályozók",
+        "geomodel": "Geomodellek"
+      },
+      "categories": {
+        "wildlife": "Vadon élő állatok osztályozók",
+        "bird": "Madár osztályozók",
+        "bat": "Denevér osztályozók"
+      },
+      "progress": {
+        "downloading": "Letöltés...",
+        "verifying": "Ellenőrzés...",
+        "loading": "Betöltés...",
+        "complete": "Sikeresen telepítve",
+        "failed": "Sikertelen"
+      },
+      "license": {
+        "title": "Licencszerződés",
+        "model": "Modell",
+        "author": "Szerző",
+        "license": "Licenc",
+        "commercialUse": "Kereskedelmi felhasználás",
+        "downloadSize": "Letöltési méret",
+        "allowed": "Engedélyezett",
+        "notAllowed": "Nem engedélyezett",
+        "commercialUseAllowed": "Kereskedelmi felhasználás engedélyezett",
+        "nonCommercialOnly": "Csak nem kereskedelmi célú felhasználás",
+        "nonCommercialWarning": "Ez a modell csak nem kereskedelmi felhasználásra licencelt. A telepítéssel elfogadja a licencfeltételeket.",
+        "acceptAndInstall": "Elfogadás és telepítés"
+      },
+      "removeDialog": {
+        "title": "{name} eltávolítása?",
+        "confirmation": "Ez eltávolítja a modellfájlokat a lemezről. A meglévő detektálások címkeadatai megmaradnak."
+      },
+      "errors": {
+        "catalogLoadFailed": "Nem sikerült betölteni a modellkatalógust",
+        "installFailed": "Nem sikerült elindítani a modell telepítését",
+        "removeFailed": "Nem sikerült eltávolítani a modellt"
+      },
+      "regionLabel": "Régió",
+      "speciesLabel": "Fajok",
+      "reinstall": "Újratelepítés",
+      "reinstalling": "Újratelepítés...",
+      "reinstallComplete": "Fájlok sikeresen ellenőrizve",
+      "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt",
+      "onnxRuntimeRequired": "ONNX Runtime szükséges, amely nem elérhető ezen a rendszeren.",
+      "onnxRuntimeMissing": "Az ONNX Runtime nem elérhető. Ez a modell nem futtatható.",
+      "unavailable": "Nem elérhető"
+    },
+    "bird": {
+      "title": "Madárészlelés",
+      "description": "Állítsa be a megbízhatósági küszöböt, a fajnyelvet és a hamis pozitív szűrést a madárosztályozókhoz."
+    },
+    "bat": {
+      "title": "Denevérészlelés",
+      "description": "Állítsa be a küszöböt, az ütemezést és a hamis pozitív szűrést a denevérosztályozókhoz."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "A dinamikus küszöb csak a madárosztályozókra vonatkozik."
+    }
+  },
   "restart": {
     "applicationRestart": "Alkalmazás újraindítása",
     "containerRestart": "Konténer újraindítása",
@@ -4478,5 +4763,147 @@
     "bannerMessage": "A konfigurációs változtatásokhoz újraindítás szükséges:",
     "bannerAction": "Újraindítás most",
     "restartFailed": "Az újraindítás kezdeményezése sikertelen"
+  },
+  "help": {
+    "title": "Súgó és támogatás",
+    "subtitle": "Kérjen segítséget, jelentsen problémákat és csatlakozzon a közösséghez",
+    "reportBug": {
+      "description": "Ha problémát tapasztal, nyisson hibajelentést a GitHubon a probléma leírásához, majd hozzon létre egy támogatási csomagot a hibajelentés számával a hibaelhárítás segítéséhez."
+    },
+    "askQuestion": {
+      "description": "Kérdése van a beállítással, funkciókkal vagy használattal kapcsolatban? A GitHub Discussions fórum a legjobb hely, ahol segítséget kaphat a közösségtől."
+    },
+    "diagnostics": {
+      "description": "Hozzon létre egy támogatási csomagot a problémák diagnosztizálásához. Ez rögzíti a rendszerkonfigurációt és a legutóbbi naplókat."
+    },
+    "quickLinks": {
+      "title": "Gyors hivatkozások",
+      "releases": "Kiadási megjegyzések"
+    }
+  },
+  "reportBug": {
+    "title": "Hiba bejelentése",
+    "subtitle": "Segítsen nekünk a hibák javításában a szükséges információk megadásával",
+    "systemInfo": {
+      "title": "Rendszerinformációk",
+      "description": "Ezek az információk segítenek azonosítani a beállításait. Másolja be a hibajelentésbe.",
+      "version": "Verzió",
+      "buildDate": "Build dátum",
+      "os": "Operációs rendszer",
+      "copy": "Másolás a vágólapra",
+      "copied": "Másolva!",
+      "architecture": "Architektúra",
+      "hardware": "Hardver",
+      "environment": "Környezet"
+    },
+    "whatToInclude": {
+      "title": "Mit tartalmazzon a jelentés",
+      "description": "Egy jó hibajelentés segít gyorsan megoldani a problémát. Kérjük, adja meg a következőket:",
+      "step1": {
+        "title": "A probléma világos leírása",
+        "description": "Mi történt, mit várt és hogyan lehet reprodukálni a problémát."
+      },
+      "step2": {
+        "title": "Telepítési módszer",
+        "description": "Hogyan telepítette a BirdNET-Go-t: install.sh szkript, Docker Compose, kézi fordítás vagy egyéb."
+      },
+      "step3": {
+        "title": "Rendszerinformációk",
+        "description": "Másolja a fent megjelenő rendszeradatokat, beleértve a verziót, az operációs rendszert és a build dátumot."
+      },
+      "step4": {
+        "title": "Támogatási csomag",
+        "description": "Hozzon létre és töltsön fel egy támogatási csomagot alább. Ez rögzíti a naplókat és a konfigurációt, amelyek jelentősen felgyorsítják a hibaelhárítást."
+      }
+    },
+    "openIssue": {
+      "title": "GitHub issue megnyitása",
+      "description": "Nyisson egy issue-t a GitHubon a probléma leírásához. Az issue számára szüksége lesz a következő lépésben.",
+      "button": "Issue megnyitása a GitHubon"
+    },
+    "supportDump": {
+      "title": "Támogatási csomag létrehozása",
+      "description": "A hibajelentés létrehozása után hozzon létre egy támogatási csomagot és adja meg a GitHub issue számát. Ez összekapcsolja a diagnosztikát a hibajelentéssel és segíti a hibaelhárítást."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "refresh": "Frissítés",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "metricFooter": {
+      "allPassing": "Minden rendben",
+      "needsAttention": "Figyelmet igényel",
+      "failing": "Sikertelen",
+      "allClear": "Nincs probléma",
+      "noData": "Nincs adat",
+      "none": "Nincs"
+    },
+    "diagnostics": "Diagnosztika",
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Leggyakoribb hibák",
+      "errorCount": "Darab",
+      "errorComponent": "Komponens",
+      "errorLevel": "Szint",
+      "errorMessage": "Üzenet"
+    },
+    "window": {
+      "label": "Kiértékelési időablak",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Utolsó esemény",
+      "recentEvents": "Legutóbbi események",
+      "time": "Idő",
+      "source": "Forrás",
+      "count": "Darab",
+      "lifetime": "összesen",
+      "sparklineLabel": "Aktivitási diagram"
+    }
   }
 }

@@ -47,6 +47,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
           locationConfigured: true,
           rangeFilter: {
             threshold: 0.03,
+            passUnmappedSpecies: false,
             speciesCount: null,
             species: [],
           },
@@ -115,6 +116,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
         threshold: 0.05,
+        passUnmappedSpecies: false,
         speciesCount: null,
         species: [],
       },
@@ -142,6 +144,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
         threshold: 0.01,
+        passUnmappedSpecies: false,
         speciesCount: null,
         species: [],
       },
@@ -255,6 +258,7 @@ describe('Settings Store - Model/Label Path Null Conversion', () => {
           locationConfigured: true,
           rangeFilter: {
             threshold: 0.03,
+            passUnmappedSpecies: false,
             speciesCount: null,
             species: [],
           },
@@ -275,6 +279,7 @@ describe('Settings Store - Model/Label Path Null Conversion', () => {
           locationConfigured: true,
           rangeFilter: {
             threshold: 0.03,
+            passUnmappedSpecies: false,
             speciesCount: null,
             species: [],
           },
@@ -484,7 +489,12 @@ describe('Settings Store - UI Locale Preservation (#2756/#2760)', () => {
         latitude: 0,
         longitude: 0,
         locationConfigured: true,
-        rangeFilter: { threshold: 0.03, speciesCount: null, species: [] },
+        rangeFilter: {
+          threshold: 0.03,
+          passUnmappedSpecies: false,
+          speciesCount: null,
+          species: [],
+        },
       },
       realtime: {
         dashboard: {

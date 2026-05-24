@@ -312,7 +312,7 @@ func (rm *RotationManager) compressFile(srcPath string) {
 	}()
 
 	// Create destination .gz file
-	dst, err := os.Create(dstPath) //nolint:gosec // path derived from rotation
+	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, LogFilePermissions) //nolint:gosec // path derived from rotation
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "rotation: failed to create compressed file: %v\n", err)
 		return
@@ -422,13 +422,14 @@ func (rm *RotationManager) recoverDiskSpace() bool {
 
 // testDiskSpace checks if we can create a file (disk has space).
 func (rm *RotationManager) testDiskSpace() bool {
-	testPath := rm.basePath + ".test"
-	f, err := os.Create(testPath) //nolint:gosec // path derived from config
+	dir := filepath.Dir(rm.basePath)
+	f, err := os.CreateTemp(dir, ".birdnet_disk_test_*")
 	if err != nil {
 		return false
 	}
+	name := f.Name()
 	_ = f.Close()
-	_ = os.Remove(testPath)
+	_ = os.Remove(name)
 	return true
 }
 

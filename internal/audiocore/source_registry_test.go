@@ -352,6 +352,41 @@ func TestSourceRegistry_UpdateDisplayName_NotFound(t *testing.T) {
 	assert.False(t, updated)
 }
 
+// TestSourceRegistry_ConnectionStringByID verifies that ConnectionStringByID
+// returns the raw connection string while Get still strips it.
+func TestSourceRegistry_ConnectionStringByID(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+
+	const rawURL = "rtsp://admin:secret@192.168.1.10/stream"
+
+	src, err := r.Register(&SourceConfig{ConnectionString: rawURL})
+	require.NoError(t, err)
+
+	// ConnectionStringByID returns the raw URL (credentials included)
+	connStr, ok := r.ConnectionStringByID(src.ID)
+	require.True(t, ok)
+	assert.Equal(t, rawURL, connStr)
+
+	// Get returns a safe copy with the connection string stripped
+	safeCopy, ok := r.Get(src.ID)
+	require.True(t, ok)
+	safeConn, err := safeCopy.GetConnectionString()
+	require.Error(t, err, "safe copy should return an error for empty connection string")
+	assert.Empty(t, safeConn)
+}
+
+// TestSourceRegistry_ConnectionStringByID_NotFound verifies that
+// ConnectionStringByID returns false for an unknown source ID.
+func TestSourceRegistry_ConnectionStringByID_NotFound(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+
+	connStr, ok := r.ConnectionStringByID("nonexistent-id")
+	assert.False(t, ok)
+	assert.Empty(t, connStr)
+}
+
 // TestGenerateSourceID_Deterministic verifies that the same inputs always produce the same ID.
 func TestGenerateSourceID_Deterministic(t *testing.T) {
 	t.Parallel()

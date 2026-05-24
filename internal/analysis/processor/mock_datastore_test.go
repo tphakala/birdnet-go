@@ -355,8 +355,26 @@ func (m *ActionMockDatastore) DeleteExpiredNotificationHistory(_ time.Time) (int
 }
 func (m *ActionMockDatastore) SchemaVersion() string     { return datastore.SchemaVersionLegacy }
 func (m *ActionMockDatastore) UpdateNameMaps(_ []string) {}
-func (m *ActionMockDatastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
+func (m *ActionMockDatastore) GetDatabaseStats(_ context.Context) (*datastore.DatabaseStats, error) {
 	return &datastore.DatabaseStats{Type: "mock", Connected: true}, nil
+}
+func (m *ActionMockDatastore) PingWithLatency(_ context.Context) (time.Duration, error) {
+	return 0, nil
+}
+func (m *ActionMockDatastore) CountDetectionsSince(_ context.Context, _ time.Time) (int, error) {
+	return 0, nil
+}
+func (m *ActionMockDatastore) SaveAppEvent(_ context.Context, _, _, _ string, _ map[string]any) error {
+	return nil
+}
+func (m *ActionMockDatastore) GetRecentAppEvents(_ context.Context, _ int) ([]datastore.AppEvent, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) GetAppEventsSince(_ context.Context, _ time.Time, _ int) ([]datastore.AppEvent, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) PruneAppEvents(_ context.Context, _ int) (int64, error) {
+	return 0, nil
 }
 
 // Migration bulk fetch methods

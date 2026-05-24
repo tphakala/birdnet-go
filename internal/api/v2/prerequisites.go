@@ -393,16 +393,15 @@ func (c *Controller) checkWritePermission() PrerequisiteCheck {
 		return check
 	}
 
-	testFile := filepath.Join(dir, ".migration_permission_test")
-
-	f, err := os.Create(testFile) //#nosec G304 -- testFile is constructed from trusted path
+	f, err := os.CreateTemp(dir, ".birdnet_write_test_*")
 	if err != nil {
 		check.Status = CheckStatusFailed
 		check.Message = fmt.Sprintf("Cannot write to %s: %v", dir, err)
 		return check
 	}
+	name := f.Name()
 	_ = f.Close()
-	_ = os.Remove(testFile)
+	_ = os.Remove(name)
 
 	check.Status = CheckStatusPassed
 	check.Message = fmt.Sprintf("Write access verified for %s", dir)

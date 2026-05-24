@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ultrasonic"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -128,7 +129,11 @@ type Processor struct {
 	backupMutex     sync.RWMutex
 
 	// Log deduplication (extracted to separate type for SRP)
-	logDedup *LogDeduplicator // Handles log deduplication logic
+	logDedupMu sync.RWMutex
+	logDedup   *LogDeduplicator
+
+	// Periodic pipeline stats (inference activity per source/model)
+	pipelineStats *PipelineStats
 
 	// Extended capture fields
 	extendedCaptureSpecies map[string]bool // Resolved set of scientific names eligible for extended capture
@@ -336,6 +341,31 @@ func validateAndLogFilterConfig(settings *conf.Settings) {
 	}
 }
 
+// validateAndLogBatFilterConfig validates the bat false positive filter configuration
+// and logs the effective minDetections. The bat model uses a fixed 50% overlap,
+// so there are no overlap-related warnings.
+func validateAndLogBatFilterConfig(settings *conf.Settings) {
+	if err := settings.Bat.FalsePositiveFilter.Validate(); err != nil {
+		GetLogger().Error("Invalid bat false positive filter configuration, falling back to level 0",
+			logger.Error(err),
+			logger.Int("fallback_level", 0),
+			logger.String("operation", "bat_false_positive_filter_validation"))
+		settings.Bat.FalsePositiveFilter.Level = 0
+	}
+
+	level := settings.Bat.FalsePositiveFilter.Level
+	if level == 0 {
+		return
+	}
+
+	minDetections := calculateBatMinDetections(settings)
+	GetLogger().Info("Bat false positive filter active",
+		logger.Int("level", level),
+		logger.String("level_name", getLevelName(level)),
+		logger.Int("min_detections", minDetections),
+		logger.String("operation", "bat_false_positive_filter_config"))
+}
+
 // initLogDeduplicator creates and configures the log deduplicator.
 func initLogDeduplicator(settings *conf.Settings) *LogDeduplicator {
 	healthCheckInterval := 60 * time.Second
@@ -469,6 +499,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 	// Initialize log deduplicator with configuration from settings
 	p.logDedup = initLogDeduplicator(settings)
 
+	// Initialize pipeline stats for periodic inference summaries
+	p.pipelineStats = NewPipelineStats(p.getDisplayNameForSource)
+
 	// Validate detection window configuration
 	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
 	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
@@ -509,6 +542,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 
 	// Validate and log false positive filter configuration
 	validateAndLogFilterConfig(settings)
+	validateAndLogBatFilterConfig(settings)
 
 	// Validate user-configured custom ExecuteCommand action paths up front
 	// so that a misconfigured command path produces a single user-facing
@@ -590,6 +624,10 @@ func (p *Processor) Start() {
 
 		p.flusherCtx, p.flusherCancel = context.WithCancel(context.Background())
 		p.pendingDetectionsFlusher()
+
+		if p.pipelineStats != nil {
+			p.pipelineStats.Start()
+		}
 	})
 }
 
@@ -617,7 +655,7 @@ func (p *Processor) startDetectionProcessor() {
 func (p *Processor) processDetections(item classifier.Results) {
 	// Add structured logging for detection pipeline entry
 	GetLogger().Debug("Processing detections from queue",
-		logger.String("source", item.Source.DisplayName),
+		logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
 		logger.String("model_id", item.ModelID),
 		logger.Time("start_time", item.StartTime),
 		logger.Int("results_count", len(item.Results)),
@@ -643,6 +681,21 @@ func (p *Processor) processDetections(item classifier.Results) {
 
 	// Log processing results with deduplication to prevent spam
 	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
+
+	// Record periodic pipeline stats
+	if p.pipelineStats != nil {
+		var maxConf float32
+		for _, r := range item.Results {
+			if r.Confidence > maxConf {
+				maxConf = r.Confidence
+			}
+		}
+		threshold := float32(settings.BirdNET.Threshold)
+		if item.ModelID == classifier.RegistryIDBat {
+			threshold = float32(settings.Bat.Threshold)
+		}
+		p.pipelineStats.RecordInference(item.Source.ID, item.ModelID, len(item.Results), len(detectionResults), maxConf, threshold)
+	}
 
 	for i := range detectionResults {
 		det := detectionResults[i]
@@ -692,7 +745,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 			GetLogger().Info("Created new pending detection",
 				logger.String("species", commonName),
 				logger.Float64("confidence", confidence),
-				logger.String("source", item.Source.DisplayName),
+				logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
 				logger.String("model_id", item.ModelID),
 				logger.Time("flush_deadline", now.Add(detectionWindow)),
 				logger.String("operation", "create_pending_detection"))
@@ -733,8 +786,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 
 	// Broadcast updated pending detections snapshot for "currently hearing" UI.
 	// This runs after all new detections are incorporated into pendingDetections.
-	minDet := calculateMinDetectionsFromSettings(settings)
-	snapshot := p.SnapshotVisiblePending(minDet)
+	snapshot := p.SnapshotVisiblePending()
 	p.broadcastPendingSnapshot(snapshot)
 }
 
@@ -778,7 +830,7 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 		p.handleHumanDetection(settings, item, speciesLowercase, result)
 
 		// Determine confidence threshold and check filters
-		baseThreshold := p.getBaseConfidenceThreshold(settings, commonName, scientificName)
+		baseThreshold := p.getBaseConfidenceThreshold(settings, commonName, scientificName, item.ModelID)
 
 		// Check if detection should be filtered
 		shouldSkip, _ := p.shouldFilterDetection(settings, result, commonName, scientificName, speciesLowercase, baseThreshold, item.Source.ID, item.ModelID)
@@ -791,7 +843,66 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 		detections = append(detections, det)
 	}
 
+	// Run ultrasonic validation filter on bat detections. Computed once per chunk
+	// since all detections share the same source audio.
+	if len(detections) > 0 && item.ModelID == classifier.RegistryIDBat {
+		p.applyUltrasonicFilter(settings, item, detections)
+	}
+
 	return detections
+}
+
+// applyUltrasonicFilter runs the ultrasonic validation filter on a batch of bat detections.
+// It computes the US frame CV once from the shared PCM audio and tags all detections
+// as unlikely when the CV falls below the configured threshold. The PCM data is at
+// the source sample rate (e.g., 256kHz), not the model's internal 48kHz rate.
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional for item
+func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifier.Results, detections []Detections) {
+	filterCfg := settings.Bat.UltrasonicFilter
+	if !filterCfg.Enabled {
+		return
+	}
+
+	resolved := p.resolveAudioSource(item.Source)
+	sourceRate := resolved.SampleRate
+	if sourceRate <= 0 || sourceRate <= filterCfg.FrequencySplitHz*2 {
+		return
+	}
+
+	if len(item.PCMdata) < 4 {
+		return
+	}
+
+	samples := convert.BytesToFloat64PCM16(item.PCMdata)
+	cv, ok := ultrasonic.ComputeUSFrameCV(samples, sourceRate, filterCfg)
+	sourceName := resolved.DisplayName
+	if !ok {
+		GetLogger().Debug("ultrasonic filter: insufficient data for CV computation",
+			logger.String("source", sourceName),
+			logger.Int("sample_count", len(samples)),
+			logger.Int("sample_rate", sourceRate))
+		return
+	}
+
+	unlikely := ultrasonic.IsUnlikely(cv, filterCfg)
+	logFields := []logger.Field{
+		logger.Float64("us_frame_cv", cv),
+		logger.Float64("threshold", filterCfg.CVThreshold),
+		logger.Bool("unlikely", unlikely),
+		logger.String("source", sourceName),
+		logger.Int("detections", len(detections)),
+	}
+	if unlikely {
+		GetLogger().Info("ultrasonic validation: detections tagged unlikely", logFields...)
+		for i := range detections {
+			detections[i].Result.Unlikely = true
+			detections[i].Result.UltrasonicCV = cv
+			detections[i].Result.UltrasonicCVThreshold = filterCfg.CVThreshold
+		}
+	} else {
+		GetLogger().Debug("ultrasonic validation filter result", logFields...)
+	}
 }
 
 // parseAndValidateSpecies parses species information and validates it
@@ -908,6 +1019,7 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 			GetLogger().Debug("species not on included list",
 				logger.String("species", result.Species),
 				logger.Float32("confidence", result.Confidence),
+				logger.String("model_id", modelID),
 				logger.String("operation", "species_inclusion_filter"))
 		}
 		return true, confidenceThreshold
@@ -1137,7 +1249,7 @@ func (p *Processor) handleDogDetection(settings *conf.Settings, item classifier.
 		GetLogger().Info("dog detection filtered",
 			logger.Float32("confidence", result.Confidence),
 			logger.Float32("threshold", float32(settings.Realtime.DogBarkFilter.Confidence)),
-			logger.String("source", item.Source.DisplayName),
+			logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
 			logger.String("operation", "dog_bark_filter"))
 		p.detectionMutex.Lock()
 		p.LastDogDetection[item.Source.ID] = item.StartTime
@@ -1155,7 +1267,7 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 		GetLogger().Info("human detection filtered",
 			logger.Float32("confidence", result.Confidence),
 			logger.Float32("threshold", float32(settings.Realtime.PrivacyFilter.Confidence)),
-			logger.String("source", item.Source.DisplayName),
+			logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
 			logger.String("operation", "privacy_filter"))
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
 		// bird detections if a human vocalization is detected after the first detection
@@ -1167,7 +1279,9 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 
 // getBaseConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
 // It supports lookup by both common name and scientific name for consistency with include/exclude matching.
-func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonName, scientificName string) float32 {
+// The modelID parameter selects which global threshold to use when no per-species config exists:
+// bat models use settings.Bat.Threshold, all others use settings.BirdNET.Threshold.
+func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonName, scientificName, modelID string) float32 {
 	// Check if species has a custom threshold using both common and scientific name lookup
 	if config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName); exists {
 		if settings.Debug {
@@ -1180,7 +1294,10 @@ func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonNa
 		return float32(config.Threshold)
 	}
 
-	// Fall back to global threshold
+	// Fall back to model-specific global threshold
+	if modelID == classifier.RegistryIDBat {
+		return float32(settings.Bat.Threshold)
+	}
 	return float32(settings.BirdNET.Threshold)
 }
 
@@ -1242,13 +1359,13 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 	return filepath.ToSlash(filepath.Join(year, month, filename))
 }
 
-// shouldDiscardDetection checks if a detection should be discarded based on various criteria
-func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections int) (shouldDiscard bool, reason string) {
-	settings := p.currentSettings()
-
+// shouldDiscardDetection checks if a detection should be discarded based on various criteria.
+// The caller provides a settings snapshot and the precomputed minDetections (from
+// calculateMinDetectionsForModel) to avoid redundant settings fetches and ensure
+// consistency within a single flush cycle.
+func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
-		// Add structured logging for minimum count filtering
 		GetLogger().Debug("Detection discarded due to insufficient count",
 			logger.String("species", item.Detection.Result.Species.CommonName),
 			logger.Int("count", item.Count),
@@ -1340,11 +1457,11 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 		logger.String("operation", "approve_detection"))
 
 	// Learn from each contributing model's approved detection for dynamic threshold adjustment.
-	// Only learn for models whose max confidence exceeds the base threshold to avoid
-	// lowering thresholds based on weak signals that rode on another model's strength.
+	// Only learn for models whose max confidence exceeds that model's own base threshold
+	// to avoid lowering thresholds based on weak signals that rode on another model's strength.
 	scientificName := item.Detection.Result.Species.ScientificName
-	baseThreshold := float64(p.getBaseConfidenceThreshold(settings, speciesName, scientificName))
 	for modelID, contrib := range item.ModelContributions {
+		baseThreshold := float64(p.getBaseConfidenceThreshold(settings, speciesName, scientificName, modelID))
 		if contrib.MaxConfidence >= baseThreshold {
 			p.LearnFromApprovedDetection(modelID, speciesName, scientificName, float32(contrib.MaxConfidence))
 		}
@@ -1495,9 +1612,13 @@ func (p *Processor) calculateMinDetections() int {
 }
 
 // flushPendingDetections processes one flush cycle, flushing eligible detections.
+// minDetections is computed per-item using the item's BestModelID so that bat
+// and bird models each apply their own false positive filter configuration.
 // Returns the count of pending and flushed detections for logging.
-func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flushedCount int) {
+func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	now := time.Now()
+	settings := p.currentSettings()
+	visThresholds := precomputeVisibilityThresholds(settings)
 
 	var terminalNotifs []SSEPendingDetection
 	var broadcastSnapshot []SSEPendingDetection
@@ -1512,12 +1633,10 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 			continue
 		}
 
-		// Get species name from the detection data (not the map key,
-		// since source IDs like RTSP URLs may contain colons).
-		// Lowercase to match the convention used in processDetections and dynamic thresholds.
 		speciesName := strings.ToLower(item.Detection.Result.Species.CommonName)
+		itemMinDetections := calculateMinDetectionsForModel(settings, item.BestModelID)
 
-		if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
+		if shouldDiscard, reason := p.shouldDiscardDetection(&item, settings, itemMinDetections); shouldDiscard {
 			GetLogger().Info("discarding detection",
 				logger.String("species", speciesName),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
@@ -1528,8 +1647,7 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 				logger.String("operation", "discard_detection"))
 			delete(p.pendingDetections, mapKey)
 
-			// Collect rejected notification if species was visible
-			if item.Count >= CalculateVisibilityThreshold(minDetections) {
+			if item.Count >= visThresholds.getThreshold(item.BestModelID) {
 				terminalNotifs = append(terminalNotifs, p.buildFlushNotification(&item, PendingStatusRejected))
 			}
 
@@ -1543,38 +1661,34 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 			logger.Bool("deadline_reached", true),
 			logger.Int("total_count", item.Count),
 			logger.Int("model_count", len(item.ModelContributions)),
-			logger.Int("required", minDetections),
+			logger.Int("required", itemMinDetections),
 			logger.String("operation", "flush_detection"))
 
 		p.processApprovedDetection(&item, speciesName)
 		delete(p.pendingDetections, mapKey)
 		flushedCount++
 
-		// Collect approved notification if species was visible
-		if item.Count >= CalculateVisibilityThreshold(minDetections) {
+		if item.Count >= visThresholds.getThreshold(item.BestModelID) {
 			terminalNotifs = append(terminalNotifs, p.buildFlushNotification(&item, PendingStatusApproved))
 		}
 	}
 
 	// Build snapshot while still holding the lock, then release before broadcasting.
 	if len(terminalNotifs) > 0 || flushedCount > 0 {
-		threshold := CalculateVisibilityThreshold(minDetections)
 		broadcastSnapshot = make([]SSEPendingDetection, 0, len(p.pendingDetections)+len(terminalNotifs))
 		for key := range p.pendingDetections {
 			item := p.pendingDetections[key]
-			if item.Count >= threshold {
+			if item.Count >= visThresholds.getThreshold(item.BestModelID) {
 				broadcastSnapshot = append(broadcastSnapshot, p.buildPendingDTO(&item, PendingStatusActive))
 			}
 		}
 		logPendingBroadcast(len(broadcastSnapshot), len(terminalNotifs))
 		broadcastSnapshot = append(broadcastSnapshot, terminalNotifs...)
-		// Sort for stable comparison in broadcastPendingSnapshot.
 		sortPendingSnapshot(broadcastSnapshot)
 	}
 
 	p.pendingMutex.Unlock()
 
-	// Broadcast outside the lock to avoid blocking processDetections.
 	if broadcastSnapshot != nil {
 		p.broadcastPendingSnapshot(broadcastSnapshot)
 	}
@@ -1582,14 +1696,26 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 	return pendingCount, flushedCount
 }
 
-// logMinDetectionsChange logs when minDetections changes due to config update.
-func logMinDetectionsChange(lastValue, newValue int) {
-	if lastValue != -1 && newValue != lastValue {
-		GetLogger().Info("minDetections updated due to config change",
-			logger.Int("old_value", lastValue),
-			logger.Int("new_value", newValue),
+// logMinDetectionsChanges logs when bird or bat minDetections values change
+// due to a config hot-reload, helping operators verify that FP filter
+// adjustments took effect.
+func logMinDetectionsChanges(settings *conf.Settings, lastBird, lastBat *int) {
+	bird := calculateMinDetectionsFromSettings(settings)
+	bat := calculateBatMinDetections(settings)
+	if *lastBird != -1 && bird != *lastBird {
+		GetLogger().Info("bird minDetections updated due to config change",
+			logger.Int("old_value", *lastBird),
+			logger.Int("new_value", bird),
 			logger.String("operation", "pending_flusher_config_update"))
 	}
+	if *lastBat != -1 && bat != *lastBat {
+		GetLogger().Info("bat minDetections updated due to config change",
+			logger.Int("old_value", *lastBat),
+			logger.Int("new_value", bat),
+			logger.String("operation", "pending_flusher_config_update"))
+	}
+	*lastBird = bird
+	*lastBat = bat
 }
 
 // pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
@@ -1603,16 +1729,13 @@ func (p *Processor) pendingDetectionsFlusher() {
 		ticker := time.NewTicker(DefaultFlushInterval)
 		defer ticker.Stop()
 
-		lastMinDetections := -1
+		lastBirdMinDet, lastBatMinDet := -1, -1
 
 		for {
 			select {
 			case <-ticker.C:
-				minDetections := p.calculateMinDetections()
-				logMinDetectionsChange(lastMinDetections, minDetections)
-				lastMinDetections = minDetections
-
-				pendingCount, flushedCount := p.flushPendingDetections(minDetections)
+				logMinDetectionsChanges(p.currentSettings(), &lastBirdMinDet, &lastBatMinDet)
+				pendingCount, flushedCount := p.flushPendingDetections()
 
 				if pendingCount > 0 || flushedCount > 0 {
 					GetLogger().Debug("Pending detections flusher cycle",
@@ -2214,13 +2337,25 @@ func (p *Processor) GetBackupScheduler() any {
 	return p.backupScheduler
 }
 
+// ReconfigureLogDeduplicator reinitializes the log deduplicator from current settings.
+func (p *Processor) ReconfigureLogDeduplicator() {
+	settings := p.currentSettings()
+	newDedup := initLogDeduplicator(settings)
+	p.logDedupMu.Lock()
+	p.logDedup = newDedup
+	p.logDedupMu.Unlock()
+}
+
 // CleanupLogDeduplicator removes stale log deduplication entries to prevent memory growth.
 // Returns the number of entries removed.
 func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {
-	if p.logDedup == nil {
+	p.logDedupMu.RLock()
+	dedup := p.logDedup
+	p.logDedupMu.RUnlock()
+	if dedup == nil {
 		return 0
 	}
-	removed := p.logDedup.Cleanup(staleAfter)
+	removed := dedup.Cleanup(staleAfter)
 	if removed > 0 {
 		GetLogger().Debug("Cleaned stale log deduplication entries",
 			logger.Int("removed_count", removed),
@@ -2296,6 +2431,11 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	// Cancel flusher goroutine
 	if p.flusherCancel != nil {
 		p.flusherCancel()
+	}
+
+	// Stop pipeline stats logger
+	if p.pipelineStats != nil {
+		p.pipelineStats.Stop()
 	}
 
 	// Flush dynamic thresholds using the provided context deadline
@@ -2394,13 +2534,14 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 // This prevents ~40,000+ identical "filtered_detections_count:0" logs per day
 // while still allowing debug-mode visibility into the detection pipeline.
 func (p *Processor) logDetectionResults(source string, rawCount, filteredCount int) {
-	// Guard against nil logDedup (can occur in tests or partial initialization)
-	if p.logDedup == nil {
+	p.logDedupMu.RLock()
+	dedup := p.logDedup
+	p.logDedupMu.RUnlock()
+	if dedup == nil {
 		return
 	}
 
-	// Use the LogDeduplicator to determine if we should log
-	shouldLog, reason := p.logDedup.ShouldLog(source, rawCount, filteredCount)
+	shouldLog, reason := dedup.ShouldLog(source, rawCount, filteredCount)
 
 	if shouldLog {
 		// Log all processing results at DEBUG level to avoid flooding console.

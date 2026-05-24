@@ -247,3 +247,72 @@ func TestInMemoryStoreCountWithFilter(t *testing.T) {
 		})
 	}
 }
+
+func TestInMemoryStore_MarkAllRead(t *testing.T) {
+	t.Parallel()
+
+	t.Run("marks unread non-toast notifications", func(t *testing.T) {
+		t.Parallel()
+		store := NewInMemoryStore(100)
+
+		n1 := NewNotification(TypeInfo, PriorityMedium, "Info", "msg1")
+		n2 := NewNotification(TypeWarning, PriorityHigh, "Warning", "msg2")
+		n3 := NewNotification(TypeInfo, PriorityMedium, "Already read", "msg3")
+		n3.MarkAsRead()
+
+		mustStoreSave(t, store, n1)
+		mustStoreSave(t, store, n2)
+		mustStoreSave(t, store, n3)
+
+		changed, err := store.MarkAllRead()
+		require.NoError(t, err)
+		assert.Equal(t, 2, changed)
+
+		assertStoreUnreadCount(t, store, 0, "all should be read")
+	})
+
+	t.Run("skips toast notifications", func(t *testing.T) {
+		t.Parallel()
+		store := NewInMemoryStore(100)
+
+		regular := NewNotification(TypeInfo, PriorityMedium, "Regular", "msg")
+		toast := NewNotification(TypeInfo, PriorityLow, "Toast", "toast msg")
+		toast.Metadata = map[string]any{MetadataKeyIsToast: true}
+
+		mustStoreSave(t, store, regular)
+		mustStoreSave(t, store, toast)
+
+		changed, err := store.MarkAllRead()
+		require.NoError(t, err)
+		assert.Equal(t, 1, changed)
+
+		got, err := store.Get(toast.ID)
+		require.NoError(t, err)
+		assert.Equal(t, StatusUnread, got.Status, "toast should remain unread")
+	})
+
+	t.Run("empty store returns zero", func(t *testing.T) {
+		t.Parallel()
+		store := NewInMemoryStore(100)
+
+		changed, err := store.MarkAllRead()
+		require.NoError(t, err)
+		assert.Equal(t, 0, changed)
+	})
+
+	t.Run("idempotent on already-read notifications", func(t *testing.T) {
+		t.Parallel()
+		store := NewInMemoryStore(100)
+
+		n := NewNotification(TypeInfo, PriorityMedium, "Test", "msg")
+		mustStoreSave(t, store, n)
+
+		changed1, err := store.MarkAllRead()
+		require.NoError(t, err)
+		assert.Equal(t, 1, changed1)
+
+		changed2, err := store.MarkAllRead()
+		require.NoError(t, err)
+		assert.Equal(t, 0, changed2, "second call should change nothing")
+	})
+}

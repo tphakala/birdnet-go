@@ -361,18 +361,24 @@ func getFfprobeBinaryName() string {
 	return "ffprobe"
 }
 
+// resolveFFprobeBinary returns the ffprobe binary path, falling back to
+// PATH lookup if the configured path is empty.
+func resolveFFprobeBinary() (string, error) {
+	if path := GetFFprobePath(); path != "" {
+		return path, nil
+	}
+	found, err := exec.LookPath(getFfprobeBinaryName())
+	if err != nil {
+		return "", ErrFFprobeNotAvailable
+	}
+	return found, nil
+}
+
 // executeFFprobe runs ffprobe and returns its CSV output.
 func executeFFprobe(ctx context.Context, path string) (string, error) {
-	// Use the configured path if set (from config validation), otherwise fall
-	// back to PATH lookup for backward compatibility.
-	ffprobeBinary := GetFFprobePath()
-	if ffprobeBinary == "" {
-		name := getFfprobeBinaryName()
-		found, err := exec.LookPath(name)
-		if err != nil {
-			return "", ErrFFprobeNotAvailable
-		}
-		ffprobeBinary = found
+	ffprobeBinary, err := resolveFFprobeBinary()
+	if err != nil {
+		return "", err
 	}
 
 	cmd := exec.CommandContext(ctx, ffprobeBinary, //nolint:gosec // G204: ffprobeBinary validated by config or exec.LookPath, path validated by caller

@@ -554,6 +554,72 @@ func TestSoundLevelValueTemplate_UsesCorrectBandKeyFormat(t *testing.T) {
 		"Value template should filter by source ID via value_json.src")
 }
 
+// TestValueTemplates_UseNoneFallback verifies that all value templates use
+// "else None" instead of "else this.state". When HA starts, sensors are in
+// 'unknown' state. If a multi-source sensor receives a message from a
+// non-matching source and the template returns this.state ('unknown'), HA
+// rejects it for numeric sensors (sound_pressure device class, % unit).
+// Returning None tells HA to skip the state update entirely.
+func TestValueTemplates_UseNoneFallback(t *testing.T) {
+	t.Parallel()
+
+	mock := newMockPublisher()
+	config := DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       "birdnet",
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "test-node",
+		Version:         "1.0.0",
+	}
+
+	publisher := NewDiscoveryPublisher(mock, &config)
+	ctx := t.Context()
+
+	source := datastore.AudioSource{
+		ID:          "rtsp_abc123",
+		DisplayName: "Backyard Mic",
+	}
+
+	settings := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				SoundLevel: conf.SoundLevelSettings{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	err := publisher.publishSourceDiscovery(ctx, source, settings)
+	require.NoError(t, err)
+
+	nodeID := SanitizeID(config.NodeID)
+	sourceID := SanitizeID(source.DisplayName)
+	prefix := "homeassistant/sensor/" + nodeID + "/" + nodeID + "_" + sourceID
+
+	sensors := map[string]string{
+		"species":         prefix + "_species/config",
+		"confidence":      prefix + "_confidence/config",
+		"scientific_name": prefix + "_scientific_name/config",
+		"sound_level":     prefix + "_sound_level/config",
+	}
+
+	for name, topic := range sensors {
+		require.Contains(t, mock.publishedMessages, topic, "Missing topic for %s", name)
+
+		var payload DiscoveryPayload
+		err := json.Unmarshal([]byte(mock.publishedMessages[topic]), &payload)
+		require.NoError(t, err, "Failed to parse %s payload", name)
+
+		assert.Contains(t, payload.ValueTemplate, "else None",
+			"%s template must use 'else None' to avoid HA validation errors on numeric sensors at startup; got: %s",
+			name, payload.ValueTemplate)
+		assert.NotContains(t, payload.ValueTemplate, "this.state",
+			"%s template must NOT use 'this.state' fallback; got: %s",
+			name, payload.ValueTemplate)
+	}
+}
+
 // =============================================================================
 // DEVICE NAMING TESTS
 // =============================================================================

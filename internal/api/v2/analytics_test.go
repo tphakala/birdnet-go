@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	speciestracker "github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -1255,11 +1256,89 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	require.NoError(t, err)
 
-	// Check that the error response contains expected fields — in non-debug mode,
+	// Check that the error response contains expected fields - in non-debug mode,
 	// Error field uses sanitized message instead of raw err.Error()
 	assert.Contains(t, errorResponse, "error")
 	assert.Equal(t, "Failed to process daily species data", errorResponse["error"])
 
 	// Assert that all expectations were met
 	mockDS.AssertExpectations(t)
+}
+
+func TestApplySpeciesStatusToSummary_FlagPassThrough(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		status            speciestracker.SpeciesStatus
+		expectNewSpecies  bool
+		expectNewThisYear bool
+		expectNewSeason   bool
+	}{
+		{
+			name: "all flags true when tracker reports new",
+			status: speciestracker.SpeciesStatus{
+				IsNew:           true,
+				DaysSinceFirst:  0,
+				IsNewThisYear:   true,
+				IsNewThisSeason: true,
+				CurrentSeason:   "spring",
+			},
+			expectNewSpecies:  true,
+			expectNewThisYear: true,
+			expectNewSeason:   true,
+		},
+		{
+			name: "all flags true when tracker reports in-window",
+			status: speciestracker.SpeciesStatus{
+				IsNew:           true,
+				DaysSinceFirst:  3,
+				IsNewThisYear:   true,
+				IsNewThisSeason: true,
+				CurrentSeason:   "spring",
+			},
+			expectNewSpecies:  true,
+			expectNewThisYear: true,
+			expectNewSeason:   true,
+		},
+		{
+			name: "all flags false when tracker reports out-of-window",
+			status: speciestracker.SpeciesStatus{
+				IsNew:           false,
+				DaysSinceFirst:  8,
+				IsNewThisYear:   false,
+				IsNewThisSeason: false,
+				CurrentSeason:   "summer",
+			},
+			expectNewSpecies:  false,
+			expectNewThisYear: false,
+			expectNewSeason:   false,
+		},
+		{
+			name: "mixed flags passed through independently",
+			status: speciestracker.SpeciesStatus{
+				IsNew:           false,
+				DaysSinceFirst:  30,
+				IsNewThisYear:   true,
+				IsNewThisSeason: true,
+				CurrentSeason:   "winter",
+			},
+			expectNewSpecies:  false,
+			expectNewThisYear: true,
+			expectNewSeason:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var summary SpeciesDailySummary
+			applySpeciesStatusToSummary(&summary, &tt.status)
+			assert.Equal(t, tt.expectNewSpecies, summary.IsNewSpecies, "IsNewSpecies")
+			assert.Equal(t, tt.expectNewThisYear, summary.IsNewThisYear, "IsNewThisYear")
+			assert.Equal(t, tt.expectNewSeason, summary.IsNewThisSeason, "IsNewThisSeason")
+			assert.Equal(t, tt.status.DaysSinceFirst, summary.DaysSinceFirstSeen, "DaysSinceFirstSeen")
+			assert.Equal(t, tt.status.CurrentSeason, summary.CurrentSeason, "CurrentSeason")
+		})
+	}
 }

@@ -36,6 +36,13 @@ func (s ModelSpec) BufferDimensions() (clipBytes, overlapBytes, readSize int) {
 	return
 }
 
+// BufferInterval returns how often a new analysis window is produced,
+// derived from 50% overlap: ClipLength / 2. If inference exceeds this
+// interval the pipeline falls behind real-time input.
+func (s ModelSpec) BufferInterval() time.Duration {
+	return s.ClipLength / 2
+}
+
 // EffectiveSampleRate returns the sample rate the model expects to receive
 // audio at. When RawSampleRate is set, the model needs raw audio at that
 // rate (e.g. 256kHz bat audio fed without resampling). Otherwise, the

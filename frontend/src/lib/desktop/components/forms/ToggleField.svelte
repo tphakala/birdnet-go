@@ -1,5 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
+  import { generateId } from '$lib/utils/uuid';
   import type { HTMLAttributes } from 'svelte/elements';
   import type { Component } from 'svelte';
 
@@ -32,8 +33,7 @@
     ...rest
   }: Props = $props();
 
-  // Generate unique ID using crypto.randomUUID() with fallback
-  const fieldId = `toggle-${crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)}`;
+  const fieldId = generateId('toggle');
 
   function handleChange(event: Event) {
     const target = event.target as HTMLInputElement;

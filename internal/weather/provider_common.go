@@ -31,6 +31,11 @@ var (
 	// configuration state, not a bug, so it must not be reported to Sentry.
 	ErrWeatherDisabled = errors.Newf("weather service disabled").
 				Component("weather").Category(errors.CategoryConfiguration).Build()
+
+	// ErrWeatherDataNotModified indicates the data has not changed since
+	// the last request (e.g., HTTP 304). Not an error condition.
+	ErrWeatherDataNotModified = errors.Newf("weather data not modified").
+					Component("weather").Category(errors.CategoryNotFound).Build()
 )
 
 // Backoff constants for the polling service

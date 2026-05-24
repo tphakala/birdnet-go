@@ -22,7 +22,7 @@ type AdvancedSearchFilters struct {
 	Location      []string // Maps to source_node column
 	Locked        *bool
 	SortAscending bool
-	SortBy        string // "date_desc", "date_asc", "species_asc", "confidence_desc", "status"
+	SortBy        string // "date_desc", "date_asc", "species_asc", "species_desc", "confidence_asc", "confidence_desc", "status"
 	Limit         int
 	Offset        int
 	// MinID filters to records with ID > MinID (cursor-based pagination for migration)
@@ -134,6 +134,10 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 			query = query.Order("date ASC, time ASC")
 		case "species_asc":
 			query = query.Order("common_name ASC")
+		case "species_desc":
+			query = query.Order("common_name DESC")
+		case "confidence_asc":
+			query = query.Order("confidence ASC")
 		case "confidence_desc":
 			query = query.Order("confidence DESC")
 		case "status":
@@ -142,7 +146,7 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 				query = query.Joins("LEFT JOIN note_reviews ON note_reviews.note_id = notes.id")
 			}
 			query = query.Order("CASE WHEN note_reviews.verified = 'correct' THEN 0 WHEN note_reviews.verified IS NULL OR note_reviews.verified = '' THEN 1 ELSE 2 END ASC")
-		default: // "date_desc" or empty — use SortAscending for backward compatibility
+		default: // "date_desc" or empty - use SortAscending for backward compatibility
 			if filters.SortAscending {
 				query = query.Order("date ASC, time ASC")
 			} else {

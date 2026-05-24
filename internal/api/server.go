@@ -28,6 +28,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -70,6 +71,9 @@ type Server struct {
 
 	// Model gallery manager (optional, nil when not configured)
 	modelManager *classifier.ModelManager
+
+	// Health error buffer shared between the logger and health checks
+	healthErrors *health.ErrorRingBuffer
 
 	// Channels
 	controlChan    chan string
@@ -251,6 +255,14 @@ func WithAudioEngine(e *engine.AudioEngine) ServerOption {
 func WithModelManager(mm *classifier.ModelManager) ServerOption {
 	return func(s *Server) {
 		s.modelManager = mm
+	}
+}
+
+// WithHealthErrorBuffer sets a shared ErrorRingBuffer that the logger writes to
+// and the health checks read from.
+func WithHealthErrorBuffer(buf *health.ErrorRingBuffer) ServerOption {
+	return func(s *Server) {
+		s.healthErrors = buf
 	}
 }
 
@@ -492,6 +504,9 @@ func (s *Server) setupRoutes() error {
 	}
 	if s.modelManager != nil {
 		v2Opts = append(v2Opts, apiv2.WithModelManager(s.modelManager))
+	}
+	if s.healthErrors != nil {
+		v2Opts = append(v2Opts, apiv2.WithHealthErrorBuffer(s.healthErrors))
 	}
 
 	// Initialize API v2 controller with auth middleware and service injected

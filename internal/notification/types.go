@@ -68,6 +68,13 @@ const (
 	MetadataKeyIsToast = "isToast"
 )
 
+// Delivery target constants control where a notification is routed.
+const (
+	DeliveryTargetAll  = ""     // default: deliver to all channels
+	DeliveryTargetBell = "bell" // in-app notification store only
+	DeliveryTargetPush = "push" // push providers only
+)
+
 // isToastNotification checks if a notification is a toast notification
 // by examining its metadata for the isToast flag
 func isToastNotification(notif *Notification) bool {
@@ -115,6 +122,12 @@ type Notification struct {
 	// MessageParams contains interpolation parameters for the message translation.
 	// Values must be scalar types (string, int, float64, bool) for safe frontend interpolation.
 	MessageParams map[string]any `json:"message_params,omitempty"`
+
+	// DeliveryTarget controls where this notification is delivered.
+	// Empty string means "all channels" (backwards-compatible default).
+	// Set to "bell" for in-app only, "push" for push providers only.
+	// Transient routing field; never serialized or persisted.
+	DeliveryTarget string `json:"-"`
 }
 
 // NewNotification creates a new notification with a unique ID and timestamp
@@ -171,6 +184,12 @@ func (n *Notification) WithMessageKey(key string, params map[string]any) *Notifi
 	return n
 }
 
+// WithDeliveryTarget sets the delivery target and returns the notification for chaining.
+func (n *Notification) WithDeliveryTarget(target string) *Notification {
+	n.DeliveryTarget = target
+	return n
+}
+
 // sanitizeParams ensures all parameter values are scalar types suitable for
 // frontend i18n interpolation. Non-scalar values (structs, slices, maps, time.Time)
 // are coerced to their string representation.
@@ -217,16 +236,17 @@ func (n *Notification) Clone() *Notification {
 	}
 
 	clone := &Notification{
-		ID:         n.ID,
-		Type:       n.Type,
-		Priority:   n.Priority,
-		Status:     n.Status,
-		Title:      n.Title,
-		Message:    n.Message,
-		Component:  n.Component,
-		Timestamp:  n.Timestamp,
-		TitleKey:   n.TitleKey,
-		MessageKey: n.MessageKey,
+		ID:             n.ID,
+		Type:           n.Type,
+		Priority:       n.Priority,
+		Status:         n.Status,
+		Title:          n.Title,
+		Message:        n.Message,
+		Component:      n.Component,
+		Timestamp:      n.Timestamp,
+		TitleKey:       n.TitleKey,
+		MessageKey:     n.MessageKey,
+		DeliveryTarget: n.DeliveryTarget,
 	}
 
 	// Deep copy ExpiresAt
@@ -330,6 +350,9 @@ type NotificationStore interface {
 	Count(filter *FilterOptions) (int, error)
 	// Update modifies an existing notification
 	Update(notification *Notification) error
+	// MarkAllRead sets every unread, non-toast notification to StatusRead and
+	// returns the number of notifications that were changed.
+	MarkAllRead() (int, error)
 	// Delete removes a notification
 	Delete(id string) error
 	// DeleteExpired removes all expired notifications
@@ -481,6 +504,22 @@ func (s *InMemoryStore) Update(notification *Notification) error {
 
 	s.notifications[notification.ID] = notification.Clone()
 	return nil
+}
+
+// MarkAllRead sets every unread, non-toast notification to StatusRead.
+// Returns the number of notifications that were changed.
+func (s *InMemoryStore) MarkAllRead() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	changed := 0
+	for _, notif := range s.notifications {
+		if notif.Status == StatusUnread && !isToastNotification(notif) {
+			notif.Status = StatusRead
+			changed++
+		}
+	}
+	return changed, nil
 }
 
 // Delete removes a notification

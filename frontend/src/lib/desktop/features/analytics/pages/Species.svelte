@@ -1,6 +1,8 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
+  import { downloadBlob } from '$lib/utils/fileHelpers';
+  import { formatNumber, formatDateTime } from '$lib/utils/formatters';
   import { loggers } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { onMount } from 'svelte';
@@ -74,20 +76,8 @@
     return getLocalDateString(date);
   }
 
-  function formatNumber(number: number): string {
-    // Use built-in toLocaleString for safe number formatting instead of complex regex
-    return number.toLocaleString('en-US');
-  }
-
   function formatPercentage(value: number): string {
     return (value * 100).toFixed(1) + '%';
-  }
-
-  function formatDateTime(dateString: string): string {
-    if (!dateString) return '';
-    const date = parseLocalDateString(dateString);
-    if (!date) return '';
-    return date.toLocaleString();
   }
 
   async function fetchData() {
@@ -343,10 +333,8 @@
       species.count,
       (species.avg_confidence * 100).toFixed(1) + '%',
       (species.max_confidence * 100).toFixed(1) + '%',
-      species.first_heard
-        ? (parseLocalDateString(species.first_heard)?.toLocaleString() ?? '')
-        : '',
-      species.last_heard ? (parseLocalDateString(species.last_heard)?.toLocaleString() ?? '') : '',
+      species.first_heard ? formatDateTime(species.first_heard) : '',
+      species.last_heard ? formatDateTime(species.last_heard) : '',
     ]);
 
     // Create CSV string
@@ -357,16 +345,7 @@
 
     // Create and download file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-
-    link.setAttribute('href', url);
-    link.setAttribute('download', `birdnet-species-${getLocalDateString()}.csv`);
-    link.style.visibility = 'hidden';
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadBlob(blob, `birdnet-species-${getLocalDateString()}.csv`);
   }
 
   let searchDebounce: ReturnType<typeof setTimeout> | undefined;

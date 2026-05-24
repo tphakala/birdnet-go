@@ -3,6 +3,7 @@ package classifier
 import (
 	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
@@ -13,10 +14,12 @@ import (
 // changing predictFilter() or any downstream code.
 type mappedRangeFilter struct {
 	inner           inference.RangeFilter
-	classifierToGeo []int   // classifierIndex -> geomodelIndex; -1 means no match
-	numClassifier   int     // len(classifierLabels)
-	mappedCount     int     // number of classifier species with a geomodel match
-	unmappedScore   float32 // score for classifier species absent from geomodel
+	classifierToGeo []int          // classifierIndex -> geomodelIndex; -1 means no match
+	numClassifier   int            // len(classifierLabels)
+	mappedCount     int            // number of classifier species with a geomodel match
+	unmappedScore   float32        // score for classifier species absent from geomodel
+	geomodelLabels  []string       // geomodel label set in geomodel output order
+	geomodelIndex   map[string]int // label -> index for O(1) lookup
 }
 
 // buildSpeciesMapping creates the classifier-to-geomodel index mapping by
@@ -25,13 +28,13 @@ type mappedRangeFilter struct {
 func buildSpeciesMapping(classifierLabels, geomodelLabels []string) []int {
 	geoIndex := make(map[string]int, len(geomodelLabels))
 	for i, label := range geomodelLabels {
-		sci := extractScientificName(label)
+		sci := detection.ExtractScientificName(label)
 		geoIndex[strings.ToLower(sci)] = i
 	}
 
 	mapping := make([]int, len(classifierLabels))
 	for i, label := range classifierLabels {
-		sci := extractScientificName(label)
+		sci := detection.ExtractScientificName(label)
 		if idx, ok := geoIndex[strings.ToLower(sci)]; ok {
 			mapping[i] = idx
 		} else {
@@ -41,13 +44,18 @@ func buildSpeciesMapping(classifierLabels, geomodelLabels []string) []int {
 	return mapping
 }
 
-// extractScientificName returns the scientific name portion from a
-// "ScientificName_CommonName" label string.
-func extractScientificName(label string) string {
-	if idx := strings.IndexByte(label, '_'); idx >= 0 {
-		return label[:idx]
+// ComputeGeomodelCoverage counts how many classifier species have a matching
+// scientific name in the geomodel label set. Returns (withRangeData, withoutRangeData).
+func ComputeGeomodelCoverage(classifierLabels, geomodelLabels []string) (withRangeData, withoutRangeData int) {
+	mapping := buildSpeciesMapping(classifierLabels, geomodelLabels)
+	for _, idx := range mapping {
+		if idx >= 0 {
+			withRangeData++
+		} else {
+			withoutRangeData++
+		}
 	}
-	return label
+	return withRangeData, withoutRangeData
 }
 
 // newMappedRangeFilter wraps inner with a species mapping layer.
@@ -63,12 +71,19 @@ func newMappedRangeFilter(inner inference.RangeFilter, classifierLabels, geomode
 			mapped++
 		}
 	}
+	geoIdx := make(map[string]int, len(geomodelLabels))
+	for i, label := range geomodelLabels {
+		geoIdx[label] = i
+	}
+
 	return &mappedRangeFilter{
 		inner:           inner,
 		classifierToGeo: mapping,
 		numClassifier:   len(classifierLabels),
 		mappedCount:     mapped,
 		unmappedScore:   unmappedScore,
+		geomodelLabels:  geomodelLabels,
+		geomodelIndex:   geoIdx,
 	}
 }
 
@@ -88,6 +103,32 @@ func (m *mappedRangeFilter) Predict(latitude, longitude, week float32) ([]float3
 		}
 	}
 	return scores, nil
+}
+
+// PredictSpeciesScores returns geomodel species whose predicted score meets or
+// exceeds threshold, together with their raw scores. The returned labels come
+// from the geomodel's own label set (not the classifier's labels), so the
+// result covers all species the geomodel knows about regardless of which
+// classifier is active.
+func (m *mappedRangeFilter) PredictSpeciesScores(lat, lon, week, threshold float32) ([]SpeciesScore, error) {
+	geoScores, err := m.inner.Predict(lat, lon, week)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]SpeciesScore, 0, len(m.geomodelLabels)/4)
+	for i, score := range geoScores {
+		if score >= threshold && i < len(m.geomodelLabels) {
+			result = append(result, SpeciesScore{Score: float64(score), Label: m.geomodelLabels[i]})
+		}
+	}
+	return result, nil
+}
+
+// GeomodelLabels returns the full geomodel label set for use in species
+// override matching, where the caller needs to search all known species
+// (not just those passing the range filter threshold).
+func (m *mappedRangeFilter) GeomodelLabels() []string {
+	return m.geomodelLabels
 }
 
 // NumSpecies returns the number of classifier labels (not geomodel labels).

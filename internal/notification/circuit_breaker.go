@@ -338,6 +338,21 @@ func (cb *PushCircuitBreaker) State() CircuitState {
 	return cb.state
 }
 
+// EffectiveState returns the state that the next call would see. When the
+// breaker is Open and the timeout has elapsed, the next beforeCall() would
+// transition to HalfOpen, so this reports StateHalfOpen proactively. This
+// is useful for health checks that need to report the current readiness
+// without triggering an actual state transition.
+func (cb *PushCircuitBreaker) EffectiveState() CircuitState {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+
+	if cb.state == StateOpen && time.Since(cb.lastStateChange) >= cb.config.Timeout {
+		return StateHalfOpen
+	}
+	return cb.state
+}
+
 // Failures returns the current number of consecutive failures.
 func (cb *PushCircuitBreaker) Failures() int {
 	cb.mu.RLock()

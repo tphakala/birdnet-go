@@ -3,6 +3,7 @@ package api
 
 import (
 	"reflect"
+	"slices"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
@@ -18,8 +19,13 @@ type sourceNameUpdater interface {
 }
 
 // audioDeviceSettingChanged checks if audio device pipeline settings have changed.
-// Only compares device-affecting fields (Device, Gain, Model), not display-only
-// fields (Name, Equalizer, QuietHours) which are handled separately.
+// Only compares device-affecting fields (Device, Gain, Model, Models,
+// SampleRate), not display-only fields (Name, Equalizer, QuietHours) which
+// are handled separately.
+//
+// Models is the per-source list of classifier IDs (e.g. ["birdnet",
+// "perch_v2"]); Model is the deprecated singular alias. Both are compared so
+// hot-reload fires whether the user edits the new list or a legacy field.
 func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldSources := oldSettings.Realtime.Audio.Sources
 	newSources := currentSettings.Realtime.Audio.Sources
@@ -31,6 +37,7 @@ func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool
 		if oldSources[i].Device != newSources[i].Device ||
 			oldSources[i].Gain != newSources[i].Gain ||
 			oldSources[i].Model != newSources[i].Model ||
+			!slices.Equal(oldSources[i].Models, newSources[i].Models) ||
 			oldSources[i].SampleRate != newSources[i].SampleRate {
 			return true
 		}
@@ -125,14 +132,15 @@ func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) b
 // registered sources (both sound cards and streams). Each source's effective EQ
 // is resolved via Settings.ResolveEQOverride using the registry DisplayName.
 func (c *Controller) handleEqualizerChange(currentSettings *conf.Settings) error {
-	if c.engine == nil {
+	eng := c.engine.Load()
+	if eng == nil {
 		return nil
 	}
 
-	router := c.engine.Router()
+	router := eng.Router()
 	globalEQ := currentSettings.Realtime.Audio.Equalizer
 
-	for _, src := range c.engine.Registry().List() {
+	for _, src := range eng.Registry().List() {
 		displayName := src.DisplayName
 		override := currentSettings.ResolveEQOverride(displayName)
 		router.UpdateFilterChain(src.ID, func(sampleRate int) *equalizer.FilterChain {
@@ -226,7 +234,7 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	// Check sound level monitoring settings
 	if soundLevelSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("Sound level monitoring settings changed, triggering reconfiguration")
-		reconfigActions = append(reconfigActions, "reconfigure_sound_level")
+		reconfigActions = append(reconfigActions, actionReconfigureSoundLevel)
 		// Send toast notification
 		_ = c.SendToastWithKey("Reconfiguring sound level monitoring...", "info", toastDurationShort,
 			notification.MsgSettingsReconfiguringSoundLevel, nil)
@@ -235,7 +243,7 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	// Check audio device settings
 	if audioDeviceSettingChanged(oldSettings, currentSettings) {
 		audiocore.GetLogger().Info("audio device settings changed, triggering reconfiguration")
-		reconfigActions = append(reconfigActions, "reconfigure_audio_sources")
+		reconfigActions = append(reconfigActions, actionReconfigureAudioSources)
 		_ = c.SendToastWithKey("Reconfiguring audio sources...", "info", toastDurationMedium,
 			notification.MsgSettingsReconfiguringAudioSources, nil)
 	}
@@ -243,7 +251,7 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	// Check extended capture filter settings (hot-reloadable: Enabled, Species, MaxDuration)
 	if extendedCaptureFilterChanged(oldSettings, currentSettings) {
 		c.Debug("Extended capture filter settings changed, triggering rebuild")
-		reconfigActions = append(reconfigActions, "rebuild_extended_capture")
+		reconfigActions = append(reconfigActions, actionRebuildExtendedCapture)
 		_ = c.SendToastWithKey("Rebuilding extended capture species filter...", "info", toastDurationShort,
 			notification.MsgSettingsRebuildingExtendedCapture, nil)
 	}
@@ -258,8 +266,8 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	// Detect source/stream name changes and sync DisplayName in the registry.
 	// Each function detects renames and updates the registry in a single pass.
 	var registry sourceNameUpdater
-	if c.engine != nil {
-		registry = c.engine.Registry()
+	if eng := c.engine.Load(); eng != nil {
+		registry = eng.Registry()
 	}
 	srcNameChanged := syncAudioSourceNames(oldSettings, currentSettings, registry)
 	strmNameChanged := syncStreamNames(oldSettings, currentSettings, registry)

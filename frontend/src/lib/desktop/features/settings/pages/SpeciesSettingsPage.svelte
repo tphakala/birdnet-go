@@ -27,6 +27,7 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy, untrack, tick } from 'svelte';
+  import { downloadBlob } from '$lib/utils/fileHelpers';
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
@@ -720,12 +721,7 @@
       '\n'
     );
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `active-species-${getLocalDateString()}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `active-species-${getLocalDateString()}.csv`);
   }
 
   // Format relative time for last updated

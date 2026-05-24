@@ -3,14 +3,22 @@ package classifier
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
+)
+
+const (
+	butterworthQ           = 1.0 / math.Sqrt2
+	defaultFilterCutoffHz  = 4000.0
+	defaultFilterPassCount = 1
 )
 
 // Bat represents a loaded bat detection model that chains BirdNET v2.4
@@ -20,6 +28,7 @@ type Bat struct {
 	embeddingExtractor inference.EmbeddingExtractor
 	batClassifier      inference.CustomClassifier
 	info               ModelInfo
+	hpFilter           *equalizer.FilterChain
 	mu                 sync.Mutex
 }
 
@@ -45,8 +54,9 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 	}
 
 	embClassifier, err := inference.NewONNXClassifier(cfg.EmbeddingModelPath, inference.ONNXClassifierOptions{
-		Labels:  cfg.EmbeddingLabels,
-		Threads: cfg.Threads,
+		Labels:              cfg.EmbeddingLabels,
+		Threads:             cfg.Threads,
+		SkipLabelValidation: true,
 	})
 	if err != nil {
 		return nil, errors.New(err).
@@ -110,6 +120,11 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 		return nil, errors.Newf("bat classifier is not initialized").
 			Category(errors.CategoryModelInit).
 			Build()
+	}
+
+	if b.hpFilter != nil {
+		b.hpFilter.Reset()
+		b.hpFilter.ApplyBatchFloat32(samples[0])
 	}
 
 	log.Debug("bat predict starting",
@@ -225,6 +240,62 @@ func (b *Bat) Labels() []string {
 		return nil
 	}
 	return b.batClassifier.Labels()
+}
+
+// UpdateFilter rebuilds the high-pass filter from current settings.
+// Currently a no-op: the filter is disabled pending bat classifier retraining
+// because it increases false positives with the current model. The filter
+// infrastructure is retained for future use.
+func (b *Bat) UpdateFilter() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.hpFilter != nil {
+		GetLogger().Info("bat high-pass filter disabled")
+		b.hpFilter = nil
+	}
+}
+
+// buildBatHPFilter creates a high-pass filter chain from current bat settings.
+// Returns nil if filter creation fails (errors are logged).
+func buildBatHPFilter() *equalizer.FilterChain {
+	log := GetLogger()
+	settings := conf.Setting()
+
+	cutoff := settings.Bat.FilterCutoffHz
+	if cutoff <= 0 {
+		cutoff = defaultFilterCutoffHz
+	}
+	passes := settings.Bat.FilterPassCount
+	if passes < 1 {
+		passes = defaultFilterPassCount
+	}
+
+	hp, err := equalizer.NewHighPass(
+		float64(ModelRegistry[RegistryIDBat].Spec.SampleRate),
+		cutoff,
+		butterworthQ,
+		passes,
+	)
+	if err != nil {
+		log.Error("failed to create bat high-pass filter",
+			logger.Error(err),
+			logger.Float64("cutoff_hz", cutoff),
+			logger.Int("passes", passes))
+		return nil
+	}
+
+	chain := equalizer.NewFilterChain()
+	if addErr := chain.AddFilter(hp); addErr != nil {
+		log.Error("failed to add bat high-pass filter to chain",
+			logger.Error(addErr))
+		return nil
+	}
+
+	log.Info("bat high-pass filter configured",
+		logger.Float64("cutoff_hz", cutoff),
+		logger.Int("passes", passes))
+	return chain
 }
 
 // Close releases resources held by the bat model.

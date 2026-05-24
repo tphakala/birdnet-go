@@ -331,7 +331,10 @@ func (c *Controller) validateSearchSortBy(path, ip string, req *SearchRequest) e
 		"date_desc":       {},
 		"date_asc":        {},
 		"species_asc":     {},
+		"species_desc":    {},
+		"confidence_asc":  {},
 		"confidence_desc": {},
+		"status":          {},
 	}
 	if req.SortBy != "" { // Allow empty string for default sorting (handled by datastore)
 		if _, ok := allowedSortBy[req.SortBy]; !ok {

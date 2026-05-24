@@ -719,7 +719,7 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 	start := time.Now()
 
 	// Create the archive file (internal temp path from backup manager)
-	archiveFile, err := os.Create(archivePath) //nolint:gosec // G304 - archivePath is an internal temp path from backup manager
+	archiveFile, err := os.OpenFile(archivePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // G304 - archivePath is an internal temp path from backup manager
 	if err != nil {
 		return errors.New(err).
 			Component("backup").

@@ -290,7 +290,7 @@ func (p *Processor) updateDynamicThreshold(modelID, commonName string, confidenc
 
 		// Check if the species already has a dynamic threshold
 		// Note: scientific name not available in this context, but common name lookup is sufficient
-		if dt, exists := p.DynamicThresholds[key]; exists && confidence > float64(p.getBaseConfidenceThreshold(settings, commonName, "")) {
+		if dt, exists := p.DynamicThresholds[key]; exists && confidence > float64(p.getBaseConfidenceThreshold(settings, commonName, "", modelID)) {
 			// Update the timer to extend the threshold's validity
 			// Note: dt is a pointer, so this directly mutates the struct in the map
 			dt.Timer = time.Now().Add(time.Duration(dt.ValidHours) * time.Hour)

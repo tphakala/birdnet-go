@@ -80,6 +80,44 @@ export function isFutureDate(dateString: string): boolean {
 }
 
 /**
+ * Check if a date string is too far in the future to be the server's
+ * current date. Tolerates up to +2 calendar days to cover the maximum
+ * possible timezone gap (UTC+14 vs UTC-12 = 26 hours, which can span
+ * 2 calendar days).
+ *
+ * Used at bootstrap before the server timezone is known.
+ *
+ * @param dateString - Date string in YYYY-MM-DD format
+ * @returns True if the date is more than 2 days ahead of browser local time
+ */
+export function isBeyondTomorrow(dateString: string): boolean {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() + 2);
+  return dateString > getLocalDateString(cutoff);
+}
+
+/**
+ * Get the current date as YYYY-MM-DD in a specific IANA timezone.
+ * Uses Intl.DateTimeFormat for correct DST handling.
+ *
+ * @param timezone - IANA timezone name (e.g., "Australia/Sydney", "America/Los_Angeles")
+ * @returns Date string in YYYY-MM-DD format, or browser local date if timezone is invalid
+ */
+export function getDateInTimezone(timezone: string): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    return formatter.format(new Date());
+  } catch {
+    return getLocalDateString();
+  }
+}
+
+/**
  * Parse a time string (HH:MM:SS) and extract the hour component
  *
  * @param timeString - Time string in HH:MM:SS format

@@ -132,15 +132,18 @@ func CalculateVisibilityThreshold(minDetections int) int {
 
 // SnapshotVisiblePending returns all pending detections that have accumulated
 // enough hits to pass the visibility threshold. Results have status "active".
+// The visibility threshold is computed per-item using BestModelID so that bat
+// and bird models each use their own false positive filter configuration.
 // The caller must NOT hold pendingMutex.
-func (p *Processor) SnapshotVisiblePending(minDetections int) []SSEPendingDetection {
-	threshold := CalculateVisibilityThreshold(minDetections)
+func (p *Processor) SnapshotVisiblePending() []SSEPendingDetection {
+	settings := p.currentSettings()
+	visThresholds := precomputeVisibilityThresholds(settings)
 
 	p.pendingMutex.RLock()
 	result := make([]SSEPendingDetection, 0, len(p.pendingDetections))
 	for key := range p.pendingDetections {
 		item := p.pendingDetections[key]
-		if item.Count < threshold {
+		if item.Count < visThresholds.getThreshold(item.BestModelID) {
 			continue
 		}
 		result = append(result, p.buildPendingDTO(&item, PendingStatusActive))

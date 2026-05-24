@@ -11,7 +11,10 @@ import (
 	"strings"
 )
 
-func loadLabels(path string) ([]string, error) {
+// LoadLabels reads species labels from a file. Supports .csv (auto-detects
+// label column) and .json (array or object formats). Files with .txt or
+// unknown/missing extensions are parsed as plain text (one label per line).
+func LoadLabels(path string) ([]string, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // Path provided by caller
 	if err != nil {
 		return nil, &LabelLoadError{Path: path, Reason: err.Error()}
@@ -26,14 +29,12 @@ func loadLabels(path string) ([]string, error) {
 
 func loadLabelsFromBytes(data []byte, ext string) ([]string, error) {
 	switch ext {
-	case ".txt":
-		return loadLabelsText(data)
 	case ".csv":
 		return loadLabelsCSV(data)
 	case ".json":
 		return loadLabelsJSON(data)
 	default:
-		return nil, &LabelLoadError{Path: "(bytes)", Reason: "unsupported label file extension: " + ext}
+		return loadLabelsText(data)
 	}
 }
 

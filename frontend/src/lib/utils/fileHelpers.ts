@@ -1,3 +1,18 @@
+/**
+ * Trigger a browser download for an in-memory Blob.
+ */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+}
+
 const DEFAULT_MAX_SIZE_BYTES = 1_048_576; // 1 MB
 
 /**

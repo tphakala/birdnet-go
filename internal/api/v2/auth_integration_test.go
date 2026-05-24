@@ -34,6 +34,7 @@ func setupAuthIntegrationTest(t *testing.T) (*echo.Echo, *Controller, *conf.Sett
 
 	// Create mock datastore
 	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 
 	// Create settings with BasicAuth enabled
 	settings := &conf.Settings{
@@ -205,6 +206,7 @@ func TestV2AuthFlow_EmptyClientID_V1Compatible(t *testing.T) {
 	// Create custom test environment with empty ClientID
 	e := echo.New()
 	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 
 	settings := &conf.Settings{
 		WebServer: conf.WebServerSettings{Debug: true},

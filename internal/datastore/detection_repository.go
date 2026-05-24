@@ -380,6 +380,7 @@ func NoteFromResult(result *detection.Result) Note {
 			SafeString:  result.AudioSource.SafeString,
 			DisplayName: result.AudioSource.DisplayName,
 		},
+		Unlikely:   result.Unlikely,
 		Occurrence: result.Occurrence,
 		Verified:   result.Verified,
 		Locked:     result.Locked,
@@ -443,6 +444,7 @@ func (r *detectionRepository) noteToResult(note *Note) (*detection.Result, error
 		Sensitivity:    note.Sensitivity,
 		ClipName:       note.ClipName,
 		ProcessingTime: note.ProcessingTime,
+		Unlikely:       note.Unlikely,
 		Occurrence:     note.Occurrence,
 		Verified:       note.Verified,
 		Locked:         note.Locked,
@@ -577,11 +579,10 @@ func (r *detectionRepository) parseDateWithDefault(dateStr string, defaultToNow 
 }
 
 // CountAll returns the total count of all detections.
-// This is a lightweight count operation that doesn't load any data.
 func (r *detectionRepository) CountAll(ctx context.Context) (int64, error) {
-	stats, err := r.store.GetDatabaseStats()
+	count, err := r.store.CountDetectionsSince(ctx, time.Time{})
 	if err != nil {
 		return 0, fmt.Errorf("failed to count detections: %w", err)
 	}
-	return stats.TotalDetections, nil
+	return int64(count), nil
 }

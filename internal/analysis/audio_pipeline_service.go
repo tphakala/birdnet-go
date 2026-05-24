@@ -9,12 +9,15 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -23,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/weather"
@@ -48,6 +52,7 @@ type AudioPipelineService struct {
 	apiService *APIServerService
 	engine     *engine.AudioEngine
 
+	watchdog            *audiocore.LivenessWatchdog
 	bufferMgr           *BufferManager
 	ctrlMonitor         *ControlMonitor
 	quietHoursScheduler *schedule.QuietHoursScheduler
@@ -56,6 +61,16 @@ type AudioPipelineService struct {
 	done                chan struct{}
 	doneOnce            sync.Once
 	wg                  sync.WaitGroup
+
+	// sourcesMu serializes operations that mutate the set of active audio
+	// sources: restartAudioCapture (restart loop goroutine), RestartSource
+	// (watchdog goroutine), and reconfigureChangedSources (control monitor
+	// goroutine). Without this, concurrent execution can cause duplicate
+	// source initialization and conflicting router states.
+	sourcesMu sync.Mutex
+
+	// audioLevelStats aggregates audio level measurements for periodic logging.
+	audioLevelStats *AudioLevelStats
 
 	// soundLevelMu guards soundLevelConsumers. It is held only while mutating
 	// the map; router and engine calls happen outside the critical section so
@@ -84,6 +99,36 @@ func NewAudioPipelineService(settings *conf.Settings, bnAnalyzer *BirdNETAnalyze
 // Name returns a human-readable identifier for logging and diagnostics.
 func (p *AudioPipelineService) Name() string {
 	return audioPipelineServiceName
+}
+
+// buildLivenessConfig creates a LivenessConfig from user settings, falling back
+// to production defaults for any zero-valued field.
+func buildLivenessConfig(ws conf.WatchdogSettings) audiocore.LivenessConfig {
+	cfg := audiocore.DefaultLivenessConfig()
+	if ws.CheckInterval > 0 {
+		cfg.CheckInterval = time.Duration(ws.CheckInterval) * time.Second
+	}
+	if ws.SilenceThreshold > 0 {
+		cfg.SilenceThreshold = time.Duration(ws.SilenceThreshold) * time.Second
+	}
+	if ws.MaxRetries > 0 {
+		cfg.MaxRetries = ws.MaxRetries
+	}
+	if ws.RetryBackoff > 0 {
+		cfg.RetryBackoff = time.Duration(ws.RetryBackoff) * time.Second
+	}
+	if ws.Cooldown > 0 {
+		cfg.CooldownAfterRecov = time.Duration(ws.Cooldown) * time.Second
+	}
+	if ws.EscalationTimeout > 0 {
+		cfg.EscalationTimeout = time.Duration(ws.EscalationTimeout) * time.Second
+	}
+	return cfg
+}
+
+// Watchdog returns the audio liveness watchdog, or nil if not started.
+func (p *AudioPipelineService) Watchdog() *audiocore.LivenessWatchdog {
+	return p.watchdog
 }
 
 // Start initializes and starts the audio capture pipeline, buffer management,
@@ -189,6 +234,10 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	proc.SetRegistry(p.engine.Registry())
 	proc.Start()
 
+	// Start periodic audio level stats logger.
+	p.audioLevelStats = NewAudioLevelStats()
+	p.audioLevelStats.Start()
+
 	// Add audio sources, register consumers, and start buffer monitors.
 	apiAudioLevelChan := p.apiService.AudioLevelChan()
 	sourceIDs := p.setupAudioSources(apiAudioLevelChan, "start")
@@ -223,6 +272,62 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	})
 	p.engine.SetScheduler(p.quietHoursScheduler)
 	p.quietHoursScheduler.Start()
+
+	// Start audio liveness watchdog for detecting silent capture deaths.
+	notifSvc := notification.GetService()
+	watchdogCallbacks := audiocore.LivenessCallbacks{
+		RestartSource: p.RestartSource,
+		Escalate: func(_ string) {
+			select {
+			case p.restartChan <- struct{}{}:
+			default:
+			}
+		},
+		Notify: func(sourceID string, state audiocore.LivenessState, msg string) {
+			if notifSvc == nil {
+				return
+			}
+			priority := notification.PriorityHigh
+			title := "Audio source " + msg
+			body := "Source " + sourceID + ": " + msg
+			if state == audiocore.StateFailed || state == audiocore.StateEscalated {
+				priority = notification.PriorityCritical
+			}
+			if _, err := notifSvc.CreateWithComponent(
+				notification.TypeSystem, priority,
+				title, body, "audiocore.liveness",
+			); err != nil {
+				audiocore.GetLogger().Warn("failed to send liveness notification",
+					logger.Error(err),
+					logger.String("operation", "liveness_notify"))
+			}
+		},
+		IsQuietHours: func(sourceID string) bool {
+			if p.quietHoursScheduler == nil {
+				return false
+			}
+			src, ok := p.engine.Registry().Get(sourceID)
+			if ok && src.Type == audiocore.SourceTypeAudioCard {
+				return p.quietHoursScheduler.IsSoundCardSuppressed()
+			}
+			return p.quietHoursScheduler.IsStreamSuppressed(sourceID)
+		},
+	}
+	p.watchdog = audiocore.NewLivenessWatchdog(
+		buildLivenessConfig(settings.Realtime.Audio.Watchdog),
+		p.engine.Router(),
+		watchdogCallbacks,
+	)
+	p.watchdog.Start()
+
+	// Expose the watchdog and source restarter to the API controller.
+	if ctrl := p.apiService.APIController(); ctrl != nil {
+		ctrl.SetAudioWatchdog(p.watchdog)
+		ctrl.SetSourceRestarter(p.RestartSource)
+	}
+
+	// Inject suncalc into the orchestrator for bat nighttime scheduling.
+	bn.SetSunCalc(p.apiService.SunCalc())
 
 	// Publish application started alert event.
 	alerting.TryPublish(&alerting.AlertEvent{
@@ -259,8 +364,9 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 		p.reconfigureChangedSources(apiAudioLevelChan)
 	}
 	reconfigureSoundLevelFn := p.ReconfigureSoundLevel
+	reconfigureMonitoringFn := p.apiService.ReconfigureMonitoring
 	apiController := p.apiService.APIController()
-	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine, reconfigureFn, reconfigureSoundLevelFn)
+	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine, reconfigureFn, reconfigureSoundLevelFn, reconfigureMonitoringFn)
 	p.ctrlMonitor.Start()
 
 	// Start restart loop goroutine.
@@ -316,10 +422,21 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 
 	// NOTE: FFmpeg manager shutdown is handled by engine.Stop() in serve.go.
 
+	// Stop liveness watchdog before quiet hours scheduler so that
+	// IsQuietHours callbacks do not race with scheduler teardown.
+	if p.watchdog != nil {
+		p.watchdog.Stop()
+	}
+
 	// Stop quiet hours scheduler.
 	if p.quietHoursScheduler != nil {
 		p.quietHoursScheduler.Stop()
 		p.quietHoursScheduler = nil
+	}
+
+	// Stop audio level stats logger.
+	if p.audioLevelStats != nil {
+		p.audioLevelStats.Stop()
 	}
 
 	// Close done channel to signal restart loop and clip cleanup goroutines.
@@ -357,6 +474,9 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 // restartAudioCapture restarts the audio capture by removing and re-adding
 // all sources via the AudioEngine.
 func (p *AudioPipelineService) restartAudioCapture() {
+	p.sourcesMu.Lock()
+	defer p.sourcesMu.Unlock()
+
 	audiocore.GetLogger().Info("restarting audio capture",
 		logger.String("operation", "restart_audio_capture"))
 
@@ -366,6 +486,100 @@ func (p *AudioPipelineService) restartAudioCapture() {
 	// Re-add sources, register consumers, and update buffer monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
 	p.setupAudioSources(audioLevelChan, "restart")
+}
+
+// RestartSource tears down and reinitializes a single audio source.
+// Follows the same cleanup pattern as reconfigureChangedSources: remove routes,
+// clean up overrun trackers, untrack sound level, stop capture, then re-add.
+func (p *AudioPipelineService) RestartSource(sourceID string) error {
+	p.sourcesMu.Lock()
+	defer p.sourcesMu.Unlock()
+
+	log := audiocore.GetLogger()
+	log.Info("restarting single audio source",
+		logger.String("source_id", sourceID),
+		logger.String("operation", "restart_source"))
+
+	registry := p.engine.Registry()
+
+	// Save connection string before removal (needed to look up config).
+	// ConnectionStringByID reads the private field directly from the registry,
+	// unlike Get() which returns a copy with the field cleared for safety.
+	connStr, ok := registry.ConnectionStringByID(sourceID)
+	if !ok {
+		return fmt.Errorf("restart source: source %s not found in registry", sourceID)
+	}
+
+	// 1. Clean up overrun tracker state.
+	RemoveOverrunTrackers(sourceID)
+
+	// 2. Untrack sound level consumer (engine.RemoveSource removes the route).
+	p.untrackSoundLevelConsumer(sourceID)
+
+	// 3. Remove source from engine (stops capture, removes routes, deallocates buffers, unregisters).
+	if err := p.engine.RemoveSource(sourceID); err != nil {
+		log.Error("failed to remove source during restart",
+			logger.String("source_id", sourceID),
+			logger.Error(err),
+			logger.String("operation", "restart_source"))
+		return fmt.Errorf("restart source: remove failed: %w", err)
+	}
+
+	// 5. Rebuild source config from current settings.
+	sourceConfigs := p.buildSourceConfigsWithModels()
+	var targetConfig *sourceConfigWithModels
+	for i := range sourceConfigs {
+		if sourceConfigs[i].config.ConnectionString == connStr {
+			targetConfig = &sourceConfigs[i]
+			break
+		}
+	}
+	if targetConfig == nil {
+		log.Warn("source config no longer in settings after removal",
+			logger.String("source_id", sourceID),
+			logger.String("operation", "restart_source"))
+		return fmt.Errorf("restart source: config for %s no longer exists in settings", sourceID)
+	}
+
+	// 6. Re-add source via engine.
+	if err := p.engine.AddSource(targetConfig.config); err != nil {
+		log.Error("failed to re-add source during restart",
+			logger.String("source_id", sourceID),
+			logger.Error(err),
+			logger.String("operation", "restart_source"))
+		return fmt.Errorf("restart source: add failed: %w", err)
+	}
+
+	// The source may get a new ID from the registry. Look it up.
+	newSrc, found := registry.GetByConnection(connStr)
+	if !found {
+		return fmt.Errorf("restart source: source re-added but not found in registry")
+	}
+	newSourceID := newSrc.ID
+
+	// 7. Re-register consumers and monitors.
+	audioLevelChan := p.apiService.AudioLevelChan()
+	sourceModelMap := map[string][]string{newSourceID: targetConfig.modelIDs}
+	p.registerConsumersForSources([]string{newSourceID}, sourceModelMap, audioLevelChan, "restart_source")
+	p.registerSoundLevelConsumers([]string{newSourceID}, "restart_source")
+
+	// Update buffer monitors.
+	if monErr := p.bufferMgr.AddMonitor(newSourceID); monErr != nil {
+		log.Warn("buffer monitor update failed during source restart",
+			logger.String("source_id", newSourceID),
+			logger.Error(monErr),
+			logger.String("operation", "restart_source"))
+	}
+
+	// Reset dispatch timestamp so watchdog starts fresh.
+	p.engine.Router().ResetDispatchTime(newSourceID)
+
+	log.Info("single source restart complete",
+		logger.String("old_source_id", sourceID),
+		logger.String("new_source_id", newSourceID),
+		logger.String("operation", "restart_source"))
+
+	return nil
 }
 
 // removeAllSources removes all audio sources from the engine.
@@ -384,6 +598,7 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 	// router state so the next registerSoundLevelConsumers call (e.g. after
 	// restartAudioCapture) does not skip sources due to stale entries.
 	p.untrackAllSoundLevelConsumers()
+	ResetOverrunTrackers()
 }
 
 // setupAudioSources builds source configs from current settings, adds them to
@@ -524,6 +739,14 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 			p.soundLevelMu.Unlock()
 			p.engine.Router().RemoveRoute(sid, consumerID)
 			log.Debug("sound level disabled mid-register, dropped route",
+				logger.String("source_id", sid),
+				logger.String("consumer_id", consumerID),
+				logger.String("operation", operation))
+			continue
+		}
+		if _, raced := p.soundLevelConsumers[sid]; raced {
+			p.soundLevelMu.Unlock()
+			log.Debug("sound level consumer already registered concurrently, skipping",
 				logger.String("source_id", sid),
 				logger.String("consumer_id", consumerID),
 				logger.String("operation", operation))
@@ -687,25 +910,20 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			modelInfos = primaryTargets
 		}
 
-		// Allocate analysis buffers for secondary models. The engine
-		// already allocates a buffer for the primary model in AddSource(),
-		// so only non-primary models need allocation here. Track which
-		// models have usable buffers so we only create targets for them.
+		// Ensure analysis buffers exist for all target models. The engine
+		// pre-allocates the primary model's buffer in AddSource(), so it
+		// usually exists already. Use HasAnalysis for all models uniformly
+		// to handle the case where a prior model-change reconfigure
+		// deallocated a buffer that is now needed again.
 		allocatedModels := make(map[string]bool, len(modelInfos))
-		allocatedModels[primaryInfo.ID] = true // pre-allocated by engine
 		for i := range modelInfos {
-			if modelInfos[i].ID == primaryInfo.ID {
-				continue
-			}
-			// If the analysis buffer already exists (e.g., gain-only reconfigure),
-			// skip allocation and mark the model as usable.
 			if bufMgr.HasAnalysis(sid, modelInfos[i].ID) {
 				allocatedModels[modelInfos[i].ID] = true
 				continue
 			}
 			clipBytes, overlapBytes, readSize := modelInfos[i].Spec.BufferDimensions()
 			if allocErr := bufMgr.AllocateAnalysis(sid, modelInfos[i].ID, clipBytes, overlapBytes, readSize); allocErr != nil {
-				log.Warn("failed to allocate analysis buffer for secondary model",
+				log.Warn("failed to allocate analysis buffer",
 					logger.String("source_id", sid),
 					logger.String("model_id", modelInfos[i].ID),
 					logger.Error(allocErr),
@@ -713,7 +931,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				continue
 			}
 			allocatedModels[modelInfos[i].ID] = true
-			log.Info("allocated analysis buffer for secondary model",
+			log.Info("allocated analysis buffer",
 				logger.String("source_id", sid),
 				logger.String("model_id", modelInfos[i].ID),
 				logger.Int("clip_bytes", clipBytes),
@@ -729,6 +947,18 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				targets = append(targets, ModelTarget{ModelID: modelInfos[i].ID, SampleRate: modelInfos[i].Spec.EffectiveSampleRate()})
 			}
 		}
+
+		// Log final model-to-source assignment for diagnostics.
+		modelIDs := make([]string, len(targets))
+		for i, t := range targets {
+			modelIDs[i] = t.ModelID
+		}
+		log.Info("registering models for audio source",
+			logger.String("source_id", sid),
+			logger.String("source_name", sourceName),
+			logger.String("models", strings.Join(modelIDs, ", ")),
+			logger.Int("model_count", len(targets)),
+			logger.String("operation", operation))
 
 		// Use per-source sample rate when available; fall back to global constant.
 		sourceSampleRate := conf.SampleRate
@@ -760,6 +990,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 			continue
 		}
+		audioStats := p.audioLevelStats
 		p.wg.Go(func() {
 			for {
 				select {
@@ -767,6 +998,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 					if !ok {
 						return
 					}
+					audioStats.Record(lvl.Name, lvl.Level, lvl.Clipping)
 					select {
 					case audioLevelChan <- audiocore.AudioLevelData(lvl):
 					default:
@@ -781,10 +1013,58 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 // sourceNeedsReconfigure reports whether the running source's audio parameters
 // differ from the desired config, requiring a full reconfigure (stop + restart).
+// A zero SourceSampleRate in the desired config means the probe failed; treat
+// this as "unknown, keep current" to avoid restarting FFmpeg on transient
+// network failures.
 func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.SourceConfig) bool {
+	sourceSampleRateChanged := desired.SourceSampleRate != 0 &&
+		running.SourceSampleRate != desired.SourceSampleRate
 	return running.SampleRate != desired.SampleRate ||
+		sourceSampleRateChanged ||
 		running.BitDepth != desired.BitDepth ||
 		running.Channels != desired.Channels
+}
+
+// resolveDesiredModelSet resolves config-level model IDs to registry IDs,
+// filtering out models that are unknown or not loaded. When the resolved set
+// is empty the primary model is used as a fallback, matching the behavior of
+// registerConsumersForSources.
+func resolveDesiredModelSet(desiredConfigIDs []string, loadedModels map[string]classifier.ModelInfo, primaryModelID string) map[string]bool {
+	set := make(map[string]bool, len(desiredConfigIDs))
+	for _, configID := range desiredConfigIDs {
+		registryID, known := classifier.ResolveConfigModelID(configID)
+		if !known {
+			continue
+		}
+		if _, loaded := loadedModels[registryID]; loaded {
+			set[registryID] = true
+		}
+	}
+	if len(set) == 0 {
+		set[primaryModelID] = true
+	}
+	return set
+}
+
+// sourceModelsChanged reports whether the set of models currently active for a
+// source (as reflected by allocated analysis buffers) differs from the desired
+// config model set. Only models that are both resolvable and loaded are
+// considered; unknown or unloaded config IDs are ignored so that a model
+// appearing in the config but not yet installed does not trigger a spurious
+// rebuild on every hot-reload cycle.
+func sourceModelsChanged(bufMgr *buffer.Manager, sourceID string, desiredConfigIDs []string, loadedModels map[string]classifier.ModelInfo, primaryModelID string) bool {
+	currentBuffers := bufMgr.AnalysisBuffers(sourceID)
+	desiredSet := resolveDesiredModelSet(desiredConfigIDs, loadedModels, primaryModelID)
+
+	if len(currentBuffers) != len(desiredSet) {
+		return true
+	}
+	for modelID := range currentBuffers {
+		if !desiredSet[modelID] {
+			return true
+		}
+	}
+	return false
 }
 
 // reconfigureChangedSources diffs the currently running sources against the
@@ -792,6 +1072,9 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 // changed are touched - unchanged streams keep their capture buffers and
 // source IDs intact.
 func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan audiocore.AudioLevelData) {
+	p.sourcesMu.Lock()
+	defer p.sourcesMu.Unlock()
+
 	log := audiocore.GetLogger()
 
 	// Build desired config keyed by connection string, including model IDs.
@@ -800,6 +1083,21 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	for _, scm := range desiredConfigs {
 		desired[scm.config.ConnectionString] = scm
 	}
+
+	// Build a lookup of loaded models for model-change detection.
+	// The bnAnalyzer may be nil in minimal test setups that only exercise
+	// the add/remove paths; model-change detection is skipped in that case.
+	var loadedModels map[string]classifier.ModelInfo
+	var primaryModelID string
+	if p.bnAnalyzer != nil {
+		modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
+		loadedModels = make(map[string]classifier.ModelInfo, len(modelInfoSlice))
+		for i := range modelInfoSlice {
+			loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
+		}
+		primaryModelID = p.bnAnalyzer.BirdNET().ModelInfo.ID
+	}
+	bufMgr := p.engine.BufferManager()
 
 	// Determine which desired configs already have a running source.
 	// Registry.List() returns copies with cleared connectionStrings for
@@ -811,6 +1109,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	var newSourceIDs []string
 	var gainChangedIDs []string
 	var reconfiguredIDs []string
+	var modelChangedIDs []string
 	var keptCount int
 
 	for connStr, scm := range desired {
@@ -820,11 +1119,20 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			sourceModelMap[src.ID] = scm.modelIDs
 			keptCount++
 
-			// Detect audio parameter changes (sample rate, bit depth, channels)
-			// that require a full source reconfigure (stop + route removal +
-			// buffer realloc + restart). ReconfigureSource handles everything,
-			// so skip the gain-only route rebuild for this source.
-			if sourceNeedsReconfigure(src, scm.config) {
+			log.Info("reconfigure: source model assignment",
+				logger.String("source_id", src.ID),
+				logger.String("source_name", src.DisplayName),
+				logger.String("models", strings.Join(scm.modelIDs, ", ")),
+				logger.Int("model_count", len(scm.modelIDs)),
+				logger.String("operation", "reconfigure_diff"))
+
+			// Classify the kind of change needed, from most to least
+			// disruptive. Model changes are checked before gain-only
+			// changes so that a simultaneous gain + model update takes
+			// the model-change path (which also handles gain).
+			switch {
+			case sourceNeedsReconfigure(src, scm.config):
+				// Audio parameter change: full stop + restart.
 				log.Info("audio parameters changed, reconfiguring source",
 					logger.String("source_id", src.ID),
 					logger.Int("old_sample_rate", src.SampleRate),
@@ -835,9 +1143,6 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				if src.Gain != scm.config.Gain {
 					registry.UpdateGain(src.ID, scm.config.Gain)
 				}
-				// ReconfigureSource removes all routes; clear the sound level
-				// tracking entry so re-registration is not blocked by the
-				// idempotency check.
 				p.untrackSoundLevelConsumer(src.ID)
 				if err := p.engine.ReconfigureSource(src.ID, scm.config); err != nil {
 					log.Error("failed to reconfigure source",
@@ -847,8 +1152,21 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				} else {
 					reconfiguredIDs = append(reconfiguredIDs, src.ID)
 				}
-			} else if src.Gain != scm.config.Gain {
-				// Gain-only change: update registry and rebuild routes (no restart needed).
+
+			case loadedModels != nil && sourceModelsChanged(bufMgr, src.ID, scm.modelIDs, loadedModels, primaryModelID):
+				// Model assignment changed (e.g., Perch added/removed):
+				// rebuild the consumer/buffer/monitor layer, keep capture running.
+				// Also pick up any simultaneous gain change.
+				if src.Gain != scm.config.Gain {
+					registry.UpdateGain(src.ID, scm.config.Gain)
+				}
+				log.Info("model assignment changed for kept source, rebuilding consumers",
+					logger.String("source_id", src.ID),
+					logger.String("operation", "reconfigure_diff"))
+				modelChangedIDs = append(modelChangedIDs, src.ID)
+
+			case src.Gain != scm.config.Gain:
+				// Gain-only change: rebuild routes, keep capture running.
 				log.Info("gain changed for kept source, rebuilding routes",
 					logger.String("source_id", src.ID),
 					logger.Float64("old_gain_db", src.Gain),
@@ -892,22 +1210,24 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	}
 	var removedCount int
 	for _, src := range registry.List() {
-		if !keepIDs[src.ID] {
-			removedCount++
-			log.Info("removing stream no longer in config",
-				logger.String("source_id", src.ID),
-				logger.String("operation", "reconfigure_diff"))
-			if err := p.engine.RemoveSource(src.ID); err != nil {
-				log.Warn("failed to remove source during reconfigure",
-					logger.String("source_id", src.ID),
-					logger.Error(err))
-			}
-			// engine.RemoveSource also removes the soundlevel route. Drop the
-			// tracking entry so the idempotency check in
-			// registerSoundLevelConsumers does not skip this ID if the same
-			// source is re-added later.
-			p.untrackSoundLevelConsumer(src.ID)
+		if keepIDs[src.ID] {
+			continue
 		}
+		removedCount++
+		log.Info("removing stream no longer in config",
+			logger.String("source_id", src.ID),
+			logger.String("operation", "reconfigure_diff"))
+		if err := p.engine.RemoveSource(src.ID); err != nil {
+			log.Warn("failed to remove source during reconfigure",
+				logger.String("source_id", src.ID),
+				logger.Error(err))
+		}
+		// engine.RemoveSource also removes the soundlevel route. Drop the
+		// tracking entry so the idempotency check in
+		// registerSoundLevelConsumers does not skip this ID if the same
+		// source is re-added later.
+		p.untrackSoundLevelConsumer(src.ID)
+		RemoveOverrunTrackers(src.ID)
 	}
 
 	// Register consumers and monitors only for newly added sources.
@@ -939,6 +1259,21 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		p.registerSoundLevelConsumers(gainChangedIDs, "gain_change")
 	}
 
+	// Rebuild routes for sources whose model assignment changed (e.g.,
+	// Perch added or removed). The capture device stays running; routes
+	// are torn down, stale analysis buffers are deallocated, and
+	// consumers are re-created with the new model targets.
+	if len(modelChangedIDs) > 0 {
+		for _, sid := range modelChangedIDs {
+			p.engine.Router().RemoveAllRoutes(sid)
+			p.untrackSoundLevelConsumer(sid)
+			desiredSet := resolveDesiredModelSet(sourceModelMap[sid], loadedModels, primaryModelID)
+			deallocateStaleAnalysisBuffers(bufMgr, sid, desiredSet)
+		}
+		p.registerConsumersForSources(modelChangedIDs, sourceModelMap, audioLevelChan, "model_change")
+		p.registerSoundLevelConsumers(modelChangedIDs, "model_change")
+	}
+
 	// Sync monitors for ALL active sources (kept + new) so UpdateMonitors
 	// receives the full desired state and removes stale monitors correctly.
 	allActiveIDs := slices.Collect(maps.Values(alreadyRunning))
@@ -957,6 +1292,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		logger.Int("added", len(newSourceIDs)),
 		logger.Int("removed", removedCount),
 		logger.Int("gain_changed", len(gainChangedIDs)),
+		logger.Int("model_changed", len(modelChangedIDs)),
 		logger.String("operation", "reconfigure_diff"))
 }
 
@@ -974,14 +1310,42 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 	settings := conf.Setting()
 	var result []sourceConfigWithModels
 
-	// RTSP streams.
+	// Collect enabled streams so we can iterate twice: once for probing,
+	// once for building configs. EnabledStreams() returns an iterator;
+	// preallocate using the parent slice length as an upper bound.
+	enabledStreams := make([]*conf.StreamConfig, 0, len(settings.Realtime.RTSP.Streams))
 	for _, stream := range settings.Realtime.RTSP.EnabledStreams() {
+		enabledStreams = append(enabledStreams, stream)
+	}
+
+	// Probe all streams concurrently to discover actual sample rates.
+	// This lets us skip FFmpeg resampling when the source already matches
+	// the target, and detect sub-48 kHz sources that need upsampling.
+	probedRates := p.probeAllStreams(enabledStreams)
+
+	// RTSP streams.
+	for _, stream := range enabledStreams {
+		probedRate := probedRates[stream.URL]
+		sampleRate := conf.SampleRate
+		if hasBatModel(stream.Models) {
+			if probedRate > conf.SampleRate {
+				sampleRate = probedRate
+			}
+			if probedRate > 0 && probedRate < ffmpeg.MinBatSampleRate {
+				GetLogger().Warn("stream sample rate below bat model minimum",
+					logger.String("stream", stream.Name),
+					logger.Int("sample_rate", probedRate),
+					logger.Int("minimum", ffmpeg.MinBatSampleRate),
+					logger.String("operation", "probe_stream"))
+			}
+		}
 		result = append(result, sourceConfigWithModels{
 			config: &audiocore.SourceConfig{
 				DisplayName:      stream.Name,
 				Type:             audiocore.StreamTypeToSourceType(stream.Type),
 				ConnectionString: stream.URL,
-				SampleRate:       conf.SampleRate,
+				SampleRate:       sampleRate,
+				SourceSampleRate: probedRate,
 				BitDepth:         conf.BitDepth,
 				Channels:         1,
 			},
@@ -1014,6 +1378,89 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 	}
 
 	return result
+}
+
+// hasBatModel returns true if any of the given config-level model IDs
+// resolves to a registry entry that requires high sample rate audio
+// (MinRawSampleRate > 0).
+func hasBatModel(modelIDs []string) bool {
+	for _, configID := range modelIDs {
+		registryID, ok := classifier.ResolveConfigModelID(configID)
+		if !ok {
+			continue
+		}
+		info, exists := classifier.ModelRegistry[registryID]
+		if exists && info.Spec.MinRawSampleRate > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// probeAllStreams probes all streams concurrently to discover their actual
+// sample rates. Returns a map from stream URL to probed sample rate.
+// A zero value means the probe failed (the caller should treat unknown
+// rates conservatively).
+func (p *AudioPipelineService) probeAllStreams(streams []*conf.StreamConfig) map[string]int {
+	if len(streams) == 0 {
+		return nil
+	}
+
+	type probeResult struct {
+		url  string
+		rate int
+	}
+
+	results := make(chan probeResult, len(streams))
+	var wg sync.WaitGroup
+	for _, s := range streams {
+		wg.Go(func() {
+			results <- probeResult{
+				url:  s.URL,
+				rate: p.probeStreamSampleRate(s.URL, s.Name),
+			}
+		})
+	}
+	wg.Wait()
+	close(results)
+
+	rates := make(map[string]int, len(streams))
+	for r := range results {
+		rates[r.url] = r.rate
+	}
+	return rates
+}
+
+// probeStreamSampleRate uses ffprobe to discover the actual sample rate of a
+// stream. Returns 0 on failure so the caller can distinguish "unknown" from
+// "actually 48 kHz" and apply conservative resampling.
+func (p *AudioPipelineService) probeStreamSampleRate(url, name string) int {
+	log := GetLogger()
+
+	info, err := ffmpeg.ProbeStreamInfo(context.Background(), url)
+	if err != nil {
+		log.Warn("stream probe failed, FFmpeg will resample to ensure correct rate",
+			logger.String("stream", name),
+			logger.Error(err),
+			logger.String("operation", "probe_stream"))
+		return 0
+	}
+
+	log.Info("probed stream audio properties",
+		logger.String("stream", name),
+		logger.Int("sample_rate", info.SampleRate),
+		logger.String("codec", info.Codec),
+		logger.Int("channels", info.Channels),
+		logger.String("operation", "probe_stream"))
+
+	if ffmpeg.IsLossyCodec(info.Codec) {
+		log.Warn("stream uses lossy codec that destroys ultrasonic content",
+			logger.String("stream", name),
+			logger.String("codec", info.Codec),
+			logger.String("operation", "probe_stream"))
+	}
+
+	return info.SampleRate
 }
 
 // buildMonitorConfigs builds the map[sourceID][]monitorConfig needed by
@@ -1054,6 +1501,18 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 	}
 
 	return result
+}
+
+// deallocateStaleAnalysisBuffers removes analysis buffers for models that are
+// no longer in the desired set. The desiredSet should be pre-built via
+// resolveDesiredModelSet to ensure consistent filtering with the change
+// detection in sourceModelsChanged.
+func deallocateStaleAnalysisBuffers(bufMgr *buffer.Manager, sourceID string, desiredSet map[string]bool) {
+	for modelID := range bufMgr.AnalysisBuffers(sourceID) {
+		if !desiredSet[modelID] {
+			bufMgr.DeallocateAnalysis(sourceID, modelID)
+		}
+	}
 }
 
 // resolveModelTargets converts config-level model IDs to ModelTarget entries
@@ -1097,117 +1556,101 @@ func (p *AudioPipelineService) startWeatherPolling(metrics *observability.Metric
 		return
 	}
 
+	weather.RegisterService(weatherService)
+
 	p.wg.Go(func() {
 		weatherService.StartPolling(p.done)
+		weather.UnregisterService()
 	})
 }
 
 // clipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
-// It also performs periodic cleanup of log deduplicator states to prevent memory growth.
 func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
-	// Get configurable cleanup check interval, with fallback to default
+	log := GetLogger()
+
+	// Read initial interval for the startup log message.
 	retention := conf.Setting().Realtime.Audio.Export.Retention
 	checkInterval := retention.CheckInterval
 	if checkInterval <= 0 {
 		checkInterval = conf.DefaultCleanupCheckInterval
 	}
-
-	// Create a ticker that triggers at the configured interval to perform cleanup
-	ticker := time.NewTicker(time.Duration(checkInterval) * time.Minute)
-	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
-
-	// Get the shared disk manager logger
-	diskManagerLogger := diskmanager.GetLogger()
-
-	policy := retention.Policy
-	GetLogger().Info("clip cleanup monitor initialized",
-		logger.String("policy", policy),
+	log.Info("clip cleanup monitor initialized",
+		logger.String("policy", retention.Policy),
 		logger.Int("check_interval_minutes", checkInterval),
 		logger.String("operation", "clip_cleanup_init"))
-	diskManagerLogger.Info("Cleanup timer started",
-		logger.String("policy", policy),
-		logger.Int("interval_minutes", checkInterval),
-		logger.String("timestamp", time.Now().Format(time.RFC3339)))
 
 	for {
+		// Re-read interval each iteration so hot-reload takes effect.
+		interval := conf.Setting().Realtime.Audio.Export.Retention.CheckInterval
+		if interval <= 0 {
+			interval = conf.DefaultCleanupCheckInterval
+		}
+		timer := time.NewTimer(time.Duration(interval) * time.Minute)
+
 		select {
 		case <-quitChan:
-			// Handle quit signal to stop the monitor
-			diskManagerLogger.Info("Cleanup timer stopped",
-				logger.String("reason", "quit signal received"),
-				logger.String("timestamp", time.Now().Format(time.RFC3339)))
+			timer.Stop()
+			log.Debug("clip cleanup monitor stopped",
+				logger.String("operation", "clip_cleanup_stop"))
 			return
 
-		case t := <-ticker.C:
-			GetLogger().Info("starting clip cleanup task",
-				logger.String("timestamp", t.Format(time.RFC3339)),
-				logger.String("policy", conf.Setting().Realtime.Audio.Export.Retention.Policy),
-				logger.String("operation", "clip_cleanup_task"))
-			diskManagerLogger.Info("Cleanup timer triggered",
-				logger.String("timestamp", t.Format(time.RFC3339)),
-				logger.String("policy", conf.Setting().Realtime.Audio.Export.Retention.Policy))
+		case t := <-timer.C:
+			currentSettings := conf.Setting()
+			exportCfg := currentSettings.Realtime.Audio.Export
+			currentPolicy := exportCfg.Retention.Policy
 
-			// age based cleanup method
-			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
-				diskManagerLogger.Debug("Starting age-based cleanup via timer")
+			if strings.TrimSpace(exportCfg.Path) == "" {
+				log.Debug("skipping clip cleanup: export path not configured",
+					logger.String("operation", "clip_cleanup_skip"))
+				continue
+			}
+
+			log.Info("starting clip cleanup task",
+				logger.String("timestamp", t.Format(time.RFC3339)),
+				logger.String("policy", currentPolicy),
+				logger.String("operation", "clip_cleanup_task"))
+
+			if currentPolicy == "age" {
 				result := diskmanager.AgeBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
-					GetLogger().Error("age-based cleanup failed",
+					log.Error("age-based cleanup failed",
 						logger.Error(result.Err),
 						logger.String("operation", "age_based_cleanup"))
-					diskManagerLogger.Error("Age-based cleanup failed",
-						logger.Error(result.Err),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				} else {
-					GetLogger().Info("age-based cleanup completed successfully",
+					log.Info("age-based cleanup completed",
 						logger.Int("clips_removed", result.ClipsRemoved),
 						logger.Int("disk_utilization_percent", result.DiskUtilization),
 						logger.String("operation", "age_based_cleanup"))
-					diskManagerLogger.Info("Age-based cleanup completed via timer",
-						logger.Int("clips_removed", result.ClipsRemoved),
-						logger.Int("disk_utilization", result.DiskUtilization),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				}
 			}
 
-			// priority based cleanup method
-			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "usage" {
-				retention := conf.Setting().Realtime.Audio.Export.Retention
-				baseDir := conf.Setting().Realtime.Audio.Export.Path
+			if currentPolicy == "usage" {
+				currentRetention := exportCfg.Retention
+				baseDir := exportCfg.Path
 
-				// Check if we can skip cleanup
-				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&retention, baseDir)
-
+				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&currentRetention, baseDir)
 				if err != nil {
-					diskManagerLogger.Warn("Failed to check disk usage for early exit via timer",
+					log.Warn("failed to check disk usage",
 						logger.Error(err),
-						logger.Bool("continuing_with_cleanup", true))
+						logger.Bool("continuing_with_cleanup", true),
+						logger.String("operation", "usage_based_cleanup"))
 				} else if skip {
-					diskManagerLogger.Info("Disk usage below threshold via timer, skipping cleanup",
-						logger.Int("current_usage", utilization),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
-					continue // Skip to next timer tick
+					log.Debug("disk usage below threshold, skipping cleanup",
+						logger.Int("disk_utilization_percent", utilization),
+						logger.String("operation", "usage_based_cleanup"))
+					continue
 				}
 
-				// Proceed with cleanup
-				diskManagerLogger.Debug("Starting usage-based cleanup via timer")
 				result := diskmanager.UsageBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
-					GetLogger().Error("usage-based cleanup failed",
+					log.Error("usage-based cleanup failed",
 						logger.Error(result.Err),
 						logger.String("operation", "usage_based_cleanup"))
-					diskManagerLogger.Error("Usage-based cleanup failed",
-						logger.Error(result.Err),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				} else {
-					GetLogger().Info("usage-based cleanup completed successfully",
+					log.Info("usage-based cleanup completed",
 						logger.Int("clips_removed", result.ClipsRemoved),
 						logger.Int("disk_utilization_percent", result.DiskUtilization),
 						logger.String("operation", "usage_based_cleanup"))
-					diskManagerLogger.Info("Usage-based cleanup completed via timer",
-						logger.Int("clips_removed", result.ClipsRemoved),
-						logger.Int("disk_utilization", result.DiskUtilization),
-						logger.String("timestamp", time.Now().Format(time.RFC3339)))
 				}
 			}
 		}
@@ -1303,14 +1746,22 @@ func cleanupHLSStreamingFiles() error {
 				logger.String("path", path),
 				logger.String("operation", "cleanup_hls_files"))
 
-			// Remove the directory and all its contents
+			// Remove the directory and all its contents.
+			// Retry once on "directory not empty" to handle the race where
+			// a concurrent HLS writer creates a file between RemoveAll's
+			// internal traversal and the final parent unlink.
 			if err := os.RemoveAll(path); err != nil {
-				log.Warn("failed to remove HLS stream directory",
-					logger.String("path", path),
-					logger.Error(err),
-					logger.String("operation", "cleanup_hls_files"))
-				cleanupErrors = append(cleanupErrors, fmt.Sprintf("%s: %v", path, err))
-				// Continue with other directories
+				if errors.Is(err, syscall.ENOTEMPTY) {
+					time.Sleep(100 * time.Millisecond)
+					err = os.RemoveAll(path)
+				}
+				if err != nil {
+					log.Warn("failed to remove HLS stream directory",
+						logger.String("path", path),
+						logger.Error(err),
+						logger.String("operation", "cleanup_hls_files"))
+					cleanupErrors = append(cleanupErrors, fmt.Sprintf("%s: %v", path, err))
+				}
 			}
 		}
 	}

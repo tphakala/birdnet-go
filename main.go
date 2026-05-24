@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/restart"
@@ -120,8 +122,15 @@ func mainWithExitCode() int {
 	settings.Version = version
 	settings.BuildDate = buildDate
 
-	// Initialize the centralized logger
-	centralLogger, err := logger.NewCentralLogger(&settings.Logging)
+	// Create health error buffer before logger so the handler can capture from the start.
+	healthErrors := health.NewErrorRingBuffer(health.DefaultErrorBufferSize)
+	health.SetGlobalErrorBuffer(healthErrors)
+
+	// Initialize the centralized logger with the health error handler attached.
+	centralLogger, err := logger.NewCentralLogger(
+		&settings.Logging,
+		health.NewErrorBufferHandler(healthErrors, slog.LevelWarn),
+	)
 	if err != nil {
 		bootLog.Error("Failed to initialize logger", logger.Error(err))
 		return 1

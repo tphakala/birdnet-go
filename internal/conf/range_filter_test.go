@@ -276,6 +276,85 @@ func TestErrorRecoveryScenario_Concurrent(t *testing.T) {
 	assert.Equal(t, 1, trueCount, "Expected exactly 1 goroutine to receive true after reset")
 }
 
+// TestIsSpeciesIncluded_ScientificNameMap verifies that IsSpeciesIncluded uses
+// the O(1) map path when IncludedScientificNames is populated.
+func TestIsSpeciesIncluded_ScientificNameMap(t *testing.T) {
+	t.Parallel()
+
+	settings := &Settings{}
+	settings.BirdNET.RangeFilter.Species = []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Corvus corax_Northern Raven",
+	}
+	settings.BirdNET.RangeFilter.IncludedScientificNames = map[string]struct{}{
+		"turdus merula": {},
+		"parus major":   {},
+		"corvus corax":  {},
+	}
+
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{"full label match", "Turdus merula_Common Blackbird", true},
+		{"scientific name only", "Turdus merula", true},
+		{"case insensitive", "TURDUS MERULA", true},
+		{"case insensitive full label", "PARUS MAJOR_Great Tit", true},
+		{"not included", "Ficedula hypoleuca_Pied Flycatcher", false},
+		{"not included sci only", "Ficedula hypoleuca", false},
+		{"empty string", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, settings.IsSpeciesIncluded(tt.input))
+		})
+	}
+}
+
+// TestUpdateIncludedSpecies_BuildsScientificNameMap verifies that
+// UpdateIncludedSpecies populates IncludedScientificNames with lowercased
+// scientific names extracted from BirdNET-style labels.
+func TestUpdateIncludedSpecies_BuildsScientificNameMap(t *testing.T) {
+	settings := &Settings{}
+	setupGlobalSettings(t, settings)
+
+	UpdateIncludedSpecies([]string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Canis lupus_Gray Wolf",
+	})
+
+	published := GetSettings()
+	require.NotNil(t, published.BirdNET.RangeFilter.IncludedScientificNames)
+	assert.Len(t, published.BirdNET.RangeFilter.IncludedScientificNames, 3)
+
+	_, hasTurdus := published.BirdNET.RangeFilter.IncludedScientificNames["turdus merula"]
+	assert.True(t, hasTurdus, "should contain lowercased scientific name")
+
+	_, hasParus := published.BirdNET.RangeFilter.IncludedScientificNames["parus major"]
+	assert.True(t, hasParus)
+
+	_, hasCanis := published.BirdNET.RangeFilter.IncludedScientificNames["canis lupus"]
+	assert.True(t, hasCanis)
+}
+
+// TestUpdateIncludedSpecies_ScientificNameOnly verifies that labels without an
+// underscore (i.e. scientific name only) are stored using the full string.
+func TestUpdateIncludedSpecies_ScientificNameOnly(t *testing.T) {
+	settings := &Settings{}
+	setupGlobalSettings(t, settings)
+
+	UpdateIncludedSpecies([]string{"Parus major", "Corvus corax"})
+
+	published := GetSettings()
+	_, hasParus := published.BirdNET.RangeFilter.IncludedScientificNames["parus major"]
+	assert.True(t, hasParus, "labels without underscore should use full string as scientific name")
+}
+
 // TestResetAndCheckInterleaved tests interleaved reset and check operations.
 func TestResetAndCheckInterleaved(t *testing.T) {
 	settings := &Settings{}

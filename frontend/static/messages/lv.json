@@ -12,6 +12,7 @@
     "refresh": "Atsvaidzināt",
     "delete": "Dzēst",
     "edit": "Rediģēt",
+    "enabled": "Iespējots",
     "search": "Meklēt",
     "filter": "Filtrs",
     "sort": "Kārtot",
@@ -153,7 +154,8 @@
         "verifiedCorrect": "Verificēts kā pareizs",
         "falsePositive": "Kļūdaini pozitīvs",
         "notReviewed": "Nav pārskatīts",
-        "locked": "Bloķēts"
+        "locked": "Bloķēts",
+        "unlikely": "Maz ticams"
       },
       "form": {
         "correctDetection": "Pareiza noteikšana",
@@ -226,7 +228,16 @@
     "analyticsSubmenu": "Analītikas apakšizvēlne",
     "settingsSubmenu": "Iestatījumu apakšizvēlne",
     "systemSubmenu": "Sistēmas apakšizvēlne",
-    "systemTerminal": "Terminālis"
+    "systemTerminal": "Terminālis",
+    "help": "Palīdzība",
+    "helpSubmenu": "Palīdzības apakšizvēlne",
+    "helpAndSupport": "Palīdzība un atbalsts",
+    "reportBug": "Ziņot par kļūdu",
+    "askQuestion": "Uzdot jautājumu",
+    "reportBugAriaLabel": "Ziņot par kļūdu GitHub (atveras jaunā logā)",
+    "askQuestionAriaLabel": "Uzdot jautājumu GitHub Discussions (atveras jaunā logā)",
+    "viewOnGithubAriaLabel": "Skatīt BirdNET-Go GitHub (atveras jaunā logā)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -422,7 +433,11 @@
       },
       "buffer": {
         "overloadTitle": "Audio analīze pārslogota",
-        "overloadMessage": "Jūsu sistēma izlaiž {dropRate}% audio paraugu avotam '{sourceName}', jo tā nespēj sekot līdzi analīzei. Samaziniet BirdNET pārklāšanās vērtību noteikšanas iestatījumos vai apsveriet jaudīgāka procesora izmantošanu."
+        "overloadMessage": "Jūsu sistēma izlaiž {dropRate}% audio paraugu avotam ''{sourceName}'', jo tā nespēj sekot līdzi analīzei. Samaziniet BirdNET pārklāšanās vērtību noteikšanas iestatījumos vai apsveriet jaudīgāka procesora izmantošanu."
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime nav pieejams",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Skatiet instalēšanas rokasgrāmatu: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -512,7 +527,8 @@
       "false": "Kļūdains",
       "unverified": "Neverificēts",
       "locked": "Bloķēts",
-      "unlocked": "Atbloķēts"
+      "unlocked": "Atbloķēts",
+      "unlikely": "Maz ticams"
     },
     "review": {
       "review": "Pārskatīt",
@@ -640,7 +656,8 @@
         "verified": "Verificēts",
         "false": "Nepatiess",
         "unverified": "Neverificēts",
-        "locked": "Bloķēts"
+        "locked": "Bloķēts",
+        "unlikely": "Maz ticams"
       },
       "modals": {
         "showSpecies": "Rādīt sugu {species}",
@@ -656,6 +673,8 @@
       },
       "actions": {
         "menuLabel": "Darbības ar sugu {species}",
+        "markCorrect": "Pareizs",
+        "markFalsePositive": "Nepareizs",
         "review": "Pārskatīt atklāšanu",
         "showSpecies": "Rādīt sugu",
         "ignoreSpecies": "Ignorēt sugu",
@@ -761,6 +780,7 @@
     "headers": {
       "dateTime": "Datums un laiks",
       "weather": "Laikapstākļi",
+      "source": "Avots",
       "species": "Suga",
       "confidence": "Ticamība",
       "thumbnail": "Sīktēls",
@@ -794,6 +814,25 @@
     "pagination": {
       "showing": "Rāda no {from} līdz {to} no {total} rezultātiem"
     },
+    "selection": {
+      "select": "Atlasīt",
+      "nSelected": "{count} atlasīti",
+      "selectAllMatching": "Atlasīt visas {count} atbilstošās atklāšanas",
+      "allSelected": "Visas {count} atlasītas",
+      "clear": "Notīrīt atlasi",
+      "toolbarLabel": "Lielapjoma darbības",
+      "confirmBulkDelete": "Dzēst {count} atklāšanas? To nevar atsaukt.",
+      "confirmBulkMarkCorrect": "Atzīmēt {count} atklāšanas kā pareizas?",
+      "confirmBulkMarkFalsePositive": "Atzīmēt {count} atklāšanas kā viltus pozitīvas?",
+      "confirmBulkLock": "Bloķēt {count} atklāšanas?",
+      "confirmBulkUnlock": "Atbloķēt {count} atklāšanas?",
+      "bulkSuccess": "{count} atklāšanas atjauninātas",
+      "bulkDeleteSuccess": "{count} atklāšanas dzēstas",
+      "bulkPartial": "{processed} atjauninātas, {skipped} izlaistas (bloķētas)",
+      "tooManyDetections": "Pārāk daudz atklāšanu ({count}). Sašauriniet filtrus, lai atlasītu mazāk par 500.",
+      "bulkError": "Lielapjoma darbība neizdevās. Lūdzu, mēģiniet vēlreiz.",
+      "switchToTable": "Pārslēdzieties uz tabulas skatu, lai atlasītu atklāšanas"
+    },
     "weather": {
       "title": "Laikapstākļu informācija",
       "noData": "Nav laikapstākļu datu",
@@ -816,25 +855,55 @@
         "pressure": "hPa"
       },
       "conditions": {
-        "clearsky_day": "Skaidras debesis",
-        "clearsky_night": "Skaidras debesis",
-        "fair_day": "Labs laiks",
-        "fair_night": "Labs laiks",
-        "partlycloudy_day": "Daļēji mākoņains",
-        "partlycloudy_night": "Daļēji mākoņains",
+        "clearsky": "Skaidras debesis",
         "cloudy": "Mākoņains",
-        "rainshowers_day": "Lietus gāzes",
-        "rainshowers_night": "Lietus gāzes",
-        "rain": "Lietus",
-        "thunder": "Pērkona negaiss",
-        "sleet": "Slapjdraņķis",
-        "snow": "Sniegs",
+        "fair": "Labs laiks",
         "fog": "Migla",
+        "heavyrain": "Stiprs lietus",
+        "heavyrainandthunder": "Stiprs lietus un pērkons",
+        "heavyrainshowers": "Stipras lietus gāzes",
+        "heavyrainshowersandthunder": "Stipras lietus gāzes un pērkons",
+        "heavysleet": "Stiprs slapjdraņķis",
+        "heavysleetandthunder": "Stiprs slapjdraņķis un pērkons",
+        "heavysleetshowers": "Stipras slapjdraņķa gāzes",
+        "heavysleetshowersandthunder": "Stipras slapjdraņķa gāzes un pērkons",
+        "heavysnow": "Stiprs sniegs",
+        "heavysnowandthunder": "Stiprs sniegs un pērkons",
+        "heavysnowshowers": "Stipras sniegputeņa gāzes",
+        "heavysnowshowersandthunder": "Stipras sniegputeņa gāzes un pērkons",
+        "lightrain": "Viegls lietus",
+        "lightrainandthunder": "Viegls lietus un pērkons",
+        "lightrainshowers": "Vieglas lietus gāzes",
+        "lightrainshowersandthunder": "Vieglas lietus gāzes un pērkons",
+        "lightsleet": "Viegls slapjdraņķis",
+        "lightsleetandthunder": "Viegls slapjdraņķis un pērkons",
+        "lightsleetshowers": "Vieglas slapjdraņķa gāzes",
+        "lightsnow": "Viegls sniegs",
+        "lightsnowandthunder": "Viegls sniegs un pērkons",
+        "lightsnowshowers": "Vieglas sniegputeņa gāzes",
+        "lightssleetshowersandthunder": "Vieglas slapjdraņķa gāzes un pērkons",
+        "lightssnowshowersandthunder": "Vieglas sniegputeņa gāzes un pērkons",
+        "partlycloudy": "Daļēji mākoņains",
+        "rain": "Lietus",
+        "rainandthunder": "Lietus un pērkons",
+        "rainshowers": "Lietus gāzes",
+        "rainshowersandthunder": "Lietus gāzes un pērkons",
+        "sleet": "Slapjdraņķis",
+        "sleetandthunder": "Slapjdraņķis un pērkons",
+        "sleetshowers": "Slapjdraņķa gāzes",
+        "sleetshowersandthunder": "Slapjdraņķa gāzes un pērkons",
+        "snow": "Sniegs",
+        "snowandthunder": "Sniegs un pērkons",
+        "snowshowers": "Sniegputeņa gāzes",
+        "snowshowersandthunder": "Sniegputeņa gāzes un pērkons",
+        "thunder": "Pērkona negaiss",
         "unknown": "Nezināms"
       }
     },
     "row": {
-      "viewDetails": "Skatīt informāciju par sugu {species}"
+      "viewDetails": "Skatīt informāciju par sugu {species}",
+      "play": "Atskaņot",
+      "playAudio": "Atskaņot audio"
     },
     "media": {
       "title": "Ieraksts un spektrogramma",
@@ -867,7 +936,10 @@
     "aria": {
       "loading": "Ielādē atklāšanas informāciju...",
       "loaded": "Atklāšanas informācija ielādēta sugai {species}",
-      "error": "Kļūda, ielādējot atklāšanu: {error}"
+      "error": "Kļūda, ielādējot atklāšanu: {error}",
+      "loadingResults": "Ielādē {count} rezultātus...",
+      "thumbnailLoading": "Ielādē {species} sīktēlu...",
+      "thumbnailLoaded": "Sīktēls {species} ielādēts"
     },
     "errors": {
       "notFound": "Atklāšana nav atrasta. Tā, iespējams, ir dzēsta vai ID ir nepareizs.",
@@ -1636,6 +1708,7 @@
     "title": "Iestatījumi - BirdNET-Go",
     "loading": "Ielādē iestatījumus...",
     "sections": {
+      "analysis": "Analīze",
       "node": "Galvenie",
       "userinterface": "Saskarne",
       "audio": "Audio",
@@ -1747,7 +1820,17 @@
           },
           "hardwareNote": "Stingrie un Maksimālie līmeņi prasa augstākus pārklāšanās iestatījumus un vairāk CPU resursu. Šiem līmeņiem nepieciešams RPi 4 vai labāka aparatūra.",
           "overlapAdjusted": "Pārklāšanās iestatījums automātiski pielāgots uz {overlap}s, lai izpildītu filtra prasības",
-          "overlapReduced": "Pārklāšanās iestatījums samazināts uz {overlap}s, lai atbilstu filtra līmenim"
+          "overlapReduced": "Pārklāšanās iestatījums samazināts uz {overlap}s, lai atbilstu filtra līmenim",
+          "levelNames": {
+            "off": "Izslēgts",
+            "lenient": "Zems",
+            "moderate": "Mērens",
+            "balanced": "Līdzsvarots",
+            "strict": "Stingrs",
+            "maximum": "Maksimums",
+            "unknown": "Nezināms"
+          },
+          "warningOff": "Bez filtrēšanas jebkura noteikšana virs ticamības sliekšņa tiek pieņemta nekavējoties. Tas parasti rada vairākus viltus pozitīvos dienā. Pat zema filtrēšana ievērojami uzlabo rezultātu kvalitāti."
         },
         "rangeFilter": {
           "title": "Areāla filtrs",
@@ -2381,8 +2464,11 @@
             "name": "Gotify",
             "server": {
               "label": "Servera URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "Jūsu Gotify servera resursdatora nosaukums (bez https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Jūsu Gotify servera resursdatora nosaukums un ports"
+            },
+            "protocol": {
+              "label": "Protokols"
             },
             "token": {
               "label": "Lietojumprogrammas tokens",
@@ -2796,6 +2882,10 @@
           "refresh": "Atsvaidzināt ierīces"
         }
       },
+      "noSources": {
+        "warning": "Nav konfigurētu audio avotu",
+        "description": "BirdNET-Go nepieciešama audio ievade, lai noteiktu putnus. Lūdzu, konfigurējiet vismaz vienu avotu cilnē Skaņas karte vai Straumes."
+      },
       "soundCards": {
         "summary": "{count} skaņas kartes avots(-i)",
         "addSource": "Pievienot skaņas karti",
@@ -2840,10 +2930,6 @@
           "recommendedSampleRate": "{rate}kHz ieteicams labākajiem rezultātiem",
           "atLeastOneModel": "Jāizvēlas vismaz viens modelis"
         }
-      },
-      "noSources": {
-        "warning": "Nav konfigurētu audio avotu",
-        "description": "BirdNET-Go nepieciešama audio ievade, lai noteiktu putnus. Lūdzu, konfigurējiet vismaz vienu avotu cilnē Skaņas karte vai Straumes."
       },
       "audioCapture": {
         "title": "Skaņas kartes konfigurācija",
@@ -2906,6 +2992,7 @@
         "unknown": "nezināma",
         "refresh": "Atsvaidzināt",
         "addStream": "Pievienot straumi",
+        "testRequired": "Pirms saglabāšanas veiciet veiksmīgu straumes testu",
         "deleteConfirm": "Noņemt šo straumi?",
         "restartCount": "Pārstartēta {count} reizi(-es)",
         "healthLoadError": "Neizdevās ielādēt straumes veselības statusu",
@@ -2958,6 +3045,18 @@
           "degraded": "Pasliktināts",
           "failed": "Neizdevies",
           "unknown": "Nezināms"
+        },
+        "test": {
+          "button": "Testēt straumi",
+          "probing": "Testē...",
+          "result": "Pārbaudes rezultāts",
+          "error": "Tests neizdevās",
+          "batCompatible": "Saderīgs ar sikspārņiem",
+          "batIncompatible": "Nav saderīgs ar sikspārņiem"
+        },
+        "batWarning": "Sikspārņu modeļiem nepieciešamas straumes ar bezzudumu kodeku (PCM) un iztveršanas frekvenci vismaz 96 kHz. Izmantojiet pogu Testēt straumi augstāk, lai pārbaudītu saderību.",
+        "codecWarning": {
+          "lossy": "Zudumu kodeki (AAC, Opus, MP3) iznīcina ultraskaņas frekvences virs ~20 kHz, padarot straumi nepiemērotu sikspārņu noteikšanai."
         }
       },
       "audioFilters": {
@@ -3133,6 +3232,10 @@
         "devicesLoadFailed": "Neizdevās ielādēt audio ierīces. Lūdzu, pārbaudiet sistēmas atļaujas.",
         "invalidBitrate": "Nederīga bitu pārraides ātruma vērtība",
         "invalidRetentionPolicy": "Nederīga saglabāšanas politika"
+      },
+      "models": {
+        "recommendBoth": "Labākai sugu noteikšanas pārklājumam ieteicams izmantot gan BirdNET, gan Perch modeļus kopā.",
+        "perchOnlyWarning": "Perch vien rada mazāk noteikšanu. Samaziniet ticamības slieksni līdz 0.50, lai iegūtu jēgpilnus rezultātus, vai aktivizējiet arī BirdNET labākam pārklājumam."
       }
     },
     "security": {
@@ -4018,13 +4121,13 @@
     "labels": {
       "showPassword": "Rādīt paroli",
       "hidePassword": "Slēpt paroli",
-      "copyToClipboard": "Kopēt starpliktuvē",
-      "clearSelection": "Notīrīt atlasi",
-      "selectOption": "Izvēlieties opciju",
       "secretSet": "Iestatīts",
       "changeSecret": "Mainīt",
       "cancelChange": "Atcelt",
-      "enterNewSecret": "Ievadiet jaunu vērtību"
+      "enterNewSecret": "Ievadiet jaunu vērtību",
+      "copyToClipboard": "Kopēt starpliktuvē",
+      "clearSelection": "Notīrīt atlasi",
+      "selectOption": "Izvēlieties opciju"
     },
     "help": {
       "passwordStrength": "Paroles stiprums: {strength}",
@@ -4108,7 +4211,31 @@
       "playbackSpeed": "Atskaņošanas ātrums",
       "speed": "Ātrums",
       "loop": "Pārslēgt cilpu",
-      "player": "Audio atskaņotājs"
+      "player": "Audio atskaņotājs",
+      "autoplayBlocked": "Noklikšķiniet, lai atskaņotu (automātiskā atskaņošana bloķēta)",
+      "hlsNotSupported": "HLS atskaņošana šajā pārlūkā netiek atbalstīta",
+      "streamStarting": "Tiek startēta audio straume...",
+      "levelFor": "Audio līmenis avotam {source}",
+      "levelForNoSource": "Audio līmenis: nav avota",
+      "noSource": "Nav avota",
+      "levelAnnouncement": "Pašreizējais audio līmenis: {level} procenti",
+      "levelAnnouncementClipping": "Pašreizējais audio līmenis: {level} procenti, konstatēta pārslodze",
+      "sourceSelection": "Audio avota izvēle",
+      "sources": "Audio avoti",
+      "noSourcesAvailable": "Nav pieejamu audio avotu",
+      "silent": "(kluss)",
+      "stopPlayback": "Apturēt audio atskaņošanu",
+      "startPlayback": "Sākt audio atskaņošanu",
+      "nowPlaying": "Tagad tiek atskaņots audio no {source}",
+      "nowPlayingNoSource": "Tiek atskaņots audio",
+      "playbackStopped": "Audio atskaņošana apturēta",
+      "loginRequired": "Lai straumētu audio, nepieciešama pieteikšanās",
+      "streamError": "Kļūda, startējot straumi",
+      "streamTitle": "Putnu audio straume - {source}",
+      "streamTitleDefault": "Putnu audio straume",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Tiešraide",
+      "playbackError": "Atskaņošanas kļūda: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogramma vēl nav ģenerēta",
@@ -4125,11 +4252,11 @@
       "spectrogramLoading": "Ielādē spektrogrammu...",
       "spectrogramLoaded": "Spektrogramma ielādēta",
       "spectrogramLoadingAria": "Ielādē spektrogrammu",
+      "spectrogramAlt": "Audio spektrogramma",
       "spectrogramGeneratingAria": "Ģenerē spektrogrammu",
       "generating": "Ģenerē...",
       "queuePosition": "Rinda: {position}",
-      "loadError": "Neizdevās ielādēt audio",
-      "spectrogramAlt": "Audio spektrogramma"
+      "loadError": "Neizdevās ielādēt audio"
     },
     "forms": {
       "numberField": {
@@ -4199,7 +4326,7 @@
         "extracting": "Izgūst klipu...",
         "extractError": "Neizdevās izgūt klipu",
         "formatLabel": "Formāts",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Atskaņot atlasi",
@@ -4334,6 +4461,16 @@
       "invalidHost": "Nederīgs resursdatora parametrs",
       "rateLimit": "Pārāk daudz paziņojumu straumes pieslēgšanās mēģinājumu, lūdzu, uzgaidiet pirms atkārtota mēģinājuma"
     },
+    "streams": {
+      "test": {
+        "invalidBody": "Nederīgs pieprasījuma saturs",
+        "urlRequired": "Straumes URL ir obligāts",
+        "invalidUrl": "Nederīgs URL formāts. Ievadiet pilnu URL, piem., rtsp://resursdators:ports/ceļš",
+        "unsupportedScheme": "Neatbalstīta URL shēma \"{scheme}\". Izmantojiet rtsp, rtsps, http, https, rtmp vai udp",
+        "blockedDestination": "Šis galamērķis ir bloķēts drošības apsvērumu dēļ",
+        "connectionFailed": "Nevarēja izveidot savienojumu ar straumi. Pārbaudiet, vai URL ir pareizs un straume ir pieejama"
+      }
+    },
     "debug": {
       "notEnabled": "Atkļūdošanas režīms nav iespējots"
     },
@@ -4467,6 +4604,154 @@
       }
     }
   },
+  "analysis": {
+    "title": "Analīze",
+    "tabs": {
+      "settings": "Iestatījumi",
+      "models": "Modeļi"
+    },
+    "detection": {
+      "title": "Noteikšanas iestatījumi",
+      "description": "Konfigurējiet ticamības sliekšņus un valodu sugu klasifikācijai.",
+      "confidenceThreshold": {
+        "label": "Confidence Threshold",
+        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+      },
+      "batThreshold": {
+        "label": "Sikspārņu noteikšanas slieksnis",
+        "helpText": "Minimālais ticamības rādītājs sikspārņu sugu noteikšanai. Attiecas tikai uz sikspārņu klasifikatora modeļiem."
+      },
+      "batFilter": {
+        "label": "Sikspārņu audio augstfrekvences filtrs",
+        "helpText": "Filtrē cilvēka dzirdei pieejamās frekvences pirms sikspārņu analīzes, lai samazinātu viltus pozitīvos rezultātus no putnu dziesmām un apkārtējā trokšņa."
+      },
+      "batNighttimeOnly": {
+        "label": "Tikai naktī",
+        "helpText": "Ja iespējots, sikspārņu noteikšana darbojas tikai starp pilsoniskajiem krēsliem un pilsonisko rītausmu. Nepieciešama atrašanās vietas konfigurācija. Atspējojiet, lai noteikšana darbotos visu diennakti."
+      },
+      "batUltrasonicFilter": {
+        "label": "Pēcnoteikšanas validācija",
+        "helpText": "Kad iespējots, sikspārņu noteikšana tiek pārbaudīta, analizējot ultraskaņas enerģijas modeļus avota ierakstā. Noteikšanas bez eholokācijas pazīmēm tiek atzīmētas kā maz ticamas."
+      },
+      "batFalsePositiveFilter": {
+        "label": "Sikspārņu viltus pozitīvo filtrs",
+        "helpText": "Pieprasa vairākus apstiprinājumus sikspārņu noteikšanai slīdošajā logā pirms tā pieņemšanas. Augstāki līmeņi pieprasa vairāk apstiprinājumu, samazinot viltus pozitīvos. Sikspārņu modelis izmanto fiksētu 50% pārklāšanos, tāpēc pārklāšanās pielāgošana nav nepieciešama.",
+        "levels": {
+          "off": "Nav filtrēšanas; pieņem jebkuru sikspārņu noteikšanu nekavējoties.",
+          "moderate": "Labs līdzsvars lielākajai daļai iestatījumu. Ievērojami samazina viltus pozitīvos.",
+          "strict": "Maksimāla filtrēšana augstākajai precizitātei."
+        },
+        "detectionCount": "Nepieciešami {count} apstiprinājumi. {description}",
+        "warningOff": "Bez filtrēšanas ir liela viltus pozitīvo varbūtība. Filtrēšanas iespējošana ievērojami uzlabo precizitāti."
+      },
+      "locale": {
+        "label": "Sugu valoda",
+        "helpText": "Valoda, kas tiek izmantota sugu nosaukumiem interfeisā."
+      }
+    },
+    "rangeFilter": {
+      "birdOnlyNote": "Areāla filtrs attiecas tikai uz putnu klasifikatoriem. Sikspārņu modeļi izmanto savus sugu sarakstus.",
+      "status": {
+        "title": "Diapazona filtra pārskats",
+        "geomodelInfo": "BirdNET Geomodels {version} - {species} zināmas sugas",
+        "autoSelected": "Automātiski atlasīts",
+        "manual": "Manuāli",
+        "classifier": "Klasifikators",
+        "totalSpecies": "Kopējais sugu skaits",
+        "withRangeData": "Ar areāla datiem",
+        "withoutRangeData": "Bez areāla datiem",
+        "withRangeDataTooltip": "Sugas, kurām ģeomodelis var novērtēt ģeogrāfisko varbūtību jūsu atrašanās vietā",
+        "withoutRangeDataTooltip": "Sugas bez ģeogrāfiskajiem datiem ģeomodelī, kuras pārvalda nekartēto sugu iestatījums zemāk",
+        "noFilter": "Nav aktīva areāla filtra",
+        "passUnmapped": {
+          "label": "Atļaut sugas bez areāla datiem",
+          "helpText": "Atļaut sugu noteikšanu, kurām ģeomodelim nav ģeogrāfisko datu. Ja atspējots, šīs sugas vienmēr tiek izfiltrētas."
+        }
+      }
+    },
+    "advanced": {
+      "title": "Papildu",
+      "description": "Apstrādes un pielāgotu modeļu konfigurācija."
+    },
+    "gallery": {
+      "title": "Modeļu galerija",
+      "description": "Pārvaldiet klasifikācijas modeļus putnu un sikspārņu noteikšanai.",
+      "tabs": {
+        "installed": "Instalētie",
+        "available": "Pieejamie"
+      },
+      "loading": "Ielādē modeļus...",
+      "retry": "Mēģināt vēlreiz",
+      "builtIn": "Iebūvēts",
+      "builtInDescription": "BirdNET komandas iebūvēts putnu sugu klasifikators.",
+      "species": "{count} sugas",
+      "install": "Instalēt",
+      "installing": "Instalē...",
+      "remove": "Noņemt",
+      "removing": "Noņem...",
+      "noInstalledModels": "Nav instalēti papildu modeļi. Pārlūkojiet cilni Pieejamie, lai pievienotu vairāk klasifikatoru.",
+      "noAvailableModels": "Jūsu platformai nav pieejami papildu modeļi.",
+      "sections": {
+        "acoustic": "Akustiskie klasifikatori",
+        "geomodel": "Ģeomodeļi"
+      },
+      "categories": {
+        "wildlife": "Savvaļas dzīvnieku klasifikatori",
+        "bird": "Putnu klasifikatori",
+        "bat": "Sikspārņu klasifikatori"
+      },
+      "progress": {
+        "downloading": "Lejupielādē...",
+        "verifying": "Pārbauda...",
+        "loading": "Ielādē...",
+        "complete": "Veiksmīgi instalēts",
+        "failed": "Neizdevās"
+      },
+      "license": {
+        "title": "Licences līgums",
+        "model": "Modelis",
+        "author": "Autors",
+        "license": "Licence",
+        "commercialUse": "Komerciāla izmantošana",
+        "downloadSize": "Lejupielādes izmērs",
+        "allowed": "Atļauts",
+        "notAllowed": "Nav atļauts",
+        "commercialUseAllowed": "Komerciāla izmantošana atļauta",
+        "nonCommercialOnly": "Tikai nekomerciāla izmantošana",
+        "nonCommercialWarning": "Šis modelis ir licencēts tikai nekomerciālai izmantošanai. Instalējot jūs piekrītat licences noteikumiem.",
+        "acceptAndInstall": "Pieņemt un instalēt"
+      },
+      "removeDialog": {
+        "title": "Noņemt {name}?",
+        "confirmation": "Modeļa faili tiks noņemti no diska. Esošo noteikšanu etiķešu dati tiks saglabāti."
+      },
+      "errors": {
+        "catalogLoadFailed": "Neizdevās ielādēt modeļu katalogu",
+        "installFailed": "Neizdevās sākt modeļa instalēšanu",
+        "removeFailed": "Neizdevās noņemt modeli"
+      },
+      "regionLabel": "Reģions",
+      "speciesLabel": "Sugas",
+      "reinstall": "Pārinstalēt",
+      "reinstalling": "Pārinstalē...",
+      "reinstallComplete": "Faili veiksmīgi pārbaudīti",
+      "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis",
+      "onnxRuntimeRequired": "Nepieciešams ONNX Runtime, kas šajā sistēmā nav pieejams.",
+      "onnxRuntimeMissing": "ONNX Runtime nav pieejams. Šo modeli nevar palaist.",
+      "unavailable": "Nav pieejams"
+    },
+    "bird": {
+      "title": "Putnu noteikšana",
+      "description": "Konfigurējiet ticamības slieksni, sugu valodu un viltus pozitīvo filtrēšanu putnu klasifikatoriem."
+    },
+    "bat": {
+      "title": "Sikspārņu noteikšana",
+      "description": "Konfigurējiet slieksni, grafiku un viltus pozitīvo filtrēšanu sikspārņu klasifikatoriem."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dinamiskais slieksnis attiecas tikai uz putnu klasifikatoriem."
+    }
+  },
   "restart": {
     "applicationRestart": "Restartēt lietojumprogrammu",
     "containerRestart": "Restartēt konteineru",
@@ -4478,5 +4763,147 @@
     "bannerMessage": "Konfigurācijas izmaiņām nepieciešama restartēšana:",
     "bannerAction": "Restartēt tagad",
     "restartFailed": "Neizdevās sākt restartēšanu"
+  },
+  "help": {
+    "title": "Palīdzība un atbalsts",
+    "subtitle": "Saņemiet palīdzību, ziņojiet par problēmām un sazinieties ar kopienu",
+    "reportBug": {
+      "description": "Ja saskaraties ar problēmu, vispirms atveriet kļūdas ziņojumu GitHub, lai aprakstītu problēmu, pēc tam izveidojiet atbalsta pakotni ar ziņojuma numuru, lai palīdzētu problēmu novēršanā."
+    },
+    "askQuestion": {
+      "description": "Vai jums ir jautājums par iestatīšanu, funkcijām vai lietošanu? GitHub Discussions forums ir labākā vieta, kur saņemt palīdzību no kopienas."
+    },
+    "diagnostics": {
+      "description": "Izveidojiet atbalsta pakotni, lai palīdzētu diagnosticēt problēmas. Tā saglabā jūsu sistēmas konfigurāciju un jaunākos žurnālus."
+    },
+    "quickLinks": {
+      "title": "Ātrās saites",
+      "releases": "Laidiena piezīmes"
+    }
+  },
+  "reportBug": {
+    "title": "Ziņot par kļūdu",
+    "subtitle": "Palīdziet mums novērst problēmas, sniedzot nepieciešamo informāciju",
+    "systemInfo": {
+      "title": "Jūsu sistēmas informācija",
+      "description": "Šī informācija palīdz identificēt jūsu iestatījumus. Kopējiet to kļūdas ziņojumā.",
+      "version": "Versija",
+      "buildDate": "Būvējuma datums",
+      "os": "Operētājsistēma",
+      "copy": "Kopēt starpliktuvē",
+      "copied": "Nokopēts!",
+      "architecture": "Arhitektūra",
+      "hardware": "Aparatūra",
+      "environment": "Vide"
+    },
+    "whatToInclude": {
+      "title": "Ko iekļaut ziņojumā",
+      "description": "Labs kļūdas ziņojums palīdz ātri atrisināt jūsu problēmu. Lūdzu, iekļaujiet šādu informāciju:",
+      "step1": {
+        "title": "Skaidrs problēmas apraksts",
+        "description": "Kas notika, ko jūs gaidījāt un kā problēmu reproducēt."
+      },
+      "step2": {
+        "title": "Jūsu instalācijas metode",
+        "description": "Kā jūs instalējāt BirdNET-Go: install.sh skripts, Docker Compose, manuāla būvēšana vai cits."
+      },
+      "step3": {
+        "title": "Sistēmas informācija",
+        "description": "Nokopējiet iepriekš redzamos sistēmas datus, ieskaitot versiju, OS un būvējuma datumu."
+      },
+      "step4": {
+        "title": "Atbalsta pakotne",
+        "description": "Izveidojiet un augšupielādējiet atbalsta pakotni zemāk. Tā saglabā žurnālus un konfigurāciju, kas ievērojami paātrina problēmu novēršanu."
+      }
+    },
+    "openIssue": {
+      "title": "Atvērt GitHub ziņojumu",
+      "description": "Atveriet ziņojumu GitHub, lai aprakstītu problēmu. Ziņojuma numurs būs nepieciešams nākamajā solī.",
+      "button": "Atvērt ziņojumu GitHub"
+    },
+    "supportDump": {
+      "title": "Izveidot atbalsta pakotni",
+      "description": "Pēc ziņojuma izveidošanas izveidojiet atbalsta pakotni un ievadiet GitHub ziņojuma numuru. Tas savieno diagnostiku ar kļūdas ziņojumu un palīdz problēmu novēršanā."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "refresh": "Atjaunot",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "metricFooter": {
+      "allPassing": "Viss kārtībā",
+      "needsAttention": "Nepieciešama uzmanība",
+      "failing": "Neizdodas",
+      "allClear": "Bez problēmām",
+      "noData": "Nav datu",
+      "none": "Nav"
+    },
+    "diagnostics": "Diagnostika",
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Biežākās kļūdas",
+      "errorCount": "Skaits",
+      "errorComponent": "Komponents",
+      "errorLevel": "Līmenis",
+      "errorMessage": "Ziņojums"
+    },
+    "window": {
+      "label": "Novērtēšanas logs",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Pēdējais notikums",
+      "recentEvents": "Nesenie notikumi",
+      "time": "Laiks",
+      "source": "Avots",
+      "count": "Skaits",
+      "lifetime": "kopā",
+      "sparklineLabel": "Aktivitātes diagramma"
+    }
   }
 }

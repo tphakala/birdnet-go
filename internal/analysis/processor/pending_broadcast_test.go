@@ -49,11 +49,38 @@ func TestCalculateVisibilityThreshold(t *testing.T) {
 	})
 }
 
+// settingsForBirdMinDetections returns settings that produce the given
+// minDetections value for bird models via calculateMinDetectionsFromSettings.
+func settingsForBirdMinDetections(t *testing.T, wantMinDet int) *conf.Settings {
+	t.Helper()
+	type pair struct {
+		level   int
+		overlap float64
+	}
+	// Pre-computed (level, overlap) pairs that yield specific minDetections values.
+	known := map[int]pair{
+		1:  {level: 0, overlap: 0},   // level 0 always returns 1
+		2:  {level: 1, overlap: 2.0}, // 6/1.0*0.20 = 1.2, ceil = 2
+		4:  {level: 2, overlap: 2.5}, // 6/0.5*0.30 = 3.6, ceil = 4
+		5:  {level: 3, overlap: 2.4}, // 6/0.6*0.50 = 5.0, ceil = 5
+		12: {level: 4, overlap: 2.7}, // 6/0.3*0.60 = 12.0, ceil = 12
+		21: {level: 5, overlap: 2.8}, // 6/0.2*0.70 = 21.0, ceil = 21
+	}
+	p, ok := known[wantMinDet]
+	if !ok {
+		t.Fatalf("no known (level, overlap) pair for minDetections=%d", wantMinDet)
+	}
+	s := &conf.Settings{}
+	s.Realtime.FalsePositiveFilter.Level = p.level
+	s.BirdNET.Overlap = p.overlap
+	return s
+}
+
 func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 	t.Parallel()
 
 	p := &Processor{
-		Settings: &conf.Settings{},
+		Settings: settingsForBirdMinDetections(t, 12),
 		pendingDetections: map[string]PendingDetection{
 			"src1:species_a": {
 				Detection: Detections{
@@ -103,7 +130,7 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 		},
 	}
 
-	result := p.SnapshotVisiblePending(12) // minDetections=12 → threshold=3
+	result := p.SnapshotVisiblePending() // minDetections=12 → threshold=3
 
 	// Should include Species A (count=5) and Species C (count=3), but not Species B (count=1)
 	require.Len(t, result, 2)
@@ -142,11 +169,11 @@ func TestSnapshotVisiblePending_EmptyMap(t *testing.T) {
 	t.Parallel()
 
 	p := &Processor{
-		Settings:          &conf.Settings{},
+		Settings:          settingsForBirdMinDetections(t, 12),
 		pendingDetections: make(map[string]PendingDetection),
 	}
 
-	result := p.SnapshotVisiblePending(12)
+	result := p.SnapshotVisiblePending()
 	assert.Empty(t, result)
 }
 
@@ -154,7 +181,7 @@ func TestSnapshotVisiblePending_AllBelowThreshold(t *testing.T) {
 	t.Parallel()
 
 	p := &Processor{
-		Settings: &conf.Settings{},
+		Settings: settingsForBirdMinDetections(t, 12),
 		pendingDetections: map[string]PendingDetection{
 			"src1:species_a": {
 				Detection: Detections{
@@ -174,7 +201,7 @@ func TestSnapshotVisiblePending_AllBelowThreshold(t *testing.T) {
 		},
 	}
 
-	result := p.SnapshotVisiblePending(12) // threshold=3
+	result := p.SnapshotVisiblePending() // threshold=3
 	assert.Empty(t, result)
 }
 
@@ -256,7 +283,7 @@ func TestSnapshotVisiblePending_UsesCreatedAtNotFirstDetected(t *testing.T) {
 	realCreationTime := time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC) // 13s later
 
 	p := &Processor{
-		Settings: &conf.Settings{},
+		Settings: settingsForBirdMinDetections(t, 4),
 		pendingDetections: map[string]PendingDetection{
 			"src1:test_species": {
 				Detection: Detections{
@@ -275,7 +302,7 @@ func TestSnapshotVisiblePending_UsesCreatedAtNotFirstDetected(t *testing.T) {
 		},
 	}
 
-	result := p.SnapshotVisiblePending(4) // threshold = max(2, 4/4) = 2, count=5 passes
+	result := p.SnapshotVisiblePending() // threshold = max(2, 4/4) = 2, count=5 passes
 	require.Len(t, result, 1)
 
 	// The SSE firstDetected field should use CreatedAt (real time), NOT FirstDetected (back-dated)
@@ -318,7 +345,7 @@ func TestSnapshotVisiblePending_IncludesHitCount(t *testing.T) {
 	t.Parallel()
 
 	p := &Processor{
-		Settings: &conf.Settings{},
+		Settings: settingsForBirdMinDetections(t, 4),
 		pendingDetections: map[string]PendingDetection{
 			"src1:species_a": {
 				Detection: Detections{
@@ -336,7 +363,7 @@ func TestSnapshotVisiblePending_IncludesHitCount(t *testing.T) {
 		},
 	}
 
-	result := p.SnapshotVisiblePending(4) // threshold = 2, count=7 passes
+	result := p.SnapshotVisiblePending() // threshold = 2, count=7 passes
 	require.Len(t, result, 1)
 	assert.Equal(t, 7, result[0].HitCount, "HitCount should match pending detection Count")
 }
@@ -482,7 +509,7 @@ func TestSnapshotVisiblePending_IncludesLastUpdated(t *testing.T) {
 	lastUpdated := time.Date(2026, 3, 7, 10, 0, 18, 0, time.UTC) // 18s after creation
 
 	p := &Processor{
-		Settings: &conf.Settings{},
+		Settings: settingsForBirdMinDetections(t, 4),
 		pendingDetections: map[string]PendingDetection{
 			"src1:species_a": {
 				Detection: Detections{
@@ -501,7 +528,7 @@ func TestSnapshotVisiblePending_IncludesLastUpdated(t *testing.T) {
 		},
 	}
 
-	result := p.SnapshotVisiblePending(4) // threshold=2, count=5 passes
+	result := p.SnapshotVisiblePending() // threshold=2, count=5 passes
 	require.Len(t, result, 1)
 	assert.Equal(t, lastUpdated.Unix(), result[0].LastUpdated,
 		"SSE LastUpdated should reflect the most recent inference hit time")
@@ -512,7 +539,7 @@ func TestSnapshotVisiblePending_IncludesAudioCapturedAt(t *testing.T) {
 
 	captureTime := time.Date(2026, 3, 21, 12, 0, 0, 0, time.UTC)
 	p := &Processor{
-		Settings: &conf.Settings{},
+		Settings: settingsForBirdMinDetections(t, 2),
 		pendingDetections: map[string]PendingDetection{
 			"src1:robin": {
 				Detection: Detections{
@@ -532,7 +559,7 @@ func TestSnapshotVisiblePending_IncludesAudioCapturedAt(t *testing.T) {
 		},
 	}
 
-	snapshot := p.SnapshotVisiblePending(2)
+	snapshot := p.SnapshotVisiblePending()
 	require.Len(t, snapshot, 1)
 	assert.Equal(t, captureTime.Unix(), snapshot[0].AudioCapturedAt)
 	// Verify existing fields unchanged

@@ -21,6 +21,10 @@ func TestEmbeddedCatalog_ValidRegistryIDs(t *testing.T) {
 	t.Parallel()
 
 	for _, entry := range EmbeddedCatalog {
+		// Shared-only entries (e.g. geomodels) have no RegistryID.
+		if IsSharedOnly(&entry) {
+			continue
+		}
 		assert.NotEmpty(t, entry.RegistryID, "catalog entry %q must have a RegistryID", entry.ID)
 		_, exists := ModelRegistry[entry.RegistryID]
 		assert.True(t, exists, "catalog entry %q references unknown RegistryID %q", entry.ID, entry.RegistryID)
@@ -32,6 +36,11 @@ func TestEmbeddedCatalog_HasFilesWithModelRole(t *testing.T) {
 
 	for _, entry := range EmbeddedCatalog {
 		require.NotEmpty(t, entry.Files, "catalog entry %q has no files", entry.ID)
+
+		// Shared-only entries (e.g. geomodels) use geomodel-role files instead of RoleModel.
+		if IsSharedOnly(&entry) {
+			continue
+		}
 
 		hasModel := false
 		for _, f := range entry.Files {
@@ -47,10 +56,10 @@ func TestEmbeddedCatalog_HasFilesWithModelRole(t *testing.T) {
 func TestEmbeddedCatalog_ValidCategories(t *testing.T) {
 	t.Parallel()
 
-	validCategories := map[string]bool{CategoryWildlife: true, CategoryBird: true, CategoryBat: true}
+	validCategories := map[string]bool{CategoryWildlife: true, CategoryBird: true, CategoryBat: true, CategoryGeomodel: true}
 	for _, entry := range EmbeddedCatalog {
 		assert.True(t, validCategories[entry.Category],
-			"catalog entry %q has invalid category %q (must be \"wildlife\", \"bird\", or \"bat\")", entry.ID, entry.Category)
+			"catalog entry %q has invalid category %q (must be \"wildlife\", \"bird\", \"bat\", or \"geomodel\")", entry.ID, entry.Category)
 	}
 }
 
@@ -77,23 +86,26 @@ func TestCatalogByCategory(t *testing.T) {
 
 	grouped := CatalogByCategory()
 
-	// Should have wildlife and bat categories (bird entries are currently hidden)
+	// Should have wildlife, bat, and geomodel categories (bird entries are currently hidden)
 	require.Contains(t, grouped, CategoryWildlife)
 	require.Contains(t, grouped, CategoryBat)
+	require.Contains(t, grouped, CategoryGeomodel)
 
-	// All wildlife entries should have the wildlife category
+	// All entries in each group should have the matching category
 	for _, entry := range grouped[CategoryWildlife] {
 		assert.Equal(t, CategoryWildlife, entry.Category)
 	}
-
-	// All bat entries should have the bat category
 	for _, entry := range grouped[CategoryBat] {
 		assert.Equal(t, CategoryBat, entry.Category)
 	}
+	for _, entry := range grouped[CategoryGeomodel] {
+		assert.Equal(t, CategoryGeomodel, entry.Category)
+	}
 
-	// Verify expected counts (1 visible wildlife, 0 visible bird, 11 bat entries)
+	// Verify expected counts
 	assert.Len(t, grouped[CategoryWildlife], 1, "expected 1 visible wildlife catalog entry")
 	assert.Empty(t, grouped[CategoryBird], "expected 0 visible bird catalog entries")
+	assert.Len(t, grouped[CategoryGeomodel], 1, "expected 1 visible geomodel catalog entry")
 	assert.Len(t, grouped[CategoryBat], 11, "expected 11 bat catalog entries")
 }
 
@@ -121,8 +133,8 @@ func TestEmbeddedCatalog_BatEntriesHaveEmbeddingsFile(t *testing.T) {
 func TestEmbeddedCatalog_EntryCount(t *testing.T) {
 	t.Parallel()
 
-	// 2 wildlife entries (birdnet-v3.0, perch-v2) + 1 bird entry (bsg-finland) + 11 bat entries = 14 total
-	assert.Len(t, EmbeddedCatalog, 14, "expected 14 total catalog entries")
+	// 2 wildlife + 1 bird + 1 geomodel + 11 bat = 15 total
+	assert.Len(t, EmbeddedCatalog, 15, "expected 15 total catalog entries")
 }
 
 func TestVisibleCatalog_ExcludesHiddenEntries(t *testing.T) {

@@ -3,7 +3,7 @@
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import WeatherDetails from '$lib/desktop/components/data/WeatherDetails.svelte';
-  import SpeciesBadges from './SpeciesBadges.svelte';
+  import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
   import SpeciesThumbnail from './SpeciesThumbnail.svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { fetchWithCSRF } from '$lib/utils/api';
@@ -147,7 +147,7 @@
                     {detection.scientificName}
                   </p>
                   <div class="mt-2">
-                    <SpeciesBadges {detection} size="md" />
+                    <VerificationBadges {detection} size="md" />
                   </div>
                 </div>
               </div>
@@ -355,7 +355,9 @@
   {/snippet}
 
   {#snippet footer()}
-    <button type="button" class="btn" onclick={onClose} disabled={isLoading}> Cancel </button>
+    <button type="button" class="btn" onclick={onClose} disabled={isLoading}>
+      {t('common.cancel')}
+    </button>
     <button
       type="button"
       class="btn btn-primary"
@@ -365,7 +367,7 @@
       {#if isLoading}
         <span class="loading loading-spinner loading-sm"></span>
       {/if}
-      Save Review
+      {t('common.review.form.saveReview')}
     </button>
   {/snippet}
 </Modal>

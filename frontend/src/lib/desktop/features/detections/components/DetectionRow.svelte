@@ -27,8 +27,10 @@
 -->
 <script lang="ts">
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
-  import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
+  import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
   import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
+  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
   import { Volume2 } from '@lucide/svelte';
   import SpectrogramPlayer from '$lib/desktop/components/media/SpectrogramPlayer.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
@@ -58,6 +60,9 @@
       speciesName: string;
       detectionId: number;
     }) => void;
+    selectionActive?: boolean;
+    selected?: boolean;
+    onToggleSelect?: (_id: string, _shiftKey: boolean) => void;
   }
 
   let {
@@ -66,6 +71,9 @@
     onDetailsClick,
     onRefresh,
     onPlayMobileAudio,
+    selectionActive = false,
+    selected = false,
+    onToggleSelect,
   }: Props = $props();
 
   // Resolve the audio source label, falling back to the current settings when
@@ -272,6 +280,18 @@
 </script>
 
 <!-- DetectionRow now returns table cells for proper table structure -->
+{#if selectionActive}
+  <td class="w-10 text-center" onclick={e => e.stopPropagation()}>
+    <Checkbox
+      checked={selected}
+      size="sm"
+      variant="primary"
+      onchange={(_checked, event) =>
+        onToggleSelect?.(String(detection.id), (event as MouseEvent).shiftKey ?? false)}
+    />
+  </td>
+{/if}
+
 <!-- Date & Time — clickable shortcut to the detection detail page.
      Anchor (not button) so middle-click and right-click context-menu work
      normally; onclick intercepts for SPA navigation when the user
@@ -336,8 +356,8 @@
         <!-- Screen reader announcement for loading state -->
         <span class="sr-only" role="status" aria-live="polite">
           {thumbnailLoader.loading
-            ? `Loading ${detection.commonName} thumbnail...`
-            : `${detection.commonName} thumbnail loaded`}
+            ? t('detections.aria.thumbnailLoading', { species: detection.commonName })
+            : t('detections.aria.thumbnailLoaded', { species: detection.commonName })}
         </span>
 
         <!-- Loading spinner overlay -->
@@ -403,10 +423,15 @@
       </div>
       <!-- Mobile-only quick play button -->
       <div class="mt-2 md:hidden">
-        <button class="btn btn-primary btn-xs" aria-label="Play audio" onclick={playMobileAudio}>
+        <Button
+          variant="primary"
+          size="xs"
+          aria-label={t('detections.row.playAudio')}
+          onclick={playMobileAudio}
+        >
           <Volume2 class="h-4 w-4" />
-          Play
-        </button>
+          {t('detections.row.play')}
+        </Button>
       </div>
     </div>
   </div>
@@ -419,8 +444,8 @@
 
 <!-- Status — clickable shortcut to the detection detail page. Same
      anchor pattern as the date/time cell above so the entire badge
-     area acts as a deep link. The StatusBadges component itself stays
-     a pure presentation component; the link wraps it. -->
+     area acts as a deep link. The VerificationBadges component itself
+     stays a pure presentation component; the link wraps it. -->
 <td>
   <a
     href={buildAppUrl(`/ui/detections/${detection.id}`)}
@@ -430,7 +455,7 @@
       species: detection.commonName,
     })}
   >
-    <StatusBadges {detection} />
+    <VerificationBadges {detection} />
   </a>
 </td>
 

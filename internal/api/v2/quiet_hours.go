@@ -42,8 +42,8 @@ func (c *Controller) initQuietHoursRoutes() {
 func (c *Controller) GetQuietHoursStatus(ctx echo.Context) error {
 	settings := c.Settings
 	var scheduler *schedule.QuietHoursScheduler
-	if c.engine != nil {
-		scheduler = c.engine.Scheduler()
+	if eng := c.engine.Load(); eng != nil {
+		scheduler = eng.Scheduler()
 	}
 
 	response := QuietHoursStatusResponse{

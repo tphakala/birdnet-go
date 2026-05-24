@@ -48,7 +48,7 @@ Performance Optimizations:
   import type { PendingDetection } from '$lib/types/pending.types';
   import {
     getLocalDateString,
-    isFutureDate,
+    getDateInTimezone,
     parseHour,
     parseLocalDateString,
   } from '$lib/utils/date';
@@ -60,6 +60,8 @@ Performance Optimizations:
   } from '$lib/utils/datePersistence';
   import { getLogger } from '$lib/utils/logger';
   import { cn } from '$lib/utils/cn.js';
+  import { createDebounce } from '$lib/utils/debounce';
+  import { getStoredValue, setStoredValue } from '$lib/utils/storage';
   import { safeArrayAccess, isPlainObject } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
@@ -163,6 +165,12 @@ Performance Optimizations:
   let summaryLimit = $state(30); // Default from backend (conf/defaults.go) - species count limit for daily summary
   let configLoaded = $state(false); // Gates reactive preloading until config is loaded
   let pendingDetections = $state<PendingDetection[]>([]);
+
+  // Server timezone from sun times API, used for date navigation constraints.
+  // When the server is ahead of the browser (e.g., server in Sydney, browser in California),
+  // the server's "today" may be the browser's "tomorrow". Without this, the date picker
+  // blocks navigation to the server's current date (#3005).
+  let serverTimezone = $state('');
 
   // Subscribe to edit mode store
   let isEditing = $derived($dashboardEditMode);
@@ -281,28 +289,16 @@ Performance Optimizations:
     50: 48,
   };
 
-  // Function to get initial detection limit from localStorage
   function getInitialDetectionLimit(): number {
-    if (typeof window !== 'undefined') {
-      const savedLimit = localStorage.getItem('recentDetectionLimit');
-      if (savedLimit) {
-        const parsed = parseInt(savedLimit, 10);
-        if (!isNaN(parsed)) {
-          // Check if it's a valid new value
-          if (VALID_DETECTION_LIMITS.includes(parsed)) {
-            return parsed;
-          }
-          // Migrate old values to new ones
-          const migrated = Object.hasOwn(LIMIT_MIGRATION_MAP, parsed)
-            ? LIMIT_MIGRATION_MAP[parsed as keyof typeof LIMIT_MIGRATION_MAP]
-            : undefined;
-          if (migrated !== undefined) {
-            // Update localStorage with migrated value
-            localStorage.setItem('recentDetectionLimit', migrated.toString());
-            return migrated;
-          }
-        }
-      }
+    const stored = getStoredValue('recentDetectionLimit', DEFAULT_DETECTION_LIMIT);
+    if (typeof stored !== 'number' || isNaN(stored)) return DEFAULT_DETECTION_LIMIT;
+    if (VALID_DETECTION_LIMITS.includes(stored)) return stored;
+    const migrated = Object.hasOwn(LIMIT_MIGRATION_MAP, stored)
+      ? LIMIT_MIGRATION_MAP[stored as keyof typeof LIMIT_MIGRATION_MAP]
+      : undefined;
+    if (migrated !== undefined) {
+      setStoredValue('recentDetectionLimit', migrated);
+      return migrated;
     }
     return DEFAULT_DETECTION_LIMIT;
   }
@@ -320,7 +316,14 @@ Performance Optimizations:
 
   // Debouncing for rapid daily summary updates
   let updateQueue = $state(new Map<string, Detection>());
-  let updateTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const flushUpdateQueue = createDebounce(() => {
+    const sortedUpdates = Array.from(updateQueue.entries()).sort(([a], [b]) => a.localeCompare(b));
+    sortedUpdates.forEach(([_, queuedDetection]) => {
+      updateDailySummary(queuedDetection);
+    });
+    updateQueue.clear();
+  }, 150);
 
   // Daily summary response caching for performance optimization
   interface CachedDailySummary {
@@ -370,7 +373,11 @@ Performance Optimizations:
         buildAppUrl(`/api/v2/analytics/species/daily?date=${selectedDate}&limit=${summaryLimit}`)
       );
       if (!response.ok) {
-        throw new Error(t('dashboard.errors.dailySummaryFetch', { status: response.statusText }));
+        throw new Error(
+          t('dashboard.errors.dailySummaryFetch', {
+            status: response.statusText || `HTTP ${response.status}`,
+          })
+        );
       }
       const data = await response.json();
 
@@ -454,7 +461,9 @@ Performance Optimizations:
       );
       if (!response.ok) {
         throw new Error(
-          t('dashboard.errors.recentDetectionsFetch', { status: response.statusText })
+          t('dashboard.errors.recentDetectionsFetch', {
+            status: response.statusText || `HTTP ${response.status}`,
+          })
         );
       }
       const rawData = await response.json();
@@ -801,8 +810,8 @@ Performance Optimizations:
         handleDateChangeWithCleanup();
         fetchDailySummary();
       } else if (!urlDate) {
-        // If no date in URL, use current date
-        const currentDate = getLocalDateString();
+        // If no date in URL, use current date (server timezone when available)
+        const currentDate = serverTodayDate;
         if (currentDate !== selectedDate) {
           selectedDate = currentDate;
           handleDateChangeWithCleanup();
@@ -824,9 +833,7 @@ Performance Optimizations:
       }
 
       // Clean up debounce timer
-      if (updateTimer) {
-        clearTimeout(updateTimer);
-      }
+      flushUpdateQueue.cancel();
 
       // Clean up SSE fetch throttling timer
       if (sseFetchTimer) {
@@ -835,10 +842,7 @@ Performance Optimizations:
       }
 
       // Clean up preload debounce timer
-      if (preloadDebounceTimer) {
-        clearTimeout(preloadDebounceTimer);
-        preloadDebounceTimer = null;
-      }
+      debouncedPreload.cancel();
 
       // Clean up animation timers
       animationCleanupTimers.forEach(timer => clearTimeout(timer));
@@ -865,10 +869,7 @@ Performance Optimizations:
   // Enhanced date change handler with cleanup
   function handleDateChangeWithCleanup() {
     // Clear pending updates for old date
-    if (updateTimer) {
-      clearTimeout(updateTimer);
-      updateTimer = null;
-    }
+    flushUpdateQueue.cancel();
     updateQueue.clear();
 
     // Clear animations
@@ -891,7 +892,7 @@ Performance Optimizations:
     if (!date) return;
     date.setDate(date.getDate() + 1);
     const newDateString = getLocalDateString(date);
-    if (!isFutureDate(newDateString)) {
+    if (newDateString <= serverTodayDate) {
       selectedDate = newDateString;
       persistDate(newDateString);
       handleDateChangeWithCleanup();
@@ -916,9 +917,9 @@ Performance Optimizations:
    * Clears both URL parameter and localStorage to show current date
    */
   function goToToday() {
-    // Reset date persistence and navigate to today
+    // Reset date persistence and navigate to today (using server timezone when available)
     resetDateToToday();
-    const currentDate = getLocalDateString();
+    const currentDate = serverTodayDate;
     selectedDate = currentDate;
     handleDateChangeWithCleanup();
     fetchDailySummary();
@@ -937,8 +938,24 @@ Performance Optimizations:
     }
   }
 
+  // Minute-level tick so serverTodayDate recomputes across midnight
+  let nowTick = $state(Date.now());
+  $effect(() => {
+    const id = setInterval(() => {
+      nowTick = Date.now();
+    }, 60_000);
+    return () => clearInterval(id);
+  });
+
+  // Server-aware "today" date: uses server timezone when known, falls back to browser local.
+  // All date comparisons that gate navigation or SSE updates should use this, not getLocalDateString().
+  const serverTodayDate = $derived.by(() => {
+    void nowTick;
+    return serverTimezone ? getDateInTimezone(serverTimezone) : getLocalDateString();
+  });
+
   // Derived state to check if we're viewing today's data
-  const isViewingToday = $derived(selectedDate === getLocalDateString());
+  const isViewingToday = $derived(selectedDate === serverTodayDate);
 
   // Location availability for banner map toggle
   let birdnet = $derived($birdnetSettings);
@@ -973,24 +990,8 @@ Performance Optimizations:
     // Use scientificName as key since species_code may be empty in v2 schema.
     updateQueue.set(detection.scientificName, detection);
 
-    // Clear existing timer and set new one
-    if (updateTimer) {
-      clearTimeout(updateTimer);
-    }
-
-    updateTimer = setTimeout(() => {
-      // Process all queued updates in order of species code for consistency
-      const sortedUpdates = Array.from(updateQueue.entries()).sort(([a], [b]) =>
-        a.localeCompare(b)
-      );
-
-      sortedUpdates.forEach(([_, queuedDetection]) => {
-        updateDailySummary(queuedDetection);
-      });
-
-      updateQueue.clear();
-      updateTimer = null;
-    }, 150); // Batch updates within 150ms window
+    // Debounce: batch updates within 150ms window
+    flushUpdateQueue();
   }
 
   // Incremental daily summary update when new detection arrives via SSE
@@ -1002,14 +1003,14 @@ Performance Optimizations:
     }
 
     // Additional safety check: ensure detection is for today and matches selected date
-    if (detection.date !== selectedDate && detection.date !== getLocalDateString()) {
+    if (detection.date !== selectedDate && detection.date !== serverTodayDate) {
       logger.debug(
         'Skipping daily summary update - detection date mismatch:',
         detection.date,
         'vs',
         selectedDate,
         'today:',
-        getLocalDateString()
+        serverTodayDate
       );
       return;
     }
@@ -1161,7 +1162,6 @@ Performance Optimizations:
 
   // Preloading cache for batch requests - use $state.raw() for performance
   const preloadCache = $state.raw(new Set<string>());
-  let preloadDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Generate adjacent dates for preloading
   function getAdjacentDates(baseDate: string): string[] {
@@ -1174,11 +1174,11 @@ Performance Optimizations:
     prevDate.setDate(prevDate.getDate() - 1);
     dates.push(getLocalDateString(prevDate));
 
-    // Next date (only if not future)
+    // Next date (only if not past the server's today)
     const nextDate = new Date(base);
     nextDate.setDate(nextDate.getDate() + 1);
     const nextDateString = getLocalDateString(nextDate);
-    if (!isFutureDate(nextDateString)) {
+    if (nextDateString <= serverTodayDate) {
       dates.push(nextDateString);
     }
 
@@ -1213,7 +1213,9 @@ Performance Optimizations:
       )
         .then(response => {
           if (!response.ok) {
-            throw new Error(`Batch preload failed: ${response.statusText}`);
+            throw new Error(
+              `Batch preload failed: ${response.statusText || `HTTP ${response.status}`}`
+            );
           }
           return response.json();
         })
@@ -1275,22 +1277,13 @@ Performance Optimizations:
     });
   }
 
-  // Trigger batch preload of adjacent dates with debouncing
+  const debouncedPreload = createDebounce((baseDate: string) => {
+    logger.debug(`Triggering batch adjacent preload for ${baseDate}`);
+    batchPreloadAdjacentDates(baseDate);
+  }, 150);
+
   function triggerAdjacentPreload(baseDate: string = selectedDate) {
-    // Clear existing debounce timer
-    if (preloadDebounceTimer) {
-      clearTimeout(preloadDebounceTimer);
-    }
-
-    // Debounce preloading to avoid excessive requests during rapid date changes
-    preloadDebounceTimer = setTimeout(() => {
-      logger.debug(`Triggering batch adjacent preload for ${baseDate}`);
-
-      // Use batch preloading for better performance
-      batchPreloadAdjacentDates(baseDate);
-
-      preloadDebounceTimer = null;
-    }, 150); // Wait 150ms for settling
+    debouncedPreload(baseDate);
   }
 
   // Reactive preloading - triggers when selectedDate changes or config finishes loading
@@ -1571,6 +1564,9 @@ Performance Optimizations:
           onNextDay={nextDay}
           onGoToToday={goToToday}
           onDateChange={handleDateChange}
+          onServerTimezone={tz => {
+            serverTimezone = tz;
+          }}
         />
       {:else if element.type === 'currently-hearing'}
         <CurrentlyHearingCard detections={isViewingToday ? pendingDetections : []} />

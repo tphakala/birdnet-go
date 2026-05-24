@@ -154,7 +154,8 @@
         "verifiedCorrect": "Vérifié correct",
         "falsePositive": "Faux positif",
         "notReviewed": "Non examiné",
-        "locked": "Verrouillé"
+        "locked": "Verrouillé",
+        "unlikely": "Improbable"
       },
       "form": {
         "correctDetection": "Détection correcte",
@@ -227,7 +228,16 @@
     "analyticsSubmenu": "Sous-menu analyses",
     "settingsSubmenu": "Sous-menu paramètres",
     "systemSubmenu": "Sous-menu système",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Aide",
+    "helpSubmenu": "Sous-menu d'aide",
+    "helpAndSupport": "Aide et support",
+    "reportBug": "Signaler un bug",
+    "askQuestion": "Poser une question",
+    "reportBugAriaLabel": "Signaler un bug sur GitHub (ouvre dans une nouvelle fenêtre)",
+    "askQuestionAriaLabel": "Poser une question sur GitHub Discussions (ouvre dans une nouvelle fenêtre)",
+    "viewOnGithubAriaLabel": "Voir BirdNET-Go sur GitHub (ouvre dans une nouvelle fenêtre)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -423,7 +433,7 @@
       },
       "buffer": {
         "overloadTitle": "Analyse audio surchargée",
-        "overloadMessage": "Votre système perd {dropRate} % des échantillons audio de la source '{sourceName}' car il ne peut pas suivre le rythme de l'analyse. Réduisez la valeur de chevauchement BirdNET dans les paramètres de détection ou envisagez de passer à un processeur plus rapide."
+        "overloadMessage": "Votre système perd {dropRate} % des échantillons audio de la source ''{sourceName}'' car il ne peut pas suivre le rythme de l'analyse. Réduisez la valeur de chevauchement BirdNET dans les paramètres de détection ou envisagez de passer à un processeur plus rapide."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -444,6 +454,10 @@
           "diskFull": "Disque plein — libérez de l'espace",
           "permissionDenied": "Permission refusée — vérifiez les permissions du fichier ou du service"
         }
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime non disponible",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} est requis pour {modelName} mais n'a pas été trouvé. Voir le guide d'installation : {installGuideURL}"
       }
     },
     "loading": "Chargement des notifications..."
@@ -513,7 +527,8 @@
       "false": "Faux",
       "unverified": "Non vérifié",
       "locked": "Verrouillé",
-      "unlocked": "Déverrouillé"
+      "unlocked": "Déverrouillé",
+      "unlikely": "Improbable"
     },
     "review": {
       "review": "Vérifier",
@@ -641,7 +656,8 @@
         "verified": "Vérifié",
         "false": "Faux",
         "unverified": "Non vérifié",
-        "locked": "Verrouillé"
+        "locked": "Verrouillé",
+        "unlikely": "Improbable"
       },
       "modals": {
         "showSpecies": "Afficher l'espèce {species}",
@@ -657,8 +673,8 @@
       },
       "actions": {
         "menuLabel": "Actions pour {species}",
-        "markCorrect": "Correct",
-        "markFalsePositive": "Incorrect",
+        "markCorrect": "Correcte",
+        "markFalsePositive": "Incorrecte",
         "review": "Examiner la détection",
         "showSpecies": "Afficher l'espèce",
         "ignoreSpecies": "Ignorer l'espèce",
@@ -815,13 +831,51 @@
         "sleet": "Grésil",
         "snow": "Neige",
         "fog": "Brouillard",
-        "unknown": "Inconnu"
+        "unknown": "Inconnu",
+        "clearsky": "Ciel clair",
+        "fair": "Beau temps",
+        "heavyrain": "Forte pluie",
+        "heavyrainandthunder": "Forte pluie et orage",
+        "heavyrainshowers": "Fortes averses",
+        "heavyrainshowersandthunder": "Fortes averses et orage",
+        "heavysleet": "Fort grésil",
+        "heavysleetandthunder": "Fort grésil et orage",
+        "heavysleetshowers": "Fortes averses de grésil",
+        "heavysleetshowersandthunder": "Fortes averses de grésil et orage",
+        "heavysnow": "Forte neige",
+        "heavysnowandthunder": "Forte neige et orage",
+        "heavysnowshowers": "Fortes averses de neige",
+        "heavysnowshowersandthunder": "Fortes averses de neige et orage",
+        "lightrain": "Pluie légère",
+        "lightrainandthunder": "Pluie légère et orage",
+        "lightrainshowers": "Averses légères",
+        "lightrainshowersandthunder": "Averses légères et orage",
+        "lightsleet": "Grésil léger",
+        "lightsleetandthunder": "Grésil léger et orage",
+        "lightsleetshowers": "Averses légères de grésil",
+        "lightsnow": "Neige légère",
+        "lightsnowandthunder": "Neige légère et orage",
+        "lightsnowshowers": "Averses légères de neige",
+        "lightssleetshowersandthunder": "Averses légères de grésil et orage",
+        "lightssnowshowersandthunder": "Averses légères de neige et orage",
+        "partlycloudy": "Partiellement couvert",
+        "rainandthunder": "Pluie et orage",
+        "rainshowers": "Averses",
+        "rainshowersandthunder": "Averses et orage",
+        "sleetandthunder": "Grésil et orage",
+        "sleetshowers": "Averses de grésil",
+        "sleetshowersandthunder": "Averses de grésil et orage",
+        "snowandthunder": "Neige et orage",
+        "snowshowers": "Averses de neige",
+        "snowshowersandthunder": "Averses de neige et orage"
       }
     },
     "row": {
       "viewDetails": "Voir les détails pour {species}",
       "openDetailFromStatus": "Ouvrir la page de détail pour {species}",
-      "openDetailFromDate": "Ouvrir la page de détail pour {species} enregistré le {date} à {time}"
+      "openDetailFromDate": "Ouvrir la page de détail pour {species} enregistré le {date} à {time}",
+      "play": "Lire",
+      "playAudio": "Lire l'audio"
     },
     "status": {
       "locked": "Verrouillé"
@@ -868,7 +922,10 @@
     "aria": {
       "loading": "Chargement des détails de détection...",
       "loaded": "Détails de détection chargés pour {species}",
-      "error": "Erreur lors du chargement de la détection : {error}"
+      "error": "Erreur lors du chargement de la détection : {error}",
+      "loadingResults": "Chargement de {count} résultats...",
+      "thumbnailLoading": "Chargement de la miniature de {species}...",
+      "thumbnailLoaded": "Miniature de {species} chargée"
     },
     "errors": {
       "notFound": "Détection introuvable. Elle a peut-être été supprimée ou l'identifiant est incorrect.",
@@ -901,6 +958,25 @@
       "confirmBody": "Ceci met à jour l'espèce, le modèle et la confiance de la détection, et la marque comme vérifiée. L'état de révision existant est écrasé.",
       "confirmApply": "Oui, appliquer la correction",
       "applying": "Application en cours…"
+    },
+    "selection": {
+      "select": "Sélectionner",
+      "nSelected": "{count} sélectionnées",
+      "selectAllMatching": "Sélectionner les {count} détections correspondantes",
+      "allSelected": "Les {count} sélectionnées",
+      "clear": "Effacer la sélection",
+      "toolbarLabel": "Actions groupées",
+      "confirmBulkDelete": "Supprimer {count} détections ? Cette action est irréversible.",
+      "confirmBulkMarkCorrect": "Marquer {count} détections comme correctes ?",
+      "confirmBulkMarkFalsePositive": "Marquer {count} détections comme faux positif ?",
+      "confirmBulkLock": "Verrouiller {count} détections ?",
+      "confirmBulkUnlock": "Déverrouiller {count} détections ?",
+      "bulkSuccess": "{count} détections mises à jour",
+      "bulkDeleteSuccess": "{count} détections supprimées",
+      "bulkPartial": "{processed} mises à jour, {skipped} ignorées (verrouillées)",
+      "tooManyDetections": "Trop de détections ({count}). Affinez vos filtres pour en sélectionner moins de 500.",
+      "bulkError": "L'opération groupée a échoué. Veuillez réessayer.",
+      "switchToTable": "Passer en vue tableau pour sélectionner des détections"
     }
   },
   "species": {
@@ -1730,7 +1806,17 @@
           },
           "hardwareNote": "Les niveaux Strict et Maximum nécessitent des paramètres de chevauchement plus élevés et plus de ressources CPU. Un RPi 4 ou un matériel supérieur est requis pour ces niveaux.",
           "overlapAdjusted": "Le paramètre de chevauchement a été automatiquement ajusté à {overlap}s pour répondre aux exigences du filtre",
-          "overlapReduced": "Le paramètre de chevauchement a été réduit à {overlap}s pour correspondre au niveau du filtre"
+          "overlapReduced": "Le paramètre de chevauchement a été réduit à {overlap}s pour correspondre au niveau du filtre",
+          "levelNames": {
+            "off": "Désactivé",
+            "lenient": "Faible",
+            "moderate": "Modéré",
+            "balanced": "Équilibré",
+            "strict": "Strict",
+            "maximum": "Maximum",
+            "unknown": "Inconnu"
+          },
+          "warningOff": "Sans filtrage, toute détection au-dessus du seuil de confiance est acceptée immédiatement. Cela produit typiquement plusieurs faux positifs par jour. Même un filtrage faible améliore considérablement la qualité des résultats."
         },
         "rangeFilter": {
           "title": "Filtre de portée",
@@ -2336,15 +2422,18 @@
             "name": "Gotify",
             "server": {
               "label": "URL du serveur",
-              "placeholder": "gotify.example.com",
-              "helpText": "Nom d'hôte de votre serveur Gotify (sans https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Nom d'hôte et port de votre serveur Gotify"
             },
             "token": {
               "label": "Token d'application",
               "placeholder": "A...",
               "helpText": "Token de la page des applications Gotify"
             },
-            "incomplete": "Le serveur et le token sont requis"
+            "incomplete": "Le serveur et le token sont requis",
+            "protocol": {
+              "label": "Protocole"
+            }
           },
           "pushover": {
             "name": "Pushover",
@@ -2827,7 +2916,7 @@
         "mqttTopic": "Topic MQTT :",
         "sseEndpoint": "Point de terminaison SSE :",
         "prometheusMetrics": "Métriques Prometheus :",
-        "disabled": "Sound level monitoring is disabled"
+        "disabled": "La surveillance du niveau sonore est désactivée"
       },
       "clipSettings": {
         "title": "Paramètres des clips",
@@ -2865,8 +2954,8 @@
         "bitrateLabel": "Débit",
         "bitrateHelp": "Débit de compression audio pour les formats avec perte. Plage : {min}-{max} kbps. Des valeurs plus élevées offrent une meilleure qualité mais des fichiers plus volumineux.",
         "losslessNote": "Les formats sans perte préservent la qualité audio originale sans artefacts de compression.",
-        "normalizationDisabled": "Audio normalization is disabled",
-        "disabledInfo": "Enable clip recording above to configure clip settings, file format, and storage options."
+        "normalizationDisabled": "La normalisation audio est désactivée",
+        "disabledInfo": "Activez l'enregistrement de clips ci-dessus pour configurer les paramètres de clip, le format de fichier et les options de stockage."
       },
       "extendedCapture": {
         "title": "Capture étendue",
@@ -2927,12 +3016,12 @@
           "age": "Âge",
           "usage": "Utilisation"
         },
-        "noRetentionTitle": "All Clips Retained",
-        "noRetentionDescription": "Audio clips will be kept indefinitely. Monitor disk usage to prevent storage issues.",
-        "ageRetentionTitle": "Age-Based Cleanup",
-        "ageRetentionDescription": "Clips older than the specified age will be automatically deleted, while preserving the minimum number per species.",
-        "usageRetentionTitle": "Usage-Based Cleanup",
-        "usageRetentionDescription": "When disk usage exceeds the threshold, oldest clips will be deleted until usage is within limits."
+        "noRetentionTitle": "Tous les clips conservés",
+        "noRetentionDescription": "Les clips audio seront conservés indéfiniment. Surveillez l'utilisation du disque pour éviter les problèmes de stockage.",
+        "ageRetentionTitle": "Nettoyage par ancienneté",
+        "ageRetentionDescription": "Les clips plus anciens que l'âge spécifié seront automatiquement supprimés, tout en conservant le nombre minimum par espèce.",
+        "usageRetentionTitle": "Nettoyage par utilisation",
+        "usageRetentionDescription": "Lorsque l'utilisation du disque dépasse le seuil, les clips les plus anciens seront supprimés jusqu'à ce que l'utilisation soit dans les limites."
       },
       "formats": {
         "wav": "WAV",
@@ -3121,7 +3210,24 @@
           "degraded": "Dégradée",
           "failed": "Échouée",
           "unknown": "Inconnue"
+        },
+        "testRequired": "Effectuez un test de flux réussi avant d'enregistrer",
+        "test": {
+          "button": "Tester le flux",
+          "probing": "Test en cours...",
+          "result": "Résultat du test",
+          "error": "Test échoué",
+          "batCompatible": "Compatible chauves-souris",
+          "batIncompatible": "Non compatible chauves-souris"
+        },
+        "batWarning": "Les modèles de chauves-souris nécessitent des flux avec un codec sans perte (PCM) et un taux d'échantillonnage d'au moins 96 kHz. Utilisez le bouton Tester le flux ci-dessus pour vérifier la compatibilité.",
+        "codecWarning": {
+          "lossy": "Les codecs avec perte (AAC, Opus, MP3) détruisent les fréquences ultrasoniques au-dessus de ~20 kHz, rendant le flux inadapté à la détection des chauves-souris."
         }
+      },
+      "models": {
+        "recommendBoth": "Pour une meilleure couverture de détection des espèces, il est recommandé d'exécuter BirdNET et Perch ensemble.",
+        "perchOnlyWarning": "Perch seul produit moins de détections. Abaissez le seuil de confiance à 0.50 pour des résultats significatifs, ou activez BirdNET en parallèle pour une meilleure couverture."
       }
     },
     "security": {
@@ -3157,7 +3263,7 @@
         "enableLabel": "Activer l'authentification par mot de passe",
         "passwordLabel": "Mot de passe",
         "passwordHelpText": "Limiter l'accès aux paramètres avec un mot de passe.",
-        "disabled": "Password authentication is disabled"
+        "disabled": "L'authentification par mot de passe est désactivée"
       },
       "oauth": {
         "title": "Authentification externe",
@@ -3270,7 +3376,7 @@
       "bypassAuthentication": {
         "title": "Contourner l'authentification",
         "description": "Autoriser l'accès aux paramètres sans authentification",
-        "disabled": "Subnet bypass is disabled"
+        "disabled": "Le contournement par sous-réseau est désactivé"
       },
       "exceptions": {
         "title": "Exceptions"
@@ -3458,27 +3564,27 @@
           "thresholdPlaceholder": "0.5",
           "intervalPlaceholder": "0"
         },
-        "addConfiguration": "Add Configuration",
-        "newConfiguration": "New Configuration",
-        "editing": "Editing: {species}",
-        "configuredCount": "{count} configured",
+        "addConfiguration": "Ajouter une configuration",
+        "newConfiguration": "Nouvelle configuration",
+        "editing": "Modification : {species}",
+        "configuredCount": "{count} configurées",
         "searchPlaceholder": "Type to search...",
-        "saving": "Saving...",
-        "save": "Save",
-        "cancel": "Cancel",
-        "configureActions": "Configure Actions",
-        "actionsConfigured": "Configured",
+        "saving": "Enregistrement...",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "configureActions": "Configurer les actions",
+        "actionsConfigured": "Configurées",
         "list": {
-          "threshold": "Threshold:",
-          "interval": "Interval:",
-          "intervalNone": "None",
+          "threshold": "Seuil :",
+          "interval": "Intervalle :",
+          "intervalNone": "Aucun",
           "actionBadge": "Action",
-          "editTitle": "Edit configuration",
-          "removeTitle": "Remove configuration"
+          "editTitle": "Modifier la configuration",
+          "removeTitle": "Supprimer la configuration"
         },
         "emptyState": {
-          "title": "No configurations yet.",
-          "description": "Click \"Add Configuration\" to customize species detection settings."
+          "title": "Aucune configuration pour le moment.",
+          "description": "Cliquez sur « Ajouter une configuration » pour personnaliser les paramètres de détection des espèces."
         }
       },
       "synonyms": {
@@ -4109,7 +4215,31 @@
       "playbackSpeed": "Vitesse de lecture",
       "speed": "Vitesse",
       "loop": "Basculer la boucle",
-      "player": "Lecteur audio"
+      "player": "Lecteur audio",
+      "autoplayBlocked": "Cliquez pour lire (lecture automatique bloquée)",
+      "hlsNotSupported": "La lecture HLS n'est pas prise en charge dans ce navigateur",
+      "streamStarting": "Démarrage du flux audio...",
+      "levelFor": "Niveau audio pour {source}",
+      "levelForNoSource": "Niveau audio : aucune source",
+      "noSource": "Aucune source",
+      "levelAnnouncement": "Niveau audio actuel : {level} pour cent",
+      "levelAnnouncementClipping": "Niveau audio actuel : {level} pour cent, saturation détectée",
+      "sourceSelection": "Sélection de la source audio",
+      "sources": "Sources audio",
+      "noSourcesAvailable": "Aucune source audio disponible",
+      "silent": "(silencieux)",
+      "stopPlayback": "Arrêter la lecture audio",
+      "startPlayback": "Démarrer la lecture audio",
+      "nowPlaying": "Lecture en cours depuis {source}",
+      "nowPlayingNoSource": "Lecture audio en cours",
+      "playbackStopped": "Lecture audio arrêtée",
+      "loginRequired": "Connexion requise pour diffuser l'audio",
+      "streamError": "Erreur lors du démarrage du flux",
+      "streamTitle": "Flux audio d'oiseaux - {source}",
+      "streamTitleDefault": "Flux audio d'oiseaux",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Diffusion en direct",
+      "playbackError": "Erreur de lecture : {details}"
     },
     "spectrogram": {
       "notGenerated": "Spectrogramme pas encore généré",
@@ -4155,7 +4285,7 @@
         "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
       },
       "subnet": {
-        "maxSubnetsReached": "Maximum number of subnets ({max}) reached."
+        "maxSubnetsReached": "Nombre maximum de sous-réseaux ({max}) atteint."
       }
     },
     "datePicker": {
@@ -4380,6 +4510,16 @@
       "conflictData": "Cette action est en conflit avec des données existantes.",
       "requestTimeout": "Délai de la requête dépassé.",
       "networkError": "Erreur réseau. Veuillez vérifier votre connexion."
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Corps de requête invalide",
+        "urlRequired": "L'URL du flux est requise",
+        "invalidUrl": "Format d'URL invalide. Saisissez une URL complète, par ex. rtsp://hôte:port/chemin",
+        "unsupportedScheme": "Schéma d'URL non pris en charge \"{scheme}\". Utilisez rtsp, rtsps, http, https, rtmp ou udp",
+        "blockedDestination": "Cette destination est bloquée pour des raisons de sécurité",
+        "connectionFailed": "Impossible de se connecter au flux. Vérifiez que l'URL est correcte et que le flux est accessible"
+      }
     }
   },
   "weather": {
@@ -4495,8 +4635,8 @@
   "analysis": {
     "title": "Analyse",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "settings": "Paramètres",
+      "models": "Modèles"
     },
     "detection": {
       "title": "Paramètres de détection",
@@ -4506,18 +4646,41 @@
         "helpText": "Score de confiance minimum (0.0 - 1.0) requis pour qu'une détection soit enregistrée."
       },
       "batThreshold": {
-        "label": "Bat Detection Threshold",
-        "helpText": "Minimum confidence score for bat species detections. Only applies to bat classifier models."
+        "label": "Seuil de détection des chauves-souris",
+        "helpText": "Score de confiance minimum pour les détections d'espèces de chauves-souris. S'applique uniquement aux modèles classificateurs de chauves-souris."
       },
       "locale": {
-        "label": "Species Language",
-        "helpText": "Language used for species common names in the interface."
+        "label": "Langue des espèces",
+        "helpText": "Langue utilisée pour les noms communs des espèces dans l'interface."
+      },
+      "batFilter": {
+        "label": "Filtre passe-haut pour chauves-souris",
+        "helpText": "Filtre les fréquences audibles avant l'analyse des chauves-souris pour réduire les faux positifs dus aux chants d'oiseaux et au bruit ambiant."
+      },
+      "batNighttimeOnly": {
+        "label": "Nocturne uniquement",
+        "helpText": "Lorsqu'activé, la détection de chauves-souris fonctionne uniquement entre le crépuscule civil et l'aube civile. Nécessite la configuration de l'emplacement. Désactivez pour exécuter la détection en permanence."
+      },
+      "batUltrasonicFilter": {
+        "label": "Validation post-détection",
+        "helpText": "Lorsqu'activé, les détections de chauves-souris sont validées en analysant les motifs d'énergie ultrasonique dans l'audio source. Les détections sans caractéristiques d'écholocation sont marquées comme improbables."
+      },
+      "batFalsePositiveFilter": {
+        "label": "Filtre de faux positifs chauves-souris",
+        "helpText": "Nécessite plusieurs confirmations d'une détection de chauve-souris dans une fenêtre glissante avant de l'accepter. Les niveaux supérieurs nécessitent plus de confirmations, réduisant les faux positifs. Le modèle chauve-souris utilise un chevauchement fixe de 50 %, aucun ajustement n'est donc nécessaire.",
+        "levels": {
+          "off": "Aucun filtrage ; accepte toute détection de chauve-souris immédiatement.",
+          "moderate": "Bon équilibre pour la plupart des configurations. Réduit considérablement les faux positifs.",
+          "strict": "Filtrage maximal pour la plus grande précision."
+        },
+        "detectionCount": "{count} confirmations requises. {description}",
+        "warningOff": "Sans filtrage, la probabilité de faux positifs est élevée. L'activation du filtrage améliore considérablement la précision."
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
+      "birdOnlyNote": "Le filtre de zone s'applique uniquement aux classificateurs d'oiseaux. Les modèles de chauves-souris utilisent leurs propres listes d'espèces.",
       "status": {
-        "title": "Filtre de zone actif",
+        "title": "Aperçu du filtre de zone",
         "model": "Modèle",
         "autoSelected": "Sélectionné automatiquement",
         "manual": "Manuel",
@@ -4525,12 +4688,22 @@
         "mappedSpecies": "Espèces cartographiées",
         "unmappedSpecies": "Espèces non cartographiées",
         "totalSpecies": "Total des espèces",
-        "noFilter": "Aucun filtre de zone actif"
+        "noFilter": "Aucun filtre de zone actif",
+        "geomodelInfo": "BirdNET Géomodèle {version} - {species} espèces connues",
+        "classifier": "Classificateur",
+        "withRangeData": "Avec données de zone",
+        "withoutRangeData": "Sans données de zone",
+        "withRangeDataTooltip": "Espèces que le géomodèle peut évaluer par probabilité géographique à votre emplacement",
+        "withoutRangeDataTooltip": "Espèces sans données géographiques dans le géomodèle, gérées par le paramètre des espèces non cartographiées ci-dessous",
+        "passUnmapped": {
+          "label": "Autoriser les espèces sans données de zone",
+          "helpText": "Autoriser les détections d'espèces pour lesquelles le géomodèle n'a pas de données géographiques. Lorsque désactivé, ces espèces sont toujours filtrées."
+        }
       }
     },
     "advanced": {
-      "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "title": "Avancé",
+      "description": "Configuration du traitement et des modèles personnalisés."
     },
     "gallery": {
       "title": "Galerie de modèles",
@@ -4590,7 +4763,25 @@
       "reinstall": "Réinstaller",
       "reinstalling": "Réinstallation...",
       "reinstallComplete": "Fichiers vérifiés avec succès",
-      "geomodelBadge": "Inclut le BirdNET v3.0 geomodel"
+      "geomodelBadge": "Inclut le BirdNET v3.0 geomodel",
+      "sections": {
+        "acoustic": "Classificateurs acoustiques",
+        "geomodel": "Géomodèles"
+      },
+      "onnxRuntimeRequired": "Nécessite ONNX Runtime qui n'est pas disponible sur ce système.",
+      "onnxRuntimeMissing": "ONNX Runtime n'est pas disponible. Ce modèle ne peut pas fonctionner.",
+      "unavailable": "Indisponible"
+    },
+    "bird": {
+      "title": "Détection des oiseaux",
+      "description": "Configurez le seuil de confiance, la langue des espèces et le filtrage des faux positifs pour les classificateurs d'oiseaux."
+    },
+    "bat": {
+      "title": "Détection des chauves-souris",
+      "description": "Configurez le seuil, la planification et le filtrage des faux positifs pour les classificateurs de chauves-souris."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Le seuil dynamique s'applique uniquement aux classificateurs d'oiseaux."
     }
   },
   "restart": {
@@ -4604,5 +4795,147 @@
     "bannerMessage": "Les modifications de configuration nécessitent un redémarrage :",
     "bannerAction": "Redémarrer maintenant",
     "restartFailed": "Échec du lancement du redémarrage"
+  },
+  "help": {
+    "title": "Aide et support",
+    "subtitle": "Obtenez de l'aide, signalez des problèmes et connectez-vous avec la communauté",
+    "reportBug": {
+      "description": "Si vous rencontrez un problème, ouvrez d'abord un rapport de bug sur GitHub pour décrire le problème, puis générez un rapport de support avec le numéro du ticket pour faciliter le diagnostic."
+    },
+    "askQuestion": {
+      "description": "Vous avez une question sur la configuration, les fonctionnalités ou l'utilisation ? Le forum GitHub Discussions est le meilleur endroit pour obtenir de l'aide de la communauté."
+    },
+    "diagnostics": {
+      "description": "Générez un rapport de support pour aider au diagnostic des problèmes. Il capture votre configuration système et les journaux récents."
+    },
+    "quickLinks": {
+      "title": "Liens rapides",
+      "releases": "Notes de version"
+    }
+  },
+  "reportBug": {
+    "title": "Signaler un bug",
+    "subtitle": "Aidez-nous à corriger les problèmes en fournissant les informations nécessaires",
+    "systemInfo": {
+      "title": "Vos informations système",
+      "description": "Ces informations aident à identifier votre configuration. Copiez-les dans votre rapport de bug.",
+      "version": "Version",
+      "buildDate": "Date de compilation",
+      "os": "Système d'exploitation",
+      "copy": "Copier dans le presse-papiers",
+      "copied": "Copié !",
+      "architecture": "Architecture",
+      "hardware": "Matériel",
+      "environment": "Environnement"
+    },
+    "whatToInclude": {
+      "title": "Que faut-il inclure dans votre rapport",
+      "description": "Un bon rapport de bug nous aide à résoudre votre problème rapidement. Veuillez inclure les éléments suivants :",
+      "step1": {
+        "title": "Description claire du problème",
+        "description": "Ce qui s'est passé, ce que vous attendiez et comment reproduire le problème."
+      },
+      "step2": {
+        "title": "Votre méthode d'installation",
+        "description": "Comment vous avez installé BirdNET-Go : script install.sh, Docker Compose, compilation manuelle ou autre."
+      },
+      "step3": {
+        "title": "Informations système",
+        "description": "Copiez les détails système affichés ci-dessus, y compris la version, le système d'exploitation et la date de compilation."
+      },
+      "step4": {
+        "title": "Rapport de support",
+        "description": "Générez et téléchargez un rapport de support ci-dessous. Il capture les journaux et la configuration qui accélèrent considérablement le diagnostic."
+      }
+    },
+    "openIssue": {
+      "title": "Ouvrir un ticket sur GitHub",
+      "description": "Ouvrez un ticket sur GitHub pour décrire le problème. Vous aurez besoin du numéro de ticket pour l'étape suivante.",
+      "button": "Ouvrir un ticket sur GitHub"
+    },
+    "supportDump": {
+      "title": "Générer un rapport de support",
+      "description": "Après avoir créé votre ticket, générez un rapport de support et entrez le numéro du ticket GitHub. Cela lie vos diagnostics au rapport de bug et facilite le dépannage."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "refresh": "Actualiser",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "metricFooter": {
+      "allPassing": "Tout va bien",
+      "needsAttention": "Attention requise",
+      "failing": "En échec",
+      "allClear": "RAS",
+      "noData": "Aucune donnée",
+      "none": "Aucun"
+    },
+    "diagnostics": "Diagnostic",
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Erreurs fréquentes",
+      "errorCount": "Nombre",
+      "errorComponent": "Composant",
+      "errorLevel": "Niveau",
+      "errorMessage": "Message"
+    },
+    "window": {
+      "label": "Fenêtre d'évaluation",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Dernier événement",
+      "recentEvents": "Événements récents",
+      "time": "Heure",
+      "source": "Source",
+      "count": "Nombre",
+      "lifetime": "total",
+      "sparklineLabel": "Graphique d'activité"
+    }
   }
 }

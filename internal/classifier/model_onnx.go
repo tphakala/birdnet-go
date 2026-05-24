@@ -1,14 +1,13 @@
 package classifier
 
 import (
-	"bufio"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
+	onnx "github.com/tphakala/birdnet-go/internal/inference/onnx"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -16,24 +15,29 @@ import (
 func (bn *BirdNET) initializeONNXModel() error {
 	start := time.Now()
 	log := GetLogger()
+	settings := bn.currentSettings()
+
+	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, "ONNX classifier", "onnx_classifier", ""); err != nil {
+		return err
+	}
 
 	// Initialize ONNX Runtime if not already done
-	if err := inference.InitONNXRuntime(bn.Settings.BirdNET.ONNXRuntimePath); err != nil {
+	if err := inference.InitONNXRuntime(settings.BirdNET.ONNXRuntimePath); err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
-			Context("onnx_runtime_path", bn.Settings.BirdNET.ONNXRuntimePath).
+			Context("onnx_runtime_path", settings.BirdNET.ONNXRuntimePath).
 			Timing("onnx-init", time.Since(start)).
 			Build()
 	}
 
-	classifier, err := inference.NewONNXClassifier(bn.Settings.BirdNET.ModelPath, inference.ONNXClassifierOptions{
-		Labels:  bn.Settings.BirdNET.Labels,
-		Threads: bn.Settings.BirdNET.Threads,
+	classifier, err := inference.NewONNXClassifier(settings.BirdNET.ModelPath, inference.ONNXClassifierOptions{
+		Labels:  settings.BirdNET.Labels,
+		Threads: settings.BirdNET.Threads,
 	})
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
-			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Timing("onnx-model-init", time.Since(start)).
 			Build()
 	}
@@ -41,7 +45,7 @@ func (bn *BirdNET) initializeONNXModel() error {
 	bn.classifier = classifier
 
 	log.Info("ONNX model initialized",
-		logger.String("model", bn.Settings.BirdNET.ModelPath),
+		logger.String("model", settings.BirdNET.ModelPath),
 		logger.Int("species", classifier.NumSpecies()))
 
 	return nil
@@ -52,11 +56,21 @@ func (bn *BirdNET) initializeONNXModel() error {
 // with its own 12K labels and wraps it in a mappedRangeFilter.
 func (bn *BirdNET) initializeONNXMetaModel() error {
 	settings := bn.currentSettings()
+	start := time.Now()
+
+	modelName := "ONNX range filter"
+	modelCtx := "range_filter"
+	if settings.BirdNET.RangeFilter.Model == "v3" {
+		modelName = "v3 geomodel"
+		modelCtx = "v3_geomodel"
+	}
+	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, modelName, modelCtx, ""); err != nil {
+		return err
+	}
+
 	if settings.BirdNET.RangeFilter.Model == "v3" {
 		return bn.initializeV3GeoModel()
 	}
-
-	start := time.Now()
 
 	// Ensure ONNX Runtime is initialized (idempotent - may already be init from classifier)
 	if err := inference.InitONNXRuntime(settings.BirdNET.ONNXRuntimePath); err != nil {
@@ -133,7 +147,7 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 			Build()
 	}
 
-	// Ensure ONNX Runtime is initialized
+	// Ensure ONNX Runtime is initialized (ORT availability checked by initializeONNXMetaModel)
 	log.Debug("V3 geomodel: initializing ONNX Runtime")
 	if err := inference.InitONNXRuntime(settings.BirdNET.ONNXRuntimePath); err != nil {
 		return errors.New(err).
@@ -145,7 +159,7 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 
 	// Load geomodel labels from file
 	log.Debug("V3 geomodel: loading labels", logger.String("path", labelsPath))
-	geoLabels, err := loadLabelsFromFile(labelsPath)
+	geoLabels, err := onnx.LoadLabels(labelsPath)
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
@@ -203,26 +217,4 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 
 	bn.rangeFilter = mapped
 	return nil
-}
-
-// loadLabelsFromFile reads species labels from a text file, one per line.
-func loadLabelsFromFile(path string) ([]string, error) {
-	f, err := os.Open(path) //nolint:gosec // G304: path is from application settings
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-
-	var labels []string
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			labels = append(labels, line)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return labels, nil
 }

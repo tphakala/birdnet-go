@@ -185,8 +185,12 @@ type StreamConfig struct {
 	// Type is the source type (e.g., "rtsp", "http", "hls").
 	Type string
 
-	// SampleRate in Hz (e.g., 48000).
+	// SampleRate in Hz (e.g., 48000). This is the desired output rate.
 	SampleRate int
+
+	// SourceSampleRate is the actual sample rate of the remote source,
+	// discovered by probing. Zero means unknown (probe failed or local source).
+	SourceSampleRate int
 
 	// BitDepth in bits (e.g., 16).
 	BitDepth int
@@ -232,9 +236,26 @@ func (c *StreamConfig) sourceType() audiocore.SourceType {
 		return audiocore.SourceTypeRTMP
 	case "udp":
 		return audiocore.SourceTypeUDP
+	case "audio_card":
+		return audiocore.SourceTypeAudioCard
+	case "file":
+		return audiocore.SourceTypeFile
 	default:
 		return audiocore.SourceTypeUnknown
 	}
+}
+
+// needsOutputResampling reports whether FFmpeg should resample the decoded
+// audio to the configured sample rate via -ar/-ac output flags.
+// When the source rate is known (probed) and matches the target, no
+// resampling is needed. When unknown (probe failed) or different from
+// the target, FFmpeg must resample to ensure the pipeline gets the
+// expected rate.
+func (c *StreamConfig) needsOutputResampling() bool {
+	if c.SourceSampleRate == 0 {
+		return true
+	}
+	return c.SourceSampleRate != c.SampleRate
 }
 
 // healthyThreshold returns the configured healthy data threshold or the default.
@@ -796,11 +817,13 @@ func (s *Stream) startProcess() error {
 		"-loglevel", logLevel,
 		"-vn",
 		"-f", format,
-		"-ar", sampleRate,
-		"-ac", numChannels,
-		"-hide_banner",
-		"pipe:1",
 	)
+
+	if s.config.needsOutputResampling() {
+		args = append(args, "-ar", sampleRate, "-ac", numChannels)
+	}
+
+	args = append(args, "-hide_banner", "pipe:1")
 
 	s.cmd = exec.CommandContext(s.ctx, s.config.FFmpegPath, args...) //nolint:gosec // G204: FFmpegPath from validated settings, args built internally
 
@@ -848,6 +871,9 @@ func (s *Stream) startProcess() error {
 		logger.String("url", s.config.safeURL()),
 		logger.Int("pid", s.cmd.Process.Pid),
 		logger.String("transport", s.config.Transport),
+		logger.Int("target_sample_rate", s.config.SampleRate),
+		logger.Int("source_sample_rate", s.config.SourceSampleRate),
+		logger.Bool("ffmpeg_resampling", s.config.needsOutputResampling()),
 		logger.Int64("total_process_count", currentTotal),
 		logger.String("component", "ffmpeg-stream"),
 		logger.String("operation", "start_process"))

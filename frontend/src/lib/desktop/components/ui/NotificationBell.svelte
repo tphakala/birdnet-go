@@ -252,10 +252,20 @@
     }
   }
 
-  // Mark all as read
+  // Mark all notifications as read via bulk endpoint
   async function markAllAsRead() {
-    const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
-    await Promise.all(unreadIds.map(id => markAsRead(id)));
+    try {
+      await api.put('/api/v2/notifications/read-all');
+      notifications = notifications.map(n => ({ ...n, read: true }));
+    } catch (error) {
+      if (error instanceof ApiError) {
+        toastActions.error(t('notifications.errors.markReadFailed'));
+      }
+      logger.error('Failed to mark all notifications as read', error, {
+        component: 'NotificationBell',
+        action: 'markAllAsRead',
+      });
+    }
   }
 
   // Navigate to notifications page
@@ -339,14 +349,34 @@
     }
   }
 
-  // Show browser notification
-  function showBrowserNotification(notification: Notification) {
-    if ('Notification' in globalThis.window && globalThis.Notification.permission === 'granted') {
-      const translated = translateNotification(notification);
-      new globalThis.Notification(sanitizeNotificationMessage(translated.title), {
-        body: sanitizeNotificationMessage(translated.message),
-        icon: buildAppUrl(NOTIFICATION_ICON_PATH),
-        tag: notification.id,
+  // Show browser notification (Service Worker-aware)
+  async function showBrowserNotification(notification: Notification) {
+    if (
+      !('Notification' in globalThis.window) ||
+      globalThis.Notification.permission !== 'granted'
+    ) {
+      return;
+    }
+
+    const translated = translateNotification(notification);
+    const options = {
+      body: sanitizeNotificationMessage(translated.message),
+      icon: buildAppUrl(NOTIFICATION_ICON_PATH),
+      tag: notification.id,
+    };
+    const title = sanitizeNotificationMessage(translated.title);
+
+    try {
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.showNotification(title, options);
+      } else {
+        new globalThis.Notification(title, options);
+      }
+    } catch (error) {
+      logger.debug('Failed to show browser notification', error, {
+        component: 'NotificationBell',
+        action: 'showBrowserNotification',
       });
     }
   }

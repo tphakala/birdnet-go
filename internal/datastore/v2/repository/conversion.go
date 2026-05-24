@@ -122,6 +122,7 @@ func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *C
 		Longitude:        lon,
 		ClipName:         clipName,
 		ProcessingTimeMs: processingTimeMs,
+		Unlikely:         result.Unlikely,
 		LegacyID:         &legacyID,
 	}
 
@@ -156,6 +157,7 @@ func ConvertFromV2Detection(det *entities.Detection) *detection.Result {
 	result := &detection.Result{
 		ID:        det.ID,
 		Timestamp: time.Unix(det.DetectedAt, 0),
+		Unlikely:  det.Unlikely,
 	}
 
 	// Convert label to species

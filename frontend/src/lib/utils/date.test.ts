@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   getLocalDateString,
+  getDateInTimezone,
   parseLocalDateString,
   isToday,
   isFutureDate,
+  isBeyondTomorrow,
   parseHour,
   getLocalTimeString,
   parseTime,
@@ -189,6 +191,44 @@ describe('Date Utilities', () => {
     });
   });
 
+  describe('isBeyondTomorrow', () => {
+    it('should return false for today', () => {
+      const mockDate = new Date('2024-01-15T12:00:00');
+      vi.setSystemTime(mockDate);
+
+      expect(isBeyondTomorrow('2024-01-15')).toBe(false);
+    });
+
+    it('should return false for +1 day (server-ahead timezone tolerance)', () => {
+      const mockDate = new Date('2024-01-15T12:00:00');
+      vi.setSystemTime(mockDate);
+
+      expect(isBeyondTomorrow('2024-01-16')).toBe(false);
+    });
+
+    it('should return false for +2 days (covers UTC+14 vs UTC-12 gap)', () => {
+      const mockDate = new Date('2024-01-15T12:00:00');
+      vi.setSystemTime(mockDate);
+
+      expect(isBeyondTomorrow('2024-01-17')).toBe(false);
+    });
+
+    it('should return true for +3 days (beyond any timezone gap)', () => {
+      const mockDate = new Date('2024-01-15T12:00:00');
+      vi.setSystemTime(mockDate);
+
+      expect(isBeyondTomorrow('2024-01-18')).toBe(true);
+    });
+
+    it('should return false for past dates', () => {
+      const mockDate = new Date('2024-01-15T12:00:00');
+      vi.setSystemTime(mockDate);
+
+      expect(isBeyondTomorrow('2024-01-14')).toBe(false);
+      expect(isBeyondTomorrow('2023-12-31')).toBe(false);
+    });
+  });
+
   describe('parseHour', () => {
     it('should parse valid time strings', () => {
       expect(parseHour('14:30:45')).toBe(14);
@@ -354,6 +394,36 @@ describe('Date Utilities', () => {
 
       expect(getLocalDateString(endOfYear)).toBe('2023-12-31');
       expect(getLocalDateString(startOfNewYear)).toBe('2024-01-01');
+    });
+  });
+
+  describe('getDateInTimezone', () => {
+    it('should return a valid YYYY-MM-DD string', () => {
+      const result = getDateInTimezone('America/New_York');
+      expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('should return different dates for timezones across the date line', () => {
+      // Fix time to just after midnight UTC so Pacific/Auckland (UTC+12) is already
+      // on the next day while America/Los_Angeles (UTC-7) is still on the previous day
+      vi.setSystemTime(new Date('2024-06-15T00:30:00Z'));
+
+      const auckland = getDateInTimezone('Pacific/Auckland');
+      const losAngeles = getDateInTimezone('America/Los_Angeles');
+
+      // Auckland at UTC 00:30 is Jun 15 12:30 NZST, LA is Jun 14 17:30 PDT
+      expect(auckland).toBe('2024-06-15');
+      expect(losAngeles).toBe('2024-06-14');
+    });
+
+    it('should fall back to local date for invalid timezone', () => {
+      const result = getDateInTimezone('Invalid/Timezone');
+      expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('should handle UTC timezone', () => {
+      vi.setSystemTime(new Date('2024-03-10T12:00:00Z'));
+      expect(getDateInTimezone('UTC')).toBe('2024-03-10');
     });
   });
 });

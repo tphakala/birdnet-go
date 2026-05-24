@@ -152,6 +152,36 @@ func (f *Filter) ApplyBatch(input []float64) {
 	}
 }
 
+// ApplyBatchFloat32 applies the filter to a batch of float32 samples in-place.
+// This avoids float32-to-float64 conversion overhead on the hot path.
+func (f *Filter) ApplyBatchFloat32(input []float32) {
+	for p := range f.passes {
+		for i := range input {
+			in := float64(input[i])
+			output := f.b0a0*in + f.b1a0*f.in1[p] + f.b2a0*f.in2[p] -
+				f.a1a0*f.out1[p] - f.a2a0*f.out2[p]
+
+			f.in2[p] = f.in1[p]
+			f.in1[p] = in
+			f.out2[p] = f.out1[p]
+			f.out1[p] = output
+
+			input[i] = float32(output)
+		}
+	}
+}
+
+// Reset clears the filter's internal state variables.
+// Use between independent audio segments to prevent state leakage.
+func (f *Filter) Reset() {
+	for p := range f.passes {
+		f.in1[p] = 0
+		f.in2[p] = 0
+		f.out1[p] = 0
+		f.out2[p] = 0
+	}
+}
+
 // NewLowPass returns the low-pass filter.
 //
 // Parameters:
@@ -460,6 +490,26 @@ func (fc *FilterChain) ApplyBatch(input []float64) {
 			filter.ApplyBatch(input)
 		} else {
 			fc.log.Warn("encountered nil filter in audio EQ filter chain")
+		}
+	}
+}
+
+// ApplyBatchFloat32 applies all filters in the chain to float32 samples in-place.
+func (fc *FilterChain) ApplyBatchFloat32(input []float32) {
+	for _, filter := range fc.filters {
+		if filter != nil {
+			filter.ApplyBatchFloat32(input)
+		} else {
+			fc.log.Warn("encountered nil filter in audio EQ filter chain")
+		}
+	}
+}
+
+// Reset clears the internal state of all filters in the chain.
+func (fc *FilterChain) Reset() {
+	for _, filter := range fc.filters {
+		if filter != nil {
+			filter.Reset()
 		}
 	}
 }

@@ -41,8 +41,8 @@ func setupAudioSourcesTestEnv(t *testing.T, sources []*audiocore.SourceConfig) (
 		Echo:     e,
 		Group:    e.Group("/api/v2"),
 		Settings: &conf.Settings{},
-		engine:   eng,
 	}
+	controller.engine.Store(eng)
 	return e, controller
 }
 

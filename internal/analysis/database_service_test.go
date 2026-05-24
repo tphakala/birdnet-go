@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -8,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -47,6 +50,32 @@ func TestDatabaseService_Stop_NilSafe(t *testing.T) {
 		err := svc.Stop(t.Context())
 		assert.NoError(t, err)
 	})
+}
+
+// TestErrV2SchemaCorrupted_PropagatesThroughInitializeWrapChain pins the unwrap
+// behavior the silent-fallback prevention in Start() depends on. validateSchemaIntegrity
+// wraps the sentinel with fmt.Errorf, SQLiteManager.Initialize wraps that again, and
+// initializeV2OnlyMode / v2only.InitializeFreshInstall wrap the result with the internal
+// errors package. errors.Is must unwrap through all three layers and still match the
+// sentinel; otherwise Start() would silently fall back to legacy mode for corrupted
+// databases (GitHub #3211).
+func TestErrV2SchemaCorrupted_PropagatesThroughInitializeWrapChain(t *testing.T) {
+	t.Parallel()
+
+	// Layer 1: validator returns the sentinel wrapped with details.
+	validatorErr := fmt.Errorf("%w: detections missing columns [unlikely]", datastoreV2.ErrV2SchemaCorrupted)
+	// Layer 2: Manager.Initialize wraps the validator error.
+	initializeErr := fmt.Errorf("v2 schema integrity check failed: %w", validatorErr)
+	// Layer 3: initializeV2OnlyMode wraps the manager error with the internal errors
+	// package. EnhancedError.Unwrap() must keep the chain intact.
+	wrapped := errors.New(initializeErr).
+		Component("analysis").
+		Category(errors.CategoryDatabase).
+		Context("operation", "initialize_v2_database").
+		Build()
+
+	assert.True(t, errors.Is(wrapped, datastoreV2.ErrV2SchemaCorrupted),
+		"errors.Is must unwrap through fmt.Errorf and EnhancedError to find the sentinel")
 }
 
 func TestDatabaseService_Start_FreshInstall(t *testing.T) {

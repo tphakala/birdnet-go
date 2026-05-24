@@ -87,7 +87,7 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 				ds.metricsMu.RUnlock()
 
 				// Update database size metrics
-				if dbSize, err := ds.getDatabaseSize(); err == nil && metrics != nil {
+				if dbSize, err := ds.getDatabaseSize(ctx); err == nil && metrics != nil {
 					metrics.UpdateDatabaseSize(dbSize)
 				} else if err != nil {
 					GetLogger().Error("Failed to get database size",
@@ -97,7 +97,7 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 				// Update table row counts
 				tables := []string{"notes", "results", "image_caches", "note_reviews", "note_locks"}
 				for _, table := range tables {
-					if count, err := ds.getTableRowCount(table); err == nil && metrics != nil {
+					if count, err := ds.getTableRowCount(ctx, table); err == nil && metrics != nil {
 						metrics.UpdateTableRowCount(table, count)
 					} else if err != nil {
 						GetLogger().Error("Failed to get table row count",
@@ -107,7 +107,7 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 				}
 
 				// Update active lock count
-				if lockCount, err := ds.getActiveLockCount(); err == nil && metrics != nil {
+				if lockCount, err := ds.getActiveLockCount(ctx); err == nil && metrics != nil {
 					metrics.UpdateActiveLockCount(lockCount)
 				} else if err != nil {
 					GetLogger().Error("Failed to get active lock count",
@@ -119,14 +119,13 @@ func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.
 }
 
 // getDatabaseSize returns the total size of the database in bytes
-func (ds *DataStore) getDatabaseSize() (int64, error) {
+func (ds *DataStore) getDatabaseSize(ctx context.Context) (int64, error) {
 	var size int64
 
 	// SQLite-specific query
 	if strings.ToLower(ds.DB.Name()) == "sqlite" {
 		// For SQLite, we use page_count * page_size
-		err := ds.DB.Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Row().Scan(&size)
-		if err != nil {
+		if err := ds.DB.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Scan(&size).Error; err != nil {
 			return 0, fmt.Errorf("failed to get SQLite database size: %w", err)
 		}
 		return size, nil
@@ -135,13 +134,13 @@ func (ds *DataStore) getDatabaseSize() (int64, error) {
 	// MySQL-specific query
 	if strings.ToLower(ds.DB.Name()) == "mysql" {
 		var dbName string
-		if err := ds.DB.Raw("SELECT DATABASE()").Scan(&dbName).Error; err != nil {
+		if err := ds.DB.WithContext(ctx).Raw("SELECT DATABASE()").Scan(&dbName).Error; err != nil {
 			return 0, fmt.Errorf("failed to get current database name: %w", err)
 		}
 
-		err := ds.DB.Raw(`
-			SELECT SUM(data_length + index_length) 
-			FROM information_schema.tables 
+		err := ds.DB.WithContext(ctx).Raw(`
+			SELECT SUM(data_length + index_length)
+			FROM information_schema.tables
 			WHERE table_schema = ?
 		`, dbName).Scan(&size).Error
 		if err != nil {
@@ -154,9 +153,9 @@ func (ds *DataStore) getDatabaseSize() (int64, error) {
 }
 
 // getTableRowCount returns the number of rows in a specific table
-func (ds *DataStore) getTableRowCount(table string) (int64, error) {
+func (ds *DataStore) getTableRowCount(ctx context.Context, table string) (int64, error) {
 	var count int64
-	err := ds.DB.Table(table).Count(&count).Error
+	err := ds.DB.WithContext(ctx).Table(table).Count(&count).Error
 	if err != nil {
 		return 0, fmt.Errorf("failed to count rows in table %s: %w", table, err)
 	}
@@ -164,9 +163,9 @@ func (ds *DataStore) getTableRowCount(table string) (int64, error) {
 }
 
 // getActiveLockCount returns the number of active note locks
-func (ds *DataStore) getActiveLockCount() (int, error) {
+func (ds *DataStore) getActiveLockCount(ctx context.Context) (int, error) {
 	var count int64
-	err := ds.DB.Model(&NoteLock{}).Count(&count).Error
+	err := ds.DB.WithContext(ctx).Model(&NoteLock{}).Count(&count).Error
 	if err != nil {
 		return 0, fmt.Errorf("failed to count active locks: %w", err)
 	}

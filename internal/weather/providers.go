@@ -2,6 +2,7 @@ package weather
 
 import (
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -20,6 +21,7 @@ func NewOpenWeatherProvider() Provider {
 
 // Provider implementations
 type YrNoProvider struct {
+	mu           sync.Mutex
 	lastModified string
 }
 type OpenWeatherProvider struct{}

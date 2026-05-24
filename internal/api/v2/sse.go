@@ -92,6 +92,7 @@ type SSEDetectionData struct {
 	// Review status
 	Verified string `json:"verified,omitempty"`
 	Locked   bool   `json:"locked"`
+	Unlikely bool   `json:"unlikely,omitempty"`
 
 	// Bird image with attribution
 	BirdImage SSEBirdImage `json:"birdImage"`
@@ -150,6 +151,7 @@ func newSSEDetectionData(note *datastore.Note, birdImage *imageprovider.BirdImag
 		ClipName:       safeBaseName(note.ClipName),
 		Verified:       note.Verified,
 		Locked:         note.Locked,
+		Unlikely:       note.Unlikely,
 		Timestamp:      time.Now(),
 		EventType:      "new_detection",
 	}
@@ -878,11 +880,14 @@ func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imagepr
 	// Compare the detection date with the species' first-seen date so the flag
 	// is true only for the actual first detection, not for every detection of a
 	// recently-first-seen species.
-	if c.Processor != nil && c.Processor.NewSpeciesTracker != nil {
-		status := c.Processor.NewSpeciesTracker.GetSpeciesStatus(note.ScientificName, time.Now())
-		detection.IsNewSpecies = !status.FirstSeenTime.IsZero() &&
-			note.Date == status.FirstSeenTime.Format(time.DateOnly)
-		detection.DaysSinceFirstSeen = status.DaysSinceFirst
+	// Snapshot processor and tracker to avoid TOCTOU race.
+	if proc := c.Processor; proc != nil {
+		if tracker := proc.GetNewSpeciesTracker(); tracker != nil {
+			status := tracker.GetSpeciesStatus(note.ScientificName, time.Now())
+			detection.IsNewSpecies = !status.FirstSeenTime.IsZero() &&
+				note.Date == status.FirstSeenTime.Format(time.DateOnly)
+			detection.DaysSinceFirstSeen = status.DaysSinceFirst
+		}
 	}
 
 	c.sseManager.BroadcastDetection(&detection)

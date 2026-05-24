@@ -151,6 +151,18 @@ func Load() (*Settings, error) {
 		}
 	}
 
+	// Adjust seasonal tracking for the user's hemisphere so the settings
+	// API returns correct season dates from the start. Without this,
+	// Viper defaults (Northern Hemisphere) would be served regardless
+	// of the configured latitude.
+	locationConfigured := settings.BirdNET.LocationConfigured
+	if settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled && locationConfigured {
+		settings.Realtime.SpeciesTracking.SeasonalTracking = GetSeasonalTrackingWithHemisphere(
+			settings.Realtime.SpeciesTracking.SeasonalTracking,
+			settings.BirdNET.Latitude,
+		)
+	}
+
 	// Publish the loaded settings atomically. Readers calling GetSettings
 	// immediately after this point see this snapshot.
 	settingsInstance.Store(settings)
@@ -398,7 +410,7 @@ func Setting() *Settings {
 // This function is separated from SaveSettings to enable unit testing without filesystem I/O.
 //
 // Current transformations:
-//   - Auto-populates seasonal tracking seasons based on latitude if not already set
+//   - Adjusts seasonal tracking seasons for the user's hemisphere based on latitude
 //
 // Note: This is a pure function that only transforms data. It does not handle:
 //   - Mutex locking (handled by SaveSettings caller)
@@ -407,13 +419,12 @@ func Setting() *Settings {
 func prepareSettingsForSave(s *Settings, latitude float64) Settings {
 	settingsCopy := *s
 
-	// Auto-update seasonal tracking dates based on latitude if seasonal tracking is enabled
-	// and no custom seasons are already defined
-	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled &&
-		len(settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons) == 0 {
-		// Get hemisphere-appropriate default seasons
-		defaultSeasons := GetDefaultSeasons(latitude)
-		settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons = defaultSeasons
+	locationConfigured := s.BirdNET.LocationConfigured
+	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled && locationConfigured {
+		settingsCopy.Realtime.SpeciesTracking.SeasonalTracking = GetSeasonalTrackingWithHemisphere(
+			settingsCopy.Realtime.SpeciesTracking.SeasonalTracking,
+			latitude,
+		)
 	}
 
 	return settingsCopy
@@ -486,6 +497,10 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 			Build()
 	}
 	tempFileName := tempFile.Name()
+
+	// Ensure fd is closed on all exit paths (closing an already-closed file is safe).
+	defer func() { _ = tempFile.Close() }()
+
 	// Ensure the temporary file is removed in case of any failure
 	defer func() {
 		if err := os.Remove(tempFileName); err != nil && !os.IsNotExist(err) {
@@ -495,14 +510,12 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 
 	// Write the YAML data to the temporary file
 	if _, err := tempFile.Write(yamlData); err != nil {
-		// Best effort close on error path
-		_ = tempFile.Close()
 		return errors.New(err).
 			Category(errors.CategoryFileIO).
 			Context("operation", "write-temp-file").
 			Build()
 	}
-	// Close the temporary file after writing
+	// Close before rename to flush and release the fd
 	if err := tempFile.Close(); err != nil {
 		return errors.New(err).
 			Category(errors.CategoryFileIO).

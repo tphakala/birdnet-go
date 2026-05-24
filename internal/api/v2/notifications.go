@@ -195,6 +195,7 @@ func (c *Controller) SetupNotificationRoutes() {
 	notificationsGroup := c.Group.Group("/notifications", c.authMiddleware)
 
 	notifServiceGroup := notificationsGroup.Group("", c.requireNotificationService)
+	notifServiceGroup.PUT("/read-all", c.MarkAllNotificationsRead)
 	notifServiceGroup.GET("/:id", c.GetNotification)
 	notifServiceGroup.PUT("/:id/read", c.MarkNotificationRead)
 	notifServiceGroup.PUT("/:id/acknowledge", c.MarkNotificationAcknowledged)
@@ -817,6 +818,22 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, notif)
+}
+
+// MarkAllNotificationsRead marks every unread notification as read in one call.
+func (c *Controller) MarkAllNotificationsRead(ctx echo.Context) error {
+	service := notification.GetService()
+
+	count, err := service.MarkAllAsRead()
+	if err != nil {
+		c.logErrorIfEnabled("failed to mark all notifications as read", logger.Error(err))
+		return c.HandleError(ctx, err, "Failed to mark all notifications as read", http.StatusInternalServerError)
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]any{
+		"message": "All notifications marked as read",
+		"count":   count,
+	})
 }
 
 // MarkNotificationRead marks a notification as read

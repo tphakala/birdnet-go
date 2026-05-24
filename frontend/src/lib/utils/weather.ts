@@ -15,8 +15,8 @@ export const WEATHER_ICON_MAP: Record<string, { day: string; night: string; desc
     '02': { day: '⛅', night: '☁️', description: 'Few clouds' },
     '03': { day: '⛅', night: '☁️', description: 'Scattered clouds' },
     '04': { day: '⛅', night: '☁️', description: 'Broken clouds' },
-    '09': { day: '🌧️', night: '🌧️', description: 'Shower rain' },
-    '10': { day: '🌦️', night: '🌧️', description: 'Rain' },
+    '09': { day: '🌦️', night: '🌧️', description: 'Shower rain' },
+    '10': { day: '🌧️', night: '🌧️', description: 'Rain' },
     '11': { day: '⛈️', night: '⛈️', description: 'Thunderstorm' },
     '12': { day: '🌨️', night: '🌨️', description: 'Sleet' },
     '13': { day: '❄️', night: '❄️', description: 'Snow' },
@@ -85,17 +85,19 @@ export function getWeatherEmoji(weatherCode: string, isNight: boolean): string {
 export function translateWeatherCondition(condition: string | undefined): string {
   if (!condition) return '';
 
-  // Normalize the condition string for i18n key lookup
   const normalized = condition.toLowerCase().replace(/ /g, '_');
 
-  // Try different key variations in order of preference
   const keys = [
     `detections.weather.conditions.${normalized}`,
     `detections.weather.conditions.${condition.toLowerCase()}`,
-    'detections.weather.conditions.unknown',
   ];
 
-  // Return first successful translation or fall back to original
+  // Strip _day/_night/_polartwilight suffix for yr.no symbols
+  const baseName = normalized.replace(/_(day|night|polartwilight)$/, '');
+  if (baseName !== normalized) {
+    keys.push(`detections.weather.conditions.${baseName}`);
+  }
+
   for (const key of keys) {
     const translation = t(key);
     if (translation !== key) {

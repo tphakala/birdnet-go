@@ -675,17 +675,19 @@ describe('Notification Error Handling', () => {
     expect(response.status).toBe(404);
   });
 
-  it('mark read on non-existent notification returns error', async () => {
+  it('mark read on non-existent notification is idempotent (returns 200)', async () => {
     const fakeId = 'non-existent-' + uniqueTestId();
     const response = await markAsRead(fakeId);
 
-    expect([404, 500]).toContain(response.status);
+    // Backend treats mark-as-read as idempotent: missing notifications return 200
+    expect(response.status).toBe(200);
   });
 
-  it('acknowledge on non-existent notification returns error', async () => {
+  it('acknowledge on non-existent notification is idempotent (returns 200)', async () => {
     const fakeId = 'non-existent-' + uniqueTestId();
     const response = await markAsAcknowledged(fakeId);
 
-    expect([404, 500]).toContain(response.status);
+    // Backend treats acknowledge as idempotent: missing notifications return 200
+    expect(response.status).toBe(200);
   });
 });

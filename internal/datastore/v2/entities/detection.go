@@ -28,6 +28,9 @@ type Detection struct {
 	// Processing metadata
 	ProcessingTimeMs *int64 // Milliseconds
 
+	// Validation flags
+	Unlikely bool `gorm:"default:false"` // Tagged by ultrasonic validation filter
+
 	// Migration reference (preserves legacy ID for lookups and related data migration)
 	LegacyID *uint `gorm:"index"`
 

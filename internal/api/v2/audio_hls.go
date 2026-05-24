@@ -231,9 +231,7 @@ func (c *Controller) initHLSRoutes() {
 // to take effect immediately without a server restart.
 func (c *Controller) publicLiveAudioAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		c.settingsMutex.RLock()
-		isPublic := c.Settings.Security.PublicAccess.LiveAudio
-		c.settingsMutex.RUnlock()
+		isPublic := c.currentSettings().Security.PublicAccess.LiveAudio
 		if isPublic {
 			return next(ctx)
 		}
@@ -326,7 +324,11 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 		logger.Bool("force_restart", forceRestart))
 
 	// Verify source exists by checking for a capture buffer
-	if _, bufErr := c.engine.BufferManager().CaptureBuffer(sourceID); bufErr != nil {
+	eng := c.engine.Load()
+	if eng == nil {
+		return c.HandleError(ctx, nil, "Audio engine not initialized", http.StatusServiceUnavailable)
+	}
+	if _, bufErr := eng.BufferManager().CaptureBuffer(sourceID); bufErr != nil {
 		return c.HandleError(ctx, nil, "Audio source not found", http.StatusNotFound)
 	}
 
@@ -949,7 +951,7 @@ func (c *Controller) setHLSHeaders(ctx echo.Context) {
 
 // getEffectiveSegmentLength returns the configured segment length with defaults and limits applied
 func (c *Controller) getEffectiveSegmentLength() int {
-	segmentLength := c.Settings.WebServer.LiveStream.SegmentLength
+	segmentLength := c.currentSettings().WebServer.LiveStream.SegmentLength
 	switch {
 	case segmentLength < hlsMinSegmentLen:
 		return hlsDefaultSegmentLen // Default
@@ -1121,7 +1123,7 @@ func (c *Controller) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 	}
 
 	// Validate FFmpeg path (defense-in-depth against ingress path contamination, see #2195)
-	ffmpegPath := c.Settings.Realtime.Audio.FfmpegPath
+	ffmpegPath := c.currentSettings().Realtime.Audio.FfmpegPath
 	if err := ffmpeg.ValidateFFmpegPath(ffmpegPath); err != nil {
 		streamCancel()
 		return nil, fmt.Errorf("invalid FFmpeg path: %w", err)
@@ -1319,7 +1321,7 @@ func (c *Controller) setupHLSFFmpeg(ctx context.Context, ffmpegPath, inputSource
 
 // buildFFmpegArgs constructs FFmpeg command line arguments
 func (c *Controller) buildFFmpegArgs(inputSource, outputDir, playlistPath string) []string {
-	settings := c.Settings.WebServer.LiveStream
+	settings := c.currentSettings().WebServer.LiveStream
 
 	// Apply defaults and limits
 	bitrate := 128
@@ -1579,8 +1581,9 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	consumerID := fmt.Sprintf("hls_%s_%s", privacy.SanitizeStreamUrl(sourceID), uuid.New().String()[:8])
 	// Use the configured live stream sample rate, falling back to the default HLS sample rate.
 	sampleRate := hlsDefaultSampleRate
-	if c.Settings.WebServer.LiveStream.SampleRate > 0 {
-		sampleRate = c.Settings.WebServer.LiveStream.SampleRate
+	liveStream := c.currentSettings().WebServer.LiveStream
+	if liveStream.SampleRate > 0 {
+		sampleRate = liveStream.SampleRate
 	}
 
 	consumer := &hlsConsumer{
@@ -1592,14 +1595,20 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 		channels: 1,
 	}
 
+	// Load the engine once for all registry/router operations in this section.
+	eng := c.engine.Load()
+	if eng == nil {
+		return nil, nil, fmt.Errorf("audio engine not initialized")
+	}
+
 	// Look up per-source gain from the registry so HLS listeners
 	// hear the same gain-adjusted audio as the analysis pipeline.
-	gainDB, _ := c.engine.Registry().GetGain(sourceID)
+	gainDB, _ := eng.Registry().GetGain(sourceID)
 
 	// Resolve EQ filter chain for this source so HLS listeners
 	// hear the same filtered audio as the analysis pipeline.
 	settings := conf.Setting()
-	src, _ := c.engine.Registry().Get(sourceID)
+	src, _ := eng.Registry().Get(sourceID)
 	sourceName := sourceID
 	if src != nil {
 		sourceName = src.DisplayName
@@ -1608,14 +1617,14 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	eqChain := equalizer.BuildFilterChainWithOverride(override, settings.Realtime.Audio.Equalizer, sourceName, sampleRate)
 
 	// Add route on the AudioRouter
-	if routeErr := c.engine.Router().AddRoute(sourceID, consumer, sampleRate, gainDB, eqChain); routeErr != nil {
+	if routeErr := eng.Router().AddRoute(sourceID, consumer, sampleRate, gainDB, eqChain); routeErr != nil {
 		return nil, nil, fmt.Errorf("failed to add HLS route: %w", routeErr)
 	}
 
 	GetLogger().Debug("Registered HLS audio route", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.String("consumer_id", consumerID))
 
 	cleanup = func() {
-		c.engine.Router().RemoveRoute(sourceID, consumerID)
+		eng.Router().RemoveRoute(sourceID, consumerID)
 		GetLogger().Debug("Removed HLS audio route", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.String("consumer_id", consumerID))
 	}
 
@@ -1951,6 +1960,17 @@ func (c *Controller) cleanupExistingHLSStream(sourceID string) {
 				}
 			}
 		}
+	}
+}
+
+// RestartHLSStreams stops all active HLS streams so they restart with fresh settings.
+func (c *Controller) RestartHLSStreams() {
+	hlsMgr.streamsMu.Lock()
+	sourceIDs := slices.Collect(maps.Keys(hlsMgr.streams))
+	hlsMgr.streamsMu.Unlock()
+
+	for _, id := range sourceIDs {
+		c.stopHLSStream(id, "settings changed")
 	}
 }
 

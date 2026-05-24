@@ -166,15 +166,13 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		return true
 	}
 
-	// Database operations frequently observe context.Canceled and
-	// context.DeadlineExceeded during graceful shutdown and request-timeout
-	// conditions (e.g. an HTTP client disconnects mid-query, or a caller's
-	// ctx.Done() fires while a long row iteration is in progress). These are
-	// not code bugs — the query layer correctly surfaces the cancellation to
-	// the caller, and the caller is expected to handle it. Suppressing here
-	// prevents hundreds of duplicate "[database] context canceled" events
-	// per day from drowning legitimate database errors.
-	if ee.Category == CategoryDatabase && isContextCancellation(ee.Err) {
+	// Database and system operations frequently observe context.Canceled and
+	// context.DeadlineExceeded during graceful shutdown and client-disconnect
+	// conditions (e.g. an HTTP client disconnects mid-query, or Sox/FFmpeg is
+	// killed when the requesting client navigates away). These are not code
+	// bugs; suppressing here prevents hundreds of duplicate events per day
+	// from drowning legitimate errors.
+	if (ee.Category == CategoryDatabase || ee.Category == CategorySystem) && isContextCancellation(ee.Err) {
 		return false
 	}
 
@@ -223,11 +221,12 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		}
 	}
 
-	// Filter out "note not found" errors — these are expected transient conditions caused by
-	// race between write commit and read, or retention cleanup deleting records between
-	// ID assignment and lookup. Not code bugs.
+	// Filter out expected not-found conditions that are not code bugs:
+	// - "note not found": transient race between write commit and read, or retention cleanup
+	// - "not found in ebird taxonomy": non-bird species (e.g., Canis latrans) detected by BirdNET
 	if ee.Category == CategoryNotFound {
-		if strings.Contains(errorMsg, "note not found") {
+		if strings.Contains(errorMsg, "note not found") ||
+			strings.Contains(errorMsg, "not found in ebird taxonomy") {
 			return false
 		}
 	}

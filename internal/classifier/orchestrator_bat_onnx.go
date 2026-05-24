@@ -26,6 +26,18 @@ func (o *Orchestrator) loadBat(threads int) error {
 		}
 	}
 
+	if classifierModel == "" || labelPath == "" || embeddingModel == "" {
+		return errors.Newf("bat model files not installed or configured").
+			Component("classifier.orchestrator").
+			Category(errors.CategoryModelInit).
+			Context("model", "Bat").
+			Build()
+	}
+
+	if err := checkORTOrFail(o.Settings.BirdNET.ONNXRuntimePath, "Bat model", "Bat", "classifier.orchestrator"); err != nil {
+		return err
+	}
+
 	cfg := BatModelConfig{
 		EmbeddingModelPath:  embeddingModel,
 		EmbeddingLabels:     o.Settings.BirdNET.Labels,

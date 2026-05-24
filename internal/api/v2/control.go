@@ -30,11 +30,12 @@ type ControlResult struct {
 
 // Available control actions
 const (
-	ActionRestartAnalysis  = "restart_analysis"
-	ActionReloadModel      = "reload_model"
-	ActionRebuildFilter    = "rebuild_filter"
-	ActionRestartServer    = "restart_server"
-	ActionRestartContainer = "restart_container"
+	ActionRestartAnalysis    = "restart_analysis"
+	ActionReloadModel        = "reload_model"
+	ActionRebuildFilter      = "rebuild_filter"
+	ActionRestartServer      = "restart_server"
+	ActionRestartContainer   = "restart_container"
+	ActionRestartAudioSource = "restart_audio_source"
 )
 
 // Control channel signals
@@ -57,6 +58,7 @@ func (c *Controller) initControlRoutes() {
 	controlGroup.POST("/rebuild-filter", c.RebuildFilter)
 	controlGroup.POST("/restart-server", c.RestartServer)
 	controlGroup.POST("/restart-container", c.RestartContainer)
+	controlGroup.POST("/restart-source/:id", c.RestartAudioSource)
 	controlGroup.GET("/actions", c.GetAvailableActions)
 
 	c.logInfoIfEnabled("Control routes initialized successfully")
@@ -86,6 +88,10 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 		{
 			Action:      ActionRestartServer,
 			Description: "Restart the server binary",
+		},
+		{
+			Action:      ActionRestartAudioSource,
+			Description: "Restart a single audio source by ID",
 		},
 	}
 
@@ -137,7 +143,9 @@ func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMe
 	// Get request context
 	reqCtx := ctx.Request().Context()
 
-	// Send signal with context timeout awareness
+	// Send signal with context timeout and shutdown awareness.
+	// The c.ctx.Done() case prevents a send-on-closed-channel panic if shutdown
+	// closes controlChan while an HTTP request is still in-flight.
 	select {
 	case c.controlChan <- signal:
 		c.logInfoIfEnabled("Control signal sent successfully",
@@ -145,7 +153,9 @@ func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMe
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		// Signal sent successfully
+	case <-c.ctx.Done():
+		return c.HandleError(ctx, c.ctx.Err(),
+			"Server is shutting down", http.StatusServiceUnavailable)
 	case <-reqCtx.Done():
 		err := reqCtx.Err()
 		c.logErrorIfEnabled("Request timeout/cancel while sending control signal",
@@ -154,7 +164,6 @@ func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMe
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		// Request context is done (timeout or cancelled)
 		return c.HandleError(ctx, err,
 			"Request timeout while sending control signal", http.StatusRequestTimeout)
 	}
@@ -262,4 +271,67 @@ func (c *Controller) RestartContainer(ctx echo.Context) error {
 	}
 
 	return c.handleRestartRequest(ctx, ActionRestartContainer, restart.SetContainerRestart, "Container restart initiated")
+}
+
+// SetSourceRestarter injects the function used by the restart-source endpoint.
+func (c *Controller) SetSourceRestarter(fn SourceRestarterFunc) {
+	if fn == nil {
+		c.sourceRestarter.Store(nil)
+		return
+	}
+	c.sourceRestarter.Store(&fn)
+}
+
+// RestartAudioSource handles POST /api/v2/control/restart-source/:id
+// Restarts a single audio source without affecting the rest of the pipeline.
+func (c *Controller) RestartAudioSource(ctx echo.Context) error {
+	sourceID := ctx.Param("id")
+	if sourceID == "" {
+		return c.HandleError(ctx, nil, "Source ID is required", http.StatusBadRequest)
+	}
+
+	c.logInfoIfEnabled("Received request to restart audio source",
+		logger.String("source_id", sourceID),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
+	)
+
+	eng := c.engine.Load()
+	if eng == nil {
+		return c.HandleError(ctx, fmt.Errorf("audio engine not initialized"),
+			"Audio engine not available", http.StatusInternalServerError)
+	}
+	if _, ok := eng.Registry().Get(sourceID); !ok {
+		return c.HandleError(ctx, fmt.Errorf("source %s not found", sourceID),
+			"Audio source not found", http.StatusNotFound)
+	}
+
+	fn := c.sourceRestarter.Load()
+	if fn == nil {
+		return c.HandleError(ctx, fmt.Errorf("source restarter not initialized"),
+			"Audio pipeline not started", http.StatusServiceUnavailable)
+	}
+
+	if err := (*fn)(sourceID); err != nil {
+		c.logErrorIfEnabled("Failed to restart audio source",
+			logger.String("source_id", sourceID),
+			logger.Error(err),
+			logger.String("path", ctx.Request().URL.Path),
+			logger.String("ip", ctx.RealIP()),
+		)
+		return c.HandleError(ctx, err, "Failed to restart audio source", http.StatusInternalServerError)
+	}
+
+	c.logInfoIfEnabled("Audio source restarted successfully",
+		logger.String("source_id", sourceID),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
+	)
+
+	return ctx.JSON(http.StatusOK, ControlResult{
+		Success:   true,
+		Message:   fmt.Sprintf("Audio source %s restarted", sourceID),
+		Action:    ActionRestartAudioSource,
+		Timestamp: time.Now(),
+	})
 }

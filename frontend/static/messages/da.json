@@ -12,6 +12,7 @@
     "refresh": "Opdater",
     "delete": "Slet",
     "edit": "Rediger",
+    "enabled": "Aktiveret",
     "search": "Søg",
     "filter": "Filtrer",
     "sort": "Sortér",
@@ -153,7 +154,8 @@
         "verifiedCorrect": "Bekræftet korrekt",
         "falsePositive": "Falsk positiv",
         "notReviewed": "Ikke gennemgået",
-        "locked": "Låst"
+        "locked": "Låst",
+        "unlikely": "Usandsynlig"
       },
       "form": {
         "correctDetection": "Korrekt detektion",
@@ -226,7 +228,16 @@
     "analyticsSubmenu": "Undermenu for analyse",
     "settingsSubmenu": "Undermenu for indstillinger",
     "systemSubmenu": "Undermenu for system",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Hjælp",
+    "helpSubmenu": "Hjælp-undermenu",
+    "helpAndSupport": "Hjælp og support",
+    "reportBug": "Rapportér fejl",
+    "askQuestion": "Stil et spørgsmål",
+    "reportBugAriaLabel": "Rapportér en fejl på GitHub (åbner i nyt vindue)",
+    "askQuestionAriaLabel": "Stil et spørgsmål på GitHub Discussions (åbner i nyt vindue)",
+    "viewOnGithubAriaLabel": "Se BirdNET-Go på GitHub (åbner i nyt vindue)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -422,7 +433,11 @@
       },
       "buffer": {
         "overloadTitle": "Lydanalyse overbelastet",
-        "overloadMessage": "Dit system dropper {dropRate}% af lydprøverne for kilden '{sourceName}', fordi det ikke kan følge med analysen. Reducer BirdNET-overlapværdien i detektionsindstillingerne eller overvej at opgradere til en hurtigere CPU."
+        "overloadMessage": "Dit system dropper {dropRate}% af lydprøverne for kilden ''{sourceName}'', fordi det ikke kan følge med analysen. Reducer BirdNET-overlapværdien i detektionsindstillingerne eller overvej at opgradere til en hurtigere CPU."
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime ikke tilgængelig",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} er påkrævet til {modelName}, men blev ikke fundet. Se installationsguiden: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -512,7 +527,8 @@
       "false": "Falsk",
       "unverified": "Ubekræftet",
       "locked": "Låst",
-      "unlocked": "Ulåst"
+      "unlocked": "Ulåst",
+      "unlikely": "Usandsynlig"
     },
     "review": {
       "review": "Gennemgå",
@@ -640,7 +656,8 @@
         "verified": "Verificeret",
         "false": "Falsk",
         "unverified": "Ikke verificeret",
-        "locked": "Låst"
+        "locked": "Låst",
+        "unlikely": "Usandsynlig"
       },
       "modals": {
         "showSpecies": "Vis art {species}",
@@ -656,6 +673,8 @@
       },
       "actions": {
         "menuLabel": "Handlinger for {species}",
+        "markCorrect": "Korrekt",
+        "markFalsePositive": "Ukorrekt",
         "review": "Gennemgå registrering",
         "showSpecies": "Vis art",
         "ignoreSpecies": "Ignorér art",
@@ -761,6 +780,7 @@
     "headers": {
       "dateTime": "Dato og tid",
       "weather": "Vejr",
+      "source": "Kilde",
       "species": "Art",
       "confidence": "Sikkerhed",
       "thumbnail": "Miniaturebillede",
@@ -794,6 +814,25 @@
     "pagination": {
       "showing": "Viser {from} til {to} af {total} resultater"
     },
+    "selection": {
+      "select": "Vælg",
+      "nSelected": "{count} valgt",
+      "selectAllMatching": "Vælg alle {count} matchende registreringer",
+      "allSelected": "Alle {count} valgt",
+      "clear": "Ryd valg",
+      "toolbarLabel": "Massehandlinger",
+      "confirmBulkDelete": "Slet {count} registreringer? Dette kan ikke fortrydes.",
+      "confirmBulkMarkCorrect": "Markér {count} registreringer som korrekte?",
+      "confirmBulkMarkFalsePositive": "Markér {count} registreringer som falsk positive?",
+      "confirmBulkLock": "Lås {count} registreringer?",
+      "confirmBulkUnlock": "Lås {count} registreringer op?",
+      "bulkSuccess": "{count} registreringer opdateret",
+      "bulkDeleteSuccess": "{count} registreringer slettet",
+      "bulkPartial": "{processed} opdateret, {skipped} sprunget over (låst)",
+      "tooManyDetections": "For mange registreringer ({count}). Indsnævr dine filtre for at vælge færre end 500.",
+      "bulkError": "Massehandling mislykkedes. Prøv igen.",
+      "switchToTable": "Skift til tabelvisning for at vælge registreringer"
+    },
     "weather": {
       "title": "Vejrinformation",
       "noData": "Ingen vejrdata",
@@ -816,25 +855,55 @@
         "pressure": "hPa"
       },
       "conditions": {
-        "clearsky_day": "Klar himmel",
-        "clearsky_night": "Klar himmel",
-        "fair_day": "Pænt vejr",
-        "fair_night": "Pænt vejr",
-        "partlycloudy_day": "Delvist skyet",
-        "partlycloudy_night": "Delvist skyet",
+        "clearsky": "Klar himmel",
         "cloudy": "Overskyet",
-        "rainshowers_day": "Regnbyger",
-        "rainshowers_night": "Regnbyger",
-        "rain": "Regn",
-        "thunder": "Tordenvejr",
-        "sleet": "Slud",
-        "snow": "Sne",
+        "fair": "Pænt vejr",
         "fog": "Tåge",
+        "heavyrain": "Kraftig regn",
+        "heavyrainandthunder": "Kraftig regn og torden",
+        "heavyrainshowers": "Kraftige regnbyger",
+        "heavyrainshowersandthunder": "Kraftige regnbyger og torden",
+        "heavysleet": "Kraftig slud",
+        "heavysleetandthunder": "Kraftig slud og torden",
+        "heavysleetshowers": "Kraftige sludbyger",
+        "heavysleetshowersandthunder": "Kraftige sludbyger og torden",
+        "heavysnow": "Kraftig sne",
+        "heavysnowandthunder": "Kraftig sne og torden",
+        "heavysnowshowers": "Kraftige snebyger",
+        "heavysnowshowersandthunder": "Kraftige snebyger og torden",
+        "lightrain": "Let regn",
+        "lightrainandthunder": "Let regn og torden",
+        "lightrainshowers": "Lette regnbyger",
+        "lightrainshowersandthunder": "Lette regnbyger og torden",
+        "lightsleet": "Let slud",
+        "lightsleetandthunder": "Let slud og torden",
+        "lightsleetshowers": "Lette sludbyger",
+        "lightsnow": "Let sne",
+        "lightsnowandthunder": "Let sne og torden",
+        "lightsnowshowers": "Lette snebyger",
+        "lightssleetshowersandthunder": "Lette sludbyger og torden",
+        "lightssnowshowersandthunder": "Lette snebyger og torden",
+        "partlycloudy": "Delvist skyet",
+        "rain": "Regn",
+        "rainandthunder": "Regn og torden",
+        "rainshowers": "Regnbyger",
+        "rainshowersandthunder": "Regnbyger og torden",
+        "sleet": "Slud",
+        "sleetandthunder": "Slud og torden",
+        "sleetshowers": "Sludbyger",
+        "sleetshowersandthunder": "Sludbyger og torden",
+        "snow": "Sne",
+        "snowandthunder": "Sne og torden",
+        "snowshowers": "Snebyger",
+        "snowshowersandthunder": "Snebyger og torden",
+        "thunder": "Tordenvejr",
         "unknown": "Ukendt"
       }
     },
     "row": {
-      "viewDetails": "Vis detaljer for {species}"
+      "viewDetails": "Vis detaljer for {species}",
+      "play": "Afspil",
+      "playAudio": "Afspil lyd"
     },
     "media": {
       "title": "Optagelse og spektrogram",
@@ -867,7 +936,10 @@
     "aria": {
       "loading": "Indlæser registreringsdetaljer...",
       "loaded": "Registreringsdetaljer indlæst for {species}",
-      "error": "Fejl ved indlæsning af registrering: {error}"
+      "error": "Fejl ved indlæsning af registrering: {error}",
+      "loadingResults": "Indlæser {count} resultater...",
+      "thumbnailLoading": "Indlæser {species} miniaturebillede...",
+      "thumbnailLoaded": "Miniaturebillede af {species} indlæst"
     },
     "errors": {
       "notFound": "Registrering ikke fundet. Den kan være blevet slettet, eller ID'et er forkert.",
@@ -1636,6 +1708,7 @@
     "title": "Indstillinger - BirdNET-Go",
     "loading": "Indlæser indstillinger...",
     "sections": {
+      "analysis": "Analyse",
       "node": "Generelt",
       "userinterface": "Grænseflade",
       "audio": "Lyd",
@@ -1747,7 +1820,17 @@
           },
           "hardwareNote": "Streng og Maksimum niveauer kræver højere overlapindstillinger og flere CPU-ressourcer. RPi 4 eller bedre hardware er påkrævet til disse niveauer.",
           "overlapAdjusted": "Overlapindstilling automatisk justeret til {overlap}s for at opfylde filterkravene",
-          "overlapReduced": "Overlapindstilling reduceret til {overlap}s for at matche filterniveauet"
+          "overlapReduced": "Overlapindstilling reduceret til {overlap}s for at matche filterniveauet",
+          "levelNames": {
+            "off": "Fra",
+            "lenient": "Mild",
+            "moderate": "Moderat",
+            "balanced": "Balanceret",
+            "strict": "Streng",
+            "maximum": "Maksimum",
+            "unknown": "Ukendt"
+          },
+          "warningOff": "Uden filtrering accepteres enhver registrering over konfidenstærsklen med det samme. Dette giver typisk flere falske positiver om dagen. Selv mild filtrering forbedrer resultatkvaliteten markant."
         },
         "rangeFilter": {
           "title": "Områdefilter",
@@ -2381,8 +2464,11 @@
             "name": "Gotify",
             "server": {
               "label": "Server-URL",
-              "placeholder": "gotify.example.com",
-              "helpText": "Dit Gotify-serverværtsnavn (uden https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Dit Gotify-servernavn og port"
+            },
+            "protocol": {
+              "label": "Protokol"
             },
             "token": {
               "label": "Applikationstoken",
@@ -2796,6 +2882,10 @@
           "refresh": "Opdater enheder"
         }
       },
+      "noSources": {
+        "warning": "Ingen lydkilder konfigureret",
+        "description": "BirdNET-Go har brug for en lydindgang for at registrere fugle. Konfigurer venligst mindst én kilde under fanen Lydkort eller Strømme."
+      },
       "soundCards": {
         "summary": "{count} lydkortkilde(r)",
         "addSource": "Tilføj lydkort",
@@ -2840,10 +2930,6 @@
           "recommendedSampleRate": "{rate}kHz anbefalet for bedste resultater",
           "atLeastOneModel": "Mindst én model skal vælges"
         }
-      },
-      "noSources": {
-        "warning": "Ingen lydkilder konfigureret",
-        "description": "BirdNET-Go har brug for en lydindgang for at registrere fugle. Konfigurer venligst mindst én kilde under fanen Lydkort eller Strømme."
       },
       "audioCapture": {
         "title": "Lydkortkonfiguration",
@@ -2906,6 +2992,7 @@
         "unknown": "ukendt",
         "refresh": "Opdater",
         "addStream": "Tilføj strøm",
+        "testRequired": "Kør en vellykket streamtest før du gemmer",
         "deleteConfirm": "Fjern denne strøm?",
         "restartCount": "Genstartet {count} gang(e)",
         "healthLoadError": "Kunne ikke indlæse strømmens sundhedsstatus",
@@ -2958,6 +3045,18 @@
           "degraded": "Forringet",
           "failed": "Fejlet",
           "unknown": "Ukendt"
+        },
+        "test": {
+          "button": "Test stream",
+          "probing": "Tester...",
+          "result": "Testresultat",
+          "error": "Test mislykkedes",
+          "batCompatible": "Kompatibel med flagermus",
+          "batIncompatible": "Ikke kompatibel med flagermus"
+        },
+        "batWarning": "Flagermusmodeller kræver streams med en tabsfri codec (PCM) og en samplerate på mindst 96 kHz. Brug knappen Test stream ovenfor for at verificere kompatibilitet.",
+        "codecWarning": {
+          "lossy": "Tabsgivende codecs (AAC, Opus, MP3) ødelægger ultralydsfrekvenser over ~20 kHz, hvilket gør streamen uegnet til detektering af flagermus."
         }
       },
       "audioFilters": {
@@ -3133,6 +3232,10 @@
         "devicesLoadFailed": "Kunne ikke indlæse lydenheder. Kontroller venligst systemtilladelserne.",
         "invalidBitrate": "Ugyldig bitrateværdi",
         "invalidRetentionPolicy": "Ugyldig opbevaringspolitik"
+      },
+      "models": {
+        "recommendBoth": "For bedste artsdækning anbefales det at køre både BirdNET og Perch sammen.",
+        "perchOnlyWarning": "Perch alene producerer færre detektioner. Sænk konfidenstærsklen til 0.50 for meningsfulde resultater, eller aktiver BirdNET ved siden af for bedste dækning."
       }
     },
     "security": {
@@ -4018,13 +4121,13 @@
     "labels": {
       "showPassword": "Vis adgangskode",
       "hidePassword": "Skjul adgangskode",
-      "copyToClipboard": "Kopiér til udklipsholder",
-      "clearSelection": "Ryd valg",
-      "selectOption": "Vælg en mulighed",
       "secretSet": "Indstillet",
       "changeSecret": "Skift",
       "cancelChange": "Annuller",
-      "enterNewSecret": "Indtast ny værdi"
+      "enterNewSecret": "Indtast ny værdi",
+      "copyToClipboard": "Kopiér til udklipsholder",
+      "clearSelection": "Ryd valg",
+      "selectOption": "Vælg en mulighed"
     },
     "help": {
       "passwordStrength": "Adgangskodestyrke: {strength}",
@@ -4108,7 +4211,31 @@
       "playbackSpeed": "Afspilningshastighed",
       "speed": "Hastighed",
       "loop": "Skift gentag",
-      "player": "Lydafspiller"
+      "player": "Lydafspiller",
+      "autoplayBlocked": "Klik for at afspille (autoplay blokeret)",
+      "hlsNotSupported": "HLS-afspilning understøttes ikke i denne browser",
+      "streamStarting": "Starter lydstrøm...",
+      "levelFor": "Lydniveau for {source}",
+      "levelForNoSource": "Lydniveau: ingen kilde",
+      "noSource": "Ingen kilde",
+      "levelAnnouncement": "Aktuelt lydniveau: {level} procent",
+      "levelAnnouncementClipping": "Aktuelt lydniveau: {level} procent, klipning registreret",
+      "sourceSelection": "Valg af lydkilde",
+      "sources": "Lydkilder",
+      "noSourcesAvailable": "Ingen lydkilder tilgængelige",
+      "silent": "(stille)",
+      "stopPlayback": "Stop lydafspilning",
+      "startPlayback": "Start lydafspilning",
+      "nowPlaying": "Afspiller nu lyd fra {source}",
+      "nowPlayingNoSource": "Afspiller lyd",
+      "playbackStopped": "Lydafspilning stoppet",
+      "loginRequired": "Login påkrævet for at streame lyd",
+      "streamError": "Fejl ved start af strøm",
+      "streamTitle": "Fuglelydstrøm - {source}",
+      "streamTitleDefault": "Fuglelydstrøm",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Live stream",
+      "playbackError": "Afspilningsfejl: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram er endnu ikke genereret",
@@ -4125,11 +4252,11 @@
       "spectrogramLoading": "Indlæser spektrogram...",
       "spectrogramLoaded": "Spektrogram indlæst",
       "spectrogramLoadingAria": "Indlæser spektrogram",
+      "spectrogramAlt": "Lydspektrogram",
       "spectrogramGeneratingAria": "Genererer spektrogram",
       "generating": "Genererer...",
       "queuePosition": "Kø: {position}",
-      "loadError": "Kunne ikke indlæse lyd",
-      "spectrogramAlt": "Lydspektrogram"
+      "loadError": "Kunne ikke indlæse lyd"
     },
     "forms": {
       "numberField": {
@@ -4334,6 +4461,16 @@
       "invalidHost": "Ugyldig host-parameter",
       "rateLimit": "For mange forsøg på at oprette notifikationsstrøm, vent venligst før du prøver igen"
     },
+    "streams": {
+      "test": {
+        "invalidBody": "Ugyldig forespørgselstekst",
+        "urlRequired": "Stream-URL er påkrævet",
+        "invalidUrl": "Ugyldigt URL-format. Indtast en fuld URL som rtsp://host:port/sti",
+        "unsupportedScheme": "Ikke-understøttet URL-skema \"{scheme}\". Brug rtsp, rtsps, http, https, rtmp eller udp",
+        "blockedDestination": "Denne destination er blokeret af sikkerhedsmæssige årsager",
+        "connectionFailed": "Kunne ikke oprette forbindelse til streamen. Kontrollér, at URL'en er korrekt, og at streamen er tilgængelig"
+      }
+    },
     "debug": {
       "notEnabled": "Fejlretningstilstand er ikke aktiveret"
     },
@@ -4467,6 +4604,154 @@
       }
     }
   },
+  "analysis": {
+    "title": "Analyse",
+    "tabs": {
+      "settings": "Indstillinger",
+      "models": "Modeller"
+    },
+    "detection": {
+      "title": "Detektionsindstillinger",
+      "description": "Konfigurer tærskler for konfidens og sprog til artsklassificering.",
+      "confidenceThreshold": {
+        "label": "Confidence Threshold",
+        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+      },
+      "batThreshold": {
+        "label": "Flagermus-detekteringsgrænse",
+        "helpText": "Minimum konfidensscore for flagermusartsdetektioner. Gælder kun for flagermusklassificeringsmodeller."
+      },
+      "batFilter": {
+        "label": "Flagermus-audio-højpasfilter",
+        "helpText": "Filtrerer hørbare frekvenser fra før flagermusanalysen for at reducere falske positiver fra fuglesang og omgivende støj."
+      },
+      "batNighttimeOnly": {
+        "label": "Kun om natten",
+        "helpText": "Når aktiveret kører flagermusdetektering kun mellem borgerlig tusmørke og borgerlig daggry. Kræver at placering er konfigureret. Deaktiver for at køre flagermusdetektering hele dagen."
+      },
+      "batUltrasonicFilter": {
+        "label": "Validering efter detektion",
+        "helpText": "Når aktiveret, valideres flagermusdetektioner ved at analysere ultralydsmønstre i kildeoptagelsen. Detektioner uden typiske flagermus-ekkolokationskarakteristika markeres som usandsynlige."
+      },
+      "batFalsePositiveFilter": {
+        "label": "Flagermus falsk-positiv filter",
+        "helpText": "Kræver flere bekræftelser af en flagermusdetektion inden for et glidende vindue, før den accepteres. Højere niveauer kræver flere bekræftelser, hvilket reducerer falske positiver. Flagermusmodellen bruger et fast 50% overlap, så ingen overlapjustering er nødvendig.",
+        "levels": {
+          "off": "Ingen filtrering; accepterer enhver flagermusregistrering med det samme.",
+          "moderate": "God balance for de fleste opsætninger. Reducerer falske positiver markant.",
+          "strict": "Maksimal filtrering for højeste nøjagtighed."
+        },
+        "detectionCount": "{count} bekræftelser krævet. {description}",
+        "warningOff": "Uden filtrering er der stor sandsynlighed for falske positiver. Aktivering af filtrering forbedrer nøjagtigheden markant."
+      },
+      "locale": {
+        "label": "Artssprog",
+        "helpText": "Sprog brugt til arternes almindelige navne i brugerfladen."
+      }
+    },
+    "rangeFilter": {
+      "birdOnlyNote": "Områdefilter gælder kun for fugleklassifikatorer. Flagermusmodeller bruger deres egne artslister.",
+      "status": {
+        "title": "Områdefilter oversigt",
+        "geomodelInfo": "BirdNET Geomodel {version} - {species} kendte arter",
+        "autoSelected": "Automatisk valgt",
+        "manual": "Manuel",
+        "classifier": "Klassifikator",
+        "totalSpecies": "Antal arter i alt",
+        "withRangeData": "Med områdedata",
+        "withoutRangeData": "Uden områdedata",
+        "withRangeDataTooltip": "Arter som geomodellen kan evaluere for geografisk sandsynlighed på din placering",
+        "withoutRangeDataTooltip": "Arter uden geografiske data i geomodellen, håndteret af indstillingen for ikke-kortlagte arter nedenfor",
+        "noFilter": "Intet områdefilter aktivt",
+        "passUnmapped": {
+          "label": "Tillad arter uden områdedata",
+          "helpText": "Tillad detektioner af arter, som geomodellen ikke har geografiske data for. Når deaktiveret, filtreres disse arter altid fra."
+        }
+      }
+    },
+    "advanced": {
+      "title": "Avanceret",
+      "description": "Behandling og brugerdefineret modelkonfiguration."
+    },
+    "gallery": {
+      "title": "Modelgalleri",
+      "description": "Administrer klassifikatormodeller til fugle- og flagermusdetektion.",
+      "tabs": {
+        "installed": "Installerede",
+        "available": "Tilgængelige"
+      },
+      "loading": "Indlæser modeller...",
+      "retry": "Prøv igen",
+      "builtIn": "Indbygget",
+      "builtInDescription": "Indbygget fuglearts-klassifikator fra BirdNET-teamet.",
+      "species": "{count} arter",
+      "install": "Installer",
+      "installing": "Installerer...",
+      "remove": "Fjern",
+      "removing": "Fjerner...",
+      "noInstalledModels": "Ingen yderligere modeller installeret. Gennemse fanen Tilgængelige for at tilføje flere klassifikatorer.",
+      "noAvailableModels": "Ingen yderligere modeller tilgængelige til din platform.",
+      "sections": {
+        "acoustic": "Akustiske klassifikatorer",
+        "geomodel": "Geomodeller"
+      },
+      "categories": {
+        "wildlife": "Vildtklassifikatorer",
+        "bird": "Fugleklassifikatorer",
+        "bat": "Flagermusklassifikatorer"
+      },
+      "progress": {
+        "downloading": "Downloader...",
+        "verifying": "Verificerer...",
+        "loading": "Indlæser...",
+        "complete": "Installeret succesfuldt",
+        "failed": "Fejlet"
+      },
+      "license": {
+        "title": "Licensaftale",
+        "model": "Model",
+        "author": "Forfatter",
+        "license": "Licens",
+        "commercialUse": "Kommerciel brug",
+        "downloadSize": "Downloadstørrelse",
+        "allowed": "Tilladt",
+        "notAllowed": "Ikke tilladt",
+        "commercialUseAllowed": "Kommerciel brug tilladt",
+        "nonCommercialOnly": "Kun ikke-kommerciel brug",
+        "nonCommercialWarning": "Denne model er licenseret kun til ikke-kommerciel brug. Ved at installere accepterer du at overholde licensbetingelserne.",
+        "acceptAndInstall": "Accepter og installer"
+      },
+      "removeDialog": {
+        "title": "Fjern {name}?",
+        "confirmation": "Dette vil fjerne modelfilerne fra disken. Labeldata bevares for eksisterende detektioner."
+      },
+      "errors": {
+        "catalogLoadFailed": "Kunne ikke indlæse modelkatalog",
+        "installFailed": "Kunne ikke starte modelinstallation",
+        "removeFailed": "Kunne ikke fjerne model"
+      },
+      "regionLabel": "Region",
+      "speciesLabel": "Arter",
+      "reinstall": "Geninstaller",
+      "reinstalling": "Geninstallerer...",
+      "reinstallComplete": "Filer verificeret succesfuldt",
+      "geomodelBadge": "Inkluderer BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Kræver ONNX Runtime, som ikke er tilgængelig på dette system.",
+      "onnxRuntimeMissing": "ONNX Runtime er ikke tilgængelig. Denne model kan ikke køre.",
+      "unavailable": "Ikke tilgængelig"
+    },
+    "bird": {
+      "title": "Fugleregistrering",
+      "description": "Konfigurer konfidenstærskel, artssprog og filtrering af falske positiver for fugleklassifikatorer."
+    },
+    "bat": {
+      "title": "Flagermusregistrering",
+      "description": "Konfigurer tærskel, planlægning og filtrering af falske positiver for flagermusklassifikatorer."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "Dynamisk tærskel gælder kun for fugleklassifikatorer."
+    }
+  },
   "restart": {
     "applicationRestart": "Genstart applikation",
     "containerRestart": "Genstart container",
@@ -4478,5 +4763,147 @@
     "bannerMessage": "Konfigurationsændringer kræver en genstart:",
     "bannerAction": "Genstart nu",
     "restartFailed": "Kunne ikke starte genstart"
+  },
+  "help": {
+    "title": "Hjælp og support",
+    "subtitle": "Få hjælp, rapportér problemer og forbind med fællesskabet",
+    "reportBug": {
+      "description": "Hvis du støder på et problem, åbn en fejlrapport på GitHub for at beskrive problemet, og generer derefter en supportpakke med sagsnummeret for at hjælpe med fejlfinding."
+    },
+    "askQuestion": {
+      "description": "Har du et spørgsmål om opsætning, funktioner eller brug? GitHub Discussions er det bedste sted at få hjælp fra fællesskabet."
+    },
+    "diagnostics": {
+      "description": "Generér en supportpakke for at hjælpe med fejlfinding. Den indfanger din systemkonfiguration og seneste logfiler."
+    },
+    "quickLinks": {
+      "title": "Hurtige links",
+      "releases": "Udgivelsesnoter"
+    }
+  },
+  "reportBug": {
+    "title": "Rapportér fejl",
+    "subtitle": "Hjælp os med at løse problemer ved at give de nødvendige oplysninger",
+    "systemInfo": {
+      "title": "Dine systemoplysninger",
+      "description": "Disse oplysninger hjælper med at identificere din opsætning. Kopiér dem til din fejlrapport.",
+      "version": "Version",
+      "buildDate": "Byggedato",
+      "os": "Operativsystem",
+      "copy": "Kopiér til udklipsholder",
+      "copied": "Kopieret!",
+      "architecture": "Arkitektur",
+      "hardware": "Hardware",
+      "environment": "Miljø"
+    },
+    "whatToInclude": {
+      "title": "Hvad din rapport skal indeholde",
+      "description": "En god fejlrapport hjælper os med at løse dit problem hurtigt. Inkludér venligst følgende:",
+      "step1": {
+        "title": "Klar beskrivelse af problemet",
+        "description": "Hvad der skete, hvad du forventede, og hvordan problemet kan genskabes."
+      },
+      "step2": {
+        "title": "Din installationsmetode",
+        "description": "Hvordan du installerede BirdNET-Go: install.sh-script, Docker Compose, manuel bygning eller andet."
+      },
+      "step3": {
+        "title": "Systemoplysninger",
+        "description": "Kopiér systemdetaljerne vist ovenfor, herunder version, OS og byggedato."
+      },
+      "step4": {
+        "title": "Supportpakke",
+        "description": "Generér og upload en supportpakke nedenfor. Den indfanger logfiler og konfiguration, der markant fremskynder fejlfinding."
+      }
+    },
+    "openIssue": {
+      "title": "Åbn en GitHub-sag",
+      "description": "Åbn en sag på GitHub for at beskrive problemet. Du skal bruge sagsnummeret i næste trin.",
+      "button": "Åbn sag på GitHub"
+    },
+    "supportDump": {
+      "title": "Generér supportpakke",
+      "description": "Efter oprettelse af din sag, generer en supportpakke og indtast GitHub-sagsnummeret. Dette kobler din diagnostik til fejlrapporten og hjælper med fejlfinding."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "refresh": "Opdater",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "metricFooter": {
+      "allPassing": "Alt OK",
+      "needsAttention": "Kræver opmærksomhed",
+      "failing": "Fejler",
+      "allClear": "Alt klart",
+      "noData": "Ingen data",
+      "none": "Ingen"
+    },
+    "diagnostics": "Diagnostik",
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Hyppigste fejl",
+      "errorCount": "Antal",
+      "errorComponent": "Komponent",
+      "errorLevel": "Niveau",
+      "errorMessage": "Besked"
+    },
+    "window": {
+      "label": "Evalueringsvindue",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Seneste hændelse",
+      "recentEvents": "Seneste hændelser",
+      "time": "Tid",
+      "source": "Kilde",
+      "count": "Antal",
+      "lifetime": "i alt",
+      "sparklineLabel": "Aktivitetsgraf"
+    }
   }
 }

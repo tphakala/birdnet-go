@@ -799,9 +799,29 @@ func (s *testLegacyInterface) GetNotificationHistory(_, _ string) (*datastore.No
 func (s *testLegacyInterface) DeleteExpiredNotificationHistory(_ time.Time) (int64, error) {
 	return 0, nil
 }
-func (s *testLegacyInterface) SchemaVersion() string                               { return datastore.SchemaVersionLegacy }
-func (s *testLegacyInterface) UpdateNameMaps(_ []string)                           {}
-func (s *testLegacyInterface) GetDatabaseStats() (*datastore.DatabaseStats, error) { return nil, nil } //nolint:nilnil // stub
+func (s *testLegacyInterface) SchemaVersion() string     { return datastore.SchemaVersionLegacy }
+func (s *testLegacyInterface) UpdateNameMaps(_ []string) {}
+func (s *testLegacyInterface) GetDatabaseStats(_ context.Context) (*datastore.DatabaseStats, error) {
+	return nil, nil //nolint:nilnil // stub
+}
+func (s *testLegacyInterface) PingWithLatency(_ context.Context) (time.Duration, error) {
+	return 0, nil
+}
+func (s *testLegacyInterface) CountDetectionsSince(_ context.Context, _ time.Time) (int, error) {
+	return 0, nil
+}
+func (s *testLegacyInterface) SaveAppEvent(_ context.Context, _, _, _ string, _ map[string]any) error {
+	return nil
+}
+func (s *testLegacyInterface) GetRecentAppEvents(_ context.Context, _ int) ([]datastore.AppEvent, error) {
+	return nil, nil
+}
+func (s *testLegacyInterface) GetAppEventsSince(_ context.Context, _ time.Time, _ int) ([]datastore.AppEvent, error) {
+	return nil, nil
+}
+func (s *testLegacyInterface) PruneAppEvents(_ context.Context, _ int) (int64, error) {
+	return 0, nil
+}
 
 // Migration bulk fetch methods - query actual database for integration tests
 

@@ -65,14 +65,24 @@ func calculateWeek(date time.Time) float32 {
 
 // getBirdNETInstance returns the BirdNET instance or an error if unavailable.
 func (c *Controller) getBirdNETInstance() (*classifier.Orchestrator, error) {
-	if c.Processor == nil {
+	// Snapshot processor to avoid TOCTOU race
+	proc := c.Processor
+	if proc == nil {
 		return nil, fmt.Errorf("BirdNET processor not available")
 	}
-	instance := c.Processor.GetBirdNET()
+	instance := proc.GetBirdNET()
 	if instance == nil {
 		return nil, fmt.Errorf("BirdNET instance not available")
 	}
 	return instance, nil
+}
+
+// currentLocale returns the BirdNET locale from the current settings.
+func (c *Controller) currentLocale() string {
+	c.settingsMutex.RLock()
+	locale := conf.CurrentOrFallback(c.Settings).BirdNET.Locale
+	c.settingsMutex.RUnlock()
+	return locale
 }
 
 // buildTestSettings creates a settings snapshot with the given test coordinates
@@ -91,9 +101,22 @@ func (c *Controller) buildTestSettings(lat, lon float64, threshold float32) *con
 	return testSnapshot
 }
 
+// resolveLocalizedName returns a locale-appropriate common name for the given
+// species. It tries the name resolver first; if that returns empty it falls
+// back to the common name parsed from the label string.
+func resolveLocalizedName(resolver *classifier.Orchestrator, locale string, sp detection.Species) string {
+	if resolver != nil && locale != "" {
+		if resolved := resolver.ResolveName(sp.ScientificName, locale); resolved != "" {
+			return resolved
+		}
+	}
+	return sp.CommonName
+}
+
 // convertSpeciesScores converts classifier.SpeciesScore entries to the API
-// response format with probability score pointers.
-func convertSpeciesScores(scores []classifier.SpeciesScore) []RangeFilterSpecies {
+// response format with probability score pointers. When resolver and locale
+// are provided, common names are resolved to the user's locale.
+func convertSpeciesScores(scores []classifier.SpeciesScore, resolver *classifier.Orchestrator, locale string) []RangeFilterSpecies {
 	species := make([]RangeFilterSpecies, 0, len(scores))
 	for _, s := range scores {
 		sp := detection.ParseSpeciesString(s.Label)
@@ -101,7 +124,7 @@ func convertSpeciesScores(scores []classifier.SpeciesScore) []RangeFilterSpecies
 		species = append(species, RangeFilterSpecies{
 			Label:          s.Label,
 			ScientificName: sp.ScientificName,
-			CommonName:     sp.CommonName,
+			CommonName:     resolveLocalizedName(resolver, locale, sp),
 			Score:          &score,
 		})
 	}
@@ -109,14 +132,16 @@ func convertSpeciesScores(scores []classifier.SpeciesScore) []RangeFilterSpecies
 }
 
 // convertLabels converts string labels to the API response format without scores.
-func convertLabels(labels []string) []RangeFilterSpecies {
+// When resolver and locale are provided, common names are resolved to the
+// user's locale.
+func convertLabels(labels []string, resolver *classifier.Orchestrator, locale string) []RangeFilterSpecies {
 	species := make([]RangeFilterSpecies, 0, len(labels))
 	for _, label := range labels {
 		sp := detection.ParseSpeciesString(label)
 		species = append(species, RangeFilterSpecies{
 			Label:          label,
 			ScientificName: sp.ScientificName,
-			CommonName:     sp.CommonName,
+			CommonName:     resolveLocalizedName(resolver, locale, sp),
 		})
 	}
 	return species
@@ -213,10 +238,10 @@ func (c *Controller) initRangeRoutes() {
 
 // GetRangeFilterStatus returns introspection data about the active range filter
 // @Summary Get range filter status
-// @Description Returns the active geomodel, mapping statistics, auto-selection status, and threshold
+// @Description Returns per-classifier geomodel coverage, auto-selection status, and threshold
 // @Tags range
 // @Produce json
-// @Success 200 {object} classifier.RangeFilterStatusInfo
+// @Success 200 {object} classifier.RangeFilterStatusResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/status [get]
 func (c *Controller) GetRangeFilterStatus(ctx echo.Context) error {
@@ -252,6 +277,7 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 	settings := conf.CurrentOrFallback(c.Settings)
 	lat := settings.BirdNET.Latitude
 	lon := settings.BirdNET.Longitude
+	locale := settings.BirdNET.Locale
 	c.settingsMutex.RUnlock()
 
 	// Override with query params if provided
@@ -301,7 +327,7 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get species scores", http.StatusInternalServerError)
 	}
 
-	speciesList := convertSpeciesScores(speciesScores)
+	speciesList := convertSpeciesScores(speciesScores, birdnetInstance, locale)
 
 	response := RangeFilterScoresResponse{
 		Species:   speciesList,
@@ -358,7 +384,9 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 	settings := conf.CurrentOrFallback(c.Settings)
 	c.settingsMutex.RUnlock()
 	includedSpecies := settings.GetIncludedSpecies()
-	speciesList := convertLabels(includedSpecies)
+
+	birdnetInstance, _ := c.getBirdNETInstance()
+	speciesList := convertLabels(includedSpecies, birdnetInstance, settings.BirdNET.Locale)
 
 	// Extract taxonomy groups from species list via taxonomy DB
 	var genera []string
@@ -482,12 +510,12 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 	}
 
 	// Get probable species for the test parameters
-	speciesScores, err := birdnetInstance.GetProbableSpeciesWithSettings(testDate, week, testSettings)
+	speciesScores, err := birdnetInstance.GetAllProbableSpeciesWithSettings(testDate, week, testSettings)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get probable species", http.StatusInternalServerError)
 	}
 
-	speciesList := convertSpeciesScores(speciesScores)
+	speciesList := convertSpeciesScores(speciesScores, birdnetInstance, c.currentLocale())
 
 	response := RangeFilterTestResponse{
 		Species:   speciesList,
@@ -592,7 +620,8 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		settings := conf.CurrentOrFallback(c.Settings)
 		c.settingsMutex.RUnlock()
 
-		speciesList = convertLabels(settings.GetIncludedSpecies())
+		birdnetInstance, _ := c.getBirdNETInstance()
+		speciesList = convertLabels(settings.GetIncludedSpecies(), birdnetInstance, settings.BirdNET.Locale)
 		location = Location{
 			Latitude:  settings.BirdNET.Latitude,
 			Longitude: settings.BirdNET.Longitude,
@@ -641,7 +670,7 @@ func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilt
 		return nil, Location{}, 0, err
 	}
 
-	speciesList := convertSpeciesScores(speciesScores)
+	speciesList := convertSpeciesScores(speciesScores, birdnetInstance, c.currentLocale())
 
 	location := Location{
 		Latitude:  req.Latitude,
@@ -750,7 +779,7 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
 
-	// Rebuild the range filter
+	// Rebuild the range filter (triggers heatmap cache invalidation via callback)
 	err = classifier.BuildRangeFilter(birdnetInstance)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to rebuild range filter", http.StatusInternalServerError)
@@ -758,7 +787,9 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 
 	// Read from the latest published snapshot so the just-published rebuild
 	// result is reflected immediately.
+	c.settingsMutex.RLock()
 	settings := conf.CurrentOrFallback(c.Settings)
+	c.settingsMutex.RUnlock()
 	includedSpecies := settings.GetIncludedSpecies()
 	lastUpdated := settings.BirdNET.RangeFilter.LastUpdated
 

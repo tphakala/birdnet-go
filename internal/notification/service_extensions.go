@@ -52,16 +52,18 @@ func (s *Service) CreateWithMetadata(notification *Notification) error {
 			logger.Int("metadata_keys", len(notification.Metadata)))
 	}
 
-	// Save to store
-	if err := s.store.Save(notification); err != nil {
-		return errors.New(err).
-			Component("notification").
-			Category(errors.CategorySystem).
-			Context("operation", "save_notification").
-			Build()
+	// Save to store unless targeted only at push providers
+	if notification.DeliveryTarget != DeliveryTargetPush {
+		if err := s.store.Save(notification); err != nil {
+			return errors.New(err).
+				Component("notification").
+				Category(errors.CategorySystem).
+				Context("operation", "save_notification").
+				Build()
+		}
 	}
 
-	// Broadcast to subscribers
+	// Always broadcast so push dispatcher can receive push-targeted notifications
 	s.broadcast(notification)
 
 	if s.config.Debug {

@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -55,6 +56,15 @@ type Manager interface {
 	Exists() bool
 	// IsMySQL returns true if this is a MySQL manager.
 	IsMySQL() bool
+	// TablePrefix returns the prefix applied to every v2 table name. It is
+	// non-empty (currently "v2_") only on MySQL deployments that are still
+	// in the v1→v2 migration window — there, v2 tables coexist alongside
+	// the legacy v1 schema and need the prefix to avoid name collisions.
+	// On SQLite, on fresh-install MySQL, and on any future cutover where
+	// the prefix is dropped, this returns "". Code that builds raw-SQL
+	// table references MUST consult this to stay correct under all three
+	// deployment modes.
+	TablePrefix() string
 }
 
 // Config holds database configuration for the v2 manager.
@@ -110,6 +120,66 @@ func reportInitFailure(dbType, operation string, err error, paths ...string) {
 
 		telemetry.CaptureMessage(
 			fmt.Sprintf("Schema initialization failed: %s (%s)", operation, dbType),
+			sentry.LevelError,
+			"datastore-init",
+		)
+	})
+}
+
+// reportSchemaEvolution reports extra columns from schema evolution to Sentry telemetry.
+// These are harmless leftovers from earlier entity versions that GORM never drops.
+func reportSchemaEvolution(dbType, tableName string, unexpected []string, rowCount int64) {
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", "datastore-init")
+		scope.SetTag("db_type", dbType)
+		scope.SetTag("operation", "schema_evolution_detected")
+		scope.SetTag("table", tableName)
+		scope.SetFingerprint([]string{"schema-evolution", tableName})
+		scope.SetContext("schema_evolution", map[string]any{
+			"table":              tableName,
+			"unexpected_columns": unexpected,
+			"row_count":          rowCount,
+		})
+		telemetry.CaptureMessage(
+			fmt.Sprintf("Schema evolution: table %s has %d extra column(s)", tableName, len(unexpected)),
+			sentry.LevelWarning,
+			"datastore-init",
+		)
+	})
+}
+
+// reportMissingColumns reports columns AutoMigrate failed to add. Distinct fingerprint
+// from extra-column reports so the two failure modes group separately in Sentry.
+func reportMissingColumns(dbType string, missing []missingColumnsEntry) {
+	if len(missing) == 0 {
+		return
+	}
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", "datastore-init")
+		scope.SetTag("db_type", dbType)
+		scope.SetTag("operation", "missing_columns_detected")
+		scope.SetFingerprint([]string{"missing-columns", dbType})
+
+		detail := make([]map[string]any, 0, len(missing))
+		tables := make([]string, 0, len(missing))
+		totalCols := 0
+		for _, m := range missing {
+			tables = append(tables, m.table)
+			totalCols += len(m.columns)
+			detail = append(detail, map[string]any{
+				"table":           m.table,
+				"missing_columns": m.columns,
+			})
+		}
+		scope.SetContext("missing_columns", map[string]any{
+			"tables":        tables,
+			"per_table":     detail,
+			"total_missing": totalCols,
+		})
+
+		telemetry.CaptureMessage(
+			fmt.Sprintf("Schema corruption: AutoMigrate did not add %d column(s) across %d table(s)",
+				totalCols, len(missing)),
 			sentry.LevelError,
 			"datastore-init",
 		)
@@ -228,6 +298,8 @@ func v2Entities() []any {
 		&entities.AlertHistory{},
 		// Application metadata
 		&entities.AppMetadata{},
+		// Application event log
+		&entities.AppEvent{},
 	}
 }
 
@@ -249,18 +321,20 @@ func (m *SQLiteManager) Initialize() error {
 		}
 	}
 
-	// Validate schema integrity: detect unexpected columns from legacy contamination.
-	// Empty contaminated tables are dropped so AutoMigrate can recreate them cleanly.
-	// Populated contaminated tables return ErrV2SchemaCorrupted for manual intervention.
-	if err := m.validateV2SchemaIntegrity(); err != nil {
-		return fmt.Errorf("v2 schema integrity check failed: %w", err)
-	}
-
 	// Run GORM auto-migrations for all entities
 	err := m.db.AutoMigrate(v2Entities()...)
 	if err != nil {
 		reportInitFailure("sqlite", "AutoMigrate", err, m.dbPath)
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)
+	}
+
+	// Validate schema integrity AFTER AutoMigrate so missing columns indicate a real
+	// silent failure (GitHub #3211: GORM AutoMigrate sometimes does not add
+	// newly-introduced columns to an existing table, breaking every subsequent INSERT).
+	// Extra columns from schema evolution remain tolerated; missing columns surface as
+	// ErrV2SchemaCorrupted so callers can stop and not fall back to legacy.
+	if err := m.validateV2SchemaIntegrity(); err != nil {
+		return fmt.Errorf("v2 schema integrity check failed: %w", err)
 	}
 
 	// Fix SQLite foreign key constraints that GORM's AutoMigrate may not handle correctly.
@@ -377,31 +451,107 @@ func (m *SQLiteManager) cleanupLegacySchemaContamination() error {
 					ErrV2SchemaCorrupted, c.table, c.column, rowCount)
 			}
 		}
+
+		events.Emit(context.Background(), "database", "schema_repair", "Legacy schema contamination cleaned", map[string]any{
+			"action": "drop_legacy_columns",
+			"table":  c.table,
+			"column": c.column,
+		})
 	}
 
 	return nil
 }
 
 // validateV2SchemaIntegrity checks all v2 tables for unexpected columns that
-// indicate legacy schema contamination. For each table:
+// indicate legacy schema contamination or schema evolution leftovers. For each table:
 //   - If the table doesn't exist yet, skip (AutoMigrate will create it).
 //   - If unexpected columns are found and the table is empty, drop it so
 //     AutoMigrate can recreate it with the correct schema.
-//   - If unexpected columns are found and the table has data, return
-//     ErrV2SchemaCorrupted so the caller can trigger self-healing or notify the user.
-func (m *SQLiteManager) validateV2SchemaIntegrity() error {
-	migrator := m.db.Migrator()
+//   - If unexpected columns are found and the table has data, log a warning
+//     but continue. Extra columns are harmless: GORM ignores them when querying.
+//     This prevents the cascade failure from Discussion #3210 where users upgrading
+//     from older builds were blocked by columns that existed in earlier entity versions.
+//
+// columnLister returns the actual column names for a given table.
+type columnLister func(db *gorm.DB, tableName string) ([]string, error)
+
+// sqliteColumnLister queries SQLite pragma_table_info for column names.
+func sqliteColumnLister(db *gorm.DB, tableName string) ([]string, error) {
+	type pragmaCol struct {
+		Name string
+	}
+	var cols []pragmaCol
+	if err := db.Raw("SELECT name FROM pragma_table_info(?)", tableName).Scan(&cols).Error; err != nil {
+		return nil, err
+	}
+	names := make([]string, len(cols))
+	for i, c := range cols {
+		names[i] = c.Name
+	}
+	return names, nil
+}
+
+// mysqlColumnLister queries information_schema for column names.
+func mysqlColumnLister(db *gorm.DB, tableName string) ([]string, error) {
+	type colInfo struct {
+		ColumnName string `gorm:"column:COLUMN_NAME"`
+	}
+	var cols []colInfo
+	if err := db.Raw(
+		"SELECT COLUMN_NAME FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?",
+		tableName,
+	).Scan(&cols).Error; err != nil {
+		return nil, err
+	}
+	names := make([]string, len(cols))
+	for i, c := range cols {
+		names[i] = c.ColumnName
+	}
+	return names, nil
+}
+
+// missingColumnsEntry records the missing columns for a single table during validation.
+type missingColumnsEntry struct {
+	table   string
+	columns []string
+}
+
+// validateSchemaIntegrity checks all v2 tables for column drift in either direction.
+// It must run AFTER AutoMigrate; calling it before AutoMigrate on a database from an
+// older version would misreport pending schema additions as corruption.
+// For each table:
+//   - If the table doesn't exist, skip. Post-AutoMigrate this should be impossible
+//     on a healthy run, so the skip is defensive only; expected-but-missing tables
+//     surface elsewhere via AutoMigrate's own error reporting.
+//   - MISSING columns (expected by the entity but not present in the database)
+//     indicate AutoMigrate silently failed to apply the new schema. These are real
+//     corruption: GORM-generated INSERTs reference the column by name and will fail
+//     with "table has no column named X". All missing columns are accumulated and
+//     reported as ErrV2SchemaCorrupted so callers can surface the failure instead of
+//     silently falling back.
+//   - EXTRA columns (present in the database but not in the entity) are tolerated:
+//     GORM ignores them on read/write. Per the additive-only rule from PR #3222,
+//     extras are normal schema-evolution residue and must not block startup. Empty
+//     tables with extras are still dropped so a fresh AutoMigrate run can recreate
+//     them cleanly; populated tables are logged + reported to Sentry only.
+func validateSchemaIntegrity(db *gorm.DB, log logger.Logger, dbType string, listColumns columnLister) error {
+	migrator := db.Migrator()
+
+	var missing []missingColumnsEntry
 
 	for _, entity := range v2Entities() {
 		if !migrator.HasTable(entity) {
 			continue
 		}
 
-		// Parse the Go struct to get expected column names from GORM tags.
-		// This uses GORM's schema parser (not the database), so it reflects
-		// the Go entity definition — the source of truth.
-		stmt := &gorm.Statement{DB: m.db}
+		stmt := &gorm.Statement{DB: db}
 		if parseErr := stmt.Parse(entity); parseErr != nil {
+			if log != nil {
+				log.Warn("entity parse failed; cannot validate columns for this entity",
+					logger.String("entity_type", fmt.Sprintf("%T", entity)),
+					logger.Error(parseErr),
+					logger.String("operation", "validate_schema_integrity"))
+			}
 			continue
 		}
 		tableName := stmt.Schema.Table
@@ -411,33 +561,61 @@ func (m *SQLiteManager) validateV2SchemaIntegrity() error {
 			expectedNames[dbName] = true
 		}
 
-		// Get actual columns from SQLite pragma
-		type pragmaCol struct {
-			Name string
-		}
-		var actualCols []pragmaCol
-		if err := m.db.Raw("SELECT name FROM pragma_table_info(?)", tableName).Scan(&actualCols).Error; err != nil {
+		actualCols, err := listColumns(db, tableName)
+		if err != nil {
+			// Listing columns is the gatekeeper for missing-column detection. If it
+			// fails we cannot prove the schema is healthy, so log loudly so the
+			// failure shows up in support dumps instead of silently degrading the
+			// post-AutoMigrate guarantee. Continue rather than fail closed: a single
+			// transient SQLite/MySQL hiccup must not block startup.
+			if log != nil {
+				log.Warn("column listing failed; skipping schema validation for this table",
+					logger.String("table", tableName),
+					logger.Error(err),
+					logger.String("operation", "validate_schema_integrity"))
+			}
 			continue
 		}
 
-		// Find unexpected columns
-		var unexpected []string
-		for _, col := range actualCols {
-			if !expectedNames[col.Name] {
-				unexpected = append(unexpected, col.Name)
+		actualNames := make(map[string]bool, len(actualCols))
+		unexpected := make([]string, 0, len(actualCols))
+		for _, colName := range actualCols {
+			actualNames[colName] = true
+			if !expectedNames[colName] {
+				unexpected = append(unexpected, colName)
 			}
+		}
+
+		missingCols := make([]string, 0, len(stmt.Schema.DBNames))
+		for _, dbName := range stmt.Schema.DBNames {
+			if !actualNames[dbName] {
+				missingCols = append(missingCols, dbName)
+			}
+		}
+
+		if len(missingCols) > 0 {
+			missing = append(missing, missingColumnsEntry{table: tableName, columns: missingCols})
+			if log != nil {
+				log.Error("table is missing expected columns; GORM writes will fail",
+					logger.String("table", tableName),
+					logger.Any("missing_columns", missingCols),
+					logger.String("db_type", dbType),
+					logger.String("operation", "validate_schema_integrity"))
+			}
+			// Skip the extras-handling branch below: a table with missing columns
+			// must not be dropped or downgraded to a warning.
+			continue
 		}
 
 		if len(unexpected) == 0 {
 			continue
 		}
 
-		// Check if table is empty — must verify count before dropping to avoid data loss
+		// Check if table is empty before dropping to avoid data loss
 		var rowCount int64
-		if countErr := m.db.Raw("SELECT COUNT(*) FROM `" + tableName + "`").Scan(&rowCount).Error; countErr != nil {
-			// Cannot determine row count — skip this table rather than risk data loss
-			if m.log != nil {
-				m.log.Warn("skipping schema validation for table due to query error",
+		if countErr := db.Raw("SELECT COUNT(*) FROM `" + tableName + "`").Scan(&rowCount).Error; countErr != nil {
+			if log != nil {
+				log.Warn("skipping schema validation for table due to query error",
 					logger.String("table", tableName),
 					logger.Error(countErr),
 					logger.String("operation", "validate_schema_integrity"))
@@ -446,12 +624,12 @@ func (m *SQLiteManager) validateV2SchemaIntegrity() error {
 		}
 
 		if rowCount == 0 {
-			if dropErr := m.db.Exec("DROP TABLE IF EXISTS `" + tableName + "`").Error; dropErr != nil {
+			if dropErr := db.Exec("DROP TABLE IF EXISTS `" + tableName + "`").Error; dropErr != nil {
 				return fmt.Errorf("%w: failed to drop contaminated table %s: %w",
 					ErrV2SchemaCorrupted, tableName, dropErr)
 			}
-			if m.log != nil {
-				m.log.Info("dropped empty contaminated table for recreation",
+			if log != nil {
+				log.Info("dropped empty contaminated table for recreation",
 					logger.String("table", tableName),
 					logger.Any("unexpected_columns", unexpected),
 					logger.String("operation", "validate_schema_integrity"))
@@ -459,10 +637,40 @@ func (m *SQLiteManager) validateV2SchemaIntegrity() error {
 			continue
 		}
 
-		return fmt.Errorf("%w: table %s has unexpected columns %v (%d rows): manual cleanup required",
-			ErrV2SchemaCorrupted, tableName, unexpected, rowCount)
+		// Populated table with extra columns: warn but continue.
+		// Extra columns from schema evolution are harmless; GORM ignores them.
+		if log != nil {
+			log.Warn("table has extra columns from schema evolution, continuing",
+				logger.String("table", tableName),
+				logger.Any("unexpected_columns", unexpected),
+				logger.Int64("row_count", rowCount),
+				logger.String("operation", "validate_schema_integrity"))
+		}
+
+		reportSchemaEvolution(dbType, tableName, unexpected, rowCount)
+	}
+
+	if len(missing) > 0 {
+		reportMissingColumns(dbType, missing)
+		return fmt.Errorf("%w: %s", ErrV2SchemaCorrupted, formatMissingColumns(missing))
 	}
 	return nil
+}
+
+// formatMissingColumns renders accumulated missing-column entries into a deterministic
+// message suitable for logs and error chains. Tables and columns appear in input order
+// to keep the output stable when there is a single source of truth (v2Entities()).
+func formatMissingColumns(missing []missingColumnsEntry) string {
+	parts := make([]string, 0, len(missing))
+	for _, m := range missing {
+		parts = append(parts, fmt.Sprintf("%s missing columns [%s]", m.table, strings.Join(m.columns, ", ")))
+	}
+	return "AutoMigrate did not apply: " + strings.Join(parts, "; ")
+}
+
+// validateV2SchemaIntegrity delegates to the shared validation with SQLite column listing.
+func (m *SQLiteManager) validateV2SchemaIntegrity() error {
+	return validateSchemaIntegrity(m.db, m.log, "sqlite", sqliteColumnLister)
 }
 
 // fixSQLiteForeignKeys ensures ON DELETE SET NULL behavior for SQLite.

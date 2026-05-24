@@ -7,13 +7,14 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
+// DefaultRangeFilterThreshold is the minimum location score for a species to pass the range filter.
+const DefaultRangeFilterThreshold float32 = 0.03
+
 // RangeFilter uses the BirdNET meta model to filter species by geographic location and date.
 type RangeFilter struct {
-	session    *ort.DynamicAdvancedSession
-	labels     []string
-	threshold  float32
-	inputName  string
-	outputName string
+	session   *ort.DynamicAdvancedSession
+	labels    []string
+	threshold float32
 }
 
 // NewRangeFilter creates a new RangeFilter from a BirdNET meta model ONNX file.
@@ -22,7 +23,7 @@ func NewRangeFilter(modelPath string, opts ...RangeFilterOption) (*RangeFilter, 
 		return nil, ErrModelPathRequired
 	}
 
-	cfg := &rangeFilterConfig{threshold: 0.03}
+	cfg := &rangeFilterConfig{threshold: DefaultRangeFilterThreshold}
 	for _, opt := range opts {
 		opt(cfg)
 	}
@@ -83,11 +84,9 @@ func NewRangeFilter(modelPath string, opts ...RangeFilterOption) (*RangeFilter, 
 	}
 
 	return &RangeFilter{
-		session:    session,
-		labels:     labels,
-		threshold:  cfg.threshold,
-		inputName:  inputNames[0],
-		outputName: outputNames[0],
+		session:   session,
+		labels:    labels,
+		threshold: cfg.threshold,
 	}, nil
 }
 
@@ -96,44 +95,63 @@ func resolveRangeFilterLabels(cfg *rangeFilterConfig) ([]string, error) {
 		return cfg.labels, nil
 	}
 	if cfg.labelsPath != "" {
-		return loadLabels(cfg.labelsPath)
+		return LoadLabels(cfg.labelsPath)
 	}
 	return nil, ErrLabelsRequired
 }
 
 // PredictRaw runs inference and returns raw species occurrence scores as a flat []float32 slice.
 // This is used by adapters that handle their own label pairing and filtering.
+// Delegates to PredictBatchRaw with batchSize=1.
 func (r *RangeFilter) PredictRaw(latitude, longitude, week float32) ([]float32, error) {
-	input := []float32{latitude, longitude, week}
+	return r.PredictBatchRaw([]float32{latitude, longitude, week}, 1)
+}
 
-	inputTensor, err := ort.NewTensor(ort.NewShape(1, 3), input)
+// PredictBatchRaw runs inference on multiple location/week inputs in a single batch.
+// inputs is a flat slice of [lat, lon, week] triples: len(inputs) must equal batchSize * 3.
+// Returns a flat slice of [batchSize * numSpecies] scores in row-major order.
+func (r *RangeFilter) PredictBatchRaw(inputs []float32, batchSize int) ([]float32, error) {
+	if r.session == nil {
+		return nil, ErrSessionClosed
+	}
+	if batchSize <= 0 {
+		return nil, ErrEmptyRangeFilterBatch
+	}
+	expected := batchSize * 3
+	if len(inputs) != expected {
+		return nil, &RangeFilterBatchInputError{Expected: expected, Got: len(inputs)}
+	}
+
+	numSpecies := len(r.labels)
+
+	inputTensor, err := ort.NewTensor(ort.NewShape(int64(batchSize), 3), inputs)
 	if err != nil {
-		return nil, fmt.Errorf("birdnet: failed to create range filter input tensor: %w", err)
+		return nil, fmt.Errorf("birdnet: failed to create range filter batch input tensor: %w", err)
 	}
 	defer func() { _ = inputTensor.Destroy() }()
 
-	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(1, int64(len(r.labels))))
+	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(int64(batchSize), int64(numSpecies)))
 	if err != nil {
-		return nil, fmt.Errorf("birdnet: failed to create range filter output tensor: %w", err)
+		return nil, fmt.Errorf("birdnet: failed to create range filter batch output tensor: %w", err)
 	}
 	defer func() { _ = outputTensor.Destroy() }()
 
-	err = r.session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor})
-	if err != nil {
-		return nil, fmt.Errorf("birdnet: range filter inference failed: %w", err)
+	if err := r.session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor}); err != nil {
+		return nil, fmt.Errorf("birdnet: range filter batch inference failed: %w", err)
 	}
 
 	data := outputTensor.GetData()
-	numSpecies := len(r.labels)
-	if len(data) < numSpecies {
-		return nil, fmt.Errorf("birdnet: range filter output has %d values but %d labels were provided", len(data), numSpecies)
+	totalScores := batchSize * numSpecies
+	if len(data) < totalScores {
+		return nil, fmt.Errorf("birdnet: range filter batch output has %d values, expected %d", len(data), totalScores)
 	}
-	scores := make([]float32, numSpecies)
-	copy(scores, data[:numSpecies])
+	scores := make([]float32, totalScores)
+	copy(scores, data[:totalScores])
 	return scores, nil
 }
 
 // Predict runs the range filter and returns labeled species occurrence scores.
+// Delegates to PredictRaw for inference, then pairs results with labels.
 func (r *RangeFilter) Predict(latitude, longitude float32, month, day int) ([]LocationScore, error) {
 	if err := ValidateCoordinates(latitude, longitude); err != nil {
 		return nil, err
@@ -143,34 +161,16 @@ func (r *RangeFilter) Predict(latitude, longitude float32, month, day int) ([]Lo
 	}
 
 	week := CalculateWeek(month, day)
-	input := []float32{latitude, longitude, week}
-
-	inputTensor, err := ort.NewTensor(ort.NewShape(1, 3), input)
+	rawScores, err := r.PredictRaw(latitude, longitude, week)
 	if err != nil {
-		return nil, fmt.Errorf("birdnet: failed to create range filter input tensor: %w", err)
-	}
-	defer func() { _ = inputTensor.Destroy() }()
-
-	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(1, int64(len(r.labels))))
-	if err != nil {
-		return nil, fmt.Errorf("birdnet: failed to create range filter output tensor: %w", err)
-	}
-	defer func() { _ = outputTensor.Destroy() }()
-
-	err = r.session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor})
-	if err != nil {
-		return nil, fmt.Errorf("birdnet: range filter inference failed: %w", err)
+		return nil, err
 	}
 
-	data := outputTensor.GetData()
-	if len(data) < len(r.labels) {
-		return nil, fmt.Errorf("birdnet: range filter output has %d values but %d labels were provided", len(data), len(r.labels))
-	}
 	scores := make([]LocationScore, len(r.labels))
 	for i, label := range r.labels {
 		scores[i] = LocationScore{
 			Species: label,
-			Score:   data[i],
+			Score:   rawScores[i],
 			Index:   i,
 		}
 	}
@@ -238,11 +238,21 @@ func ValidateDate(month, day int) error {
 // filterPredictions removes predictions for species with location scores below threshold.
 // If rerank is true, confidence is multiplied by location score and results are re-sorted.
 func filterPredictions(predictions []Prediction, scores []LocationScore, threshold float32, rerank bool) []Prediction {
+	scoreMap := buildScoreMap(scores)
+	return filterPredictionsWithMap(predictions, scoreMap, threshold, rerank)
+}
+
+// buildScoreMap creates a species-to-score lookup map from location scores.
+func buildScoreMap(scores []LocationScore) map[string]float32 {
 	scoreMap := make(map[string]float32, len(scores))
 	for _, s := range scores {
 		scoreMap[s.Species] = s.Score
 	}
+	return scoreMap
+}
 
+// filterPredictionsWithMap filters predictions using a pre-built score map.
+func filterPredictionsWithMap(predictions []Prediction, scoreMap map[string]float32, threshold float32, rerank bool) []Prediction {
 	var result []Prediction
 	for _, p := range predictions {
 		locScore, ok := scoreMap[p.Species]
@@ -272,9 +282,10 @@ func filterPredictions(predictions []Prediction, scores []LocationScore, thresho
 
 // filterBatchPredictions applies filterPredictions to each batch of predictions.
 func filterBatchPredictions(batches [][]Prediction, scores []LocationScore, threshold float32, rerank bool) [][]Prediction {
+	scoreMap := buildScoreMap(scores)
 	result := make([][]Prediction, len(batches))
 	for i, batch := range batches {
-		result[i] = filterPredictions(batch, scores, threshold, rerank)
+		result[i] = filterPredictionsWithMap(batch, scoreMap, threshold, rerank)
 	}
 	return result
 }
@@ -290,7 +301,11 @@ type rangeFilterConfig struct {
 
 // WithRangeFilterLabels provides labels directly.
 func WithRangeFilterLabels(labels []string) RangeFilterOption {
-	return func(c *rangeFilterConfig) { c.labels = labels }
+	return func(c *rangeFilterConfig) {
+		cp := make([]string, len(labels))
+		copy(cp, labels)
+		c.labels = cp
+	}
 }
 
 // WithRangeFilterLabelsPath loads labels from a file.

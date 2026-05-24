@@ -51,6 +51,7 @@ type MQTTEventDTO struct {
 	ModelName     string `json:"modelName,omitempty"`     // "BirdNET"
 	ModelVersion  string `json:"modelVersion,omitempty"`  // "2.4"
 	IsCustomModel bool   `json:"isCustomModel,omitempty"` // Custom model flag
+	Unlikely      bool   `json:"unlikely,omitempty"`      // Tagged by ultrasonic validation filter
 	Timezone      string `json:"timezone,omitempty"`      // e.g., "Europe/Helsinki"
 }
 
@@ -91,6 +92,7 @@ func NewMQTTEventDTO(r *detection.Result) *MQTTEventDTO {
 		ModelName:      r.Model.Name,
 		ModelVersion:   r.Model.Version,
 		IsCustomModel:  r.Model.Variant != "" && r.Model.Variant != detection.DefaultModelVariant,
+		Unlikely:       r.Unlikely,
 	}
 
 	// Add timezone if timestamp has location info

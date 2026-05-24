@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -29,6 +30,11 @@ type SQLiteStore struct {
 	// Cached integrity check result (updated by monitoring goroutine)
 	integrityMu     sync.RWMutex
 	integrityResult string // "ok" or error string; empty until first check
+
+	// dbCorrupted is latched on first detection of SQLite corruption
+	// ("database disk image is malformed"). Once set, duplicate Sentry
+	// reports are suppressed. The app continues in degraded mode.
+	dbCorrupted atomic.Bool
 
 	// dbstatAvailable caches whether the dbstat virtual table exists.
 	// 0 = unchecked, 1 = available, -1 = not available.
@@ -66,24 +72,24 @@ func getDiskSpace(path string) (uint64, error) {
 
 // checkWritePermission checks if we have write permission to the directory
 func checkWritePermission(path string) error {
-	// Create a temporary file to test write permissions
-	tempFile := filepath.Join(filepath.Dir(path), ".tmp_write_test")
-	f, err := os.OpenFile(tempFile, os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // G304: tempFile derived from database path
+	dir := filepath.Dir(path)
+	f, err := os.CreateTemp(dir, ".birdnet_write_test_*")
 	if err != nil {
 		return errors.New(err).
 			Component("datastore").
 			Category(errors.CategorySystem).
 			Context("operation", "check_write_permission").
-			Context("directory", filepath.Dir(path)).
+			Context("directory", dir).
 			Build()
 	}
+	name := f.Name()
+	defer func() {
+		if err := os.Remove(name); err != nil {
+			GetLogger().Warn("Failed to remove temp file", logger.Error(err))
+		}
+	}()
 	if err := f.Close(); err != nil {
-		// Log but don't fail permission check
 		GetLogger().Warn("Failed to close temp file", logger.Error(err))
-	}
-	if err := os.Remove(tempFile); err != nil {
-		// Log but don't fail permission check
-		GetLogger().Warn("Failed to remove temp file", logger.Error(err))
 	}
 	return nil
 }
@@ -149,8 +155,8 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 		}
 	}()
 
-	// Create backup file
-	destination, err := os.Create(backupPath) //nolint:gosec // G304: backupPath derived from dbPath (application settings)
+	// Create backup file with restricted permissions (owner-only)
+	destination, err := os.OpenFile(backupPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // G304: backupPath derived from dbPath (application settings)
 	if err != nil {
 		return errors.New(err).
 			Component("datastore").
@@ -181,7 +187,7 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 }
 
 // Open initializes the SQLite database connection
-func (s *SQLiteStore) Open() error {
+func (s *SQLiteStore) Open() (retErr error) {
 	// Get database path from settings
 	dbPath := s.Settings.Output.SQLite.Path
 
@@ -266,6 +272,16 @@ func (s *SQLiteStore) Open() error {
 	}
 	sqlDB.SetMaxOpenConns(1)
 
+	// Clean up connection pool if any subsequent initialization step fails.
+	defer func() {
+		if retErr != nil {
+			if closeErr := sqlDB.Close(); closeErr != nil {
+				GetLogger().Warn("Failed to close DB pool after init error", logger.Error(closeErr))
+			}
+			s.DB = nil
+		}
+	}()
+
 	// Store the database connection
 	s.DB = db
 
@@ -295,6 +311,13 @@ func (s *SQLiteStore) Open() error {
 		}
 		return err
 	}
+
+	// Run synchronous integrity check after migration succeeds.
+	// If corruption is found, attempts REINDEX auto-recovery.
+	// On failure, latches corruption flag and notifies user but does NOT
+	// return an error: the app continues in degraded mode so the web UI
+	// remains accessible for diagnostics and recovery guidance.
+	s.performStartupIntegrityCheck()
 
 	// Ensure _metadata table exists for tracking operational timestamps (e.g. last vacuum)
 	if err := s.EnsureMetadataTable(); err != nil {
@@ -342,9 +365,9 @@ func (s *SQLiteStore) startIntegrityCheckLoop() {
 		ctx := s.monitoringCtx
 		s.monitoringMu.Unlock()
 
-		// Run initial check immediately, then on interval
 		s.monitoringWg.Go(func() {
-			s.RunIntegrityCheck()
+			// Skip immediate check: performStartupIntegrityCheck() already
+			// ran synchronously and cached the result in Open().
 
 			ticker := time.NewTicker(integrityCheckInterval)
 			defer ticker.Stop()
@@ -620,10 +643,30 @@ func (s *SQLiteStore) SchemaVersion() string {
 	return SchemaVersionLegacy
 }
 
+// SaveAppEvent is a no-op for the legacy SQLite datastore.
+func (s *SQLiteStore) SaveAppEvent(_ context.Context, _, _, _ string, _ map[string]any) error {
+	return nil
+}
+
+// GetRecentAppEvents is a no-op for the legacy SQLite datastore.
+func (s *SQLiteStore) GetRecentAppEvents(_ context.Context, _ int) ([]AppEvent, error) {
+	return nil, nil
+}
+
+// GetAppEventsSince is a no-op for the legacy SQLite datastore.
+func (s *SQLiteStore) GetAppEventsSince(_ context.Context, _ time.Time, _ int) ([]AppEvent, error) {
+	return nil, nil
+}
+
+// PruneAppEvents is a no-op for the legacy SQLite datastore.
+func (s *SQLiteStore) PruneAppEvents(_ context.Context, _ int) (int64, error) {
+	return 0, nil
+}
+
 // GetDatabaseStats returns basic runtime statistics about the SQLite database.
 // Returns partial stats with ErrDBNotConnected if the database is unreachable.
 // The Connected field in the returned stats indicates if the DB is reachable.
-func (s *SQLiteStore) GetDatabaseStats() (*DatabaseStats, error) {
+func (s *SQLiteStore) GetDatabaseStats(ctx context.Context) (*DatabaseStats, error) {
 	// Defensive guard for nil Settings (e.g., in custom test setups)
 	location := ""
 	if s.Settings != nil {
@@ -646,20 +689,35 @@ func (s *SQLiteStore) GetDatabaseStats() (*DatabaseStats, error) {
 		return stats, ErrDBNotConnected
 	}
 
-	if err := sqlDB.Ping(); err != nil {
+	if err := sqlDB.PingContext(ctx); err != nil {
 		return stats, ErrDBNotConnected
 	}
 	stats.Connected = true
 
 	// Get database size (ignore errors, size stays 0)
-	if size, sizeErr := s.getDatabaseSize(); sizeErr == nil {
+	if size, sizeErr := s.getDatabaseSize(ctx); sizeErr == nil {
 		stats.SizeBytes = size
 	}
 
 	// Get total detections (ignore errors, count stays 0)
-	if count, countErr := s.getTableRowCount("notes"); countErr == nil {
+	if count, countErr := s.getTableRowCount(ctx, "notes"); countErr == nil {
 		stats.TotalDetections = count
 	}
 
 	return stats, nil
+}
+
+// IsCorrupted reports whether the database has been flagged as corrupted.
+// Safe to call concurrently. Used by health checks and diagnostics.
+func (s *SQLiteStore) IsCorrupted() bool {
+	return s.dbCorrupted.Load()
+}
+
+// IntegrityResult returns the cached integrity check result and corruption status.
+// Returns ("", false) if no check has run yet.
+func (s *SQLiteStore) IntegrityResult() (string, bool) {
+	s.integrityMu.RLock()
+	result := s.integrityResult
+	s.integrityMu.RUnlock()
+	return result, s.dbCorrupted.Load()
 }

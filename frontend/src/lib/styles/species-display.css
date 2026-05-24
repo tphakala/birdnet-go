@@ -336,8 +336,7 @@ tbody td:last-child,
   text-align: right;
 }
 
-tbody td:last-child > *,
-.detection-header-list th:last-child {
+tbody td:last-child > * {
   display: flex;
   justify-content: flex-end;
 }

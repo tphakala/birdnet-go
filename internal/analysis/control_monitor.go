@@ -20,10 +20,18 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+)
+
+const (
+	signalReconfigureLogDeduplication = "reconfigure_log_deduplication"
+	signalReconfigureRTSPHealth       = "reconfigure_rtsp_health"
+	signalReconfigureMonitoring       = "reconfigure_monitoring"
+	signalReconfigureLivestream       = "reconfigure_livestream"
 )
 
 // ControlMonitor handles control signals for realtime analysis mode
@@ -52,6 +60,10 @@ type ControlMonitor struct {
 	// the downstream publisher via soundLevelManager.
 	reconfigureSoundLevelFn func()
 
+	// reconfigureMonitoringFn stops and recreates the SystemMonitor from current
+	// settings. Provided by APIServerService because it owns the monitor lifecycle.
+	reconfigureMonitoringFn func()
+
 	// Sound level manager for lifecycle management
 	soundLevelManager *SoundLevelManager
 
@@ -77,7 +89,11 @@ type ControlMonitor struct {
 // sound level manager is restarted so that router routes exist when the
 // publisher starts (enable) or are gone before the publisher stops (disable).
 // May be nil in contexts where no sound level pipeline is owned.
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan audiocore.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *schedule.QuietHoursScheduler, audioEngine *engine.AudioEngine, reconfigureSourcesFn, reconfigureSoundLevelFn func()) *ControlMonitor {
+//
+// reconfigureMonitoringFn stops and recreates the SystemMonitor from current
+// settings. Provided by APIServerService because it owns the monitor lifecycle.
+// May be nil in contexts where no system monitor is owned.
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan audiocore.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *schedule.QuietHoursScheduler, audioEngine *engine.AudioEngine, reconfigureSourcesFn, reconfigureSoundLevelFn, reconfigureMonitoringFn func()) *ControlMonitor {
 	cm := &ControlMonitor{
 		wg:                      wg,
 		controlChan:             controlChan,
@@ -94,6 +110,7 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 		engine:                  audioEngine,
 		reconfigureSourcesFn:    reconfigureSourcesFn,
 		reconfigureSoundLevelFn: reconfigureSoundLevelFn,
+		reconfigureMonitoringFn: reconfigureMonitoringFn,
 	}
 
 	// Initialize the sound level manager but don't start it yet
@@ -256,9 +273,53 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleQuietHoursStopSoundCard()
 	case schedule.SignalQuietHoursStartSoundCard:
 		cm.handleQuietHoursStartSoundCard()
+	case "reconfigure_bat_filter":
+		cm.handleReconfigureBatFilter()
+	case signalReconfigureLogDeduplication:
+		cm.handleReconfigureLogDeduplication()
+	case signalReconfigureRTSPHealth:
+		cm.handleReconfigureStreams()
+		emitHotReload("rtsp_health")
+	case signalReconfigureMonitoring:
+		cm.handleReconfigureMonitoring()
+	case signalReconfigureLivestream:
+		cm.handleReconfigureLiveStream()
 	default:
 		GetLogger().Warn("Received unknown control signal", logger.String("signal", signal))
 	}
+}
+
+// handleReconfigureBatFilter rebuilds the bat model's high-pass filter from current settings.
+func (cm *ControlMonitor) handleReconfigureBatFilter() {
+	if cm.bn != nil {
+		cm.bn.ReloadBatFilter()
+		emitHotReload("bat_filter")
+	}
+}
+
+// handleReconfigureLogDeduplication reinitializes the log deduplicator from current settings.
+func (cm *ControlMonitor) handleReconfigureLogDeduplication() {
+	if cm.proc == nil {
+		return
+	}
+	cm.proc.ReconfigureLogDeduplicator()
+	emitHotReload("log_deduplication")
+}
+
+// handleReconfigureMonitoring stops and recreates the SystemMonitor from current settings.
+func (cm *ControlMonitor) handleReconfigureMonitoring() {
+	if cm.reconfigureMonitoringFn != nil {
+		cm.reconfigureMonitoringFn()
+	}
+	emitHotReload("monitoring")
+}
+
+// handleReconfigureLiveStream restarts active HLS streams so they pick up new settings.
+func (cm *ControlMonitor) handleReconfigureLiveStream() {
+	if cm.apiController != nil {
+		cm.apiController.RestartHLSStreams()
+	}
+	emitHotReload("livestream")
 }
 
 // handleRebuildRangeFilter rebuilds the range filter
@@ -269,6 +330,7 @@ func (cm *ControlMonitor) handleRebuildRangeFilter() {
 	} else {
 		GetLogger().Info("Range filter rebuilt successfully")
 		cm.notifySuccess("Range filter rebuilt successfully")
+		emitHotReload("range_filter")
 	}
 
 	// Perform log deduplicator cleanup when range filter is rebuilt
@@ -277,10 +339,10 @@ func (cm *ControlMonitor) handleRebuildRangeFilter() {
 	// for maintenance tasks. Future maintainers: this is just opportunistic cleanup,
 	// not a functional requirement of range filter rebuilding.
 	if cm.proc != nil {
-		// Clean entries older than 1 hour
 		cm.proc.CleanupLogDeduplicator(time.Hour)
 		cm.proc.CleanupEventTracker(time.Hour)
 	}
+	CleanupOverrunTrackers(time.Hour)
 }
 
 // handleReloadBirdnet reloads the BirdNET model
@@ -313,6 +375,8 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		cm.apiController.UpdateCommonNameMap(labels)
 		GetLogger().Info("API controller common name map updated with new labels")
 	}
+
+	emitHotReload("birdnet_model")
 }
 
 // handleReconfigureMQTT reconfigures the MQTT connection
@@ -365,6 +429,8 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		GetLogger().Info("MQTT connection disabled")
 		cm.notifySuccess("MQTT connection disabled")
 	}
+
+	emitHotReload("mqtt")
 }
 
 // handleReconfigureStreams reconfigures audio streams using the AudioEngine.
@@ -373,6 +439,7 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 func (cm *ControlMonitor) handleReconfigureStreams() {
 	audiocore.GetLogger().Info("Reconfiguring audio streams")
 
+	ResetOverrunTrackers()
 	cm.reconfigureSourcesFn()
 
 	// Re-evaluate quiet hours after stream reconfiguration to ensure
@@ -382,6 +449,7 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 	}
 
 	audiocore.GetLogger().Info("Audio streams reconfigured successfully")
+	emitHotReload("rtsp_sources")
 }
 
 // handleReconfigureBirdWeather reconfigures the BirdWeather integration
@@ -420,6 +488,8 @@ func (cm *ControlMonitor) handleReconfigureBirdWeather() {
 		GetLogger().Info("BirdWeather integration disabled")
 		cm.notifySuccess("BirdWeather integration disabled")
 	}
+
+	emitHotReload("birdweather")
 }
 
 // handleUpdateDetectionIntervals updates event tracking intervals for species
@@ -464,6 +534,14 @@ func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
 
 	GetLogger().Info("Detection rate limits updated successfully")
 	cm.notifySuccess("Detection rate limits updated successfully")
+	emitHotReload("detection_intervals")
+}
+
+// emitHotReload records a hot-reload event for the given component.
+func emitHotReload(component string) {
+	events.Emit(context.Background(), "settings", "hot_reload", "Component reconfigured", map[string]any{
+		"component": component,
+	})
 }
 
 // notifySuccess logs a success message
@@ -513,6 +591,8 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 		GetLogger().Info("Sound level monitoring disabled")
 		cm.notifySuccess("Sound level monitoring disabled")
 	}
+
+	emitHotReload("sound_level")
 }
 
 // handleReconfigureTelemetry reconfigures the telemetry/metrics endpoint
@@ -578,6 +658,8 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 		GetLogger().Info("Telemetry endpoint disabled")
 		cm.notifySuccess("Telemetry endpoint disabled")
 	}
+
+	emitHotReload("telemetry")
 }
 
 // validateListenAddress checks if the listen address is in a valid format
@@ -665,6 +747,7 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 		cm.proc.SetNewSpeciesTracker(nil)
 		GetLogger().Info("Species tracking disabled")
 		cm.notifySuccess("Species tracking disabled")
+		emitHotReload("species_tracking")
 		return
 	}
 
@@ -702,6 +785,7 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 		logger.Int("sync_minutes", settings.Realtime.SpeciesTracking.SyncIntervalMinutes),
 		logger.String("hemisphere", hemisphere))
 	cm.notifySuccess("Species tracking reconfigured successfully")
+	emitHotReload("species_tracking")
 }
 
 // handleReconfigurePushNotifications reconfigures the push notification dispatcher.
@@ -717,6 +801,7 @@ func (cm *ControlMonitor) handleReconfigurePushNotifications() {
 
 	GetLogger().Info("Push notification providers reconfigured successfully")
 	cm.notifySuccess("Push notification providers configured successfully")
+	emitHotReload("push_notifications")
 }
 
 // handleRebuildExtendedCapture rebuilds the extended capture species filter
@@ -738,6 +823,7 @@ func (cm *ControlMonitor) handleRebuildExtendedCapture() {
 
 	GetLogger().Info("Extended capture species filter rebuilt successfully")
 	cm.notifySuccess("Extended capture species filter rebuilt successfully")
+	emitHotReload("extended_capture")
 }
 
 // handleReconfigureAudioSources reconfigures audio capture sources (sound cards)
@@ -745,6 +831,8 @@ func (cm *ControlMonitor) handleRebuildExtendedCapture() {
 // diff-based reconfiguration used for RTSP stream changes.
 func (cm *ControlMonitor) handleReconfigureAudioSources() {
 	audiocore.GetLogger().Info("Reconfiguring audio sources")
+
+	ResetOverrunTrackers()
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -768,6 +856,7 @@ func (cm *ControlMonitor) handleReconfigureAudioSources() {
 	}
 
 	audiocore.GetLogger().Info("Audio sources reconfigured successfully")
+	emitHotReload("audio_sources")
 }
 
 // handleRecalculateDynamicThresholds recalculates all dynamic threshold CurrentValue entries
@@ -776,6 +865,7 @@ func (cm *ControlMonitor) handleReconfigureAudioSources() {
 func (cm *ControlMonitor) handleRecalculateDynamicThresholds() {
 	if cm.proc != nil {
 		cm.proc.RecalculateDynamicThresholds()
+		emitHotReload("dynamic_thresholds")
 	}
 }
 
@@ -804,6 +894,8 @@ func (cm *ControlMonitor) handleReconfigureDynamicThresholds() {
 		GetLogger().Info("Dynamic thresholds disabled")
 		cm.notifySuccess("Dynamic thresholds disabled")
 	}
+
+	emitHotReload("dynamic_thresholds_config")
 }
 
 // handleReconfigureQuietHours triggers a re-evaluation of quiet hours after settings change.
@@ -814,6 +906,7 @@ func (cm *ControlMonitor) handleReconfigureQuietHours() {
 		cm.quietHoursScheduler.Evaluate()
 		GetLogger().Info("Quiet hours re-evaluated successfully")
 		cm.notifySuccess("Quiet hours reconfigured successfully")
+		emitHotReload("quiet_hours")
 	} else {
 		GetLogger().Warn("Quiet hours scheduler not available")
 	}

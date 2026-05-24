@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/inference/tflite"
@@ -37,7 +38,7 @@ const defaultModelVersionString = ModelNameBirdNETv24 + " FP32"
 // Scores are immutable once stored - callers must not mutate the returned map.
 type speciesCacheEntry struct {
 	key    string             // Composite cache key: date + rounded lat/lon + model id
-	scores map[string]float64 // Species occurrence scores keyed by label
+	scores map[string]float64 // Species occurrence scores keyed by scientific name
 }
 
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
@@ -153,12 +154,10 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 	}
 
 	if err := bn.initializeMetaModel(); err != nil {
-		return nil, errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "initialize_range_filter").
-			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
-			Build()
+		GetLogger().Warn("Range filter initialization failed, starting without species filtering (fix via Settings > Species)",
+			logger.Error(err),
+			logger.String("range_filter_model", settings.BirdNET.RangeFilter.Model),
+			logger.String("model_path", settings.BirdNET.RangeFilter.ModelPath))
 	}
 
 	// Normalize and validate locale setting.
@@ -371,7 +370,7 @@ func (bn *BirdNET) initializeMetaModel() error {
 	// Auto-select v3 geomodel for compatible classifiers when files exist on disk.
 	// Only applies locally for routing; does NOT publish settings to avoid
 	// inconsistency if the backend fails to initialize.
-	if bn.modelsDir != "" && shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
+	if rf.Model == "" && bn.modelsDir != "" && shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
 		localSettings := conf.CloneSettings(settings)
 		applyAutoSelectedGeomodelPaths(localSettings, bn.modelsDir)
 		rf = localSettings.BirdNET.RangeFilter
@@ -620,7 +619,7 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	}
 	scores := make(map[string]float64, len(speciesScores))
 	for _, s := range speciesScores {
-		scores[s.Label] = s.Score
+		scores[strings.ToLower(detection.ExtractScientificName(s.Label))] = s.Score
 	}
 
 	// WRITE PATH: double-check, evict old entries, and publish new results
@@ -943,18 +942,20 @@ func (bn *BirdNET) ReloadModel() error {
 	defer bn.mu.Unlock()
 	bn.Debug("Acquired mutex for model reload")
 
+	// Get fresh settings so sub-methods see the latest config.
+	fresh := bn.currentSettings()
+	settingsCopy := *fresh
+	oldSettings := bn.Settings
+	bn.Settings = &settingsCopy
+
 	// Snapshot all mutable state for transactional rollback on failure.
 	oldClassifier := bn.classifier
 	oldRangeFilter := bn.rangeFilter
 	oldModelInfo := bn.ModelInfo
 	oldTaxonomyMap := bn.TaxonomyMap
 	oldScientificIndex := bn.ScientificIndex
-	oldLabels := slices.Clone(bn.Settings.BirdNET.Labels)
-	oldLocale := bn.Settings.BirdNET.Locale
 
 	rollback := func() {
-		// Close any newly created backends that differ from the originals
-		// to avoid leaking resources during failed reloads
 		if bn.classifier != nil && bn.classifier != oldClassifier {
 			bn.classifier.Close()
 		}
@@ -966,11 +967,10 @@ func (bn *BirdNET) ReloadModel() error {
 		bn.ModelInfo = oldModelInfo
 		bn.TaxonomyMap = oldTaxonomyMap
 		bn.ScientificIndex = oldScientificIndex
-		bn.Settings.BirdNET.Labels = oldLabels
-		bn.Settings.BirdNET.Locale = oldLocale
+		bn.Settings = oldSettings
 	}
 
-	// Check if model version changed — if so, the orchestrator must handle
+	// Check if model version changed; if so, the orchestrator must handle
 	// the switch via pipeline cold restart, not ReloadModel.
 	if bn.Settings.BirdNET.Version != "" {
 		newInfo, ok := ResolveBirdNETVersion(bn.Settings.BirdNET.Version)
@@ -1150,7 +1150,7 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	// Try to get cached scores first
 	cachedScores, err := bn.getCachedSpeciesScores(detectionTime)
 	if err == nil && len(cachedScores) > 0 {
-		if occurrence, found := cachedScores[species]; found {
+		if occurrence, found := cachedScores[strings.ToLower(detection.ExtractScientificName(species))]; found {
 			// Clamp the score to [0.0, 1.0] range
 			if occurrence < 0.0 {
 				return 0.0
@@ -1171,8 +1171,9 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	}
 
 	// Look for the species in the scores
+	targetSci := detection.ExtractScientificName(species)
 	for _, score := range speciesScores {
-		if score.Label == species {
+		if strings.EqualFold(detection.ExtractScientificName(score.Label), targetSci) {
 			// Clamp the score to [0.0, 1.0] range
 			if score.Score < 0.0 {
 				return 0.0
@@ -1215,13 +1216,18 @@ func (bn *BirdNET) ModelVersion() string {
 // NumSpecies returns the number of species this model can classify.
 // Implements ModelInstance.
 func (bn *BirdNET) NumSpecies() int {
-	return len(bn.currentSettings().BirdNET.Labels)
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+	return len(bn.Settings.BirdNET.Labels)
 }
 
-// Labels returns the full list of species labels for this model.
+// Labels returns a snapshot of the species labels for this model.
+// The returned slice is a defensive copy safe for concurrent use.
 // Implements ModelInstance.
 func (bn *BirdNET) Labels() []string {
-	return bn.currentSettings().BirdNET.Labels
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+	return slices.Clone(bn.Settings.BirdNET.Labels)
 }
 
 // Close releases resources held by the BirdNET model.
@@ -1248,69 +1254,79 @@ func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, co
 	return scientific, common, code
 }
 
-// RangeFilterStatusInfo holds introspection data about the active range filter
-// configuration. Used by the API to expose geomodel state without coupling
-// callers to internal types.
-type RangeFilterStatusInfo struct {
-	Model               string    `json:"model"`
-	ModelPath           string    `json:"modelPath"`
-	LabelsPath          string    `json:"labelsPath"`
-	AutoSelected        bool      `json:"autoSelected"`
-	ClassifierModel     string    `json:"classifierModel"`
-	GeomodelSpecies     int       `json:"geomodelSpecies"`
-	ClassifierSpecies   int       `json:"classifierSpecies"`
-	MappedSpecies       int       `json:"mappedSpecies"`
-	UnmappedSpecies     int       `json:"unmappedSpecies"`
-	PassUnmappedSpecies bool      `json:"passUnmappedSpecies"`
-	Threshold           float32   `json:"threshold"`
-	LocationConfigured  bool      `json:"locationConfigured"`
-	LastUpdated         time.Time `json:"lastUpdated"`
+// GeomodelStatus holds metadata about the active geomodel.
+type GeomodelStatus struct {
+	Version      string `json:"version"`
+	TotalSpecies int    `json:"totalSpecies"`
+	AutoSelected bool   `json:"autoSelected"`
 }
 
-// RangeFilterStatus returns introspection data about the active range filter.
-// Safe for concurrent use; acquires bn.mu to read the rangeFilter field.
-func (bn *BirdNET) RangeFilterStatus() RangeFilterStatusInfo {
+// ClassifierCoverage holds the geomodel coverage stats for one classifier.
+type ClassifierCoverage struct {
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	TotalSpecies     int    `json:"totalSpecies"`
+	WithRangeData    int    `json:"withRangeData"`
+	WithoutRangeData int    `json:"withoutRangeData"`
+}
+
+// RangeFilterStatusResponse holds the complete range filter status including
+// per-classifier geomodel coverage. Used by the API to expose geomodel state
+// without coupling callers to internal types.
+type RangeFilterStatusResponse struct {
+	Geomodel            *GeomodelStatus      `json:"geomodel"`
+	Classifiers         []ClassifierCoverage `json:"classifiers"`
+	PassUnmappedSpecies bool                 `json:"passUnmappedSpecies"`
+	Threshold           float32              `json:"threshold"`
+	LocationConfigured  bool                 `json:"locationConfigured"`
+	LastUpdated         time.Time            `json:"lastUpdated"`
+}
+
+// PrimaryRangeFilterCoverage returns the geomodel info and coverage stats for
+// the primary classifier. The orchestrator calls this and then adds coverage
+// for additional models.
+func (bn *BirdNET) PrimaryRangeFilterCoverage() (geomodel *GeomodelStatus, primary ClassifierCoverage, geoLabels []string, autoSelected bool) {
 	settings := bn.currentSettings()
 	rf := settings.BirdNET.RangeFilter
 
-	info := RangeFilterStatusInfo{
-		Model:               rf.Model,
-		ModelPath:           rf.ModelPath,
-		LabelsPath:          rf.LabelsPath,
-		ClassifierModel:     bn.ModelInfo.ID,
-		PassUnmappedSpecies: rf.PassUnmappedSpecies,
-		Threshold:           rf.Threshold,
-		LocationConfigured:  settings.BirdNET.LocationConfigured,
-		LastUpdated:         rf.LastUpdated,
+	bn.mu.Lock()
+	primary = ClassifierCoverage{
+		ID:           bn.ModelInfo.ID,
+		Name:         bn.ModelInfo.Name,
+		TotalSpecies: len(bn.Settings.BirdNET.Labels),
 	}
 
-	// Determine if the geomodel was auto-selected: model must be "v3" and
-	// paths must match the shared directory pattern produced by
-	// applyAutoSelectedGeomodelPaths.
+	mrf, isMapped := bn.rangeFilter.(*mappedRangeFilter)
+	if isMapped {
+		primary.WithRangeData = mrf.mappedCount
+		primary.WithoutRangeData = mrf.numClassifier - mrf.mappedCount
+		geoLabels = mrf.geomodelLabels
+
+		version := rf.Model
+		if version == "v3" {
+			version = "v3.0"
+		}
+
+		geomodel = &GeomodelStatus{
+			Version:      version,
+			TotalSpecies: mrf.inner.NumSpecies(),
+		}
+	}
+	// No geomodel active: leave WithRangeData and WithoutRangeData at zero.
+	bn.mu.Unlock()
+
 	if rf.Model == "v3" && bn.modelsDir != "" {
 		sharedDir := filepath.Join(bn.modelsDir, "shared")
 		expectedONNX := filepath.Join(sharedDir, geomodelONNXLocalName)
 		expectedLabels := filepath.Join(sharedDir, geomodelLabelsLocalName)
-		info.AutoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
+		autoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
 	}
 
-	// Extract mapping stats from mappedRangeFilter if present.
-	bn.mu.Lock()
-	if mrf, ok := bn.rangeFilter.(*mappedRangeFilter); ok {
-		info.GeomodelSpecies = mrf.inner.NumSpecies()
-		info.ClassifierSpecies = mrf.numClassifier
-		info.MappedSpecies = mrf.mappedCount
-		info.UnmappedSpecies = mrf.numClassifier - mrf.mappedCount
-	} else if bn.rangeFilter != nil {
-		GetLogger().Debug("Range filter is not a mappedRangeFilter",
-			logger.String("type", fmt.Sprintf("%T", bn.rangeFilter)),
-			logger.Int("num_species", bn.rangeFilter.NumSpecies()))
-	} else {
-		GetLogger().Debug("Range filter is nil, species counts will be zero")
+	if geomodel != nil {
+		geomodel.AutoSelected = autoSelected
 	}
-	bn.mu.Unlock()
 
-	return info
+	return geomodel, primary, geoLabels, autoSelected
 }
 
 // SetModelsDir sets the base directory for gallery-installed models.

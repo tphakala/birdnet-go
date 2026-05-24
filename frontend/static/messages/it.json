@@ -12,6 +12,7 @@
     "refresh": "Aggiorna",
     "delete": "Elimina",
     "edit": "Modifica",
+    "enabled": "Abilitato",
     "search": "Cerca",
     "filter": "Filtra",
     "sort": "Ordina",
@@ -153,7 +154,8 @@
         "verifiedCorrect": "Verificato corretto",
         "falsePositive": "Falso positivo",
         "notReviewed": "Non revisionato",
-        "locked": "Bloccato"
+        "locked": "Bloccato",
+        "unlikely": "Improbabile"
       },
       "form": {
         "correctDetection": "Rilevamento corretto",
@@ -226,7 +228,16 @@
     "analyticsSubmenu": "Sottomenu analisi",
     "settingsSubmenu": "Sottomenu impostazioni",
     "systemSubmenu": "Sottomenu sistema",
-    "systemTerminal": "Terminale"
+    "systemTerminal": "Terminale",
+    "help": "Aiuto",
+    "helpSubmenu": "Sottomenu aiuto",
+    "helpAndSupport": "Aiuto e supporto",
+    "reportBug": "Segnala un bug",
+    "askQuestion": "Fai una domanda",
+    "reportBugAriaLabel": "Segnala un bug su GitHub (si apre in una nuova finestra)",
+    "askQuestionAriaLabel": "Fai una domanda su GitHub Discussions (si apre in una nuova finestra)",
+    "viewOnGithubAriaLabel": "Visualizza BirdNET-Go su GitHub (si apre in una nuova finestra)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -422,7 +433,11 @@
       },
       "buffer": {
         "overloadTitle": "Analisi audio sovraccaricata",
-        "overloadMessage": "Il sistema sta scartando il {dropRate} % dei campioni audio della sorgente '{sourceName}' perché non riesce a tenere il passo con l'analisi. Riduci il valore di sovrapposizione BirdNET nelle impostazioni di rilevamento o considera l'aggiornamento a una CPU più veloce."
+        "overloadMessage": "Il sistema sta scartando il {dropRate} % dei campioni audio della sorgente ''{sourceName}'' perché non riesce a tenere il passo con l'analisi. Riduci il valore di sovrapposizione BirdNET nelle impostazioni di rilevamento o considera l'aggiornamento a una CPU più veloce."
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime non disponibile",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} è richiesto per {modelName} ma non è stato trovato. Consulta la guida all'installazione: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -512,7 +527,8 @@
       "false": "Falso",
       "unverified": "Non verificato",
       "locked": "Bloccato",
-      "unlocked": "Sbloccato"
+      "unlocked": "Sbloccato",
+      "unlikely": "Improbabile"
     },
     "review": {
       "review": "Verifica",
@@ -640,7 +656,8 @@
         "verified": "Verificato",
         "false": "Falso",
         "unverified": "Non verificato",
-        "locked": "Bloccato"
+        "locked": "Bloccato",
+        "unlikely": "Improbabile"
       },
       "modals": {
         "showSpecies": "Mostra Specie {species}",
@@ -656,6 +673,8 @@
       },
       "actions": {
         "menuLabel": "Azioni per {species}",
+        "markCorrect": "Corretto",
+        "markFalsePositive": "Non corretto",
         "review": "Revisiona rilevamento",
         "showSpecies": "Mostra specie",
         "ignoreSpecies": "Ignora specie",
@@ -761,12 +780,18 @@
     "headers": {
       "dateTime": "Data e Ora",
       "weather": "Meteo",
+      "source": "Sorgente",
       "species": "Specie",
       "confidence": "Confidenza",
       "thumbnail": "Miniatura",
       "status": "Stato",
       "recording": "Registrazione",
       "actions": "Azioni"
+    },
+    "viewToggle": {
+      "label": "Modalità visualizzazione",
+      "table": "Vista tabella",
+      "cards": "Vista a schede"
     },
     "status": {
       "locked": "Bloccato"
@@ -788,6 +813,25 @@
     },
     "pagination": {
       "showing": "Visualizzati da {from} a {to} di {total} risultati"
+    },
+    "selection": {
+      "select": "Seleziona",
+      "nSelected": "{count} selezionati",
+      "selectAllMatching": "Seleziona tutti i {count} rilevamenti corrispondenti",
+      "allSelected": "Tutti i {count} selezionati",
+      "clear": "Cancella selezione",
+      "toolbarLabel": "Azioni di massa",
+      "confirmBulkDelete": "Eliminare {count} rilevamenti? Questa azione non può essere annullata.",
+      "confirmBulkMarkCorrect": "Contrassegnare {count} rilevamenti come corretti?",
+      "confirmBulkMarkFalsePositive": "Contrassegnare {count} rilevamenti come falso positivo?",
+      "confirmBulkLock": "Bloccare {count} rilevamenti?",
+      "confirmBulkUnlock": "Sbloccare {count} rilevamenti?",
+      "bulkSuccess": "{count} rilevamenti aggiornati",
+      "bulkDeleteSuccess": "{count} rilevamenti eliminati",
+      "bulkPartial": "{processed} aggiornati, {skipped} saltati (bloccati)",
+      "tooManyDetections": "Troppi rilevamenti ({count}). Restringi i filtri per selezionarne meno di 500.",
+      "bulkError": "Operazione di massa fallita. Riprova.",
+      "switchToTable": "Passa alla vista tabella per selezionare i rilevamenti"
     },
     "weather": {
       "title": "Informazioni Meteo",
@@ -811,25 +855,55 @@
         "pressure": "hPa"
       },
       "conditions": {
-        "clearsky_day": "Cielo sereno",
-        "clearsky_night": "Cielo sereno",
-        "fair_day": "Sereno",
-        "fair_night": "Sereno",
-        "partlycloudy_day": "Parzialmente nuvoloso",
-        "partlycloudy_night": "Parzialmente nuvoloso",
+        "clearsky": "Cielo sereno",
         "cloudy": "Nuvoloso",
-        "rainshowers_day": "Rovesci di pioggia",
-        "rainshowers_night": "Rovesci di pioggia",
-        "rain": "Pioggia",
-        "thunder": "Temporale",
-        "sleet": "Nevischio",
-        "snow": "Neve",
+        "fair": "Sereno",
         "fog": "Nebbia",
+        "heavyrain": "Pioggia forte",
+        "heavyrainandthunder": "Pioggia forte e temporale",
+        "heavyrainshowers": "Rovesci forti",
+        "heavyrainshowersandthunder": "Rovesci forti e temporale",
+        "heavysleet": "Nevischio forte",
+        "heavysleetandthunder": "Nevischio forte e temporale",
+        "heavysleetshowers": "Rovesci forti di nevischio",
+        "heavysleetshowersandthunder": "Rovesci forti di nevischio e temporale",
+        "heavysnow": "Neve forte",
+        "heavysnowandthunder": "Neve forte e temporale",
+        "heavysnowshowers": "Rovesci forti di neve",
+        "heavysnowshowersandthunder": "Rovesci forti di neve e temporale",
+        "lightrain": "Pioggia leggera",
+        "lightrainandthunder": "Pioggia leggera e temporale",
+        "lightrainshowers": "Rovesci leggeri",
+        "lightrainshowersandthunder": "Rovesci leggeri e temporale",
+        "lightsleet": "Nevischio leggero",
+        "lightsleetandthunder": "Nevischio leggero e temporale",
+        "lightsleetshowers": "Rovesci leggeri di nevischio",
+        "lightsnow": "Neve leggera",
+        "lightsnowandthunder": "Neve leggera e temporale",
+        "lightsnowshowers": "Rovesci leggeri di neve",
+        "lightssleetshowersandthunder": "Rovesci leggeri di nevischio e temporale",
+        "lightssnowshowersandthunder": "Rovesci leggeri di neve e temporale",
+        "partlycloudy": "Parzialmente nuvoloso",
+        "rain": "Pioggia",
+        "rainandthunder": "Pioggia e temporale",
+        "rainshowers": "Rovesci di pioggia",
+        "rainshowersandthunder": "Rovesci e temporale",
+        "sleet": "Nevischio",
+        "sleetandthunder": "Nevischio e temporale",
+        "sleetshowers": "Rovesci di nevischio",
+        "sleetshowersandthunder": "Rovesci di nevischio e temporale",
+        "snow": "Neve",
+        "snowandthunder": "Neve e temporale",
+        "snowshowers": "Rovesci di neve",
+        "snowshowersandthunder": "Rovesci di neve e temporale",
+        "thunder": "Temporale",
         "unknown": "Sconosciuto"
       }
     },
     "row": {
-      "viewDetails": "Vedi dettagli per {species}"
+      "viewDetails": "Vedi dettagli per {species}",
+      "play": "Riproduci",
+      "playAudio": "Riproduci audio"
     },
     "media": {
       "title": "Registrazione e Spettrogramma",
@@ -862,7 +936,10 @@
     "aria": {
       "loading": "Caricamento dettagli rilevamento...",
       "loaded": "Dettagli rilevamento caricati per {species}",
-      "error": "Errore caricamento rilevamento: {error}"
+      "error": "Errore caricamento rilevamento: {error}",
+      "loadingResults": "Caricamento di {count} risultati...",
+      "thumbnailLoading": "Caricamento miniatura di {species}...",
+      "thumbnailLoaded": "Miniatura di {species} caricata"
     },
     "errors": {
       "notFound": "Rilevamento non trovato. Potrebbe essere stato eliminato o l'ID non è corretto.",
@@ -872,11 +949,6 @@
       "loadFailed": "Impossibile caricare il rilevamento (Errore {status}). Prova ad aggiornare la pagina.",
       "noIdProvided": "Nessun ID di rilevamento fornito.",
       "fetchFailed": "Recupero dei rilevamenti non riuscito"
-    },
-    "viewToggle": {
-      "label": "Modalità visualizzazione",
-      "table": "Vista tabella",
-      "cards": "Vista a schede"
     }
   },
   "species": {
@@ -1087,6 +1159,86 @@
         "detections": "Rilevamenti",
         "fetchFailed": "Impossibile recuperare statistiche database"
       },
+      "dashboard": {
+        "title": "Dashboard database",
+        "fetchFailed": "Impossibile recuperare la panoramica del database",
+        "loading": "Caricamento...",
+        "metrics": {
+          "readLatency": "Latenza lettura",
+          "writeLatency": "Latenza scrittura",
+          "queriesPerSec": "Query/sec",
+          "database": "Database",
+          "avg": "media",
+          "max": "max",
+          "lastHour": "{count} nell'ultima ora",
+          "slowQueries": "{count} lenti"
+        },
+        "details": {
+          "title": "Dettagli database",
+          "engine": "Motore",
+          "journal": "Giornale",
+          "pageSize": "Dimensione pagina",
+          "cacheHit": "Cache hit",
+          "integrity": "Integrità",
+          "lastVacuum": "Ultimo VACUUM"
+        },
+        "locksWal": {
+          "title": "Blocchi e WAL",
+          "lockWaits": "Attese blocco",
+          "lockTimeouts": "Timeout blocco",
+          "avgWait": "Attesa media",
+          "busyTimeouts": "Timeout occupato",
+          "walSize": "Dimensione WAL",
+          "checkpoints": "Checkpoint",
+          "freelistPages": "Pagine freelist",
+          "cacheSize": "Dimensione cache"
+        },
+        "connectionPool": {
+          "title": "Pool di connessioni",
+          "poolUsage": "Utilizzo pool",
+          "active": "attivo",
+          "idle": "inattivo",
+          "waiting": "in attesa",
+          "totalCreated": "Totale creati",
+          "connErrors": "Errori di connessione",
+          "threads": "Thread",
+          "running": "in esecuzione",
+          "cached": "in cache"
+        },
+        "innodb": {
+          "title": "InnoDB e blocchi",
+          "bufferPoolHitRate": "Tasso di hit del buffer pool",
+          "bufferPoolSize": "Dimensione buffer pool",
+          "lockWaits": "Attese blocco",
+          "deadlocks": "Deadlock",
+          "avgLockWait": "Attesa media blocco",
+          "tableLocksWaited": "Blocchi tabella in attesa",
+          "tableLocksImmediate": "Blocchi tabella immediati"
+        },
+        "detectionRate": {
+          "title": "Tasso di rilevamento (24h)",
+          "chartLabel": "Tasso di rilevamento nelle ultime 24 ore",
+          "detectionsTooltip": "{count} rilevamenti",
+          "perHour": "/ora",
+          "min": "min",
+          "avg": "media",
+          "max": "max",
+          "lastBackup": "Ultimo backup",
+          "backupSize": "Dimensione backup",
+          "createBackup": "Crea backup",
+          "mysqlHost": "Host",
+          "mysqlBackupNote": "I backup MySQL devono essere gestiti tramite mysqldump o i tuoi strumenti di amministrazione MySQL."
+        },
+        "tables": {
+          "title": "Tabelle",
+          "total": "Totale",
+          "table": "Tabella",
+          "engine": "Motore",
+          "rows": "Righe",
+          "size": "Dimensione",
+          "usage": "Utilizzo"
+        }
+      },
       "backup": {
         "download": "Scarica Backup",
         "downloading": "Download in corso...",
@@ -1171,6 +1323,29 @@
           "calculating": "Calcolo in corso...",
           "dirtyWriteFailed": "{count} record non scritti — verranno riconciliati durante la validazione"
         },
+        "details": {
+          "title": "Dettagli database",
+          "detections": "{count} rilevamenti",
+          "lastBackup": "Ultimo backup: {date}",
+          "noBackups": "Nessun backup",
+          "integrity": "Integrità: {status}"
+        },
+        "strip": {
+          "legacy": "Legacy",
+          "v2Target": "V2 (Destinazione)",
+          "active": "Attivo",
+          "migration": "Migrazione",
+          "complete": "Completato",
+          "recordsMigrated": "{count} record migrati",
+          "readyToMigrate": "Pronto per la migrazione",
+          "recordsInLegacy": "{count} record nel legacy",
+          "comparingRecords": "Confronto conteggio record...",
+          "validationFailed": "Validazione fallita",
+          "rate": "Frequenza",
+          "recPerSec": "{rate} rec/s",
+          "dayAvg": "~{count} / media giornaliera",
+          "dayHistory": "Storico 30 giorni"
+        },
         "phase": {
           "indicator": "Fase {current} di {total}: ",
           "detections": "Migrazione rilevamenti primari",
@@ -1219,8 +1394,8 @@
           "resumeFailed": "Impossibile riprendere la migrazione",
           "cancelFailed": "Impossibile annullare la migrazione",
           "rollbackFailed": "Impossibile eseguire il rollback della migrazione",
-          "fetchFailed": "Impossibile recuperare lo stato della migrazione",
-          "retryValidationFailed": "Impossibile riprovare la validazione"
+          "retryValidationFailed": "Impossibile riprovare la validazione",
+          "fetchFailed": "Impossibile recuperare lo stato della migrazione"
         },
         "worker": {
           "running": "Worker In Esecuzione",
@@ -1236,6 +1411,19 @@
           "warningsCount": "{count} avviso/i",
           "running": "Esecuzione controlli pre-migrazione...",
           "checkingStep": "Passo {current} di {total}",
+          "passedCount": "{passed}/{total} superati",
+          "criticalCount": "{count} critici",
+          "warningCount": "{count} avviso/i",
+          "rerun": "Riesegui",
+          "showDetails": "Mostra dettagli",
+          "hideDetails": "Nascondi dettagli",
+          "status": {
+            "passed": "Superato",
+            "failed": "Fallito",
+            "error": "Errore",
+            "warning": "Avviso",
+            "skipped": "Saltato"
+          },
           "errors": {
             "fetchFailed": "Impossibile recuperare i prerequisiti"
           },
@@ -1279,123 +1467,7 @@
             "mysql_timeout": {
               "name": "Timeout MySQL"
             }
-          },
-          "passedCount": "{passed}/{total} superati",
-          "criticalCount": "{count} critici",
-          "warningCount": "{count} avviso/i",
-          "rerun": "Riesegui",
-          "showDetails": "Mostra dettagli",
-          "hideDetails": "Nascondi dettagli",
-          "status": {
-            "passed": "Superato",
-            "failed": "Fallito",
-            "error": "Errore",
-            "warning": "Avviso",
-            "skipped": "Saltato"
           }
-        },
-        "details": {
-          "title": "Dettagli database",
-          "detections": "{count} rilevamenti",
-          "lastBackup": "Ultimo backup: {date}",
-          "noBackups": "Nessun backup",
-          "integrity": "Integrità: {status}"
-        },
-        "strip": {
-          "legacy": "Legacy",
-          "v2Target": "V2 (Destinazione)",
-          "active": "Attivo",
-          "migration": "Migrazione",
-          "complete": "Completato",
-          "recordsMigrated": "{count} record migrati",
-          "readyToMigrate": "Pronto per la migrazione",
-          "recordsInLegacy": "{count} record nel legacy",
-          "comparingRecords": "Confronto conteggio record...",
-          "validationFailed": "Validazione fallita",
-          "rate": "Frequenza",
-          "recPerSec": "{rate} rec/s",
-          "dayAvg": "~{count} / media giornaliera",
-          "dayHistory": "Storico 30 giorni"
-        }
-      },
-      "dashboard": {
-        "title": "Dashboard database",
-        "fetchFailed": "Impossibile recuperare la panoramica del database",
-        "loading": "Caricamento...",
-        "metrics": {
-          "readLatency": "Latenza lettura",
-          "writeLatency": "Latenza scrittura",
-          "queriesPerSec": "Query/sec",
-          "database": "Database",
-          "avg": "media",
-          "max": "max",
-          "lastHour": "{count} nell'ultima ora",
-          "slowQueries": "{count} lenti"
-        },
-        "details": {
-          "title": "Dettagli database",
-          "engine": "Motore",
-          "journal": "Giornale",
-          "pageSize": "Dimensione pagina",
-          "cacheHit": "Cache hit",
-          "integrity": "Integrità",
-          "lastVacuum": "Ultimo VACUUM"
-        },
-        "locksWal": {
-          "title": "Blocchi e WAL",
-          "lockWaits": "Attese blocco",
-          "lockTimeouts": "Timeout blocco",
-          "avgWait": "Attesa media",
-          "busyTimeouts": "Timeout occupato",
-          "walSize": "Dimensione WAL",
-          "checkpoints": "Checkpoint",
-          "freelistPages": "Pagine freelist",
-          "cacheSize": "Dimensione cache"
-        },
-        "connectionPool": {
-          "title": "Pool di connessioni",
-          "poolUsage": "Utilizzo pool",
-          "active": "attivo",
-          "idle": "inattivo",
-          "waiting": "in attesa",
-          "totalCreated": "Totale creati",
-          "connErrors": "Errori di connessione",
-          "threads": "Thread",
-          "running": "in esecuzione",
-          "cached": "in cache"
-        },
-        "innodb": {
-          "title": "InnoDB e blocchi",
-          "bufferPoolHitRate": "Tasso di hit del buffer pool",
-          "bufferPoolSize": "Dimensione buffer pool",
-          "lockWaits": "Attese blocco",
-          "deadlocks": "Deadlock",
-          "avgLockWait": "Attesa media blocco",
-          "tableLocksWaited": "Blocchi tabella in attesa",
-          "tableLocksImmediate": "Blocchi tabella immediati"
-        },
-        "detectionRate": {
-          "title": "Tasso di rilevamento (24h)",
-          "chartLabel": "Tasso di rilevamento nelle ultime 24 ore",
-          "detectionsTooltip": "{count} rilevamenti",
-          "perHour": "/ora",
-          "min": "min",
-          "avg": "media",
-          "max": "max",
-          "lastBackup": "Ultimo backup",
-          "backupSize": "Dimensione backup",
-          "createBackup": "Crea backup",
-          "mysqlHost": "Host",
-          "mysqlBackupNote": "I backup MySQL devono essere gestiti tramite mysqldump o i tuoi strumenti di amministrazione MySQL."
-        },
-        "tables": {
-          "title": "Tabelle",
-          "total": "Totale",
-          "table": "Tabella",
-          "engine": "Motore",
-          "rows": "Righe",
-          "size": "Dimensione",
-          "usage": "Utilizzo"
         }
       }
     },
@@ -1409,12 +1481,12 @@
       "available": "disp.",
       "min": "Min",
       "max": "Max",
+      "limit": "Limite",
       "tempUnavailable": "Non disponibile",
       "online": "Online",
       "uptime": "Tempo attivo",
       "host": "Host",
       "model": "Modello",
-      "limit": "Limite",
       "inference": "Inferenza",
       "avgTime": "Med",
       "noInference": "Nessun dato",
@@ -1428,6 +1500,30 @@
       "free": "libero",
       "ram": "RAM"
     }
+  },
+  "terminal": {
+    "title": "Terminale",
+    "disabled": "Terminale disabilitato",
+    "disabledDescription": "Il terminale del browser è disabilitato. Abilitarlo in Impostazioni → Sicurezza per utilizzare questa funzione.",
+    "connected": "Connesso",
+    "disconnected": "Disconnesso",
+    "connecting": "Connessione in corso...",
+    "connectionError": "Connessione non riuscita",
+    "connectionClosed": "Connessione chiusa",
+    "securityWarning": "Avviso: Questo terminale fornisce accesso diretto alla shell del sistema host. Abilitare solo su reti attendibili.",
+    "copySelection": "Copia selezione",
+    "expand": "Espandi",
+    "collapse": "Comprimi",
+    "fullscreen": "Schermo intero",
+    "exitFullscreen": "Esci da schermo intero",
+    "colorTheme": "Tema colori",
+    "themeDark": "Scuro",
+    "themeLight": "Chiaro",
+    "themeHighContrast": "Alto contrasto",
+    "detach": "Apri in nuova finestra",
+    "detached": "Terminale separato",
+    "detachedDescription": "Il terminale è in esecuzione in una finestra separata. Chiudere quella finestra per riportarlo qui.",
+    "reattach": "Riattacca"
   },
   "analytics": {
     "title": "Panoramica",
@@ -1589,19 +1685,19 @@
           "species": "Specie"
         }
       },
-      "aria": {
-        "startDate": "Data inizio",
-        "endDate": "Data fine",
-        "loadingAnalytics": "Caricamento dati analitici",
-        "loadingTrends": "Caricamento dati trend",
-        "loadingDiversity": "Caricamento dati di diversità"
-      },
       "categories": {
         "birds": "Uccelli"
       },
       "filters": {
         "startDate": "Data inizio",
         "endDate": "Data fine"
+      },
+      "aria": {
+        "startDate": "Data inizio",
+        "endDate": "Data fine",
+        "loadingAnalytics": "Caricamento dati analitici",
+        "loadingTrends": "Caricamento dati trend",
+        "loadingDiversity": "Caricamento dati di diversità"
       }
     },
     "errors": {
@@ -1612,6 +1708,7 @@
     "title": "Impostazioni - BirdNET-Go",
     "loading": "Caricamento impostazioni...",
     "sections": {
+      "analysis": "Analisi",
       "node": "Generali",
       "userinterface": "Interfaccia",
       "audio": "Audio",
@@ -1635,6 +1732,12 @@
       "savingAriaLabel": "Salvataggio modifiche...",
       "unsavedChanges": "Modifiche non salvate",
       "toolbar": "Azioni impostazioni"
+    },
+    "errors": {
+      "loadFailed": "Caricamento delle impostazioni non riuscito",
+      "saveFailed": "Salvataggio delle impostazioni non riuscito",
+      "databaseStatsFailed": "Caricamento delle statistiche del database non riuscito",
+      "csvDownloadFailed": "Download del CSV non riuscito"
     },
     "card": {
       "changed": "modificato",
@@ -1717,7 +1820,17 @@
           },
           "hardwareNote": "I livelli Rigoroso e Massimo richiedono impostazioni di sovrapposizione più alte e più risorse CPU. Hardware RPi 4 o migliore è richiesto per questi livelli.",
           "overlapAdjusted": "Impostazione sovrapposizione regolata automaticamente a {overlap}s per soddisfare i requisiti del filtro",
-          "overlapReduced": "Impostazione sovrapposizione ridotta a {overlap}s per corrispondere al livello del filtro"
+          "overlapReduced": "Impostazione sovrapposizione ridotta a {overlap}s per corrispondere al livello del filtro",
+          "levelNames": {
+            "off": "Disattivato",
+            "lenient": "Basso",
+            "moderate": "Moderato",
+            "balanced": "Bilanciato",
+            "strict": "Rigoroso",
+            "maximum": "Massimo",
+            "unknown": "Sconosciuto"
+          },
+          "warningOff": "Senza filtraggio, qualsiasi rilevamento sopra la soglia di confidenza viene accettato immediatamente. Questo produce tipicamente diversi falsi positivi al giorno. Anche un filtraggio basso migliora significativamente la qualità dei risultati."
         },
         "rangeFilter": {
           "title": "Filtro Intervallo",
@@ -2351,8 +2464,11 @@
             "name": "Gotify",
             "server": {
               "label": "URL Server",
-              "placeholder": "gotify.example.com",
-              "helpText": "Il tuo hostname server Gotify (senza https://)"
+              "placeholder": "gotify.example.com:8070",
+              "helpText": "Nome host e porta del tuo server Gotify"
+            },
+            "protocol": {
+              "label": "Protocollo"
             },
             "token": {
               "label": "Token Applicazione",
@@ -2766,6 +2882,10 @@
           "refresh": "Aggiorna Dispositivi"
         }
       },
+      "noSources": {
+        "warning": "Nessuna Sorgente Audio Configurata",
+        "description": "BirdNET-Go necessita di un input audio per rilevare uccelli. Per favore configura almeno una sorgente nella scheda Scheda Audio o Flussi."
+      },
       "soundCards": {
         "summary": "{count} sorgente/i scheda audio",
         "addSource": "Aggiungi scheda audio",
@@ -2810,10 +2930,6 @@
           "recommendedSampleRate": "{rate}kHz consigliato per i migliori risultati",
           "atLeastOneModel": "È necessario selezionare almeno un modello"
         }
-      },
-      "noSources": {
-        "warning": "Nessuna Sorgente Audio Configurata",
-        "description": "BirdNET-Go necessita di un input audio per rilevare uccelli. Per favore configura almeno una sorgente nella scheda Scheda Audio o Flussi."
       },
       "audioCapture": {
         "title": "Configurazione Scheda Audio",
@@ -2876,6 +2992,7 @@
         "unknown": "sconosciuto",
         "refresh": "Aggiorna",
         "addStream": "Aggiungi Flusso",
+        "testRequired": "Esegui un test dello stream riuscito prima di salvare",
         "deleteConfirm": "Rimuovere questo flusso?",
         "restartCount": "Riavviato {count} volta/e",
         "healthLoadError": "Impossibile caricare stato salute flusso",
@@ -2928,6 +3045,18 @@
           "degraded": "Degradato",
           "failed": "Fallito",
           "unknown": "Sconosciuto"
+        },
+        "test": {
+          "button": "Testa stream",
+          "probing": "Test in corso...",
+          "result": "Risultato del test",
+          "error": "Test fallito",
+          "batCompatible": "Compatibile con pipistrelli",
+          "batIncompatible": "Non compatibile con pipistrelli"
+        },
+        "batWarning": "I modelli per pipistrelli richiedono flussi con un codec lossless (PCM) e una frequenza di campionamento di almeno 96 kHz. Usa il pulsante Testa stream sopra per verificare la compatibilità.",
+        "codecWarning": {
+          "lossy": "I codec con perdita (AAC, Opus, MP3) distruggono le frequenze ultrasoniche sopra i ~20 kHz, rendendo lo stream inadatto al rilevamento dei pipistrelli."
         }
       },
       "audioFilters": {
@@ -3103,6 +3232,10 @@
         "devicesLoadFailed": "Impossibile caricare dispositivi audio. Controlla permessi sistema.",
         "invalidBitrate": "Valore bitrate non valido",
         "invalidRetentionPolicy": "Politica conservazione non valida"
+      },
+      "models": {
+        "recommendBoth": "Per la migliore copertura di rilevamento delle specie, si consiglia di eseguire insieme sia BirdNET che Perch.",
+        "perchOnlyWarning": "Perch da solo produce meno rilevamenti. Abbassare la soglia di confidenza a 0.50 per risultati significativi, oppure attivare BirdNET per una migliore copertura."
       }
     },
     "security": {
@@ -3490,6 +3623,8 @@
         "parameters": {
           "label": "Parametri",
           "helpText": "Questi valori saranno passati al tuo comando nell'ordine elencato",
+          "placeholder": "Clicca i pulsanti qui sotto per aggiungere parametri o digita manualmente",
+          "tooltip": "Usa i pulsanti qui sotto o digita direttamente (separati da virgola)",
           "availableTitle": "Parametri Disponibili",
           "buttons": {
             "commonName": "NomeComune",
@@ -3498,9 +3633,7 @@
             "time": "Ora",
             "source": "Sorgente",
             "clearParameters": "Pulisci Parametri"
-          },
-          "placeholder": "Clicca i pulsanti qui sotto per aggiungere parametri o digita manualmente",
-          "tooltip": "Usa i pulsanti qui sotto o digita direttamente (separati da virgola)"
+          }
         },
         "executeDefaults": {
           "label": "Esegui anche azioni predefinite (archiviazione database, notifiche, ecc.)",
@@ -3509,6 +3642,7 @@
       },
       "add": "Aggiungi",
       "remove": "Rimuovi",
+      "suggestions": "Suggerimenti specie",
       "addSpeciesToInclude": "Aggiungi specie da includere",
       "addSpeciesToIncludeLabel": "Aggiungi Nuova Specie da Includere",
       "addSpeciesToExclude": "Aggiungi specie da escludere",
@@ -3651,8 +3785,7 @@
         "resetAllError": "Impossibile resettare soglie",
         "expand": "Mostra cronologia eventi",
         "collapse": "Nascondi cronologia eventi"
-      },
-      "suggestions": "Suggerimenti specie"
+      }
     },
     "database": {
       "sqlitePlaceholder": "Inserisci percorso database SQLite",
@@ -3867,12 +4000,6 @@
         }
       }
     },
-    "errors": {
-      "loadFailed": "Caricamento delle impostazioni non riuscito",
-      "saveFailed": "Salvataggio delle impostazioni non riuscito",
-      "databaseStatsFailed": "Caricamento delle statistiche del database non riuscito",
-      "csvDownloadFailed": "Download del CSV non riuscito"
-    },
     "appearance": {
       "colorScheme": "Schema colori",
       "colorSchemeDescription": "Scegli uno schema di colori per l'interfaccia",
@@ -3994,13 +4121,13 @@
     "labels": {
       "showPassword": "Mostra password",
       "hidePassword": "Nascondi password",
-      "copyToClipboard": "Copia negli appunti",
-      "clearSelection": "Pulisci selezione",
-      "selectOption": "Seleziona un'opzione",
       "secretSet": "Imposta",
       "changeSecret": "Modifica",
       "cancelChange": "Annulla",
-      "enterNewSecret": "Inserisci nuovo valore"
+      "enterNewSecret": "Inserisci nuovo valore",
+      "copyToClipboard": "Copia negli appunti",
+      "clearSelection": "Pulisci selezione",
+      "selectOption": "Seleziona un'opzione"
     },
     "help": {
       "passwordStrength": "Forza password: {strength}",
@@ -4084,7 +4211,31 @@
       "playbackSpeed": "Velocità riproduzione",
       "speed": "Velocità",
       "loop": "Attiva/disattiva ripetizione",
-      "player": "Lettore audio"
+      "player": "Lettore audio",
+      "autoplayBlocked": "Clicca per riprodurre (riproduzione automatica bloccata)",
+      "hlsNotSupported": "La riproduzione HLS non è supportata in questo browser",
+      "streamStarting": "Avvio dello stream audio...",
+      "levelFor": "Livello audio per {source}",
+      "levelForNoSource": "Livello audio: nessuna sorgente",
+      "noSource": "Nessuna sorgente",
+      "levelAnnouncement": "Livello audio attuale: {level} percento",
+      "levelAnnouncementClipping": "Livello audio attuale: {level} percento, distorsione rilevata",
+      "sourceSelection": "Selezione sorgente audio",
+      "sources": "Sorgenti audio",
+      "noSourcesAvailable": "Nessuna sorgente audio disponibile",
+      "silent": "(silenzioso)",
+      "stopPlayback": "Interrompi riproduzione audio",
+      "startPlayback": "Avvia riproduzione audio",
+      "nowPlaying": "Riproduzione audio da {source}",
+      "nowPlayingNoSource": "Riproduzione audio in corso",
+      "playbackStopped": "Riproduzione audio interrotta",
+      "loginRequired": "Accesso richiesto per lo streaming audio",
+      "streamError": "Errore nell'avvio dello stream",
+      "streamTitle": "Stream audio uccelli - {source}",
+      "streamTitleDefault": "Stream audio uccelli",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Diretta",
+      "playbackError": "Errore di riproduzione: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spettrogramma non ancora generato",
@@ -4226,30 +4377,6 @@
       "download": "Scarica"
     }
   },
-  "terminal": {
-    "title": "Terminale",
-    "disabled": "Terminale disabilitato",
-    "disabledDescription": "Il terminale del browser è disabilitato. Abilitarlo in Impostazioni → Sicurezza per utilizzare questa funzione.",
-    "connected": "Connesso",
-    "disconnected": "Disconnesso",
-    "connecting": "Connessione in corso...",
-    "connectionError": "Connessione non riuscita",
-    "connectionClosed": "Connessione chiusa",
-    "securityWarning": "Avviso: Questo terminale fornisce accesso diretto alla shell del sistema host. Abilitare solo su reti attendibili.",
-    "copySelection": "Copia selezione",
-    "expand": "Espandi",
-    "collapse": "Comprimi",
-    "fullscreen": "Schermo intero",
-    "exitFullscreen": "Esci da schermo intero",
-    "colorTheme": "Tema colori",
-    "themeDark": "Scuro",
-    "themeLight": "Chiaro",
-    "themeHighContrast": "Alto contrasto",
-    "detach": "Apri in nuova finestra",
-    "detached": "Terminale separato",
-    "detachedDescription": "Il terminale è in esecuzione in una finestra separata. Chiudere quella finestra per riportarlo qui.",
-    "reattach": "Riattacca"
-  },
   "quietHours": {
     "indicator": {
       "tooltip": "Ore silenziose attive — {count} sorgente/i in pausa"
@@ -4333,6 +4460,16 @@
       "hostRequired": "Il parametro host è obbligatorio",
       "invalidHost": "Parametro host non valido",
       "rateLimit": "Troppi tentativi di connessione al flusso di notifiche, attendere prima di riprovare"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Corpo della richiesta non valido",
+        "urlRequired": "L'URL dello stream è obbligatorio",
+        "invalidUrl": "Formato URL non valido. Inserisci un URL completo, ad es. rtsp://host:porta/percorso",
+        "unsupportedScheme": "Schema URL non supportato \"{scheme}\". Usa rtsp, rtsps, http, https, rtmp o udp",
+        "blockedDestination": "Questa destinazione è bloccata per motivi di sicurezza",
+        "connectionFailed": "Impossibile connettersi allo stream. Verifica che l'URL sia corretto e che lo stream sia accessibile"
+      }
     },
     "debug": {
       "notEnabled": "Modalità debug non abilitata"
@@ -4467,6 +4604,154 @@
       }
     }
   },
+  "analysis": {
+    "title": "Analisi",
+    "tabs": {
+      "settings": "Impostazioni",
+      "models": "Modelli"
+    },
+    "detection": {
+      "title": "Impostazioni di rilevamento",
+      "description": "Configura le soglie di confidenza e la lingua per la classificazione delle specie.",
+      "confidenceThreshold": {
+        "label": "Confidence Threshold",
+        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+      },
+      "batThreshold": {
+        "label": "Soglia di rilevamento pipistrelli",
+        "helpText": "Punteggio di confidenza minimo per i rilevamenti delle specie di pipistrelli. Si applica solo ai modelli classificatori di pipistrelli."
+      },
+      "batFilter": {
+        "label": "Filtro passa-alto audio pipistrelli",
+        "helpText": "Filtra le frequenze udibili dall'uomo prima dell'analisi dei pipistrelli per ridurre i falsi positivi causati dal canto degli uccelli e dal rumore ambientale."
+      },
+      "batNighttimeOnly": {
+        "label": "Solo di notte",
+        "helpText": "Se abilitato, il rilevamento dei pipistrelli funziona solo tra il crepuscolo civile e l'alba civile. Richiede la configurazione della posizione. Disabilita per eseguire il rilevamento continuamente."
+      },
+      "batUltrasonicFilter": {
+        "label": "Validazione post-rilevamento",
+        "helpText": "Quando abilitato, i rilevamenti di pipistrelli vengono validati analizzando i pattern di energia ultrasonica nell'audio sorgente. I rilevamenti privi di caratteristiche di ecolocalizzazione vengono contrassegnati come improbabili."
+      },
+      "batFalsePositiveFilter": {
+        "label": "Filtro falsi positivi pipistrelli",
+        "helpText": "Richiede multiple conferme di un rilevamento di pipistrello all'interno di una finestra scorrevole prima di accettarlo. Livelli più alti richiedono più conferme, riducendo i falsi positivi. Il modello pipistrelli usa una sovrapposizione fissa del 50%, quindi non è necessario alcun aggiustamento.",
+        "levels": {
+          "off": "Nessun filtraggio; accetta qualsiasi rilevamento di pipistrello immediatamente.",
+          "moderate": "Buon equilibrio per la maggior parte delle configurazioni. Riduce significativamente i falsi positivi.",
+          "strict": "Filtraggio massimo per la massima precisione."
+        },
+        "detectionCount": "{count} conferme richieste. {description}",
+        "warningOff": "Senza filtraggio c'è un'alta probabilità di falsi positivi. L'attivazione del filtraggio migliora significativamente la precisione."
+      },
+      "locale": {
+        "label": "Lingua delle specie",
+        "helpText": "Lingua utilizzata per i nomi comuni delle specie nell'interfaccia."
+      }
+    },
+    "rangeFilter": {
+      "birdOnlyNote": "Il filtro di zona si applica solo ai classificatori di uccelli. I modelli per pipistrelli usano le proprie liste di specie.",
+      "status": {
+        "title": "Panoramica filtro di zona",
+        "geomodelInfo": "BirdNET Geomodello {version} - {species} specie conosciute",
+        "autoSelected": "Selezionato automaticamente",
+        "manual": "Manuale",
+        "classifier": "Classificatore",
+        "totalSpecies": "Specie totali",
+        "withRangeData": "Con dati di distribuzione",
+        "withoutRangeData": "Senza dati di distribuzione",
+        "withRangeDataTooltip": "Specie che il geomodel può valutare per la probabilità geografica nella tua posizione",
+        "withoutRangeDataTooltip": "Specie senza dati geografici nel geomodel, gestite dall'impostazione delle specie non mappate qui sotto",
+        "noFilter": "Nessun filtro di zona attivo",
+        "passUnmapped": {
+          "label": "Consenti specie senza dati di distribuzione",
+          "helpText": "Consenti i rilevamenti di specie per le quali il geomodel non ha dati geografici. Se disabilitato, queste specie vengono sempre filtrate."
+        }
+      }
+    },
+    "advanced": {
+      "title": "Avanzate",
+      "description": "Configurazione dell'elaborazione e dei modelli personalizzati."
+    },
+    "gallery": {
+      "title": "Galleria modelli",
+      "description": "Gestisci i modelli di classificazione per il rilevamento di uccelli e pipistrelli.",
+      "tabs": {
+        "installed": "Installati",
+        "available": "Disponibili"
+      },
+      "loading": "Caricamento modelli...",
+      "retry": "Riprova",
+      "builtIn": "Integrato",
+      "builtInDescription": "Classificatore di specie di uccelli integrato dal team BirdNET.",
+      "species": "{count} specie",
+      "install": "Installa",
+      "installing": "Installazione...",
+      "remove": "Rimuovi",
+      "removing": "Rimozione...",
+      "noInstalledModels": "Nessun modello aggiuntivo installato. Sfoglia la scheda Disponibili per aggiungerne altri.",
+      "noAvailableModels": "Nessun modello aggiuntivo disponibile per la tua piattaforma.",
+      "sections": {
+        "acoustic": "Classificatori acustici",
+        "geomodel": "Geomodelli"
+      },
+      "categories": {
+        "wildlife": "Classificatori di fauna selvatica",
+        "bird": "Classificatori di uccelli",
+        "bat": "Classificatori di pipistrelli"
+      },
+      "progress": {
+        "downloading": "Download in corso...",
+        "verifying": "Verifica in corso...",
+        "loading": "Caricamento...",
+        "complete": "Installazione completata",
+        "failed": "Non riuscito"
+      },
+      "license": {
+        "title": "Contratto di licenza",
+        "model": "Modello",
+        "author": "Autore",
+        "license": "Licenza",
+        "commercialUse": "Uso commerciale",
+        "downloadSize": "Dimensione download",
+        "allowed": "Consentito",
+        "notAllowed": "Non consentito",
+        "commercialUseAllowed": "Uso commerciale consentito",
+        "nonCommercialOnly": "Solo uso non commerciale",
+        "nonCommercialWarning": "Questo modello è concesso in licenza solo per uso non commerciale. Installandolo, accetti di rispettare i termini della licenza.",
+        "acceptAndInstall": "Accetta e installa"
+      },
+      "removeDialog": {
+        "title": "Rimuovere {name}?",
+        "confirmation": "I file del modello verranno rimossi dal disco. I dati delle etichette vengono conservati per i rilevamenti esistenti."
+      },
+      "errors": {
+        "catalogLoadFailed": "Impossibile caricare il catalogo dei modelli",
+        "installFailed": "Impossibile avviare l'installazione del modello",
+        "removeFailed": "Impossibile rimuovere il modello"
+      },
+      "regionLabel": "Regione",
+      "speciesLabel": "Specie",
+      "reinstall": "Reinstalla",
+      "reinstalling": "Reinstallazione...",
+      "reinstallComplete": "File verificati con successo",
+      "geomodelBadge": "Include il geomodel BirdNET v3.0",
+      "onnxRuntimeRequired": "Richiede ONNX Runtime che non è disponibile su questo sistema.",
+      "onnxRuntimeMissing": "ONNX Runtime non è disponibile. Questo modello non può essere eseguito.",
+      "unavailable": "Non disponibile"
+    },
+    "bird": {
+      "title": "Rilevamento uccelli",
+      "description": "Configura la soglia di confidenza, la lingua delle specie e il filtraggio dei falsi positivi per i classificatori di uccelli."
+    },
+    "bat": {
+      "title": "Rilevamento pipistrelli",
+      "description": "Configura la soglia, la pianificazione e il filtraggio dei falsi positivi per i classificatori di pipistrelli."
+    },
+    "dynamicThreshold": {
+      "birdOnlyNote": "La soglia dinamica si applica solo ai classificatori di uccelli."
+    }
+  },
   "restart": {
     "applicationRestart": "Riavvia applicazione",
     "containerRestart": "Riavvia container",
@@ -4478,5 +4763,147 @@
     "bannerMessage": "Le modifiche alla configurazione richiedono un riavvio:",
     "bannerAction": "Riavvia ora",
     "restartFailed": "Impossibile avviare il riavvio"
+  },
+  "help": {
+    "title": "Aiuto e supporto",
+    "subtitle": "Ottieni aiuto, segnala problemi e connettiti con la comunità",
+    "reportBug": {
+      "description": "Se riscontri un problema, apri prima una segnalazione bug su GitHub per descrivere il problema, poi genera un pacchetto di supporto con il numero della segnalazione per facilitare la diagnosi."
+    },
+    "askQuestion": {
+      "description": "Hai una domanda sulla configurazione, le funzionalità o l'utilizzo? Il forum GitHub Discussions è il posto migliore per ottenere aiuto dalla comunità."
+    },
+    "diagnostics": {
+      "description": "Genera un pacchetto di supporto per aiutare a diagnosticare i problemi. Acquisisce la configurazione del sistema e i log recenti."
+    },
+    "quickLinks": {
+      "title": "Link rapidi",
+      "releases": "Note di rilascio"
+    }
+  },
+  "reportBug": {
+    "title": "Segnala un bug",
+    "subtitle": "Aiutaci a risolvere i problemi fornendo le informazioni necessarie",
+    "systemInfo": {
+      "title": "Le tue informazioni di sistema",
+      "description": "Queste informazioni aiutano a identificare la tua configurazione. Copiale nella segnalazione.",
+      "version": "Versione",
+      "buildDate": "Data di build",
+      "os": "Sistema operativo",
+      "copy": "Copia negli appunti",
+      "copied": "Copiato!",
+      "architecture": "Architettura",
+      "hardware": "Hardware",
+      "environment": "Ambiente"
+    },
+    "whatToInclude": {
+      "title": "Cosa includere nella segnalazione",
+      "description": "Una buona segnalazione ci aiuta a risolvere il tuo problema rapidamente. Includi quanto segue:",
+      "step1": {
+        "title": "Descrizione chiara del problema",
+        "description": "Cosa è successo, cosa ti aspettavi e come riprodurre il problema."
+      },
+      "step2": {
+        "title": "Il tuo metodo di installazione",
+        "description": "Come hai installato BirdNET-Go: script install.sh, Docker Compose, build manuale o altro."
+      },
+      "step3": {
+        "title": "Informazioni di sistema",
+        "description": "Copia i dettagli di sistema mostrati sopra, inclusi versione, sistema operativo e data di build."
+      },
+      "step4": {
+        "title": "Pacchetto di supporto",
+        "description": "Genera e carica un pacchetto di supporto qui sotto. Cattura log e configurazione che velocizzano significativamente la risoluzione dei problemi."
+      }
+    },
+    "openIssue": {
+      "title": "Apri una segnalazione su GitHub",
+      "description": "Apri una segnalazione su GitHub per descrivere il problema. Avrai bisogno del numero della segnalazione nel passaggio successivo.",
+      "button": "Apri segnalazione su GitHub"
+    },
+    "supportDump": {
+      "title": "Genera pacchetto di supporto",
+      "description": "Dopo aver creato la segnalazione, genera un pacchetto di supporto e inserisci il numero della segnalazione GitHub. Questo collega la diagnostica alla segnalazione bug e facilita la risoluzione."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "refresh": "Aggiorna",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "metricFooter": {
+      "allPassing": "Tutto OK",
+      "needsAttention": "Richiede attenzione",
+      "failing": "In errore",
+      "allClear": "Tutto a posto",
+      "noData": "Nessun dato",
+      "none": "Nessuno"
+    },
+    "diagnostics": "Diagnostica",
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Errori frequenti",
+      "errorCount": "Conteggio",
+      "errorComponent": "Componente",
+      "errorLevel": "Livello",
+      "errorMessage": "Messaggio"
+    },
+    "window": {
+      "label": "Finestra di valutazione",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Ultimo evento",
+      "recentEvents": "Eventi recenti",
+      "time": "Ora",
+      "source": "Sorgente",
+      "count": "Conteggio",
+      "lifetime": "totale",
+      "sparklineLabel": "Grafico di attività"
+    }
   }
 }

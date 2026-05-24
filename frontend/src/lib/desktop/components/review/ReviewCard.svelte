@@ -16,6 +16,7 @@
   import { fetchWithCSRF } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { XCircle, TriangleAlert, ChevronRight } from '@lucide/svelte';
+  import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import type { Detection } from '$lib/types/detection.types';
 
   interface Props {
@@ -249,20 +250,27 @@
                 >{t('common.review.form.reviewLabel')}:</span
               >
               <span>
-                {#if detection.verified && detection.verified !== 'unverified'}
-                  <span
-                    class="badge badge-xs"
-                    class:badge-success={detection.verified === 'correct'}
-                    class:badge-error={detection.verified === 'false_positive'}
-                  >
-                    {detection.verified === 'correct'
-                      ? t('common.review.status.verifiedCorrect')
-                      : t('common.review.status.falsePositive')}
-                  </span>
+                {#if detection.verified === 'correct'}
+                  <StatusPill
+                    variant="success"
+                    label={t('common.review.status.verifiedCorrect')}
+                    size="xs"
+                    showDot={false}
+                  />
+                {:else if detection.verified === 'false_positive'}
+                  <StatusPill
+                    variant="error"
+                    label={t('common.review.status.falsePositive')}
+                    size="xs"
+                    showDot={false}
+                  />
                 {:else}
-                  <span class="badge badge-neutral badge-xs"
-                    >{t('common.review.status.notReviewed')}</span
-                  >
+                  <StatusPill
+                    variant="neutral"
+                    label={t('common.review.status.notReviewed')}
+                    size="xs"
+                    showDot={false}
+                  />
                 {/if}
               </span>
             </div>
@@ -272,11 +280,19 @@
               >
               <span>
                 {#if detection.locked}
-                  <span class="badge badge-warning badge-xs">{t('search.statusBadges.locked')}</span
-                  >
+                  <StatusPill
+                    variant="warning"
+                    label={t('search.statusBadges.locked')}
+                    size="xs"
+                    showDot={false}
+                  />
                 {:else}
-                  <span class="badge badge-ghost badge-xs">{t('search.statusBadges.unlocked')}</span
-                  >
+                  <StatusPill
+                    variant="neutral"
+                    label={t('search.statusBadges.unlocked')}
+                    size="xs"
+                    showDot={false}
+                  />
                 {/if}
               </span>
             </div>

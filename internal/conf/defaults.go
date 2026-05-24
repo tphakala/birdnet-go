@@ -85,6 +85,16 @@ func setDefaultConfig() {
 
 	// Bat detection configuration
 	viper.SetDefault("bat.threshold", 0.5)
+	viper.SetDefault("bat.filterenabled", false)
+	viper.SetDefault("bat.filtercutoffhz", 4000.0)
+	viper.SetDefault("bat.filterpasscount", 1)
+	viper.SetDefault("bat.nighttimeonly", true)
+	viper.SetDefault("bat.falsepositivefilter.level", 2)
+	viper.SetDefault("bat.ultrasonicfilter.enabled", true)
+	viper.SetDefault("bat.ultrasonicfilter.cvthreshold", 0.15)
+	viper.SetDefault("bat.ultrasonicfilter.fftsize", 8192)
+	viper.SetDefault("bat.ultrasonicfilter.hopsize", 4096)
+	viper.SetDefault("bat.ultrasonicfilter.frequencysplithz", 20000)
 
 	// Global model enablement (BirdNET only by default)
 	viper.SetDefault("models.enabled", []string{"birdnet"})
