@@ -14,7 +14,7 @@
 - **NEVER create inline SVGs** - use `@lucide/svelte` icons
 - **NEVER use `toISOString()` for dates** - use `getLocalDateString()`
 - **NEVER use Secure Context APIs without fallback** - BirdNET-Go commonly runs on plain HTTP in home networks. `crypto.randomUUID()` and `navigator.clipboard` are undefined on non-HTTPS. Use `Math.random().toString(36).slice(2, 10)` for unique IDs. For clipboard, check `navigator.clipboard?.writeText` and fall back to textarea + `document.execCommand('copy')`
-- **NEVER ship ambiguous UI states** - disabled controls, errors, and loading states must always explain *why* to the user. A disabled Save button with no tooltip is a support ticket waiting to be filed. See [UX Design Principles](#ux-design-principles) below.
+- **NEVER ship ambiguous UI states** - disabled controls, errors, and loading states must always explain _why_ to the user. A disabled Save button with no tooltip is a support ticket waiting to be filed. See [UX Design Principles](#ux-design-principles) below.
 - **Use D3.js for ALL charting/plotting** - unless specific requirement for custom approach
 - **Run `npm run check:all` before EVERY commit**
 
@@ -356,7 +356,7 @@ Every interactive element needs a deliberate UX pass before it ships. Ambiguity 
 
 ### No Ambiguous Disabled States
 
-When a control is disabled (button, input, toggle, link), the user MUST be able to tell *why* without guessing or clicking around. Silent disabled controls are the single biggest source of "this is broken" reports that turn out to be a missing prerequisite the user could have satisfied themselves.
+When a control is disabled (button, input, toggle, link), the user MUST be able to tell _why_ without guessing or clicking around. Silent disabled controls are the single biggest source of "this is broken" reports that turn out to be a missing prerequisite the user could have satisfied themselves.
 
 Required indicators when a control is disabled:
 

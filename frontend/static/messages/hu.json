@@ -4828,11 +4828,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Frissítés",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4844,6 +4842,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Minden rendben",
+      "needsAttention": "Figyelmet igényel",
+      "failing": "Sikertelen",
+      "allClear": "Nincs probléma",
+      "noData": "Nincs adat",
+      "none": "Nincs"
+    },
+    "diagnostics": "Diagnosztika",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4879,6 +4886,24 @@
       "errorComponent": "Komponens",
       "errorLevel": "Szint",
       "errorMessage": "Üzenet"
+    },
+    "window": {
+      "label": "Kiértékelési időablak",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Utolsó esemény",
+      "recentEvents": "Legutóbbi események",
+      "time": "Idő",
+      "source": "Forrás",
+      "count": "Darab",
+      "lifetime": "összesen",
+      "sparklineLabel": "Aktivitási diagram"
     }
   }
 }

@@ -138,9 +138,11 @@ type Controller struct {
 	audioWatchdog atomic.Pointer[audiocore.LivenessWatchdog]
 
 	// Health check infrastructure for the diagnostics endpoints.
-	healthRegistry *health.Registry
-	healthReports  *health.ReportStore
-	healthErrors   *health.ErrorRingBuffer
+	healthRegistry     *health.Registry
+	healthReports      *health.ReportStore
+	healthErrors       *health.ErrorRingBuffer
+	healthMetricsStore *observability.HealthMetricsStore
+	healthEvents       *observability.HealthEventBuffer
 
 	// sourceRestarter restarts a single audio source by ID. Set during
 	// pipeline Start() and called by the restart-source control endpoint.
@@ -649,6 +651,7 @@ func (c *Controller) initRoutes() {
 		{"range routes", c.initRangeRoutes},
 		{"heatmap routes", c.initHeatmapRoutes},
 		{"sse routes", c.initSSERoutes},
+		{"diagnostics routes", c.initDiagnosticsRoutes},
 		{"metrics history routes", c.initMetricsHistoryRoutes},
 		{"notification routes", c.initNotificationRoutes},
 		{"support routes", c.initSupportRoutes},
@@ -659,7 +662,6 @@ func (c *Controller) initRoutes() {
 		{"model routes", c.initModelRoutes},
 		{"insights routes", c.initInsightsRoutes},
 		{"tls routes", c.initTLSRoutes},
-		{"diagnostics routes", c.initDiagnosticsRoutes},
 	}
 
 	for _, initializer := range routeInitializers {

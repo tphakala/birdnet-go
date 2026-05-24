@@ -44,10 +44,25 @@ func (r *Registry) RegisterAll(checks ...Check) {
 
 // RunAll executes all checks in parallel with per-check timeout.
 func (r *Registry) RunAll(ctx context.Context) []Result {
+	return r.RunAllWithWindow(ctx, 0)
+}
+
+// RunAllWithWindow executes all checks in parallel. For checks implementing
+// WindowedCheck, the given window duration is applied before execution.
+// A zero window leaves checks at their default window.
+func (r *Registry) RunAllWithWindow(ctx context.Context, window time.Duration) []Result {
 	r.mu.RLock()
 	checks := make([]Check, len(r.checks))
 	copy(checks, r.checks)
 	r.mu.RUnlock()
+
+	if window > 0 {
+		for i, c := range checks {
+			if wc, ok := c.(WindowedCheck); ok {
+				checks[i] = wc.WithWindow(window)
+			}
+		}
+	}
 
 	return runChecks(ctx, checks)
 }

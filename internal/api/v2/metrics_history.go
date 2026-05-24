@@ -228,6 +228,14 @@ func (c *Controller) initMetricsHistoryRoutes() {
 		// Wire BirdNET inference counters
 		collector.SetInferenceCounters(classifier.GetInferenceCounters())
 
+		// Wire health counter collection (drops, overruns, stream restarts)
+		if c.healthMetricsStore != nil {
+			collector.SetHealthStore(c.healthMetricsStore)
+			collector.SetHealthEvents(c.healthEvents)
+			collector.SetAudioRouter(c.buildAudioRouterSnapshotProvider())
+			collector.SetStreamHealth(c.buildStreamHealthSnapshotProvider())
+		}
+
 		collector.Start(c.ctx)
 	})
 

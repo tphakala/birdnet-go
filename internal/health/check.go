@@ -65,6 +65,19 @@ type MultiResultCheck interface {
 	RunMulti(ctx context.Context) []Result
 }
 
+// WindowedCheck is implemented by counter-based checks that support
+// time-windowed evaluation. The registry calls WithWindow before Run
+// to configure the evaluation window for the current diagnostics request.
+//
+// Note: WithWindow returns the narrower Check interface, so an implementation
+// that also satisfies MultiResultCheck will lose that capability after the
+// registry rewraps it. Currently no check is both windowed and multi-result;
+// if that changes, this interface should return the same dynamic type.
+type WindowedCheck interface {
+	Check
+	WithWindow(d time.Duration) Check
+}
+
 // WorstStatus returns the most severe actionable status from a slice of results.
 // Skipped and unknown results are ignored when actionable results (healthy,
 // warning, critical) exist. If every result is non-actionable, it returns
