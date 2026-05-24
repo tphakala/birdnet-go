@@ -136,7 +136,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// -- LogDeduplication --
 	"Realtime.LogDeduplication": {
 		categories: []hotReloadCategory{hotReloadFresh},
-		todoAction: "reconfigure_log_deduplication",
+		action:     "reconfigure_log_deduplication",
 	},
 
 	// -- Birdweather --
@@ -166,7 +166,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.RTSP.Transport":            {categories: []hotReloadCategory{hotReloadRuntime}},
 	"Realtime.RTSP.Health": {
 		categories: []hotReloadCategory{hotReloadFresh},
-		todoAction: "reconfigure_rtsp_health",
+		action:     "reconfigure_rtsp_health",
 	},
 	"Realtime.RTSP.FFmpegParameters": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},
 
@@ -182,7 +182,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.MQTT.TLS":           {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_mqtt"},
 	"Realtime.MQTT.HomeAssistant": {
 		categories: []hotReloadCategory{hotReloadFresh},
-		todoAction: "reconfigure_mqtt",
+		action:     "reconfigure_mqtt",
 	},
 
 	// -- Telemetry --
@@ -191,7 +191,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// -- Monitoring --
 	"Realtime.Monitoring": {
 		categories: []hotReloadCategory{hotReloadFresh},
-		todoAction: "reconfigure_monitoring",
+		action:     "reconfigure_monitoring",
 	},
 
 	// -- Species --
@@ -217,7 +217,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"WebServer.AllowEmbedding": {categories: []hotReloadCategory{hotReloadFresh}},
 	"WebServer.LiveStream": {
 		categories: []hotReloadCategory{hotReloadFresh},
-		todoAction: "reconfigure_livestream",
+		action:     "reconfigure_livestream",
 	},
 	"WebServer.EnableTerminal": {categories: []hotReloadCategory{hotReloadNotify}},
 
@@ -241,7 +241,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 }
 
 // Ceiling decreases as TODO actions are implemented; target is zero.
-const maxTodoActions = 5
+const maxTodoActions = 0
 
 // TestSettingsHotReloadCoverage ensures every leaf field in conf.Settings has
 // a declared hot-reload behavior in the registry. Fails CI when a new field

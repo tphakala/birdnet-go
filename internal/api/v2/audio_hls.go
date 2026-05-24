@@ -1963,6 +1963,17 @@ func (c *Controller) cleanupExistingHLSStream(sourceID string) {
 	}
 }
 
+// RestartHLSStreams stops all active HLS streams so they restart with fresh settings.
+func (c *Controller) RestartHLSStreams() {
+	hlsMgr.streamsMu.Lock()
+	sourceIDs := slices.Collect(maps.Keys(hlsMgr.streams))
+	hlsMgr.streamsMu.Unlock()
+
+	for _, id := range sourceIDs {
+		c.stopHLSStream(id, "settings changed")
+	}
+}
+
 // stopHLSStream stops a stream with a specific reason
 func (c *Controller) stopHLSStream(sourceID, reason string) {
 	hlsMgr.streamsMu.Lock()

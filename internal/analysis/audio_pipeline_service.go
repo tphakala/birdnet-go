@@ -364,8 +364,9 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 		p.reconfigureChangedSources(apiAudioLevelChan)
 	}
 	reconfigureSoundLevelFn := p.ReconfigureSoundLevel
+	reconfigureMonitoringFn := p.apiService.ReconfigureMonitoring
 	apiController := p.apiService.APIController()
-	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine, reconfigureFn, reconfigureSoundLevelFn)
+	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine, reconfigureFn, reconfigureSoundLevelFn, reconfigureMonitoringFn)
 	p.ctrlMonitor.Start()
 
 	// Start restart loop goroutine.

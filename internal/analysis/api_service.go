@@ -301,6 +301,16 @@ func (s *APIServerService) SunCalc() *suncalc.SunCalc {
 	return s.sunCalc
 }
 
+// ReconfigureMonitoring stops the current SystemMonitor (if any) and recreates
+// it from current settings. Called by ControlMonitor on hot-reload.
+func (s *APIServerService) ReconfigureMonitoring() {
+	if s.systemMonitor != nil {
+		s.systemMonitor.Stop()
+		s.systemMonitor = nil
+	}
+	s.systemMonitor = initializeSystemMonitor(conf.Setting())
+}
+
 // initializeBackupSystem sets up the backup manager and scheduler.
 func initializeBackupSystem(settings *conf.Settings, backupLog logger.Logger) (*backup.Manager, *backup.Scheduler, error) {
 	backupLog.Info("Initializing backup system...")
