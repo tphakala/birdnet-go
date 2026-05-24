@@ -42,18 +42,19 @@ func emitORTUnavailableNotification(modelName, ortError string) {
 		return
 	}
 
+	requiredVersion := inference.ORTRequiredVersion()
 	notif := notification.NewNotification(
 		notification.TypeWarning,
 		notification.PriorityHigh,
 		fmt.Sprintf("ONNX Runtime required for %s", modelName),
 		fmt.Sprintf("ONNX Runtime %s is required for %s but is not available. %s",
-			inference.ORTRequiredVersion(), modelName, ortError),
+			requiredVersion, modelName, ortError),
 	).
 		WithComponent("classifier").
 		WithTitleKey(notification.MsgORTUnavailableTitle, nil).
 		WithMessageKey(notification.MsgORTUnavailableMessage, map[string]any{
 			"modelName":       modelName,
-			"requiredVersion": inference.ORTRequiredVersion(),
+			"requiredVersion": requiredVersion,
 			"installGuideURL": inference.ORTInstallGuideURL,
 		}).
 		WithDeliveryTarget("bell")
