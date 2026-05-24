@@ -4843,14 +4843,14 @@
       "total": "Total checks"
     },
     "metricFooter": {
-      "allPassing": "All passing",
-      "needsAttention": "Needs attention",
-      "failing": "Failing",
-      "allClear": "All clear",
-      "noData": "No recent data",
-      "none": "None"
+      "allPassing": "Allt OK",
+      "needsAttention": "Kräver uppmärksamhet",
+      "failing": "Misslyckas",
+      "allClear": "Inga problem",
+      "noData": "Inga data",
+      "none": "Inga"
     },
-    "diagnostics": "Diagnostics",
+    "diagnostics": "Diagnostik",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
