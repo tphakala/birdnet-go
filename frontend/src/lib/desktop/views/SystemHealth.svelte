@@ -363,7 +363,7 @@
           {report?.count_by_status?.healthy ?? (running ? '…' : '—')}
         </span>
       </div>
-      <div class="mt-auto text-[10px] text-muted">
+      <div class="mt-auto text-xs text-muted">
         {#if report}
           {@const h = report.count_by_status.healthy ?? 0}
           {@const total = report.total_checks}
@@ -396,7 +396,7 @@
           {report?.count_by_status?.warning ?? (running ? '…' : '—')}
         </span>
       </div>
-      <div class="mt-auto text-[10px] text-muted">
+      <div class="mt-auto text-xs text-muted">
         {#if report}
           {(report.count_by_status.warning ?? 0) > 0
             ? t('health.metricFooter.needsAttention')
@@ -429,7 +429,7 @@
           {report?.count_by_status?.critical ?? (running ? '…' : '—')}
         </span>
       </div>
-      <div class="mt-auto text-[10px] text-muted">
+      <div class="mt-auto text-xs text-muted">
         {#if report}
           {(report.count_by_status.critical ?? 0) > 0
             ? t('health.metricFooter.failing')
@@ -454,13 +454,13 @@
           <span class="text-xs font-medium text-muted">{t('health.summary.skipped')}</span>
         </div>
         <span
-          class="font-mono tabular-nums text-2xl font-semibold" class:opacity-40={!((report?.count_by_status?.skipped ??
-            0) > 0)}
+          class="font-mono tabular-nums text-2xl font-semibold"
+          class:opacity-40={!((report?.count_by_status?.skipped ?? 0) > 0)}
         >
           {report?.count_by_status?.skipped ?? (running ? '…' : '—')}
         </span>
       </div>
-      <div class="mt-auto text-[10px] text-muted">
+      <div class="mt-auto text-xs text-muted">
         {#if report}
           {(report.count_by_status.skipped ?? 0) > 0
             ? t('health.metricFooter.noData')
