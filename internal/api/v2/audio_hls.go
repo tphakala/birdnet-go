@@ -231,9 +231,7 @@ func (c *Controller) initHLSRoutes() {
 // to take effect immediately without a server restart.
 func (c *Controller) publicLiveAudioAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		c.settingsMutex.RLock()
-		isPublic := c.Settings.Security.PublicAccess.LiveAudio
-		c.settingsMutex.RUnlock()
+		isPublic := c.currentSettings().Security.PublicAccess.LiveAudio
 		if isPublic {
 			return next(ctx)
 		}
@@ -953,7 +951,7 @@ func (c *Controller) setHLSHeaders(ctx echo.Context) {
 
 // getEffectiveSegmentLength returns the configured segment length with defaults and limits applied
 func (c *Controller) getEffectiveSegmentLength() int {
-	segmentLength := c.Settings.WebServer.LiveStream.SegmentLength
+	segmentLength := c.currentSettings().WebServer.LiveStream.SegmentLength
 	switch {
 	case segmentLength < hlsMinSegmentLen:
 		return hlsDefaultSegmentLen // Default
@@ -1125,7 +1123,7 @@ func (c *Controller) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 	}
 
 	// Validate FFmpeg path (defense-in-depth against ingress path contamination, see #2195)
-	ffmpegPath := c.Settings.Realtime.Audio.FfmpegPath
+	ffmpegPath := c.currentSettings().Realtime.Audio.FfmpegPath
 	if err := ffmpeg.ValidateFFmpegPath(ffmpegPath); err != nil {
 		streamCancel()
 		return nil, fmt.Errorf("invalid FFmpeg path: %w", err)
@@ -1323,7 +1321,7 @@ func (c *Controller) setupHLSFFmpeg(ctx context.Context, ffmpegPath, inputSource
 
 // buildFFmpegArgs constructs FFmpeg command line arguments
 func (c *Controller) buildFFmpegArgs(inputSource, outputDir, playlistPath string) []string {
-	settings := c.Settings.WebServer.LiveStream
+	settings := c.currentSettings().WebServer.LiveStream
 
 	// Apply defaults and limits
 	bitrate := 128
@@ -1583,8 +1581,9 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	consumerID := fmt.Sprintf("hls_%s_%s", privacy.SanitizeStreamUrl(sourceID), uuid.New().String()[:8])
 	// Use the configured live stream sample rate, falling back to the default HLS sample rate.
 	sampleRate := hlsDefaultSampleRate
-	if c.Settings.WebServer.LiveStream.SampleRate > 0 {
-		sampleRate = c.Settings.WebServer.LiveStream.SampleRate
+	liveStream := c.currentSettings().WebServer.LiveStream
+	if liveStream.SampleRate > 0 {
+		sampleRate = liveStream.SampleRate
 	}
 
 	consumer := &hlsConsumer{
