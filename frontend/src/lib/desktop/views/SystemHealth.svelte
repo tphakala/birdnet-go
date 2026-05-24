@@ -3,8 +3,6 @@
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import type { StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import {
-    Activity,
-    Play,
     Download,
     ClipboardCopy,
     CheckCircle,
@@ -15,6 +13,7 @@
     Loader2,
     Info,
     ChevronDown,
+    RefreshCw,
   } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
@@ -192,6 +191,7 @@
   }
 
   onMount(() => {
+    runDiagnostics();
     return () => {
       if (copyTimer !== null) clearTimeout(copyTimer);
     };
@@ -347,99 +347,12 @@
 {/snippet}
 
 <div class="col-span-12 space-y-4">
-  <!-- Page Header -->
+  <!-- Status & Controls Toolbar -->
   <Card className="bg-[var(--color-base-100)] shadow-sm">
-    <div class="flex flex-col items-center text-center">
-      <div
-        class="w-20 h-20 rounded-full bg-gradient-to-b from-[var(--surface-200)] to-[var(--color-base-100)] flex items-center justify-center border border-[var(--border-100)]"
-      >
-        <Activity class="size-10 text-[var(--color-primary)]" />
-      </div>
-      <div class="mt-3">
-        <h1 class="text-3xl font-bold">{t('health.title')}</h1>
-        <p class="text-[var(--color-base-content)] opacity-70 text-base mt-2">
-          {t('health.subtitle')}
-        </p>
-      </div>
-
-      <div class="mt-4 flex flex-col items-center gap-3">
-        <button
-          onclick={runDiagnostics}
-          disabled={running}
-          class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:bg-[var(--color-primary-hover)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {#if running}
-            <Loader2 class="size-4 animate-spin" />
-            {t('health.running')}
-          {:else}
-            <Play class="size-4" />
-            {t('health.runDiagnostics')}
-          {/if}
-        </button>
-
-        <!-- Window Selector -->
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-[var(--color-base-content)] opacity-60">
-            {t('health.window.label')}:
-          </span>
-          <div
-            class="inline-flex rounded-md border border-[var(--color-base-300)] overflow-hidden"
-            role="radiogroup"
-            aria-label={t('health.window.label')}
-          >
-            {#each windowPresets as w (w)}
-              <button
-                type="button"
-                role="radio"
-                aria-checked={selectedWindow === w}
-                disabled={running}
-                onclick={() => selectWindow(w)}
-                class="px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 {selectedWindow ===
-                w
-                  ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)]'
-                  : 'bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)]'}"
-              >
-                {t(`health.window.${w}`)}
-              </button>
-            {/each}
-          </div>
-        </div>
-      </div>
-    </div>
-  </Card>
-
-  <!-- Error State -->
-  {#if error}
-    <Card className="bg-[var(--color-base-100)] shadow-sm">
-      <div
-        role="alert"
-        aria-live="assertive"
-        class="flex items-center gap-3 p-3 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]"
-      >
-        <XCircle class="size-5 shrink-0 text-[var(--color-error)]" />
-        <p class="text-sm text-[var(--color-base-content)]">{error}</p>
-      </div>
-    </Card>
-  {/if}
-
-  <!-- No Results State -->
-  {#if !report && !running && !error}
-    <Card className="bg-[var(--color-base-100)] shadow-sm">
-      <div class="flex flex-col items-center py-6 text-center">
-        <Activity class="size-12 text-[var(--color-base-content)] opacity-20 mb-3" />
-        <p class="text-[var(--color-base-content)] opacity-60 text-sm">
-          {t('health.noResults')}
-        </p>
-      </div>
-    </Card>
-  {/if}
-
-  <!-- Results -->
-  {#if report}
-    <!-- Summary Bar -->
-    <Card className="bg-[var(--color-base-100)] shadow-sm">
-      <div class="flex flex-wrap items-center gap-4">
-        <div class="flex items-center gap-2">
+    <!-- Row 1: Status + last run + refresh -->
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-3 min-w-0">
+        {#if report}
           <StatusPill
             variant={statusToVariant(report.status)}
             label={t(`health.status.${report.status}`)}
@@ -451,52 +364,120 @@
               {/if}
             {/snippet}
           </StatusPill>
-        </div>
 
-        <div class="flex items-center gap-3 text-sm text-[var(--color-base-content)] opacity-70">
-          {#if report.count_by_status.healthy}
-            <span class="flex items-center gap-1">
-              <CheckCircle class="size-3.5 text-[var(--color-success)]" />
-              {report.count_by_status.healthy}
-              {t('health.summary.healthy')}
-            </span>
-          {/if}
-          {#if report.count_by_status.warning}
-            <span class="flex items-center gap-1">
-              <AlertTriangle class="size-3.5 text-[var(--color-warning)]" />
-              {report.count_by_status.warning}
-              {t('health.summary.warnings')}
-            </span>
-          {/if}
-          {#if report.count_by_status.critical}
-            <span class="flex items-center gap-1">
-              <XCircle class="size-3.5 text-[var(--color-error)]" />
-              {report.count_by_status.critical}
-              {t('health.summary.critical')}
-            </span>
-          {/if}
-          {#if report.count_by_status.skipped}
-            <span class="flex items-center gap-1">
-              <SkipForward class="size-3.5 opacity-40" />
-              {report.count_by_status.skipped}
-              {t('health.summary.skipped')}
-            </span>
-          {/if}
-        </div>
+          <div
+            class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--color-base-content)] opacity-70"
+          >
+            {#if report.count_by_status.healthy}
+              <span class="flex items-center gap-1">
+                <CheckCircle class="size-3.5 text-[var(--color-success)]" />
+                {report.count_by_status.healthy}
+                {t('health.summary.healthy')}
+              </span>
+            {/if}
+            {#if report.count_by_status.warning}
+              <span class="flex items-center gap-1">
+                <AlertTriangle class="size-3.5 text-[var(--color-warning)]" />
+                {report.count_by_status.warning}
+                {t('health.summary.warnings')}
+              </span>
+            {/if}
+            {#if report.count_by_status.critical}
+              <span class="flex items-center gap-1">
+                <XCircle class="size-3.5 text-[var(--color-error)]" />
+                {report.count_by_status.critical}
+                {t('health.summary.critical')}
+              </span>
+            {/if}
+            {#if report.count_by_status.skipped}
+              <span class="flex items-center gap-1">
+                <SkipForward class="size-3.5 opacity-40" />
+                {report.count_by_status.skipped}
+                {t('health.summary.skipped')}
+              </span>
+            {/if}
+          </div>
+        {:else if running}
+          <div class="flex items-center gap-2 text-sm text-[var(--color-base-content)] opacity-70">
+            <Loader2 class="size-4 animate-spin" />
+            {t('health.running')}
+          </div>
+        {:else if error}
+          <div
+            role="alert"
+            aria-live="assertive"
+            class="flex items-center gap-2 text-sm text-[var(--color-error)]"
+          >
+            <XCircle class="size-4" />
+            {error}
+          </div>
+        {/if}
+      </div>
 
-        <div
-          class="ml-auto flex items-center gap-2 text-xs text-[var(--color-base-content)] opacity-50"
+      <div
+        class="flex items-center gap-3 text-xs text-[var(--color-base-content)] opacity-60 shrink-0"
+      >
+        {#if report}
+          <span
+            class="flex items-center gap-1.5"
+            title={new Date(report.started_at).toLocaleString()}
+          >
+            <Clock class="size-3.5" />
+            {t('health.lastRun')}
+            {getLocalTimeString(new Date(report.started_at))}
+            <span class="opacity-60">· {report.duration_ms.toFixed(0)}ms</span>
+          </span>
+        {/if}
+        <button
+          type="button"
+          onclick={runDiagnostics}
+          disabled={running}
+          aria-label={t('health.refresh')}
+          title={t('health.refresh')}
+          class="inline-flex items-center justify-center size-8 rounded-md transition-colors hover:bg-[var(--color-base-200)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Clock class="size-3.5" />
-          {report.duration_ms.toFixed(0)}ms
+          <RefreshCw class="size-4 {running ? 'animate-spin' : ''}" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Row 2: Window selector + export -->
+    <div
+      class="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-[var(--color-base-200)]"
+    >
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-[var(--color-base-content)] opacity-60">
+          {t('health.window.label')}:
+        </span>
+        <div
+          class="inline-flex rounded-md border border-[var(--color-base-300)] overflow-hidden"
+          role="radiogroup"
+          aria-label={t('health.window.label')}
+        >
+          {#each windowPresets as w (w)}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={selectedWindow === w}
+              disabled={running}
+              onclick={() => selectWindow(w)}
+              class="px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 {selectedWindow ===
+              w
+                ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)]'
+                : 'bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)]'}"
+            >
+              {t(`health.window.${w}`)}
+            </button>
+          {/each}
         </div>
       </div>
 
-      <!-- Export Buttons -->
-      <div class="flex items-center gap-2 mt-3 pt-3 border-t border-[var(--color-base-200)]">
+      <div class="flex items-center gap-2">
         <button
+          type="button"
           onclick={copyReport}
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)]"
+          disabled={!report}
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {#if copied}
             <CheckCircle class="size-3.5 text-[var(--color-success)]" />
@@ -507,15 +488,20 @@
           {/if}
         </button>
         <button
+          type="button"
           onclick={downloadJSON}
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)]"
+          disabled={!report}
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Download class="size-3.5" />
           {t('health.exportJSON')}
         </button>
       </div>
-    </Card>
+    </div>
+  </Card>
 
+  <!-- Results -->
+  {#if report}
     <!-- Category Results -->
     {#each [...groupedResults] as [category, results] (category)}
       <Card
