@@ -1229,6 +1229,7 @@ func TestStreamConfig_NeedsOutputResampling(t *testing.T) {
 		{"16kHz_to_48kHz_resamples", 48000, 16000, true},
 		{"44100Hz_to_48kHz_resamples", 48000, 44100, true},
 		{"48kHz_to_48kHz_passthrough", 48000, 48000, false},
+		{"96kHz_source_downsampled_for_bird", 48000, 96000, true},
 		{"96kHz_bat_passthrough", 96000, 96000, false},
 		{"192kHz_bat_passthrough", 192000, 192000, false},
 		{"256kHz_bat_passthrough", 256000, 256000, false},

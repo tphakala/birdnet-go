@@ -1014,6 +1014,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 // differ from the desired config, requiring a full reconfigure (stop + restart).
 func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.SourceConfig) bool {
 	return running.SampleRate != desired.SampleRate ||
+		running.SourceSampleRate != desired.SourceSampleRate ||
 		running.BitDepth != desired.BitDepth ||
 		running.Channels != desired.Channels
 }
@@ -1320,8 +1321,17 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 	for _, stream := range enabledStreams {
 		probedRate := probedRates[stream.URL]
 		sampleRate := conf.SampleRate
-		if hasBatModel(stream.Models) && probedRate > conf.SampleRate {
-			sampleRate = probedRate
+		if hasBatModel(stream.Models) {
+			if probedRate > conf.SampleRate {
+				sampleRate = probedRate
+			}
+			if probedRate > 0 && probedRate < ffmpeg.MinBatSampleRate {
+				GetLogger().Warn("stream sample rate below bat model minimum",
+					logger.String("stream", stream.Name),
+					logger.Int("sample_rate", probedRate),
+					logger.Int("minimum", ffmpeg.MinBatSampleRate),
+					logger.String("operation", "probe_stream"))
+			}
 		}
 		result = append(result, sourceConfigWithModels{
 			config: &audiocore.SourceConfig{
