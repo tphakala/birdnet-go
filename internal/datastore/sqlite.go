@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -29,6 +30,11 @@ type SQLiteStore struct {
 	// Cached integrity check result (updated by monitoring goroutine)
 	integrityMu     sync.RWMutex
 	integrityResult string // "ok" or error string; empty until first check
+
+	// dbCorrupted is latched on first detection of SQLite corruption
+	// ("database disk image is malformed"). Once set, duplicate Sentry
+	// reports are suppressed. The app continues in degraded mode.
+	dbCorrupted atomic.Bool
 
 	// dbstatAvailable caches whether the dbstat virtual table exists.
 	// 0 = unchecked, 1 = available, -1 = not available.
@@ -682,4 +688,19 @@ func (s *SQLiteStore) GetDatabaseStats(ctx context.Context) (*DatabaseStats, err
 	}
 
 	return stats, nil
+}
+
+// IsCorrupted reports whether the database has been flagged as corrupted.
+// Safe to call concurrently. Used by health checks and diagnostics.
+func (s *SQLiteStore) IsCorrupted() bool {
+	return s.dbCorrupted.Load()
+}
+
+// IntegrityResult returns the cached integrity check result and corruption status.
+// Returns ("", false) if no check has run yet.
+func (s *SQLiteStore) IntegrityResult() (string, bool) {
+	s.integrityMu.RLock()
+	result := s.integrityResult
+	s.integrityMu.RUnlock()
+	return result, s.dbCorrupted.Load()
 }
