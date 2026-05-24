@@ -129,7 +129,8 @@ type Processor struct {
 	backupMutex     sync.RWMutex
 
 	// Log deduplication (extracted to separate type for SRP)
-	logDedup *LogDeduplicator // Handles log deduplication logic
+	logDedupMu sync.RWMutex
+	logDedup   *LogDeduplicator
 
 	// Periodic pipeline stats (inference activity per source/model)
 	pipelineStats *PipelineStats
@@ -2339,16 +2340,22 @@ func (p *Processor) GetBackupScheduler() any {
 // ReconfigureLogDeduplicator reinitializes the log deduplicator from current settings.
 func (p *Processor) ReconfigureLogDeduplicator() {
 	settings := p.currentSettings()
-	p.logDedup = initLogDeduplicator(settings)
+	newDedup := initLogDeduplicator(settings)
+	p.logDedupMu.Lock()
+	p.logDedup = newDedup
+	p.logDedupMu.Unlock()
 }
 
 // CleanupLogDeduplicator removes stale log deduplication entries to prevent memory growth.
 // Returns the number of entries removed.
 func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {
-	if p.logDedup == nil {
+	p.logDedupMu.RLock()
+	dedup := p.logDedup
+	p.logDedupMu.RUnlock()
+	if dedup == nil {
 		return 0
 	}
-	removed := p.logDedup.Cleanup(staleAfter)
+	removed := dedup.Cleanup(staleAfter)
 	if removed > 0 {
 		GetLogger().Debug("Cleaned stale log deduplication entries",
 			logger.Int("removed_count", removed),
@@ -2527,13 +2534,14 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 // This prevents ~40,000+ identical "filtered_detections_count:0" logs per day
 // while still allowing debug-mode visibility into the detection pipeline.
 func (p *Processor) logDetectionResults(source string, rawCount, filteredCount int) {
-	// Guard against nil logDedup (can occur in tests or partial initialization)
-	if p.logDedup == nil {
+	p.logDedupMu.RLock()
+	dedup := p.logDedup
+	p.logDedupMu.RUnlock()
+	if dedup == nil {
 		return
 	}
 
-	// Use the LogDeduplicator to determine if we should log
-	shouldLog, reason := p.logDedup.ShouldLog(source, rawCount, filteredCount)
+	shouldLog, reason := dedup.ShouldLog(source, rawCount, filteredCount)
 
 	if shouldLog {
 		// Log all processing results at DEBUG level to avoid flooding console.

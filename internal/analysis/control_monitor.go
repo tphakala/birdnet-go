@@ -27,6 +27,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
+const (
+	signalReconfigureLogDeduplication = "reconfigure_log_deduplication"
+	signalReconfigureRTSPHealth       = "reconfigure_rtsp_health"
+	signalReconfigureMonitoring       = "reconfigure_monitoring"
+	signalReconfigureLivestream       = "reconfigure_livestream"
+)
+
 // ControlMonitor handles control signals for realtime analysis mode
 type ControlMonitor struct {
 	wg             *sync.WaitGroup
@@ -268,14 +275,14 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleQuietHoursStartSoundCard()
 	case "reconfigure_bat_filter":
 		cm.handleReconfigureBatFilter()
-	case "reconfigure_log_deduplication":
+	case signalReconfigureLogDeduplication:
 		cm.handleReconfigureLogDeduplication()
-	case "reconfigure_rtsp_health":
+	case signalReconfigureRTSPHealth:
 		cm.handleReconfigureStreams()
 		emitHotReload("rtsp_health")
-	case "reconfigure_monitoring":
+	case signalReconfigureMonitoring:
 		cm.handleReconfigureMonitoring()
-	case "reconfigure_livestream":
+	case signalReconfigureLivestream:
 		cm.handleReconfigureLiveStream()
 	default:
 		GetLogger().Warn("Received unknown control signal", logger.String("signal", signal))
