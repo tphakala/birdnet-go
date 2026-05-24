@@ -91,19 +91,19 @@ func TestCollector_StreamHealthDelta(t *testing.T) {
 
 	c.SetStreamHealth(func() []StreamHealthSnapshot {
 		return []StreamHealthSnapshot{
-			{SourceID: "rtsp://cam1", RestartCount: 2},
+			{SourceID: "stream_abc123", RestartCount: 2},
 		}
 	})
 	c.collectHealthCounters()
 
 	c.SetStreamHealth(func() []StreamHealthSnapshot {
 		return []StreamHealthSnapshot{
-			{SourceID: "rtsp://cam1", RestartCount: 5},
+			{SourceID: "stream_abc123", RestartCount: 5},
 		}
 	})
 	c.collectHealthCounters()
 
-	assert.Equal(t, int64(3), healthStore.LifetimeTotal("stream.restarts.rtsp://cam1"))
+	assert.Equal(t, int64(3), healthStore.LifetimeTotal("stream.restarts.stream_abc123"))
 
 	events := healthEvents.Recent("restarts", 10)
 	require.Len(t, events, 1)

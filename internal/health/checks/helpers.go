@@ -66,10 +66,6 @@ const sparklineBuckets = 24
 // recentEventsLimit is the number of recent events included in the response.
 const recentEventsLimit = 20
 
-// staleBucketAge is the maximum age of the latest bucket before a source is
-// considered stale and excluded from evaluation.
-const staleBucketAge = 30 * time.Second
-
 // evalWindowedStats evaluates counter-based metrics using time-windowed data from
 // the HealthMetricsStore. It sums events within the configured window, builds
 // sparkline data, and formats messages with temporal context.
@@ -97,23 +93,18 @@ func evalWindowedStats(
 	for _, key := range keys {
 		sourceID := key[len(cfg.metricPrefix):]
 
-		latestBucket := store.LatestBucketTime(key)
-		if !latestBucket.IsZero() && now.Sub(latestBucket) > time.Hour+staleBucketAge {
-			continue
-		}
-
 		activeSources++
 		wTotal := store.SumAt(key, cfg.window, now)
 		perSource[sourceID] = wTotal
 		windowTotal += wTotal
 		lifetimeTotal += store.LifetimeTotal(key)
 
-		if et := store.LastEventTime(key); !et.IsZero() && et.After(lastEvent) {
+		if et := store.LastEventTime(key); et.After(lastEvent) {
 			lastEvent = et
 		}
 	}
 
-	if len(keys) == 0 || activeSources == 0 {
+	if len(keys) == 0 {
 		return skippedResult(name, category, start)
 	}
 

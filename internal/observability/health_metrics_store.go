@@ -83,6 +83,10 @@ func (r *hourlyRing) current() *HourlyBucket {
 }
 
 // sum returns the total count of events within the given window ending at now.
+// Buckets are hourly: a bucket is included as long as any part of it overlaps
+// the window, so a 1h window evaluated mid-hour includes the bucket that
+// contains the cutoff. This over-counts by up to one bucket-width of older
+// data, but never under-counts recent activity at hour boundaries.
 func (r *hourlyRing) sum(window time.Duration, now time.Time) int64 {
 	if r.size == 0 {
 		return 0
@@ -92,7 +96,7 @@ func (r *hourlyRing) sum(window time.Duration, now time.Time) int64 {
 	for i := range r.size {
 		idx := (r.head - i + len(r.buckets)) % len(r.buckets)
 		b := &r.buckets[idx]
-		if b.Start.Before(cutoff) {
+		if !b.Start.Add(time.Hour).After(cutoff) {
 			break
 		}
 		total += b.Count
@@ -103,7 +107,7 @@ func (r *hourlyRing) sum(window time.Duration, now time.Time) int64 {
 // recentBuckets returns the last n hourly buckets in chronological order.
 // Returns fewer than n if the ring has fewer entries.
 func (r *hourlyRing) recentBuckets(n int) []HourlyBucket {
-	if r.size == 0 {
+	if r.size == 0 || n <= 0 {
 		return nil
 	}
 	count := n

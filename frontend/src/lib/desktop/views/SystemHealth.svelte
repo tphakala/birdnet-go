@@ -15,7 +15,7 @@
     RefreshCw,
   } from '@lucide/svelte';
   import { onMount } from 'svelte';
-  import { t } from '$lib/i18n';
+  import { t, getLocale } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { getLocalDateString, getLocalTimeString } from '$lib/utils/date';
@@ -180,13 +180,15 @@
     const diffMs = now - then;
     const diffSec = Math.floor(diffMs / 1000);
 
-    if (diffSec < 60) return `${diffSec}s ago`;
+    const rtf = new Intl.RelativeTimeFormat(getLocale(), { numeric: 'auto' });
+
+    if (diffSec < 60) return rtf.format(-diffSec, 'second');
     const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffMin < 60) return rtf.format(-diffMin, 'minute');
     const diffHours = Math.floor(diffMin / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffHours < 24) return rtf.format(-diffHours, 'hour');
     const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
+    return rtf.format(-diffDays, 'day');
   }
 
   onMount(() => {
@@ -232,7 +234,11 @@
 
   function selectWindow(w: string) {
     selectedWindow = w;
-    localStorage.setItem('health-eval-window', w);
+    try {
+      localStorage.setItem('health-eval-window', w);
+    } catch {
+      // Ignore storage failures (private browsing, quota); selection stays in memory.
+    }
     if (report) {
       runDiagnostics();
     }

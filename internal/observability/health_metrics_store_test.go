@@ -32,8 +32,12 @@ func TestHealthMetricsStore_SumWindowBoundary(t *testing.T) {
 
 	now := base.Add(2*time.Hour + 30*time.Minute)
 
-	assert.Equal(t, int64(30), s.SumAt("drops", time.Hour, now))
-	assert.Equal(t, int64(50), s.SumAt("drops", 2*time.Hour, now))
+	// At 12:30 with a 1h window (cutoff 11:30), both the 12:00 bucket and
+	// the 11:00 bucket overlap the window, so both are included. This
+	// over-counts by up to one bucket-width of older data but never
+	// under-counts recent activity at hour boundaries.
+	assert.Equal(t, int64(50), s.SumAt("drops", time.Hour, now))
+	assert.Equal(t, int64(60), s.SumAt("drops", 2*time.Hour, now))
 	assert.Equal(t, int64(60), s.SumAt("drops", 3*time.Hour, now))
 }
 
