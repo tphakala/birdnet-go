@@ -620,6 +620,120 @@ grep -rn 'func.*Add\|func.*Store\|func.*Put' --include="*.go" | grep -v '_test.g
 grep -rn 'sync.Mutex\|sync.RWMutex' -l --include="*.go" | xargs grep -l 'map\[\|^\s*\w\+\s\+\[\]'
 ```
 
+## Context Lifecycle Through Embedded Structs
+
+Context fields on embedded structs may be modified by methods on either the parent or the embedded struct. A goroutine capturing a context set by the parent can be silently killed when an embedded struct's lifecycle method cancels and replaces that context.
+
+```go
+// BAD: Open() initializes monitoringCtx, then goroutine captures it.
+// But StartMonitoring() (on embedded DataStore) cancels and replaces monitoringCtx.
+// The goroutine's context is cancelled shortly after Open() returns.
+
+type DataStore struct {
+    monitoringCtx    context.Context
+    monitoringCancel context.CancelFunc
+}
+
+func (ds *DataStore) StartMonitoring() {
+    if ds.monitoringCancel != nil {
+        ds.monitoringCancel()  // Cancels the context from Open()!
+    }
+    ds.monitoringCtx, ds.monitoringCancel = context.WithCancel(context.Background())
+    // ...
+}
+
+type SQLiteStore struct {
+    DataStore  // Embedded struct
+}
+
+func (s *SQLiteStore) Open() error {
+    // Gate suggested: initialize context before integrity check
+    s.monitoringCtx, s.monitoringCancel = context.WithCancel(context.Background())
+
+    if err := s.performStartupIntegrityCheck(); err != nil {
+        // Goroutine captures s.monitoringCtx for deferred notification
+        go s.notifyCorruptionDeferred(s.monitoringCtx, err)
+    }
+
+    return nil
+    // After Open() returns, caller calls s.StartMonitoring()
+    // which cancels s.monitoringCtx, killing the goroutine above
+}
+
+// GOOD: Use a dedicated context for the goroutine, independent of struct state
+func (s *SQLiteStore) Open() error {
+    if err := s.performStartupIntegrityCheck(); err != nil {
+        // Own context with timeout, not shared struct field
+        notifyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+        go func() {
+            defer cancel()
+            s.notifyCorruptionDeferred(notifyCtx, err)
+        }()
+    }
+    return nil
+}
+```
+
+**When to flag:** Any code that:
+1. Sets a context field on a struct, then captures that field in a goroutine
+2. Uses a context field from an embedded struct without checking who else writes it
+3. Embeds a struct with lifecycle methods that cancel/replace context fields
+
+**Review action:** When code reads or writes a `context.Context` field on a struct:
+1. `grep -rn 'fieldName\s*=' pkg/` to find ALL assignments
+2. Check if any embedded struct method modifies the same field
+3. Check if any goroutine captures the field (will it survive lifecycle transitions?)
+
+**Search patterns:**
+```bash
+# Find all context field assignments in a package
+grep -rn 'monitoringCtx\s*=' internal/datastore/
+grep -rn 'Ctx\s*=\|ctx\s*=' --include="*.go" | grep -v '_test.go' | grep 'context\.'
+
+# Find embedded structs
+grep -rn 'type.*struct {' -A5 --include="*.go" | grep '^\s\+\w\+\s*$\|^\s\+\*\?\w\+\s*$'
+
+# Find lifecycle methods on embedded types
+grep -rn 'func.*Start\|func.*Stop\|func.*Close\|func.*Open\|func.*Init\|func.*Monitor' --include="*.go"
+```
+
+## Fix-Introduces-Bug Pattern
+
+When a gate agent suggests a fix that touches shared state (contexts, mutexes, atomics, channels), the fix itself may introduce a new bug through interactions with code the agent didn't examine. The fix is superficially correct in isolation but wrong in the context of the full system.
+
+```go
+// SCENARIO: Gate finds that a goroutine uses an uninitialized context.
+// Gate suggests: "Initialize the context before launching the goroutine."
+//
+// The fix looks correct in sqlite_integrity.go:
+//   s.monitoringCtx, s.monitoringCancel = context.WithCancel(context.Background())
+//   go s.notifyCorruptionDeferred(s.monitoringCtx, err)
+//
+// But in monitoring.go (not reviewed by the agent):
+//   func (ds *DataStore) StartMonitoring() {
+//       ds.monitoringCancel()  // Cancels the context we just set!
+//       ds.monitoringCtx, ds.monitoringCancel = context.WithCancel(...)
+//   }
+//
+// The fix created a race: the goroutine's context is cancelled
+// 50ms after Open() returns, when StartMonitoring() is called.
+```
+
+**Verification steps after any fix touching shared state:**
+1. Identify the shared state the fix touches (context, mutex, channel, atomic, map, global)
+2. `grep -rn 'stateName' pkg/` to find ALL readers and writers
+3. For each writer: does it conflict with the fix? (cancel, replace, close, reset)
+4. For each reader: does it assume a state the fix changes?
+5. If the state is on an embedded struct: check the embedded struct's methods too
+
+**When to flag:** Any suggested fix that:
+- Initializes or reassigns a struct field that other methods also write
+- Adds a goroutine that captures struct state
+- Modifies shutdown/cleanup ordering
+- Changes when a resource is created or destroyed
+
+**This pattern is a process check, not a code pattern.** It applies during Phase 3 fix verification, not during the initial review.
+
 ## Common Bugs
 
 **Go:**
@@ -2127,6 +2241,56 @@ grep -rn 'Sensitive\|Redact\|Scrub\|Sanitize\|Mask' --include="*.go" | grep -i '
 2. Check if `[]map[string]any` is also handled (array of objects)
 3. Assess whether the missing type could carry security-sensitive data
 4. Severity: High if the function feeds into redaction/scrubbing, Medium otherwise
+
+## Check 8: Embedded Struct Method Tracing
+
+When a struct embeds another struct, method calls on the outer struct may resolve to the embedded struct's methods via Go's promotion rules. These promoted methods can modify shared state (contexts, mutexes, channels) that the outer struct's code also uses, creating hidden conflicts.
+
+```go
+// SQLiteStore embeds DataStore
+type SQLiteStore struct {
+    DataStore  // Embedded - its methods are promoted to SQLiteStore
+}
+
+// Calling s.StartMonitoring() on a SQLiteStore actually calls DataStore.StartMonitoring()
+// This method cancels and replaces monitoringCtx, which Open() may have just set
+
+type DataStore struct {
+    monitoringCtx    context.Context
+    monitoringCancel context.CancelFunc
+}
+
+func (ds *DataStore) StartMonitoring() {
+    if ds.monitoringCancel != nil {
+        ds.monitoringCancel()  // Cancels any existing context
+    }
+    ds.monitoringCtx, ds.monitoringCancel = context.WithCancel(context.Background())
+    go ds.monitorLoop()  // Uses the NEW context
+}
+```
+
+**Review action:** When reviewing a struct that embeds another struct:
+1. Identify all embedded structs: `grep -rn 'type.*struct {' -A10 file.go | grep '^\s\+\*\?\w\+\s*$'`
+2. For each embedded struct, find its lifecycle methods: `grep -rn 'func.*EmbeddedType.*\(Start\|Stop\|Close\|Open\|Init\|Monitor\|Shutdown\)' --include="*.go"`
+3. Check if any embedded method modifies the same state that the changed code uses
+4. Trace the call sequence: does the caller invoke both the changed code AND the embedded method? In what order?
+
+**Severity guide:**
+- **High**: Embedded method cancels/replaces state (context, channel) that changed code depends on
+- **Medium**: Embedded method modifies state that changed code reads but doesn't depend on for correctness
+- **Low**: Embedded method touches unrelated state
+
+**Search patterns:**
+```bash
+# Find all embedded structs in a type
+grep -rn 'type SQLiteStore struct' -A20 --include="*.go" | grep '^\s\+\*\?\w\+\s*$'
+
+# Find methods on the embedded type
+grep -rn 'func (ds \*DataStore)' --include="*.go"
+
+# Find all callers that invoke both Open() and StartMonitoring() in sequence
+grep -rn 'Open()\|StartMonitoring()' --include="*.go"
+```
 
 ## General Search Strategy for Agent 5
 

@@ -68,15 +68,16 @@ Review changes for bugs that cause crashes, data loss, or security incidents.
 7. **Common bugs**: Go (= vs :=, missing rows.Err(), modify slice while iterating, defer in loop, missing return after http.Error), TS (truthy on 0/"", .find() without undefined check, unwaited promise, == vs ===), Svelte ($state destructuring, $effect for derived values, missing cleanup, $state.raw mutation).
 8. **Non-DST-safe time arithmetic**: `time.Now().Add(-N * 24 * time.Hour)` loses or gains an hour near DST transitions. Use `time.Now().AddDate(0, 0, -N)` for calendar-day arithmetic. Flag any `N * 24 * time.Hour` used for day-level offsets.
 9. **Event emission ordering (query-before-emit)**: emitting a new event before querying for the previous one creates a race where you read back your own event. Always query history before emitting new entries in event-sourced patterns.
+10. **Context lifecycle through embedded structs**: when code reads or writes a `context.Context` field on a struct, grep for ALL assignments to that field across the entire package (`grep -rn 'fieldName\s*=' pkg/`). Embedded struct methods can cancel and replace contexts set by the parent. A goroutine capturing a context may be killed when an embedded method replaces it. Especially important for lifecycle methods (`Start`, `Stop`, `Open`, `Close`, `Monitor`).
 
 **Safety:**
-10. **Security**: SQL/command/path injection, XSS (@html without sanitize, innerHTML), hardcoded secrets, insecure crypto, missing auth/authz, CORS misconfiguration.
-11. **Sensitive data in telemetry**: raw err.Error() containing file paths, connection strings, or credentials sent to Sentry/logging without scrubbing. Check scrubbing covers all components individually and consistently across all callsites.
-12. **Shallow copy of reference types in concurrent collections**: when storing structs containing maps or slices in concurrent-safe collections (ring buffers, sync.Map, channel-based queues), deep copy the reference types using maps.Clone/slices.Clone. When returning stored structs via accessor methods, clone reference-typed fields to prevent data races with callers.
-13. **Protocol violations**: wrong HTTP status codes, missing Content-Type headers, API contract violations.
-14. **Shutdown races**: drain/close without blocking new connections, missing atomic shutdown flag, expected shutdown errors (http.ErrServerClosed) logged as real errors, nil channel close, double-close of resources.
-15. **Missing context propagation**: goroutines without ctx or panic recovery, semaphore acquisition without context deadline, context.Background() where parent ctx exists.
-16. **Critical TODOs**: TODO/FIXME in auth, validation, crypto, or transaction paths that skip essential implementation. Flag as Critical when the code proceeds without security checks.
+11. **Security**: SQL/command/path injection, XSS (@html without sanitize, innerHTML), hardcoded secrets, insecure crypto, missing auth/authz, CORS misconfiguration.
+12. **Sensitive data in telemetry**: raw err.Error() containing file paths, connection strings, or credentials sent to Sentry/logging without scrubbing. Check scrubbing covers all components individually and consistently across all callsites.
+13. **Shallow copy of reference types in concurrent collections**: when storing structs containing maps or slices in concurrent-safe collections (ring buffers, sync.Map, channel-based queues), deep copy the reference types using maps.Clone/slices.Clone. When returning stored structs via accessor methods, clone reference-typed fields to prevent data races with callers.
+14. **Protocol violations**: wrong HTTP status codes, missing Content-Type headers, API contract violations.
+15. **Shutdown races**: drain/close without blocking new connections, missing atomic shutdown flag, expected shutdown errors (http.ErrServerClosed) logged as real errors, nil channel close, double-close of resources.
+16. **Missing context propagation**: goroutines without ctx or panic recovery, semaphore acquisition without context deadline, context.Background() where parent ctx exists.
+17. **Critical TODOs**: TODO/FIXME in auth, validation, crypto, or transaction paths that skip essential implementation. Flag as Critical when the code proceeds without security checks.
 
 ### Reviewer 3: Quality & Patterns
 
@@ -156,6 +157,7 @@ Review the full context of changed files for integration gaps where new code fai
 5. **Constructor & factory consistency**: When a struct gains a new field, check all constructors/factories that create instances of that struct. Flag if any constructor doesn't initialize the new field.
 6. **Event schema consistency across emission sites**: For each event emission call, find ALL other emissions with the same event type (entity + action pair). Compare metadata keys across all emission sites. Flag any site missing keys present in others.
 7. **Recursive type handling in serialization pipelines**: When a function processes a type-switch on `any`, check that all relevant composite types are handled (`map[string]any`, `[]any`, `[]map[string]any`). Especially important when the function feeds into security-sensitive operations (redaction, scrubbing, access control).
+8. **Embedded struct method tracing**: When a struct embeds another struct, read the embedded struct's methods that are called (directly or implicitly) from the changed code. Calls like `s.StartMonitoring()` may resolve to an embedded struct's method that modifies shared state (contexts, mutexes, channels). Trace all lifecycle methods (`Start`, `Stop`, `Open`, `Close`, `Init`, `Monitor`, `Shutdown`) on embedded structs to check for state conflicts with the parent struct's code.
 
 **Output format:** Each finding must include the new item being traced, the pipeline stage that's missing, the specific file and function where the gap exists, and severity: High (data silently dropped), Medium (validation gap), Low (cosmetic inconsistency).
 
@@ -175,7 +177,14 @@ Wait for all reviewers (including Reviewer 5) to complete. Then:
 
    **c) Pre-existing and out-of-scope:** If the fix is risky, large, or in untouched files, file a tracking issue in the project's issue tracker. Include the file path, line number, and a clear description of the problem.
 
-4. **Report remaining items** that cannot be auto-fixed, with severity:
+4. **Fix verification (post-fix re-scan):** After applying fixes from step 3a/3b, re-read each fixed file and verify:
+   - **Shared state safety**: if the fix touches a context, mutex, atomic, or channel field, grep for ALL other code that reads or writes that same field. Confirm the fix doesn't create a new race or lifecycle conflict.
+   - **Comment staleness**: check that any comments within 5 lines of the fixed code still accurately describe the behavior. Fix-then-forget is the #1 source of stale comments.
+   - **Embedded struct interactions**: if the fix initializes or modifies a field on an embedded struct, check the embedded struct's lifecycle methods for conflicts (they may cancel, replace, or override the value).
+
+   This step catches "fix-introduces-bug" patterns where a superficially correct fix creates a new problem through interactions with code the agent didn't read during the initial review.
+
+5. **Report remaining items** that cannot be auto-fixed, with severity:
    - **Critical**: security vulnerabilities, data corruption risks, panics in production paths
    - **High**: race conditions, resource leaks, incomplete multi-site fixes
    - **Medium**: code smells, inconsistent patterns, test gaps
