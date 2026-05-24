@@ -2,7 +2,6 @@ package classifier
 
 import (
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -27,19 +26,8 @@ func (o *Orchestrator) loadBat(threads int) error {
 		}
 	}
 
-	// Pre-check ORT availability before attempting bat model load.
-	ortStatus := inference.CheckORTAvailability(o.Settings.BirdNET.ONNXRuntimePath)
-	if !ortStatus.Available {
-		log.Warn("Bat model requires ONNX Runtime which is not available",
-			logger.String("error", ortStatus.Error))
-		emitORTUnavailableNotification("Bat Model", ortStatus.Error)
-		return errors.Newf("Bat model requires ONNX Runtime %s: %s",
-			inference.ORTRequiredVersion(), ortStatus.Error).
-			Component("classifier.orchestrator").
-			Category(errors.CategoryModelInit).
-			Context("model", "Bat").
-			Context("ort_error", ortStatus.Error).
-			Build()
+	if err := checkORTOrFail(o.Settings.BirdNET.ONNXRuntimePath, "Bat model", "Bat", "classifier.orchestrator"); err != nil {
+		return err
 	}
 
 	cfg := BatModelConfig{
