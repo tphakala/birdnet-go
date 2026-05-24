@@ -27,7 +27,9 @@ func TestDatabaseIntegrityCheck_Corrupted(t *testing.T) {
 	result := check.Run(t.Context())
 	assert.Equal(t, health.StatusCritical, result.Status)
 	assert.Contains(t, result.Message, "corruption")
-	assert.Contains(t, result.Details["recovery_hint"].(string), "Support")
+	recoveryHint, ok := result.Details["recovery_hint"].(string)
+	assert.True(t, ok, "recovery_hint should be a string")
+	assert.Contains(t, recoveryHint, "Support")
 }
 
 func TestDatabaseIntegrityCheck_NotYetRun(t *testing.T) {

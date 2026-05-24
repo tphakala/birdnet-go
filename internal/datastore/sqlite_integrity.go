@@ -110,6 +110,15 @@ func (s *SQLiteStore) notifyCorruptionDeferred(integrityResult string) {
 			maxWait      = 30 * time.Second
 		)
 
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		ticker := time.NewTicker(pollInterval)
+		defer ticker.Stop()
+
 		deadline := time.Now().Add(maxWait)
 		var svc *notification.Service
 		for time.Now().Before(deadline) {
@@ -120,7 +129,7 @@ func (s *SQLiteStore) notifyCorruptionDeferred(integrityResult string) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(pollInterval):
+			case <-ticker.C:
 			}
 		}
 		if svc == nil {
