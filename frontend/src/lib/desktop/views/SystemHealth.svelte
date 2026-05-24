@@ -90,10 +90,14 @@
 
   function safeGetWindow(): string {
     try {
-      return localStorage.getItem('health-eval-window') ?? '1h';
+      const stored = localStorage.getItem('health-eval-window');
+      if (stored && (windowPresets as readonly string[]).includes(stored)) {
+        return stored;
+      }
     } catch {
-      return '1h';
+      // localStorage unavailable in strict privacy modes
     }
+    return '1h';
   }
 
   let selectedWindow = $state<string>(safeGetWindow());

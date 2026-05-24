@@ -3,6 +3,7 @@ package observability
 import (
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -231,7 +232,7 @@ func (s *HealthMetricsStore) KeysWithPrefix(prefix string) []string {
 
 	var keys []string
 	for k := range s.series {
-		if len(k) >= len(prefix) && k[:len(prefix)] == prefix {
+		if strings.HasPrefix(k, prefix) {
 			keys = append(keys, k)
 		}
 	}
