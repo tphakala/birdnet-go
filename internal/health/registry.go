@@ -104,11 +104,10 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 	}
 
 	resCh := make(chan checkResult, len(checks))
-	var wg sync.WaitGroup
 
 	for i, c := range checks {
 		idx, check := i, c
-		wg.Go(func() {
+		go func() {
 			checkCtx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 			defer cancel()
 			start := time.Now()
@@ -131,37 +130,33 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 				}
 			}
 			resCh <- checkResult{idx: idx, results: rs}
-		})
+		}()
 	}
 
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-ctx.Done():
-		// Give context-aware checks a brief grace period to finish and
-		// report their own status before we synthesize StatusUnknown.
-		grace := time.NewTimer(contextGracePeriod)
-		select {
-		case <-done:
-			grace.Stop()
-		case <-grace.C:
-		}
-	}
-
-	// Drain completed results from the channel without blocking.
-	// Do NOT close resCh: hung goroutines may still send later.
+	// Collect results until all checks report or the parent context expires.
+	// Count-based collection avoids spawning a waiter goroutine that would
+	// leak if a check ignores its context and hangs indefinitely.
 	completed := make(map[int][]Result, len(checks))
-	for draining := true; draining; {
+	received := 0
+	for received < len(checks) {
 		select {
 		case cr := <-resCh:
 			completed[cr.idx] = cr.results
-		default:
-			draining = false
+			received++
+		case <-ctx.Done():
+			// Give context-aware checks a brief grace period to finish and
+			// report their own status before we synthesize StatusUnknown.
+			grace := time.NewTimer(contextGracePeriod)
+			for received < len(checks) {
+				select {
+				case cr := <-resCh:
+					completed[cr.idx] = cr.results
+					received++
+				case <-grace.C:
+					received = len(checks)
+				}
+			}
+			grace.Stop()
 		}
 	}
 
