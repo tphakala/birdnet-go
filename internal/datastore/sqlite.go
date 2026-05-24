@@ -302,6 +302,13 @@ func (s *SQLiteStore) Open() error {
 		return err
 	}
 
+	// Run synchronous integrity check after migration succeeds.
+	// If corruption is found, attempts REINDEX auto-recovery.
+	// On failure, latches corruption flag and notifies user but does NOT
+	// return an error: the app continues in degraded mode so the web UI
+	// remains accessible for diagnostics and recovery guidance.
+	s.performStartupIntegrityCheck()
+
 	// Ensure _metadata table exists for tracking operational timestamps (e.g. last vacuum)
 	if err := s.EnsureMetadataTable(); err != nil {
 		GetLogger().Warn("Failed to create _metadata table", logger.Error(err))
@@ -348,9 +355,9 @@ func (s *SQLiteStore) startIntegrityCheckLoop() {
 		ctx := s.monitoringCtx
 		s.monitoringMu.Unlock()
 
-		// Run initial check immediately, then on interval
 		s.monitoringWg.Go(func() {
-			s.RunIntegrityCheck()
+			// Skip immediate check: performStartupIntegrityCheck() already
+			// ran synchronously and cached the result in Open().
 
 			ticker := time.NewTicker(integrityCheckInterval)
 			defer ticker.Stop()
