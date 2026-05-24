@@ -93,8 +93,9 @@ func (s *SQLiteStore) attemptAutoRecovery() bool {
 // notifyCorruptionDeferred spawns a goroutine that polls for the notification
 // service (up to 30 seconds) and sends a persistent warning notification.
 // The notification service may not be initialized when Open() runs, so this
-// must be deferred. The goroutine respects the monitoring context for clean
-// shutdown.
+// must be deferred. Uses a dedicated 30-second timeout context independent of
+// monitoringCtx, which StartMonitoring cancels and replaces shortly after
+// Open() returns.
 func (s *SQLiteStore) notifyCorruptionDeferred(integrityResult string) {
 	// Use a dedicated context with timeout instead of monitoringCtx.
 	// StartMonitoring cancels and replaces monitoringCtx shortly after
