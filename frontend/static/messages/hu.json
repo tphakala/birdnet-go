@@ -4842,6 +4842,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Minden rendben",
+      "needsAttention": "Figyelmet igényel",
+      "failing": "Sikertelen",
+      "allClear": "Nincs probléma",
+      "noData": "Nincs adat",
+      "none": "Nincs"
+    },
+    "diagnostics": "Diagnosztika",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",

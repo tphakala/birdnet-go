@@ -4842,6 +4842,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Alt OK",
+      "needsAttention": "Kræver opmærksomhed",
+      "failing": "Fejler",
+      "allClear": "Alt klart",
+      "noData": "Ingen data",
+      "none": "Ingen"
+    },
+    "diagnostics": "Diagnostik",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",

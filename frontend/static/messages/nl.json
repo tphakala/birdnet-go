@@ -4842,6 +4842,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Alles in orde",
+      "needsAttention": "Vereist aandacht",
+      "failing": "Mislukt",
+      "allClear": "Geen problemen",
+      "noData": "Geen gegevens",
+      "none": "Geen"
+    },
+    "diagnostics": "Diagnostiek",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",

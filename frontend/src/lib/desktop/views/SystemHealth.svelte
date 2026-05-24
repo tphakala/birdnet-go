@@ -1,5 +1,4 @@
 <script lang="ts">
-  import Card from '$lib/desktop/components/ui/Card.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import type { StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import {
@@ -347,77 +346,153 @@
 {/snippet}
 
 <div class="col-span-12 space-y-4">
-  <!-- Status & Controls Toolbar -->
-  <Card className="bg-[var(--color-base-100)] shadow-sm">
-    <!-- Row 1: Status + last run + refresh -->
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="flex flex-wrap items-center gap-3 min-w-0">
+  <!-- Status Metric Strip (matches System Overview pattern) -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <!-- Healthy -->
+    <div
+      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+    >
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <div class="p-1.5 rounded-lg bg-green-500/10">
+            <CheckCircle class="w-4 h-4 text-[var(--color-success)]" />
+          </div>
+          <span class="text-xs font-medium text-muted">{t('health.summary.healthy')}</span>
+        </div>
+        <span class="font-mono tabular-nums text-2xl font-semibold text-[var(--color-success)]">
+          {report?.count_by_status?.healthy ?? (running ? '…' : '—')}
+        </span>
+      </div>
+      <div class="mt-auto text-[10px] text-muted">
         {#if report}
-          <StatusPill
-            variant={statusToVariant(report.status)}
-            label={t(`health.status.${report.status}`)}
-            size="md"
-          >
-            {#snippet leadingIcon()}
-              {#if report}
-                {@render statusIcon(report.status, 'size-4')}
-              {/if}
-            {/snippet}
-          </StatusPill>
-
-          <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--color-base-content)] opacity-70"
-          >
-            {#if report.count_by_status.healthy}
-              <span class="flex items-center gap-1">
-                <CheckCircle class="size-3.5 text-[var(--color-success)]" />
-                {report.count_by_status.healthy}
-                {t('health.summary.healthy')}
-              </span>
-            {/if}
-            {#if report.count_by_status.warning}
-              <span class="flex items-center gap-1">
-                <AlertTriangle class="size-3.5 text-[var(--color-warning)]" />
-                {report.count_by_status.warning}
-                {t('health.summary.warnings')}
-              </span>
-            {/if}
-            {#if report.count_by_status.critical}
-              <span class="flex items-center gap-1">
-                <XCircle class="size-3.5 text-[var(--color-error)]" />
-                {report.count_by_status.critical}
-                {t('health.summary.critical')}
-              </span>
-            {/if}
-            {#if report.count_by_status.skipped}
-              <span class="flex items-center gap-1">
-                <SkipForward class="size-3.5 opacity-40" />
-                {report.count_by_status.skipped}
-                {t('health.summary.skipped')}
-              </span>
-            {/if}
-          </div>
+          {@const h = report.count_by_status.healthy ?? 0}
+          {@const total = report.total_checks}
+          {h === total ? t('health.metricFooter.allPassing') : `${h} of ${total}`}
         {:else if running}
-          <div class="flex items-center gap-2 text-sm text-[var(--color-base-content)] opacity-70">
-            <Loader2 class="size-4 animate-spin" />
-            {t('health.running')}
-          </div>
-        {:else if error}
-          <div
-            role="alert"
-            aria-live="assertive"
-            class="flex items-center gap-2 text-sm text-[var(--color-error)]"
-          >
-            <XCircle class="size-4" />
-            {error}
-          </div>
+          {t('health.running')}
+        {:else}
+          —
         {/if}
       </div>
+    </div>
 
+    <!-- Warning -->
+    <div
+      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+    >
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <div class="p-1.5 rounded-lg bg-amber-500/10">
+            <AlertTriangle class="w-4 h-4 text-[var(--color-warning)]" />
+          </div>
+          <span class="text-xs font-medium text-muted">{t('health.summary.warnings')}</span>
+        </div>
+        <span
+          class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status?.warning ??
+            0) > 0
+            ? 'text-[var(--color-warning)]'
+            : 'opacity-40'}"
+        >
+          {report?.count_by_status?.warning ?? (running ? '…' : '—')}
+        </span>
+      </div>
+      <div class="mt-auto text-[10px] text-muted">
+        {#if report}
+          {(report.count_by_status.warning ?? 0) > 0
+            ? t('health.metricFooter.needsAttention')
+            : t('health.metricFooter.none')}
+        {:else if running}
+          {t('health.running')}
+        {:else}
+          —
+        {/if}
+      </div>
+    </div>
+
+    <!-- Critical -->
+    <div
+      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+    >
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <div class="p-1.5 rounded-lg bg-red-500/10">
+            <XCircle class="w-4 h-4 text-[var(--color-error)]" />
+          </div>
+          <span class="text-xs font-medium text-muted">{t('health.summary.critical')}</span>
+        </div>
+        <span
+          class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status
+            ?.critical ?? 0) > 0
+            ? 'text-[var(--color-error)]'
+            : 'opacity-40'}"
+        >
+          {report?.count_by_status?.critical ?? (running ? '…' : '—')}
+        </span>
+      </div>
+      <div class="mt-auto text-[10px] text-muted">
+        {#if report}
+          {(report.count_by_status.critical ?? 0) > 0
+            ? t('health.metricFooter.failing')
+            : t('health.metricFooter.allClear')}
+        {:else if running}
+          {t('health.running')}
+        {:else}
+          —
+        {/if}
+      </div>
+    </div>
+
+    <!-- Skipped -->
+    <div
+      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+    >
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <div class="p-1.5 rounded-lg bg-slate-500/10">
+            <SkipForward class="w-4 h-4 text-slate-500" />
+          </div>
+          <span class="text-xs font-medium text-muted">{t('health.summary.skipped')}</span>
+        </div>
+        <span
+          class="font-mono tabular-nums text-2xl font-semibold" class:opacity-40={!((report?.count_by_status?.skipped ??
+            0) > 0)}
+        >
+          {report?.count_by_status?.skipped ?? (running ? '…' : '—')}
+        </span>
+      </div>
+      <div class="mt-auto text-[10px] text-muted">
+        {#if report}
+          {(report.count_by_status.skipped ?? 0) > 0
+            ? t('health.metricFooter.noData')
+            : t('health.metricFooter.none')}
+        {:else if running}
+          {t('health.running')}
+        {:else}
+          —
+        {/if}
+      </div>
+    </div>
+  </div>
+
+  <!-- Diagnostics Control Card -->
+  <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
+        {t('health.diagnostics')}
+      </h3>
       <div
         class="flex items-center gap-3 text-xs text-[var(--color-base-content)] opacity-60 shrink-0"
       >
-        {#if report}
+        {#if error}
+          <span
+            role="alert"
+            aria-live="assertive"
+            class="flex items-center gap-1.5 text-[var(--color-error)] opacity-100"
+          >
+            <XCircle class="size-3.5" />
+            {error}
+          </span>
+        {:else if report}
           <span
             class="flex items-center gap-1.5"
             title={new Date(report.started_at).toLocaleString()}
@@ -426,6 +501,11 @@
             {t('health.lastRun')}
             {getLocalTimeString(new Date(report.started_at))}
             <span class="opacity-60">· {report.duration_ms.toFixed(0)}ms</span>
+          </span>
+        {:else if running}
+          <span class="flex items-center gap-1.5">
+            <Loader2 class="size-3.5 animate-spin" />
+            {t('health.running')}
           </span>
         {/if}
         <button
@@ -441,10 +521,7 @@
       </div>
     </div>
 
-    <!-- Row 2: Window selector + export -->
-    <div
-      class="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-[var(--color-base-200)]"
-    >
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-2">
         <span class="text-xs text-[var(--color-base-content)] opacity-60">
           {t('health.window.label')}:
@@ -498,16 +575,18 @@
         </button>
       </div>
     </div>
-  </Card>
+  </div>
 
   <!-- Results -->
   {#if report}
     <!-- Category Results -->
     {#each [...groupedResults] as [category, results] (category)}
-      <Card
-        title={t(`health.categories.${category}`)}
-        className="bg-[var(--color-base-100)] shadow-sm"
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm"
       >
+        <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
+          {t(`health.categories.${category}`)}
+        </h3>
         <div class="space-y-2">
           {#each results as result (result.name)}
             {@const topErrors = getTopErrors(result)}
@@ -676,7 +755,7 @@
             </div>
           {/each}
         </div>
-      </Card>
+      </div>
     {/each}
   {/if}
 </div>

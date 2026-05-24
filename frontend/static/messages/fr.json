@@ -4842,6 +4842,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Tout va bien",
+      "needsAttention": "Attention requise",
+      "failing": "En échec",
+      "allClear": "RAS",
+      "noData": "Aucune donnée",
+      "none": "Aucun"
+    },
+    "diagnostics": "Diagnostic",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",

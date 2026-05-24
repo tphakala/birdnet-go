@@ -4842,6 +4842,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Viss kārtībā",
+      "needsAttention": "Nepieciešama uzmanība",
+      "failing": "Neizdodas",
+      "allClear": "Bez problēmām",
+      "noData": "Nav datu",
+      "none": "Nav"
+    },
+    "diagnostics": "Diagnostika",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",

@@ -4842,6 +4842,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Vše v pořádku",
+      "needsAttention": "Vyžaduje pozornost",
+      "failing": "Selhává",
+      "allClear": "Bez problémů",
+      "noData": "Žádná data",
+      "none": "Žádné"
+    },
+    "diagnostics": "Diagnostika",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",

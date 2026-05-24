@@ -4842,6 +4842,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "All passing",
+      "needsAttention": "Needs attention",
+      "failing": "Failing",
+      "allClear": "All clear",
+      "noData": "No recent data",
+      "none": "None"
+    },
+    "diagnostics": "Diagnostics",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",

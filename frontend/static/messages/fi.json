@@ -4842,6 +4842,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Kaikki kunnossa",
+      "needsAttention": "Vaatii huomiota",
+      "failing": "Epäonnistuu",
+      "allClear": "Ei ongelmia",
+      "noData": "Ei dataa",
+      "none": "Ei mitään"
+    },
+    "diagnostics": "Diagnostiikka",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
