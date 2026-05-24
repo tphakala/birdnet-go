@@ -261,7 +261,7 @@ func getUserFriendlyMessage(operation string, err error) string {
 	case isNotFoundError(err):
 		return "The requested item could not be found."
 	case corruptionPattern.MatchString(err.Error()):
-		return "Database integrity issue detected. Please contact support immediately."
+		return "Database integrity issue detected. Please back up your database file, then go to Settings > Support to upload a support dump for analysis. If you have a recent backup, restoring from it is the safest recovery option."
 	default:
 		return fmt.Sprintf("Failed to %s. Please try again or contact support if the issue persists.", operation)
 	}
