@@ -3,12 +3,17 @@ package health
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 )
 
 // DefaultTimeout is the per-check timeout.
 const DefaultTimeout = 10 * time.Second
+
+// contextGracePeriod is the time to wait after context cancellation for
+// context-aware checks to finish before synthesizing StatusUnknown.
+const contextGracePeriod = 100 * time.Millisecond
 
 // Registry stores health checks and runs them.
 type Registry struct {
@@ -52,8 +57,7 @@ func (r *Registry) RunAll(ctx context.Context) []Result {
 // A zero window leaves checks at their default window.
 func (r *Registry) RunAllWithWindow(ctx context.Context, window time.Duration) []Result {
 	r.mu.RLock()
-	checks := make([]Check, len(r.checks))
-	copy(checks, r.checks)
+	checks := slices.Clone(r.checks)
 	r.mu.RUnlock()
 
 	if window > 0 {
@@ -81,27 +85,37 @@ func (r *Registry) RunCategory(ctx context.Context, cat Category) []Result {
 	return runChecks(ctx, filtered)
 }
 
+// checkResult pairs a check's index with its results so the orchestrator
+// can reconstruct registration order after collecting from a channel.
+type checkResult struct {
+	idx     int
+	results []Result
+}
+
 // runChecks executes the given checks in parallel with per-check timeout.
 // Checks that implement MultiResultCheck produce multiple results per check;
 // all results are flattened into the returned slice in registration order.
+//
+// If the parent context expires before all checks finish, completed results
+// are returned and unfinished checks receive a synthetic StatusUnknown result.
 func runChecks(ctx context.Context, checks []Check) []Result {
-	type checkOutput struct {
-		results []Result
+	if len(checks) == 0 {
+		return nil
 	}
-	outputs := make([]checkOutput, len(checks))
+
+	resCh := make(chan checkResult, len(checks))
 	var wg sync.WaitGroup
 
 	for i, c := range checks {
-		wg.Add(1)
-		go func(idx int, check Check) {
-			defer wg.Done()
+		idx, check := i, c
+		wg.Go(func() {
 			checkCtx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 			defer cancel()
 			start := time.Now()
 
 			var rs []Result
 			if mc, ok := check.(MultiResultCheck); ok {
-				rs = mc.RunMulti(checkCtx)
+				rs = slices.Clone(mc.RunMulti(checkCtx))
 			} else {
 				rs = []Result{check.Run(checkCtx)}
 			}
@@ -116,15 +130,54 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 					rs[j].Timestamp = now
 				}
 			}
-			outputs[idx] = checkOutput{results: rs}
-		}(i, c)
+			resCh <- checkResult{idx: idx, results: rs}
+		})
 	}
 
-	wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		// Give context-aware checks a brief grace period to finish and
+		// report their own status before we synthesize StatusUnknown.
+		grace := time.NewTimer(contextGracePeriod)
+		select {
+		case <-done:
+			grace.Stop()
+		case <-grace.C:
+		}
+	}
+
+	// Drain completed results from the channel without blocking.
+	// Do NOT close resCh: hung goroutines may still send later.
+	completed := make(map[int][]Result, len(checks))
+	for draining := true; draining; {
+		select {
+		case cr := <-resCh:
+			completed[cr.idx] = cr.results
+		default:
+			draining = false
+		}
+	}
 
 	results := make([]Result, 0, len(checks))
-	for _, o := range outputs {
-		results = append(results, o.results...)
+	for i, c := range checks {
+		if rs, ok := completed[i]; ok {
+			results = append(results, rs...)
+		} else {
+			results = append(results, Result{
+				Name:      c.Name(),
+				Category:  c.Category(),
+				Status:    StatusUnknown,
+				Message:   "check did not complete within deadline",
+				Timestamp: time.Now(),
+			})
+		}
 	}
 	return results
 }
