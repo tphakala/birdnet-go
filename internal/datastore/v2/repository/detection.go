@@ -174,6 +174,18 @@ type DetectionRepository interface {
 	// SaveReviewsBatch saves multiple reviews efficiently.
 	SaveReviewsBatch(ctx context.Context, reviews []*entities.DetectionReview) error
 
+	// CorrectAndVerify atomically applies a species correction (Update) and
+	// upserts the matching detection_reviews row (SaveReview) inside a single
+	// database transaction. If either side fails — including the lock guard
+	// inside Update — the whole correction is rolled back so the detection is
+	// never left with the new species but no `verified='correct'` review (or
+	// vice-versa).
+	//
+	// Returns the same sentinels Update returns: ErrDetectionNotFound and
+	// ErrDetectionLocked. Callers (e.g. WriteSpeciesCorrection) can match
+	// these with errors.Is to map to precise HTTP statuses.
+	CorrectAndVerify(ctx context.Context, id uint, updates map[string]any, review *entities.DetectionReview) error
+
 	// GetReviewsByDetectionIDs retrieves reviews for multiple detections in a single query.
 	// Returns a map of detection ID to DetectionReview.
 	// Handles large ID sets by chunking to avoid SQL parameter limits.

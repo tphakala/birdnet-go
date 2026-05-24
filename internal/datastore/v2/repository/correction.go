@@ -20,18 +20,19 @@ import (
 // WriteSpeciesCorrection applies a species correction to v2_detections and
 // upserts the corresponding v2_detection_reviews row. The caller resolves
 // (name, version, variant) for the chosen model and the new scientific name;
-// this helper looks up the matching v2_ai_models and v2_labels rows, writes
-// the detection update via DetectionRepository.Update (which enforces the
-// detection_locks guard atomically), and saves the review.
+// this helper looks up the matching v2_ai_models and v2_labels rows, then
+// dispatches the detection update + review upsert through
+// DetectionRepository.CorrectAndVerify so both writes share a single GORM
+// transaction.
+//
+// Atomicity guarantee: the detection update and the review upsert either both
+// commit or both roll back. A transient SaveReview failure can no longer
+// leave a detection with the new species but no `verified='correct'` review.
 //
 // Returns wrapped errors for any of the underlying repository failures —
-// notably repository.ErrModelNotFound, repository.ErrLabelNotFound, and
-// repository.ErrDetectionLocked, which callers can match via errors.Is.
-//
-// Designed to be called either inside a transaction (when the caller wants
-// to atomically pair the v2 write with other work) or directly against the
-// session-scoped repositories; the repositories handle their own SQL and
-// don't require an enclosing tx.
+// notably repository.ErrModelNotFound, repository.ErrLabelNotFound,
+// repository.ErrDetectionNotFound, and repository.ErrDetectionLocked, which
+// callers can match via errors.Is.
 func WriteSpeciesCorrection(
 	ctx context.Context,
 	modelRepo ModelRepository,
@@ -56,19 +57,17 @@ func WriteSpeciesCorrection(
 		return fmt.Errorf("v2 labels lookup failed: %w", err)
 	}
 
-	if err := detRepo.Update(ctx, detectionID, map[string]any{
+	updates := map[string]any{
 		"label_id":   label.ID,
 		"model_id":   aiModel.ID,
 		"confidence": confidence,
-	}); err != nil {
-		return fmt.Errorf("v2 detection update failed: %w", err)
 	}
-
-	if err := detRepo.SaveReview(ctx, &entities.DetectionReview{
+	review := &entities.DetectionReview{
 		DetectionID: detectionID,
 		Verified:    entities.VerificationCorrect,
-	}); err != nil {
-		return fmt.Errorf("v2 review save failed: %w", err)
+	}
+	if err := detRepo.CorrectAndVerify(ctx, detectionID, updates, review); err != nil {
+		return fmt.Errorf("v2 atomic species correction failed: %w", err)
 	}
 	return nil
 }

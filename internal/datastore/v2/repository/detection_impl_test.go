@@ -345,3 +345,143 @@ func TestSaveReview_ConcurrentUpsertNoDuplicates(t *testing.T) {
 	require.NoError(t, db.Table(tableDetectionReviews).Where("detection_id = ?", det.ID).Count(&count).Error)
 	assert.Equal(t, int64(1), count)
 }
+
+// ============================================================================
+// CorrectAndVerify Tests
+// ============================================================================
+//
+// CorrectAndVerify wraps Update + SaveReview in a single transaction so an
+// operator-driven correction can't leave a detection with the new species
+// but no `verified='correct'` review (or vice-versa) on a transient failure.
+
+func TestCorrectAndVerify_HappyPath(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+
+	repo := &detectionRepository{db: db}
+	det := createTestDetection(t, db, 1000)
+
+	updates := map[string]any{
+		"label_id":   uint(42),
+		"model_id":   uint(7),
+		"confidence": 0.81,
+	}
+	review := &entities.DetectionReview{
+		DetectionID: det.ID,
+		Verified:    entities.VerificationCorrect,
+	}
+
+	require.NoError(t, repo.CorrectAndVerify(ctx, det.ID, updates, review))
+
+	// Detection got the updates.
+	got, err := repo.Get(ctx, det.ID)
+	require.NoError(t, err)
+	assert.Equal(t, uint(42), got.LabelID)
+	assert.Equal(t, uint(7), got.ModelID)
+	assert.InDelta(t, 0.81, got.Confidence, 1e-9)
+
+	// And the review landed.
+	gotReview, err := repo.GetReview(ctx, det.ID)
+	require.NoError(t, err)
+	assert.Equal(t, entities.VerificationCorrect, gotReview.Verified)
+	assert.Equal(t, det.ID, gotReview.DetectionID)
+}
+
+func TestCorrectAndVerify_LockedRollsBackReview(t *testing.T) {
+	// When the detection is locked, Update returns ErrDetectionLocked.
+	// SaveReview must NOT have written anything — that's the atomicity
+	// guarantee the whole helper exists to provide.
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+
+	repo := &detectionRepository{db: db}
+	det := createTestDetection(t, db, 1000)
+
+	// Lock it.
+	require.NoError(t, db.Table(tableDetectionLocks).Create(&entities.DetectionLock{
+		DetectionID: det.ID,
+	}).Error)
+
+	updates := map[string]any{
+		"label_id":   uint(999),
+		"model_id":   uint(7),
+		"confidence": 0.42,
+	}
+	review := &entities.DetectionReview{
+		DetectionID: det.ID,
+		Verified:    entities.VerificationCorrect,
+	}
+
+	err := repo.CorrectAndVerify(ctx, det.ID, updates, review)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrDetectionLocked,
+		"expected ErrDetectionLocked to propagate from Update through the tx envelope")
+
+	// Detection unchanged.
+	got, err := repo.Get(ctx, det.ID)
+	require.NoError(t, err)
+	assert.Equal(t, uint(1), got.LabelID, "detection should not have been updated when locked")
+	assert.InDelta(t, 0.9, got.Confidence, 1e-9)
+
+	// And critically: no review row was written.
+	var count int64
+	require.NoError(t, db.Table(tableDetectionReviews).Where("detection_id = ?", det.ID).Count(&count).Error)
+	assert.Equal(t, int64(0), count,
+		"SaveReview must roll back when Update fails — atomicity guarantee")
+}
+
+func TestCorrectAndVerify_NotFoundLeavesReviewAbsent(t *testing.T) {
+	// Same atomicity guarantee for the not-found case: no orphan review row
+	// can land on a detection ID that doesn't exist.
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+
+	repo := &detectionRepository{db: db}
+
+	const missingID uint = 9999
+	updates := map[string]any{"label_id": uint(1), "model_id": uint(1), "confidence": 0.5}
+	review := &entities.DetectionReview{DetectionID: missingID, Verified: entities.VerificationCorrect}
+
+	err := repo.CorrectAndVerify(ctx, missingID, updates, review)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrDetectionNotFound)
+
+	var count int64
+	require.NoError(t, db.Table(tableDetectionReviews).Where("detection_id = ?", missingID).Count(&count).Error)
+	assert.Equal(t, int64(0), count,
+		"review row must not exist for a detection that was never updated")
+}
+
+func TestCorrectAndVerify_IdempotentOnRerun(t *testing.T) {
+	// Running CorrectAndVerify twice with different verifications should
+	// upsert (single review row, latest status) and re-apply the detection
+	// update — same semantics as calling Update + SaveReview twice in a row.
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+
+	repo := &detectionRepository{db: db}
+	det := createTestDetection(t, db, 1000)
+
+	require.NoError(t, repo.CorrectAndVerify(ctx, det.ID,
+		map[string]any{"label_id": uint(10), "confidence": 0.7},
+		&entities.DetectionReview{DetectionID: det.ID, Verified: entities.VerificationCorrect},
+	))
+
+	require.NoError(t, repo.CorrectAndVerify(ctx, det.ID,
+		map[string]any{"label_id": uint(20), "confidence": 0.8},
+		&entities.DetectionReview{DetectionID: det.ID, Verified: entities.VerificationFalsePositive},
+	))
+
+	got, err := repo.Get(ctx, det.ID)
+	require.NoError(t, err)
+	assert.Equal(t, uint(20), got.LabelID)
+	assert.InDelta(t, 0.8, got.Confidence, 1e-9)
+
+	gotReview, err := repo.GetReview(ctx, det.ID)
+	require.NoError(t, err)
+	assert.Equal(t, entities.VerificationFalsePositive, gotReview.Verified)
+
+	var count int64
+	require.NoError(t, db.Table(tableDetectionReviews).Where("detection_id = ?", det.ID).Count(&count).Error)
+	assert.Equal(t, int64(1), count, "upsert: still exactly one review row after rerun")
+}

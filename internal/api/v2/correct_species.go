@@ -24,6 +24,8 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	bnerrors "github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -107,9 +109,19 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 	// repository performs its own atomic lock check, so c.DS.Get here is
 	// pure read-side context — the canonical lock guard runs inside the
 	// CorrectSpecies write.
+	//
+	// Discriminate between "detection does not exist" and "fetch failed for
+	// some other reason" (transient DB error, schema issue, etc.). The
+	// legacy datastore.Get returns a CategoryNotFound enhanced error; the
+	// v2only path returns repository.ErrDetectionNotFound. Anything else
+	// is an infrastructure problem and deserves a 500, not a misleading
+	// 404 that tells the operator the detection is gone.
 	existing, err := c.DS.Get(idStr)
 	if err != nil {
-		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		if errors.Is(err, repository.ErrDetectionNotFound) || bnerrors.IsNotFound(err) {
+			return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Failed to fetch detection", http.StatusInternalServerError)
 	}
 	if existing.Locked {
 		return c.HandleError(ctx,

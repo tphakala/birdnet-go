@@ -1115,6 +1115,33 @@ func (r *detectionRepository) SaveReview(ctx context.Context, review *entities.D
 	}, r.metrics)
 }
 
+// CorrectAndVerify atomically applies the species update + review upsert in
+// one transaction. The two writes share a *gorm.DB obtained via the surrounding
+// gorm.Transaction, so a failure in SaveReview rolls back the species change
+// (and vice versa) — closing the data-integrity gap where a transient
+// SaveReview failure would otherwise leave the detection corrected but
+// unverified.
+//
+// We construct a sibling repository (txRepo) bound to the transactional db
+// and delegate to its existing Update + SaveReview methods. This keeps the
+// careful atomic-lock guard inside Update and the OnConflict semantics inside
+// SaveReview in exactly one place — this method is just the transaction
+// envelope around them.
+func (r *detectionRepository) CorrectAndVerify(ctx context.Context, id uint, updates map[string]any, review *entities.DetectionReview) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txRepo := &detectionRepository{
+			db:          tx,
+			metrics:     r.metrics,
+			useV2Prefix: r.useV2Prefix,
+			isMySQL:     r.isMySQL,
+		}
+		if err := txRepo.Update(ctx, id, updates); err != nil {
+			return err
+		}
+		return txRepo.SaveReview(ctx, review)
+	})
+}
+
 // GetReview retrieves the review for a detection.
 func (r *detectionRepository) GetReview(ctx context.Context, detectionID uint) (*entities.DetectionReview, error) {
 	var review entities.DetectionReview
