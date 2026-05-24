@@ -2336,6 +2336,12 @@ func (p *Processor) GetBackupScheduler() any {
 	return p.backupScheduler
 }
 
+// ReconfigureLogDeduplicator reinitializes the log deduplicator from current settings.
+func (p *Processor) ReconfigureLogDeduplicator() {
+	settings := p.currentSettings()
+	p.logDedup = initLogDeduplicator(settings)
+}
+
 // CleanupLogDeduplicator removes stale log deduplication entries to prevent memory growth.
 // Returns the number of entries removed.
 func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {

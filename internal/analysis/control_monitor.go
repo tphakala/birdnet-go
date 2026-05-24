@@ -53,6 +53,10 @@ type ControlMonitor struct {
 	// the downstream publisher via soundLevelManager.
 	reconfigureSoundLevelFn func()
 
+	// reconfigureMonitoringFn stops and recreates the SystemMonitor from current
+	// settings. Provided by APIServerService because it owns the monitor lifecycle.
+	reconfigureMonitoringFn func()
+
 	// Sound level manager for lifecycle management
 	soundLevelManager *SoundLevelManager
 
@@ -78,7 +82,11 @@ type ControlMonitor struct {
 // sound level manager is restarted so that router routes exist when the
 // publisher starts (enable) or are gone before the publisher stops (disable).
 // May be nil in contexts where no sound level pipeline is owned.
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan audiocore.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *schedule.QuietHoursScheduler, audioEngine *engine.AudioEngine, reconfigureSourcesFn, reconfigureSoundLevelFn func()) *ControlMonitor {
+//
+// reconfigureMonitoringFn stops and recreates the SystemMonitor from current
+// settings. Provided by APIServerService because it owns the monitor lifecycle.
+// May be nil in contexts where no system monitor is owned.
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan audiocore.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *schedule.QuietHoursScheduler, audioEngine *engine.AudioEngine, reconfigureSourcesFn, reconfigureSoundLevelFn, reconfigureMonitoringFn func()) *ControlMonitor {
 	cm := &ControlMonitor{
 		wg:                      wg,
 		controlChan:             controlChan,
@@ -95,6 +103,7 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 		engine:                  audioEngine,
 		reconfigureSourcesFn:    reconfigureSourcesFn,
 		reconfigureSoundLevelFn: reconfigureSoundLevelFn,
+		reconfigureMonitoringFn: reconfigureMonitoringFn,
 	}
 
 	// Initialize the sound level manager but don't start it yet
@@ -259,6 +268,15 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleQuietHoursStartSoundCard()
 	case "reconfigure_bat_filter":
 		cm.handleReconfigureBatFilter()
+	case "reconfigure_log_deduplication":
+		cm.handleReconfigureLogDeduplication()
+	case "reconfigure_rtsp_health":
+		cm.handleReconfigureStreams()
+		emitHotReload("rtsp_health")
+	case "reconfigure_monitoring":
+		cm.handleReconfigureMonitoring()
+	case "reconfigure_livestream":
+		cm.handleReconfigureLiveStream()
 	default:
 		GetLogger().Warn("Received unknown control signal", logger.String("signal", signal))
 	}
@@ -270,6 +288,31 @@ func (cm *ControlMonitor) handleReconfigureBatFilter() {
 		cm.bn.ReloadBatFilter()
 		emitHotReload("bat_filter")
 	}
+}
+
+// handleReconfigureLogDeduplication reinitializes the log deduplicator from current settings.
+func (cm *ControlMonitor) handleReconfigureLogDeduplication() {
+	if cm.proc == nil {
+		return
+	}
+	cm.proc.ReconfigureLogDeduplicator()
+	emitHotReload("log_deduplication")
+}
+
+// handleReconfigureMonitoring stops and recreates the SystemMonitor from current settings.
+func (cm *ControlMonitor) handleReconfigureMonitoring() {
+	if cm.reconfigureMonitoringFn != nil {
+		cm.reconfigureMonitoringFn()
+	}
+	emitHotReload("monitoring")
+}
+
+// handleReconfigureLiveStream restarts active HLS streams so they pick up new settings.
+func (cm *ControlMonitor) handleReconfigureLiveStream() {
+	if cm.apiController != nil {
+		cm.apiController.RestartHLSStreams()
+	}
+	emitHotReload("livestream")
 }
 
 // handleRebuildRangeFilter rebuilds the range filter
