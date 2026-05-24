@@ -211,10 +211,6 @@ onnxruntime-win-x64-v1.25.1-1/
   "tag": "v1.25.1-1",
   "platform": "linux",
   "arch": "x86_64",
-  "archive": {
-    "name": "onnxruntime-linux-x64-v1.25.1-1.tar.gz",
-    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-  },
   "execution_providers": {
     "OpenVINO": {
       "library": "libonnxruntime_providers_openvino.so",
@@ -256,9 +252,9 @@ onnxruntime-win-x64-v1.25.1-1/
 
 Key design choices in the metadata:
 
-- **`archive.sha256`**: BirdNET-Go verifies the archive checksum before extraction.
 - **`execution_providers` is a map, not a list**: Each EP explicitly names its provider library and runtime dependencies. The CPU EP has `"library": null` since it's built into the core ORT library.
 - **Per-library SHA256**: For post-extraction integrity verification.
+- **Archive checksum**: Stored in a separate `.sha256` file alongside the archive in the GitHub Release (not inside the archive, which would be circular). BirdNET-Go downloads the `.sha256` file first and verifies the archive after download.
 
 ## Version Bumping Process
 
