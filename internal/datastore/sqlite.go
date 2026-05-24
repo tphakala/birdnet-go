@@ -72,24 +72,24 @@ func getDiskSpace(path string) (uint64, error) {
 
 // checkWritePermission checks if we have write permission to the directory
 func checkWritePermission(path string) error {
-	// Create a temporary file to test write permissions
-	tempFile := filepath.Join(filepath.Dir(path), ".tmp_write_test")
-	f, err := os.OpenFile(tempFile, os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // G304: tempFile derived from database path
+	dir := filepath.Dir(path)
+	f, err := os.CreateTemp(dir, ".birdnet_write_test_*")
 	if err != nil {
 		return errors.New(err).
 			Component("datastore").
 			Category(errors.CategorySystem).
 			Context("operation", "check_write_permission").
-			Context("directory", filepath.Dir(path)).
+			Context("directory", dir).
 			Build()
 	}
+	name := f.Name()
+	defer func() {
+		if err := os.Remove(name); err != nil {
+			GetLogger().Warn("Failed to remove temp file", logger.Error(err))
+		}
+	}()
 	if err := f.Close(); err != nil {
-		// Log but don't fail permission check
 		GetLogger().Warn("Failed to close temp file", logger.Error(err))
-	}
-	if err := os.Remove(tempFile); err != nil {
-		// Log but don't fail permission check
-		GetLogger().Warn("Failed to remove temp file", logger.Error(err))
 	}
 	return nil
 }
@@ -155,8 +155,8 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 		}
 	}()
 
-	// Create backup file
-	destination, err := os.Create(backupPath) //nolint:gosec // G304: backupPath derived from dbPath (application settings)
+	// Create backup file with restricted permissions (owner-only)
+	destination, err := os.OpenFile(backupPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // G304: backupPath derived from dbPath (application settings)
 	if err != nil {
 		return errors.New(err).
 			Component("datastore").
@@ -187,7 +187,7 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 }
 
 // Open initializes the SQLite database connection
-func (s *SQLiteStore) Open() error {
+func (s *SQLiteStore) Open() (retErr error) {
 	// Get database path from settings
 	dbPath := s.Settings.Output.SQLite.Path
 
@@ -271,6 +271,16 @@ func (s *SQLiteStore) Open() error {
 			Build()
 	}
 	sqlDB.SetMaxOpenConns(1)
+
+	// Clean up connection pool if any subsequent initialization step fails.
+	defer func() {
+		if retErr != nil {
+			if closeErr := sqlDB.Close(); closeErr != nil {
+				GetLogger().Warn("Failed to close DB pool after init error", logger.Error(closeErr))
+			}
+			s.DB = nil
+		}
+	}()
 
 	// Store the database connection
 	s.DB = db

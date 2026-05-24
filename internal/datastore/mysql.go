@@ -44,7 +44,7 @@ func validateMySQLConfig() error {
 }
 
 // InitializeDatabase sets up the MySQL database connection
-func (store *MySQLStore) Open() error {
+func (store *MySQLStore) Open() (retErr error) {
 	if err := validateMySQLConfig(); err != nil {
 		return err // validateMySQLConfig returns a properly formatted error
 	}
@@ -100,6 +100,16 @@ func (store *MySQLStore) Open() error {
 	sqlDB.SetMaxIdleConns(MySQLMaxIdleConns)
 	sqlDB.SetConnMaxLifetime(MySQLConnMaxLifetime)
 	sqlDB.SetConnMaxIdleTime(MySQLConnMaxIdleTime)
+
+	// Clean up connection pool if any subsequent initialization step fails.
+	defer func() {
+		if retErr != nil {
+			if closeErr := sqlDB.Close(); closeErr != nil {
+				GetLogger().Warn("Failed to close DB pool after init error", logger.Error(closeErr))
+			}
+			store.DB = nil
+		}
+	}()
 
 	store.DB = db
 
