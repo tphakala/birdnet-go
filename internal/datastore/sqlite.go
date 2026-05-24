@@ -302,15 +302,6 @@ func (s *SQLiteStore) Open() error {
 		return err
 	}
 
-	// Initialize monitoring context before the integrity check so that any
-	// deferred goroutine (e.g. notifyCorruptionDeferred) gets a cancellable
-	// context instead of falling back to context.Background().
-	s.monitoringMu.Lock()
-	if s.monitoringCtx == nil {
-		s.monitoringCtx, s.monitoringCancel = context.WithCancel(context.Background())
-	}
-	s.monitoringMu.Unlock()
-
 	// Run synchronous integrity check after migration succeeds.
 	// If corruption is found, attempts REINDEX auto-recovery.
 	// On failure, latches corruption flag and notifies user but does NOT

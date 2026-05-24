@@ -96,45 +96,30 @@ func (s *SQLiteStore) attemptAutoRecovery() bool {
 // must be deferred. The goroutine respects the monitoring context for clean
 // shutdown.
 func (s *SQLiteStore) notifyCorruptionDeferred(integrityResult string) {
-	s.monitoringMu.Lock()
-	ctx := s.monitoringCtx
-	s.monitoringMu.Unlock()
-
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	// Use a dedicated context with timeout instead of monitoringCtx.
+	// StartMonitoring cancels and replaces monitoringCtx shortly after
+	// Open() returns, which would kill this goroutine before it can send
+	// the notification.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	s.monitoringWg.Go(func() {
-		const (
-			pollInterval = 500 * time.Millisecond
-			maxWait      = 30 * time.Second
-		)
+		defer cancel()
 
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		ticker := time.NewTicker(pollInterval)
+		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 
-		deadline := time.Now().Add(maxWait)
 		var svc *notification.Service
-		for time.Now().Before(deadline) {
+		for {
 			svc = notification.GetService()
 			if svc != nil {
 				break
 			}
 			select {
 			case <-ctx.Done():
+				GetLogger().Warn("notification service unavailable, corruption notification not sent")
 				return
 			case <-ticker.C:
 			}
-		}
-		if svc == nil {
-			GetLogger().Warn("notification service unavailable, corruption notification not sent")
-			return
 		}
 
 		notif := notification.NewNotification(
