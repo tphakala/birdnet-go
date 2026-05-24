@@ -1215,6 +1215,39 @@ func TestStream_SourceTypeDetection(t *testing.T) {
 	}
 }
 
+func TestStreamConfig_NeedsOutputResampling(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		sampleRate       int
+		sourceSampleRate int
+		want             bool
+	}{
+		{"unknown_source_resamples", 48000, 0, true},
+		{"8kHz_to_48kHz_resamples", 48000, 8000, true},
+		{"16kHz_to_48kHz_resamples", 48000, 16000, true},
+		{"44100Hz_to_48kHz_resamples", 48000, 44100, true},
+		{"48kHz_to_48kHz_passthrough", 48000, 48000, false},
+		{"96kHz_source_downsampled_for_bird", 48000, 96000, true},
+		{"96kHz_bat_passthrough", 96000, 96000, false},
+		{"192kHz_bat_passthrough", 192000, 192000, false},
+		{"256kHz_bat_passthrough", 256000, 256000, false},
+		{"384kHz_bat_passthrough", 384000, 384000, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := StreamConfig{
+				SampleRate:       tt.sampleRate,
+				SourceSampleRate: tt.sourceSampleRate,
+			}
+			assert.Equal(t, tt.want, cfg.needsOutputResampling())
+		})
+	}
+}
+
 func TestStream_HealthyThresholdConfig(t *testing.T) {
 	t.Parallel()
 

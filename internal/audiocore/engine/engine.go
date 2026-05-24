@@ -296,6 +296,7 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 		URL:              url,
 		Type:             string(src.Type),
 		SampleRate:       sampleRate,
+		SourceSampleRate: src.SourceSampleRate,
 		BitDepth:         bitDepth,
 		Channels:         channels,
 		FFmpegPath:       e.ffmpegPath,
@@ -430,6 +431,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 			URL:              cfg.ConnectionString,
 			Type:             string(cfg.Type),
 			SampleRate:       sampleRate,
+			SourceSampleRate: cfg.SourceSampleRate,
 			BitDepth:         bitDepth,
 			Channels:         channels,
 			FFmpegPath:       e.ffmpegPath,
@@ -485,6 +487,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 		logger.String("source_id", sourceID),
 		logger.String("type", cfg.Type.String()),
 		logger.Int("sample_rate", sampleRate),
+		logger.Int("source_sample_rate", cfg.SourceSampleRate),
 		logger.String("primary_model", e.primaryModelID),
 		logger.Int("analysis_clip_bytes", e.primaryClipBytes))
 
@@ -631,6 +634,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			URL:              newCfg.ConnectionString,
 			Type:             string(newType),
 			SampleRate:       sampleRate,
+			SourceSampleRate: newCfg.SourceSampleRate,
 			BitDepth:         bitDepth,
 			Channels:         channels,
 			FFmpegPath:       e.ffmpegPath,

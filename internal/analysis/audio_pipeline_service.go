@@ -1013,8 +1013,14 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 // sourceNeedsReconfigure reports whether the running source's audio parameters
 // differ from the desired config, requiring a full reconfigure (stop + restart).
+// A zero SourceSampleRate in the desired config means the probe failed; treat
+// this as "unknown, keep current" to avoid restarting FFmpeg on transient
+// network failures.
 func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.SourceConfig) bool {
+	sourceSampleRateChanged := desired.SourceSampleRate != 0 &&
+		running.SourceSampleRate != desired.SourceSampleRate
 	return running.SampleRate != desired.SampleRate ||
+		sourceSampleRateChanged ||
 		running.BitDepth != desired.BitDepth ||
 		running.Channels != desired.Channels
 }
@@ -1312,15 +1318,26 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 		enabledStreams = append(enabledStreams, stream)
 	}
 
-	// Probe bat-model streams concurrently to avoid blocking sourcesMu
-	// for N * 10s when multiple streams are configured.
-	probedRates := p.probeBatStreams(enabledStreams)
+	// Probe all streams concurrently to discover actual sample rates.
+	// This lets us skip FFmpeg resampling when the source already matches
+	// the target, and detect sub-48 kHz sources that need upsampling.
+	probedRates := p.probeAllStreams(enabledStreams)
 
 	// RTSP streams.
 	for _, stream := range enabledStreams {
+		probedRate := probedRates[stream.URL]
 		sampleRate := conf.SampleRate
-		if rate, ok := probedRates[stream.URL]; ok {
-			sampleRate = rate
+		if hasBatModel(stream.Models) {
+			if probedRate > conf.SampleRate {
+				sampleRate = probedRate
+			}
+			if probedRate > 0 && probedRate < ffmpeg.MinBatSampleRate {
+				GetLogger().Warn("stream sample rate below bat model minimum",
+					logger.String("stream", stream.Name),
+					logger.Int("sample_rate", probedRate),
+					logger.Int("minimum", ffmpeg.MinBatSampleRate),
+					logger.String("operation", "probe_stream"))
+			}
 		}
 		result = append(result, sourceConfigWithModels{
 			config: &audiocore.SourceConfig{
@@ -1328,6 +1345,7 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 				Type:             audiocore.StreamTypeToSourceType(stream.Type),
 				ConnectionString: stream.URL,
 				SampleRate:       sampleRate,
+				SourceSampleRate: probedRate,
 				BitDepth:         conf.BitDepth,
 				Channels:         1,
 			},
@@ -1379,28 +1397,23 @@ func hasBatModel(modelIDs []string) bool {
 	return false
 }
 
-// probeBatStreams probes all streams that have bat models assigned, running
-// probes concurrently to minimize lock hold time. Returns a map from stream
-// URL to probed sample rate.
-func (p *AudioPipelineService) probeBatStreams(streams []*conf.StreamConfig) map[string]int {
+// probeAllStreams probes all streams concurrently to discover their actual
+// sample rates. Returns a map from stream URL to probed sample rate.
+// A zero value means the probe failed (the caller should treat unknown
+// rates conservatively).
+func (p *AudioPipelineService) probeAllStreams(streams []*conf.StreamConfig) map[string]int {
+	if len(streams) == 0 {
+		return nil
+	}
+
 	type probeResult struct {
 		url  string
 		rate int
 	}
 
-	var batStreams []*conf.StreamConfig
-	for _, s := range streams {
-		if hasBatModel(s.Models) {
-			batStreams = append(batStreams, s)
-		}
-	}
-	if len(batStreams) == 0 {
-		return nil
-	}
-
-	results := make(chan probeResult, len(batStreams))
+	results := make(chan probeResult, len(streams))
 	var wg sync.WaitGroup
-	for _, s := range batStreams {
+	for _, s := range streams {
 		wg.Go(func() {
 			results <- probeResult{
 				url:  s.URL,
@@ -1411,7 +1424,7 @@ func (p *AudioPipelineService) probeBatStreams(streams []*conf.StreamConfig) map
 	wg.Wait()
 	close(results)
 
-	rates := make(map[string]int, len(batStreams))
+	rates := make(map[string]int, len(streams))
 	for r := range results {
 		rates[r.url] = r.rate
 	}
@@ -1419,18 +1432,18 @@ func (p *AudioPipelineService) probeBatStreams(streams []*conf.StreamConfig) map
 }
 
 // probeStreamSampleRate uses ffprobe to discover the actual sample rate of a
-// stream. Returns conf.SampleRate (48 kHz) on failure so the pipeline can
-// still start with a degraded configuration.
+// stream. Returns 0 on failure so the caller can distinguish "unknown" from
+// "actually 48 kHz" and apply conservative resampling.
 func (p *AudioPipelineService) probeStreamSampleRate(url, name string) int {
 	log := GetLogger()
 
 	info, err := ffmpeg.ProbeStreamInfo(context.Background(), url)
 	if err != nil {
-		log.Warn("stream probe failed, using default 48 kHz",
+		log.Warn("stream probe failed, FFmpeg will resample to ensure correct rate",
 			logger.String("stream", name),
 			logger.Error(err),
 			logger.String("operation", "probe_stream"))
-		return conf.SampleRate
+		return 0
 	}
 
 	log.Info("probed stream audio properties",
@@ -1444,14 +1457,6 @@ func (p *AudioPipelineService) probeStreamSampleRate(url, name string) int {
 		log.Warn("stream uses lossy codec that destroys ultrasonic content",
 			logger.String("stream", name),
 			logger.String("codec", info.Codec),
-			logger.String("operation", "probe_stream"))
-	}
-
-	if info.SampleRate < ffmpeg.MinBatSampleRate {
-		log.Warn("stream sample rate below bat model minimum (96 kHz)",
-			logger.String("stream", name),
-			logger.Int("sample_rate", info.SampleRate),
-			logger.Int("minimum", ffmpeg.MinBatSampleRate),
 			logger.String("operation", "probe_stream"))
 	}
 

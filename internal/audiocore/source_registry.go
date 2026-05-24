@@ -129,17 +129,18 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 	}
 
 	src := &AudioSource{
-		ID:           id,
-		DisplayName:  displayName,
-		Type:         cfg.Type,
-		SafeString:   safeStr,
-		SampleRate:   cfg.SampleRate,
-		BitDepth:     cfg.BitDepth,
-		Channels:     cfg.Channels,
-		Gain:         cfg.Gain,
-		State:        SourceInactive,
-		RegisteredAt: time.Now(),
-		LastSeen:     time.Now(),
+		ID:               id,
+		DisplayName:      displayName,
+		Type:             cfg.Type,
+		SafeString:       safeStr,
+		SampleRate:       cfg.SampleRate,
+		SourceSampleRate: cfg.SourceSampleRate,
+		BitDepth:         cfg.BitDepth,
+		Channels:         cfg.Channels,
+		Gain:             cfg.Gain,
+		State:            SourceInactive,
+		RegisteredAt:     time.Now(),
+		LastSeen:         time.Now(),
 	}
 	src.SetConnectionString(connStr)
 

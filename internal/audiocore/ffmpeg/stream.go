@@ -185,8 +185,12 @@ type StreamConfig struct {
 	// Type is the source type (e.g., "rtsp", "http", "hls").
 	Type string
 
-	// SampleRate in Hz (e.g., 48000).
+	// SampleRate in Hz (e.g., 48000). This is the desired output rate.
 	SampleRate int
+
+	// SourceSampleRate is the actual sample rate of the remote source,
+	// discovered by probing. Zero means unknown (probe failed or local source).
+	SourceSampleRate int
 
 	// BitDepth in bits (e.g., 16).
 	BitDepth int
@@ -239,6 +243,19 @@ func (c *StreamConfig) sourceType() audiocore.SourceType {
 	default:
 		return audiocore.SourceTypeUnknown
 	}
+}
+
+// needsOutputResampling reports whether FFmpeg should resample the decoded
+// audio to the configured sample rate via -ar/-ac output flags.
+// When the source rate is known (probed) and matches the target, no
+// resampling is needed. When unknown (probe failed) or different from
+// the target, FFmpeg must resample to ensure the pipeline gets the
+// expected rate.
+func (c *StreamConfig) needsOutputResampling() bool {
+	if c.SourceSampleRate == 0 {
+		return true
+	}
+	return c.SourceSampleRate != c.SampleRate
 }
 
 // healthyThreshold returns the configured healthy data threshold or the default.
@@ -802,10 +819,7 @@ func (s *Stream) startProcess() error {
 		"-f", format,
 	)
 
-	// Protocol-based streams (RTSP, HTTP, HLS, RTMP, UDP) negotiate audio
-	// parameters via SDP/headers. Only local sources need explicit values.
-	srcType := s.config.sourceType()
-	if srcType == audiocore.SourceTypeAudioCard || srcType == audiocore.SourceTypeFile || srcType == audiocore.SourceTypeUnknown {
+	if s.config.needsOutputResampling() {
 		args = append(args, "-ar", sampleRate, "-ac", numChannels)
 	}
 
@@ -857,6 +871,9 @@ func (s *Stream) startProcess() error {
 		logger.String("url", s.config.safeURL()),
 		logger.Int("pid", s.cmd.Process.Pid),
 		logger.String("transport", s.config.Transport),
+		logger.Int("target_sample_rate", s.config.SampleRate),
+		logger.Int("source_sample_rate", s.config.SourceSampleRate),
+		logger.Bool("ffmpeg_resampling", s.config.needsOutputResampling()),
 		logger.Int64("total_process_count", currentTotal),
 		logger.String("component", "ffmpeg-stream"),
 		logger.String("operation", "start_process"))
