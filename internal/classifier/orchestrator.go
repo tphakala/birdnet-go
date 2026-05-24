@@ -62,9 +62,15 @@ type Orchestrator struct {
 	scheduler atomic.Pointer[nighttimeScheduler]
 }
 
+// currentSettings returns the latest settings snapshot so hot-reloaded
+// values (threads, locale, etc.) take effect without restarting.
+func (o *Orchestrator) currentSettings() *conf.Settings {
+	return conf.CurrentOrFallback(o.Settings)
+}
+
 // NewOrchestrator creates a new Orchestrator with BirdNET as the primary model
 // and loads any additional models from configuration.
-// This is the primary constructor — callers should use this instead of NewBirdNET.
+// This is the primary constructor - callers should use this instead of NewBirdNET.
 func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Resolve primary model identity from config
 	var primaryInfo *ModelInfo
@@ -786,7 +792,7 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 
 	// Give the new model the full thread budget. Inference is serialized by
 	// inferenceMu so concurrent CPU contention cannot occur.
-	dynamicThreads := o.Settings.BirdNET.Threads
+	dynamicThreads := o.currentSettings().BirdNET.Threads
 	if dynamicThreads <= 0 {
 		dynamicThreads = runtime.NumCPU()
 	}
