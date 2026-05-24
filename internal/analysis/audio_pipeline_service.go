@@ -1012,9 +1012,14 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 // sourceNeedsReconfigure reports whether the running source's audio parameters
 // differ from the desired config, requiring a full reconfigure (stop + restart).
+// A zero SourceSampleRate in the desired config means the probe failed; treat
+// this as "unknown, keep current" to avoid restarting FFmpeg on transient
+// network failures.
 func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.SourceConfig) bool {
+	sourceSampleRateChanged := desired.SourceSampleRate != 0 &&
+		running.SourceSampleRate != desired.SourceSampleRate
 	return running.SampleRate != desired.SampleRate ||
-		running.SourceSampleRate != desired.SourceSampleRate ||
+		sourceSampleRateChanged ||
 		running.BitDepth != desired.BitDepth ||
 		running.Channels != desired.Channels
 }
