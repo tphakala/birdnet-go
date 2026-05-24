@@ -2149,6 +2149,10 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", "info", toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, "warning", toastDurationExtended},
 	{"Bat filter", "reconfigure_bat_filter", batFilterSettingsChanged, "", "", "", 0},
+	{"Log deduplication", "reconfigure_log_deduplication", logDeduplicationSettingsChanged, "Reconfiguring log deduplication...", "", "info", toastDurationShort},
+	{"RTSP health", "reconfigure_rtsp_health", rtspHealthSettingsChanged, "Reconfiguring RTSP health monitoring...", "", "info", toastDurationShort},
+	{"Monitoring", "reconfigure_monitoring", monitoringSettingsChanged, "Reconfiguring system monitoring...", "", "info", toastDurationShort},
+	{"Live stream", "reconfigure_livestream", liveStreamSettingsChanged, "Reconfiguring live stream settings...", "", "info", toastDurationShort},
 }
 
 // handleSettingsChanges checks if important settings have changed and triggers appropriate actions
@@ -2299,7 +2303,7 @@ func mqttSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	newMQTT := currentSettings.Realtime.MQTT
 
 	// Check for changes in MQTT settings
-	return oldMQTT.Enabled != newMQTT.Enabled ||
+	if oldMQTT.Enabled != newMQTT.Enabled ||
 		oldMQTT.Broker != newMQTT.Broker ||
 		oldMQTT.Topic != newMQTT.Topic ||
 		oldMQTT.Username != newMQTT.Username ||
@@ -2308,7 +2312,15 @@ func mqttSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		oldMQTT.TLS.InsecureSkipVerify != newMQTT.TLS.InsecureSkipVerify ||
 		oldMQTT.TLS.CACert != newMQTT.TLS.CACert ||
 		oldMQTT.TLS.ClientCert != newMQTT.TLS.ClientCert ||
-		oldMQTT.TLS.ClientKey != newMQTT.TLS.ClientKey
+		oldMQTT.TLS.ClientKey != newMQTT.TLS.ClientKey {
+		return true
+	}
+
+	if !reflect.DeepEqual(oldMQTT.HomeAssistant, newMQTT.HomeAssistant) {
+		return true
+	}
+
+	return false
 }
 
 // streamsSettingsChanged checks if stream settings have changed in a way that
@@ -2513,6 +2525,26 @@ func batFilterSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	return oldSettings.Bat.FilterEnabled != currentSettings.Bat.FilterEnabled ||
 		oldSettings.Bat.FilterCutoffHz != currentSettings.Bat.FilterCutoffHz ||
 		oldSettings.Bat.FilterPassCount != currentSettings.Bat.FilterPassCount
+}
+
+// logDeduplicationSettingsChanged checks if log deduplication settings have changed.
+func logDeduplicationSettingsChanged(old, current *conf.Settings) bool {
+	return old.Realtime.LogDeduplication != current.Realtime.LogDeduplication
+}
+
+// rtspHealthSettingsChanged checks if RTSP health monitoring settings have changed.
+func rtspHealthSettingsChanged(old, current *conf.Settings) bool {
+	return old.Realtime.RTSP.Health != current.Realtime.RTSP.Health
+}
+
+// monitoringSettingsChanged checks if system monitoring settings have changed.
+func monitoringSettingsChanged(old, current *conf.Settings) bool {
+	return !reflect.DeepEqual(old.Realtime.Monitoring, current.Realtime.Monitoring)
+}
+
+// liveStreamSettingsChanged checks if live stream settings have changed.
+func liveStreamSettingsChanged(old, current *conf.Settings) bool {
+	return old.WebServer.LiveStream != current.WebServer.LiveStream
 }
 
 // LocaleData represents a locale with its code and full name

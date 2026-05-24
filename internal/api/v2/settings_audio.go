@@ -234,7 +234,7 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	// Check sound level monitoring settings
 	if soundLevelSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("Sound level monitoring settings changed, triggering reconfiguration")
-		reconfigActions = append(reconfigActions, "reconfigure_sound_level")
+		reconfigActions = append(reconfigActions, actionReconfigureSoundLevel)
 		// Send toast notification
 		_ = c.SendToastWithKey("Reconfiguring sound level monitoring...", "info", toastDurationShort,
 			notification.MsgSettingsReconfiguringSoundLevel, nil)
@@ -243,7 +243,7 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	// Check audio device settings
 	if audioDeviceSettingChanged(oldSettings, currentSettings) {
 		audiocore.GetLogger().Info("audio device settings changed, triggering reconfiguration")
-		reconfigActions = append(reconfigActions, "reconfigure_audio_sources")
+		reconfigActions = append(reconfigActions, actionReconfigureAudioSources)
 		_ = c.SendToastWithKey("Reconfiguring audio sources...", "info", toastDurationMedium,
 			notification.MsgSettingsReconfiguringAudioSources, nil)
 	}
@@ -251,7 +251,7 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	// Check extended capture filter settings (hot-reloadable: Enabled, Species, MaxDuration)
 	if extendedCaptureFilterChanged(oldSettings, currentSettings) {
 		c.Debug("Extended capture filter settings changed, triggering rebuild")
-		reconfigActions = append(reconfigActions, "rebuild_extended_capture")
+		reconfigActions = append(reconfigActions, actionRebuildExtendedCapture)
 		_ = c.SendToastWithKey("Rebuilding extended capture species filter...", "info", toastDurationShort,
 			notification.MsgSettingsRebuildingExtendedCapture, nil)
 	}

@@ -4850,11 +4850,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Atjaunot",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4866,6 +4864,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Viss kārtībā",
+      "needsAttention": "Nepieciešama uzmanība",
+      "failing": "Neizdodas",
+      "allClear": "Bez problēmām",
+      "noData": "Nav datu",
+      "none": "Nav"
+    },
+    "diagnostics": "Diagnostika",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4901,6 +4908,24 @@
       "errorComponent": "Komponents",
       "errorLevel": "Līmenis",
       "errorMessage": "Ziņojums"
+    },
+    "window": {
+      "label": "Novērtēšanas logs",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Pēdējais notikums",
+      "recentEvents": "Nesenie notikumi",
+      "time": "Laiks",
+      "source": "Avots",
+      "count": "Skaits",
+      "lifetime": "kopā",
+      "sparklineLabel": "Aktivitātes diagramma"
     }
   }
 }

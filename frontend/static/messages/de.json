@@ -4850,11 +4850,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Aktualisieren",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4866,6 +4864,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Alles in Ordnung",
+      "needsAttention": "Erfordert Aufmerksamkeit",
+      "failing": "Fehlerhaft",
+      "allClear": "Keine Probleme",
+      "noData": "Keine Daten",
+      "none": "Keine"
+    },
+    "diagnostics": "Diagnose",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4901,6 +4908,24 @@
       "errorComponent": "Komponente",
       "errorLevel": "Stufe",
       "errorMessage": "Nachricht"
+    },
+    "window": {
+      "label": "Auswertungszeitraum",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Letztes Ereignis",
+      "recentEvents": "Letzte Ereignisse",
+      "time": "Zeit",
+      "source": "Quelle",
+      "count": "Anzahl",
+      "lifetime": "gesamt",
+      "sparklineLabel": "Aktivitäts-Sparkline"
     }
   }
 }

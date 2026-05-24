@@ -942,18 +942,20 @@ func (bn *BirdNET) ReloadModel() error {
 	defer bn.mu.Unlock()
 	bn.Debug("Acquired mutex for model reload")
 
+	// Get fresh settings so sub-methods see the latest config.
+	fresh := bn.currentSettings()
+	settingsCopy := *fresh
+	oldSettings := bn.Settings
+	bn.Settings = &settingsCopy
+
 	// Snapshot all mutable state for transactional rollback on failure.
 	oldClassifier := bn.classifier
 	oldRangeFilter := bn.rangeFilter
 	oldModelInfo := bn.ModelInfo
 	oldTaxonomyMap := bn.TaxonomyMap
 	oldScientificIndex := bn.ScientificIndex
-	oldLabels := slices.Clone(bn.Settings.BirdNET.Labels)
-	oldLocale := bn.Settings.BirdNET.Locale
 
 	rollback := func() {
-		// Close any newly created backends that differ from the originals
-		// to avoid leaking resources during failed reloads
 		if bn.classifier != nil && bn.classifier != oldClassifier {
 			bn.classifier.Close()
 		}
@@ -965,11 +967,10 @@ func (bn *BirdNET) ReloadModel() error {
 		bn.ModelInfo = oldModelInfo
 		bn.TaxonomyMap = oldTaxonomyMap
 		bn.ScientificIndex = oldScientificIndex
-		bn.Settings.BirdNET.Labels = oldLabels
-		bn.Settings.BirdNET.Locale = oldLocale
+		bn.Settings = oldSettings
 	}
 
-	// Check if model version changed — if so, the orchestrator must handle
+	// Check if model version changed; if so, the orchestrator must handle
 	// the switch via pipeline cold restart, not ReloadModel.
 	if bn.Settings.BirdNET.Version != "" {
 		newInfo, ok := ResolveBirdNETVersion(bn.Settings.BirdNET.Version)

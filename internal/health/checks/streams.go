@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/health"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // StreamHealthInfo is a snapshot of a single RTSP stream's health.
@@ -84,14 +85,20 @@ func (c *StreamConnectivityCheck) Run(_ context.Context) health.Result {
 	}
 }
 
-// StreamErrorRateCheck monitors RTSP stream restart counts to detect error loops.
+// StreamErrorRateCheck monitors RTSP stream restart counts using time-windowed evaluation.
 type StreamErrorRateCheck struct {
-	getStreams func() []StreamHealthInfo
+	store     *observability.HealthMetricsStore
+	getEvents func(metric string, n int) []observability.HealthEvent
+	window    time.Duration
 }
 
-// NewStreamErrorRateCheck creates a StreamErrorRateCheck using the given stream provider.
-func NewStreamErrorRateCheck(getStreams func() []StreamHealthInfo) *StreamErrorRateCheck {
-	return &StreamErrorRateCheck{getStreams: getStreams}
+// NewStreamErrorRateCheck creates a StreamErrorRateCheck using the health metrics store and event getter.
+func NewStreamErrorRateCheck(store *observability.HealthMetricsStore, getEvents func(metric string, n int) []observability.HealthEvent) *StreamErrorRateCheck {
+	return &StreamErrorRateCheck{
+		store:     store,
+		getEvents: getEvents,
+		window:    DefaultWindow,
+	}
 }
 
 // Name returns the check identifier.
@@ -100,61 +107,27 @@ func (c *StreamErrorRateCheck) Name() string { return "stream_error_rate" }
 // Category returns the streams category.
 func (c *StreamErrorRateCheck) Category() health.Category { return health.CategoryStreams }
 
-// Run evaluates the restart count of each RTSP stream.
+// WithWindow returns a copy of this check configured with the given evaluation window.
+// Returns the receiver unchanged when d equals the current window to avoid an allocation.
+func (c *StreamErrorRateCheck) WithWindow(d time.Duration) health.Check {
+	if d == c.window {
+		return c
+	}
+	cp := *c
+	cp.window = d
+	return &cp
+}
+
+// Run evaluates stream restart counts within the configured time window.
 func (c *StreamErrorRateCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
-	if c.getStreams == nil {
-		return skippedResult(c.Name(), c.Category(), start)
-	}
-
-	streams := c.getStreams()
-	if len(streams) == 0 {
-		return skippedResult(c.Name(), c.Category(), start)
-	}
-
-	const warnRestarts = 3
-	const critRestarts = 10
-
-	status := health.StatusHealthy
-	var msg string
-	warnCount := 0
-	critCount := 0
-
-	for _, s := range streams {
-		switch {
-		case s.RestartCount > critRestarts:
-			critCount++
-		case s.RestartCount > warnRestarts:
-			warnCount++
-		}
-	}
-
-	switch {
-	case critCount > 0:
-		status = health.StatusCritical
-		msg = fmt.Sprintf("%d stream(s) have restarted more than %d times", critCount, critRestarts)
-	case warnCount > 0:
-		status = health.StatusWarning
-		msg = fmt.Sprintf("%d stream(s) have restarted more than %d times", warnCount, warnRestarts)
-	default:
-		msg = "Stream restart counts within normal range"
-	}
-
-	return health.Result{
-		Name:     c.Name(),
-		Category: c.Category(),
-		Status:   status,
-		Message:  msg,
-		Details: map[string]any{
-			"streams_above_warn_threshold": warnCount,
-			"streams_above_crit_threshold": critCount,
-			"warn_threshold":               warnRestarts,
-			"crit_threshold":               critRestarts,
-		},
-		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
-		Timestamp:  time.Now(),
-	}
+	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
+		warnThreshold: 3,
+		critThreshold: 10,
+		metricPrefix:  observability.MetricPrefixStreamRestarts,
+		window:        c.window,
+	}, start)
 }
 
 // FFmpegHealthCheck monitors the process state of the FFmpeg processes backing each RTSP stream.

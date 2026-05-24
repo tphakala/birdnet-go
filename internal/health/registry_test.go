@@ -191,6 +191,113 @@ func TestRegistry_Categories_Empty(t *testing.T) {
 	assert.Empty(t, r.Categories())
 }
 
+// hangingCheck ignores its context and blocks until the channel is closed.
+type hangingCheck struct {
+	name     string
+	category Category
+	unblock  chan struct{}
+}
+
+func (h *hangingCheck) Name() string       { return h.name }
+func (h *hangingCheck) Category() Category { return h.category }
+func (h *hangingCheck) Run(_ context.Context) Result {
+	<-h.unblock
+	return Result{Name: h.name, Category: h.category, Status: StatusHealthy}
+}
+
+func TestRunChecks_OverallTimeout(t *testing.T) {
+	t.Parallel()
+	unblock := make(chan struct{})
+	defer close(unblock)
+
+	r := NewRegistry()
+	r.RegisterAll(
+		&mockCheck{
+			name:     "fast",
+			category: CategorySystem,
+			result:   Result{Name: "fast", Category: CategorySystem, Status: StatusHealthy, Message: "ok"},
+		},
+		&hangingCheck{
+			name:     "hung",
+			category: CategoryAudio,
+			unblock:  unblock,
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+
+	results := r.RunAll(ctx)
+	require.Len(t, results, 2)
+
+	byName := make(map[string]Result, len(results))
+	for _, res := range results {
+		byName[res.Name] = res
+	}
+
+	assert.Equal(t, StatusHealthy, byName["fast"].Status)
+	assert.Equal(t, "ok", byName["fast"].Message)
+
+	assert.Equal(t, StatusUnknown, byName["hung"].Status)
+	assert.Equal(t, "check did not complete within deadline", byName["hung"].Message)
+}
+
+func TestRunChecks_OverallTimeout_MultiResultNilSlice(t *testing.T) {
+	t.Parallel()
+	unblock := make(chan struct{})
+	defer close(unblock)
+
+	r := NewRegistry()
+	r.RegisterAll(
+		&mockMultiCheck{
+			name:     "empty_multi",
+			category: CategoryAnalysis,
+			results:  nil,
+		},
+		&hangingCheck{
+			name:     "hung",
+			category: CategoryAudio,
+			unblock:  unblock,
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+
+	results := r.RunAll(ctx)
+
+	// The empty multi-check completed (returned nil/empty), so no results from it.
+	// The hung check should get a synthetic StatusUnknown.
+	require.Len(t, results, 1)
+	assert.Equal(t, "hung", results[0].Name)
+	assert.Equal(t, StatusUnknown, results[0].Status)
+}
+
+func TestRunChecks_MultiResultDefensiveCopy(t *testing.T) {
+	t.Parallel()
+
+	shared := []Result{
+		{Name: "model_a", Category: CategoryAnalysis, Status: StatusHealthy},
+		{Name: "model_b", Category: CategoryAnalysis, Status: StatusWarning},
+	}
+
+	mc := &mockMultiCheck{
+		name:     "shared",
+		category: CategoryAnalysis,
+		results:  shared,
+	}
+
+	r := NewRegistry()
+	r.Register(mc)
+	r.RunAll(t.Context())
+
+	// The original slice should NOT have been mutated by the orchestrator.
+	assert.Zero(t, shared[0].DurationMS, "original slice DurationMS should be untouched")
+	assert.True(t, shared[0].Timestamp.IsZero(), "original slice Timestamp should be untouched")
+	assert.Zero(t, shared[1].DurationMS, "original slice DurationMS should be untouched")
+	assert.True(t, shared[1].Timestamp.IsZero(), "original slice Timestamp should be untouched")
+}
+
 // mockMultiCheck implements both Check and MultiResultCheck.
 type mockMultiCheck struct {
 	name     string

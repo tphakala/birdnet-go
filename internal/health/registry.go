@@ -3,12 +3,17 @@ package health
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 )
 
 // DefaultTimeout is the per-check timeout.
 const DefaultTimeout = 10 * time.Second
+
+// contextGracePeriod is the time to wait after context cancellation for
+// context-aware checks to finish before synthesizing StatusUnknown.
+const contextGracePeriod = 100 * time.Millisecond
 
 // Registry stores health checks and runs them.
 type Registry struct {
@@ -44,10 +49,24 @@ func (r *Registry) RegisterAll(checks ...Check) {
 
 // RunAll executes all checks in parallel with per-check timeout.
 func (r *Registry) RunAll(ctx context.Context) []Result {
+	return r.RunAllWithWindow(ctx, 0)
+}
+
+// RunAllWithWindow executes all checks in parallel. For checks implementing
+// WindowedCheck, the given window duration is applied before execution.
+// A zero window leaves checks at their default window.
+func (r *Registry) RunAllWithWindow(ctx context.Context, window time.Duration) []Result {
 	r.mu.RLock()
-	checks := make([]Check, len(r.checks))
-	copy(checks, r.checks)
+	checks := slices.Clone(r.checks)
 	r.mu.RUnlock()
+
+	if window > 0 {
+		for i, c := range checks {
+			if wc, ok := c.(WindowedCheck); ok {
+				checks[i] = wc.WithWindow(window)
+			}
+		}
+	}
 
 	return runChecks(ctx, checks)
 }
@@ -66,27 +85,36 @@ func (r *Registry) RunCategory(ctx context.Context, cat Category) []Result {
 	return runChecks(ctx, filtered)
 }
 
+// checkResult pairs a check's index with its results so the orchestrator
+// can reconstruct registration order after collecting from a channel.
+type checkResult struct {
+	idx     int
+	results []Result
+}
+
 // runChecks executes the given checks in parallel with per-check timeout.
 // Checks that implement MultiResultCheck produce multiple results per check;
 // all results are flattened into the returned slice in registration order.
+//
+// If the parent context expires before all checks finish, completed results
+// are returned and unfinished checks receive a synthetic StatusUnknown result.
 func runChecks(ctx context.Context, checks []Check) []Result {
-	type checkOutput struct {
-		results []Result
+	if len(checks) == 0 {
+		return nil
 	}
-	outputs := make([]checkOutput, len(checks))
-	var wg sync.WaitGroup
+
+	resCh := make(chan checkResult, len(checks))
 
 	for i, c := range checks {
-		wg.Add(1)
-		go func(idx int, check Check) {
-			defer wg.Done()
+		idx, check := i, c
+		go func() {
 			checkCtx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 			defer cancel()
 			start := time.Now()
 
 			var rs []Result
 			if mc, ok := check.(MultiResultCheck); ok {
-				rs = mc.RunMulti(checkCtx)
+				rs = slices.Clone(mc.RunMulti(checkCtx))
 			} else {
 				rs = []Result{check.Run(checkCtx)}
 			}
@@ -101,15 +129,55 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 					rs[j].Timestamp = now
 				}
 			}
-			outputs[idx] = checkOutput{results: rs}
-		}(i, c)
+			resCh <- checkResult{idx: idx, results: rs}
+		}()
 	}
 
-	wg.Wait()
+	// Collect results until all checks report or the parent context expires.
+	// Count-based collection avoids spawning a waiter goroutine that would
+	// leak if a check ignores its context and hangs indefinitely.
+	completed := make([][]Result, len(checks))
+	finished := make([]bool, len(checks))
+	received := 0
+
+collect:
+	for received < len(checks) {
+		select {
+		case cr := <-resCh:
+			completed[cr.idx] = cr.results
+			finished[cr.idx] = true
+			received++
+		case <-ctx.Done():
+			// Give context-aware checks a brief grace period to finish and
+			// report their own status before we synthesize StatusUnknown.
+			grace := time.NewTimer(contextGracePeriod)
+			for received < len(checks) {
+				select {
+				case cr := <-resCh:
+					completed[cr.idx] = cr.results
+					finished[cr.idx] = true
+					received++
+				case <-grace.C:
+					break collect
+				}
+			}
+			grace.Stop()
+		}
+	}
 
 	results := make([]Result, 0, len(checks))
-	for _, o := range outputs {
-		results = append(results, o.results...)
+	for i, c := range checks {
+		if finished[i] {
+			results = append(results, completed[i]...)
+		} else {
+			results = append(results, Result{
+				Name:      c.Name(),
+				Category:  c.Category(),
+				Status:    StatusUnknown,
+				Message:   "check did not complete within deadline",
+				Timestamp: time.Now(),
+			})
+		}
 	}
 	return results
 }
