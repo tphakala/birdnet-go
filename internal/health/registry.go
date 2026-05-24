@@ -136,12 +136,16 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 	// Collect results until all checks report or the parent context expires.
 	// Count-based collection avoids spawning a waiter goroutine that would
 	// leak if a check ignores its context and hangs indefinitely.
-	completed := make(map[int][]Result, len(checks))
+	completed := make([][]Result, len(checks))
+	finished := make([]bool, len(checks))
 	received := 0
+
+collect:
 	for received < len(checks) {
 		select {
 		case cr := <-resCh:
 			completed[cr.idx] = cr.results
+			finished[cr.idx] = true
 			received++
 		case <-ctx.Done():
 			// Give context-aware checks a brief grace period to finish and
@@ -151,9 +155,10 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 				select {
 				case cr := <-resCh:
 					completed[cr.idx] = cr.results
+					finished[cr.idx] = true
 					received++
 				case <-grace.C:
-					received = len(checks)
+					break collect
 				}
 			}
 			grace.Stop()
@@ -162,8 +167,8 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 
 	results := make([]Result, 0, len(checks))
 	for i, c := range checks {
-		if rs, ok := completed[i]; ok {
-			results = append(results, rs...)
+		if finished[i] {
+			results = append(results, completed[i]...)
 		} else {
 			results = append(results, Result{
 				Name:      c.Name(),
