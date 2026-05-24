@@ -44,8 +44,12 @@ const (
 	minHourRangeParts     = 2                // Minimum parts for hour range parsing
 
 	// queryType values for detection queries
+	queryTypeHourly  = "hourly"
 	queryTypeSpecies = "species"
 	queryTypeSearch  = "search"
+
+	// Default sort order for non-hourly query types
+	sortByDateDesc = "date_desc"
 )
 
 // Regex to validate YYYY-MM-DD format and check for unwanted characters
@@ -270,12 +274,12 @@ type detectionQueryParams struct {
 // advancedSearchCacheKey generates a deterministic cache key for advanced search queries.
 // Includes all filter parameters to avoid cache collisions.
 func (p *detectionQueryParams) advancedSearchCacheKey() string {
-	return fmt.Sprintf("adv_search:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s",
+	return fmt.Sprintf("adv_search:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%d",
 		p.Search, p.NumResults, p.Offset,
 		p.Confidence, p.TimeOfDay, p.HourRange,
 		p.Verified, p.Location, p.Locked,
 		p.Species, p.Date, p.StartDate+":"+p.EndDate,
-		p.SortBy)
+		p.SortBy, p.QueryType, p.Hour, p.Duration)
 }
 
 // parseDetectionQueryParams extracts and validates query parameters from the request
@@ -305,6 +309,9 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 	duration, _ := strconv.Atoi(ctx.QueryParam("duration"))
 	if duration <= 0 {
 		duration = 1
+	}
+	if duration > 24 {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "duration must be between 1 and 24 hours")
 	}
 	params.Duration = duration
 
@@ -340,6 +347,8 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 			"date_desc":       {},
 			"date_asc":        {},
 			"species_asc":     {},
+			"species_desc":    {},
+			"confidence_asc":  {},
 			"confidence_desc": {},
 			"status":          {},
 		}
@@ -363,7 +372,7 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 	}
 
 	// Validate hour parameter based on query type
-	if params.QueryType == "hourly" {
+	if params.QueryType == queryTypeHourly {
 		// Hourly queries require a single valid integer hour (0-23), not a range
 		if params.Hour == "" {
 			return nil, echo.NewHTTPError(http.StatusBadRequest, "hour parameter is required for hourly query type")
@@ -596,17 +605,44 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, response)
 }
 
+// needsAdvancedRouting reports whether the query parameters require routing
+// through the advanced search path instead of the dedicated handlers.
+// It checks for advanced filters, non-default sort, and cross-type parameters
+// that the simple handlers would silently ignore.
+func (p *detectionQueryParams) needsAdvancedRouting() bool {
+	if p.Confidence != "" || p.TimeOfDay != "" ||
+		p.HourRange != "" || p.Verified != "" ||
+		p.Location != "" || p.Locked != "" ||
+		p.StartDate != "" || p.EndDate != "" {
+		return true
+	}
+
+	if p.SortBy != "" {
+		if p.QueryType == queryTypeHourly || p.SortBy != sortByDateDesc {
+			return true
+		}
+	}
+
+	if p.QueryType != queryTypeSpecies && p.Species != "" {
+		return true
+	}
+	if p.QueryType != queryTypeSearch && p.Search != "" {
+		return true
+	}
+
+	// Date and Hour are handled natively by hourly and species handlers.
+	// For search and default query types, they must trigger advanced routing.
+	if p.QueryType != queryTypeHourly && p.QueryType != queryTypeSpecies {
+		if p.Date != "" || p.Hour != "" {
+			return true
+		}
+	}
+
+	return false
+}
+
 // getDetectionsByQueryType retrieves detections based on the query type
 func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]datastore.Note, int64, error) {
-	// Check if advanced filters are present (non-default sort counts as advanced).
-	// Date parameters are included so that ?date=2025-03-07 without an explicit
-	// queryType routes through the advanced search path instead of being ignored.
-	hasAdvancedFilters := params.Confidence != "" || params.TimeOfDay != "" ||
-		params.HourRange != "" || params.Verified != "" ||
-		params.Location != "" || params.Locked != "" ||
-		params.Date != "" || params.StartDate != "" || params.EndDate != "" ||
-		(params.SortBy != "" && params.SortBy != "date_desc")
-
 	// Resolve locale common names to scientific names before routing so every
 	// query type benefits without per-case duplication.
 	if resolved, hit := c.resolveSpeciesToScientific(params.Species); hit {
@@ -617,19 +653,23 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 	}
 
 	switch params.QueryType {
-	case "hourly":
+	case queryTypeHourly:
+		if params.needsAdvancedRouting() {
+			return c.getSearchDetectionsAdvanced(params)
+		}
 		return c.getHourlyDetections(params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
 	case queryTypeSpecies:
+		if params.needsAdvancedRouting() {
+			return c.getSearchDetectionsAdvanced(params)
+		}
 		return c.getSpeciesDetections(params.Species, params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
 	case queryTypeSearch:
-		// Use advanced search if filters are present
-		if hasAdvancedFilters {
+		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
 		}
 		return c.getSearchDetections(params.Search, params.NumResults, params.Offset)
-	default: // "all" or any other value
-		// Check if there are filters even without explicit search text
-		if hasAdvancedFilters {
+	default:
+		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
 		}
 		return c.getAllDetections(params.NumResults, params.Offset)
@@ -702,14 +742,20 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 // Without this, all detections of a recently-first-seen species would incorrectly
 // show isNewSpecies=true instead of only the actual first detection.
 func (c *Controller) applySpeciesTrackingMetadata(detection *DetectionResponse, scientificName, detectionDate string) {
-	if c.Processor == nil || c.Processor.NewSpeciesTracker == nil {
+	// Snapshot processor and tracker to avoid TOCTOU race
+	proc := c.Processor
+	if proc == nil {
+		return
+	}
+	tracker := proc.GetNewSpeciesTracker()
+	if tracker == nil {
 		return
 	}
 	// GetSpeciesStatus is called with time.Now() intentionally: the "days since"
 	// counters (DaysSinceFirstSeen, DaysThisYear, DaysThisSeason) describe the
 	// species' current tracking state, not the state at the detection's time.
 	// The boolean flags (IsNew*) are computed below using date comparison instead.
-	status := c.Processor.NewSpeciesTracker.GetSpeciesStatus(scientificName, time.Now())
+	status := tracker.GetSpeciesStatus(scientificName, time.Now())
 
 	// Set flags based on whether THIS detection's date matches the first-seen date
 	// for each tracking period, rather than using the tracker's window-based "IsNew" flag.
@@ -967,9 +1013,18 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 
 // getSearchDetectionsAdvanced handles advanced search with filters
 func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) ([]datastore.Note, int64, error) {
+	cacheKey := params.advancedSearchCacheKey()
+
+	if cachedData, found := c.detectionCache.Get(cacheKey); found {
+		cachedResult := cachedData.(struct {
+			Notes []datastore.Note
+			Total int64
+		})
+		return cachedResult.Notes, cachedResult.Total, nil
+	}
+
 	filters := c.buildAdvancedSearchFilters(params)
 
-	// Use the advanced search method
 	notes, totalCount, err := c.DS.SearchNotesAdvanced(&filters)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to perform advanced search",
@@ -979,8 +1034,7 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 		return nil, 0, err
 	}
 
-	// Cache the results with key that includes all filter parameters
-	c.detectionCache.Set(params.advancedSearchCacheKey(), struct {
+	c.detectionCache.Set(cacheKey, struct {
 		Notes []datastore.Note
 		Total int64
 	}{notes, totalCount}, cache.DefaultExpiration)
@@ -1016,9 +1070,13 @@ func (c *Controller) buildAdvancedSearchFilters(params *detectionQueryParams) da
 		hourParam = params.Hour
 	}
 	if hourFilter := parseHourFilter(hourParam); hourFilter != nil {
+		endHour := hourFilter.End
+		if hourFilter.Start == hourFilter.End && params.Duration > 1 {
+			endHour = (hourFilter.Start + params.Duration - 1) % 24
+		}
 		filters.Hour = &datastore.HourFilter{
 			Start: hourFilter.Start,
-			End:   hourFilter.End,
+			End:   endHour,
 		}
 	}
 
@@ -1489,13 +1547,9 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 
 // GetExcludedSpecies returns the list of excluded species
 func (c *Controller) GetExcludedSpecies(ctx echo.Context) error {
-	settings := c.Settings
-
-	// Create a copy of the slice to avoid race conditions
-	c.speciesExcludeMutex.Lock()
-	species := make([]string, len(settings.Realtime.Species.Exclude))
-	copy(species, settings.Realtime.Species.Exclude)
-	c.speciesExcludeMutex.Unlock()
+	c.settingsMutex.RLock()
+	species := slices.Clone(c.getSettingsOrFallback().Realtime.Species.Exclude)
+	c.settingsMutex.RUnlock()
 
 	return ctx.JSON(http.StatusOK, ExcludedSpeciesResponse{
 		Species: species,
@@ -1519,40 +1573,42 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 		return "", false, nil
 	}
 
-	// Use the controller's mutex to protect this operation
-	c.speciesExcludeMutex.Lock()
-	defer c.speciesExcludeMutex.Unlock()
+	// Serialise against concurrent settings saves so that out-of-band
+	// StoreSettings calls (range filter rebuild, etc.) cannot desynchronise
+	// c.Settings from the live atomic pointer between read and publish.
+	c.settingsMutex.Lock()
+	defer c.settingsMutex.Unlock()
 
-	// Access settings via dependency injection (not the global singleton)
-	settings := c.Settings
+	// Always read the live atomic snapshot; c.Settings may be stale after
+	// UpdateIncludedSpecies or other out-of-band StoreSettings calls.
+	current := c.getSettingsOrFallback()
 
-	// Check if species is already in the excluded list
-	wasExcluded := slices.Contains(settings.Realtime.Species.Exclude, species)
+	wasExcluded := slices.Contains(current.Realtime.Species.Exclude, species)
 
+	updated := conf.CloneSettings(current)
 	if wasExcluded {
-		// Remove from excluded list
-		newExcludeList := make([]string, 0, len(settings.Realtime.Species.Exclude)-1)
-		for _, s := range settings.Realtime.Species.Exclude {
-			if s != species {
-				newExcludeList = append(newExcludeList, s)
-			}
-		}
-		settings.Realtime.Species.Exclude = newExcludeList
+		updated.Realtime.Species.Exclude = slices.DeleteFunc(updated.Realtime.Species.Exclude, func(s string) bool {
+			return s == species
+		})
 		action = "removed"
 		isExcluded = false
 	} else {
-		// Add to excluded list
-		newExcludeList := make([]string, len(settings.Realtime.Species.Exclude), len(settings.Realtime.Species.Exclude)+1)
-		copy(newExcludeList, settings.Realtime.Species.Exclude)
-		newExcludeList = append(newExcludeList, species)
-		settings.Realtime.Species.Exclude = newExcludeList
+		updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
 		action = "added"
 		isExcluded = true
 	}
 
-	// Save settings using the package function that handles concurrency
-	if err := conf.SaveSettings(); err != nil {
-		return "", wasExcluded, fmt.Errorf("failed to save settings: %w", err)
+	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		return "", wasExcluded, err
+	}
+
+	// Trigger side-effects (range filter rebuild, etc.) so the include list
+	// reflects the updated exclude list without waiting for the daily rebuild.
+	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
+		GetLogger().Warn("Failed to trigger settings side-effects after species exclusion change",
+			logger.Error(handleErr),
+			logger.String("species", species),
+			logger.String("action", action))
 	}
 
 	return action, isExcluded, nil
@@ -1565,32 +1621,25 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 		return nil
 	}
 
-	// Use the controller's mutex to protect this operation
-	c.speciesExcludeMutex.Lock()
-	defer c.speciesExcludeMutex.Unlock()
+	c.settingsMutex.Lock()
+	defer c.settingsMutex.Unlock()
 
-	// Access settings via dependency injection (not the global singleton)
-	settings := c.Settings
+	current := c.getSettingsOrFallback()
+	if slices.Contains(current.Realtime.Species.Exclude, species) {
+		return nil
+	}
 
-	// Check if species is already in the excluded list
-	isExcluded := slices.Contains(settings.Realtime.Species.Exclude, species)
+	updated := conf.CloneSettings(current)
+	updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
 
-	// If not already excluded, add it
-	if !isExcluded {
-		// Create a copy of the current exclude list to avoid race conditions
-		newExcludeList := make([]string, len(settings.Realtime.Species.Exclude), len(settings.Realtime.Species.Exclude)+1)
-		copy(newExcludeList, settings.Realtime.Species.Exclude)
+	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		return err
+	}
 
-		// Add the new species to the list
-		newExcludeList = append(newExcludeList, species)
-
-		// Update the settings with the new list
-		settings.Realtime.Species.Exclude = newExcludeList
-
-		// Save settings using the package function that handles concurrency
-		if err := conf.SaveSettings(); err != nil {
-			return fmt.Errorf("failed to save settings: %w", err)
-		}
+	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
+		GetLogger().Warn("Failed to trigger settings side-effects after species exclusion change",
+			logger.Error(handleErr),
+			logger.String("species", species))
 	}
 
 	return nil

@@ -228,7 +228,16 @@
     "analyticsSubmenu": "Elemzés almenü",
     "settingsSubmenu": "Beállítások almenü",
     "systemSubmenu": "Rendszer almenü",
-    "systemTerminal": "Terminál"
+    "systemTerminal": "Terminál",
+    "help": "Súgó",
+    "helpSubmenu": "Súgó almenü",
+    "helpAndSupport": "Súgó és támogatás",
+    "reportBug": "Hiba bejelentése",
+    "askQuestion": "Kérdés feltevése",
+    "reportBugAriaLabel": "Hiba bejelentése a GitHubon (új ablakban nyílik meg)",
+    "askQuestionAriaLabel": "Kérdés feltevése a GitHub Discussions oldalon (új ablakban nyílik meg)",
+    "viewOnGithubAriaLabel": "BirdNET-Go megtekintése a GitHubon (új ablakban nyílik meg)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -425,6 +434,10 @@
       "buffer": {
         "overloadTitle": "Hang elemzés túlterhelve",
         "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a ''{sourceName}'' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
+      },
+      "ort": {
+        "unavailableTitle": "Az ONNX Runtime nem elérhető",
+        "unavailableMessage": "Az ONNX Runtime {requiredVersion} szükséges a(z) {modelName} modellhez, de nem található. Lásd a telepítési útmutatót: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -924,7 +937,10 @@
     "aria": {
       "loading": "Detektálás részleteinek betöltése...",
       "loaded": "Detektálás részletei betöltve: {species}",
-      "error": "Hiba a detektálás betöltésekor: {error}"
+      "error": "Hiba a detektálás betöltésekor: {error}",
+      "loadingResults": "{count} eredmény betöltése...",
+      "thumbnailLoading": "{species} bélyegkép betöltése...",
+      "thumbnailLoaded": "{species} bélyegkép betöltve"
     },
     "errors": {
       "notFound": "A detektálás nem található. Lehet, hogy törölték vagy az ID hibás.",
@@ -2998,6 +3014,7 @@
         "unknown": "ismeretlen",
         "refresh": "Frissítés",
         "addStream": "Stream hozzáadása",
+        "testRequired": "Futtasson sikeres streamtesztet a mentés előtt",
         "deleteConfirm": "Eltávolítja ezt a streamet?",
         "restartCount": "{count} alkalommal újraindítva",
         "healthLoadError": "A stream egészségi állapot betöltése sikertelen",
@@ -3050,6 +3067,18 @@
           "degraded": "Degradált",
           "failed": "Sikertelen",
           "unknown": "Ismeretlen"
+        },
+        "test": {
+          "button": "Stream tesztelése",
+          "probing": "Tesztelés...",
+          "result": "Teszt eredménye",
+          "error": "Teszt sikertelen",
+          "batCompatible": "Denevér-kompatibilis",
+          "batIncompatible": "Nem denevér-kompatibilis"
+        },
+        "batWarning": "A denevérmodellek veszteségmentes kodeket (PCM) és legalább 96 kHz-es mintavételezési frekvenciát igényelnek. Használja a fenti Stream tesztelése gombot a kompatibilitás ellenőrzéséhez.",
+        "codecWarning": {
+          "lossy": "A veszteséges kodekek (AAC, Opus, MP3) megsemmisítik az ~20 kHz feletti ultrahang-frekvenciákat, így a stream alkalmatlanná válik a denevérek észlelésére."
         }
       },
       "audioFilters": {
@@ -3225,6 +3254,10 @@
         "devicesLoadFailed": "A hang eszközök betöltése sikertelen. Kérjük, ellenőrizze a rendszer engedélyeket.",
         "invalidBitrate": "Érvénytelen bitráta érték",
         "invalidRetentionPolicy": "Érvénytelen megőrzési szabályzat"
+      },
+      "models": {
+        "recommendBoth": "A legjobb fajészlelési lefedettség érdekében javasolt a BirdNET és a Perch modellek együttes futtatása.",
+        "perchOnlyWarning": "A Perch önmagában kevesebb észlelést produkál. Az érdemi eredményekhez csökkentse a megbízhatósági küszöböt 0.50-re, vagy aktiválja a BirdNET-et is a jobb lefedettség érdekében."
       }
     },
     "security": {
@@ -4200,7 +4233,31 @@
       "playbackSpeed": "Lejátszási sebesség",
       "speed": "Sebesség",
       "loop": "Ismétlés be/ki",
-      "player": "Hang lejátszó"
+      "player": "Hang lejátszó",
+      "autoplayBlocked": "Kattintson a lejátszáshoz (automatikus lejátszás letiltva)",
+      "hlsNotSupported": "A HLS lejátszás nem támogatott ebben a böngészőben",
+      "streamStarting": "Audio stream indítása...",
+      "levelFor": "Hangszint: {source}",
+      "levelForNoSource": "Hangszint: nincs forrás",
+      "noSource": "Nincs forrás",
+      "levelAnnouncement": "Jelenlegi hangszint: {level} százalék",
+      "levelAnnouncementClipping": "Jelenlegi hangszint: {level} százalék, túlvezérlés észlelve",
+      "sourceSelection": "Hangforrás kiválasztása",
+      "sources": "Hangforrások",
+      "noSourcesAvailable": "Nem érhető el hangforrás",
+      "silent": "(néma)",
+      "stopPlayback": "Hang lejátszás leállítása",
+      "startPlayback": "Hang lejátszás indítása",
+      "nowPlaying": "Hang lejátszása innen: {source}",
+      "nowPlayingNoSource": "Hang lejátszása folyamatban",
+      "playbackStopped": "Hang lejátszás leállítva",
+      "loginRequired": "Bejelentkezés szükséges az audio streameléshez",
+      "streamError": "Hiba a stream indításakor",
+      "streamTitle": "Madárhang stream - {source}",
+      "streamTitleDefault": "Madárhang stream",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Élő közvetítés",
+      "playbackError": "Lejátszási hiba: {details}"
     },
     "spectrogram": {
       "notGenerated": "A spektrogram még nincs generálva",
@@ -4425,6 +4482,16 @@
       "hostRequired": "A host paraméter kötelező",
       "invalidHost": "Érvénytelen host paraméter",
       "rateLimit": "Túl sok értesítési stream csatlakozási kísérlet, kérjük, várjon, mielőtt újra próbálkozik"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Érvénytelen kéréstörzs",
+        "urlRequired": "A stream URL megadása kötelező",
+        "invalidUrl": "Érvénytelen URL-formátum. Adjon meg egy teljes URL-t, pl. rtsp://host:port/útvonal",
+        "unsupportedScheme": "Nem támogatott URL-séma: \"{scheme}\". Használjon rtsp, rtsps, http, https, rtmp vagy udp sémát",
+        "blockedDestination": "Ez a cél biztonsági okokból le van tiltva",
+        "connectionFailed": "Nem sikerült csatlakozni a streamhez. Ellenőrizze, hogy az URL helyes-e és a stream elérhető-e"
+      }
     },
     "debug": {
       "notEnabled": "A debug mód nincs engedélyezve"
@@ -4690,7 +4757,10 @@
       "reinstall": "Újratelepítés",
       "reinstalling": "Újratelepítés...",
       "reinstallComplete": "Fájlok sikeresen ellenőrizve",
-      "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt"
+      "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt",
+      "onnxRuntimeRequired": "ONNX Runtime szükséges, amely nem elérhető ezen a rendszeren.",
+      "onnxRuntimeMissing": "Az ONNX Runtime nem elérhető. Ez a modell nem futtatható.",
+      "unavailable": "Nem elérhető"
     },
     "bird": {
       "title": "Madárészlelés",
@@ -4715,5 +4785,122 @@
     "bannerMessage": "A konfigurációs változtatásokhoz újraindítás szükséges:",
     "bannerAction": "Újraindítás most",
     "restartFailed": "Az újraindítás kezdeményezése sikertelen"
+  },
+  "help": {
+    "title": "Súgó és támogatás",
+    "subtitle": "Kérjen segítséget, jelentsen problémákat és csatlakozzon a közösséghez",
+    "reportBug": {
+      "description": "Ha problémát tapasztal, nyisson hibajelentést a GitHubon a probléma leírásához, majd hozzon létre egy támogatási csomagot a hibajelentés számával a hibaelhárítás segítéséhez."
+    },
+    "askQuestion": {
+      "description": "Kérdése van a beállítással, funkciókkal vagy használattal kapcsolatban? A GitHub Discussions fórum a legjobb hely, ahol segítséget kaphat a közösségtől."
+    },
+    "diagnostics": {
+      "description": "Hozzon létre egy támogatási csomagot a problémák diagnosztizálásához. Ez rögzíti a rendszerkonfigurációt és a legutóbbi naplókat."
+    },
+    "quickLinks": {
+      "title": "Gyors hivatkozások",
+      "releases": "Kiadási megjegyzések"
+    }
+  },
+  "reportBug": {
+    "title": "Hiba bejelentése",
+    "subtitle": "Segítsen nekünk a hibák javításában a szükséges információk megadásával",
+    "systemInfo": {
+      "title": "Rendszerinformációk",
+      "description": "Ezek az információk segítenek azonosítani a beállításait. Másolja be a hibajelentésbe.",
+      "version": "Verzió",
+      "buildDate": "Build dátum",
+      "os": "Operációs rendszer",
+      "copy": "Másolás a vágólapra",
+      "copied": "Másolva!",
+      "architecture": "Architektúra",
+      "hardware": "Hardver",
+      "environment": "Környezet"
+    },
+    "whatToInclude": {
+      "title": "Mit tartalmazzon a jelentés",
+      "description": "Egy jó hibajelentés segít gyorsan megoldani a problémát. Kérjük, adja meg a következőket:",
+      "step1": {
+        "title": "A probléma világos leírása",
+        "description": "Mi történt, mit várt és hogyan lehet reprodukálni a problémát."
+      },
+      "step2": {
+        "title": "Telepítési módszer",
+        "description": "Hogyan telepítette a BirdNET-Go-t: install.sh szkript, Docker Compose, kézi fordítás vagy egyéb."
+      },
+      "step3": {
+        "title": "Rendszerinformációk",
+        "description": "Másolja a fent megjelenő rendszeradatokat, beleértve a verziót, az operációs rendszert és a build dátumot."
+      },
+      "step4": {
+        "title": "Támogatási csomag",
+        "description": "Hozzon létre és töltsön fel egy támogatási csomagot alább. Ez rögzíti a naplókat és a konfigurációt, amelyek jelentősen felgyorsítják a hibaelhárítást."
+      }
+    },
+    "openIssue": {
+      "title": "GitHub issue megnyitása",
+      "description": "Nyisson egy issue-t a GitHubon a probléma leírásához. Az issue számára szüksége lesz a következő lépésben.",
+      "button": "Issue megnyitása a GitHubon"
+    },
+    "supportDump": {
+      "title": "Támogatási csomag létrehozása",
+      "description": "A hibajelentés létrehozása után hozzon létre egy támogatási csomagot és adja meg a GitHub issue számát. Ez összekapcsolja a diagnosztikát a hibajelentéssel és segíti a hibaelhárítást."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
+    "runDiagnostics": "Run Diagnostics",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Leggyakoribb hibák",
+      "errorCount": "Darab",
+      "errorComponent": "Komponens",
+      "errorLevel": "Szint",
+      "errorMessage": "Üzenet"
+    }
   }
 }

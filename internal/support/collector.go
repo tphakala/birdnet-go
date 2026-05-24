@@ -56,11 +56,14 @@ const (
 	logTimeFormat      = "2006-01-02 15:04:05"
 
 	// Archive file names
-	diagnosticsFileName = "collection_diagnostics.json"
-	metadataFileName    = "metadata.json"
-	configYAMLFileName  = "config.yaml"
-	systemInfoFileName  = "system_info.json"
-	logReadmeFileName   = "logs/README.txt"
+	diagnosticsFileName    = "collection_diagnostics.json"
+	metadataFileName       = "metadata.json"
+	configYAMLFileName     = "config.yaml"
+	systemInfoFileName     = "system_info.json"
+	databaseInfoFileName   = "database_info.json"
+	deploymentInfoFileName = "deployment_info.json"
+	appEventsFileName      = "app_events.json"
+	logReadmeFileName      = "logs/README.txt"
 
 	// Redaction and privacy
 	redactedPlaceholder      = "[redacted]"
@@ -104,15 +107,17 @@ func getLogger() logger.Logger {
 
 // Collector collects support data for troubleshooting
 type Collector struct {
-	configPath    string
-	dataPath      string
-	systemID      string
-	version       string
-	sensitiveKeys []string
+	configPath        string
+	dataPath          string
+	systemID          string
+	version           string
+	sensitiveKeys     []string
+	dbInfoProvider    DatabaseInfoProvider
+	appEventsProvider AppEventsProvider
 }
 
-// defaultSensitiveKeys returns the default list of sensitive configuration keys to redact
-func defaultSensitiveKeys() []string {
+// DefaultSensitiveKeys returns the default list of sensitive configuration keys to redact.
+func DefaultSensitiveKeys() []string {
 	return []string{
 		// Authentication credentials (snake_case and camelCase variants)
 		"password", "pass", "token", "secret", "key", "api_key", "api_token",
@@ -145,6 +150,17 @@ func defaultSensitiveKeys() []string {
 // isURLValue checks if a string value appears to be a URL
 func isURLValue(s string) bool {
 	return strings.Contains(s, urlSchemeDelimiter)
+}
+
+// MatchesSensitiveKey checks if a dot-separated key path contains any sensitive key pattern.
+func MatchesSensitiveKey(key string, sensitiveKeys []string) bool {
+	lowerKey := strings.ReplaceAll(strings.ToLower(key), ".", "_")
+	for _, sensitive := range sensitiveKeys {
+		if isSensitiveKey(lowerKey, sensitive) {
+			return true
+		}
+	}
+	return false
 }
 
 // isSensitiveKey checks if a key matches a sensitive key pattern using word boundaries.
@@ -276,7 +292,7 @@ func NewCollector(configPath, dataPath, systemID, version string) *Collector {
 		dataPath:      dataPath,
 		systemID:      systemID,
 		version:       version,
-		sensitiveKeys: defaultSensitiveKeys(),
+		sensitiveKeys: DefaultSensitiveKeys(),
 	}
 }
 
@@ -292,7 +308,7 @@ func NewCollectorWithOptions(configPath, dataPath, systemID, version string, sen
 
 	// Use default sensitive keys if none provided
 	if len(sensitiveKeys) == 0 {
-		sensitiveKeys = defaultSensitiveKeys()
+		sensitiveKeys = DefaultSensitiveKeys()
 	}
 
 	return &Collector{
@@ -304,10 +320,20 @@ func NewCollectorWithOptions(configPath, dataPath, systemID, version string, sen
 	}
 }
 
+// SetDatabaseInfoProvider configures the database diagnostics provider.
+func (c *Collector) SetDatabaseInfoProvider(provider DatabaseInfoProvider) {
+	c.dbInfoProvider = provider
+}
+
+// SetAppEventsProvider configures the application events provider.
+func (c *Collector) SetAppEventsProvider(provider AppEventsProvider) {
+	c.appEventsProvider = provider
+}
+
 // Collect gathers support data based on the provided options
 func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*SupportDump, error) {
 	// Validate options
-	if !opts.IncludeLogs && !opts.IncludeConfig && !opts.IncludeSystemInfo {
+	if !opts.IncludeLogs && !opts.IncludeConfig && !opts.IncludeSystemInfo && !opts.IncludeDatabaseInfo && !opts.IncludeDeploymentInfo && !opts.IncludeAppEvents {
 		getLogger().Error("support: collection validation failed: at least one data type must be included")
 		return nil, errors.Newf("at least one data type must be included in support dump").
 			Component("support").
@@ -335,6 +361,8 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 		logger.Bool("include_logs", opts.IncludeLogs),
 		logger.Bool("include_config", opts.IncludeConfig),
 		logger.Bool("include_system_info", opts.IncludeSystemInfo),
+		logger.Bool("include_database_info", opts.IncludeDatabaseInfo),
+		logger.Bool("include_app_events", opts.IncludeAppEvents),
 		logger.Duration("log_duration", opts.LogDuration),
 		logger.Int64("max_log_size", opts.MaxLogSize))
 
@@ -373,6 +401,40 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 		logs := c.collectLogs(ctx, opts.LogDuration, opts.MaxLogSize, opts.AnonymizePII, &dump.Diagnostics.LogCollection)
 		dump.Logs = logs
 		getLogger().Debug("support: logs collected", logger.Int("log_count", len(logs)))
+	}
+
+	// Collect database information
+	if opts.IncludeDatabaseInfo && c.dbInfoProvider != nil {
+		getLogger().Debug("support: collecting database information")
+		dbInfo, err := c.dbInfoProvider.CollectDatabaseInfo(ctx)
+		if err != nil {
+			getLogger().Error("support: failed to collect database information", logger.Error(err))
+		} else {
+			dump.DatabaseInfo = dbInfo
+			getLogger().Debug("support: database information collected",
+				logger.String("dialect", dbInfo.Dialect),
+				logger.Int("table_count", len(dbInfo.Tables)))
+		}
+	}
+
+	// Collect deployment context
+	if opts.IncludeDeploymentInfo {
+		getLogger().Debug("support: collecting deployment information")
+		dump.DeploymentInfo = c.collectDeploymentInfo(ctx, opts.AnonymizePII)
+		getLogger().Debug("support: deployment information collected")
+	}
+
+	// Collect app events
+	if opts.IncludeAppEvents && c.appEventsProvider != nil {
+		getLogger().Debug("support: collecting app events")
+		appEvents, err := c.appEventsProvider.GetRecentAppEvents(ctx, supportDumpEventLimit)
+		if err != nil {
+			getLogger().Error("support: failed to collect app events", logger.Error(err))
+		} else {
+			dump.AppEvents = appEvents
+			getLogger().Debug("support: app events collected",
+				logger.Int("event_count", len(appEvents)))
+		}
 	}
 
 	getLogger().Info("support: collection completed successfully",
@@ -496,6 +558,75 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 				Build()
 		}
 		getLogger().Debug("support: system info added successfully")
+	}
+
+	// Add database info if collected
+	if dump.DatabaseInfo != nil {
+		getLogger().Debug("support: adding database info to archive")
+		dbInfoFile, err := w.Create(databaseInfoFileName)
+		if err != nil {
+			getLogger().Error("support: failed to create database info file in archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_database_info_file").
+				Build()
+		}
+		if err := json.NewEncoder(dbInfoFile).Encode(dump.DatabaseInfo); err != nil {
+			getLogger().Error("support: failed to write database info to archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_database_info").
+				Build()
+		}
+		getLogger().Debug("support: database info added successfully")
+	}
+
+	// Add deployment info if collected
+	if dump.DeploymentInfo != nil {
+		getLogger().Debug("support: adding deployment info to archive")
+		deployFile, err := w.Create(deploymentInfoFileName)
+		if err != nil {
+			getLogger().Error("support: failed to create deployment info file in archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_deployment_info_file").
+				Build()
+		}
+		if err := json.NewEncoder(deployFile).Encode(dump.DeploymentInfo); err != nil {
+			getLogger().Error("support: failed to write deployment info to archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_deployment_info").
+				Build()
+		}
+		getLogger().Debug("support: deployment info added successfully")
+	}
+
+	// Add app events if collected
+	if len(dump.AppEvents) > 0 {
+		getLogger().Debug("support: adding app events to archive")
+		eventsFile, err := w.Create(appEventsFileName)
+		if err != nil {
+			getLogger().Error("support: failed to create app events file in archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_app_events_file").
+				Build()
+		}
+		if err := json.NewEncoder(eventsFile).Encode(dump.AppEvents); err != nil {
+			getLogger().Error("support: failed to write app events to archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_app_events").
+				Build()
+		}
+		getLogger().Debug("support: app events added successfully")
 	}
 
 	// Always add diagnostics - this is crucial for troubleshooting collection issues

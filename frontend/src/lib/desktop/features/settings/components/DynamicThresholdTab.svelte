@@ -34,6 +34,7 @@
   import { toastActions } from '$lib/stores/toast';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { formatDateTime } from '$lib/utils/formatters';
   import SettingsNote from './SettingsNote.svelte';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
 
@@ -210,10 +211,6 @@
     } finally {
       resetting = false;
     }
-  }
-
-  function formatDate(isoDate: string): string {
-    return new Date(isoDate).toLocaleString();
   }
 
   function getChangeReasonKey(reason: ThresholdChangeReason): string {
@@ -647,7 +644,7 @@
                                   </span>
                                 </div>
                                 <div class="text-muted mt-0.5">
-                                  {formatDate(event.createdAt)}
+                                  {formatDateTime(event.createdAt)}
                                   {#if event.confidence && event.confidence > 0}
                                     <span class="ml-2">
                                       {t('settings.species.dynamicThreshold.confidence')}: {(

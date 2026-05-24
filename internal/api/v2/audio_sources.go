@@ -58,11 +58,12 @@ func (c *Controller) listSources(ctx echo.Context, label string, filter func(aud
 
 	resp := AudioSourceListResponse{Sources: []AudioSourceInfo{}}
 
-	if c.engine == nil {
+	eng := c.engine.Load()
+	if eng == nil {
 		return ctx.JSON(http.StatusOK, resp)
 	}
 
-	registry := c.engine.Registry()
+	registry := eng.Registry()
 	if registry == nil {
 		return ctx.JSON(http.StatusOK, resp)
 	}

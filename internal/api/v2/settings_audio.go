@@ -132,14 +132,15 @@ func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) b
 // registered sources (both sound cards and streams). Each source's effective EQ
 // is resolved via Settings.ResolveEQOverride using the registry DisplayName.
 func (c *Controller) handleEqualizerChange(currentSettings *conf.Settings) error {
-	if c.engine == nil {
+	eng := c.engine.Load()
+	if eng == nil {
 		return nil
 	}
 
-	router := c.engine.Router()
+	router := eng.Router()
 	globalEQ := currentSettings.Realtime.Audio.Equalizer
 
-	for _, src := range c.engine.Registry().List() {
+	for _, src := range eng.Registry().List() {
 		displayName := src.DisplayName
 		override := currentSettings.ResolveEQOverride(displayName)
 		router.UpdateFilterChain(src.ID, func(sampleRate int) *equalizer.FilterChain {
@@ -265,8 +266,8 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	// Detect source/stream name changes and sync DisplayName in the registry.
 	// Each function detects renames and updates the registry in a single pass.
 	var registry sourceNameUpdater
-	if c.engine != nil {
-		registry = c.engine.Registry()
+	if eng := c.engine.Load(); eng != nil {
+		registry = eng.Registry()
 	}
 	srcNameChanged := syncAudioSourceNames(oldSettings, currentSettings, registry)
 	strmNameChanged := syncStreamNames(oldSettings, currentSettings, registry)

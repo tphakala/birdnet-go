@@ -20,6 +20,7 @@
 </script>
 
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import { safeGet } from '$lib/utils/security';
 
@@ -34,6 +35,8 @@
     showDot?: boolean;
     /** Pulse animation for the dot (useful for connecting/loading states) */
     pulse?: boolean;
+    /** Optional leading icon snippet, rendered in place of the dot */
+    leadingIcon?: Snippet;
     /** Additional CSS classes */
     className?: string;
   }
@@ -44,6 +47,7 @@
     size = 'sm',
     showDot = true,
     pulse = false,
+    leadingIcon,
     className = '',
   }: Props = $props();
 
@@ -60,12 +64,12 @@
   const getPillStyles = (variant: StatusVariant) => {
     const varName = safeGet(cssVarNames, variant, '--color-base-content');
     return variant === 'neutral'
-      ? `background-color: color-mix(in srgb, var(${varName}) 5%, transparent); ` +
-          `color: color-mix(in srgb, var(${varName}) 60%, transparent); ` +
-          `border-color: color-mix(in srgb, var(${varName}) 10%, transparent);`
-      : `background-color: color-mix(in srgb, var(${varName}) 10%, transparent); ` +
-          `color: var(${varName}); ` +
-          `border-color: color-mix(in srgb, var(${varName}) 20%, transparent);`;
+      ? `background-color: color-mix(in srgb, var(${varName}) 8%, transparent); ` +
+          `color: color-mix(in srgb, var(${varName}) 70%, transparent); ` +
+          `border-color: color-mix(in srgb, var(${varName}) 15%, transparent);`
+      : `background-color: color-mix(in srgb, var(${varName}) 15%, transparent); ` +
+          `color: color-mix(in srgb, var(${varName}) 70%, black); ` +
+          `border-color: color-mix(in srgb, var(${varName}) 30%, transparent);`;
   };
 
   // Dot color styles using CSS variables
@@ -78,9 +82,9 @@
 
   // Size styles for the pill
   const sizeStyles: Record<StatusSize, string> = {
-    xs: 'text-[10px] px-1.5 py-0.5 gap-1',
-    sm: 'text-xs px-2 py-1 gap-1.5',
-    md: 'text-sm px-2.5 py-1.5 gap-2',
+    xs: 'text-[11px] px-2 py-0.5 gap-1',
+    sm: 'text-xs px-2.5 py-1 gap-1.5',
+    md: 'text-sm px-3 py-1.5 gap-2',
   };
 
   // Dot sizes
@@ -99,7 +103,11 @@
   )}
   style={getPillStyles(variant)}
 >
-  {#if showDot}
+  {#if leadingIcon}
+    <span class="flex-shrink-0 flex items-center" aria-hidden="true">
+      {@render leadingIcon()}
+    </span>
+  {:else if showDot}
     <span
       class={cn(
         'rounded-full flex-shrink-0',

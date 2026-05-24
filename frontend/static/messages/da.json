@@ -228,7 +228,16 @@
     "analyticsSubmenu": "Undermenu for analyse",
     "settingsSubmenu": "Undermenu for indstillinger",
     "systemSubmenu": "Undermenu for system",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Hjælp",
+    "helpSubmenu": "Hjælp-undermenu",
+    "helpAndSupport": "Hjælp og support",
+    "reportBug": "Rapportér fejl",
+    "askQuestion": "Stil et spørgsmål",
+    "reportBugAriaLabel": "Rapportér en fejl på GitHub (åbner i nyt vindue)",
+    "askQuestionAriaLabel": "Stil et spørgsmål på GitHub Discussions (åbner i nyt vindue)",
+    "viewOnGithubAriaLabel": "Se BirdNET-Go på GitHub (åbner i nyt vindue)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -425,6 +434,10 @@
       "buffer": {
         "overloadTitle": "Lydanalyse overbelastet",
         "overloadMessage": "Dit system dropper {dropRate}% af lydprøverne for kilden ''{sourceName}'', fordi det ikke kan følge med analysen. Reducer BirdNET-overlapværdien i detektionsindstillingerne eller overvej at opgradere til en hurtigere CPU."
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime ikke tilgængelig",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} er påkrævet til {modelName}, men blev ikke fundet. Se installationsguiden: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -924,7 +937,10 @@
     "aria": {
       "loading": "Indlæser registreringsdetaljer...",
       "loaded": "Registreringsdetaljer indlæst for {species}",
-      "error": "Fejl ved indlæsning af registrering: {error}"
+      "error": "Fejl ved indlæsning af registrering: {error}",
+      "loadingResults": "Indlæser {count} resultater...",
+      "thumbnailLoading": "Indlæser {species} miniaturebillede...",
+      "thumbnailLoaded": "Miniaturebillede af {species} indlæst"
     },
     "errors": {
       "notFound": "Registrering ikke fundet. Den kan være blevet slettet, eller ID'et er forkert.",
@@ -2998,6 +3014,7 @@
         "unknown": "ukendt",
         "refresh": "Opdater",
         "addStream": "Tilføj strøm",
+        "testRequired": "Kør en vellykket streamtest før du gemmer",
         "deleteConfirm": "Fjern denne strøm?",
         "restartCount": "Genstartet {count} gang(e)",
         "healthLoadError": "Kunne ikke indlæse strømmens sundhedsstatus",
@@ -3050,6 +3067,18 @@
           "degraded": "Forringet",
           "failed": "Fejlet",
           "unknown": "Ukendt"
+        },
+        "test": {
+          "button": "Test stream",
+          "probing": "Tester...",
+          "result": "Testresultat",
+          "error": "Test mislykkedes",
+          "batCompatible": "Kompatibel med flagermus",
+          "batIncompatible": "Ikke kompatibel med flagermus"
+        },
+        "batWarning": "Flagermusmodeller kræver streams med en tabsfri codec (PCM) og en samplerate på mindst 96 kHz. Brug knappen Test stream ovenfor for at verificere kompatibilitet.",
+        "codecWarning": {
+          "lossy": "Tabsgivende codecs (AAC, Opus, MP3) ødelægger ultralydsfrekvenser over ~20 kHz, hvilket gør streamen uegnet til detektering af flagermus."
         }
       },
       "audioFilters": {
@@ -3225,6 +3254,10 @@
         "devicesLoadFailed": "Kunne ikke indlæse lydenheder. Kontroller venligst systemtilladelserne.",
         "invalidBitrate": "Ugyldig bitrateværdi",
         "invalidRetentionPolicy": "Ugyldig opbevaringspolitik"
+      },
+      "models": {
+        "recommendBoth": "For bedste artsdækning anbefales det at køre både BirdNET og Perch sammen.",
+        "perchOnlyWarning": "Perch alene producerer færre detektioner. Sænk konfidenstærsklen til 0.50 for meningsfulde resultater, eller aktiver BirdNET ved siden af for bedste dækning."
       }
     },
     "security": {
@@ -4200,7 +4233,31 @@
       "playbackSpeed": "Afspilningshastighed",
       "speed": "Hastighed",
       "loop": "Skift gentag",
-      "player": "Lydafspiller"
+      "player": "Lydafspiller",
+      "autoplayBlocked": "Klik for at afspille (autoplay blokeret)",
+      "hlsNotSupported": "HLS-afspilning understøttes ikke i denne browser",
+      "streamStarting": "Starter lydstrøm...",
+      "levelFor": "Lydniveau for {source}",
+      "levelForNoSource": "Lydniveau: ingen kilde",
+      "noSource": "Ingen kilde",
+      "levelAnnouncement": "Aktuelt lydniveau: {level} procent",
+      "levelAnnouncementClipping": "Aktuelt lydniveau: {level} procent, klipning registreret",
+      "sourceSelection": "Valg af lydkilde",
+      "sources": "Lydkilder",
+      "noSourcesAvailable": "Ingen lydkilder tilgængelige",
+      "silent": "(stille)",
+      "stopPlayback": "Stop lydafspilning",
+      "startPlayback": "Start lydafspilning",
+      "nowPlaying": "Afspiller nu lyd fra {source}",
+      "nowPlayingNoSource": "Afspiller lyd",
+      "playbackStopped": "Lydafspilning stoppet",
+      "loginRequired": "Login påkrævet for at streame lyd",
+      "streamError": "Fejl ved start af strøm",
+      "streamTitle": "Fuglelydstrøm - {source}",
+      "streamTitleDefault": "Fuglelydstrøm",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Live stream",
+      "playbackError": "Afspilningsfejl: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram er endnu ikke genereret",
@@ -4425,6 +4482,16 @@
       "hostRequired": "Host-parameter er påkrævet",
       "invalidHost": "Ugyldig host-parameter",
       "rateLimit": "For mange forsøg på at oprette notifikationsstrøm, vent venligst før du prøver igen"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Ugyldig forespørgselstekst",
+        "urlRequired": "Stream-URL er påkrævet",
+        "invalidUrl": "Ugyldigt URL-format. Indtast en fuld URL som rtsp://host:port/sti",
+        "unsupportedScheme": "Ikke-understøttet URL-skema \"{scheme}\". Brug rtsp, rtsps, http, https, rtmp eller udp",
+        "blockedDestination": "Denne destination er blokeret af sikkerhedsmæssige årsager",
+        "connectionFailed": "Kunne ikke oprette forbindelse til streamen. Kontrollér, at URL'en er korrekt, og at streamen er tilgængelig"
+      }
     },
     "debug": {
       "notEnabled": "Fejlretningstilstand er ikke aktiveret"
@@ -4690,7 +4757,10 @@
       "reinstall": "Geninstaller",
       "reinstalling": "Geninstallerer...",
       "reinstallComplete": "Filer verificeret succesfuldt",
-      "geomodelBadge": "Inkluderer BirdNET v3.0 geomodel"
+      "geomodelBadge": "Inkluderer BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Kræver ONNX Runtime, som ikke er tilgængelig på dette system.",
+      "onnxRuntimeMissing": "ONNX Runtime er ikke tilgængelig. Denne model kan ikke køre.",
+      "unavailable": "Ikke tilgængelig"
     },
     "bird": {
       "title": "Fugleregistrering",
@@ -4715,5 +4785,122 @@
     "bannerMessage": "Konfigurationsændringer kræver en genstart:",
     "bannerAction": "Genstart nu",
     "restartFailed": "Kunne ikke starte genstart"
+  },
+  "help": {
+    "title": "Hjælp og support",
+    "subtitle": "Få hjælp, rapportér problemer og forbind med fællesskabet",
+    "reportBug": {
+      "description": "Hvis du støder på et problem, åbn en fejlrapport på GitHub for at beskrive problemet, og generer derefter en supportpakke med sagsnummeret for at hjælpe med fejlfinding."
+    },
+    "askQuestion": {
+      "description": "Har du et spørgsmål om opsætning, funktioner eller brug? GitHub Discussions er det bedste sted at få hjælp fra fællesskabet."
+    },
+    "diagnostics": {
+      "description": "Generér en supportpakke for at hjælpe med fejlfinding. Den indfanger din systemkonfiguration og seneste logfiler."
+    },
+    "quickLinks": {
+      "title": "Hurtige links",
+      "releases": "Udgivelsesnoter"
+    }
+  },
+  "reportBug": {
+    "title": "Rapportér fejl",
+    "subtitle": "Hjælp os med at løse problemer ved at give de nødvendige oplysninger",
+    "systemInfo": {
+      "title": "Dine systemoplysninger",
+      "description": "Disse oplysninger hjælper med at identificere din opsætning. Kopiér dem til din fejlrapport.",
+      "version": "Version",
+      "buildDate": "Byggedato",
+      "os": "Operativsystem",
+      "copy": "Kopiér til udklipsholder",
+      "copied": "Kopieret!",
+      "architecture": "Arkitektur",
+      "hardware": "Hardware",
+      "environment": "Miljø"
+    },
+    "whatToInclude": {
+      "title": "Hvad din rapport skal indeholde",
+      "description": "En god fejlrapport hjælper os med at løse dit problem hurtigt. Inkludér venligst følgende:",
+      "step1": {
+        "title": "Klar beskrivelse af problemet",
+        "description": "Hvad der skete, hvad du forventede, og hvordan problemet kan genskabes."
+      },
+      "step2": {
+        "title": "Din installationsmetode",
+        "description": "Hvordan du installerede BirdNET-Go: install.sh-script, Docker Compose, manuel bygning eller andet."
+      },
+      "step3": {
+        "title": "Systemoplysninger",
+        "description": "Kopiér systemdetaljerne vist ovenfor, herunder version, OS og byggedato."
+      },
+      "step4": {
+        "title": "Supportpakke",
+        "description": "Generér og upload en supportpakke nedenfor. Den indfanger logfiler og konfiguration, der markant fremskynder fejlfinding."
+      }
+    },
+    "openIssue": {
+      "title": "Åbn en GitHub-sag",
+      "description": "Åbn en sag på GitHub for at beskrive problemet. Du skal bruge sagsnummeret i næste trin.",
+      "button": "Åbn sag på GitHub"
+    },
+    "supportDump": {
+      "title": "Generér supportpakke",
+      "description": "Efter oprettelse af din sag, generer en supportpakke og indtast GitHub-sagsnummeret. Dette kobler din diagnostik til fejlrapporten og hjælper med fejlfinding."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
+    "runDiagnostics": "Run Diagnostics",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Hyppigste fejl",
+      "errorCount": "Antal",
+      "errorComponent": "Komponent",
+      "errorLevel": "Niveau",
+      "errorMessage": "Besked"
+    }
   }
 }

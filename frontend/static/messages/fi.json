@@ -228,7 +228,16 @@
     "analyticsSubmenu": "Analytiikan alavalikko",
     "settingsSubmenu": "Asetusten alavalikko",
     "systemSubmenu": "Järjestelmän alavalikko",
-    "systemTerminal": "Terminaali"
+    "systemTerminal": "Terminaali",
+    "help": "Ohje",
+    "helpSubmenu": "Ohje-alavalikko",
+    "helpAndSupport": "Ohje ja tuki",
+    "reportBug": "Ilmoita virheestä",
+    "askQuestion": "Esitä kysymys",
+    "reportBugAriaLabel": "Ilmoita virheestä GitHubissa (avautuu uuteen ikkunaan)",
+    "askQuestionAriaLabel": "Esitä kysymys GitHub Discussions -foorumilla (avautuu uuteen ikkunaan)",
+    "viewOnGithubAriaLabel": "Näytä BirdNET-Go GitHubissa (avautuu uuteen ikkunaan)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -425,6 +434,10 @@
       "buffer": {
         "overloadTitle": "Äänianalyysi ylikuormitettu",
         "overloadMessage": "Järjestelmäsi hylkää {dropRate} % lähteen '{sourceName}' ääninäytteistä, koska se ei pysy analyysin tahdissa. Pienennä BirdNET-päällekkäisyysarvoa tunnistusasetuksista tai harkitse nopeamman suorittimen hankkimista."
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime ei ole käytettävissä",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} vaaditaan mallille {modelName}, mutta sitä ei löytynyt. Katso asennusohje: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -924,7 +937,10 @@
     "aria": {
       "loading": "Ladataan havainnon tietoja...",
       "loaded": "Havainnon tiedot ladattu: {species}",
-      "error": "Virhe havainnon latauksessa: {error}"
+      "error": "Virhe havainnon latauksessa: {error}",
+      "loadingResults": "Ladataan {count} tulosta...",
+      "thumbnailLoading": "Ladataan {species} pikkukuvaa...",
+      "thumbnailLoaded": "Pikkukuva {species} ladattu"
     },
     "errors": {
       "notFound": "Havaintoa ei löytynyt. Se on ehkä poistettu tai tunniste on virheellinen.",
@@ -2998,6 +3014,7 @@
         "unknown": "tuntematon",
         "refresh": "Päivitä",
         "addStream": "Lisää striimi",
+        "testRequired": "Suorita onnistunut striimitesti ennen tallentamista",
         "deleteConfirm": "Poista tämä striimi?",
         "restartCount": "Uudelleenkäynnistetty {count} kertaa",
         "healthLoadError": "Striimin tilan lataus epäonnistui",
@@ -3050,6 +3067,18 @@
           "degraded": "Heikentynyt",
           "failed": "Epäonnistunut",
           "unknown": "Tuntematon"
+        },
+        "test": {
+          "button": "Testaa striimi",
+          "probing": "Testataan...",
+          "result": "Testitulos",
+          "error": "Testi epäonnistui",
+          "batCompatible": "Yhteensopiva lepakoiden kanssa",
+          "batIncompatible": "Ei yhteensopiva lepakoiden kanssa"
+        },
+        "batWarning": "Lepakkomallit vaativat häviöttömän koodekin (PCM) ja vähintään 96 kHz näytteenottotaajuuden. Tarkista yhteensopivuus yllä olevalla Testaa striimi -painikkeella.",
+        "codecWarning": {
+          "lossy": "Häviölliset koodekit (AAC, Opus, MP3) tuhoavat ultraäänitaajuudet yli ~20 kHz, mikä tekee striimistä soveltumattoman lepakoiden havaitsemiseen."
         }
       },
       "audioFilters": {
@@ -3225,6 +3254,10 @@
         "devicesLoadFailed": "Äänilaitteiden lataus epäonnistui. Tarkista järjestelmän käyttöoikeudet.",
         "invalidBitrate": "Virheellinen bittinopeusarvo",
         "invalidRetentionPolicy": "Virheellinen säilytyskäytäntö"
+      },
+      "models": {
+        "recommendBoth": "Parhaan lajien havainnointikattavuuden saavuttamiseksi suositellaan käyttämään sekä BirdNET- että Perch-malleja yhdessä.",
+        "perchOnlyWarning": "Perch yksinään tuottaa vähemmän havaintoja. Laske luottamuskynnys arvoon 0.50 mielekkäiden tulosten saamiseksi tai ota BirdNET käyttöön rinnalle paremman kattavuuden saavuttamiseksi."
       }
     },
     "security": {
@@ -4200,7 +4233,31 @@
       "playbackSpeed": "Toistonopeus",
       "speed": "Nopeus",
       "loop": "Vaihda silmukka",
-      "player": "Äänisoitin"
+      "player": "Äänisoitin",
+      "autoplayBlocked": "Klikkaa toistaaksesi (automaattinen toisto estetty)",
+      "hlsNotSupported": "HLS-toisto ei ole tuettu tässä selaimessa",
+      "streamStarting": "Käynnistetään äänistriimi...",
+      "levelFor": "Äänitaso lähteelle {source}",
+      "levelForNoSource": "Äänitaso: ei lähdettä",
+      "noSource": "Ei lähdettä",
+      "levelAnnouncement": "Nykyinen äänitaso: {level} prosenttia",
+      "levelAnnouncementClipping": "Nykyinen äänitaso: {level} prosenttia, säröytyminen havaittu",
+      "sourceSelection": "Äänilähteen valinta",
+      "sources": "Äänilähteet",
+      "noSourcesAvailable": "Ei äänilähteitä saatavilla",
+      "silent": "(hiljainen)",
+      "stopPlayback": "Pysäytä äänen toisto",
+      "startPlayback": "Aloita äänen toisto",
+      "nowPlaying": "Toistetaan ääntä lähteestä {source}",
+      "nowPlayingNoSource": "Toistetaan ääntä",
+      "playbackStopped": "Äänen toisto pysäytetty",
+      "loginRequired": "Kirjautuminen vaaditaan äänen suoratoistoon",
+      "streamError": "Virhe striimin käynnistyksessä",
+      "streamTitle": "Lintujen äänistriimi - {source}",
+      "streamTitleDefault": "Lintujen äänistriimi",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Suora lähetys",
+      "playbackError": "Toistovirhe: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammia ei ole vielä generoitu",
@@ -4425,6 +4482,16 @@
       "hostRequired": "Host-parametri on pakollinen",
       "invalidHost": "Virheellinen host-parametri",
       "rateLimit": "Liian monta yhteysyritystä ilmoitusstriimiin, odota hetki ennen uutta yritystä"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Virheellinen pyyntörunko",
+        "urlRequired": "Striimin URL on pakollinen",
+        "invalidUrl": "Virheellinen URL-muoto. Syötä täydellinen URL, esim. rtsp://host:portti/polku",
+        "unsupportedScheme": "URL-skeemaa \"{scheme}\" ei tueta. Käytä rtsp, rtsps, http, https, rtmp tai udp",
+        "blockedDestination": "Tämä kohde on estetty turvallisuussyistä",
+        "connectionFailed": "Striimiin ei saatu yhteyttä. Tarkista, että URL on oikein ja striimi on saavutettavissa"
+      }
     },
     "debug": {
       "notEnabled": "Virheenkorjaustila ei ole käytössä"
@@ -4690,7 +4757,10 @@
       "reinstall": "Asenna uudelleen",
       "reinstalling": "Asennetaan uudelleen...",
       "reinstallComplete": "Tiedostot tarkistettu onnistuneesti",
-      "geomodelBadge": "Sisältää BirdNET v3.0 -geomallin"
+      "geomodelBadge": "Sisältää BirdNET v3.0 -geomallin",
+      "onnxRuntimeRequired": "Vaatii ONNX Runtimen, joka ei ole käytettävissä tässä järjestelmässä.",
+      "onnxRuntimeMissing": "ONNX Runtime ei ole käytettävissä. Tätä mallia ei voi suorittaa.",
+      "unavailable": "Ei käytettävissä"
     },
     "bird": {
       "title": "Bird Detection",
@@ -4715,5 +4785,122 @@
     "bannerMessage": "Asetusten muutokset vaativat uudelleenkäynnistyksen:",
     "bannerAction": "Käynnistä uudelleen nyt",
     "restartFailed": "Uudelleenkäynnistyksen aloittaminen epäonnistui"
+  },
+  "help": {
+    "title": "Ohje ja tuki",
+    "subtitle": "Saa apua, ilmoita ongelmista ja ota yhteyttä yhteisöön",
+    "reportBug": {
+      "description": "Jos kohtaat ongelman, avaa ensin virheraportti GitHubissa ongelman kuvaamiseksi ja luo sitten tukipaketti raportin numerolla vianmäärityksen helpottamiseksi."
+    },
+    "askQuestion": {
+      "description": "Onko sinulla kysyttävää asennuksesta, ominaisuuksista tai käytöstä? GitHub Discussions -foorumi on paras paikka saada apua yhteisöltä."
+    },
+    "diagnostics": {
+      "description": "Luo tukipaketti ongelmien diagnosoimiseksi. Se tallentaa järjestelmäkokoonpanon ja viimeisimmät lokit."
+    },
+    "quickLinks": {
+      "title": "Pikalinkit",
+      "releases": "Julkaisutiedot"
+    }
+  },
+  "reportBug": {
+    "title": "Ilmoita virheestä",
+    "subtitle": "Auta meitä korjaamaan ongelmia antamalla tarvittavat tiedot",
+    "systemInfo": {
+      "title": "Järjestelmätietosi",
+      "description": "Nämä tiedot auttavat tunnistamaan asennuksesi. Kopioi ne virheraporttiin.",
+      "version": "Versio",
+      "buildDate": "Käännöspäivä",
+      "os": "Käyttöjärjestelmä",
+      "copy": "Kopioi leikepöydälle",
+      "copied": "Kopioitu!",
+      "architecture": "Arkkitehtuuri",
+      "hardware": "Laitteisto",
+      "environment": "Ympäristö"
+    },
+    "whatToInclude": {
+      "title": "Mitä raporttiin tulee sisällyttää",
+      "description": "Hyvä virheraportti auttaa meitä korjaamaan ongelmasi nopeasti. Sisällytä seuraavat tiedot:",
+      "step1": {
+        "title": "Selkeä kuvaus ongelmasta",
+        "description": "Mitä tapahtui, mitä odotit tapahtuvan ja miten ongelma toistetaan."
+      },
+      "step2": {
+        "title": "Asennustapasi",
+        "description": "Miten asensit BirdNET-Go:n: install.sh-skripti, Docker Compose, manuaalinen käännös tai muu."
+      },
+      "step3": {
+        "title": "Järjestelmätiedot",
+        "description": "Kopioi yllä näkyvät järjestelmätiedot, mukaan lukien versio, käyttöjärjestelmä ja käännöspäivä."
+      },
+      "step4": {
+        "title": "Tukipaketti",
+        "description": "Luo ja lataa tukipaketti alla. Se tallentaa lokit ja asetukset, jotka nopeuttavat merkittävästi vianmääritystä."
+      }
+    },
+    "openIssue": {
+      "title": "Avaa GitHub-raportti",
+      "description": "Avaa raportti GitHubissa ongelman kuvaamiseksi. Tarvitset raportin numeron seuraavassa vaiheessa.",
+      "button": "Avaa raportti GitHubissa"
+    },
+    "supportDump": {
+      "title": "Luo tukipaketti",
+      "description": "Raportin luomisen jälkeen luo tukipaketti ja syötä GitHub-raportin numero. Tämä yhdistää diagnostiikkatiedot virheraporttiin ja auttaa vianmäärityksessä."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
+    "runDiagnostics": "Run Diagnostics",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Yleisimmät virheet",
+      "errorCount": "Lukumäärä",
+      "errorComponent": "Komponentti",
+      "errorLevel": "Taso",
+      "errorMessage": "Viesti"
+    }
   }
 }

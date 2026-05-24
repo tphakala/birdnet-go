@@ -27,7 +27,7 @@ flowchart TB
 
     subgraph Inference["Model Inference"]
         BN[BirdNET v2.4\nTFLite / ONNX\n6522 bird species]
-        PC[Perch v2\nONNX\n14795 bird species]
+        PC[Perch v2\nONNX\n14795 species]
         BAT[Bat Two-Stage\n1. BirdNET embedding extraction\n2. Regional bat classifier]
     end
 
@@ -136,7 +136,7 @@ flowchart LR
     end
 
     subgraph Perch["Perch v2"]
-        PC_IN[float32 samples] --> PC_ONNX[ONNX model\n14795 species output]
+        PC_IN[float32 samples] --> PC_ONNX[ONNX model\n14795 multi-taxa species output]
         PC_ONNX --> PC_OUT[species + confidence]
     end
 
@@ -149,7 +149,7 @@ flowchart LR
 
 **BirdNET v2.4**: Runs TFLite (default) or ONNX, produces 6522 species probabilities. The lightest model.
 
-**Perch v2**: Runs ONNX, produces 14795 species probabilities. Larger model, needs more CPU and RAM.
+**Perch v2**: Runs ONNX, produces 14795 multi-taxa species probabilities (birds, insects, amphibians, mammals). Larger model, needs more CPU and RAM.
 
 **BattyBirdNET** (two-stage):
 1. The BirdNET v2.4 ONNX model (patched to expose embeddings) extracts a 1024-dimensional embedding vector from the `GLOBAL_AVG_POOL` layer
@@ -335,7 +335,7 @@ flowchart TB
 
     subgraph Models["Model Inference"]
         BN["BirdNET v2.4\nTFLite / ONNX\n6522 species"]
-        PC["Perch v2\nONNX\n14795 species"]
+        PC["Perch v2\nONNX\n14795 multi-taxa species"]
         BAT["Bat Two-Stage\n1. BirdNET embeddings 1024-dim\n2. Regional classifier"]
     end
 

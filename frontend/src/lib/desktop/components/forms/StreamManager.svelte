@@ -36,6 +36,7 @@
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import type { StreamConfig, StreamType, QuietHoursConfig } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
+  import StreamTestButton from './StreamTestButton.svelte';
 
   const logger = loggers.audio;
 
@@ -126,6 +127,8 @@
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let nameError = $state<string | null>(null);
   let urlError = $state<string | null>(null);
+  let newTestResult = $state<{ sampleRate: number } | null>(null);
+  let newSourceSampleRate = $derived(newTestResult?.sampleRate ?? 48000);
 
   // SSE connection for real-time health updates
   let eventSource: ReconnectingEventSource | null = null;
@@ -414,6 +417,7 @@
     newStreamType = 'rtsp';
     newModels = [DEFAULT_MODEL_ID];
     newQuietHours = { ...defaultQuietHoursConfig };
+    newTestResult = null;
     clearErrors();
     showAddForm = false;
 
@@ -649,6 +653,15 @@
               {/if}
             </div>
 
+            <!-- Test Stream -->
+            <StreamTestButton
+              url={newUrl}
+              models={availableModels}
+              selectedModels={newModels}
+              {disabled}
+              onResult={result => (newTestResult = result)}
+            />
+
             <!-- Stream Type and Protocol -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <SelectDropdown
@@ -678,6 +691,8 @@
             <ModelCheckboxList
               models={availableModels}
               selectedModels={newModels}
+              sourceSampleRate={newSourceSampleRate}
+              isStream={true}
               {disabled}
               onToggle={models => (newModels = models)}
             />
@@ -703,20 +718,27 @@
                   newTransport = 'tcp';
                   newModels = [DEFAULT_MODEL_ID];
                   newQuietHours = { ...defaultQuietHoursConfig };
+                  newTestResult = null;
                   clearErrors();
                 }}
               >
                 {t('common.cancel')}
               </button>
-              <button
-                type="button"
-                class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
-                onclick={addStream}
-                disabled={!newName.trim() || !newUrl.trim() || disabled}
+              <span
+                title={!newTestResult && newUrl.trim()
+                  ? t('settings.audio.streams.testRequired')
+                  : undefined}
               >
-                <Plus class="size-4" />
-                {t('settings.audio.streams.addStream')}
-              </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  onclick={addStream}
+                  disabled={!newName.trim() || !newUrl.trim() || !newTestResult || disabled}
+                >
+                  <Plus class="size-4" />
+                  {t('settings.audio.streams.addStream')}
+                </button>
+              </span>
             </div>
           </div>
         </div>

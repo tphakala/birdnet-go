@@ -703,7 +703,7 @@ func TestV2OnlyDatastore_GetDatabaseStats(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get stats
-	stats, err := ds.GetDatabaseStats()
+	stats, err := ds.GetDatabaseStats(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "sqlite", stats.Type)
 	assert.Equal(t, int64(1), stats.TotalDetections)
@@ -1015,7 +1015,7 @@ func TestV2OnlyDatastore_ConcatenatedLabelExtraction(t *testing.T) {
 	ctx := t.Context()
 
 	// Simulate legacy data: directly create a label with concatenated scientific name
-	// (this is what happened before the extractScientificName fix was applied to writes)
+	// (this is what happened before the ExtractScientificName fix was applied to writes)
 	concatenatedName := "Strix aluco_lehtopöllö"
 	legacyLabel, err := ds.label.GetOrCreate(ctx, concatenatedName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
 	require.NoError(t, err)

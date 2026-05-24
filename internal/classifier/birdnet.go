@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/inference/tflite"
@@ -37,7 +38,7 @@ const defaultModelVersionString = ModelNameBirdNETv24 + " FP32"
 // Scores are immutable once stored - callers must not mutate the returned map.
 type speciesCacheEntry struct {
 	key    string             // Composite cache key: date + rounded lat/lon + model id
-	scores map[string]float64 // Species occurrence scores keyed by label
+	scores map[string]float64 // Species occurrence scores keyed by scientific name
 }
 
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
@@ -618,7 +619,7 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	}
 	scores := make(map[string]float64, len(speciesScores))
 	for _, s := range speciesScores {
-		scores[s.Label] = s.Score
+		scores[strings.ToLower(detection.ExtractScientificName(s.Label))] = s.Score
 	}
 
 	// WRITE PATH: double-check, evict old entries, and publish new results
@@ -1148,7 +1149,7 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	// Try to get cached scores first
 	cachedScores, err := bn.getCachedSpeciesScores(detectionTime)
 	if err == nil && len(cachedScores) > 0 {
-		if occurrence, found := cachedScores[species]; found {
+		if occurrence, found := cachedScores[strings.ToLower(detection.ExtractScientificName(species))]; found {
 			// Clamp the score to [0.0, 1.0] range
 			if occurrence < 0.0 {
 				return 0.0
@@ -1169,8 +1170,9 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	}
 
 	// Look for the species in the scores
+	targetSci := detection.ExtractScientificName(species)
 	for _, score := range speciesScores {
-		if score.Label == species {
+		if strings.EqualFold(detection.ExtractScientificName(score.Label), targetSci) {
 			// Clamp the score to [0.0, 1.0] range
 			if score.Score < 0.0 {
 				return 0.0

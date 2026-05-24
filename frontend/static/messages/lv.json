@@ -228,7 +228,16 @@
     "analyticsSubmenu": "Analītikas apakšizvēlne",
     "settingsSubmenu": "Iestatījumu apakšizvēlne",
     "systemSubmenu": "Sistēmas apakšizvēlne",
-    "systemTerminal": "Terminālis"
+    "systemTerminal": "Terminālis",
+    "help": "Palīdzība",
+    "helpSubmenu": "Palīdzības apakšizvēlne",
+    "helpAndSupport": "Palīdzība un atbalsts",
+    "reportBug": "Ziņot par kļūdu",
+    "askQuestion": "Uzdot jautājumu",
+    "reportBugAriaLabel": "Ziņot par kļūdu GitHub (atveras jaunā logā)",
+    "askQuestionAriaLabel": "Uzdot jautājumu GitHub Discussions (atveras jaunā logā)",
+    "viewOnGithubAriaLabel": "Skatīt BirdNET-Go GitHub (atveras jaunā logā)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -425,6 +434,10 @@
       "buffer": {
         "overloadTitle": "Audio analīze pārslogota",
         "overloadMessage": "Jūsu sistēma izlaiž {dropRate}% audio paraugu avotam ''{sourceName}'', jo tā nespēj sekot līdzi analīzei. Samaziniet BirdNET pārklāšanās vērtību noteikšanas iestatījumos vai apsveriet jaudīgāka procesora izmantošanu."
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime nav pieejams",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Skatiet instalēšanas rokasgrāmatu: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -924,7 +937,10 @@
     "aria": {
       "loading": "Ielādē atklāšanas informāciju...",
       "loaded": "Atklāšanas informācija ielādēta sugai {species}",
-      "error": "Kļūda, ielādējot atklāšanu: {error}"
+      "error": "Kļūda, ielādējot atklāšanu: {error}",
+      "loadingResults": "Ielādē {count} rezultātus...",
+      "thumbnailLoading": "Ielādē {species} sīktēlu...",
+      "thumbnailLoaded": "Sīktēls {species} ielādēts"
     },
     "errors": {
       "notFound": "Atklāšana nav atrasta. Tā, iespējams, ir dzēsta vai ID ir nepareizs.",
@@ -2998,6 +3014,7 @@
         "unknown": "nezināma",
         "refresh": "Atsvaidzināt",
         "addStream": "Pievienot straumi",
+        "testRequired": "Pirms saglabāšanas veiciet veiksmīgu straumes testu",
         "deleteConfirm": "Noņemt šo straumi?",
         "restartCount": "Pārstartēta {count} reizi(-es)",
         "healthLoadError": "Neizdevās ielādēt straumes veselības statusu",
@@ -3050,6 +3067,18 @@
           "degraded": "Pasliktināts",
           "failed": "Neizdevies",
           "unknown": "Nezināms"
+        },
+        "test": {
+          "button": "Testēt straumi",
+          "probing": "Testē...",
+          "result": "Pārbaudes rezultāts",
+          "error": "Tests neizdevās",
+          "batCompatible": "Saderīgs ar sikspārņiem",
+          "batIncompatible": "Nav saderīgs ar sikspārņiem"
+        },
+        "batWarning": "Sikspārņu modeļiem nepieciešamas straumes ar bezzudumu kodeku (PCM) un iztveršanas frekvenci vismaz 96 kHz. Izmantojiet pogu Testēt straumi augstāk, lai pārbaudītu saderību.",
+        "codecWarning": {
+          "lossy": "Zudumu kodeki (AAC, Opus, MP3) iznīcina ultraskaņas frekvences virs ~20 kHz, padarot straumi nepiemērotu sikspārņu noteikšanai."
         }
       },
       "audioFilters": {
@@ -3225,6 +3254,10 @@
         "devicesLoadFailed": "Neizdevās ielādēt audio ierīces. Lūdzu, pārbaudiet sistēmas atļaujas.",
         "invalidBitrate": "Nederīga bitu pārraides ātruma vērtība",
         "invalidRetentionPolicy": "Nederīga saglabāšanas politika"
+      },
+      "models": {
+        "recommendBoth": "Labākai sugu noteikšanas pārklājumam ieteicams izmantot gan BirdNET, gan Perch modeļus kopā.",
+        "perchOnlyWarning": "Perch vien rada mazāk noteikšanu. Samaziniet ticamības slieksni līdz 0.50, lai iegūtu jēgpilnus rezultātus, vai aktivizējiet arī BirdNET labākam pārklājumam."
       }
     },
     "security": {
@@ -4200,7 +4233,31 @@
       "playbackSpeed": "Atskaņošanas ātrums",
       "speed": "Ātrums",
       "loop": "Pārslēgt cilpu",
-      "player": "Audio atskaņotājs"
+      "player": "Audio atskaņotājs",
+      "autoplayBlocked": "Noklikšķiniet, lai atskaņotu (automātiskā atskaņošana bloķēta)",
+      "hlsNotSupported": "HLS atskaņošana šajā pārlūkā netiek atbalstīta",
+      "streamStarting": "Tiek startēta audio straume...",
+      "levelFor": "Audio līmenis avotam {source}",
+      "levelForNoSource": "Audio līmenis: nav avota",
+      "noSource": "Nav avota",
+      "levelAnnouncement": "Pašreizējais audio līmenis: {level} procenti",
+      "levelAnnouncementClipping": "Pašreizējais audio līmenis: {level} procenti, konstatēta pārslodze",
+      "sourceSelection": "Audio avota izvēle",
+      "sources": "Audio avoti",
+      "noSourcesAvailable": "Nav pieejamu audio avotu",
+      "silent": "(kluss)",
+      "stopPlayback": "Apturēt audio atskaņošanu",
+      "startPlayback": "Sākt audio atskaņošanu",
+      "nowPlaying": "Tagad tiek atskaņots audio no {source}",
+      "nowPlayingNoSource": "Tiek atskaņots audio",
+      "playbackStopped": "Audio atskaņošana apturēta",
+      "loginRequired": "Lai straumētu audio, nepieciešama pieteikšanās",
+      "streamError": "Kļūda, startējot straumi",
+      "streamTitle": "Putnu audio straume - {source}",
+      "streamTitleDefault": "Putnu audio straume",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Tiešraide",
+      "playbackError": "Atskaņošanas kļūda: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogramma vēl nav ģenerēta",
@@ -4425,6 +4482,16 @@
       "hostRequired": "Resursdatora parametrs ir obligāts",
       "invalidHost": "Nederīgs resursdatora parametrs",
       "rateLimit": "Pārāk daudz paziņojumu straumes pieslēgšanās mēģinājumu, lūdzu, uzgaidiet pirms atkārtota mēģinājuma"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Nederīgs pieprasījuma saturs",
+        "urlRequired": "Straumes URL ir obligāts",
+        "invalidUrl": "Nederīgs URL formāts. Ievadiet pilnu URL, piem., rtsp://resursdators:ports/ceļš",
+        "unsupportedScheme": "Neatbalstīta URL shēma \"{scheme}\". Izmantojiet rtsp, rtsps, http, https, rtmp vai udp",
+        "blockedDestination": "Šis galamērķis ir bloķēts drošības apsvērumu dēļ",
+        "connectionFailed": "Nevarēja izveidot savienojumu ar straumi. Pārbaudiet, vai URL ir pareizs un straume ir pieejama"
+      }
     },
     "debug": {
       "notEnabled": "Atkļūdošanas režīms nav iespējots"
@@ -4690,7 +4757,10 @@
       "reinstall": "Pārinstalēt",
       "reinstalling": "Pārinstalē...",
       "reinstallComplete": "Faili veiksmīgi pārbaudīti",
-      "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis"
+      "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis",
+      "onnxRuntimeRequired": "Nepieciešams ONNX Runtime, kas šajā sistēmā nav pieejams.",
+      "onnxRuntimeMissing": "ONNX Runtime nav pieejams. Šo modeli nevar palaist.",
+      "unavailable": "Nav pieejams"
     },
     "bird": {
       "title": "Putnu noteikšana",
@@ -4715,5 +4785,122 @@
     "bannerMessage": "Konfigurācijas izmaiņām nepieciešama restartēšana:",
     "bannerAction": "Restartēt tagad",
     "restartFailed": "Neizdevās sākt restartēšanu"
+  },
+  "help": {
+    "title": "Palīdzība un atbalsts",
+    "subtitle": "Saņemiet palīdzību, ziņojiet par problēmām un sazinieties ar kopienu",
+    "reportBug": {
+      "description": "Ja saskaraties ar problēmu, vispirms atveriet kļūdas ziņojumu GitHub, lai aprakstītu problēmu, pēc tam izveidojiet atbalsta pakotni ar ziņojuma numuru, lai palīdzētu problēmu novēršanā."
+    },
+    "askQuestion": {
+      "description": "Vai jums ir jautājums par iestatīšanu, funkcijām vai lietošanu? GitHub Discussions forums ir labākā vieta, kur saņemt palīdzību no kopienas."
+    },
+    "diagnostics": {
+      "description": "Izveidojiet atbalsta pakotni, lai palīdzētu diagnosticēt problēmas. Tā saglabā jūsu sistēmas konfigurāciju un jaunākos žurnālus."
+    },
+    "quickLinks": {
+      "title": "Ātrās saites",
+      "releases": "Laidiena piezīmes"
+    }
+  },
+  "reportBug": {
+    "title": "Ziņot par kļūdu",
+    "subtitle": "Palīdziet mums novērst problēmas, sniedzot nepieciešamo informāciju",
+    "systemInfo": {
+      "title": "Jūsu sistēmas informācija",
+      "description": "Šī informācija palīdz identificēt jūsu iestatījumus. Kopējiet to kļūdas ziņojumā.",
+      "version": "Versija",
+      "buildDate": "Būvējuma datums",
+      "os": "Operētājsistēma",
+      "copy": "Kopēt starpliktuvē",
+      "copied": "Nokopēts!",
+      "architecture": "Arhitektūra",
+      "hardware": "Aparatūra",
+      "environment": "Vide"
+    },
+    "whatToInclude": {
+      "title": "Ko iekļaut ziņojumā",
+      "description": "Labs kļūdas ziņojums palīdz ātri atrisināt jūsu problēmu. Lūdzu, iekļaujiet šādu informāciju:",
+      "step1": {
+        "title": "Skaidrs problēmas apraksts",
+        "description": "Kas notika, ko jūs gaidījāt un kā problēmu reproducēt."
+      },
+      "step2": {
+        "title": "Jūsu instalācijas metode",
+        "description": "Kā jūs instalējāt BirdNET-Go: install.sh skripts, Docker Compose, manuāla būvēšana vai cits."
+      },
+      "step3": {
+        "title": "Sistēmas informācija",
+        "description": "Nokopējiet iepriekš redzamos sistēmas datus, ieskaitot versiju, OS un būvējuma datumu."
+      },
+      "step4": {
+        "title": "Atbalsta pakotne",
+        "description": "Izveidojiet un augšupielādējiet atbalsta pakotni zemāk. Tā saglabā žurnālus un konfigurāciju, kas ievērojami paātrina problēmu novēršanu."
+      }
+    },
+    "openIssue": {
+      "title": "Atvērt GitHub ziņojumu",
+      "description": "Atveriet ziņojumu GitHub, lai aprakstītu problēmu. Ziņojuma numurs būs nepieciešams nākamajā solī.",
+      "button": "Atvērt ziņojumu GitHub"
+    },
+    "supportDump": {
+      "title": "Izveidot atbalsta pakotni",
+      "description": "Pēc ziņojuma izveidošanas izveidojiet atbalsta pakotni un ievadiet GitHub ziņojuma numuru. Tas savieno diagnostiku ar kļūdas ziņojumu un palīdz problēmu novēršanā."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
+    "runDiagnostics": "Run Diagnostics",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Biežākās kļūdas",
+      "errorCount": "Skaits",
+      "errorComponent": "Komponents",
+      "errorLevel": "Līmenis",
+      "errorMessage": "Ziņojums"
+    }
   }
 }

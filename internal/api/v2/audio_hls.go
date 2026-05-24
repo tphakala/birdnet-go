@@ -326,7 +326,11 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 		logger.Bool("force_restart", forceRestart))
 
 	// Verify source exists by checking for a capture buffer
-	if _, bufErr := c.engine.BufferManager().CaptureBuffer(sourceID); bufErr != nil {
+	eng := c.engine.Load()
+	if eng == nil {
+		return c.HandleError(ctx, nil, "Audio engine not initialized", http.StatusServiceUnavailable)
+	}
+	if _, bufErr := eng.BufferManager().CaptureBuffer(sourceID); bufErr != nil {
 		return c.HandleError(ctx, nil, "Audio source not found", http.StatusNotFound)
 	}
 
@@ -1592,14 +1596,20 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 		channels: 1,
 	}
 
+	// Load the engine once for all registry/router operations in this section.
+	eng := c.engine.Load()
+	if eng == nil {
+		return nil, nil, fmt.Errorf("audio engine not initialized")
+	}
+
 	// Look up per-source gain from the registry so HLS listeners
 	// hear the same gain-adjusted audio as the analysis pipeline.
-	gainDB, _ := c.engine.Registry().GetGain(sourceID)
+	gainDB, _ := eng.Registry().GetGain(sourceID)
 
 	// Resolve EQ filter chain for this source so HLS listeners
 	// hear the same filtered audio as the analysis pipeline.
 	settings := conf.Setting()
-	src, _ := c.engine.Registry().Get(sourceID)
+	src, _ := eng.Registry().Get(sourceID)
 	sourceName := sourceID
 	if src != nil {
 		sourceName = src.DisplayName
@@ -1608,14 +1618,14 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	eqChain := equalizer.BuildFilterChainWithOverride(override, settings.Realtime.Audio.Equalizer, sourceName, sampleRate)
 
 	// Add route on the AudioRouter
-	if routeErr := c.engine.Router().AddRoute(sourceID, consumer, sampleRate, gainDB, eqChain); routeErr != nil {
+	if routeErr := eng.Router().AddRoute(sourceID, consumer, sampleRate, gainDB, eqChain); routeErr != nil {
 		return nil, nil, fmt.Errorf("failed to add HLS route: %w", routeErr)
 	}
 
 	GetLogger().Debug("Registered HLS audio route", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.String("consumer_id", consumerID))
 
 	cleanup = func() {
-		c.engine.Router().RemoveRoute(sourceID, consumerID)
+		eng.Router().RemoveRoute(sourceID, consumerID)
 		GetLogger().Debug("Removed HLS audio route", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.String("consumer_id", consumerID))
 	}
 

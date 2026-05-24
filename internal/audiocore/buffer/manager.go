@@ -110,6 +110,14 @@ func (m *Manager) AllocateCapture(sourceID string, durationSeconds, sampleRate, 
 	return nil
 }
 
+// DeallocateAnalysis removes the AnalysisBuffer for a single (sourceID,
+// modelID) pair. It is a no-op if no buffer exists for that key.
+func (m *Manager) DeallocateAnalysis(sourceID, modelID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.analysisBuffers, bufferKey{sourceID: sourceID, modelID: modelID})
+}
+
 // DeallocateSource removes all AnalysisBuffers (across all models) and the
 // CaptureBuffer for the given sourceID in a single atomic operation. It is
 // safe to call for sourceIDs that were never allocated; the method is a no-op
@@ -217,6 +225,30 @@ func (m *Manager) BytePoolFor(size int) *BytePool {
 	}
 	m.bytePools[size] = pool
 	return pool
+}
+
+// CaptureBufferHealth holds a snapshot of a single capture buffer's status.
+type CaptureBufferHealth struct {
+	SourceID    string
+	Capacity    int
+	Initialized bool
+}
+
+// CaptureBufferHealthAll returns status snapshots for every allocated
+// capture buffer. The returned slice is safe to read without further locking.
+func (m *Manager) CaptureBufferHealthAll() []CaptureBufferHealth {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	infos := make([]CaptureBufferHealth, 0, len(m.captureBuffers))
+	for sourceID, cb := range m.captureBuffers {
+		infos = append(infos, CaptureBufferHealth{
+			SourceID:    sourceID,
+			Capacity:    cb.Capacity(),
+			Initialized: cb.Initialized(),
+		})
+	}
+	return infos
 }
 
 // Float64PoolFor returns a Float64Pool for the given slice length, creating

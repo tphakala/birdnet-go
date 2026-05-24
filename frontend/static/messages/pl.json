@@ -228,7 +228,16 @@
     "analyticsSubmenu": "Podmenu analityki",
     "settingsSubmenu": "Podmenu ustawień",
     "systemSubmenu": "Podmenu systemu",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Pomoc",
+    "helpSubmenu": "Podmenu pomocy",
+    "helpAndSupport": "Pomoc i wsparcie",
+    "reportBug": "Zgłoś błąd",
+    "askQuestion": "Zadaj pytanie",
+    "reportBugAriaLabel": "Zgłoś błąd na GitHubie (otwiera się w nowym oknie)",
+    "askQuestionAriaLabel": "Zadaj pytanie na GitHub Discussions (otwiera się w nowym oknie)",
+    "viewOnGithubAriaLabel": "Zobacz BirdNET-Go na GitHubie (otwiera się w nowym oknie)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -425,6 +434,10 @@
       "buffer": {
         "overloadTitle": "Analiza dźwięku przeciążona",
         "overloadMessage": "System odrzuca {dropRate} % próbek dźwięku ze źródła '{sourceName}', ponieważ nie nadąża z analizą. Zmniejsz wartość nakładania BirdNET w ustawieniach wykrywania lub rozważ wymianę procesora na szybszy."
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime niedostępny",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} jest wymagany dla {modelName}, ale nie został znaleziony. Zobacz przewodnik instalacji: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -924,7 +937,10 @@
     "aria": {
       "loading": "Ładowanie szczegółów detekcji...",
       "loaded": "Szczegóły detekcji załadowane dla {species}",
-      "error": "Błąd ładowania detekcji: {error}"
+      "error": "Błąd ładowania detekcji: {error}",
+      "loadingResults": "Ładowanie {count} wyników...",
+      "thumbnailLoading": "Ładowanie miniatury {species}...",
+      "thumbnailLoaded": "Miniatura {species} załadowana"
     },
     "errors": {
       "notFound": "Nie znaleziono detekcji. Mogła zostać usunięta lub identyfikator jest nieprawidłowy.",
@@ -2998,6 +3014,7 @@
         "unknown": "nieznany",
         "refresh": "Odśwież",
         "addStream": "Dodaj Strumień",
+        "testRequired": "Przeprowadź udany test strumienia przed zapisaniem",
         "deleteConfirm": "Usunąć ten strumień?",
         "restartCount": "Zrestartowano {count} raz(y)",
         "healthLoadError": "Nie udało się załadować statusu strumienia",
@@ -3050,6 +3067,18 @@
           "degraded": "Pogorszone",
           "failed": "Nieudane",
           "unknown": "Nieznany"
+        },
+        "test": {
+          "button": "Testuj strumień",
+          "probing": "Testowanie...",
+          "result": "Wynik testu",
+          "error": "Test nieudany",
+          "batCompatible": "Kompatybilny z nietoperzami",
+          "batIncompatible": "Niekompatybilny z nietoperzami"
+        },
+        "batWarning": "Modele nietoperzy wymagają strumieni z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz. Użyj przycisku Testuj strumień powyżej, aby sprawdzić kompatybilność.",
+        "codecWarning": {
+          "lossy": "Stratne kodeki (AAC, Opus, MP3) niszczą częstotliwości ultradźwiękowe powyżej ~20 kHz, przez co strumień jest nieodpowiedni do wykrywania nietoperzy."
         }
       },
       "audioFilters": {
@@ -3225,6 +3254,10 @@
         "devicesLoadFailed": "Nie udało się załadować urządzeń audio. Proszę sprawdzić uprawnienia systemowe.",
         "invalidBitrate": "Nieprawidłowa wartość bitrate",
         "invalidRetentionPolicy": "Nieprawidłowa polityka retencji"
+      },
+      "models": {
+        "recommendBoth": "Dla najlepszego pokrycia wykrywania gatunków zaleca się uruchamianie zarówno modelu BirdNET, jak i Perch jednocześnie.",
+        "perchOnlyWarning": "Sam Perch produkuje mniej wykryć. Obniż próg pewności do 0.50, aby uzyskać znaczące wyniki, lub włącz BirdNET obok Perch dla lepszego pokrycia."
       }
     },
     "security": {
@@ -4200,7 +4233,31 @@
       "playbackSpeed": "Prędkość odtwarzania",
       "speed": "Prędkość",
       "loop": "Przełącz pętlę",
-      "player": "Odtwarzacz audio"
+      "player": "Odtwarzacz audio",
+      "autoplayBlocked": "Kliknij, aby odtworzyć (autoodtwarzanie zablokowane)",
+      "hlsNotSupported": "Odtwarzanie HLS nie jest obsługiwane w tej przeglądarce",
+      "streamStarting": "Uruchamianie strumienia audio...",
+      "levelFor": "Poziom dźwięku dla {source}",
+      "levelForNoSource": "Poziom dźwięku: brak źródła",
+      "noSource": "Brak źródła",
+      "levelAnnouncement": "Aktualny poziom dźwięku: {level} procent",
+      "levelAnnouncementClipping": "Aktualny poziom dźwięku: {level} procent, wykryto przesterowanie",
+      "sourceSelection": "Wybór źródła dźwięku",
+      "sources": "Źródła dźwięku",
+      "noSourcesAvailable": "Brak dostępnych źródeł dźwięku",
+      "silent": "(cisza)",
+      "stopPlayback": "Zatrzymaj odtwarzanie audio",
+      "startPlayback": "Rozpocznij odtwarzanie audio",
+      "nowPlaying": "Odtwarzanie audio z {source}",
+      "nowPlayingNoSource": "Odtwarzanie audio",
+      "playbackStopped": "Odtwarzanie audio zatrzymane",
+      "loginRequired": "Wymagane logowanie, aby strumieniować audio",
+      "streamError": "Błąd uruchamiania strumienia",
+      "streamTitle": "Strumień audio ptaków - {source}",
+      "streamTitleDefault": "Strumień audio ptaków",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Transmisja na żywo",
+      "playbackError": "Błąd odtwarzania: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram jeszcze niegenerowany",
@@ -4425,6 +4482,16 @@
       "hostRequired": "Parametr hosta jest wymagany",
       "invalidHost": "Nieprawidłowy parametr hosta",
       "rateLimit": "Zbyt wiele prób połączenia ze strumieniem powiadomień, poczekaj chwilę przed ponowną próbą"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Nieprawidłowa treść żądania",
+        "urlRequired": "Adres URL strumienia jest wymagany",
+        "invalidUrl": "Nieprawidłowy format URL. Wprowadź pełny URL, np. rtsp://host:port/ścieżka",
+        "unsupportedScheme": "Nieobsługiwany schemat URL \"{scheme}\". Użyj rtsp, rtsps, http, https, rtmp lub udp",
+        "blockedDestination": "Ten cel jest zablokowany ze względów bezpieczeństwa",
+        "connectionFailed": "Nie udało się połączyć ze strumieniem. Sprawdź, czy URL jest poprawny i strumień jest dostępny"
+      }
     },
     "debug": {
       "notEnabled": "Tryb debugowania nie jest włączony"
@@ -4690,7 +4757,10 @@
       "reinstall": "Zainstaluj ponownie",
       "reinstalling": "Ponowna instalacja...",
       "reinstallComplete": "Pliki zweryfikowane pomyślnie",
-      "geomodelBadge": "Zawiera BirdNET v3.0 geomodel"
+      "geomodelBadge": "Zawiera BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Wymaga ONNX Runtime, który nie jest dostępny w tym systemie.",
+      "onnxRuntimeMissing": "ONNX Runtime nie jest dostępny. Ten model nie może działać.",
+      "unavailable": "Niedostępne"
     },
     "bird": {
       "title": "Bird Detection",
@@ -4715,5 +4785,122 @@
     "bannerMessage": "Zmiany konfiguracji wymagają ponownego uruchomienia:",
     "bannerAction": "Uruchom ponownie teraz",
     "restartFailed": "Nie udało się zainicjować ponownego uruchomienia"
+  },
+  "help": {
+    "title": "Pomoc i wsparcie",
+    "subtitle": "Uzyskaj pomoc, zgłoś problemy i połącz się ze społecznością",
+    "reportBug": {
+      "description": "Jeśli napotkasz problem, otwórz najpierw zgłoszenie błędu na GitHubie, aby opisać problem, a następnie wygeneruj pakiet wsparcia z numerem zgłoszenia, aby pomóc w diagnostyce."
+    },
+    "askQuestion": {
+      "description": "Masz pytanie dotyczące konfiguracji, funkcji lub użytkowania? Forum GitHub Discussions to najlepsze miejsce, aby uzyskać pomoc od społeczności."
+    },
+    "diagnostics": {
+      "description": "Wygeneruj pakiet wsparcia, aby pomóc w diagnozowaniu problemów. Przechwytuje konfigurację systemu i ostatnie logi."
+    },
+    "quickLinks": {
+      "title": "Szybkie linki",
+      "releases": "Informacje o wydaniu"
+    }
+  },
+  "reportBug": {
+    "title": "Zgłoś błąd",
+    "subtitle": "Pomóż nam naprawić problemy, dostarczając potrzebne informacje",
+    "systemInfo": {
+      "title": "Informacje o systemie",
+      "description": "Te informacje pomagają zidentyfikować twoją konfigurację. Skopiuj je do zgłoszenia błędu.",
+      "version": "Wersja",
+      "buildDate": "Data kompilacji",
+      "os": "System operacyjny",
+      "copy": "Kopiuj do schowka",
+      "copied": "Skopiowano!",
+      "architecture": "Architektura",
+      "hardware": "Sprzęt",
+      "environment": "Środowisko"
+    },
+    "whatToInclude": {
+      "title": "Co zawrzeć w zgłoszeniu",
+      "description": "Dobre zgłoszenie błędu pomaga nam szybko rozwiązać problem. Podaj następujące informacje:",
+      "step1": {
+        "title": "Jasny opis problemu",
+        "description": "Co się stało, czego oczekiwałeś i jak odtworzyć problem."
+      },
+      "step2": {
+        "title": "Metoda instalacji",
+        "description": "Jak zainstalowałeś BirdNET-Go: skrypt install.sh, Docker Compose, ręczna kompilacja lub inaczej."
+      },
+      "step3": {
+        "title": "Informacje o systemie",
+        "description": "Skopiuj szczegóły systemu wyświetlone powyżej, w tym wersję, system operacyjny i datę kompilacji."
+      },
+      "step4": {
+        "title": "Pakiet wsparcia",
+        "description": "Wygeneruj i prześlij pakiet wsparcia poniżej. Przechwytuje logi i konfigurację, które znacząco przyspieszają rozwiązywanie problemów."
+      }
+    },
+    "openIssue": {
+      "title": "Otwórz zgłoszenie na GitHubie",
+      "description": "Otwórz zgłoszenie na GitHubie, aby opisać problem. Numer zgłoszenia będzie potrzebny w następnym kroku.",
+      "button": "Otwórz zgłoszenie na GitHubie"
+    },
+    "supportDump": {
+      "title": "Generuj pakiet wsparcia",
+      "description": "Po utworzeniu zgłoszenia wygeneruj pakiet wsparcia i wprowadź numer zgłoszenia GitHub. To powiąże diagnostykę ze zgłoszeniem błędu i pomoże w rozwiązaniu."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
+    "runDiagnostics": "Run Diagnostics",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Najczęstsze błędy",
+      "errorCount": "Liczba",
+      "errorComponent": "Komponent",
+      "errorLevel": "Poziom",
+      "errorMessage": "Wiadomość"
+    }
   }
 }

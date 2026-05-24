@@ -138,9 +138,16 @@ type BirdImageCache struct {
 	debug        bool
 	store        datastore.Interface
 	fileCache    *ImageFileCache
-	quit         chan struct{}                         // Channel to signal shutdown
-	closeMu      sync.Mutex                            // Guards closed + wg.Go atomicity in tryGo to prevent Add-after-Wait panic
-	closed       atomic.Bool                           // Set during shutdown to reject new DB operations
+	quit         chan struct{} // Channel to signal shutdown
+	closeMu      sync.Mutex    // Guards closed + wg.Go atomicity in tryGo to prevent Add-after-Wait panic
+	closed       atomic.Bool   // Set during shutdown to reject new DB operations
+	// dbCorrupted is latched the first time the datastore reports a SQLite
+	// corruption error ("database disk image is malformed"). Once latched,
+	// loadFromDBCache, saveToDB, fetchFromDBWithFallback and loadCachedImages
+	// all return ErrCacheMiss without touching the DB, so the cache continues
+	// to serve fresh fetches from the provider instead of generating an
+	// unbounded stream of Sentry events (Forgejo #762, BIRDNET-GO-ZR/ZS).
+	dbCorrupted  atomic.Bool
 	wg           sync.WaitGroup                        // Tracks in-flight DB and background operations
 	Initializing sync.Map                              // Track which species are being initialized
 	registry     atomic.Pointer[ImageProviderRegistry] // Use atomic pointer
@@ -387,6 +394,14 @@ func (c *BirdImageCache) refreshStaleEntries() {
 		return
 	}
 
+	// Skip the hourly refresh once the DB has been latched corrupted; otherwise
+	// the ticker would keep emitting one Sentry event per hour for the lifetime
+	// of the process (Forgejo #762).
+	if c.dbCorrupted.Load() {
+		log.Debug("Skipping cache refresh: image cache database is corrupted")
+		return
+	}
+
 	if c.store == nil {
 		log.Debug("DB store is nil, skipping cache refresh")
 		return
@@ -399,6 +414,11 @@ func (c *BirdImageCache) refreshStaleEntries() {
 
 	entries, err := c.store.GetAllImageCaches(c.providerName)
 	if err != nil {
+		// Latch on corruption so the refresh ticker stops issuing read errors
+		// (Forgejo #762).
+		if c.handleDBCorruption(err, "get_cached_entries_for_refresh") {
+			return
+		}
 		c.logRefreshError(err)
 		return
 	}
@@ -561,6 +581,13 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 		return
 	}
 
+	// Ensure ScientificName is populated from the request before persisting,
+	// mirroring storeSuccessfulFetch. Providers can return a BirdImage with an
+	// empty ScientificName, which would otherwise cause a NOT NULL constraint
+	// violation on image_caches.scientific_name during background refresh too
+	// (Forgejo #756 sibling-callsite fix).
+	birdImage.ScientificName = scientificName
+
 	// Update memory cache
 	log.Debug("Updating memory cache with refreshed image")
 	c.dataMap.Store(scientificName, &birdImage)
@@ -602,7 +629,7 @@ func (c *BirdImageCache) tryRefreshFallback(scientificName string) (BirdImage, b
 	}
 
 	// Tier 1: Check fallback providers' DB cache (no network)
-	if c.store != nil && !c.closed.Load() {
+	if c.store != nil && !c.closed.Load() && !c.dbCorrupted.Load() {
 		for _, providerName := range fallbackProviders {
 			if providerName == c.providerName {
 				continue
@@ -612,7 +639,14 @@ func (c *BirdImageCache) tryRefreshFallback(scientificName string) (BirdImage, b
 				ProviderName:   providerName,
 			}
 			cachedImage, err := c.store.GetImageCache(query)
-			if err != nil || cachedImage == nil {
+			if err != nil {
+				// Latch on corruption and stop trying further fallback DBs.
+				if c.handleDBCorruption(err, "tier1_fallback_lookup") {
+					break
+				}
+				continue
+			}
+			if cachedImage == nil {
 				continue
 			}
 			img := dbEntryToBirdImage(cachedImage)
@@ -721,6 +755,42 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 	return cache
 }
 
+// handleDBCorruption inspects err for SQLite corruption ("database disk image
+// is malformed", "file is not a database", etc.) and, the first time it is
+// seen, latches the dbCorrupted flag so subsequent DB operations short-circuit
+// instead of repeatedly failing. Returns true when corruption is detected so
+// callers can treat the read/write as a cache miss without surfacing further
+// errors.
+//
+// Why latch instead of recover: the image cache shares the main SQLite file
+// in v2-only mode, so we cannot safely DROP or recreate the table from here.
+// A latch keeps the service healthy (fresh fetches from the provider) and
+// stops a single bad file from generating thousands of Sentry events
+// (Forgejo #762: 1,763 events from one corrupted system over 2+ months).
+func (c *BirdImageCache) handleDBCorruption(err error, operation string) bool {
+	if !datastore.IsDatabaseCorruption(err) {
+		return false
+	}
+	if c.dbCorrupted.CompareAndSwap(false, true) {
+		log := GetLogger().With(
+			logger.String("provider", c.providerName),
+			logger.String("operation", operation))
+		enhancedErr := errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryImageCache).
+			Context("provider", c.providerName).
+			Context("operation", operation).
+			Context("recovery_action", "image_cache_db_disabled_for_session").
+			Build()
+		log.Error("Image cache database is corrupted, disabling further DB operations for this session",
+			logger.Error(enhancedErr))
+		if c.metrics != nil {
+			c.metrics.IncrementDownloadErrorsWithCategory("image-cache", c.providerName, "db_corruption")
+		}
+	}
+	return true
+}
+
 // loadFromDBCache loads a BirdImage from the database cache
 func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, error) {
 	log := GetLogger().With(
@@ -730,6 +800,11 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 	// Reject DB reads after shutdown to avoid "database is closed" errors
 	if c.closed.Load() {
 		log.Debug("Skipping DB load: cache is shutting down")
+		return nil, ErrCacheMiss
+	}
+	// Skip DB reads once corruption has been detected to avoid Sentry spam.
+	if c.dbCorrupted.Load() {
+		log.Debug("Skipping DB load: image cache database is corrupted")
 		return nil, ErrCacheMiss
 	}
 	// Check if store is nil to prevent nil pointer dereference
@@ -750,6 +825,11 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 		// Check if it's a record not found error (which is expected for cache misses)
 		if errors.Is(err, datastore.ErrImageCacheNotFound) {
 			log.Debug("Image not found in DB cache (GetImageCache returned ErrImageCacheNotFound)")
+			return nil, ErrCacheMiss
+		}
+		// Treat SQLite corruption as a permanent cache miss and disable future
+		// DB reads/writes for this session (Forgejo #762).
+		if c.handleDBCorruption(err, "query_image_cache") {
 			return nil, ErrCacheMiss
 		}
 		// Log database errors for other errors
@@ -820,6 +900,11 @@ func (c *BirdImageCache) fetchFromDBWithFallback(scientificNames []string) (map[
 		log.Debug("Skipping batch DB load: cache is shutting down")
 		return nil, ErrCacheMiss
 	}
+	// Skip batch reads once corruption has been detected (Forgejo #762).
+	if c.dbCorrupted.Load() {
+		log.Debug("Skipping batch DB load: image cache database is corrupted")
+		return nil, ErrCacheMiss
+	}
 
 	settings := conf.Setting()
 	debug := settings.Realtime.Dashboard.Thumbnails.Debug
@@ -832,6 +917,9 @@ func (c *BirdImageCache) fetchFromDBWithFallback(scientificNames []string) (map[
 
 	dbImages, err := c.store.GetImageCacheBatch(c.providerName, scientificNames)
 	if err != nil {
+		if c.handleDBCorruption(err, "get_image_cache_batch") {
+			return nil, ErrCacheMiss
+		}
 		log.Error("Failed to batch load from DB cache",
 			logger.Error(err))
 		return nil, err
@@ -858,6 +946,10 @@ func (c *BirdImageCache) tryBatchFallbackProviders(scientificNames []string, deb
 	if c.closed.Load() {
 		return nil
 	}
+	// Skip fallback DB lookups once corruption is latched (Forgejo #762).
+	if c.dbCorrupted.Load() {
+		return nil
+	}
 
 	settings := conf.Setting()
 
@@ -877,7 +969,15 @@ func (c *BirdImageCache) tryBatchFallbackProviders(scientificNames []string, deb
 			continue
 		}
 		fallbackImages, err := c.store.GetImageCacheBatch(fallbackProvider, scientificNames)
-		if err == nil && len(fallbackImages) > 0 {
+		if err != nil {
+			// Stop iterating fallbacks if the DB is corrupted; the next batch
+			// query would also fail and inflate the corruption metric.
+			if c.handleDBCorruption(err, "batch_fallback_lookup") {
+				return nil
+			}
+			continue
+		}
+		if len(fallbackImages) > 0 {
 			if debug {
 				log.Debug("Found images using fallback provider",
 					logger.String("fallback_provider", fallbackProvider),
@@ -930,6 +1030,11 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 		log.Debug("Skipping DB save: cache is shutting down")
 		return
 	}
+	// Skip DB writes once corruption has been detected to avoid Sentry spam.
+	if c.dbCorrupted.Load() {
+		log.Debug("Skipping DB save: image cache database is corrupted")
+		return
+	}
 	// Check if store is nil
 	if c.store == nil {
 		log.Warn("Cannot save to DB cache: DB store is nil")
@@ -978,6 +1083,11 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 	}
 
 	if err := c.store.SaveImageCache(dbEntry); err != nil {
+		// SQLite corruption is permanent at this point; latch the flag so
+		// future saves short-circuit rather than re-reporting (Forgejo #762).
+		if c.handleDBCorruption(err, "save_image_cache") {
+			return
+		}
 		enhancedErr := errors.New(err).
 			Component("imageprovider").
 			Category(errors.CategoryImageCache).
@@ -1010,6 +1120,11 @@ func (c *BirdImageCache) loadCachedImages() error {
 
 	entries, err := c.store.GetAllImageCaches(c.providerName) // Get entries specific to this provider
 	if err != nil {
+		// On corruption at startup, latch the flag and skip the warmup load
+		// without surfacing an error so init can still complete (Forgejo #762).
+		if c.handleDBCorruption(err, "get_all_image_caches") {
+			return nil
+		}
 		enhancedErr := errors.New(err).
 			Component("imageprovider").
 			Category(errors.CategoryImageCache).
@@ -1447,6 +1562,12 @@ func (c *BirdImageCache) storeSuccessfulFetch(scientificName string, fetchedImag
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
 
+	// Ensure ScientificName is populated from the request before persisting,
+	// mirroring storeNegativeCacheEntry. Some providers return a BirdImage with
+	// an empty ScientificName, which would otherwise cause a NOT NULL constraint
+	// violation on image_caches.scientific_name when saved via the fetch path
+	// (Forgejo #756).
+	fetchedImage.ScientificName = scientificName
 	fetchedImage.CachedAt = time.Now()
 	fetchedImage.SourceProvider = c.providerName
 	log.Debug("Image successfully fetched from provider", logger.String("url", fetchedImage.URL))
@@ -1481,7 +1602,12 @@ func (c *BirdImageCache) downloadImageToFileCache(scientificName string, img *Bi
 	}
 
 	if _, _, err := c.fileCache.DownloadAndStore(context.Background(), provider, scientificName, img.URL); err != nil {
-		log.Warn("Failed to download image to file cache", logger.Error(err))
+		// File cache populates lazily; the image is already in the in-memory and
+		// DB caches, so a download failure here just means the proxy will refetch
+		// on the next request. Logged at info to keep the diagnostics health
+		// check from flagging an "elevated error count" on transient upstream
+		// failures (404s, throttling, etc.).
+		log.Info("Failed to download image to file cache", logger.Error(err))
 		return
 	}
 	log.Debug("Image downloaded to file cache")
@@ -1603,14 +1729,16 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 		// to avoid the fallback chain and potential infinite loop
 		img, err := cache.fetchAndStore(scientificName)
 		if err != nil {
-			if !errors.Is(err, ErrImageNotFound) {
-				// Transient/real error — do NOT mark species exhausted.
+			if errors.Is(err, ErrImageNotFound) {
+				log.Info("Fallback provider has no image",
+					logger.String("provider", name),
+					logger.String("species", scientificName))
+			} else {
 				allFallbacksNotFound = false
+				log.Warn("Fallback provider failed to get image",
+					logger.String("provider", name),
+					logger.Error(err))
 			}
-			// Log error but continue trying other fallbacks
-			log.Warn("Fallback provider failed to get image",
-				logger.String("provider", name),
-				logger.Error(err))
 			return true // Continue ranging
 		}
 

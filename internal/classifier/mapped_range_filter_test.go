@@ -7,26 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExtractScientificName(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		label    string
-		expected string
-	}{
-		{"Turdus merula_Common Blackbird", "Turdus merula"},
-		{"Parus major_Great Tit", "Parus major"},
-		{"NoUnderscore", "NoUnderscore"},
-		{"Sci_Common_Extra", "Sci"},
-		{"", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.expected, extractScientificName(tt.label))
-		})
-	}
-}
-
 func TestBuildSpeciesMapping(t *testing.T) {
 	t.Parallel()
 

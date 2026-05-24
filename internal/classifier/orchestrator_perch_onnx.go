@@ -22,6 +22,18 @@ func (o *Orchestrator) loadPerch(threads int) error {
 		}
 	}
 
+	if modelPath == "" || labelPath == "" {
+		return errors.Newf("Perch v2 model files not installed or configured").
+			Component("classifier.orchestrator").
+			Category(errors.CategoryModelInit).
+			Context("model", "Perch_V2").
+			Build()
+	}
+
+	if err := checkORTOrFail(o.Settings.BirdNET.ONNXRuntimePath, "Perch v2", "Perch_V2", "classifier.orchestrator"); err != nil {
+		return err
+	}
+
 	cfg := PerchConfig{
 		ModelPath:       modelPath,
 		LabelPath:       labelPath,

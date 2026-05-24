@@ -261,6 +261,115 @@ func TestService_CreateWithMetadata_WithFailingStore(t *testing.T) {
 	assert.NotEmpty(t, err.Error(), "Error should have a meaningful message")
 }
 
+func TestCreateWithMetadata_PushTarget_SkipsStore(t *testing.T) {
+	t.Parallel()
+
+	service := createTestService()
+
+	notif := NewNotification(TypeDetection, PriorityHigh, "Push Only", "Should not be stored").
+		WithDeliveryTarget(DeliveryTargetPush)
+
+	err := service.CreateWithMetadata(notif)
+	require.NoError(t, err)
+
+	_, err = service.Get(notif.ID)
+	assert.Error(t, err, "push-only notification should not be in store")
+}
+
+func TestCreateWithMetadata_BellTarget_SavesAndBroadcasts(t *testing.T) {
+	t.Parallel()
+
+	service := createTestService()
+	ch, _ := service.Subscribe()
+	defer service.Unsubscribe(ch)
+
+	notif := NewNotification(TypeDetection, PriorityHigh, "Bell Only", "Should be stored").
+		WithDeliveryTarget(DeliveryTargetBell)
+
+	err := service.CreateWithMetadata(notif)
+	require.NoError(t, err)
+
+	stored, err := service.Get(notif.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Bell Only", stored.Title)
+
+	select {
+	case received := <-ch:
+		assert.Equal(t, notif.ID, received.ID)
+	case <-time.After(100 * time.Millisecond):
+		require.Fail(t, "bell notification should be broadcast")
+	}
+}
+
+func TestCreateWithMetadata_NoTarget_SavesAndBroadcasts(t *testing.T) {
+	t.Parallel()
+
+	service := createTestService()
+
+	notif := NewNotification(TypeInfo, PriorityLow, "Default", "Backwards compat")
+
+	err := service.CreateWithMetadata(notif)
+	require.NoError(t, err)
+
+	stored, err := service.Get(notif.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Default", stored.Title)
+}
+
+func TestCreateWithMetadata_PushTarget_StillBroadcasts(t *testing.T) {
+	t.Parallel()
+
+	service := createTestService()
+	ch, _ := service.Subscribe()
+	defer service.Unsubscribe(ch)
+
+	notif := NewNotification(TypeDetection, PriorityHigh, "Push Broadcast", "Should reach subscribers").
+		WithDeliveryTarget(DeliveryTargetPush)
+
+	err := service.CreateWithMetadata(notif)
+	require.NoError(t, err)
+
+	select {
+	case received := <-ch:
+		assert.Equal(t, notif.ID, received.ID)
+	case <-time.After(100 * time.Millisecond):
+		require.Fail(t, "push notification should still be broadcast to subscribers")
+	}
+}
+
+func TestClone_PreservesDeliveryTarget(t *testing.T) {
+	t.Parallel()
+
+	original := NewNotification(TypeDetection, PriorityHigh, "Test", "Clone test").
+		WithDeliveryTarget(DeliveryTargetPush)
+
+	clone := original.Clone()
+
+	assert.Equal(t, DeliveryTargetPush, clone.DeliveryTarget, "Clone must preserve DeliveryTarget")
+}
+
+func TestCreateWithMetadata_PushTarget_BroadcastPreservesTarget(t *testing.T) {
+	t.Parallel()
+
+	service := createTestService()
+	ch, _ := service.Subscribe()
+	defer service.Unsubscribe(ch)
+
+	notif := NewNotification(TypeDetection, PriorityHigh, "Push Via Broadcast", "Should preserve target").
+		WithDeliveryTarget(DeliveryTargetPush)
+
+	err := service.CreateWithMetadata(notif)
+	require.NoError(t, err)
+
+	select {
+	case received := <-ch:
+		assert.Equal(t, DeliveryTargetPush, received.DeliveryTarget,
+			"broadcast must preserve DeliveryTarget through Clone")
+	case <-time.After(100 * time.Millisecond):
+		require.Fail(t, "should have received notification")
+	}
+}
+
 // Benchmark for CreateWithMetadata performance
 func BenchmarkService_CreateWithMetadata(b *testing.B) {
 	config := &ServiceConfig{

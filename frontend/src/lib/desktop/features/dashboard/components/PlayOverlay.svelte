@@ -82,6 +82,7 @@
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
   const MAX_AUDIO_RETRIES = 3;
   const AUDIO_RETRY_DELAYS = [1000, 2000, 4000];
+  const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
 
   // Web Audio API
   let audioContext: AudioContext | null = null;
@@ -266,7 +267,7 @@
 
   // Seek to position when clicking on the overlay area
   function handleSeek(event: MouseEvent) {
-    if (!audioElement || !overlayElement || duration === 0) return;
+    if (!audioElement || !overlayElement || !isFinite(duration) || duration <= 0) return;
 
     const rect = overlayElement.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
@@ -365,10 +366,12 @@
       canplayTimeoutId = undefined;
     }
 
+    const isPermanentError = audioElement?.error?.code === MEDIA_ERR_SRC_NOT_SUPPORTED;
+
     // Retry transparently if user initiated play and retries remain.
     // This handles the case where the audio clip is still being written
     // to disk when the user clicks play on a freshly detected species.
-    if (isLoading && audioRetryCount < MAX_AUDIO_RETRIES) {
+    if (isLoading && !isPermanentError && audioRetryCount < MAX_AUDIO_RETRIES) {
       const delay = AUDIO_RETRY_DELAYS[Math.min(audioRetryCount, AUDIO_RETRY_DELAYS.length - 1)];
       audioRetryCount++;
       logger.debug('Audio load failed, retrying', {
@@ -445,7 +448,8 @@
 
         // Stop audio playback to prevent resource leaks
         audioElement.pause();
-        audioElement.src = '';
+        audioElement.removeAttribute('src');
+        audioElement.load();
       }
 
       // Clean up Web Audio API using shared utilities
@@ -475,7 +479,7 @@
   aria-valuetext={`${formatTime(currentTime)} of ${formatTime(duration)}`}
   onmousedown={handleMouseDown}
   onkeydown={e => {
-    if (!audioElement || duration === 0) return;
+    if (!audioElement || !isFinite(duration) || duration <= 0) return;
     const SMALL_SKIP = 5;
     const LARGE_SKIP = 10;
 

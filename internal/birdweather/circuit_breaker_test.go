@@ -240,3 +240,83 @@ func TestBwClient_CircuitBreaker_NotFoundDoesNotTrip(t *testing.T) {
 	assert.Equal(t, notification.StateClosed, client.CircuitBreakerState(),
 		"CategoryNotFound (species validation) must not trip the circuit breaker")
 }
+
+// TestBwClient_Status verifies the Status method maps circuit breaker states
+// to the expected (connected, message) pairs used by health checks.
+func TestBwClient_Status(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		cbState       notification.CircuitState
+		failures      int
+		wantConnected bool
+		wantContains  string
+	}{
+		{
+			name:          "closed circuit reports connected",
+			cbState:       notification.StateClosed,
+			failures:      0,
+			wantConnected: true,
+			wantContains:  "connected",
+		},
+		{
+			name:          "open circuit reports disconnected",
+			cbState:       notification.StateOpen,
+			failures:      5,
+			wantConnected: false,
+			wantContains:  "circuit open",
+		},
+		{
+			name:          "half-open circuit reports recovering",
+			cbState:       notification.StateHalfOpen,
+			failures:      0,
+			wantConnected: false,
+			wantContains:  "recovering",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+			}))
+			defer server.Close()
+
+			cfg := newCBTestConfig()
+			client := newCBTestClient(t, server, cfg)
+
+			// Drive circuit breaker to desired state via failures.
+			if tt.cbState == notification.StateOpen || tt.cbState == notification.StateHalfOpen {
+				for range cfg.MaxFailures {
+					_ = client.PostDetection("1", "2024-01-01T00:00:00.000+0000", "Great Tit", "Parus major", 0.9)
+				}
+				// One more to trigger the open state.
+				_ = client.PostDetection("1", "2024-01-01T00:00:00.000+0000", "Great Tit", "Parus major", 0.9)
+				assert.Equal(t, notification.StateOpen, client.CircuitBreakerState())
+
+				if tt.cbState == notification.StateHalfOpen {
+					time.Sleep(cfg.Timeout + 10*time.Millisecond)
+				}
+			}
+
+			connected, msg := client.Status()
+			assert.Equal(t, tt.wantConnected, connected)
+			assert.Contains(t, msg, tt.wantContains)
+		})
+	}
+}
+
+// TestBwClient_Status_NilCircuitBreaker ensures Status() handles a nil
+// circuit breaker (legacy test construction paths) gracefully.
+func TestBwClient_Status_NilCircuitBreaker(t *testing.T) {
+	t.Parallel()
+
+	client := &BwClient{}
+	connected, msg := client.Status()
+
+	assert.True(t, connected)
+	assert.Contains(t, msg, "no circuit breaker")
+}

@@ -232,6 +232,10 @@ func (c *StreamConfig) sourceType() audiocore.SourceType {
 		return audiocore.SourceTypeRTMP
 	case "udp":
 		return audiocore.SourceTypeUDP
+	case "audio_card":
+		return audiocore.SourceTypeAudioCard
+	case "file":
+		return audiocore.SourceTypeFile
 	default:
 		return audiocore.SourceTypeUnknown
 	}
@@ -796,11 +800,16 @@ func (s *Stream) startProcess() error {
 		"-loglevel", logLevel,
 		"-vn",
 		"-f", format,
-		"-ar", sampleRate,
-		"-ac", numChannels,
-		"-hide_banner",
-		"pipe:1",
 	)
+
+	// Protocol-based streams (RTSP, HTTP, HLS, RTMP, UDP) negotiate audio
+	// parameters via SDP/headers. Only local sources need explicit values.
+	srcType := s.config.sourceType()
+	if srcType == audiocore.SourceTypeAudioCard || srcType == audiocore.SourceTypeFile || srcType == audiocore.SourceTypeUnknown {
+		args = append(args, "-ar", sampleRate, "-ac", numChannels)
+	}
+
+	args = append(args, "-hide_banner", "pipe:1")
 
 	s.cmd = exec.CommandContext(s.ctx, s.config.FFmpegPath, args...) //nolint:gosec // G204: FFmpegPath from validated settings, args built internally
 

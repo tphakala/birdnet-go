@@ -9,12 +9,15 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -65,6 +68,9 @@ type AudioPipelineService struct {
 	// goroutine). Without this, concurrent execution can cause duplicate
 	// source initialization and conflicting router states.
 	sourcesMu sync.Mutex
+
+	// audioLevelStats aggregates audio level measurements for periodic logging.
+	audioLevelStats *AudioLevelStats
 
 	// soundLevelMu guards soundLevelConsumers. It is held only while mutating
 	// the map; router and engine calls happen outside the critical section so
@@ -228,6 +234,10 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	proc.SetRegistry(p.engine.Registry())
 	proc.Start()
 
+	// Start periodic audio level stats logger.
+	p.audioLevelStats = NewAudioLevelStats()
+	p.audioLevelStats.Start()
+
 	// Add audio sources, register consumers, and start buffer monitors.
 	apiAudioLevelChan := p.apiService.AudioLevelChan()
 	sourceIDs := p.setupAudioSources(apiAudioLevelChan, "start")
@@ -300,8 +310,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			if ok && src.Type == audiocore.SourceTypeAudioCard {
 				return p.quietHoursScheduler.IsSoundCardSuppressed()
 			}
-			suppressed := p.quietHoursScheduler.GetSuppressedStreams()
-			return suppressed[sourceID]
+			return p.quietHoursScheduler.IsStreamSuppressed(sourceID)
 		},
 	}
 	p.watchdog = audiocore.NewLivenessWatchdog(
@@ -422,6 +431,11 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 	if p.quietHoursScheduler != nil {
 		p.quietHoursScheduler.Stop()
 		p.quietHoursScheduler = nil
+	}
+
+	// Stop audio level stats logger.
+	if p.audioLevelStats != nil {
+		p.audioLevelStats.Stop()
 	}
 
 	// Close done channel to signal restart loop and clip cleanup goroutines.
@@ -895,25 +909,20 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			modelInfos = primaryTargets
 		}
 
-		// Allocate analysis buffers for secondary models. The engine
-		// already allocates a buffer for the primary model in AddSource(),
-		// so only non-primary models need allocation here. Track which
-		// models have usable buffers so we only create targets for them.
+		// Ensure analysis buffers exist for all target models. The engine
+		// pre-allocates the primary model's buffer in AddSource(), so it
+		// usually exists already. Use HasAnalysis for all models uniformly
+		// to handle the case where a prior model-change reconfigure
+		// deallocated a buffer that is now needed again.
 		allocatedModels := make(map[string]bool, len(modelInfos))
-		allocatedModels[primaryInfo.ID] = true // pre-allocated by engine
 		for i := range modelInfos {
-			if modelInfos[i].ID == primaryInfo.ID {
-				continue
-			}
-			// If the analysis buffer already exists (e.g., gain-only reconfigure),
-			// skip allocation and mark the model as usable.
 			if bufMgr.HasAnalysis(sid, modelInfos[i].ID) {
 				allocatedModels[modelInfos[i].ID] = true
 				continue
 			}
 			clipBytes, overlapBytes, readSize := modelInfos[i].Spec.BufferDimensions()
 			if allocErr := bufMgr.AllocateAnalysis(sid, modelInfos[i].ID, clipBytes, overlapBytes, readSize); allocErr != nil {
-				log.Warn("failed to allocate analysis buffer for secondary model",
+				log.Warn("failed to allocate analysis buffer",
 					logger.String("source_id", sid),
 					logger.String("model_id", modelInfos[i].ID),
 					logger.Error(allocErr),
@@ -921,7 +930,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				continue
 			}
 			allocatedModels[modelInfos[i].ID] = true
-			log.Info("allocated analysis buffer for secondary model",
+			log.Info("allocated analysis buffer",
 				logger.String("source_id", sid),
 				logger.String("model_id", modelInfos[i].ID),
 				logger.Int("clip_bytes", clipBytes),
@@ -937,6 +946,18 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				targets = append(targets, ModelTarget{ModelID: modelInfos[i].ID, SampleRate: modelInfos[i].Spec.EffectiveSampleRate()})
 			}
 		}
+
+		// Log final model-to-source assignment for diagnostics.
+		modelIDs := make([]string, len(targets))
+		for i, t := range targets {
+			modelIDs[i] = t.ModelID
+		}
+		log.Info("registering models for audio source",
+			logger.String("source_id", sid),
+			logger.String("source_name", sourceName),
+			logger.String("models", strings.Join(modelIDs, ", ")),
+			logger.Int("model_count", len(targets)),
+			logger.String("operation", operation))
 
 		// Use per-source sample rate when available; fall back to global constant.
 		sourceSampleRate := conf.SampleRate
@@ -968,6 +989,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 			continue
 		}
+		audioStats := p.audioLevelStats
 		p.wg.Go(func() {
 			for {
 				select {
@@ -975,6 +997,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 					if !ok {
 						return
 					}
+					audioStats.Record(lvl.Name, lvl.Level, lvl.Clipping)
 					select {
 					case audioLevelChan <- audiocore.AudioLevelData(lvl):
 					default:
@@ -995,6 +1018,48 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 		running.Channels != desired.Channels
 }
 
+// resolveDesiredModelSet resolves config-level model IDs to registry IDs,
+// filtering out models that are unknown or not loaded. When the resolved set
+// is empty the primary model is used as a fallback, matching the behavior of
+// registerConsumersForSources.
+func resolveDesiredModelSet(desiredConfigIDs []string, loadedModels map[string]classifier.ModelInfo, primaryModelID string) map[string]bool {
+	set := make(map[string]bool, len(desiredConfigIDs))
+	for _, configID := range desiredConfigIDs {
+		registryID, known := classifier.ResolveConfigModelID(configID)
+		if !known {
+			continue
+		}
+		if _, loaded := loadedModels[registryID]; loaded {
+			set[registryID] = true
+		}
+	}
+	if len(set) == 0 {
+		set[primaryModelID] = true
+	}
+	return set
+}
+
+// sourceModelsChanged reports whether the set of models currently active for a
+// source (as reflected by allocated analysis buffers) differs from the desired
+// config model set. Only models that are both resolvable and loaded are
+// considered; unknown or unloaded config IDs are ignored so that a model
+// appearing in the config but not yet installed does not trigger a spurious
+// rebuild on every hot-reload cycle.
+func sourceModelsChanged(bufMgr *buffer.Manager, sourceID string, desiredConfigIDs []string, loadedModels map[string]classifier.ModelInfo, primaryModelID string) bool {
+	currentBuffers := bufMgr.AnalysisBuffers(sourceID)
+	desiredSet := resolveDesiredModelSet(desiredConfigIDs, loadedModels, primaryModelID)
+
+	if len(currentBuffers) != len(desiredSet) {
+		return true
+	}
+	for modelID := range currentBuffers {
+		if !desiredSet[modelID] {
+			return true
+		}
+	}
+	return false
+}
+
 // reconfigureChangedSources diffs the currently running sources against the
 // desired config from settings. Only sources that were added, removed, or
 // changed are touched - unchanged streams keep their capture buffers and
@@ -1012,6 +1077,21 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		desired[scm.config.ConnectionString] = scm
 	}
 
+	// Build a lookup of loaded models for model-change detection.
+	// The bnAnalyzer may be nil in minimal test setups that only exercise
+	// the add/remove paths; model-change detection is skipped in that case.
+	var loadedModels map[string]classifier.ModelInfo
+	var primaryModelID string
+	if p.bnAnalyzer != nil {
+		modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
+		loadedModels = make(map[string]classifier.ModelInfo, len(modelInfoSlice))
+		for i := range modelInfoSlice {
+			loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
+		}
+		primaryModelID = p.bnAnalyzer.BirdNET().ModelInfo.ID
+	}
+	bufMgr := p.engine.BufferManager()
+
 	// Determine which desired configs already have a running source.
 	// Registry.List() returns copies with cleared connectionStrings for
 	// security, so we look up sources via GetByConnection on the desired
@@ -1022,6 +1102,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	var newSourceIDs []string
 	var gainChangedIDs []string
 	var reconfiguredIDs []string
+	var modelChangedIDs []string
 	var keptCount int
 
 	for connStr, scm := range desired {
@@ -1031,11 +1112,20 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			sourceModelMap[src.ID] = scm.modelIDs
 			keptCount++
 
-			// Detect audio parameter changes (sample rate, bit depth, channels)
-			// that require a full source reconfigure (stop + route removal +
-			// buffer realloc + restart). ReconfigureSource handles everything,
-			// so skip the gain-only route rebuild for this source.
-			if sourceNeedsReconfigure(src, scm.config) {
+			log.Info("reconfigure: source model assignment",
+				logger.String("source_id", src.ID),
+				logger.String("source_name", src.DisplayName),
+				logger.String("models", strings.Join(scm.modelIDs, ", ")),
+				logger.Int("model_count", len(scm.modelIDs)),
+				logger.String("operation", "reconfigure_diff"))
+
+			// Classify the kind of change needed, from most to least
+			// disruptive. Model changes are checked before gain-only
+			// changes so that a simultaneous gain + model update takes
+			// the model-change path (which also handles gain).
+			switch {
+			case sourceNeedsReconfigure(src, scm.config):
+				// Audio parameter change: full stop + restart.
 				log.Info("audio parameters changed, reconfiguring source",
 					logger.String("source_id", src.ID),
 					logger.Int("old_sample_rate", src.SampleRate),
@@ -1046,9 +1136,6 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				if src.Gain != scm.config.Gain {
 					registry.UpdateGain(src.ID, scm.config.Gain)
 				}
-				// ReconfigureSource removes all routes; clear the sound level
-				// tracking entry so re-registration is not blocked by the
-				// idempotency check.
 				p.untrackSoundLevelConsumer(src.ID)
 				if err := p.engine.ReconfigureSource(src.ID, scm.config); err != nil {
 					log.Error("failed to reconfigure source",
@@ -1058,8 +1145,21 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				} else {
 					reconfiguredIDs = append(reconfiguredIDs, src.ID)
 				}
-			} else if src.Gain != scm.config.Gain {
-				// Gain-only change: update registry and rebuild routes (no restart needed).
+
+			case loadedModels != nil && sourceModelsChanged(bufMgr, src.ID, scm.modelIDs, loadedModels, primaryModelID):
+				// Model assignment changed (e.g., Perch added/removed):
+				// rebuild the consumer/buffer/monitor layer, keep capture running.
+				// Also pick up any simultaneous gain change.
+				if src.Gain != scm.config.Gain {
+					registry.UpdateGain(src.ID, scm.config.Gain)
+				}
+				log.Info("model assignment changed for kept source, rebuilding consumers",
+					logger.String("source_id", src.ID),
+					logger.String("operation", "reconfigure_diff"))
+				modelChangedIDs = append(modelChangedIDs, src.ID)
+
+			case src.Gain != scm.config.Gain:
+				// Gain-only change: rebuild routes, keep capture running.
 				log.Info("gain changed for kept source, rebuilding routes",
 					logger.String("source_id", src.ID),
 					logger.Float64("old_gain_db", src.Gain),
@@ -1152,6 +1252,21 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		p.registerSoundLevelConsumers(gainChangedIDs, "gain_change")
 	}
 
+	// Rebuild routes for sources whose model assignment changed (e.g.,
+	// Perch added or removed). The capture device stays running; routes
+	// are torn down, stale analysis buffers are deallocated, and
+	// consumers are re-created with the new model targets.
+	if len(modelChangedIDs) > 0 {
+		for _, sid := range modelChangedIDs {
+			p.engine.Router().RemoveAllRoutes(sid)
+			p.untrackSoundLevelConsumer(sid)
+			desiredSet := resolveDesiredModelSet(sourceModelMap[sid], loadedModels, primaryModelID)
+			deallocateStaleAnalysisBuffers(bufMgr, sid, desiredSet)
+		}
+		p.registerConsumersForSources(modelChangedIDs, sourceModelMap, audioLevelChan, "model_change")
+		p.registerSoundLevelConsumers(modelChangedIDs, "model_change")
+	}
+
 	// Sync monitors for ALL active sources (kept + new) so UpdateMonitors
 	// receives the full desired state and removes stale monitors correctly.
 	allActiveIDs := slices.Collect(maps.Values(alreadyRunning))
@@ -1170,6 +1285,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		logger.Int("added", len(newSourceIDs)),
 		logger.Int("removed", removedCount),
 		logger.Int("gain_changed", len(gainChangedIDs)),
+		logger.Int("model_changed", len(modelChangedIDs)),
 		logger.String("operation", "reconfigure_diff"))
 }
 
@@ -1187,14 +1303,30 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 	settings := conf.Setting()
 	var result []sourceConfigWithModels
 
-	// RTSP streams.
+	// Collect enabled streams so we can iterate twice: once for probing,
+	// once for building configs. EnabledStreams() returns an iterator;
+	// preallocate using the parent slice length as an upper bound.
+	enabledStreams := make([]*conf.StreamConfig, 0, len(settings.Realtime.RTSP.Streams))
 	for _, stream := range settings.Realtime.RTSP.EnabledStreams() {
+		enabledStreams = append(enabledStreams, stream)
+	}
+
+	// Probe bat-model streams concurrently to avoid blocking sourcesMu
+	// for N * 10s when multiple streams are configured.
+	probedRates := p.probeBatStreams(enabledStreams)
+
+	// RTSP streams.
+	for _, stream := range enabledStreams {
+		sampleRate := conf.SampleRate
+		if rate, ok := probedRates[stream.URL]; ok {
+			sampleRate = rate
+		}
 		result = append(result, sourceConfigWithModels{
 			config: &audiocore.SourceConfig{
 				DisplayName:      stream.Name,
 				Type:             audiocore.StreamTypeToSourceType(stream.Type),
 				ConnectionString: stream.URL,
-				SampleRate:       conf.SampleRate,
+				SampleRate:       sampleRate,
 				BitDepth:         conf.BitDepth,
 				Channels:         1,
 			},
@@ -1227,6 +1359,102 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 	}
 
 	return result
+}
+
+// hasBatModel returns true if any of the given config-level model IDs
+// resolves to a registry entry that requires high sample rate audio
+// (MinRawSampleRate > 0).
+func hasBatModel(modelIDs []string) bool {
+	for _, configID := range modelIDs {
+		registryID, ok := classifier.ResolveConfigModelID(configID)
+		if !ok {
+			continue
+		}
+		info, exists := classifier.ModelRegistry[registryID]
+		if exists && info.Spec.MinRawSampleRate > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// probeBatStreams probes all streams that have bat models assigned, running
+// probes concurrently to minimize lock hold time. Returns a map from stream
+// URL to probed sample rate.
+func (p *AudioPipelineService) probeBatStreams(streams []*conf.StreamConfig) map[string]int {
+	type probeResult struct {
+		url  string
+		rate int
+	}
+
+	var batStreams []*conf.StreamConfig
+	for _, s := range streams {
+		if hasBatModel(s.Models) {
+			batStreams = append(batStreams, s)
+		}
+	}
+	if len(batStreams) == 0 {
+		return nil
+	}
+
+	results := make(chan probeResult, len(batStreams))
+	var wg sync.WaitGroup
+	for _, s := range batStreams {
+		wg.Go(func() {
+			results <- probeResult{
+				url:  s.URL,
+				rate: p.probeStreamSampleRate(s.URL, s.Name),
+			}
+		})
+	}
+	wg.Wait()
+	close(results)
+
+	rates := make(map[string]int, len(batStreams))
+	for r := range results {
+		rates[r.url] = r.rate
+	}
+	return rates
+}
+
+// probeStreamSampleRate uses ffprobe to discover the actual sample rate of a
+// stream. Returns conf.SampleRate (48 kHz) on failure so the pipeline can
+// still start with a degraded configuration.
+func (p *AudioPipelineService) probeStreamSampleRate(url, name string) int {
+	log := GetLogger()
+
+	info, err := ffmpeg.ProbeStreamInfo(context.Background(), url)
+	if err != nil {
+		log.Warn("stream probe failed, using default 48 kHz",
+			logger.String("stream", name),
+			logger.Error(err),
+			logger.String("operation", "probe_stream"))
+		return conf.SampleRate
+	}
+
+	log.Info("probed stream audio properties",
+		logger.String("stream", name),
+		logger.Int("sample_rate", info.SampleRate),
+		logger.String("codec", info.Codec),
+		logger.Int("channels", info.Channels),
+		logger.String("operation", "probe_stream"))
+
+	if ffmpeg.IsLossyCodec(info.Codec) {
+		log.Warn("stream uses lossy codec that destroys ultrasonic content",
+			logger.String("stream", name),
+			logger.String("codec", info.Codec),
+			logger.String("operation", "probe_stream"))
+	}
+
+	if info.SampleRate < ffmpeg.MinBatSampleRate {
+		log.Warn("stream sample rate below bat model minimum (96 kHz)",
+			logger.String("stream", name),
+			logger.Int("sample_rate", info.SampleRate),
+			logger.Int("minimum", ffmpeg.MinBatSampleRate),
+			logger.String("operation", "probe_stream"))
+	}
+
+	return info.SampleRate
 }
 
 // buildMonitorConfigs builds the map[sourceID][]monitorConfig needed by
@@ -1267,6 +1495,18 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 	}
 
 	return result
+}
+
+// deallocateStaleAnalysisBuffers removes analysis buffers for models that are
+// no longer in the desired set. The desiredSet should be pre-built via
+// resolveDesiredModelSet to ensure consistent filtering with the change
+// detection in sourceModelsChanged.
+func deallocateStaleAnalysisBuffers(bufMgr *buffer.Manager, sourceID string, desiredSet map[string]bool) {
+	for modelID := range bufMgr.AnalysisBuffers(sourceID) {
+		if !desiredSet[modelID] {
+			bufMgr.DeallocateAnalysis(sourceID, modelID)
+		}
+	}
 }
 
 // resolveModelTargets converts config-level model IDs to ModelTarget entries
@@ -1310,8 +1550,11 @@ func (p *AudioPipelineService) startWeatherPolling(metrics *observability.Metric
 		return
 	}
 
+	weather.RegisterService(weatherService)
+
 	p.wg.Go(func() {
 		weatherService.StartPolling(p.done)
+		weather.UnregisterService()
 	})
 }
 
@@ -1346,7 +1589,16 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			return
 
 		case t := <-timer.C:
-			currentPolicy := conf.Setting().Realtime.Audio.Export.Retention.Policy
+			currentSettings := conf.Setting()
+			exportCfg := currentSettings.Realtime.Audio.Export
+			currentPolicy := exportCfg.Retention.Policy
+
+			if strings.TrimSpace(exportCfg.Path) == "" {
+				log.Debug("skipping clip cleanup: export path not configured",
+					logger.String("operation", "clip_cleanup_skip"))
+				continue
+			}
+
 			log.Info("starting clip cleanup task",
 				logger.String("timestamp", t.Format(time.RFC3339)),
 				logger.String("policy", currentPolicy),
@@ -1367,8 +1619,8 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			}
 
 			if currentPolicy == "usage" {
-				currentRetention := conf.Setting().Realtime.Audio.Export.Retention
-				baseDir := conf.Setting().Realtime.Audio.Export.Path
+				currentRetention := exportCfg.Retention
+				baseDir := exportCfg.Path
 
 				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&currentRetention, baseDir)
 				if err != nil {
@@ -1488,14 +1740,22 @@ func cleanupHLSStreamingFiles() error {
 				logger.String("path", path),
 				logger.String("operation", "cleanup_hls_files"))
 
-			// Remove the directory and all its contents
+			// Remove the directory and all its contents.
+			// Retry once on "directory not empty" to handle the race where
+			// a concurrent HLS writer creates a file between RemoveAll's
+			// internal traversal and the final parent unlink.
 			if err := os.RemoveAll(path); err != nil {
-				log.Warn("failed to remove HLS stream directory",
-					logger.String("path", path),
-					logger.Error(err),
-					logger.String("operation", "cleanup_hls_files"))
-				cleanupErrors = append(cleanupErrors, fmt.Sprintf("%s: %v", path, err))
-				// Continue with other directories
+				if errors.Is(err, syscall.ENOTEMPTY) {
+					time.Sleep(100 * time.Millisecond)
+					err = os.RemoveAll(path)
+				}
+				if err != nil {
+					log.Warn("failed to remove HLS stream directory",
+						logger.String("path", path),
+						logger.Error(err),
+						logger.String("operation", "cleanup_hls_files"))
+					cleanupErrors = append(cleanupErrors, fmt.Sprintf("%s: %v", path, err))
+				}
 			}
 		}
 	}

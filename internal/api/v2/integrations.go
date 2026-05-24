@@ -765,13 +765,14 @@ func (c *Controller) TriggerHomeAssistantDiscovery(ctx echo.Context) error {
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()))
 
-	// Check if processor is available
-	if c.Processor == nil {
+	// Snapshot processor to avoid TOCTOU race
+	proc := c.Processor
+	if proc == nil {
 		return c.HandleErrorWithKey(ctx, nil, "Processor not available", http.StatusServiceUnavailable, notification.MsgErrIntegProcessorUnavail, nil)
 	}
 
 	// Trigger discovery
-	if err := c.Processor.TriggerHomeAssistantDiscovery(ctx.Request().Context()); err != nil {
+	if err := proc.TriggerHomeAssistantDiscovery(ctx.Request().Context()); err != nil {
 		return c.HandleErrorWithKey(ctx, err, "Failed to trigger Home Assistant discovery", http.StatusBadRequest, notification.MsgErrIntegDiscoveryFailed, nil)
 	}
 

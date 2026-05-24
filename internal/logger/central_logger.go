@@ -127,11 +127,14 @@ type CentralLogger struct {
 	mainWriter    *BufferedFileWriter            // Main log file writer (if file output enabled)
 	moduleWriters map[string]*BufferedFileWriter // Per-module buffered writers
 	moduleLevels  map[string]slog.Level          // Per-module log levels
+	extraHandlers []slog.Handler                 // Additional handlers injected at construction
 	mu            sync.RWMutex                   // Protects concurrent access
 }
 
-// NewCentralLogger creates a centralized logger with module routing
-func NewCentralLogger(cfg *LoggingConfig) (*CentralLogger, error) {
+// NewCentralLogger creates a centralized logger with module routing.
+// Optional extraHandlers are appended to the base handler chain so they
+// receive every log record (e.g. a health-check error buffer handler).
+func NewCentralLogger(cfg *LoggingConfig, extraHandlers ...slog.Handler) (*CentralLogger, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("logging config cannot be nil")
 	}
@@ -161,6 +164,7 @@ func NewCentralLogger(cfg *LoggingConfig) (*CentralLogger, error) {
 		timezone:      tz,
 		moduleWriters: make(map[string]*BufferedFileWriter),
 		moduleLevels:  make(map[string]slog.Level),
+		extraHandlers: extraHandlers,
 	}
 
 	// Parse module levels
@@ -251,6 +255,13 @@ func (cl *CentralLogger) createBaseHandler() error {
 		handlers = append(handlers, newTextHandler(os.Stdout, parseLogLevel(cl.config.DefaultLevel), cl.timezone))
 	}
 
+	// Append any extra handlers injected at construction (e.g. health error buffer)
+	for _, h := range cl.extraHandlers {
+		if h != nil {
+			handlers = append(handlers, h)
+		}
+	}
+
 	if len(handlers) == 1 {
 		cl.baseHandler = handlers[0]
 	} else {
@@ -298,8 +309,16 @@ func (cl *CentralLogger) Module(name string) Logger {
 			consoleLevel := parseLogLevel(cl.config.Console.Level)
 			handlers = append(handlers, newTextHandler(os.Stdout, consoleLevel, cl.timezone))
 		}
+
+		// Include extra handlers (e.g. health error buffer) so modules with
+		// dedicated file output still feed into the shared diagnostics buffer.
+		for _, h := range cl.extraHandlers {
+			if h != nil {
+				handlers = append(handlers, h)
+			}
+		}
 	} else {
-		// Use base handler (console + main file)
+		// Use base handler (console + main file + extra handlers)
 		handlers = append(handlers, cl.baseHandler)
 	}
 

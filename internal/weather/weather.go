@@ -13,6 +13,40 @@ import (
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
+var (
+	globalServiceMu sync.RWMutex
+	globalService   *Service
+)
+
+// RegisterService stores the weather service instance for package-level access.
+// Called during audio pipeline startup.
+func RegisterService(s *Service) {
+	globalServiceMu.Lock()
+	globalService = s
+	globalServiceMu.Unlock()
+}
+
+// UnregisterService clears the stored weather service instance.
+func UnregisterService() {
+	globalServiceMu.Lock()
+	globalService = nil
+	globalServiceMu.Unlock()
+}
+
+// GetStatus returns the health status of the weather service. Returns
+// (ok, message) suitable for health check consumption. Returns (true, "not started")
+// when no service has been registered.
+func GetStatus() (ok bool, msg string) {
+	globalServiceMu.RLock()
+	svc := globalService
+	globalServiceMu.RUnlock()
+
+	if svc == nil {
+		return false, "Weather service not started"
+	}
+	return svc.Status()
+}
+
 // getLogger returns the weather service logger.
 // Fetched dynamically to ensure it uses the current centralized logger.
 func getLogger() logger.Logger {
@@ -565,4 +599,28 @@ func (s *Service) fetchAndSave() error {
 
 	// Errors logged within SaveWeatherData
 	return s.SaveWeatherData(data)
+}
+
+// Status reports the health of the weather service by inspecting backoff state.
+// Returns (ok, statusMessage).
+func (s *Service) Status() (ok bool, msg string) {
+	s.backoff.mu.Lock()
+	authDisabled := s.backoff.authDisabled
+	failures := s.backoff.consecutiveFailures
+	inBackoff := !s.backoff.nextAllowedFetchTime.IsZero() && time.Now().Before(s.backoff.nextAllowedFetchTime)
+	s.backoff.mu.Unlock()
+
+	if authDisabled {
+		return false, fmt.Sprintf("Weather provider %s auth disabled", s.providerName)
+	}
+
+	if inBackoff {
+		return false, fmt.Sprintf("Weather provider %s backing off (%d failures)", s.providerName, failures)
+	}
+
+	if failures > 0 {
+		return false, fmt.Sprintf("Weather provider %s degraded (%d failures)", s.providerName, failures)
+	}
+
+	return true, fmt.Sprintf("Weather provider %s healthy", s.providerName)
 }

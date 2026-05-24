@@ -24,6 +24,7 @@
     getTemperatureSymbol,
     convertWindSpeed,
     getWindSpeedUnit,
+    formatTimeOfDay,
   } from '$lib/utils/formatters';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
 
@@ -100,23 +101,11 @@
 
   let is24h = $derived(config.timeFormat !== '12h');
 
-  function formatTime(date: Date): string {
-    return date.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: !is24h,
-    });
-  }
-
   function formatSunTime(isoString: string): string | null {
     const date = new Date(isoString);
     // Guard against epoch-zero (database has no sunrise/sunset data)
     if (date.getFullYear() < 2000) return null;
-    return date.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: !is24h,
-    });
+    return formatTimeOfDay(date, is24h);
   }
 
   let timezone = $derived(Intl.DateTimeFormat().resolvedOptions().timeZone.replace(/_/g, ' '));
@@ -202,7 +191,7 @@
     <div
       class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[var(--color-base-content)]"
     >
-      <span class="font-semibold">{formatTime(now)}</span>
+      <span class="font-semibold">{formatTimeOfDay(now, is24h)}</span>
       <span class="text-xs text-[var(--color-base-content)]/40">{timezone}</span>
       {@render sep()}
       <div class="flex items-center gap-1.5">

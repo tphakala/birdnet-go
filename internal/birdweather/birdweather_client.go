@@ -160,6 +160,26 @@ func closeResponseBody(resp *http.Response) {
 	}
 }
 
+// Status reports the health of the BirdWeather client by inspecting the
+// circuit breaker state. Returns (connected, statusMessage).
+func (b *BwClient) Status() (connected bool, msg string) {
+	if b.circuitBreaker == nil {
+		return true, "BirdWeather API connected (no circuit breaker)"
+	}
+
+	state := b.circuitBreaker.EffectiveState()
+	failures := b.circuitBreaker.Failures()
+
+	switch state {
+	case notification.StateOpen:
+		return false, fmt.Sprintf("BirdWeather API disconnected (circuit open, %d failures)", failures)
+	case notification.StateHalfOpen:
+		return false, "BirdWeather API recovering (half-open)"
+	default:
+		return true, "BirdWeather API connected"
+	}
+}
+
 // BirdweatherClientInterface defines what methods a BirdweatherClient must have
 type Interface interface {
 	Publish(note *datastore.Note, pcmData []byte) error

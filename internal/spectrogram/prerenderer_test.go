@@ -119,7 +119,7 @@ func TestPreRenderer_Stats(t *testing.T) {
 func TestPreRenderer_Submit_AfterStop(t *testing.T) {
 	pr, env := createTestPreRenderer(t, nil)
 	pr.Start()
-	pr.Stop() // Closes channel and cancels context
+	pr.Stop() // Cancels context, workers exit via ctx.Done()
 
 	job := createTestJob(filepath.Join(env.TempDir, "test.wav"), 1)
 

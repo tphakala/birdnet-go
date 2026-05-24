@@ -228,7 +228,16 @@
     "analyticsSubmenu": "Podponuka analytiky",
     "settingsSubmenu": "Podponuka nastavení",
     "systemSubmenu": "Podponuka systému",
-    "systemTerminal": "Terminál"
+    "systemTerminal": "Terminál",
+    "help": "Pomoc",
+    "helpSubmenu": "Podmenu pomoci",
+    "helpAndSupport": "Pomoc a podpora",
+    "reportBug": "Nahlásiť chybu",
+    "askQuestion": "Položiť otázku",
+    "reportBugAriaLabel": "Nahlásiť chybu na GitHube (otvorí sa v novom okne)",
+    "askQuestionAriaLabel": "Položiť otázku na GitHub Discussions (otvorí sa v novom okne)",
+    "viewOnGithubAriaLabel": "Zobraziť BirdNET-Go na GitHube (otvorí sa v novom okne)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -425,6 +434,10 @@
       "buffer": {
         "overloadTitle": "Analýza zvuku preťažená",
         "overloadMessage": "Váš systém zahadzuje {dropRate} % zvukových vzoriek zo zdroja ''{sourceName}'', pretože nestíha analýzu. Znížte hodnotu prekrytia BirdNET v nastaveniach detekcie alebo zvážte rýchlejší procesor."
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime nie je k dispozícii",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} je vyžadovaný pre {modelName}, ale nebol nájdený. Pozrite si príručku inštalácie: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -924,7 +937,10 @@
     "aria": {
       "loading": "Načítavajú sa podrobnosti detekcie...",
       "loaded": "Podrobnosti detekcie načítané pre {species}",
-      "error": "Chyba pri načítaní detekcie: {error}"
+      "error": "Chyba pri načítaní detekcie: {error}",
+      "loadingResults": "Načítava sa {count} výsledkov...",
+      "thumbnailLoading": "Načítava sa náhľad {species}...",
+      "thumbnailLoaded": "Náhľad {species} načítaný"
     },
     "errors": {
       "notFound": "Detekcia sa nenašla. Možno bola odstránená alebo je ID nesprávne.",
@@ -2998,6 +3014,7 @@
         "unknown": "neznámy",
         "refresh": "Obnoviť",
         "addStream": "Pridať stream",
+        "testRequired": "Pred uložením vykonajte úspešný test streamu",
         "deleteConfirm": "Odstrániť tento stream?",
         "restartCount": "Reštartované {count}-krát",
         "healthLoadError": "Nepodarilo sa načítať stav zdravia streamu",
@@ -3050,6 +3067,18 @@
           "degraded": "Zhoršené",
           "failed": "Zlyhalo",
           "unknown": "Neznáme"
+        },
+        "test": {
+          "button": "Testovať stream",
+          "probing": "Testovanie...",
+          "result": "Výsledok testu",
+          "error": "Test zlyhal",
+          "batCompatible": "Kompatibilný s netopiermi",
+          "batIncompatible": "Nekompatibilný s netopiermi"
+        },
+        "batWarning": "Modely netopierov vyžadujú streamy s bezstratovým kodekom (PCM) a vzorkovacou frekvenciou aspoň 96 kHz. Pomocou tlačidla Testovať stream vyššie overte kompatibilitu.",
+        "codecWarning": {
+          "lossy": "Stratové kodeky (AAC, Opus, MP3) ničia ultrazvukové frekvencie nad ~20 kHz, čím sa stream stáva nevhodným na detekciu netopierov."
         }
       },
       "audioFilters": {
@@ -3225,6 +3254,10 @@
         "devicesLoadFailed": "Nepodarilo sa načítať zvukové zariadenia. Skontrolujte systémové oprávnenia.",
         "invalidBitrate": "Neplatná hodnota bitrate",
         "invalidRetentionPolicy": "Neplatná politika uchovávania"
+      },
+      "models": {
+        "recommendBoth": "Pre najlepšie pokrytie detekcie druhov sa odporúča spustiť oba modely BirdNET a Perch spoločne.",
+        "perchOnlyWarning": "Samotný Perch produkuje menej detekcií. Pre zmysluplné výsledky znížte prah spoľahlivosti na 0.50, alebo aktivujte aj BirdNET pre lepšie pokrytie."
       }
     },
     "security": {
@@ -4200,7 +4233,31 @@
       "playbackSpeed": "Rýchlosť prehrávania",
       "speed": "Rýchlosť",
       "loop": "Prepnúť opakovanie",
-      "player": "Prehrávač zvuku"
+      "player": "Prehrávač zvuku",
+      "autoplayBlocked": "Kliknutím spustíte prehrávanie (automatické prehrávanie blokované)",
+      "hlsNotSupported": "Prehrávanie HLS nie je v tomto prehliadači podporované",
+      "streamStarting": "Spúšťa sa audio stream...",
+      "levelFor": "Úroveň zvuku pre {source}",
+      "levelForNoSource": "Úroveň zvuku: žiadny zdroj",
+      "noSource": "Žiadny zdroj",
+      "levelAnnouncement": "Aktuálna úroveň zvuku: {level} percent",
+      "levelAnnouncementClipping": "Aktuálna úroveň zvuku: {level} percent, detekované orezávanie",
+      "sourceSelection": "Výber zdroja zvuku",
+      "sources": "Zdroje zvuku",
+      "noSourcesAvailable": "Žiadne dostupné zdroje zvuku",
+      "silent": "(ticho)",
+      "stopPlayback": "Zastaviť prehrávanie zvuku",
+      "startPlayback": "Spustiť prehrávanie zvuku",
+      "nowPlaying": "Prehráva sa zvuk z {source}",
+      "nowPlayingNoSource": "Prehráva sa zvuk",
+      "playbackStopped": "Prehrávanie zvuku zastavené",
+      "loginRequired": "Na streamovanie zvuku je potrebné prihlásenie",
+      "streamError": "Chyba pri spúšťaní streamu",
+      "streamTitle": "Audio stream vtákov - {source}",
+      "streamTitleDefault": "Audio stream vtákov",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Živé vysielanie",
+      "playbackError": "Chyba prehrávania: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram ešte nebol vygenerovaný",
@@ -4425,6 +4482,16 @@
       "hostRequired": "Parameter hostiteľa je povinný",
       "invalidHost": "Neplatný parameter hostiteľa",
       "rateLimit": "Príliš veľa pokusov o pripojenie k prúdu oznámení, počkajte chvíľu pred ďalším pokusom"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Neplatné telo požiadavky",
+        "urlRequired": "URL streamu je povinné",
+        "invalidUrl": "Neplatný formát URL. Zadajte úplnú URL, napr. rtsp://host:port/cesta",
+        "unsupportedScheme": "Nepodporovaná schéma URL \"{scheme}\". Použite rtsp, rtsps, http, https, rtmp alebo udp",
+        "blockedDestination": "Tento cieľ je z bezpečnostných dôvodov zablokovaný",
+        "connectionFailed": "Nepodarilo sa pripojiť k streamu. Skontrolujte, či je URL správna a stream je dostupný"
+      }
     },
     "debug": {
       "notEnabled": "Režim ladenia nie je povolený"
@@ -4690,7 +4757,10 @@
       "reinstall": "Preinštalovať",
       "reinstalling": "Preinštalovanie...",
       "reinstallComplete": "Súbory úspešne overené",
-      "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel"
+      "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Vyžaduje ONNX Runtime, ktorý nie je v tomto systéme k dispozícii.",
+      "onnxRuntimeMissing": "ONNX Runtime nie je k dispozícii. Tento model nie je možné spustiť.",
+      "unavailable": "Nedostupné"
     },
     "bird": {
       "title": "Detekcia vtákov",
@@ -4715,5 +4785,122 @@
     "bannerMessage": "Zmeny konfigurácie vyžadujú reštart:",
     "bannerAction": "Reštartovať teraz",
     "restartFailed": "Nepodarilo sa spustiť reštart"
+  },
+  "help": {
+    "title": "Pomoc a podpora",
+    "subtitle": "Získajte pomoc, nahláste problémy a spojte sa s komunitou",
+    "reportBug": {
+      "description": "Ak narazíte na problém, otvorte najprv hlásenie chyby na GitHube na opísanie problému a potom vygenerujte diagnostický balíček s číslom hlásenia na uľahčenie riešenia."
+    },
+    "askQuestion": {
+      "description": "Máte otázku ohľadom nastavenia, funkcií alebo používania? Fórum GitHub Discussions je najlepšie miesto na získanie pomoci od komunity."
+    },
+    "diagnostics": {
+      "description": "Vygenerujte diagnostický balíček na pomoc s riešením problémov. Zachytí konfiguráciu systému a posledné záznamy."
+    },
+    "quickLinks": {
+      "title": "Rýchle odkazy",
+      "releases": "Poznámky k vydaniu"
+    }
+  },
+  "reportBug": {
+    "title": "Nahlásiť chybu",
+    "subtitle": "Pomôžte nám opraviť problémy poskytnutím potrebných informácií",
+    "systemInfo": {
+      "title": "Informácie o vašom systéme",
+      "description": "Tieto informácie pomáhajú identifikovať vaše nastavenie. Skopírujte ich do hlásenia chyby.",
+      "version": "Verzia",
+      "buildDate": "Dátum zostavenia",
+      "os": "Operačný systém",
+      "copy": "Kopírovať do schránky",
+      "copied": "Skopírované!",
+      "architecture": "Architektúra",
+      "hardware": "Hardvér",
+      "environment": "Prostredie"
+    },
+    "whatToInclude": {
+      "title": "Čo zahrnúť do hlásenia",
+      "description": "Dobré hlásenie chyby nám pomôže rýchlo vyriešiť váš problém. Uveďte prosím nasledujúce:",
+      "step1": {
+        "title": "Jasný popis problému",
+        "description": "Čo sa stalo, čo ste očakávali a ako problém reprodukovať."
+      },
+      "step2": {
+        "title": "Spôsob inštalácie",
+        "description": "Ako ste nainštalovali BirdNET-Go: skript install.sh, Docker Compose, manuálne zostavenie alebo inak."
+      },
+      "step3": {
+        "title": "Systémové informácie",
+        "description": "Skopírujte systémové údaje zobrazené vyššie, vrátane verzie, OS a dátumu zostavenia."
+      },
+      "step4": {
+        "title": "Diagnostický balíček",
+        "description": "Vygenerujte a nahrajte diagnostický balíček nižšie. Zachytí záznamy a konfiguráciu, ktoré výrazne urýchlia riešenie problému."
+      }
+    },
+    "openIssue": {
+      "title": "Otvoriť hlásenie na GitHube",
+      "description": "Otvorte hlásenie na GitHube a opíšte problém. Číslo hlásenia budete potrebovať v ďalšom kroku.",
+      "button": "Otvoriť hlásenie na GitHube"
+    },
+    "supportDump": {
+      "title": "Vygenerovať diagnostický balíček",
+      "description": "Po vytvorení hlásenia vygenerujte diagnostický balíček a zadajte číslo GitHub hlásenia. Tým prepojíte diagnostiku s hlásením chyby a uľahčíte riešenie."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
+    "runDiagnostics": "Run Diagnostics",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Najčastejšie chyby",
+      "errorCount": "Počet",
+      "errorComponent": "Komponent",
+      "errorLevel": "Úroveň",
+      "errorMessage": "Správa"
+    }
   }
 }

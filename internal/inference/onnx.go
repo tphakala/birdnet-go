@@ -3,6 +3,7 @@ package inference
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 
@@ -14,6 +15,13 @@ var (
 	ortInitMu      sync.Mutex
 	ortInitialized bool
 )
+
+// IsORTInitialized reports whether the ONNX Runtime has been successfully initialized. Thread-safe.
+func IsORTInitialized() bool {
+	ortInitMu.Lock()
+	defer ortInitMu.Unlock()
+	return ortInitialized
+}
 
 // ONNXClassifierOptions configures the ONNX species classifier.
 type ONNXClassifierOptions struct {
@@ -273,7 +281,7 @@ func InitONNXRuntime(libraryPath string) (err error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("failed to initialize ONNX Runtime: %v", r)
+			err = fmt.Errorf("failed to initialize ONNX Runtime: %v; install guide: %s", r, ORTInstallGuideURL)
 		}
 	}()
 
@@ -287,9 +295,24 @@ func InitONNXRuntime(libraryPath string) (err error) {
 // fallback for dlopen's default search.
 func findONNXRuntimeLibrary() string {
 	var candidates []string
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		candidates = []string{"onnxruntime.dll"}
-	} else {
+		if exePath, err := os.Executable(); err == nil {
+			candidates = append([]string{filepath.Join(filepath.Dir(exePath), "onnxruntime.dll")}, candidates...)
+		}
+		for i, c := range candidates {
+			if abs, err := filepath.Abs(c); err == nil {
+				candidates[i] = abs
+			}
+		}
+	case "darwin":
+		candidates = []string{
+			"/opt/homebrew/lib/libonnxruntime.dylib",
+			"/usr/local/lib/libonnxruntime.dylib",
+			"libonnxruntime.dylib",
+		}
+	default:
 		candidates = []string{
 			"/usr/lib/libonnxruntime.so",
 			"/usr/local/lib/libonnxruntime.so",
@@ -302,6 +325,9 @@ func findONNXRuntimeLibrary() string {
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
+	}
+	if runtime.GOOS == "darwin" {
+		return "libonnxruntime.dylib"
 	}
 	return "onnxruntime"
 }

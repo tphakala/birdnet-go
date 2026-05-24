@@ -143,7 +143,9 @@ func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMe
 	// Get request context
 	reqCtx := ctx.Request().Context()
 
-	// Send signal with context timeout awareness
+	// Send signal with context timeout and shutdown awareness.
+	// The c.ctx.Done() case prevents a send-on-closed-channel panic if shutdown
+	// closes controlChan while an HTTP request is still in-flight.
 	select {
 	case c.controlChan <- signal:
 		c.logInfoIfEnabled("Control signal sent successfully",
@@ -151,7 +153,9 @@ func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMe
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		// Signal sent successfully
+	case <-c.ctx.Done():
+		return c.HandleError(ctx, c.ctx.Err(),
+			"Server is shutting down", http.StatusServiceUnavailable)
 	case <-reqCtx.Done():
 		err := reqCtx.Err()
 		c.logErrorIfEnabled("Request timeout/cancel while sending control signal",
@@ -160,7 +164,6 @@ func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMe
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		// Request context is done (timeout or cancelled)
 		return c.HandleError(ctx, err,
 			"Request timeout while sending control signal", http.StatusRequestTimeout)
 	}
@@ -293,11 +296,12 @@ func (c *Controller) RestartAudioSource(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	if c.engine == nil {
+	eng := c.engine.Load()
+	if eng == nil {
 		return c.HandleError(ctx, fmt.Errorf("audio engine not initialized"),
 			"Audio engine not available", http.StatusInternalServerError)
 	}
-	if _, ok := c.engine.Registry().Get(sourceID); !ok {
+	if _, ok := eng.Registry().Get(sourceID); !ok {
 		return c.HandleError(ctx, fmt.Errorf("source %s not found", sourceID),
 			"Audio source not found", http.StatusNotFound)
 	}

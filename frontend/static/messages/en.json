@@ -228,7 +228,16 @@
     "analyticsSubmenu": "Analytics submenu",
     "settingsSubmenu": "Settings submenu",
     "systemSubmenu": "System submenu",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Help",
+    "helpSubmenu": "Help submenu",
+    "helpAndSupport": "Help & Support",
+    "reportBug": "Report Bug",
+    "askQuestion": "Ask a Question",
+    "reportBugAriaLabel": "Report a bug on GitHub (opens in new window)",
+    "askQuestionAriaLabel": "Ask a question on GitHub Discussions (opens in new window)",
+    "viewOnGithubAriaLabel": "View BirdNET-Go on GitHub (opens in new window)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -425,6 +434,10 @@
       "buffer": {
         "overloadTitle": "Audio Analysis Overloaded",
         "overloadMessage": "Your system is dropping {dropRate}% of audio samples for source ''{sourceName}'' because it cannot keep up with analysis. Reduce the BirdNET overlap value in detection settings or consider upgrading to a faster CPU."
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime Not Available",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. See the install guide: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -924,7 +937,10 @@
     "aria": {
       "loading": "Loading detection details...",
       "loaded": "Detection details loaded for {species}",
-      "error": "Error loading detection: {error}"
+      "error": "Error loading detection: {error}",
+      "loadingResults": "Loading {count} results...",
+      "thumbnailLoading": "Loading {species} thumbnail...",
+      "thumbnailLoaded": "{species} thumbnail loaded"
     },
     "errors": {
       "notFound": "Detection not found. It may have been deleted or the ID is incorrect.",
@@ -2998,6 +3014,7 @@
         "unknown": "unknown",
         "refresh": "Refresh",
         "addStream": "Add Stream",
+        "testRequired": "Run a successful stream test before saving",
         "deleteConfirm": "Remove this stream?",
         "restartCount": "Restarted {count} time(s)",
         "healthLoadError": "Failed to load stream health status",
@@ -3050,6 +3067,18 @@
           "degraded": "Degraded",
           "failed": "Failed",
           "unknown": "Unknown"
+        },
+        "test": {
+          "button": "Test Stream",
+          "probing": "Testing...",
+          "result": "Test Result",
+          "error": "Test failed",
+          "batCompatible": "Bat compatible",
+          "batIncompatible": "Not bat compatible"
+        },
+        "batWarning": "Bat models require streams with a lossless codec (PCM) and a sample rate of at least 96 kHz. Use the Test Stream button above to verify compatibility.",
+        "codecWarning": {
+          "lossy": "Lossy codecs (AAC, Opus, MP3) destroy ultrasonic frequencies above ~20 kHz, making the stream unsuitable for bat detection."
         }
       },
       "audioFilters": {
@@ -3225,6 +3254,10 @@
         "devicesLoadFailed": "Failed to load audio devices. Please check system permissions.",
         "invalidBitrate": "Invalid bitrate value",
         "invalidRetentionPolicy": "Invalid retention policy"
+      },
+      "models": {
+        "recommendBoth": "Running both BirdNET and Perch together is recommended for best species detection coverage.",
+        "perchOnlyWarning": "Perch alone produces fewer detections. Lower the confidence threshold to 0.50 for meaningful results, or enable BirdNET alongside for best coverage."
       }
     },
     "security": {
@@ -4200,7 +4233,31 @@
       "playbackSpeed": "Playback speed",
       "speed": "Speed",
       "loop": "Toggle loop",
-      "player": "Audio player"
+      "player": "Audio player",
+      "autoplayBlocked": "Click to play (autoplay blocked)",
+      "hlsNotSupported": "HLS playback not supported in this browser",
+      "streamStarting": "Starting audio stream...",
+      "levelFor": "Audio level for {source}",
+      "levelForNoSource": "Audio level: no source",
+      "noSource": "No source",
+      "levelAnnouncement": "Current audio level: {level} percent",
+      "levelAnnouncementClipping": "Current audio level: {level} percent, clipping detected",
+      "sourceSelection": "Audio Source Selection",
+      "sources": "Audio Sources",
+      "noSourcesAvailable": "No audio sources available",
+      "silent": "(silent)",
+      "stopPlayback": "Stop audio playback",
+      "startPlayback": "Start audio playback",
+      "nowPlaying": "Now playing audio from {source}",
+      "nowPlayingNoSource": "Now playing audio",
+      "playbackStopped": "Audio playback stopped",
+      "loginRequired": "Login required to stream audio",
+      "streamError": "Error starting stream",
+      "streamTitle": "Bird Audio Stream - {source}",
+      "streamTitleDefault": "Bird Audio Stream",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Live Stream",
+      "playbackError": "Playback error: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spectrogram not yet generated",
@@ -4425,6 +4482,16 @@
       "hostRequired": "Host parameter is required",
       "invalidHost": "Invalid host parameter",
       "rateLimit": "Too many notification stream connection attempts, please wait before trying again"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Invalid request body",
+        "urlRequired": "Stream URL is required",
+        "invalidUrl": "Invalid URL format. Enter a full URL like rtsp://host:port/path",
+        "unsupportedScheme": "Unsupported URL scheme \"{scheme}\". Use rtsp, rtsps, http, https, rtmp, or udp",
+        "blockedDestination": "This destination is blocked for security reasons",
+        "connectionFailed": "Could not connect to the stream. Check that the URL is correct and the stream is accessible"
+      }
     },
     "debug": {
       "notEnabled": "Debug mode not enabled"
@@ -4690,7 +4757,10 @@
       "reinstall": "Reinstall",
       "reinstalling": "Reinstalling...",
       "reinstallComplete": "Files verified successfully",
-      "geomodelBadge": "Includes BirdNET v3.0 geomodel"
+      "geomodelBadge": "Includes BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Requires ONNX Runtime which is not available on this system.",
+      "onnxRuntimeMissing": "ONNX Runtime is not available. This model cannot run.",
+      "unavailable": "Unavailable"
     },
     "bird": {
       "title": "Bird Detection",
@@ -4715,5 +4785,122 @@
     "bannerMessage": "Configuration changes require a restart to take effect:",
     "bannerAction": "Restart Now",
     "restartFailed": "Failed to initiate restart"
+  },
+  "help": {
+    "title": "Help & Support",
+    "subtitle": "Get help, report issues, and connect with the community",
+    "reportBug": {
+      "description": "If you encounter a problem, open a bug report on GitHub to describe the issue, then generate a support dump with the issue number to help with troubleshooting."
+    },
+    "askQuestion": {
+      "description": "Have a question about setup, features, or usage? The GitHub Discussions forum is the best place to get help from the community."
+    },
+    "diagnostics": {
+      "description": "Generate a support dump to help diagnose issues. This captures your system configuration and recent logs."
+    },
+    "quickLinks": {
+      "title": "Quick Links",
+      "releases": "Release Notes"
+    }
+  },
+  "reportBug": {
+    "title": "Report a Bug",
+    "subtitle": "Help us fix issues by providing the information we need",
+    "systemInfo": {
+      "title": "Your System Information",
+      "description": "This information helps identify your setup. Copy it into your bug report.",
+      "version": "Version",
+      "buildDate": "Build date",
+      "os": "Operating system",
+      "copy": "Copy to clipboard",
+      "copied": "Copied!",
+      "architecture": "Architecture",
+      "hardware": "Hardware",
+      "environment": "Environment"
+    },
+    "whatToInclude": {
+      "title": "What to Include in Your Report",
+      "description": "A good bug report helps us fix your issue quickly. Please include the following:",
+      "step1": {
+        "title": "Clear description of the problem",
+        "description": "What happened, what you expected to happen, and how to reproduce the issue."
+      },
+      "step2": {
+        "title": "Your installation method",
+        "description": "How you installed BirdNET-Go: install.sh script, Docker Compose, manual build, or other."
+      },
+      "step3": {
+        "title": "System information",
+        "description": "Copy the system details shown above, including your version, OS, and build date."
+      },
+      "step4": {
+        "title": "Support dump",
+        "description": "Generate and upload a support dump below. This captures logs and configuration that greatly speed up troubleshooting."
+      }
+    },
+    "openIssue": {
+      "title": "Open a GitHub Issue",
+      "description": "Open an issue on GitHub to describe the problem. You will need the issue number for the next step.",
+      "button": "Open Issue on GitHub"
+    },
+    "supportDump": {
+      "title": "Generate Support Dump",
+      "description": "After filing your issue, generate a support dump and enter the GitHub issue number. This links your diagnostics to the bug report and helps with troubleshooting."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
+    "runDiagnostics": "Run Diagnostics",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Top error patterns",
+      "errorCount": "Count",
+      "errorComponent": "Component",
+      "errorLevel": "Level",
+      "errorMessage": "Message"
+    }
   }
 }

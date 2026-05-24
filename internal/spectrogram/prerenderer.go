@@ -160,11 +160,10 @@ func (pr *PreRenderer) Start() {
 func (pr *PreRenderer) Stop() {
 	pr.logger.Info("Stopping spectrogram pre-renderer")
 
-	// Cancel context to signal workers to stop
+	// Cancel context to signal workers to stop.
+	// Workers exit via pr.ctx.Done(); the jobs channel is left open
+	// so Submit() cannot panic on a closed-channel send.
 	pr.cancel()
-
-	// Close job channel to prevent new submissions
-	close(pr.jobs)
 
 	// Wait for workers to finish with timeout
 	done := make(chan struct{})
@@ -236,7 +235,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 
 	// Path-traversal guard: ensure spectrogram path is within export directory
 	// Use SecureFS base dir (resolved to absolute at init time) instead of
-	// filepath.Abs() which depends on os.Getwd() — unreliable on Windows
+	// filepath.Abs() which depends on os.Getwd(), unreliable on Windows
 	// when running as a service without a working directory set (#2342).
 	absRoot := pr.sfs.BaseDir()
 
@@ -278,28 +277,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 		return nil
 	}
 
-	// Panic protection for concurrent channel close
-	defer func() {
-		if r := recover(); r != nil {
-			pr.logger.Error("Panic during job submission (channel likely closed)",
-				logger.Any("note_id", job.NoteID),
-				logger.Any("panic", r))
-			pr.mu.Lock()
-			pr.stats.Failed++
-			pr.mu.Unlock()
-			// Set named return value to report the panic as an error
-			err = errors.Newf("panic during job submission: %v", r).
-				Component("spectrogram").
-				Category(errors.CategorySystem).
-				Context("operation", "submit_job").
-				Context("note_id", job.NoteID).
-				Build()
-		}
-	}()
-
-	// Check context first to avoid select race with closed channel
-	// When Stop() is called, context is cancelled before channel is closed,
-	// so checking this first ensures we don't race with channel closure
+	// Check context first to reject jobs after Stop()
 	select {
 	case <-pr.ctx.Done():
 		// Context cancelled, don't attempt to send
@@ -366,11 +344,7 @@ func (pr *PreRenderer) worker(id int) {
 		case <-pr.ctx.Done():
 			pr.logger.Debug("Pre-render worker stopping", logger.Int("worker_id", id))
 			return
-		case job, ok := <-pr.jobs:
-			if !ok {
-				pr.logger.Debug("Pre-render worker channel closed", logger.Int("worker_id", id))
-				return
-			}
+		case job := <-pr.jobs:
 			pr.processJob(job, id)
 		}
 	}
@@ -381,7 +355,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	start := time.Now()
 
 	// Capture a single settings snapshot for this job so size, raw, and
-	// export path are read from the same view — a UI edit that lands
+	// export path are read from the same view. A UI edit that lands
 	// mid-job can't produce a mix of old/new values. The Generator below
 	// captures its own snapshot when its public entry point runs; that is
 	// a deliberate per-component boundary (Size/Raw are per-call inputs

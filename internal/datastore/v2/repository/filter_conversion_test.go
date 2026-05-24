@@ -397,6 +397,33 @@ func TestConvertAdvancedFilters(t *testing.T) {
 		// UTC should have offset 0
 		assert.Equal(t, 0, result.TimezoneOffset)
 	})
+
+	t.Run("sort field mapping", func(t *testing.T) {
+		tests := []struct {
+			sortBy   string
+			wantBy   string
+			wantDesc bool
+		}{
+			{"date_desc", SortFieldDetectedAt, true},
+			{"date_asc", SortFieldDetectedAt, false},
+			{"species_asc", SortFieldSpecies, false},
+			{"species_desc", SortFieldSpecies, true},
+			{"confidence_asc", SortFieldConfidence, false},
+			{"confidence_desc", SortFieldConfidence, true},
+			{"status", SortFieldStatus, false},
+			{"", SortFieldDetectedAt, true},
+		}
+
+		for _, tt := range tests {
+			t.Run("sort_"+tt.sortBy, func(t *testing.T) {
+				filters := &datastore.AdvancedSearchFilters{SortBy: tt.sortBy}
+				result, err := ConvertAdvancedFilters(ctx, filters, nil, tz)
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantBy, result.SortBy)
+				assert.Equal(t, tt.wantDesc, result.SortDesc)
+			})
+		}
+	})
 }
 
 // =============================================================================
@@ -909,8 +936,11 @@ func TestConvertSearchFilters(t *testing.T) {
 		}{
 			{"date_desc", SortFieldDetectedAt, true},
 			{"date_asc", SortFieldDetectedAt, false},
+			{"species_asc", SortFieldSpecies, false},
+			{"species_desc", SortFieldSpecies, true},
+			{"confidence_asc", SortFieldConfidence, false},
 			{"confidence_desc", SortFieldConfidence, true},
-			{"species_asc", "label_id", false},
+			{"status", SortFieldStatus, false},
 			{"", SortFieldDetectedAt, true}, // Default
 		}
 

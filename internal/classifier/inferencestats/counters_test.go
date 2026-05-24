@@ -141,3 +141,55 @@ func TestCounterMap_EmptySnapshot(t *testing.T) {
 	snaps := m.SnapshotAll()
 	assert.Empty(t, snaps)
 }
+
+func TestCounterMap_PeekAll_NonDestructive(t *testing.T) {
+	t.Parallel()
+	m := &CounterMap{}
+
+	m.RecordInvoke("model_a", 500)
+	m.RecordInvoke("model_a", 1200)
+	m.RecordInvoke("model_b", 300)
+
+	peek1 := m.PeekAll()
+	require.Len(t, peek1, 2)
+
+	a := peek1["model_a"]
+	assert.Equal(t, int64(2), a.InvokeCount)
+	assert.Equal(t, int64(1700), a.InvokeTotalUs)
+	assert.Equal(t, int64(1200), a.InvokeMaxUs)
+
+	b := peek1["model_b"]
+	assert.Equal(t, int64(1), b.InvokeCount)
+	assert.Equal(t, int64(300), b.InvokeTotalUs)
+	assert.Equal(t, int64(300), b.InvokeMaxUs)
+
+	// PeekAll must NOT reset InvokeMaxUs
+	peek2 := m.PeekAll()
+	assert.Equal(t, int64(1200), peek2["model_a"].InvokeMaxUs)
+	assert.Equal(t, int64(300), peek2["model_b"].InvokeMaxUs)
+}
+
+func TestCounterMap_PeekAll_Empty(t *testing.T) {
+	t.Parallel()
+	m := &CounterMap{}
+	peek := m.PeekAll()
+	assert.Empty(t, peek)
+}
+
+func TestCounterMap_PeekAll_DoesNotInterfereWithSnapshot(t *testing.T) {
+	t.Parallel()
+	m := &CounterMap{}
+
+	m.RecordInvoke("model_a", 1000)
+
+	// PeekAll should not affect subsequent SnapshotAll
+	peek := m.PeekAll()
+	assert.Equal(t, int64(1000), peek["model_a"].InvokeMaxUs)
+
+	snap := m.SnapshotAll()
+	assert.Equal(t, int64(1000), snap["model_a"].InvokeMaxUs)
+
+	// After SnapshotAll resets max, PeekAll should see zero
+	peek2 := m.PeekAll()
+	assert.Equal(t, int64(0), peek2["model_a"].InvokeMaxUs)
+}

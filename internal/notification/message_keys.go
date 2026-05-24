@@ -163,4 +163,8 @@ const (
 	// Error burst grouping notifications
 	MsgErrorBurstTitle   = "notifications.content.error.burstTitle"
 	MsgErrorBurstMessage = "notifications.content.error.burstMessage"
+
+	// ONNX Runtime availability notifications
+	MsgORTUnavailableTitle   = "notifications.content.ort.unavailableTitle"
+	MsgORTUnavailableMessage = "notifications.content.ort.unavailableMessage"
 )

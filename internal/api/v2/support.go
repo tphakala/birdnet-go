@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -27,12 +28,14 @@ const (
 
 // GenerateSupportDumpRequest represents the request for generating a support dump
 type GenerateSupportDumpRequest struct {
-	IncludeLogs       bool   `json:"include_logs"`
-	IncludeConfig     bool   `json:"include_config"`
-	IncludeSystemInfo bool   `json:"include_system_info"`
-	UserMessage       string `json:"user_message"`
-	UploadToSentry    bool   `json:"upload_to_sentry"`
-	GitHubIssueNumber string `json:"github_issue_number"`
+	IncludeLogs         bool   `json:"include_logs"`
+	IncludeConfig       bool   `json:"include_config"`
+	IncludeSystemInfo   bool   `json:"include_system_info"`
+	IncludeDatabaseInfo bool   `json:"include_database_info"`
+	IncludeAppEvents    bool   `json:"include_app_events"`
+	UserMessage         string `json:"user_message"`
+	UploadToSentry      bool   `json:"upload_to_sentry"`
+	GitHubIssueNumber   string `json:"github_issue_number"`
 }
 
 // GenerateSupportDumpResponse represents the response for support dump generation
@@ -71,15 +74,19 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		logger.Bool("include_logs", req.IncludeLogs),
 		logger.Bool("include_config", req.IncludeConfig),
 		logger.Bool("include_system_info", req.IncludeSystemInfo),
+		logger.Bool("include_database_info", req.IncludeDatabaseInfo),
+		logger.Bool("include_app_events", req.IncludeAppEvents),
 		logger.Bool("upload_to_sentry", req.UploadToSentry),
 		logger.String("github_issue", req.GitHubIssueNumber),
 		logger.Bool("has_user_message", req.UserMessage != ""))
 
 	// Set defaults if nothing is selected
-	if !req.IncludeLogs && !req.IncludeConfig && !req.IncludeSystemInfo {
+	if !req.IncludeLogs && !req.IncludeConfig && !req.IncludeSystemInfo && !req.IncludeDatabaseInfo && !req.IncludeAppEvents {
 		req.IncludeLogs = true
 		req.IncludeConfig = true
 		req.IncludeSystemInfo = true
+		req.IncludeDatabaseInfo = true
+		req.IncludeAppEvents = true
 		c.logDebugIfEnabled("Set default options for support dump")
 	}
 
@@ -103,14 +110,39 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		settings.Version,
 	)
 
+	// Wire database info provider if V2Manager is available
+	if req.IncludeDatabaseInfo && c.V2Manager != nil {
+		dialect := datastore.DialectSQLite
+		if c.V2Manager.IsMySQL() {
+			dialect = datastore.DialectMySQL
+		}
+		dbCollector := support.NewGormDatabaseInfoCollector(
+			c.V2Manager.DB(),
+			dialect,
+			c.V2Manager.Path(),
+			c.DS.SchemaVersion(),
+			c.V2Manager.TablePrefix(),
+		)
+		collector.SetDatabaseInfoProvider(dbCollector)
+	}
+
+	// Wire app events provider
+	if req.IncludeAppEvents && c.DS != nil {
+		collector.SetAppEventsProvider(support.NewDatastoreAppEventsProvider(c.DS, nil))
+	}
+
 	// Set collection options
 	opts := support.CollectorOptions{
-		IncludeLogs:       req.IncludeLogs,
-		IncludeConfig:     req.IncludeConfig,
-		IncludeSystemInfo: req.IncludeSystemInfo,
-		LogDuration:       supportLogDurationWeeks * daysPerWeek * HoursPerDay * time.Hour, // 4 weeks
-		MaxLogSize:        supportMaxLogSizeMB * supportBytesPerMB,                         // 50MB to accommodate more logs
-		ScrubSensitive:    true,
+		IncludeLogs:           req.IncludeLogs,
+		IncludeConfig:         req.IncludeConfig,
+		IncludeSystemInfo:     req.IncludeSystemInfo,
+		IncludeDatabaseInfo:   req.IncludeDatabaseInfo,
+		IncludeDeploymentInfo: true,
+		IncludeAppEvents:      req.IncludeAppEvents,
+		LogDuration:           supportLogDurationWeeks * daysPerWeek * HoursPerDay * time.Hour, // 4 weeks
+		MaxLogSize:            supportMaxLogSizeMB * supportBytesPerMB,                         // 50MB to accommodate more logs
+		ScrubSensitive:        true,
+		AnonymizePII:          true,
 	}
 
 	// Collect data
@@ -273,6 +305,9 @@ func (c *Controller) initSupportRoutes() {
 		c.wg.Go(func() {
 			c.startSupportDumpCleanup(c.ctx)
 		})
+		c.wg.Go(func() {
+			c.startAppEventPruning(c.ctx)
+		})
 	}
 }
 
@@ -350,4 +385,50 @@ func (c *Controller) tryRemoveOldFile(file string, cutoff time.Time) bool {
 		return false
 	}
 	return true
+}
+
+// appEventRetentionDays is the default retention period for application events.
+const appEventRetentionDays = 90
+
+// startAppEventPruning runs periodic pruning of old application events.
+func (c *Controller) startAppEventPruning(ctx context.Context) {
+	if ctx == nil || c.DS == nil {
+		return
+	}
+
+	// Prune once at startup, but check for early cancellation first
+	select {
+	case <-ctx.Done():
+		return
+	default:
+		c.pruneAppEvents(ctx)
+	}
+
+	// Then prune daily
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			c.pruneAppEvents(ctx)
+		}
+	}
+}
+
+// pruneAppEvents removes application events older than the retention period.
+func (c *Controller) pruneAppEvents(ctx context.Context) {
+	if c.DS == nil {
+		return
+	}
+	pruned, err := c.DS.PruneAppEvents(ctx, appEventRetentionDays)
+	if err != nil {
+		c.logWarnIfEnabled("Failed to prune app events", logger.Error(err))
+		return
+	}
+	if pruned > 0 {
+		c.logInfoIfEnabled("Pruned old app events", logger.Int64("count", pruned))
+	}
 }

@@ -32,6 +32,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -45,20 +46,19 @@ const tunnelProviderUnknown = "unknown"
 
 // Controller manages the API routes and handlers
 type Controller struct {
-	Echo                *echo.Echo
-	Group               *echo.Group
-	DS                  datastore.Interface           // Deprecated: Use Repo for new detection operations
-	Repo                datastore.DetectionRepository // New: Preferred for detection CRUD operations
-	Settings            *conf.Settings
-	BirdImageCache      *imageprovider.BirdImageCache
-	SunCalc             *suncalc.SunCalc
-	Processor           *processor.Processor
-	EBirdClient         *ebird.Client
-	TaxonomyDB          *classifier.TaxonomyDatabase
-	controlChan         chan string
-	shutdownRequester   ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
-	shutdownMu          sync.RWMutex      // protects shutdownRequester
-	speciesExcludeMutex sync.RWMutex      // Mutex for species exclude list operations
+	Echo              *echo.Echo
+	Group             *echo.Group
+	DS                datastore.Interface           // Deprecated: Use Repo for new detection operations
+	Repo              datastore.DetectionRepository // New: Preferred for detection CRUD operations
+	Settings          *conf.Settings
+	BirdImageCache    *imageprovider.BirdImageCache
+	SunCalc           *suncalc.SunCalc
+	Processor         *processor.Processor
+	EBirdClient       *ebird.Client
+	TaxonomyDB        *classifier.TaxonomyDatabase
+	controlChan       chan string
+	shutdownRequester ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
+	shutdownMu        sync.RWMutex      // protects shutdownRequester
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.
@@ -98,7 +98,9 @@ type Controller struct {
 	audioLevelChan chan audiocore.AudioLevelData
 
 	// engine provides access to the unified audio subsystem (sources, buffers, routing).
-	engine *engine.AudioEngine
+	// Stored atomically: written once via WithAudioEngine after Controller init,
+	// read concurrently by HTTP handlers.
+	engine atomic.Pointer[engine.AudioEngine]
 
 	// V2Manager provides access to the v2 normalized database for stats and backup
 	V2Manager datastoreV2.Manager
@@ -134,6 +136,11 @@ type Controller struct {
 	// Stored atomically because it is set during pipeline Start() and read
 	// concurrently by HTTP handlers.
 	audioWatchdog atomic.Pointer[audiocore.LivenessWatchdog]
+
+	// Health check infrastructure for the diagnostics endpoints.
+	healthRegistry *health.Registry
+	healthReports  *health.ReportStore
+	healthErrors   *health.ErrorRingBuffer
 
 	// sourceRestarter restarts a single audio source by ID. Set during
 	// pipeline Start() and called by the restart-source control endpoint.
@@ -190,7 +197,7 @@ func WithV2Manager(mgr datastoreV2.Manager) Option {
 // WithAudioEngine sets the AudioEngine for audio subsystem access.
 func WithAudioEngine(e *engine.AudioEngine) Option {
 	return func(c *Controller) {
-		c.engine = e
+		c.engine.Store(e)
 	}
 }
 
@@ -198,6 +205,15 @@ func WithAudioEngine(e *engine.AudioEngine) Option {
 func WithModelManager(mm *classifier.ModelManager) Option {
 	return func(c *Controller) {
 		c.ModelManager = mm
+	}
+}
+
+// WithHealthErrorBuffer injects a shared ErrorRingBuffer created at startup.
+// When set, initDiagnosticsRoutes uses this buffer instead of creating its own,
+// enabling the logger to feed errors into the same buffer the health checks read.
+func WithHealthErrorBuffer(buf *health.ErrorRingBuffer) Option {
+	return func(c *Controller) {
+		c.healthErrors = buf
 	}
 }
 
@@ -621,6 +637,7 @@ func (c *Controller) initRoutes() {
 		{"settings routes", c.initSettingsRoutes},
 		{"filesystem routes", c.initFileSystemRoutes},
 		{"stream health routes", c.initStreamHealthRoutes},
+		{"stream test routes", c.initStreamTestRoutes},
 		{"audio health routes", c.initAudioHealthRoutes},
 		{"quiet hours routes", c.initQuietHoursRoutes},
 		{"audio level routes", c.initAudioLevelRoutes},
@@ -642,6 +659,7 @@ func (c *Controller) initRoutes() {
 		{"model routes", c.initModelRoutes},
 		{"insights routes", c.initInsightsRoutes},
 		{"tls routes", c.initTLSRoutes},
+		{"diagnostics routes", c.initDiagnosticsRoutes},
 	}
 
 	for _, initializer := range routeInitializers {
@@ -797,7 +815,6 @@ func (c *Controller) Shutdown() {
 }
 
 // SetShutdownRequester sets the shutdown requester for programmatic restart.
-// SetShutdownRequester sets the shutdown requester for programmatic restart.
 // Thread-safe: may be called after the HTTP server starts accepting requests.
 func (c *Controller) SetShutdownRequester(sr ShutdownRequester) {
 	c.shutdownMu.Lock()
@@ -924,6 +941,11 @@ func (c *Controller) reportErrorToTelemetry(ctx echo.Context, err error, message
 		if errors.As(err, &ee) && ee.IsReported() {
 			return
 		}
+	}
+
+	// Client disconnects and request timeouts are not server bugs.
+	if err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+		return
 	}
 
 	path := ctx.Request().URL.Path

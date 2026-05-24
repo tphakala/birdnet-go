@@ -58,7 +58,7 @@
 
   // Fetch image attribution when popup opens
   async function fetchImageAttribution() {
-    if (!scientificName || lastFetchedScientificName === scientificName) return;
+    if (!scientificName?.trim() || lastFetchedScientificName === scientificName) return;
     lastFetchedScientificName = scientificName;
 
     try {

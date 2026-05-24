@@ -575,16 +575,20 @@ func ConvertSearchFilters(
 		sf.SortBy = SortFieldDetectedAt
 		sf.SortDesc = true
 	case "species_asc":
-		// WARNING: label_id is an auto-increment integer with no correlation to
-		// alphabetical species names. This provides stable grouping by species,
-		// but NOT alphabetical ordering. True species sorting requires a JOIN
-		// with the labels table, which is not implemented.
-		// TODO(#1905): Implement proper species sorting via label JOIN
-		sf.SortBy = "label_id"
+		sf.SortBy = SortFieldSpecies
+		sf.SortDesc = false
+	case "species_desc":
+		sf.SortBy = SortFieldSpecies
+		sf.SortDesc = true
+	case "confidence_asc":
+		sf.SortBy = SortFieldConfidence
 		sf.SortDesc = false
 	case "confidence_desc":
 		sf.SortBy = SortFieldConfidence
 		sf.SortDesc = true
+	case "status":
+		sf.SortBy = SortFieldStatus
+		sf.SortDesc = false
 	}
 
 	// Pagination: convert Page/PerPage to Limit/Offset
@@ -667,13 +671,19 @@ func ConvertAdvancedFilters(
 	case "species_asc":
 		sf.SortBy = SortFieldSpecies
 		sf.SortDesc = false
+	case "species_desc":
+		sf.SortBy = SortFieldSpecies
+		sf.SortDesc = true
+	case "confidence_asc":
+		sf.SortBy = SortFieldConfidence
+		sf.SortDesc = false
 	case "confidence_desc":
 		sf.SortBy = SortFieldConfidence
 		sf.SortDesc = true
 	case "status":
 		sf.SortBy = SortFieldStatus
 		sf.SortDesc = false
-	default: // "date_desc" or empty — use SortAscending for backward compatibility
+	default: // "date_desc" or empty
 		sf.SortBy = SortFieldDetectedAt
 		// sf.SortDesc already set from !filters.SortAscending above
 	}

@@ -66,6 +66,10 @@ type audioLevelManager struct {
 	subscribers   map[chan audiocore.AudioLevelData]struct{}
 	subscribersMu sync.RWMutex
 
+	// Latest audio level per source for health checks (updated by broadcaster)
+	latestLevels   map[string]audiocore.AudioLevelData
+	latestLevelsMu sync.RWMutex
+
 	// Broadcaster lifecycle
 	broadcasterOnce   sync.Once
 	broadcasterCancel context.CancelFunc
@@ -79,6 +83,7 @@ const maxStreamAnonymMapSize = 100
 var audioLevelMgr = &audioLevelManager{
 	streamAnonymMap: make(map[string]string),
 	subscribers:     make(map[chan audiocore.AudioLevelData]struct{}),
+	latestLevels:    make(map[string]audiocore.AudioLevelData),
 }
 
 // SetAudioLevelChan sets the audio level channel for the controller and starts
@@ -103,24 +108,39 @@ func (c *Controller) SetAudioLevelChan(ch chan audiocore.AudioLevelData) {
 	})
 }
 
+// cleanupBroadcaster closes all subscriber channels and clears stale audio levels.
+// Called when the broadcaster exits (context cancel or source channel close).
+func cleanupBroadcaster() {
+	audioLevelMgr.subscribersMu.Lock()
+	for ch := range audioLevelMgr.subscribers {
+		close(ch)
+		delete(audioLevelMgr.subscribers, ch)
+	}
+	audioLevelMgr.subscribersMu.Unlock()
+
+	audioLevelMgr.latestLevelsMu.Lock()
+	clear(audioLevelMgr.latestLevels)
+	audioLevelMgr.latestLevelsMu.Unlock()
+}
+
 // runAudioLevelBroadcaster reads from the source channel and broadcasts to all subscribers.
 // This allows multiple SSE clients to receive the same audio level data.
 func runAudioLevelBroadcaster(ctx context.Context, sourceChan chan audiocore.AudioLevelData) {
 	for {
 		select {
 		case <-ctx.Done():
+			cleanupBroadcaster()
 			return
 		case data, ok := <-sourceChan:
 			if !ok {
-				// Source channel closed, close all subscriber channels
-				audioLevelMgr.subscribersMu.Lock()
-				for ch := range audioLevelMgr.subscribers {
-					close(ch)
-					delete(audioLevelMgr.subscribers, ch)
-				}
-				audioLevelMgr.subscribersMu.Unlock()
+				cleanupBroadcaster()
 				return
 			}
+
+			// Track latest level per source for health checks
+			audioLevelMgr.latestLevelsMu.Lock()
+			audioLevelMgr.latestLevels[data.Source] = data
+			audioLevelMgr.latestLevelsMu.Unlock()
 
 			// Fan out to all subscribers (non-blocking send)
 			audioLevelMgr.subscribersMu.RLock()
@@ -157,6 +177,22 @@ func unsubscribeFromAudioLevels(ch chan audiocore.AudioLevelData) {
 	audioLevelMgr.subscribersMu.Unlock()
 	// Note: We don't close the channel here as it may still have buffered data
 	// that the handler is processing. The channel will be garbage collected.
+}
+
+// LatestAudioLevels returns a snapshot of the most recent audio level per source.
+// Safe for concurrent use; returns nil if no levels have been received.
+func LatestAudioLevels() []audiocore.AudioLevelData {
+	audioLevelMgr.latestLevelsMu.RLock()
+	defer audioLevelMgr.latestLevelsMu.RUnlock()
+
+	if len(audioLevelMgr.latestLevels) == 0 {
+		return nil
+	}
+	levels := make([]audiocore.AudioLevelData, 0, len(audioLevelMgr.latestLevels))
+	for source := range audioLevelMgr.latestLevels {
+		levels = append(levels, audioLevelMgr.latestLevels[source])
+	}
+	return levels
 }
 
 // cacheStreamAnonymName stores an anonymized name for a stream source with bounded map size.
@@ -342,7 +378,11 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 
 		case <-activityCheck.C:
 			// Prune sources that have been removed/disabled since the session started.
-			registry := c.engine.Registry()
+			eng := c.engine.Load()
+			if eng == nil {
+				continue
+			}
+			registry := eng.Registry()
 			pruned := registry != nil && c.pruneRemovedSources(registry, levels, lastUpdateTime, lastNonZeroTime)
 			// Check for inactive sources and zero them out.
 			if updated := c.checkSourceActivity(levels, lastUpdateTime, lastNonZeroTime); updated || pruned {
@@ -381,7 +421,11 @@ func createAudioLevelEntry(sourceID, displayName string) audiocore.AudioLevelDat
 // initializeAudioLevels creates the initial levels map with configured sources
 func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audiocore.AudioLevelData {
 	levels := make(map[string]audiocore.AudioLevelData)
-	registry := c.engine.Registry()
+	eng := c.engine.Load()
+	if eng == nil {
+		return levels
+	}
+	registry := eng.Registry()
 	if registry == nil {
 		return levels
 	}
@@ -440,7 +484,11 @@ func (c *Controller) updateAudioLevel(
 	isAuthenticated bool,
 ) {
 	now := time.Now()
-	registry := c.engine.Registry()
+	eng := c.engine.Load()
+	var registry *audiocore.SourceRegistry
+	if eng != nil {
+		registry = eng.Registry()
+	}
 
 	// Determine display name based on authentication
 	if registry != nil {

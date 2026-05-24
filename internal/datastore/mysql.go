@@ -44,7 +44,7 @@ func validateMySQLConfig() error {
 }
 
 // InitializeDatabase sets up the MySQL database connection
-func (store *MySQLStore) Open() error {
+func (store *MySQLStore) Open() (retErr error) {
 	if err := validateMySQLConfig(); err != nil {
 		return err // validateMySQLConfig returns a properly formatted error
 	}
@@ -100,6 +100,16 @@ func (store *MySQLStore) Open() error {
 	sqlDB.SetMaxIdleConns(MySQLMaxIdleConns)
 	sqlDB.SetConnMaxLifetime(MySQLConnMaxLifetime)
 	sqlDB.SetConnMaxIdleTime(MySQLConnMaxIdleTime)
+
+	// Clean up connection pool if any subsequent initialization step fails.
+	defer func() {
+		if retErr != nil {
+			if closeErr := sqlDB.Close(); closeErr != nil {
+				GetLogger().Warn("Failed to close DB pool after init error", logger.Error(closeErr))
+			}
+			store.DB = nil
+		}
+	}()
 
 	store.DB = db
 
@@ -262,10 +272,30 @@ func (m *MySQLStore) SchemaVersion() string {
 	return SchemaVersionLegacy
 }
 
+// SaveAppEvent is a no-op for the legacy MySQL datastore.
+func (m *MySQLStore) SaveAppEvent(_ context.Context, _, _, _ string, _ map[string]any) error {
+	return nil
+}
+
+// GetRecentAppEvents is a no-op for the legacy MySQL datastore.
+func (m *MySQLStore) GetRecentAppEvents(_ context.Context, _ int) ([]AppEvent, error) {
+	return nil, nil
+}
+
+// GetAppEventsSince is a no-op for the legacy MySQL datastore.
+func (m *MySQLStore) GetAppEventsSince(_ context.Context, _ time.Time, _ int) ([]AppEvent, error) {
+	return nil, nil
+}
+
+// PruneAppEvents is a no-op for the legacy MySQL datastore.
+func (m *MySQLStore) PruneAppEvents(_ context.Context, _ int) (int64, error) {
+	return 0, nil
+}
+
 // GetDatabaseStats returns basic runtime statistics about the MySQL database.
 // Returns partial stats with ErrDBNotConnected if the database is unreachable.
 // The Connected field in the returned stats indicates if the DB is reachable.
-func (m *MySQLStore) GetDatabaseStats() (*DatabaseStats, error) {
+func (m *MySQLStore) GetDatabaseStats(ctx context.Context) (*DatabaseStats, error) {
 	// Defensive guard for nil Settings (e.g., in custom test setups)
 	location := ""
 	if m.Settings != nil {
@@ -291,18 +321,18 @@ func (m *MySQLStore) GetDatabaseStats() (*DatabaseStats, error) {
 		return stats, ErrDBNotConnected
 	}
 
-	if err := sqlDB.Ping(); err != nil {
+	if err := sqlDB.PingContext(ctx); err != nil {
 		return stats, ErrDBNotConnected
 	}
 	stats.Connected = true
 
 	// Get database size (ignore errors, size stays 0)
-	if size, sizeErr := m.getDatabaseSize(); sizeErr == nil {
+	if size, sizeErr := m.getDatabaseSize(ctx); sizeErr == nil {
 		stats.SizeBytes = size
 	}
 
 	// Get total detections (ignore errors, count stays 0)
-	if count, countErr := m.getTableRowCount("notes"); countErr == nil {
+	if count, countErr := m.getTableRowCount(ctx, "notes"); countErr == nil {
 		stats.TotalDetections = count
 	}
 

@@ -25,6 +25,9 @@ BIRDNET_GO_IMAGE=""
 # Silent mode for non-interactive installation (set via --silent flag)
 SILENT_MODE="false"
 
+# Force root mode - allow running as root despite warnings (set via --force-root flag)
+FORCE_ROOT="false"
+
 # Flag to track if Docker image was changed during update/rollback
 IMAGE_CHANGED="false"
 
@@ -145,6 +148,17 @@ sanitize_for_logs() {
     # Also redact common secret patterns like password: value
     sed -E 's#(://)[^/@:]+(:[^/@]*)?@#\1***:***@#g' \
     | sed -E 's#(password|passwd|pwd|token|secret|api[_-]?key)["'"'"']?\s*[:=]\s*[^"'"'"'[:space:]]+#\1: ***#Ig'
+}
+
+# Prevent sed injection from user-supplied values (RTSP URLs, device names, passwords).
+sed_escape_replacement() {
+    printf '%s' "$1" | tr -d '\n\r' | sed -e 's/[\\|&]/\\&/g'
+}
+
+# Prevent sed injection from user-supplied lat/lon and port values.
+validate_numeric() {
+    local value="$1"
+    [[ "$value" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]
 }
 
 # Function to log messages with timestamps
@@ -1661,22 +1675,203 @@ check_directory() {
     fi
 }
 
-# Function to prevent running as root
+# Function to warn against running as root (soft block with bypass)
 check_not_root() {
     if [ "$(id -u)" -eq 0 ]; then
+        if [ "$FORCE_ROOT" = "true" ]; then
+            print_message "⚠️  Running as root (--force-root was specified)" "$YELLOW"
+            return 0
+        fi
+
         print_message "" "$NC"
-        print_message "❌ This script must not be run as root or with sudo" "$RED"
+        print_message "⚠️  Running as root is strongly discouraged" "$YELLOW"
         print_message "" "$NC"
         print_message "Running as root places all data under /root/birdnet-go-app/," "$YELLOW"
         print_message "which causes settings and recordings to become inaccessible" "$YELLOW"
-        print_message "if you later run the script as your regular user." "$YELLOW"
+        print_message "if you later try to manage the application as a regular user." "$YELLOW"
         print_message "" "$NC"
-        print_message "Run the script as your regular user instead:" "$GREEN"
+        print_message "It is strongly recommended to run this script as a non-privileged user." "$GREEN"
+        print_message "The script uses sudo internally when elevated privileges are needed." "$NC"
+        print_message "" "$NC"
+        print_message "Recommended: run as your regular user instead:" "$GREEN"
         print_message "  ./install.sh" "$NC"
         print_message "" "$NC"
-        print_message "The script uses sudo internally when elevated privileges are needed." "$YELLOW"
+        print_message "To proceed as root anyway, re-run with --force-root:" "$YELLOW"
+        print_message "  ./install.sh --force-root" "$NC"
+        print_message "" "$NC"
         exit 1
     fi
+}
+
+# Function to migrate a root installation to the current user's home directory
+migrate_installation() {
+    local source_path="$1"
+    local dest_path="$2"
+
+    log_message "INFO" "=== Starting Installation Migration ==="
+    log_message "INFO" "Source: $source_path, Destination: $dest_path"
+
+    print_message "" "$NC"
+    print_message "🔄 Migrating installation from $source_path to $dest_path..." "$YELLOW"
+
+    # Pre-flight: verify source has valid data (use sudo since source may be under /root)
+    if ! sudo test -f "${source_path}/config/config.yaml" 2>/dev/null; then
+        print_message "❌ Source directory does not contain a valid BirdNET-Go installation" "$RED"
+        log_message "ERROR" "Migration source missing config/config.yaml: $source_path"
+        send_telemetry_event "error" "Root migration failed: no config at source" "error" "step=migrate,reason=no_source_config"
+        return 1
+    fi
+
+    # Pre-flight: verify destination does not already contain data
+    if [ -d "$dest_path" ] && [ -n "$(ls -A "$dest_path" 2>/dev/null)" ]; then
+        print_message "❌ Destination already contains BirdNET-Go data" "$RED"
+        print_message "   Remove or empty $dest_path first if you want to re-migrate." "$YELLOW"
+        log_message "ERROR" "Migration destination is not empty: $dest_path"
+        send_telemetry_event "error" "Root migration failed: destination exists" "error" "step=migrate,reason=dest_exists"
+        return 1
+    fi
+
+    # Pre-flight: check disk space
+    local source_size_kb
+    source_size_kb=$(sudo du -sk "$source_path" 2>/dev/null | cut -f1)
+    if [ -n "$source_size_kb" ] && [ "$source_size_kb" -gt 0 ]; then
+        local dest_parent
+        dest_parent=$(dirname "$dest_path")
+        mkdir -p "$dest_parent" 2>/dev/null
+        local dest_available_kb
+        dest_available_kb=$(df -Pk "$dest_parent" 2>/dev/null | awk 'NR==2 {print $4}')
+
+        if [ -n "$dest_available_kb" ]; then
+            # Require 10% safety margin
+            local required_kb=$(( source_size_kb + source_size_kb / 10 ))
+            if [ "$dest_available_kb" -lt "$required_kb" ]; then
+                local required_mb=$(( required_kb / 1024 ))
+                local available_mb=$(( dest_available_kb / 1024 ))
+                print_message "❌ Not enough disk space for migration" "$RED"
+                print_message "   Need ~${required_mb} MB (including 10% buffer), only ${available_mb} MB available" "$YELLOW"
+                log_message "ERROR" "Migration failed: insufficient disk space (need ${source_size_kb}KB, have ${dest_available_kb}KB)"
+                send_telemetry_event "error" "Root migration failed: insufficient disk space" "error" "step=migrate,reason=disk_space"
+                return 1
+            fi
+        fi
+    fi
+
+    # Step 1: Stop service and remove container (reuse existing robust stop logic)
+    if detect_birdnet_service || check_container_running 2>/dev/null; then
+        stop_birdnet_service true
+        log_message "INFO" "Stopped birdnet-go service and container"
+    fi
+    # Force-remove container to release SQLite locks
+    if command_exists docker; then
+        sudo docker rm -f birdnet-go 2>/dev/null || true
+    fi
+
+    # Step 2: Copy data
+    print_message "📋 Copying data..." "$YELLOW"
+    mkdir -p -- "$dest_path" || {
+        print_message "❌ Failed to create destination directory" "$RED"
+        log_message "ERROR" "Migration mkdir failed: $dest_path"
+        return 1
+    }
+    if ! sudo cp -a "${source_path}/." "$dest_path/"; then
+        print_message "❌ Failed to copy data, rolling back" "$RED"
+        sudo rm -rf -- "$dest_path"
+        log_message "ERROR" "Migration cp -a failed, rolled back"
+        send_telemetry_event "error" "Root migration failed: copy error" "error" "step=migrate,reason=copy_failed"
+        return 1
+    fi
+    log_message "INFO" "Data copied successfully"
+
+    # Step 3: Fix ownership
+    print_message "🔧 Fixing file ownership..." "$YELLOW"
+    if ! sudo chown -R "$USER:$USER" "$dest_path/"; then
+        print_message "❌ Failed to change file ownership, rolling back copy" "$RED"
+        sudo rm -rf -- "$dest_path"
+        log_message "ERROR" "Migration chown failed, rolled back"
+        send_telemetry_event "error" "Root migration failed: chown error" "error" "step=migrate,reason=chown_failed"
+        return 1
+    fi
+    log_message "INFO" "File ownership updated to $USER"
+
+    # Step 4: Post-migration validation
+    print_message "🔍 Validating migration..." "$YELLOW"
+    local validation_ok=true
+
+    if [ ! -f "${dest_path}/config/config.yaml" ]; then
+        print_message "❌ Config file missing after migration" "$RED"
+        validation_ok=false
+    else
+        local file_owner
+        file_owner=$(stat -c %U "${dest_path}/config/config.yaml" 2>/dev/null)
+        if [ "$file_owner" != "$USER" ]; then
+            print_message "❌ File ownership incorrect (expected $USER, got $file_owner)" "$RED"
+            validation_ok=false
+        fi
+    fi
+
+    # SQLite integrity check (best-effort, skip if sqlite3 not available)
+    local db_file="${dest_path}/data/birdnet.db"
+    if [ -f "$db_file" ] && command_exists sqlite3; then
+        local integrity_result
+        integrity_result=$(sqlite3 "$db_file" "PRAGMA integrity_check;" 2>/dev/null)
+        if [ "$integrity_result" != "ok" ]; then
+            print_message "⚠️  Database integrity check returned: $integrity_result" "$YELLOW"
+            print_message "   The database may still work, but consider restoring from backup if issues arise." "$YELLOW"
+            log_message "WARN" "SQLite integrity check after migration: $integrity_result"
+        else
+            log_message "INFO" "SQLite integrity check passed"
+        fi
+    fi
+
+    if [ "$validation_ok" = false ]; then
+        print_message "❌ Migration validation failed, rolling back copy" "$RED"
+        sudo rm -rf -- "$dest_path"
+        log_message "ERROR" "Migration validation failed, rolled back"
+        send_telemetry_event "error" "Root migration failed: validation error" "error" "step=migrate,reason=validation_failed"
+        return 1
+    fi
+
+    # Step 5: Preserve timezone and clean up old systemd service
+    if [ -z "$CONFIGURED_TZ" ]; then
+        local tz_service_file=""
+        if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
+            tz_service_file="/etc/systemd/system/birdnet-go.service"
+        elif [ -f "/lib/systemd/system/birdnet-go.service" ]; then
+            tz_service_file="/lib/systemd/system/birdnet-go.service"
+        fi
+        if [ -n "$tz_service_file" ]; then
+            CONFIGURED_TZ=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' "$tz_service_file" 2>/dev/null | head -1)
+            if [ -n "$CONFIGURED_TZ" ]; then
+                log_message "INFO" "Preserved timezone from old service: $CONFIGURED_TZ"
+                print_message "📍 Preserved existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+            fi
+        fi
+    fi
+    sudo systemctl disable --now birdnet-go.service 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/birdnet-go.service
+    sudo rm -f /etc/systemd/system/multi-user.target.wants/birdnet-go.service
+    sudo rm -f /lib/systemd/system/birdnet-go.service
+    sudo rm -rf /etc/systemd/system/birdnet-go.service.d
+    sudo systemctl daemon-reload
+    sudo systemctl reset-failed birdnet-go.service 2>/dev/null || true
+    log_message "INFO" "Removed old systemd service and related files"
+
+    # Step 6: Success message and cleanup suggestion
+    print_message "" "$NC"
+    print_message "✅ Migration complete!" "$GREEN"
+    print_message "" "$NC"
+    print_message "Your data has been migrated to: $dest_path" "$GREEN"
+    print_message "Your old data is still at: $source_path" "$NC"
+    print_message "Once you've verified everything works, you can remove it with:" "$NC"
+    print_message "  sudo rm -rf $source_path" "$NC"
+    print_message "" "$NC"
+
+    log_message "INFO" "Migration completed successfully"
+    send_telemetry_event "info" "Root migration completed" "info" "step=migrate,source=root_home"
+
+    MIGRATION_DONE="true"
+    load_telemetry_config
+    return 0
 }
 
 # Function to check for existing BirdNET-Go installation under a different user
@@ -1728,20 +1923,32 @@ check_existing_installation_owner() {
         fi
     fi
 
-    # Method 3: Scan other users' home directories for birdnet-go-app
+    # Method 3: Scan /root and other users' home directories for birdnet-go-app
     if [ "$found_other_install" = false ]; then
-        for candidate in /home/*/birdnet-go-app; do
-            if [ -d "$candidate" ]; then
-                local candidate_home
-                candidate_home=$(dirname "$candidate")
-                if [ "$candidate_home" != "$HOME" ] && [ -f "${candidate}/config/config.yaml" ]; then
-                    found_other_install=true
-                    other_user=$(basename "$candidate_home")
-                    other_path="$candidate"
-                    break
+        # Check /root separately since it's typically mode 700 and requires sudo
+        # Try non-interactive first; fall back to interactive only in non-silent mode
+        # (interactive sudo would hang in automated/CI environments)
+        if [ "$HOME" != "/root" ] && { sudo -n test -f "/root/birdnet-go-app/config/config.yaml" 2>/dev/null || { [ "$SILENT_MODE" != "true" ] && sudo test -f "/root/birdnet-go-app/config/config.yaml" 2>/dev/null; }; }; then
+            found_other_install=true
+            other_user="root"
+            other_path="/root/birdnet-go-app"
+        fi
+
+        # Check other users' home directories
+        if [ "$found_other_install" = false ]; then
+            for candidate in /home/*/birdnet-go-app; do
+                if [ -d "$candidate" ]; then
+                    local candidate_home
+                    candidate_home=$(dirname "$candidate")
+                    if [ "$candidate_home" != "$HOME" ] && [ -f "${candidate}/config/config.yaml" ]; then
+                        found_other_install=true
+                        other_user=$(basename "$candidate_home")
+                        other_path="$candidate"
+                        break
+                    fi
                 fi
-            fi
-        done
+            done
+        fi
     fi
 
     if [ "$found_other_install" = true ]; then
@@ -1763,35 +1970,77 @@ check_existing_installation_owner() {
         print_message "" "$NC"
 
         if [ "$other_user" = "root" ]; then
-            print_message "💡 To migrate your existing data to your user account:" "$GREEN"
-            print_message "  sudo systemctl stop birdnet-go.service" "$NC"
-            print_message "  mkdir -p $HOME/birdnet-go-app" "$NC"
-            print_message "  sudo cp -a /root/birdnet-go-app/. $HOME/birdnet-go-app/" "$NC"
-            print_message "  sudo chown -R \$USER:\$USER $HOME/birdnet-go-app/" "$NC"
-            print_message "  Then run: ./install.sh" "$NC"
+            # Root installs can be migrated automatically since we have sudo access
+            if [ "$SILENT_MODE" = "true" ]; then
+                # Silent mode: attempt automated migration, exit on failure
+                log_message "INFO" "Silent mode: attempting automated migration from $other_path"
+                if migrate_installation "$other_path" "$HOME/birdnet-go-app"; then
+                    log_message "INFO" "Silent mode: migration succeeded"
+                    return 0
+                else
+                    print_message "❌ Silent mode: migration failed" "$RED"
+                    send_telemetry_event "error" "Root migration failed in silent mode" "error" "step=check_owner,other_user=$other_user"
+                    exit 1
+                fi
+            fi
+
+            print_message "Options:" "$GREEN"
+            print_message "  1) Migrate data to your account (recommended)" "$NC"
+            print_message "  2) Start fresh (existing data will NOT be migrated)" "$NC"
+            print_message "  3) Cancel" "$NC"
+            print_message "" "$NC"
+            print_message "❓ Select an option (1-3): " "$YELLOW" "nonewline"
+            read -r -t 120 migrate_choice || migrate_choice="3"
+
+            case "$migrate_choice" in
+                1)
+                    if migrate_installation "$other_path" "$HOME/birdnet-go-app"; then
+                        return 0
+                    else
+                        print_message "" "$NC"
+                        print_message "⚠️  Automated migration failed. You can migrate manually:" "$YELLOW"
+                        print_message "  sudo systemctl stop birdnet-go.service" "$NC"
+                        print_message "  sudo docker rm -f birdnet-go" "$NC"
+                        print_message "  mkdir -p $HOME/birdnet-go-app" "$NC"
+                        print_message "  sudo cp -a /root/birdnet-go-app/. $HOME/birdnet-go-app/" "$NC"
+                        print_message "  sudo chown -R \$USER:\$USER $HOME/birdnet-go-app/" "$NC"
+                        print_message "  Then run: ./install.sh" "$NC"
+                        exit 1
+                    fi
+                    ;;
+                2)
+                    log_message "WARN" "User chose fresh installation despite existing install at $other_path"
+                    FRESH_INSTALL="true"
+                    ;;
+                *)
+                    print_message "Installation cancelled." "$NC"
+                    exit 0
+                    ;;
+            esac
         else
+            # Non-root cross-user: manual instructions only
             print_message "💡 To use your existing installation, log in as '$other_user'" "$GREEN"
             print_message "and run: ./install.sh" "$NC"
-        fi
 
-        if [ "$SILENT_MODE" = "true" ]; then
+            if [ "$SILENT_MODE" = "true" ]; then
+                print_message "" "$NC"
+                print_message "❌ Silent mode: refusing to create a second installation" "$RED"
+                send_telemetry_event "error" "Duplicate installation detected in silent mode" "error" "step=check_owner,other_user=$other_user"
+                exit 1
+            fi
+
             print_message "" "$NC"
-            print_message "❌ Silent mode: refusing to create a second installation" "$RED"
-            send_telemetry_event "error" "Duplicate installation detected in silent mode" "error" "step=check_owner,other_user=$other_user"
-            exit 1
+            print_message "❓ Proceed with a NEW installation as $USER? (y/n): " "$YELLOW" "nonewline"
+            read -r -t 60 proceed || proceed="n"
+
+            if [[ ! "$proceed" =~ ^[Yy]$ ]]; then
+                print_message "Installation cancelled." "$NC"
+                exit 0
+            fi
+
+            print_message "" "$NC"
+            log_message "WARN" "User chose to proceed with new installation despite existing install at $other_path"
         fi
-
-        print_message "" "$NC"
-        print_message "❓ Proceed with a NEW installation as $USER? (y/n): " "$YELLOW" "nonewline"
-        read -r -t 60 proceed || proceed="n"
-
-        if [[ ! "$proceed" =~ ^[Yy]$ ]]; then
-            print_message "Installation cancelled." "$NC"
-            exit 0
-        fi
-
-        print_message "" "$NC"
-        log_message "WARN" "User chose to proceed with new installation despite existing install at $other_path"
     fi
 }
 
@@ -2400,9 +2649,9 @@ convert_relative_to_absolute_path() {
     # Only convert if path is relative (doesn't start with /)
     if [[ ! "$current_path" =~ ^/ ]]; then
         print_message "Converting relative path '${current_path}' to absolute path '${abs_path}'" "$YELLOW"
-        # Use line-specific sed to replace just the clips path line
-        # Corrected sed command for replacement
-        sed -i "${clip_path_line}s|^\([[:space:]]*path:[[:space:]]*\).*|\1${abs_path}        # path to audio clip export directory|" "$config_file"
+        local escaped_path
+        escaped_path=$(sed_escape_replacement "$abs_path")
+        sed -i "${clip_path_line}s|^\([[:space:]]*path:[[:space:]]*\).*|\1${escaped_path}        # path to audio clip export directory|" "$config_file"
         return 0
     else
         print_message "Path '${current_path}' is already absolute, skipping conversion" "$GREEN"
@@ -2837,12 +3086,13 @@ configure_sound_card() {
             print_message "✅ Selected capture device: " "$GREEN" "nonewline"
             print_message "$ALSA_CARD"
 
-            # Update config file with the friendly name
-            sed -i "s/source: \"sysdefault\"/source: \"${ALSA_CARD}\"/" "$CONFIG_FILE"
+            # Update audio sources config with the selected device (new multi-source format)
+            local escaped_card
+            escaped_card=$(sed_escape_replacement "$ALSA_CARD")
+            sed -i "s|device: \"sysdefault\"|device: \"${escaped_card}\"|" "$CONFIG_FILE"
             log_command_result "sed audio device configuration" $? "updating config file"
-            # Comment out RTSP section
-            sed -i '/rtsp:/,/      # - rtsp/s/^/#/' "$CONFIG_FILE"
-            log_command_result "sed comment RTSP section" $? "disabling RTSP configuration"
+            sed -i "s|name: \"Sound Card 1\"|name: \"${escaped_card}\"|" "$CONFIG_FILE"
+            log_command_result "sed audio source name" $? "updating source name in config"
                 
             AUDIO_ENV="--device /dev/snd"
             return 0
@@ -2851,6 +3101,30 @@ configure_sound_card() {
             print_message "❌ Invalid selection. Please try again." "$RED"
         fi
     done
+}
+
+# Add an RTSP stream to the rtsp.streams section and disable the default sound card source.
+# Usage: configure_rtsp_in_config <url> [stream_name]
+configure_rtsp_in_config() {
+    local url="$1"
+    local stream_name="${2:-RTSP Stream}"
+
+    local escaped_url
+    escaped_url=$(sed_escape_replacement "$url")
+    local escaped_name
+    escaped_name=$(sed_escape_replacement "$stream_name")
+
+    # Add stream entry to the rtsp.streams section (replaces empty array)
+    sed -i "s|    streams: \[\].*|    streams:\n      - name: \"${escaped_name}\"\n        url: \"${escaped_url}\"\n        enabled: true\n        type: rtsp\n        transport: tcp|" "$CONFIG_FILE"
+    log_command_result "sed RTSP stream configuration" $? "adding RTSP stream to config"
+
+    # Comment out default sound card source (RTSP replaces local capture)
+    sed -i \
+        -e '/^      - name: "Sound Card 1"/s/^/# /' \
+        -e '/^        device: "sysdefault"/s/^/# /' \
+        -e '/^        gain: 0/s/^/# /' \
+        "$CONFIG_FILE"
+    log_command_result "sed disable sound card source" $? "commenting out default audio source"
 }
 
 # Function to configure RTSP stream
@@ -2865,11 +3139,7 @@ configure_rtsp_stream_silent() {
         exit 1
     fi
 
-    # Replace the default sound card device with the RTSP URL in the sources list
-    sed -i "s|device: sysdefault|device: ${url}|" "$CONFIG_FILE"
-
-    # Also try the commented RTSP example line if present
-    sed -i "s|# - rtsp://user:password@example.com/stream1|      - ${url}|" "$CONFIG_FILE"
+    configure_rtsp_in_config "$url"
 
     AUDIO_ENV="--device /dev/snd"
     log_message "INFO" "Silent RTSP configuration completed"
@@ -2905,12 +3175,8 @@ configure_rtsp_stream() {
             log_message "INFO" "RTSP connection test successful, configuring RTSP audio input"
             print_message "✅ RTSP connection successful!" "$GREEN"
             
-            # Update config file
-            sed -i "s|# - rtsp://user:password@example.com/stream1|      - ${RTSP_URL}|" "$CONFIG_FILE"
-            log_command_result "sed RTSP URL configuration" $? "adding RTSP URL to config"
-            # Comment out audio source section
-            sed -i '/source: "sysdefault"/s/^/#/' "$CONFIG_FILE"
-            log_command_result "sed comment audio source" $? "disabling audio source"
+            # Add RTSP stream to config and disable default sound card source
+            configure_rtsp_in_config "$RTSP_URL"
             
             # MODIFIED: Always include device mapping even with RTSP
             AUDIO_ENV="--device /dev/snd"
@@ -2936,7 +3202,13 @@ configure_audio_format() {
     # Silent mode: use default AAC
     if [ "$SILENT_MODE" = "true" ]; then
         local format="${BIRDNET_AUDIO_FORMAT:-aac}"
-        sed -i "s/type: wav/type: $format/" "$CONFIG_FILE"
+        # Validate format against allowed values
+        case "$format" in
+            wav|flac|aac|mp3|opus) ;;
+            *) log_message "WARN" "Invalid BIRDNET_AUDIO_FORMAT: $format, defaulting to aac"
+               format="aac" ;;
+        esac
+        sed -i "s|type: wav|type: $format|" "$CONFIG_FILE"
         print_message "🔇 Silent mode: audio format set to $format" "$YELLOW"
         return
     fi
@@ -2971,8 +3243,8 @@ configure_audio_format() {
     print_message "✅ Selected audio format: " "$GREEN" "nonewline"
     print_message "$format"
 
-    # Update config file
-    sed -i "s/type: wav/type: $format/" "$CONFIG_FILE"
+    # Update config file (format is from hardcoded case, safe)
+    sed -i "s|type: wav|type: $format|" "$CONFIG_FILE"
 }
 
 # Function to configure locale
@@ -2980,7 +3252,12 @@ configure_locale() {
     # Silent mode: use env var or default to en-uk
     if [ "$SILENT_MODE" = "true" ]; then
         local locale="${BIRDNET_LOCALE:-en-uk}"
-        sed -i "s/locale: [a-zA-Z0-9_-]*/locale: ${locale}/" "$CONFIG_FILE"
+        # Validate locale contains only safe characters
+        if [[ ! "$locale" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            log_message "ERROR" "Invalid BIRDNET_LOCALE format: $locale"
+            locale="en-uk"
+        fi
+        sed -i "s|locale: [a-zA-Z0-9_-]*|locale: ${locale}|" "$CONFIG_FILE"
         print_message "🔇 Silent mode: locale set to $locale" "$YELLOW"
         return
     fi
@@ -3013,8 +3290,8 @@ configure_locale() {
             LOCALE_CODE="${locale_codes[$((selection-1))]}"
             print_message "✅ Selected language: " "$GREEN" "nonewline"
             print_message "${locale_names[$((selection-1))]}"
-            # Update config file - fixed to replace the entire locale value
-            sed -i "s/locale: [a-zA-Z0-9_-]*/locale: ${LOCALE_CODE}/" "$CONFIG_FILE"
+            # Update config file (LOCALE_CODE is from hardcoded array, safe)
+            sed -i "s|locale: [a-zA-Z0-9_-]*|locale: ${LOCALE_CODE}|" "$CONFIG_FILE"
             break
         else
             print_message "❌ Invalid selection. Please try again." "$RED"
@@ -3330,11 +3607,16 @@ configure_location() {
     if [ "$SILENT_MODE" = "true" ]; then
         local lat="${BIRDNET_LATITUDE:-0.000}"
         local lon="${BIRDNET_LONGITUDE:-0.000}"
-        sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
-        sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
+        if ! validate_numeric "$lat" || ! validate_numeric "$lon"; then
+            log_message "ERROR" "Invalid coordinates: lat=$lat lon=$lon (must be numeric)"
+            print_message "❌ Invalid BIRDNET_LATITUDE or BIRDNET_LONGITUDE (must be numeric)" "$RED"
+            exit 1
+        fi
+        sed -i "s|latitude: 00.000|latitude: $lat|" "$CONFIG_FILE"
+        sed -i "s|longitude: 00.000|longitude: $lon|" "$CONFIG_FILE"
         # Also handle configs where location was previously set
-        sed -i -E "s/^(\\s*latitude:\\s*)[0-9.-]+/\\1$lat/" "$CONFIG_FILE"
-        sed -i -E "s/^(\\s*longitude:\\s*)[0-9.-]+/\\1$lon/" "$CONFIG_FILE"
+        sed -i -E "s|^([[:space:]]*latitude:[[:space:]]*)[0-9.-]+|\\1$lat|" -- "$CONFIG_FILE"
+        sed -i -E "s|^([[:space:]]*longitude:[[:space:]]*)[0-9.-]+|\\1$lon|" -- "$CONFIG_FILE"
         print_message "🔇 Silent mode: location set to $lat, $lon" "$YELLOW"
         return
     fi
@@ -3380,11 +3662,14 @@ configure_location() {
             else
                 print_message "✅ Using IP-based location" "$GREEN"
             fi
-            # Update config file and return
-            sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
+            # Update config file and return (IP-derived values are numeric, safe for sed)
+            sed -i "s|latitude: 00.000|latitude: $lat|" "$CONFIG_FILE"
             local sed_result=$?
-            sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
+            sed -i "s|longitude: 00.000|longitude: $lon|" "$CONFIG_FILE"
             sed_result=$((sed_result + $?))
+            # Also handle configs where location was previously set
+            sed -i -E "s|^([[:space:]]*latitude:[[:space:]]*)[0-9.-]+|\\1$lat|" -- "$CONFIG_FILE"
+            sed -i -E "s|^([[:space:]]*longitude:[[:space:]]*)[0-9.-]+|\\1$lon|" -- "$CONFIG_FILE"
             log_command_result "sed latitude/longitude update" "$sed_result" "updating location coordinates in config file"
             return
         else
@@ -3484,12 +3769,15 @@ configure_location() {
         esac
     done
 
-    # Update config file
+    # Update config file (lat/lon are already validated as numeric above)
     log_message "INFO" "Location configured manually, updating config file"
-    sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
+    sed -i "s|latitude: 00.000|latitude: $lat|" "$CONFIG_FILE"
     local sed_result=$?
-    sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
+    sed -i "s|longitude: 00.000|longitude: $lon|" "$CONFIG_FILE"
     sed_result=$((sed_result + $?))
+    # Also handle configs where location was previously set
+    sed -i -E "s|^([[:space:]]*latitude:[[:space:]]*)[0-9.-]+|\\1$lat|" -- "$CONFIG_FILE"
+    sed -i -E "s|^([[:space:]]*longitude:[[:space:]]*)[0-9.-]+|\\1$lon|" -- "$CONFIG_FILE"
     log_command_result "sed latitude/longitude update" "$sed_result" "updating location coordinates in config file"
 }
 
@@ -3502,8 +3790,11 @@ configure_auth() {
         if [ -n "$BIRDNET_PASSWORD" ]; then
             local password_hash
             password_hash=$(echo -n "$BIRDNET_PASSWORD" | htpasswd -niB "" | cut -d: -f2)
+            local escaped_hash
+            escaped_hash=$(sed_escape_replacement "$password_hash")
             sed -i "s|enabled: false    # true to enable basic auth|enabled: true    # true to enable basic auth|" "$CONFIG_FILE"
-            sed -i "s|password: \"\"|password: \"$password_hash\"|" "$CONFIG_FILE"
+            sed -i "s|password: \"\"|password: \"${escaped_hash}\"|" "$CONFIG_FILE"
+            unset BIRDNET_PASSWORD password_hash escaped_hash
             print_message "🔇 Silent mode: password protection enabled" "$YELLOW"
         else
             print_message "🔇 Silent mode: no password set (BIRDNET_PASSWORD not provided)" "$YELLOW"
@@ -3529,13 +3820,18 @@ configure_auth() {
                 log_message "INFO" "Password confirmed, generating hash and updating config"
                 # Generate password hash (using bcrypt)
                 password_hash=$(echo -n "$password" | htpasswd -niB "" | cut -d: -f2)
-                
-                # Update config file - using different delimiter for sed
+                local escaped_hash
+                escaped_hash=$(sed_escape_replacement "$password_hash")
+
+                # Update config file
                 sed -i "s|enabled: false    # true to enable basic auth|enabled: true    # true to enable basic auth|" "$CONFIG_FILE"
                 log_command_result "sed enable auth" $? "enabling authentication"
-                sed -i "s|password: \"\"|password: \"$password_hash\"|" "$CONFIG_FILE"
+                sed -i "s|password: \"\"|password: \"${escaped_hash}\"|" "$CONFIG_FILE"
                 log_command_result "sed password hash" $? "setting password hash"
-                
+
+                # Clear sensitive variables from shell memory
+                unset password password2 password_hash escaped_hash
+
                 log_message "INFO" "Password protection configured successfully"
                 print_message "✅ Password protection enabled successfully!" "$GREEN"
                 print_message "If you forget your password, you can reset it by editing:" "$YELLOW"
@@ -3680,10 +3976,14 @@ configure_web_port() {
     # Use env var if set, otherwise default
     WEB_PORT="${BIRDNET_WEB_PORT:-8080}"
 
-    # Update config file with port
-    sed -i -E "s/^(\\s*port:\\s*)[0-9]+/\\1$WEB_PORT/" "$CONFIG_FILE"
+    # Validate port is a positive integer
+    if ! [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || [ "$WEB_PORT" -lt 1 ] || [ "$WEB_PORT" -gt 65535 ]; then
+        log_message "WARN" "Invalid BIRDNET_WEB_PORT: $WEB_PORT, defaulting to 8080"
+        WEB_PORT="8080"
+    fi
 
-    # Port validation already done in prerequisites section
+    # Update config file with port (validated as numeric, safe for sed)
+    sed -i -E "s|^([[:space:]]*port:[[:space:]]*)[0-9]+|\\1$WEB_PORT|" -- "$CONFIG_FILE"
 }
 
 # Generate systemd service content
@@ -4230,12 +4530,20 @@ handle_container_update() {
     print_message "🔄 Checking for updates..." "$YELLOW"
     
     # Extract existing timezone from systemd service file if updating
-    if [ -f "/etc/systemd/system/birdnet-go.service" ] && [ -z "$CONFIGURED_TZ" ]; then
-        local existing_tz=$(grep -oP '(?<=--env TZ=")[^"]+' /etc/systemd/system/birdnet-go.service 2>/dev/null)
-        if [ -n "$existing_tz" ]; then
-            CONFIGURED_TZ="$existing_tz"
-            log_message "INFO" "Extracted existing timezone from service: $CONFIGURED_TZ"
-            print_message "📍 Using existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+    if [ -z "$CONFIGURED_TZ" ]; then
+        local tz_service_file=""
+        if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
+            tz_service_file="/etc/systemd/system/birdnet-go.service"
+        elif [ -f "/lib/systemd/system/birdnet-go.service" ]; then
+            tz_service_file="/lib/systemd/system/birdnet-go.service"
+        fi
+        if [ -n "$tz_service_file" ]; then
+            local existing_tz=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' "$tz_service_file" 2>/dev/null | head -1)
+            if [ -n "$existing_tz" ]; then
+                CONFIGURED_TZ="$existing_tz"
+                log_message "INFO" "Extracted existing timezone from service: $CONFIGURED_TZ"
+                print_message "📍 Using existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+            fi
         fi
     fi
     
@@ -4915,6 +5223,7 @@ show_usage() {
     echo "                          Default: nightly"
     echo "                          Examples: latest, v1.2.3, nightly, sha256:abc123..."
     echo "  --silent                Non-interactive install using environment variables"
+    echo "  --force-root            Allow running as root (not recommended)"
     echo "  -h, --help              Show this help message"
     echo ""
     echo "SILENT MODE ENVIRONMENT VARIABLES:"
@@ -4955,6 +5264,10 @@ parse_arguments() {
                 SILENT_MODE="true"
                 shift
                 ;;
+            --force-root)
+                FORCE_ROOT="true"
+                shift
+                ;;
             -h|--help)
                 show_usage
                 exit 0
@@ -4984,8 +5297,25 @@ parse_arguments() {
 # Parse command line arguments first
 parse_arguments "$@"
 
-# Prevent running as root (must be before $HOME-dependent path setup)
+# Warn if running as root; allow bypass with --force-root (must be before $HOME-dependent path setup)
 check_not_root
+
+# When running as root without sudo installed (common in containers), provide a
+# shim so the script's 100+ sudo calls work without modification.
+if [ "$(id -u)" -eq 0 ] && ! command_exists sudo; then
+    sudo() {
+        # Strip sudo-specific flags before executing the actual command
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -n|-S|-E|-H|-P|-K|-k|-b) shift ;;
+                -u|-g|-C) shift 2 ;;
+                --) shift; break ;;
+                *) break ;;
+            esac
+        done
+        "$@"
+    }
+fi
 
 # Default paths
 CONFIG_DIR="$HOME/birdnet-go-app/config"
@@ -4997,6 +5327,8 @@ COCKPIT_PORT=9090  # Default Cockpit port
 AUDIO_ENV="--device /dev/snd"
 # Flag for fresh installation
 FRESH_INSTALL="false"
+# Flag for completed migration (prevents silent mode from overwriting migrated config)
+MIGRATION_DONE="false"
 # Configured timezone (will be set during configuration)
 CONFIGURED_TZ=""
 
@@ -5538,11 +5870,16 @@ if [ "$SILENT_MODE" = "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PR
         fi
         print_message "⚠️ Update failed, proceeding with fresh installation" "$YELLOW"
     fi
-    FRESH_INSTALL="true"
+    # After migration, preserve the migrated config by skipping fresh-install overwrite
+    if [ "$MIGRATION_DONE" = "true" ]; then
+        FRESH_INSTALL="false"
+    else
+        FRESH_INSTALL="true"
+    fi
 fi
 
-# Menu loop for existing installations (skipped in silent mode)
-if [ "$SILENT_MODE" != "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; }; then
+# Menu loop for existing installations (skipped in silent mode and after migration)
+if [ "$SILENT_MODE" != "true" ] && [ "$MIGRATION_DONE" != "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; }; then
     while true; do
         # Display menu based on installation type
         print_message ""  # Add spacing
@@ -5667,29 +6004,34 @@ check_data_directory_space "$DATA_DIR"
 # Download base config file
 download_base_config
 
-# Now lets query user for configuration
-print_message "\n🔧 Now lets configure some basic settings" "$YELLOW"
+# Skip configuration steps after migration (config already has user's settings)
+if [ "$MIGRATION_DONE" = "true" ]; then
+    print_message "\n✅ Using migrated configuration settings" "$GREEN"
+else
+    # Now lets query user for configuration
+    print_message "\n🔧 Now lets configure some basic settings" "$YELLOW"
 
-# Configure web port
-configure_web_port
+    # Configure web port
+    configure_web_port
 
-# Configure audio input
-configure_audio_input
+    # Configure audio input
+    configure_audio_input
 
-# Configure audio format
-configure_audio_format
+    # Configure audio format
+    configure_audio_format
 
-# Configure location (this will also detect timezone)
-configure_location
+    # Configure location (this will also detect timezone)
+    configure_location
 
-# Configure timezone (now with smart detection from location)
-configure_timezone
+    # Configure timezone (now with smart detection from location)
+    configure_timezone
 
-# Configure locale
-configure_locale
+    # Configure locale
+    configure_locale
 
-# Configure security
-configure_auth
+    # Configure security
+    configure_auth
+fi
 
 # Configure telemetry (only if not already configured or fresh install)
 if [ "$FRESH_INSTALL" = "true" ] || [ "$TELEMETRY_CONFIGURED" = "false" ]; then

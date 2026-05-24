@@ -131,6 +131,9 @@ type Processor struct {
 	// Log deduplication (extracted to separate type for SRP)
 	logDedup *LogDeduplicator // Handles log deduplication logic
 
+	// Periodic pipeline stats (inference activity per source/model)
+	pipelineStats *PipelineStats
+
 	// Extended capture fields
 	extendedCaptureSpecies map[string]bool // Resolved set of scientific names eligible for extended capture
 	extendedCaptureAll     bool            // True when all species qualify (empty species list)
@@ -495,6 +498,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 	// Initialize log deduplicator with configuration from settings
 	p.logDedup = initLogDeduplicator(settings)
 
+	// Initialize pipeline stats for periodic inference summaries
+	p.pipelineStats = NewPipelineStats(p.getDisplayNameForSource)
+
 	// Validate detection window configuration
 	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
 	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
@@ -617,6 +623,10 @@ func (p *Processor) Start() {
 
 		p.flusherCtx, p.flusherCancel = context.WithCancel(context.Background())
 		p.pendingDetectionsFlusher()
+
+		if p.pipelineStats != nil {
+			p.pipelineStats.Start()
+		}
 	})
 }
 
@@ -670,6 +680,21 @@ func (p *Processor) processDetections(item classifier.Results) {
 
 	// Log processing results with deduplication to prevent spam
 	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
+
+	// Record periodic pipeline stats
+	if p.pipelineStats != nil {
+		var maxConf float32
+		for _, r := range item.Results {
+			if r.Confidence > maxConf {
+				maxConf = r.Confidence
+			}
+		}
+		threshold := float32(settings.BirdNET.Threshold)
+		if item.ModelID == classifier.RegistryIDBat {
+			threshold = float32(settings.Bat.Threshold)
+		}
+		p.pipelineStats.RecordInference(item.Source.ID, item.ModelID, len(item.Results), len(detectionResults), maxConf, threshold)
+	}
 
 	for i := range detectionResults {
 		det := detectionResults[i]
@@ -2393,6 +2418,11 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	// Cancel flusher goroutine
 	if p.flusherCancel != nil {
 		p.flusherCancel()
+	}
+
+	// Stop pipeline stats logger
+	if p.pipelineStats != nil {
+		p.pipelineStats.Stop()
 	}
 
 	// Flush dynamic thresholds using the provided context deadline

@@ -228,7 +228,16 @@
     "analyticsSubmenu": "Sous-menu analyses",
     "settingsSubmenu": "Sous-menu paramètres",
     "systemSubmenu": "Sous-menu système",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminal",
+    "help": "Aide",
+    "helpSubmenu": "Sous-menu d'aide",
+    "helpAndSupport": "Aide et support",
+    "reportBug": "Signaler un bug",
+    "askQuestion": "Poser une question",
+    "reportBugAriaLabel": "Signaler un bug sur GitHub (ouvre dans une nouvelle fenêtre)",
+    "askQuestionAriaLabel": "Poser une question sur GitHub Discussions (ouvre dans une nouvelle fenêtre)",
+    "viewOnGithubAriaLabel": "Voir BirdNET-Go sur GitHub (ouvre dans une nouvelle fenêtre)",
+    "health": "Health"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -425,6 +434,10 @@
       "buffer": {
         "overloadTitle": "Analyse audio surchargée",
         "overloadMessage": "Votre système perd {dropRate} % des échantillons audio de la source '{sourceName}' car il ne peut pas suivre le rythme de l'analyse. Réduisez la valeur de chevauchement BirdNET dans les paramètres de détection ou envisagez de passer à un processeur plus rapide."
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime non disponible",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} est requis pour {modelName} mais n'a pas été trouvé. Voir le guide d'installation : {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -924,7 +937,10 @@
     "aria": {
       "loading": "Chargement des détails de détection...",
       "loaded": "Détails de détection chargés pour {species}",
-      "error": "Erreur lors du chargement de la détection : {error}"
+      "error": "Erreur lors du chargement de la détection : {error}",
+      "loadingResults": "Chargement de {count} résultats...",
+      "thumbnailLoading": "Chargement de la miniature de {species}...",
+      "thumbnailLoaded": "Miniature de {species} chargée"
     },
     "errors": {
       "notFound": "Détection introuvable. Elle a peut-être été supprimée ou l'identifiant est incorrect.",
@@ -2998,6 +3014,7 @@
         "unknown": "inconnu",
         "refresh": "Actualiser",
         "addStream": "Ajouter un Flux",
+        "testRequired": "Effectuez un test de flux réussi avant d'enregistrer",
         "deleteConfirm": "Supprimer ce flux ?",
         "restartCount": "Redémarré {count} fois",
         "healthLoadError": "Échec du chargement de l'état du flux",
@@ -3050,6 +3067,18 @@
           "degraded": "Dégradée",
           "failed": "Échouée",
           "unknown": "Inconnue"
+        },
+        "test": {
+          "button": "Tester le flux",
+          "probing": "Test en cours...",
+          "result": "Résultat du test",
+          "error": "Test échoué",
+          "batCompatible": "Compatible chauves-souris",
+          "batIncompatible": "Non compatible chauves-souris"
+        },
+        "batWarning": "Les modèles de chauves-souris nécessitent des flux avec un codec sans perte (PCM) et un taux d'échantillonnage d'au moins 96 kHz. Utilisez le bouton Tester le flux ci-dessus pour vérifier la compatibilité.",
+        "codecWarning": {
+          "lossy": "Les codecs avec perte (AAC, Opus, MP3) détruisent les fréquences ultrasoniques au-dessus de ~20 kHz, rendant le flux inadapté à la détection des chauves-souris."
         }
       },
       "audioFilters": {
@@ -3225,6 +3254,10 @@
         "devicesLoadFailed": "Échec du chargement des périphériques audio. Veuillez vérifier les permissions système.",
         "invalidBitrate": "Valeur de débit invalide",
         "invalidRetentionPolicy": "Politique de rétention invalide"
+      },
+      "models": {
+        "recommendBoth": "Pour une meilleure couverture de détection des espèces, il est recommandé d'exécuter BirdNET et Perch ensemble.",
+        "perchOnlyWarning": "Perch seul produit moins de détections. Abaissez le seuil de confiance à 0.50 pour des résultats significatifs, ou activez BirdNET en parallèle pour une meilleure couverture."
       }
     },
     "security": {
@@ -4200,7 +4233,31 @@
       "playbackSpeed": "Vitesse de lecture",
       "speed": "Vitesse",
       "loop": "Basculer la boucle",
-      "player": "Lecteur audio"
+      "player": "Lecteur audio",
+      "autoplayBlocked": "Cliquez pour lire (lecture automatique bloquée)",
+      "hlsNotSupported": "La lecture HLS n'est pas prise en charge dans ce navigateur",
+      "streamStarting": "Démarrage du flux audio...",
+      "levelFor": "Niveau audio pour {source}",
+      "levelForNoSource": "Niveau audio : aucune source",
+      "noSource": "Aucune source",
+      "levelAnnouncement": "Niveau audio actuel : {level} pour cent",
+      "levelAnnouncementClipping": "Niveau audio actuel : {level} pour cent, saturation détectée",
+      "sourceSelection": "Sélection de la source audio",
+      "sources": "Sources audio",
+      "noSourcesAvailable": "Aucune source audio disponible",
+      "silent": "(silencieux)",
+      "stopPlayback": "Arrêter la lecture audio",
+      "startPlayback": "Démarrer la lecture audio",
+      "nowPlaying": "Lecture en cours depuis {source}",
+      "nowPlayingNoSource": "Lecture audio en cours",
+      "playbackStopped": "Lecture audio arrêtée",
+      "loginRequired": "Connexion requise pour diffuser l'audio",
+      "streamError": "Erreur lors du démarrage du flux",
+      "streamTitle": "Flux audio d'oiseaux - {source}",
+      "streamTitleDefault": "Flux audio d'oiseaux",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Diffusion en direct",
+      "playbackError": "Erreur de lecture : {details}"
     },
     "spectrogram": {
       "notGenerated": "Spectrogramme pas encore généré",
@@ -4425,6 +4482,16 @@
       "hostRequired": "Le paramètre host est requis",
       "invalidHost": "Paramètre host invalide",
       "rateLimit": "Trop de tentatives de connexion au flux de notifications, veuillez patienter avant de réessayer"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Corps de requête invalide",
+        "urlRequired": "L'URL du flux est requise",
+        "invalidUrl": "Format d'URL invalide. Saisissez une URL complète, par ex. rtsp://hôte:port/chemin",
+        "unsupportedScheme": "Schéma d'URL non pris en charge \"{scheme}\". Utilisez rtsp, rtsps, http, https, rtmp ou udp",
+        "blockedDestination": "Cette destination est bloquée pour des raisons de sécurité",
+        "connectionFailed": "Impossible de se connecter au flux. Vérifiez que l'URL est correcte et que le flux est accessible"
+      }
     },
     "debug": {
       "notEnabled": "Le mode débogage n'est pas activé"
@@ -4690,7 +4757,10 @@
       "reinstall": "Réinstaller",
       "reinstalling": "Réinstallation...",
       "reinstallComplete": "Fichiers vérifiés avec succès",
-      "geomodelBadge": "Inclut le BirdNET v3.0 geomodel"
+      "geomodelBadge": "Inclut le BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Nécessite ONNX Runtime qui n'est pas disponible sur ce système.",
+      "onnxRuntimeMissing": "ONNX Runtime n'est pas disponible. Ce modèle ne peut pas fonctionner.",
+      "unavailable": "Indisponible"
     },
     "bird": {
       "title": "Bird Detection",
@@ -4715,5 +4785,122 @@
     "bannerMessage": "Les modifications de configuration nécessitent un redémarrage :",
     "bannerAction": "Redémarrer maintenant",
     "restartFailed": "Échec du lancement du redémarrage"
+  },
+  "help": {
+    "title": "Aide et support",
+    "subtitle": "Obtenez de l'aide, signalez des problèmes et connectez-vous avec la communauté",
+    "reportBug": {
+      "description": "Si vous rencontrez un problème, ouvrez d'abord un rapport de bug sur GitHub pour décrire le problème, puis générez un rapport de support avec le numéro du ticket pour faciliter le diagnostic."
+    },
+    "askQuestion": {
+      "description": "Vous avez une question sur la configuration, les fonctionnalités ou l'utilisation ? Le forum GitHub Discussions est le meilleur endroit pour obtenir de l'aide de la communauté."
+    },
+    "diagnostics": {
+      "description": "Générez un rapport de support pour aider au diagnostic des problèmes. Il capture votre configuration système et les journaux récents."
+    },
+    "quickLinks": {
+      "title": "Liens rapides",
+      "releases": "Notes de version"
+    }
+  },
+  "reportBug": {
+    "title": "Signaler un bug",
+    "subtitle": "Aidez-nous à corriger les problèmes en fournissant les informations nécessaires",
+    "systemInfo": {
+      "title": "Vos informations système",
+      "description": "Ces informations aident à identifier votre configuration. Copiez-les dans votre rapport de bug.",
+      "version": "Version",
+      "buildDate": "Date de compilation",
+      "os": "Système d'exploitation",
+      "copy": "Copier dans le presse-papiers",
+      "copied": "Copié !",
+      "architecture": "Architecture",
+      "hardware": "Matériel",
+      "environment": "Environnement"
+    },
+    "whatToInclude": {
+      "title": "Que faut-il inclure dans votre rapport",
+      "description": "Un bon rapport de bug nous aide à résoudre votre problème rapidement. Veuillez inclure les éléments suivants :",
+      "step1": {
+        "title": "Description claire du problème",
+        "description": "Ce qui s'est passé, ce que vous attendiez et comment reproduire le problème."
+      },
+      "step2": {
+        "title": "Votre méthode d'installation",
+        "description": "Comment vous avez installé BirdNET-Go : script install.sh, Docker Compose, compilation manuelle ou autre."
+      },
+      "step3": {
+        "title": "Informations système",
+        "description": "Copiez les détails système affichés ci-dessus, y compris la version, le système d'exploitation et la date de compilation."
+      },
+      "step4": {
+        "title": "Rapport de support",
+        "description": "Générez et téléchargez un rapport de support ci-dessous. Il capture les journaux et la configuration qui accélèrent considérablement le diagnostic."
+      }
+    },
+    "openIssue": {
+      "title": "Ouvrir un ticket sur GitHub",
+      "description": "Ouvrez un ticket sur GitHub pour décrire le problème. Vous aurez besoin du numéro de ticket pour l'étape suivante.",
+      "button": "Ouvrir un ticket sur GitHub"
+    },
+    "supportDump": {
+      "title": "Générer un rapport de support",
+      "description": "Après avoir créé votre ticket, générez un rapport de support et entrez le numéro du ticket GitHub. Cela lie vos diagnostics au rapport de bug et facilite le dépannage."
+    }
+  },
+  "health": {
+    "title": "System Health",
+    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
+    "runDiagnostics": "Run Diagnostics",
+    "running": "Running diagnostics...",
+    "lastRun": "Last run",
+    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "exportText": "Copy Report",
+    "exportJSON": "Download JSON",
+    "copied": "Report copied to clipboard",
+    "duration": "Duration",
+    "summary": {
+      "healthy": "Healthy",
+      "warnings": "Warnings",
+      "critical": "Critical",
+      "skipped": "Skipped",
+      "total": "Total checks"
+    },
+    "categories": {
+      "system": "System",
+      "audio": "Audio Pipeline",
+      "analysis": "Analysis",
+      "streams": "Audio Streams",
+      "database": "Database",
+      "network": "Network",
+      "config": "Configuration",
+      "logs": "Logs"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "title": "Recent Errors",
+      "noErrors": "No recent errors",
+      "fetchFailed": "Failed to load diagnostics"
+    },
+    "export": {
+      "reportTitle": "BirdNET-Go System Health Report",
+      "statusLabel": "Status",
+      "timeLabel": "Time",
+      "durationLabel": "Duration",
+      "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Erreurs fréquentes",
+      "errorCount": "Nombre",
+      "errorComponent": "Composant",
+      "errorLevel": "Niveau",
+      "errorMessage": "Message"
+    }
   }
 }

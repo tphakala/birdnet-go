@@ -393,6 +393,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/streams/health/:url`   | `GetStreamHealth`         | ✅   | Get detailed health status of a specific RTSP stream (settings-only; URLs sanitized) |
 | GET    | `/streams/status`        | `GetStreamsStatusSummary` | ✅   | Get high-level summary of all stream statuses with counts (settings-only)            |
 | GET    | `/streams/health/stream` | `StreamHealthUpdates`     | ✅⚡ | Real-time stream health updates via SSE (settings page, not dashboard)               |
+| POST   | `/streams/test`          | `TestStream`              | ✅   | Test a stream URL to verify connectivity and discover audio properties (sample rate, codec, bat compatibility) |
 
 ### Quiet Hours Status (`quiet_hours.go`)
 
@@ -560,6 +561,23 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
   "validity": "365d"
 }
 ```
+
+### Diagnostics (`diagnostics.go`)
+
+| Method | Route                            | Handler                  | Auth | Description                    |
+| ------ | -------------------------------- | ------------------------ | ---- | ------------------------------ |
+| GET    | `/system/diagnostics/status`     | `GetDiagnosticsStatus`   | ✅   | Health summary for UI badge    |
+| POST   | `/system/diagnostics/run`        | `RunDiagnostics`         | ✅   | Run full diagnostic suite      |
+| GET    | `/system/diagnostics/report/:id` | `GetDiagnosticsReport`   | ✅   | Retrieve completed report      |
+| GET    | `/system/diagnostics/errors`     | `GetRecentErrors`        | ✅   | Recent error log entries       |
+
+**GET /api/v2/system/diagnostics/status** - Returns the overall health status and per-category breakdown from the most recent diagnostic run. Returns `{"status": "unknown"}` if no diagnostics have been run yet.
+
+**POST /api/v2/system/diagnostics/run** - Executes all registered health checks in parallel (31 checks across 8 categories: system, audio, analysis, streams, database, network, config, logs). Returns a full `DiagnosticsReport` with per-check results, timing, and summary.
+
+**GET /api/v2/system/diagnostics/report/:id** - Retrieves a previously completed diagnostics report by its UUID. Up to 10 reports are cached in memory.
+
+**GET /api/v2/system/diagnostics/errors** - Returns recent warn/error/fatal log entries from the in-memory ring buffer. Supports `?limit=N` query parameter (default 50, max 200).
 
 ## Legend
 

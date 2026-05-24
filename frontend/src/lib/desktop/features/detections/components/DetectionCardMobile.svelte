@@ -1,7 +1,7 @@
 <script lang="ts">
   // Use prop callback instead of legacy event dispatcher
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
-  import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
+  import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
   import { Volume2 } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
@@ -89,7 +89,7 @@
 
     <!-- Status badges -->
     <div class="flex flex-wrap gap-2">
-      <StatusBadges {detection} />
+      <VerificationBadges {detection} />
     </div>
 
     <!-- Actions -->
@@ -112,10 +112,3 @@
     </div>
   </div>
 </section>
-
-<style>
-  /* Keep styles minimal and mobile-focused */
-  .card :global(.badge) {
-    font-size: 0.7rem;
-  }
-</style>

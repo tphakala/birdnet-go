@@ -81,6 +81,8 @@ export type DetectionSortBy =
   | 'date_desc'
   | 'date_asc'
   | 'species_asc'
+  | 'species_desc'
+  | 'confidence_asc'
   | 'confidence_desc'
   | 'status';
 

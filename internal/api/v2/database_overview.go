@@ -46,7 +46,7 @@ const detectionRateCacheTTL = 5 * time.Minute
 // into a single response.
 func (c *Controller) GetDatabaseOverview(ctx echo.Context) error {
 	// Get basic database stats from the store
-	basicStats, err := c.DS.GetDatabaseStats()
+	basicStats, err := c.DS.GetDatabaseStats(ctx.Request().Context())
 	if err != nil || basicStats == nil {
 		if err != nil {
 			c.logDebugIfEnabled("Database stats unavailable", logger.Error(err))
