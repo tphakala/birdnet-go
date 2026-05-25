@@ -558,6 +558,345 @@ func TestEngine_EscalationSteps_FiresAtEachStep(t *testing.T) {
 	assert.Equal(t, []float64{86, 91, 96, 99.5}, fired, "top step should be suppressed")
 }
 
+func TestEngine_DetectionEscalationSteps_FiresAtHigherConfidence(t *testing.T) {
+	const (
+		bayBreastedWarblerSci = "Setophaga castanea"
+		noveltyEpisodeStart   = "2026-05-23T12:00:00Z"
+		detectionCooldownSec  = 24 * 60 * 60
+		firstConfidenceStep   = 0.75
+		secondConfidenceStep  = 0.85
+		thirdConfidenceStep   = 0.90
+		firstStepDetection    = 0.76
+		sameStepDetection     = 0.80
+		secondStepDetection   = 0.86
+		thirdStepDetection    = 0.91
+		noveltyEpisodeDays    = 12
+	)
+
+	rule := entities.AlertRule{
+		ID:              1,
+		Enabled:         true,
+		ObjectType:      ObjectTypeDetection,
+		TriggerType:     TriggerTypeEvent,
+		EventName:       EventDetectionOccurred,
+		CooldownSec:     detectionCooldownSec,
+		EscalationSteps: []float64{firstConfidenceStep, secondConfidenceStep, thirdConfidenceStep},
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyConfidence, Operator: OperatorGreaterOrEqual, Value: "0.75"},
+			{Property: PropertyNoveltyEpisodeDays, Operator: OperatorGreaterOrEqual, Value: "7"},
+		},
+	}
+
+	var fired []float64
+	repo := newMockRepo(rule)
+	engine := NewEngine(repo, func(_ *entities.AlertRule, event *AlertEvent) {
+		fired = append(fired, event.Properties[PropertyThresholdStep].(float64))
+	}, testLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	emit := func(confidence float64) {
+		engine.HandleEvent(&AlertEvent{
+			ObjectType: ObjectTypeDetection,
+			EventName:  EventDetectionOccurred,
+			Properties: map[string]any{
+				PropertySpeciesName:         "Bay-breasted Warbler",
+				PropertyScientificName:      bayBreastedWarblerSci,
+				PropertyConfidence:          confidence,
+				PropertyNoveltyEpisodeDays:  noveltyEpisodeDays,
+				PropertyNoveltyEpisodeStart: noveltyEpisodeStart,
+				PropertyDaysSinceLastSeen:   noveltyEpisodeDays,
+			},
+			Timestamp: time.Now(),
+		})
+	}
+
+	emit(firstStepDetection)
+	assert.Equal(t, []float64{firstConfidenceStep}, fired)
+
+	emit(sameStepDetection)
+	assert.Equal(t, []float64{firstConfidenceStep}, fired, "same confidence step should be suppressed")
+
+	emit(secondStepDetection)
+	assert.Equal(t, []float64{firstConfidenceStep, secondConfidenceStep}, fired)
+
+	emit(thirdStepDetection)
+	assert.Equal(t, []float64{firstConfidenceStep, secondConfidenceStep, thirdConfidenceStep}, fired)
+}
+
+func TestEngine_DetectionEscalationSteps_AllowsRepeatAfterCooldown(t *testing.T) {
+	const (
+		bayBreastedWarblerSci = "Setophaga castanea"
+		noveltyEpisodeStart   = "2026-05-23T12:00:00Z"
+		detectionCooldownSec  = 60
+		firstConfidenceStep   = 0.75
+		secondConfidenceStep  = 0.85
+		firstStepDetection    = 0.80
+		secondStepDetection   = 0.86
+		noveltyEpisodeDays    = 12
+	)
+
+	rule := entities.AlertRule{
+		ID:              1,
+		Enabled:         true,
+		ObjectType:      ObjectTypeDetection,
+		TriggerType:     TriggerTypeEvent,
+		EventName:       EventDetectionOccurred,
+		CooldownSec:     detectionCooldownSec,
+		EscalationSteps: []float64{firstConfidenceStep, secondConfidenceStep},
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyConfidence, Operator: OperatorGreaterOrEqual, Value: "0.75"},
+			{Property: PropertyNoveltyEpisodeDays, Operator: OperatorGreaterOrEqual, Value: "7"},
+		},
+	}
+
+	var fired []float64
+	repo := newMockRepo(rule)
+	engine := NewEngine(repo, func(_ *entities.AlertRule, event *AlertEvent) {
+		fired = append(fired, event.Properties[PropertyThresholdStep].(float64))
+	}, testLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	newEvent := func(confidence float64) *AlertEvent {
+		return &AlertEvent{
+			ObjectType: ObjectTypeDetection,
+			EventName:  EventDetectionOccurred,
+			Properties: map[string]any{
+				PropertySpeciesName:         "Bay-breasted Warbler",
+				PropertyScientificName:      bayBreastedWarblerSci,
+				PropertyConfidence:          confidence,
+				PropertyNoveltyEpisodeDays:  noveltyEpisodeDays,
+				PropertyNoveltyEpisodeStart: noveltyEpisodeStart,
+			},
+			Timestamp: time.Now(),
+		}
+	}
+
+	secondStepEvent := newEvent(secondStepDetection)
+	engine.HandleEvent(secondStepEvent)
+	assert.Equal(t, []float64{secondConfidenceStep}, fired)
+
+	engine.HandleEvent(newEvent(firstStepDetection))
+	assert.Equal(t, []float64{secondConfidenceStep}, fired, "lower step should respect cooldown")
+
+	cdKey := cooldownKey(&rule, secondStepEvent)
+	engine.cooldownsMu.Lock()
+	engine.cooldowns[cdKey] = time.Now().Add(-2 * time.Duration(detectionCooldownSec) * time.Second)
+	engine.cooldownsMu.Unlock()
+
+	engine.HandleEvent(newEvent(firstStepDetection))
+	assert.Equal(t, []float64{secondConfidenceStep, firstConfidenceStep}, fired)
+
+	engine.HandleEvent(newEvent(secondStepDetection))
+	assert.Equal(t, []float64{secondConfidenceStep, firstConfidenceStep, secondConfidenceStep}, fired, "higher step should bypass active cooldown")
+}
+
+func TestEngine_DetectionEscalationSteps_SuppressesMissingConfidence(t *testing.T) {
+	const (
+		detectionCooldownSec = 24 * 60 * 60
+		firstConfidenceStep  = 0.75
+		secondConfidenceStep = 0.85
+	)
+
+	tests := []struct {
+		name       string
+		properties map[string]any
+	}{
+		{
+			name: "missing confidence",
+			properties: map[string]any{
+				PropertySpeciesName: "Bay-breasted Warbler",
+			},
+		},
+		{
+			name: "invalid confidence",
+			properties: map[string]any{
+				PropertySpeciesName: "Bay-breasted Warbler",
+				PropertyConfidence:  "not-a-number",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			rule := entities.AlertRule{
+				ID:              1,
+				Enabled:         true,
+				ObjectType:      ObjectTypeDetection,
+				TriggerType:     TriggerTypeEvent,
+				EventName:       EventDetectionOccurred,
+				CooldownSec:     detectionCooldownSec,
+				EscalationSteps: []float64{firstConfidenceStep, secondConfidenceStep},
+			}
+
+			var fireCount int
+			repo := newMockRepo(rule)
+			engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
+				fireCount++
+			}, testLogger(), nil)
+			require.NoError(t, engine.RefreshRules(t.Context()))
+
+			engine.HandleEvent(&AlertEvent{
+				ObjectType: ObjectTypeDetection,
+				EventName:  EventDetectionOccurred,
+				Properties: tt.properties,
+				Timestamp:  time.Now(),
+			})
+
+			assert.Zero(t, fireCount, "confidence escalation should not fire without a usable confidence value")
+		})
+	}
+}
+
+func TestEngine_DetectionEscalationSteps_UnknownSpeciesUsesCooldown(t *testing.T) {
+	const (
+		detectionCooldownSec = 3600
+		firstConfidenceStep  = 0.75
+		secondConfidenceStep = 0.85
+		detectionConfidence  = 0.90
+	)
+
+	rule := entities.AlertRule{
+		ID:              1,
+		Enabled:         true,
+		ObjectType:      ObjectTypeDetection,
+		TriggerType:     TriggerTypeEvent,
+		EventName:       EventDetectionOccurred,
+		CooldownSec:     detectionCooldownSec,
+		EscalationSteps: []float64{firstConfidenceStep, secondConfidenceStep},
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyConfidence, Operator: OperatorGreaterOrEqual, Value: "0.75"},
+		},
+	}
+
+	var fired []bool
+	repo := newMockRepo(rule)
+	engine := NewEngine(repo, func(_ *entities.AlertRule, event *AlertEvent) {
+		_, hasThresholdStep := event.Properties[PropertyThresholdStep]
+		fired = append(fired, hasThresholdStep)
+	}, testLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	event := &AlertEvent{
+		ObjectType: ObjectTypeDetection,
+		EventName:  EventDetectionOccurred,
+		Properties: map[string]any{
+			PropertyConfidence: detectionConfidence,
+		},
+		Timestamp: time.Now(),
+	}
+
+	engine.HandleEvent(event)
+	engine.HandleEvent(event)
+
+	assert.Equal(t, []bool{false}, fired, "species-less detections should use regular cooldown without threshold metadata")
+}
+
+func TestEngine_DetectionEscalationSteps_PrunesPreviousEpisode(t *testing.T) {
+	const (
+		bayBreastedWarblerSci = "Setophaga castanea"
+		oldEpisodeStart       = "2026-05-23T12:00:00Z"
+		newEpisodeStart       = "2026-06-02T12:00:00Z"
+		confidenceStep        = 0.75
+		detectionConfidence   = 0.80
+		noveltyEpisodeDays    = 12
+	)
+
+	rule := entities.AlertRule{
+		ID:              1,
+		Enabled:         true,
+		ObjectType:      ObjectTypeDetection,
+		TriggerType:     TriggerTypeEvent,
+		EventName:       EventDetectionOccurred,
+		EscalationSteps: []float64{confidenceStep},
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyConfidence, Operator: OperatorGreaterOrEqual, Value: "0.75"},
+			{Property: PropertyNoveltyEpisodeDays, Operator: OperatorGreaterOrEqual, Value: "7"},
+		},
+	}
+
+	repo := newMockRepo(rule)
+	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {}, testLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	buildEvent := func(episodeStart string) *AlertEvent {
+		return &AlertEvent{
+			ObjectType: ObjectTypeDetection,
+			EventName:  EventDetectionOccurred,
+			Properties: map[string]any{
+				PropertySpeciesName:         "Bay-breasted Warbler",
+				PropertyScientificName:      bayBreastedWarblerSci,
+				PropertyConfidence:          detectionConfidence,
+				PropertyNoveltyEpisodeDays:  noveltyEpisodeDays,
+				PropertyNoveltyEpisodeStart: episodeStart,
+			},
+			Timestamp: time.Now(),
+		}
+	}
+
+	oldEvent := buildEvent(oldEpisodeStart)
+	newEpisodeEvent := buildEvent(newEpisodeStart)
+	speciesKey := detectionSpeciesKey(oldEvent)
+	oldKey := detectionEscalationKey(&rule, oldEvent, speciesKey)
+	newKey := detectionEscalationKey(&rule, newEpisodeEvent, speciesKey)
+
+	engine.HandleEvent(oldEvent)
+	engine.HandleEvent(newEpisodeEvent)
+
+	engine.escalationsMu.RLock()
+	_, oldExists := engine.escalations[oldKey]
+	_, newExists := engine.escalations[newKey]
+	engine.escalationsMu.RUnlock()
+
+	assert.False(t, oldExists, "old episode escalation key should be pruned")
+	assert.True(t, newExists, "current episode escalation key should remain")
+}
+
+func TestEngine_DetectionNoveltyCooldownIsSpeciesScoped(t *testing.T) {
+	const noveltyEpisodeStart = "2026-05-23T12:00:00Z"
+
+	rule := entities.AlertRule{
+		ID:          1,
+		Enabled:     true,
+		ObjectType:  ObjectTypeDetection,
+		TriggerType: TriggerTypeEvent,
+		EventName:   EventDetectionOccurred,
+		CooldownSec: 3600,
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyNoveltyEpisodeDays, Operator: OperatorGreaterOrEqual, Value: "7"},
+		},
+	}
+
+	var fired []string
+	repo := newMockRepo(rule)
+	engine := NewEngine(repo, func(_ *entities.AlertRule, event *AlertEvent) {
+		fired = append(fired, event.Properties[PropertyScientificName].(string))
+	}, testLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	emit := func(scientificName string) {
+		engine.HandleEvent(&AlertEvent{
+			ObjectType: ObjectTypeDetection,
+			EventName:  EventDetectionOccurred,
+			Properties: map[string]any{
+				PropertySpeciesName:         scientificName,
+				PropertyScientificName:      scientificName,
+				PropertyConfidence:          0.8,
+				PropertyNoveltyEpisodeDays:  9,
+				PropertyNoveltyEpisodeStart: noveltyEpisodeStart,
+			},
+			Timestamp: time.Now(),
+		})
+	}
+
+	emit("Setophaga castanea")
+	emit("Setophaga castanea")
+	emit("Bubo virginianus")
+
+	assert.Equal(t, []string{"Setophaga castanea", "Bubo virginianus"}, fired)
+}
+
 func TestEngine_EscalationSteps_ResetOnRecovery(t *testing.T) {
 	rule := entities.AlertRule{
 		ID:              1,
