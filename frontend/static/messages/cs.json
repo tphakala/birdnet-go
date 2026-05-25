@@ -3946,6 +3946,8 @@
         "operators": {
           "is": "je",
           "is_not": "není",
+          "in": "je v seznamu",
+          "not_in": "není v seznamu",
           "contains": "obsahuje",
           "not_contains": "neobsahuje",
           "greater_than": "větší než",

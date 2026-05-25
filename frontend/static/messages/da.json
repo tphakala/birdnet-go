@@ -3946,6 +3946,8 @@
         "operators": {
           "is": "er",
           "is_not": "er ikke",
+          "in": "er på listen",
+          "not_in": "er ikke på listen",
           "contains": "indeholder",
           "not_contains": "indeholder ikke",
           "greater_than": "større end",

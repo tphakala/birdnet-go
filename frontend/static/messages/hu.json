@@ -3946,6 +3946,8 @@
         "operators": {
           "is": "egyenlő",
           "is_not": "nem egyenlő",
+          "in": "szerepel a listában",
+          "not_in": "nem szerepel a listában",
           "contains": "tartalmazza",
           "not_contains": "nem tartalmazza",
           "greater_than": "nagyobb mint",

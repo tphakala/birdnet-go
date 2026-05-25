@@ -3946,6 +3946,8 @@
         "operators": {
           "is": "is",
           "is_not": "is niet",
+          "in": "staat in de lijst",
+          "not_in": "staat niet in de lijst",
           "contains": "bevat",
           "not_contains": "bevat niet",
           "greater_than": "groter dan",
