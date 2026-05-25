@@ -31,6 +31,68 @@ func (t *SpeciesTracker) updateLifetimeTrackingLocked(scientificName string, det
 	return false
 }
 
+// updateLastSeenLocked updates the most recent detection time for a species.
+// Assumes lock is held.
+func (t *SpeciesTracker) updateLastSeenLocked(scientificName string, detectionTime time.Time) {
+	lastSeen, exists := t.speciesLastSeen[scientificName]
+	if !exists || detectionTime.After(lastSeen) {
+		t.speciesLastSeen[scientificName] = detectionTime
+	}
+}
+
+// inactiveNoveltyStatus returns the sentinel status used when no novelty
+// episode is active for the current detection.
+func inactiveNoveltyStatus(daysSinceLastSeen int) NoveltyStatus {
+	return NoveltyStatus{
+		DaysSinceLastSeen:    daysSinceLastSeen,
+		NoveltyEpisodeDays:   inactiveNoveltyValue,
+		NoveltyEpisodeActive: false,
+	}
+}
+
+// calculateNoveltyStatusLocked calculates and updates novelty episode state.
+// It must be called before speciesLastSeen is updated for the current detection.
+// Assumes lock is held.
+func (t *SpeciesTracker) calculateNoveltyStatusLocked(scientificName string, detectionTime time.Time) NoveltyStatus {
+	daysSinceLastSeen := inactiveNoveltyValue
+	if lastSeen, exists := t.speciesLastSeen[scientificName]; exists {
+		daysSinceLastSeen = calculateDaysSince(detectionTime, lastSeen)
+	}
+
+	if episode, exists := t.noveltyEpisodes[scientificName]; exists {
+		episode.DaysSinceLastSeen = daysSinceLastSeen
+		daysActive := calculateDaysSince(detectionTime, episode.NoveltyEpisodeStart)
+		if daysActive <= t.windowDays {
+			t.noveltyEpisodes[scientificName] = episode
+			return episode
+		}
+		delete(t.noveltyEpisodes, scientificName)
+	}
+
+	var status NoveltyStatus
+	switch {
+	case daysSinceLastSeen == inactiveNoveltyValue:
+		status = NoveltyStatus{
+			DaysSinceLastSeen:    inactiveNoveltyValue,
+			NoveltyEpisodeDays:   firstEverNoveltyEpisodeDays,
+			NoveltyEpisodeStart:  detectionTime,
+			NoveltyEpisodeActive: true,
+		}
+	case daysSinceLastSeen > 0:
+		status = NoveltyStatus{
+			DaysSinceLastSeen:    daysSinceLastSeen,
+			NoveltyEpisodeDays:   daysSinceLastSeen,
+			NoveltyEpisodeStart:  detectionTime,
+			NoveltyEpisodeActive: true,
+		}
+	default:
+		return inactiveNoveltyStatus(daysSinceLastSeen)
+	}
+
+	t.noveltyEpisodes[scientificName] = status
+	return status
+}
+
 // updateYearlyTrackingLocked updates yearly tracking data. Assumes lock is held.
 func (t *SpeciesTracker) updateYearlyTrackingLocked(scientificName string, detectionTime time.Time) {
 	if !t.yearlyEnabled || !t.isWithinCurrentYear(detectionTime) {
@@ -85,6 +147,7 @@ func (t *SpeciesTracker) UpdateSpecies(scientificName string, detectionTime time
 
 	// Update all tracking systems
 	isNewSpecies := t.updateLifetimeTrackingLocked(scientificName, detectionTime)
+	t.updateLastSeenLocked(scientificName, detectionTime)
 	t.updateYearlyTrackingLocked(scientificName, detectionTime)
 	t.updateSeasonalTrackingLocked(scientificName, detectionTime)
 
@@ -157,12 +220,21 @@ func (t *SpeciesTracker) addSeasonalIfNewLocked(scientificName string, detection
 // could all be considered "new" before any of them update the tracker.
 // Returns (isNew, daysSinceFirstSeen)
 func (t *SpeciesTracker) CheckAndUpdateSpecies(scientificName string, detectionTime time.Time) (isNew bool, daysSinceFirstSeen int) {
+	isNew, daysSinceFirstSeen, _ = t.CheckAndUpdateSpeciesWithNovelty(scientificName, detectionTime)
+	return
+}
+
+// CheckAndUpdateSpeciesWithNovelty atomically checks species status, updates
+// tracking, and returns novelty episode details for alert rules.
+func (t *SpeciesTracker) CheckAndUpdateSpeciesWithNovelty(scientificName string, detectionTime time.Time) (isNew bool, daysSinceFirstSeen int, novelty NoveltyStatus) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	t.checkAndResetPeriods(detectionTime)
 
+	novelty = t.calculateNoveltyStatusLocked(scientificName, detectionTime)
 	isNew, daysSinceFirstSeen = t.checkAndUpdateLifetimeLocked(scientificName, detectionTime)
+	t.updateLastSeenLocked(scientificName, detectionTime)
 	t.addYearlyIfNewLocked(scientificName, detectionTime)
 	t.addSeasonalIfNewLocked(scientificName, detectionTime)
 

@@ -3937,6 +3937,8 @@
           "species_name": "Nome da espécie",
           "scientific_name": "Nome científico",
           "confidence": "Confiança",
+          "days_since_last_seen": "Dias desde a última detecção",
+          "novelty_episode_days": "Dias do episódio de novidade",
           "location": "Localização",
           "stream_name": "Nome do fluxo",
           "stream_url": "URL do fluxo",
