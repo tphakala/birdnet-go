@@ -7,7 +7,7 @@ require (
 	github.com/antonholmquist/jason v1.0.0
 	github.com/creack/pty v1.1.24
 	github.com/eclipse/paho.mqtt.golang v1.5.1
-	github.com/gen2brain/malgo v0.11.24
+	github.com/gen2brain/malgo v0.11.25
 	github.com/getsentry/sentry-go v0.46.2
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
@@ -39,10 +39,10 @@ require (
 	github.com/tphakala/simd v1.0.22
 	github.com/yalue/onnxruntime_go v1.30.1
 	go.uber.org/goleak v1.3.0
-	golang.org/x/crypto v0.51.0
-	golang.org/x/net v0.54.0
+	golang.org/x/crypto v0.52.0
+	golang.org/x/net v0.55.0
 	golang.org/x/text v0.37.0
-	google.golang.org/api v0.278.0
+	google.golang.org/api v0.280.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/sqlite v1.6.0
@@ -114,7 +114,7 @@ require (
 	golang.org/x/term v0.43.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260511170946-3700d4141b60 // indirect
-	google.golang.org/grpc v1.81.0 // indirect
+	google.golang.org/grpc v1.81.1 // indirect
 )
 
 require (
@@ -155,7 +155,7 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
-	golang.org/x/sys v0.44.0
+	golang.org/x/sys v0.45.0
 	golang.org/x/time v0.15.0
 	google.golang.org/protobuf v1.36.11 // indirect
 )
