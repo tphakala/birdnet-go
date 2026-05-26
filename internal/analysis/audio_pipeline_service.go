@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
@@ -16,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -66,6 +68,9 @@ type AudioPipelineService struct {
 	// goroutine). Without this, concurrent execution can cause duplicate
 	// source initialization and conflicting router states.
 	sourcesMu sync.Mutex
+
+	// audioLevelStats aggregates audio level measurements for periodic logging.
+	audioLevelStats *AudioLevelStats
 
 	// soundLevelMu guards soundLevelConsumers. It is held only while mutating
 	// the map; router and engine calls happen outside the critical section so
@@ -229,6 +234,10 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	proc.SetRegistry(p.engine.Registry())
 	proc.Start()
 
+	// Start periodic audio level stats logger.
+	p.audioLevelStats = NewAudioLevelStats()
+	p.audioLevelStats.Start()
+
 	// Add audio sources, register consumers, and start buffer monitors.
 	apiAudioLevelChan := p.apiService.AudioLevelChan()
 	sourceIDs := p.setupAudioSources(apiAudioLevelChan, "start")
@@ -355,8 +364,9 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 		p.reconfigureChangedSources(apiAudioLevelChan)
 	}
 	reconfigureSoundLevelFn := p.ReconfigureSoundLevel
+	reconfigureMonitoringFn := p.apiService.ReconfigureMonitoring
 	apiController := p.apiService.APIController()
-	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine, reconfigureFn, reconfigureSoundLevelFn)
+	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine, reconfigureFn, reconfigureSoundLevelFn, reconfigureMonitoringFn)
 	p.ctrlMonitor.Start()
 
 	// Start restart loop goroutine.
@@ -422,6 +432,11 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 	if p.quietHoursScheduler != nil {
 		p.quietHoursScheduler.Stop()
 		p.quietHoursScheduler = nil
+	}
+
+	// Stop audio level stats logger.
+	if p.audioLevelStats != nil {
+		p.audioLevelStats.Stop()
 	}
 
 	// Close done channel to signal restart loop and clip cleanup goroutines.
@@ -975,6 +990,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 			continue
 		}
+		audioStats := p.audioLevelStats
 		p.wg.Go(func() {
 			for {
 				select {
@@ -982,6 +998,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 					if !ok {
 						return
 					}
+					audioStats.Record(lvl.Name, lvl.Level, lvl.Clipping)
 					select {
 					case audioLevelChan <- audiocore.AudioLevelData(lvl):
 					default:
@@ -996,8 +1013,14 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 // sourceNeedsReconfigure reports whether the running source's audio parameters
 // differ from the desired config, requiring a full reconfigure (stop + restart).
+// A zero SourceSampleRate in the desired config means the probe failed; treat
+// this as "unknown, keep current" to avoid restarting FFmpeg on transient
+// network failures.
 func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.SourceConfig) bool {
+	sourceSampleRateChanged := desired.SourceSampleRate != 0 &&
+		running.SourceSampleRate != desired.SourceSampleRate
 	return running.SampleRate != desired.SampleRate ||
+		sourceSampleRateChanged ||
 		running.BitDepth != desired.BitDepth ||
 		running.Channels != desired.Channels
 }
@@ -1287,14 +1310,42 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 	settings := conf.Setting()
 	var result []sourceConfigWithModels
 
-	// RTSP streams.
+	// Collect enabled streams so we can iterate twice: once for probing,
+	// once for building configs. EnabledStreams() returns an iterator;
+	// preallocate using the parent slice length as an upper bound.
+	enabledStreams := make([]*conf.StreamConfig, 0, len(settings.Realtime.RTSP.Streams))
 	for _, stream := range settings.Realtime.RTSP.EnabledStreams() {
+		enabledStreams = append(enabledStreams, stream)
+	}
+
+	// Probe all streams concurrently to discover actual sample rates.
+	// This lets us skip FFmpeg resampling when the source already matches
+	// the target, and detect sub-48 kHz sources that need upsampling.
+	probedRates := p.probeAllStreams(enabledStreams)
+
+	// RTSP streams.
+	for _, stream := range enabledStreams {
+		probedRate := probedRates[stream.URL]
+		sampleRate := conf.SampleRate
+		if hasBatModel(stream.Models) {
+			if probedRate > conf.SampleRate {
+				sampleRate = probedRate
+			}
+			if probedRate > 0 && probedRate < ffmpeg.MinBatSampleRate {
+				GetLogger().Warn("stream sample rate below bat model minimum",
+					logger.String("stream", stream.Name),
+					logger.Int("sample_rate", probedRate),
+					logger.Int("minimum", ffmpeg.MinBatSampleRate),
+					logger.String("operation", "probe_stream"))
+			}
+		}
 		result = append(result, sourceConfigWithModels{
 			config: &audiocore.SourceConfig{
 				DisplayName:      stream.Name,
 				Type:             audiocore.StreamTypeToSourceType(stream.Type),
 				ConnectionString: stream.URL,
-				SampleRate:       conf.SampleRate,
+				SampleRate:       sampleRate,
+				SourceSampleRate: probedRate,
 				BitDepth:         conf.BitDepth,
 				Channels:         1,
 			},
@@ -1327,6 +1378,89 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 	}
 
 	return result
+}
+
+// hasBatModel returns true if any of the given config-level model IDs
+// resolves to a registry entry that requires high sample rate audio
+// (MinRawSampleRate > 0).
+func hasBatModel(modelIDs []string) bool {
+	for _, configID := range modelIDs {
+		registryID, ok := classifier.ResolveConfigModelID(configID)
+		if !ok {
+			continue
+		}
+		info, exists := classifier.ModelRegistry[registryID]
+		if exists && info.Spec.MinRawSampleRate > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// probeAllStreams probes all streams concurrently to discover their actual
+// sample rates. Returns a map from stream URL to probed sample rate.
+// A zero value means the probe failed (the caller should treat unknown
+// rates conservatively).
+func (p *AudioPipelineService) probeAllStreams(streams []*conf.StreamConfig) map[string]int {
+	if len(streams) == 0 {
+		return nil
+	}
+
+	type probeResult struct {
+		url  string
+		rate int
+	}
+
+	results := make(chan probeResult, len(streams))
+	var wg sync.WaitGroup
+	for _, s := range streams {
+		wg.Go(func() {
+			results <- probeResult{
+				url:  s.URL,
+				rate: p.probeStreamSampleRate(s.URL, s.Name),
+			}
+		})
+	}
+	wg.Wait()
+	close(results)
+
+	rates := make(map[string]int, len(streams))
+	for r := range results {
+		rates[r.url] = r.rate
+	}
+	return rates
+}
+
+// probeStreamSampleRate uses ffprobe to discover the actual sample rate of a
+// stream. Returns 0 on failure so the caller can distinguish "unknown" from
+// "actually 48 kHz" and apply conservative resampling.
+func (p *AudioPipelineService) probeStreamSampleRate(url, name string) int {
+	log := GetLogger()
+
+	info, err := ffmpeg.ProbeStreamInfo(context.Background(), url)
+	if err != nil {
+		log.Warn("stream probe failed, FFmpeg will resample to ensure correct rate",
+			logger.String("stream", name),
+			logger.Error(err),
+			logger.String("operation", "probe_stream"))
+		return 0
+	}
+
+	log.Info("probed stream audio properties",
+		logger.String("stream", name),
+		logger.Int("sample_rate", info.SampleRate),
+		logger.String("codec", info.Codec),
+		logger.Int("channels", info.Channels),
+		logger.String("operation", "probe_stream"))
+
+	if ffmpeg.IsLossyCodec(info.Codec) {
+		log.Warn("stream uses lossy codec that destroys ultrasonic content",
+			logger.String("stream", name),
+			logger.String("codec", info.Codec),
+			logger.String("operation", "probe_stream"))
+	}
+
+	return info.SampleRate
 }
 
 // buildMonitorConfigs builds the map[sourceID][]monitorConfig needed by
@@ -1461,7 +1595,16 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			return
 
 		case t := <-timer.C:
-			currentPolicy := conf.Setting().Realtime.Audio.Export.Retention.Policy
+			currentSettings := conf.Setting()
+			exportCfg := currentSettings.Realtime.Audio.Export
+			currentPolicy := exportCfg.Retention.Policy
+
+			if strings.TrimSpace(exportCfg.Path) == "" {
+				log.Debug("skipping clip cleanup: export path not configured",
+					logger.String("operation", "clip_cleanup_skip"))
+				continue
+			}
+
 			log.Info("starting clip cleanup task",
 				logger.String("timestamp", t.Format(time.RFC3339)),
 				logger.String("policy", currentPolicy),
@@ -1482,8 +1625,8 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			}
 
 			if currentPolicy == "usage" {
-				currentRetention := conf.Setting().Realtime.Audio.Export.Retention
-				baseDir := conf.Setting().Realtime.Audio.Export.Path
+				currentRetention := exportCfg.Retention
+				baseDir := exportCfg.Path
 
 				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&currentRetention, baseDir)
 				if err != nil {
@@ -1603,14 +1746,22 @@ func cleanupHLSStreamingFiles() error {
 				logger.String("path", path),
 				logger.String("operation", "cleanup_hls_files"))
 
-			// Remove the directory and all its contents
+			// Remove the directory and all its contents.
+			// Retry once on "directory not empty" to handle the race where
+			// a concurrent HLS writer creates a file between RemoveAll's
+			// internal traversal and the final parent unlink.
 			if err := os.RemoveAll(path); err != nil {
-				log.Warn("failed to remove HLS stream directory",
-					logger.String("path", path),
-					logger.Error(err),
-					logger.String("operation", "cleanup_hls_files"))
-				cleanupErrors = append(cleanupErrors, fmt.Sprintf("%s: %v", path, err))
-				// Continue with other directories
+				if errors.Is(err, syscall.ENOTEMPTY) {
+					time.Sleep(100 * time.Millisecond)
+					err = os.RemoveAll(path)
+				}
+				if err != nil {
+					log.Warn("failed to remove HLS stream directory",
+						logger.String("path", path),
+						logger.Error(err),
+						logger.String("operation", "cleanup_hls_files"))
+					cleanupErrors = append(cleanupErrors, fmt.Sprintf("%s: %v", path, err))
+				}
 			}
 		}
 	}

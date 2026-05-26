@@ -242,7 +242,7 @@ func TestLogFileCollector_addNoLogsNote(t *testing.T) {
 // TestCollector_scrubConfig tests sensitive data scrubbing
 func TestCollector_scrubConfig(t *testing.T) {
 	c := &Collector{
-		sensitiveKeys: defaultSensitiveKeys(),
+		sensitiveKeys: DefaultSensitiveKeys(),
 	}
 
 	tests := []struct {
@@ -1041,7 +1041,7 @@ func TestCollector_Collect_AlwaysIncludesDiagnostics(t *testing.T) {
 	c := &Collector{
 		configPath:    tempDir,
 		dataPath:      tempDir,
-		sensitiveKeys: defaultSensitiveKeys(),
+		sensitiveKeys: DefaultSensitiveKeys(),
 	}
 
 	// Create a bundle with minimal options - at least one type must be enabled
@@ -1958,7 +1958,7 @@ func TestComprehensivePrivacyScrubbing_Integration(t *testing.T) {
 
 	// Create collector with default sensitive keys
 	c := &Collector{
-		sensitiveKeys: defaultSensitiveKeys(),
+		sensitiveKeys: DefaultSensitiveKeys(),
 	}
 
 	// Build comprehensive mock config

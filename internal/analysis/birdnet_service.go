@@ -9,6 +9,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -56,6 +57,10 @@ func (a *BirdNETAnalyzer) Start(_ context.Context) error {
 	}
 
 	a.bn = bn
+
+	events.Emit(context.Background(), "detection", "model_loaded", "BirdNET model loaded", map[string]any{
+		"species_count": len(bn.Settings.BirdNET.Labels),
+	})
 
 	// Initialize ModelManager for the model gallery. Failure is non-fatal
 	// because the gallery is an optional feature; core detection still works.

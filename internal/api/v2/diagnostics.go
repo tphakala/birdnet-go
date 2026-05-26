@@ -16,11 +16,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
@@ -40,6 +42,8 @@ func (c *Controller) initDiagnosticsRoutes() {
 		c.healthErrors = health.NewErrorRingBuffer(health.DefaultErrorBufferSize)
 	}
 	c.healthRegistry = health.NewRegistry()
+	c.healthMetricsStore = observability.NewHealthMetricsStore()
+	c.healthEvents = observability.NewHealthEventBuffer(observability.DefaultEventBufferCapacity)
 
 	c.registerHealthChecks()
 
@@ -90,9 +94,9 @@ func (c *Controller) registerHealthChecks() {
 		// Audio checks
 		checks.NewSourceStatusCheck(snapshotProvider),
 		checks.NewPipelineLivenessCheck(snapshotProvider),
-		checks.NewBufferDropsCheck(c.buildDropStatsProvider()),
+		checks.NewBufferDropsCheck(c.healthMetricsStore, c.healthEvents.Recent),
 		checks.NewAudioLevelCheck(c.buildAudioLevelProvider()),
-		checks.NewBufferOverrunCheck(c.buildOverrunStatsProvider()),
+		checks.NewBufferOverrunCheck(c.healthMetricsStore, c.healthEvents.Recent),
 		checks.NewCaptureBufferCheck(c.buildCaptureBufferHealthProvider()),
 
 		// Analysis checks (multi-model aware)
@@ -117,7 +121,7 @@ func (c *Controller) registerHealthChecks() {
 
 		// Stream checks
 		checks.NewStreamConnectivityCheck(getStreamHealthInfos),
-		checks.NewStreamErrorRateCheck(getStreamHealthInfos),
+		checks.NewStreamErrorRateCheck(c.healthMetricsStore, c.healthEvents.Recent),
 		checks.NewFFmpegHealthCheck(getStreamHealthInfos),
 
 		// Database checks
@@ -140,6 +144,17 @@ func (c *Controller) registerHealthChecks() {
 				return 0, errors.NewStd("datastore unavailable")
 			}
 			return ds.PingWithLatency(ctx)
+		}),
+		checks.NewDatabaseIntegrityCheck(func() (string, bool) {
+			ds := c.DS
+			if ds == nil {
+				return "", false
+			}
+			sqliteStore, ok := ds.(*datastore.SQLiteStore)
+			if !ok || sqliteStore == nil {
+				return "", false
+			}
+			return sqliteStore.IntegrityResult()
 		}),
 
 		// Network checks
@@ -204,6 +219,20 @@ func (c *Controller) registerHealthChecks() {
 		),
 
 		// Config checks
+		checks.NewToolAvailabilityCheck(func() []checks.ToolInfo {
+			s := c.currentSettings()
+			return []checks.ToolInfo{
+				{
+					Name:    "FFmpeg",
+					Path:    s.Realtime.Audio.FfmpegPath,
+					Version: s.Realtime.Audio.FfmpegVersion,
+				},
+				{
+					Name: "Sox",
+					Path: s.Realtime.Audio.SoxPath,
+				},
+			}
+		}),
 		checks.NewPathAccessCheck(map[string]string{
 			"data": filepath.Dir(c.currentSettings().Output.SQLite.Path),
 		}),
@@ -343,10 +372,10 @@ func (c *Controller) buildStreamHealthProvider() func() []checks.StreamHealthInf
 	}
 }
 
-// buildDropStatsProvider returns a closure that aggregates per-source frame
-// drop counts from the audio router. Returns nil before the engine starts.
-func (c *Controller) buildDropStatsProvider() func() checks.DropStats {
-	return func() checks.DropStats {
+// buildAudioRouterSnapshotProvider returns a closure that reads cumulative
+// audio counter values from the audio router for the health metrics collector.
+func (c *Controller) buildAudioRouterSnapshotProvider() func() []observability.AudioRouterSnapshot {
+	return func() []observability.AudioRouterSnapshot {
 		eng := c.engine.Load()
 		if eng == nil {
 			return nil
@@ -359,15 +388,47 @@ func (c *Controller) buildDropStatsProvider() func() checks.DropStats {
 		if len(sourceIDs) == 0 {
 			return nil
 		}
-		stats := make(checks.DropStats, len(sourceIDs))
+		snaps := make([]observability.AudioRouterSnapshot, 0, len(sourceIDs))
 		for _, sid := range sourceIDs {
-			var totalDrops int64
+			var totalDrops, totalErrors int64
 			for _, ri := range router.Routes(sid) {
 				totalDrops += ri.Drops
+				totalErrors += ri.Errors
 			}
-			stats[sid] = totalDrops
+			snaps = append(snaps, observability.AudioRouterSnapshot{
+				SourceID: sid,
+				Drops:    totalDrops,
+				Errors:   totalErrors,
+			})
 		}
-		return stats
+		return snaps
+	}
+}
+
+// buildStreamHealthSnapshotProvider returns a closure that reads cumulative
+// stream restart counts for the health metrics collector.
+func (c *Controller) buildStreamHealthSnapshotProvider() func() []observability.StreamHealthSnapshot {
+	return func() []observability.StreamHealthSnapshot {
+		eng := c.engine.Load()
+		if eng == nil {
+			return nil
+		}
+		mgr := eng.FFmpegManager()
+		if mgr == nil {
+			return nil
+		}
+		healthMap := mgr.AllStreamHealth()
+		if len(healthMap) == 0 {
+			return nil
+		}
+		snaps := make([]observability.StreamHealthSnapshot, 0, len(healthMap))
+		for sourceID, sh := range healthMap {
+			snaps = append(snaps, observability.StreamHealthSnapshot{
+				SourceID:     sourceID,
+				RestartCount: sh.RestartCount,
+			})
+		}
+		return snaps
 	}
 }
 
@@ -413,35 +474,6 @@ func (c *Controller) buildAudioLevelProvider() func() []checks.AudioLevelInfo {
 			return nil
 		}
 		return infos
-	}
-}
-
-// buildOverrunStatsProvider returns a closure that aggregates per-source write
-// error counts from the audio router. Write errors indicate downstream
-// processing could not keep up (overrun condition).
-func (c *Controller) buildOverrunStatsProvider() func() checks.OverrunStats {
-	return func() checks.OverrunStats {
-		eng := c.engine.Load()
-		if eng == nil {
-			return nil
-		}
-		router := eng.Router()
-		if router == nil {
-			return nil
-		}
-		sourceIDs := router.ActiveSourceIDs()
-		if len(sourceIDs) == 0 {
-			return nil
-		}
-		stats := make(checks.OverrunStats, len(sourceIDs))
-		for _, sid := range sourceIDs {
-			var totalErrors int64
-			for _, ri := range router.Routes(sid) {
-				totalErrors += ri.Errors
-			}
-			stats[sid] = totalErrors
-		}
-		return stats
 	}
 }
 
@@ -515,12 +547,40 @@ func (c *Controller) GetDiagnosticsStatus(ctx echo.Context) error {
 	})
 }
 
+// validWindows maps accepted window parameter values to durations.
+var validWindows = map[string]time.Duration{
+	"15m": 15 * time.Minute,
+	"30m": 30 * time.Minute,
+	"1h":  time.Hour,
+	"6h":  6 * time.Hour,
+	"24h": 24 * time.Hour,
+	"7d":  7 * 24 * time.Hour,
+}
+
+// parseWindow converts a window query parameter to a duration.
+// Returns the default (1h) for empty input, or an error for invalid values.
+func parseWindow(s string) (time.Duration, error) {
+	if s == "" {
+		return time.Hour, nil
+	}
+	d, ok := validWindows[s]
+	if !ok {
+		return 0, fmt.Errorf("invalid window %q: valid values are 15m, 30m, 1h, 6h, 24h, 7d", s)
+	}
+	return d, nil
+}
+
 // RunDiagnostics executes all registered health checks and stores the report.
 func (c *Controller) RunDiagnostics(ctx echo.Context) error {
+	window, err := parseWindow(ctx.QueryParam("window"))
+	if err != nil {
+		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
+	}
+
 	id := uuid.New().String()
 	startedAt := time.Now()
 
-	results := c.healthRegistry.RunAll(ctx.Request().Context())
+	results := c.healthRegistry.RunAllWithWindow(ctx.Request().Context(), window)
 	report := health.NewReport(id, startedAt, results)
 	c.healthReports.Save(report)
 

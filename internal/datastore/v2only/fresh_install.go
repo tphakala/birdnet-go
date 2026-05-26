@@ -72,6 +72,7 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 			Database:    settings.Output.MySQL.Database,
 			UseV2Prefix: false, // NO prefix for fresh installs
 			Debug:       settings.Debug,
+			Logger:      log,
 		})
 
 	default:
@@ -125,6 +126,7 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 	imageCacheRepo := repository.NewImageCacheRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
 	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
 	notificationRepo := repository.NewNotificationHistoryRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
+	appEventRepo := repository.NewAppEventRepository(db, nil, useV2Prefix, isMySQL)
 	labelTypeRepo := repository.NewLabelTypeRepository(db, nil, useV2Prefix)
 	taxClassRepo := repository.NewTaxonomicClassRepository(db, nil, useV2Prefix)
 
@@ -175,6 +177,7 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 		ImageCache:         imageCacheRepo,
 		Threshold:          thresholdRepo,
 		Notification:       notificationRepo,
+		AppEvent:           appEventRepo,
 		Logger:             log,
 		Timezone:           time.Local,
 		DefaultModelID:     defaultModel.ID,

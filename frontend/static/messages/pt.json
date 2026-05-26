@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime não disponível",
-        "unavailableMessage": "O ONNX Runtime {requiredVersion} é necessário para {modelName}, mas não foi encontrado. Verifique se o libonnxruntime.so está instalado no caminho esperado."
+        "unavailableMessage": "O ONNX Runtime {requiredVersion} é necessário para {modelName}, mas não foi encontrado. Consulte o guia de instalação: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Carregando detalhes da detecção...",
       "loaded": "Detalhes de detecção carregados para {species}",
-      "error": "Erro ao carregar detecção: {error}"
+      "error": "Erro ao carregar detecção: {error}",
+      "loadingResults": "Carregando {count} resultados...",
+      "thumbnailLoading": "Carregando miniatura de {species}...",
+      "thumbnailLoaded": "Miniatura de {species} carregada"
     },
     "errors": {
       "notFound": "Detecção não encontrada. Pode ter sido excluída ou o ID está incorreto.",
@@ -2989,6 +2992,7 @@
         "unknown": "desconhecido",
         "refresh": "Atualizar",
         "addStream": "Adicionar Stream",
+        "testRequired": "Execute um teste de stream bem-sucedido antes de guardar",
         "deleteConfirm": "Remover este stream?",
         "restartCount": "Reiniciado {count} vez(es)",
         "healthLoadError": "Falha ao carregar status do stream",
@@ -3041,6 +3045,18 @@
           "degraded": "Degradada",
           "failed": "Falhou",
           "unknown": "Desconhecido"
+        },
+        "test": {
+          "button": "Testar stream",
+          "probing": "Testando...",
+          "result": "Resultado do teste",
+          "error": "Teste falhou",
+          "batCompatible": "Compatível com morcegos",
+          "batIncompatible": "Não compatível com morcegos"
+        },
+        "batWarning": "Os modelos de morcegos requerem streams com um codec sem perda (PCM) e uma taxa de amostragem de pelo menos 96 kHz. Use o botão Testar stream acima para verificar a compatibilidade.",
+        "codecWarning": {
+          "lossy": "Codecs com perdas (AAC, Opus, MP3) destroem frequências ultrassónicas acima de ~20 kHz, tornando o stream inadequado para a deteção de morcegos."
         }
       },
       "audioFilters": {
@@ -3216,6 +3232,10 @@
         "devicesLoadFailed": "Falha ao carregar dispositivos de áudio. Por favor, verifique as permissões do sistema.",
         "invalidBitrate": "Valor de taxa de bits inválido",
         "invalidRetentionPolicy": "Política de retenção inválida"
+      },
+      "models": {
+        "recommendBoth": "Para melhor cobertura de deteção de espécies, recomenda-se executar tanto o BirdNET como o Perch em conjunto.",
+        "perchOnlyWarning": "O Perch sozinho produz menos deteções. Reduza o limiar de confiança para 0.50 para resultados significativos, ou ative o BirdNET em paralelo para melhor cobertura."
       }
     },
     "security": {
@@ -3927,6 +3947,8 @@
         "operators": {
           "is": "é",
           "is_not": "não é",
+          "in": "está na lista",
+          "not_in": "não está na lista",
           "contains": "contém",
           "not_contains": "não contém",
           "greater_than": "maior que",
@@ -4191,7 +4213,31 @@
       "playbackSpeed": "Velocidade de reprodução",
       "speed": "Velocidade",
       "loop": "Alternar repetição",
-      "player": "Reprodutor de áudio"
+      "player": "Reprodutor de áudio",
+      "autoplayBlocked": "Clique para reproduzir (reprodução automática bloqueada)",
+      "hlsNotSupported": "A reprodução HLS não é suportada neste navegador",
+      "streamStarting": "Iniciando transmissão de áudio...",
+      "levelFor": "Nível de áudio para {source}",
+      "levelForNoSource": "Nível de áudio: sem fonte",
+      "noSource": "Sem fonte",
+      "levelAnnouncement": "Nível de áudio atual: {level} por cento",
+      "levelAnnouncementClipping": "Nível de áudio atual: {level} por cento, distorção detetada",
+      "sourceSelection": "Seleção de fonte de áudio",
+      "sources": "Fontes de áudio",
+      "noSourcesAvailable": "Nenhuma fonte de áudio disponível",
+      "silent": "(silencioso)",
+      "stopPlayback": "Parar reprodução de áudio",
+      "startPlayback": "Iniciar reprodução de áudio",
+      "nowPlaying": "Reproduzindo áudio de {source}",
+      "nowPlayingNoSource": "Reproduzindo áudio",
+      "playbackStopped": "Reprodução de áudio parada",
+      "loginRequired": "Login necessário para transmitir áudio",
+      "streamError": "Erro ao iniciar a transmissão",
+      "streamTitle": "Transmissão de áudio de pássaros - {source}",
+      "streamTitleDefault": "Transmissão de áudio de pássaros",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Transmissão ao vivo",
+      "playbackError": "Erro de reprodução: {details}"
     },
     "spectrogram": {
       "notGenerated": "Espectrograma ainda não gerado",
@@ -4416,6 +4462,16 @@
       "hostRequired": "O parâmetro de host é obrigatório",
       "invalidHost": "Parâmetro de host inválido",
       "rateLimit": "Demasiadas tentativas de ligação ao fluxo de notificações, aguarde antes de tentar novamente"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Corpo do pedido inválido",
+        "urlRequired": "O URL do stream é obrigatório",
+        "invalidUrl": "Formato de URL inválido. Introduza um URL completo, por ex. rtsp://host:porta/caminho",
+        "unsupportedScheme": "Esquema de URL não suportado \"{scheme}\". Use rtsp, rtsps, http, https, rtmp ou udp",
+        "blockedDestination": "Este destino está bloqueado por razões de segurança",
+        "connectionFailed": "Não foi possível ligar ao stream. Verifique se o URL está correto e se o stream está acessível"
+      }
     },
     "debug": {
       "notEnabled": "O modo de depuração não está ativado"
@@ -4774,11 +4830,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Atualizar",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4790,6 +4844,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Tudo OK",
+      "needsAttention": "Requer atenção",
+      "failing": "A falhar",
+      "allClear": "Sem problemas",
+      "noData": "Sem dados",
+      "none": "Nenhum"
+    },
+    "diagnostics": "Diagnóstico",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4825,6 +4888,24 @@
       "errorComponent": "Componente",
       "errorLevel": "Nível",
       "errorMessage": "Mensagem"
+    },
+    "window": {
+      "label": "Janela de avaliação",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Último evento",
+      "recentEvents": "Eventos recentes",
+      "time": "Hora",
+      "source": "Fonte",
+      "count": "Contagem",
+      "lifetime": "total",
+      "sparklineLabel": "Gráfico de atividade"
     }
   }
 }

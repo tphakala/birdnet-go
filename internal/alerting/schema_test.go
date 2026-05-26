@@ -55,7 +55,7 @@ func TestGetSchema_AllOperatorsPresent(t *testing.T) {
 		names[i] = op.Name
 	}
 	assert.ElementsMatch(t, []string{
-		OperatorIs, OperatorIsNot, OperatorContains, OperatorNotContains,
+		OperatorIs, OperatorIsNot, OperatorIn, OperatorNotIn, OperatorContains, OperatorNotContains,
 		OperatorGreaterThan, OperatorLessThan, OperatorGreaterOrEqual, OperatorLessOrEqual,
 	}, names)
 }
@@ -63,7 +63,7 @@ func TestGetSchema_AllOperatorsPresent(t *testing.T) {
 func TestGetSchema_PropertiesHaveValidOperators(t *testing.T) {
 	schema := GetSchema()
 	validOps := map[string]bool{
-		OperatorIs: true, OperatorIsNot: true, OperatorContains: true, OperatorNotContains: true,
+		OperatorIs: true, OperatorIsNot: true, OperatorIn: true, OperatorNotIn: true, OperatorContains: true, OperatorNotContains: true,
 		OperatorGreaterThan: true, OperatorLessThan: true, OperatorGreaterOrEqual: true, OperatorLessOrEqual: true,
 	}
 	for _, ot := range schema.ObjectTypes {

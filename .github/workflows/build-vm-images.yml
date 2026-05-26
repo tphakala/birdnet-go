@@ -58,7 +58,7 @@ jobs:
           echo "📦 Building VM images for version: $VERSION"
 
       - name: Install build dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: awalsh128/cache-apt-pkgs-action@acb598e5ddbc6f68a970c5da0688d2f3a9f04d05 # v1.6.0
         with:
           packages: qemu-kvm qemu-utils qemu-system-x86 qemu-system-arm libvirt-daemon-system libvirt-clients bridge-utils virt-manager ovmf qemu-efi-aarch64 zstd
           version: 1.0
@@ -75,7 +75,7 @@ jobs:
 
       - name: Install QEMU cross-platform support
         if: matrix.arch == 'arm64'
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: awalsh128/cache-apt-pkgs-action@acb598e5ddbc6f68a970c5da0688d2f3a9f04d05 # v1.6.0
         with:
           packages: qemu-user-static binfmt-support
           version: 1.0

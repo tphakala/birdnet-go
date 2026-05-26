@@ -341,8 +341,8 @@
         <!-- Screen reader announcement for loading state -->
         <span class="sr-only" role="status" aria-live="polite">
           {thumbnailLoader.loading
-            ? `Loading ${detection.commonName} thumbnail...`
-            : `${detection.commonName} thumbnail loaded`}
+            ? t('detections.aria.thumbnailLoading', { species: detection.commonName })
+            : t('detections.aria.thumbnailLoaded', { species: detection.commonName })}
         </span>
 
         <!-- Loading spinner overlay -->

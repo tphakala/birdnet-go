@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime nicht verfügbar",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} wird für {modelName} benötigt, wurde aber nicht gefunden. Prüfen Sie, ob libonnxruntime.so im erwarteten Pfad installiert ist."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} wird für {modelName} benötigt, wurde aber nicht gefunden. Siehe Installationsanleitung: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Erkennungsdetails werden geladen...",
       "loaded": "Erkennungsdetails für {species} geladen",
-      "error": "Fehler beim Laden der Erkennung: {error}"
+      "error": "Fehler beim Laden der Erkennung: {error}",
+      "loadingResults": "Lade {count} Ergebnisse...",
+      "thumbnailLoading": "Lade Vorschaubild von {species}...",
+      "thumbnailLoaded": "Vorschaubild von {species} geladen"
     },
     "errors": {
       "notFound": "Erkennung nicht gefunden. Sie wurde möglicherweise gelöscht oder die ID ist falsch.",
@@ -2989,6 +2992,7 @@
         "unknown": "unbekannt",
         "refresh": "Aktualisieren",
         "addStream": "Stream hinzufügen",
+        "testRequired": "Führen Sie einen erfolgreichen Streamtest durch, bevor Sie speichern",
         "deleteConfirm": "Diesen Stream entfernen?",
         "restartCount": "{count} Mal neu gestartet",
         "healthLoadError": "Laden des Stream-Status fehlgeschlagen",
@@ -3041,6 +3045,18 @@
           "degraded": "Beeinträchtigt",
           "failed": "Fehlgeschlagen",
           "unknown": "Unbekannt"
+        },
+        "test": {
+          "button": "Stream testen",
+          "probing": "Teste...",
+          "result": "Testergebnis",
+          "error": "Test fehlgeschlagen",
+          "batCompatible": "Fledermaus-kompatibel",
+          "batIncompatible": "Nicht fledermaus-kompatibel"
+        },
+        "batWarning": "Fledermausmodelle erfordern Streams mit einem verlustfreien Codec (PCM) und einer Abtastrate von mindestens 96 kHz. Verwenden Sie die Schaltfläche Stream testen oben, um die Kompatibilität zu überprüfen.",
+        "codecWarning": {
+          "lossy": "Verlustbehaftete Codecs (AAC, Opus, MP3) zerstören Ultraschallfrequenzen über ~20 kHz und machen den Stream für die Fledermauserkennung ungeeignet."
         }
       },
       "audioFilters": {
@@ -3216,6 +3232,10 @@
         "devicesLoadFailed": "Fehler beim Laden der Audiogeräte. Bitte überprüfen Sie die Systemberechtigungen.",
         "invalidBitrate": "Ungültiger Bitratenwert",
         "invalidRetentionPolicy": "Ungültige Aufbewahrungsrichtlinie"
+      },
+      "models": {
+        "recommendBoth": "Für die beste Artenerkennung wird empfohlen, sowohl BirdNET als auch Perch gemeinsam auszuführen.",
+        "perchOnlyWarning": "Perch allein erzeugt weniger Erkennungen. Senken Sie den Konfidenzschwellenwert auf 0.50 für aussagekräftige Ergebnisse, oder aktivieren Sie BirdNET für eine bessere Abdeckung."
       }
     },
     "security": {
@@ -3927,6 +3947,8 @@
         "operators": {
           "is": "ist",
           "is_not": "ist nicht",
+          "in": "ist in der Liste",
+          "not_in": "ist nicht in der Liste",
           "contains": "enthält",
           "not_contains": "enthält nicht",
           "greater_than": "größer als",
@@ -4191,7 +4213,31 @@
       "playbackSpeed": "Wiedergabegeschwindigkeit",
       "speed": "Tempo",
       "loop": "Wiederholung umschalten",
-      "player": "Audioplayer"
+      "player": "Audioplayer",
+      "autoplayBlocked": "Klicken zum Abspielen (Autoplay blockiert)",
+      "hlsNotSupported": "HLS-Wiedergabe wird in diesem Browser nicht unterstützt",
+      "streamStarting": "Audiostream wird gestartet...",
+      "levelFor": "Audiopegel für {source}",
+      "levelForNoSource": "Audiopegel: keine Quelle",
+      "noSource": "Keine Quelle",
+      "levelAnnouncement": "Aktueller Audiopegel: {level} Prozent",
+      "levelAnnouncementClipping": "Aktueller Audiopegel: {level} Prozent, Übersteuerung erkannt",
+      "sourceSelection": "Audioquelle auswählen",
+      "sources": "Audioquellen",
+      "noSourcesAvailable": "Keine Audioquellen verfügbar",
+      "silent": "(still)",
+      "stopPlayback": "Audiowiedergabe stoppen",
+      "startPlayback": "Audiowiedergabe starten",
+      "nowPlaying": "Spielt jetzt Audio von {source}",
+      "nowPlayingNoSource": "Audio wird wiedergegeben",
+      "playbackStopped": "Audiowiedergabe gestoppt",
+      "loginRequired": "Anmeldung für Audio-Streaming erforderlich",
+      "streamError": "Fehler beim Starten des Streams",
+      "streamTitle": "Vogelaudio-Stream - {source}",
+      "streamTitleDefault": "Vogelaudio-Stream",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Livestream",
+      "playbackError": "Wiedergabefehler: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogramm noch nicht generiert",
@@ -4416,6 +4462,16 @@
       "hostRequired": "Host-Parameter ist erforderlich",
       "invalidHost": "Ungültiger Host-Parameter",
       "rateLimit": "Zu viele Verbindungsversuche zum Benachrichtigungsstream, bitte warten Sie einen Moment"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Ungültiger Anfragekörper",
+        "urlRequired": "Stream-URL ist erforderlich",
+        "invalidUrl": "Ungültiges URL-Format. Geben Sie eine vollständige URL ein, z. B. rtsp://host:port/pfad",
+        "unsupportedScheme": "Nicht unterstütztes URL-Schema \"{scheme}\". Verwenden Sie rtsp, rtsps, http, https, rtmp oder udp",
+        "blockedDestination": "Dieses Ziel ist aus Sicherheitsgründen gesperrt",
+        "connectionFailed": "Verbindung zum Stream konnte nicht hergestellt werden. Überprüfen Sie, ob die URL korrekt ist und der Stream erreichbar ist"
+      }
     },
     "debug": {
       "notEnabled": "Debug-Modus nicht aktiviert"
@@ -4774,11 +4830,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Aktualisieren",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4790,6 +4844,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Alles in Ordnung",
+      "needsAttention": "Erfordert Aufmerksamkeit",
+      "failing": "Fehlerhaft",
+      "allClear": "Keine Probleme",
+      "noData": "Keine Daten",
+      "none": "Keine"
+    },
+    "diagnostics": "Diagnose",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4825,6 +4888,24 @@
       "errorComponent": "Komponente",
       "errorLevel": "Stufe",
       "errorMessage": "Nachricht"
+    },
+    "window": {
+      "label": "Auswertungszeitraum",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Letztes Ereignis",
+      "recentEvents": "Letzte Ereignisse",
+      "time": "Zeit",
+      "source": "Quelle",
+      "count": "Anzahl",
+      "lifetime": "gesamt",
+      "sparklineLabel": "Aktivitäts-Sparkline"
     }
   }
 }

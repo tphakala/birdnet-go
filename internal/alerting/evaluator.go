@@ -34,6 +34,10 @@ func evaluateCondition(cond *entities.AlertCondition, properties map[string]any)
 		return strings.EqualFold(propStr, condVal)
 	case OperatorIsNot:
 		return !strings.EqualFold(propStr, condVal)
+	case OperatorIn:
+		return listContains(condVal, propStr)
+	case OperatorNotIn:
+		return !listContains(condVal, propStr)
 	case OperatorContains:
 		return strings.Contains(strings.ToLower(propStr), strings.ToLower(condVal))
 	case OperatorNotContains:
@@ -43,6 +47,28 @@ func evaluateCondition(cond *entities.AlertCondition, properties map[string]any)
 	default:
 		return false
 	}
+}
+
+// listContains checks whether propValue appears in a comma, semicolon, or newline
+// delimited list. Items are trimmed, empty items are skipped, and comparisons are
+// case-insensitive.
+func listContains(listValue, propValue string) bool {
+	if propValue == "" {
+		return false
+	}
+
+	for item := range strings.FieldsFuncSeq(listValue, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r'
+	}) {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		if strings.EqualFold(trimmed, propValue) {
+			return true
+		}
+	}
+	return false
 }
 
 func evaluateNumeric(operator string, propVal any, condVal string) bool {

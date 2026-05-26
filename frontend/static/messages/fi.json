@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime ei ole käytettävissä",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} vaaditaan mallille {modelName}, mutta sitä ei löytynyt. Varmista, että libonnxruntime.so on asennettu odotettuun sijaintiin."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} vaaditaan mallille {modelName}, mutta sitä ei löytynyt. Katso asennusohje: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Ladataan havainnon tietoja...",
       "loaded": "Havainnon tiedot ladattu: {species}",
-      "error": "Virhe havainnon latauksessa: {error}"
+      "error": "Virhe havainnon latauksessa: {error}",
+      "loadingResults": "Ladataan {count} tulosta...",
+      "thumbnailLoading": "Ladataan {species} pikkukuvaa...",
+      "thumbnailLoaded": "Pikkukuva {species} ladattu"
     },
     "errors": {
       "notFound": "Havaintoa ei löytynyt. Se on ehkä poistettu tai tunniste on virheellinen.",
@@ -2989,6 +2992,7 @@
         "unknown": "tuntematon",
         "refresh": "Päivitä",
         "addStream": "Lisää striimi",
+        "testRequired": "Suorita onnistunut striimitesti ennen tallentamista",
         "deleteConfirm": "Poista tämä striimi?",
         "restartCount": "Uudelleenkäynnistetty {count} kertaa",
         "healthLoadError": "Striimin tilan lataus epäonnistui",
@@ -3041,6 +3045,18 @@
           "degraded": "Heikentynyt",
           "failed": "Epäonnistunut",
           "unknown": "Tuntematon"
+        },
+        "test": {
+          "button": "Testaa striimi",
+          "probing": "Testataan...",
+          "result": "Testitulos",
+          "error": "Testi epäonnistui",
+          "batCompatible": "Yhteensopiva lepakoiden kanssa",
+          "batIncompatible": "Ei yhteensopiva lepakoiden kanssa"
+        },
+        "batWarning": "Lepakkomallit vaativat häviöttömän koodekin (PCM) ja vähintään 96 kHz näytteenottotaajuuden. Tarkista yhteensopivuus yllä olevalla Testaa striimi -painikkeella.",
+        "codecWarning": {
+          "lossy": "Häviölliset koodekit (AAC, Opus, MP3) tuhoavat ultraäänitaajuudet yli ~20 kHz, mikä tekee striimistä soveltumattoman lepakoiden havaitsemiseen."
         }
       },
       "audioFilters": {
@@ -3216,6 +3232,10 @@
         "devicesLoadFailed": "Äänilaitteiden lataus epäonnistui. Tarkista järjestelmän käyttöoikeudet.",
         "invalidBitrate": "Virheellinen bittinopeusarvo",
         "invalidRetentionPolicy": "Virheellinen säilytyskäytäntö"
+      },
+      "models": {
+        "recommendBoth": "Parhaan lajien havainnointikattavuuden saavuttamiseksi suositellaan käyttämään sekä BirdNET- että Perch-malleja yhdessä.",
+        "perchOnlyWarning": "Perch yksinään tuottaa vähemmän havaintoja. Laske luottamuskynnys arvoon 0.50 mielekkäiden tulosten saamiseksi tai ota BirdNET käyttöön rinnalle paremman kattavuuden saavuttamiseksi."
       }
     },
     "security": {
@@ -3927,6 +3947,8 @@
         "operators": {
           "is": "on",
           "is_not": "ei ole",
+          "in": "on luettelossa",
+          "not_in": "ei ole luettelossa",
           "contains": "sisältää",
           "not_contains": "ei sisällä",
           "greater_than": "suurempi kuin",
@@ -4191,7 +4213,31 @@
       "playbackSpeed": "Toistonopeus",
       "speed": "Nopeus",
       "loop": "Vaihda silmukka",
-      "player": "Äänisoitin"
+      "player": "Äänisoitin",
+      "autoplayBlocked": "Klikkaa toistaaksesi (automaattinen toisto estetty)",
+      "hlsNotSupported": "HLS-toisto ei ole tuettu tässä selaimessa",
+      "streamStarting": "Käynnistetään äänistriimi...",
+      "levelFor": "Äänitaso lähteelle {source}",
+      "levelForNoSource": "Äänitaso: ei lähdettä",
+      "noSource": "Ei lähdettä",
+      "levelAnnouncement": "Nykyinen äänitaso: {level} prosenttia",
+      "levelAnnouncementClipping": "Nykyinen äänitaso: {level} prosenttia, säröytyminen havaittu",
+      "sourceSelection": "Äänilähteen valinta",
+      "sources": "Äänilähteet",
+      "noSourcesAvailable": "Ei äänilähteitä saatavilla",
+      "silent": "(hiljainen)",
+      "stopPlayback": "Pysäytä äänen toisto",
+      "startPlayback": "Aloita äänen toisto",
+      "nowPlaying": "Toistetaan ääntä lähteestä {source}",
+      "nowPlayingNoSource": "Toistetaan ääntä",
+      "playbackStopped": "Äänen toisto pysäytetty",
+      "loginRequired": "Kirjautuminen vaaditaan äänen suoratoistoon",
+      "streamError": "Virhe striimin käynnistyksessä",
+      "streamTitle": "Lintujen äänistriimi - {source}",
+      "streamTitleDefault": "Lintujen äänistriimi",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Suora lähetys",
+      "playbackError": "Toistovirhe: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammia ei ole vielä generoitu",
@@ -4416,6 +4462,16 @@
       "hostRequired": "Host-parametri on pakollinen",
       "invalidHost": "Virheellinen host-parametri",
       "rateLimit": "Liian monta yhteysyritystä ilmoitusstriimiin, odota hetki ennen uutta yritystä"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Virheellinen pyyntörunko",
+        "urlRequired": "Striimin URL on pakollinen",
+        "invalidUrl": "Virheellinen URL-muoto. Syötä täydellinen URL, esim. rtsp://host:portti/polku",
+        "unsupportedScheme": "URL-skeemaa \"{scheme}\" ei tueta. Käytä rtsp, rtsps, http, https, rtmp tai udp",
+        "blockedDestination": "Tämä kohde on estetty turvallisuussyistä",
+        "connectionFailed": "Striimiin ei saatu yhteyttä. Tarkista, että URL on oikein ja striimi on saavutettavissa"
+      }
     },
     "debug": {
       "notEnabled": "Virheenkorjaustila ei ole käytössä"
@@ -4774,11 +4830,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Päivitä",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4790,6 +4844,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Kaikki kunnossa",
+      "needsAttention": "Vaatii huomiota",
+      "failing": "Epäonnistuu",
+      "allClear": "Ei ongelmia",
+      "noData": "Ei dataa",
+      "none": "Ei mitään"
+    },
+    "diagnostics": "Diagnostiikka",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4825,6 +4888,24 @@
       "errorComponent": "Komponentti",
       "errorLevel": "Taso",
       "errorMessage": "Viesti"
+    },
+    "window": {
+      "label": "Arviointijakso",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Viimeisin tapahtuma",
+      "recentEvents": "Viimeaikaiset tapahtumat",
+      "time": "Aika",
+      "source": "Lähde",
+      "count": "Määrä",
+      "lifetime": "yhteensä",
+      "sparklineLabel": "Aktiivisuuskaavio"
     }
   }
 }

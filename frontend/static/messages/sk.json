@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime nie je k dispozícii",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} je vyžadovaný pre {modelName}, ale nebol nájdený. Skontrolujte, či je libonnxruntime.so nainštalovaný na očakávanej ceste."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} je vyžadovaný pre {modelName}, ale nebol nájdený. Pozrite si príručku inštalácie: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Načítavajú sa podrobnosti detekcie...",
       "loaded": "Podrobnosti detekcie načítané pre {species}",
-      "error": "Chyba pri načítaní detekcie: {error}"
+      "error": "Chyba pri načítaní detekcie: {error}",
+      "loadingResults": "Načítava sa {count} výsledkov...",
+      "thumbnailLoading": "Načítava sa náhľad {species}...",
+      "thumbnailLoaded": "Náhľad {species} načítaný"
     },
     "errors": {
       "notFound": "Detekcia sa nenašla. Možno bola odstránená alebo je ID nesprávne.",
@@ -2989,6 +2992,7 @@
         "unknown": "neznámy",
         "refresh": "Obnoviť",
         "addStream": "Pridať stream",
+        "testRequired": "Pred uložením vykonajte úspešný test streamu",
         "deleteConfirm": "Odstrániť tento stream?",
         "restartCount": "Reštartované {count}-krát",
         "healthLoadError": "Nepodarilo sa načítať stav zdravia streamu",
@@ -3041,6 +3045,18 @@
           "degraded": "Zhoršené",
           "failed": "Zlyhalo",
           "unknown": "Neznáme"
+        },
+        "test": {
+          "button": "Testovať stream",
+          "probing": "Testovanie...",
+          "result": "Výsledok testu",
+          "error": "Test zlyhal",
+          "batCompatible": "Kompatibilný s netopiermi",
+          "batIncompatible": "Nekompatibilný s netopiermi"
+        },
+        "batWarning": "Modely netopierov vyžadujú streamy s bezstratovým kodekom (PCM) a vzorkovacou frekvenciou aspoň 96 kHz. Pomocou tlačidla Testovať stream vyššie overte kompatibilitu.",
+        "codecWarning": {
+          "lossy": "Stratové kodeky (AAC, Opus, MP3) ničia ultrazvukové frekvencie nad ~20 kHz, čím sa stream stáva nevhodným na detekciu netopierov."
         }
       },
       "audioFilters": {
@@ -3216,6 +3232,10 @@
         "devicesLoadFailed": "Nepodarilo sa načítať zvukové zariadenia. Skontrolujte systémové oprávnenia.",
         "invalidBitrate": "Neplatná hodnota bitrate",
         "invalidRetentionPolicy": "Neplatná politika uchovávania"
+      },
+      "models": {
+        "recommendBoth": "Pre najlepšie pokrytie detekcie druhov sa odporúča spustiť oba modely BirdNET a Perch spoločne.",
+        "perchOnlyWarning": "Samotný Perch produkuje menej detekcií. Pre zmysluplné výsledky znížte prah spoľahlivosti na 0.50, alebo aktivujte aj BirdNET pre lepšie pokrytie."
       }
     },
     "security": {
@@ -3927,6 +3947,8 @@
         "operators": {
           "is": "je",
           "is_not": "nie je",
+          "in": "je v zozname",
+          "not_in": "nie je v zozname",
           "contains": "obsahuje",
           "not_contains": "neobsahuje",
           "greater_than": "väčšie ako",
@@ -4191,7 +4213,31 @@
       "playbackSpeed": "Rýchlosť prehrávania",
       "speed": "Rýchlosť",
       "loop": "Prepnúť opakovanie",
-      "player": "Prehrávač zvuku"
+      "player": "Prehrávač zvuku",
+      "autoplayBlocked": "Kliknutím spustíte prehrávanie (automatické prehrávanie blokované)",
+      "hlsNotSupported": "Prehrávanie HLS nie je v tomto prehliadači podporované",
+      "streamStarting": "Spúšťa sa audio stream...",
+      "levelFor": "Úroveň zvuku pre {source}",
+      "levelForNoSource": "Úroveň zvuku: žiadny zdroj",
+      "noSource": "Žiadny zdroj",
+      "levelAnnouncement": "Aktuálna úroveň zvuku: {level} percent",
+      "levelAnnouncementClipping": "Aktuálna úroveň zvuku: {level} percent, detekované orezávanie",
+      "sourceSelection": "Výber zdroja zvuku",
+      "sources": "Zdroje zvuku",
+      "noSourcesAvailable": "Žiadne dostupné zdroje zvuku",
+      "silent": "(ticho)",
+      "stopPlayback": "Zastaviť prehrávanie zvuku",
+      "startPlayback": "Spustiť prehrávanie zvuku",
+      "nowPlaying": "Prehráva sa zvuk z {source}",
+      "nowPlayingNoSource": "Prehráva sa zvuk",
+      "playbackStopped": "Prehrávanie zvuku zastavené",
+      "loginRequired": "Na streamovanie zvuku je potrebné prihlásenie",
+      "streamError": "Chyba pri spúšťaní streamu",
+      "streamTitle": "Audio stream vtákov - {source}",
+      "streamTitleDefault": "Audio stream vtákov",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Živé vysielanie",
+      "playbackError": "Chyba prehrávania: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram ešte nebol vygenerovaný",
@@ -4416,6 +4462,16 @@
       "hostRequired": "Parameter hostiteľa je povinný",
       "invalidHost": "Neplatný parameter hostiteľa",
       "rateLimit": "Príliš veľa pokusov o pripojenie k prúdu oznámení, počkajte chvíľu pred ďalším pokusom"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Neplatné telo požiadavky",
+        "urlRequired": "URL streamu je povinné",
+        "invalidUrl": "Neplatný formát URL. Zadajte úplnú URL, napr. rtsp://host:port/cesta",
+        "unsupportedScheme": "Nepodporovaná schéma URL \"{scheme}\". Použite rtsp, rtsps, http, https, rtmp alebo udp",
+        "blockedDestination": "Tento cieľ je z bezpečnostných dôvodov zablokovaný",
+        "connectionFailed": "Nepodarilo sa pripojiť k streamu. Skontrolujte, či je URL správna a stream je dostupný"
+      }
     },
     "debug": {
       "notEnabled": "Režim ladenia nie je povolený"
@@ -4774,11 +4830,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Obnoviť",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4790,6 +4844,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Všetko v poriadku",
+      "needsAttention": "Vyžaduje pozornosť",
+      "failing": "Zlyháva",
+      "allClear": "Bez problémov",
+      "noData": "Žiadne dáta",
+      "none": "Žiadne"
+    },
+    "diagnostics": "Diagnostika",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4825,6 +4888,24 @@
       "errorComponent": "Komponent",
       "errorLevel": "Úroveň",
       "errorMessage": "Správa"
+    },
+    "window": {
+      "label": "Časové okno vyhodnotenia",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Posledná udalosť",
+      "recentEvents": "Nedávne udalosti",
+      "time": "Čas",
+      "source": "Zdroj",
+      "count": "Počet",
+      "lifetime": "celkom",
+      "sparklineLabel": "Graf aktivity"
     }
   }
 }

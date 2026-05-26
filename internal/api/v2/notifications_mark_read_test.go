@@ -54,14 +54,14 @@ func TestMarkNotificationRead_NotFound(t *testing.T) {
 	}
 
 	err := controller.MarkNotificationRead(ctx)
-	require.NoError(t, err, "handler should return nil and write error to response")
+	require.NoError(t, err, "handler should return nil")
 
-	assert.Equal(t, http.StatusNotFound, rec.Code, "expected 404 for missing notification")
+	assert.Equal(t, http.StatusOK, rec.Code, "mark-as-read is idempotent: missing notification returns 200")
 
 	var body map[string]any
 	err = json.Unmarshal(rec.Body.Bytes(), &body)
 	require.NoError(t, err)
-	assert.Contains(t, body["message"], "Notification not found")
+	assert.Contains(t, body["message"], "Notification marked as read")
 }
 
 func TestMarkNotificationRead_EmptyID(t *testing.T) {
@@ -127,12 +127,12 @@ func TestMarkNotificationAcknowledged_NotFound(t *testing.T) {
 	}
 
 	err := controller.MarkNotificationAcknowledged(ctx)
-	require.NoError(t, err, "handler should return nil and write error to response")
+	require.NoError(t, err, "handler should return nil")
 
-	assert.Equal(t, http.StatusNotFound, rec.Code, "expected 404 for missing notification")
+	assert.Equal(t, http.StatusOK, rec.Code, "mark-as-acknowledged is idempotent: missing notification returns 200")
 
 	var body map[string]any
 	err = json.Unmarshal(rec.Body.Bytes(), &body)
 	require.NoError(t, err)
-	assert.Contains(t, body["message"], "Notification not found")
+	assert.Contains(t, body["message"], "Notification marked as acknowledged")
 }

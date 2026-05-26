@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime Not Available",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. Check that libonnxruntime.so is installed at the expected path."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. See the install guide: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Loading detection details...",
       "loaded": "Detection details loaded for {species}",
-      "error": "Error loading detection: {error}"
+      "error": "Error loading detection: {error}",
+      "loadingResults": "Loading {count} results...",
+      "thumbnailLoading": "Loading {species} thumbnail...",
+      "thumbnailLoaded": "{species} thumbnail loaded"
     },
     "errors": {
       "notFound": "Detection not found. It may have been deleted or the ID is incorrect.",
@@ -2989,6 +2992,7 @@
         "unknown": "unknown",
         "refresh": "Refresh",
         "addStream": "Add Stream",
+        "testRequired": "Run a successful stream test before saving",
         "deleteConfirm": "Remove this stream?",
         "restartCount": "Restarted {count} time(s)",
         "healthLoadError": "Failed to load stream health status",
@@ -3041,6 +3045,18 @@
           "degraded": "Degraded",
           "failed": "Failed",
           "unknown": "Unknown"
+        },
+        "test": {
+          "button": "Test Stream",
+          "probing": "Testing...",
+          "result": "Test Result",
+          "error": "Test failed",
+          "batCompatible": "Bat compatible",
+          "batIncompatible": "Not bat compatible"
+        },
+        "batWarning": "Bat models require streams with a lossless codec (PCM) and a sample rate of at least 96 kHz. Use the Test Stream button above to verify compatibility.",
+        "codecWarning": {
+          "lossy": "Lossy codecs (AAC, Opus, MP3) destroy ultrasonic frequencies above ~20 kHz, making the stream unsuitable for bat detection."
         }
       },
       "audioFilters": {
@@ -3216,6 +3232,10 @@
         "devicesLoadFailed": "Failed to load audio devices. Please check system permissions.",
         "invalidBitrate": "Invalid bitrate value",
         "invalidRetentionPolicy": "Invalid retention policy"
+      },
+      "models": {
+        "recommendBoth": "Running both BirdNET and Perch together is recommended for best species detection coverage.",
+        "perchOnlyWarning": "Perch alone produces fewer detections. Lower the confidence threshold to 0.50 for meaningful results, or enable BirdNET alongside for best coverage."
       }
     },
     "security": {
@@ -3927,6 +3947,8 @@
         "operators": {
           "is": "is",
           "is_not": "is not",
+          "in": "is in list",
+          "not_in": "is not in list",
           "contains": "contains",
           "not_contains": "does not contain",
           "greater_than": "greater than",
@@ -4191,7 +4213,31 @@
       "playbackSpeed": "Playback speed",
       "speed": "Speed",
       "loop": "Toggle loop",
-      "player": "Audio player"
+      "player": "Audio player",
+      "autoplayBlocked": "Click to play (autoplay blocked)",
+      "hlsNotSupported": "HLS playback not supported in this browser",
+      "streamStarting": "Starting audio stream...",
+      "levelFor": "Audio level for {source}",
+      "levelForNoSource": "Audio level: no source",
+      "noSource": "No source",
+      "levelAnnouncement": "Current audio level: {level} percent",
+      "levelAnnouncementClipping": "Current audio level: {level} percent, clipping detected",
+      "sourceSelection": "Audio Source Selection",
+      "sources": "Audio Sources",
+      "noSourcesAvailable": "No audio sources available",
+      "silent": "(silent)",
+      "stopPlayback": "Stop audio playback",
+      "startPlayback": "Start audio playback",
+      "nowPlaying": "Now playing audio from {source}",
+      "nowPlayingNoSource": "Now playing audio",
+      "playbackStopped": "Audio playback stopped",
+      "loginRequired": "Login required to stream audio",
+      "streamError": "Error starting stream",
+      "streamTitle": "Bird Audio Stream - {source}",
+      "streamTitleDefault": "Bird Audio Stream",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Live Stream",
+      "playbackError": "Playback error: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spectrogram not yet generated",
@@ -4416,6 +4462,16 @@
       "hostRequired": "Host parameter is required",
       "invalidHost": "Invalid host parameter",
       "rateLimit": "Too many notification stream connection attempts, please wait before trying again"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Invalid request body",
+        "urlRequired": "Stream URL is required",
+        "invalidUrl": "Invalid URL format. Enter a full URL like rtsp://host:port/path",
+        "unsupportedScheme": "Unsupported URL scheme \"{scheme}\". Use rtsp, rtsps, http, https, rtmp, or udp",
+        "blockedDestination": "This destination is blocked for security reasons",
+        "connectionFailed": "Could not connect to the stream. Check that the URL is correct and the stream is accessible"
+      }
     },
     "debug": {
       "notEnabled": "Debug mode not enabled"
@@ -4774,11 +4830,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Refresh",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4790,6 +4844,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "All passing",
+      "needsAttention": "Needs attention",
+      "failing": "Failing",
+      "allClear": "All clear",
+      "noData": "No recent data",
+      "none": "None"
+    },
+    "diagnostics": "Diagnostics",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4825,6 +4888,24 @@
       "errorComponent": "Component",
       "errorLevel": "Level",
       "errorMessage": "Message"
+    },
+    "window": {
+      "label": "Evaluation window",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Last event",
+      "recentEvents": "Recent events",
+      "time": "Time",
+      "source": "Source",
+      "count": "Count",
+      "lifetime": "lifetime",
+      "sparklineLabel": "Activity sparkline"
     }
   }
 }

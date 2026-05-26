@@ -510,7 +510,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 	}
 
 	// Get probable species for the test parameters
-	speciesScores, err := birdnetInstance.GetProbableSpeciesWithSettings(testDate, week, testSettings)
+	speciesScores, err := birdnetInstance.GetAllProbableSpeciesWithSettings(testDate, week, testSettings)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get probable species", http.StatusInternalServerError)
 	}

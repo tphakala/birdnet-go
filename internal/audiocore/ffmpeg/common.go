@@ -59,6 +59,43 @@ func ValidateFFmpegPath(ffmpegPath string) error {
 	return nil
 }
 
+// ValidateSoxPath checks if the Sox path is valid for execution.
+// It rejects empty paths, relative paths, and paths that appear to be
+// HTTP/proxy URL prefixes rather than filesystem paths (e.g., ingress path contamination).
+func ValidateSoxPath(soxPath string) error {
+	if soxPath == "" {
+		return errors.Newf("Sox is not available").
+			Component("audiocore").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_sox_path").
+			Build()
+	}
+
+	if !filepath.IsAbs(soxPath) {
+		return errors.Newf("Sox path must be absolute, got: %s", soxPath).
+			Component("audiocore").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_sox_path").
+			Context("path", soxPath).
+			Build()
+	}
+
+	// Reject paths contaminated by HTTP proxy/ingress prefixes.
+	// A valid Sox binary path should be a clean filesystem path,
+	// not contain URL-like segments such as "/api/", "/ingress/", "/proxy/",
+	// or "/hassio/". Uses a case-insensitive regex for broader detection.
+	if rePathContamination.MatchString(soxPath) {
+		return errors.Newf("Sox path appears contaminated by proxy/ingress prefix: %s", soxPath).
+			Component("audiocore").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_sox_path").
+			Context("path", soxPath).
+			Build()
+	}
+
+	return nil
+}
+
 // GetFFmpegFormat converts audio configuration values to FFmpeg-compatible format strings.
 // Returns sampleRateStr (e.g. "48000"), channelsStr (e.g. "1"), and formatStr (e.g. "s16le").
 // Supported bit depths: 16 → "s16le", 24 → "s24le", 32 → "s32le". Defaults to "s16le".

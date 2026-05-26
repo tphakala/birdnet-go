@@ -6,6 +6,9 @@ clips/
 models/
 plans/
 superpowers/
+docs/plans/
+docs/specs/
+docs/superpowers/
 db/
 cache/
 spectrograms/

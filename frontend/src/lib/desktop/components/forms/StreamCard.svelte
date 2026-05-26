@@ -49,6 +49,7 @@
   } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
   import type { StreamHealthResponse } from './StreamManager.svelte';
+  import StreamTestButton from './StreamTestButton.svelte';
   import StreamTimeline from './StreamTimeline.svelte';
 
   interface LocalEqualizerSettings {
@@ -166,6 +167,8 @@
     if (health.is_healthy && health.is_receiving_data) return 'Stable';
     return 'Unknown';
   });
+
+  let testResult = $state<{ sampleRate: number } | null>(null);
 
   // Local editing state - initialized with defaults, synced from props in startEdit()
   let isEditing = $state(false);
@@ -318,6 +321,7 @@
       : { enabled: false, filters: [] };
     editQuietHours = { ...defaultQuietHoursConfig, ...stream.quietHours };
     showEqualizer = false;
+    testResult = null;
     isEditing = true;
   }
 
@@ -327,6 +331,7 @@
   }
 
   function saveEdit() {
+    if (needsTest) return;
     if (editName.trim() && editUrl.trim()) {
       const transformedEqualizer =
         editEqualizer.enabled || editEqualizer.filters.length > 0
@@ -381,6 +386,14 @@
       event.preventDefault();
       cancelEdit();
     }
+  }
+
+  let urlChanged = $derived(editUrl.trim() !== stream.url);
+  let needsTest = $derived(urlChanged && !testResult);
+  let sourceSampleRate = $derived(testResult?.sampleRate ?? 48000);
+
+  function handleTestResult(result: { sampleRate: number } | null) {
+    testResult = result;
   }
 
   function updateEnabled(enabled: boolean) {
@@ -469,6 +482,15 @@
           />
         </div>
 
+        <!-- Test Stream -->
+        <StreamTestButton
+          url={editUrl}
+          models={availableModels}
+          selectedModels={editModels}
+          {disabled}
+          onResult={handleTestResult}
+        />
+
         <!-- Type and Transport Row -->
         <div class="grid grid-cols-2 gap-4">
           <div>
@@ -508,6 +530,8 @@
         <ModelCheckboxList
           models={availableModels}
           selectedModels={editModels}
+          {sourceSampleRate}
+          isStream={true}
           {disabled}
           onToggle={models => (editModels = models)}
         />
@@ -562,15 +586,17 @@
             <X class="size-4" />
             {t('common.cancel')}
           </button>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            onclick={saveEdit}
-            disabled={!editName.trim() || !editUrl.trim()}
-          >
-            <Check class="size-4" />
-            {t('common.save')}
-          </button>
+          <span title={needsTest ? t('settings.audio.streams.testRequired') : undefined}>
+            <button
+              type="button"
+              class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onclick={saveEdit}
+              disabled={!editName.trim() || !editUrl.trim() || needsTest}
+            >
+              <Check class="size-4" />
+              {t('common.save')}
+            </button>
+          </span>
         </div>
       </div>
     {:else}

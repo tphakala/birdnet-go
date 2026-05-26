@@ -1,11 +1,11 @@
 ---
 name: preflight
-description: Pre-push quality gate. Runs 4 parallel reviews (reuse, correctness, quality, i18n) on changes before pushing. Mandatory for all AI-assisted PRs.
+description: Pre-push quality gate. Runs 5 parallel reviews (reuse, correctness, quality, i18n, integration wiring) on changes before pushing. Mandatory for all AI-assisted PRs.
 ---
 
 # Preflight: Pre-Push Quality Gate
 
-Combined code review running parallel review passes to catch reuse opportunities, correctness bugs, safety issues, code quality problems, and i18n translation integrity. Finds and fixes issues before pushing.
+Combined code review running parallel review passes to catch reuse opportunities, correctness bugs, safety issues, code quality problems, i18n translation integrity, and integration wiring gaps. Finds and fixes issues before pushing.
 
 ## Phase 1: Identify Changes
 
@@ -17,9 +17,18 @@ If there are no git changes, review the most recently modified files that the us
 
 ## Phase 2: Launch Review Passes
 
-Run all four review passes. If your platform supports parallel agents or tasks, run them concurrently for speed; otherwise run them sequentially. Pass each reviewer the full diff AND the list of changed file paths.
+Run all five review passes. If your platform supports parallel agents or tasks, run them concurrently for speed; otherwise run them sequentially. Pass Reviewers 1-4 the full diff AND the list of changed file paths. Reviewer 5 receives different input (see coordinator pre-work below).
 
-Tell reviewers 2, 3, and 4 to read the detailed patterns reference at `reference/patterns.md` (located in the same directory as this skill file) for code examples and validation commands. The reference file is organized by reviewer number, so each can jump to their section.
+Tell reviewers 2, 3, 4, and 5 to read the detailed patterns reference at `reference/patterns.md` (located in the same directory as this skill file) for code examples and validation commands. The reference file is organized by reviewer number, so each can jump to their section.
+
+**Coordinator pre-work for Reviewer 5:** Before dispatching Reviewer 5, extract from the diff:
+- New struct fields added
+- New functions/methods added
+- New event emission calls (e.g., `events.Emit()`)
+- New options/flags added to config/options structs
+- New interface methods added
+
+Pass this structured "what's new" list to Reviewer 5 along with the changed file paths. Do NOT pass Reviewer 5 the raw diff.
 
 **Important: All reviewers must classify each finding as:**
 - **[CHANGED]** - issue is in lines added or modified by this PR's diff
@@ -57,15 +66,18 @@ Review changes for bugs that cause crashes, data loss, or security incidents.
 5. **Resource leaks**: unclosed files/connections/channels, missing defer, goroutines that never exit, event listeners not removed, timers/intervals not cleared, subscriptions not unsubscribed.
 6. **Data corruption**: missing transactions for multi-step operations, partial writes without rollback, concurrent modifications without locking.
 7. **Common bugs**: Go (= vs :=, missing rows.Err(), modify slice while iterating, defer in loop, missing return after http.Error), TS (truthy on 0/"", .find() without undefined check, unwaited promise, == vs ===), Svelte ($state destructuring, $effect for derived values, missing cleanup, $state.raw mutation).
+8. **Non-DST-safe time arithmetic**: `time.Now().Add(-N * 24 * time.Hour)` loses or gains an hour near DST transitions. Use `time.Now().AddDate(0, 0, -N)` for calendar-day arithmetic. Flag any `N * 24 * time.Hour` used for day-level offsets.
+9. **Event emission ordering (query-before-emit)**: emitting a new event before querying for the previous one creates a race where you read back your own event. Always query history before emitting new entries in event-sourced patterns.
+10. **Context lifecycle through embedded structs**: when code reads or writes a `context.Context` field on a struct, grep for ALL assignments to that field across the entire package (`grep -rn 'fieldName\s*=' pkg/`). Embedded struct methods can cancel and replace contexts set by the parent. A goroutine capturing a context may be killed when an embedded method replaces it. Especially important for lifecycle methods (`Start`, `Stop`, `Open`, `Close`, `Monitor`).
 
 **Safety:**
-8. **Security**: SQL/command/path injection, XSS (@html without sanitize, innerHTML), hardcoded secrets, insecure crypto, missing auth/authz, CORS misconfiguration.
-9. **Sensitive data in telemetry**: raw err.Error() containing file paths, connection strings, or credentials sent to Sentry/logging without scrubbing. Check scrubbing covers all components individually and consistently across all callsites.
-10. **Shallow copy of reference types in concurrent collections**: when storing structs containing maps or slices in concurrent-safe collections (ring buffers, sync.Map, channel-based queues), deep copy the reference types using maps.Clone/slices.Clone. When returning stored structs via accessor methods, clone reference-typed fields to prevent data races with callers.
-11. **Protocol violations**: wrong HTTP status codes, missing Content-Type headers, API contract violations.
-12. **Shutdown races**: drain/close without blocking new connections, missing atomic shutdown flag, expected shutdown errors (http.ErrServerClosed) logged as real errors, nil channel close, double-close of resources.
-13. **Missing context propagation**: goroutines without ctx or panic recovery, semaphore acquisition without context deadline, context.Background() where parent ctx exists.
-14. **Critical TODOs**: TODO/FIXME in auth, validation, crypto, or transaction paths that skip essential implementation. Flag as Critical when the code proceeds without security checks.
+11. **Security**: SQL/command/path injection, XSS (@html without sanitize, innerHTML), hardcoded secrets, insecure crypto, missing auth/authz, CORS misconfiguration.
+12. **Sensitive data in telemetry**: raw err.Error() containing file paths, connection strings, or credentials sent to Sentry/logging without scrubbing. Check scrubbing covers all components individually and consistently across all callsites.
+13. **Shallow copy of reference types in concurrent collections**: when storing structs containing maps or slices in concurrent-safe collections (ring buffers, sync.Map, channel-based queues), deep copy the reference types using maps.Clone/slices.Clone. When returning stored structs via accessor methods, clone reference-typed fields to prevent data races with callers.
+14. **Protocol violations**: wrong HTTP status codes, missing Content-Type headers, API contract violations.
+15. **Shutdown races**: drain/close without blocking new connections, missing atomic shutdown flag, expected shutdown errors (http.ErrServerClosed) logged as real errors, nil channel close, double-close of resources.
+16. **Missing context propagation**: goroutines without ctx or panic recovery, semaphore acquisition without context deadline, context.Background() where parent ctx exists.
+17. **Critical TODOs**: TODO/FIXME in auth, validation, crypto, or transaction paths that skip essential implementation. Flag as Critical when the code proceeds without security checks.
 
 ### Reviewer 3: Quality & Patterns
 
@@ -129,9 +141,31 @@ Validate translation files under `frontend/static/messages/`. Use `en.json` as t
 
 Classify each finding as **[CHANGED]** or **[PRE-EXISTING]** based on whether the affected key appears in this PR's diff of the translation files.
 
+### Reviewer 5: Integration & Wiring
+
+Review the full context of changed files for integration gaps where new code fails to connect with existing pipelines. This reviewer does NOT receive the diff. Instead, it receives the list of changed file paths and the structured "what's new" list extracted by the coordinator.
+
+**Read the full content of each changed file using the Read tool. Do NOT rely on the diff.**
+
+**Read `reference/patterns.md` section "Agent 5: Integration & Wiring Patterns" for detailed examples and search commands.**
+
+**Checks:**
+1. **End-to-end data flow**: For each new struct field or type, trace where it's populated (collection/construction) and where it's consumed (serialization, archive, API response, template). Flag if any pipeline stage doesn't handle the new field.
+2. **Validation & guard completeness**: For each new option/flag added to a struct, find all validation functions that enumerate the struct's fields. Flag if the new field is missing from any enumeration.
+3. **Sibling function consistency**: When a function is modified, find sibling functions (same receiver, same file, similar name pattern, or same semantic role/domain operation) and check if the same change should apply. Flag asymmetry with specific function names and line numbers.
+4. **Pipeline stage coverage**: For each new collection/provider method, trace the pipeline: collect -> store in struct -> write to archive/response -> deserialize in consumer. Flag any stage that doesn't handle the new data.
+5. **Constructor & factory consistency**: When a struct gains a new field, check all constructors/factories that create instances of that struct. Flag if any constructor doesn't initialize the new field.
+6. **Event schema consistency across emission sites**: For each event emission call, find ALL other emissions with the same event type (entity + action pair). Compare metadata keys across all emission sites. Flag any site missing keys present in others.
+7. **Recursive type handling in serialization pipelines**: When a function processes a type-switch on `any`, check that all relevant composite types are handled (`map[string]any`, `[]any`, `[]map[string]any`). Especially important when the function feeds into security-sensitive operations (redaction, scrubbing, access control).
+8. **Embedded struct method tracing**: When a struct embeds another struct, read the embedded struct's methods that are called (directly or implicitly) from the changed code. Calls like `s.StartMonitoring()` may resolve to an embedded struct's method that modifies shared state (contexts, mutexes, channels). Trace all lifecycle methods (`Start`, `Stop`, `Open`, `Close`, `Init`, `Monitor`, `Shutdown`) on embedded structs to check for state conflicts with the parent struct's code.
+
+**Output format:** Each finding must include the new item being traced, the pipeline stage that's missing, the specific file and function where the gap exists, and severity: High (data silently dropped), Medium (validation gap), Low (cosmetic inconsistency).
+
+Classify each finding as **[CHANGED]** or **[PRE-EXISTING]** based on whether the gap is in code introduced by this PR or in pre-existing code.
+
 ## Phase 3: Aggregate, Fix & Report
 
-Wait for all reviewers to complete. Then:
+Wait for all reviewers (including Reviewer 5) to complete. Then:
 
 1. **Cross-reference findings** across all reviewers. Deduplicate overlapping reports.
 2. **Filter false positives** using the reference below. Discard known benign patterns.
@@ -143,7 +177,14 @@ Wait for all reviewers to complete. Then:
 
    **c) Pre-existing and out-of-scope:** If the fix is risky, large, or in untouched files, file a tracking issue in the project's issue tracker. Include the file path, line number, and a clear description of the problem.
 
-4. **Report remaining items** that cannot be auto-fixed, with severity:
+4. **Fix verification (post-fix re-scan):** After applying fixes from step 3a/3b, re-read each fixed file and verify:
+   - **Shared state safety**: if the fix touches a context, mutex, atomic, or channel field, grep for ALL other code that reads or writes that same field. Confirm the fix doesn't create a new race or lifecycle conflict.
+   - **Comment staleness**: check that any comments within 5 lines of the fixed code still accurately describe the behavior. Fix-then-forget is the #1 source of stale comments.
+   - **Embedded struct interactions**: if the fix initializes or modifies a field on an embedded struct, check the embedded struct's lifecycle methods for conflicts (they may cancel, replace, or override the value).
+
+   This step catches "fix-introduces-bug" patterns where a superficially correct fix creates a new problem through interactions with code the agent didn't read during the initial review.
+
+5. **Report remaining items** that cannot be auto-fixed, with severity:
    - **Critical**: security vulnerabilities, data corruption risks, panics in production paths
    - **High**: race conditions, resource leaks, incomplete multi-site fixes
    - **Medium**: code smells, inconsistent patterns, test gaps

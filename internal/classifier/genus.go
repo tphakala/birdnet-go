@@ -169,6 +169,7 @@ type TaxonomyDatabase struct {
 
 // GenusMetadata represents metadata for a genus
 type GenusMetadata struct {
+	Class        string   `json:"class"`
 	Family       string   `json:"family"`
 	FamilyCommon string   `json:"family_common"`
 	Order        string   `json:"order"`
@@ -177,6 +178,7 @@ type GenusMetadata struct {
 
 // FamilyMetadata represents metadata for a family
 type FamilyMetadata struct {
+	Class        string   `json:"class"`
 	FamilyCommon string   `json:"family_common"`
 	Order        string   `json:"order"`
 	Genera       []string `json:"genera"`
@@ -277,6 +279,7 @@ func normalizeFamilyGeneraValues(families map[string]*FamilyMetadata) map[string
 		}
 		// Create new FamilyMetadata with normalized genera
 		normalized[key] = &FamilyMetadata{
+			Class:        fm.Class,
 			FamilyCommon: fm.FamilyCommon,
 			Order:        fm.Order,
 			Genera:       genera,
@@ -555,16 +558,21 @@ func (db *TaxonomyDatabase) GetSpeciesTree(scientificName string) (*SpeciesTreeR
 		updatedAt = t
 	}
 
+	class := genusMetadata.Class
+	if class == "" {
+		class = "Aves"
+	}
+
 	tree := &ebird.TaxonomyTree{
 		Kingdom:       "Animalia",
-		Phylum:        "Chordata",
-		Class:         "Aves",
+		Phylum:        phylumForClass(class),
+		Class:         class,
 		Order:         genusMetadata.Order,
 		Family:        genusMetadata.Family,
 		FamilyCommon:  genusMetadata.FamilyCommon,
 		Genus:         genus,
 		Species:       scientificName,
-		SpeciesCommon: "", // Would need common name mapping
+		SpeciesCommon: "",
 		UpdatedAt:     updatedAt,
 	}
 
@@ -587,6 +595,22 @@ func (db *TaxonomyDatabase) BuildFamilyTree(scientificName string) (*ebird.Taxon
 		return nil, err
 	}
 	return result.TaxonomyTree, nil
+}
+
+// phylumForClass returns the phylum for a given taxonomic class.
+func phylumForClass(class string) string {
+	switch strings.ToLower(class) {
+	case "insecta", "arachnida", "malacostraca":
+		return "Arthropoda"
+	case "gastropoda", "bivalvia", "cephalopoda":
+		return "Mollusca"
+	case "hydrozoa":
+		return "Cnidaria"
+	case "trematoda":
+		return "Platyhelminthes"
+	default:
+		return "Chordata"
+	}
 }
 
 // GetFamilyInfo retrieves family information including all genera

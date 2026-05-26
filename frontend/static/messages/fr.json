@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime non disponible",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} est requis pour {modelName} mais n'a pas été trouvé. Vérifiez que libonnxruntime.so est installé à l'emplacement attendu."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} est requis pour {modelName} mais n'a pas été trouvé. Voir le guide d'installation : {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Chargement des détails de détection...",
       "loaded": "Détails de détection chargés pour {species}",
-      "error": "Erreur lors du chargement de la détection : {error}"
+      "error": "Erreur lors du chargement de la détection : {error}",
+      "loadingResults": "Chargement de {count} résultats...",
+      "thumbnailLoading": "Chargement de la miniature de {species}...",
+      "thumbnailLoaded": "Miniature de {species} chargée"
     },
     "errors": {
       "notFound": "Détection introuvable. Elle a peut-être été supprimée ou l'identifiant est incorrect.",
@@ -2989,6 +2992,7 @@
         "unknown": "inconnu",
         "refresh": "Actualiser",
         "addStream": "Ajouter un Flux",
+        "testRequired": "Effectuez un test de flux réussi avant d'enregistrer",
         "deleteConfirm": "Supprimer ce flux ?",
         "restartCount": "Redémarré {count} fois",
         "healthLoadError": "Échec du chargement de l'état du flux",
@@ -3041,6 +3045,18 @@
           "degraded": "Dégradée",
           "failed": "Échouée",
           "unknown": "Inconnue"
+        },
+        "test": {
+          "button": "Tester le flux",
+          "probing": "Test en cours...",
+          "result": "Résultat du test",
+          "error": "Test échoué",
+          "batCompatible": "Compatible chauves-souris",
+          "batIncompatible": "Non compatible chauves-souris"
+        },
+        "batWarning": "Les modèles de chauves-souris nécessitent des flux avec un codec sans perte (PCM) et un taux d'échantillonnage d'au moins 96 kHz. Utilisez le bouton Tester le flux ci-dessus pour vérifier la compatibilité.",
+        "codecWarning": {
+          "lossy": "Les codecs avec perte (AAC, Opus, MP3) détruisent les fréquences ultrasoniques au-dessus de ~20 kHz, rendant le flux inadapté à la détection des chauves-souris."
         }
       },
       "audioFilters": {
@@ -3216,6 +3232,10 @@
         "devicesLoadFailed": "Échec du chargement des périphériques audio. Veuillez vérifier les permissions système.",
         "invalidBitrate": "Valeur de débit invalide",
         "invalidRetentionPolicy": "Politique de rétention invalide"
+      },
+      "models": {
+        "recommendBoth": "Pour une meilleure couverture de détection des espèces, il est recommandé d'exécuter BirdNET et Perch ensemble.",
+        "perchOnlyWarning": "Perch seul produit moins de détections. Abaissez le seuil de confiance à 0.50 pour des résultats significatifs, ou activez BirdNET en parallèle pour une meilleure couverture."
       }
     },
     "security": {
@@ -3927,6 +3947,8 @@
         "operators": {
           "is": "est",
           "is_not": "n'est pas",
+          "in": "est dans la liste",
+          "not_in": "n'est pas dans la liste",
           "contains": "contient",
           "not_contains": "ne contient pas",
           "greater_than": "supérieur à",
@@ -4191,7 +4213,31 @@
       "playbackSpeed": "Vitesse de lecture",
       "speed": "Vitesse",
       "loop": "Basculer la boucle",
-      "player": "Lecteur audio"
+      "player": "Lecteur audio",
+      "autoplayBlocked": "Cliquez pour lire (lecture automatique bloquée)",
+      "hlsNotSupported": "La lecture HLS n'est pas prise en charge dans ce navigateur",
+      "streamStarting": "Démarrage du flux audio...",
+      "levelFor": "Niveau audio pour {source}",
+      "levelForNoSource": "Niveau audio : aucune source",
+      "noSource": "Aucune source",
+      "levelAnnouncement": "Niveau audio actuel : {level} pour cent",
+      "levelAnnouncementClipping": "Niveau audio actuel : {level} pour cent, saturation détectée",
+      "sourceSelection": "Sélection de la source audio",
+      "sources": "Sources audio",
+      "noSourcesAvailable": "Aucune source audio disponible",
+      "silent": "(silencieux)",
+      "stopPlayback": "Arrêter la lecture audio",
+      "startPlayback": "Démarrer la lecture audio",
+      "nowPlaying": "Lecture en cours depuis {source}",
+      "nowPlayingNoSource": "Lecture audio en cours",
+      "playbackStopped": "Lecture audio arrêtée",
+      "loginRequired": "Connexion requise pour diffuser l'audio",
+      "streamError": "Erreur lors du démarrage du flux",
+      "streamTitle": "Flux audio d'oiseaux - {source}",
+      "streamTitleDefault": "Flux audio d'oiseaux",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Diffusion en direct",
+      "playbackError": "Erreur de lecture : {details}"
     },
     "spectrogram": {
       "notGenerated": "Spectrogramme pas encore généré",
@@ -4416,6 +4462,16 @@
       "hostRequired": "Le paramètre host est requis",
       "invalidHost": "Paramètre host invalide",
       "rateLimit": "Trop de tentatives de connexion au flux de notifications, veuillez patienter avant de réessayer"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Corps de requête invalide",
+        "urlRequired": "L'URL du flux est requise",
+        "invalidUrl": "Format d'URL invalide. Saisissez une URL complète, par ex. rtsp://hôte:port/chemin",
+        "unsupportedScheme": "Schéma d'URL non pris en charge \"{scheme}\". Utilisez rtsp, rtsps, http, https, rtmp ou udp",
+        "blockedDestination": "Cette destination est bloquée pour des raisons de sécurité",
+        "connectionFailed": "Impossible de se connecter au flux. Vérifiez que l'URL est correcte et que le flux est accessible"
+      }
     },
     "debug": {
       "notEnabled": "Le mode débogage n'est pas activé"
@@ -4774,11 +4830,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Actualiser",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4790,6 +4844,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Tout va bien",
+      "needsAttention": "Attention requise",
+      "failing": "En échec",
+      "allClear": "RAS",
+      "noData": "Aucune donnée",
+      "none": "Aucun"
+    },
+    "diagnostics": "Diagnostic",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4825,6 +4888,24 @@
       "errorComponent": "Composant",
       "errorLevel": "Niveau",
       "errorMessage": "Message"
+    },
+    "window": {
+      "label": "Fenêtre d'évaluation",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Dernier événement",
+      "recentEvents": "Événements récents",
+      "time": "Heure",
+      "source": "Source",
+      "count": "Nombre",
+      "lifetime": "total",
+      "sparklineLabel": "Graphique d'activité"
     }
   }
 }

@@ -129,7 +129,11 @@ type Processor struct {
 	backupMutex     sync.RWMutex
 
 	// Log deduplication (extracted to separate type for SRP)
-	logDedup *LogDeduplicator // Handles log deduplication logic
+	logDedupMu sync.RWMutex
+	logDedup   *LogDeduplicator
+
+	// Periodic pipeline stats (inference activity per source/model)
+	pipelineStats *PipelineStats
 
 	// Extended capture fields
 	extendedCaptureSpecies map[string]bool // Resolved set of scientific names eligible for extended capture
@@ -495,6 +499,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 	// Initialize log deduplicator with configuration from settings
 	p.logDedup = initLogDeduplicator(settings)
 
+	// Initialize pipeline stats for periodic inference summaries
+	p.pipelineStats = NewPipelineStats(p.getDisplayNameForSource)
+
 	// Validate detection window configuration
 	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
 	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
@@ -617,6 +624,10 @@ func (p *Processor) Start() {
 
 		p.flusherCtx, p.flusherCancel = context.WithCancel(context.Background())
 		p.pendingDetectionsFlusher()
+
+		if p.pipelineStats != nil {
+			p.pipelineStats.Start()
+		}
 	})
 }
 
@@ -670,6 +681,21 @@ func (p *Processor) processDetections(item classifier.Results) {
 
 	// Log processing results with deduplication to prevent spam
 	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
+
+	// Record periodic pipeline stats
+	if p.pipelineStats != nil {
+		var maxConf float32
+		for _, r := range item.Results {
+			if r.Confidence > maxConf {
+				maxConf = r.Confidence
+			}
+		}
+		threshold := float32(settings.BirdNET.Threshold)
+		if item.ModelID == classifier.RegistryIDBat {
+			threshold = float32(settings.Bat.Threshold)
+		}
+		p.pipelineStats.RecordInference(item.Source.ID, item.ModelID, len(item.Results), len(detectionResults), maxConf, threshold)
+	}
 
 	for i := range detectionResults {
 		det := detectionResults[i]
@@ -2311,13 +2337,25 @@ func (p *Processor) GetBackupScheduler() any {
 	return p.backupScheduler
 }
 
+// ReconfigureLogDeduplicator reinitializes the log deduplicator from current settings.
+func (p *Processor) ReconfigureLogDeduplicator() {
+	settings := p.currentSettings()
+	newDedup := initLogDeduplicator(settings)
+	p.logDedupMu.Lock()
+	p.logDedup = newDedup
+	p.logDedupMu.Unlock()
+}
+
 // CleanupLogDeduplicator removes stale log deduplication entries to prevent memory growth.
 // Returns the number of entries removed.
 func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {
-	if p.logDedup == nil {
+	p.logDedupMu.RLock()
+	dedup := p.logDedup
+	p.logDedupMu.RUnlock()
+	if dedup == nil {
 		return 0
 	}
-	removed := p.logDedup.Cleanup(staleAfter)
+	removed := dedup.Cleanup(staleAfter)
 	if removed > 0 {
 		GetLogger().Debug("Cleaned stale log deduplication entries",
 			logger.Int("removed_count", removed),
@@ -2393,6 +2431,11 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	// Cancel flusher goroutine
 	if p.flusherCancel != nil {
 		p.flusherCancel()
+	}
+
+	// Stop pipeline stats logger
+	if p.pipelineStats != nil {
+		p.pipelineStats.Stop()
 	}
 
 	// Flush dynamic thresholds using the provided context deadline
@@ -2491,13 +2534,14 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 // This prevents ~40,000+ identical "filtered_detections_count:0" logs per day
 // while still allowing debug-mode visibility into the detection pipeline.
 func (p *Processor) logDetectionResults(source string, rawCount, filteredCount int) {
-	// Guard against nil logDedup (can occur in tests or partial initialization)
-	if p.logDedup == nil {
+	p.logDedupMu.RLock()
+	dedup := p.logDedup
+	p.logDedupMu.RUnlock()
+	if dedup == nil {
 		return
 	}
 
-	// Use the LogDeduplicator to determine if we should log
-	shouldLog, reason := p.logDedup.ShouldLog(source, rawCount, filteredCount)
+	shouldLog, reason := dedup.ShouldLog(source, rawCount, filteredCount)
 
 	if shouldLog {
 		// Log all processing results at DEBUG level to avoid flooding console.

@@ -15,39 +15,29 @@ import (
 func (bn *BirdNET) initializeONNXModel() error {
 	start := time.Now()
 	log := GetLogger()
+	settings := bn.currentSettings()
 
-	// Pre-check ORT availability before attempting model load.
-	ortStatus := inference.CheckORTAvailability(bn.Settings.BirdNET.ONNXRuntimePath)
-	if !ortStatus.Available {
-		log.Warn("ONNX classifier requires ONNX Runtime which is not available",
-			logger.String("error", ortStatus.Error))
-		emitORTUnavailableNotification("BirdNET ONNX Classifier", ortStatus.Error)
-		return errors.Newf("ONNX classifier requires ONNX Runtime %s: %s",
-			inference.ORTRequiredVersion(), ortStatus.Error).
-			Category(errors.CategoryModelInit).
-			Context("model", "onnx_classifier").
-			Context("ort_error", ortStatus.Error).
-			Timing("ort-check", time.Since(start)).
-			Build()
+	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, "ONNX classifier", "onnx_classifier", ""); err != nil {
+		return err
 	}
 
 	// Initialize ONNX Runtime if not already done
-	if err := inference.InitONNXRuntime(bn.Settings.BirdNET.ONNXRuntimePath); err != nil {
+	if err := inference.InitONNXRuntime(settings.BirdNET.ONNXRuntimePath); err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
-			Context("onnx_runtime_path", bn.Settings.BirdNET.ONNXRuntimePath).
+			Context("onnx_runtime_path", settings.BirdNET.ONNXRuntimePath).
 			Timing("onnx-init", time.Since(start)).
 			Build()
 	}
 
-	classifier, err := inference.NewONNXClassifier(bn.Settings.BirdNET.ModelPath, inference.ONNXClassifierOptions{
-		Labels:  bn.Settings.BirdNET.Labels,
-		Threads: bn.Settings.BirdNET.Threads,
+	classifier, err := inference.NewONNXClassifier(settings.BirdNET.ModelPath, inference.ONNXClassifierOptions{
+		Labels:  settings.BirdNET.Labels,
+		Threads: settings.BirdNET.Threads,
 	})
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
-			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Timing("onnx-model-init", time.Since(start)).
 			Build()
 	}
@@ -55,7 +45,7 @@ func (bn *BirdNET) initializeONNXModel() error {
 	bn.classifier = classifier
 
 	log.Info("ONNX model initialized",
-		logger.String("model", bn.Settings.BirdNET.ModelPath),
+		logger.String("model", settings.BirdNET.ModelPath),
 		logger.Int("species", classifier.NumSpecies()))
 
 	return nil
@@ -66,26 +56,20 @@ func (bn *BirdNET) initializeONNXModel() error {
 // with its own 12K labels and wraps it in a mappedRangeFilter.
 func (bn *BirdNET) initializeONNXMetaModel() error {
 	settings := bn.currentSettings()
+	start := time.Now()
+
+	modelName := "ONNX range filter"
+	modelCtx := "range_filter"
 	if settings.BirdNET.RangeFilter.Model == "v3" {
-		return bn.initializeV3GeoModel()
+		modelName = "v3 geomodel"
+		modelCtx = "v3_geomodel"
+	}
+	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, modelName, modelCtx, ""); err != nil {
+		return err
 	}
 
-	start := time.Now()
-	log := GetLogger()
-
-	// Pre-check ORT availability before attempting range filter load.
-	ortStatus := inference.CheckORTAvailability(settings.BirdNET.ONNXRuntimePath)
-	if !ortStatus.Available {
-		log.Warn("ONNX range filter requires ONNX Runtime which is not available",
-			logger.String("error", ortStatus.Error))
-		emitORTUnavailableNotification("BirdNET Range Filter", ortStatus.Error)
-		return errors.Newf("ONNX range filter requires ONNX Runtime %s: %s",
-			inference.ORTRequiredVersion(), ortStatus.Error).
-			Category(errors.CategoryModelInit).
-			Context("model", "range_filter").
-			Context("ort_error", ortStatus.Error).
-			Timing("ort-check", time.Since(start)).
-			Build()
+	if settings.BirdNET.RangeFilter.Model == "v3" {
+		return bn.initializeV3GeoModel()
 	}
 
 	// Ensure ONNX Runtime is initialized (idempotent - may already be init from classifier)
@@ -163,22 +147,7 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 			Build()
 	}
 
-	// Pre-check ORT availability before attempting geomodel load.
-	ortStatus := inference.CheckORTAvailability(settings.BirdNET.ONNXRuntimePath)
-	if !ortStatus.Available {
-		log.Warn("V3 geomodel requires ONNX Runtime which is not available",
-			logger.String("error", ortStatus.Error))
-		emitORTUnavailableNotification("BirdNET Geomodel", ortStatus.Error)
-		return errors.Newf("v3 geomodel requires ONNX Runtime %s: %s",
-			inference.ORTRequiredVersion(), ortStatus.Error).
-			Category(errors.CategoryModelInit).
-			Context("model", "v3_geomodel").
-			Context("ort_error", ortStatus.Error).
-			Timing("ort-check", time.Since(start)).
-			Build()
-	}
-
-	// Ensure ONNX Runtime is initialized
+	// Ensure ONNX Runtime is initialized (ORT availability checked by initializeONNXMetaModel)
 	log.Debug("V3 geomodel: initializing ONNX Runtime")
 	if err := inference.InitONNXRuntime(settings.BirdNET.ONNXRuntimePath); err != nil {
 		return errors.New(err).

@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime nav pieejams",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Pārliecinieties, ka libonnxruntime.so ir instalēts paredzētajā ceļā."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Skatiet instalēšanas rokasgrāmatu: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Ielādē atklāšanas informāciju...",
       "loaded": "Atklāšanas informācija ielādēta sugai {species}",
-      "error": "Kļūda, ielādējot atklāšanu: {error}"
+      "error": "Kļūda, ielādējot atklāšanu: {error}",
+      "loadingResults": "Ielādē {count} rezultātus...",
+      "thumbnailLoading": "Ielādē {species} sīktēlu...",
+      "thumbnailLoaded": "Sīktēls {species} ielādēts"
     },
     "errors": {
       "notFound": "Atklāšana nav atrasta. Tā, iespējams, ir dzēsta vai ID ir nepareizs.",
@@ -2989,6 +2992,7 @@
         "unknown": "nezināma",
         "refresh": "Atsvaidzināt",
         "addStream": "Pievienot straumi",
+        "testRequired": "Pirms saglabāšanas veiciet veiksmīgu straumes testu",
         "deleteConfirm": "Noņemt šo straumi?",
         "restartCount": "Pārstartēta {count} reizi(-es)",
         "healthLoadError": "Neizdevās ielādēt straumes veselības statusu",
@@ -3041,6 +3045,18 @@
           "degraded": "Pasliktināts",
           "failed": "Neizdevies",
           "unknown": "Nezināms"
+        },
+        "test": {
+          "button": "Testēt straumi",
+          "probing": "Testē...",
+          "result": "Pārbaudes rezultāts",
+          "error": "Tests neizdevās",
+          "batCompatible": "Saderīgs ar sikspārņiem",
+          "batIncompatible": "Nav saderīgs ar sikspārņiem"
+        },
+        "batWarning": "Sikspārņu modeļiem nepieciešamas straumes ar bezzudumu kodeku (PCM) un iztveršanas frekvenci vismaz 96 kHz. Izmantojiet pogu Testēt straumi augstāk, lai pārbaudītu saderību.",
+        "codecWarning": {
+          "lossy": "Zudumu kodeki (AAC, Opus, MP3) iznīcina ultraskaņas frekvences virs ~20 kHz, padarot straumi nepiemērotu sikspārņu noteikšanai."
         }
       },
       "audioFilters": {
@@ -3216,6 +3232,10 @@
         "devicesLoadFailed": "Neizdevās ielādēt audio ierīces. Lūdzu, pārbaudiet sistēmas atļaujas.",
         "invalidBitrate": "Nederīga bitu pārraides ātruma vērtība",
         "invalidRetentionPolicy": "Nederīga saglabāšanas politika"
+      },
+      "models": {
+        "recommendBoth": "Labākai sugu noteikšanas pārklājumam ieteicams izmantot gan BirdNET, gan Perch modeļus kopā.",
+        "perchOnlyWarning": "Perch vien rada mazāk noteikšanu. Samaziniet ticamības slieksni līdz 0.50, lai iegūtu jēgpilnus rezultātus, vai aktivizējiet arī BirdNET labākam pārklājumam."
       }
     },
     "security": {
@@ -3927,6 +3947,8 @@
         "operators": {
           "is": "ir",
           "is_not": "nav",
+          "in": "ir sarakstā",
+          "not_in": "nav sarakstā",
           "contains": "satur",
           "not_contains": "nesatur",
           "greater_than": "lielāks par",
@@ -4191,7 +4213,31 @@
       "playbackSpeed": "Atskaņošanas ātrums",
       "speed": "Ātrums",
       "loop": "Pārslēgt cilpu",
-      "player": "Audio atskaņotājs"
+      "player": "Audio atskaņotājs",
+      "autoplayBlocked": "Noklikšķiniet, lai atskaņotu (automātiskā atskaņošana bloķēta)",
+      "hlsNotSupported": "HLS atskaņošana šajā pārlūkā netiek atbalstīta",
+      "streamStarting": "Tiek startēta audio straume...",
+      "levelFor": "Audio līmenis avotam {source}",
+      "levelForNoSource": "Audio līmenis: nav avota",
+      "noSource": "Nav avota",
+      "levelAnnouncement": "Pašreizējais audio līmenis: {level} procenti",
+      "levelAnnouncementClipping": "Pašreizējais audio līmenis: {level} procenti, konstatēta pārslodze",
+      "sourceSelection": "Audio avota izvēle",
+      "sources": "Audio avoti",
+      "noSourcesAvailable": "Nav pieejamu audio avotu",
+      "silent": "(kluss)",
+      "stopPlayback": "Apturēt audio atskaņošanu",
+      "startPlayback": "Sākt audio atskaņošanu",
+      "nowPlaying": "Tagad tiek atskaņots audio no {source}",
+      "nowPlayingNoSource": "Tiek atskaņots audio",
+      "playbackStopped": "Audio atskaņošana apturēta",
+      "loginRequired": "Lai straumētu audio, nepieciešama pieteikšanās",
+      "streamError": "Kļūda, startējot straumi",
+      "streamTitle": "Putnu audio straume - {source}",
+      "streamTitleDefault": "Putnu audio straume",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Tiešraide",
+      "playbackError": "Atskaņošanas kļūda: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogramma vēl nav ģenerēta",
@@ -4416,6 +4462,16 @@
       "hostRequired": "Resursdatora parametrs ir obligāts",
       "invalidHost": "Nederīgs resursdatora parametrs",
       "rateLimit": "Pārāk daudz paziņojumu straumes pieslēgšanās mēģinājumu, lūdzu, uzgaidiet pirms atkārtota mēģinājuma"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Nederīgs pieprasījuma saturs",
+        "urlRequired": "Straumes URL ir obligāts",
+        "invalidUrl": "Nederīgs URL formāts. Ievadiet pilnu URL, piem., rtsp://resursdators:ports/ceļš",
+        "unsupportedScheme": "Neatbalstīta URL shēma \"{scheme}\". Izmantojiet rtsp, rtsps, http, https, rtmp vai udp",
+        "blockedDestination": "Šis galamērķis ir bloķēts drošības apsvērumu dēļ",
+        "connectionFailed": "Nevarēja izveidot savienojumu ar straumi. Pārbaudiet, vai URL ir pareizs un straume ir pieejama"
+      }
     },
     "debug": {
       "notEnabled": "Atkļūdošanas režīms nav iespējots"
@@ -4774,11 +4830,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Atjaunot",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4790,6 +4844,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Viss kārtībā",
+      "needsAttention": "Nepieciešama uzmanība",
+      "failing": "Neizdodas",
+      "allClear": "Bez problēmām",
+      "noData": "Nav datu",
+      "none": "Nav"
+    },
+    "diagnostics": "Diagnostika",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4825,6 +4888,24 @@
       "errorComponent": "Komponents",
       "errorLevel": "Līmenis",
       "errorMessage": "Ziņojums"
+    },
+    "window": {
+      "label": "Novērtēšanas logs",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Pēdējais notikums",
+      "recentEvents": "Nesenie notikumi",
+      "time": "Laiks",
+      "source": "Avots",
+      "count": "Skaits",
+      "lifetime": "kopā",
+      "sparklineLabel": "Aktivitātes diagramma"
     }
   }
 }

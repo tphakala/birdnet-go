@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime ikke tilgængelig",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} er påkrævet til {modelName}, men blev ikke fundet. Kontrollér, at libonnxruntime.so er installeret på den forventede sti."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} er påkrævet til {modelName}, men blev ikke fundet. Se installationsguiden: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Indlæser registreringsdetaljer...",
       "loaded": "Registreringsdetaljer indlæst for {species}",
-      "error": "Fejl ved indlæsning af registrering: {error}"
+      "error": "Fejl ved indlæsning af registrering: {error}",
+      "loadingResults": "Indlæser {count} resultater...",
+      "thumbnailLoading": "Indlæser {species} miniaturebillede...",
+      "thumbnailLoaded": "Miniaturebillede af {species} indlæst"
     },
     "errors": {
       "notFound": "Registrering ikke fundet. Den kan være blevet slettet, eller ID'et er forkert.",
@@ -2989,6 +2992,7 @@
         "unknown": "ukendt",
         "refresh": "Opdater",
         "addStream": "Tilføj strøm",
+        "testRequired": "Kør en vellykket streamtest før du gemmer",
         "deleteConfirm": "Fjern denne strøm?",
         "restartCount": "Genstartet {count} gang(e)",
         "healthLoadError": "Kunne ikke indlæse strømmens sundhedsstatus",
@@ -3041,6 +3045,18 @@
           "degraded": "Forringet",
           "failed": "Fejlet",
           "unknown": "Ukendt"
+        },
+        "test": {
+          "button": "Test stream",
+          "probing": "Tester...",
+          "result": "Testresultat",
+          "error": "Test mislykkedes",
+          "batCompatible": "Kompatibel med flagermus",
+          "batIncompatible": "Ikke kompatibel med flagermus"
+        },
+        "batWarning": "Flagermusmodeller kræver streams med en tabsfri codec (PCM) og en samplerate på mindst 96 kHz. Brug knappen Test stream ovenfor for at verificere kompatibilitet.",
+        "codecWarning": {
+          "lossy": "Tabsgivende codecs (AAC, Opus, MP3) ødelægger ultralydsfrekvenser over ~20 kHz, hvilket gør streamen uegnet til detektering af flagermus."
         }
       },
       "audioFilters": {
@@ -3216,6 +3232,10 @@
         "devicesLoadFailed": "Kunne ikke indlæse lydenheder. Kontroller venligst systemtilladelserne.",
         "invalidBitrate": "Ugyldig bitrateværdi",
         "invalidRetentionPolicy": "Ugyldig opbevaringspolitik"
+      },
+      "models": {
+        "recommendBoth": "For bedste artsdækning anbefales det at køre både BirdNET og Perch sammen.",
+        "perchOnlyWarning": "Perch alene producerer færre detektioner. Sænk konfidenstærsklen til 0.50 for meningsfulde resultater, eller aktiver BirdNET ved siden af for bedste dækning."
       }
     },
     "security": {
@@ -3927,6 +3947,8 @@
         "operators": {
           "is": "er",
           "is_not": "er ikke",
+          "in": "er på listen",
+          "not_in": "er ikke på listen",
           "contains": "indeholder",
           "not_contains": "indeholder ikke",
           "greater_than": "større end",
@@ -4191,7 +4213,31 @@
       "playbackSpeed": "Afspilningshastighed",
       "speed": "Hastighed",
       "loop": "Skift gentag",
-      "player": "Lydafspiller"
+      "player": "Lydafspiller",
+      "autoplayBlocked": "Klik for at afspille (autoplay blokeret)",
+      "hlsNotSupported": "HLS-afspilning understøttes ikke i denne browser",
+      "streamStarting": "Starter lydstrøm...",
+      "levelFor": "Lydniveau for {source}",
+      "levelForNoSource": "Lydniveau: ingen kilde",
+      "noSource": "Ingen kilde",
+      "levelAnnouncement": "Aktuelt lydniveau: {level} procent",
+      "levelAnnouncementClipping": "Aktuelt lydniveau: {level} procent, klipning registreret",
+      "sourceSelection": "Valg af lydkilde",
+      "sources": "Lydkilder",
+      "noSourcesAvailable": "Ingen lydkilder tilgængelige",
+      "silent": "(stille)",
+      "stopPlayback": "Stop lydafspilning",
+      "startPlayback": "Start lydafspilning",
+      "nowPlaying": "Afspiller nu lyd fra {source}",
+      "nowPlayingNoSource": "Afspiller lyd",
+      "playbackStopped": "Lydafspilning stoppet",
+      "loginRequired": "Login påkrævet for at streame lyd",
+      "streamError": "Fejl ved start af strøm",
+      "streamTitle": "Fuglelydstrøm - {source}",
+      "streamTitleDefault": "Fuglelydstrøm",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Live stream",
+      "playbackError": "Afspilningsfejl: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram er endnu ikke genereret",
@@ -4416,6 +4462,16 @@
       "hostRequired": "Host-parameter er påkrævet",
       "invalidHost": "Ugyldig host-parameter",
       "rateLimit": "For mange forsøg på at oprette notifikationsstrøm, vent venligst før du prøver igen"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Ugyldig forespørgselstekst",
+        "urlRequired": "Stream-URL er påkrævet",
+        "invalidUrl": "Ugyldigt URL-format. Indtast en fuld URL som rtsp://host:port/sti",
+        "unsupportedScheme": "Ikke-understøttet URL-skema \"{scheme}\". Brug rtsp, rtsps, http, https, rtmp eller udp",
+        "blockedDestination": "Denne destination er blokeret af sikkerhedsmæssige årsager",
+        "connectionFailed": "Kunne ikke oprette forbindelse til streamen. Kontrollér, at URL'en er korrekt, og at streamen er tilgængelig"
+      }
     },
     "debug": {
       "notEnabled": "Fejlretningstilstand er ikke aktiveret"
@@ -4774,11 +4830,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Opdater",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4790,6 +4844,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Alt OK",
+      "needsAttention": "Kræver opmærksomhed",
+      "failing": "Fejler",
+      "allClear": "Alt klart",
+      "noData": "Ingen data",
+      "none": "Ingen"
+    },
+    "diagnostics": "Diagnostik",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4825,6 +4888,24 @@
       "errorComponent": "Komponent",
       "errorLevel": "Niveau",
       "errorMessage": "Besked"
+    },
+    "window": {
+      "label": "Evalueringsvindue",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Seneste hændelse",
+      "recentEvents": "Seneste hændelser",
+      "time": "Tid",
+      "source": "Kilde",
+      "count": "Antal",
+      "lifetime": "i alt",
+      "sparklineLabel": "Aktivitetsgraf"
     }
   }
 }

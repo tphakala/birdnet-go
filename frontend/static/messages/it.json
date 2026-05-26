@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime non disponibile",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} è richiesto per {modelName} ma non è stato trovato. Verificare che libonnxruntime.so sia installato nel percorso previsto."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} è richiesto per {modelName} ma non è stato trovato. Consulta la guida all'installazione: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Caricamento dettagli rilevamento...",
       "loaded": "Dettagli rilevamento caricati per {species}",
-      "error": "Errore caricamento rilevamento: {error}"
+      "error": "Errore caricamento rilevamento: {error}",
+      "loadingResults": "Caricamento di {count} risultati...",
+      "thumbnailLoading": "Caricamento miniatura di {species}...",
+      "thumbnailLoaded": "Miniatura di {species} caricata"
     },
     "errors": {
       "notFound": "Rilevamento non trovato. Potrebbe essere stato eliminato o l'ID non è corretto.",
@@ -2989,6 +2992,7 @@
         "unknown": "sconosciuto",
         "refresh": "Aggiorna",
         "addStream": "Aggiungi Flusso",
+        "testRequired": "Esegui un test dello stream riuscito prima di salvare",
         "deleteConfirm": "Rimuovere questo flusso?",
         "restartCount": "Riavviato {count} volta/e",
         "healthLoadError": "Impossibile caricare stato salute flusso",
@@ -3041,6 +3045,18 @@
           "degraded": "Degradato",
           "failed": "Fallito",
           "unknown": "Sconosciuto"
+        },
+        "test": {
+          "button": "Testa stream",
+          "probing": "Test in corso...",
+          "result": "Risultato del test",
+          "error": "Test fallito",
+          "batCompatible": "Compatibile con pipistrelli",
+          "batIncompatible": "Non compatibile con pipistrelli"
+        },
+        "batWarning": "I modelli per pipistrelli richiedono flussi con un codec lossless (PCM) e una frequenza di campionamento di almeno 96 kHz. Usa il pulsante Testa stream sopra per verificare la compatibilità.",
+        "codecWarning": {
+          "lossy": "I codec con perdita (AAC, Opus, MP3) distruggono le frequenze ultrasoniche sopra i ~20 kHz, rendendo lo stream inadatto al rilevamento dei pipistrelli."
         }
       },
       "audioFilters": {
@@ -3216,6 +3232,10 @@
         "devicesLoadFailed": "Impossibile caricare dispositivi audio. Controlla permessi sistema.",
         "invalidBitrate": "Valore bitrate non valido",
         "invalidRetentionPolicy": "Politica conservazione non valida"
+      },
+      "models": {
+        "recommendBoth": "Per la migliore copertura di rilevamento delle specie, si consiglia di eseguire insieme sia BirdNET che Perch.",
+        "perchOnlyWarning": "Perch da solo produce meno rilevamenti. Abbassare la soglia di confidenza a 0.50 per risultati significativi, oppure attivare BirdNET per una migliore copertura."
       }
     },
     "security": {
@@ -3927,6 +3947,8 @@
         "operators": {
           "is": "è",
           "is_not": "non è",
+          "in": "è nell'elenco",
+          "not_in": "non è nell'elenco",
           "contains": "contiene",
           "not_contains": "non contiene",
           "greater_than": "maggiore di",
@@ -4191,7 +4213,31 @@
       "playbackSpeed": "Velocità riproduzione",
       "speed": "Velocità",
       "loop": "Attiva/disattiva ripetizione",
-      "player": "Lettore audio"
+      "player": "Lettore audio",
+      "autoplayBlocked": "Clicca per riprodurre (riproduzione automatica bloccata)",
+      "hlsNotSupported": "La riproduzione HLS non è supportata in questo browser",
+      "streamStarting": "Avvio dello stream audio...",
+      "levelFor": "Livello audio per {source}",
+      "levelForNoSource": "Livello audio: nessuna sorgente",
+      "noSource": "Nessuna sorgente",
+      "levelAnnouncement": "Livello audio attuale: {level} percento",
+      "levelAnnouncementClipping": "Livello audio attuale: {level} percento, distorsione rilevata",
+      "sourceSelection": "Selezione sorgente audio",
+      "sources": "Sorgenti audio",
+      "noSourcesAvailable": "Nessuna sorgente audio disponibile",
+      "silent": "(silenzioso)",
+      "stopPlayback": "Interrompi riproduzione audio",
+      "startPlayback": "Avvia riproduzione audio",
+      "nowPlaying": "Riproduzione audio da {source}",
+      "nowPlayingNoSource": "Riproduzione audio in corso",
+      "playbackStopped": "Riproduzione audio interrotta",
+      "loginRequired": "Accesso richiesto per lo streaming audio",
+      "streamError": "Errore nell'avvio dello stream",
+      "streamTitle": "Stream audio uccelli - {source}",
+      "streamTitleDefault": "Stream audio uccelli",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Diretta",
+      "playbackError": "Errore di riproduzione: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spettrogramma non ancora generato",
@@ -4416,6 +4462,16 @@
       "hostRequired": "Il parametro host è obbligatorio",
       "invalidHost": "Parametro host non valido",
       "rateLimit": "Troppi tentativi di connessione al flusso di notifiche, attendere prima di riprovare"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Corpo della richiesta non valido",
+        "urlRequired": "L'URL dello stream è obbligatorio",
+        "invalidUrl": "Formato URL non valido. Inserisci un URL completo, ad es. rtsp://host:porta/percorso",
+        "unsupportedScheme": "Schema URL non supportato \"{scheme}\". Usa rtsp, rtsps, http, https, rtmp o udp",
+        "blockedDestination": "Questa destinazione è bloccata per motivi di sicurezza",
+        "connectionFailed": "Impossibile connettersi allo stream. Verifica che l'URL sia corretto e che lo stream sia accessibile"
+      }
     },
     "debug": {
       "notEnabled": "Modalità debug non abilitata"
@@ -4774,11 +4830,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Aggiorna",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4790,6 +4844,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Tutto OK",
+      "needsAttention": "Richiede attenzione",
+      "failing": "In errore",
+      "allClear": "Tutto a posto",
+      "noData": "Nessun dato",
+      "none": "Nessuno"
+    },
+    "diagnostics": "Diagnostica",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4825,6 +4888,24 @@
       "errorComponent": "Componente",
       "errorLevel": "Livello",
       "errorMessage": "Messaggio"
+    },
+    "window": {
+      "label": "Finestra di valutazione",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Ultimo evento",
+      "recentEvents": "Eventi recenti",
+      "time": "Ora",
+      "source": "Sorgente",
+      "count": "Conteggio",
+      "lifetime": "totale",
+      "sparklineLabel": "Grafico di attività"
     }
   }
 }

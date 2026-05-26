@@ -589,7 +589,7 @@ func TestGenerateWithSoxDirect_MissingBinary(t *testing.T) {
 
 	err = gen.generateWithSoxDirect(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0)
 	require.Error(t, err, "should error when Sox binary not configured")
-	assert.Contains(t, err.Error(), "sox binary not configured", "error should mention sox binary")
+	assert.Contains(t, err.Error(), "invalid Sox path", "error should mention invalid sox path")
 }
 
 // TestGenerateWithFFmpegSoxPipeline_MissingBinaries tests error handling for missing binaries.
@@ -612,7 +612,7 @@ func TestGenerateWithFFmpegSoxPipeline_MissingBinaries(t *testing.T) {
 			name:       "missing sox",
 			ffmpegPath: "/usr/bin/ffmpeg",
 			soxPath:    "",
-			errContain: "sox binary not configured",
+			errContain: "invalid Sox path",
 		},
 	}
 
@@ -660,7 +660,7 @@ func TestGenerateWithSoxPCM_MissingBinary(t *testing.T) {
 
 	err := gen.generateWithSoxPCM(t.Context(), gen.currentSettings(), pcmData, outputPath, 400, false, 0)
 	require.Error(t, err, "should error when Sox binary not configured")
-	assert.Contains(t, err.Error(), "sox binary not configured", "error should mention sox binary")
+	assert.Contains(t, err.Error(), "invalid Sox path", "error should mention invalid sox path")
 }
 
 // TestGetSoxArgs_FileInput tests getSoxArgs for file input type.

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -98,6 +99,8 @@ func (a *App) Start(ctx context.Context) error {
 // Shutdown stops all services using tiered shutdown.
 // TierNetwork services stop first, then TierCore services get a guaranteed fresh budget.
 func (a *App) Shutdown(ctx context.Context) error {
+	events.Emit(ctx, "system", "shutdown", "Application shutting down", nil)
+
 	network, core := a.groupByTier()
 
 	var allErrs []error

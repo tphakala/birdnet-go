@@ -81,8 +81,8 @@ else
     # Just ensure directories exist (permissions already set in Dockerfile)
     mkdir -p /config /data/clips /data/models 2>/dev/null || true
 
-    # Use current user
-    USER_NAME=$(whoami)
+    # K8s/OpenShift arbitrary-UID pods have no /etc/passwd entry, so id -un fails
+    USER_NAME=$(id -un 2>/dev/null || echo "uid-${CURRENT_UID}")
     echo "Running as user: $USER_NAME"
 fi
 

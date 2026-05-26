@@ -46,20 +46,19 @@ const tunnelProviderUnknown = "unknown"
 
 // Controller manages the API routes and handlers
 type Controller struct {
-	Echo                *echo.Echo
-	Group               *echo.Group
-	DS                  datastore.Interface           // Deprecated: Use Repo for new detection operations
-	Repo                datastore.DetectionRepository // New: Preferred for detection CRUD operations
-	Settings            *conf.Settings
-	BirdImageCache      *imageprovider.BirdImageCache
-	SunCalc             *suncalc.SunCalc
-	Processor           *processor.Processor
-	EBirdClient         *ebird.Client
-	TaxonomyDB          *classifier.TaxonomyDatabase
-	controlChan         chan string
-	shutdownRequester   ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
-	shutdownMu          sync.RWMutex      // protects shutdownRequester
-	speciesExcludeMutex sync.RWMutex      // Mutex for species exclude list operations
+	Echo              *echo.Echo
+	Group             *echo.Group
+	DS                datastore.Interface           // Deprecated: Use Repo for new detection operations
+	Repo              datastore.DetectionRepository // New: Preferred for detection CRUD operations
+	Settings          *conf.Settings
+	BirdImageCache    *imageprovider.BirdImageCache
+	SunCalc           *suncalc.SunCalc
+	Processor         *processor.Processor
+	EBirdClient       *ebird.Client
+	TaxonomyDB        *classifier.TaxonomyDatabase
+	controlChan       chan string
+	shutdownRequester ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
+	shutdownMu        sync.RWMutex      // protects shutdownRequester
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.
@@ -139,9 +138,11 @@ type Controller struct {
 	audioWatchdog atomic.Pointer[audiocore.LivenessWatchdog]
 
 	// Health check infrastructure for the diagnostics endpoints.
-	healthRegistry *health.Registry
-	healthReports  *health.ReportStore
-	healthErrors   *health.ErrorRingBuffer
+	healthRegistry     *health.Registry
+	healthReports      *health.ReportStore
+	healthErrors       *health.ErrorRingBuffer
+	healthMetricsStore *observability.HealthMetricsStore
+	healthEvents       *observability.HealthEventBuffer
 
 	// sourceRestarter restarts a single audio source by ID. Set during
 	// pipeline Start() and called by the restart-source control endpoint.
@@ -638,6 +639,7 @@ func (c *Controller) initRoutes() {
 		{"settings routes", c.initSettingsRoutes},
 		{"filesystem routes", c.initFileSystemRoutes},
 		{"stream health routes", c.initStreamHealthRoutes},
+		{"stream test routes", c.initStreamTestRoutes},
 		{"audio health routes", c.initAudioHealthRoutes},
 		{"quiet hours routes", c.initQuietHoursRoutes},
 		{"audio level routes", c.initAudioLevelRoutes},
@@ -649,6 +651,7 @@ func (c *Controller) initRoutes() {
 		{"range routes", c.initRangeRoutes},
 		{"heatmap routes", c.initHeatmapRoutes},
 		{"sse routes", c.initSSERoutes},
+		{"diagnostics routes", c.initDiagnosticsRoutes},
 		{"metrics history routes", c.initMetricsHistoryRoutes},
 		{"notification routes", c.initNotificationRoutes},
 		{"support routes", c.initSupportRoutes},
@@ -659,7 +662,6 @@ func (c *Controller) initRoutes() {
 		{"model routes", c.initModelRoutes},
 		{"insights routes", c.initInsightsRoutes},
 		{"tls routes", c.initTLSRoutes},
-		{"diagnostics routes", c.initDiagnosticsRoutes},
 	}
 
 	for _, initializer := range routeInitializers {

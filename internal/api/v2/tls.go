@@ -109,39 +109,48 @@ func (c *Controller) UploadTLSCertificate(ctx echo.Context) error {
 
 	tlsMgr := conf.GetTLSManager()
 
+	// Serialise the entire backup-save-settings sequence.
+	c.settingsMutex.Lock()
+	defer c.settingsMutex.Unlock()
+
+	if err := tlsMgr.BackupAllCertificates(tlsServiceName); err != nil {
+		return c.HandleError(ctx, err, "Failed to backup TLS certificates", http.StatusInternalServerError)
+	}
+
 	// Save certificate
 	if _, err := tlsMgr.SaveCertificate(tlsServiceName, conf.TLSCertTypeServerCert, req.Certificate); err != nil {
+		tlsMgr.RestoreBackups(tlsServiceName)
 		return c.HandleError(ctx, err, "Failed to save TLS certificate", http.StatusInternalServerError)
 	}
 
 	// Save private key
 	if _, err := tlsMgr.SaveCertificate(tlsServiceName, conf.TLSCertTypeServerKey, req.PrivateKey); err != nil {
-		// Clean up the cert that was saved
-		_ = tlsMgr.RemoveCertificate(tlsServiceName, conf.TLSCertTypeServerCert)
+		tlsMgr.RestoreBackups(tlsServiceName)
 		return c.HandleError(ctx, err, "Failed to save TLS private key", http.StatusInternalServerError)
 	}
 
 	// Save CA certificate if provided
 	if strings.TrimSpace(req.CACertificate) != "" {
 		if _, err := tlsMgr.SaveCertificate(tlsServiceName, conf.TLSCertTypeCA, req.CACertificate); err != nil {
-			// Clean up cert and key that were saved
-			_ = tlsMgr.RemoveCertificate(tlsServiceName, conf.TLSCertTypeServerCert)
-			_ = tlsMgr.RemoveCertificate(tlsServiceName, conf.TLSCertTypeServerKey)
+			tlsMgr.RestoreBackups(tlsServiceName)
 			return c.HandleError(ctx, err, "Failed to save CA certificate", http.StatusInternalServerError)
 		}
 	}
 
 	// Update TLS mode to manual
-	c.settingsMutex.Lock()
-	c.Settings.Security.TLSMode = conf.TLSModeManual
-	c.settingsMutex.Unlock()
-
-	if !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			c.logErrorIfEnabled("Failed to save settings after TLS certificate upload",
-				logger.Error(err))
-		}
+	current := c.getSettingsOrFallback()
+	updated := conf.CloneSettings(current)
+	updated.Security.TLSMode = conf.TLSModeManual
+	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		tlsMgr.RestoreBackups(tlsServiceName)
+		return c.HandleError(ctx, err, "Failed to save settings after TLS certificate upload",
+			http.StatusInternalServerError)
 	}
+	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
+		GetLogger().Warn("Failed to trigger settings side-effects after TLS certificate change",
+			logger.Error(handleErr))
+	}
+	tlsMgr.CleanupBackups(tlsServiceName)
 
 	// Return certificate info
 	certPath := tlsMgr.GetCertificatePath(tlsServiceName, conf.TLSCertTypeServerCert)
@@ -159,21 +168,33 @@ func (c *Controller) UploadTLSCertificate(ctx echo.Context) error {
 func (c *Controller) DeleteTLSCertificate(ctx echo.Context) error {
 	tlsMgr := conf.GetTLSManager()
 
+	// Serialise the entire backup-remove-save sequence so concurrent
+	// requests cannot interleave between backup and remove.
+	c.settingsMutex.Lock()
+	defer c.settingsMutex.Unlock()
+
+	if err := tlsMgr.BackupAllCertificates(tlsServiceName); err != nil {
+		return c.HandleError(ctx, err, "Failed to backup TLS certificates before deletion",
+			http.StatusInternalServerError)
+	}
 	if err := tlsMgr.RemoveAllCertificates(tlsServiceName); err != nil {
+		tlsMgr.RestoreBackups(tlsServiceName)
 		return c.HandleError(ctx, err, "Failed to remove TLS certificates", http.StatusInternalServerError)
 	}
 
-	// Reset TLS mode to none
-	c.settingsMutex.Lock()
-	c.Settings.Security.TLSMode = conf.TLSModeNone
-	c.settingsMutex.Unlock()
-
-	if !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			c.logErrorIfEnabled("Failed to save settings after TLS certificate deletion",
-				logger.Error(err))
-		}
+	current := c.getSettingsOrFallback()
+	updated := conf.CloneSettings(current)
+	updated.Security.TLSMode = conf.TLSModeNone
+	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		tlsMgr.RestoreBackups(tlsServiceName)
+		return c.HandleError(ctx, err, "Failed to save settings after TLS certificate deletion",
+			http.StatusInternalServerError)
 	}
+	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
+		GetLogger().Warn("Failed to trigger settings side-effects after TLS certificate change",
+			logger.Error(handleErr))
+	}
+	tlsMgr.CleanupBackups(tlsServiceName)
 
 	return ctx.NoContent(http.StatusNoContent)
 }
@@ -207,8 +228,9 @@ func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
 
 	// Collect SANs from settings
 	c.settingsMutex.RLock()
-	host := c.Settings.Security.Host
-	baseURL := c.Settings.Security.BaseURL
+	snap := c.getSettingsOrFallback()
+	host := snap.Security.Host
+	baseURL := snap.Security.BaseURL
 	c.settingsMutex.RUnlock()
 
 	sans := tlspkg.CollectSANs(host, baseURL)
@@ -222,29 +244,38 @@ func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to generate self-signed certificate", http.StatusInternalServerError)
 	}
 
-	// Save certificate and key
+	// Save certificate and key under settingsMutex for full serialisation.
 	tlsMgr := conf.GetTLSManager()
 
+	c.settingsMutex.Lock()
+	defer c.settingsMutex.Unlock()
+
+	if err := tlsMgr.BackupAllCertificates(tlsServiceName); err != nil {
+		return c.HandleError(ctx, err, "Failed to backup TLS certificates", http.StatusInternalServerError)
+	}
+
 	if _, err := tlsMgr.SaveCertificate(tlsServiceName, conf.TLSCertTypeServerCert, certPEM); err != nil {
+		tlsMgr.RestoreBackups(tlsServiceName)
 		return c.HandleError(ctx, err, "Failed to save generated certificate", http.StatusInternalServerError)
 	}
 	if _, err := tlsMgr.SaveCertificate(tlsServiceName, conf.TLSCertTypeServerKey, keyPEM); err != nil {
-		// Clean up the cert that was saved
-		_ = tlsMgr.RemoveCertificate(tlsServiceName, conf.TLSCertTypeServerCert)
+		tlsMgr.RestoreBackups(tlsServiceName)
 		return c.HandleError(ctx, err, "Failed to save generated private key", http.StatusInternalServerError)
 	}
 
-	// Update TLS mode to self-signed
-	c.settingsMutex.Lock()
-	c.Settings.Security.TLSMode = conf.TLSModeSelfSigned
-	c.settingsMutex.Unlock()
-
-	if !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			c.logErrorIfEnabled("Failed to save settings after self-signed certificate generation",
-				logger.Error(err))
-		}
+	current := c.getSettingsOrFallback()
+	updated := conf.CloneSettings(current)
+	updated.Security.TLSMode = conf.TLSModeSelfSigned
+	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		tlsMgr.RestoreBackups(tlsServiceName)
+		return c.HandleError(ctx, err, "Failed to save settings after self-signed certificate generation",
+			http.StatusInternalServerError)
 	}
+	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
+		GetLogger().Warn("Failed to trigger settings side-effects after TLS certificate change",
+			logger.Error(handleErr))
+	}
+	tlsMgr.CleanupBackups(tlsServiceName)
 
 	// Return certificate info
 	certPath := tlsMgr.GetCertificatePath(tlsServiceName, conf.TLSCertTypeServerCert)

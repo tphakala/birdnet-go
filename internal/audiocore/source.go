@@ -100,8 +100,12 @@ type AudioSource struct {
 	// (e.g., credentials replaced with "***").
 	SafeString string `json:"safeString"`
 
-	// SampleRate is the capture sample rate in Hz (e.g., 48000).
+	// SampleRate is the desired output sample rate in Hz (e.g., 48000).
 	SampleRate int `json:"sampleRate"`
+
+	// SourceSampleRate is the actual sample rate of the remote source,
+	// discovered by probing. Zero means unknown.
+	SourceSampleRate int `json:"sourceSampleRate,omitempty"`
 
 	// BitDepth is the capture bit depth (e.g., 16).
 	BitDepth int `json:"bitDepth"`
@@ -191,8 +195,12 @@ type SourceConfig struct {
 	// ConnectionString is the raw URL or device path (treated as sensitive).
 	ConnectionString string
 
-	// SampleRate is the desired capture sample rate in Hz.
+	// SampleRate is the desired output sample rate in Hz (what the pipeline expects).
 	SampleRate int
+
+	// SourceSampleRate is the actual sample rate of the remote source, discovered
+	// by probing. Zero means unknown (probe failed or not probed).
+	SourceSampleRate int
 
 	// BitDepth is the desired capture bit depth (e.g., 16).
 	BitDepth int

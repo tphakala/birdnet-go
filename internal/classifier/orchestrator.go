@@ -62,9 +62,15 @@ type Orchestrator struct {
 	scheduler atomic.Pointer[nighttimeScheduler]
 }
 
+// currentSettings returns the latest settings snapshot so hot-reloaded
+// values (threads, locale, etc.) take effect without restarting.
+func (o *Orchestrator) currentSettings() *conf.Settings {
+	return conf.CurrentOrFallback(o.Settings)
+}
+
 // NewOrchestrator creates a new Orchestrator with BirdNET as the primary model
 // and loads any additional models from configuration.
-// This is the primary constructor — callers should use this instead of NewBirdNET.
+// This is the primary constructor - callers should use this instead of NewBirdNET.
 func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Resolve primary model identity from config
 	var primaryInfo *ModelInfo
@@ -365,6 +371,65 @@ func (o *Orchestrator) GetProbableSpecies(date time.Time, week float32) ([]Speci
 // without modifying global state.
 func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
 	return o.primary.GetProbableSpeciesWithSettings(date, week, settings)
+}
+
+// GetAllProbableSpeciesWithSettings returns species from all active classifiers.
+// The primary BirdNET model's species are filtered by the range filter using the
+// supplied settings. Additional models (except bat) contribute their full label
+// set since they have no range filter. Results are deduplicated by label.
+func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
+	// Snapshot primary under read lock to avoid racing with Delete().
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return nil, nil
+	}
+
+	scores, err := primary.GetProbableSpeciesWithSettings(date, week, settings)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]bool, len(scores))
+	for _, s := range scores {
+		seen[s.Label] = true
+	}
+
+	type entryRef struct {
+		id    string
+		entry *modelEntry
+	}
+
+	var refs []entryRef
+	o.mu.RLock()
+	primaryID := primary.ModelInfo.ID
+	for id, entry := range o.models {
+		if id == primaryID || id == RegistryIDBat {
+			continue
+		}
+		refs = append(refs, entryRef{id: id, entry: entry})
+	}
+	o.mu.RUnlock()
+
+	for _, ref := range refs {
+		ref.entry.mu.Lock()
+		if ref.entry.instance == nil {
+			ref.entry.mu.Unlock()
+			continue
+		}
+		labels := ref.entry.instance.Labels()
+		ref.entry.mu.Unlock()
+
+		for _, label := range labels {
+			if !seen[label] {
+				scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
+				seen[label] = true
+			}
+		}
+	}
+
+	return scores, nil
 }
 
 // GetSpeciesOccurrence returns the occurrence probability for a species at the current time.
@@ -727,7 +792,7 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 
 	// Give the new model the full thread budget. Inference is serialized by
 	// inferenceMu so concurrent CPU contention cannot occur.
-	dynamicThreads := o.Settings.BirdNET.Threads
+	dynamicThreads := o.currentSettings().BirdNET.Threads
 	if dynamicThreads <= 0 {
 		dynamicThreads = runtime.NumCPU()
 	}

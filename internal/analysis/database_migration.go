@@ -357,6 +357,7 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 		Database:    settings.Output.MySQL.Database,
 		UseV2Prefix: true, // v2_ prefix avoids collisions with legacy auxiliary tables
 		Debug:       settings.Debug,
+		Logger:      log,
 	})
 	if err != nil {
 		return nil, errors.New(err).
@@ -461,6 +462,7 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 			Database:    settings.Output.MySQL.Database,
 			UseV2Prefix: useV2Prefix,
 			Debug:       settings.Debug,
+			Logger:      log,
 		})
 
 	default:
@@ -500,6 +502,7 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	imageCacheRepo := repository.NewImageCacheRepository(v2DB, nil, labelRepo, useV2Prefix, isMySQL)
 	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, nil, labelRepo, useV2Prefix, isMySQL)
 	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, nil, labelRepo, useV2Prefix, isMySQL)
+	appEventRepo := repository.NewAppEventRepository(v2DB, nil, useV2Prefix, isMySQL)
 
 	// Load eBird taxonomy for species code lookups in analytics endpoints.
 	_, scientificIndex, taxonomyErr := classifier.LoadTaxonomyData("")
@@ -519,6 +522,7 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 		ImageCache:     imageCacheRepo,
 		Threshold:      thresholdRepo,
 		Notification:   notificationRepo,
+		AppEvent:       appEventRepo,
 		Logger:         log,
 		Timezone:       time.Local,
 		Labels:         settings.BirdNET.Labels, // For GetThresholdEvents workaround (#1907)

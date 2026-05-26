@@ -25,6 +25,9 @@ BIRDNET_GO_IMAGE=""
 # Silent mode for non-interactive installation (set via --silent flag)
 SILENT_MODE="false"
 
+# Force root mode - allow running as root despite warnings (set via --force-root flag)
+FORCE_ROOT="false"
+
 # Flag to track if Docker image was changed during update/rollback
 IMAGE_CHANGED="false"
 
@@ -1672,20 +1675,30 @@ check_directory() {
     fi
 }
 
-# Function to prevent running as root
+# Function to warn against running as root (soft block with bypass)
 check_not_root() {
     if [ "$(id -u)" -eq 0 ]; then
+        if [ "$FORCE_ROOT" = "true" ]; then
+            print_message "⚠️  Running as root (--force-root was specified)" "$YELLOW"
+            return 0
+        fi
+
         print_message "" "$NC"
-        print_message "❌ This script must not be run as root or with sudo" "$RED"
+        print_message "⚠️  Running as root is strongly discouraged" "$YELLOW"
         print_message "" "$NC"
         print_message "Running as root places all data under /root/birdnet-go-app/," "$YELLOW"
         print_message "which causes settings and recordings to become inaccessible" "$YELLOW"
-        print_message "if you later run the script as your regular user." "$YELLOW"
+        print_message "if you later try to manage the application as a regular user." "$YELLOW"
         print_message "" "$NC"
-        print_message "Run the script as your regular user instead:" "$GREEN"
+        print_message "It is strongly recommended to run this script as a non-privileged user." "$GREEN"
+        print_message "The script uses sudo internally when elevated privileges are needed." "$NC"
+        print_message "" "$NC"
+        print_message "Recommended: run as your regular user instead:" "$GREEN"
         print_message "  ./install.sh" "$NC"
         print_message "" "$NC"
-        print_message "The script uses sudo internally when elevated privileges are needed." "$YELLOW"
+        print_message "To proceed as root anyway, re-run with --force-root:" "$YELLOW"
+        print_message "  ./install.sh --force-root" "$NC"
+        print_message "" "$NC"
         exit 1
     fi
 }
@@ -1818,7 +1831,22 @@ migrate_installation() {
         return 1
     fi
 
-    # Step 5: Clean up old systemd service and related files (new one will be created during install)
+    # Step 5: Preserve timezone and clean up old systemd service
+    if [ -z "$CONFIGURED_TZ" ]; then
+        local tz_service_file=""
+        if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
+            tz_service_file="/etc/systemd/system/birdnet-go.service"
+        elif [ -f "/lib/systemd/system/birdnet-go.service" ]; then
+            tz_service_file="/lib/systemd/system/birdnet-go.service"
+        fi
+        if [ -n "$tz_service_file" ]; then
+            CONFIGURED_TZ=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' "$tz_service_file" 2>/dev/null | head -1)
+            if [ -n "$CONFIGURED_TZ" ]; then
+                log_message "INFO" "Preserved timezone from old service: $CONFIGURED_TZ"
+                print_message "📍 Preserved existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+            fi
+        fi
+    fi
     sudo systemctl disable --now birdnet-go.service 2>/dev/null || true
     sudo rm -f /etc/systemd/system/birdnet-go.service
     sudo rm -f /etc/systemd/system/multi-user.target.wants/birdnet-go.service
@@ -1856,12 +1884,30 @@ check_existing_installation_owner() {
     _check_install_home() {
         local install_home="$1"
         if [ -n "$install_home" ] && [ "$install_home" != "$HOME" ]; then
-            found_other_install=true
-            other_path="${install_home}/birdnet-go-app"
+            local candidate_path="${install_home}/birdnet-go-app"
+            # Verify the detected path actually exists on disk before flagging.
+            # Stale systemd service files or Docker container metadata can
+            # reference paths that no longer (or never) existed, causing
+            # false-positive migration prompts (see issue #3273).
+            local path_exists=false
             if [ "$install_home" = "/root" ]; then
-                other_user="root"
+                # /root is typically mode 700; use non-interactive sudo
+                if sudo -n test -d "$candidate_path" 2>/dev/null; then
+                    path_exists=true
+                fi
             else
-                other_user=$(basename "$install_home")
+                if [ -d "$candidate_path" ]; then
+                    path_exists=true
+                fi
+            fi
+            if [ "$path_exists" = true ]; then
+                found_other_install=true
+                other_path="$candidate_path"
+                if [ "$install_home" = "/root" ]; then
+                    other_user="root"
+                else
+                    other_user=$(basename "$install_home")
+                fi
             fi
         fi
     }
@@ -4502,12 +4548,20 @@ handle_container_update() {
     print_message "🔄 Checking for updates..." "$YELLOW"
     
     # Extract existing timezone from systemd service file if updating
-    if [ -f "/etc/systemd/system/birdnet-go.service" ] && [ -z "$CONFIGURED_TZ" ]; then
-        local existing_tz=$(grep -oP '(?<=--env TZ=")[^"]+' /etc/systemd/system/birdnet-go.service 2>/dev/null)
-        if [ -n "$existing_tz" ]; then
-            CONFIGURED_TZ="$existing_tz"
-            log_message "INFO" "Extracted existing timezone from service: $CONFIGURED_TZ"
-            print_message "📍 Using existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+    if [ -z "$CONFIGURED_TZ" ]; then
+        local tz_service_file=""
+        if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
+            tz_service_file="/etc/systemd/system/birdnet-go.service"
+        elif [ -f "/lib/systemd/system/birdnet-go.service" ]; then
+            tz_service_file="/lib/systemd/system/birdnet-go.service"
+        fi
+        if [ -n "$tz_service_file" ]; then
+            local existing_tz=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' "$tz_service_file" 2>/dev/null | head -1)
+            if [ -n "$existing_tz" ]; then
+                CONFIGURED_TZ="$existing_tz"
+                log_message "INFO" "Extracted existing timezone from service: $CONFIGURED_TZ"
+                print_message "📍 Using existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+            fi
         fi
     fi
     
@@ -5187,6 +5241,7 @@ show_usage() {
     echo "                          Default: nightly"
     echo "                          Examples: latest, v1.2.3, nightly, sha256:abc123..."
     echo "  --silent                Non-interactive install using environment variables"
+    echo "  --force-root            Allow running as root (not recommended)"
     echo "  -h, --help              Show this help message"
     echo ""
     echo "SILENT MODE ENVIRONMENT VARIABLES:"
@@ -5227,6 +5282,10 @@ parse_arguments() {
                 SILENT_MODE="true"
                 shift
                 ;;
+            --force-root)
+                FORCE_ROOT="true"
+                shift
+                ;;
             -h|--help)
                 show_usage
                 exit 0
@@ -5256,8 +5315,25 @@ parse_arguments() {
 # Parse command line arguments first
 parse_arguments "$@"
 
-# Prevent running as root (must be before $HOME-dependent path setup)
+# Warn if running as root; allow bypass with --force-root (must be before $HOME-dependent path setup)
 check_not_root
+
+# When running as root without sudo installed (common in containers), provide a
+# shim so the script's 100+ sudo calls work without modification.
+if [ "$(id -u)" -eq 0 ] && ! command_exists sudo; then
+    sudo() {
+        # Strip sudo-specific flags before executing the actual command
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -n|-S|-E|-H|-P|-K|-k|-b) shift ;;
+                -u|-g|-C) shift 2 ;;
+                --) shift; break ;;
+                *) break ;;
+            esac
+        done
+        "$@"
+    }
+fi
 
 # Default paths
 CONFIG_DIR="$HOME/birdnet-go-app/config"

@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime niedostępny",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} jest wymagany dla {modelName}, ale nie został znaleziony. Sprawdź, czy libonnxruntime.so jest zainstalowany we właściwej ścieżce."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} jest wymagany dla {modelName}, ale nie został znaleziony. Zobacz przewodnik instalacji: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Ładowanie szczegółów detekcji...",
       "loaded": "Szczegóły detekcji załadowane dla {species}",
-      "error": "Błąd ładowania detekcji: {error}"
+      "error": "Błąd ładowania detekcji: {error}",
+      "loadingResults": "Ładowanie {count} wyników...",
+      "thumbnailLoading": "Ładowanie miniatury {species}...",
+      "thumbnailLoaded": "Miniatura {species} załadowana"
     },
     "errors": {
       "notFound": "Nie znaleziono detekcji. Mogła zostać usunięta lub identyfikator jest nieprawidłowy.",
@@ -2989,6 +2992,7 @@
         "unknown": "nieznany",
         "refresh": "Odśwież",
         "addStream": "Dodaj Strumień",
+        "testRequired": "Przeprowadź udany test strumienia przed zapisaniem",
         "deleteConfirm": "Usunąć ten strumień?",
         "restartCount": "Zrestartowano {count} raz(y)",
         "healthLoadError": "Nie udało się załadować statusu strumienia",
@@ -3041,6 +3045,18 @@
           "degraded": "Pogorszone",
           "failed": "Nieudane",
           "unknown": "Nieznany"
+        },
+        "test": {
+          "button": "Testuj strumień",
+          "probing": "Testowanie...",
+          "result": "Wynik testu",
+          "error": "Test nieudany",
+          "batCompatible": "Kompatybilny z nietoperzami",
+          "batIncompatible": "Niekompatybilny z nietoperzami"
+        },
+        "batWarning": "Modele nietoperzy wymagają strumieni z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz. Użyj przycisku Testuj strumień powyżej, aby sprawdzić kompatybilność.",
+        "codecWarning": {
+          "lossy": "Stratne kodeki (AAC, Opus, MP3) niszczą częstotliwości ultradźwiękowe powyżej ~20 kHz, przez co strumień jest nieodpowiedni do wykrywania nietoperzy."
         }
       },
       "audioFilters": {
@@ -3216,6 +3232,10 @@
         "devicesLoadFailed": "Nie udało się załadować urządzeń audio. Proszę sprawdzić uprawnienia systemowe.",
         "invalidBitrate": "Nieprawidłowa wartość bitrate",
         "invalidRetentionPolicy": "Nieprawidłowa polityka retencji"
+      },
+      "models": {
+        "recommendBoth": "Dla najlepszego pokrycia wykrywania gatunków zaleca się uruchamianie zarówno modelu BirdNET, jak i Perch jednocześnie.",
+        "perchOnlyWarning": "Sam Perch produkuje mniej wykryć. Obniż próg pewności do 0.50, aby uzyskać znaczące wyniki, lub włącz BirdNET obok Perch dla lepszego pokrycia."
       }
     },
     "security": {
@@ -3927,6 +3947,8 @@
         "operators": {
           "is": "jest",
           "is_not": "nie jest",
+          "in": "jest na liście",
+          "not_in": "nie jest na liście",
           "contains": "zawiera",
           "not_contains": "nie zawiera",
           "greater_than": "większe niż",
@@ -4191,7 +4213,31 @@
       "playbackSpeed": "Prędkość odtwarzania",
       "speed": "Prędkość",
       "loop": "Przełącz pętlę",
-      "player": "Odtwarzacz audio"
+      "player": "Odtwarzacz audio",
+      "autoplayBlocked": "Kliknij, aby odtworzyć (autoodtwarzanie zablokowane)",
+      "hlsNotSupported": "Odtwarzanie HLS nie jest obsługiwane w tej przeglądarce",
+      "streamStarting": "Uruchamianie strumienia audio...",
+      "levelFor": "Poziom dźwięku dla {source}",
+      "levelForNoSource": "Poziom dźwięku: brak źródła",
+      "noSource": "Brak źródła",
+      "levelAnnouncement": "Aktualny poziom dźwięku: {level} procent",
+      "levelAnnouncementClipping": "Aktualny poziom dźwięku: {level} procent, wykryto przesterowanie",
+      "sourceSelection": "Wybór źródła dźwięku",
+      "sources": "Źródła dźwięku",
+      "noSourcesAvailable": "Brak dostępnych źródeł dźwięku",
+      "silent": "(cisza)",
+      "stopPlayback": "Zatrzymaj odtwarzanie audio",
+      "startPlayback": "Rozpocznij odtwarzanie audio",
+      "nowPlaying": "Odtwarzanie audio z {source}",
+      "nowPlayingNoSource": "Odtwarzanie audio",
+      "playbackStopped": "Odtwarzanie audio zatrzymane",
+      "loginRequired": "Wymagane logowanie, aby strumieniować audio",
+      "streamError": "Błąd uruchamiania strumienia",
+      "streamTitle": "Strumień audio ptaków - {source}",
+      "streamTitleDefault": "Strumień audio ptaków",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Transmisja na żywo",
+      "playbackError": "Błąd odtwarzania: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram jeszcze niegenerowany",
@@ -4416,6 +4462,16 @@
       "hostRequired": "Parametr hosta jest wymagany",
       "invalidHost": "Nieprawidłowy parametr hosta",
       "rateLimit": "Zbyt wiele prób połączenia ze strumieniem powiadomień, poczekaj chwilę przed ponowną próbą"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Nieprawidłowa treść żądania",
+        "urlRequired": "Adres URL strumienia jest wymagany",
+        "invalidUrl": "Nieprawidłowy format URL. Wprowadź pełny URL, np. rtsp://host:port/ścieżka",
+        "unsupportedScheme": "Nieobsługiwany schemat URL \"{scheme}\". Użyj rtsp, rtsps, http, https, rtmp lub udp",
+        "blockedDestination": "Ten cel jest zablokowany ze względów bezpieczeństwa",
+        "connectionFailed": "Nie udało się połączyć ze strumieniem. Sprawdź, czy URL jest poprawny i strumień jest dostępny"
+      }
     },
     "debug": {
       "notEnabled": "Tryb debugowania nie jest włączony"
@@ -4774,11 +4830,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Odśwież",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4790,6 +4844,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Wszystko w porządku",
+      "needsAttention": "Wymaga uwagi",
+      "failing": "Niepowodzenie",
+      "allClear": "Bez problemów",
+      "noData": "Brak danych",
+      "none": "Brak"
+    },
+    "diagnostics": "Diagnostyka",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4825,6 +4888,24 @@
       "errorComponent": "Komponent",
       "errorLevel": "Poziom",
       "errorMessage": "Wiadomość"
+    },
+    "window": {
+      "label": "Okno oceny",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Ostatnie zdarzenie",
+      "recentEvents": "Ostatnie zdarzenia",
+      "time": "Czas",
+      "source": "Źródło",
+      "count": "Liczba",
+      "lifetime": "łącznie",
+      "sparklineLabel": "Wykres aktywności"
     }
   }
 }

@@ -437,7 +437,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime inte tillgänglig",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} krävs för {modelName} men hittades inte. Kontrollera att libonnxruntime.so är installerat på den förväntade sökvägen."
+        "unavailableMessage": "ONNX Runtime {requiredVersion} krävs för {modelName} men hittades inte. Se installationsguiden: {installGuideURL}"
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -936,7 +936,10 @@
     "aria": {
       "loading": "Laddar detekteringsinformation...",
       "loaded": "Detekteringsinformation laddad för {species}",
-      "error": "Fel vid laddning av detektering: {error}"
+      "error": "Fel vid laddning av detektering: {error}",
+      "loadingResults": "Laddar {count} resultat...",
+      "thumbnailLoading": "Laddar {species} miniatyrbild...",
+      "thumbnailLoaded": "Miniatyrbild av {species} laddad"
     },
     "errors": {
       "notFound": "Detekteringen hittades inte. Den kan ha tagits bort eller så är ID:t felaktigt.",
@@ -2989,6 +2992,7 @@
         "unknown": "okänd",
         "refresh": "Uppdatera",
         "addStream": "Lägg till ström",
+        "testRequired": "Kör ett lyckat strömtest innan du sparar",
         "deleteConfirm": "Ta bort denna ström?",
         "restartCount": "Omstartad {count} gång(er)",
         "healthLoadError": "Kunde inte ladda strömmens hälsostatus",
@@ -3041,6 +3045,18 @@
           "degraded": "Försämrad",
           "failed": "Misslyckad",
           "unknown": "Okänd"
+        },
+        "test": {
+          "button": "Testa ström",
+          "probing": "Testar...",
+          "result": "Testresultat",
+          "error": "Test misslyckades",
+          "batCompatible": "Fladdermus-kompatibel",
+          "batIncompatible": "Inte fladdermus-kompatibel"
+        },
+        "batWarning": "Fladdermusmodeller kräver strömmar med en förlustfri kodek (PCM) och en samplingsfrekvens på minst 96 kHz. Använd knappen Testa ström ovan för att verifiera kompatibilitet.",
+        "codecWarning": {
+          "lossy": "Förlustbringande codecs (AAC, Opus, MP3) förstör ultraljudsfrekvenser över ~20 kHz, vilket gör strömmen olämplig för fladdermusdetektion."
         }
       },
       "audioFilters": {
@@ -3216,6 +3232,10 @@
         "devicesLoadFailed": "Kunde inte ladda ljudenheter. Kontrollera systembehörigheterna.",
         "invalidBitrate": "Ogiltigt bithastighetsvärde",
         "invalidRetentionPolicy": "Ogiltig lagringspolicy"
+      },
+      "models": {
+        "recommendBoth": "För bästa artdetekteringstäckning rekommenderas att köra både BirdNET och Perch tillsammans.",
+        "perchOnlyWarning": "Perch ensamt ger färre detektioner. Sänk konfidensströskeln till 0.50 för meningsfulla resultat, eller aktivera BirdNET bredvid för bästa täckning."
       }
     },
     "security": {
@@ -3927,6 +3947,8 @@
         "operators": {
           "is": "är",
           "is_not": "är inte",
+          "in": "finns i listan",
+          "not_in": "finns inte i listan",
           "contains": "innehåller",
           "not_contains": "innehåller inte",
           "greater_than": "större än",
@@ -4191,7 +4213,31 @@
       "playbackSpeed": "Uppspelningshastighet",
       "speed": "Hastighet",
       "loop": "Växla upprepning",
-      "player": "Ljudspelare"
+      "player": "Ljudspelare",
+      "autoplayBlocked": "Klicka för att spela (autouppspelning blockerad)",
+      "hlsNotSupported": "HLS-uppspelning stöds inte i den här webbläsaren",
+      "streamStarting": "Startar ljudström...",
+      "levelFor": "Ljudnivå för {source}",
+      "levelForNoSource": "Ljudnivå: ingen källa",
+      "noSource": "Ingen källa",
+      "levelAnnouncement": "Aktuell ljudnivå: {level} procent",
+      "levelAnnouncementClipping": "Aktuell ljudnivå: {level} procent, klippning upptäckt",
+      "sourceSelection": "Val av ljudkälla",
+      "sources": "Ljudkällor",
+      "noSourcesAvailable": "Inga ljudkällor tillgängliga",
+      "silent": "(tyst)",
+      "stopPlayback": "Stoppa ljuduppspelning",
+      "startPlayback": "Starta ljuduppspelning",
+      "nowPlaying": "Spelar nu ljud från {source}",
+      "nowPlayingNoSource": "Spelar upp ljud",
+      "playbackStopped": "Ljuduppspelning stoppad",
+      "loginRequired": "Inloggning krävs för att strömma ljud",
+      "streamError": "Fel vid start av ström",
+      "streamTitle": "Fågelljudström - {source}",
+      "streamTitleDefault": "Fågelljudström",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Livestream",
+      "playbackError": "Uppspelningsfel: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammet har inte genererats ännu",
@@ -4416,6 +4462,16 @@
       "hostRequired": "Värdparameter krävs",
       "invalidHost": "Ogiltig värdparameter",
       "rateLimit": "För många anslutningsförsök till aviseringsströmmen, vänta innan du försöker igen"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Ogiltig begärandekropp",
+        "urlRequired": "Ström-URL krävs",
+        "invalidUrl": "Ogiltigt URL-format. Ange en fullständig URL, t.ex. rtsp://värd:port/sökväg",
+        "unsupportedScheme": "URL-schema \"{scheme}\" stöds inte. Använd rtsp, rtsps, http, https, rtmp eller udp",
+        "blockedDestination": "Denna destination är blockerad av säkerhetsskäl",
+        "connectionFailed": "Kunde inte ansluta till strömmen. Kontrollera att URL:en är korrekt och att strömmen är tillgänglig"
+      }
     },
     "debug": {
       "notEnabled": "Felsökningsläge är inte aktiverat"
@@ -4774,11 +4830,9 @@
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Uppdatera",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4790,6 +4844,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Allt OK",
+      "needsAttention": "Kräver uppmärksamhet",
+      "failing": "Misslyckas",
+      "allClear": "Inga problem",
+      "noData": "Inga data",
+      "none": "Inga"
+    },
+    "diagnostics": "Diagnostik",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4825,6 +4888,24 @@
       "errorComponent": "Komponent",
       "errorLevel": "Nivå",
       "errorMessage": "Meddelande"
+    },
+    "window": {
+      "label": "Utvärderingsfönster",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Senaste händelse",
+      "recentEvents": "Senaste händelser",
+      "time": "Tid",
+      "source": "Källa",
+      "count": "Antal",
+      "lifetime": "totalt",
+      "sparklineLabel": "Aktivitetsdiagram"
     }
   }
 }

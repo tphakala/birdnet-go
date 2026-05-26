@@ -1,12 +1,14 @@
 package v2
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"gorm.io/gorm"
@@ -93,12 +95,27 @@ func (m *StateManager) StartMigration(totalRecords int64) error {
 		return startErr
 	}
 
+	events.Emit(context.Background(), "migration", "state_transition", "Migration state changed", map[string]any{
+		"from_state":    "idle",
+		"to_state":      "initializing",
+		"total_records": totalRecords,
+	})
+
 	return nil
 }
 
 // TransitionToDualWrite transitions from INITIALIZING to DUAL_WRITE.
 func (m *StateManager) TransitionToDualWrite() error {
-	return m.transitionState(entities.MigrationStatusInitializing, entities.MigrationStatusDualWrite)
+	if err := m.transitionState(entities.MigrationStatusInitializing, entities.MigrationStatusDualWrite); err != nil {
+		return err
+	}
+
+	events.Emit(context.Background(), "migration", "state_transition", "Migration state changed", map[string]any{
+		"from_state": "initializing",
+		"to_state":   "dual_write",
+	})
+
+	return nil
 }
 
 // Pause transitions from DUAL_WRITE or MIGRATING to PAUSED.
@@ -111,6 +128,12 @@ func (m *StateManager) Pause() error {
 	pausableStates := []entities.MigrationStatus{
 		entities.MigrationStatusDualWrite,
 		entities.MigrationStatusMigrating,
+	}
+
+	// Read the current state before the update so we can emit the actual from_state.
+	var currentState entities.MigrationState
+	if err := m.db.First(&currentState).Error; err != nil {
+		currentState.State = "unknown"
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
@@ -129,6 +152,11 @@ func (m *StateManager) Pause() error {
 		return fmt.Errorf("cannot pause migration: current state is %s", current.State)
 	}
 
+	events.Emit(context.Background(), "migration", "state_transition", "Migration state changed", map[string]any{
+		"from_state": string(currentState.State),
+		"to_state":   "paused",
+	})
+
 	return nil
 }
 
@@ -144,7 +172,16 @@ func (m *StateManager) Pause() error {
 // DUAL_WRITE simply restarts the state machine loop. The worker will see LastMigratedID=50000
 // and continue from ID 50001, eventually transitioning back through MIGRATING → VALIDATING.
 func (m *StateManager) Resume() error {
-	return m.transitionState(entities.MigrationStatusPaused, entities.MigrationStatusDualWrite)
+	if err := m.transitionState(entities.MigrationStatusPaused, entities.MigrationStatusDualWrite); err != nil {
+		return err
+	}
+
+	events.Emit(context.Background(), "migration", "state_transition", "Migration state changed", map[string]any{
+		"from_state": "paused",
+		"to_state":   "dual_write",
+	})
+
+	return nil
 }
 
 // Fail transitions from VALIDATING to FAILED.
@@ -152,32 +189,77 @@ func (m *StateManager) Resume() error {
 // Unlike Pause, this indicates a validation failure that requires explicit
 // retry rather than a simple resume.
 func (m *StateManager) Fail() error {
-	return m.transitionState(entities.MigrationStatusValidating, entities.MigrationStatusFailed)
+	if err := m.transitionState(entities.MigrationStatusValidating, entities.MigrationStatusFailed); err != nil {
+		return err
+	}
+
+	events.Emit(context.Background(), "migration", "state_transition", "Migration state changed", map[string]any{
+		"from_state": "validating",
+		"to_state":   "failed",
+	})
+
+	return nil
 }
 
 // RetryValidation transitions from FAILED back to VALIDATING.
 // This allows re-running validation after a failure, without restarting the
 // entire migration from DUAL_WRITE (which Resume would do from PAUSED).
 func (m *StateManager) RetryValidation() error {
-	return m.transitionState(entities.MigrationStatusFailed, entities.MigrationStatusValidating)
+	if err := m.transitionState(entities.MigrationStatusFailed, entities.MigrationStatusValidating); err != nil {
+		return err
+	}
+
+	events.Emit(context.Background(), "migration", "state_transition", "Migration state changed", map[string]any{
+		"from_state": "failed",
+		"to_state":   "validating",
+	})
+
+	return nil
 }
 
 // TransitionToMigrating transitions from DUAL_WRITE to MIGRATING.
 // This is called when the migration worker starts processing records.
 func (m *StateManager) TransitionToMigrating() error {
-	return m.transitionState(entities.MigrationStatusDualWrite, entities.MigrationStatusMigrating)
+	if err := m.transitionState(entities.MigrationStatusDualWrite, entities.MigrationStatusMigrating); err != nil {
+		return err
+	}
+
+	events.Emit(context.Background(), "migration", "state_transition", "Migration state changed", map[string]any{
+		"from_state": "dual_write",
+		"to_state":   "migrating",
+	})
+
+	return nil
 }
 
 // TransitionToValidating transitions from MIGRATING to VALIDATING.
 // This is called when all records have been migrated.
 func (m *StateManager) TransitionToValidating() error {
-	return m.transitionState(entities.MigrationStatusMigrating, entities.MigrationStatusValidating)
+	if err := m.transitionState(entities.MigrationStatusMigrating, entities.MigrationStatusValidating); err != nil {
+		return err
+	}
+
+	events.Emit(context.Background(), "migration", "state_transition", "Migration state changed", map[string]any{
+		"from_state": "migrating",
+		"to_state":   "validating",
+	})
+
+	return nil
 }
 
 // TransitionToCutover transitions from VALIDATING to CUTOVER.
 // This is called when validation passes.
 func (m *StateManager) TransitionToCutover() error {
-	return m.transitionState(entities.MigrationStatusValidating, entities.MigrationStatusCutover)
+	if err := m.transitionState(entities.MigrationStatusValidating, entities.MigrationStatusCutover); err != nil {
+		return err
+	}
+
+	events.Emit(context.Background(), "migration", "state_transition", "Migration state changed", map[string]any{
+		"from_state": "validating",
+		"to_state":   "cutover",
+	})
+
+	return nil
 }
 
 // Complete transitions from CUTOVER to COMPLETED.
@@ -210,6 +292,11 @@ func (m *StateManager) Complete() error {
 		reportStateTransitionError(string(entities.MigrationStatusCutover), string(entities.MigrationStatusCompleted), completeErr)
 		return completeErr
 	}
+
+	events.Emit(context.Background(), "migration", "state_transition", "Migration state changed", map[string]any{
+		"from_state": "cutover",
+		"to_state":   "completed",
+	})
 
 	return nil
 }

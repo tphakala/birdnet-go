@@ -85,7 +85,7 @@ var EmbeddedCatalog = []CatalogEntry{
 	{
 		ID:              "perch-v2",
 		Name:            "Google Perch v2",
-		Description:     "Google Perch v2 classifier with approximately 14,795 species (scientific names only)",
+		Description:     "Google Perch v2 multi-taxa classifier with approximately 14,795 species including birds, insects, amphibians, and mammals (scientific names only)",
 		Author:          "Google Research",
 		License:         "Apache-2.0",
 		CommercialUse:   true,

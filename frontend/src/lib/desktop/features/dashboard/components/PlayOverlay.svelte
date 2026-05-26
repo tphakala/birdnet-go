@@ -82,6 +82,7 @@
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
   const MAX_AUDIO_RETRIES = 3;
   const AUDIO_RETRY_DELAYS = [1000, 2000, 4000];
+  const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
 
   // Web Audio API
   let audioContext: AudioContext | null = null;
@@ -365,10 +366,12 @@
       canplayTimeoutId = undefined;
     }
 
+    const isPermanentError = audioElement?.error?.code === MEDIA_ERR_SRC_NOT_SUPPORTED;
+
     // Retry transparently if user initiated play and retries remain.
     // This handles the case where the audio clip is still being written
     // to disk when the user clicks play on a freshly detected species.
-    if (isLoading && audioRetryCount < MAX_AUDIO_RETRIES) {
+    if (isLoading && !isPermanentError && audioRetryCount < MAX_AUDIO_RETRIES) {
       const delay = AUDIO_RETRY_DELAYS[Math.min(audioRetryCount, AUDIO_RETRY_DELAYS.length - 1)];
       audioRetryCount++;
       logger.debug('Audio load failed, retrying', {
@@ -445,7 +448,8 @@
 
         // Stop audio playback to prevent resource leaks
         audioElement.pause();
-        audioElement.src = '';
+        audioElement.removeAttribute('src');
+        audioElement.load();
       }
 
       // Clean up Web Audio API using shared utilities
