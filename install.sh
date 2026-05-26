@@ -1884,12 +1884,30 @@ check_existing_installation_owner() {
     _check_install_home() {
         local install_home="$1"
         if [ -n "$install_home" ] && [ "$install_home" != "$HOME" ]; then
-            found_other_install=true
-            other_path="${install_home}/birdnet-go-app"
+            local candidate_path="${install_home}/birdnet-go-app"
+            # Verify the detected path actually exists on disk before flagging.
+            # Stale systemd service files or Docker container metadata can
+            # reference paths that no longer (or never) existed, causing
+            # false-positive migration prompts (see issue #3273).
+            local path_exists=false
             if [ "$install_home" = "/root" ]; then
-                other_user="root"
+                # /root is typically mode 700; use non-interactive sudo
+                if sudo -n test -d "$candidate_path" 2>/dev/null; then
+                    path_exists=true
+                fi
             else
-                other_user=$(basename "$install_home")
+                if [ -d "$candidate_path" ]; then
+                    path_exists=true
+                fi
+            fi
+            if [ "$path_exists" = true ]; then
+                found_other_install=true
+                other_path="$candidate_path"
+                if [ "$install_home" = "/root" ]; then
+                    other_user="root"
+                else
+                    other_user=$(basename "$install_home")
+                fi
             fi
         fi
     }
