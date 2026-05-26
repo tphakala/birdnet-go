@@ -18,6 +18,7 @@ Props:
   import { t } from '$lib/i18n';
   import type { PendingDetection } from '$lib/types/pending.types';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { settingsStore } from '$lib/stores/settings';
 
   interface Props {
     detections: PendingDetection[];
@@ -123,8 +124,12 @@ Props:
     return elapsedTexts[key] ?? '';
   }
 
-  // Show source column only when multiple sources are present
-  let hasMultipleSources = $derived(new Set(displayDetections.map(d => d.source)).size > 1);
+  // Show source when the instance has multiple audio sources configured
+  let hasMultipleSources = $derived(
+    ($settingsStore?.formData?.realtime?.audio?.sources?.length ?? 0) +
+      ($settingsStore?.formData?.realtime?.rtsp?.streams?.length ?? 0) >=
+      2
+  );
 
   // Clean up pending timers on component destroy
   $effect(() => {
