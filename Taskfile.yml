@@ -209,7 +209,9 @@ tasks:
 
           # Audio capture library (required at runtime for microphone access)
           # and tools for full test coverage (spectrogram, audio duration, clip export)
-          $SUDO apt-get install -y libasound2 ffmpeg sox
+          # Use libasound2-dev which works on both Debian/Ubuntu <24.04 (libasound2)
+          # and Ubuntu 24.04+ (libasound2t64 via time_t transition)
+          $SUDO apt-get install -y libasound2-dev ffmpeg sox
 
           # Install Go if not present or version is too old
           # Version comes from go.mod via Taskfile var
@@ -605,7 +607,7 @@ tasks:
             echo "✅ ALSA (libasound2): installed"
           else
             echo "❌ ALSA (libasound2): not found (audio capture will fail at runtime)"
-            echo "   Install with: sudo apt-get install libasound2"
+            echo "   Install with: sudo apt-get install libasound2-dev"
           fi
         fi
 
@@ -617,8 +619,11 @@ tasks:
           Linux_*) ONNX_LIB_DIR="{{.SYSTEM_LIB_DIR}}";;
           *) echo "⚠️  ONNX Runtime: unsupported platform $(uname -s)_$(uname -m), skipping check";;
         esac
-        if [ -n "${ONNX_LIB_DIR}" ] && ls "${ONNX_LIB_DIR}"/libonnxruntime.* >/dev/null 2>&1; then
-          echo "✅ ONNX Runtime: installed in ${ONNX_LIB_DIR}"
+        if [ -n "${ONNX_LIB_DIR}" ] && ls "${ONNX_LIB_DIR}"/libonnxruntime.*{{.ONNXRUNTIME_VERSION}}* >/dev/null 2>&1; then
+          echo "✅ ONNX Runtime: {{.ONNXRUNTIME_VERSION}} installed in ${ONNX_LIB_DIR}"
+        elif [ -n "${ONNX_LIB_DIR}" ] && ls "${ONNX_LIB_DIR}"/libonnxruntime.* >/dev/null 2>&1; then
+          echo "⚠️  ONNX Runtime: installed in ${ONNX_LIB_DIR} but version {{.ONNXRUNTIME_VERSION}} not found"
+          echo "   Update with: task download-onnxruntime"
         else
           echo "⚠️  ONNX Runtime: not found (required for ONNX models including BirdNET v3.0)"
           echo "   Install with: task download-onnxruntime"
@@ -1275,11 +1280,6 @@ tasks:
           esac
     cmds:
       - |
-        if ls "{{.ONNX_LIB_DIR}}"/{{.ONNX_LIB_NAME}}*{{.ONNXRUNTIME_VERSION}}* >/dev/null 2>&1; then
-          echo "ONNX Runtime {{.ONNXRUNTIME_VERSION}} already installed at {{.ONNX_LIB_DIR}}"
-          exit 0
-        fi
-
         echo "Downloading ONNX Runtime {{.ONNXRUNTIME_VERSION}}..."
         curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v{{.ONNXRUNTIME_VERSION}}/{{.ONNX_ARCHIVE}}" \
           -o /tmp/onnxruntime.tgz
