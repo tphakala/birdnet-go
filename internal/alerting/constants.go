@@ -50,6 +50,8 @@ const (
 const (
 	OperatorIs             = "is"
 	OperatorIsNot          = "is_not"
+	OperatorIn             = "in"
+	OperatorNotIn          = "not_in"
 	OperatorContains       = "contains"
 	OperatorNotContains    = "not_contains"
 	OperatorGreaterThan    = "greater_than"

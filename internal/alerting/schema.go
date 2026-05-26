@@ -46,7 +46,7 @@ type OperatorSchema struct {
 }
 
 // stringOperators are operators valid for string properties.
-var stringOperators = []string{OperatorIs, OperatorIsNot, OperatorContains, OperatorNotContains}
+var stringOperators = []string{OperatorIs, OperatorIsNot, OperatorIn, OperatorNotIn, OperatorContains, OperatorNotContains}
 
 // numericOperators are operators valid for numeric properties.
 var numericOperators = []string{OperatorGreaterThan, OperatorLessThan, OperatorGreaterOrEqual, OperatorLessOrEqual}
@@ -112,6 +112,8 @@ func GetSchema() Schema {
 		Operators: []OperatorSchema{
 			{Name: OperatorIs, Label: "is", Type: "string"},
 			{Name: OperatorIsNot, Label: "is not", Type: "string"},
+			{Name: OperatorIn, Label: "is in list", Type: "string"},
+			{Name: OperatorNotIn, Label: "is not in list", Type: "string"},
 			{Name: OperatorContains, Label: "contains", Type: "string"},
 			{Name: OperatorNotContains, Label: "does not contain", Type: "string"},
 			{Name: OperatorGreaterThan, Label: "greater than", Type: "number"},

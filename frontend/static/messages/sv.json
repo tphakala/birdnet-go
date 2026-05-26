@@ -3969,6 +3969,8 @@
         "operators": {
           "is": "är",
           "is_not": "är inte",
+          "in": "finns i listan",
+          "not_in": "finns inte i listan",
           "contains": "innehåller",
           "not_contains": "innehåller inte",
           "greater_than": "större än",
