@@ -3947,6 +3947,8 @@
         "operators": {
           "is": "ir",
           "is_not": "nav",
+          "in": "ir sarakstā",
+          "not_in": "nav sarakstā",
           "contains": "satur",
           "not_contains": "nesatur",
           "greater_than": "lielāks par",

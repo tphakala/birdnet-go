@@ -2647,6 +2647,8 @@ export type TranslationKey =
   | 'settings.alerts.schema.properties.broker'
   | 'settings.alerts.schema.operators.is'
   | 'settings.alerts.schema.operators.is_not'
+  | 'settings.alerts.schema.operators.in'
+  | 'settings.alerts.schema.operators.not_in'
   | 'settings.alerts.schema.operators.contains'
   | 'settings.alerts.schema.operators.not_contains'
   | 'settings.alerts.schema.operators.greater_than'

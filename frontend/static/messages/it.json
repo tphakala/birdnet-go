@@ -3947,6 +3947,8 @@
         "operators": {
           "is": "è",
           "is_not": "non è",
+          "in": "è nell'elenco",
+          "not_in": "non è nell'elenco",
           "contains": "contiene",
           "not_contains": "non contiene",
           "greater_than": "maggiore di",

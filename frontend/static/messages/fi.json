@@ -3947,6 +3947,8 @@
         "operators": {
           "is": "on",
           "is_not": "ei ole",
+          "in": "on luettelossa",
+          "not_in": "ei ole luettelossa",
           "contains": "sisältää",
           "not_contains": "ei sisällä",
           "greater_than": "suurempi kuin",
