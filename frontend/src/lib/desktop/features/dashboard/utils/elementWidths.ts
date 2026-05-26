@@ -21,10 +21,6 @@ export function getEffectiveWidth(el: DashboardElement): 'full' | 'half' {
   return el.width === 'half' ? 'half' : 'full';
 }
 
-/**
- * Returns responsive grid span classes for dashboard elements.
- * Full-width elements occupy the single mobile column and span both columns from md up.
- */
 export function getResponsiveGridSpanClass(el: DashboardElement): string {
   return getEffectiveWidth(el) === 'half' ? 'col-span-1' : 'col-span-1 md:col-span-2';
 }
