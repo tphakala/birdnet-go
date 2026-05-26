@@ -456,7 +456,7 @@ Performance Optimizations:
     try {
       const response = await fetch(
         buildAppUrl(
-          `/api/v2/detections/recent?limit=${Math.max(detectionLimit, MIN_FETCH_LIMIT)}&includeWeather=true`
+          `/api/v2/detections/recent?limit=${Math.max(detectionLimit, MIN_FETCH_LIMIT)}&includeWeather=true&aboveThreshold=true`
         )
       );
       if (!response.ok) {

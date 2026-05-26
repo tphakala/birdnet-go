@@ -56,6 +56,9 @@ type DetectionRepository interface {
 	// GetRecent retrieves the most recent detections with preloaded relations.
 	GetRecent(ctx context.Context, limit int) ([]*entities.Detection, error)
 
+	// GetRecentWithMinimumConfidence retrieves the most recent detections at or above minConfidence.
+	GetRecentWithMinimumConfidence(ctx context.Context, limit int, minConfidence float64) ([]*entities.Detection, error)
+
 	// GetByLabel retrieves detections for a specific label.
 	// Returns results, total count, and any error.
 	GetByLabel(ctx context.Context, labelID uint, limit, offset int) ([]*entities.Detection, int64, error)

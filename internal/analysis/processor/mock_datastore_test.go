@@ -166,6 +166,9 @@ func (m *ActionMockDatastore) SpeciesDetections(_, _, _ string, _ int, _ bool, _
 func (m *ActionMockDatastore) GetLastDetections(_ int) ([]datastore.Note, error) {
 	return nil, nil
 }
+func (m *ActionMockDatastore) GetLastDetectionsWithMinimumConfidence(_ int, _ float64) ([]datastore.Note, error) {
+	return nil, nil
+}
 func (m *ActionMockDatastore) GetAllDetectedSpecies() ([]datastore.Note, error) {
 	return nil, nil
 }

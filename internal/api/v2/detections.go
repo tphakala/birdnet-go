@@ -39,6 +39,7 @@ const (
 	detectionCacheExpiry  = 5 * time.Minute  // Default cache expiration
 	detectionCacheCleanup = 10 * time.Minute // Cache cleanup interval
 	defaultNumResults     = 100              // Default number of results
+	defaultRecentLimit    = 10               // Default number of recent detections
 	maxNumResults         = 1000             // Maximum number of results
 	sunEventWindowMinutes = 30               // Minutes before/after sunrise/sunset
 	minHourRangeParts     = 2                // Minimum parts for hour range parsing
@@ -1206,22 +1207,39 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 // Query parameters:
 // - limit: number of detections to return (default: 10)
 // - includeWeather: whether to include weather data (default: false)
+// - aboveThreshold: whether to only return detections at or above the global BirdNET threshold (default: false)
 func (c *Controller) GetRecentDetections(ctx echo.Context) error {
 	limit, _ := strconv.Atoi(ctx.QueryParam("limit"))
 	if limit <= 0 {
-		limit = 10
+		limit = defaultRecentLimit
 	}
 
 	// Check if weather data should be included
 	includeWeather := ctx.QueryParam("includeWeather") == QueryValueTrue
 
-	notes, err := c.DS.GetLastDetections(limit)
+	var (
+		notes []datastore.Note
+		err   error
+	)
+	if ctx.QueryParam("aboveThreshold") == QueryValueTrue {
+		notes, err = c.DS.GetLastDetectionsWithMinimumConfidence(limit, c.recentDetectionsMinConfidence())
+	} else {
+		notes, err = c.DS.GetLastDetections(limit)
+	}
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get recent detections", http.StatusInternalServerError)
 	}
 
 	detections := c.convertNotesToDetectionResponses(notes, includeWeather)
 	return ctx.JSON(http.StatusOK, detections)
+}
+
+func (c *Controller) recentDetectionsMinConfidence() float64 {
+	settings := c.currentSettings()
+	if settings == nil {
+		return 0
+	}
+	return settings.BirdNET.Threshold
 }
 
 // DeleteDetection deletes a detection by ID

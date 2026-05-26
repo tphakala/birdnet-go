@@ -2630,6 +2630,65 @@ func (_c *MockInterface_GetLastDetections_Call) RunAndReturn(run func(int) ([]da
 	return _c
 }
 
+// GetLastDetectionsWithMinimumConfidence provides a mock function with given fields: numDetections, minConfidence
+func (_m *MockInterface) GetLastDetectionsWithMinimumConfidence(numDetections int, minConfidence float64) ([]datastore.Note, error) {
+	ret := _m.Called(numDetections, minConfidence)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetLastDetectionsWithMinimumConfidence")
+	}
+
+	var r0 []datastore.Note
+	var r1 error
+	if rf, ok := ret.Get(0).(func(int, float64) ([]datastore.Note, error)); ok {
+		return rf(numDetections, minConfidence)
+	}
+	if rf, ok := ret.Get(0).(func(int, float64) []datastore.Note); ok {
+		r0 = rf(numDetections, minConfidence)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.Note)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(int, float64) error); ok {
+		r1 = rf(numDetections, minConfidence)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetLastDetectionsWithMinimumConfidence_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetLastDetectionsWithMinimumConfidence'
+type MockInterface_GetLastDetectionsWithMinimumConfidence_Call struct {
+	*mock.Call
+}
+
+// GetLastDetectionsWithMinimumConfidence is a helper method to define mock.On call
+//   - numDetections int
+//   - minConfidence float64
+func (_e *MockInterface_Expecter) GetLastDetectionsWithMinimumConfidence(numDetections interface{}, minConfidence interface{}) *MockInterface_GetLastDetectionsWithMinimumConfidence_Call {
+	return &MockInterface_GetLastDetectionsWithMinimumConfidence_Call{Call: _e.mock.On("GetLastDetectionsWithMinimumConfidence", numDetections, minConfidence)}
+}
+
+func (_c *MockInterface_GetLastDetectionsWithMinimumConfidence_Call) Run(run func(numDetections int, minConfidence float64)) *MockInterface_GetLastDetectionsWithMinimumConfidence_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int), args[1].(float64))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetLastDetectionsWithMinimumConfidence_Call) Return(_a0 []datastore.Note, _a1 error) *MockInterface_GetLastDetectionsWithMinimumConfidence_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetLastDetectionsWithMinimumConfidence_Call) RunAndReturn(run func(int, float64) ([]datastore.Note, error)) *MockInterface_GetLastDetectionsWithMinimumConfidence_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetLockedNotesClipPaths provides a mock function with no fields
 func (_m *MockInterface) GetLockedNotesClipPaths() ([]string, error) {
 	ret := _m.Called()

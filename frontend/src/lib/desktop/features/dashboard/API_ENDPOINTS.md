@@ -42,6 +42,9 @@ const dailySummary = await response.json();
 **Query Parameters:**
 
 - `limit` (optional): Number of recent detections to return, default: 10
+- `aboveThreshold` (optional): When `true`, only return detections at or above the global BirdNET confidence threshold
+
+By default, this endpoint returns the latest detections without threshold filtering. The dashboard uses `aboveThreshold=true` so recent detections match notification-worthy detections.
 
 **Response:**
 
@@ -68,7 +71,7 @@ const dailySummary = await response.json();
 **Usage in Svelte:**
 
 ```typescript
-const response = await fetch('/api/v2/detections/recent?limit=10');
+const response = await fetch('/api/v2/detections/recent?limit=10&aboveThreshold=true');
 const recentDetections = await response.json();
 ```
 

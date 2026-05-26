@@ -865,6 +865,7 @@ func TestGetRecentDetections(t *testing.T) {
 	testCases := []struct {
 		name           string
 		limit          string
+		aboveThreshold bool
 		mockSetup      func(*mock.Mock)
 		expectedStatus int
 		expectedCount  int
@@ -873,7 +874,8 @@ func TestGetRecentDetections(t *testing.T) {
 			name:  "Default limit",
 			limit: "",
 			mockSetup: func(m *mock.Mock) {
-				m.On("GetLastDetections", 10).Return(mockNotes, nil)
+				m.On("GetLastDetections", defaultRecentLimit).
+					Return(mockNotes, nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -882,7 +884,19 @@ func TestGetRecentDetections(t *testing.T) {
 			name:  "Custom limit",
 			limit: "5",
 			mockSetup: func(m *mock.Mock) {
-				m.On("GetLastDetections", 5).Return(mockNotes, nil)
+				m.On("GetLastDetections", 5).
+					Return(mockNotes, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+		},
+		{
+			name:           "Above global threshold",
+			limit:          "5",
+			aboveThreshold: true,
+			mockSetup: func(m *mock.Mock) {
+				m.On("GetLastDetectionsWithMinimumConfidence", 5, 0.8).
+					Return(mockNotes, nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -891,7 +905,8 @@ func TestGetRecentDetections(t *testing.T) {
 			name:  "Database error",
 			limit: "5",
 			mockSetup: func(m *mock.Mock) {
-				m.On("GetLastDetections", 5).Return([]datastore.Note{}, errors.New("database error"))
+				m.On("GetLastDetections", 5).
+					Return([]datastore.Note{}, errors.New("database error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedCount:  0,
@@ -906,11 +921,14 @@ func TestGetRecentDetections(t *testing.T) {
 
 			// Create request
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/recent", http.NoBody)
+			q := req.URL.Query()
 			if tc.limit != "" {
-				q := req.URL.Query()
 				q.Add("limit", tc.limit)
-				req.URL.RawQuery = q.Encode()
 			}
+			if tc.aboveThreshold {
+				q.Add("aboveThreshold", QueryValueTrue)
+			}
+			req.URL.RawQuery = q.Encode()
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 

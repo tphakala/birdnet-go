@@ -1347,6 +1347,16 @@ func (ds *Datastore) GetLastDetections(numDetections int) ([]datastore.Note, err
 	return ds.detectionsToNotes(dets), nil
 }
 
+// GetLastDetectionsWithMinimumConfidence retrieves the last N detections at or above minConfidence.
+func (ds *Datastore) GetLastDetectionsWithMinimumConfidence(numDetections int, minConfidence float64) ([]datastore.Note, error) {
+	ctx := context.Background()
+	dets, err := ds.detection.GetRecentWithMinimumConfidence(ctx, numDetections, minConfidence)
+	if err != nil {
+		return nil, err
+	}
+	return ds.detectionsToNotes(dets), nil
+}
+
 // GetAllDetectedSpecies retrieves all detected species.
 func (ds *Datastore) GetAllDetectedSpecies() ([]datastore.Note, error) {
 	ctx := context.Background()

@@ -683,7 +683,10 @@ func (s *testLegacyInterface) SpeciesDetections(_, _, _ string, _ int, _ bool, _
 	return nil, nil
 }
 func (s *testLegacyInterface) GetLastDetections(_ int) ([]datastore.Note, error) { return nil, nil }
-func (s *testLegacyInterface) GetAllDetectedSpecies() ([]datastore.Note, error)  { return nil, nil }
+func (s *testLegacyInterface) GetLastDetectionsWithMinimumConfidence(_ int, _ float64) ([]datastore.Note, error) {
+	return nil, nil
+}
+func (s *testLegacyInterface) GetAllDetectedSpecies() ([]datastore.Note, error) { return nil, nil }
 func (s *testLegacyInterface) SearchNotes(_ string, _ bool, _, _ int) ([]datastore.Note, int64, error) {
 	return nil, 0, nil
 }

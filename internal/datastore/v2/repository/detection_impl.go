@@ -417,6 +417,24 @@ func (r *detectionRepository) GetRecent(ctx context.Context, limit int) ([]*enti
 	return dets, nil
 }
 
+// GetRecentWithMinimumConfidence retrieves the most recent detections at or above minConfidence with relations.
+func (r *detectionRepository) GetRecentWithMinimumConfidence(ctx context.Context, limit int, minConfidence float64) ([]*entities.Detection, error) {
+	var dets []*entities.Detection
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("confidence >= ?", minConfidence).
+		Order("detected_at DESC").
+		Limit(limit).
+		Find(&dets).Error
+	if err != nil {
+		return nil, err
+	}
+
+	if err := r.loadRelationsForDetections(ctx, dets); err != nil {
+		return nil, err
+	}
+	return dets, nil
+}
+
 // loadRelationsForDetections loads Label, Model, Source for multiple detections.
 // Returns error if any relation lookup fails.
 func (r *detectionRepository) loadRelationsForDetections(ctx context.Context, dets []*entities.Detection) error {

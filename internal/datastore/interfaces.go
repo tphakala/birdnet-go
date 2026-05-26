@@ -110,6 +110,7 @@ type Interface interface {
 	GetBatchHourlyOccurrences(date string, species []string, minConfidence float64) (map[string][24]int, error)
 	SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetLastDetections(numDetections int) ([]Note, error)
+	GetLastDetectionsWithMinimumConfidence(numDetections int, minConfidence float64) ([]Note, error)
 	GetAllDetectedSpecies() ([]Note, error)
 	SearchNotes(query string, sortAscending bool, limit int, offset int) ([]Note, int64, error)
 	SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note, int64, error)
@@ -898,13 +899,28 @@ func (ds *DataStore) SpeciesDetections(species, date, hour string, duration int,
 
 // GetLastDetections retrieves the most recent bird detections.
 func (ds *DataStore) GetLastDetections(numDetections int) ([]Note, error) {
+	return ds.getLastDetections(numDetections, 0, false)
+}
+
+// GetLastDetectionsWithMinimumConfidence retrieves the most recent bird detections
+// whose confidence is at or above minConfidence.
+func (ds *DataStore) GetLastDetectionsWithMinimumConfidence(numDetections int, minConfidence float64) ([]Note, error) {
+	return ds.getLastDetections(numDetections, minConfidence, true)
+}
+
+func (ds *DataStore) getLastDetections(numDetections int, minConfidence float64, filterConfidence bool) ([]Note, error) {
 	var notes []Note
 	now := time.Now()
 
-	// Retrieve the most recent detections based on the ID in descending order
-	if result := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
+	query := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC") // Order comments by creation time, newest first
-	}).Order("id DESC").Limit(numDetections).Find(&notes); result.Error != nil {
+	})
+	if filterConfidence {
+		query = query.Where("confidence >= ?", minConfidence)
+	}
+
+	// Retrieve the most recent detections based on the ID in descending order
+	if result := query.Order("id DESC").Limit(numDetections).Find(&notes); result.Error != nil {
 		return nil, errors.New(result.Error).
 			Component("datastore").
 			Category(errors.CategoryDatabase).

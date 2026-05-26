@@ -246,8 +246,9 @@ func TestGetRecentDetections_DefaultParams(t *testing.T) {
 
 	notes := testNotes()
 
-	// Default limit is 10
-	mockDS.On("GetLastDetections", 10).Return(notes, nil).Once()
+	mockDS.On("GetLastDetections", defaultRecentLimit).
+		Return(notes, nil).
+		Once()
 
 	rec := executeRequest(t, e, http.MethodGet, "/api/v2/detections/recent", controller.GetRecentDetections)
 

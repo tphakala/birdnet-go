@@ -68,6 +68,9 @@ func (m *MockDatastore) SpeciesDetections(string, string, string, int, bool, int
 func (m *MockDatastore) GetLastDetections(int) ([]datastore.Note, error) {
 	return make([]datastore.Note, 0), nil
 }
+func (m *MockDatastore) GetLastDetectionsWithMinimumConfidence(int, float64) ([]datastore.Note, error) {
+	return make([]datastore.Note, 0), nil
+}
 func (m *MockDatastore) GetAllDetectedSpecies() ([]datastore.Note, error) {
 	return make([]datastore.Note, 0), nil
 }
