@@ -67,6 +67,9 @@ var (
 	ErrNotificationHistoryNotFound = errors.Newf("notification history not found").Component("datastore").Category(errors.CategoryNotFound).Build()
 	// ErrDBNotConnected indicates the database is not connected, but partial stats may be available.
 	ErrDBNotConnected = errors.Newf("database not connected").Component("datastore").Category(errors.CategorySystem).Build()
+	// ErrDetectionLocked indicates the requested detection is locked and
+	// cannot be modified. Callers should map this to 409 Conflict.
+	ErrDetectionLocked = errors.Newf("detection is locked").Component("datastore").Category(errors.CategoryDatabase).Build()
 )
 
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.
@@ -117,6 +120,19 @@ type Interface interface {
 	DeleteNoteClipPath(noteID string) error
 	GetNoteReview(noteID string) (*NoteReview, error)
 	SaveNoteReview(review *NoteReview) error
+
+	// CorrectNoteSpecies replaces the species attribution and confidence on
+	// a single detection AND records a 'correct' review, atomically.
+	// Implementations write to whichever schema is canonical for them: the
+	// legacy v1 store updates the notes row (guarded against note_locks)
+	// and upserts note_reviews in one transaction; the v2-only adapter
+	// routes the change through the v2 repositories so v2_detections /
+	// v2_ai_models / v2_labels / v2_detection_reviews stay consistent.
+	// The model field is consumed only by v2-aware implementations — v1
+	// notes have no model_id column — but it MUST be set by callers that
+	// target a v2-aware Interface. Callers MUST NOT issue a separate
+	// review write; this method owns it.
+	CorrectNoteSpecies(ctx context.Context, noteID uint, scientific, common string, confidence float64, model detection.ModelInfo) error
 	GetNoteComments(noteID string) ([]NoteComment, error)
 	// GetNoteResults returns the additional predictions for a note.
 	GetNoteResults(noteID string) ([]Results, error)
@@ -1372,6 +1388,59 @@ func (ds *DataStore) SaveNoteReview(review *NoteReview) error {
 		}
 
 		return nil
+	}, ds.getMetrics())
+}
+
+// CorrectNoteSpecies updates the species, common name, and confidence on a
+// detection row in the legacy notes table AND records a 'correct' review,
+// both inside a single transaction. The model argument is ignored — the v1
+// schema has no per-detection model_id column to update; v2-aware Interface
+// implementations (the v2only adapter) consume it instead.
+//
+// The species UPDATE and the note_reviews upsert share one transaction so
+// the operator-facing "correction" is all-or-nothing: a detection never
+// ends up with the new species but stale verification state, or vice
+// versa. The NOT EXISTS guard against note_locks fires atomically with the
+// UPDATE in the same transaction.
+func (ds *DataStore) CorrectNoteSpecies(_ context.Context, noteID uint, scientific, common string, confidence float64, _ detection.ModelInfo) error {
+	return RetryOnLock(context.Background(), "correct_note_species", func() error {
+		return ds.DB.Transaction(func(tx *gorm.DB) error {
+			result := tx.Exec(
+				`UPDATE notes
+				    SET scientific_name = ?, common_name = ?, confidence = ?
+				  WHERE id = ?
+				    AND NOT EXISTS (SELECT 1 FROM note_locks WHERE note_id = ?)`,
+				scientific, common, confidence, noteID, noteID)
+			if result.Error != nil {
+				return errors.New(result.Error).
+					Component("datastore").
+					Category(errors.CategoryDatabase).
+					Context("operation", "correct_note_species").
+					Context("note_id", strconv.FormatUint(uint64(noteID), 10)).
+					Build()
+			}
+			if result.RowsAffected == 0 {
+				return ErrDetectionLocked
+			}
+
+			// Upsert the 'correct' review in the same transaction. GORM's
+			// Where+Assign+FirstOrCreate is dialect-safe (it does a SELECT
+			// then INSERT-or-UPDATE) so this works on both SQLite and MySQL
+			// without hand-written ON CONFLICT clauses.
+			now := time.Now()
+			review := &NoteReview{NoteID: noteID, Verified: "correct"}
+			if err := tx.Where("note_id = ?", noteID).
+				Assign(NoteReview{Verified: "correct", UpdatedAt: now}).
+				FirstOrCreate(review).Error; err != nil {
+				return errors.New(err).
+					Component("datastore").
+					Category(errors.CategoryDatabase).
+					Context("operation", "correct_note_species_review").
+					Context("note_id", strconv.FormatUint(uint64(noteID), 10)).
+					Build()
+			}
+			return nil
+		})
 	}, ds.getMetrics())
 }
 

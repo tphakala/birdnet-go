@@ -52,6 +52,15 @@ type DetectionRepository interface {
 	SetReview(ctx context.Context, id, verified string) error
 	GetReview(ctx context.Context, id string) (string, error)
 
+	// CorrectSpecies replaces a detection's species + confidence and marks
+	// the detection as verified='correct' in one logical operation. The
+	// detection must be unlocked; concurrent lock acquisition between
+	// caller-side checks and this write is reported as ErrDetectionLocked.
+	// Implementations that wrap the v2 schema use params.Model to write
+	// the matching v2_ai_models / v2_labels rows; v1-only implementations
+	// ignore params.Model (the v1 notes table has no model_id column).
+	CorrectSpecies(ctx context.Context, id string, params *CorrectSpeciesParams) error
+
 	// Comment operations
 	AddComment(ctx context.Context, id, comment string) error
 	GetComments(ctx context.Context, id string) ([]detection.Comment, error)
@@ -67,6 +76,32 @@ type DetectionRepository interface {
 	// CountAll returns the total count of all detections.
 	// This is a lightweight count operation that doesn't load any data.
 	CountAll(ctx context.Context) (int64, error)
+}
+
+// CorrectSpeciesParams carries the fields needed to apply an operator-driven
+// species correction. Returned alongside CorrectSpecies on DetectionRepository.
+type CorrectSpeciesParams struct {
+	// ScientificName is the binomial Latin name to write to the detection,
+	// e.g. "Ficedula hypoleuca". Required.
+	ScientificName string
+
+	// CommonName is the locale-appropriate common name to write to the
+	// detection, resolved by the caller from the orchestrator's label
+	// resolver (so v3 geomodel translations stay consistent with the rest
+	// of the UI). Required.
+	CommonName string
+
+	// Confidence is the value to record on the corrected detection. Range
+	// [0, 1]; typically the max confidence the chosen model produced for
+	// this species in the reanalysis pass.
+	Confidence float64
+
+	// Model identifies the classifier the operator chose. Consumed by
+	// v2-aware implementations to look up the matching v2_ai_models row
+	// (and then the (scientific, model) → v2_labels row to write to
+	// v2_detections.label_id). v1-only implementations ignore this; the
+	// v1 notes table has no model_id column.
+	Model detection.ModelInfo
 }
 
 // DetectionFilters defines the filter parameters for detection queries.

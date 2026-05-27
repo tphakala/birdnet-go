@@ -85,6 +85,9 @@ func (m *MockDatastore) GetNoteReview(string) (*datastore.NoteReview, error) {
 	return nil, datastore.ErrNoteReviewNotFound
 }
 func (m *MockDatastore) SaveNoteReview(*datastore.NoteReview) error { return nil }
+func (m *MockDatastore) CorrectNoteSpecies(context.Context, uint, string, string, float64, detection.ModelInfo) error {
+	return nil
+}
 func (m *MockDatastore) GetNoteComments(string) ([]datastore.NoteComment, error) {
 	return make([]datastore.NoteComment, 0), nil
 }

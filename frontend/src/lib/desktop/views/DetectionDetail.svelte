@@ -27,11 +27,13 @@
   import { formatLocalDateTime } from '$lib/utils/date';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
+  import ReanalyzeModal from '$lib/desktop/components/modals/ReanalyzeModal.svelte';
   import {
     Download,
     Camera,
     Clock,
     History,
+    Sparkles,
     StickyNote,
     Sun,
     Moon,
@@ -110,6 +112,9 @@
   let isLoadingTaxonomy = $state(false);
   let detectionError = $state<string | null>(null);
   let imageAttribution = $state<ImageAttribution | null>(null);
+
+  // Reanalyze modal — opens from the metadata bar's "Reanalyze" button.
+  let reanalyzeOpen = $state(false);
 
   // Derived state for subspecies with proper typing
   let subspeciesList = $derived<Subspecies[]>(
@@ -600,6 +605,21 @@
           </a>
         </div>
       {/if}
+
+      <!-- Reanalyze with a different model -->
+      {#if det.clipName && $isAuthenticated}
+        <div class="meta-section">
+          <button
+            type="button"
+            class="meta-download"
+            onclick={() => (reanalyzeOpen = true)}
+            aria-label={t('detections.reanalyze.buttonAriaLabel', { species: det.commonName })}
+          >
+            <Sparkles class="w-4 h-4" />
+            <span>{t('detections.reanalyze.button')}</span>
+          </button>
+        </div>
+      {/if}
     </div>
   </section>
 {/snippet}
@@ -901,6 +921,13 @@
     </section>
   {/if}
 </main>
+
+<ReanalyzeModal
+  isOpen={reanalyzeOpen}
+  detectionId={detection ? detection.id : null}
+  onClose={() => (reanalyzeOpen = false)}
+  onCorrected={() => fetchDetection()}
+/>
 
 <style>
   /* ===========================================

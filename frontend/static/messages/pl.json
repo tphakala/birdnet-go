@@ -435,10 +435,6 @@
         "overloadTitle": "Analiza dźwięku przeciążona",
         "overloadMessage": "System odrzuca {dropRate} % próbek dźwięku ze źródła ''{sourceName}'', ponieważ nie nadąża z analizą. Zmniejsz wartość nakładania BirdNET w ustawieniach wykrywania lub rozważ wymianę procesora na szybszy."
       },
-      "ort": {
-        "unavailableTitle": "ONNX Runtime niedostępny",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} jest wymagany dla {modelName}, ale nie został znaleziony. Zobacz przewodnik instalacji: {installGuideURL}"
-      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",
@@ -458,6 +454,10 @@
           "diskFull": "Dysk jest pełny — zwolnij miejsce",
           "permissionDenied": "Brak uprawnień — sprawdź uprawnienia pliku lub usługi"
         }
+      },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime niedostępny",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} jest wymagany dla {modelName}, ale nie został znaleziony. Zobacz przewodnik instalacji: {installGuideURL}"
       }
     },
     "loading": "Ładowanie powiadomień..."
@@ -788,11 +788,6 @@
       "recording": "Nagranie",
       "actions": "Akcje"
     },
-    "viewToggle": {
-      "label": "Tryb widoku",
-      "table": "Widok tabeli",
-      "cards": "Widok kart"
-    },
     "status": {
       "locked": "Zablokowane"
     },
@@ -813,25 +808,6 @@
     },
     "pagination": {
       "showing": "Pokazywanie {from} do {to} z {total} wyników"
-    },
-    "selection": {
-      "select": "Zaznacz",
-      "nSelected": "Zaznaczono: {count}",
-      "selectAllMatching": "Zaznacz wszystkie {count} pasujących detekcji",
-      "allSelected": "Wszystkie {count} zaznaczone",
-      "clear": "Wyczyść zaznaczenie",
-      "toolbarLabel": "Operacje zbiorcze",
-      "confirmBulkDelete": "Usunąć {count} detekcji? Tej operacji nie można cofnąć.",
-      "confirmBulkMarkCorrect": "Oznaczyć {count} detekcji jako poprawne?",
-      "confirmBulkMarkFalsePositive": "Oznaczyć {count} detekcji jako fałszywie pozytywne?",
-      "confirmBulkLock": "Zablokować {count} detekcji?",
-      "confirmBulkUnlock": "Odblokować {count} detekcji?",
-      "bulkSuccess": "Zaktualizowano {count} detekcji",
-      "bulkDeleteSuccess": "Usunięto {count} detekcji",
-      "bulkPartial": "{processed} zaktualizowano, {skipped} pominięto (zablokowane)",
-      "tooManyDetections": "Zbyt wiele detekcji ({count}). Zawęź filtry, aby zaznaczyć mniej niż 500.",
-      "bulkError": "Operacja zbiorcza nie powiodła się. Spróbuj ponownie.",
-      "switchToTable": "Przełącz na widok tabeli, aby zaznaczyć detekcje"
     },
     "weather": {
       "title": "Informacje o pogodzie",
@@ -855,10 +831,23 @@
         "pressure": "hPa"
       },
       "conditions": {
-        "clearsky": "Czyste Niebo",
+        "clearsky_day": "Czyste Niebo",
+        "clearsky_night": "Czyste Niebo",
+        "fair_day": "Pogodnie",
+        "fair_night": "Pogodnie",
+        "partlycloudy_day": "Częściowe Zachmurzenie",
+        "partlycloudy_night": "Częściowe Zachmurzenie",
         "cloudy": "Pochmurno",
-        "fair": "Pogodnie",
+        "rainshowers_day": "Przelotne Opady",
+        "rainshowers_night": "Przelotne Opady",
+        "rain": "Deszcz",
+        "thunder": "Burza",
+        "sleet": "Deszcz ze Śniegiem",
+        "snow": "Śnieg",
         "fog": "Mgła",
+        "unknown": "Nieznane",
+        "clearsky": "Czyste Niebo",
+        "fair": "Pogodnie",
         "heavyrain": "Silny deszcz",
         "heavyrainandthunder": "Silny deszcz z burzą",
         "heavyrainshowers": "Silne przelotne opady",
@@ -884,24 +873,21 @@
         "lightssleetshowersandthunder": "Słabe przelotne opady deszczu ze śniegiem i burzą",
         "lightssnowshowersandthunder": "Słabe przelotne opady śniegu z burzą",
         "partlycloudy": "Częściowe Zachmurzenie",
-        "rain": "Deszcz",
         "rainandthunder": "Deszcz z burzą",
         "rainshowers": "Przelotne Opady",
         "rainshowersandthunder": "Przelotne opady z burzą",
-        "sleet": "Deszcz ze Śniegiem",
         "sleetandthunder": "Deszcz ze śniegiem i burzą",
         "sleetshowers": "Przelotne opady deszczu ze śniegiem",
         "sleetshowersandthunder": "Przelotne opady deszczu ze śniegiem i burzą",
-        "snow": "Śnieg",
         "snowandthunder": "Śnieg z burzą",
         "snowshowers": "Przelotne opady śniegu",
-        "snowshowersandthunder": "Przelotne opady śniegu z burzą",
-        "thunder": "Burza",
-        "unknown": "Nieznane"
+        "snowshowersandthunder": "Przelotne opady śniegu z burzą"
       }
     },
     "row": {
       "viewDetails": "Wyświetl szczegóły dla {species}",
+      "openDetailFromStatus": "Otwórz stronę szczegółów dla {species}",
+      "openDetailFromDate": "Otwórz stronę szczegółów dla {species} z {date} o {time}",
       "play": "Odtwórz",
       "playAudio": "Odtwórz dźwięk"
     },
@@ -949,6 +935,48 @@
       "loadFailed": "Nie udało się załadować detekcji (Błąd {status}). Odśwież stronę.",
       "noIdProvided": "Nie podano identyfikatora detekcji.",
       "fetchFailed": "Nie udało się pobrać detekcji"
+    },
+    "viewToggle": {
+      "label": "Tryb widoku",
+      "table": "Widok tabeli",
+      "cards": "Widok kart"
+    },
+    "reanalyze": {
+      "title": "Ponownie przeanalizuj ten klip",
+      "running": "Analizowanie…",
+      "noPredictions": "Nie zwrócono żadnych przewidywań.",
+      "colSpecies": "Gatunek",
+      "button": "Przeanalizuj ponownie",
+      "buttonAriaLabel": "Przeanalizuj klip {species} ponownie innym modelem",
+      "descriptionMulti": "Poniżej widzisz, jak każdy załadowany klasyfikator ocenił ten klip. Kliknij 'Użyj tego' przy wierszu, który uważasz za poprawny, aby zaktualizować detekcję.",
+      "multiModelSummary": "{models} • {duration} audio",
+      "useThis": "Użyj tego",
+      "useThisAriaLabel": "Zastosuj ten gatunek ({species}) jako poprawioną detekcję",
+      "noModelForCorrection": "Żaden model nie ocenił tego gatunku; nie można zastosować.",
+      "correctionApplied": "Detekcja zaktualizowana na {species}.",
+      "confirmTitle": "Zastąpić detekcję gatunkiem {species}?",
+      "confirmBody": "To zaktualizuje gatunek, model i pewność detekcji w miejscu oraz oznaczy ją jako zweryfikowaną. Istniejący status recenzji zostanie nadpisany.",
+      "confirmApply": "Tak, zastosuj poprawkę",
+      "applying": "Stosowanie…"
+    },
+    "selection": {
+      "select": "Zaznacz",
+      "nSelected": "Zaznaczono: {count}",
+      "selectAllMatching": "Zaznacz wszystkie {count} pasujących detekcji",
+      "allSelected": "Wszystkie {count} zaznaczone",
+      "clear": "Wyczyść zaznaczenie",
+      "toolbarLabel": "Operacje zbiorcze",
+      "confirmBulkDelete": "Usunąć {count} detekcji? Tej operacji nie można cofnąć.",
+      "confirmBulkMarkCorrect": "Oznaczyć {count} detekcji jako poprawne?",
+      "confirmBulkMarkFalsePositive": "Oznaczyć {count} detekcji jako fałszywie pozytywne?",
+      "confirmBulkLock": "Zablokować {count} detekcji?",
+      "confirmBulkUnlock": "Odblokować {count} detekcji?",
+      "bulkSuccess": "Zaktualizowano {count} detekcji",
+      "bulkDeleteSuccess": "Usunięto {count} detekcji",
+      "bulkPartial": "{processed} zaktualizowano, {skipped} pominięto (zablokowane)",
+      "tooManyDetections": "Zbyt wiele detekcji ({count}). Zawęź filtry, aby zaznaczyć mniej niż 500.",
+      "bulkError": "Operacja zbiorcza nie powiodła się. Spróbuj ponownie.",
+      "switchToTable": "Przełącz na widok tabeli, aby zaznaczyć detekcje"
     }
   },
   "species": {
@@ -1076,12 +1104,6 @@
         "buffCache": "Bufor/Cache"
       }
     },
-    "progress": {
-      "labels": {
-        "overallProgress": "Ogólny postęp",
-        "progress": "Postęp"
-      }
-    },
     "processInfo": {
       "title": "Informacje o Procesach",
       "loading": "Ładowanie informacji o procesach...",
@@ -1113,6 +1135,12 @@
       "temperature": "Nie udało się załadować temperatury: {error}",
       "processes": "Nie udało się załadować informacji o procesach: {error}"
     },
+    "progress": {
+      "labels": {
+        "overallProgress": "Ogólny postęp",
+        "progress": "Postęp"
+      }
+    },
     "sections": {
       "overview": "Przegląd",
       "database": "Baza danych",
@@ -1121,13 +1149,211 @@
     "database": {
       "title": "Zarządzanie bazą danych",
       "description": "Zarządzaj migracją schematu",
+      "migration": {
+        "title": "Migracja bazy danych",
+        "description": "Migruj ze starego schematu do znormalizowanego schematu v2",
+        "completedTitle": "Migracja zakończona",
+        "completedNote": "Twoja baza danych została pomyślnie zmigrowana do nowego schematu. Uruchom ponownie BirdNET-Go, aby przełączyć się na nową bazę danych. Uwaga: Nowa baza danych jest mniejsza, ponieważ przechowuje dane bardziej efektywnie - to jest normalne i wszystkie Twoje dane są zachowane.",
+        "status": {
+          "idle": "Gotowy do rozpoczęcia",
+          "initializing": "Inicjalizacja",
+          "dual_write": "Podwójny zapis aktywny",
+          "migrating": "Migrowanie danych podstawowych",
+          "migrating_predictions": "Migrowanie danych dodatkowych",
+          "paused": "Wstrzymano",
+          "validating": "Walidacja",
+          "cutover": "Przełączanie w toku",
+          "completed": "Migracja zakończona",
+          "failed": "Walidacja nie powiodła się"
+        },
+        "progress": {
+          "title": "Postęp migracji",
+          "records": "rekordów",
+          "percent": "{percent}%",
+          "rate": "{rate} rekordów/sek",
+          "rateValue": "{rate} rek/s",
+          "remaining": "Pozostało: {time}",
+          "eta": "Szacowany pozostały czas",
+          "dirtyIds": "{count} rekordów oczekuje",
+          "paused": "Migracja wstrzymana",
+          "completedTitle": "Migracja zakończona",
+          "completedBody": "Wszystkie {count} rekordów zostało pomyślnie zmigrowanych do bazy danych V2. Aplikacja użyje V2 jako głównej bazy danych po ponownym uruchomieniu.",
+          "restartTitle": "Wymagane ponowne uruchomienie",
+          "restartBody": "Uruchom ponownie aplikację, aby przełączyć się na bazę danych V2. Czyszczenie starszej bazy danych będzie dostępne po ponownym uruchomieniu.",
+          "fallbackError": "Niezgodność liczby rekordów między starszą bazą danych a V2. Niektóre rekordy mogły nie zostać poprawnie zmigrowane.",
+          "migrateInfo": "Migracja przeniesie {count} rekordów ze starszej bazy danych do nowego schematu V2. Tryb podwójnego zapisu zapewnia brak utraty danych podczas migracji.",
+          "sourceLegacy": "Źródło (starsza)",
+          "targetV2": "Cel (V2)",
+          "recordsLabel": "Rekordy",
+          "sizeLabel": "Rozmiar",
+          "prerequisitesNotMet": "Wymagania wstępne nie są spełnione — rozwiąż poniższe krytyczne problemy",
+          "validatingTitle": "Walidacja danych",
+          "validatingBody": "Porównywanie {count} starszych rekordów z bazą danych V2...",
+          "dirtyRecordsCatchup": "{count} zmienionych rekordów — próba uzgodnienia",
+          "cutoverTitle": "Kończenie przełączania",
+          "cutoverBody": "Finalizowanie przejścia na bazę danych V2...",
+          "migratingPhase": "Migracja {phase}",
+          "progressLabel": "Postęp",
+          "ofRecords": "/ {count} rekordów",
+          "percentComplete": "{percent}% ukończono",
+          "recordsPerSec": "{rate} rekordów/s",
+          "calculating": "Obliczanie...",
+          "dirtyWriteFailed": "{count} rekordów nie udało się zapisać — zostaną uzgodnione podczas walidacji"
+        },
+        "phase": {
+          "indicator": "Faza {current} z {total}: ",
+          "detections": "Migrowanie wykryć podstawowych",
+          "predictions": "Migrowanie wykryć dodatkowych",
+          "reviews": "Migrowanie recenzji",
+          "comments": "Migrowanie komentarzy",
+          "locks": "Migrowanie blokad"
+        },
+        "notes": {
+          "in_progress": "Możesz normalnie korzystać z systemu, podczas gdy migracja działa w tle.",
+          "dual_write": "Migracja w toku. Twoje dane są bezpieczne - wszystkie nowe wykrycia są zapisywane w obu bazach danych. Możesz nadal normalnie korzystać z BirdNET-Go.",
+          "migrating": "Kopiowanie istniejących wykryć do nowej bazy danych. Może to potrwać, w zależności od liczby wykryć. Możesz wstrzymać i wznowić w dowolnym momencie.",
+          "validating": "Sprawdzanie, czy wszystkie rekordy zostały poprawnie skopiowane. Prawie gotowe!",
+          "cutover": "Przełączanie na nową bazę danych. To zajmie tylko chwilę.",
+          "paused": "Migracja jest wstrzymana. Twoje dane są bezpieczne. Wznów, gdy będziesz gotowy."
+        },
+        "actions": {
+          "start": "Rozpocznij migrację",
+          "pause": "Wstrzymaj",
+          "resume": "Wznów",
+          "cancel": "Anuluj",
+          "rollback": "Cofnij",
+          "retryValidation": "Ponów walidację"
+        },
+        "confirmCancel": {
+          "title": "Anulować migrację?",
+          "message": "To zatrzyma migrację i powróci do stanu bezczynności. Możesz bezpiecznie ponownie uruchomić migrację później - rekordy nie będą duplikowane.",
+          "confirm": "Tak, anuluj",
+          "dismiss": "Nie, kontynuuj"
+        },
+        "confirmRollback": {
+          "title": "Cofnąć migrację?",
+          "message": "Spowoduje to powrót do starej bazy danych. Nowe wykrycia zarejestrowane od migracji zostaną zachowane w ulepszonej bazie danych, ale nie będą widoczne, dopóki migracja nie zostanie ponownie uruchomiona.",
+          "confirm": "Tak, cofnij",
+          "dismiss": "Nie, zachowaj ulepszoną"
+        },
+        "errors": {
+          "startFailed": "Nie udało się rozpocząć migracji",
+          "pauseFailed": "Nie udało się wstrzymać migracji",
+          "resumeFailed": "Nie udało się wznowić migracji",
+          "cancelFailed": "Nie udało się anulować migracji",
+          "rollbackFailed": "Nie udało się cofnąć migracji",
+          "fetchFailed": "Nie udało się pobrać statusu migracji",
+          "retryValidationFailed": "Nie udało się ponowić walidacji"
+        },
+        "worker": {
+          "running": "Worker działa",
+          "paused": "Worker wstrzymany",
+          "stopped": "Worker zatrzymany"
+        },
+        "prerequisites": {
+          "title": "Sprawdzenia przed migracją",
+          "rerunChecks": "Powtórz sprawdzenia",
+          "critical": "Krytyczne",
+          "allPassed": "Wszystkie sprawdzenia zakończone sukcesem - gotowe do migracji",
+          "criticalIssues": "{count} krytyczny problem/problemy do rozwiązania",
+          "warningsCount": "{count} ostrzeżenie/ostrzeżeń",
+          "running": "Wykonywanie wstępnych sprawdzeń...",
+          "checkingStep": "Krok {current} z {total}",
+          "errors": {
+            "fetchFailed": "Nie udało się pobrać wymagań wstępnych"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Stan migracji"
+            },
+            "disk_space": {
+              "name": "Przestrzeń dyskowa"
+            },
+            "legacy_accessible": {
+              "name": "Połączenie z bazą danych"
+            },
+            "sqlite_integrity": {
+              "name": "Integralność bazy danych"
+            },
+            "mysql_table_health": {
+              "name": "Stan tabel"
+            },
+            "write_permission": {
+              "name": "Uprawnienia do zapisu"
+            },
+            "mysql_permissions": {
+              "name": "Uprawnienia MySQL"
+            },
+            "record_count": {
+              "name": "Liczba rekordów"
+            },
+            "existing_v2_data": {
+              "name": "Istniejące dane migracji"
+            },
+            "no_active_locks": {
+              "name": "Aktywne blokady"
+            },
+            "memory_available": {
+              "name": "Dostępna pamięć"
+            },
+            "mysql_max_packet": {
+              "name": "Maks. pakiet MySQL"
+            },
+            "mysql_timeout": {
+              "name": "Limit czasu MySQL"
+            }
+          },
+          "passedCount": "{passed}/{total} zaliczonych",
+          "criticalCount": "{count} krytycznych",
+          "warningCount": "{count} ostrzeżeń",
+          "rerun": "Uruchom ponownie",
+          "showDetails": "Pokaż szczegóły",
+          "hideDetails": "Ukryj szczegóły",
+          "status": {
+            "passed": "Zaliczono",
+            "failed": "Niepowodzenie",
+            "error": "Błąd",
+            "warning": "Ostrzeżenie",
+            "skipped": "Pominięto"
+          }
+        },
+        "requiredNote": "Migracja bazy danych jest wymagana dla nadchodzących funkcji BirdNET-Go, które opierają się na nowym znormalizowanym schemacie bazy danych. Nowe funkcje nie będą dostępne do czasu zakończenia migracji.",
+        "starting": "Rozpoczynanie migracji...",
+        "confirmDialog": {
+          "title": "Rozpocznij migrację bazy danych",
+          "message": "Migracja skopiuje dane wykrywania z bieżącej bazy danych do nowej znormalizowanej bazy danych. Oryginalna baza danych pozostaje niezmieniona. Zaleca się jednak utworzenie kopii zapasowej na wypadek nieoczekiwanych problemów.",
+          "checkbox": "Potwierdzam, że wykonałem kopię zapasową bazy danych lub rozumiem ryzyko kontynuowania bez kopii zapasowej.",
+          "note": "Możesz pobrać kopię zapasową, używając przycisku \"Pobierz kopię zapasową\" powyżej."
+        },
+        "details": {
+          "title": "Szczegóły bazy danych",
+          "detections": "{count} wykryć",
+          "lastBackup": "Ostatnia kopia zapasowa: {date}",
+          "noBackups": "Brak kopii zapasowych",
+          "integrity": "Integralność: {status}"
+        },
+        "strip": {
+          "legacy": "Starsza",
+          "v2Target": "V2 (cel)",
+          "active": "Aktywna",
+          "migration": "Migracja",
+          "complete": "Zakończona",
+          "recordsMigrated": "{count} rekordów zmigrowanych",
+          "readyToMigrate": "Gotowe do migracji",
+          "recordsInLegacy": "{count} rekordów w starszej",
+          "comparingRecords": "Porównywanie liczby rekordów...",
+          "validationFailed": "Walidacja nieudana",
+          "rate": "Szybkość",
+          "recPerSec": "{rate} rek/s",
+          "dayAvg": "~{count} / dzień śr.",
+          "dayHistory": "Historia 30 dni"
+        }
+      },
       "legacy": {
         "title": "Stara baza danych",
         "fetchFailed": "Nie udało się pobrać statusu starej bazy danych",
         "cleanup": {
           "title": "Czyszczenie starej bazy danych",
-          "description": "Ta baza danych jest teraz offline i nie jest już używana. Wszystkie Twoje dane zostały przeniesione do ulepszonej bazy danych.",
-          "recommendation": "Zaleca się usunięcie tej bazy danych, aby zwolnić miejsce na dysku.",
           "location": "Lokalizacja",
           "size": "Rozmiar",
           "records": "Rekordy",
@@ -1144,7 +1370,9 @@
           "confirmMessage": "Zamierzasz trwale usunąć starą bazę danych ({size}). Tej operacji nie można cofnąć.",
           "confirmCheckbox": "Rozumiem, że spowoduje to trwałe usunięcie starej bazy danych",
           "cancelButton": "Anuluj",
-          "deleteConfirmButton": "Usuń trwale"
+          "deleteConfirmButton": "Usuń trwale",
+          "description": "Ta baza danych jest teraz offline i nie jest już używana. Wszystkie Twoje dane zostały przeniesione do ulepszonej bazy danych.",
+          "recommendation": "Zaleca się usunięcie tej bazy danych, aby zwolnić miejsce na dysku."
         }
       },
       "v2": {
@@ -1162,7 +1390,6 @@
       "dashboard": {
         "title": "Panel bazy danych",
         "fetchFailed": "Nie udało się pobrać przeglądu bazy danych",
-        "loading": "Ładowanie...",
         "metrics": {
           "readLatency": "Opóźnienie odczytu",
           "writeLatency": "Opóźnienie zapisu",
@@ -1217,8 +1444,6 @@
         },
         "detectionRate": {
           "title": "Częstość detekcji (24h)",
-          "chartLabel": "Wskaźnik wykryć w ciągu 24 godzin",
-          "detectionsTooltip": "{count} wykryć",
           "perHour": "/godz",
           "min": "min",
           "avg": "średnia",
@@ -1227,7 +1452,9 @@
           "backupSize": "Rozmiar kopii zapasowej",
           "createBackup": "Utwórz kopię zapasową",
           "mysqlHost": "Host",
-          "mysqlBackupNote": "Kopie zapasowe MySQL powinny być zarządzane za pomocą mysqldump lub narzędzi administracyjnych MySQL."
+          "mysqlBackupNote": "Kopie zapasowe MySQL powinny być zarządzane za pomocą mysqldump lub narzędzi administracyjnych MySQL.",
+          "chartLabel": "Wskaźnik wykryć w ciągu 24 godzin",
+          "detectionsTooltip": "{count} wykryć"
         },
         "tables": {
           "title": "Tabele",
@@ -1237,7 +1464,8 @@
           "rows": "Wiersze",
           "size": "Rozmiar",
           "usage": "Użycie"
-        }
+        },
+        "loading": "Ładowanie..."
       },
       "backup": {
         "download": "Pobierz kopię zapasową",
@@ -1269,207 +1497,7 @@
           }
         }
       },
-      "notInitialized": "Nie zainicjalizowano",
-      "migration": {
-        "title": "Migracja bazy danych",
-        "description": "Migruj ze starego schematu do znormalizowanego schematu v2",
-        "requiredNote": "Migracja bazy danych jest wymagana dla nadchodzących funkcji BirdNET-Go, które opierają się na nowym znormalizowanym schemacie bazy danych. Nowe funkcje nie będą dostępne do czasu zakończenia migracji.",
-        "completedTitle": "Migracja zakończona",
-        "completedNote": "Twoja baza danych została pomyślnie zmigrowana do nowego schematu. Uruchom ponownie BirdNET-Go, aby przełączyć się na nową bazę danych. Uwaga: Nowa baza danych jest mniejsza, ponieważ przechowuje dane bardziej efektywnie - to jest normalne i wszystkie Twoje dane są zachowane.",
-        "starting": "Rozpoczynanie migracji...",
-        "status": {
-          "idle": "Gotowy do rozpoczęcia",
-          "initializing": "Inicjalizacja",
-          "dual_write": "Podwójny zapis aktywny",
-          "migrating": "Migrowanie danych podstawowych",
-          "migrating_predictions": "Migrowanie danych dodatkowych",
-          "paused": "Wstrzymano",
-          "validating": "Walidacja",
-          "cutover": "Przełączanie w toku",
-          "completed": "Migracja zakończona",
-          "failed": "Walidacja nie powiodła się"
-        },
-        "progress": {
-          "title": "Postęp migracji",
-          "records": "rekordów",
-          "paused": "Migracja wstrzymana",
-          "percent": "{percent}%",
-          "rate": "{rate} rekordów/sek",
-          "rateValue": "{rate} rek/s",
-          "remaining": "Pozostało: {time}",
-          "eta": "Szacowany pozostały czas",
-          "dirtyIds": "{count} rekordów oczekuje",
-          "completedTitle": "Migracja zakończona",
-          "completedBody": "Wszystkie {count} rekordów zostało pomyślnie zmigrowanych do bazy danych V2. Aplikacja użyje V2 jako głównej bazy danych po ponownym uruchomieniu.",
-          "restartTitle": "Wymagane ponowne uruchomienie",
-          "restartBody": "Uruchom ponownie aplikację, aby przełączyć się na bazę danych V2. Czyszczenie starszej bazy danych będzie dostępne po ponownym uruchomieniu.",
-          "fallbackError": "Niezgodność liczby rekordów między starszą bazą danych a V2. Niektóre rekordy mogły nie zostać poprawnie zmigrowane.",
-          "migrateInfo": "Migracja przeniesie {count} rekordów ze starszej bazy danych do nowego schematu V2. Tryb podwójnego zapisu zapewnia brak utraty danych podczas migracji.",
-          "sourceLegacy": "Źródło (starsza)",
-          "targetV2": "Cel (V2)",
-          "recordsLabel": "Rekordy",
-          "sizeLabel": "Rozmiar",
-          "prerequisitesNotMet": "Wymagania wstępne nie są spełnione — rozwiąż poniższe krytyczne problemy",
-          "validatingTitle": "Walidacja danych",
-          "validatingBody": "Porównywanie {count} starszych rekordów z bazą danych V2...",
-          "dirtyRecordsCatchup": "{count} zmienionych rekordów — próba uzgodnienia",
-          "cutoverTitle": "Kończenie przełączania",
-          "cutoverBody": "Finalizowanie przejścia na bazę danych V2...",
-          "migratingPhase": "Migracja {phase}",
-          "progressLabel": "Postęp",
-          "ofRecords": "/ {count} rekordów",
-          "percentComplete": "{percent}% ukończono",
-          "recordsPerSec": "{rate} rekordów/s",
-          "calculating": "Obliczanie...",
-          "dirtyWriteFailed": "{count} rekordów nie udało się zapisać — zostaną uzgodnione podczas walidacji"
-        },
-        "details": {
-          "title": "Szczegóły bazy danych",
-          "detections": "{count} wykryć",
-          "lastBackup": "Ostatnia kopia zapasowa: {date}",
-          "noBackups": "Brak kopii zapasowych",
-          "integrity": "Integralność: {status}"
-        },
-        "strip": {
-          "legacy": "Starsza",
-          "v2Target": "V2 (cel)",
-          "active": "Aktywna",
-          "migration": "Migracja",
-          "complete": "Zakończona",
-          "recordsMigrated": "{count} rekordów zmigrowanych",
-          "readyToMigrate": "Gotowe do migracji",
-          "recordsInLegacy": "{count} rekordów w starszej",
-          "comparingRecords": "Porównywanie liczby rekordów...",
-          "validationFailed": "Walidacja nieudana",
-          "rate": "Szybkość",
-          "recPerSec": "{rate} rek/s",
-          "dayAvg": "~{count} / dzień śr.",
-          "dayHistory": "Historia 30 dni"
-        },
-        "phase": {
-          "indicator": "Faza {current} z {total}: ",
-          "detections": "Migrowanie wykryć podstawowych",
-          "predictions": "Migrowanie wykryć dodatkowych",
-          "reviews": "Migrowanie recenzji",
-          "comments": "Migrowanie komentarzy",
-          "locks": "Migrowanie blokad"
-        },
-        "notes": {
-          "in_progress": "Możesz normalnie korzystać z systemu, podczas gdy migracja działa w tle.",
-          "dual_write": "Migracja w toku. Twoje dane są bezpieczne - wszystkie nowe wykrycia są zapisywane w obu bazach danych. Możesz nadal normalnie korzystać z BirdNET-Go.",
-          "migrating": "Kopiowanie istniejących wykryć do nowej bazy danych. Może to potrwać, w zależności od liczby wykryć. Możesz wstrzymać i wznowić w dowolnym momencie.",
-          "validating": "Sprawdzanie, czy wszystkie rekordy zostały poprawnie skopiowane. Prawie gotowe!",
-          "cutover": "Przełączanie na nową bazę danych. To zajmie tylko chwilę.",
-          "paused": "Migracja jest wstrzymana. Twoje dane są bezpieczne. Wznów, gdy będziesz gotowy."
-        },
-        "actions": {
-          "start": "Rozpocznij migrację",
-          "pause": "Wstrzymaj",
-          "resume": "Wznów",
-          "cancel": "Anuluj",
-          "rollback": "Cofnij",
-          "retryValidation": "Ponów walidację"
-        },
-        "confirmDialog": {
-          "title": "Rozpocznij migrację bazy danych",
-          "message": "Migracja skopiuje dane wykrywania z bieżącej bazy danych do nowej znormalizowanej bazy danych. Oryginalna baza danych pozostaje niezmieniona. Zaleca się jednak utworzenie kopii zapasowej na wypadek nieoczekiwanych problemów.",
-          "checkbox": "Potwierdzam, że wykonałem kopię zapasową bazy danych lub rozumiem ryzyko kontynuowania bez kopii zapasowej.",
-          "note": "Możesz pobrać kopię zapasową, używając przycisku \"Pobierz kopię zapasową\" powyżej."
-        },
-        "confirmCancel": {
-          "title": "Anulować migrację?",
-          "message": "To zatrzyma migrację i powróci do stanu bezczynności. Możesz bezpiecznie ponownie uruchomić migrację później - rekordy nie będą duplikowane.",
-          "confirm": "Tak, anuluj",
-          "dismiss": "Nie, kontynuuj"
-        },
-        "confirmRollback": {
-          "title": "Cofnąć migrację?",
-          "message": "Spowoduje to powrót do starej bazy danych. Nowe wykrycia zarejestrowane od migracji zostaną zachowane w ulepszonej bazie danych, ale nie będą widoczne, dopóki migracja nie zostanie ponownie uruchomiona.",
-          "confirm": "Tak, cofnij",
-          "dismiss": "Nie, zachowaj ulepszoną"
-        },
-        "errors": {
-          "startFailed": "Nie udało się rozpocząć migracji",
-          "pauseFailed": "Nie udało się wstrzymać migracji",
-          "resumeFailed": "Nie udało się wznowić migracji",
-          "cancelFailed": "Nie udało się anulować migracji",
-          "rollbackFailed": "Nie udało się cofnąć migracji",
-          "retryValidationFailed": "Nie udało się ponowić walidacji",
-          "fetchFailed": "Nie udało się pobrać statusu migracji"
-        },
-        "worker": {
-          "running": "Worker działa",
-          "paused": "Worker wstrzymany",
-          "stopped": "Worker zatrzymany"
-        },
-        "prerequisites": {
-          "title": "Sprawdzenia przed migracją",
-          "rerunChecks": "Powtórz sprawdzenia",
-          "critical": "Krytyczne",
-          "allPassed": "Wszystkie sprawdzenia zakończone sukcesem - gotowe do migracji",
-          "criticalIssues": "{count} krytyczny problem/problemy do rozwiązania",
-          "warningsCount": "{count} ostrzeżenie/ostrzeżeń",
-          "running": "Wykonywanie wstępnych sprawdzeń...",
-          "checkingStep": "Krok {current} z {total}",
-          "passedCount": "{passed}/{total} zaliczonych",
-          "criticalCount": "{count} krytycznych",
-          "warningCount": "{count} ostrzeżeń",
-          "rerun": "Uruchom ponownie",
-          "showDetails": "Pokaż szczegóły",
-          "hideDetails": "Ukryj szczegóły",
-          "status": {
-            "passed": "Zaliczono",
-            "failed": "Niepowodzenie",
-            "error": "Błąd",
-            "warning": "Ostrzeżenie",
-            "skipped": "Pominięto"
-          },
-          "errors": {
-            "fetchFailed": "Nie udało się pobrać wymagań wstępnych"
-          },
-          "checks": {
-            "state_idle": {
-              "name": "Stan migracji"
-            },
-            "disk_space": {
-              "name": "Przestrzeń dyskowa"
-            },
-            "legacy_accessible": {
-              "name": "Połączenie z bazą danych"
-            },
-            "sqlite_integrity": {
-              "name": "Integralność bazy danych"
-            },
-            "mysql_table_health": {
-              "name": "Stan tabel"
-            },
-            "write_permission": {
-              "name": "Uprawnienia do zapisu"
-            },
-            "mysql_permissions": {
-              "name": "Uprawnienia MySQL"
-            },
-            "record_count": {
-              "name": "Liczba rekordów"
-            },
-            "existing_v2_data": {
-              "name": "Istniejące dane migracji"
-            },
-            "no_active_locks": {
-              "name": "Aktywne blokady"
-            },
-            "memory_available": {
-              "name": "Dostępna pamięć"
-            },
-            "mysql_max_packet": {
-              "name": "Maks. pakiet MySQL"
-            },
-            "mysql_timeout": {
-              "name": "Limit czasu MySQL"
-            }
-          }
-        }
-      }
+      "notInitialized": "Nie zainicjalizowano"
     },
     "metrics": {
       "cpu": "CPU",
@@ -1500,30 +1528,6 @@
       "free": "wolne",
       "ram": "RAM"
     }
-  },
-  "terminal": {
-    "title": "Terminal",
-    "disabled": "Terminal wyłączony",
-    "disabledDescription": "Terminal przeglądarki jest wyłączony. Włącz go w Ustawienia → Bezpieczeństwo, aby skorzystać z tej funkcji.",
-    "connected": "Połączono",
-    "disconnected": "Rozłączono",
-    "connecting": "Łączenie...",
-    "connectionError": "Błąd połączenia",
-    "connectionClosed": "Połączenie zamknięte",
-    "securityWarning": "Ostrzeżenie: Ten terminal zapewnia bezpośredni dostęp do powłoki systemu hosta. Włączaj tylko w zaufanych sieciach.",
-    "copySelection": "Kopiuj zaznaczenie",
-    "expand": "Rozwiń",
-    "collapse": "Zwiń",
-    "fullscreen": "Pełny ekran",
-    "exitFullscreen": "Zamknij pełny ekran",
-    "colorTheme": "Motyw kolorów",
-    "themeDark": "Ciemny",
-    "themeLight": "Jasny",
-    "themeHighContrast": "Wysoki kontrast",
-    "detach": "Otwórz w nowym oknie",
-    "detached": "Terminal jest odłączony",
-    "detachedDescription": "Terminal działa w osobnym oknie. Zamknij to okno, aby przywrócić go tutaj.",
-    "reattach": "Podłącz ponownie"
   },
   "analytics": {
     "title": "Przegląd",
@@ -1732,12 +1736,6 @@
       "savingAriaLabel": "Zapisywanie zmian...",
       "unsavedChanges": "Niezapisane zmiany",
       "toolbar": "Działania ustawień"
-    },
-    "errors": {
-      "loadFailed": "Nie udało się załadować ustawień",
-      "saveFailed": "Nie udało się zapisać ustawień",
-      "databaseStatsFailed": "Nie udało się załadować statystyk bazy danych",
-      "csvDownloadFailed": "Nie udało się pobrać pliku CSV"
     },
     "card": {
       "changed": "zmieniono",
@@ -2259,40 +2257,6 @@
           "daysSinceFirstSeen": "Liczba dni od pierwszej detekcji"
         }
       },
-      "testNotification": {
-        "title": "Wyślij Testowe Powiadomienie o Nowym Gatunku",
-        "description": "Wygeneruj testowe powiadomienie dla detekcji nowego gatunku, aby zweryfikować, że system powiadomień działa",
-        "whatHappens": "Co się stanie, gdy klikniesz 'Wyślij Test':",
-        "sendButton": "Wyślij Test",
-        "sendingButton": "Wysyłanie...",
-        "statusMessages": {
-          "sending": "Wysyłanie testowego powiadomienia...",
-          "success": "Testowe powiadomienie wysłane pomyślnie! Sprawdź dzwonek powiadomień.",
-          "error": "Nie udało się wysłać testowego powiadomienia: {message}",
-          "serviceUnavailable": "Usługa powiadomień jest niedostępna. Proszę sprawdzić ustawienia powiadomień."
-        }
-      },
-      "statusMessages": {
-        "sending": "Wysyłanie testowego powiadomienia...",
-        "success": "Testowe powiadomienie wysłane pomyślnie!",
-        "error": "Nie udało się wysłać testowego powiadomienia: {message}",
-        "serviceUnavailable": "Usługa powiadomień jest niedostępna. Proszę sprawdzić ustawienia powiadomień."
-      },
-      "systemInfo": {
-        "howToView": "Jak wyświetlić powiadomienia:",
-        "technicalDetails": "Szczegóły techniczne dotyczące powiadomień w BirdNET-Go:"
-      },
-      "privacy": {
-        "title": "Informacja o Prywatności dla Zewnętrznych Webhooków",
-        "description": "Powiadomienia o detekcjach mogą zawierać wrażliwe dane podczas wysyłania do usług zewnętrznych:",
-        "gps": "Współrzędne GPS",
-        "gpsDetails": "Dokładna lokalizacja (szerokość/długość geograficzna) jeśli skonfigurowana",
-        "urls": "Adresy URL Detekcji",
-        "urlsDetails": "Mogą ujawnić informacje o sieci wewnętrznej",
-        "species": "Dane o Gatunkach",
-        "speciesDetails": "Jakie ptaki zostały wykryte i kiedy",
-        "recommendation": "Włącz zewnętrzne webhooki tylko jeśli ufasz usłudze odbiorczej lub używasz usług self-hosted/lokalnych."
-      },
       "push": {
         "title": "Powiadomienia push",
         "description": "Wysyłaj powiadomienia do zewnętrznych usług jak Discord, Telegram, Slack i inne",
@@ -2467,15 +2431,15 @@
               "placeholder": "gotify.example.com:8070",
               "helpText": "Nazwa hosta i port serwera Gotify"
             },
-            "protocol": {
-              "label": "Protokół"
-            },
             "token": {
               "label": "Token aplikacji",
               "placeholder": "A...",
               "helpText": "Token ze strony Gotify Apps"
             },
-            "incomplete": "Serwer i token są wymagane"
+            "incomplete": "Serwer i token są wymagane",
+            "protocol": {
+              "label": "Protokół"
+            }
           },
           "pushover": {
             "name": "Pushover",
@@ -2562,30 +2526,63 @@
             "invalidUrl": "Nieprawidłowy format URL. URL powinien zaczynać się od service://"
           }
         }
+      },
+      "testNotification": {
+        "title": "Wyślij Testowe Powiadomienie o Nowym Gatunku",
+        "description": "Wygeneruj testowe powiadomienie dla detekcji nowego gatunku, aby zweryfikować, że system powiadomień działa",
+        "whatHappens": "Co się stanie, gdy klikniesz 'Wyślij Test':",
+        "sendButton": "Wyślij Test",
+        "sendingButton": "Wysyłanie...",
+        "statusMessages": {
+          "sending": "Wysyłanie testowego powiadomienia...",
+          "success": "Testowe powiadomienie wysłane pomyślnie! Sprawdź dzwonek powiadomień.",
+          "error": "Nie udało się wysłać testowego powiadomienia: {message}",
+          "serviceUnavailable": "Usługa powiadomień jest niedostępna. Proszę sprawdzić ustawienia powiadomień."
+        }
+      },
+      "statusMessages": {
+        "sending": "Wysyłanie testowego powiadomienia...",
+        "success": "Testowe powiadomienie wysłane pomyślnie!",
+        "error": "Nie udało się wysłać testowego powiadomienia: {message}",
+        "serviceUnavailable": "Usługa powiadomień jest niedostępna. Proszę sprawdzić ustawienia powiadomień."
+      },
+      "systemInfo": {
+        "howToView": "Jak wyświetlić powiadomienia:",
+        "technicalDetails": "Szczegóły techniczne dotyczące powiadomień w BirdNET-Go:"
+      },
+      "privacy": {
+        "title": "Informacja o Prywatności dla Zewnętrznych Webhooków",
+        "description": "Powiadomienia o detekcjach mogą zawierać wrażliwe dane podczas wysyłania do usług zewnętrznych:",
+        "gps": "Współrzędne GPS",
+        "gpsDetails": "Dokładna lokalizacja (szerokość/długość geograficzna) jeśli skonfigurowana",
+        "urls": "Adresy URL Detekcji",
+        "urlsDetails": "Mogą ujawnić informacje o sieci wewnętrznej",
+        "species": "Dane o Gatunkach",
+        "speciesDetails": "Jakie ptaki zostały wykryte i kiedy",
+        "recommendation": "Włącz zewnętrzne webhooki tylko jeśli ufasz usłudze odbiorczej lub używasz usług self-hosted/lokalnych."
       }
     },
     "filters": {
-      "title": "Filtry",
       "privacyFiltering": {
         "title": "Filtrowanie Prywatności",
         "description": "Filtrowanie prywatności unika zapisywania klipów audio, gdy wykryte są głosy ludzkie",
         "enable": "Włącz Filtrowanie Prywatności",
-        "disabled": "Filtrowanie prywatności jest wyłączone",
         "confidenceLabel": "Próg Pewności dla Detekcji Człowieka",
-        "confidenceHelp": "Ustaw poziom pewności dla detekcji głosu ludzkiego, niższa wartość sprawia, że filtr jest bardziej czuły"
+        "confidenceHelp": "Ustaw poziom pewności dla detekcji głosu ludzkiego, niższa wartość sprawia, że filtr jest bardziej czuły",
+        "disabled": "Filtrowanie prywatności jest wyłączone"
       },
       "falsePositivePrevention": {
         "title": "Zapobieganie Fałszywym Pozytywnościom",
         "description": "Konfiguruj filtry fałszywych detekcji",
         "enableDogBark": "Włącz Filtr Szczekania Psa",
-        "disabled": "Filtr szczekania psa jest wyłączony",
         "confidenceLabel": "Próg Pewności",
         "confidenceHelp": "Ustaw poziom pewności dla detekcji szczekania psa, niższa wartość sprawia, że filtr jest bardziej czuły",
         "expireTimeLabel": "Czas Wygaśnięcia Szczekania Psa (Minuty)",
         "expireTimeHelp": "Ustaw, jak długo pamiętać wykryte szczekanie psa",
         "addDogBarkSpeciesLabel": "Dodaj Gatunki Szczekania Psa",
         "addDogBarkSpeciesHelp": "Szukaj i dodaj gatunki, które mogą być mylone ze szczekaniem psa",
-        "addSpeciesButton": "Dodaj"
+        "addSpeciesButton": "Dodaj",
+        "disabled": "Filtr szczekania psa jest wyłączony"
       },
       "speciesNamePlaceholder": "Nazwa gatunku",
       "typeSpeciesName": "Wpisz nazwę gatunku...",
@@ -2603,7 +2600,8 @@
       },
       "errors": {
         "speciesLoadFailed": "Nie udało się załadować listy gatunków. Spróbuj ponownie."
-      }
+      },
+      "title": "Filtry"
     },
     "integration": {
       "birdweather": {
@@ -2841,96 +2839,6 @@
         "recording": "Nagrywanie",
         "retention": "Przechowywanie"
       },
-      "emptyStates": {
-        "soundCard": {
-          "title": "Nie Wykryto Kart Dźwiękowych",
-          "description": "Nie znaleziono lokalnych urządzeń wejściowych audio w tym systemie. Jest to normalne dla wdrożeń kontenerowych lub serwerów bez interfejsu graficznego.",
-          "errorTitle": "Błąd Ładowania Urządzeń",
-          "hintsTitle": "Możesz:",
-          "hints": {
-            "container": "Jest to normalne dla wdrożeń kontenerowych/bez interfejsu graficznego",
-            "streams": "Skonfigurować strumienie sieciowe w karcie Strumienie zamiast tego",
-            "usb": "Podłączyć mikrofon USB i odświeżyć listę"
-          },
-          "refresh": "Odśwież Urządzenia",
-          "retry": "Spróbuj Ponownie"
-        },
-        "streams": {
-          "title": "Brak Skonfigurowanych Strumieni",
-          "description": "Dodaj strumienie audio RTSP lub sieciowe z kamer IP, serwerów mikrofonowych lub innych źródeł strumieniowych.",
-          "hintsTitle": "Pierwsze kroki:",
-          "hints": {
-            "rtsp": "Wprowadź adresy URL RTSP w formacie: rtsp://ip:port/strumień",
-            "multiple": "Możesz dodać wiele strumieni dla różnych lokalizacji",
-            "protocol": "Wybierz TCP dla niezawodności lub UDP dla mniejszego opóźnienia"
-          }
-        }
-      },
-      "soundCard": {
-        "title": "Karta Dźwiękowa",
-        "description": "Konfiguruj lokalne urządzenie wejściowe audio",
-        "audioSourceLabel": "Źródło Audio (wymaga restartu aplikacji do zastosowania)",
-        "audioSourceHelp": "Wybierz urządzenie wejściowe audio do detekcji dźwięków ptaków. Zmiany wymagają restartu aplikacji, aby zostały zastosowane.",
-        "noSoundCardCapture": "Brak przechwytywania karty dźwiękowej",
-        "empty": {
-          "title": "Nie Wykryto Kart Dźwiękowych",
-          "description": "Nie znaleziono lokalnych urządzeń wejściowych audio w tym systemie. Jest to normalne dla wdrożeń kontenerowych lub serwerów bez interfejsu graficznego.",
-          "hintsTitle": "Możesz:",
-          "hintStream": "Skonfigurować strumienie sieciowe w karcie Strumienie",
-          "hintUsb": "Podłączyć mikrofon USB i odświeżyć listę",
-          "goToStreams": "Przejdź do Strumieni",
-          "refresh": "Odśwież Urządzenia"
-        }
-      },
-      "noSources": {
-        "warning": "Brak Skonfigurowanych Źródeł Audio",
-        "description": "BirdNET-Go potrzebuje wejścia audio do wykrywania ptaków. Proszę skonfigurować co najmniej jedno źródło w karcie Karta Dźwiękowa lub Strumienie."
-      },
-      "soundCards": {
-        "summary": "{count} źródło/źródeł kart dźwiękowych",
-        "addSource": "Dodaj Kartę Dźwiękową",
-        "nameLabel": "Nazwa Źródła",
-        "namePlaceholder": "np. Mikrofon na Podwórku",
-        "nameHelp": "Opisowa nazwa dla tego źródła audio",
-        "deviceLabel": "Urządzenie Audio",
-        "devicePlaceholder": "Wybierz urządzenie audio",
-        "gainLabel": "Wzmocnienie (dB)",
-        "gainHelp": "Regulacja wzmocnienia wejścia audio (-40 do +40 dB)",
-        "sampleRateLabel": "Częstotliwość próbkowania",
-        "sampleRateUnverified": "Nie można zweryfikować obsługiwanych częstotliwości dla tego urządzenia",
-        "sampleRateProbing": "Wykrywanie obsługiwanych częstotliwości...",
-        "sampleRateExclusive": "Częstotliwości powyżej 48 kHz używają wyłącznego dostępu do urządzenia w systemie Linux, uniemożliwiając innym aplikacjom współdzielenie karty dźwiękowej",
-        "modelLabel": "Modele detekcji",
-        "modelHelp": "Wybierz modele AI dla tego źródła audio",
-        "deleteConfirm": "Usunąć to źródło karty dźwiękowej?",
-        "emptyState": {
-          "title": "Brak Skonfigurowanych Źródeł Kart Dźwiękowych",
-          "description": "Dodaj źródło karty dźwiękowej, aby rozpocząć przechwytywanie audio do wykrywania ptaków.",
-          "hintsTitle": "Pierwsze Kroki",
-          "hints": {
-            "device": "Wybierz spośród dostępnych urządzeń wejścia audio w systemie",
-            "multiple": "Możesz skonfigurować wiele kart dźwiękowych dla różnych lokalizacji",
-            "model": "Każde źródło może używać innego modelu detekcji (BirdNET, Perch, Bat)"
-          }
-        },
-        "models": {
-          "birdnetDefault": "BirdNET (Domyślny)",
-          "birdnet": "BirdNET",
-          "perchV2": "Google Perch v2",
-          "bat": "Wykrywanie nietoperzy"
-        },
-        "errors": {
-          "nameRequired": "Nazwa źródła jest wymagana",
-          "deviceRequired": "Urządzenie audio jest wymagane",
-          "duplicateName": "Źródło o tej nazwie już istnieje",
-          "duplicateDevice": "To urządzenie jest już skonfigurowane"
-        },
-        "compatibility": {
-          "minSampleRate": "Wymaga co najmniej {rate}kHz częstotliwości próbkowania",
-          "recommendedSampleRate": "{rate}kHz zalecane dla najlepszych wyników",
-          "atLeastOneModel": "Należy wybrać co najmniej jeden model"
-        }
-      },
       "audioCapture": {
         "title": "Przechwytywanie Audio",
         "description": "Ustaw źródło przechwytywania audio, kartę dźwiękową lub strumień RTSP",
@@ -2938,13 +2846,13 @@
         "audioSourceLabel": "Źródło Audio (wymaga restartu aplikacji do zastosowania)",
         "audioSourceHelp": "Wybierz urządzenie wejściowe audio do detekcji dźwięków ptaków. Zmiany wymagają restartu aplikacji, aby zostały zastosowane.",
         "noSoundCardCapture": "Brak przechwytywania karty dźwiękowej",
-        "noDeviceSelected": "Nie wybrano urządzenia audio",
-        "refreshDevices": "Odśwież",
         "rtspSource": "Źródło RTSP",
         "rtspTransportLabel": "Protokół Transportu RTSP",
         "rtspTransportHelp": "TCP jest bardziej niezawodny, ale może mieć większe opóźnienie. UDP jest szybszy, ale może doświadczać utraty pakietów w słabych sieciach.",
         "rtspUrlsLabel": "Adresy URL Strumienia RTSP",
         "rtspUrlsHelp": "Wprowadź jeden lub więcej adresów URL strumienia RTSP dla sieciowych źródeł audio. Format: rtsp://ip:port/stream. Uwaga: Dane uwierzytelniające powinny być skonfigurowane oddzielnie w ustawieniach serwera RTSP ze względów bezpieczeństwa.",
+        "noDeviceSelected": "Nie wybrano urządzenia audio",
+        "refreshDevices": "Odśwież",
         "deviceSelected": "Karta dźwiękowa wybrana i gotowa do przechwytywania",
         "availableDevices": "Dostępne Urządzenia Audio",
         "active": "Aktywne",
@@ -2968,96 +2876,6 @@
         "solarHint": "Godziny są obliczane na podstawie wschodu/zachodu słońca w skonfigurowanej lokalizacji. Użyj ujemnych przesunięć dla czasu przed zdarzeniem, dodatnich po nim.",
         "badge": "Cisza",
         "enabledBadge": "Godziny ciszy włączone dla tego strumienia"
-      },
-      "rtspStreams": {
-        "title": "Konfiguracja Strumieni Audio",
-        "description": "Konfiguruj sieciowe strumienie audio do zdalnego przechwytywania audio. Obsługuje protokoły RTSP, HTTP, HLS, RTMP i UDP.",
-        "noStreamsConfigured": "Brak skonfigurowanych strumieni"
-      },
-      "streams": {
-        "streamLabel": "Strumień",
-        "nameLabel": "Nazwa Strumienia",
-        "enabled": "Włączony",
-        "disabled": "Wyłączony",
-        "namePlaceholder": "np. Karmnik w Ogrodzie",
-        "nameHelp": "Opisowa nazwa do identyfikacji tego strumienia audio",
-        "urlLabel": "URL Strumienia",
-        "urlHelp": "Wprowadź URL strumienia z opcjonalnymi danymi logowania (np. rtsp://host:port/ścieżka). Użyj zmiennych środowiskowych dla danych logowania.",
-        "typeLabel": "Typ Strumienia",
-        "typeHelp": "Protokół strumienia - wykrywany automatycznie z URL",
-        "transportLabel": "Protokół",
-        "summary": "{count} strumień(i) skonfigurowany(ch)",
-        "healthy": "sprawny",
-        "unhealthy": "niesprawny",
-        "unknown": "nieznany",
-        "refresh": "Odśwież",
-        "addStream": "Dodaj Strumień",
-        "testRequired": "Przeprowadź udany test strumienia przed zapisaniem",
-        "deleteConfirm": "Usunąć ten strumień?",
-        "restartCount": "Zrestartowano {count} raz(y)",
-        "healthLoadError": "Nie udało się załadować statusu strumienia",
-        "status": {
-          "connected": "Połączony",
-          "connecting": "Łączenie",
-          "error": "Błąd",
-          "idle": "Bezczynny",
-          "suppressed": "Cisza nocna",
-          "unknown": "Nieznany"
-        },
-        "emptyState": {
-          "title": "Brak Skonfigurowanych Strumieni",
-          "description": "Dodaj strumienie audio z kamer IP, serwerów Icecast lub innych źródeł sieciowych.",
-          "hintsTitle": "Pierwsze Kroki",
-          "hints": {
-            "rtsp": "Obsługuje strumienie RTSP, HTTP, HLS, RTMP i UDP/RTP",
-            "credentials": "Dane logowania można dołączyć w URL lub użyć zmiennych środowiskowych",
-            "protocol": "TCP jest bardziej niezawodny dla RTSP, UDP ma niższe opóźnienie"
-          }
-        },
-        "errors": {
-          "nameRequired": "Nazwa strumienia jest wymagana",
-          "duplicateName": "Strumień o tej nazwie już istnieje",
-          "urlRequired": "URL strumienia jest wymagany",
-          "invalidUrl": "Nieprawidłowy format URL strumienia",
-          "duplicate": "Ten URL strumienia już istnieje"
-        },
-        "timeline": {
-          "error": "Błąd",
-          "noHistory": "Brak dostępnej historii stanu lub błędów.",
-          "stateChange": "Zmiana stanu",
-          "host": "Host",
-          "troubleshooting": "Rozwiązywanie problemów",
-          "from": "Od",
-          "to": "Do",
-          "reason": "Powód",
-          "eventAt": "Zdarzenie o {time}"
-        },
-        "diagnostics": {
-          "toggleDiagnostics": "Przełącz diagnostykę",
-          "processState": "Stan procesu",
-          "lastData": "Ostatnie dane",
-          "restartCount": "Restarty",
-          "connection": "Połączenie",
-          "stateErrorHistory": "Historia stanów i błędów"
-        },
-        "connectionStatus": {
-          "stable": "Stabilne",
-          "degraded": "Pogorszone",
-          "failed": "Nieudane",
-          "unknown": "Nieznany"
-        },
-        "test": {
-          "button": "Testuj strumień",
-          "probing": "Testowanie...",
-          "result": "Wynik testu",
-          "error": "Test nieudany",
-          "batCompatible": "Kompatybilny z nietoperzami",
-          "batIncompatible": "Niekompatybilny z nietoperzami"
-        },
-        "batWarning": "Modele nietoperzy wymagają strumieni z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz. Użyj przycisku Testuj strumień powyżej, aby sprawdzić kompatybilność.",
-        "codecWarning": {
-          "lossy": "Stratne kodeki (AAC, Opus, MP3) niszczą częstotliwości ultradźwiękowe powyżej ~20 kHz, przez co strumień jest nieodpowiedni do wykrywania nietoperzy."
-        }
       },
       "audioFilters": {
         "title": "Filtry Audio",
@@ -3097,14 +2915,14 @@
         "description": "Monitoruj i raportuj poziomy dźwięku środowiskowego",
         "enable": "Włącz Monitorowanie Poziomu Dźwięku",
         "enableHelp": "Śledź poziomy hałasu otoczenia, aby zrozumieć środowisko nagrywania i skorelować ze wzorcami aktywności ptaków.",
-        "disabled": "Monitorowanie poziomu dźwięku jest wyłączone",
         "intervalLabel": "Interwał Pomiaru (sekundy)",
         "intervalHelp": "Jak często mierzyć i raportować poziomy dźwięku. Niższe wartości zapewniają bardziej szczegółowe dane, ale wykorzystują więcej zasobów. Minimum 5 sekund, zalecane 60 sekund.",
         "dataOutputTitle": "Wyjście Danych Poziomu Dźwięku",
         "dataOutputDescription": "Po włączeniu pomiary poziomu dźwięku są publikowane przez:",
         "mqttTopic": "Temat MQTT:",
         "sseEndpoint": "Punkt końcowy SSE:",
-        "prometheusMetrics": "Metryki Prometheus:"
+        "prometheusMetrics": "Metryki Prometheus:",
+        "disabled": "Monitorowanie poziomu dźwięku jest wyłączone"
       },
       "clipSettings": {
         "title": "Ustawienia Klipów",
@@ -3114,8 +2932,8 @@
         "title": "Ustawienia Nagrywania Klipów",
         "description": "Konfiguruj przechwytywanie, format i opcje przechowywania klipów audio dla wykrytych odgłosów ptaków.",
         "enable": "Włącz nagrywanie klipów",
-        "enableHelp": "Zapisuj klipy audio wykrytych odgłosów ptaków do przeglądu, udostępniania lub budowania niestandardowych zbiorów danych.",
         "disabled": "Nagrywanie klipów jest wyłączone",
+        "enableHelp": "Zapisuj klipy audio wykrytych odgłosów ptaków do przeglądu, udostępniania lub budowania niestandardowych zbiorów danych.",
         "captureSettings": "Ustawienia Przechwytywania",
         "lengthLabel": "Długość Przechwytywania",
         "lengthHelp": "Czas trwania audio do przechwycenia dla każdej detekcji (10-60 sekund). Dłuższe klipy zapewniają więcej kontekstu, ale wykorzystują więcej miejsca.",
@@ -3126,7 +2944,6 @@
         "normalization": "Normalizacja Audio",
         "normalizationEnable": "Włącz Normalizację Głośności",
         "normalizationHelp": "Automatycznie dostosuj poziomy audio do standardu nadawczego EBU R128 dla spójnej głośności odtwarzania wszystkich klipów.",
-        "normalizationDisabled": "Normalizacja audio jest wyłączona",
         "targetLUFSLabel": "Docelowa Głośność (LUFS)",
         "targetLUFSHelp": "Docelowa zintegrowana głośność w LUFS (Jednostki Głośności Względem Pełnej Skali). -23 LUFS jest standardem nadawczym EBU R128. Zakres: -40 do -10 LUFS.",
         "loudnessRangeLabel": "Zakres Głośności (LU)",
@@ -3143,6 +2960,7 @@
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Bitrate kompresji audio dla formatów stratnych. Zakres: {min}-{max} kbps. Wyższe wartości zapewniają lepszą jakość, ale większe pliki.",
         "losslessNote": "Formaty bezstratne zachowują oryginalną jakość audio bez artefaktów kompresji.",
+        "normalizationDisabled": "Normalizacja audio jest wyłączona",
         "disabledInfo": "Włącz nagrywanie klipów powyżej, aby skonfigurować ustawienia klipów, format pliku i opcje przechowywania."
       },
       "extendedCapture": {
@@ -3233,6 +3051,186 @@
         "invalidBitrate": "Nieprawidłowa wartość bitrate",
         "invalidRetentionPolicy": "Nieprawidłowa polityka retencji"
       },
+      "emptyStates": {
+        "soundCard": {
+          "title": "Nie Wykryto Kart Dźwiękowych",
+          "description": "Nie znaleziono lokalnych urządzeń wejściowych audio w tym systemie. Jest to normalne dla wdrożeń kontenerowych lub serwerów bez interfejsu graficznego.",
+          "errorTitle": "Błąd Ładowania Urządzeń",
+          "hintsTitle": "Możesz:",
+          "hints": {
+            "container": "Jest to normalne dla wdrożeń kontenerowych/bez interfejsu graficznego",
+            "streams": "Skonfigurować strumienie sieciowe w karcie Strumienie zamiast tego",
+            "usb": "Podłączyć mikrofon USB i odświeżyć listę"
+          },
+          "refresh": "Odśwież Urządzenia",
+          "retry": "Spróbuj Ponownie"
+        },
+        "streams": {
+          "title": "Brak Skonfigurowanych Strumieni",
+          "description": "Dodaj strumienie audio RTSP lub sieciowe z kamer IP, serwerów mikrofonowych lub innych źródeł strumieniowych.",
+          "hintsTitle": "Pierwsze kroki:",
+          "hints": {
+            "rtsp": "Wprowadź adresy URL RTSP w formacie: rtsp://ip:port/strumień",
+            "multiple": "Możesz dodać wiele strumieni dla różnych lokalizacji",
+            "protocol": "Wybierz TCP dla niezawodności lub UDP dla mniejszego opóźnienia"
+          }
+        }
+      },
+      "soundCard": {
+        "title": "Karta Dźwiękowa",
+        "description": "Konfiguruj lokalne urządzenie wejściowe audio",
+        "audioSourceLabel": "Źródło Audio (wymaga restartu aplikacji do zastosowania)",
+        "audioSourceHelp": "Wybierz urządzenie wejściowe audio do detekcji dźwięków ptaków. Zmiany wymagają restartu aplikacji, aby zostały zastosowane.",
+        "noSoundCardCapture": "Brak przechwytywania karty dźwiękowej",
+        "empty": {
+          "title": "Nie Wykryto Kart Dźwiękowych",
+          "description": "Nie znaleziono lokalnych urządzeń wejściowych audio w tym systemie. Jest to normalne dla wdrożeń kontenerowych lub serwerów bez interfejsu graficznego.",
+          "hintsTitle": "Możesz:",
+          "hintStream": "Skonfigurować strumienie sieciowe w karcie Strumienie",
+          "hintUsb": "Podłączyć mikrofon USB i odświeżyć listę",
+          "goToStreams": "Przejdź do Strumieni",
+          "refresh": "Odśwież Urządzenia"
+        }
+      },
+      "noSources": {
+        "warning": "Brak Skonfigurowanych Źródeł Audio",
+        "description": "BirdNET-Go potrzebuje wejścia audio do wykrywania ptaków. Proszę skonfigurować co najmniej jedno źródło w karcie Karta Dźwiękowa lub Strumienie."
+      },
+      "soundCards": {
+        "summary": "{count} źródło/źródeł kart dźwiękowych",
+        "addSource": "Dodaj Kartę Dźwiękową",
+        "nameLabel": "Nazwa Źródła",
+        "namePlaceholder": "np. Mikrofon na Podwórku",
+        "nameHelp": "Opisowa nazwa dla tego źródła audio",
+        "deviceLabel": "Urządzenie Audio",
+        "devicePlaceholder": "Wybierz urządzenie audio",
+        "gainLabel": "Wzmocnienie (dB)",
+        "gainHelp": "Regulacja wzmocnienia wejścia audio (-40 do +40 dB)",
+        "sampleRateLabel": "Częstotliwość próbkowania",
+        "sampleRateUnverified": "Nie można zweryfikować obsługiwanych częstotliwości dla tego urządzenia",
+        "sampleRateProbing": "Wykrywanie obsługiwanych częstotliwości...",
+        "sampleRateExclusive": "Częstotliwości powyżej 48 kHz używają wyłącznego dostępu do urządzenia w systemie Linux, uniemożliwiając innym aplikacjom współdzielenie karty dźwiękowej",
+        "modelLabel": "Modele detekcji",
+        "modelHelp": "Wybierz modele AI dla tego źródła audio",
+        "deleteConfirm": "Usunąć to źródło karty dźwiękowej?",
+        "emptyState": {
+          "title": "Brak Skonfigurowanych Źródeł Kart Dźwiękowych",
+          "description": "Dodaj źródło karty dźwiękowej, aby rozpocząć przechwytywanie audio do wykrywania ptaków.",
+          "hintsTitle": "Pierwsze Kroki",
+          "hints": {
+            "device": "Wybierz spośród dostępnych urządzeń wejścia audio w systemie",
+            "multiple": "Możesz skonfigurować wiele kart dźwiękowych dla różnych lokalizacji",
+            "model": "Każde źródło może używać innego modelu detekcji (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Domyślny)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Wykrywanie nietoperzy"
+        },
+        "errors": {
+          "nameRequired": "Nazwa źródła jest wymagana",
+          "deviceRequired": "Urządzenie audio jest wymagane",
+          "duplicateName": "Źródło o tej nazwie już istnieje",
+          "duplicateDevice": "To urządzenie jest już skonfigurowane"
+        },
+        "compatibility": {
+          "minSampleRate": "Wymaga co najmniej {rate}kHz częstotliwości próbkowania",
+          "recommendedSampleRate": "{rate}kHz zalecane dla najlepszych wyników",
+          "atLeastOneModel": "Należy wybrać co najmniej jeden model"
+        }
+      },
+      "rtspStreams": {
+        "title": "Konfiguracja Strumieni Audio",
+        "description": "Konfiguruj sieciowe strumienie audio do zdalnego przechwytywania audio. Obsługuje protokoły RTSP, HTTP, HLS, RTMP i UDP.",
+        "noStreamsConfigured": "Brak skonfigurowanych strumieni"
+      },
+      "streams": {
+        "streamLabel": "Strumień",
+        "nameLabel": "Nazwa Strumienia",
+        "enabled": "Włączony",
+        "disabled": "Wyłączony",
+        "namePlaceholder": "np. Karmnik w Ogrodzie",
+        "nameHelp": "Opisowa nazwa do identyfikacji tego strumienia audio",
+        "urlLabel": "URL Strumienia",
+        "urlHelp": "Wprowadź URL strumienia z opcjonalnymi danymi logowania (np. rtsp://host:port/ścieżka). Użyj zmiennych środowiskowych dla danych logowania.",
+        "typeLabel": "Typ Strumienia",
+        "typeHelp": "Protokół strumienia - wykrywany automatycznie z URL",
+        "transportLabel": "Protokół",
+        "summary": "{count} strumień(i) skonfigurowany(ch)",
+        "healthy": "sprawny",
+        "unhealthy": "niesprawny",
+        "unknown": "nieznany",
+        "refresh": "Odśwież",
+        "addStream": "Dodaj Strumień",
+        "deleteConfirm": "Usunąć ten strumień?",
+        "restartCount": "Zrestartowano {count} raz(y)",
+        "healthLoadError": "Nie udało się załadować statusu strumienia",
+        "status": {
+          "connected": "Połączony",
+          "connecting": "Łączenie",
+          "error": "Błąd",
+          "idle": "Bezczynny",
+          "suppressed": "Cisza nocna",
+          "unknown": "Nieznany"
+        },
+        "emptyState": {
+          "title": "Brak Skonfigurowanych Strumieni",
+          "description": "Dodaj strumienie audio z kamer IP, serwerów Icecast lub innych źródeł sieciowych.",
+          "hintsTitle": "Pierwsze Kroki",
+          "hints": {
+            "rtsp": "Obsługuje strumienie RTSP, HTTP, HLS, RTMP i UDP/RTP",
+            "credentials": "Dane logowania można dołączyć w URL lub użyć zmiennych środowiskowych",
+            "protocol": "TCP jest bardziej niezawodny dla RTSP, UDP ma niższe opóźnienie"
+          }
+        },
+        "errors": {
+          "nameRequired": "Nazwa strumienia jest wymagana",
+          "duplicateName": "Strumień o tej nazwie już istnieje",
+          "urlRequired": "URL strumienia jest wymagany",
+          "invalidUrl": "Nieprawidłowy format URL strumienia",
+          "duplicate": "Ten URL strumienia już istnieje"
+        },
+        "timeline": {
+          "error": "Błąd",
+          "noHistory": "Brak dostępnej historii stanu lub błędów.",
+          "stateChange": "Zmiana stanu",
+          "host": "Host",
+          "troubleshooting": "Rozwiązywanie problemów",
+          "from": "Od",
+          "to": "Do",
+          "reason": "Powód",
+          "eventAt": "Zdarzenie o {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Przełącz diagnostykę",
+          "processState": "Stan procesu",
+          "lastData": "Ostatnie dane",
+          "restartCount": "Restarty",
+          "connection": "Połączenie",
+          "stateErrorHistory": "Historia stanów i błędów"
+        },
+        "connectionStatus": {
+          "stable": "Stabilne",
+          "degraded": "Pogorszone",
+          "failed": "Nieudane",
+          "unknown": "Nieznany"
+        },
+        "testRequired": "Przeprowadź udany test strumienia przed zapisaniem",
+        "test": {
+          "button": "Testuj strumień",
+          "probing": "Testowanie...",
+          "result": "Wynik testu",
+          "error": "Test nieudany",
+          "batCompatible": "Kompatybilny z nietoperzami",
+          "batIncompatible": "Niekompatybilny z nietoperzami"
+        },
+        "batWarning": "Modele nietoperzy wymagają strumieni z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz. Użyj przycisku Testuj strumień powyżej, aby sprawdzić kompatybilność.",
+        "codecWarning": {
+          "lossy": "Stratne kodeki (AAC, Opus, MP3) niszczą częstotliwości ultradźwiękowe powyżej ~20 kHz, przez co strumień jest nieodpowiedni do wykrywania nietoperzy."
+        }
+      },
       "models": {
         "recommendBoth": "Dla najlepszego pokrycia wykrywania gatunków zaleca się uruchamianie zarówno modelu BirdNET, jak i Perch jednocześnie.",
         "perchOnlyWarning": "Sam Perch produkuje mniej wykryć. Obniż próg pewności do 0.50, aby uzyskać znaczące wyniki, lub włącz BirdNET obok Perch dla lepszego pokrycia."
@@ -3269,9 +3267,9 @@
         "title": "Podstawowe Uwierzytelnianie",
         "description": "Bezpieczny dostęp za pomocą prostego hasła",
         "enableLabel": "Włącz Uwierzytelnianie Hasłem",
-        "disabled": "Uwierzytelnianie hasłem jest wyłączone",
         "passwordLabel": "Hasło",
-        "passwordHelpText": "Ogranicz dostęp do ustawień za pomocą hasła."
+        "passwordHelpText": "Ogranicz dostęp do ustawień za pomocą hasła.",
+        "disabled": "Uwierzytelnianie hasłem jest wyłączone"
       },
       "oauth": {
         "title": "Uwierzytelnianie zewnętrzne",
@@ -3623,8 +3621,6 @@
         "parameters": {
           "label": "Parametry",
           "helpText": "Te wartości zostaną przekazane do twojego polecenia w podanej kolejności",
-          "placeholder": "Kliknij przyciski poniżej, aby dodać parametry lub wpisz ręcznie",
-          "tooltip": "Użyj przycisków poniżej lub wpisz bezpośrednio (oddzielone przecinkami)",
           "availableTitle": "Dostępne Parametry",
           "buttons": {
             "commonName": "NazwaPospolita",
@@ -3633,7 +3629,9 @@
             "time": "Czas",
             "source": "Źródło",
             "clearParameters": "Wyczyść Parametry"
-          }
+          },
+          "placeholder": "Kliknij przyciski poniżej, aby dodać parametry lub wpisz ręcznie",
+          "tooltip": "Użyj przycisków poniżej lub wpisz bezpośrednio (oddzielone przecinkami)"
         },
         "executeDefaults": {
           "label": "Uruchom również domyślne akcje (przechowywanie w bazie danych, powiadomienia itp.)",
@@ -3642,7 +3640,6 @@
       },
       "add": "Dodaj",
       "remove": "Usuń",
-      "suggestions": "Sugestie gatunków",
       "addSpeciesToInclude": "Dodaj gatunki do uwzględnienia",
       "addSpeciesToIncludeLabel": "Dodaj Nowy Gatunek do Uwzględnienia",
       "addSpeciesToExclude": "Dodaj gatunki do wykluczenia",
@@ -3785,7 +3782,8 @@
         "resetAllError": "Nie udało się zresetować progów",
         "expand": "Pokaż historię zdarzeń",
         "collapse": "Ukryj historię zdarzeń"
-      }
+      },
+      "suggestions": "Sugestie gatunków"
     },
     "database": {
       "sqlitePlaceholder": "Wprowadź ścieżkę bazy danych SQLite",
@@ -4003,6 +4001,12 @@
           "description": "Powiadamia, gdy przesyłanie do BirdWeather nie powiedzie się"
         }
       }
+    },
+    "errors": {
+      "loadFailed": "Nie udało się załadować ustawień",
+      "saveFailed": "Nie udało się zapisać ustawień",
+      "databaseStatsFailed": "Nie udało się załadować statystyk bazy danych",
+      "csvDownloadFailed": "Nie udało się pobrać pliku CSV"
     },
     "appearance": {
       "colorScheme": "Schemat kolorów",
@@ -4267,6 +4271,17 @@
         "adjustedToMinimum": "Wartość została dostosowana do minimum ({value})",
         "adjustedToMaximum": "Wartość została dostosowana do maksimum ({value})"
       },
+      "species": {
+        "suggestionsAvailable": "{count} sugestie gatunków dostępne. Używaj klawiszy strzałek do nawigacji.",
+        "noSuggestions": "Brak dostępnych sugestii gatunków.",
+        "loadingSpecies": "Ładowanie gatunków...",
+        "typePlaceholder": "Wpisz nazwę gatunku..."
+      },
+      "select": {
+        "searchOptions": "Opcje wyszukiwania",
+        "noOptions": "Nie znaleziono opcji",
+        "searchPlaceholder": "Szukaj..."
+      },
       "rtsp": {
         "addNewStream": "Dodaj Nowy Strumień RTSP",
         "maxStreamsReached": "Osiągnięto maksymalną liczbę strumieni RTSP ({max}).",
@@ -4275,17 +4290,6 @@
       },
       "subnet": {
         "maxSubnetsReached": "Osiągnięto maksymalną liczbę podsieci ({max})."
-      },
-      "species": {
-        "loadingSpecies": "Ładowanie gatunków...",
-        "typePlaceholder": "Wpisz nazwę gatunku...",
-        "suggestionsAvailable": "{count} sugestie gatunków dostępne. Używaj klawiszy strzałek do nawigacji.",
-        "noSuggestions": "Brak dostępnych sugestii gatunków."
-      },
-      "select": {
-        "searchPlaceholder": "Szukaj...",
-        "searchOptions": "Opcje wyszukiwania",
-        "noOptions": "Nie znaleziono opcji"
       }
     },
     "datePicker": {
@@ -4381,6 +4385,30 @@
       "download": "Pobierz"
     }
   },
+  "terminal": {
+    "title": "Terminal",
+    "disabled": "Terminal wyłączony",
+    "disabledDescription": "Terminal przeglądarki jest wyłączony. Włącz go w Ustawienia → Bezpieczeństwo, aby skorzystać z tej funkcji.",
+    "connected": "Połączono",
+    "disconnected": "Rozłączono",
+    "connecting": "Łączenie...",
+    "connectionError": "Błąd połączenia",
+    "connectionClosed": "Połączenie zamknięte",
+    "securityWarning": "Ostrzeżenie: Ten terminal zapewnia bezpośredni dostęp do powłoki systemu hosta. Włączaj tylko w zaufanych sieciach.",
+    "copySelection": "Kopiuj zaznaczenie",
+    "expand": "Rozwiń",
+    "collapse": "Zwiń",
+    "fullscreen": "Pełny ekran",
+    "exitFullscreen": "Zamknij pełny ekran",
+    "colorTheme": "Motyw kolorów",
+    "themeDark": "Ciemny",
+    "themeLight": "Jasny",
+    "themeHighContrast": "Wysoki kontrast",
+    "detach": "Otwórz w nowym oknie",
+    "detached": "Terminal jest odłączony",
+    "detachedDescription": "Terminal działa w osobnym oknie. Zamknij to okno, aby przywrócić go tutaj.",
+    "reattach": "Podłącz ponownie"
+  },
   "quietHours": {
     "indicator": {
       "tooltip": "Cisza nocna aktywna — {count} źródło(a) wstrzymane"
@@ -4465,16 +4493,6 @@
       "invalidHost": "Nieprawidłowy parametr hosta",
       "rateLimit": "Zbyt wiele prób połączenia ze strumieniem powiadomień, poczekaj chwilę przed ponowną próbą"
     },
-    "streams": {
-      "test": {
-        "invalidBody": "Nieprawidłowa treść żądania",
-        "urlRequired": "Adres URL strumienia jest wymagany",
-        "invalidUrl": "Nieprawidłowy format URL. Wprowadź pełny URL, np. rtsp://host:port/ścieżka",
-        "unsupportedScheme": "Nieobsługiwany schemat URL \"{scheme}\". Użyj rtsp, rtsps, http, https, rtmp lub udp",
-        "blockedDestination": "Ten cel jest zablokowany ze względów bezpieczeństwa",
-        "connectionFailed": "Nie udało się połączyć ze strumieniem. Sprawdź, czy URL jest poprawny i strumień jest dostępny"
-      }
-    },
     "debug": {
       "notEnabled": "Tryb debugowania nie jest włączony"
     },
@@ -4496,6 +4514,16 @@
       "conflictData": "Ta akcja jest w konflikcie z istniejącymi danymi.",
       "requestTimeout": "Przekroczono limit czasu żądania.",
       "networkError": "Wystąpił błąd sieci. Sprawdź połączenie."
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Nieprawidłowa treść żądania",
+        "urlRequired": "Adres URL strumienia jest wymagany",
+        "invalidUrl": "Nieprawidłowy format URL. Wprowadź pełny URL, np. rtsp://host:port/ścieżka",
+        "unsupportedScheme": "Nieobsługiwany schemat URL \"{scheme}\". Użyj rtsp, rtsps, http, https, rtmp lub udp",
+        "blockedDestination": "Ten cel jest zablokowany ze względów bezpieczeństwa",
+        "connectionFailed": "Nie udało się połączyć ze strumieniem. Sprawdź, czy URL jest poprawny i strumień jest dostępny"
+      }
     }
   },
   "weather": {
@@ -4625,6 +4653,10 @@
         "label": "Próg wykrywania nietoperzy",
         "helpText": "Minimalna ocena pewności dla wykryć gatunków nietoperzy. Dotyczy tylko modeli klasyfikatora nietoperzy."
       },
+      "locale": {
+        "label": "Język gatunków",
+        "helpText": "Język używany do nazw zwyczajowych gatunków w interfejsie."
+      },
       "batFilter": {
         "label": "Filtr górnoprzepustowy dla nietoperzy",
         "helpText": "Filtruje słyszalne częstotliwości przed analizą nietoperzy, aby zmniejszyć fałszywe wykrycia spowodowane śpiewem ptaków i hałasem otoczenia."
@@ -4647,26 +4679,26 @@
         },
         "detectionCount": "Wymagane {count} potwierdzeń. {description}",
         "warningOff": "Bez filtrowania istnieje duże prawdopodobieństwo fałszywych trafień. Włączenie filtrowania znacznie poprawia dokładność."
-      },
-      "locale": {
-        "label": "Język gatunków",
-        "helpText": "Język używany do nazw zwyczajowych gatunków w interfejsie."
       }
     },
     "rangeFilter": {
       "birdOnlyNote": "Filtr zasięgu dotyczy tylko klasyfikatorów ptaków. Modele nietoperzy używają własnych list gatunków.",
       "status": {
         "title": "Przegląd filtra zasięgu",
-        "geomodelInfo": "BirdNET Geomodel {version} - {species} znanych gatunków",
+        "model": "Model",
         "autoSelected": "Wybrano automatycznie",
         "manual": "Ręczny",
-        "classifier": "Klasyfikator",
+        "classifierModel": "Klasyfikator",
+        "mappedSpecies": "Zmapowane gatunki",
+        "unmappedSpecies": "Niezmapowane gatunki",
         "totalSpecies": "Łącznie gatunków",
+        "noFilter": "Brak aktywnego filtra zasięgu",
+        "geomodelInfo": "BirdNET Geomodel {version} - {species} znanych gatunków",
+        "classifier": "Klasyfikator",
         "withRangeData": "Z danymi zasięgu",
         "withoutRangeData": "Bez danych zasięgu",
         "withRangeDataTooltip": "Gatunki, które geomodel może ocenić pod kątem prawdopodobieństwa geograficznego w Twojej lokalizacji",
         "withoutRangeDataTooltip": "Gatunki bez danych geograficznych w geomodelu, obsługiwane przez poniższe ustawienie niezmapowanych gatunków",
-        "noFilter": "Brak aktywnego filtra zasięgu",
         "passUnmapped": {
           "label": "Zezwalaj na gatunki bez danych zasięgu",
           "helpText": "Zezwalaj na wykrywanie gatunków, dla których geomodel nie ma danych geograficznych. Po wyłączeniu te gatunki są zawsze odfiltrowywane."
@@ -4695,10 +4727,6 @@
       "removing": "Usuwanie...",
       "noInstalledModels": "Brak zainstalowanych dodatkowych modeli. Przejdź do karty Dostępne, aby dodać więcej klasyfikatorów.",
       "noAvailableModels": "Brak dodatkowych modeli dostępnych dla Twojej platformy.",
-      "sections": {
-        "acoustic": "Klasyfikatory akustyczne",
-        "geomodel": "Geomodele"
-      },
       "categories": {
         "wildlife": "Klasyfikatory dzikiej przyrody",
         "bird": "Klasyfikatory ptaków",
@@ -4740,6 +4768,10 @@
       "reinstalling": "Ponowna instalacja...",
       "reinstallComplete": "Pliki zweryfikowane pomyślnie",
       "geomodelBadge": "Zawiera BirdNET v3.0 geomodel",
+      "sections": {
+        "acoustic": "Klasyfikatory akustyczne",
+        "geomodel": "Geomodele"
+      },
       "onnxRuntimeRequired": "Wymaga ONNX Runtime, który nie jest dostępny w tym systemie.",
       "onnxRuntimeMissing": "ONNX Runtime nie jest dostępny. Ten model nie może działać.",
       "unavailable": "Niedostępne"

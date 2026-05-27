@@ -587,6 +587,9 @@ func (r *testDetectionRepo) SetReview(_ context.Context, _, _ string) error { re
 func (r *testDetectionRepo) GetReview(_ context.Context, _ string) (string, error) {
 	return "", nil
 }
+func (r *testDetectionRepo) CorrectSpecies(_ context.Context, _ string, _ *datastore.CorrectSpeciesParams) error {
+	return nil
+}
 
 func (r *testDetectionRepo) AddComment(_ context.Context, _, _ string) error { return nil }
 func (r *testDetectionRepo) GetComments(_ context.Context, _ string) ([]detection.Comment, error) {
@@ -694,6 +697,9 @@ func (s *testLegacyInterface) GetNoteClipPath(_ string) (string, error)         
 func (s *testLegacyInterface) DeleteNoteClipPath(_ string) error                     { return nil }
 func (s *testLegacyInterface) GetNoteReview(_ string) (*datastore.NoteReview, error) { return nil, nil } //nolint:nilnil // stub
 func (s *testLegacyInterface) SaveNoteReview(_ *datastore.NoteReview) error          { return nil }
+func (s *testLegacyInterface) CorrectNoteSpecies(_ context.Context, _ uint, _, _ string, _ float64, _ detection.ModelInfo) error {
+	return nil
+}
 func (s *testLegacyInterface) GetNoteComments(_ string) ([]datastore.NoteComment, error) {
 	return nil, nil
 }

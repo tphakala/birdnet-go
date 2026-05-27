@@ -244,6 +244,29 @@ func (r *detectionRepository) GetReview(ctx context.Context, id string) (string,
 	return review.Verified, nil
 }
 
+// CorrectSpecies replaces a detection's species + confidence and records a
+// 'correct' review. Both happen inside CorrectNoteSpecies, which owns the
+// species update and the review write as one atomic operation (see its
+// contract on the Interface).
+//
+// We deliberately do NOT issue a separate SaveNoteReview here. The earlier
+// shape did, which double-wrote the review on the v2only path
+// (WriteSpeciesCorrection already saves it) and left a window where the
+// species update could commit without the review landing.
+func (r *detectionRepository) CorrectSpecies(ctx context.Context, id string, params *CorrectSpeciesParams) error {
+	noteID, err := r.parseID(id)
+	if err != nil {
+		return err
+	}
+
+	if err := r.store.CorrectNoteSpecies(ctx, noteID,
+		params.ScientificName, params.CommonName, params.Confidence, params.Model,
+	); err != nil {
+		return fmt.Errorf("failed to correct species for detection %s: %w", id, err)
+	}
+	return nil
+}
+
 // AddComment adds a comment to a detection.
 func (r *detectionRepository) AddComment(ctx context.Context, id, comment string) error {
 	noteID, err := r.parseID(id)
