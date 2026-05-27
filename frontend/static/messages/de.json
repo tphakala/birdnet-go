@@ -591,6 +591,21 @@
       "subtitle": "Arten werden in Echtzeit identifiziert",
       "empty": "Alles ruhig — derzeit keine Vögel erkannt"
     },
+    "recentHearing": {
+      "title": "Zuletzt gehört",
+      "subtitle": "Letzte {hours} Stunden",
+      "empty": "Keine aktuelle Artenaktivität",
+      "loading": "Lade aktuelle Artenaktivität",
+      "justNow": "gerade eben",
+      "minutesAgo": "vor {count} Min.",
+      "hoursAgo": "vor {count} Std.",
+      "detections": "{count} Erkennungen",
+      "confidence": "{confidence} % Konfidenz",
+      "confidenceTrend": "Konfidenzverlauf für {species}",
+      "controls": {
+        "refresh": "Aktuelle Artenaktivität aktualisieren"
+      }
+    },
     "rejected": "Abgelehnt",
     "dailySummary": {
       "title": "Tagesaktivität",
@@ -694,6 +709,8 @@
       "dailySummaryLoad": "Fehler beim Laden der Tageszusammenfassung",
       "recentDetectionsFetch": "Fehler beim Abrufen aktueller Erkennungen: {status}",
       "recentDetectionsLoad": "Fehler beim Laden aktueller Erkennungen",
+      "recentHearingFetch": "Aktuelle Artenaktivität konnte nicht abgerufen werden: {status}",
+      "recentHearingLoad": "Aktuelle Artenaktivität konnte nicht geladen werden",
       "configFetch": "Fehler beim Abrufen der Dashboard-Konfiguration: {status}"
     },
     "banner": {
@@ -759,6 +776,7 @@
       "banner": "Dashboard-Banner",
       "dailySummary": "Tageszusammenfassung",
       "currentlyHearing": "Aktuell erkannt",
+      "recentHearing": "Zuletzt gehört",
       "detectionsGrid": "Aktuelle Erkennungen",
       "liveSpectrogram": "Live-Spektrogramm",
       "videoEmbed": "Video-Einbettung"

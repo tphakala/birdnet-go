@@ -81,7 +81,9 @@
         enabled: true,
         summary: { summaryLimit: 30 },
       },
-      { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true },
+      { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true, width: 'half' },
+      { id: 'recent-hearing-0', type: 'recent-hearing', enabled: true, width: 'half' },
+      { id: 'live-spectrogram-0', type: 'live-spectrogram', enabled: true },
       { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
     ],
   };

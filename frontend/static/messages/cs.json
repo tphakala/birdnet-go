@@ -591,6 +591,21 @@
       "subtitle": "Druhy identifikované v reálném čase",
       "empty": "Vše je v klidu — momentálně nejsou detekováni žádní ptáci"
     },
+    "recentHearing": {
+      "title": "Nedávno slyšeno",
+      "subtitle": "Posledních {hours} hodin",
+      "empty": "Žádná nedávná aktivita druhů",
+      "loading": "Načítání nedávné aktivity druhů",
+      "justNow": "právě teď",
+      "minutesAgo": "před {count} min",
+      "hoursAgo": "před {count} h",
+      "detections": "{count} detekcí",
+      "confidence": "spolehlivost {confidence} %",
+      "confidenceTrend": "Trend spolehlivosti pro {species}",
+      "controls": {
+        "refresh": "Obnovit nedávnou aktivitu druhů"
+      }
+    },
     "rejected": "Zamítnuto",
     "dailySummary": {
       "title": "Denní aktivita",
@@ -694,6 +709,8 @@
       "dailySummaryLoad": "Nepodařilo se načíst denní souhrn",
       "recentDetectionsFetch": "Nepodařilo se získat nedávné detekce: {status}",
       "recentDetectionsLoad": "Nepodařilo se načíst nedávné detekce",
+      "recentHearingFetch": "Nepodařilo se načíst nedávnou aktivitu druhů: {status}",
+      "recentHearingLoad": "Nepodařilo se načíst nedávnou aktivitu druhů",
       "configFetch": "Nepodařilo se získat konfiguraci dashboardu: {status}"
     },
     "banner": {
@@ -759,6 +776,7 @@
       "banner": "Banner Dashboardu",
       "dailySummary": "Denní souhrn",
       "currentlyHearing": "Právě slyšíme",
+      "recentHearing": "Nedávno slyšeno",
       "detectionsGrid": "Nedávné detekce",
       "liveSpectrogram": "Živý spektrogram",
       "videoEmbed": "Vložené video"

@@ -591,6 +591,21 @@
       "subtitle": "Specie identificate in tempo reale",
       "empty": "Tutto tranquillo — nessun uccello rilevato al momento"
     },
+    "recentHearing": {
+      "title": "Ascoltati di recente",
+      "subtitle": "Ultime {hours} ore",
+      "empty": "Nessuna attività recente delle specie",
+      "loading": "Caricamento attività recente delle specie",
+      "justNow": "adesso",
+      "minutesAgo": "{count} min fa",
+      "hoursAgo": "{count} h fa",
+      "detections": "{count} rilevamenti",
+      "confidence": "confidenza {confidence}%",
+      "confidenceTrend": "Andamento della confidenza per {species}",
+      "controls": {
+        "refresh": "Aggiorna attività recente delle specie"
+      }
+    },
     "rejected": "Rifiutato",
     "dailySummary": {
       "title": "Attività giornaliera",
@@ -694,6 +709,8 @@
       "dailySummaryLoad": "Impossibile caricare il riepilogo giornaliero",
       "recentDetectionsFetch": "Impossibile recuperare i rilevamenti recenti: {status}",
       "recentDetectionsLoad": "Impossibile caricare i rilevamenti recenti",
+      "recentHearingFetch": "Impossibile recuperare l'attività recente delle specie: {status}",
+      "recentHearingLoad": "Impossibile caricare l'attività recente delle specie",
       "configFetch": "Impossibile recuperare la configurazione della dashboard: {status}"
     },
     "banner": {
@@ -759,6 +776,7 @@
       "banner": "Banner della dashboard",
       "dailySummary": "Riepilogo giornaliero",
       "currentlyHearing": "In ascolto ora",
+      "recentHearing": "Ascoltati di recente",
       "detectionsGrid": "Rilevamenti recenti",
       "liveSpectrogram": "Spettrogramma in tempo reale",
       "videoEmbed": "Video incorporato"

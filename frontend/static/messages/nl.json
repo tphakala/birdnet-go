@@ -591,6 +591,21 @@
       "subtitle": "Soorten worden in realtime geïdentificeerd",
       "empty": "Alles rustig — momenteel geen vogels gedetecteerd"
     },
+    "recentHearing": {
+      "title": "Recent gehoord",
+      "subtitle": "Laatste {hours} uur",
+      "empty": "Geen recente soortactiviteit",
+      "loading": "Recente soortactiviteit laden",
+      "justNow": "zojuist",
+      "minutesAgo": "{count} min geleden",
+      "hoursAgo": "{count} u geleden",
+      "detections": "{count} detecties",
+      "confidence": "{confidence}% zekerheid",
+      "confidenceTrend": "Zekerheidstrend voor {species}",
+      "controls": {
+        "refresh": "Recente soortactiviteit vernieuwen"
+      }
+    },
     "rejected": "Afgewezen",
     "dailySummary": {
       "title": "Dagactiviteit",
@@ -694,6 +709,8 @@
       "dailySummaryLoad": "Kon Dagelijks overzicht niet weergeven",
       "recentDetectionsFetch": "Kon Recent herkend niet inlezen: {status}",
       "recentDetectionsLoad": "Kon Recent herkend niet weergeven",
+      "recentHearingFetch": "Kan recente soortactiviteit niet ophalen: {status}",
+      "recentHearingLoad": "Kan recente soortactiviteit niet laden",
       "configFetch": "Kon Overzicht instellingen niet inlezen: {status}"
     },
     "banner": {
@@ -759,6 +776,7 @@
       "banner": "Dashboard-banner",
       "dailySummary": "Dagelijks overzicht",
       "currentlyHearing": "Momenteel gehoord",
+      "recentHearing": "Recent gehoord",
       "detectionsGrid": "Recente detecties",
       "liveSpectrogram": "Live spectrogram",
       "videoEmbed": "Video-inbedding"

@@ -591,6 +591,21 @@
       "subtitle": "Espèces identifiées en temps réel",
       "empty": "Tout est calme — aucun oiseau détecté pour le moment"
     },
+    "recentHearing": {
+      "title": "Entendu récemment",
+      "subtitle": "Dernières {hours} heures",
+      "empty": "Aucune activité récente d'espèces",
+      "loading": "Chargement de l'activité récente des espèces",
+      "justNow": "à l'instant",
+      "minutesAgo": "il y a {count} min",
+      "hoursAgo": "il y a {count} h",
+      "detections": "{count} détections",
+      "confidence": "confiance {confidence} %",
+      "confidenceTrend": "Tendance de confiance pour {species}",
+      "controls": {
+        "refresh": "Actualiser l'activité récente des espèces"
+      }
+    },
     "rejected": "Rejeté",
     "dailySummary": {
       "title": "Activité Quotidienne",
@@ -694,6 +709,8 @@
       "dailySummaryLoad": "Échec du chargement du résumé quotidien",
       "recentDetectionsFetch": "Échec de la récupération des détections récentes : {status}",
       "recentDetectionsLoad": "Échec du chargement des détections récentes",
+      "recentHearingFetch": "Impossible de récupérer l'activité récente des espèces : {status}",
+      "recentHearingLoad": "Impossible de charger l'activité récente des espèces",
       "configFetch": "Échec de la récupération de la configuration du tableau de bord : {status}"
     },
     "banner": {
@@ -759,6 +776,7 @@
       "banner": "Bannière du tableau de bord",
       "dailySummary": "Résumé quotidien",
       "currentlyHearing": "En écoute actuellement",
+      "recentHearing": "Entendu récemment",
       "detectionsGrid": "Détections récentes",
       "liveSpectrogram": "Spectrogramme en direct",
       "videoEmbed": "Vidéo intégrée"
