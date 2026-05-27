@@ -11,6 +11,9 @@ export const SUPPORTS_HALF: ReadonlySet<string> = new Set([
   'detections-grid',
 ]);
 
+const GRID_SPAN_HALF = 'col-span-1';
+const GRID_SPAN_FULL_RESPONSIVE = 'col-span-1 md:col-span-2';
+
 /**
  * Returns the effective display width for a dashboard element.
  * Full-width-only types always return 'full'.
@@ -22,5 +25,5 @@ export function getEffectiveWidth(el: DashboardElement): 'full' | 'half' {
 }
 
 export function getResponsiveGridSpanClass(el: DashboardElement): string {
-  return getEffectiveWidth(el) === 'half' ? 'col-span-1' : 'col-span-1 md:col-span-2';
+  return getEffectiveWidth(el) === 'half' ? GRID_SPAN_HALF : GRID_SPAN_FULL_RESPONSIVE;
 }
