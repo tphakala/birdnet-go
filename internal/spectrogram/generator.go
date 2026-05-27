@@ -68,6 +68,12 @@ const (
 
 	// soxResampleRate is the target sample rate for Sox spectrogram generation
 	soxResampleRate = "24k"
+
+	// soxVisualNormalizeEffect normalizes only the audio stream used for image rendering.
+	// Sox spectrograms use an absolute 0 dBFS scale, so quiet detections otherwise render
+	// nearly black even when the frequency content is present.
+	soxVisualNormalizeEffect = "gain"
+	soxVisualNormalizeArg    = "-n"
 )
 
 // GenerateOption configures optional parameters for spectrogram generation.
@@ -725,8 +731,9 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 		"-e", "signed", // Encoding: signed integer
 		"-b", strconv.Itoa(conf.BitDepth), // Bit depth: 16-bit
 		"-c", strconv.Itoa(conf.NumChannels), // Channels: mono
-		"-",                     // Read from stdin
-		"-n",                    // No audio output (null output)
+		"-",                                             // Read from stdin
+		"-n",                                            // No audio output (null output)
+		soxVisualNormalizeEffect, soxVisualNormalizeArg, // Visual-only peak normalization
 		"rate", soxResampleRate, // Resample to 24kHz for spectrogram
 		"spectrogram",             // Effect: spectrogram
 		"-x", strconv.Itoa(width), // Width in pixels
@@ -887,8 +894,9 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, settings *conf.Se
 	heightStr := strconv.Itoa(fftFriendlyHeight(width))
 	widthStr := strconv.Itoa(width)
 
-	// Build base args without duration parameter
-	args := []string{"-n", "rate", soxResampleRate, "spectrogram", "-x", widthStr, "-y", heightStr}
+	// Build base args without duration parameter. Normalize the render input only;
+	// saved clips and inference audio are left unchanged.
+	args := []string{"-n", soxVisualNormalizeEffect, soxVisualNormalizeArg, "rate", soxResampleRate, "spectrogram", "-x", widthStr, "-y", heightStr}
 
 	// Always provide explicit duration via -d parameter to ensure spectrogram
 	// shows the full audio duration regardless of image width (fixes #1484).

@@ -39,6 +39,10 @@ const (
 
 	// exitCodeSIGTERM is the exit code when a process is terminated by SIGTERM (128 + 15)
 	exitCodeSIGTERM = 143
+
+	// RenderCacheVersionSuffix is appended to generated spectrogram filenames when the
+	// render algorithm changes in a way that should bypass older cached PNGs.
+	RenderCacheVersionSuffix = "-norm1"
 )
 
 // validSizes maps size strings to pixel widths (single source of truth).
@@ -88,12 +92,12 @@ func GetValidSizes() []string {
 }
 
 // BuildSpectrogramPath constructs the spectrogram file path from the audio clip path.
-// It replaces the audio file extension with .png.
+// It replaces the audio file extension with a cache-versioned .png.
 //
 // Example:
 //
 //	"clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00.wav"
-//	-> "clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00.png"
+//	-> "clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00-norm1.png"
 func BuildSpectrogramPath(clipPath string) (string, error) {
 	ext := filepath.Ext(clipPath)
 	if ext == "" {
@@ -105,7 +109,7 @@ func BuildSpectrogramPath(clipPath string) (string, error) {
 			Build()
 	}
 
-	spectrogramPath := strings.TrimSuffix(clipPath, ext) + ".png"
+	spectrogramPath := strings.TrimSuffix(clipPath, ext) + RenderCacheVersionSuffix + ".png"
 	return spectrogramPath, nil
 }
 
@@ -143,12 +147,12 @@ func IsOperationalError(err error) bool {
 // BuildSpectrogramPathWithParams builds a spectrogram path with size/raw encoded in filename.
 // Used by API when different sizes/raw settings are requested than the default.
 //
-// The filename format is: basename.{size}[.raw].png
+// The filename format is: basename.{size}[.raw]-norm1.png
 // Examples:
 //
-//	"file.wav" with width=514, raw=false  -> "file.md.png"
-//	"file.wav" with width=1026, raw=true  -> "file.lg.raw.png"
-//	"file.wav" with width=2050, raw=false -> "file.xl.png"
+//	"file.wav" with width=514, raw=false  -> "file.md-norm1.png"
+//	"file.wav" with width=1026, raw=true  -> "file.lg.raw-norm1.png"
+//	"file.wav" with width=2050, raw=false -> "file.xl-norm1.png"
 func BuildSpectrogramPathWithParams(audioPath string, width int, raw bool) (string, error) {
 	// Find the size string for this width
 	sizeStr, err := PixelsToSize(width)
@@ -172,7 +176,7 @@ func BuildSpectrogramPathWithParams(audioPath string, width int, raw bool) (stri
 	if raw {
 		suffix += ".raw"
 	}
-	suffix += ".png"
+	suffix += RenderCacheVersionSuffix + ".png"
 
 	return baseName + suffix, nil
 }

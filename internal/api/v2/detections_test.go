@@ -1053,6 +1053,8 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 		baseName + "_258px.png",
 		baseName + "_1026px.png",
 		baseName + "_1026px-legend.png",
+		baseName + "_1026px-norm1.png",
+		baseName + "_1026px-scientific_dark-norm1-legend.png",
 	}
 	for _, sf := range spectrogramFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(clipDir, sf), []byte("fake-png"), 0o600))

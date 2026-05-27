@@ -1305,17 +1305,40 @@ func (c *Controller) removeDetectionFiles(clipName string) {
 			logger.String("path", absClipPath))
 	}
 
-	// Remove all associated spectrogram files.
-	// Spectrograms follow the naming pattern: <basename>_<width>px.png
-	// and <basename>_<width>px-legend.png for each valid width.
+	// Remove all associated API spectrogram files.
+	// Spectrograms follow the naming pattern: <basename>_<width>px*.png,
+	// where the suffix can include render cache versions, style, dynamic range,
+	// and legend markers.
 	ext := filepath.Ext(normalized)
 	basePath := strings.TrimSuffix(absClipPath, ext)
+	clipDir := filepath.Dir(basePath)
+	baseName := filepath.Base(basePath)
 
 	removed := 0
-	suffixes := []string{"%s_%dpx.png", "%s_%dpx-legend.png"}
-	for _, width := range spectrogramWidths {
-		for _, sfx := range suffixes {
-			path := fmt.Sprintf(sfx, basePath, width)
+	entries, err := os.ReadDir(clipDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Warn("Failed to read clip directory for spectrogram cleanup",
+				logger.String("path", clipDir),
+				logger.Error(err))
+		}
+	} else {
+		widthPrefixes := make([]string, 0, len(spectrogramWidths))
+		for _, width := range spectrogramWidths {
+			widthPrefixes = append(widthPrefixes, fmt.Sprintf("%s_%dpx", baseName, width))
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if !strings.HasSuffix(strings.ToLower(name), ".png") || !slices.ContainsFunc(widthPrefixes, func(prefix string) bool {
+				return strings.HasPrefix(name, prefix)
+			}) {
+				continue
+			}
+			path := filepath.Join(clipDir, name)
 			if err := os.Remove(path); err == nil {
 				removed++
 			} else if !os.IsNotExist(err) {
