@@ -3937,6 +3937,8 @@
           "species_name": "Lajin nimi",
           "scientific_name": "Tieteellinen nimi",
           "confidence": "Luotettavuus",
+          "days_since_last_seen": "Päiviä edellisestä havainnosta",
+          "novelty_episode_days": "Uutuusjakson päivät",
           "location": "Sijainti",
           "stream_name": "Striimin nimi",
           "stream_url": "Striimin URL",

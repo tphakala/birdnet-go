@@ -61,7 +61,9 @@ const (
 	maxHour = 23
 	// saveTransactionTimeout is the maximum duration for a Save transaction.
 	// This prevents indefinite lock holding during slow I/O operations.
-	saveTransactionTimeout = 30 * time.Second
+	saveTransactionTimeout  = 30 * time.Second
+	sqliteDetectionDateExpr = "date(d.detected_at, 'unixepoch', 'localtime')"
+	mysqlDetectionDateExpr  = "DATE(FROM_UNIXTIME(d.detected_at))"
 )
 
 // parseHour validates and parses an hour string to an integer.
@@ -2479,6 +2481,7 @@ type speciesFirstSeenInfo struct {
 	LabelID        uint
 	ScientificName string
 	FirstDetected  int64
+	LastDetected   int64
 }
 
 // convertToNewSpeciesData converts species first-seen data to NewSpeciesData with common name resolution.
@@ -2497,10 +2500,15 @@ func (ds *Datastore) convertToNewSpeciesData(_ context.Context, data []speciesFi
 		commonName := ds.resolveCommonName(sciName)
 
 		firstSeenDate := time.Unix(d.FirstDetected, 0).In(ds.timezone).Format(time.DateOnly)
+		var lastSeenDate string
+		if d.LastDetected > 0 {
+			lastSeenDate = time.Unix(d.LastDetected, 0).In(ds.timezone).Format(time.DateOnly)
+		}
 		result = append(result, datastore.NewSpeciesData{
 			ScientificName: sciName,
 			CommonName:     commonName,
 			FirstSeenDate:  firstSeenDate,
+			LastSeenDate:   lastSeenDate,
 			CountInPeriod:  0,
 		})
 	}
@@ -2526,6 +2534,7 @@ func (ds *Datastore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 			LabelID:        d.LabelID,
 			ScientificName: d.ScientificName,
 			FirstDetected:  d.FirstDetected,
+			LastDetected:   d.LastDetected,
 		}
 	}
 
@@ -2557,6 +2566,103 @@ func (ds *Datastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start
 	return ds.convertToNewSpeciesData(ctx, data), nil
 }
 
+// GetSpeciesDetectionDatesInPeriod returns distinct species/date pairs within a period.
+func (ds *Datastore) GetSpeciesDetectionDatesInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.SpeciesDetectionDate, error) {
+	start, end, err := ds.parseDateRange(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 10000
+	}
+
+	dateExpr := sqliteDetectionDateExpr
+	if ds.manager.IsMySQL() {
+		dateExpr = mysqlDetectionDateExpr
+	}
+
+	type result struct {
+		ScientificName string `gorm:"column:scientific_name"`
+		Date           string `gorm:"column:date"`
+	}
+	var rows []result
+
+	prefix := ds.manager.TablePrefix()
+	query := ds.manager.DB().WithContext(ctx).
+		Table(prefix+"detections d").
+		Select(fmt.Sprintf("l.scientific_name as scientific_name, %s as date", dateExpr)).
+		Joins(fmt.Sprintf("JOIN %slabels l ON d.label_id = l.id", prefix)).
+		Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
+		Where("d.detected_at >= ? AND d.detected_at < ?", start, end).
+		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
+		Group(fmt.Sprintf("l.scientific_name, %s", dateExpr)).
+		Order("date ASC, l.scientific_name ASC").
+		Limit(limit).
+		Offset(offset)
+
+	if err := query.Scan(&rows).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_detection_dates_in_period").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
+	}
+
+	results := make([]datastore.SpeciesDetectionDate, 0, len(rows))
+	for _, row := range rows {
+		scientificName := detection.ExtractScientificName(row.ScientificName)
+		results = append(results, datastore.SpeciesDetectionDate{
+			ScientificName: scientificName,
+			CommonName:     ds.resolveCommonName(scientificName),
+			Date:           row.Date,
+		})
+	}
+
+	return results, nil
+}
+
+// GetSpeciesLastDetectionDateBefore returns the last detection date before the given date.
+func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scientificName, beforeDate string) (string, error) {
+	before, err := time.ParseInLocation(time.DateOnly, beforeDate, ds.timezone)
+	if err != nil {
+		return "", fmt.Errorf("invalid before date format: %w", err)
+	}
+
+	dateExpr := sqliteDetectionDateExpr
+	if ds.manager.IsMySQL() {
+		dateExpr = mysqlDetectionDateExpr
+	}
+
+	var result struct {
+		LastSeenDate string `gorm:"column:last_seen_date"`
+	}
+
+	escapedScientificName := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(scientificName)
+	prefix := ds.manager.TablePrefix()
+	query := ds.manager.DB().WithContext(ctx).
+		Table(prefix+"detections d").
+		Select(fmt.Sprintf("COALESCE(MAX(%s), '') as last_seen_date", dateExpr)).
+		Joins(fmt.Sprintf("JOIN %slabels l ON d.label_id = l.id", prefix)).
+		Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
+		Where("d.detected_at < ?", before.Unix()).
+		Where("(l.scientific_name = ? OR l.scientific_name LIKE ? ESCAPE '\\')", scientificName, escapedScientificName+`\_%`).
+		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
+
+	if err := query.Scan(&result).Error; err != nil {
+		return "", errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_last_detection_date_before").
+			Context("scientific_name", scientificName).
+			Context("before_date", beforeDate).
+			Build()
+	}
+
+	return result.LastSeenDate, nil
+}
+
 // GetSpeciesDiversityData returns unique species count per day.
 func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]datastore.DailyAnalyticsData, error) {
 	// Validate date formats before using in SQL
@@ -2576,11 +2682,9 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 	// Generate database-agnostic date expression
 	// MySQL: DATE(FROM_UNIXTIME(d.detected_at))
 	// SQLite: date(d.detected_at, 'unixepoch', 'localtime') - localtime for timezone-aware bucketing
-	var dateExpr string
+	dateExpr := sqliteDetectionDateExpr
 	if ds.manager.IsMySQL() {
-		dateExpr = "DATE(FROM_UNIXTIME(d.detected_at))"
-	} else {
-		dateExpr = "date(d.detected_at, 'unixepoch', 'localtime')"
+		dateExpr = mysqlDetectionDateExpr
 	}
 
 	// Build query to count distinct species per day, excluding false positives
