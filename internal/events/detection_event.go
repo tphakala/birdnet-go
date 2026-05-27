@@ -8,6 +8,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// Detection metadata keys shared by event producers and consumers.
+const (
+	DetectionMetadataDaysSinceLastSeen   = "days_since_last_seen"
+	DetectionMetadataNoveltyEpisodeDays  = "novelty_episode_days"
+	DetectionMetadataNoveltyEpisodeStart = "novelty_episode_start"
+)
+
 // DetectionEvent represents a bird detection event that can be processed asynchronously
 type DetectionEvent interface {
 	// GetSpeciesName returns the common name of the detected species

@@ -2639,6 +2639,8 @@ export type TranslationKey =
   | 'settings.alerts.schema.properties.species_name'
   | 'settings.alerts.schema.properties.scientific_name'
   | 'settings.alerts.schema.properties.confidence'
+  | 'settings.alerts.schema.properties.days_since_last_seen'
+  | 'settings.alerts.schema.properties.novelty_episode_days'
   | 'settings.alerts.schema.properties.location'
   | 'settings.alerts.schema.properties.stream_name'
   | 'settings.alerts.schema.properties.stream_url'

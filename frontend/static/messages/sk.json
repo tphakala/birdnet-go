@@ -3937,6 +3937,8 @@
           "species_name": "Názov druhu",
           "scientific_name": "Vedecký názov",
           "confidence": "Spoľahlivosť",
+          "days_since_last_seen": "Dni od posledného pozorovania",
+          "novelty_episode_days": "Dni epizódy novosti",
           "location": "Poloha",
           "stream_name": "Názov streamu",
           "stream_url": "URL streamu",

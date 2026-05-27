@@ -3937,6 +3937,8 @@
           "species_name": "Artnamn",
           "scientific_name": "Vetenskapligt namn",
           "confidence": "Konfidens",
+          "days_since_last_seen": "Dagar sedan senast sedd",
+          "novelty_episode_days": "Dagar i nyhetsepisod",
           "location": "Plats",
           "stream_name": "Strömmens namn",
           "stream_url": "Strömmens URL",

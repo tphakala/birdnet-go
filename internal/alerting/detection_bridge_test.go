@@ -76,6 +76,26 @@ func TestBridge_OrdinaryDetection_EmitsOccurredOnly(t *testing.T) {
 	assert.False(t, result[0].Properties[PropertyIsNewSpecies].(bool))
 }
 
+func TestBridge_DetectionMetadataPromotedForConditions(t *testing.T) {
+	const noveltyEpisodeStart = "2026-05-23T12:00:00Z"
+
+	bridge, mu, captured := setupBridgeWithCapture(t)
+
+	event, err := events.NewDetectionEvent("Bay-breasted Warbler", "Setophaga castanea", 0.86, "mic", false, 30)
+	require.NoError(t, err)
+	event.GetMetadata()[PropertyDaysSinceLastSeen] = 12
+	event.GetMetadata()[PropertyNoveltyEpisodeDays] = 12
+	event.GetMetadata()[PropertyNoveltyEpisodeStart] = noveltyEpisodeStart
+
+	require.NoError(t, bridge.ProcessDetectionEvent(event))
+
+	result := waitForEvents(t, mu, captured, 1)
+	require.Len(t, result, 1)
+	assert.Equal(t, 12, result[0].Properties[PropertyDaysSinceLastSeen])
+	assert.Equal(t, 12, result[0].Properties[PropertyNoveltyEpisodeDays])
+	assert.Equal(t, noveltyEpisodeStart, result[0].Properties[PropertyNoveltyEpisodeStart])
+}
+
 func TestBridge_NewSpecies_EmitsBothEvents(t *testing.T) {
 	bridge, mu, captured := setupBridgeWithCapture(t)
 

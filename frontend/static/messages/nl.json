@@ -3937,6 +3937,8 @@
           "species_name": "Soortnaam",
           "scientific_name": "Wetenschappelijke naam",
           "confidence": "Betrouwbaarheid",
+          "days_since_last_seen": "Dagen sinds laatst gezien",
+          "novelty_episode_days": "Dagen van nieuwheidsepisode",
           "location": "Locatie",
           "stream_name": "Streamnaam",
           "stream_url": "Stream-URL",

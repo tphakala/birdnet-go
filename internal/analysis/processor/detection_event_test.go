@@ -173,7 +173,7 @@ func TestPublishDetectionEvent_OrdinaryDetection(t *testing.T) {
 		CorrelationID: "test-ordinary-det",
 	}
 
-	action.publishDetectionEvent(false, 30)
+	action.publishDetectionEvent(false, 30, species.NoveltyStatus{})
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		received := consumer.GetReceivedEvents()
@@ -184,6 +184,67 @@ func TestPublishDetectionEvent_OrdinaryDetection(t *testing.T) {
 	assert.Equal(t, det.Result.Species.CommonName, received[0].GetSpeciesName())
 	assert.Equal(t, det.Result.Species.ScientificName, received[0].GetScientificName())
 	assert.False(t, received[0].IsNewSpecies())
+	metadata := received[0].GetMetadata()
+	assert.NotContains(t, metadata, events.DetectionMetadataDaysSinceLastSeen)
+	assert.NotContains(t, metadata, events.DetectionMetadataNoveltyEpisodeDays)
+}
+
+func TestPublishDetectionEvent_InactiveNoveltyOmitsEpisodeSentinel(t *testing.T) {
+	const inactiveNoveltyEpisodeDays = -1
+
+	consumer := setupEventBusWithConsumer(t)
+
+	det := testDetection()
+	action := &DatabaseAction{
+		Settings:      &conf.Settings{Debug: true},
+		Result:        det.Result,
+		CorrelationID: "test-inactive-novelty",
+	}
+
+	action.publishDetectionEvent(false, 30, species.NoveltyStatus{
+		DaysSinceLastSeen:    0,
+		NoveltyEpisodeDays:   inactiveNoveltyEpisodeDays,
+		NoveltyEpisodeActive: false,
+	})
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		received := consumer.GetReceivedEvents()
+		assert.Len(collect, received, 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	metadata := consumer.GetReceivedEvents()[0].GetMetadata()
+	assert.NotContains(t, metadata, events.DetectionMetadataDaysSinceLastSeen)
+	assert.NotContains(t, metadata, events.DetectionMetadataNoveltyEpisodeDays)
+	assert.NotContains(t, metadata, events.DetectionMetadataNoveltyEpisodeStart)
+}
+
+func TestPublishDetectionEvent_ActiveNoveltyIncludesSameDayLastSeen(t *testing.T) {
+	consumer := setupEventBusWithConsumer(t)
+
+	det := testDetection()
+	action := &DatabaseAction{
+		Settings:      &conf.Settings{Debug: true},
+		Result:        det.Result,
+		CorrelationID: "test-active-novelty-same-day",
+	}
+
+	episodeStart := time.Date(2026, 5, 23, 8, 0, 0, 0, time.UTC)
+	action.publishDetectionEvent(false, 30, species.NoveltyStatus{
+		DaysSinceLastSeen:    0,
+		NoveltyEpisodeDays:   12,
+		NoveltyEpisodeStart:  episodeStart,
+		NoveltyEpisodeActive: true,
+	})
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		received := consumer.GetReceivedEvents()
+		assert.Len(collect, received, 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	metadata := consumer.GetReceivedEvents()[0].GetMetadata()
+	assert.Equal(t, 0, metadata[events.DetectionMetadataDaysSinceLastSeen])
+	assert.Equal(t, 12, metadata[events.DetectionMetadataNoveltyEpisodeDays])
+	assert.Equal(t, episodeStart.Format(time.RFC3339), metadata[events.DetectionMetadataNoveltyEpisodeStart])
 }
 
 // TestPublishDetectionEvent_NewSpecies verifies that new-species detections
@@ -198,7 +259,7 @@ func TestPublishDetectionEvent_NewSpecies(t *testing.T) {
 		CorrelationID: "test-new-species-det",
 	}
 
-	action.publishDetectionEvent(true, 0)
+	action.publishDetectionEvent(true, 0, species.NoveltyStatus{})
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		received := consumer.GetReceivedEvents()
@@ -244,7 +305,7 @@ func TestPublishDetectionEvent_SuppressedNewSpecies(t *testing.T) {
 		NewSpeciesTracker: tracker,
 	}
 
-	action.publishDetectionEvent(true, 0)
+	action.publishDetectionEvent(true, 0, species.NoveltyStatus{})
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		received := consumer.GetReceivedEvents()
@@ -271,7 +332,7 @@ func TestPublishDetectionEvent_NoEventBus(t *testing.T) {
 
 	// Should not panic when event bus is not initialized
 	assert.NotPanics(t, func() {
-		action.publishDetectionEvent(false, 10)
-		action.publishDetectionEvent(true, 0)
+		action.publishDetectionEvent(false, 10, species.NoveltyStatus{})
+		action.publishDetectionEvent(true, 0, species.NoveltyStatus{})
 	})
 }

@@ -817,10 +817,10 @@ func (s *Stream) startProcess() error {
 		"-loglevel", logLevel,
 		"-vn",
 		"-f", format,
+		"-ac", numChannels,
 	)
-
 	if s.config.needsOutputResampling() {
-		args = append(args, "-ar", sampleRate, "-ac", numChannels)
+		args = append(args, "-ar", sampleRate)
 	}
 
 	args = append(args, "-hide_banner", "pipe:1")

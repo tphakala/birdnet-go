@@ -207,6 +207,9 @@ type NewSpeciesData struct {
 	// FirstDetected is the Unix timestamp of the very first detection.
 	FirstDetected int64
 
+	// LastDetected is the Unix timestamp of the most recent detection.
+	LastDetected int64
+
 	// DetectionID is the ID of the first detection.
 	DetectionID uint
 
