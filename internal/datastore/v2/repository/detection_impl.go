@@ -1563,10 +1563,14 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 			MIN(d.label_id) as label_id,
 			species_first.scientific_name,
 			species_first.lifetime_first as first_detected,
+			species_first.lifetime_last as last_detected,
 			MIN(d.id) as detection_id,
 			MAX(d.confidence) as confidence
 		FROM (
-			SELECT l2.scientific_name, MIN(d2.detected_at) as lifetime_first
+			SELECT
+				l2.scientific_name,
+				MIN(d2.detected_at) as lifetime_first,
+				MAX(d2.detected_at) as lifetime_last
 			FROM %s d2
 			JOIN %s l2 ON l2.id = d2.label_id
 			%s

@@ -3959,6 +3959,8 @@
           "species_name": "Sugas nosaukums",
           "scientific_name": "Zinātniskais nosaukums",
           "confidence": "Ticamība",
+          "days_since_last_seen": "Dienas kopš pēdējā novērojuma",
+          "novelty_episode_days": "Jaunuma epizodes dienas",
           "location": "Atrašanās vieta",
           "stream_name": "Straumes nosaukums",
           "stream_url": "Straumes URL",

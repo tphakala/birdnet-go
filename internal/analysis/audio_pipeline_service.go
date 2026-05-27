@@ -1453,6 +1453,13 @@ func (p *AudioPipelineService) probeStreamSampleRate(url, name string) int {
 		logger.Int("channels", info.Channels),
 		logger.String("operation", "probe_stream"))
 
+	if info.Channels > 1 {
+		log.Warn("stream sends multi-channel audio; FFmpeg will downmix to mono but phase differences between channels can cause comb filtering that reduces detection accuracy. Configure the source to send mono if possible.",
+			logger.String("stream", name),
+			logger.Int("channels", info.Channels),
+			logger.String("operation", "probe_stream"))
+	}
+
 	if ffmpeg.IsLossyCodec(info.Codec) {
 		log.Warn("stream uses lossy codec that destroys ultrasonic content",
 			logger.String("stream", name),

@@ -3959,6 +3959,8 @@
           "species_name": "Nazwa gatunku",
           "scientific_name": "Nazwa naukowa",
           "confidence": "Pewność",
+          "days_since_last_seen": "Dni od ostatniego wykrycia",
+          "novelty_episode_days": "Dni epizodu nowości",
           "location": "Lokalizacja",
           "stream_name": "Nazwa strumienia",
           "stream_url": "URL strumienia",

@@ -3959,6 +3959,8 @@
           "species_name": "Species Name",
           "scientific_name": "Scientific Name",
           "confidence": "Confidence",
+          "days_since_last_seen": "Days Since Last Seen",
+          "novelty_episode_days": "Novelty Episode Days",
           "location": "Location",
           "stream_name": "Stream Name",
           "stream_url": "Stream URL",

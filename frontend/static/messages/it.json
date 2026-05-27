@@ -3959,6 +3959,8 @@
           "species_name": "Nome specie",
           "scientific_name": "Nome scientifico",
           "confidence": "Confidenza",
+          "days_since_last_seen": "Giorni dall'ultimo rilevamento",
+          "novelty_episode_days": "Giorni dell'episodio di novità",
           "location": "Posizione",
           "stream_name": "Nome flusso",
           "stream_url": "URL flusso",

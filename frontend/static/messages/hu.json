@@ -3959,6 +3959,8 @@
           "species_name": "Faj neve",
           "scientific_name": "Tudományos név",
           "confidence": "Megbízhatóság",
+          "days_since_last_seen": "Napok az utolsó észlelés óta",
+          "novelty_episode_days": "Újdonsági epizód napjai",
           "location": "Helyszín",
           "stream_name": "Stream neve",
           "stream_url": "Adatfolyam URL",
