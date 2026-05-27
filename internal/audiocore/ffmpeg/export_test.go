@@ -4,7 +4,10 @@ import (
 	"encoding/binary"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -78,6 +81,115 @@ func TestExportAudio_FLAC(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.FileExists(t, outPath)
+}
+
+func TestExportAudio_NormalizationBoostsGatedQuietAudio(t *testing.T) {
+	t.Parallel()
+
+	ffmpegPath, err := findFFmpegBinary()
+	if err != nil {
+		t.Skip("FFmpeg not available:", err)
+	}
+
+	const sampleRate = 48000
+	const amplitude = 3.0
+	const freqHz = 3000.0
+	numSamples := sampleRate * 2
+	pcm := make([]byte, numSamples*2)
+	for i := range numSamples {
+		sample := amplitude * math.Sin(2.0*math.Pi*freqHz*float64(i)/float64(sampleRate))
+		binary.LittleEndian.PutUint16(pcm[i*2:], uint16(int16(sample))) //nolint:gosec // G115: amplitude*sin always in int16 range
+	}
+
+	outDir := t.TempDir()
+	outPath := filepath.Join(outDir, "quiet_norm.flac")
+
+	err = ffmpeg.ExportAudio(t.Context(), &ffmpeg.ExportOptions{
+		PCMData:    pcm,
+		OutputPath: outPath,
+		Format:     ffmpeg.FormatFLAC,
+		SampleRate: sampleRate,
+		Channels:   1,
+		BitDepth:   16,
+		Normalization: ffmpeg.ExportNormalization{
+			Enabled:       true,
+			TargetLUFS:    -23.0,
+			TruePeak:      -2.0,
+			LoudnessRange: 7.0,
+		},
+		FFmpegPath: ffmpegPath,
+	})
+	require.NoError(t, err)
+	assert.FileExists(t, outPath)
+
+	decoded := decodePCM16(t, ffmpegPath, outPath)
+	rmsDB := rmsDBFS(decoded)
+	assert.Greater(t, rmsDB, -35.0, "quiet clips below loudnorm's gate should still be made audible")
+
+	if sampleRateOut, ok := probeSampleRate(t, outPath); ok {
+		assert.Equal(t, sampleRate, sampleRateOut)
+	}
+}
+
+func decodePCM16(t *testing.T, ffmpegPath, inputPath string) []byte {
+	t.Helper()
+
+	cmd := exec.CommandContext(t.Context(), ffmpegPath,
+		"-hide_banner",
+		"-loglevel", "error",
+		"-i", inputPath,
+		"-ac", "1",
+		"-f", "s16le",
+		"pipe:1",
+	)
+	output, err := cmd.Output()
+	require.NoError(t, err)
+	require.NotEmpty(t, output)
+	return output
+}
+
+func rmsDBFS(pcm []byte) float64 {
+	if len(pcm) < 2 {
+		return math.Inf(-1)
+	}
+	sampleBytes := len(pcm) - len(pcm)%2
+	var sumSquares float64
+	var count int
+	for i := 0; i < sampleBytes; i += 2 {
+		sample := float64(int16(binary.LittleEndian.Uint16(pcm[i:i+2]))) / 32768.0 //nolint:gosec // intentional PCM reinterpretation
+		sumSquares += sample * sample
+		count++
+	}
+	if count == 0 {
+		return math.Inf(-1)
+	}
+	rms := math.Sqrt(sumSquares / float64(count))
+	if rms <= 0 {
+		return math.Inf(-1)
+	}
+	return 20 * math.Log10(rms)
+}
+
+func probeSampleRate(t *testing.T, inputPath string) (int, bool) {
+	t.Helper()
+
+	ffprobePath, err := exec.LookPath("ffprobe")
+	if err != nil {
+		t.Log("ffprobe not available, skipping sample-rate assertion")
+		return 0, false
+	}
+	output, err := exec.CommandContext(t.Context(), ffprobePath,
+		"-v", "error",
+		"-select_streams", "a:0",
+		"-show_entries", "stream=sample_rate",
+		"-of", "default=nw=1:nk=1",
+		inputPath,
+	).Output()
+	require.NoError(t, err)
+
+	rate, err := strconv.Atoi(strings.TrimSpace(string(output)))
+	require.NoError(t, err)
+	return rate, true
 }
 
 // TestExportAudio_WithGain verifies that gain adjustment is applied during export.

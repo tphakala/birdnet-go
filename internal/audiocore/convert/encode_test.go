@@ -82,6 +82,36 @@ func TestSavePCMDataToWAV(t *testing.T) {
 		assert.Equal(t, uint32(len(pcmData)), dataSize, "data chunk size should match PCM data length")
 	})
 
+	t.Run("valid stereo 16-bit WAV", func(t *testing.T) {
+		t.Parallel()
+
+		pcmData := makePCM16Bytes(t, []int16{
+			100, -100,
+			200, -200,
+		})
+		dir := t.TempDir()
+		filePath := filepath.Join(dir, "stereo.wav")
+
+		err := convert.SavePCMDataToWAVWithChannels(filePath, pcmData, 48000, 16, 2)
+		require.NoError(t, err)
+
+		data, err := os.ReadFile(filePath)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(data), 44)
+
+		numChannels := binary.LittleEndian.Uint16(data[22:24])
+		assert.Equal(t, uint16(2), numChannels, "should preserve stereo channel count")
+
+		byteRate := binary.LittleEndian.Uint32(data[28:32])
+		assert.Equal(t, uint32(48000*2*2), byteRate, "byte rate should include both channels")
+
+		blockAlign := binary.LittleEndian.Uint16(data[32:34])
+		assert.Equal(t, uint16(2*2), blockAlign, "block align should include both channels")
+
+		dataSize := binary.LittleEndian.Uint32(data[40:44])
+		assert.Equal(t, uint32(len(pcmData)), dataSize, "data chunk size should match PCM data length")
+	})
+
 	t.Run("empty file path returns error", func(t *testing.T) {
 		t.Parallel()
 		pcmData := makePCM16Bytes(t, []int16{0, 1, 2})
@@ -105,6 +135,26 @@ func TestSavePCMDataToWAV(t *testing.T) {
 		err := convert.SavePCMDataToWAV(filepath.Join(dir, "out.wav"), []byte{0x01, 0x02, 0x03}, 48000, 16)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not aligned")
+	})
+
+	t.Run("misaligned stereo PCM data returns error", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		pcmData := makePCM16Bytes(t, []int16{1, 2, 3})
+
+		err := convert.SavePCMDataToWAVWithChannels(filepath.Join(dir, "out.wav"), pcmData, 48000, 16, 2)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not aligned")
+	})
+
+	t.Run("invalid channel count returns error", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		pcmData := makePCM16Bytes(t, []int16{1, 2})
+
+		err := convert.SavePCMDataToWAVWithChannels(filepath.Join(dir, "out.wav"), pcmData, 48000, 16, 0)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid channel count")
 	})
 
 	t.Run("creates parent directories", func(t *testing.T) {
