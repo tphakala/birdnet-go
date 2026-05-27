@@ -84,9 +84,10 @@ func TestServeSpectrogramCacheControlHonorsPrivateMode(t *testing.T) {
 			h, e, root := newCacheControlTestHandler(t, tc.privateMode)
 
 			// Simulate an already-generated spectrogram so the serve path runs
-			// without invoking external tools. Default raw=true => audio_800px.png.
+			// without invoking external tools. Default raw=true uses the current
+			// render cache version in the filename.
 			require.NoError(t, createTestAudioFile(t, filepath.Join(root, "audio.wav")))
-			require.NoError(t, os.WriteFile(filepath.Join(root, "audio_800px.png"),
+			require.NoError(t, os.WriteFile(filepath.Join(root, "audio_800px-norm1.png"),
 				[]byte("simulated spectrogram content"), 0o600))
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/media/spectrogram/audio.wav?width=800", http.NoBody)
@@ -213,9 +214,9 @@ func TestServeSpectrogramByIDCacheControlHonorsPrivateMode(t *testing.T) {
 			require.NoError(t, createTestAudioFile(t, filepath.Join(root, audioBase+".wav")))
 			// Default raw=true with size=lg (1026px). Provide both raw and legend
 			// variants so the serve path finds the fixture regardless of raw parsing.
-			require.NoError(t, os.WriteFile(filepath.Join(root, audioBase+"_1026px.png"),
+			require.NoError(t, os.WriteFile(filepath.Join(root, audioBase+"_1026px-norm1.png"),
 				[]byte("id spectrogram"), 0o600))
-			require.NoError(t, os.WriteFile(filepath.Join(root, audioBase+"_1026px-legend.png"),
+			require.NoError(t, os.WriteFile(filepath.Join(root, audioBase+"_1026px-norm1-legend.png"),
 				[]byte("id legend spectrogram"), 0o600))
 
 			mockDS := mocks.NewMockInterface(t)

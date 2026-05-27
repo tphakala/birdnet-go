@@ -66,6 +66,12 @@ const (
 
 	// osWindows is the GOOS value for Windows operating system
 	osWindows = "windows"
+
+	// soxVisualNormalizeEffect normalizes only the audio stream used for image rendering.
+	// Sox spectrograms use an absolute 0 dBFS scale, so quiet detections otherwise render
+	// nearly black even when the frequency content is present.
+	soxVisualNormalizeEffect = "gain"
+	soxVisualNormalizeArg    = "-n"
 )
 
 // GenerateOption configures optional parameters for spectrogram generation.
@@ -826,8 +832,9 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 		"-e", "signed", // Encoding: signed integer
 		"-b", strconv.Itoa(conf.BitDepth), // Bit depth: 16-bit
 		"-c", strconv.Itoa(conf.NumChannels), // Channels: mono
-		"-",  // Read from stdin
-		"-n", // No audio output (null output)
+		"-",                                             // Read from stdin
+		"-n",                                            // No audio output (null output)
+		soxVisualNormalizeEffect, soxVisualNormalizeArg, // Visual-only peak normalization
 	}
 
 	// Frequency-dependent effects: resample to the profile's rate (bird 24 kHz,
@@ -1014,14 +1021,14 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, settings *conf.Se
 	heightStr := strconv.Itoa(fftFriendlyHeight(width))
 	widthStr := strconv.Itoa(width)
 
-	// Build base args: resample to the profile's rate (bird 24 kHz, bat 256 kHz) so
-	// the spectrogram's frequency axis matches the fixed UI overlay.
-	var args []string
+	// Normalize the render input only; saved clips and inference audio are left
+	// unchanged. Then resample to the profile's rate (bird 24 kHz, bat 256 kHz)
+	// so the spectrogram's frequency axis matches the fixed UI overlay.
+	args := []string{"-n", soxVisualNormalizeEffect, soxVisualNormalizeArg}
 	if profile.ResampleRate > 0 {
-		args = []string{"-n", "rate", strconv.Itoa(profile.ResampleRate), "spectrogram", "-x", widthStr, "-y", heightStr}
-	} else {
-		args = []string{"-n", "spectrogram", "-x", widthStr, "-y", heightStr}
+		args = append(args, "rate", strconv.Itoa(profile.ResampleRate))
 	}
+	args = append(args, "spectrogram", "-x", widthStr, "-y", heightStr)
 
 	// Always provide explicit duration via -d parameter to ensure spectrogram
 	// shows the full audio duration regardless of image width (fixes #1484).

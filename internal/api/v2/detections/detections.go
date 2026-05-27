@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -1345,13 +1346,10 @@ func (c *Handler) removeDetectionFiles(clipName string) {
 
 	// Remove all associated spectrogram files. buildSpectrogramPaths names them
 	// <basename>_<width>px<suffix>.png, where <suffix> encodes the visual style,
-	// dynamic range, frequency profile (e.g. "-bat-v2") and legend/raw variant - and a
-	// single clip can accumulate several of these as those settings change over time.
-	// Rather than enumerate every combination (and miss renders from styles no longer
-	// configured), scan the directory and remove any PNG whose name matches this
-	// clip's "<basename>_<width>px" prefix followed by ".png" or a "-"-prefixed
-	// suffix. The separator anchor after the width prevents matching a different clip
-	// whose basename merely shares this prefix.
+	// dynamic range, render version, frequency profile (e.g. "-norm1-bat-v2"), and
+	// legend/raw variant. A single clip can accumulate several of these as settings
+	// change over time. Rather than enumerate every combination, scan the directory
+	// and remove any PNG whose name matches this clip's anchored filename prefix.
 	ext := filepath.Ext(normalized)
 	baseFilename := strings.TrimSuffix(filepath.Base(normalized), ext)
 	clipDir := filepath.Dir(absClipPath)
@@ -1385,13 +1383,16 @@ func (c *Handler) removeDetectionFiles(clipName string) {
 }
 
 // isSpectrogramFileFor reports whether pngName is a spectrogram render of the clip
-// with the given base filename. It matches "<baseFilename>_<width>px" followed by
-// either ".png" or a "-"-prefixed suffix (style, dynamic-range, frequency-profile
-// and legend tokens), for any known render width. The "."/"-" anchor after the
-// width avoids matching a different clip whose base name merely shares this prefix.
+// with the given base filename. It matches both prerender names and API-sized names.
+// Only exact prerender versions and anchored width suffixes are accepted so a clip
+// whose basename merely shares this prefix is never removed.
 func isSpectrogramFileFor(pngName, baseFilename string) bool {
 	if !strings.HasSuffix(pngName, ".png") {
 		return false
+	}
+	if pngName == baseFilename+".png" ||
+		pngName == baseFilename+spectrogram.RenderCacheVersionSuffix+".png" {
+		return true
 	}
 	for _, width := range spectrogramWidths {
 		prefix := fmt.Sprintf("%s_%dpx", baseFilename, width)
