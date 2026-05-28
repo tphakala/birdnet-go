@@ -399,3 +399,73 @@ func TestBackoffCalculation_ZeroRestarts(t *testing.T) {
 	assert.GreaterOrEqual(t, got, base)
 	assert.LessOrEqual(t, got, base+base/5)
 }
+
+// TestComputeBaseBackoff verifies the jitter-free exponential backoff: doubling
+// per restart, exponent clamped at zero, and capped at maxBackoff.
+func TestComputeBaseBackoff(t *testing.T) {
+	t.Parallel()
+
+	base := 5 * time.Second
+	maxDur := 2 * time.Minute
+
+	tests := []struct {
+		name         string
+		restartCount int
+		want         time.Duration
+	}{
+		{"zero clamps to base", 0, 5 * time.Second},
+		{"first restart", 1, 5 * time.Second},
+		{"second restart", 2, 10 * time.Second},
+		{"third restart", 3, 20 * time.Second},
+		{"capped at maxBackoff", 20, maxDur},
+		{"large count stays capped", 1000, maxDur},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, computeBaseBackoff(tt.restartCount, base, maxDur))
+		})
+	}
+}
+
+// TestExtremeFailurePenalty verifies the escalating delay applied once the
+// restart count exceeds extremeFailureThreshold, including the cap.
+func TestExtremeFailurePenalty(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		restartCount int
+		want         time.Duration
+	}{
+		{"below threshold", extremeFailureThreshold - 1, 0},
+		{"at threshold", extremeFailureThreshold, 0},
+		{"one past threshold", extremeFailureThreshold + 1, extremeFailureDelayStep},
+		{"ten past threshold", extremeFailureThreshold + 10, 10 * extremeFailureDelayStep},
+		{"capped", extremeFailureThreshold + 1000, extremeFailureDelayCap},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, extremeFailurePenalty(tt.restartCount))
+		})
+	}
+}
+
+// TestApplyBackoffJitter verifies jitter stays within the [backoff, backoff+20%]
+// band and that non-positive inputs pass through unchanged.
+func TestApplyBackoffJitter(t *testing.T) {
+	t.Parallel()
+
+	const backoff = 10 * time.Second
+	for range 100 {
+		got := applyBackoffJitter(backoff)
+		assert.GreaterOrEqual(t, got, backoff)
+		assert.LessOrEqual(t, got, backoff+backoff/5)
+	}
+
+	assert.Equal(t, time.Duration(0), applyBackoffJitter(0))
+	assert.Equal(t, -time.Second, applyBackoffJitter(-time.Second))
+}
