@@ -269,7 +269,6 @@ func recordDropsPerHour(t *testing.T, store *observability.HealthMetricsStore, k
 func TestEvalWindowedStats_SeverityMatrix(t *testing.T) {
 	t.Parallel()
 
-	// Use a truncated baseline to avoid boundary effects at hour rollover.
 	baseNow := time.Now().Truncate(time.Hour)
 
 	tests := []struct {
@@ -277,13 +276,12 @@ func TestEvalWindowedStats_SeverityMatrix(t *testing.T) {
 		window      time.Duration
 		setup       func(t *testing.T, store *observability.HealthMetricsStore, now time.Time)
 		wantStatus  health.Status
-		wantPattern *string
+		wantPattern string
 	}{
 		{
-			name:   "ZeroDrops",
-			window: time.Hour,
-			setup:  nil,
-			// No keys registered in the store -> skipped result.
+			name:       "ZeroDrops",
+			window:     time.Hour,
+			setup:      nil,
 			wantStatus: health.StatusSkipped,
 		},
 		{
@@ -291,122 +289,102 @@ func TestEvalWindowedStats_SeverityMatrix(t *testing.T) {
 			window: time.Hour,
 			setup: func(t *testing.T, store *observability.HealthMetricsStore, now time.Time) {
 				t.Helper()
-				// 8 drops in current hour; baseWarn=10, warnThreshold=10*1=10. Below threshold.
 				store.RecordAt("audio.drops.src1", 8, now)
 			},
-			wantStatus: health.StatusHealthy,
+			wantStatus:  health.StatusHealthy,
+			wantPattern: "transient",
 		},
 		{
 			name:   "TransientAboveWarn",
 			window: time.Hour,
 			setup: func(t *testing.T, store *observability.HealthMetricsStore, now time.Time) {
 				t.Helper()
-				// 15 drops; warnThreshold=10. Above warn -> Warning.
 				store.RecordAt("audio.drops.src1", 15, now)
 			},
-			wantStatus: health.StatusWarning,
+			wantStatus:  health.StatusWarning,
+			wantPattern: "transient",
 		},
 		{
 			name:   "TransientAboveCrit",
 			window: time.Hour,
 			setup: func(t *testing.T, store *observability.HealthMetricsStore, now time.Time) {
 				t.Helper()
-				// 55 drops; baseCrit=50. Peak safety net fires -> Critical.
 				store.RecordAt("audio.drops.src1", 55, now)
 			},
-			wantStatus: health.StatusCritical,
+			wantStatus:  health.StatusCritical,
+			wantPattern: "transient",
 		},
 		{
-			// Sub-hour window (15m): recurrence disabled (window < 3h).
-			// 3 buckets are recorded but the 15m window sees only the current hour.
-			// That hour has 3 drops, below baseWarn(10) -> Healthy.
 			name:   "SubHourNoRecurrence",
 			window: 15 * time.Minute,
 			setup: func(t *testing.T, store *observability.HealthMetricsStore, now time.Time) {
 				t.Helper()
 				recordDropsPerHour(t, store, "audio.drops.src1", []int64{5, 5, 3}, now)
 			},
-			wantStatus: health.StatusHealthy,
+			wantStatus:  health.StatusHealthy,
+			wantPattern: "transient",
 		},
 		{
-			// 10 drops/hr across 4 active hours in a 6h window.
-			// windowHours=6, warnThreshold=60, critThreshold=300.
-			// total=40, activeHours(4) >= sustainedHrs(3), total(40) >= floor(30).
-			// total(40) < crit(300) and stable velocity -> Warning (sustained).
 			name:   "SustainedAboveFloor",
 			window: 6 * time.Hour,
 			setup: func(t *testing.T, store *observability.HealthMetricsStore, now time.Time) {
 				t.Helper()
 				recordDropsPerHour(t, store, "audio.drops.src1", []int64{0, 0, 10, 10, 10, 10}, now)
 			},
-			wantStatus: health.StatusWarning,
+			wantStatus:  health.StatusWarning,
+			wantPattern: "sustained",
 		},
 		{
-			// 1 drop/hr for 4 hours = 4 total in a 6h window.
-			// warnThreshold=60, floor=30. total(4) < floor(30) -> sustained not triggered.
-			// total(4) < warnThreshold(60) -> Healthy.
 			name:   "SustainedBelowFloor",
 			window: 6 * time.Hour,
 			setup: func(t *testing.T, store *observability.HealthMetricsStore, now time.Time) {
 				t.Helper()
 				recordDropsPerHour(t, store, "audio.drops.src1", []int64{0, 0, 1, 1, 1, 1}, now)
 			},
-			wantStatus: health.StatusHealthy,
+			wantStatus:  health.StatusHealthy,
+			wantPattern: "transient",
 		},
 		{
-			// 5, 10, 20 drops across last 3 hours = 35 total, 6h window.
-			// activeHours(3) >= sustainedHrs(3), total(35) >= floor(30).
-			// velocity: last two buckets [10, 20] -> increasing.
-			// Sustained + increasing velocity -> Critical.
 			name:   "SustainedWorsening",
 			window: 6 * time.Hour,
 			setup: func(t *testing.T, store *observability.HealthMetricsStore, now time.Time) {
 				t.Helper()
 				recordDropsPerHour(t, store, "audio.drops.src1", []int64{0, 0, 0, 5, 10, 20}, now)
 			},
-			wantStatus: health.StatusCritical,
+			wantStatus:  health.StatusCritical,
+			wantPattern: "sustained",
 		},
 		{
-			// 60 drops/hr for 5 hours = 300 total in a 6h window.
-			// critThreshold = 50*6 = 300. total(300) >= crit(300).
-			// But also maxHourly(60) >= baseCrit(50) -> safety net fires first -> Critical.
 			name:   "SustainedCritical",
 			window: 6 * time.Hour,
 			setup: func(t *testing.T, store *observability.HealthMetricsStore, now time.Time) {
 				t.Helper()
 				recordDropsPerHour(t, store, "audio.drops.src1", []int64{0, 60, 60, 60, 60, 60}, now)
 			},
-			wantStatus: health.StatusCritical,
+			wantStatus:  health.StatusCritical,
+			wantPattern: "sustained",
 		},
 		{
-			// 7d window: one hour with 2000 drops. maxHourly(2000) >= baseCrit(50).
-			// Safety net fires -> Critical.
 			name:   "PeakOverridesLargeWindow",
 			window: 7 * 24 * time.Hour,
 			setup: func(t *testing.T, store *observability.HealthMetricsStore, now time.Time) {
 				t.Helper()
 				store.RecordAt("audio.drops.src1", 2000, now)
 			},
-			wantStatus: health.StatusCritical,
+			wantStatus:  health.StatusCritical,
+			wantPattern: "transient",
 		},
 		{
-			// 24h window: 15 drops in 1 hour. maxHourly(15) >= baseWarn(10) -> peakEscalated.
-			// total(15) < critThreshold(1200). activeHours(1) < sustainedHrs(3).
-			// peakEscalated path -> Warning. (15 < baseCrit=50 so safety net does not fire)
 			name:   "PeakWarnInLargeWindow",
 			window: 24 * time.Hour,
 			setup: func(t *testing.T, store *observability.HealthMetricsStore, now time.Time) {
 				t.Helper()
 				store.RecordAt("audio.drops.src1", 15, now)
 			},
-			wantStatus: health.StatusWarning,
+			wantStatus:  health.StatusWarning,
+			wantPattern: "transient",
 		},
 		{
-			// 24h window: 120 drops spread across 12 hours (10/hr).
-			// warnThreshold = 10*24 = 240, critThreshold = 50*24 = 1200.
-			// activeHours(12) >= sustainedHrs(3), floor = 240/2 = 120.
-			// total(120) >= floor(120). Sustained triggered.
-			// total(120) < crit(1200) and velocity stable -> Warning.
 			name:   "WindowScaling",
 			window: 24 * time.Hour,
 			setup: func(t *testing.T, store *observability.HealthMetricsStore, now time.Time) {
@@ -416,7 +394,8 @@ func TestEvalWindowedStats_SeverityMatrix(t *testing.T) {
 					store.RecordAt("audio.drops.src1", 10, ts)
 				}
 			},
-			wantStatus: health.StatusWarning,
+			wantStatus:  health.StatusWarning,
+			wantPattern: "sustained",
 		},
 	}
 
@@ -441,10 +420,7 @@ func TestEvalWindowedStats_SeverityMatrix(t *testing.T) {
 			}
 
 			require.NotNil(t, result.Details)
-
-			if tt.wantPattern != nil {
-				assert.Equal(t, *tt.wantPattern, result.Details["pattern"], "pattern mismatch")
-			}
+			assert.Equal(t, tt.wantPattern, result.Details["pattern"], "pattern mismatch")
 		})
 	}
 }

@@ -141,14 +141,21 @@ func evalWindowedStats(
 	warnThreshold := cfg.baseWarnThreshold * windowHours
 	critThreshold := cfg.baseCritThreshold * windowHours
 
+	// For windows larger than the sparkline display (24h), build a wider
+	// bucket set so signals cover the full evaluation window.
+	signalBuckets := sparkline
+	if windowBuckets := int(windowHours); windowBuckets > sparklineBuckets {
+		signalBuckets = buildMergedSparkline(store, keys, windowBuckets, now)
+	}
+
 	recurrenceEnabled := cfg.window >= minWindowForRecurrence
-	activeHours := countActiveHours(sparkline, cfg.window, now)
-	maxHourly := maxBucketCount(sparkline, cfg.window, now)
+	activeHours := countActiveHours(signalBuckets, cfg.window, now)
+	maxHourly := maxBucketCount(signalBuckets, cfg.window, now)
 
 	var velocity velocityTrend
 	velocityDetail := "n/a"
 	if recurrenceEnabled {
-		velocity = detectVelocity(sparkline, cfg.window, now)
+		velocity = detectVelocity(signalBuckets, cfg.window, now)
 		velocityDetail = velocityString(velocity)
 	}
 
@@ -167,15 +174,17 @@ func evalWindowedStats(
 		window:            cfg.window,
 	}, msg)
 
-	// Determine pattern classification.
+	// Determine pattern classification (aligned with the sustained-signal
+	// conditions: recurrence must be enabled and volume must exceed the floor).
+	sustainedVolumeFloor := warnThreshold / 2
 	var pattern string
 	switch {
 	case windowTotal == 0:
 		pattern = "none"
-	case activeHours < sustainedHrs:
-		pattern = "transient"
-	default:
+	case recurrenceEnabled && activeHours >= sustainedHrs && windowTotal >= sustainedVolumeFloor:
 		pattern = "sustained"
+	default:
+		pattern = "transient"
 	}
 
 	details := map[string]any{
@@ -400,25 +409,23 @@ func countActiveHours(buckets []observability.HourlyBucket, window time.Duration
 func detectVelocity(buckets []observability.HourlyBucket, window time.Duration, now time.Time) velocityTrend {
 	cutoff := now.Add(-window)
 
-	// Collect in-window buckets in forward order, then examine the last two.
-	var inWindow []observability.HourlyBucket
+	var prev, curr observability.HourlyBucket
+	n := 0
 	for _, b := range buckets {
 		if !b.Start.Add(time.Hour).Before(cutoff) {
-			inWindow = append(inWindow, b)
+			prev, curr = curr, b
+			n++
 		}
 	}
 
-	if len(inWindow) < 2 {
+	if n < 2 {
 		return velocityStable
 	}
 
-	current := inWindow[len(inWindow)-1]
-	previous := inWindow[len(inWindow)-2]
-
 	switch {
-	case current.Count > previous.Count:
+	case curr.Count > prev.Count:
 		return velocityIncreasing
-	case current.Count < previous.Count:
+	case curr.Count < prev.Count:
 		return velocityDecreasing
 	default:
 		return velocityStable
