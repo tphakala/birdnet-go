@@ -26,15 +26,20 @@
     Check,
     X,
     AlertCircle,
+    AlertTriangle,
     Radio,
     ChevronDown,
     Moon,
+    Search,
+    Loader2,
+    CircleCheck,
   } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { DEFAULT_MODEL_ID } from '$lib/stores/models.svelte';
   import { maskUrlCredentials } from '$lib/utils/security';
+  import { api } from '$lib/utils/api';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import Checkbox from './Checkbox.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
@@ -46,6 +51,8 @@
     StreamType,
     EqualizerFilterType,
     QuietHoursConfig,
+    ChannelMode,
+    ChannelAnalysis,
   } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
   import type { StreamHealthResponse } from './StreamManager.svelte';
@@ -168,7 +175,7 @@
     return 'Unknown';
   });
 
-  let testResult = $state<{ sampleRate: number } | null>(null);
+  let testResult = $state<{ sampleRate: number; channels: number } | null>(null);
 
   // Local editing state - initialized with defaults, synced from props in startEdit()
   let isEditing = $state(false);
@@ -182,6 +189,10 @@
   let editQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let showDeleteConfirm = $state(false);
   let showEqualizer = $state(false);
+  let editChannelMode = $state<ChannelMode>('downmix');
+  let isAnalyzing = $state(false);
+  let analysisResult = $state<ChannelAnalysis | null>(null);
+  let analysisError = $state<string | null>(null);
 
   // Stream type options (all supported types)
   const streamTypeOptions = [
@@ -196,6 +207,16 @@
   const transportOptions = [
     { value: 'tcp', label: 'TCP' },
     { value: 'udp', label: 'UDP' },
+  ];
+
+  // Channel mode options
+  const channelModeOptions = [
+    {
+      value: 'downmix' as ChannelMode,
+      label: () => t('settings.audio.streams.channelMode.downmix'),
+    },
+    { value: 'left' as ChannelMode, label: () => t('settings.audio.streams.channelMode.left') },
+    { value: 'right' as ChannelMode, label: () => t('settings.audio.streams.channelMode.right') },
   ];
 
   // Get icon colors based on stream status - using CSS variables for theme compatibility
@@ -313,6 +334,7 @@
     editName = stream.name;
     editUrl = stream.url;
     editTransport = stream.transport ?? 'tcp';
+    editChannelMode = stream.channelMode ?? 'downmix';
     editStreamType = stream.type;
     editEnabled = stream.enabled;
     editModels = stream.models?.length ? [...stream.models] : [DEFAULT_MODEL_ID];
@@ -322,6 +344,8 @@
     editQuietHours = { ...defaultQuietHoursConfig, ...stream.quietHours };
     showEqualizer = false;
     testResult = null;
+    analysisResult = null;
+    analysisError = null;
     isEditing = true;
   }
 
@@ -350,6 +374,7 @@
         enabled: editEnabled,
         type: editStreamType,
         models: editModels,
+        channelMode: editChannelMode,
         // Use selected transport for RTSP/RTMP, omit for others
         ...(showTransportInEdit ? { transport: editTransport } : {}),
         equalizer: transformedEqualizer,
@@ -388,11 +413,30 @@
     }
   }
 
+  async function analyzeChannels(url: string) {
+    isAnalyzing = true;
+    analysisResult = null;
+    analysisError = null;
+    try {
+      const result = await api.post<ChannelAnalysis>('/api/v2/streams/analyze-channels', {
+        url: url.trim(),
+      });
+      analysisResult = result;
+      if (result.recommended && result.recommended !== 'downmix') {
+        editChannelMode = result.recommended as ChannelMode;
+      }
+    } catch (err: unknown) {
+      analysisError = err instanceof Error ? err.message : String(err);
+    } finally {
+      isAnalyzing = false;
+    }
+  }
+
   let urlChanged = $derived(editUrl.trim() !== stream.url);
   let needsTest = $derived(urlChanged && !testResult);
   let sourceSampleRate = $derived(testResult?.sampleRate ?? 48000);
 
-  function handleTestResult(result: { sampleRate: number } | null) {
+  function handleTestResult(result: { sampleRate: number; channels: number } | null) {
     testResult = result;
   }
 
@@ -517,6 +561,100 @@
             </div>
           {/if}
         </div>
+
+        <!-- Channel mode selector -->
+        <div class="space-y-1.5">
+          <label
+            for="channel-mode-{index}"
+            class="text-xs font-medium text-[var(--color-base-content)]/70"
+          >
+            {t('settings.audio.streams.channelMode.label')}
+          </label>
+          <select
+            id="channel-mode-{index}"
+            bind:value={editChannelMode}
+            class="w-full h-8 px-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
+          >
+            {#each channelModeOptions as opt}
+              <option value={opt.value}>{opt.label()}</option>
+            {/each}
+          </select>
+          <p class="text-xs text-[var(--color-base-content)]/50">
+            {t('settings.audio.streams.channelMode.description')}
+          </p>
+        </div>
+
+        <!-- Channel analysis and warnings (shown when stream is stereo) -->
+        {#if testResult && testResult.channels > 1}
+          <div class="space-y-2">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] hover:bg-[var(--color-base-300)] transition-colors disabled:opacity-50"
+              onclick={() => analyzeChannels(editUrl || stream.url)}
+              disabled={isAnalyzing}
+            >
+              {#if isAnalyzing}
+                <Loader2 class="size-4 animate-spin" />
+                {t('settings.audio.streams.channelMode.analyzing')}
+              {:else}
+                <Search class="size-4" />
+                {t('settings.audio.streams.channelMode.detectBest')}
+              {/if}
+            </button>
+
+            {#if analysisResult}
+              <div class="space-y-1 text-xs">
+                {#each analysisResult.energy as ch}
+                  <div class="flex items-center gap-2">
+                    <span class="w-20 text-[var(--color-base-content)]/70">{ch.label}:</span>
+                    <div class="flex-1 h-2 bg-[var(--color-base-200)] rounded-full overflow-hidden">
+                      <div
+                        class="h-full rounded-full {ch.label.toLowerCase() ===
+                        analysisResult.recommended
+                          ? 'bg-[var(--color-success)]'
+                          : 'bg-[var(--color-base-400)]'}"
+                        style:width="{Math.max(2, Math.min(100, ((ch.rmsDbfs + 96) / 96) * 100))}%"
+                      ></div>
+                    </div>
+                    <span class="font-mono w-16 text-right">{ch.rmsDbfs.toFixed(1)} dBFS</span>
+                  </div>
+                {/each}
+                {#if analysisResult.recommended !== 'downmix'}
+                  <p class="text-[var(--color-success)] font-medium">
+                    {t('settings.audio.streams.channelMode.recommended', {
+                      channel:
+                        analysisResult.recommended === 'left'
+                          ? t('settings.audio.streams.channelMode.energyLeft')
+                          : t('settings.audio.streams.channelMode.energyRight'),
+                    })}
+                  </p>
+                {/if}
+              </div>
+            {/if}
+
+            {#if analysisError}
+              <p class="text-xs text-[var(--color-error)]">
+                {t('settings.audio.streams.channelMode.analyzeError')}: {analysisError}
+              </p>
+            {/if}
+
+            {#if editChannelMode === 'downmix'}
+              <div
+                class="flex items-start gap-2 p-2 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
+              >
+                <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
+                <span>{t('settings.audio.streams.channelMode.downmixWarning')}</span>
+              </div>
+            {:else}
+              <div
+                class="flex items-start gap-2 p-2 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]"
+              >
+                <CircleCheck class="size-3.5 shrink-0 mt-0.5 text-[var(--color-success)]" />
+                <span>{t('settings.audio.streams.channelMode.singleChannelGood')}</span>
+              </div>
+            {/if}
+          </div>
+        {/if}
 
         <Checkbox
           checked={editEnabled}
@@ -686,6 +824,17 @@
               >
                 {stream.transport.toUpperCase()}
               </span>
+            {/if}
+            {#if stream.channelMode === 'left'}
+              <span
+                class="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
+                >L</span
+              >
+            {:else if stream.channelMode === 'right'}
+              <span
+                class="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
+                >R</span
+              >
             {/if}
           </div>
 
