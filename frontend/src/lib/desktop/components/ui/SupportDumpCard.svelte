@@ -17,6 +17,9 @@
 
   const logger = loggers.settings;
 
+  // Must exceed backend supportDumpTimeout (120s) in internal/api/v2/support.go
+  const SUPPORT_DUMP_TIMEOUT_MS = 130_000;
+
   const instanceId = Math.random().toString(36).slice(2, 10);
   const githubIssueInputId = `githubIssueNumber-${instanceId}`;
   const userMessageInputId = `userMessage-${instanceId}`;
@@ -127,14 +130,18 @@
         download_url?: string;
         message?: string;
       }
-      const data = await api.post<SupportDumpResponse>('/api/v2/support/generate', {
-        include_logs: supportDump.includeLogs,
-        include_config: supportDump.includeConfig,
-        include_system_info: supportDump.includeSystemInfo,
-        github_issue_number: hasValidGithubIssue ? normalizedGithubIssue.replace(/^#/, '') : '',
-        user_message: supportDump.userMessage,
-        upload_to_sentry: supportDump.uploadToSentry,
-      });
+      const data = await api.post<SupportDumpResponse>(
+        '/api/v2/support/generate',
+        {
+          include_logs: supportDump.includeLogs,
+          include_config: supportDump.includeConfig,
+          include_system_info: supportDump.includeSystemInfo,
+          github_issue_number: hasValidGithubIssue ? normalizedGithubIssue.replace(/^#/, '') : '',
+          user_message: supportDump.userMessage,
+          upload_to_sentry: supportDump.uploadToSentry,
+        },
+        { timeout: SUPPORT_DUMP_TIMEOUT_MS }
+      );
       generating = false;
 
       if (data.success) {
@@ -206,9 +213,9 @@
     if (type === 'info' && percent < 90) {
       safeTimeout(() => {
         if (generating && progressPercent < 90) {
-          updateStatus(message, type, Math.min(progressPercent + 10, 90));
+          updateStatus(message, type, Math.min(progressPercent + 3, 90));
         }
-      }, 1000);
+      }, 2500);
     }
   }
 </script>

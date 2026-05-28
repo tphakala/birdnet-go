@@ -22,8 +22,8 @@ import (
 const (
 	supportLogDurationWeeks = 4           // Weeks of logs to collect
 	supportMaxLogSizeMB     = 50          // Maximum log size in MB
-	supportBytesPerKB       = 1024        // Bytes per kilobyte
 	supportBytesPerMB       = 1024 * 1024 // Bytes per megabyte
+	supportDumpTimeout      = 120 * time.Second
 )
 
 // GenerateSupportDumpRequest represents the request for generating a support dump
@@ -60,6 +60,17 @@ func sanitizeGitHubIssueNumber(issueNum string) string {
 // GenerateSupportDump handles the generation and optional upload of support dumps
 func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	c.logDebugIfEnabled("Support dump generation started")
+
+	// Use a dedicated timeout that outlives Echo's WriteTimeout.
+	// Collection, archiving, and Sentry upload can take well over 30s
+	// on low-powered devices or slow upstream connections.
+	// WithoutCancel preserves context values (trace IDs) while
+	// decoupling from the HTTP request's cancellation signal.
+	dumpCtx, cancel := context.WithTimeout(
+		context.WithoutCancel(ctx.Request().Context()),
+		supportDumpTimeout,
+	)
+	defer cancel()
 
 	// Parse JSON request
 	var req GenerateSupportDumpRequest
@@ -111,7 +122,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	)
 
 	// Wire database info provider if V2Manager is available
-	if req.IncludeDatabaseInfo && c.V2Manager != nil {
+	if req.IncludeDatabaseInfo && c.V2Manager != nil && c.DS != nil {
 		dialect := datastore.DialectSQLite
 		if c.V2Manager.IsMySQL() {
 			dialect = datastore.DialectMySQL
@@ -147,7 +158,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 
 	// Collect data
 	c.logDebugIfEnabled("Starting support data collection", logger.String("system_id", settings.SystemID))
-	dump, err := collector.Collect(ctx.Request().Context(), opts)
+	dump, err := collector.Collect(dumpCtx, opts)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to collect support data",
 			logger.Error(err),
@@ -160,12 +171,12 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 
 	// Create archive
 	c.logDebugIfEnabled("Creating support archive", logger.String("dump_id", dump.ID))
-	archiveData, err := collector.CreateArchive(ctx.Request().Context(), dump, opts)
+	archiveData, err := collector.CreateArchive(dumpCtx, dump, opts)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to create support archive",
 			logger.Error(err),
 			logger.String("dump_id", dump.ID),
-			logger.Any("context_err", ctx.Request().Context().Err()),
+			logger.Any("context_err", dumpCtx.Err()),
 		)
 		return c.HandleError(ctx, err, "Failed to create support archive", http.StatusInternalServerError)
 	}
@@ -196,7 +207,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		// Proceed with upload if still requested
 		if req.UploadToSentry {
 			uploader := telemetry.GetAttachmentUploader()
-			if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, settings.SystemID, req.UserMessage, req.GitHubIssueNumber); err != nil {
+			if err := uploader.UploadSupportDump(dumpCtx, archiveData, settings.SystemID, req.UserMessage, req.GitHubIssueNumber); err != nil {
 				// Log error but don't fail the request
 				c.logErrorIfEnabled("Failed to upload support dump to Sentry",
 					logger.Error(err),
@@ -235,7 +246,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	c.logInfoIfEnabled("Support dump generated",
 		logger.String("dump_id", dump.ID),
 		logger.Int("size", len(archiveData)),
-		logger.Bool("uploaded", req.UploadToSentry && settings.Sentry.Enabled),
+		logger.Bool("uploaded", response.UploadedAt != ""),
 	)
 
 	return ctx.JSON(http.StatusOK, response)
