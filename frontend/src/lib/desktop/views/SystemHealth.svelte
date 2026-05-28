@@ -83,6 +83,13 @@
 
   const windowPresets = ['15m', '30m', '1h', '6h', '24h', '7d'] as const;
 
+  const VELOCITY_INCREASING = 'increasing';
+  const VELOCITY_DECREASING = 'decreasing';
+  const VELOCITY_NA = 'n/a';
+  const PATTERN_NONE = 'none';
+  const PATTERN_TRANSIENT = 'transient';
+  const PATTERN_SUSTAINED = 'sustained';
+
   let report = $state<DiagnosticsReport | null>(null);
   let running = $state(false);
   let error = $state<string | null>(null);
@@ -180,9 +187,9 @@
 
   function velocityLabel(velocity: string): string {
     switch (velocity) {
-      case 'increasing':
+      case VELOCITY_INCREASING:
         return t('health.detail.velocityIncreasing');
-      case 'decreasing':
+      case VELOCITY_DECREASING:
         return t('health.detail.velocityDecreasing');
       default:
         return t('health.detail.velocityStable');
@@ -191,9 +198,9 @@
 
   function velocityColor(velocity: string): string {
     switch (velocity) {
-      case 'increasing':
+      case VELOCITY_INCREASING:
         return 'var(--color-error)';
-      case 'decreasing':
+      case VELOCITY_DECREASING:
         return 'var(--color-success)';
       default:
         return 'var(--color-base-content)';
@@ -202,9 +209,9 @@
 
   function patternLabel(pattern: string): string {
     switch (pattern) {
-      case 'sustained':
+      case PATTERN_SUSTAINED:
         return t('health.detail.patternSustained');
-      case 'transient':
+      case PATTERN_TRANSIENT:
         return t('health.detail.patternTransient');
       default:
         return t('health.detail.patternNone');
@@ -213,9 +220,9 @@
 
   function patternColor(pattern: string): string {
     switch (pattern) {
-      case 'sustained':
+      case PATTERN_SUSTAINED:
         return 'var(--color-error)';
-      case 'transient':
+      case PATTERN_TRANSIENT:
         return 'var(--color-warning)';
       default:
         return 'var(--color-base-content)';
@@ -339,9 +346,9 @@
             parts.push(`${t('health.detail.windowTotal')}: ${d.window_total}`);
           if (typeof d.active_hours === 'number' && d.active_hours > 0)
             parts.push(`${t('health.detail.activeHours')}: ${d.active_hours}`);
-          if (typeof d.pattern === 'string' && d.pattern !== 'none')
+          if (typeof d.pattern === 'string' && d.pattern !== PATTERN_NONE)
             parts.push(`${t('health.detail.pattern')}: ${patternLabel(d.pattern)}`);
-          if (typeof d.velocity === 'string' && d.velocity !== 'n/a')
+          if (typeof d.velocity === 'string' && d.velocity !== VELOCITY_NA)
             parts.push(`${t('health.detail.velocity')}: ${velocityLabel(d.velocity)}`);
           if (parts.length > 0) lines.push(`    ${parts.join(' | ')}`);
         }
@@ -787,7 +794,7 @@
                     {@const velocity = result.details?.velocity}
                     {@const pattern = result.details?.pattern}
                     {@const windowTotal = result.details?.window_total}
-                    {#if (typeof activeHours === 'number' && activeHours > 0) || (typeof velocity === 'string' && velocity !== 'n/a') || (typeof pattern === 'string' && pattern !== 'none')}
+                    {#if (typeof windowTotal === 'number' && windowTotal > 0) || (typeof activeHours === 'number' && activeHours > 0) || (typeof velocity === 'string' && velocity !== VELOCITY_NA) || (typeof pattern === 'string' && pattern !== PATTERN_NONE)}
                       <div
                         class="px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-[var(--color-base-200)]/50"
                       >
@@ -807,7 +814,7 @@
                           </span>
                         {/if}
 
-                        {#if typeof pattern === 'string' && pattern !== 'none'}
+                        {#if typeof pattern === 'string' && pattern !== PATTERN_NONE}
                           <span class="inline-flex items-center gap-1.5 text-xs">
                             <span class="opacity-60">{t('health.detail.pattern')}:</span>
                             <span
@@ -820,7 +827,7 @@
                           </span>
                         {/if}
 
-                        {#if typeof velocity === 'string' && velocity !== 'n/a'}
+                        {#if typeof velocity === 'string' && velocity !== VELOCITY_NA}
                           <span class="inline-flex items-center gap-1.5 text-xs">
                             <span class="opacity-60">{t('health.detail.velocity')}:</span>
                             <span
@@ -828,9 +835,9 @@
                               style:color={velocityColor(velocity)}
                               style:background="color-mix(in srgb, {velocityColor(velocity)} 10%, transparent)"
                             >
-                              {#if velocity === 'increasing'}
+                              {#if velocity === VELOCITY_INCREASING}
                                 <TrendingUp class="size-3" />
-                              {:else if velocity === 'decreasing'}
+                              {:else if velocity === VELOCITY_DECREASING}
                                 <TrendingDown class="size-3" />
                               {:else}
                                 <Minus class="size-3" />
