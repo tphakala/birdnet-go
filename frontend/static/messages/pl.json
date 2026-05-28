@@ -3057,6 +3057,26 @@
         "batWarning": "Modele nietoperzy wymagają strumieni z bezstratnym kodekiem (PCM) i częstotliwością próbkowania co najmniej 96 kHz. Użyj przycisku Testuj strumień powyżej, aby sprawdzić kompatybilność.",
         "codecWarning": {
           "lossy": "Stratne kodeki (AAC, Opus, MP3) niszczą częstotliwości ultradźwiękowe powyżej ~20 kHz, przez co strumień jest nieodpowiedni do wykrywania nietoperzy."
+        },
+        "channelMode": {
+          "analyzeError": "Analiza kanałów nie powiodła się",
+          "analyzing": "Analizowanie kanałów...",
+          "description": "Jak obsługiwać dźwięk wielokanałowy. Wybierz konkretny kanał, jeśli źródło wysyła stereo.",
+          "detectBest": "Wykryj najlepszy kanał",
+          "downmix": "Mikser do mono",
+          "downmixWarning": "Miksowanie do mono nie jest zalecane dla strumieni stereo. Różnice fazowe między kanałami powodują filtrowanie grzebieniowe, które zmniejsza dokładność detekcji. Zamiast tego wybierz konkretny kanał.",
+          "energyLeft": "Lewy kanał",
+          "energyRight": "Prawy kanał",
+          "label": "Tryb kanału",
+          "left": "Tylko lewy kanał",
+          "recommended": "Zalecane: {channel}",
+          "right": "Tylko prawy kanał",
+          "singleChannelGood": "Wybrany pojedynczy kanał, optymalny dla dokładności detekcji."
+        },
+        "stereoWarning": {
+          "message": "Wykryto strumień stereo. Miksowanie wielu kanałów może zmniejszyć dokładność detekcji z powodu różnic fazowych między kanałami. Wybierz konkretny kanał (lewy/prawy) lub użyj detektora kanałów, aby uzyskać najlepsze wyniki.",
+          "short": "Downmix stereo aktywny. Dokładność detekcji może być zmniejszona. Edytuj, aby wybrać konkretny kanał.",
+          "tooltip": "Downmix stereo aktywny. Dokładność detekcji może być zmniejszona. Edytuj, aby wybrać konkretny kanał."
         }
       },
       "audioFilters": {

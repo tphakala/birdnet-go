@@ -3057,6 +3057,26 @@
         "batWarning": "Sikspārņu modeļiem nepieciešamas straumes ar bezzudumu kodeku (PCM) un iztveršanas frekvenci vismaz 96 kHz. Izmantojiet pogu Testēt straumi augstāk, lai pārbaudītu saderību.",
         "codecWarning": {
           "lossy": "Zudumu kodeki (AAC, Opus, MP3) iznīcina ultraskaņas frekvences virs ~20 kHz, padarot straumi nepiemērotu sikspārņu noteikšanai."
+        },
+        "channelMode": {
+          "analyzeError": "Kanālu analīze neizdevās",
+          "analyzing": "Analizē kanālus...",
+          "description": "Kā apstrādāt daudzkanālu audio. Izvēlieties konkrētu kanālu, ja jūsu avots sūta stereo.",
+          "detectBest": "Noteikt labāko kanālu",
+          "downmix": "Samazināt uz mono",
+          "downmixWarning": "Samazināšana uz mono nav ieteicama stereo straumēm. Fāzu atšķirības starp kanāliem izraisa ķemmes filtrēšanu, kas samazina noteikšanas precizitāti. Tā vietā izvēlieties konkrētu kanālu.",
+          "energyLeft": "Kreisais kanāls",
+          "energyRight": "Labais kanāls",
+          "label": "Kanāla režīms",
+          "left": "Tikai kreisais kanāls",
+          "recommended": "Ieteicamais: {channel}",
+          "right": "Tikai labais kanāls",
+          "singleChannelGood": "Izvēlēts viens kanāls, optimāli noteikšanas precizitātei."
+        },
+        "stereoWarning": {
+          "message": "Konstatēta stereo straume. Vairāku kanālu samazināšana var pazemināt noteikšanas precizitāti fāzu atšķirību dēļ starp kanāliem. Izvēlieties konkrētu kanālu (kreiso/labo) vai izmantojiet kanālu detektoru labākajiem rezultātiem.",
+          "short": "Stereo downmix aktīvs. Noteikšanas precizitāte var būt samazināta. Rediģējiet, lai izvēlētos konkrētu kanālu.",
+          "tooltip": "Stereo downmix aktīvs. Noteikšanas precizitāte var būt samazināta. Rediģējiet, lai izvēlētos konkrētu kanālu."
         }
       },
       "audioFilters": {

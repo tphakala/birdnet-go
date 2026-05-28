@@ -3057,6 +3057,26 @@
         "batWarning": "Modely netopierov vyžadujú streamy s bezstratovým kodekom (PCM) a vzorkovacou frekvenciou aspoň 96 kHz. Pomocou tlačidla Testovať stream vyššie overte kompatibilitu.",
         "codecWarning": {
           "lossy": "Stratové kodeky (AAC, Opus, MP3) ničia ultrazvukové frekvencie nad ~20 kHz, čím sa stream stáva nevhodným na detekciu netopierov."
+        },
+        "channelMode": {
+          "analyzeError": "Analýza kanálov zlyhala",
+          "analyzing": "Analýza kanálov...",
+          "description": "Ako spracovať viackanálový zvuk. Vyberte konkrétny kanál, ak váš zdroj vysiela stereo.",
+          "detectBest": "Detekovať najlepší kanál",
+          "downmix": "Zmiešať do mono",
+          "downmixWarning": "Zmiešanie do mono nie je odporúčané pre stereo streamy. Fázové rozdiely medzi kanálmi spôsobujú hrebeňový filter, ktorý znižuje presnosť detekcie. Namiesto toho vyberte konkrétny kanál.",
+          "energyLeft": "Ľavý kanál",
+          "energyRight": "Pravý kanál",
+          "label": "Režim kanálu",
+          "left": "Len ľavý kanál",
+          "recommended": "Odporúčané: {channel}",
+          "right": "Len pravý kanál",
+          "singleChannelGood": "Vybraný jeden kanál, optimálne pre presnosť detekcie."
+        },
+        "stereoWarning": {
+          "message": "Detekovaný stereo stream. Zmiešanie viacerých kanálov môže znížiť presnosť detekcie kvôli fázovým rozdielom medzi kanálmi. Pre najlepšie výsledky vyberte konkrétny kanál (ľavý/pravý) alebo použite detektor kanálov.",
+          "short": "Stereo downmix aktívny. Presnosť detekcie môže byť znížená. Upravte pre výber konkrétneho kanálu.",
+          "tooltip": "Stereo downmix aktívny. Presnosť detekcie môže byť znížená. Upravte pre výber konkrétneho kanálu."
         }
       },
       "audioFilters": {

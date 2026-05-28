@@ -3057,6 +3057,26 @@
         "batWarning": "Flagermusmodeller kræver streams med en tabsfri codec (PCM) og en samplerate på mindst 96 kHz. Brug knappen Test stream ovenfor for at verificere kompatibilitet.",
         "codecWarning": {
           "lossy": "Tabsgivende codecs (AAC, Opus, MP3) ødelægger ultralydsfrekvenser over ~20 kHz, hvilket gør streamen uegnet til detektering af flagermus."
+        },
+        "channelMode": {
+          "analyzeError": "Kanalanalyse mislykkedes",
+          "analyzing": "Analyserer kanaler...",
+          "description": "Hvordan multikanallyd håndteres. Vælg en specifik kanal, hvis din kilde sender stereo.",
+          "detectBest": "Detekter bedste kanal",
+          "downmix": "Downmix til mono",
+          "downmixWarning": "Downmix anbefales ikke til stereostreams. Faseforskelle mellem kanaler forårsager kamfiltrering, der reducerer detektionsnøjagtigheden. Vælg en specifik kanal i stedet.",
+          "energyLeft": "Venstre kanal",
+          "energyRight": "Højre kanal",
+          "label": "Kanaltilstand",
+          "left": "Kun venstre kanal",
+          "recommended": "Anbefalet: {channel}",
+          "right": "Kun højre kanal",
+          "singleChannelGood": "Enkelt kanal valgt, optimalt for detektionsnøjagtighed."
+        },
+        "stereoWarning": {
+          "message": "Stereostream detekteret. Downmixing af flere kanaler kan reducere detektionsnøjagtigheden på grund af faseforskelle mellem kanaler. Vælg en specifik kanal (venstre/højre) eller brug kanaldetektoren for bedste resultater.",
+          "short": "Stereo downmix aktiv. Detektionsnøjagtighed kan være reduceret. Rediger for at vælge en specifik kanal.",
+          "tooltip": "Stereo downmix aktiv. Detektionsnøjagtighed kan være reduceret. Rediger for at vælge en specifik kanal."
         }
       },
       "audioFilters": {

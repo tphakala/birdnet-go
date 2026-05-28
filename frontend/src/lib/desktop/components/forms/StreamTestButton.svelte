@@ -153,7 +153,7 @@
     >
       <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
       <span class="text-[var(--color-base-content)]">
-        {t('settings.audio.streams.stereoWarning')}
+        {t('settings.audio.streams.stereoWarning.message')}
       </span>
     </div>
   {/if}
