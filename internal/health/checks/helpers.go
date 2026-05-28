@@ -52,12 +52,19 @@ func skippedResult(name string, category health.Category, start time.Time) healt
 	}
 }
 
+// defaultSustainedHours is the number of active hours required before events
+// are considered a sustained pattern rather than transient spikes.
+const defaultSustainedHours = 3
+
 // windowedStatsConfig parameterises evalWindowedStats for counter-based checks.
 type windowedStatsConfig struct {
-	warnThreshold int64
-	critThreshold int64
-	metricPrefix  string
-	window        time.Duration
+	baseWarnThreshold int64
+	baseCritThreshold int64
+	metricPrefix      string
+	window            time.Duration
+	// sustainedHours is the minimum number of active hourly buckets for the
+	// pattern to be classified as "sustained". Zero means use defaultSustainedHours.
+	sustainedHours int
 }
 
 // sparklineBuckets is the number of hourly buckets included in the sparkline response.
@@ -108,14 +115,6 @@ func evalWindowedStats(
 		return skippedResult(name, category, start)
 	}
 
-	status := health.StatusHealthy
-	switch {
-	case windowTotal >= cfg.critThreshold:
-		status = health.StatusCritical
-	case windowTotal >= cfg.warnThreshold:
-		status = health.StatusWarning
-	}
-
 	msg := formatWindowedMessage(name, windowTotal, lifetimeTotal, activeSources, lastEvent, cfg.window, now)
 
 	metricType := extractMetricType(cfg.metricPrefix)
@@ -127,12 +126,106 @@ func evalWindowedStats(
 		recentEvents = getEvents(metricType, recentEventsLimit)
 	}
 
+	// Four-signal evaluation: scaled thresholds, peak spike, sustained pattern, velocity.
+	sustainedHrs := cfg.sustainedHours
+	if sustainedHrs <= 0 {
+		sustainedHrs = defaultSustainedHours
+	}
+
+	windowHours := max(int64(cfg.window/time.Hour), 1)
+	warnThreshold := cfg.baseWarnThreshold * windowHours
+	critThreshold := cfg.baseCritThreshold * windowHours
+
+	recurrenceEnabled := cfg.window >= 3*time.Hour
+	activeHours := countActiveHours(sparkline, cfg.window, now)
+	maxHourly := maxBucketCount(sparkline, cfg.window, now)
+
+	var velocity velocityTrend
+	if recurrenceEnabled {
+		velocity = detectVelocity(sparkline, cfg.window, now)
+	}
+
+	status := health.StatusHealthy
+
+	if windowTotal > 0 {
+		peakEscalated := false
+
+		// Safety net: severe hourly spike overrides window-scaled thresholds.
+		if maxHourly >= cfg.baseCritThreshold {
+			status = health.StatusCritical
+			label := checkNameLabel(name)
+			msg = fmt.Sprintf("%d %s in %s, peak hour: %d %s",
+				windowTotal, label, formatDuration(cfg.window), maxHourly, label)
+		}
+
+		if status == health.StatusHealthy && maxHourly >= cfg.baseWarnThreshold {
+			peakEscalated = true
+		}
+
+		sustainedVolumeFloor := warnThreshold / 2
+
+		// Sustained recurrence pattern.
+		if status == health.StatusHealthy && recurrenceEnabled &&
+			activeHours >= sustainedHrs && windowTotal >= sustainedVolumeFloor {
+			label := checkNameLabel(name)
+			if windowTotal >= critThreshold || velocity == velocityIncreasing {
+				status = health.StatusCritical
+				msg = fmt.Sprintf("Sustained %s across %d hours, worsening", label, activeHours)
+			} else {
+				status = health.StatusWarning
+				msg = fmt.Sprintf("Sustained %s across %d hours", label, activeHours)
+			}
+		}
+
+		// Absolute threshold checks.
+		if status == health.StatusHealthy && windowTotal >= critThreshold {
+			status = health.StatusCritical
+			label := checkNameLabel(name)
+			msg = fmt.Sprintf("%d %s in %s, concentrated in %d hour(s)",
+				windowTotal, label, formatDuration(cfg.window), max(activeHours, 1))
+		}
+
+		if status == health.StatusHealthy && (windowTotal >= warnThreshold || peakEscalated) {
+			label := checkNameLabel(name)
+			if recurrenceEnabled && velocity == velocityIncreasing {
+				status = health.StatusWarning
+				msg = fmt.Sprintf("%d %s in %s, rate increasing",
+					windowTotal, label, formatDuration(cfg.window))
+			} else {
+				status = health.StatusWarning
+				msg = fmt.Sprintf("%d %s in %s",
+					windowTotal, label, formatDuration(cfg.window))
+			}
+		}
+
+		// Low volume within tolerance.
+		if status == health.StatusHealthy && activeHours > 0 {
+			label := checkNameLabel(name)
+			msg = fmt.Sprintf("%d %s in %s, within tolerance",
+				windowTotal, label, formatDuration(cfg.window))
+		}
+	}
+
+	// Determine pattern classification.
+	var pattern string
+	switch {
+	case windowTotal == 0:
+		pattern = "none"
+	case activeHours < sustainedHrs:
+		pattern = "transient"
+	default:
+		pattern = "sustained"
+	}
+
 	details := map[string]any{
 		"window":         formatDuration(cfg.window),
 		"window_total":   windowTotal,
 		"lifetime_total": lifetimeTotal,
 		"sources":        activeSources,
 		"per_source":     perSource,
+		"active_hours":   activeHours,
+		"velocity":       velocityString(velocity),
+		"pattern":        pattern,
 	}
 	if !lastEvent.IsZero() {
 		details["last_event"] = lastEvent.Format(time.RFC3339)
