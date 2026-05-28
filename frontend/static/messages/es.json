@@ -3057,6 +3057,26 @@
         "batWarning": "Los modelos de murciélagos requieren streams con un códec sin pérdida (PCM) y una tasa de muestreo de al menos 96 kHz. Use el botón Probar stream de arriba para verificar la compatibilidad.",
         "codecWarning": {
           "lossy": "Los códecs con pérdida (AAC, Opus, MP3) destruyen las frecuencias ultrasónicas por encima de ~20 kHz, haciendo el stream inadecuado para la detección de murciélagos."
+        },
+        "channelMode": {
+          "analyzeError": "El análisis de canales falló",
+          "analyzing": "Analizando canales...",
+          "description": "Cómo manejar audio multicanal. Seleccione un canal específico si su fuente envía estéreo.",
+          "detectBest": "Detectar mejor canal",
+          "downmix": "Mezclar a mono",
+          "downmixWarning": "No se recomienda mezclar a mono para transmisiones estéreo. Las diferencias de fase entre canales causan filtrado de peine que reduce la precisión de detección. Seleccione un canal específico en su lugar.",
+          "energyLeft": "Canal izquierdo",
+          "energyRight": "Canal derecho",
+          "label": "Modo de canal",
+          "left": "Solo canal izquierdo",
+          "recommended": "Recomendado: {channel}",
+          "right": "Solo canal derecho",
+          "singleChannelGood": "Canal único seleccionado, óptimo para la precisión de detección."
+        },
+        "stereoWarning": {
+          "message": "Transmisión estéreo detectada. La mezcla de múltiples canales puede reducir la precisión de detección debido a diferencias de fase entre canales. Seleccione un canal específico (izquierdo/derecho) o use el detector de canales para mejores resultados.",
+          "short": "Downmix estéreo activo. La precisión de detección puede estar reducida. Edite para seleccionar un canal específico.",
+          "tooltip": "Downmix estéreo activo. La precisión de detección puede estar reducida. Edite para seleccionar un canal específico."
         }
       },
       "audioFilters": {

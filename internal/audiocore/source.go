@@ -93,7 +93,7 @@ type AudioSource struct {
 	// Type identifies the transport protocol or device class.
 	Type SourceType `json:"type"`
 
-	// connectionString holds the raw URL or device path — never logged or serialised.
+	// connectionString holds the raw URL or device path, never logged or serialised.
 	connectionString string
 
 	// SafeString is a sanitised version of the connection string safe for logging
@@ -112,6 +112,14 @@ type AudioSource struct {
 
 	// Channels is the number of capture channels (e.g., 1 for mono).
 	Channels int `json:"channels"`
+
+	// SourceChannels is the actual channel count of the remote source,
+	// discovered by probing. Zero means unknown (probe failed or mono assumed).
+	SourceChannels int `json:"sourceChannels,omitempty"`
+
+	// ChannelMode controls how multi-channel audio is handled.
+	// Values: "downmix" (default), "left", "right".
+	ChannelMode string `json:"channelMode,omitempty"`
 
 	// Gain is the configured input gain in dB. 0 means no adjustment.
 	Gain float64 `json:"gain"`
@@ -207,6 +215,14 @@ type SourceConfig struct {
 
 	// Channels is the desired number of capture channels.
 	Channels int
+
+	// SourceChannels is the actual channel count of the remote source,
+	// discovered by probing. Zero means unknown (probe failed or mono assumed).
+	SourceChannels int
+
+	// ChannelMode controls how multi-channel audio is handled.
+	// Values: "downmix" (default), "left", "right".
+	ChannelMode string
 
 	// Gain is the input gain adjustment in dB. 0 means no adjustment.
 	// Positive values amplify, negative values attenuate.

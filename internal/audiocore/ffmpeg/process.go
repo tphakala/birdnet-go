@@ -377,12 +377,27 @@ func BuildFFmpegArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
 		"-vn",
 		"-f", format,
 		"-ar", sampleRate,
-		"-ac", numChannels,
-		"-hide_banner",
-		"pipe:1",
 	)
+	args = appendChannelArgs(args, cfg.ChannelMode, cfg.SourceChannels, numChannels)
+	args = append(args, "-hide_banner", "pipe:1")
 
 	return args
+}
+
+// appendChannelArgs appends the appropriate FFmpeg channel selection flags.
+// When channelMode is "left" or "right" and the source has >1 channel,
+// it uses a pan filter to extract the selected channel. Falls back to
+// simple -ac downmix when the source is mono or mode is "downmix"/empty.
+func appendChannelArgs(args []string, channelMode string, sourceChannels int, numChannels string) []string {
+	if sourceChannels > 1 {
+		switch strings.ToLower(channelMode) {
+		case "left":
+			return append(args, "-af", "pan=mono|c0=c0", "-ac", "1")
+		case "right":
+			return append(args, "-af", "pan=mono|c0=c1", "-ac", "1")
+		}
+	}
+	return append(args, "-ac", numChannels)
 }
 
 // buildInputArgs constructs the pre-input FFmpeg flags (transport, timeout, extra parameters).

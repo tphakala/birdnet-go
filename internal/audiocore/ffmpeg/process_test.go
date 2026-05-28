@@ -115,6 +115,104 @@ func TestBuildFFmpegArgs_CustomTimeout(t *testing.T) {
 	assert.Equal(t, 1, count, "timeout flag must appear exactly once")
 }
 
+// TestBuildFFmpegArgs_ChannelModeLeft verifies that a stereo source with
+// channel mode "left" produces a pan filter extracting the left channel.
+func TestBuildFFmpegArgs_ChannelModeLeft(t *testing.T) {
+	t.Parallel()
+
+	cfg := &StreamConfig{
+		URL:            "rtsp://camera.example.com/live",
+		Type:           "rtsp",
+		SampleRate:     48000,
+		BitDepth:       16,
+		Channels:       1,
+		SourceChannels: 2,
+		ChannelMode:    "left",
+		Transport:      "tcp",
+		LogLevel:       "error",
+	}
+
+	args := BuildFFmpegArgs(cfg, nil)
+
+	afIdx := slices.Index(args, "-af")
+	require.NotEqual(t, -1, afIdx, "expected -af flag for left channel extraction")
+	require.Less(t, afIdx+1, len(args), "-af must have a value")
+	assert.Equal(t, "pan=mono|c0=c0", args[afIdx+1])
+	assert.Contains(t, args, "-ac")
+}
+
+// TestBuildFFmpegArgs_ChannelModeRight verifies that a stereo source with
+// channel mode "right" produces a pan filter extracting the right channel.
+func TestBuildFFmpegArgs_ChannelModeRight(t *testing.T) {
+	t.Parallel()
+
+	cfg := &StreamConfig{
+		URL:            "rtsp://camera.example.com/live",
+		Type:           "rtsp",
+		SampleRate:     48000,
+		BitDepth:       16,
+		Channels:       1,
+		SourceChannels: 2,
+		ChannelMode:    "right",
+		Transport:      "tcp",
+		LogLevel:       "error",
+	}
+
+	args := BuildFFmpegArgs(cfg, nil)
+
+	afIdx := slices.Index(args, "-af")
+	require.NotEqual(t, -1, afIdx, "expected -af flag for right channel extraction")
+	require.Less(t, afIdx+1, len(args), "-af must have a value")
+	assert.Equal(t, "pan=mono|c0=c1", args[afIdx+1])
+}
+
+// TestBuildFFmpegArgs_ChannelModeDownmix verifies that "downmix" mode uses
+// simple -ac without a pan filter.
+func TestBuildFFmpegArgs_ChannelModeDownmix(t *testing.T) {
+	t.Parallel()
+
+	cfg := &StreamConfig{
+		URL:            "rtsp://camera.example.com/live",
+		Type:           "rtsp",
+		SampleRate:     48000,
+		BitDepth:       16,
+		Channels:       1,
+		SourceChannels: 2,
+		ChannelMode:    "downmix",
+		Transport:      "tcp",
+		LogLevel:       "error",
+	}
+
+	args := BuildFFmpegArgs(cfg, nil)
+
+	assert.NotContains(t, args, "-af")
+	assert.Contains(t, args, "-ac")
+}
+
+// TestBuildFFmpegArgs_ChannelModeLeftOnMonoSource verifies the safety guard:
+// a mono source never gets a pan filter, even when channel mode is "left".
+func TestBuildFFmpegArgs_ChannelModeLeftOnMonoSource(t *testing.T) {
+	t.Parallel()
+
+	cfg := &StreamConfig{
+		URL:            "rtsp://camera.example.com/live",
+		Type:           "rtsp",
+		SampleRate:     48000,
+		BitDepth:       16,
+		Channels:       1,
+		SourceChannels: 1,
+		ChannelMode:    "left",
+		Transport:      "tcp",
+		LogLevel:       "error",
+	}
+
+	args := BuildFFmpegArgs(cfg, nil)
+
+	// Safety guard: mono source should NOT get pan filter.
+	assert.NotContains(t, args, "-af")
+	assert.Contains(t, args, "-ac")
+}
+
 // TestBackoffCalculation verifies that CalculateBackoff implements exponential
 // backoff with a jitter ceiling and respects the maximum backoff cap.
 func TestBackoffCalculation(t *testing.T) {

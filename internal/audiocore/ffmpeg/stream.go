@@ -198,6 +198,15 @@ type StreamConfig struct {
 	// Channels count (e.g., 1 for mono).
 	Channels int
 
+	// SourceChannels is the actual channel count of the remote source.
+	// Used by the channel mode safety guard: pan filter is only applied
+	// when the source actually has multiple channels.
+	SourceChannels int
+
+	// ChannelMode controls how multi-channel audio is handled.
+	// Values: "downmix" (default), "left", "right".
+	ChannelMode string
+
 	// FFmpegPath is the absolute path to the FFmpeg binary.
 	FFmpegPath string
 
@@ -817,8 +826,8 @@ func (s *Stream) startProcess() error {
 		"-loglevel", logLevel,
 		"-vn",
 		"-f", format,
-		"-ac", numChannels,
 	)
+	args = appendChannelArgs(args, s.config.ChannelMode, s.config.SourceChannels, numChannels)
 	if s.config.needsOutputResampling() {
 		args = append(args, "-ar", sampleRate)
 	}

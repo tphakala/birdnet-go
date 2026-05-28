@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 type testStreamRequest struct {
@@ -25,13 +26,25 @@ type testStreamResponse struct {
 	Warnings      []string `json:"warnings"`
 }
 
+type analyzeChannelsRequest struct {
+	URL string `json:"url"`
+}
+
+type analyzeChannelsResponse struct {
+	Channels    int                    `json:"channels"`
+	Energy      []ffmpeg.ChannelEnergy `json:"energy"`
+	Recommended string                 `json:"recommended"`
+}
+
 var allowedSchemes = map[string]bool{
 	"rtsp":  true,
 	"rtsps": true,
 	"http":  true,
 	"https": true,
 	"rtmp":  true,
+	"rtmps": true,
 	"udp":   true,
+	"rtp":   true,
 }
 
 var blockedHosts = map[string]bool{
@@ -44,6 +57,7 @@ var blockedHosts = map[string]bool{
 // initStreamTestRoutes registers stream testing endpoints.
 func (c *Controller) initStreamTestRoutes() {
 	c.Group.POST("/streams/test", c.TestStream, c.authMiddleware)
+	c.Group.POST("/streams/analyze-channels", c.AnalyzeChannels, c.authMiddleware)
 }
 
 // TestStream tests a stream URL to discover its audio properties.
@@ -85,8 +99,41 @@ func (c *Controller) TestStream(ctx echo.Context) error {
 		resp.Warnings = append(resp.Warnings,
 			"Sample rate below bat model minimum (96 kHz)")
 	}
+	if info.Channels > 1 {
+		resp.Warnings = append(resp.Warnings,
+			"Stream sends stereo audio. AI inference works on mono only. "+
+				"Select a specific channel (left/right) for best detection accuracy, "+
+				"or use the channel detector to find the active microphone channel.")
+	}
 
 	return ctx.JSON(http.StatusOK, resp)
+}
+
+// AnalyzeChannels captures a short stereo sample and returns per-channel
+// energy levels with a recommendation for which channel to use.
+func (c *Controller) AnalyzeChannels(ctx echo.Context) error {
+	var req analyzeChannelsRequest
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleErrorWithKey(ctx, err, "invalid request body",
+			http.StatusBadRequest, "errors.streams.test.invalidBody", nil)
+	}
+
+	if vErr := validateStreamTestURL(req.URL); vErr != nil {
+		return c.HandleErrorWithKey(ctx, nil, vErr.message,
+			vErr.status, vErr.errorKey, vErr.params)
+	}
+
+	analysis, err := ffmpeg.AnalyzeChannelEnergy(ctx.Request().Context(), req.URL, conf.Setting().Realtime.Audio.FfmpegPath)
+	if err != nil {
+		return c.HandleErrorWithKey(ctx, err, "channel analysis failed",
+			http.StatusBadGateway, "errors.streams.analyzeChannels.failed", nil)
+	}
+
+	return ctx.JSON(http.StatusOK, analyzeChannelsResponse{
+		Channels:    analysis.Channels,
+		Energy:      analysis.Energy,
+		Recommended: analysis.Recommended,
+	})
 }
 
 type streamTestValidationError struct {
