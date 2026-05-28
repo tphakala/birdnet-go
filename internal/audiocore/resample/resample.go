@@ -90,7 +90,7 @@ func (r *Resampler) EstimateOutputBytes(inputBytes int) int {
 // ErrBufferTooSmall is returned without advancing resampler state.
 //
 // input must contain an even number of bytes (each sample is two bytes).
-func (r *Resampler) ResampleTo(input []byte, dst []byte) ([]byte, error) {
+func (r *Resampler) ResampleTo(input, dst []byte) ([]byte, error) {
 	if len(input) == 0 {
 		return dst[:0], nil
 	}
