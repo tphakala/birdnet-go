@@ -1926,11 +1926,16 @@ func (s *Stream) conditionalFailureReset(totalBytesReceived int64) {
 
 // detectUserTimeout scans FFmpeg parameters for an existing timeout setting.
 // Detects both -timeout and -stimeout so user-provided values are honoured
-// regardless of which flag the user specified.
+// regardless of which flag the user specified. A dangling flag with no
+// following value is reported as found with an empty value so callers can
+// strip it and fall back to the default.
 func detectUserTimeout(params []string) (found bool, value string) {
 	for i, param := range params {
-		if (param == ffmpegTimeoutParam || param == ffmpegRTSPTimeoutParam) && i+1 < len(params) {
-			return true, params[i+1]
+		if param == ffmpegTimeoutParam || param == ffmpegRTSPTimeoutParam {
+			if i+1 < len(params) {
+				return true, params[i+1]
+			}
+			return true, ""
 		}
 	}
 	return false, ""

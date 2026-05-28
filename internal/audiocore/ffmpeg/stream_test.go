@@ -771,11 +771,11 @@ func TestDetectUserTimeout(t *testing.T) {
 		{"empty_params", []string{}, false, ""},
 		{"no_timeout_param", []string{"-loglevel", "debug"}, false, ""},
 		{"timeout_with_value", []string{"-timeout", "5000000"}, true, "5000000"},
-		{"timeout_without_value", []string{"-timeout"}, false, ""},
+		{"timeout_without_value", []string{"-timeout"}, true, ""},
 		{"timeout_in_middle", []string{"-loglevel", "debug", "-timeout", "10000000", "-rtsp_flags", "prefer_tcp"}, true, "10000000"},
 		{"first_timeout_wins", []string{"-timeout", "5000000", "-timeout", "10000000"}, true, "5000000"},
 		{"stimeout_with_value", []string{"-stimeout", "5000000"}, true, "5000000"},
-		{"stimeout_without_value", []string{"-stimeout"}, false, ""},
+		{"stimeout_without_value", []string{"-stimeout"}, true, ""},
 		{"stimeout_in_middle", []string{"-loglevel", "debug", "-stimeout", "8000000"}, true, "8000000"},
 		{"timeout_before_stimeout", []string{"-timeout", "3000000", "-stimeout", "7000000"}, true, "3000000"},
 	}
