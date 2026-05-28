@@ -550,16 +550,36 @@ const (
 // DefaultTransport is the default RTSP/RTMP transport protocol
 const DefaultTransport = "tcp"
 
+// ChannelMode controls how multi-channel audio is handled before analysis.
+type ChannelMode string
+
+const (
+	ChannelModeDownmix ChannelMode = "downmix" // Mix all channels to mono (default)
+	ChannelModeLeft    ChannelMode = "left"    // Use left (first) channel only
+	ChannelModeRight   ChannelMode = "right"   // Use right (second) channel only
+)
+
+// DefaultChannelMode is used when no channel mode is specified.
+const DefaultChannelMode = ChannelModeDownmix
+
+// ValidChannelModes is the set of accepted channel mode values.
+var ValidChannelModes = map[ChannelMode]bool{
+	ChannelModeDownmix: true,
+	ChannelModeLeft:    true,
+	ChannelModeRight:   true,
+}
+
 // StreamConfig represents a single audio stream source
 type StreamConfig struct {
-	Name       string             `yaml:"name" json:"name" mapstructure:"name"`                                    // Required: descriptive name like "Front Yard"
-	URL        string             `yaml:"url" json:"url" mapstructure:"url"`                                       // Required: stream URL
-	Enabled    bool               `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                           // true when the configured stream should be active
-	Type       string             `yaml:"type" json:"type" mapstructure:"type"`                                    // Stream type: rtsp, http, hls, rtmp, udp
-	Transport  string             `yaml:"transport" json:"transport" mapstructure:"transport"`                     // Transport: tcp or udp (for RTSP/RTMP)
-	Equalizer  *EqualizerSettings `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"` // Per-stream EQ (nil = use global)
-	QuietHours QuietHoursConfig   `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                  // Quiet hours configuration
-	Models     []string           `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"`          // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
+	Name        string             `yaml:"name" json:"name" mapstructure:"name"`                                    // Required: descriptive name like "Front Yard"
+	URL         string             `yaml:"url" json:"url" mapstructure:"url"`                                       // Required: stream URL
+	Enabled     bool               `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                           // true when the configured stream should be active
+	Type        string             `yaml:"type" json:"type" mapstructure:"type"`                                    // Stream type: rtsp, http, hls, rtmp, udp
+	Transport   string             `yaml:"transport" json:"transport" mapstructure:"transport"`                     // Transport: tcp or udp (for RTSP/RTMP)
+	ChannelMode ChannelMode        `yaml:"channelMode,omitempty" json:"channelMode" mapstructure:"channelMode"`     // Channel handling: downmix, left, or right
+	Equalizer   *EqualizerSettings `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"` // Per-stream EQ (nil = use global)
+	QuietHours  QuietHoursConfig   `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                  // Quiet hours configuration
+	Models      []string           `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"`          // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
 }
 
 // IsEnabled returns the effective enabled state for a stream.
