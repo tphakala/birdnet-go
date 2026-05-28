@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 type testStreamRequest struct {
@@ -120,7 +121,7 @@ func (c *Controller) AnalyzeChannels(ctx echo.Context) error {
 			vErr.status, vErr.errorKey, vErr.params)
 	}
 
-	analysis, err := ffmpeg.AnalyzeChannelEnergy(ctx.Request().Context(), req.URL)
+	analysis, err := ffmpeg.AnalyzeChannelEnergy(ctx.Request().Context(), req.URL, conf.Setting().Realtime.Audio.FfmpegPath)
 	if err != nil {
 		return c.HandleErrorWithKey(ctx, err, "channel analysis failed",
 			http.StatusBadGateway, "errors.streams.analyzeChannels.failed", nil)

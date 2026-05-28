@@ -39,10 +39,15 @@ type ChannelAnalysis struct {
 
 // AnalyzeChannelEnergy captures a short stereo sample from the given URL and
 // computes per-channel RMS energy to recommend which channel to use.
-func AnalyzeChannelEnergy(ctx context.Context, url string) (*ChannelAnalysis, error) {
-	ffmpegBinary, err := resolveFFmpegBinary()
-	if err != nil {
-		return nil, err
+// If ffmpegPath is empty, the binary is resolved via exec.LookPath.
+func AnalyzeChannelEnergy(ctx context.Context, url, ffmpegPath string) (*ChannelAnalysis, error) {
+	ffmpegBinary := ffmpegPath
+	if ffmpegBinary == "" {
+		var err error
+		ffmpegBinary, err = resolveFFmpegBinary()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	analysisCtx, cancel := context.WithTimeout(ctx, analysisTimeout)

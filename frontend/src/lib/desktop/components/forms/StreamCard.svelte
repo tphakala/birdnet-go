@@ -438,6 +438,8 @@
 
   function handleTestResult(result: { sampleRate: number; channels: number } | null) {
     testResult = result;
+    analysisResult = null;
+    analysisError = null;
   }
 
   function updateEnabled(enabled: boolean) {
@@ -575,7 +577,7 @@
             bind:value={editChannelMode}
             class="w-full h-8 px-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
           >
-            {#each channelModeOptions as opt}
+            {#each channelModeOptions as opt (opt.value)}
               <option value={opt.value}>{opt.label()}</option>
             {/each}
           </select>
@@ -604,12 +606,16 @@
 
             {#if analysisResult}
               <div class="space-y-1 text-xs">
-                {#each analysisResult.energy as ch}
+                {#each analysisResult.energy as ch (ch.channel)}
                   <div class="flex items-center gap-2">
-                    <span class="w-20 text-[var(--color-base-content)]/70">{ch.label}:</span>
+                    <span class="w-20 text-[var(--color-base-content)]/70"
+                      >{ch.channel === 0
+                        ? t('settings.audio.streams.channelMode.energyLeft')
+                        : t('settings.audio.streams.channelMode.energyRight')}:</span
+                    >
                     <div class="flex-1 h-2 bg-[var(--color-base-200)] rounded-full overflow-hidden">
                       <div
-                        class="h-full rounded-full {ch.label.toLowerCase() ===
+                        class="h-full rounded-full {(ch.channel === 0 ? 'left' : 'right') ===
                         analysisResult.recommended
                           ? 'bg-[var(--color-success)]'
                           : 'bg-[var(--color-base-400)]'}"

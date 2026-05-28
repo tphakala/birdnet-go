@@ -1019,10 +1019,14 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.SourceConfig) bool {
 	sourceSampleRateChanged := desired.SourceSampleRate != 0 &&
 		running.SourceSampleRate != desired.SourceSampleRate
+	sourceChannelsChanged := desired.SourceChannels != 0 &&
+		running.SourceChannels != desired.SourceChannels
 	return running.SampleRate != desired.SampleRate ||
 		sourceSampleRateChanged ||
 		running.BitDepth != desired.BitDepth ||
-		running.Channels != desired.Channels
+		running.Channels != desired.Channels ||
+		running.ChannelMode != desired.ChannelMode ||
+		sourceChannelsChanged
 }
 
 // resolveDesiredModelSet resolves config-level model IDs to registry IDs,
