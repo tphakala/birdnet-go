@@ -393,15 +393,28 @@ func ProcessAudioToFile(ctx context.Context, filePath, ffmpegPath string, filter
 }
 
 // BuildFFmpegArgs constructs the complete FFmpeg argument list for a streaming source.
-// It is a pure function suitable for unit testing. The Stream.startProcess method
-// delegates to this function after constructing the input and output format parameters.
+// It is a pure function suitable for unit testing. It produces the same output
+// arguments as the runtime path (Stream.startProcess) by sharing buildOutputArgs;
+// only the input-argument timeout warning logging differs between the two.
 //
 // RTSP-specific flags like -rtsp_transport are only added for RTSP sources.
 // A default -timeout is added unless the caller supplies one via ffmpegParameters.
 func BuildFFmpegArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
-	sampleRate, numChannels, format := GetFFmpegFormat(cfg.SampleRate, cfg.Channels, cfg.BitDepth)
-
 	args := buildInputArgs(cfg, ffmpegParameters)
+	return buildOutputArgs(args, cfg)
+}
+
+// buildOutputArgs appends the post-input FFmpeg flags: the input URL, decode
+// format, channel selection, conditional output resampling, and the stdout pipe.
+// It is shared by BuildFFmpegArgs and Stream.startProcess so the unit-tested
+// argument construction matches the runtime path exactly.
+//
+// -ac (channel count) is always emitted via appendChannelArgs so multi-channel
+// sources are downmixed to mono. -ar (sample rate) is only emitted when the
+// source rate is unknown or differs from the target, avoiding a needless
+// resample when the source already matches.
+func buildOutputArgs(args []string, cfg *StreamConfig) []string {
+	sampleRate, numChannels, format := GetFFmpegFormat(cfg.SampleRate, cfg.Channels, cfg.BitDepth)
 
 	logLevel := cfg.LogLevel
 	if logLevel == "" {
@@ -413,9 +426,11 @@ func BuildFFmpegArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
 		"-loglevel", logLevel,
 		"-vn",
 		"-f", format,
-		"-ar", sampleRate,
 	)
 	args = appendChannelArgs(args, cfg.ChannelMode, cfg.SourceChannels, numChannels)
+	if cfg.needsOutputResampling() {
+		args = append(args, "-ar", sampleRate)
+	}
 	args = append(args, "-hide_banner", "pipe:1")
 
 	return args

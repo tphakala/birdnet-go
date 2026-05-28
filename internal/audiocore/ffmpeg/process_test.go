@@ -180,7 +180,7 @@ func TestBuildFFmpegArgs_ChannelModeLeft(t *testing.T) {
 	require.NotEqual(t, -1, afIdx, "expected -af flag for left channel extraction")
 	require.Less(t, afIdx+1, len(args), "-af must have a value")
 	assert.Equal(t, "pan=mono|c0=c0", args[afIdx+1])
-	assert.Contains(t, args, "-ac")
+	assertFlagValue(t, args, "-ac", "1")
 }
 
 // TestBuildFFmpegArgs_ChannelModeRight verifies that a stereo source with
@@ -206,10 +206,11 @@ func TestBuildFFmpegArgs_ChannelModeRight(t *testing.T) {
 	require.NotEqual(t, -1, afIdx, "expected -af flag for right channel extraction")
 	require.Less(t, afIdx+1, len(args), "-af must have a value")
 	assert.Equal(t, "pan=mono|c0=c1", args[afIdx+1])
+	assertFlagValue(t, args, "-ac", "1")
 }
 
 // TestBuildFFmpegArgs_ChannelModeDownmix verifies that "downmix" mode uses
-// simple -ac without a pan filter.
+// simple -ac 1 (mono downmix) without a pan filter.
 func TestBuildFFmpegArgs_ChannelModeDownmix(t *testing.T) {
 	t.Parallel()
 
@@ -228,7 +229,76 @@ func TestBuildFFmpegArgs_ChannelModeDownmix(t *testing.T) {
 	args := BuildFFmpegArgs(cfg, nil)
 
 	assert.NotContains(t, args, "-af")
-	assert.Contains(t, args, "-ac")
+	assertFlagValue(t, args, "-ac", "1")
+}
+
+// TestBuildFFmpegArgs_ChannelModeEmpty verifies that an unset channel mode (the
+// default for existing streams that predate the feature) downmixes a stereo
+// source to mono with -ac 1 and no pan filter, matching pre-feature behavior.
+func TestBuildFFmpegArgs_ChannelModeEmpty(t *testing.T) {
+	t.Parallel()
+
+	cfg := &StreamConfig{
+		URL:            "rtsp://camera.example.com/live",
+		Type:           "rtsp",
+		SampleRate:     48000,
+		BitDepth:       16,
+		Channels:       1,
+		SourceChannels: 2,
+		ChannelMode:    "",
+		Transport:      "tcp",
+		LogLevel:       "error",
+	}
+
+	args := BuildFFmpegArgs(cfg, nil)
+
+	assert.NotContains(t, args, "-af")
+	assertFlagValue(t, args, "-ac", "1")
+}
+
+// TestBuildFFmpegArgs_OutputResampling verifies that -ar is emitted only when
+// the source sample rate is unknown or differs from the target, and omitted
+// when the probed source rate already matches the target. -ac must always be
+// present so multi-channel sources still downmix to mono regardless of -ar.
+func TestBuildFFmpegArgs_OutputResampling(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		sourceSampleRate int
+		wantAr           bool
+	}{
+		{"unknown_source_rate_resamples", 0, true},
+		{"differing_rate_resamples", 44100, true},
+		{"matching_rate_skips_ar", 48000, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &StreamConfig{
+				URL:              "rtsp://camera.example.com/live",
+				Type:             "rtsp",
+				SampleRate:       48000,
+				SourceSampleRate: tt.sourceSampleRate,
+				BitDepth:         16,
+				Channels:         1,
+				Transport:        "tcp",
+				LogLevel:         "error",
+			}
+
+			args := BuildFFmpegArgs(cfg, nil)
+
+			if tt.wantAr {
+				assertFlagValue(t, args, "-ar", "48000")
+			} else {
+				assert.NotContains(t, args, "-ar", "expected no -ar when source rate matches target")
+			}
+			// -ac must always be present so stereo sources downmix to mono.
+			assertFlagValue(t, args, "-ac", "1")
+		})
+	}
 }
 
 // TestBuildFFmpegArgs_ChannelModeLeftOnMonoSource verifies the safety guard:
@@ -250,9 +320,18 @@ func TestBuildFFmpegArgs_ChannelModeLeftOnMonoSource(t *testing.T) {
 
 	args := BuildFFmpegArgs(cfg, nil)
 
-	// Safety guard: mono source should NOT get pan filter.
+	// Safety guard: mono source should NOT get pan filter, and must downmix to mono.
 	assert.NotContains(t, args, "-af")
-	assert.Contains(t, args, "-ac")
+	assertFlagValue(t, args, "-ac", "1")
+}
+
+// assertFlagValue asserts that flag appears in args immediately followed by want.
+func assertFlagValue(t *testing.T, args []string, flag, want string) {
+	t.Helper()
+	idx := slices.Index(args, flag)
+	require.NotEqual(t, -1, idx, "expected %s flag", flag)
+	require.Less(t, idx+1, len(args), "%s must have a value", flag)
+	assert.Equal(t, want, args[idx+1], "unexpected value for %s", flag)
 }
 
 // TestBackoffCalculation verifies that CalculateBackoff implements exponential

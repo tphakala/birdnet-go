@@ -720,10 +720,8 @@ func TestStream_ConditionalFailureReset_NotEnoughBytes(t *testing.T) {
 	assert.Equal(t, 5, stream.getConsecutiveFailures(), "Failures should NOT be reset without enough bytes")
 }
 
-func TestStream_ValidateUserTimeout(t *testing.T) {
+func TestValidateTimeout(t *testing.T) {
 	t.Parallel()
-
-	stream := newTestStream(t)
 
 	tests := []struct {
 		name          string
@@ -747,7 +745,7 @@ func TestStream_ValidateUserTimeout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := stream.validateUserTimeout(tt.timeoutStr)
+			err := validateTimeout(tt.timeoutStr)
 
 			if tt.expectError {
 				require.Error(t, err, "Expected error for timeout: %s", tt.timeoutStr)
