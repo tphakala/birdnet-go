@@ -578,17 +578,17 @@ func (c *Controller) getDawnChorusImpl(ctx echo.Context) error {
 		earliestSeconds int
 		daysObserved    int
 	}
-	speciesMap := make(map[uint]*speciesData)
+	speciesMap := make(map[string]*speciesData)
 	loc := time.Local
 
 	for _, entry := range rawEntries {
-		sd, ok := speciesMap[entry.LabelID]
+		sd, ok := speciesMap[entry.ScientificName]
 		if !ok {
 			sd = &speciesData{
 				scientificName:  entry.ScientificName,
 				earliestSeconds: 24 * 3600, // sentinel max
 			}
-			speciesMap[entry.LabelID] = sd
+			speciesMap[entry.ScientificName] = sd
 		}
 
 		t := time.Unix(entry.EarliestAt, 0).In(loc)
