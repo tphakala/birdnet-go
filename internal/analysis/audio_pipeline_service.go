@@ -1318,23 +1318,24 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 		enabledStreams = append(enabledStreams, stream)
 	}
 
-	// Probe all streams concurrently to discover actual sample rates.
-	// This lets us skip FFmpeg resampling when the source already matches
-	// the target, and detect sub-48 kHz sources that need upsampling.
-	probedRates := p.probeAllStreams(enabledStreams)
+	// Probe all streams concurrently to discover actual sample rates and
+	// channel counts. This lets us skip FFmpeg resampling when the source
+	// already matches the target, detect sub-48 kHz sources that need
+	// upsampling, and pass channel info for the channel selection filter.
+	probeResults := p.probeAllStreams(enabledStreams)
 
 	// RTSP streams.
 	for _, stream := range enabledStreams {
-		probedRate := probedRates[stream.URL]
+		probe := probeResults[stream.URL]
 		sampleRate := conf.SampleRate
 		if hasBatModel(stream.Models) {
-			if probedRate > conf.SampleRate {
-				sampleRate = probedRate
+			if probe.sampleRate > conf.SampleRate {
+				sampleRate = probe.sampleRate
 			}
-			if probedRate > 0 && probedRate < ffmpeg.MinBatSampleRate {
+			if probe.sampleRate > 0 && probe.sampleRate < ffmpeg.MinBatSampleRate {
 				GetLogger().Warn("stream sample rate below bat model minimum",
 					logger.String("stream", stream.Name),
-					logger.Int("sample_rate", probedRate),
+					logger.Int("sample_rate", probe.sampleRate),
 					logger.Int("minimum", ffmpeg.MinBatSampleRate),
 					logger.String("operation", "probe_stream"))
 			}
@@ -1345,9 +1346,11 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 				Type:             audiocore.StreamTypeToSourceType(stream.Type),
 				ConnectionString: stream.URL,
 				SampleRate:       sampleRate,
-				SourceSampleRate: probedRate,
+				SourceSampleRate: probe.sampleRate,
 				BitDepth:         conf.BitDepth,
 				Channels:         1,
+				SourceChannels:   probe.channels,
+				ChannelMode:      string(stream.ChannelMode),
 			},
 			modelIDs: stream.Models,
 		})
@@ -1398,43 +1401,50 @@ func hasBatModel(modelIDs []string) bool {
 }
 
 // probeAllStreams probes all streams concurrently to discover their actual
-// sample rates. Returns a map from stream URL to probed sample rate.
-// A zero value means the probe failed (the caller should treat unknown
-// rates conservatively).
-func (p *AudioPipelineService) probeAllStreams(streams []*conf.StreamConfig) map[string]int {
+// sample rates and channel counts. Returns a map from stream URL to probe
+// result. A zero-valued result means the probe failed (the caller should
+// treat unknown values conservatively).
+func (p *AudioPipelineService) probeAllStreams(streams []*conf.StreamConfig) map[string]streamProbeResult {
 	if len(streams) == 0 {
 		return nil
 	}
 
-	type probeResult struct {
-		url  string
-		rate int
+	type result struct {
+		url   string
+		probe streamProbeResult
 	}
 
-	results := make(chan probeResult, len(streams))
+	results := make(chan result, len(streams))
 	var wg sync.WaitGroup
 	for _, s := range streams {
 		wg.Go(func() {
-			results <- probeResult{
-				url:  s.URL,
-				rate: p.probeStreamSampleRate(s.URL, s.Name),
+			results <- result{
+				url:   s.URL,
+				probe: p.probeStreamSampleRate(s.URL, s.Name),
 			}
 		})
 	}
 	wg.Wait()
 	close(results)
 
-	rates := make(map[string]int, len(streams))
+	probes := make(map[string]streamProbeResult, len(streams))
 	for r := range results {
-		rates[r.url] = r.rate
+		probes[r.url] = r.probe
 	}
-	return rates
+	return probes
+}
+
+// streamProbeResult holds the sample rate and channel count discovered by
+// probing a stream. Zero values mean the probe failed or the field is unknown.
+type streamProbeResult struct {
+	sampleRate int
+	channels   int
 }
 
 // probeStreamSampleRate uses ffprobe to discover the actual sample rate of a
-// stream. Returns 0 on failure so the caller can distinguish "unknown" from
-// "actually 48 kHz" and apply conservative resampling.
-func (p *AudioPipelineService) probeStreamSampleRate(url, name string) int {
+// stream. Returns a zero-valued result on failure so the caller can distinguish
+// "unknown" from "actually 48 kHz" and apply conservative resampling.
+func (p *AudioPipelineService) probeStreamSampleRate(url, name string) streamProbeResult {
 	log := GetLogger()
 
 	info, err := ffmpeg.ProbeStreamInfo(context.Background(), url)
@@ -1443,7 +1453,7 @@ func (p *AudioPipelineService) probeStreamSampleRate(url, name string) int {
 			logger.String("stream", name),
 			logger.Error(err),
 			logger.String("operation", "probe_stream"))
-		return 0
+		return streamProbeResult{}
 	}
 
 	log.Info("probed stream audio properties",
@@ -1467,7 +1477,7 @@ func (p *AudioPipelineService) probeStreamSampleRate(url, name string) int {
 			logger.String("operation", "probe_stream"))
 	}
 
-	return info.SampleRate
+	return streamProbeResult{sampleRate: info.SampleRate, channels: info.Channels}
 }
 
 // buildMonitorConfigs builds the map[sourceID][]monitorConfig needed by
