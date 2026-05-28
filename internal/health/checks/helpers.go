@@ -237,6 +237,94 @@ func extractMetricType(prefix string) string {
 	return trimmed
 }
 
+// velocityTrend describes whether error activity is growing, shrinking, or flat
+// over the most recent consecutive in-window sparkline buckets.
+type velocityTrend int
+
+const (
+	// velocityStable means the two most recent in-window buckets are equal,
+	// or fewer than two in-window buckets exist.
+	velocityStable velocityTrend = iota
+	// velocityIncreasing means the current bucket count exceeds the previous one.
+	velocityIncreasing
+	// velocityDecreasing means the current bucket count is below the previous one.
+	velocityDecreasing
+)
+
+// countActiveHours returns the number of sparkline buckets within the given
+// window that recorded at least one event. A bucket is considered in-window
+// if its hour-long interval ends after cutoff (now - window).
+func countActiveHours(buckets []observability.HourlyBucket, window time.Duration, now time.Time) int {
+	cutoff := now.Add(-window)
+	count := 0
+	for _, b := range buckets {
+		if !b.Start.Add(time.Hour).Before(cutoff) && b.Count > 0 {
+			count++
+		}
+	}
+	return count
+}
+
+// detectVelocity examines the two most recent consecutive in-window sparkline
+// buckets and returns whether activity is increasing, decreasing, or stable.
+// Zero-count buckets are NOT skipped so the comparison reflects the true
+// trajectory (e.g. a drop to zero is decreasing, not stable).
+// Returns velocityStable when fewer than two in-window buckets are found.
+func detectVelocity(buckets []observability.HourlyBucket, window time.Duration, now time.Time) velocityTrend {
+	cutoff := now.Add(-window)
+
+	// Collect in-window buckets in forward order, then examine the last two.
+	var inWindow []observability.HourlyBucket
+	for _, b := range buckets {
+		if !b.Start.Add(time.Hour).Before(cutoff) {
+			inWindow = append(inWindow, b)
+		}
+	}
+
+	if len(inWindow) < 2 {
+		return velocityStable
+	}
+
+	current := inWindow[len(inWindow)-1]
+	previous := inWindow[len(inWindow)-2]
+
+	switch {
+	case current.Count > previous.Count:
+		return velocityIncreasing
+	case current.Count < previous.Count:
+		return velocityDecreasing
+	default:
+		return velocityStable
+	}
+}
+
+// maxBucketCount returns the highest Count value across all in-window sparkline
+// buckets. Used as a peak hourly rate safety net for severity decisions.
+// Returns 0 when no in-window buckets are present.
+func maxBucketCount(buckets []observability.HourlyBucket, window time.Duration, now time.Time) int64 {
+	cutoff := now.Add(-window)
+	var peak int64
+	for _, b := range buckets {
+		if !b.Start.Add(time.Hour).Before(cutoff) && b.Count > peak {
+			peak = b.Count
+		}
+	}
+	return peak
+}
+
+// velocityString returns a human-readable label for a velocityTrend value,
+// suitable for inclusion in a health result details map.
+func velocityString(v velocityTrend) string {
+	switch v {
+	case velocityIncreasing:
+		return "increasing"
+	case velocityDecreasing:
+		return "decreasing"
+	default:
+		return "stable"
+	}
+}
+
 // buildMergedSparkline merges multiple metric keys into a single sparkline
 // of n hourly buckets, with zeros for hours without data.
 func buildMergedSparkline(store *observability.HealthMetricsStore, keys []string, n int, now time.Time) []observability.HourlyBucket {
