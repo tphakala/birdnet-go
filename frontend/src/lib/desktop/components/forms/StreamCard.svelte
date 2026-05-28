@@ -412,7 +412,7 @@
       if (seq !== analysisSeq) return;
       analysisResult = result;
       if (result.recommended && result.recommended !== 'downmix') {
-        editChannelMode = result.recommended as ChannelMode;
+        editChannelMode = result.recommended;
       }
     } catch (err: unknown) {
       if (seq !== analysisSeq) return;

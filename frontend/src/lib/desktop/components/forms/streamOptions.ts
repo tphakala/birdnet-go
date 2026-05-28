@@ -15,13 +15,15 @@ export const transportOptions = [
   { value: 'udp', label: 'UDP' },
 ];
 
-export const channelModeOptions = [
+type ChannelModeOption = { value: ChannelMode; label: () => string };
+
+export const channelModeOptions: ChannelModeOption[] = [
   {
-    value: 'downmix' as ChannelMode,
+    value: 'downmix',
     label: () => t('settings.audio.streams.channelMode.downmix'),
   },
-  { value: 'left' as ChannelMode, label: () => t('settings.audio.streams.channelMode.left') },
-  { value: 'right' as ChannelMode, label: () => t('settings.audio.streams.channelMode.right') },
+  { value: 'left', label: () => t('settings.audio.streams.channelMode.left') },
+  { value: 'right', label: () => t('settings.audio.streams.channelMode.right') },
 ];
 
 export async function analyzeStreamChannels(url: string): Promise<ChannelAnalysis> {

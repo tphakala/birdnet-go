@@ -126,7 +126,7 @@
   // Pass the object directly - children will see mutations to its properties
   setContext('streamHealth', streamHealth);
 
-  let healthLoading = $state(true);
+  let healthLoading = $state(false);
 
   // Add new stream state
   let showAddForm = $state(false);
@@ -364,7 +364,7 @@
       if (seq !== analysisSeq) return;
       analysisResult = result;
       if (result.recommended && result.recommended !== 'downmix') {
-        newChannelMode = result.recommended as ChannelMode;
+        newChannelMode = result.recommended;
       }
     } catch (err: unknown) {
       if (seq !== analysisSeq) return;
@@ -385,6 +385,8 @@
   }
 
   function resetAddForm() {
+    analysisSeq++;
+    isAnalyzing = false;
     showAddForm = false;
     newName = '';
     newUrl = '';
