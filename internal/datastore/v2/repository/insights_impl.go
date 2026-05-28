@@ -90,7 +90,7 @@ func (r *insightsRepository) GetExpectedSpeciesToday(ctx context.Context, yearRa
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).
-		Select(fmt.Sprintf("d.label_id, %s.scientific_name, COUNT(DISTINCT %s) as years_seen, MAX(%s) as last_seen_date",
+		Select(fmt.Sprintf("%s.scientific_name, COUNT(DISTINCT %s) as years_seen, MAX(%s) as last_seen_date",
 			lab, yearExpr, dateExpr)).
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = d.label_id", lab, lab)).
 		Joins(fpJoin).
@@ -107,7 +107,7 @@ func (r *insightsRepository) GetExpectedSpeciesToday(ctx context.Context, yearRa
 		query = query.Where("d.model_id = ?", *modelID)
 	}
 
-	query = query.Group("d.label_id").Order("years_seen DESC")
+	query = query.Group(lab + ".scientific_name").Order("years_seen DESC")
 
 	var results []ExpectedSpecies
 	if err := query.Scan(&results).Error; err != nil {
@@ -123,7 +123,7 @@ func (r *insightsRepository) GetPhantomSpecies(ctx context.Context, since int64,
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).
-		Select(fmt.Sprintf("d.label_id, %s.scientific_name, COUNT(*) as detection_count, AVG(d.confidence) as avg_confidence, MAX(d.confidence) as max_confidence", lab)).
+		Select(fmt.Sprintf("%s.scientific_name, COUNT(*) as detection_count, AVG(d.confidence) as avg_confidence, MAX(d.confidence) as max_confidence", lab)).
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = d.label_id", lab, lab)).
 		Joins(fpJoin).
 		Where("d.detected_at >= ?", since).
@@ -133,7 +133,7 @@ func (r *insightsRepository) GetPhantomSpecies(ctx context.Context, since int64,
 		query = query.Where("d.model_id = ?", *modelID)
 	}
 
-	query = query.Group("d.label_id").
+	query = query.Group(lab + ".scientific_name").
 		Having("COUNT(*) >= ? AND AVG(d.confidence) < ?", minDetections, maxAvgConfidence).
 		Order("avg_confidence ASC")
 
@@ -153,7 +153,7 @@ func (r *insightsRepository) GetDawnChorusRaw(ctx context.Context, since int64, 
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).
-		Select(fmt.Sprintf("d.label_id, %s.scientific_name, %s as date, MIN(d.detected_at) as earliest_at",
+		Select(fmt.Sprintf("%s.scientific_name, %s as date, MIN(d.detected_at) as earliest_at",
 			lab, dateExpr)).
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = d.label_id", lab, lab)).
 		Joins(fpJoin).
@@ -165,7 +165,7 @@ func (r *insightsRepository) GetDawnChorusRaw(ctx context.Context, since int64, 
 		query = query.Where("d.model_id = ?", *modelID)
 	}
 
-	query = query.Group(fmt.Sprintf("d.label_id, %s", dateExpr))
+	query = query.Group(fmt.Sprintf("%s.scientific_name, %s", lab, dateExpr))
 
 	var results []DawnChorusRawEntry
 	if err := query.Scan(&results).Error; err != nil {
@@ -181,7 +181,7 @@ func (r *insightsRepository) GetNewArrivals(ctx context.Context, recentSince int
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).
-		Select(fmt.Sprintf("d.label_id, %s.scientific_name, MIN(d.detected_at) as first_detected, COUNT(*) as detection_count", lab)).
+		Select(fmt.Sprintf("%s.scientific_name, MIN(d.detected_at) as first_detected, COUNT(*) as detection_count", lab)).
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = d.label_id", lab, lab)).
 		Joins(fpJoin).
 		Where(fpWhere)
@@ -190,7 +190,7 @@ func (r *insightsRepository) GetNewArrivals(ctx context.Context, recentSince int
 		query = query.Where("d.model_id = ?", *modelID)
 	}
 
-	query = query.Group("d.label_id").
+	query = query.Group(lab + ".scientific_name").
 		Having("MIN(d.detected_at) >= ?", recentSince).
 		Order("first_detected DESC")
 
@@ -208,7 +208,7 @@ func (r *insightsRepository) GetGoneQuiet(ctx context.Context, recentSince int64
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).
-		Select(fmt.Sprintf("d.label_id, %s.scientific_name, MAX(d.detected_at) as last_detected, COUNT(*) as total_detections", lab)).
+		Select(fmt.Sprintf("%s.scientific_name, MAX(d.detected_at) as last_detected, COUNT(*) as total_detections", lab)).
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = d.label_id", lab, lab)).
 		Joins(fpJoin).
 		Where(fpWhere)
@@ -217,7 +217,7 @@ func (r *insightsRepository) GetGoneQuiet(ctx context.Context, recentSince int64
 		query = query.Where("d.model_id = ?", *modelID)
 	}
 
-	query = query.Group("d.label_id").
+	query = query.Group(lab + ".scientific_name").
 		Having("COUNT(*) >= ? AND MAX(d.detected_at) < ?", minTotalDetections, recentSince).
 		Order("last_detected DESC")
 
@@ -244,8 +244,12 @@ func (r *insightsRepository) GetDashboardKPIs(ctx context.Context, todaySince in
 		return q
 	}
 
-	// 1. Lifetime species
-	if err := baseQuery().Select("COUNT(DISTINCT d.label_id)").Scan(&kpis.LifetimeSpecies).Error; err != nil {
+	// 1. Lifetime species (join labels to count distinct scientific names across models)
+	lab := r.labelsTable()
+	if err := baseQuery().
+		Joins(fmt.Sprintf("JOIN %s ON %s.id = d.label_id", lab, lab)).
+		Select(fmt.Sprintf("COUNT(DISTINCT %s.scientific_name)", lab)).
+		Scan(&kpis.LifetimeSpecies).Error; err != nil {
 		return nil, fmt.Errorf("lifetime species: %w", err)
 	}
 
