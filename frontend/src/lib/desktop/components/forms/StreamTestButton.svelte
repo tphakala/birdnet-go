@@ -146,18 +146,6 @@
     </div>
   {/if}
 
-  {#if testResult && testResult.channels > 1}
-    <div
-      class="flex items-start gap-2 p-2.5 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
-      role="status"
-    >
-      <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
-      <span class="text-[var(--color-base-content)]">
-        {t('settings.audio.streams.stereoWarning.message')}
-      </span>
-    </div>
-  {/if}
-
   {#if testError !== null}
     <p class="text-xs text-[var(--color-error)]">
       {t('settings.audio.streams.test.error')}{testError ? `: ${testError}` : ''}
