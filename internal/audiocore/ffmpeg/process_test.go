@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
 // TestBuildFFmpegArgs_RTSP verifies that BuildFFmpegArgs produces the correct
@@ -32,9 +33,10 @@ func TestBuildFFmpegArgs_RTSP(t *testing.T) {
 	require.Less(t, rtspIdx+1, len(args), "-rtsp_transport must have a value")
 	assert.Equal(t, "tcp", args[rtspIdx+1])
 
-	// Default timeout must be present when no user timeout is supplied.
-	timeoutIdx := slices.Index(args, "-timeout")
-	require.NotEqual(t, -1, timeoutIdx, "expected -timeout flag")
+	// RTSP must use -stimeout, not -timeout.
+	stimeoutIdx := slices.Index(args, "-stimeout")
+	require.NotEqual(t, -1, stimeoutIdx, "expected -stimeout flag for RTSP")
+	assert.Equal(t, -1, slices.Index(args, "-timeout"), "RTSP must not use -timeout")
 
 	// Input URL must be present.
 	iIdx := slices.Index(args, "-i")
@@ -72,8 +74,9 @@ func TestBuildFFmpegArgs_HTTP(t *testing.T) {
 	// RTSP transport flag must NOT be present for HTTP sources.
 	assert.Equal(t, -1, slices.Index(args, "-rtsp_transport"), "HTTP source must not include -rtsp_transport")
 
-	// Default timeout should still be present.
-	assert.NotEqual(t, -1, slices.Index(args, "-timeout"), "expected -timeout flag")
+	// HTTP must use -timeout, not -stimeout.
+	assert.NotEqual(t, -1, slices.Index(args, "-timeout"), "expected -timeout flag for HTTP")
+	assert.Equal(t, -1, slices.Index(args, "-stimeout"), "HTTP must not use -stimeout")
 
 	// Input URL must be present.
 	iIdx := slices.Index(args, "-i")
@@ -86,7 +89,7 @@ func TestBuildFFmpegArgs_HTTP(t *testing.T) {
 }
 
 // TestBuildFFmpegArgs_CustomTimeout verifies that a user-provided valid timeout
-// replaces the default and is included in the output args.
+// is converted to the correct flag for the source type.
 func TestBuildFFmpegArgs_CustomTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -96,23 +99,62 @@ func TestBuildFFmpegArgs_CustomTimeout(t *testing.T) {
 		Transport: "tcp",
 	}
 
-	// 5 seconds in microseconds — above the 1-second minimum.
+	// User provides -timeout but RTSP needs -stimeout.
 	customParams := []string{"-timeout", "5000000"}
 	args := BuildFFmpegArgs(cfg, customParams)
 
-	timeoutIdx := slices.Index(args, "-timeout")
-	require.NotEqual(t, -1, timeoutIdx)
-	require.Less(t, timeoutIdx+1, len(args), "-timeout must have a value")
-	assert.Equal(t, "5000000", args[timeoutIdx+1])
+	// Must be converted to -stimeout with the user's value.
+	stimeoutIdx := slices.Index(args, "-stimeout")
+	require.NotEqual(t, -1, stimeoutIdx, "expected -stimeout for RTSP")
+	require.Less(t, stimeoutIdx+1, len(args), "-stimeout must have a value")
+	assert.Equal(t, "5000000", args[stimeoutIdx+1])
 
-	// Must appear only once.
+	// -timeout must not appear (stripped and converted).
+	assert.Equal(t, -1, slices.Index(args, "-timeout"), "RTSP must not contain -timeout")
+
+	// -stimeout must appear only once.
 	count := 0
 	for _, a := range args {
-		if a == ffmpegTimeoutFlag {
+		if a == "-stimeout" {
 			count++
 		}
 	}
-	assert.Equal(t, 1, count, "timeout flag must appear exactly once")
+	assert.Equal(t, 1, count, "-stimeout must appear exactly once")
+}
+
+func TestTimeoutParamForSource(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "-stimeout", timeoutParamForSource(audiocore.SourceTypeRTSP))
+	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeHTTP))
+	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeHLS))
+	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeRTMP))
+	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeUDP))
+}
+
+func TestStripTimeoutParams(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		input  []string
+		expect []string
+	}{
+		{"empty", []string{}, []string{}},
+		{"no_timeout", []string{"-loglevel", "debug"}, []string{"-loglevel", "debug"}},
+		{"strip_timeout", []string{"-timeout", "5000000", "-loglevel", "debug"}, []string{"-loglevel", "debug"}},
+		{"strip_stimeout", []string{"-stimeout", "5000000", "-loglevel", "debug"}, []string{"-loglevel", "debug"}},
+		{"strip_both", []string{"-timeout", "3000000", "-stimeout", "5000000"}, []string{}},
+		{"timeout_at_end", []string{"-loglevel", "debug", "-timeout", "5000000"}, []string{"-loglevel", "debug"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := stripTimeoutParams(tt.input)
+			assert.Equal(t, tt.expect, result)
+		})
+	}
 }
 
 // TestBuildFFmpegArgs_ChannelModeLeft verifies that a stereo source with
