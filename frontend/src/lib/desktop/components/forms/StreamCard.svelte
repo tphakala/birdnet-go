@@ -177,6 +177,11 @@
 
   let testResult = $state<{ sampleRate: number; channels: number } | null>(null);
 
+  // Show a warning when a stereo source is still set to downmix mode
+  let showStereoWarning = $derived(
+    (health?.source_channels ?? 0) >= 2 && (stream.channelMode ?? 'downmix') === 'downmix'
+  );
+
   // Local editing state - initialized with defaults, synced from props in startEdit()
   let isEditing = $state(false);
   let editName = $state('');
@@ -884,6 +889,17 @@
           </div>
         </div>
       </div>
+
+      <!-- Stereo downmix warning: shown when a stereo source is still using downmix -->
+      {#if showStereoWarning}
+        <div
+          class="flex items-center gap-2 px-3 py-1.5 border-t border-[var(--color-warning)]/20 bg-[var(--color-warning)]/5 text-[var(--color-warning)]"
+          title={t('settings.audio.streams.stereoWarning.tooltip')}
+        >
+          <AlertTriangle class="size-3.5 flex-shrink-0" />
+          <span class="text-xs">{t('settings.audio.streams.stereoWarning.short')}</span>
+        </div>
+      {/if}
 
       <!-- Expandable Diagnostics Panel -->
       {#if expanded}

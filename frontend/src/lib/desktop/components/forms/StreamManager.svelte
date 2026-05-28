@@ -89,6 +89,7 @@
     total_bytes_received: number;
     bytes_per_second: number;
     is_receiving_data: boolean;
+    source_channels?: number; // Detected channel count (0 or absent if unknown)
     // Error diagnostics
     last_error_context?: ErrorContext | null;
     error_history?: ErrorContext[];
