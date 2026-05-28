@@ -689,26 +689,35 @@ func TestV2OnlyDatastore_GetLastDetections(t *testing.T) {
 }
 
 func TestV2OnlyDatastore_GetLastDetectionsWithMinimumConfidence(t *testing.T) {
+	const (
+		highConfidence = 0.95
+		lowConfidence  = 0.60
+		midConfidence  = 0.85
+		resultLimit    = 10
+		minConfidence  = 0.8
+		expectedCount  = 2
+	)
+
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
 	testNotes := []datastore.Note{
-		{Date: "2024-01-15", Time: "12:30:00", ScientificName: "Passer domesticus", Confidence: 0.95},
-		{Date: "2024-01-15", Time: "12:31:00", ScientificName: "Turdus migratorius", Confidence: 0.60},
-		{Date: "2024-01-15", Time: "12:32:00", ScientificName: "Corvus brachyrhynchos", Confidence: 0.85},
+		{Date: "2024-01-15", Time: "12:30:00", ScientificName: "Passer domesticus", Confidence: highConfidence},
+		{Date: "2024-01-15", Time: "12:31:00", ScientificName: "Turdus migratorius", Confidence: lowConfidence},
+		{Date: "2024-01-15", Time: "12:32:00", ScientificName: "Corvus brachyrhynchos", Confidence: midConfidence},
 	}
 	for i := range testNotes {
 		err := ds.Save(&testNotes[i], nil)
 		require.NoError(t, err)
 	}
 
-	notes, err := ds.GetLastDetectionsWithMinimumConfidence(10, 0.8)
+	notes, err := ds.GetLastDetectionsWithMinimumConfidence(resultLimit, minConfidence)
 	require.NoError(t, err)
-	require.Len(t, notes, 2)
+	require.Len(t, notes, expectedCount)
 	assert.Equal(t, "Corvus brachyrhynchos", notes[0].ScientificName)
 	assert.Equal(t, "Passer domesticus", notes[1].ScientificName)
 	for i := range notes {
-		assert.GreaterOrEqual(t, notes[i].Confidence, 0.8)
+		assert.GreaterOrEqual(t, notes[i].Confidence, minConfidence)
 	}
 }
 

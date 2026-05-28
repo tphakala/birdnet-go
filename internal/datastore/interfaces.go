@@ -939,7 +939,8 @@ func (ds *DataStore) getLastDetections(numDetections int, minConfidence float64,
 
 	elapsed := time.Since(now)
 	GetLogger().Debug("Retrieved detections",
-		logger.Int("count", numDetections),
+		logger.Int("count", len(notes)),
+		logger.Int("limit", numDetections),
 		logger.Duration("elapsed", elapsed))
 
 	return notes, nil

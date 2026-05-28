@@ -118,7 +118,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | ------ | ----------------------------- | ----------------------- | ---- | ------------------------------------------ |
 | GET    | `/detections`                 | `GetDetections`         | ❌   | List bird detections                       |
 | GET    | `/detections/:id`             | `GetDetection`          | ❌   | Get specific detection                     |
-| GET    | `/detections/recent`          | `GetRecentDetections`   | ❌   | Recent detections                         |
+| GET    | `/detections/recent`          | `GetRecentDetections`   | ❌   | Recent detections                          |
 | GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay` | ❌   | Detection time context                     |
 | DELETE | `/detections/:id`             | `DeleteDetection`       | ✅   | Delete detection record                    |
 | POST   | `/detections/:id/review`      | `ReviewDetection`       | ✅   | Review/verify detection                    |
