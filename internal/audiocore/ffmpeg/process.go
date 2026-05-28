@@ -533,8 +533,7 @@ func applyBackoffJitter(backoff time.Duration) time.Duration {
 		return backoff
 	}
 
-	factor := float64(restartJitterPercentMax) / 100.0
-	jitterRange := time.Duration(float64(backoff) * factor)
+	jitterRange := backoff * restartJitterPercentMax / 100
 	if jitterRange <= 0 {
 		return backoff
 	}
