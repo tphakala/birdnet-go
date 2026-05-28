@@ -16,7 +16,7 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy, setContext } from 'svelte';
-  import { Plus, Radio, RefreshCw } from '@lucide/svelte';
+  import { Plus, Radio, RefreshCw, Loader2, AlertTriangle, CircleCheck } from '@lucide/svelte';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
@@ -34,9 +34,21 @@
   import SelectDropdown from './SelectDropdown.svelte';
   import TextInput from './TextInput.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
-  import type { StreamConfig, StreamType, QuietHoursConfig } from '$lib/stores/settings';
+  import type {
+    StreamConfig,
+    StreamType,
+    QuietHoursConfig,
+    ChannelMode,
+  } from '$lib/stores/settings';
+  import type { ChannelAnalysis } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
   import StreamTestButton from './StreamTestButton.svelte';
+  import {
+    streamTypeOptions,
+    transportOptions,
+    channelModeOptions,
+    analyzeStreamChannels,
+  } from './streamOptions';
 
   const logger = loggers.audio;
 
@@ -110,13 +122,11 @@
   // IMPORTANT: Pass the object directly, not a getter. Never reassign - only mutate properties.
   let streamHealth = $state<Record<string, StreamHealthResponse>>({});
 
-  // Quiet hours suppression state from shared store
-
   // Provide the state object via context so children can access it reactively
   // Pass the object directly - children will see mutations to its properties
   setContext('streamHealth', streamHealth);
 
-  let healthLoading = $state(true);
+  let healthLoading = $state(false);
 
   // Add new stream state
   let showAddForm = $state(false);
@@ -126,28 +136,18 @@
   let newStreamType = $state<StreamType>('rtsp');
   let newModels = $state<string[]>([DEFAULT_MODEL_ID]);
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
+  let newChannelMode = $state<ChannelMode>('downmix');
   let nameError = $state<string | null>(null);
   let urlError = $state<string | null>(null);
-  let newTestResult = $state<{ sampleRate: number } | null>(null);
+  let newTestResult = $state<{ sampleRate: number; channels: number } | null>(null);
   let newSourceSampleRate = $derived(newTestResult?.sampleRate ?? 48000);
+  let isAnalyzing = $state(false);
+  let analysisResult = $state<ChannelAnalysis | null>(null);
+  let analysisError = $state<string | null>(null);
+  let analysisSeq = 0;
 
   // SSE connection for real-time health updates
   let eventSource: ReconnectingEventSource | null = null;
-
-  // Stream type options (all 5 types)
-  const streamTypeOptions = [
-    { value: 'rtsp', label: 'RTSP' },
-    { value: 'http', label: 'HTTP' },
-    { value: 'hls', label: 'HLS' },
-    { value: 'rtmp', label: 'RTMP' },
-    { value: 'udp', label: 'UDP/RTP' },
-  ];
-
-  // Transport protocol options
-  const transportOptions = [
-    { value: 'tcp', label: 'TCP' },
-    { value: 'udp', label: 'UDP' },
-  ];
 
   // Show transport dropdown only for RTSP and RTMP
   let showTransportInAdd = $derived(newStreamType === 'rtsp' || newStreamType === 'rtmp');
@@ -238,6 +238,7 @@
 
   // Load initial health status
   async function loadHealthStatus() {
+    if (healthLoading) return;
     healthLoading = true;
 
     try {
@@ -353,6 +354,53 @@
     return validateProtocolURL(url, getProtocols(streamType), MAX_STREAM_URL_LENGTH);
   }
 
+  async function analyzeChannels(url: string) {
+    const seq = ++analysisSeq;
+    isAnalyzing = true;
+    analysisResult = null;
+    analysisError = null;
+    try {
+      const result = await analyzeStreamChannels(url);
+      if (seq !== analysisSeq) return;
+      analysisResult = result;
+      if (result.recommended && result.recommended !== 'downmix') {
+        newChannelMode = result.recommended;
+      }
+    } catch (err: unknown) {
+      if (seq !== analysisSeq) return;
+      analysisError = err instanceof Error ? err.message : String(err);
+    } finally {
+      if (seq === analysisSeq) isAnalyzing = false;
+    }
+  }
+
+  function handleNewTestResult(result: { sampleRate: number; channels: number } | null) {
+    newTestResult = result;
+    if (!result) {
+      analysisResult = null;
+      analysisError = null;
+    } else if (result.channels > 1) {
+      analyzeChannels(newUrl);
+    }
+  }
+
+  function resetAddForm() {
+    analysisSeq++;
+    isAnalyzing = false;
+    showAddForm = false;
+    newName = '';
+    newUrl = '';
+    newTransport = 'tcp';
+    newStreamType = 'rtsp';
+    newChannelMode = 'downmix';
+    newModels = [DEFAULT_MODEL_ID];
+    newQuietHours = { ...defaultQuietHoursConfig };
+    newTestResult = null;
+    analysisResult = null;
+    analysisError = null;
+    clearErrors();
+  }
+
   // Clear form errors
   function clearErrors() {
     nameError = null;
@@ -403,6 +451,7 @@
       enabled: true,
       type: newStreamType,
       models: newModels,
+      channelMode: newChannelMode,
       ...(showTransportInAdd ? { transport: newTransport } : {}),
       quietHours: newQuietHours,
     } as StreamConfig;
@@ -411,16 +460,7 @@
     const updatedStreams = [...streams, newStream];
     onUpdateStreams(updatedStreams);
 
-    // Reset form
-    newName = '';
-    newUrl = '';
-    newTransport = 'tcp';
-    newStreamType = 'rtsp';
-    newModels = [DEFAULT_MODEL_ID];
-    newQuietHours = { ...defaultQuietHoursConfig };
-    newTestResult = null;
-    clearErrors();
-    showAddForm = false;
+    resetAddForm();
 
     // Refresh health status
     setTimeout(() => loadHealthStatus(), 1000);
@@ -660,7 +700,7 @@
               models={availableModels}
               selectedModels={newModels}
               {disabled}
-              onResult={result => (newTestResult = result)}
+              onResult={handleNewTestResult}
             />
 
             <!-- Stream Type and Protocol -->
@@ -688,6 +728,104 @@
               {/if}
             </div>
 
+            <!-- Channel Mode -->
+            <div class="space-y-1.5">
+              <label
+                for="new-stream-channel-mode"
+                class="text-xs font-medium text-[var(--color-base-content)]/70"
+              >
+                {t('settings.audio.streams.channelMode.label')}
+              </label>
+              <select
+                id="new-stream-channel-mode"
+                bind:value={newChannelMode}
+                {disabled}
+                class="w-full h-8 px-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {#each channelModeOptions as opt (opt.value)}
+                  <option value={opt.value}>{opt.label()}</option>
+                {/each}
+              </select>
+              <p class="text-xs text-[var(--color-base-content)]/50">
+                {t('settings.audio.streams.channelMode.description')}
+              </p>
+            </div>
+
+            <!-- Channel analysis results (shown after testing a stereo stream) -->
+            {#if newTestResult && newTestResult.channels > 1}
+              <div class="space-y-2">
+                {#if isAnalyzing}
+                  <div
+                    class="flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/70"
+                  >
+                    <Loader2 class="size-4 animate-spin" />
+                    {t('settings.audio.streams.channelMode.analyzing')}
+                  </div>
+                {/if}
+
+                {#if analysisResult}
+                  <div class="space-y-1 text-xs">
+                    {#each analysisResult.energy as ch (ch.channel)}
+                      <div class="flex items-center gap-2">
+                        <span class="w-20 text-[var(--color-base-content)]/70"
+                          >{ch.channel === 0
+                            ? t('settings.audio.streams.channelMode.energyLeft')
+                            : t('settings.audio.streams.channelMode.energyRight')}:</span
+                        >
+                        <div
+                          class="flex-1 h-2 bg-[var(--color-base-200)] rounded-full overflow-hidden"
+                        >
+                          <div
+                            class="h-full rounded-full {(ch.channel === 0 ? 'left' : 'right') ===
+                            analysisResult.recommended
+                              ? 'bg-[var(--color-success)]'
+                              : 'bg-[var(--color-base-400)]'}"
+                            style:width="{Math.max(
+                              2,
+                              Math.min(100, ((ch.rmsDbfs + 96) / 96) * 100)
+                            )}%"
+                          ></div>
+                        </div>
+                        <span class="font-mono w-16 text-right">{ch.rmsDbfs.toFixed(1)} dBFS</span>
+                      </div>
+                    {/each}
+                    {#if analysisResult.recommended !== 'downmix'}
+                      <p class="text-[var(--color-success)] font-medium">
+                        {t('settings.audio.streams.channelMode.recommended', {
+                          channel:
+                            analysisResult.recommended === 'left'
+                              ? t('settings.audio.streams.channelMode.energyLeft')
+                              : t('settings.audio.streams.channelMode.energyRight'),
+                        })}
+                      </p>
+                    {/if}
+                  </div>
+                {/if}
+
+                {#if analysisError}
+                  <p class="text-xs text-[var(--color-error)]">
+                    {t('settings.audio.streams.channelMode.analyzeError')}: {analysisError}
+                  </p>
+                {/if}
+
+                {#if newChannelMode === 'downmix'}
+                  <div
+                    class="flex items-start gap-2 p-2 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
+                  >
+                    <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
+                    <span>{t('settings.audio.streams.channelMode.downmixWarning')}</span>
+                  </div>
+                {:else}
+                  <div
+                    class="flex items-start gap-2 p-2 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]"
+                  >
+                    <CircleCheck class="size-3.5 shrink-0 mt-0.5 text-[var(--color-success)]" />
+                    <span>{t('settings.audio.streams.channelMode.singleChannelGood')}</span>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
             <!-- Model Selection -->
             <ModelCheckboxList
               models={availableModels}
@@ -711,17 +849,7 @@
               <button
                 type="button"
                 class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-transparent text-[var(--color-base-content)] hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
-                onclick={() => {
-                  showAddForm = false;
-                  newName = '';
-                  newUrl = '';
-                  newStreamType = 'rtsp';
-                  newTransport = 'tcp';
-                  newModels = [DEFAULT_MODEL_ID];
-                  newQuietHours = { ...defaultQuietHoursConfig };
-                  newTestResult = null;
-                  clearErrors();
-                }}
+                onclick={resetAddForm}
               >
                 {t('common.cancel')}
               </button>
