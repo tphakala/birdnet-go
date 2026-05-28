@@ -39,7 +39,6 @@
   import { cn } from '$lib/utils/cn';
   import { DEFAULT_MODEL_ID } from '$lib/stores/models.svelte';
   import { maskUrlCredentials } from '$lib/utils/security';
-  import { api } from '$lib/utils/api';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import Checkbox from './Checkbox.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
@@ -58,6 +57,12 @@
   import type { StreamHealthResponse } from './StreamManager.svelte';
   import StreamTestButton from './StreamTestButton.svelte';
   import StreamTimeline from './StreamTimeline.svelte';
+  import {
+    streamTypeOptions,
+    transportOptions,
+    channelModeOptions,
+    analyzeStreamChannels,
+  } from './streamOptions';
 
   interface LocalEqualizerSettings {
     enabled: boolean;
@@ -198,31 +203,7 @@
   let isAnalyzing = $state(false);
   let analysisResult = $state<ChannelAnalysis | null>(null);
   let analysisError = $state<string | null>(null);
-
-  // Stream type options (all supported types)
-  const streamTypeOptions = [
-    { value: 'rtsp', label: 'RTSP' },
-    { value: 'http', label: 'HTTP' },
-    { value: 'hls', label: 'HLS' },
-    { value: 'rtmp', label: 'RTMP' },
-    { value: 'udp', label: 'UDP/RTP' },
-  ];
-
-  // Transport protocol options
-  const transportOptions = [
-    { value: 'tcp', label: 'TCP' },
-    { value: 'udp', label: 'UDP' },
-  ];
-
-  // Channel mode options
-  const channelModeOptions = [
-    {
-      value: 'downmix' as ChannelMode,
-      label: () => t('settings.audio.streams.channelMode.downmix'),
-    },
-    { value: 'left' as ChannelMode, label: () => t('settings.audio.streams.channelMode.left') },
-    { value: 'right' as ChannelMode, label: () => t('settings.audio.streams.channelMode.right') },
-  ];
+  let analysisSeq = 0;
 
   // Get icon colors based on stream status - using CSS variables for theme compatibility
   function getIconColors(s: StreamStatus): { bg: string; text: string; border: string } {
@@ -348,7 +329,10 @@
       : { enabled: false, filters: [] };
     editQuietHours = { ...defaultQuietHoursConfig, ...stream.quietHours };
     showEqualizer = false;
-    testResult = null;
+    testResult =
+      health?.source_channels && health.source_channels > 0
+        ? { sampleRate: 48000, channels: health.source_channels }
+        : null;
     analysisResult = null;
     analysisError = null;
     isEditing = true;
@@ -419,21 +403,22 @@
   }
 
   async function analyzeChannels(url: string) {
+    const seq = ++analysisSeq;
     isAnalyzing = true;
     analysisResult = null;
     analysisError = null;
     try {
-      const result = await api.post<ChannelAnalysis>('/api/v2/streams/analyze-channels', {
-        url: url.trim(),
-      });
+      const result = await analyzeStreamChannels(url);
+      if (seq !== analysisSeq) return;
       analysisResult = result;
       if (result.recommended && result.recommended !== 'downmix') {
         editChannelMode = result.recommended as ChannelMode;
       }
     } catch (err: unknown) {
+      if (seq !== analysisSeq) return;
       analysisError = err instanceof Error ? err.message : String(err);
     } finally {
-      isAnalyzing = false;
+      if (seq === analysisSeq) isAnalyzing = false;
     }
   }
 
