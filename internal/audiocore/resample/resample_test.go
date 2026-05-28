@@ -194,7 +194,7 @@ func TestResampleBytes_ReturnsIndependentCopy(t *testing.T) {
 }
 
 // TestResampleTo_WritesIntoDst verifies that ResampleTo writes output directly
-// into the caller-provided buffer and the returned slice shares its backing array.
+// into the caller-provided buffer.
 func TestResampleTo_WritesIntoDst(t *testing.T) {
 	r, err := NewResampler(48000, 32000)
 	require.NoError(t, err)
@@ -205,13 +205,20 @@ func TestResampleTo_WritesIntoDst(t *testing.T) {
 	dstSize := r.EstimateOutputBytes(len(input))
 	dst := make([]byte, dstSize)
 
-	result, err := r.ResampleTo(input, dst)
+	n, err := r.ResampleTo(input, dst)
 	require.NoError(t, err)
-	require.NotEmpty(t, result)
+	assert.Greater(t, n, 0)
+	assert.LessOrEqual(t, n, dstSize)
 
-	// Result must alias the dst buffer.
-	assert.Same(t, &dst[0], &result[0],
-		"returned slice must share backing array with caller-provided dst")
+	// Verify output is non-zero (actual audio was written).
+	allZero := true
+	for _, b := range dst[:n] {
+		if b != 0 {
+			allZero = false
+			break
+		}
+	}
+	assert.False(t, allZero, "dst[:n] should contain non-zero audio data")
 }
 
 // TestResampleTo_DstTooSmall verifies that an undersized dst returns an error
@@ -232,9 +239,9 @@ func TestResampleTo_DstTooSmall(t *testing.T) {
 	// Verify state is not corrupted: a subsequent call with correct buffer works.
 	dstSize := r.EstimateOutputBytes(len(input))
 	dst := make([]byte, dstSize)
-	result, err := r.ResampleTo(input, dst)
+	n, err := r.ResampleTo(input, dst)
 	require.NoError(t, err)
-	assert.NotEmpty(t, result)
+	assert.Greater(t, n, 0)
 }
 
 // TestResampleTo_MatchesResampleInto verifies that ResampleTo and ResampleInto
@@ -256,10 +263,10 @@ func TestResampleTo_MatchesResampleInto(t *testing.T) {
 
 	dstSize := r2.EstimateOutputBytes(len(input))
 	dst := make([]byte, dstSize)
-	toResult, err := r2.ResampleTo(input, dst)
+	n, err := r2.ResampleTo(input, dst)
 	require.NoError(t, err)
 
-	assert.Equal(t, intoResult, toResult,
+	assert.Equal(t, intoResult, dst[:n],
 		"ResampleTo and ResampleInto must produce identical output")
 }
 
@@ -278,10 +285,10 @@ func TestResampleTo_HighRatio(t *testing.T) {
 	dstSize := r.EstimateOutputBytes(len(input))
 	dst := make([]byte, dstSize)
 
-	result, err := r.ResampleTo(input, dst)
+	n, err := r.ResampleTo(input, dst)
 	require.NoError(t, err)
 
-	outputSamples := len(result) / bytesPerSample
+	outputSamples := n / bytesPerSample
 	expectedSamples := inputSamples * toRate / fromRate
 	tolerance := expectedSamples / 10 // 10%
 	assert.InDelta(t, expectedSamples, outputSamples, float64(tolerance),

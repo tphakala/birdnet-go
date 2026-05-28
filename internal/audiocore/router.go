@@ -704,23 +704,22 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	// safe: release() is a no-op when all pool pointers are nil.
 	var procResult processingResult
 
+	var resampleBuf []byte // full-length pooled buffer for Put; nil when no resampling
+
 	// Apply per-route resampling when rates differ.
 	if route.resampler != nil {
 		resampleStart := time.Now()
-		// Allocate the output buffer up-front so ResampleTo writes directly
-		// into owned memory — no defensive copy needed.
 		outSize := route.resampler.EstimateOutputBytes(len(frame.Data))
 		resamplePool = r.cachedBytePool(&route.resamplePool, &route.resamplePoolLen, outSize)
-		var out []byte
 		if resamplePool != nil {
-			out = resamplePool.Get()
+			resampleBuf = resamplePool.Get()
 		} else {
-			out = make([]byte, outSize)
+			resampleBuf = make([]byte, outSize)
 		}
-		resampled, err := route.resampler.ResampleTo(frame.Data, out)
+		n, err := route.resampler.ResampleTo(frame.Data, resampleBuf)
 		if err != nil {
 			if resamplePool != nil {
-				resamplePool.Put(out)
+				resamplePool.Put(resampleBuf)
 			}
 			errCount := route.errors.Add(1)
 			if errCount%errorLogInterval == 1 {
@@ -735,7 +734,7 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 		frame = AudioFrame{
 			SourceID:   frame.SourceID,
 			SourceName: frame.SourceName,
-			Data:       resampled,
+			Data:       resampleBuf[:n],
 			SampleRate: route.Consumer.SampleRate(),
 			BitDepth:   frame.BitDepth,
 			Channels:   frame.Channels,
@@ -751,18 +750,16 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 		result, err := r.applyProcessing(frame, route, chain)
 		if err != nil {
 			// applyProcessing already released its own pool buffers on error.
-			// Release the resample buffer (frame.Data still points to it here).
+			// Release the resample buffer.
 			if resamplePool != nil {
-				resamplePool.Put(frame.Data)
+				resamplePool.Put(resampleBuf)
 			}
 			return
 		}
 		// Release the resample buffer BEFORE frame.Data is reassigned to the
-		// processing output, otherwise the trailing guard below would Put a
-		// processed (possibly wrong-sized) slice into the resample pool. Nil
-		// out the pointer so the trailing guard is a no-op.
+		// processing output. Nil out the pointer so the trailing guard is a no-op.
 		if resamplePool != nil {
-			resamplePool.Put(frame.Data)
+			resamplePool.Put(resampleBuf)
 			resamplePool = nil
 		}
 		frame = result.Frame
@@ -805,7 +802,7 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	// nilled resamplePool before reassigning frame.Data). When processing ran,
 	// resamplePool is nil here and this is a no-op.
 	if resamplePool != nil {
-		resamplePool.Put(frame.Data)
+		resamplePool.Put(resampleBuf)
 	}
 
 	route.stats.record(resampleDur, processingDur, writeDur, time.Since(frameStart))

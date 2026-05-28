@@ -85,18 +85,19 @@ func (r *Resampler) EstimateOutputBytes(inputBytes int) int {
 }
 
 // ResampleTo resamples the raw 16-bit PCM bytes in input and writes the
-// result into dst, returning dst[:n]. dst must be at least
+// result into dst, returning the number of bytes written. Callers should
+// use dst[:n] for the audio data. dst must be at least
 // EstimateOutputBytes(len(input)) bytes long; if it is too small,
-// ErrBufferTooSmall is returned without advancing resampler state.
+// an error is returned without advancing resampler state.
 //
 // input must contain an even number of bytes (each sample is two bytes).
-func (r *Resampler) ResampleTo(input, dst []byte) ([]byte, error) {
+func (r *Resampler) ResampleTo(input, dst []byte) (int, error) {
 	if len(input) == 0 {
-		return dst[:0], nil
+		return 0, nil
 	}
 
 	if len(input)%bytesPerSample != 0 {
-		return nil, errors.Newf("input length %d is not a multiple of %d (16-bit PCM requires even byte count)", len(input), bytesPerSample).
+		return 0, errors.Newf("input length %d is not a multiple of %d (16-bit PCM requires even byte count)", len(input), bytesPerSample).
 			Component("audiocore/resample").
 			Category(errors.CategoryValidation).
 			Context("input_len", len(input)).
@@ -127,7 +128,7 @@ func (r *Resampler) ResampleTo(input, dst []byte) ([]byte, error) {
 	// Resample using the zero-allocation path.
 	n, err := r.inner.ProcessInto(r.inFloats, r.outFloats)
 	if err != nil {
-		return nil, errors.Newf("resampler process failed: %w", err).
+		return 0, errors.Newf("resampler process failed: %w", err).
 			Component("audiocore/resample").
 			Category(errors.CategoryAudio).
 			Context("from_rate", r.fromRate).
@@ -139,7 +140,7 @@ func (r *Resampler) ResampleTo(input, dst []byte) ([]byte, error) {
 	// Verify dst is large enough for the actual output.
 	requiredBytes := n * bytesPerSample
 	if len(dst) < requiredBytes {
-		return nil, errors.Newf("destination buffer too small: need %d bytes, have %d", requiredBytes, len(dst)).
+		return 0, errors.Newf("destination buffer too small: need %d bytes, have %d", requiredBytes, len(dst)).
 			Component("audiocore/resample").
 			Category(errors.CategoryValidation).
 			Context("required_bytes", requiredBytes).
@@ -158,7 +159,7 @@ func (r *Resampler) ResampleTo(input, dst []byte) ([]byte, error) {
 		binary.LittleEndian.PutUint16(dst[i*bytesPerSample:], uint16(s)) //nolint:gosec // G115: intentional int16→uint16 bit reinterpretation for PCM audio
 	}
 
-	return dst[:requiredBytes], nil
+	return requiredBytes, nil
 }
 
 // ResampleInto resamples the raw 16-bit PCM bytes in input and returns a slice
@@ -178,7 +179,11 @@ func (r *Resampler) ResampleInto(input []byte) ([]byte, error) {
 	}
 	r.outBuf = r.outBuf[:needed]
 
-	return r.ResampleTo(input, r.outBuf)
+	n, err := r.ResampleTo(input, r.outBuf)
+	if err != nil {
+		return nil, err
+	}
+	return r.outBuf[:n], nil
 }
 
 // FromRate returns the input sample rate in Hz.
