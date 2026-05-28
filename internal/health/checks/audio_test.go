@@ -66,7 +66,7 @@ func TestBufferDropsCheck_Warning(t *testing.T) {
 	check := NewBufferDropsCheck(store, nil)
 	result := check.Run(t.Context())
 	assert.Equal(t, health.StatusWarning, result.Status)
-	assert.Contains(t, result.Message, "15 drops in last 1h")
+	assert.Contains(t, result.Message, "15 drops in 1h")
 }
 
 func TestBufferDropsCheck_Critical(t *testing.T) {
@@ -165,6 +165,46 @@ func TestBufferOverrunCheck_WithWindow(t *testing.T) {
 	check := NewBufferOverrunCheck(store, nil)
 	narrowed := check.WithWindow(15 * time.Minute)
 	assert.NotNil(t, narrowed)
+}
+
+func TestBufferDropsCheck_CritAt50(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+
+	// baseCritThreshold is 50; maxHourly(50) >= baseCrit(50) triggers peak safety net.
+	store.RecordAt("audio.drops.src1", 50, time.Now())
+
+	check := NewBufferDropsCheck(store, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusCritical, result.Status)
+}
+
+func TestBufferOverrunCheck_LowerThresholds(t *testing.T) {
+	t.Parallel()
+
+	t.Run("WarnAt5", func(t *testing.T) {
+		t.Parallel()
+		store := newTestHealthStore(t)
+
+		// baseWarnThreshold is 5; maxHourly(5) >= baseWarn(5) -> peakEscalated -> Warning.
+		store.RecordAt("audio.overruns.src1", 5, time.Now())
+
+		check := NewBufferOverrunCheck(store, nil)
+		result := check.Run(t.Context())
+		assert.Equal(t, health.StatusWarning, result.Status)
+	})
+
+	t.Run("CritAt25", func(t *testing.T) {
+		t.Parallel()
+		store := newTestHealthStore(t)
+
+		// baseCritThreshold is 25; maxHourly(25) >= baseCrit(25) -> peak safety net -> Critical.
+		store.RecordAt("audio.overruns.src1", 25, time.Now())
+
+		check := NewBufferOverrunCheck(store, nil)
+		result := check.Run(t.Context())
+		assert.Equal(t, health.StatusCritical, result.Status)
+	})
 }
 
 func TestAudioLevelCheck_NilProvider(t *testing.T) {

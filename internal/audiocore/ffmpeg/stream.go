@@ -3,13 +3,10 @@ package ffmpeg
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"fmt"
 	"io"
-	"math/big"
 	"os/exec"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -76,6 +73,14 @@ const (
 
 	// Restart jitter to prevent thundering herd effect.
 	restartJitterPercentMax = 20
+
+	// Extreme failure penalty: once a stream has restarted more than
+	// extremeFailureThreshold times, add an escalating delay on top of the
+	// capped exponential backoff, growing by extremeFailureDelayStep per
+	// restart up to extremeFailureDelayCap.
+	extremeFailureThreshold = 50
+	extremeFailureDelayStep = 10 * time.Second
+	extremeFailureDelayCap  = 5 * time.Minute
 
 	// Timeout settings for FFmpeg streams.
 	defaultTimeoutMicroseconds = 10000000
@@ -198,6 +203,15 @@ type StreamConfig struct {
 	// Channels count (e.g., 1 for mono).
 	Channels int
 
+	// SourceChannels is the actual channel count of the remote source.
+	// Used by the channel mode safety guard: pan filter is only applied
+	// when the source actually has multiple channels.
+	SourceChannels int
+
+	// ChannelMode controls how multi-channel audio is handled.
+	// Values: "downmix" (default), "left", "right".
+	ChannelMode string
+
 	// FFmpegPath is the absolute path to the FFmpeg binary.
 	FFmpegPath string
 
@@ -279,6 +293,7 @@ type StreamHealth struct {
 	StateHistory       []StateTransition
 	LastErrorContext   *ErrorContext
 	ErrorHistory       []*ErrorContext
+	SourceChannels     int
 }
 
 // dataRateCalculator tracks data rate over a sliding window.
@@ -793,12 +808,7 @@ func (s *Stream) startProcess() error {
 			Build()
 	}
 
-	sampleRate, numChannels, format := GetFFmpegFormat(s.config.SampleRate, s.config.Channels, s.config.BitDepth)
-
-	args := s.buildFFmpegInputArgs(s.config.FFmpegParameters)
-
-	connStr := s.config.URL
-	if connStr == "" {
+	if s.config.URL == "" {
 		return errors.Newf("connection string is empty for source %s, cannot start FFmpeg", s.config.SourceID).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-stream").
@@ -807,23 +817,10 @@ func (s *Stream) startProcess() error {
 			Build()
 	}
 
-	logLevel := s.config.LogLevel
-	if logLevel == "" {
-		logLevel = "error"
-	}
-
-	args = append(args,
-		"-i", connStr,
-		"-loglevel", logLevel,
-		"-vn",
-		"-f", format,
-		"-ac", numChannels,
-	)
-	if s.config.needsOutputResampling() {
-		args = append(args, "-ar", sampleRate)
-	}
-
-	args = append(args, "-hide_banner", "pipe:1")
+	// Input args use the Stream's timeout-warning logging; output args are built
+	// by the shared buildOutputArgs so this runtime path matches BuildFFmpegArgs.
+	args := s.buildFFmpegInputArgs(s.config.FFmpegParameters)
+	args = buildOutputArgs(args, &s.config)
 
 	s.cmd = exec.CommandContext(s.ctx, s.config.FFmpegPath, args...) //nolint:gosec // G204: FFmpegPath from validated settings, args built internally
 
@@ -882,51 +879,22 @@ func (s *Stream) startProcess() error {
 }
 
 // buildFFmpegInputArgs constructs the FFmpeg input arguments for this stream.
-// RTSP-specific flags like -rtsp_transport are only added for RTSP streams.
+// It delegates the actual argument construction to the shared buildInputArgs so
+// the runtime path stays in lockstep with the unit-tested BuildFFmpegArgs. The
+// only Stream-specific behavior is surfacing an invalid user-supplied timeout as
+// a warning log (buildInputArgs silently falls back to the default).
 func (s *Stream) buildFFmpegInputArgs(ffmpegParameters []string) []string {
-	args := []string{}
-
-	if s.config.sourceType() == audiocore.SourceTypeRTSP {
-		args = append(args, "-rtsp_transport", s.config.Transport)
-	}
-
-	hasUserTimeout, userTimeoutValue := detectUserTimeout(ffmpegParameters)
-
-	if !hasUserTimeout {
-		args = append(args, "-timeout", strconv.FormatInt(defaultTimeoutMicroseconds, 10))
-	}
-
-	if len(ffmpegParameters) > 0 {
-		if hasUserTimeout {
-			if err := s.validateUserTimeout(userTimeoutValue); err != nil {
-				getStreamLogger().Warn("invalid user timeout, using default",
-					logger.String("url", s.config.safeURL()),
-					logger.String("user_timeout", userTimeoutValue),
-					logger.Error(err),
-					logger.String("component", "ffmpeg-stream"),
-					logger.String("operation", "validate_timeout"))
-				args = append(args, "-timeout", strconv.FormatInt(defaultTimeoutMicroseconds, 10))
-				skipNext := false
-				for _, param := range ffmpegParameters {
-					if skipNext {
-						skipNext = false
-						continue
-					}
-					if param == "-timeout" {
-						skipNext = true
-						continue
-					}
-					args = append(args, param)
-				}
-			} else {
-				args = append(args, ffmpegParameters...)
-			}
-		} else {
-			args = append(args, ffmpegParameters...)
+	if hasUserTimeout, userTimeoutValue := detectUserTimeout(ffmpegParameters); hasUserTimeout {
+		if err := validateTimeout(userTimeoutValue); err != nil {
+			getStreamLogger().Warn("invalid user timeout, using default",
+				logger.String("url", s.config.safeURL()),
+				logger.String("user_timeout", userTimeoutValue),
+				logger.Error(err),
+				logger.String("component", "ffmpeg-stream"),
+				logger.String("operation", "validate_timeout"))
 		}
 	}
-
-	return args
+	return buildInputArgs(&s.config, ffmpegParameters)
 }
 
 // readResult carries the outcome of a single stdout.Read call from the
@@ -1506,28 +1474,23 @@ func (s *Stream) handleRestartBackoff() {
 	s.restartCountMu.Lock()
 	s.restartCount++
 	currentRestartCount := s.restartCount
-
-	exponent := min(s.restartCount-1, maxBackoffExponent)
-	backoff := min(s.backoffDuration*time.Duration(1<<uint(exponent)), s.maxBackoff) //nolint:gosec // G115: exponent is capped by maxBackoffExponent
-
-	if currentRestartCount > 50 {
-		additionalDelay := min(time.Duration(currentRestartCount-50)*10*time.Second, 5*time.Minute)
-		backoff += additionalDelay
-	}
 	s.restartCountMu.Unlock()
 
-	wait := backoff
-	if backoff > 0 {
-		factor := float64(restartJitterPercentMax) / 100.0
-		jitterRange := time.Duration(float64(backoff) * factor)
-		if jitterRange > 0 {
-			if n, err := rand.Int(rand.Reader, big.NewInt(jitterRange.Nanoseconds())); err == nil {
-				wait = backoff + time.Duration(n.Int64())
-			}
-		}
-	}
+	// Capped exponential backoff plus an escalating penalty once a stream has
+	// failed enough times that it is probably broken, so it stops hammering the
+	// source. backoffDuration and maxBackoff are immutable after construction,
+	// so this needs no lock.
+	baseBackoff := computeBaseBackoff(currentRestartCount, s.backoffDuration, s.maxBackoff)
+	penalty := extremeFailurePenalty(currentRestartCount)
+	backoff := baseBackoff + penalty
 
-	s.transitionState(StateBackoff, fmt.Sprintf("restart #%d: waiting %s (base backoff: %s)", currentRestartCount, formatDuration(wait), formatDuration(backoff)))
+	// Jitter the full delay (including any extreme-failure penalty) to avoid a
+	// thundering herd of reconnects.
+	wait := applyBackoffJitter(backoff)
+
+	s.transitionState(StateBackoff, fmt.Sprintf(
+		"restart #%d: waiting %s (base: %s, penalty: %s, pre-jitter: %s)",
+		currentRestartCount, formatDuration(wait), formatDuration(baseBackoff), formatDuration(penalty), formatDuration(backoff)))
 
 	getStreamLogger().Info("waiting before restart attempt",
 		logger.String("url", s.config.safeURL()),
@@ -1545,6 +1508,23 @@ func (s *Stream) handleRestartBackoff() {
 	case <-s.stopChan:
 		// Stop requested.
 	}
+}
+
+// extremeFailurePenalty returns the escalating delay added on top of the capped
+// exponential backoff once restartCount exceeds extremeFailureThreshold. It is
+// zero at or below the threshold and grows by extremeFailureDelayStep per
+// restart beyond it, capped at extremeFailureDelayCap. The step count is clamped
+// before the multiplication so a pathologically large restartCount cannot
+// overflow time.Duration.
+func extremeFailurePenalty(restartCount int) time.Duration {
+	if restartCount <= extremeFailureThreshold {
+		return 0
+	}
+	steps := restartCount - extremeFailureThreshold
+	if maxSteps := int(extremeFailureDelayCap / extremeFailureDelayStep); steps >= maxSteps {
+		return extremeFailureDelayCap
+	}
+	return time.Duration(steps) * extremeFailureDelayStep
 }
 
 // Stop gracefully stops the FFmpeg stream.
@@ -1707,6 +1687,7 @@ func (s *Stream) GetHealth() StreamHealth {
 		StateHistory:       recentHistory,
 		LastErrorContext:   lastError,
 		ErrorHistory:       recentErrors,
+		SourceChannels:     s.config.SourceChannels,
 	}
 }
 
@@ -1925,38 +1906,20 @@ func (s *Stream) conditionalFailureReset(totalBytesReceived int64) {
 }
 
 // detectUserTimeout scans FFmpeg parameters for an existing timeout setting.
+// Detects -timeout (and legacy -stimeout) so user-provided values are honoured
+// regardless of which flag the user specified. A dangling flag with no
+// following value is reported as found with an empty value so callers can
+// strip it and fall back to the default.
 func detectUserTimeout(params []string) (found bool, value string) {
 	for i, param := range params {
-		if param == "-timeout" && i+1 < len(params) {
-			return true, params[i+1]
+		if param == ffmpegTimeoutParam || param == ffmpegRTSPTimeoutParam || param == ffmpegLegacyRTSPTimeoutParam {
+			if i+1 < len(params) {
+				return true, params[i+1]
+			}
+			return true, ""
 		}
 	}
 	return false, ""
-}
-
-// validateUserTimeout validates a user-provided timeout value.
-func (s *Stream) validateUserTimeout(timeoutStr string) error {
-	timeout, err := strconv.ParseInt(timeoutStr, 10, 64)
-	if err != nil {
-		return errors.Newf("invalid timeout format: %s (must be a number in microseconds)", timeoutStr).
-			Component("ffmpeg-stream").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_user_timeout").
-			Context("timeout_value", timeoutStr).
-			Build()
-	}
-
-	if timeout < minTimeoutMicroseconds {
-		return errors.Newf("timeout too short: %d microseconds (minimum: %d microseconds = 1 second)", timeout, minTimeoutMicroseconds).
-			Component("ffmpeg-stream").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_user_timeout").
-			Context("timeout_microseconds", timeout).
-			Context("minimum_microseconds", minTimeoutMicroseconds).
-			Build()
-	}
-
-	return nil
 }
 
 // recordErrorContext stores an error context in the history buffer.

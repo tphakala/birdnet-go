@@ -166,13 +166,15 @@ This method does not use Docker but requires manual dependency installation.
 
 1.  **Download Binary:** Go to the [BirdNET-Go Releases page](https://github.com/tphakala/birdnet-go/releases) and download the pre-compiled binary suitable for your operating system (Linux, macOS, Windows) and architecture.
 2.  **Download TFLite Library:** Download the corresponding TensorFlow Lite C library from [tphakala/tflite_c Releases](https://github.com/tphakala/tflite_c/releases). Follow the installation instructions there (copying the `.so`, `.dylib`, or `.dll` file to the correct system path or the BirdNET-Go executable directory). Version `v2.17.1` or newer is recommended for best performance (XNNPACK support).
-3.  **Install Dependencies:**
+3.  **(Optional) Install ONNX Runtime:** Required for BirdNET v3.0 models (currently in development preview). The release tarballs bundle the library. See the [ONNX Runtime Installation Guide](../ONNX-Runtime-Installation.md) for platform-specific instructions.
+4.  **Install Dependencies:**
     - **FFmpeg:** Required for RTSP stream capture, audio export to formats other than WAV (MP3, AAC, FLAC, Opus), and the [Live Audio Streaming](guide.md#live-audio-streaming) feature. Install using your system's package manager (e.g., `sudo apt install ffmpeg` on Debian/Ubuntu, `brew install ffmpeg` on macOS).
     - **SoX:** Required for rendering spectrograms in the web interface. Install using your system's package manager (e.g., `sudo apt install sox` on Debian/Ubuntu, `brew install sox` on macOS).
-4.  **Place Executable:** Extract the downloaded BirdNET-Go binary and place it in your desired directory.
-5.  **Run BirdNET-Go:** Open a terminal or command prompt, navigate to the directory containing the `birdnet-go` executable, and run it (e.g., `./birdnet-go`).
-6.  **Configuration:** On the first run, BirdNET-Go will create a default `config.yaml` file. Edit this file according to your needs. See the [Configuration](guide.md#configuration) section in the Wiki for details and default file locations per OS.
-7.  **Process Management:** You are responsible for managing the BirdNET-Go process (running it in the background, ensuring it restarts on boot, etc.) using tools like `systemd`, `supervisor`, `screen`, or Task Scheduler (Windows).
+    - **libasound2 (Linux only):** Required for microphone audio capture. Install with `sudo apt install libasound2-dev` on Debian/Ubuntu.
+5.  **Place Executable:** Extract the downloaded BirdNET-Go binary and place it in your desired directory.
+6.  **Run BirdNET-Go:** Open a terminal or command prompt, navigate to the directory containing the `birdnet-go` executable, and run it (e.g., `./birdnet-go`).
+7.  **Configuration:** On the first run, BirdNET-Go will create a default `config.yaml` file. Edit this file according to your needs. See the [Configuration](guide.md#configuration) section in the Wiki for details and default file locations per OS.
+8.  **Process Management:** You are responsible for managing the BirdNET-Go process (running it in the background, ensuring it restarts on boot, etc.) using tools like `systemd`, `supervisor`, `screen`, or Task Scheduler (Windows).
 
 ## Systemd Service Details (`install.sh` Method)
 

@@ -3079,6 +3079,26 @@
         "batWarning": "Fladdermusmodeller kräver strömmar med en förlustfri kodek (PCM) och en samplingsfrekvens på minst 96 kHz. Använd knappen Testa ström ovan för att verifiera kompatibilitet.",
         "codecWarning": {
           "lossy": "Förlustbringande codecs (AAC, Opus, MP3) förstör ultraljudsfrekvenser över ~20 kHz, vilket gör strömmen olämplig för fladdermusdetektion."
+        },
+        "channelMode": {
+          "analyzeError": "Kanalanalys misslyckades",
+          "analyzing": "Analyserar kanaler...",
+          "description": "Hur flerkanaligt ljud hanteras. Välj en specifik kanal om din källa skickar stereo.",
+          "detectBest": "Detektera bästa kanal",
+          "downmix": "Nedmixa till mono",
+          "downmixWarning": "Nedmixning rekommenderas inte för stereoströmmar. Fasskillnader mellan kanaler orsakar kamfiltrering som minskar detektionsnoggrannheten. Välj en specifik kanal istället.",
+          "energyLeft": "Vänster kanal",
+          "energyRight": "Höger kanal",
+          "label": "Kanalläge",
+          "left": "Endast vänster kanal",
+          "recommended": "Rekommenderad: {channel}",
+          "right": "Endast höger kanal",
+          "singleChannelGood": "Enskild kanal vald, optimalt för detektionsnoggrannhet."
+        },
+        "stereoWarning": {
+          "message": "Stereoström detekterad. Nedmixning av flera kanaler kan minska detektionsnoggrannheten på grund av fasskillnader mellan kanaler. Välj en specifik kanal (vänster/höger) eller använd kanaldetektorn för bästa resultat.",
+          "short": "Stereo nedmix aktiv. Detektionsnoggrannheten kan vara nedsatt. Redigera för att välja en specifik kanal.",
+          "tooltip": "Stereo nedmix aktiv. Detektionsnoggrannheten kan vara nedsatt. Redigera för att välja en specifik kanal."
         }
       },
       "audioFilters": {
@@ -4929,7 +4949,17 @@
       "source": "Källa",
       "count": "Antal",
       "lifetime": "totalt",
-      "sparklineLabel": "Aktivitetsdiagram"
+      "sparklineLabel": "Aktivitetsdiagram",
+      "activeHours": "Aktiva timmar",
+      "windowTotal": "I fönster",
+      "velocity": "Trend",
+      "velocityStable": "Stabil",
+      "velocityIncreasing": "Ökande",
+      "velocityDecreasing": "Minskande",
+      "pattern": "Mönster",
+      "patternNone": "Inget",
+      "patternTransient": "Övergående",
+      "patternSustained": "Ihållande"
     }
   }
 }

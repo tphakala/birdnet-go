@@ -130,6 +130,11 @@ func (s *StreamConfig) Validate() error {
 		return fmt.Errorf("invalid transport '%s' for '%s': must be tcp or udp", s.Transport, s.Name)
 	}
 
+	// Validate channel mode (empty defaults to downmix, explicit values must be valid)
+	if s.ChannelMode != "" && !ValidChannelModes[s.ChannelMode] {
+		return fmt.Errorf("invalid channel mode '%s' for '%s': must be downmix, left, or right", s.ChannelMode, s.Name)
+	}
+
 	// Validate URL scheme matches type
 	if err := s.validateURLScheme(); err != nil {
 		return err

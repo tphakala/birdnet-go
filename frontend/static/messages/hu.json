@@ -3079,6 +3079,26 @@
         "batWarning": "A denevérmodellek veszteségmentes kodeket (PCM) és legalább 96 kHz-es mintavételezési frekvenciát igényelnek. Használja a fenti Stream tesztelése gombot a kompatibilitás ellenőrzéséhez.",
         "codecWarning": {
           "lossy": "A veszteséges kodekek (AAC, Opus, MP3) megsemmisítik az ~20 kHz feletti ultrahang-frekvenciákat, így a stream alkalmatlanná válik a denevérek észlelésére."
+        },
+        "channelMode": {
+          "analyzeError": "A csatornaanalízis sikertelen",
+          "analyzing": "Csatornák elemzése...",
+          "description": "Hogyan kezelje a többcsatornás hangot. Válasszon konkrét csatornát, ha a forrása sztereót küld.",
+          "detectBest": "Legjobb csatorna felismerése",
+          "downmix": "Keverés monóba",
+          "downmixWarning": "A monóba keverés nem ajánlott sztereó streamekhez. A csatornák közötti fáziskülönbségek fésűszűrést okoznak, ami csökkenti az érzékelési pontosságot. Válasszon inkább egy konkrét csatornát.",
+          "energyLeft": "Bal csatorna",
+          "energyRight": "Jobb csatorna",
+          "label": "Csatornamód",
+          "left": "Csak bal csatorna",
+          "recommended": "Ajánlott: {channel}",
+          "right": "Csak jobb csatorna",
+          "singleChannelGood": "Egycsatornás kiválasztva, optimális az érzékelési pontossághoz."
+        },
+        "stereoWarning": {
+          "message": "Sztereó stream észlelve. A több csatorna keverése csökkentheti az érzékelési pontosságot a csatornák közötti fáziskülönbségek miatt. Válasszon konkrét csatornát (bal/jobb) vagy használja a csatornadetektort a legjobb eredményekhez.",
+          "short": "Sztereó downmix aktív. Az érzékelési pontosság csökkent lehet. Szerkessze a konkrét csatorna kiválasztásához.",
+          "tooltip": "Sztereó downmix aktív. Az érzékelési pontosság csökkent lehet. Szerkessze a konkrét csatorna kiválasztásához."
         }
       },
       "audioFilters": {
@@ -4929,7 +4949,17 @@
       "source": "Forrás",
       "count": "Darab",
       "lifetime": "összesen",
-      "sparklineLabel": "Aktivitási diagram"
+      "sparklineLabel": "Aktivitási diagram",
+      "activeHours": "Aktív órák",
+      "windowTotal": "Az ablakban",
+      "velocity": "Tendencia",
+      "velocityStable": "Stabil",
+      "velocityIncreasing": "Növekvő",
+      "velocityDecreasing": "Csökkenő",
+      "pattern": "Minta",
+      "patternNone": "Nincs",
+      "patternTransient": "Átmeneti",
+      "patternSustained": "Tartós"
     }
   }
 }

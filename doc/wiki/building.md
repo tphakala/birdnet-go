@@ -18,7 +18,7 @@ For development work within VSCode, using the provided [devcontainer](https://co
 
 **Inside the Devcontainer:**
 
-- All Go, CGO, TensorFlow, FFmpeg, and SoX dependencies are pre-installed.
+- All Go, CGO, TensorFlow, ONNX Runtime, FFmpeg, and SoX dependencies are pre-installed.
 - Your source code is mounted into the container.
 - An `air` development server ([`.air.toml`](.air.toml)) is automatically started. It watches for code changes (`.go`, `.html`, `.css`, `.js`, etc.) and triggers:
   - Tailwind CSS recompilation.
@@ -53,7 +53,18 @@ This project uses [Task](https://taskfile.dev/) (`Taskfile.yml`) as its build sy
 ### 2. Prepare Dependencies (Handled mostly by Task)
 
 - **TensorFlow Lite C Library:** `task` will automatically download the correct pre-compiled library (from [tphakala/tflite_c](https://github.com/tphakala/tflite_c/releases/tag/{{TFLITE_VERSION}})) for your target OS/architecture when you run a build task. It places the library in the expected system path (e.g., `/usr/lib`, `/usr/local/lib`, `/opt/homebrew/lib`, or `/usr/x86_64-w64-mingw32/lib` for Windows cross-compile) and creates necessary symlinks.
+- **ONNX Runtime (Optional):** Needed for BirdNET v3.0 models (currently in development preview). Run `task download-onnxruntime` to automatically download and install the correct version for your platform. See [ONNX Runtime Installation](../ONNX-Runtime-Installation.md) for manual installation options.
 - **TensorFlow Headers:** `task` checks if TensorFlow source code (needed for C header files for CGO) is present in `$HOME/src/tensorflow`. If not, it clones the specific tag (`{{TFLITE_VERSION}}`) required.
+
+### One-Command Setup
+
+For a fully automated development environment setup (installs Go, build tools, TFLite, ONNX Runtime, frontend dependencies, and Playwright):
+
+```bash
+task setup-dev
+```
+
+This handles all prerequisites on Linux (Debian/Ubuntu). On macOS, you will need Homebrew and Xcode command-line tools pre-installed.
 
 ### 3. Build BirdNET-Go
 

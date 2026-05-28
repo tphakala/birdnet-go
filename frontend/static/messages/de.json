@@ -3079,6 +3079,26 @@
         "batWarning": "Fledermausmodelle erfordern Streams mit einem verlustfreien Codec (PCM) und einer Abtastrate von mindestens 96 kHz. Verwenden Sie die Schaltfläche Stream testen oben, um die Kompatibilität zu überprüfen.",
         "codecWarning": {
           "lossy": "Verlustbehaftete Codecs (AAC, Opus, MP3) zerstören Ultraschallfrequenzen über ~20 kHz und machen den Stream für die Fledermauserkennung ungeeignet."
+        },
+        "channelMode": {
+          "analyzeError": "Kanalanalyse fehlgeschlagen",
+          "analyzing": "Kanäle werden analysiert...",
+          "description": "Wie Mehrkanal-Audio verarbeitet wird. Wählen Sie einen bestimmten Kanal, wenn Ihre Quelle Stereo sendet.",
+          "detectBest": "Besten Kanal erkennen",
+          "downmix": "Downmix auf Mono",
+          "downmixWarning": "Downmix wird für Stereo-Streams nicht empfohlen. Phasenunterschiede zwischen den Kanälen verursachen Kammfilterung, die die Erkennungsgenauigkeit verringert. Wählen Sie stattdessen einen bestimmten Kanal.",
+          "energyLeft": "Linker Kanal",
+          "energyRight": "Rechter Kanal",
+          "label": "Kanalmodus",
+          "left": "Nur linker Kanal",
+          "recommended": "Empfohlen: {channel}",
+          "right": "Nur rechter Kanal",
+          "singleChannelGood": "Einzelkanal ausgewählt, optimal für die Erkennungsgenauigkeit."
+        },
+        "stereoWarning": {
+          "message": "Stereo-Stream erkannt. Das Abmischen mehrerer Kanäle kann die Erkennungsgenauigkeit aufgrund von Phasenunterschieden zwischen den Kanälen verringern. Wählen Sie einen bestimmten Kanal (links/rechts) oder verwenden Sie den Kanaldetektor für beste Ergebnisse.",
+          "short": "Stereo-Downmix aktiv. Erkennungsgenauigkeit kann beeinträchtigt sein. Bearbeiten, um einen bestimmten Kanal auszuwählen.",
+          "tooltip": "Stereo-Downmix aktiv. Erkennungsgenauigkeit kann beeinträchtigt sein. Bearbeiten, um einen bestimmten Kanal auszuwählen."
         }
       },
       "audioFilters": {
@@ -4929,7 +4949,17 @@
       "source": "Quelle",
       "count": "Anzahl",
       "lifetime": "gesamt",
-      "sparklineLabel": "Aktivitäts-Sparkline"
+      "sparklineLabel": "Aktivitäts-Sparkline",
+      "activeHours": "Aktive Stunden",
+      "windowTotal": "Im Fenster",
+      "velocity": "Trend",
+      "velocityStable": "Stabil",
+      "velocityIncreasing": "Steigend",
+      "velocityDecreasing": "Fallend",
+      "pattern": "Muster",
+      "patternNone": "Keines",
+      "patternTransient": "Vorübergehend",
+      "patternSustained": "Anhaltend"
     }
   }
 }

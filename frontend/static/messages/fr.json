@@ -3079,6 +3079,26 @@
         "batWarning": "Les modèles de chauves-souris nécessitent des flux avec un codec sans perte (PCM) et un taux d'échantillonnage d'au moins 96 kHz. Utilisez le bouton Tester le flux ci-dessus pour vérifier la compatibilité.",
         "codecWarning": {
           "lossy": "Les codecs avec perte (AAC, Opus, MP3) détruisent les fréquences ultrasoniques au-dessus de ~20 kHz, rendant le flux inadapté à la détection des chauves-souris."
+        },
+        "channelMode": {
+          "analyzeError": "L'analyse des canaux a échoué",
+          "analyzing": "Analyse des canaux...",
+          "description": "Comment gérer l'audio multicanal. Sélectionnez un canal spécifique si votre source envoie du stéréo.",
+          "detectBest": "Détecter le meilleur canal",
+          "downmix": "Mixer en mono",
+          "downmixWarning": "Le mixage en mono n'est pas recommandé pour les flux stéréo. Les différences de phase entre les canaux provoquent un filtrage en peigne qui réduit la précision de détection. Sélectionnez plutôt un canal spécifique.",
+          "energyLeft": "Canal gauche",
+          "energyRight": "Canal droit",
+          "label": "Mode canal",
+          "left": "Canal gauche uniquement",
+          "recommended": "Recommandé : {channel}",
+          "right": "Canal droit uniquement",
+          "singleChannelGood": "Canal unique sélectionné, optimal pour la précision de détection."
+        },
+        "stereoWarning": {
+          "message": "Flux stéréo détecté. Le mixage de plusieurs canaux peut réduire la précision de détection en raison des différences de phase entre les canaux. Sélectionnez un canal spécifique (gauche/droit) ou utilisez le détecteur de canaux pour de meilleurs résultats.",
+          "short": "Downmix stéréo actif. La précision de détection peut être réduite. Modifiez pour sélectionner un canal spécifique.",
+          "tooltip": "Downmix stéréo actif. La précision de détection peut être réduite. Modifiez pour sélectionner un canal spécifique."
         }
       },
       "audioFilters": {
@@ -4929,7 +4949,17 @@
       "source": "Source",
       "count": "Nombre",
       "lifetime": "total",
-      "sparklineLabel": "Graphique d'activité"
+      "sparklineLabel": "Graphique d'activité",
+      "activeHours": "Heures actives",
+      "windowTotal": "Dans la fenêtre",
+      "velocity": "Tendance",
+      "velocityStable": "Stable",
+      "velocityIncreasing": "En hausse",
+      "velocityDecreasing": "En baisse",
+      "pattern": "Modèle",
+      "patternNone": "Aucun",
+      "patternTransient": "Transitoire",
+      "patternSustained": "Persistant"
     }
   }
 }

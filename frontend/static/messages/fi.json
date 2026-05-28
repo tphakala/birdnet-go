@@ -3079,6 +3079,26 @@
         "batWarning": "Lepakkomallit vaativat häviöttömän koodekin (PCM) ja vähintään 96 kHz näytteenottotaajuuden. Tarkista yhteensopivuus yllä olevalla Testaa striimi -painikkeella.",
         "codecWarning": {
           "lossy": "Häviölliset koodekit (AAC, Opus, MP3) tuhoavat ultraäänitaajuudet yli ~20 kHz, mikä tekee striimistä soveltumattoman lepakoiden havaitsemiseen."
+        },
+        "channelMode": {
+          "analyzeError": "Kanava-analyysi epäonnistui",
+          "analyzing": "Analysoidaan kanavia...",
+          "description": "Miten monikanavaääntä käsitellään. Valitse tietty kanava, jos lähteesi lähettää stereota.",
+          "detectBest": "Tunnista paras kanava",
+          "downmix": "Sekoita monoksi",
+          "downmixWarning": "Monoksi sekoittamista ei suositella stereovirroille. Kanavien väliset vaiheerot aiheuttavat kampasuodatusta, joka heikentää tunnistustarkkuutta. Valitse sen sijaan tietty kanava.",
+          "energyLeft": "Vasen kanava",
+          "energyRight": "Oikea kanava",
+          "label": "Kanavatila",
+          "left": "Vain vasen kanava",
+          "recommended": "Suositeltu: {channel}",
+          "right": "Vain oikea kanava",
+          "singleChannelGood": "Yksittäinen kanava valittu, optimaalinen tunnistustarkkuudelle."
+        },
+        "stereoWarning": {
+          "message": "Stereovirta havaittu. Useiden kanavien sekoittaminen voi heikentää tunnistustarkkuutta kanavien välisten vaihe-erojen vuoksi. Valitse tietty kanava (vasen/oikea) tai käytä kanavatunnistinta parhaiden tulosten saavuttamiseksi.",
+          "short": "Stereon downmix käytössä. Tunnistustarkkuus voi olla heikentynyt. Muokkaa valitaksesi tietyn kanavan.",
+          "tooltip": "Stereon downmix käytössä. Tunnistustarkkuus voi olla heikentynyt. Muokkaa valitaksesi tietyn kanavan."
         }
       },
       "audioFilters": {
@@ -4929,7 +4949,17 @@
       "source": "Lähde",
       "count": "Määrä",
       "lifetime": "yhteensä",
-      "sparklineLabel": "Aktiivisuuskaavio"
+      "sparklineLabel": "Aktiivisuuskaavio",
+      "activeHours": "Aktiiviset tunnit",
+      "windowTotal": "Ikkunassa",
+      "velocity": "Suunta",
+      "velocityStable": "Vakaa",
+      "velocityIncreasing": "Kasvava",
+      "velocityDecreasing": "Laskeva",
+      "pattern": "Kaava",
+      "patternNone": "Ei mitään",
+      "patternTransient": "Ohimenevä",
+      "patternSustained": "Jatkuva"
     }
   }
 }

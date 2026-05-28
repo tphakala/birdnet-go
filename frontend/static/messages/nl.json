@@ -3079,6 +3079,26 @@
         "batWarning": "Vleermuismodellen vereisen streams met een verliesvrije codec (PCM) en een samplerate van minimaal 96 kHz. Gebruik de knop Stream testen hierboven om de compatibiliteit te controleren.",
         "codecWarning": {
           "lossy": "Codecs met verlies (AAC, Opus, MP3) vernietigen ultrasone frequenties boven ~20 kHz, waardoor de stream ongeschikt wordt voor vleermuisdetectie."
+        },
+        "channelMode": {
+          "analyzeError": "Kanaalanalyse mislukt",
+          "analyzing": "Kanalen analyseren...",
+          "description": "Hoe meerkanaals audio wordt verwerkt. Selecteer een specifiek kanaal als uw bron stereo verzendt.",
+          "detectBest": "Beste kanaal detecteren",
+          "downmix": "Downmix naar mono",
+          "downmixWarning": "Downmix wordt niet aanbevolen voor stereostreams. Faseverschillen tussen kanalen veroorzaken kamfiltering die de detectienauwkeurigheid vermindert. Selecteer in plaats daarvan een specifiek kanaal.",
+          "energyLeft": "Linkerkanaal",
+          "energyRight": "Rechterkanaal",
+          "label": "Kanaalmodus",
+          "left": "Alleen linkerkanaal",
+          "recommended": "Aanbevolen: {channel}",
+          "right": "Alleen rechterkanaal",
+          "singleChannelGood": "Enkel kanaal geselecteerd, optimaal voor detectienauwkeurigheid."
+        },
+        "stereoWarning": {
+          "message": "Stereostream gedetecteerd. Het downmixen van meerdere kanalen kan de detectienauwkeurigheid verminderen door faseverschillen tussen kanalen. Selecteer een specifiek kanaal (links/rechts) of gebruik de kanaaldetector voor de beste resultaten.",
+          "short": "Stereo downmix actief. Detectienauwkeurigheid kan verminderd zijn. Bewerk om een specifiek kanaal te selecteren.",
+          "tooltip": "Stereo downmix actief. Detectienauwkeurigheid kan verminderd zijn. Bewerk om een specifiek kanaal te selecteren."
         }
       },
       "audioFilters": {
@@ -4929,7 +4949,17 @@
       "source": "Bron",
       "count": "Aantal",
       "lifetime": "totaal",
-      "sparklineLabel": "Activiteitsgrafiek"
+      "sparklineLabel": "Activiteitsgrafiek",
+      "activeHours": "Actieve uren",
+      "windowTotal": "In venster",
+      "velocity": "Trend",
+      "velocityStable": "Stabiel",
+      "velocityIncreasing": "Stijgend",
+      "velocityDecreasing": "Dalend",
+      "pattern": "Patroon",
+      "patternNone": "Geen",
+      "patternTransient": "Voorbijgaand",
+      "patternSustained": "Aanhoudend"
     }
   }
 }

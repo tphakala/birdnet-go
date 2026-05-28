@@ -35,9 +35,10 @@ vars:
       fi
   LDFLAGS: -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}'"
   BUILD_FLAGS: '{{.BUILD_TAGS_FLAG}} {{.LDFLAGS}}'
-  # System paths
-  SYSTEM_LIB_DIR_AMD64: /usr/lib
-  SYSTEM_LIB_DIR_ARM64: /usr/aarch64-linux-gnu/lib
+  # System paths for native library installation (used by download/verify tasks)
+  SYSTEM_LIB_DIR: /usr/lib
+  # Cross-compilation sysroot (used by linux_arm64 build targets on x86 hosts)
+  CROSS_LIB_DIR_ARM64: /usr/aarch64-linux-gnu/lib
 
 tasks:
   default:
@@ -79,8 +80,7 @@ tasks:
         case "{{.UNAME_S}}_{{.UNAME_M}}" in
           Darwin_arm64) LIB_DIR="/opt/homebrew/lib";;
           Darwin_*) LIB_DIR="/usr/local/lib";;
-          Linux_aarch64|Linux_arm64) LIB_DIR="{{.SYSTEM_LIB_DIR_ARM64}}";;
-          Linux_*) LIB_DIR="{{.SYSTEM_LIB_DIR_AMD64}}";;
+          Linux_*) LIB_DIR="{{.SYSTEM_LIB_DIR}}";;
           *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
         esac
         # Use noembed,skipfrontend tags to skip model and frontend embedding for faster linting
@@ -95,16 +95,13 @@ tasks:
       - task: lint
         vars: {CLI_ARGS: "--fix -v"}
 
-  # New Task: Download Avicommons Data
   download-avicommons-data:
     desc: Download the Avicommons latest.json data file if it doesn't exist
     dir: '{{.AVICOMMONS_DATA_DIR}}'
     cmds:
-      - mkdir -p {{.AVICOMMONS_DATA_DIR}}
       - |
         if [ ! -f "{{.AVICOMMONS_JSON_FILE}}" ]; then
           echo "Downloading Avicommons data file ({{.AVICOMMONS_JSON_FILE}})..."
-          # Use curl with -fL to fail on error and follow redirects
           curl -fL -o "{{.AVICOMMONS_JSON_FILE}}" "{{.AVICOMMONS_JSON_URL}}"
         else
           echo "Avicommons data file ({{.AVICOMMONS_JSON_FILE}}) already exists."
@@ -151,6 +148,7 @@ tasks:
         echo "  • Node.js LTS"
         echo "  • Build tools (gcc, git, wget, etc.)"
         echo "  • Go dev tools (golangci-lint, air)"
+        echo "  • TFLite C library and ONNX Runtime"
         echo "  • Frontend dependencies and Playwright browsers"
         echo ""
         printf "Continue with setup? (y/N) "
@@ -165,6 +163,7 @@ tasks:
       - task: frontend-build
       - task: check-tensorflow
       - task: check-tflite-lib
+      - task: download-onnxruntime
       - task: verify-dev-setup
       - |
         echo ""
@@ -208,8 +207,11 @@ tasks:
             unzip \
             ca-certificates
 
-          # Audio tools for full test coverage (spectrogram, audio duration, clip export)
-          $SUDO apt-get install -y ffmpeg sox
+          # Audio capture library (required at runtime for microphone access)
+          # and tools for full test coverage (spectrogram, audio duration, clip export)
+          # Use libasound2-dev which works on both Debian/Ubuntu <24.04 (libasound2)
+          # and Ubuntu 24.04+ (libasound2t64 via time_t transition)
+          $SUDO apt-get install -y libasound2-dev ffmpeg sox
 
           # Install Go if not present or version is too old
           # Version comes from go.mod via Taskfile var
@@ -245,19 +247,25 @@ tasks:
 
           if [ "$INSTALL_GO" = true ]; then
             echo "📥 Installing Go ${GO_VERSION}..."
-            if ! wget "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"; then
-              echo "❌ Failed to download Go ${GO_VERSION}"
+            case "$(uname -m)" in
+              x86_64) GO_ARCH="amd64";;
+              aarch64|arm64) GO_ARCH="arm64";;
+              *) echo "❌ Unsupported architecture: $(uname -m)"; exit 1;;
+            esac
+            GO_TARBALL="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
+            if ! wget "https://go.dev/dl/${GO_TARBALL}"; then
+              echo "❌ Failed to download Go ${GO_VERSION} for ${GO_ARCH}"
               echo "   Check your internet connection and try again"
               exit 1
             fi
 
             $SUDO rm -rf /usr/local/go
-            if ! $SUDO tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz"; then
+            if ! $SUDO tar -C /usr/local -xzf "${GO_TARBALL}"; then
               echo "❌ Failed to extract Go ${GO_VERSION}"
-              rm -f "go${GO_VERSION}.linux-amd64.tar.gz"
+              rm -f "${GO_TARBALL}"
               exit 1
             fi
-            rm -f "go${GO_VERSION}.linux-amd64.tar.gz"
+            rm -f "${GO_TARBALL}"
 
             # Add Go to PATH if not already there
             if ! grep -q "/usr/local/go/bin" ~/.profile 2>/dev/null; then
@@ -472,13 +480,9 @@ tasks:
           echo "✅ Playwright browsers installed"
         fi
 
-        # Return to root directory to initialize Husky
-        cd ..
-
         # Initialize Husky for git hooks (pre-commit checks)
         echo "🪝 Setting up git hooks with Husky..."
-        if [ -d ".git" ]; then
-          cd frontend
+        if [ -d "{{.ROOT_DIR}}/.git" ]; then
           if ! npm run prepare; then
             echo "⚠️  Failed to initialize Husky"
             echo "   Git hooks won't be active, but you can initialize later with: cd frontend && npm run prepare"
@@ -486,7 +490,6 @@ tasks:
             echo "✅ Git hooks initialized"
             echo "   Pre-commit hook will run golangci-lint and frontend linting automatically"
           fi
-          cd ..
         else
           echo "⚠️  Not a git repository, skipping Husky setup"
         fi
@@ -590,15 +593,41 @@ tasks:
         fi
 
         # Check Playwright (optional for E2E tests)
-        cd frontend
-        if npx playwright --version >/dev/null 2>&1; then
-          PLAYWRIGHT_VERSION=$(npx playwright --version)
+        if (cd frontend && npx playwright --version >/dev/null 2>&1); then
+          PLAYWRIGHT_VERSION=$(cd frontend && npx playwright --version)
           echo "✅ Playwright: ${PLAYWRIGHT_VERSION}"
         else
           echo "⚠️  Playwright: not installed (optional for E2E tests)"
           echo "   Install with: cd frontend && npx playwright install --with-deps chromium"
         fi
-        cd ..
+
+        # ALSA library (required at runtime for audio capture on Linux)
+        if [ "$(uname -s)" = "Linux" ]; then
+          if ldconfig -p 2>/dev/null | grep -q libasound.so.2; then
+            echo "✅ ALSA (libasound2): installed"
+          else
+            echo "❌ ALSA (libasound2): not found (audio capture will fail at runtime)"
+            echo "   Install with: sudo apt-get install libasound2-dev"
+          fi
+        fi
+
+        # ONNX Runtime (required for BirdNET v3.0 and ONNX models)
+        ONNX_LIB_DIR=""
+        case "$(uname -s)_$(uname -m)" in
+          Darwin_arm64) ONNX_LIB_DIR="/opt/homebrew/lib";;
+          Darwin_*) ONNX_LIB_DIR="/usr/local/lib";;
+          Linux_*) ONNX_LIB_DIR="{{.SYSTEM_LIB_DIR}}";;
+          *) echo "⚠️  ONNX Runtime: unsupported platform $(uname -s)_$(uname -m), skipping check";;
+        esac
+        if [ -n "${ONNX_LIB_DIR}" ] && ls "${ONNX_LIB_DIR}"/libonnxruntime.*{{.ONNXRUNTIME_VERSION}}* >/dev/null 2>&1; then
+          echo "✅ ONNX Runtime: {{.ONNXRUNTIME_VERSION}} installed in ${ONNX_LIB_DIR}"
+        elif [ -n "${ONNX_LIB_DIR}" ] && ls "${ONNX_LIB_DIR}"/libonnxruntime.* >/dev/null 2>&1; then
+          echo "⚠️  ONNX Runtime: installed in ${ONNX_LIB_DIR} but version {{.ONNXRUNTIME_VERSION}} not found"
+          echo "   Update with: task download-onnxruntime"
+        else
+          echo "⚠️  ONNX Runtime: not found (required for ONNX models including BirdNET v3.0)"
+          echo "   Install with: task download-onnxruntime"
+        fi
 
         # Audio tools (optional but needed for full test coverage)
         if command -v ffmpeg >/dev/null 2>&1; then
@@ -627,6 +656,7 @@ tasks:
         done
 
   check-tensorflow:
+    desc: Clone TensorFlow headers for CGo compilation
     cmds:
       - |
         if [ ! -f "$HOME/src/tensorflow/tensorflow/lite/c/c_api.h" ]; then
@@ -653,8 +683,7 @@ tasks:
               case "{{.UNAME_S}}_{{.UNAME_M}}" in
                 Darwin_arm64) echo "/opt/homebrew/lib";;
                 Darwin_*) echo "/usr/local/lib";;
-                Linux_aarch64|Linux_arm64) echo "{{.SYSTEM_LIB_DIR_ARM64}}";;
-                Linux_*) echo "{{.SYSTEM_LIB_DIR_AMD64}}";;
+                Linux_*) echo "{{.SYSTEM_LIB_DIR}}";;
                 *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
               esac
           TFLITE_LIB_ARCH:
@@ -964,7 +993,7 @@ tasks:
   linux_amd64:
     deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
     vars:
-      TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_AMD64}}'
+      TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR}}'
       TFLITE_LIB_ARCH: linux_amd64.tar.gz
       TARGET: linux_amd64
     cmds:
@@ -979,7 +1008,7 @@ tasks:
   linux_arm64:
     deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
     vars:
-      TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_ARM64}}'
+      TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .CROSS_LIB_DIR_ARM64}}'
       TFLITE_LIB_ARCH: linux_arm64.tar.gz
       TARGET: linux_arm64
     cmds:
@@ -1120,7 +1149,7 @@ tasks:
     cmds:
       - task: noembed_build
         vars:
-          TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_AMD64}}'
+          TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR}}'
           TFLITE_LIB_ARCH: linux_amd64.tar.gz
           TARGET: linux_amd64
           GOOS: linux
@@ -1132,7 +1161,7 @@ tasks:
     cmds:
       - task: noembed_build
         vars:
-          TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_ARM64}}'
+          TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .CROSS_LIB_DIR_ARM64}}'
           TFLITE_LIB_ARCH: linux_arm64.tar.gz
           TARGET: linux_arm64
           GOOS: linux
@@ -1221,14 +1250,15 @@ tasks:
 
   download-onnxruntime:
     desc: Download and install ONNX Runtime library for the current platform
+    status:
+      - 'ls {{.ONNX_LIB_DIR}}/libonnxruntime.*{{.ONNXRUNTIME_VERSION}}* >/dev/null 2>&1'
     vars:
       ONNX_LIB_DIR:
         sh: |
           case "{{.UNAME_S}}_{{.UNAME_M}}" in
             Darwin_arm64) echo "/opt/homebrew/lib";;
             Darwin_*) echo "/usr/local/lib";;
-            Linux_aarch64|Linux_arm64) echo "{{.SYSTEM_LIB_DIR_ARM64}}";;
-            Linux_*) echo "{{.SYSTEM_LIB_DIR_AMD64}}";;
+            Linux_*) echo "{{.SYSTEM_LIB_DIR}}";;
             *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
           esac
       ONNX_ARCHIVE:
@@ -1249,11 +1279,6 @@ tasks:
           esac
     cmds:
       - |
-        if [ -f "{{.ONNX_LIB_DIR}}/{{.ONNX_LIB_NAME}}" ]; then
-          echo "ONNX Runtime already installed at {{.ONNX_LIB_DIR}}/{{.ONNX_LIB_NAME}}"
-          exit 0
-        fi
-
         echo "Downloading ONNX Runtime {{.ONNXRUNTIME_VERSION}}..."
         curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v{{.ONNXRUNTIME_VERSION}}/{{.ONNX_ARCHIVE}}" \
           -o /tmp/onnxruntime.tgz

@@ -3079,6 +3079,26 @@
         "batWarning": "I modelli per pipistrelli richiedono flussi con un codec lossless (PCM) e una frequenza di campionamento di almeno 96 kHz. Usa il pulsante Testa stream sopra per verificare la compatibilità.",
         "codecWarning": {
           "lossy": "I codec con perdita (AAC, Opus, MP3) distruggono le frequenze ultrasoniche sopra i ~20 kHz, rendendo lo stream inadatto al rilevamento dei pipistrelli."
+        },
+        "channelMode": {
+          "analyzeError": "Analisi dei canali fallita",
+          "analyzing": "Analisi dei canali...",
+          "description": "Come gestire l'audio multicanale. Seleziona un canale specifico se la tua sorgente invia stereo.",
+          "detectBest": "Rileva il canale migliore",
+          "downmix": "Downmix a mono",
+          "downmixWarning": "Il downmix non è raccomandato per gli stream stereo. Le differenze di fase tra i canali causano filtraggio a pettine che riduce la precisione del rilevamento. Seleziona invece un canale specifico.",
+          "energyLeft": "Canale sinistro",
+          "energyRight": "Canale destro",
+          "label": "Modalità canale",
+          "left": "Solo canale sinistro",
+          "recommended": "Consigliato: {channel}",
+          "right": "Solo canale destro",
+          "singleChannelGood": "Canale singolo selezionato, ottimale per la precisione del rilevamento."
+        },
+        "stereoWarning": {
+          "message": "Stream stereo rilevato. Il downmix di più canali può ridurre la precisione del rilevamento a causa delle differenze di fase tra i canali. Seleziona un canale specifico (sinistro/destro) o usa il rilevatore di canali per i migliori risultati.",
+          "short": "Downmix stereo attivo. La precisione del rilevamento potrebbe essere ridotta. Modifica per selezionare un canale specifico.",
+          "tooltip": "Downmix stereo attivo. La precisione del rilevamento potrebbe essere ridotta. Modifica per selezionare un canale specifico."
         }
       },
       "audioFilters": {
@@ -4929,7 +4949,17 @@
       "source": "Sorgente",
       "count": "Conteggio",
       "lifetime": "totale",
-      "sparklineLabel": "Grafico di attività"
+      "sparklineLabel": "Grafico di attività",
+      "activeHours": "Ore attive",
+      "windowTotal": "Nella finestra",
+      "velocity": "Tendenza",
+      "velocityStable": "Stabile",
+      "velocityIncreasing": "In aumento",
+      "velocityDecreasing": "In calo",
+      "pattern": "Schema",
+      "patternNone": "Nessuno",
+      "patternTransient": "Transitorio",
+      "patternSustained": "Persistente"
     }
   }
 }

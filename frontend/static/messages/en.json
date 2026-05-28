@@ -3079,6 +3079,26 @@
         "batWarning": "Bat models require streams with a lossless codec (PCM) and a sample rate of at least 96 kHz. Use the Test Stream button above to verify compatibility.",
         "codecWarning": {
           "lossy": "Lossy codecs (AAC, Opus, MP3) destroy ultrasonic frequencies above ~20 kHz, making the stream unsuitable for bat detection."
+        },
+        "channelMode": {
+          "analyzeError": "Channel analysis failed",
+          "analyzing": "Analyzing channels...",
+          "description": "How to handle multi-channel audio. Select a specific channel if your source sends stereo.",
+          "detectBest": "Detect best channel",
+          "downmix": "Downmix to mono",
+          "downmixWarning": "Downmix is not recommended for stereo streams. Phase differences between channels cause comb filtering that reduces detection accuracy. Select a specific channel instead.",
+          "energyLeft": "Left channel",
+          "energyRight": "Right channel",
+          "label": "Channel mode",
+          "left": "Left channel only",
+          "recommended": "Recommended: {channel}",
+          "right": "Right channel only",
+          "singleChannelGood": "Single channel selected, optimal for detection accuracy."
+        },
+        "stereoWarning": {
+          "message": "Stereo stream detected. Downmixing multiple channels can reduce detection accuracy due to phase differences between channels. Select a specific channel (left/right) or use the channel detector for best results.",
+          "short": "Stereo downmix active. Detection accuracy may be reduced. Edit to select a specific channel.",
+          "tooltip": "Stereo downmix active. Detection accuracy may be reduced. Edit to select a specific channel."
         }
       },
       "audioFilters": {
@@ -4929,7 +4949,17 @@
       "source": "Source",
       "count": "Count",
       "lifetime": "lifetime",
-      "sparklineLabel": "Activity sparkline"
+      "sparklineLabel": "Activity sparkline",
+      "activeHours": "Active hours",
+      "windowTotal": "In window",
+      "velocity": "Trend",
+      "velocityStable": "Stable",
+      "velocityIncreasing": "Increasing",
+      "velocityDecreasing": "Decreasing",
+      "pattern": "Pattern",
+      "patternNone": "None",
+      "patternTransient": "Transient",
+      "patternSustained": "Sustained"
     }
   }
 }

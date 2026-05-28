@@ -319,6 +319,208 @@ func TestGetDashboardKPIs_Empty(t *testing.T) {
 	assert.Equal(t, int64(0), kpis.TodayDetections)
 }
 
+// seedLabelForModel creates a test label for a specific model and returns its ID.
+func seedLabelForModel(t *testing.T, db *gorm.DB, scientificName string, modelID uint) uint {
+	t.Helper()
+	label := entities.Label{
+		ScientificName: scientificName,
+		ModelID:        modelID,
+		LabelTypeID:    1,
+	}
+	require.NoError(t, db.Create(&label).Error)
+	return label.ID
+}
+
+// seedDetectionForModel creates a test detection for a specific model.
+func seedDetectionForModel(t *testing.T, db *gorm.DB, labelID, modelID uint, detectedAt int64, confidence float64) uint {
+	t.Helper()
+	det := entities.Detection{
+		LabelID:    labelID,
+		DetectedAt: detectedAt,
+		Confidence: confidence,
+		ModelID:    modelID,
+	}
+	require.NoError(t, db.Create(&det).Error)
+	return det.ID
+}
+
+// setupInsightsTestDBMultiModel creates a test DB with two AI models seeded.
+func setupInsightsTestDBMultiModel(t *testing.T) *gorm.DB {
+	t.Helper()
+	db := setupInsightsTestDB(t)
+	require.NoError(t, db.Create(&entities.AIModel{ID: 2, Name: "Perch", Version: "1.0"}).Error)
+	return db
+}
+
+func TestGetNewArrivals_MultiModel(t *testing.T) {
+	db := setupInsightsTestDBMultiModel(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	now := time.Now()
+	fourteenDaysAgo := now.AddDate(0, 0, -14).Unix()
+
+	labelA1 := seedLabelForModel(t, db, "Chordeiles minor", 1)
+	labelA2 := seedLabelForModel(t, db, "Chordeiles minor", 2)
+
+	seedDetectionForModel(t, db, labelA1, 1, now.AddDate(0, 0, -5).Unix(), 0.9)
+	seedDetectionForModel(t, db, labelA2, 2, now.AddDate(0, 0, -3).Unix(), 0.85)
+
+	results, err := repo.GetNewArrivals(ctx, fourteenDaysAgo, nil)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "same species from two models should produce one result")
+	assert.Equal(t, "Chordeiles minor", results[0].ScientificName)
+	assert.Equal(t, int64(2), results[0].DetectionCount)
+}
+
+func TestGetGoneQuiet_MultiModel(t *testing.T) {
+	db := setupInsightsTestDBMultiModel(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	now := time.Now()
+	fourteenDaysAgo := now.AddDate(0, 0, -14).Unix()
+
+	labelA1 := seedLabelForModel(t, db, "Setophaga americana", 1)
+	labelA2 := seedLabelForModel(t, db, "Setophaga americana", 2)
+
+	for i := 20; i < 25; i++ {
+		seedDetectionForModel(t, db, labelA1, 1, now.AddDate(0, 0, -i).Unix(), 0.85)
+	}
+	for i := 22; i < 27; i++ {
+		seedDetectionForModel(t, db, labelA2, 2, now.AddDate(0, 0, -i).Unix(), 0.80)
+	}
+
+	results, err := repo.GetGoneQuiet(ctx, fourteenDaysAgo, 5, nil)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "same species from two models should produce one result")
+	assert.Equal(t, "Setophaga americana", results[0].ScientificName)
+	assert.Equal(t, int64(10), results[0].TotalDetections)
+}
+
+func TestGetDawnChorusRaw_MultiModel(t *testing.T) {
+	db := setupInsightsTestDBMultiModel(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	now := time.Now()
+	since := now.AddDate(0, 0, -30).Unix()
+
+	labelA1 := seedLabelForModel(t, db, "Turdus merula", 1)
+	labelA2 := seedLabelForModel(t, db, "Turdus merula", 2)
+
+	day1 := time.Date(now.Year(), now.Month(), now.Day()-5, 0, 0, 0, 0, time.Local)
+	seedDetectionForModel(t, db, labelA1, 1, day1.Add(5*time.Hour).Unix(), 0.9)
+	seedDetectionForModel(t, db, labelA2, 2, day1.Add(6*time.Hour).Unix(), 0.85)
+
+	results, err := repo.GetDawnChorusRaw(ctx, since, 4, 10, nil)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "same species on same day from two models should produce one result")
+	assert.Equal(t, "Turdus merula", results[0].ScientificName)
+	entryTime := time.Unix(results[0].EarliestAt, 0).In(time.Local)
+	assert.Equal(t, 5, entryTime.Hour(), "should pick the earliest detection across models")
+}
+
+func TestGetPhantomSpecies_MultiModel(t *testing.T) {
+	db := setupInsightsTestDBMultiModel(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	now := time.Now()
+	since := now.AddDate(0, 0, -30).Unix()
+
+	labelA1 := seedLabelForModel(t, db, "Parus major", 1)
+	labelA2 := seedLabelForModel(t, db, "Parus major", 2)
+
+	seedDetectionForModel(t, db, labelA1, 1, now.AddDate(0, 0, -1).Unix(), 0.45)
+	seedDetectionForModel(t, db, labelA1, 1, now.AddDate(0, 0, -2).Unix(), 0.40)
+	seedDetectionForModel(t, db, labelA2, 2, now.AddDate(0, 0, -3).Unix(), 0.50)
+
+	results, err := repo.GetPhantomSpecies(ctx, since, 3, 0.6, nil)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "same species from two models should produce one result")
+	assert.Equal(t, "Parus major", results[0].ScientificName)
+	assert.Equal(t, int64(3), results[0].DetectionCount)
+}
+
+func TestGetExpectedSpeciesToday_MultiModel(t *testing.T) {
+	db := setupInsightsTestDBMultiModel(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	labelA1 := seedLabelForModel(t, db, "Turdus merula", 1)
+	labelA2 := seedLabelForModel(t, db, "Turdus merula", 2)
+
+	y1Start := time.Date(2024, 3, 8, 0, 0, 0, 0, time.Local)
+	seedDetectionForModel(t, db, labelA1, 1, y1Start.Unix(), 0.9)
+
+	y2Start := time.Date(2025, 3, 7, 0, 0, 0, 0, time.Local)
+	seedDetectionForModel(t, db, labelA2, 2, y2Start.Unix(), 0.88)
+
+	yearRanges := []TimeRange{
+		{
+			Start: time.Date(2024, 3, 6, 0, 0, 0, 0, time.Local).Unix(),
+			End:   time.Date(2024, 3, 12, 23, 59, 59, 0, time.Local).Unix(),
+		},
+		{
+			Start: time.Date(2025, 3, 6, 0, 0, 0, 0, time.Local).Unix(),
+			End:   time.Date(2025, 3, 12, 23, 59, 59, 0, time.Local).Unix(),
+		},
+	}
+
+	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, nil)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "same species from two models should produce one result")
+	assert.Equal(t, "Turdus merula", results[0].ScientificName)
+	assert.Equal(t, 2, results[0].YearsSeen)
+}
+
+func TestGetDashboardKPIs_MultiModel(t *testing.T) {
+	db := setupInsightsTestDBMultiModel(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+
+	labelA1 := seedLabelForModel(t, db, "Turdus merula", 1)
+	labelA2 := seedLabelForModel(t, db, "Turdus merula", 2)
+
+	seedDetectionForModel(t, db, labelA1, 1, today.Add(2*time.Hour).Unix(), 0.9)
+	seedDetectionForModel(t, db, labelA2, 2, today.Add(3*time.Hour).Unix(), 0.85)
+
+	labelB := seedLabelForModel(t, db, "Parus major", 1)
+	seedDetectionForModel(t, db, labelB, 1, today.Add(4*time.Hour).Unix(), 0.8)
+
+	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), nil)
+	require.NoError(t, err)
+	require.NotNil(t, kpis)
+	assert.Equal(t, int64(2), kpis.LifetimeSpecies, "same species from two models should count as one")
+	assert.Equal(t, int64(3), kpis.TodayDetections)
+}
+
+func TestGetNewArrivals_MultiModel_FilterByModel(t *testing.T) {
+	db := setupInsightsTestDBMultiModel(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	now := time.Now()
+	fourteenDaysAgo := now.AddDate(0, 0, -14).Unix()
+
+	labelA1 := seedLabelForModel(t, db, "Chordeiles minor", 1)
+	labelA2 := seedLabelForModel(t, db, "Chordeiles minor", 2)
+
+	seedDetectionForModel(t, db, labelA1, 1, now.AddDate(0, 0, -5).Unix(), 0.9)
+	seedDetectionForModel(t, db, labelA2, 2, now.AddDate(0, 0, -3).Unix(), 0.85)
+
+	modelID := uint(1)
+	results, err := repo.GetNewArrivals(ctx, fourteenDaysAgo, &modelID)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "filtering by model should return only that model's detections")
+	assert.Equal(t, "Chordeiles minor", results[0].ScientificName)
+	assert.Equal(t, int64(1), results[0].DetectionCount, "should only count model 1 detections")
+}
+
 func TestGetExpectedSpeciesToday_EmptyRanges(t *testing.T) {
 	db := setupInsightsTestDB(t)
 	repo := NewInsightsRepository(db, false, false)

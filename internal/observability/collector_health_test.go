@@ -157,6 +157,35 @@ func TestCollector_SourceRemoval(t *testing.T) {
 	assert.Equal(t, int64(0), healthStore.LifetimeTotal("audio.drops.src2"))
 }
 
+func TestCollector_SeedsKeysOnFirstTick(t *testing.T) {
+	t.Parallel()
+	c, healthStore, _ := newTestCollectorWithHealth(t)
+
+	c.SetAudioRouter(func() []AudioRouterSnapshot {
+		return []AudioRouterSnapshot{
+			{SourceID: "src1", Drops: 0, Errors: 0},
+		}
+	})
+	c.SetStreamHealth(func() []StreamHealthSnapshot {
+		return []StreamHealthSnapshot{
+			{SourceID: "stream1", RestartCount: 0},
+		}
+	})
+
+	c.collectHealthCounters()
+
+	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixAudioDrops),
+		MetricPrefixAudioDrops+"src1")
+	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixAudioOverruns),
+		MetricPrefixAudioOverruns+"src1")
+	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixStreamRestarts),
+		MetricPrefixStreamRestarts+"stream1")
+
+	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixAudioDrops+"src1"))
+	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixAudioOverruns+"src1"))
+	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixStreamRestarts+"stream1"))
+}
+
 func TestCollector_NoHealthStoreSkips(t *testing.T) {
 	t.Parallel()
 	store := NewMemoryStore(100)

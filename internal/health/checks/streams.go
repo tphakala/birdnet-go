@@ -85,6 +85,12 @@ func (c *StreamConnectivityCheck) Run(_ context.Context) health.Result {
 	}
 }
 
+// Threshold constants for stream health checks.
+const (
+	streamBaseWarnThreshold = 3
+	streamBaseCritThreshold = 10
+)
+
 // StreamErrorRateCheck monitors RTSP stream restart counts using time-windowed evaluation.
 type StreamErrorRateCheck struct {
 	store     *observability.HealthMetricsStore
@@ -123,10 +129,11 @@ func (c *StreamErrorRateCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
 	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
-		warnThreshold: 3,
-		critThreshold: 10,
-		metricPrefix:  observability.MetricPrefixStreamRestarts,
-		window:        c.window,
+		baseWarnThreshold: streamBaseWarnThreshold,
+		baseCritThreshold: streamBaseCritThreshold,
+		sustainedHours:    defaultSustainedHours,
+		metricPrefix:      observability.MetricPrefixStreamRestarts,
+		window:            c.window,
 	}, start)
 }
 

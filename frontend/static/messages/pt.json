@@ -3079,6 +3079,26 @@
         "batWarning": "Os modelos de morcegos requerem streams com um codec sem perda (PCM) e uma taxa de amostragem de pelo menos 96 kHz. Use o botão Testar stream acima para verificar a compatibilidade.",
         "codecWarning": {
           "lossy": "Codecs com perdas (AAC, Opus, MP3) destroem frequências ultrassónicas acima de ~20 kHz, tornando o stream inadequado para a deteção de morcegos."
+        },
+        "channelMode": {
+          "analyzeError": "Falha na análise de canais",
+          "analyzing": "Analisando canais...",
+          "description": "Como lidar com áudio multicanal. Selecione um canal específico se sua fonte envia estéreo.",
+          "detectBest": "Detectar melhor canal",
+          "downmix": "Misturar para mono",
+          "downmixWarning": "A mistura para mono não é recomendada para streams estéreo. Diferenças de fase entre canais causam filtragem em pente que reduz a precisão de detecção. Selecione um canal específico em vez disso.",
+          "energyLeft": "Canal esquerdo",
+          "energyRight": "Canal direito",
+          "label": "Modo de canal",
+          "left": "Apenas canal esquerdo",
+          "recommended": "Recomendado: {channel}",
+          "right": "Apenas canal direito",
+          "singleChannelGood": "Canal único selecionado, ótimo para a precisão de detecção."
+        },
+        "stereoWarning": {
+          "message": "Stream estéreo detectado. A mistura de múltiplos canais pode reduzir a precisão de detecção devido a diferenças de fase entre canais. Selecione um canal específico (esquerdo/direito) ou use o detector de canais para melhores resultados.",
+          "short": "Downmix estéreo ativo. A precisão de detecção pode estar reduzida. Edite para selecionar um canal específico.",
+          "tooltip": "Downmix estéreo ativo. A precisão de detecção pode estar reduzida. Edite para selecionar um canal específico."
         }
       },
       "audioFilters": {
@@ -4929,7 +4949,17 @@
       "source": "Fonte",
       "count": "Contagem",
       "lifetime": "total",
-      "sparklineLabel": "Gráfico de atividade"
+      "sparklineLabel": "Gráfico de atividade",
+      "activeHours": "Horas ativas",
+      "windowTotal": "Na janela",
+      "velocity": "Tendência",
+      "velocityStable": "Estável",
+      "velocityIncreasing": "Em aumento",
+      "velocityDecreasing": "Em queda",
+      "pattern": "Padrão",
+      "patternNone": "Nenhum",
+      "patternTransient": "Transitório",
+      "patternSustained": "Persistente"
     }
   }
 }
