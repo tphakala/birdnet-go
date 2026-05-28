@@ -499,6 +499,28 @@ func TestGetDashboardKPIs_MultiModel(t *testing.T) {
 	assert.Equal(t, int64(3), kpis.TodayDetections)
 }
 
+func TestGetNewArrivals_MultiModel_FilterByModel(t *testing.T) {
+	db := setupInsightsTestDBMultiModel(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	now := time.Now()
+	fourteenDaysAgo := now.AddDate(0, 0, -14).Unix()
+
+	labelA1 := seedLabelForModel(t, db, "Chordeiles minor", 1)
+	labelA2 := seedLabelForModel(t, db, "Chordeiles minor", 2)
+
+	seedDetectionForModel(t, db, labelA1, 1, now.AddDate(0, 0, -5).Unix(), 0.9)
+	seedDetectionForModel(t, db, labelA2, 2, now.AddDate(0, 0, -3).Unix(), 0.85)
+
+	modelID := uint(1)
+	results, err := repo.GetNewArrivals(ctx, fourteenDaysAgo, &modelID)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "filtering by model should return only that model's detections")
+	assert.Equal(t, "Chordeiles minor", results[0].ScientificName)
+	assert.Equal(t, int64(1), results[0].DetectionCount, "should only count model 1 detections")
+}
+
 func TestGetExpectedSpeciesToday_EmptyRanges(t *testing.T) {
 	db := setupInsightsTestDB(t)
 	repo := NewInsightsRepository(db, false, false)
