@@ -13,6 +13,10 @@
     Info,
     ChevronDown,
     RefreshCw,
+    TrendingUp,
+    TrendingDown,
+    Minus,
+    Activity,
   } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t, getLocale } from '$lib/i18n';
@@ -174,6 +178,50 @@
     }
   }
 
+  function velocityLabel(velocity: string): string {
+    switch (velocity) {
+      case 'increasing':
+        return t('health.detail.velocityIncreasing');
+      case 'decreasing':
+        return t('health.detail.velocityDecreasing');
+      default:
+        return t('health.detail.velocityStable');
+    }
+  }
+
+  function velocityColor(velocity: string): string {
+    switch (velocity) {
+      case 'increasing':
+        return 'var(--color-error)';
+      case 'decreasing':
+        return 'var(--color-success)';
+      default:
+        return 'var(--color-base-content)';
+    }
+  }
+
+  function patternLabel(pattern: string): string {
+    switch (pattern) {
+      case 'sustained':
+        return t('health.detail.patternSustained');
+      case 'transient':
+        return t('health.detail.patternTransient');
+      default:
+        return t('health.detail.patternNone');
+    }
+  }
+
+  function patternColor(pattern: string): string {
+    switch (pattern) {
+      case 'sustained':
+        return 'var(--color-error)';
+      case 'transient':
+        return 'var(--color-warning)';
+      default:
+        return 'var(--color-base-content)';
+    }
+  }
+
   function formatTimeAgo(isoTime: string): string {
     const now = Date.now();
     const then = new Date(isoTime).getTime();
@@ -284,6 +332,19 @@
       for (const r of results) {
         const statusLabel = t(`health.status.${r.status}`);
         lines.push(`  [${statusLabel}] ${formatCheckName(r.name)}: ${r.message}`);
+        const d = r.details;
+        if (d) {
+          const parts: string[] = [];
+          if (typeof d.window_total === 'number' && d.window_total > 0)
+            parts.push(`${t('health.detail.windowTotal')}: ${d.window_total}`);
+          if (typeof d.active_hours === 'number' && d.active_hours > 0)
+            parts.push(`${t('health.detail.activeHours')}: ${d.active_hours}`);
+          if (typeof d.pattern === 'string' && d.pattern !== 'none')
+            parts.push(`${t('health.detail.pattern')}: ${patternLabel(d.pattern)}`);
+          if (typeof d.velocity === 'string' && d.velocity !== 'n/a')
+            parts.push(`${t('health.detail.velocity')}: ${velocityLabel(d.velocity)}`);
+          if (parts.length > 0) lines.push(`    ${parts.join(' | ')}`);
+        }
       }
       lines.push('');
     }
@@ -366,7 +427,7 @@
           <span class="text-xs font-medium text-muted">{t('health.summary.healthy')}</span>
         </div>
         <span class="font-mono tabular-nums text-2xl font-semibold text-[var(--color-success)]">
-          {report?.count_by_status?.healthy ?? (running ? '…' : '—')}
+          {report?.count_by_status?.healthy ?? (running ? '…' : '-')}
         </span>
       </div>
       <div class="mt-auto text-xs text-muted">
@@ -399,7 +460,7 @@
             ? 'text-[var(--color-warning)]'
             : 'opacity-40'}"
         >
-          {report?.count_by_status?.warning ?? (running ? '…' : '—')}
+          {report?.count_by_status?.warning ?? (running ? '…' : '-')}
         </span>
       </div>
       <div class="mt-auto text-xs text-muted">
@@ -432,7 +493,7 @@
             ? 'text-[var(--color-error)]'
             : 'opacity-40'}"
         >
-          {report?.count_by_status?.critical ?? (running ? '…' : '—')}
+          {report?.count_by_status?.critical ?? (running ? '…' : '-')}
         </span>
       </div>
       <div class="mt-auto text-xs text-muted">
@@ -463,7 +524,7 @@
           class="font-mono tabular-nums text-2xl font-semibold"
           class:opacity-40={!((report?.count_by_status?.skipped ?? 0) > 0)}
         >
-          {report?.count_by_status?.skipped ?? (running ? '…' : '—')}
+          {report?.count_by_status?.skipped ?? (running ? '…' : '-')}
         </span>
       </div>
       <div class="mt-auto text-xs text-muted">
@@ -716,6 +777,66 @@
                           <span class="text-xs opacity-50">
                             ({result.details.lifetime_total}
                             {t('health.detail.lifetime')})
+                          </span>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    <!-- Severity Signal Metadata -->
+                    {@const activeHours = result.details?.active_hours}
+                    {@const velocity = result.details?.velocity}
+                    {@const pattern = result.details?.pattern}
+                    {@const windowTotal = result.details?.window_total}
+                    {#if (typeof activeHours === 'number' && activeHours > 0) || (typeof velocity === 'string' && velocity !== 'n/a') || (typeof pattern === 'string' && pattern !== 'none')}
+                      <div
+                        class="px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-[var(--color-base-200)]/50"
+                      >
+                        {#if windowTotal != null && typeof windowTotal === 'number' && windowTotal > 0}
+                          <span class="inline-flex items-center gap-1.5 text-xs">
+                            <Activity class="size-3 opacity-50" />
+                            <span class="opacity-60">{t('health.detail.windowTotal')}:</span>
+                            <span class="font-medium font-mono">{windowTotal}</span>
+                          </span>
+                        {/if}
+
+                        {#if typeof activeHours === 'number' && activeHours > 0}
+                          <span class="inline-flex items-center gap-1.5 text-xs">
+                            <Clock class="size-3 opacity-50" />
+                            <span class="opacity-60">{t('health.detail.activeHours')}:</span>
+                            <span class="font-medium font-mono">{activeHours}</span>
+                          </span>
+                        {/if}
+
+                        {#if typeof pattern === 'string' && pattern !== 'none'}
+                          <span class="inline-flex items-center gap-1.5 text-xs">
+                            <span class="opacity-60">{t('health.detail.pattern')}:</span>
+                            <span
+                              class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
+                              style:color={patternColor(pattern)}
+                              style:background="color-mix(in srgb, {patternColor(pattern)} 10%, transparent)"
+                            >
+                              {patternLabel(pattern)}
+                            </span>
+                          </span>
+                        {/if}
+
+                        {#if typeof velocity === 'string' && velocity !== 'n/a'}
+                          <span class="inline-flex items-center gap-1.5 text-xs">
+                            <span class="opacity-60">{t('health.detail.velocity')}:</span>
+                            <span
+                              class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                              style:color={velocityColor(velocity)}
+                              style:background="color-mix(in srgb, {velocityColor(velocity)} 10%, transparent)"
+                            >
+                              {#if velocity === 'increasing'}
+                                <TrendingUp class="size-3" />
+                              {:else if velocity === 'decreasing'}
+                                <TrendingDown class="size-3" />
+                              {:else}
+                                <Minus class="size-3" />
+                              {/if}
+                              {velocityLabel(velocity)}
+                            </span>
                           </span>
                         {/if}
                       </div>

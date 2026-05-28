@@ -4927,7 +4927,17 @@
       "source": "Lähde",
       "count": "Määrä",
       "lifetime": "yhteensä",
-      "sparklineLabel": "Aktiivisuuskaavio"
+      "sparklineLabel": "Aktiivisuuskaavio",
+      "activeHours": "Aktiiviset tunnit",
+      "windowTotal": "Ikkunassa",
+      "velocity": "Suunta",
+      "velocityStable": "Vakaa",
+      "velocityIncreasing": "Kasvava",
+      "velocityDecreasing": "Laskeva",
+      "pattern": "Kaava",
+      "patternNone": "Ei mitään",
+      "patternTransient": "Ohimenevä",
+      "patternSustained": "Jatkuva"
     }
   }
 }

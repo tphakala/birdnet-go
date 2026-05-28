@@ -4927,7 +4927,17 @@
       "source": "Forrás",
       "count": "Darab",
       "lifetime": "összesen",
-      "sparklineLabel": "Aktivitási diagram"
+      "sparklineLabel": "Aktivitási diagram",
+      "activeHours": "Aktív órák",
+      "windowTotal": "Az ablakban",
+      "velocity": "Tendencia",
+      "velocityStable": "Stabil",
+      "velocityIncreasing": "Növekvő",
+      "velocityDecreasing": "Csökkenő",
+      "pattern": "Minta",
+      "patternNone": "Nincs",
+      "patternTransient": "Átmeneti",
+      "patternSustained": "Tartós"
     }
   }
 }

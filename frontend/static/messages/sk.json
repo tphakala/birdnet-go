@@ -4927,7 +4927,17 @@
       "source": "Zdroj",
       "count": "Počet",
       "lifetime": "celkom",
-      "sparklineLabel": "Graf aktivity"
+      "sparklineLabel": "Graf aktivity",
+      "activeHours": "Aktívne hodiny",
+      "windowTotal": "V okne",
+      "velocity": "Trend",
+      "velocityStable": "Stabilný",
+      "velocityIncreasing": "Stúpajúci",
+      "velocityDecreasing": "Klesajúci",
+      "pattern": "Vzor",
+      "patternNone": "Žiadny",
+      "patternTransient": "Prechodný",
+      "patternSustained": "Trvalý"
     }
   }
 }

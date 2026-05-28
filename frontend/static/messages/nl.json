@@ -4927,7 +4927,17 @@
       "source": "Bron",
       "count": "Aantal",
       "lifetime": "totaal",
-      "sparklineLabel": "Activiteitsgrafiek"
+      "sparklineLabel": "Activiteitsgrafiek",
+      "activeHours": "Actieve uren",
+      "windowTotal": "In venster",
+      "velocity": "Trend",
+      "velocityStable": "Stabiel",
+      "velocityIncreasing": "Stijgend",
+      "velocityDecreasing": "Dalend",
+      "pattern": "Patroon",
+      "patternNone": "Geen",
+      "patternTransient": "Voorbijgaand",
+      "patternSustained": "Aanhoudend"
     }
   }
 }

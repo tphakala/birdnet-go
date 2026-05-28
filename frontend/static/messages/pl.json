@@ -4927,7 +4927,17 @@
       "source": "Źródło",
       "count": "Liczba",
       "lifetime": "łącznie",
-      "sparklineLabel": "Wykres aktywności"
+      "sparklineLabel": "Wykres aktywności",
+      "activeHours": "Aktywne godziny",
+      "windowTotal": "W oknie",
+      "velocity": "Trend",
+      "velocityStable": "Stabilny",
+      "velocityIncreasing": "Rosnący",
+      "velocityDecreasing": "Malejący",
+      "pattern": "Wzorzec",
+      "patternNone": "Brak",
+      "patternTransient": "Przejściowy",
+      "patternSustained": "Utrzymujący się"
     }
   }
 }
