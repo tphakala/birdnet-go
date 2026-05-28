@@ -657,7 +657,6 @@ tasks:
 
   check-tensorflow:
     desc: Clone TensorFlow headers for CGo compilation
-    internal: true
     cmds:
       - |
         if [ ! -f "$HOME/src/tensorflow/tensorflow/lite/c/c_api.h" ]; then
