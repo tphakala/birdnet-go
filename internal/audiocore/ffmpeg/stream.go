@@ -1931,7 +1931,7 @@ func (s *Stream) conditionalFailureReset(totalBytesReceived int64) {
 // strip it and fall back to the default.
 func detectUserTimeout(params []string) (found bool, value string) {
 	for i, param := range params {
-		if param == ffmpegTimeoutParam || param == ffmpegRTSPTimeoutParam {
+		if param == ffmpegTimeoutParam || param == ffmpegRTSPTimeoutParam || param == ffmpegLegacyRTSPTimeoutParam {
 			if i+1 < len(params) {
 				return true, params[i+1]
 			}

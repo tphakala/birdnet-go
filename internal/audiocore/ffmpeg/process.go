@@ -29,6 +29,12 @@ const ffmpegTimeoutParam = "-timeout"
 // Using -timeout works across all supported versions.
 const ffmpegRTSPTimeoutParam = "-timeout"
 
+// ffmpegLegacyRTSPTimeoutParam is the deprecated -stimeout flag that older FFmpeg
+// used for RTSP. We no longer emit it, but we still recognise it in user-supplied
+// parameters so a carried-over value is honoured and the unsupported flag is
+// stripped before reaching FFmpeg.
+const ffmpegLegacyRTSPTimeoutParam = "-stimeout"
+
 // timeoutParamForSource returns the correct FFmpeg timeout flag for the given source type.
 func timeoutParamForSource(st audiocore.SourceType) string {
 	if st == audiocore.SourceTypeRTSP {
@@ -46,7 +52,7 @@ func stripTimeoutParams(params []string) []string {
 			skipNext = false
 			continue
 		}
-		if param == ffmpegTimeoutParam || param == ffmpegRTSPTimeoutParam {
+		if param == ffmpegTimeoutParam || param == ffmpegRTSPTimeoutParam || param == ffmpegLegacyRTSPTimeoutParam {
 			skipNext = true
 			continue
 		}

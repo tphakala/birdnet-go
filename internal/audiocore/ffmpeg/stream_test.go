@@ -15,11 +15,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 )
 
-// ffmpegTimeoutFlag is the FFmpeg flag name for connection timeout used in tests (non-RTSP).
+// ffmpegTimeoutFlag is the FFmpeg connection timeout flag emitted for all source
+// types, including RTSP (the legacy -stimeout was removed in FFmpeg 5.x+).
 const ffmpegTimeoutFlag = "-timeout"
 
-// ffmpegRTSPTimeoutFlag is the RTSP-specific stream timeout flag used in tests.
-const ffmpegRTSPTimeoutFlag = "-stimeout"
+// ffmpegLegacyTimeoutFlag is the deprecated RTSP -stimeout flag. It must never be
+// emitted, but is still recognised when present in user-supplied parameters.
+const ffmpegLegacyTimeoutFlag = "-stimeout"
 
 // newTestConfig returns a minimal StreamConfig suitable for unit tests.
 func newTestConfig() StreamConfig {
@@ -801,8 +803,8 @@ func TestStream_BuildFFmpegInputArgs_RTSP(t *testing.T) {
 
 	assert.Contains(t, args, "-rtsp_transport")
 	assert.Contains(t, args, "tcp")
-	assert.Contains(t, args, ffmpegRTSPTimeoutFlag, "RTSP must use -stimeout, not -timeout")
-	assert.NotContains(t, args, ffmpegTimeoutFlag, "RTSP must not use -timeout")
+	assert.Contains(t, args, ffmpegTimeoutFlag, "RTSP must use -timeout")
+	assert.NotContains(t, args, ffmpegLegacyTimeoutFlag, "RTSP must not use legacy -stimeout")
 }
 
 func TestStream_BuildFFmpegInputArgs_HTTP(t *testing.T) {
@@ -817,7 +819,7 @@ func TestStream_BuildFFmpegInputArgs_HTTP(t *testing.T) {
 
 	assert.NotContains(t, args, "-rtsp_transport", "HTTP stream should not have RTSP transport")
 	assert.Contains(t, args, ffmpegTimeoutFlag, "HTTP must use -timeout")
-	assert.NotContains(t, args, ffmpegRTSPTimeoutFlag, "HTTP must not use -stimeout")
+	assert.NotContains(t, args, ffmpegLegacyTimeoutFlag, "HTTP must not use legacy -stimeout")
 }
 
 func TestStream_BuildFFmpegInputArgs_InvalidTimeout(t *testing.T) {
@@ -829,21 +831,21 @@ func TestStream_BuildFFmpegInputArgs_InvalidTimeout(t *testing.T) {
 	params := []string{"-timeout", "abc", "-loglevel", "debug"}
 	args := stream.buildFFmpegInputArgs(params)
 
-	// RTSP stream: invalid user -timeout should be replaced with -stimeout default.
-	timeoutIdx := slices.Index(args, ffmpegRTSPTimeoutFlag)
-	require.NotEqual(t, -1, timeoutIdx, "-stimeout flag must be present for RTSP")
-	require.Less(t, timeoutIdx+1, len(args), "-stimeout must have a following value")
+	// RTSP stream: invalid user -timeout should be replaced with the -timeout default.
+	timeoutIdx := slices.Index(args, ffmpegTimeoutFlag)
+	require.NotEqual(t, -1, timeoutIdx, "-timeout flag must be present for RTSP")
+	require.Less(t, timeoutIdx+1, len(args), "-timeout must have a following value")
 	assert.NotEqual(t, "abc", args[timeoutIdx+1], "invalid timeout value must not reach FFmpeg")
 
 	count := 0
 	for _, a := range args {
-		if a == ffmpegRTSPTimeoutFlag {
+		if a == ffmpegTimeoutFlag {
 			count++
 		}
 	}
-	assert.Equal(t, 1, count, "-stimeout must appear exactly once")
+	assert.Equal(t, 1, count, "-timeout must appear exactly once")
 
-	assert.NotContains(t, args, ffmpegTimeoutFlag, "RTSP must not contain -timeout")
+	assert.NotContains(t, args, ffmpegLegacyTimeoutFlag, "RTSP must not contain legacy -stimeout")
 	assert.Contains(t, args, "-loglevel")
 	assert.Contains(t, args, "debug")
 }
@@ -858,18 +860,16 @@ func TestStream_BuildFFmpegInputArgs_ProtocolSpecific(t *testing.T) {
 		transport         string
 		ffmpegParams      []string
 		wantRTSPTransport bool
-		wantStimeout      bool // RTSP uses -stimeout
-		wantTimeout       bool // non-RTSP uses -timeout
+		wantTimeout       bool // all source types now use -timeout
 	}{
 		{
-			name:              "rtsp_stream_uses_stimeout",
+			name:              "rtsp_stream_uses_timeout",
 			url:               "rtsp://192.168.1.100/stream",
 			sourceType:        "rtsp",
 			transport:         "tcp",
 			ffmpegParams:      []string{},
 			wantRTSPTransport: true,
-			wantStimeout:      true,
-			wantTimeout:       false,
+			wantTimeout:       true,
 		},
 		{
 			name:              "http_stream_uses_timeout",
@@ -878,7 +878,6 @@ func TestStream_BuildFFmpegInputArgs_ProtocolSpecific(t *testing.T) {
 			transport:         "tcp",
 			ffmpegParams:      []string{"-f", "s16le", "-ar", "48000", "-ac", "1"},
 			wantRTSPTransport: false,
-			wantStimeout:      false,
 			wantTimeout:       true,
 		},
 		{
@@ -888,18 +887,16 @@ func TestStream_BuildFFmpegInputArgs_ProtocolSpecific(t *testing.T) {
 			transport:         "tcp",
 			ffmpegParams:      []string{},
 			wantRTSPTransport: false,
-			wantStimeout:      false,
 			wantTimeout:       true,
 		},
 		{
-			name:              "rtsp_with_user_timeout_converts_to_stimeout",
+			name:              "rtsp_with_user_timeout_stays_timeout",
 			url:               "rtsp://192.168.1.100/stream",
 			sourceType:        "rtsp",
 			transport:         "udp",
 			ffmpegParams:      []string{"-timeout", "5000000"},
 			wantRTSPTransport: true,
-			wantStimeout:      true,
-			wantTimeout:       false,
+			wantTimeout:       true,
 		},
 	}
 
@@ -916,12 +913,12 @@ func TestStream_BuildFFmpegInputArgs_ProtocolSpecific(t *testing.T) {
 			args := stream.buildFFmpegInputArgs(tt.ffmpegParams)
 
 			hasRTSPTransport := slices.Contains(args, "-rtsp_transport")
-			hasStimeout := slices.Contains(args, ffmpegRTSPTimeoutFlag)
 			hasTimeout := slices.Contains(args, ffmpegTimeoutFlag)
+			hasLegacyTimeout := slices.Contains(args, ffmpegLegacyTimeoutFlag)
 
 			assert.Equal(t, tt.wantRTSPTransport, hasRTSPTransport, "rtsp_transport flag presence mismatch")
-			assert.Equal(t, tt.wantStimeout, hasStimeout, "-stimeout flag presence mismatch")
 			assert.Equal(t, tt.wantTimeout, hasTimeout, "-timeout flag presence mismatch")
+			assert.False(t, hasLegacyTimeout, "legacy -stimeout must never be emitted")
 		})
 	}
 }

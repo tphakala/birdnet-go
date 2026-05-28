@@ -33,10 +33,10 @@ func TestBuildFFmpegArgs_RTSP(t *testing.T) {
 	require.Less(t, rtspIdx+1, len(args), "-rtsp_transport must have a value")
 	assert.Equal(t, "tcp", args[rtspIdx+1])
 
-	// RTSP must use -stimeout, not -timeout.
-	stimeoutIdx := slices.Index(args, "-stimeout")
-	require.NotEqual(t, -1, stimeoutIdx, "expected -stimeout flag for RTSP")
-	assert.Equal(t, -1, slices.Index(args, "-timeout"), "RTSP must not use -timeout")
+	// RTSP must use -timeout; the legacy -stimeout was removed in FFmpeg 5.x+.
+	timeoutIdx := slices.Index(args, "-timeout")
+	require.NotEqual(t, -1, timeoutIdx, "expected -timeout flag for RTSP")
+	assert.Equal(t, -1, slices.Index(args, "-stimeout"), "RTSP must not use legacy -stimeout")
 
 	// Input URL must be present.
 	iIdx := slices.Index(args, "-i")
@@ -99,33 +99,33 @@ func TestBuildFFmpegArgs_CustomTimeout(t *testing.T) {
 		Transport: "tcp",
 	}
 
-	// User provides -timeout but RTSP needs -stimeout.
+	// User provides -timeout; RTSP now also uses -timeout.
 	customParams := []string{"-timeout", "5000000"}
 	args := BuildFFmpegArgs(cfg, customParams)
 
-	// Must be converted to -stimeout with the user's value.
-	stimeoutIdx := slices.Index(args, "-stimeout")
-	require.NotEqual(t, -1, stimeoutIdx, "expected -stimeout for RTSP")
-	require.Less(t, stimeoutIdx+1, len(args), "-stimeout must have a value")
-	assert.Equal(t, "5000000", args[stimeoutIdx+1])
+	// The user's value must be honoured on the -timeout flag.
+	timeoutIdx := slices.Index(args, "-timeout")
+	require.NotEqual(t, -1, timeoutIdx, "expected -timeout for RTSP")
+	require.Less(t, timeoutIdx+1, len(args), "-timeout must have a value")
+	assert.Equal(t, "5000000", args[timeoutIdx+1])
 
-	// -timeout must not appear (stripped and converted).
-	assert.Equal(t, -1, slices.Index(args, "-timeout"), "RTSP must not contain -timeout")
+	// Legacy -stimeout must not appear.
+	assert.Equal(t, -1, slices.Index(args, "-stimeout"), "RTSP must not contain legacy -stimeout")
 
-	// -stimeout must appear only once.
+	// -timeout must appear only once.
 	count := 0
 	for _, a := range args {
-		if a == "-stimeout" {
+		if a == "-timeout" {
 			count++
 		}
 	}
-	assert.Equal(t, 1, count, "-stimeout must appear exactly once")
+	assert.Equal(t, 1, count, "-timeout must appear exactly once")
 }
 
 func TestTimeoutParamForSource(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "-stimeout", timeoutParamForSource(audiocore.SourceTypeRTSP))
+	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeRTSP))
 	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeHTTP))
 	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeHLS))
 	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeRTMP))
