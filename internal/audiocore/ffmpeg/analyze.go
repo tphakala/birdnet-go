@@ -109,7 +109,7 @@ func buildAnalysisArgs(url string) []string {
 
 	timeoutKey := ffmpegTimeoutParam
 	if isRTSP {
-		timeoutKey = "-stimeout"
+		timeoutKey = ffmpegRTSPTimeoutParam
 	}
 
 	args = append(args,

@@ -288,6 +288,7 @@ type StreamHealth struct {
 	StateHistory       []StateTransition
 	LastErrorContext   *ErrorContext
 	ErrorHistory       []*ErrorContext
+	SourceChannels     int
 }
 
 // dataRateCalculator tracks data rate over a sliding window.
@@ -892,8 +893,10 @@ func (s *Stream) startProcess() error {
 
 // buildFFmpegInputArgs constructs the FFmpeg input arguments for this stream.
 // RTSP-specific flags like -rtsp_transport are only added for RTSP streams.
+// RTSP streams use -stimeout (FFmpeg ignores -timeout for the RTSP protocol).
 func (s *Stream) buildFFmpegInputArgs(ffmpegParameters []string) []string {
 	args := []string{}
+	timeoutFlag := timeoutParamForSource(s.config.sourceType())
 
 	if s.config.sourceType() == audiocore.SourceTypeRTSP {
 		args = append(args, "-rtsp_transport", s.config.Transport)
@@ -902,38 +905,25 @@ func (s *Stream) buildFFmpegInputArgs(ffmpegParameters []string) []string {
 	hasUserTimeout, userTimeoutValue := detectUserTimeout(ffmpegParameters)
 
 	if !hasUserTimeout {
-		args = append(args, "-timeout", strconv.FormatInt(defaultTimeoutMicroseconds, 10))
-	}
-
-	if len(ffmpegParameters) > 0 {
-		if hasUserTimeout {
-			if err := s.validateUserTimeout(userTimeoutValue); err != nil {
-				getStreamLogger().Warn("invalid user timeout, using default",
-					logger.String("url", s.config.safeURL()),
-					logger.String("user_timeout", userTimeoutValue),
-					logger.Error(err),
-					logger.String("component", "ffmpeg-stream"),
-					logger.String("operation", "validate_timeout"))
-				args = append(args, "-timeout", strconv.FormatInt(defaultTimeoutMicroseconds, 10))
-				skipNext := false
-				for _, param := range ffmpegParameters {
-					if skipNext {
-						skipNext = false
-						continue
-					}
-					if param == "-timeout" {
-						skipNext = true
-						continue
-					}
-					args = append(args, param)
-				}
-			} else {
-				args = append(args, ffmpegParameters...)
-			}
-		} else {
+		args = append(args, timeoutFlag, strconv.FormatInt(defaultTimeoutMicroseconds, 10))
+		if len(ffmpegParameters) > 0 {
 			args = append(args, ffmpegParameters...)
 		}
+		return args
 	}
+
+	if err := s.validateUserTimeout(userTimeoutValue); err != nil {
+		getStreamLogger().Warn("invalid user timeout, using default",
+			logger.String("url", s.config.safeURL()),
+			logger.String("user_timeout", userTimeoutValue),
+			logger.Error(err),
+			logger.String("component", "ffmpeg-stream"),
+			logger.String("operation", "validate_timeout"))
+		args = append(args, timeoutFlag, strconv.FormatInt(defaultTimeoutMicroseconds, 10))
+	} else {
+		args = append(args, timeoutFlag, userTimeoutValue)
+	}
+	args = append(args, stripTimeoutParams(ffmpegParameters)...)
 
 	return args
 }
@@ -1716,6 +1706,7 @@ func (s *Stream) GetHealth() StreamHealth {
 		StateHistory:       recentHistory,
 		LastErrorContext:   lastError,
 		ErrorHistory:       recentErrors,
+		SourceChannels:     s.config.SourceChannels,
 	}
 }
 
@@ -1934,10 +1925,17 @@ func (s *Stream) conditionalFailureReset(totalBytesReceived int64) {
 }
 
 // detectUserTimeout scans FFmpeg parameters for an existing timeout setting.
+// Detects both -timeout and -stimeout so user-provided values are honoured
+// regardless of which flag the user specified. A dangling flag with no
+// following value is reported as found with an empty value so callers can
+// strip it and fall back to the default.
 func detectUserTimeout(params []string) (found bool, value string) {
 	for i, param := range params {
-		if param == "-timeout" && i+1 < len(params) {
-			return true, params[i+1]
+		if param == ffmpegTimeoutParam || param == ffmpegRTSPTimeoutParam {
+			if i+1 < len(params) {
+				return true, params[i+1]
+			}
+			return true, ""
 		}
 	}
 	return false, ""

@@ -52,6 +52,8 @@ type StreamHealthResponse struct {
 	TotalBytesReceived int64   `json:"total_bytes_received"` // Total bytes received
 	BytesPerSecond     float64 `json:"bytes_per_second"`     // Current data rate
 	IsReceivingData    bool    `json:"is_receiving_data"`    // Whether stream is actively receiving data
+	// Audio info
+	SourceChannels int `json:"source_channels,omitempty"` // Detected channel count of the remote source (0 if unknown)
 	// Error diagnostics (from PR #1380)
 	LastErrorContext *ErrorContextResponse   `json:"last_error_context,omitempty"` // Most recent error with troubleshooting
 	ErrorHistory     []*ErrorContextResponse `json:"error_history,omitempty"`      // Recent errors (last 10)
@@ -385,6 +387,7 @@ func convertStreamHealthToResponse(rawURL string, health *ffmpeg.StreamHealth) S
 		TotalBytesReceived: health.TotalBytesReceived,
 		BytesPerSecond:     health.BytesPerSecond,
 		IsReceivingData:    health.IsReceivingData,
+		SourceChannels:     health.SourceChannels,
 	}
 
 	// Handle LastDataReceived (may be zero time if never received data)
@@ -791,6 +794,7 @@ func (c *Controller) sendStreamStatsUpdate(ctx echo.Context, rawURL string, heal
 		TotalBytesReceived: health.TotalBytesReceived,
 		BytesPerSecond:     health.BytesPerSecond,
 		IsReceivingData:    health.IsReceivingData,
+		SourceChannels:     health.SourceChannels,
 		TimeSinceData:      timeSinceData,
 		// Explicitly omit: ErrorHistory, StateHistory, LastErrorContext
 	}
