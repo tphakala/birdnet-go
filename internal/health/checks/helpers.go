@@ -261,13 +261,17 @@ func applySeveritySignals(s *severitySignals, defaultMsg string) (status health.
 	peakEscalated := false
 
 	// Safety net: severe hourly spike overrides window-scaled thresholds.
-	if s.maxHourly >= s.baseCritThreshold {
-		return health.StatusCritical, fmt.Sprintf("%d %s in %s, peak hour: %d %s%s",
-			s.windowTotal, label, windowStr, s.maxHourly, label, ctx)
-	}
+	// Only enabled for windows >= 1h; sub-hour windows share a single bucket
+	// with events outside the window, causing false positives.
+	if s.window >= time.Hour {
+		if s.maxHourly >= s.baseCritThreshold {
+			return health.StatusCritical, fmt.Sprintf("%d %s in %s, peak hour: %d %s%s",
+				s.windowTotal, label, windowStr, s.maxHourly, label, ctx)
+		}
 
-	if s.maxHourly >= s.baseWarnThreshold {
-		peakEscalated = true
+		if s.maxHourly >= s.baseWarnThreshold {
+			peakEscalated = true
+		}
 	}
 
 	// Volume floor prevents classifying negligible noise as sustained

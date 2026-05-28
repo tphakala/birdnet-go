@@ -80,11 +80,10 @@ func TestCountActiveHours(t *testing.T) {
 			// 3h window: cutoff = now-3h.
 			// Oldest bucket end = (now-4h)+1h = now-3h, which equals cutoff exactly.
 			// The condition is !Before(cutoff), so now-3h is NOT before now-3h -> included.
-			// That bucket has count 10, so all 5 buckets are in window; counts {10,5,0,3} active = 4.
-			// NOTE: we use count 0 in slot 1 to verify exclusion only happens beyond strict cutoff.
+			// That bucket has count 10, so all 5 buckets are in window; counts {10,5,0,3,7} active = 4.
 			name:   "oldest bucket end equals cutoff is included",
 			counts: []int64{10, 5, 0, 3, 7},
-			window: 4 * time.Hour,
+			window: 3 * time.Hour,
 			want:   4,
 		},
 		{
@@ -164,15 +163,13 @@ func TestDetectVelocity(t *testing.T) {
 			want:   velocityIncreasing,
 		},
 		{
-			// 5 buckets, 2h window: cutoff = now-2h.
-			// Oldest bucket starts now-4h, ends now-3h; NOT in window.
-			// In-window buckets (3): counts [5, 3] -> last two [5, 3] -> decreasing.
-			// Use 2h window so oldest 2 buckets are excluded.
+			// 5 buckets, 2h window: cutoff = bucketNow-2h.
+			// Oldest bucket starts bucketNow-4h, ends bucketNow-3h; NOT in window.
+			// In-window buckets (3): counts [5, 3, 0] -> last two [3, 0] -> decreasing.
 			name:   "old bucket excluded by window uses last two in-window",
 			counts: []int64{100, 99, 5, 3, 0},
 			window: 2 * time.Hour,
-			// Last 2 in-window: counts 3, 0 -> decreasing.
-			want: velocityDecreasing,
+			want:   velocityDecreasing,
 		},
 	}
 
