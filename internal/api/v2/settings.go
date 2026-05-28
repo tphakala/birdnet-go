@@ -2340,7 +2340,7 @@ func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		return true
 	}
 
-	// Check for changes in individual streams (name, URL, type, transport, or models)
+	// Check for changes in individual streams (name, URL, type, transport, channel mode, or models)
 	for i := range oldRTSP.Streams {
 		if i >= len(newRTSP.Streams) {
 			return true
@@ -2352,6 +2352,7 @@ func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 			oldStream.IsEnabled() != newStream.IsEnabled() ||
 			oldStream.Type != newStream.Type ||
 			oldStream.Transport != newStream.Transport ||
+			oldStream.ChannelMode != newStream.ChannelMode ||
 			!slices.Equal(oldStream.Models, newStream.Models) {
 			return true
 		}
