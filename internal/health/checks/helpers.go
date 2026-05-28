@@ -56,6 +56,11 @@ func skippedResult(name string, category health.Category, start time.Time) healt
 // are considered a sustained pattern rather than transient spikes.
 const defaultSustainedHours = 3
 
+// minWindowForRecurrence is the minimum evaluation window for recurrence and
+// velocity analysis to be meaningful. Hourly bucket resolution is too coarse
+// for shorter windows.
+const minWindowForRecurrence = 3 * time.Hour
+
 // windowedStatsConfig parameterises evalWindowedStats for counter-based checks.
 type windowedStatsConfig struct {
 	baseWarnThreshold int64
@@ -136,13 +141,15 @@ func evalWindowedStats(
 	warnThreshold := cfg.baseWarnThreshold * windowHours
 	critThreshold := cfg.baseCritThreshold * windowHours
 
-	recurrenceEnabled := cfg.window >= 3*time.Hour
+	recurrenceEnabled := cfg.window >= minWindowForRecurrence
 	activeHours := countActiveHours(sparkline, cfg.window, now)
 	maxHourly := maxBucketCount(sparkline, cfg.window, now)
 
 	var velocity velocityTrend
+	velocityDetail := "n/a"
 	if recurrenceEnabled {
 		velocity = detectVelocity(sparkline, cfg.window, now)
+		velocityDetail = velocityString(velocity)
 	}
 
 	status := health.StatusHealthy
@@ -162,6 +169,8 @@ func evalWindowedStats(
 			peakEscalated = true
 		}
 
+		// Volume floor prevents classifying negligible noise as sustained
+		// (e.g. 1 drop/hr for 3 hrs = 3 total, below floor of 5 with baseWarn=10).
 		sustainedVolumeFloor := warnThreshold / 2
 
 		// Sustained recurrence pattern.
@@ -223,9 +232,9 @@ func evalWindowedStats(
 		"lifetime_total": lifetimeTotal,
 		"sources":        activeSources,
 		"per_source":     perSource,
-		"active_hours":   activeHours,
-		"velocity":       velocityString(velocity),
-		"pattern":        pattern,
+		"active_hours": activeHours,
+		"velocity":     velocityDetail,
+		"pattern":      pattern,
 	}
 	if !lastEvent.IsZero() {
 		details["last_event"] = lastEvent.Format(time.RFC3339)
