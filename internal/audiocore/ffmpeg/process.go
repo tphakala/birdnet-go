@@ -25,8 +25,9 @@ import (
 const ffmpegTimeoutParam = "-timeout"
 
 // ffmpegRTSPTimeoutParam is the RTSP-specific stream timeout flag.
-// FFmpeg ignores -timeout for the RTSP protocol; -stimeout must be used instead.
-const ffmpegRTSPTimeoutParam = "-stimeout"
+// Older FFmpeg used -stimeout for RTSP, but it was removed in FFmpeg 5.x+.
+// Using -timeout works across all supported versions.
+const ffmpegRTSPTimeoutParam = "-timeout"
 
 // timeoutParamForSource returns the correct FFmpeg timeout flag for the given source type.
 func timeoutParamForSource(st audiocore.SourceType) string {
@@ -432,7 +433,7 @@ func appendChannelArgs(args []string, channelMode string, sourceChannels int, nu
 
 // buildInputArgs constructs the pre-input FFmpeg flags (transport, timeout, extra parameters).
 // This mirrors the logic in Stream.buildFFmpegInputArgs but accepts explicit parameters.
-// RTSP streams use -stimeout (FFmpeg ignores -timeout for the RTSP protocol).
+// RTSP streams use -timeout for connection timeout.
 func buildInputArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
 	args := make([]string, 0, 8+len(ffmpegParameters))
 	timeoutFlag := timeoutParamForSource(cfg.sourceType())

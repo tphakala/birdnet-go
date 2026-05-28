@@ -893,7 +893,7 @@ func (s *Stream) startProcess() error {
 
 // buildFFmpegInputArgs constructs the FFmpeg input arguments for this stream.
 // RTSP-specific flags like -rtsp_transport are only added for RTSP streams.
-// RTSP streams use -stimeout (FFmpeg ignores -timeout for the RTSP protocol).
+// RTSP streams use -timeout for connection timeout.
 func (s *Stream) buildFFmpegInputArgs(ffmpegParameters []string) []string {
 	args := []string{}
 	timeoutFlag := timeoutParamForSource(s.config.sourceType())
@@ -1925,7 +1925,7 @@ func (s *Stream) conditionalFailureReset(totalBytesReceived int64) {
 }
 
 // detectUserTimeout scans FFmpeg parameters for an existing timeout setting.
-// Detects both -timeout and -stimeout so user-provided values are honoured
+// Detects -timeout (and legacy -stimeout) so user-provided values are honoured
 // regardless of which flag the user specified. A dangling flag with no
 // following value is reported as found with an empty value so callers can
 // strip it and fall back to the default.
