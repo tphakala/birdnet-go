@@ -707,8 +707,21 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	// Apply per-route resampling when rates differ.
 	if route.resampler != nil {
 		resampleStart := time.Now()
-		resampled, err := route.resampler.ResampleInto(frame.Data)
+		// Allocate the output buffer up-front so ResampleTo writes directly
+		// into owned memory — no defensive copy needed.
+		outSize := route.resampler.EstimateOutputBytes(len(frame.Data))
+		resamplePool = r.cachedBytePool(&route.resamplePool, &route.resamplePoolLen, outSize)
+		var out []byte
+		if resamplePool != nil {
+			out = resamplePool.Get()
+		} else {
+			out = make([]byte, outSize)
+		}
+		resampled, err := route.resampler.ResampleTo(frame.Data, out)
 		if err != nil {
+			if resamplePool != nil {
+				resamplePool.Put(out)
+			}
 			errCount := route.errors.Add(1)
 			if errCount%errorLogInterval == 1 {
 				r.log.Warn("resampler error",
@@ -719,21 +732,10 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 			}
 			return
 		}
-		// Copy resampled bytes into an owned buffer (Resampler reuses its
-		// internal slice). When a buffer.Manager is wired, the copy lands
-		// in a pooled slice keyed by length; otherwise fall back to make().
-		resamplePool = r.cachedBytePool(&route.resamplePool, &route.resamplePoolLen, len(resampled))
-		var out []byte
-		if resamplePool != nil {
-			out = resamplePool.Get()
-		} else {
-			out = make([]byte, len(resampled))
-		}
-		copy(out, resampled)
 		frame = AudioFrame{
 			SourceID:   frame.SourceID,
 			SourceName: frame.SourceName,
-			Data:       out,
+			Data:       resampled,
 			SampleRate: route.Consumer.SampleRate(),
 			BitDepth:   frame.BitDepth,
 			Channels:   frame.Channels,
