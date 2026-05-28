@@ -1,6 +1,5 @@
 import { t } from '$lib/i18n';
 import { api } from '$lib/utils/api';
-import { Merge, PanelLeft, PanelRight } from '@lucide/svelte';
 import type { ChannelAnalysis } from '$lib/stores/settings';
 
 export const streamTypeOptions = [
@@ -18,9 +17,9 @@ export const transportOptions = [
 
 export function getChannelModeOptions() {
   return [
-    { value: 'downmix', label: t('settings.audio.streams.channelMode.downmix'), icon: Merge },
-    { value: 'left', label: t('settings.audio.streams.channelMode.left'), icon: PanelLeft },
-    { value: 'right', label: t('settings.audio.streams.channelMode.right'), icon: PanelRight },
+    { value: 'downmix', label: t('settings.audio.streams.channelMode.downmix') },
+    { value: 'left', label: t('settings.audio.streams.channelMode.left') },
+    { value: 'right', label: t('settings.audio.streams.channelMode.right') },
   ];
 }
 
