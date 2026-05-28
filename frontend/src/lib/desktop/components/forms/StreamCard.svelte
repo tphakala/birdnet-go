@@ -438,8 +438,10 @@
 
   function handleTestResult(result: { sampleRate: number; channels: number } | null) {
     testResult = result;
-    analysisResult = null;
-    analysisError = null;
+    if (!result) {
+      analysisResult = null;
+      analysisError = null;
+    }
   }
 
   function updateEnabled(enabled: boolean) {
@@ -593,7 +595,7 @@
               type="button"
               class="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] hover:bg-[var(--color-base-300)] transition-colors disabled:opacity-50"
               onclick={() => analyzeChannels(editUrl || stream.url)}
-              disabled={isAnalyzing}
+              disabled={isAnalyzing || !(editUrl.trim() || stream.url)}
             >
               {#if isAnalyzing}
                 <Loader2 class="size-4 animate-spin" />

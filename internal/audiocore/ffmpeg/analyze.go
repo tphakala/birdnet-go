@@ -75,14 +75,15 @@ func AnalyzeChannelEnergy(ctx context.Context, url, ffmpegPath string) (*Channel
 	}
 
 	pcmData := stdout.Bytes()
-	if len(pcmData) < 4 {
-		return nil, errors.Newf("channel analysis produced insufficient data (%d bytes)", len(pcmData)).
+	minExpectedBytes := analysisSampleRate * analysisChannels * 2
+	if len(pcmData) < minExpectedBytes {
+		return nil, errors.Newf("channel analysis produced insufficient data (%d bytes, expected at least %d)", len(pcmData), minExpectedBytes).
 			Component("ffmpeg").
 			Category(errors.CategoryAudio).
 			Build()
 	}
 
-	left, right := deinterleave(pcmData, analysisChannels)
+	left, right := deinterleave(pcmData)
 
 	leftDbfs := computeRmsDbfs(left)
 	rightDbfs := computeRmsDbfs(right)
@@ -126,8 +127,8 @@ func buildAnalysisArgs(url string) []string {
 	return args
 }
 
-func deinterleave(pcm []byte, channels int) (left, right []int16) {
-	samplesPerChannel := len(pcm) / (2 * channels)
+func deinterleave(pcm []byte) (left, right []int16) {
+	samplesPerChannel := len(pcm) / 4
 	left = make([]int16, 0, samplesPerChannel)
 	right = make([]int16, 0, samplesPerChannel)
 
@@ -158,6 +159,11 @@ func computeRmsDbfs(samples []int16) float64 {
 }
 
 func recommendChannel(leftDbfs, rightDbfs float64) string {
+	const activeThresholdDb = -60.0
+	if leftDbfs < activeThresholdDb && rightDbfs < activeThresholdDb {
+		return "downmix"
+	}
+
 	diff := leftDbfs - rightDbfs
 	if diff > energyThresholdDb {
 		return "left"

@@ -19,7 +19,7 @@ func TestDeinterleave(t *testing.T) {
 		0xd0, 0x07, // 2000 LE
 	}
 
-	left, right := deinterleave(pcm, 2)
+	left, right := deinterleave(pcm)
 	require.Len(t, left, 2)
 	require.Len(t, right, 2)
 	assert.Equal(t, int16(1000), left[0])
@@ -82,6 +82,7 @@ func TestRecommendChannel(t *testing.T) {
 		{"exactly 6dB difference", -12.0, -18.0, "downmix"},
 		{"left just over threshold", -12.0, -18.1, "left"},
 		{"both silent", -96.0, -96.0, "downmix"},
+		{"both quiet but diff >6dB", -65.0, -75.0, "downmix"},
 	}
 
 	for _, tt := range tests {
