@@ -9,7 +9,6 @@ import (
 	"math/big"
 	"os/exec"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -803,12 +802,7 @@ func (s *Stream) startProcess() error {
 			Build()
 	}
 
-	sampleRate, numChannels, format := GetFFmpegFormat(s.config.SampleRate, s.config.Channels, s.config.BitDepth)
-
-	args := s.buildFFmpegInputArgs(s.config.FFmpegParameters)
-
-	connStr := s.config.URL
-	if connStr == "" {
+	if s.config.URL == "" {
 		return errors.Newf("connection string is empty for source %s, cannot start FFmpeg", s.config.SourceID).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-stream").
@@ -817,23 +811,10 @@ func (s *Stream) startProcess() error {
 			Build()
 	}
 
-	logLevel := s.config.LogLevel
-	if logLevel == "" {
-		logLevel = "error"
-	}
-
-	args = append(args,
-		"-i", connStr,
-		"-loglevel", logLevel,
-		"-vn",
-		"-f", format,
-	)
-	args = appendChannelArgs(args, s.config.ChannelMode, s.config.SourceChannels, numChannels)
-	if s.config.needsOutputResampling() {
-		args = append(args, "-ar", sampleRate)
-	}
-
-	args = append(args, "-hide_banner", "pipe:1")
+	// Input args use the Stream's timeout-warning logging; output args are built
+	// by the shared buildOutputArgs so this runtime path matches BuildFFmpegArgs.
+	args := s.buildFFmpegInputArgs(s.config.FFmpegParameters)
+	args = buildOutputArgs(args, &s.config)
 
 	s.cmd = exec.CommandContext(s.ctx, s.config.FFmpegPath, args...) //nolint:gosec // G204: FFmpegPath from validated settings, args built internally
 
@@ -892,40 +873,22 @@ func (s *Stream) startProcess() error {
 }
 
 // buildFFmpegInputArgs constructs the FFmpeg input arguments for this stream.
-// RTSP-specific flags like -rtsp_transport are only added for RTSP streams.
-// RTSP streams use -timeout for connection timeout.
+// It delegates the actual argument construction to the shared buildInputArgs so
+// the runtime path stays in lockstep with the unit-tested BuildFFmpegArgs. The
+// only Stream-specific behavior is surfacing an invalid user-supplied timeout as
+// a warning log (buildInputArgs silently falls back to the default).
 func (s *Stream) buildFFmpegInputArgs(ffmpegParameters []string) []string {
-	args := []string{}
-	timeoutFlag := timeoutParamForSource(s.config.sourceType())
-
-	if s.config.sourceType() == audiocore.SourceTypeRTSP {
-		args = append(args, "-rtsp_transport", s.config.Transport)
-	}
-
-	hasUserTimeout, userTimeoutValue := detectUserTimeout(ffmpegParameters)
-
-	if !hasUserTimeout {
-		args = append(args, timeoutFlag, strconv.FormatInt(defaultTimeoutMicroseconds, 10))
-		if len(ffmpegParameters) > 0 {
-			args = append(args, ffmpegParameters...)
+	if hasUserTimeout, userTimeoutValue := detectUserTimeout(ffmpegParameters); hasUserTimeout {
+		if err := validateTimeout(userTimeoutValue); err != nil {
+			getStreamLogger().Warn("invalid user timeout, using default",
+				logger.String("url", s.config.safeURL()),
+				logger.String("user_timeout", userTimeoutValue),
+				logger.Error(err),
+				logger.String("component", "ffmpeg-stream"),
+				logger.String("operation", "validate_timeout"))
 		}
-		return args
 	}
-
-	if err := s.validateUserTimeout(userTimeoutValue); err != nil {
-		getStreamLogger().Warn("invalid user timeout, using default",
-			logger.String("url", s.config.safeURL()),
-			logger.String("user_timeout", userTimeoutValue),
-			logger.Error(err),
-			logger.String("component", "ffmpeg-stream"),
-			logger.String("operation", "validate_timeout"))
-		args = append(args, timeoutFlag, strconv.FormatInt(defaultTimeoutMicroseconds, 10))
-	} else {
-		args = append(args, timeoutFlag, userTimeoutValue)
-	}
-	args = append(args, stripTimeoutParams(ffmpegParameters)...)
-
-	return args
+	return buildInputArgs(&s.config, ffmpegParameters)
 }
 
 // readResult carries the outcome of a single stdout.Read call from the
@@ -1939,31 +1902,6 @@ func detectUserTimeout(params []string) (found bool, value string) {
 		}
 	}
 	return false, ""
-}
-
-// validateUserTimeout validates a user-provided timeout value.
-func (s *Stream) validateUserTimeout(timeoutStr string) error {
-	timeout, err := strconv.ParseInt(timeoutStr, 10, 64)
-	if err != nil {
-		return errors.Newf("invalid timeout format: %s (must be a number in microseconds)", timeoutStr).
-			Component("ffmpeg-stream").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_user_timeout").
-			Context("timeout_value", timeoutStr).
-			Build()
-	}
-
-	if timeout < minTimeoutMicroseconds {
-		return errors.Newf("timeout too short: %d microseconds (minimum: %d microseconds = 1 second)", timeout, minTimeoutMicroseconds).
-			Component("ffmpeg-stream").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_user_timeout").
-			Context("timeout_microseconds", timeout).
-			Context("minimum_microseconds", minTimeoutMicroseconds).
-			Build()
-	}
-
-	return nil
 }
 
 // recordErrorContext stores an error context in the history buffer.
