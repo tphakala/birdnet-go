@@ -4927,7 +4927,17 @@
       "source": "Källa",
       "count": "Antal",
       "lifetime": "totalt",
-      "sparklineLabel": "Aktivitetsdiagram"
+      "sparklineLabel": "Aktivitetsdiagram",
+      "activeHours": "Aktiva timmar",
+      "windowTotal": "I fönster",
+      "velocity": "Trend",
+      "velocityStable": "Stabil",
+      "velocityIncreasing": "Ökande",
+      "velocityDecreasing": "Minskande",
+      "pattern": "Mönster",
+      "patternNone": "Inget",
+      "patternTransient": "Övergående",
+      "patternSustained": "Ihållande"
     }
   }
 }

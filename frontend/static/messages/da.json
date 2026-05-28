@@ -4927,7 +4927,17 @@
       "source": "Kilde",
       "count": "Antal",
       "lifetime": "i alt",
-      "sparklineLabel": "Aktivitetsgraf"
+      "sparklineLabel": "Aktivitetsgraf",
+      "activeHours": "Aktive timer",
+      "windowTotal": "I vindue",
+      "velocity": "Tendens",
+      "velocityStable": "Stabil",
+      "velocityIncreasing": "Stigende",
+      "velocityDecreasing": "Faldende",
+      "pattern": "Mønster",
+      "patternNone": "Ingen",
+      "patternTransient": "Forbigående",
+      "patternSustained": "Vedvarende"
     }
   }
 }

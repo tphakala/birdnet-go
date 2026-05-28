@@ -4927,7 +4927,17 @@
       "source": "Source",
       "count": "Count",
       "lifetime": "lifetime",
-      "sparklineLabel": "Activity sparkline"
+      "sparklineLabel": "Activity sparkline",
+      "activeHours": "Active hours",
+      "windowTotal": "In window",
+      "velocity": "Trend",
+      "velocityStable": "Stable",
+      "velocityIncreasing": "Increasing",
+      "velocityDecreasing": "Decreasing",
+      "pattern": "Pattern",
+      "patternNone": "None",
+      "patternTransient": "Transient",
+      "patternSustained": "Sustained"
     }
   }
 }

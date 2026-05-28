@@ -4927,7 +4927,17 @@
       "source": "Avots",
       "count": "Skaits",
       "lifetime": "kopā",
-      "sparklineLabel": "Aktivitātes diagramma"
+      "sparklineLabel": "Aktivitātes diagramma",
+      "activeHours": "Aktīvās stundas",
+      "windowTotal": "Logā",
+      "velocity": "Tendence",
+      "velocityStable": "Stabila",
+      "velocityIncreasing": "Pieaugoša",
+      "velocityDecreasing": "Dilstoša",
+      "pattern": "Raksts",
+      "patternNone": "Nav",
+      "patternTransient": "Īslaicīgs",
+      "patternSustained": "Ilgstošs"
     }
   }
 }
