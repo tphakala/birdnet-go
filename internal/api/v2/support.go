@@ -26,6 +26,19 @@ const (
 	supportDumpTimeout      = 120 * time.Second
 )
 
+// valueContext wraps a cancellation-bearing context while delegating
+// Value lookups to a separate context. This lets the support dump
+// handler use the server lifecycle context (c.ctx) for cancellation
+// while still reading trace IDs from the HTTP request context.
+type valueContext struct {
+	context.Context
+	values context.Context
+}
+
+func (vc valueContext) Value(key any) any {
+	return vc.values.Value(key)
+}
+
 // GenerateSupportDumpRequest represents the request for generating a support dump
 type GenerateSupportDumpRequest struct {
 	IncludeLogs         bool   `json:"include_logs"`
@@ -61,16 +74,27 @@ func sanitizeGitHubIssueNumber(issueNum string) string {
 func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	c.logDebugIfEnabled("Support dump generation started")
 
-	// Use a dedicated timeout that outlives Echo's WriteTimeout.
-	// Collection, archiving, and Sentry upload can take well over 30s
-	// on low-powered devices or slow upstream connections.
-	// WithoutCancel preserves context values (trace IDs) while
-	// decoupling from the HTTP request's cancellation signal.
+	// Use the server lifecycle context for cancellation so the dump
+	// stops on shutdown, but delegate Value lookups to the request
+	// context so trace IDs remain accessible.
+	parentCtx := c.ctx
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
 	dumpCtx, cancel := context.WithTimeout(
-		context.WithoutCancel(ctx.Request().Context()),
+		valueContext{Context: parentCtx, values: ctx.Request().Context()},
 		supportDumpTimeout,
 	)
 	defer cancel()
+
+	// Extend the HTTP write deadline so the server does not close the
+	// TCP connection before the handler finishes (default WriteTimeout
+	// is 30s, but the dump can take much longer).
+	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
+		if err := conn.SetWriteDeadline(time.Now().Add(supportDumpTimeout)); err != nil {
+			c.logDebugIfEnabled("Failed to extend write deadline for support dump", logger.Error(err))
+		}
+	}
 
 	// Parse JSON request
 	var req GenerateSupportDumpRequest

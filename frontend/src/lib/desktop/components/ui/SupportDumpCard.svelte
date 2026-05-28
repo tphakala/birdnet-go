@@ -19,6 +19,9 @@
 
   // Must exceed backend supportDumpTimeout (120s) in internal/api/v2/support.go
   const SUPPORT_DUMP_TIMEOUT_MS = 130_000;
+  const PROGRESS_MAX = 90;
+  const PROGRESS_STEP = 3;
+  const PROGRESS_INTERVAL_MS = 2_500;
 
   const instanceId = Math.random().toString(36).slice(2, 10);
   const githubIssueInputId = `githubIssueNumber-${instanceId}`;
@@ -210,12 +213,12 @@
     statusType = type;
     progressPercent = percent;
 
-    if (type === 'info' && percent < 90) {
+    if (type === 'info' && percent < PROGRESS_MAX) {
       safeTimeout(() => {
-        if (generating && progressPercent < 90) {
-          updateStatus(message, type, Math.min(progressPercent + 3, 90));
+        if (generating && progressPercent < PROGRESS_MAX) {
+          updateStatus(message, type, Math.min(progressPercent + PROGRESS_STEP, PROGRESS_MAX));
         }
-      }, 2500);
+      }, PROGRESS_INTERVAL_MS);
     }
   }
 </script>
