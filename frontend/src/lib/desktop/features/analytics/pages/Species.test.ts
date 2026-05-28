@@ -1,8 +1,11 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { cleanup, waitFor } from '@testing-library/svelte';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../../../test/render-helpers';
 import { setBasePath, resetBasePath } from '$lib/utils/urlHelpers';
 import Species from './Species.svelte';
+
+/** Must match SORT_STORAGE_KEY in Species.svelte. */
+const SORT_STORAGE_KEY = 'analytics.species.sort';
 
 interface SpeciesSummary {
   common_name: string;
@@ -124,5 +127,137 @@ describe('Species (analytics page)', () => {
     );
 
     expect(img.getAttribute('src')).toBe('/birdnet/api/v2/media/image/Cardinalis%20cardinalis');
+  });
+});
+
+describe('Species (analytics page) — column header sorting', () => {
+  const originalFetch = globalThis.fetch;
+
+  // Common names sort A→Z differently from counts, so a wrong sort is visible.
+  const summary = [
+    {
+      common_name: 'American Robin',
+      scientific_name: 'Turdus migratorius',
+      count: 5,
+      avg_confidence: 0.8,
+      max_confidence: 0.9,
+      first_heard: '2026-04-01',
+      last_heard: '2026-04-20',
+    },
+    {
+      common_name: 'Blue Jay',
+      scientific_name: 'Cyanocitta cristata',
+      count: 99,
+      avg_confidence: 0.7,
+      max_confidence: 0.95,
+      first_heard: '2026-04-05',
+      last_heard: '2026-04-25',
+    },
+    {
+      common_name: 'Zebra Finch',
+      scientific_name: 'Taeniopygia guttata',
+      count: 50,
+      avg_confidence: 0.6,
+      max_confidence: 0.85,
+      first_heard: '2026-04-10',
+      last_heard: '2026-04-15',
+    },
+  ];
+
+  beforeEach(() => {
+    globalThis.fetch = mockFetchSequence({
+      '/api/v2/analytics/species/summary': () => summary,
+      '/api/v2/analytics/species/thumbnails': () => ({}),
+    });
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetBasePath();
+    globalThis.fetch = originalFetch;
+    window.localStorage.clear();
+  });
+
+  const speciesTest = createComponentTestFactory(Species);
+
+  /** Render, switch to the list view, and return its container + table rows. */
+  async function renderListView() {
+    const { container } = speciesTest.render({});
+
+    // Switch from the default grid view to the list/table view.
+    const toggleButtons = container.querySelectorAll('.join button');
+    await fireEvent.click(toggleButtons[1]);
+
+    await waitFor(
+      () => {
+        if (!container.querySelector('table tbody tr')) {
+          throw new Error('table not yet rendered');
+        }
+      },
+      { timeout: 2000 }
+    );
+    return { container };
+  }
+
+  function rowNames(container: HTMLElement): string[] {
+    return Array.from(container.querySelectorAll('table tbody tr td .font-bold')).map(el =>
+      el.textContent.trim()
+    );
+  }
+
+  it('defaults to sorting by species name ascending', async () => {
+    const { container } = await renderListView();
+
+    expect(rowNames(container)).toEqual(['American Robin', 'Blue Jay', 'Zebra Finch']);
+
+    const speciesHeader = container.querySelector('table thead th');
+    expect(speciesHeader?.getAttribute('aria-sort')).toBe('ascending');
+  });
+
+  it('sorts by detection count descending on first header click and toggles on second', async () => {
+    const { container } = await renderListView();
+
+    const headerButtons = container.querySelectorAll('table thead th button');
+    const countButton = headerButtons[1]; // species, count, avgConf, maxConf, first, last
+
+    // First click → most detections first.
+    await fireEvent.click(countButton);
+    expect(rowNames(container)).toEqual(['Blue Jay', 'Zebra Finch', 'American Robin']);
+    expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
+      'descending'
+    );
+
+    // Second click on the same column reverses the order.
+    await fireEvent.click(countButton);
+    expect(rowNames(container)).toEqual(['American Robin', 'Zebra Finch', 'Blue Jay']);
+    expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
+      'ascending'
+    );
+  });
+
+  it('persists the chosen sort column/direction to localStorage', async () => {
+    const { container } = await renderListView();
+
+    const countButton = container.querySelectorAll('table thead th button')[1];
+    await fireEvent.click(countButton);
+
+    const stored = JSON.parse(window.localStorage.getItem(SORT_STORAGE_KEY) ?? '{}');
+    expect(stored).toEqual({ column: 'count', direction: 'desc' });
+  });
+
+  it('restores a persisted sort selection on a fresh render', async () => {
+    window.localStorage.setItem(
+      SORT_STORAGE_KEY,
+      JSON.stringify({ column: 'count', direction: 'asc' })
+    );
+
+    const { container } = await renderListView();
+
+    // count ascending → fewest first.
+    expect(rowNames(container)).toEqual(['American Robin', 'Zebra Finch', 'Blue Jay']);
+    expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
+      'ascending'
+    );
   });
 });
