@@ -36,7 +36,10 @@ type valueContext struct {
 }
 
 func (vc valueContext) Value(key any) any {
-	return vc.values.Value(key)
+	if val := vc.values.Value(key); val != nil {
+		return val
+	}
+	return vc.Context.Value(key)
 }
 
 // GenerateSupportDumpRequest represents the request for generating a support dump
@@ -90,10 +93,9 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	// Extend the HTTP write deadline so the server does not close the
 	// TCP connection before the handler finishes (default WriteTimeout
 	// is 30s, but the dump can take much longer).
-	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
-		if err := conn.SetWriteDeadline(time.Now().Add(supportDumpTimeout)); err != nil {
-			c.logDebugIfEnabled("Failed to extend write deadline for support dump", logger.Error(err))
-		}
+	rc := http.NewResponseController(ctx.Response().Writer)
+	if err := rc.SetWriteDeadline(time.Now().Add(supportDumpTimeout)); err != nil {
+		c.logDebugIfEnabled("Failed to extend write deadline for support dump", logger.Error(err))
 	}
 
 	// Parse JSON request
