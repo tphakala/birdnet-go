@@ -425,15 +425,17 @@ func (c *Collector) collectAudioHealthCounters(now time.Time) {
 		current[s.SourceID] = s
 	}
 
-	if c.prevAudioSnaps != nil {
-		for id, cur := range current {
-			prev, ok := c.prevAudioSnaps[id]
-			if !ok {
-				continue
-			}
-			c.recordHealthDelta(MetricPrefixAudioDrops+id, cur.Drops, prev.Drops, id, "drops", now)
-			c.recordHealthDelta(MetricPrefixAudioOverruns+id, cur.Errors, prev.Errors, id, "overruns", now)
+	for id, cur := range current {
+		prev, ok := c.prevAudioSnaps[id]
+		if !ok {
+			// First tick or new source: seed the store keys so health checks
+			// show "Healthy" instead of "Skipped" even with zero drops.
+			c.healthStore.RecordAt(MetricPrefixAudioDrops+id, 0, now)
+			c.healthStore.RecordAt(MetricPrefixAudioOverruns+id, 0, now)
+			continue
 		}
+		c.recordHealthDelta(MetricPrefixAudioDrops+id, cur.Drops, prev.Drops, id, "drops", now)
+		c.recordHealthDelta(MetricPrefixAudioOverruns+id, cur.Errors, prev.Errors, id, "overruns", now)
 	}
 
 	c.prevAudioSnaps = current
@@ -451,14 +453,13 @@ func (c *Collector) collectStreamHealthCounters(now time.Time) {
 		current[s.SourceID] = s
 	}
 
-	if c.prevStreamSnaps != nil {
-		for sourceID, cur := range current {
-			prev, ok := c.prevStreamSnaps[sourceID]
-			if !ok {
-				continue
-			}
-			c.recordHealthDelta(MetricPrefixStreamRestarts+sourceID, int64(cur.RestartCount), int64(prev.RestartCount), sourceID, "restarts", now)
+	for sourceID, cur := range current {
+		prev, ok := c.prevStreamSnaps[sourceID]
+		if !ok {
+			c.healthStore.RecordAt(MetricPrefixStreamRestarts+sourceID, 0, now)
+			continue
 		}
+		c.recordHealthDelta(MetricPrefixStreamRestarts+sourceID, int64(cur.RestartCount), int64(prev.RestartCount), sourceID, "restarts", now)
 	}
 
 	c.prevStreamSnaps = current
