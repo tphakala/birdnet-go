@@ -204,10 +204,11 @@ func (c *BufferDropsCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
 	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
-		warnThreshold: 10,
-		critThreshold: 100,
-		metricPrefix:  observability.MetricPrefixAudioDrops,
-		window:        c.window,
+		baseWarnThreshold: 10,
+		baseCritThreshold: 50,
+		sustainedHours:    3,
+		metricPrefix:      observability.MetricPrefixAudioDrops,
+		window:            c.window,
 	}, start)
 }
 
@@ -326,10 +327,11 @@ func (c *BufferOverrunCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
 	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
-		warnThreshold: 10,
-		critThreshold: 50,
-		metricPrefix:  observability.MetricPrefixAudioOverruns,
-		window:        c.window,
+		baseWarnThreshold: 5,
+		baseCritThreshold: 25,
+		sustainedHours:    3,
+		metricPrefix:      observability.MetricPrefixAudioOverruns,
+		window:            c.window,
 	}, start)
 }
 

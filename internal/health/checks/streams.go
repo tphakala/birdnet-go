@@ -123,10 +123,11 @@ func (c *StreamErrorRateCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
 	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
-		warnThreshold: 3,
-		critThreshold: 10,
-		metricPrefix:  observability.MetricPrefixStreamRestarts,
-		window:        c.window,
+		baseWarnThreshold: 3,
+		baseCritThreshold: 10,
+		sustainedHours:    3,
+		metricPrefix:      observability.MetricPrefixStreamRestarts,
+		window:            c.window,
 	}, start)
 }
 

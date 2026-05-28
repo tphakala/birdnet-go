@@ -152,68 +152,20 @@ func evalWindowedStats(
 		velocityDetail = velocityString(velocity)
 	}
 
-	status := health.StatusHealthy
-
-	if windowTotal > 0 {
-		peakEscalated := false
-
-		// Safety net: severe hourly spike overrides window-scaled thresholds.
-		if maxHourly >= cfg.baseCritThreshold {
-			status = health.StatusCritical
-			label := checkNameLabel(name)
-			msg = fmt.Sprintf("%d %s in %s, peak hour: %d %s",
-				windowTotal, label, formatDuration(cfg.window), maxHourly, label)
-		}
-
-		if status == health.StatusHealthy && maxHourly >= cfg.baseWarnThreshold {
-			peakEscalated = true
-		}
-
-		// Volume floor prevents classifying negligible noise as sustained
-		// (e.g. 1 drop/hr for 3 hrs = 3 total, below floor of 5 with baseWarn=10).
-		sustainedVolumeFloor := warnThreshold / 2
-
-		// Sustained recurrence pattern.
-		if status == health.StatusHealthy && recurrenceEnabled &&
-			activeHours >= sustainedHrs && windowTotal >= sustainedVolumeFloor {
-			label := checkNameLabel(name)
-			if windowTotal >= critThreshold || velocity == velocityIncreasing {
-				status = health.StatusCritical
-				msg = fmt.Sprintf("Sustained %s across %d hours, worsening", label, activeHours)
-			} else {
-				status = health.StatusWarning
-				msg = fmt.Sprintf("Sustained %s across %d hours", label, activeHours)
-			}
-		}
-
-		// Absolute threshold checks.
-		if status == health.StatusHealthy && windowTotal >= critThreshold {
-			status = health.StatusCritical
-			label := checkNameLabel(name)
-			msg = fmt.Sprintf("%d %s in %s, concentrated in %d hour(s)",
-				windowTotal, label, formatDuration(cfg.window), max(activeHours, 1))
-		}
-
-		if status == health.StatusHealthy && (windowTotal >= warnThreshold || peakEscalated) {
-			label := checkNameLabel(name)
-			if recurrenceEnabled && velocity == velocityIncreasing {
-				status = health.StatusWarning
-				msg = fmt.Sprintf("%d %s in %s, rate increasing",
-					windowTotal, label, formatDuration(cfg.window))
-			} else {
-				status = health.StatusWarning
-				msg = fmt.Sprintf("%d %s in %s",
-					windowTotal, label, formatDuration(cfg.window))
-			}
-		}
-
-		// Low volume within tolerance.
-		if status == health.StatusHealthy && activeHours > 0 {
-			label := checkNameLabel(name)
-			msg = fmt.Sprintf("%d %s in %s, within tolerance",
-				windowTotal, label, formatDuration(cfg.window))
-		}
-	}
+	status, msg := applySeveritySignals(&severitySignals{
+		name:              name,
+		windowTotal:       windowTotal,
+		warnThreshold:     warnThreshold,
+		critThreshold:     critThreshold,
+		baseWarnThreshold: cfg.baseWarnThreshold,
+		baseCritThreshold: cfg.baseCritThreshold,
+		maxHourly:         maxHourly,
+		activeHours:       activeHours,
+		sustainedHrs:      sustainedHrs,
+		recurrenceEnabled: recurrenceEnabled,
+		velocity:          velocity,
+		window:            cfg.window,
+	}, msg)
 
 	// Determine pattern classification.
 	var pattern string
@@ -232,9 +184,9 @@ func evalWindowedStats(
 		"lifetime_total": lifetimeTotal,
 		"sources":        activeSources,
 		"per_source":     perSource,
-		"active_hours": activeHours,
-		"velocity":     velocityDetail,
-		"pattern":      pattern,
+		"active_hours":   activeHours,
+		"velocity":       velocityDetail,
+		"pattern":        pattern,
 	}
 	if !lastEvent.IsZero() {
 		details["last_event"] = lastEvent.Format(time.RFC3339)
@@ -255,6 +207,79 @@ func evalWindowedStats(
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
 	}
+}
+
+// severitySignals holds the pre-computed inputs for the four-signal severity evaluation.
+type severitySignals struct {
+	name              string
+	windowTotal       int64
+	warnThreshold     int64
+	critThreshold     int64
+	baseWarnThreshold int64
+	baseCritThreshold int64
+	maxHourly         int64
+	activeHours       int
+	sustainedHrs      int
+	recurrenceEnabled bool
+	velocity          velocityTrend
+	window            time.Duration
+}
+
+// applySeveritySignals runs the four-signal evaluation (peak spike, sustained
+// recurrence, absolute volume, velocity) and returns the resulting status and
+// message. The defaultMsg is returned unchanged when no signal fires.
+func applySeveritySignals(s *severitySignals, defaultMsg string) (status health.Status, msg string) {
+	if s.windowTotal == 0 {
+		return health.StatusHealthy, defaultMsg
+	}
+
+	label := checkNameLabel(s.name)
+	windowStr := formatDuration(s.window)
+	status = health.StatusHealthy
+	msg = defaultMsg
+	peakEscalated := false
+
+	// Safety net: severe hourly spike overrides window-scaled thresholds.
+	if s.maxHourly >= s.baseCritThreshold {
+		return health.StatusCritical, fmt.Sprintf("%d %s in %s, peak hour: %d %s",
+			s.windowTotal, label, windowStr, s.maxHourly, label)
+	}
+
+	if s.maxHourly >= s.baseWarnThreshold {
+		peakEscalated = true
+	}
+
+	// Volume floor prevents classifying negligible noise as sustained
+	// (e.g. 1 drop/hr for 3 hrs = 3 total, below floor of 5 with baseWarn=10).
+	sustainedVolumeFloor := s.warnThreshold / 2
+
+	// Sustained recurrence pattern.
+	if s.recurrenceEnabled && s.activeHours >= s.sustainedHrs && s.windowTotal >= sustainedVolumeFloor {
+		if s.windowTotal >= s.critThreshold || s.velocity == velocityIncreasing {
+			return health.StatusCritical, fmt.Sprintf("Sustained %s across %d hours, worsening", label, s.activeHours)
+		}
+		return health.StatusWarning, fmt.Sprintf("Sustained %s across %d hours", label, s.activeHours)
+	}
+
+	// Absolute threshold checks.
+	if s.windowTotal >= s.critThreshold {
+		return health.StatusCritical, fmt.Sprintf("%d %s in %s, concentrated in %d hour(s)",
+			s.windowTotal, label, windowStr, max(s.activeHours, 1))
+	}
+
+	if s.windowTotal >= s.warnThreshold || peakEscalated {
+		if s.recurrenceEnabled && s.velocity == velocityIncreasing {
+			return health.StatusWarning, fmt.Sprintf("%d %s in %s, rate increasing", s.windowTotal, label, windowStr)
+		}
+		return health.StatusWarning, fmt.Sprintf("%d %s in %s", s.windowTotal, label, windowStr)
+	}
+
+	// Low volume within tolerance.
+	if s.activeHours > 0 {
+		msg = fmt.Sprintf("%d %s in %s, within tolerance", s.windowTotal, label, windowStr)
+	}
+
+	return status, msg
 }
 
 // formatWindowedMessage builds a human-readable message with temporal context.
