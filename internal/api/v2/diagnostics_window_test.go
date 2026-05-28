@@ -286,7 +286,7 @@ func TestRunDiagnostics_SparklineStructure(t *testing.T) {
 
 	sparkline, ok := sparklineRaw.([]any)
 	require.True(t, ok, "sparkline must be an array")
-	assert.Len(t, sparkline, 24, "sparkline should have 24 hourly buckets")
+	require.Len(t, sparkline, 24, "sparkline should have 24 hourly buckets")
 
 	bucket, ok := sparkline[0].(map[string]any)
 	require.True(t, ok, "each sparkline bucket must be an object")
@@ -314,6 +314,7 @@ func TestRunDiagnostics_RecentEventsStructure(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	require.NoError(t, controller.RunDiagnostics(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var report health.DiagnosticsReport
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))

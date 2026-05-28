@@ -174,12 +174,12 @@ func TestCollector_SeedsKeysOnFirstTick(t *testing.T) {
 
 	c.collectHealthCounters()
 
-	assert.NotEmpty(t, healthStore.KeysWithPrefix(MetricPrefixAudioDrops),
-		"audio drops key should exist after first tick even with zero drops")
-	assert.NotEmpty(t, healthStore.KeysWithPrefix(MetricPrefixAudioOverruns),
-		"audio overruns key should exist after first tick even with zero overruns")
-	assert.NotEmpty(t, healthStore.KeysWithPrefix(MetricPrefixStreamRestarts),
-		"stream restarts key should exist after first tick even with zero restarts")
+	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixAudioDrops),
+		MetricPrefixAudioDrops+"src1")
+	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixAudioOverruns),
+		MetricPrefixAudioOverruns+"src1")
+	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixStreamRestarts),
+		MetricPrefixStreamRestarts+"stream1")
 
 	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixAudioDrops+"src1"))
 	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixAudioOverruns+"src1"))
