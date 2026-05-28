@@ -46,7 +46,7 @@
   import {
     streamTypeOptions,
     transportOptions,
-    channelModeOptions,
+    getChannelModeOptions,
     analyzeStreamChannels,
   } from './streamOptions';
 
@@ -729,27 +729,16 @@
             </div>
 
             <!-- Channel Mode -->
-            <div class="space-y-1.5">
-              <label
-                for="new-stream-channel-mode"
-                class="text-xs font-medium text-[var(--color-base-content)]/70"
-              >
-                {t('settings.audio.streams.channelMode.label')}
-              </label>
-              <select
-                id="new-stream-channel-mode"
-                bind:value={newChannelMode}
-                {disabled}
-                class="w-full h-8 px-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {#each channelModeOptions as opt (opt.value)}
-                  <option value={opt.value}>{opt.label()}</option>
-                {/each}
-              </select>
-              <p class="text-xs text-[var(--color-base-content)]/50">
-                {t('settings.audio.streams.channelMode.description')}
-              </p>
-            </div>
+            <SelectDropdown
+              value={newChannelMode}
+              label={t('settings.audio.streams.channelMode.label')}
+              options={getChannelModeOptions()}
+              {disabled}
+              onChange={value => (newChannelMode = value as ChannelMode)}
+              groupBy={false}
+              menuSize="sm"
+              helpText={t('settings.audio.streams.channelMode.description')}
+            />
 
             <!-- Channel analysis results (shown after testing a stereo stream) -->
             {#if newTestResult && newTestResult.channels > 1}
@@ -807,23 +796,26 @@
                     {t('settings.audio.streams.channelMode.analyzeError')}: {analysisError}
                   </p>
                 {/if}
-
-                {#if newChannelMode === 'downmix'}
-                  <div
-                    class="flex items-start gap-2 p-2 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
-                  >
-                    <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
-                    <span>{t('settings.audio.streams.channelMode.downmixWarning')}</span>
-                  </div>
-                {:else}
-                  <div
-                    class="flex items-start gap-2 p-2 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]"
-                  >
-                    <CircleCheck class="size-3.5 shrink-0 mt-0.5 text-[var(--color-success)]" />
-                    <span>{t('settings.audio.streams.channelMode.singleChannelGood')}</span>
-                  </div>
-                {/if}
               </div>
+            {/if}
+
+            <!-- Channel mode warnings (shown after stereo stream detected) -->
+            {#if newTestResult && newTestResult.channels > 1}
+              {#if newChannelMode === 'downmix'}
+                <div
+                  class="flex items-start gap-2 p-2 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
+                >
+                  <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
+                  <span>{t('settings.audio.streams.channelMode.downmixWarning')}</span>
+                </div>
+              {:else}
+                <div
+                  class="flex items-start gap-2 p-2 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]"
+                >
+                  <CircleCheck class="size-3.5 shrink-0 mt-0.5 text-[var(--color-success)]" />
+                  <span>{t('settings.audio.streams.channelMode.singleChannelGood')}</span>
+                </div>
+              {/if}
             {/if}
 
             <!-- Model Selection -->

@@ -60,7 +60,7 @@
   import {
     streamTypeOptions,
     transportOptions,
-    channelModeOptions,
+    getChannelModeOptions,
     analyzeStreamChannels,
   } from './streamOptions';
 
@@ -557,26 +557,16 @@
         </div>
 
         <!-- Channel mode selector -->
-        <div class="space-y-1.5">
-          <label
-            for="channel-mode-{index}"
-            class="text-xs font-medium text-[var(--color-base-content)]/70"
-          >
-            {t('settings.audio.streams.channelMode.label')}
-          </label>
-          <select
-            id="channel-mode-{index}"
-            bind:value={editChannelMode}
-            class="w-full h-8 px-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
-          >
-            {#each channelModeOptions as opt (opt.value)}
-              <option value={opt.value}>{opt.label()}</option>
-            {/each}
-          </select>
-          <p class="text-xs text-[var(--color-base-content)]/50">
-            {t('settings.audio.streams.channelMode.description')}
-          </p>
-        </div>
+        <SelectDropdown
+          value={editChannelMode}
+          label={t('settings.audio.streams.channelMode.label')}
+          options={getChannelModeOptions()}
+          {disabled}
+          onChange={value => (editChannelMode = value as ChannelMode)}
+          groupBy={false}
+          menuSize="sm"
+          helpText={t('settings.audio.streams.channelMode.description')}
+        />
 
         <!-- Channel analysis and warnings (shown when stream is stereo) -->
         {#if testResult && testResult.channels > 1}
