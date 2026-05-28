@@ -81,8 +81,12 @@ compact confidence sparkline for the configured time window.
     return 'bg-[var(--color-base-200)] text-[var(--color-base-content)]/70 ring-[var(--color-base-content)]/10';
   }
 
+  function displayName(item: RecentSpeciesActivity): string {
+    return item.common_name || item.scientific_name || t('common.unknown');
+  }
+
   function rowKey(item: RecentSpeciesActivity): string {
-    return item.scientific_name || item.common_name;
+    return item.scientific_name || item.common_name || item.latest_detection_id.toString();
   }
 </script>
 
@@ -117,7 +121,7 @@ compact confidence sparkline for the configured time window.
   <div class="flex-1 px-4 py-3">
     {#if loading && !hasRows}
       <div class="space-y-2" aria-label={t('dashboard.recentHearing.loading')}>
-        {#each Array(4) as _, index (index)}
+        {#each Array.from({ length: 4 }) as _, index (index)}
           <div
             class="grid min-h-14 grid-cols-[minmax(0,1fr)_5.75rem_3.25rem] items-center gap-3 rounded-lg px-2"
           >
@@ -145,6 +149,8 @@ compact confidence sparkline for the configured time window.
     {:else if hasRows}
       <ul class="divide-y divide-[var(--color-base-200)]" role="list">
         {#each visibleRows as item (rowKey(item))}
+          {@const speciesName = displayName(item)}
+          {@const relTime = relativeTime(item.latest_heard_at)}
           <li
             class="grid min-h-14 grid-cols-[minmax(0,1fr)_5.75rem_3.25rem] items-center gap-3 px-2 py-2"
           >
@@ -152,14 +158,14 @@ compact confidence sparkline for the configured time window.
               {#if item.thumbnail_url}
                 <img
                   src={buildAppUrl(item.thumbnail_url)}
-                  alt={item.common_name}
+                  alt={speciesName}
                   class="h-9 aspect-[4/3] shrink-0 rounded-md object-cover"
                 />
               {:else}
                 <div
                   class="flex h-9 aspect-[4/3] shrink-0 items-center justify-center rounded-md bg-[var(--color-base-content)]/10 text-xs font-bold text-[var(--color-base-content)]/50"
                 >
-                  {item.common_name.slice(0, 2).toUpperCase()}
+                  {speciesName.slice(0, 2).toUpperCase()}
                 </div>
               {/if}
 
@@ -167,10 +173,13 @@ compact confidence sparkline for the configured time window.
                 <div
                   class="truncate text-sm font-medium leading-tight text-[var(--color-base-content)]"
                 >
-                  {item.common_name}
+                  {speciesName}
                 </div>
                 <div class="truncate text-xs text-[var(--color-base-content)]/55">
-                  {relativeTime(item.latest_heard_at)} · {t('dashboard.recentHearing.detections', {
+                  {#if relTime}
+                    {relTime} ·
+                  {/if}
+                  {t('dashboard.recentHearing.detections', {
                     count: item.count,
                   })}
                 </div>
@@ -181,7 +190,7 @@ compact confidence sparkline for the configured time window.
               class="h-8"
               role="img"
               aria-label={t('dashboard.recentHearing.confidenceTrend', {
-                species: item.common_name,
+                species: speciesName,
               })}
             >
               <Sparkline

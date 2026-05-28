@@ -1290,7 +1290,7 @@ func TestGetRecentSpeciesActivity(t *testing.T) {
 	notes := []datastore.Note{
 		noteAt(1, now.Add(-10*time.Minute), "American Robin", "Turdus migratorius", 0.82),
 		noteAt(2, now.Add(-2*time.Hour), "American Robin", "Turdus migratorius", 0.66),
-		noteAt(3, now.Add(-20*time.Minute), "Northern Cardinal", "Cardinalis cardinalis", 0.95),
+		noteAt(3, now.Add(-20*time.Minute), "Northern Cardinal", "Cardinalis cardinalis", 0.95), //nolint:misspell // Scientific name.
 		noteAt(4, now.Add(-5*time.Hour), "Blue Jay", "Cyanocitta cristata", 0.99),
 	}
 

@@ -106,6 +106,7 @@ Performance Optimizations:
   const RECENT_HEARING_HOURS = 4;
   const RECENT_HEARING_LIMIT = 8;
   const RECENT_HEARING_BUCKETS = 12;
+  const RECENT_HEARING_FETCH_THROTTLE_MS = 10000;
   // Species limit buffer constants for SSE updates
   // BUFFER_TRIGGER: When array exceeds limit + this, trigger cleanup
   // BUFFER_TARGET: After cleanup, keep limit + this many species to avoid frequent re-sorting
@@ -540,11 +541,19 @@ Performance Optimizations:
     }
   }
 
-  async function fetchRecentHearing() {
+  let lastRecentHearingFetch = 0;
+
+  async function fetchRecentHearing(force = false) {
     if (!connectionState.isOnline) {
       isLoadingRecentHearing = false;
       return;
     }
+
+    const now = Date.now();
+    if (!force && now - lastRecentHearingFetch < RECENT_HEARING_FETCH_THROTTLE_MS) {
+      return;
+    }
+    lastRecentHearingFetch = now;
 
     isLoadingRecentHearing = true;
     recentHearingError = null;
@@ -611,7 +620,7 @@ Performance Optimizations:
   }
 
   function handleRecentHearingRefresh() {
-    fetchRecentHearing();
+    fetchRecentHearing(true);
   }
 
   // Animation cleanup timers and RAF manager - use $state.raw() for performance
