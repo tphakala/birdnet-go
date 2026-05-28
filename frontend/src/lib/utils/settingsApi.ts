@@ -160,13 +160,6 @@ export const settingsAPI = {
     ffmpegStatus: (): Promise<{ available: boolean; version?: string }> => {
       return api.get('/api/v2/system/ffmpeg');
     },
-
-    /**
-     * Generate system support dump
-     */
-    supportDump: (options: { includePrivateInfo: boolean }): Promise<{ downloadUrl: string }> => {
-      return api.post('/api/v2/system/support-dump', options);
-    },
   },
 
   /**
