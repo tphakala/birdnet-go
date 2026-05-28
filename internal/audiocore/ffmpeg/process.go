@@ -3,11 +3,10 @@ package ffmpeg
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"math"
-	"math/big"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -511,23 +510,33 @@ func validateTimeout(timeoutStr string) error {
 
 // CalculateBackoff computes the exponential backoff duration for a given restart count.
 // It adds a random jitter of up to restartJitterPercentMax percent of the base backoff.
-// The returned duration is always at least base and at most maxBackoff + maxJitter.
+// The returned duration is always at least base and at most maxBackoff plus that jitter.
 func CalculateBackoff(restartCount int, base, maxBackoff time.Duration) time.Duration {
+	return applyBackoffJitter(computeBaseBackoff(restartCount, base, maxBackoff))
+}
+
+// computeBaseBackoff returns the capped exponential backoff for a restart count,
+// without jitter. The exponent is clamped to [0, maxBackoffExponent] and the
+// result is capped at maxBackoff.
+func computeBaseBackoff(restartCount int, base, maxBackoff time.Duration) time.Duration {
 	exponent := max(restartCount-1, 0)
 	exponent = min(exponent, maxBackoffExponent)
 
-	backoff := min(base*time.Duration(1<<uint(exponent)), maxBackoff) //nolint:gosec // G115: exponent is capped by maxBackoffExponent
+	return min(base*time.Duration(1<<uint(exponent)), maxBackoff) //nolint:gosec // G115: exponent is capped by maxBackoffExponent
+}
 
-	wait := backoff
-	if backoff > 0 {
-		factor := float64(restartJitterPercentMax) / 100.0
-		jitterRange := time.Duration(float64(backoff) * factor)
-		if jitterRange > 0 {
-			if n, err := rand.Int(rand.Reader, big.NewInt(jitterRange.Nanoseconds())); err == nil {
-				wait = backoff + time.Duration(n.Int64())
-			}
-		}
+// applyBackoffJitter adds a random jitter of up to restartJitterPercentMax percent
+// on top of backoff to prevent a thundering herd of simultaneous reconnects. A
+// non-positive backoff (or jitter range) returns backoff unchanged.
+func applyBackoffJitter(backoff time.Duration) time.Duration {
+	if backoff <= 0 {
+		return backoff
 	}
 
-	return wait
+	jitterRange := backoff * restartJitterPercentMax / 100
+	if jitterRange <= 0 {
+		return backoff
+	}
+
+	return backoff + time.Duration(rand.Int64N(jitterRange.Nanoseconds())) //nolint:gosec // G404: non-cryptographic jitter to spread out reconnects
 }

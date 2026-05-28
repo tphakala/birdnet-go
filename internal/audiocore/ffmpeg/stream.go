@@ -3,10 +3,8 @@ package ffmpeg
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"fmt"
 	"io"
-	"math/big"
 	"os/exec"
 	"slices"
 	"strings"
@@ -75,6 +73,14 @@ const (
 
 	// Restart jitter to prevent thundering herd effect.
 	restartJitterPercentMax = 20
+
+	// Extreme failure penalty: once a stream has restarted more than
+	// extremeFailureThreshold times, add an escalating delay on top of the
+	// capped exponential backoff, growing by extremeFailureDelayStep per
+	// restart up to extremeFailureDelayCap.
+	extremeFailureThreshold = 50
+	extremeFailureDelayStep = 10 * time.Second
+	extremeFailureDelayCap  = 5 * time.Minute
 
 	// Timeout settings for FFmpeg streams.
 	defaultTimeoutMicroseconds = 10000000
@@ -1468,28 +1474,23 @@ func (s *Stream) handleRestartBackoff() {
 	s.restartCountMu.Lock()
 	s.restartCount++
 	currentRestartCount := s.restartCount
-
-	exponent := min(s.restartCount-1, maxBackoffExponent)
-	backoff := min(s.backoffDuration*time.Duration(1<<uint(exponent)), s.maxBackoff) //nolint:gosec // G115: exponent is capped by maxBackoffExponent
-
-	if currentRestartCount > 50 {
-		additionalDelay := min(time.Duration(currentRestartCount-50)*10*time.Second, 5*time.Minute)
-		backoff += additionalDelay
-	}
 	s.restartCountMu.Unlock()
 
-	wait := backoff
-	if backoff > 0 {
-		factor := float64(restartJitterPercentMax) / 100.0
-		jitterRange := time.Duration(float64(backoff) * factor)
-		if jitterRange > 0 {
-			if n, err := rand.Int(rand.Reader, big.NewInt(jitterRange.Nanoseconds())); err == nil {
-				wait = backoff + time.Duration(n.Int64())
-			}
-		}
-	}
+	// Capped exponential backoff plus an escalating penalty once a stream has
+	// failed enough times that it is probably broken, so it stops hammering the
+	// source. backoffDuration and maxBackoff are immutable after construction,
+	// so this needs no lock.
+	baseBackoff := computeBaseBackoff(currentRestartCount, s.backoffDuration, s.maxBackoff)
+	penalty := extremeFailurePenalty(currentRestartCount)
+	backoff := baseBackoff + penalty
 
-	s.transitionState(StateBackoff, fmt.Sprintf("restart #%d: waiting %s (base backoff: %s)", currentRestartCount, formatDuration(wait), formatDuration(backoff)))
+	// Jitter the full delay (including any extreme-failure penalty) to avoid a
+	// thundering herd of reconnects.
+	wait := applyBackoffJitter(backoff)
+
+	s.transitionState(StateBackoff, fmt.Sprintf(
+		"restart #%d: waiting %s (base: %s, penalty: %s, pre-jitter: %s)",
+		currentRestartCount, formatDuration(wait), formatDuration(baseBackoff), formatDuration(penalty), formatDuration(backoff)))
 
 	getStreamLogger().Info("waiting before restart attempt",
 		logger.String("url", s.config.safeURL()),
@@ -1507,6 +1508,23 @@ func (s *Stream) handleRestartBackoff() {
 	case <-s.stopChan:
 		// Stop requested.
 	}
+}
+
+// extremeFailurePenalty returns the escalating delay added on top of the capped
+// exponential backoff once restartCount exceeds extremeFailureThreshold. It is
+// zero at or below the threshold and grows by extremeFailureDelayStep per
+// restart beyond it, capped at extremeFailureDelayCap. The step count is clamped
+// before the multiplication so a pathologically large restartCount cannot
+// overflow time.Duration.
+func extremeFailurePenalty(restartCount int) time.Duration {
+	if restartCount <= extremeFailureThreshold {
+		return 0
+	}
+	steps := restartCount - extremeFailureThreshold
+	if maxSteps := int(extremeFailureDelayCap / extremeFailureDelayStep); steps >= maxSteps {
+		return extremeFailureDelayCap
+	}
+	return time.Duration(steps) * extremeFailureDelayStep
 }
 
 // Stop gracefully stops the FFmpeg stream.
