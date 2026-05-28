@@ -1352,26 +1352,44 @@ func (ds *Datastore) GetLastDetections(numDetections int) ([]datastore.Note, err
 // GetAllDetectedSpecies retrieves all detected species.
 func (ds *Datastore) GetAllDetectedSpecies() ([]datastore.Note, error) {
 	ctx := context.Background()
-	labels, err := ds.label.GetAllByLabelType(ctx, ds.speciesLabelTypeID)
+	labelIDs, err := ds.detection.GetAllDetectedLabels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(labelIDs) == 0 {
+		return []datastore.Note{}, nil
+	}
+
+	labels, err := ds.label.GetByIDs(ctx, labelIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	// Use a map to deduplicate by scientific name (since labels are now per-model).
+	// Use a map to deduplicate by scientific name (since labels are per-model).
 	// Labels may contain legacy concatenated "ScientificName_CommonName" format,
 	// so extract only the scientific name portion.
 	seen := make(map[string]struct{}, len(labels))
-	notes := make([]datastore.Note, 0, len(labels))
-	for i := range labels {
-		sciName := detection.ExtractScientificName(labels[i].ScientificName)
-		if sciName != "" {
-			if _, exists := seen[sciName]; !exists {
-				seen[sciName] = struct{}{}
-				notes = append(notes, datastore.Note{
-					ScientificName: sciName,
-				})
-			}
+	for _, label := range labels {
+		if label == nil {
+			continue
 		}
+		if label.LabelTypeID != ds.speciesLabelTypeID {
+			continue
+		}
+		sciName := detection.ExtractScientificName(label.ScientificName)
+		if sciName != "" {
+			seen[sciName] = struct{}{}
+		}
+	}
+
+	names := slices.Collect(maps.Keys(seen))
+	slices.Sort(names)
+
+	notes := make([]datastore.Note, 0, len(names))
+	for _, sciName := range names {
+		notes = append(notes, datastore.Note{
+			ScientificName: sciName,
+		})
 	}
 	return notes, nil
 }

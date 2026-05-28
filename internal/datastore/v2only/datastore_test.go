@@ -1,6 +1,7 @@
 package v2only
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -111,6 +112,19 @@ func setupTestDatastoreWithLabels(t *testing.T, labels []string) (ds *Datastore,
 	return ds, func() { _ = ds.Close(); cfgCleanup() }
 }
 
+type nilInjectingLabelRepository struct {
+	repository.LabelRepository
+}
+
+func (r nilInjectingLabelRepository) GetByIDs(ctx context.Context, ids []uint) (map[uint]*entities.Label, error) {
+	labels, err := r.LabelRepository.GetByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	labels[0] = nil
+	return labels, nil
+}
+
 func TestV2OnlyDatastore_Open(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
@@ -164,6 +178,55 @@ func TestV2OnlyDatastore_SaveAndGet(t *testing.T) {
 	assert.Equal(t, "12:30:00", notes[0].Time)
 	assert.Equal(t, "Passer domesticus", notes[0].ScientificName)
 	assert.InDelta(t, 0.85, notes[0].Confidence, 0.001)
+}
+
+func TestV2OnlyDatastore_GetAllDetectedSpeciesReturnsOnlyDetectionLabels(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	note := &datastore.Note{
+		Date:           "2024-01-15",
+		Time:           "12:30:00",
+		ScientificName: "Passer domesticus",
+		Confidence:     0.85,
+	}
+	results := []datastore.Results{
+		{Species: "Passer domesticus", Confidence: 0.85},
+		{Species: "Passer montanus", Confidence: 0.10},
+	}
+	require.NoError(t, ds.Save(note, results))
+
+	ctx := t.Context()
+	_, err := ds.label.GetOrCreate(ctx, "Crack", ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+	_, err = ds.label.GetOrCreate(ctx, "Dishes", ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+
+	otherModel, err := ds.model.GetOrCreate(ctx, "Perch", "1.0", "default", entities.ModelTypeBird, nil)
+	require.NoError(t, err)
+	duplicateLabel, err := ds.label.GetOrCreate(ctx, "Passer domesticus", otherModel.ID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+	require.NoError(t, ds.detection.Save(ctx, &entities.Detection{
+		ModelID:    otherModel.ID,
+		LabelID:    duplicateLabel.ID,
+		DetectedAt: time.Now().Unix(),
+		Confidence: 0.91,
+	}))
+
+	ds.label = nilInjectingLabelRepository{LabelRepository: ds.label}
+
+	species, err := ds.GetAllDetectedSpecies()
+	require.NoError(t, err)
+
+	names := make([]string, 0, len(species))
+	for _, note := range species {
+		names = append(names, note.ScientificName)
+	}
+
+	assert.ElementsMatch(t, []string{"Passer domesticus"}, names)
+	assert.NotContains(t, names, "Passer montanus", "prediction-only labels must not be warmed as detected species")
+	assert.NotContains(t, names, "Crack", "orphan species labels must not be warmed as detected species")
+	assert.NotContains(t, names, "Dishes", "orphan species labels must not be warmed as detected species")
 }
 
 func TestV2OnlyDatastore_Delete(t *testing.T) {
