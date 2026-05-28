@@ -101,12 +101,18 @@ func buildAnalysisArgs(url string) []string {
 	args := make([]string, 0, 16)
 
 	lower := strings.ToLower(url)
-	if strings.HasPrefix(lower, "rtsp://") || strings.HasPrefix(lower, "rtsps://") {
+	isRTSP := strings.HasPrefix(lower, "rtsp://") || strings.HasPrefix(lower, "rtsps://")
+	if isRTSP {
 		args = append(args, "-rtsp_transport", "tcp")
 	}
 
+	timeoutKey := ffmpegTimeoutParam
+	if isRTSP {
+		timeoutKey = "-stimeout"
+	}
+
 	args = append(args,
-		"-timeout", strconv.FormatInt(defaultTimeoutMicroseconds, 10),
+		timeoutKey, strconv.FormatInt(defaultTimeoutMicroseconds, 10),
 		"-i", url,
 		"-t", strconv.Itoa(analysisCaptureDuration),
 		"-loglevel", "error",

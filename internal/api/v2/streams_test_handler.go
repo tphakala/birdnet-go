@@ -42,7 +42,9 @@ var allowedSchemes = map[string]bool{
 	"http":  true,
 	"https": true,
 	"rtmp":  true,
+	"rtmps": true,
 	"udp":   true,
+	"rtp":   true,
 }
 
 var blockedHosts = map[string]bool{
