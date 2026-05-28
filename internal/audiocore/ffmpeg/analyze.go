@@ -107,13 +107,8 @@ func buildAnalysisArgs(url string) []string {
 		args = append(args, "-rtsp_transport", "tcp")
 	}
 
-	timeoutKey := ffmpegTimeoutParam
-	if isRTSP {
-		timeoutKey = ffmpegRTSPTimeoutParam
-	}
-
 	args = append(args,
-		timeoutKey, strconv.FormatInt(defaultTimeoutMicroseconds, 10),
+		ffmpegTimeoutParam, strconv.FormatInt(defaultTimeoutMicroseconds, 10),
 		"-i", url,
 		"-t", strconv.Itoa(analysisCaptureDuration),
 		"-loglevel", "error",
