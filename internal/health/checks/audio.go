@@ -166,6 +166,14 @@ func (c *PipelineLivenessCheck) Run(_ context.Context) health.Result {
 // DefaultWindow is the default evaluation window for windowed checks.
 const DefaultWindow = time.Hour
 
+// Threshold constants for audio health checks.
+const (
+	dropsBaseWarnThreshold   = 10
+	dropsBaseCritThreshold   = 50
+	overrunBaseWarnThreshold = 5
+	overrunBaseCritThreshold = 25
+)
+
 // BufferDropsCheck monitors audio buffer drop statistics using time-windowed evaluation.
 type BufferDropsCheck struct {
 	store     *observability.HealthMetricsStore
@@ -204,9 +212,9 @@ func (c *BufferDropsCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
 	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
-		baseWarnThreshold: 10,
-		baseCritThreshold: 50,
-		sustainedHours:    3,
+		baseWarnThreshold: dropsBaseWarnThreshold,
+		baseCritThreshold: dropsBaseCritThreshold,
+		sustainedHours:    defaultSustainedHours,
 		metricPrefix:      observability.MetricPrefixAudioDrops,
 		window:            c.window,
 	}, start)
@@ -327,9 +335,9 @@ func (c *BufferOverrunCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
 	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
-		baseWarnThreshold: 5,
-		baseCritThreshold: 25,
-		sustainedHours:    3,
+		baseWarnThreshold: overrunBaseWarnThreshold,
+		baseCritThreshold: overrunBaseCritThreshold,
+		sustainedHours:    defaultSustainedHours,
 		metricPrefix:      observability.MetricPrefixAudioOverruns,
 		window:            c.window,
 	}, start)

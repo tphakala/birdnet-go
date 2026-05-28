@@ -61,6 +61,13 @@ const defaultSustainedHours = 3
 // for shorter windows.
 const minWindowForRecurrence = 3 * time.Hour
 
+// Pattern classification labels for the details map.
+const (
+	patternNone      = "none"
+	patternTransient = "transient"
+	patternSustained = "sustained"
+)
+
 // windowedStatsConfig parameterises evalWindowedStats for counter-based checks.
 type windowedStatsConfig struct {
 	baseWarnThreshold int64
@@ -169,6 +176,8 @@ func evalWindowedStats(
 		maxHourly:         maxHourly,
 		activeHours:       activeHours,
 		sustainedHrs:      sustainedHrs,
+		sources:           activeSources,
+		lastEventSuffix:   formatLastEventSuffix(lastEvent, now),
 		recurrenceEnabled: recurrenceEnabled,
 		velocity:          velocity,
 		window:            cfg.window,
@@ -180,11 +189,11 @@ func evalWindowedStats(
 	var pattern string
 	switch {
 	case windowTotal == 0:
-		pattern = "none"
+		pattern = patternNone
 	case recurrenceEnabled && activeHours >= sustainedHrs && windowTotal >= sustainedVolumeFloor:
-		pattern = "sustained"
+		pattern = patternSustained
 	default:
-		pattern = "transient"
+		pattern = patternTransient
 	}
 
 	details := map[string]any{
@@ -229,6 +238,8 @@ type severitySignals struct {
 	maxHourly         int64
 	activeHours       int
 	sustainedHrs      int
+	sources           int
+	lastEventSuffix   string
 	recurrenceEnabled bool
 	velocity          velocityTrend
 	window            time.Duration
@@ -244,14 +255,15 @@ func applySeveritySignals(s *severitySignals, defaultMsg string) (status health.
 
 	label := checkNameLabel(s.name)
 	windowStr := formatDuration(s.window)
+	ctx := fmt.Sprintf(" across %d source(s)%s", s.sources, s.lastEventSuffix)
 	status = health.StatusHealthy
 	msg = defaultMsg
 	peakEscalated := false
 
 	// Safety net: severe hourly spike overrides window-scaled thresholds.
 	if s.maxHourly >= s.baseCritThreshold {
-		return health.StatusCritical, fmt.Sprintf("%d %s in %s, peak hour: %d %s",
-			s.windowTotal, label, windowStr, s.maxHourly, label)
+		return health.StatusCritical, fmt.Sprintf("%d %s in %s, peak hour: %d %s%s",
+			s.windowTotal, label, windowStr, s.maxHourly, label, ctx)
 	}
 
 	if s.maxHourly >= s.baseWarnThreshold {
@@ -265,27 +277,27 @@ func applySeveritySignals(s *severitySignals, defaultMsg string) (status health.
 	// Sustained recurrence pattern.
 	if s.recurrenceEnabled && s.activeHours >= s.sustainedHrs && s.windowTotal >= sustainedVolumeFloor {
 		if s.windowTotal >= s.critThreshold || s.velocity == velocityIncreasing {
-			return health.StatusCritical, fmt.Sprintf("Sustained %s across %d hours, worsening", label, s.activeHours)
+			return health.StatusCritical, fmt.Sprintf("Sustained %s across %d hours, worsening%s", label, s.activeHours, ctx)
 		}
-		return health.StatusWarning, fmt.Sprintf("Sustained %s across %d hours", label, s.activeHours)
+		return health.StatusWarning, fmt.Sprintf("Sustained %s across %d hours%s", label, s.activeHours, ctx)
 	}
 
 	// Absolute threshold checks.
 	if s.windowTotal >= s.critThreshold {
-		return health.StatusCritical, fmt.Sprintf("%d %s in %s, concentrated in %d hour(s)",
-			s.windowTotal, label, windowStr, max(s.activeHours, 1))
+		return health.StatusCritical, fmt.Sprintf("%d %s in %s, concentrated in %d hour(s)%s",
+			s.windowTotal, label, windowStr, max(s.activeHours, 1), ctx)
 	}
 
 	if s.windowTotal >= s.warnThreshold || peakEscalated {
 		if s.recurrenceEnabled && s.velocity == velocityIncreasing {
-			return health.StatusWarning, fmt.Sprintf("%d %s in %s, rate increasing", s.windowTotal, label, windowStr)
+			return health.StatusWarning, fmt.Sprintf("%d %s in %s, rate increasing%s", s.windowTotal, label, windowStr, ctx)
 		}
-		return health.StatusWarning, fmt.Sprintf("%d %s in %s", s.windowTotal, label, windowStr)
+		return health.StatusWarning, fmt.Sprintf("%d %s in %s%s", s.windowTotal, label, windowStr, ctx)
 	}
 
 	// Low volume within tolerance.
 	if s.activeHours > 0 {
-		msg = fmt.Sprintf("%d %s in %s, within tolerance", s.windowTotal, label, windowStr)
+		msg = fmt.Sprintf("%d %s in %s, within tolerance%s", s.windowTotal, label, windowStr, ctx)
 	}
 
 	return status, msg
@@ -364,6 +376,14 @@ func formatTimeAgo(t, now time.Time) string {
 	}
 }
 
+// formatLastEventSuffix returns " (last: Xh ago)" or empty string when no event recorded.
+func formatLastEventSuffix(lastEvent, now time.Time) string {
+	if lastEvent.IsZero() {
+		return ""
+	}
+	return fmt.Sprintf(" (last: %s)", formatTimeAgo(lastEvent, now))
+}
+
 // extractMetricType extracts the metric type from a prefix like "audio.drops." -> "drops".
 func extractMetricType(prefix string) string {
 	trimmed := strings.TrimSuffix(prefix, ".")
@@ -408,10 +428,14 @@ func countActiveHours(buckets []observability.HourlyBucket, window time.Duration
 // Returns velocityStable when fewer than two in-window buckets are found.
 func detectVelocity(buckets []observability.HourlyBucket, window time.Duration, now time.Time) velocityTrend {
 	cutoff := now.Add(-window)
+	currentHourStart := now.Truncate(time.Hour)
 
 	var prev, curr observability.HourlyBucket
 	n := 0
 	for _, b := range buckets {
+		if !b.Start.Before(currentHourStart) {
+			continue
+		}
 		if !b.Start.Add(time.Hour).Before(cutoff) {
 			prev, curr = curr, b
 			n++

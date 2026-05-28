@@ -113,7 +113,11 @@ func TestCountActiveHours(t *testing.T) {
 func TestDetectVelocity(t *testing.T) {
 	t.Parallel()
 
+	// makeBuckets anchors the newest bucket at now.Truncate(1h). detectVelocity
+	// skips the bucket starting at now.Truncate(1h) (current incomplete hour).
+	// Shift bucketNow back one hour from now so the newest bucket is completed.
 	now := time.Now().Truncate(time.Hour)
+	bucketNow := now.Add(-time.Hour)
 
 	tests := []struct {
 		name   string
@@ -175,7 +179,7 @@ func TestDetectVelocity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			buckets := makeBuckets(t, tt.counts, now)
+			buckets := makeBuckets(t, tt.counts, bucketNow)
 			got := detectVelocity(buckets, tt.window, now)
 			assert.Equal(t, tt.want, got)
 		})
