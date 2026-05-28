@@ -1480,14 +1480,17 @@ func (s *Stream) handleRestartBackoff() {
 	// failed enough times that it is probably broken, so it stops hammering the
 	// source. backoffDuration and maxBackoff are immutable after construction,
 	// so this needs no lock.
-	backoff := computeBaseBackoff(currentRestartCount, s.backoffDuration, s.maxBackoff) +
-		extremeFailurePenalty(currentRestartCount)
+	baseBackoff := computeBaseBackoff(currentRestartCount, s.backoffDuration, s.maxBackoff)
+	penalty := extremeFailurePenalty(currentRestartCount)
+	backoff := baseBackoff + penalty
 
 	// Jitter the full delay (including any extreme-failure penalty) to avoid a
 	// thundering herd of reconnects.
 	wait := applyBackoffJitter(backoff)
 
-	s.transitionState(StateBackoff, fmt.Sprintf("restart #%d: waiting %s (base backoff: %s)", currentRestartCount, formatDuration(wait), formatDuration(backoff)))
+	s.transitionState(StateBackoff, fmt.Sprintf(
+		"restart #%d: waiting %s (base: %s, penalty: %s, pre-jitter: %s)",
+		currentRestartCount, formatDuration(wait), formatDuration(baseBackoff), formatDuration(penalty), formatDuration(backoff)))
 
 	getStreamLogger().Info("waiting before restart attempt",
 		logger.String("url", s.config.safeURL()),

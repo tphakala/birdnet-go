@@ -3,11 +3,10 @@ package ffmpeg
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"math"
-	"math/big"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -528,7 +527,7 @@ func computeBaseBackoff(restartCount int, base, maxBackoff time.Duration) time.D
 
 // applyBackoffJitter adds a random jitter of up to restartJitterPercentMax percent
 // on top of backoff to prevent a thundering herd of simultaneous reconnects. A
-// non-positive backoff or a failed random read returns backoff unchanged.
+// non-positive backoff (or jitter range) returns backoff unchanged.
 func applyBackoffJitter(backoff time.Duration) time.Duration {
 	if backoff <= 0 {
 		return backoff
@@ -540,9 +539,5 @@ func applyBackoffJitter(backoff time.Duration) time.Duration {
 		return backoff
 	}
 
-	n, err := rand.Int(rand.Reader, big.NewInt(jitterRange.Nanoseconds()))
-	if err != nil {
-		return backoff
-	}
-	return backoff + time.Duration(n.Int64())
+	return backoff + time.Duration(rand.Int64N(jitterRange.Nanoseconds())) //nolint:gosec // G404: non-cryptographic jitter to spread out reconnects
 }
