@@ -3,6 +3,9 @@ package health
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
+	"runtime/debug"
 	"slices"
 	"sync"
 	"time"
@@ -108,11 +111,60 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 	for i, c := range checks {
 		idx, check := i, c
 		go func() {
+			var rs []Result
+
+			// Capture the check identity once, before running it. The recover
+			// path below must not call check.Name()/check.Category() again: if
+			// those methods are what panicked (for example a typed-nil check),
+			// calling them inside the recover defer would panic a second time
+			// with no further recovery and crash the process, defeating the
+			// point of recovering here.
+			name := check.Name()
+			category := check.Category()
+
+			// sent guards against a double send on resCh. resCh is buffered to
+			// exactly len(checks), so a second send would steal another check's
+			// slot and block that goroutine forever. Today only the success send
+			// below runs before any panic could occur, but the flag keeps the
+			// invariant if code is ever added after the send.
+			sent := false
+
+			// Recover from a panic in the check so a single misbehaving check
+			// cannot crash the process. Registered first, so it runs last (after
+			// defer cancel below). A recovered panic is a real bug, not a benign
+			// condition, so it is logged at ERROR with a stack trace before being
+			// surfaced as StatusUnknown: the app stays up, but the panic is not
+			// silently hidden. The recovery must still deliver a result on resCh,
+			// otherwise the orchestrator would block waiting for a result that
+			// never arrives.
+			defer func() {
+				rec := recover()
+				if rec == nil {
+					return
+				}
+				slog.Error("health check panicked",
+					"check", name,
+					"category", category,
+					"panic", rec,
+					"stack", string(debug.Stack()))
+				if !sent {
+					resCh <- checkResult{
+						idx: idx,
+						results: []Result{{
+							Name:      name,
+							Category:  category,
+							Status:    StatusUnknown,
+							Message:   fmt.Sprintf("check panicked: %v", rec),
+							Timestamp: time.Now(),
+						}},
+					}
+				}
+			}()
+
 			checkCtx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 			defer cancel()
 			start := time.Now()
 
-			var rs []Result
 			if mc, ok := check.(MultiResultCheck); ok {
 				rs = slices.Clone(mc.RunMulti(checkCtx))
 			} else {
@@ -130,6 +182,7 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 				}
 			}
 			resCh <- checkResult{idx: idx, results: rs}
+			sent = true
 		}()
 	}
 

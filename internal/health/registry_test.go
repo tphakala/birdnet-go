@@ -358,3 +358,90 @@ func TestRegistry_RunAll_MultiResultCheck_Empty(t *testing.T) {
 	results := r.RunAll(t.Context())
 	assert.Empty(t, results)
 }
+
+// panicCheck panics when Run is called, to verify the orchestrator recovers.
+type panicCheck struct {
+	name     string
+	category Category
+	panicVal any
+}
+
+func (p *panicCheck) Name() string       { return p.name }
+func (p *panicCheck) Category() Category { return p.category }
+func (p *panicCheck) Run(_ context.Context) Result {
+	panic(p.panicVal)
+}
+
+// panicMultiCheck panics from RunMulti to verify multi-result checks are
+// also protected by panic recovery.
+type panicMultiCheck struct {
+	name     string
+	category Category
+	panicVal any
+}
+
+func (p *panicMultiCheck) Name() string       { return p.name }
+func (p *panicMultiCheck) Category() Category { return p.category }
+func (p *panicMultiCheck) Run(_ context.Context) Result {
+	panic(p.panicVal)
+}
+func (p *panicMultiCheck) RunMulti(_ context.Context) []Result {
+	panic(p.panicVal)
+}
+
+func TestRunChecks_RecoversFromPanic(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+	r.RegisterAll(
+		&panicCheck{
+			name:     "boom",
+			category: CategorySystem,
+			panicVal: "kaboom",
+		},
+		&mockCheck{
+			name:     "ok",
+			category: CategoryAudio,
+			result:   Result{Name: "ok", Category: CategoryAudio, Status: StatusHealthy},
+		},
+	)
+
+	// Must not crash the process and must not hang.
+	results := r.RunAll(t.Context())
+	require.Len(t, results, 2)
+
+	byName := make(map[string]Result, len(results))
+	for _, res := range results {
+		byName[res.Name] = res
+	}
+
+	boom := byName["boom"]
+	assert.Equal(t, StatusUnknown, boom.Status)
+	assert.Equal(t, CategorySystem, boom.Category)
+	assert.Contains(t, boom.Message, "check panicked")
+	assert.Contains(t, boom.Message, "kaboom")
+	assert.False(t, boom.Timestamp.IsZero(), "panic result should carry a timestamp")
+
+	// The sibling healthy check must still report normally.
+	assert.Equal(t, StatusHealthy, byName["ok"].Status)
+}
+
+func TestRunChecks_RecoversFromMultiResultPanic(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+	r.Register(&panicMultiCheck{
+		name:     "multi_boom",
+		category: CategoryAnalysis,
+		panicVal: "multi kaboom",
+	})
+
+	results := r.RunAll(t.Context())
+	require.Len(t, results, 1)
+
+	res := results[0]
+	assert.Equal(t, "multi_boom", res.Name)
+	assert.Equal(t, CategoryAnalysis, res.Category)
+	assert.Equal(t, StatusUnknown, res.Status)
+	assert.Contains(t, res.Message, "check panicked")
+	assert.Contains(t, res.Message, "multi kaboom")
+	assert.False(t, res.Timestamp.IsZero())
+}

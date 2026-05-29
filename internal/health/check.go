@@ -82,7 +82,13 @@ type WindowedCheck interface {
 // Skipped and unknown results are ignored when actionable results (healthy,
 // warning, critical) exist. If every result is non-actionable, it returns
 // StatusUnknown when any unknown result is present, otherwise StatusSkipped.
+//
+// An empty (or nil) slice means there is no data to aggregate. Absence of data
+// is not "healthy", so it reports StatusUnknown.
 func WorstStatus(results []Result) Status {
+	if len(results) == 0 {
+		return StatusUnknown
+	}
 	worst := StatusHealthy
 	hasActionable := false
 	sawUnknown := false
@@ -98,7 +104,7 @@ func WorstStatus(results []Result) Status {
 			worst = r.Status
 		}
 	}
-	if !hasActionable && len(results) > 0 {
+	if !hasActionable {
 		if sawUnknown {
 			return StatusUnknown
 		}

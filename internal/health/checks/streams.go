@@ -137,6 +137,17 @@ func (c *StreamErrorRateCheck) Run(_ context.Context) health.Result {
 	}, start)
 }
 
+// FFmpeg health check message formats.
+const (
+	// ffmpegDeadMsgFormat is used when only dead processes are present.
+	ffmpegDeadMsgFormat = "%d FFmpeg process(es) are dead"
+	// ffmpegNotRunningMsgFormat is used when only not-running processes are present.
+	ffmpegNotRunningMsgFormat = "%d FFmpeg process(es) are not in running state"
+	// ffmpegDeadAndNotRunningMsgFormat is used when both dead and not-running
+	// processes are present so neither count is masked.
+	ffmpegDeadAndNotRunningMsgFormat = "%d FFmpeg process(es) are dead, %d not in running state"
+)
+
 // FFmpegHealthCheck monitors the process state of the FFmpeg processes backing each RTSP stream.
 type FFmpegHealthCheck struct {
 	getStreams func() []StreamHealthInfo
@@ -184,12 +195,18 @@ func (c *FFmpegHealthCheck) Run(_ context.Context) health.Result {
 	msg := fmt.Sprintf("All %d FFmpeg processes running", len(streams))
 
 	switch {
+	case deadCount > 0 && notRunningCount > 0:
+		// Both dead and not-running processes exist. Dead processes keep the
+		// status critical, but the message must surface both counts so the
+		// not-running processes are not masked.
+		status = health.StatusCritical
+		msg = fmt.Sprintf(ffmpegDeadAndNotRunningMsgFormat, deadCount, notRunningCount)
 	case deadCount > 0:
 		status = health.StatusCritical
-		msg = fmt.Sprintf("%d FFmpeg process(es) are dead", deadCount)
+		msg = fmt.Sprintf(ffmpegDeadMsgFormat, deadCount)
 	case notRunningCount > 0:
 		status = health.StatusWarning
-		msg = fmt.Sprintf("%d FFmpeg process(es) are not in running state", notRunningCount)
+		msg = fmt.Sprintf(ffmpegNotRunningMsgFormat, notRunningCount)
 	}
 
 	return health.Result{
