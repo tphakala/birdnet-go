@@ -179,6 +179,9 @@
         "currentStatusTitle": "Nåværende status",
         "detectionStatusTitle": "Registreringsstatus",
         "lockLabel": "Låsestatus",
+        "alternativePredictionsTitle": "Klassifiseringskandidater",
+        "alternativePredictionsHelp": "Registrert art først, deretter alternativer etter modellens sikkerhet",
+        "detectedPredictionLabel": "Registrert",
         "reviewLabel": "Gjennomgangsstatus",
         "saveReview": "Lagre gjennomgang"
       },

@@ -619,6 +619,12 @@ func TestGetDetection(t *testing.T) {
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "1").Return(mockNote, nil)
 				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+				m.On("GetNoteResults", "1").Return([]datastore.Results{
+					{Species: "Melanerpes carolinus_Red-bellied Woodpecker_RBWO", Confidence: 0.81},
+					{Species: "Corvus brachyrhynchos_American Crow_AMCRO", Confidence: 0.95},
+					{Species: "Cyanocitta cristata_Blue Jay_BLJA", Confidence: 0.72},
+					{Species: "Melanerpes carolinus_Red-bellied Woodpecker_RBWO", Confidence: 0.86},
+				}, nil)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
@@ -638,6 +644,33 @@ func TestGetDetection(t *testing.T) {
 				assert.Equal(t, uint(1), response.Comments[0].ID)
 				assert.NotEmpty(t, response.Comments[0].CreatedAt)
 				assert.NotEmpty(t, response.Comments[0].UpdatedAt)
+				require.Len(t, response.AlternativePredictions, 2)
+				assert.Equal(t, 2, response.AlternativePredictions[0].Rank)
+				assert.Equal(t, "Melanerpes carolinus", response.AlternativePredictions[0].ScientificName)
+				assert.Equal(t, "Red-bellied Woodpecker", response.AlternativePredictions[0].CommonName)
+				assert.Equal(t, "RBWO", response.AlternativePredictions[0].SpeciesCode)
+				assert.InDelta(t, 0.86, response.AlternativePredictions[0].Confidence, 0.001)
+				assert.Equal(t, 3, response.AlternativePredictions[1].Rank)
+				assert.Equal(t, "Cyanocitta cristata", response.AlternativePredictions[1].ScientificName)
+			},
+		},
+		{
+			name:        "Alternative predictions load failure does not fail detection",
+			detectionID: "1",
+			mockSetup: func(m *mock.Mock) {
+				m.On("Get", "1").Return(mockNote, nil)
+				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+				m.On("GetNoteResults", "1").Return([]datastore.Results{}, errors.New("results unavailable"))
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var response DetectionResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				require.NoError(t, err)
+				assert.Equal(t, uint(1), response.ID)
+				assert.Equal(t, "Corvus brachyrhynchos", response.ScientificName)
+				assert.Empty(t, response.AlternativePredictions)
 			},
 		},
 		{
@@ -720,6 +753,7 @@ func TestGetDetection_ClipNameSerialized(t *testing.T) {
 		mockDS.ExpectedCalls = nil
 		mockDS.On("Get", "7").Return(note, nil)
 		mockDS.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+		mockDS.On("GetNoteResults", "7").Return([]datastore.Results{}, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/7", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -746,6 +780,7 @@ func TestGetDetection_ClipNameSerialized(t *testing.T) {
 		mockDS.ExpectedCalls = nil
 		mockDS.On("Get", "7").Return(note, nil)
 		mockDS.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+		mockDS.On("GetNoteResults", "7").Return([]datastore.Results{}, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/7", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -842,6 +877,7 @@ func TestGetDetectionCommentFormat(t *testing.T) {
 	// Setup mock expectations
 	mockDS.On("Get", "42").Return(mockNote, nil)
 	mockDS.On("GetHourlyWeather", "2025-01-09").Return([]datastore.HourlyWeather{}, nil)
+	mockDS.On("GetNoteResults", "42").Return([]datastore.Results{}, nil)
 
 	// Create request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/42", http.NoBody)
@@ -914,6 +950,7 @@ func TestGetDetectionEmptyComments(t *testing.T) {
 
 	mockDS.On("Get", "99").Return(mockNote, nil)
 	mockDS.On("GetHourlyWeather", "2025-01-09").Return([]datastore.HourlyWeather{}, nil)
+	mockDS.On("GetNoteResults", "99").Return([]datastore.Results{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/99", http.NoBody)
 	rec := httptest.NewRecorder()

@@ -420,6 +420,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		controlChan:   controlChan,
 		isGlobalOwner: settings == conf.GetSettings(),
 	}
+	c.UpdateCommonNameMap(settings.BirdNET.Labels)
 
 	// Construct domain handlers around the shared core. They hold the same
 	// *apicore.Core pointer and register their routes in initRoutes.

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import type { Detection } from '$lib/types/detection.types';
-  import ConfidenceBadge from '$lib/desktop/features/dashboard/components/ConfidenceBadge.svelte';
+  import ConfidenceBadge from '$lib/desktop/components/data/ConfidenceBadge.svelte';
   import WeatherBadge from '$lib/desktop/features/dashboard/components/WeatherBadge.svelte';
   import MoonBadge from '$lib/desktop/features/dashboard/components/MoonBadge.svelte';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
