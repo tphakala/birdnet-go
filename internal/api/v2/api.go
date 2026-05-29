@@ -995,16 +995,20 @@ func (c *Controller) HandleErrorForTest(ctx echo.Context, err error, message str
 //
 // Reads the debug flag via conf.GetSettings() rather than c.Settings so the
 // check is race-free against concurrent c.Settings writes in the settings
-// handlers: c.Settings is plain a *conf.Settings field with no locking on
+// handlers: c.Settings is a plain *conf.Settings field with no locking on
 // the Debug read path, while conf.GetSettings() is a lock-free atomic.Load.
-// Falls back to c.Settings when the global snapshot has not been set (tests
-// that inject a standalone Controller without touching the global).
+// Returns silently when the global snapshot has not been set (e.g. in unit
+// tests with a standalone Controller).
 func (c *Controller) Debug(format string, v ...any) {
 	settings := conf.GetSettings()
 	if settings == nil {
-		settings = c.Settings
+		// Skip debug logging when the global snapshot hasn't been set
+		// (e.g. in unit tests with a standalone Controller). Reading
+		// c.Settings here would race with concurrent writes in the
+		// settings update handlers.
+		return
 	}
-	if settings != nil && settings.WebServer.Debug {
+	if settings.WebServer.Debug {
 		msg := fmt.Sprintf(format, v...)
 		c.logDebugIfEnabled(msg)
 	}

@@ -67,6 +67,25 @@ var (
 		"context deadline exceeded", // Upload/request timeout
 		"tls handshake timeout",
 		"eof", // Connection lost (e.g., MQTT broker disconnect)
+
+		// imageprovider Wikipedia rate-limit / circuit-breaker noise.
+		// Wikipedia rate-limits the image fetcher (HTTP 429) and the circuit
+		// breaker then throttles further calls, so forwarding a Sentry event for
+		// each rejected request is pure noise. These are built with CategoryNetwork
+		// in internal/imageprovider/wikipedia.go. The patterns are Wikipedia-specific
+		// full signatures (not loose substrings like "rate limit exceeded") so
+		// network-category errors from other components are never collaterally
+		// suppressed, matching the rtspSilenceTimeoutSignature approach above.
+		// HTTP 429 is purely environmental throttling so every occurrence is
+		// suppressed; 403/500/503 still report at least the first event because
+		// those can indicate a real problem (policy violation, server fault).
+		// Lowercase substrings of the real messages produced there:
+		//   - handleHTTPStatusError: "Wikipedia API returned status 429: <body>"
+		//   - checkCircuitBreaker:   "Wikipedia API circuit breaker open: <reason>"
+		//   - diagnostic path:       "Wikipedia rate limit exceeded: <message>"
+		"wikipedia api returned status 429",  // direct HTTP 429 from the API
+		"wikipedia api circuit breaker open", // repeated rejection while breaker is open
+		"wikipedia rate limit exceeded",      // diagnostic rate-limit error
 	}
 )
 
@@ -181,7 +200,7 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 	// Notification circuit-breaker open/half-open conditions are operational
 	// throttling state, not bugs. BirdWeather reuses the notification package's
 	// PushCircuitBreaker, whose sentinel ErrCircuitBreakerOpen is tagged with
-	// component="notification" regardless of the caller — so this single check
+	// component="notification" regardless of the caller, so this single check
 	// also covers BirdWeather's breaker-open errors. The breaker state transitions
 	// themselves are surfaced via the dedicated CircuitBreakerStateTransition
 	// telemetry path, so the per-call "circuit breaker is open" errors are pure
@@ -214,7 +233,7 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		}
 	}
 
-	// Filter out "image not found" errors — expected when Wikipedia lacks an image for a species
+	// Filter out "image not found" errors, expected when Wikipedia lacks an image for a species
 	if ee.Category == CategoryImageFetch {
 		if strings.Contains(errorMsg, "image not found") {
 			return false
@@ -256,7 +275,7 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		return false
 	}
 
-	// Rate-limit disk-full errors — a single root cause creates cascading
+	// Rate-limit disk-full errors: a single root cause creates cascading
 	// errors across many subsystems (database, FFmpeg, alerting, etc.)
 	if strings.Contains(errorMsg, "disk is full") ||
 		strings.Contains(errorMsg, "no space left on device") {

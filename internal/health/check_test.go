@@ -9,8 +9,10 @@ import (
 
 func TestWorstStatus_Empty(t *testing.T) {
 	t.Parallel()
-	got := WorstStatus([]Result{})
-	assert.Equal(t, StatusHealthy, got)
+	// An empty slice means there is no data to aggregate. No data is not
+	// "healthy"; it is unknown.
+	assert.Equal(t, StatusUnknown, WorstStatus([]Result{}))
+	assert.Equal(t, StatusUnknown, WorstStatus(nil))
 }
 
 func TestWorstStatus_AllHealthy(t *testing.T) {
