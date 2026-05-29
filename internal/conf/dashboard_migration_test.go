@@ -25,7 +25,7 @@ func TestSettings_MigrateDashboardLayout(t *testing.T) {
 				},
 			},
 			expectMigrated: true,
-			expectElements: 4,
+			expectElements: 5,
 			expectLimit:    50,
 		},
 		{
@@ -55,7 +55,7 @@ func TestSettings_MigrateDashboardLayout(t *testing.T) {
 				},
 			},
 			expectMigrated: true,
-			expectElements: 4,
+			expectElements: 5,
 			expectLimit:    30,
 		},
 	}
@@ -72,18 +72,21 @@ func TestSettings_MigrateDashboardLayout(t *testing.T) {
 				// Verify element types, ordering, and enabled state
 				assert.Equal(t, "daily-summary", elements[0].Type)
 				assert.True(t, elements[0].Enabled)
-				assert.Equal(t, "currently-hearing", elements[1].Type)
+				assert.Equal(t, "new-species-highlights", elements[1].Type)
 				assert.True(t, elements[1].Enabled)
-				assert.Equal(t, "live-spectrogram", elements[2].Type)
+				assert.Equal(t, "currently-hearing", elements[2].Type)
 				assert.True(t, elements[2].Enabled)
-				assert.Equal(t, "detections-grid", elements[3].Type)
+				assert.Equal(t, "live-spectrogram", elements[3].Type)
 				assert.True(t, elements[3].Enabled)
+				assert.Equal(t, "detections-grid", elements[4].Type)
+				assert.True(t, elements[4].Enabled)
 
 				// Verify stable IDs are generated
 				assert.Equal(t, "daily-summary-0", elements[0].ID)
-				assert.Equal(t, "currently-hearing-0", elements[1].ID)
-				assert.Equal(t, "live-spectrogram-0", elements[2].ID)
-				assert.Equal(t, "detections-grid-0", elements[3].ID)
+				assert.Equal(t, "new-species-highlights-0", elements[1].ID)
+				assert.Equal(t, "currently-hearing-0", elements[2].ID)
+				assert.Equal(t, "live-spectrogram-0", elements[3].ID)
+				assert.Equal(t, "detections-grid-0", elements[4].ID)
 
 				// Verify summaryLimit is migrated into the element config
 				require.NotNil(t, elements[0].Summary)
@@ -105,12 +108,12 @@ func TestSettings_MigrateDashboardLayout_Idempotent(t *testing.T) {
 
 	migrated1 := settings.MigrateDashboardLayout()
 	require.True(t, migrated1)
-	assert.Len(t, settings.Realtime.Dashboard.Layout.Elements, 4)
+	assert.Len(t, settings.Realtime.Dashboard.Layout.Elements, 5)
 	assert.Equal(t, 0, settings.Realtime.Dashboard.SummaryLimit) // zeroed after migration
 
 	migrated2 := settings.MigrateDashboardLayout()
 	require.False(t, migrated2)
-	assert.Len(t, settings.Realtime.Dashboard.Layout.Elements, 4)
+	assert.Len(t, settings.Realtime.Dashboard.Layout.Elements, 5)
 }
 
 func TestSettings_GetEffectiveSummaryLimit(t *testing.T) {

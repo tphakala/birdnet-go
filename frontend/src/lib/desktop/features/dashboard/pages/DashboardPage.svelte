@@ -42,6 +42,7 @@ Performance Optimizations:
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import CurrentlyHearingCard from '$lib/desktop/features/dashboard/components/CurrentlyHearingCard.svelte';
   import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
+  import NewSpeciesHighlightsCard from '$lib/desktop/features/dashboard/components/NewSpeciesHighlightsCard.svelte';
   import DetectionCardGrid from '$lib/desktop/features/dashboard/components/DetectionCardGrid.svelte';
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
@@ -178,6 +179,7 @@ Performance Optimizations:
   // Dashboard layout: derive enabled elements from layout config with fallback
   const defaultElements: DashboardElement[] = [
     { id: 'daily-summary-0', type: 'daily-summary', enabled: true, summary: { summaryLimit: 30 } },
+    { id: 'new-species-highlights-0', type: 'new-species-highlights', enabled: true },
     { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true },
     { id: 'live-spectrogram-0', type: 'live-spectrogram', enabled: true },
     { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
@@ -1568,6 +1570,8 @@ Performance Optimizations:
             serverTimezone = tz;
           }}
         />
+      {:else if element.type === 'new-species-highlights'}
+        <NewSpeciesHighlightsCard data={dailySummary} {selectedDate} {showThumbnails} />
       {:else if element.type === 'currently-hearing'}
         <CurrentlyHearingCard detections={isViewingToday ? pendingDetections : []} />
       {:else if element.type === 'live-spectrogram'}

@@ -740,6 +740,8 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 			HighConfidence:      true, // Based on 0.95 > 0.8
 			ThumbnailURLContain: "/api/v2/media/image/Corvus%20brachyrhynchos",
 		})
+		// Max confidence is merged from the species summary aggregation
+		assert.InDelta(t, 0.95, amcro.MaxConfidence, 0.001, "American Crow max confidence should be merged")
 	}
 
 	// Verify the Red-bellied Woodpecker details

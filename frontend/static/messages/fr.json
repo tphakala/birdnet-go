@@ -592,6 +592,18 @@
       "empty": "Tout est calme — aucun oiseau détecté pour le moment"
     },
     "rejected": "Rejeté",
+    "newSpeciesHighlights": {
+      "title": "Nouvelles espèces marquantes",
+      "categoryLifetime": "Nouvelle espèce",
+      "categoryYear": "Nouvelle cette année",
+      "categorySeason": "Nouvelle cette saison",
+      "categorySeasonNamed": "Nouvelle ce {season}",
+      "detectionsToday": "Détections aujourd'hui",
+      "maxConfidence": "Confiance max",
+      "lastDetection": "Dernière détection",
+      "firstSeen": "Première observation",
+      "daysAgo": "{days, plural, =0 {aujourd'hui} one {il y a # jour} other {il y a # jours}}"
+    },
     "dailySummary": {
       "title": "Activité Quotidienne",
       "subtitle": "Détections par heure",
@@ -758,6 +770,7 @@
     "elements": {
       "banner": "Bannière du tableau de bord",
       "dailySummary": "Résumé quotidien",
+      "newSpeciesHighlights": "Nouvelles espèces marquantes",
       "currentlyHearing": "En écoute actuellement",
       "detectionsGrid": "Détections récentes",
       "liveSpectrogram": "Spectrogramme en direct",

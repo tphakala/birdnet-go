@@ -92,6 +92,7 @@ func TestDailySpeciesSummary_DefaultParams(t *testing.T) {
 			"Blue Jay":       {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		}, nil).Once()
 
+
 	rec := executeRequest(t, e, http.MethodGet, "/api/v2/analytics/species/daily", controller.GetDailySpeciesSummary)
 
 	assert.Equal(t, http.StatusOK, rec.Code)

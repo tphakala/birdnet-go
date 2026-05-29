@@ -63,6 +63,7 @@
   const ALL_ELEMENT_TYPES: DashboardElementType[] = [
     'banner',
     'daily-summary',
+    'new-species-highlights',
     'currently-hearing',
     'live-spectrogram',
     'detections-grid',
@@ -72,6 +73,7 @@
   // Maximum number of instances allowed per element type
   const MAX_INSTANCES: Partial<Record<DashboardElementType, number>> = {
     'video-embed': 6,
+    'new-species-highlights': 1,
   };
 
   let missingTypes = $derived(

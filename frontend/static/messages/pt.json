@@ -592,6 +592,18 @@
       "empty": "Tudo calmo — nenhuma ave detectada no momento"
     },
     "rejected": "Rejeitado",
+    "newSpeciesHighlights": {
+      "title": "New Species Highlights",
+      "categoryLifetime": "New species",
+      "categoryYear": "New this year",
+      "categorySeason": "New this season",
+      "categorySeasonNamed": "New this {season}",
+      "detectionsToday": "Detections today",
+      "maxConfidence": "Max confidence",
+      "lastDetection": "Last detection",
+      "firstSeen": "First seen",
+      "daysAgo": "{days, plural, =0 {today} one {# day ago} other {# days ago}}"
+    },
     "dailySummary": {
       "title": "Atividade Diária",
       "subtitle": "Detecções por hora",
@@ -758,6 +770,7 @@
     "elements": {
       "banner": "Banner do painel",
       "dailySummary": "Resumo diário",
+      "newSpeciesHighlights": "New Species Highlights",
       "currentlyHearing": "Ouvindo atualmente",
       "detectionsGrid": "Detecções recentes",
       "liveSpectrogram": "Espectrograma ao vivo",

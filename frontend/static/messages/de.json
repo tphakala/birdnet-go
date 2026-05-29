@@ -592,6 +592,18 @@
       "empty": "Alles ruhig — derzeit keine Vögel erkannt"
     },
     "rejected": "Abgelehnt",
+    "newSpeciesHighlights": {
+      "title": "New Species Highlights",
+      "categoryLifetime": "New species",
+      "categoryYear": "New this year",
+      "categorySeason": "New this season",
+      "categorySeasonNamed": "New this {season}",
+      "detectionsToday": "Detections today",
+      "maxConfidence": "Max confidence",
+      "lastDetection": "Last detection",
+      "firstSeen": "First seen",
+      "daysAgo": "{days, plural, =0 {today} one {# day ago} other {# days ago}}"
+    },
     "dailySummary": {
       "title": "Tagesaktivität",
       "subtitle": "Artnachweise pro Stunde",
@@ -758,6 +770,7 @@
     "elements": {
       "banner": "Dashboard-Banner",
       "dailySummary": "Tageszusammenfassung",
+      "newSpeciesHighlights": "New Species Highlights",
       "currentlyHearing": "Aktuell erkannt",
       "detectionsGrid": "Aktuelle Erkennungen",
       "liveSpectrogram": "Live-Spektrogramm",

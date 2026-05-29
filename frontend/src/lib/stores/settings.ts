@@ -589,6 +589,7 @@ export interface DashboardLayout {
 export type DashboardElementType =
   | 'banner'
   | 'daily-summary'
+  | 'new-species-highlights'
   | 'currently-hearing'
   | 'detections-grid'
   | 'live-spectrogram'
@@ -1008,6 +1009,7 @@ function createEmptySettings(): SettingsFormData {
               enabled: true,
               summary: { summaryLimit: 30 },
             },
+            { id: 'new-species-highlights-0', type: 'new-species-highlights', enabled: true },
             { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true },
             { id: 'live-spectrogram-0', type: 'live-spectrogram', enabled: true },
             { id: 'detections-grid-0', type: 'detections-grid', enabled: true },

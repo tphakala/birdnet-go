@@ -34,17 +34,20 @@ const (
 
 // SpeciesDailySummary represents a bird in the daily species summary API response
 type SpeciesDailySummary struct {
-	ScientificName     string `json:"scientific_name"`
-	CommonName         string `json:"common_name"`
-	SpeciesCode        string `json:"species_code,omitempty"`
-	Count              int    `json:"count"`
-	HourlyCounts       []int  `json:"hourly_counts"`
-	HighConfidence     bool   `json:"high_confidence"`
-	FirstHeard         string `json:"first_heard,omitempty"`
-	LatestHeard        string `json:"latest_heard,omitempty"`
-	ThumbnailURL       string `json:"thumbnail_url,omitempty"`
-	IsNewSpecies       bool   `json:"is_new_species,omitempty"`        // First seen within tracking window
-	DaysSinceFirstSeen int    `json:"days_since_first_seen,omitempty"` // Days since species was first detected
+	ScientificName string `json:"scientific_name"`
+	CommonName     string `json:"common_name"`
+	SpeciesCode    string `json:"species_code,omitempty"`
+	Count          int    `json:"count"`
+	HourlyCounts   []int  `json:"hourly_counts"`
+	HighConfidence bool   `json:"high_confidence"`
+	// MaxConfidence is the highest detection confidence for this species on the
+	// selected day, expressed as a fraction in the range [0,1].
+	MaxConfidence      float64 `json:"max_confidence,omitempty"`
+	FirstHeard         string  `json:"first_heard,omitempty"`
+	LatestHeard        string  `json:"latest_heard,omitempty"`
+	ThumbnailURL       string  `json:"thumbnail_url,omitempty"`
+	IsNewSpecies       bool    `json:"is_new_species,omitempty"`        // First seen within tracking window
+	DaysSinceFirstSeen int     `json:"days_since_first_seen,omitempty"` // Days since species was first detected
 	// Multi-period tracking metadata
 	IsNewThisYear   bool   `json:"is_new_this_year,omitempty"`   // First time this year
 	IsNewThisSeason bool   `json:"is_new_this_season,omitempty"` // First time this season
@@ -104,6 +107,7 @@ type aggregatedBirdInfo struct {
 	Count          int
 	HourlyCounts   [24]int
 	HighConfidence bool
+	MaxConfidence  float64
 	First          string
 	Latest         string
 }
@@ -403,6 +407,9 @@ func (c *Controller) updateAggregatedData(aggregatedData map[string]aggregatedBi
 	data.Count = totalCount
 	data.HourlyCounts = *hourlyCounts
 	data.HighConfidence = data.HighConfidence || note.Confidence >= defaultConfidenceThreshold
+	// GetTopBirdsData already returns MAX(confidence) per species, but take the max
+	// across notes defensively in case multiple notes for a species are aggregated.
+	data.MaxConfidence = max(data.MaxConfidence, note.Confidence)
 
 	if note.Time < data.First {
 		data.First = note.Time
@@ -518,6 +525,7 @@ func buildSpeciesSummaryFromData(data *aggregatedBirdInfo, thumbnailURL string) 
 		Count:          data.Count,
 		HourlyCounts:   hourlyCountsSlice,
 		HighConfidence: data.HighConfidence,
+		MaxConfidence:  data.MaxConfidence,
 		FirstHeard:     data.First,
 		LatestHeard:    data.Latest,
 		ThumbnailURL:   thumbnailURL,

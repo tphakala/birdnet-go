@@ -176,6 +176,7 @@ export interface DailySpeciesSummary {
   count: number;
   hourly_counts: number[];
   high_confidence: boolean;
+  max_confidence?: number; // Highest detection confidence for the day (fraction 0..1)
   first_heard: string;
   latest_heard: string;
   thumbnail_url: string;
