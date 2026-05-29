@@ -15,8 +15,9 @@ import (
 const (
 	// maxBreadcrumbs defines the maximum number of breadcrumbs to keep in Sentry events
 	maxBreadcrumbs = 10
-	// sentryFlushTimeout is the timeout for flushing events to Sentry
-	sentryFlushTimeout = 5 * time.Second
+	// sentryFlushTimeout is the timeout for flushing events to Sentry.
+	// Support dumps can be several MB; 30s accommodates slow upstream links.
+	sentryFlushTimeout = 30 * time.Second
 )
 
 // flushWithContext flushes Sentry events with context cancellation awareness.
@@ -247,10 +248,18 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 			Build()
 	}
 
+	if !au.enabled {
+		log.Warn("support event blocked - telemetry not enabled")
+		return errors.Newf("telemetry is not enabled - cannot create support event").
+			Component("telemetry").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "create_support_event").
+			Build()
+	}
+
 	// Extract trace ID from context if available
 	traceID := extractTraceID(ctx)
 	if traceID != "" {
-		// Log trace ID for observability
 		log.Debug("trace ID found", logger.String("trace_id", traceID))
 		sentry.ConfigureScope(func(scope *sentry.Scope) {
 			scope.SetTag("trace_id", traceID)
@@ -259,16 +268,6 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 
 	// Scrub message for privacy
 	scrubbedMessage := privacy.ScrubMessage(message)
-
-	if !au.enabled {
-		log.Warn("support event blocked - telemetry not enabled")
-		return errors.Newf("telemetry is not enabled - cannot create support event").
-			Component("telemetry").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "create_support_event").
-			Context("trace_id", traceID).
-			Build()
-	}
 
 	// Create event
 	event := sentry.NewEvent()

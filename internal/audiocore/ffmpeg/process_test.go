@@ -33,10 +33,10 @@ func TestBuildFFmpegArgs_RTSP(t *testing.T) {
 	require.Less(t, rtspIdx+1, len(args), "-rtsp_transport must have a value")
 	assert.Equal(t, "tcp", args[rtspIdx+1])
 
-	// RTSP must use -stimeout, not -timeout.
-	stimeoutIdx := slices.Index(args, "-stimeout")
-	require.NotEqual(t, -1, stimeoutIdx, "expected -stimeout flag for RTSP")
-	assert.Equal(t, -1, slices.Index(args, "-timeout"), "RTSP must not use -timeout")
+	// RTSP must use -timeout; the legacy -stimeout was removed in FFmpeg 5.x+.
+	timeoutIdx := slices.Index(args, "-timeout")
+	require.NotEqual(t, -1, timeoutIdx, "expected -timeout flag for RTSP")
+	assert.Equal(t, -1, slices.Index(args, "-stimeout"), "RTSP must not use legacy -stimeout")
 
 	// Input URL must be present.
 	iIdx := slices.Index(args, "-i")
@@ -99,33 +99,33 @@ func TestBuildFFmpegArgs_CustomTimeout(t *testing.T) {
 		Transport: "tcp",
 	}
 
-	// User provides -timeout but RTSP needs -stimeout.
+	// User provides -timeout; RTSP now also uses -timeout.
 	customParams := []string{"-timeout", "5000000"}
 	args := BuildFFmpegArgs(cfg, customParams)
 
-	// Must be converted to -stimeout with the user's value.
-	stimeoutIdx := slices.Index(args, "-stimeout")
-	require.NotEqual(t, -1, stimeoutIdx, "expected -stimeout for RTSP")
-	require.Less(t, stimeoutIdx+1, len(args), "-stimeout must have a value")
-	assert.Equal(t, "5000000", args[stimeoutIdx+1])
+	// The user's value must be honoured on the -timeout flag.
+	timeoutIdx := slices.Index(args, "-timeout")
+	require.NotEqual(t, -1, timeoutIdx, "expected -timeout for RTSP")
+	require.Less(t, timeoutIdx+1, len(args), "-timeout must have a value")
+	assert.Equal(t, "5000000", args[timeoutIdx+1])
 
-	// -timeout must not appear (stripped and converted).
-	assert.Equal(t, -1, slices.Index(args, "-timeout"), "RTSP must not contain -timeout")
+	// Legacy -stimeout must not appear.
+	assert.Equal(t, -1, slices.Index(args, "-stimeout"), "RTSP must not contain legacy -stimeout")
 
-	// -stimeout must appear only once.
+	// -timeout must appear only once.
 	count := 0
 	for _, a := range args {
-		if a == "-stimeout" {
+		if a == "-timeout" {
 			count++
 		}
 	}
-	assert.Equal(t, 1, count, "-stimeout must appear exactly once")
+	assert.Equal(t, 1, count, "-timeout must appear exactly once")
 }
 
 func TestTimeoutParamForSource(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "-stimeout", timeoutParamForSource(audiocore.SourceTypeRTSP))
+	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeRTSP))
 	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeHTTP))
 	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeHLS))
 	assert.Equal(t, "-timeout", timeoutParamForSource(audiocore.SourceTypeRTMP))
@@ -180,7 +180,7 @@ func TestBuildFFmpegArgs_ChannelModeLeft(t *testing.T) {
 	require.NotEqual(t, -1, afIdx, "expected -af flag for left channel extraction")
 	require.Less(t, afIdx+1, len(args), "-af must have a value")
 	assert.Equal(t, "pan=mono|c0=c0", args[afIdx+1])
-	assert.Contains(t, args, "-ac")
+	assertFlagValue(t, args, "-ac", "1")
 }
 
 // TestBuildFFmpegArgs_ChannelModeRight verifies that a stereo source with
@@ -206,10 +206,11 @@ func TestBuildFFmpegArgs_ChannelModeRight(t *testing.T) {
 	require.NotEqual(t, -1, afIdx, "expected -af flag for right channel extraction")
 	require.Less(t, afIdx+1, len(args), "-af must have a value")
 	assert.Equal(t, "pan=mono|c0=c1", args[afIdx+1])
+	assertFlagValue(t, args, "-ac", "1")
 }
 
 // TestBuildFFmpegArgs_ChannelModeDownmix verifies that "downmix" mode uses
-// simple -ac without a pan filter.
+// simple -ac 1 (mono downmix) without a pan filter.
 func TestBuildFFmpegArgs_ChannelModeDownmix(t *testing.T) {
 	t.Parallel()
 
@@ -228,7 +229,76 @@ func TestBuildFFmpegArgs_ChannelModeDownmix(t *testing.T) {
 	args := BuildFFmpegArgs(cfg, nil)
 
 	assert.NotContains(t, args, "-af")
-	assert.Contains(t, args, "-ac")
+	assertFlagValue(t, args, "-ac", "1")
+}
+
+// TestBuildFFmpegArgs_ChannelModeEmpty verifies that an unset channel mode (the
+// default for existing streams that predate the feature) downmixes a stereo
+// source to mono with -ac 1 and no pan filter, matching pre-feature behavior.
+func TestBuildFFmpegArgs_ChannelModeEmpty(t *testing.T) {
+	t.Parallel()
+
+	cfg := &StreamConfig{
+		URL:            "rtsp://camera.example.com/live",
+		Type:           "rtsp",
+		SampleRate:     48000,
+		BitDepth:       16,
+		Channels:       1,
+		SourceChannels: 2,
+		ChannelMode:    "",
+		Transport:      "tcp",
+		LogLevel:       "error",
+	}
+
+	args := BuildFFmpegArgs(cfg, nil)
+
+	assert.NotContains(t, args, "-af")
+	assertFlagValue(t, args, "-ac", "1")
+}
+
+// TestBuildFFmpegArgs_OutputResampling verifies that -ar is emitted only when
+// the source sample rate is unknown or differs from the target, and omitted
+// when the probed source rate already matches the target. -ac must always be
+// present so multi-channel sources still downmix to mono regardless of -ar.
+func TestBuildFFmpegArgs_OutputResampling(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		sourceSampleRate int
+		wantAr           bool
+	}{
+		{"unknown_source_rate_resamples", 0, true},
+		{"differing_rate_resamples", 44100, true},
+		{"matching_rate_skips_ar", 48000, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &StreamConfig{
+				URL:              "rtsp://camera.example.com/live",
+				Type:             "rtsp",
+				SampleRate:       48000,
+				SourceSampleRate: tt.sourceSampleRate,
+				BitDepth:         16,
+				Channels:         1,
+				Transport:        "tcp",
+				LogLevel:         "error",
+			}
+
+			args := BuildFFmpegArgs(cfg, nil)
+
+			if tt.wantAr {
+				assertFlagValue(t, args, "-ar", "48000")
+			} else {
+				assert.NotContains(t, args, "-ar", "expected no -ar when source rate matches target")
+			}
+			// -ac must always be present so stereo sources downmix to mono.
+			assertFlagValue(t, args, "-ac", "1")
+		})
+	}
 }
 
 // TestBuildFFmpegArgs_ChannelModeLeftOnMonoSource verifies the safety guard:
@@ -250,9 +320,18 @@ func TestBuildFFmpegArgs_ChannelModeLeftOnMonoSource(t *testing.T) {
 
 	args := BuildFFmpegArgs(cfg, nil)
 
-	// Safety guard: mono source should NOT get pan filter.
+	// Safety guard: mono source should NOT get pan filter, and must downmix to mono.
 	assert.NotContains(t, args, "-af")
-	assert.Contains(t, args, "-ac")
+	assertFlagValue(t, args, "-ac", "1")
+}
+
+// assertFlagValue asserts that flag appears in args immediately followed by want.
+func assertFlagValue(t *testing.T, args []string, flag, want string) {
+	t.Helper()
+	idx := slices.Index(args, flag)
+	require.NotEqual(t, -1, idx, "expected %s flag", flag)
+	require.Less(t, idx+1, len(args), "%s must have a value", flag)
+	assert.Equal(t, want, args[idx+1], "unexpected value for %s", flag)
 }
 
 // TestBackoffCalculation verifies that CalculateBackoff implements exponential
@@ -319,4 +398,74 @@ func TestBackoffCalculation_ZeroRestarts(t *testing.T) {
 	// restart count 0: exponent clamped to 0, so backoff = base * 2^0 = base.
 	assert.GreaterOrEqual(t, got, base)
 	assert.LessOrEqual(t, got, base+base/5)
+}
+
+// TestComputeBaseBackoff verifies the jitter-free exponential backoff: doubling
+// per restart, exponent clamped at zero, and capped at maxBackoff.
+func TestComputeBaseBackoff(t *testing.T) {
+	t.Parallel()
+
+	base := 5 * time.Second
+	maxDur := 2 * time.Minute
+
+	tests := []struct {
+		name         string
+		restartCount int
+		want         time.Duration
+	}{
+		{"zero clamps to base", 0, 5 * time.Second},
+		{"first restart", 1, 5 * time.Second},
+		{"second restart", 2, 10 * time.Second},
+		{"third restart", 3, 20 * time.Second},
+		{"capped at maxBackoff", 20, maxDur},
+		{"large count stays capped", 1000, maxDur},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, computeBaseBackoff(tt.restartCount, base, maxDur))
+		})
+	}
+}
+
+// TestExtremeFailurePenalty verifies the escalating delay applied once the
+// restart count exceeds extremeFailureThreshold, including the cap.
+func TestExtremeFailurePenalty(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		restartCount int
+		want         time.Duration
+	}{
+		{"below threshold", extremeFailureThreshold - 1, 0},
+		{"at threshold", extremeFailureThreshold, 0},
+		{"one past threshold", extremeFailureThreshold + 1, extremeFailureDelayStep},
+		{"ten past threshold", extremeFailureThreshold + 10, 10 * extremeFailureDelayStep},
+		{"capped", extremeFailureThreshold + 1000, extremeFailureDelayCap},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, extremeFailurePenalty(tt.restartCount))
+		})
+	}
+}
+
+// TestApplyBackoffJitter verifies jitter stays within the [backoff, backoff+20%]
+// band and that non-positive inputs pass through unchanged.
+func TestApplyBackoffJitter(t *testing.T) {
+	t.Parallel()
+
+	const backoff = 10 * time.Second
+	for range 100 {
+		got := applyBackoffJitter(backoff)
+		assert.GreaterOrEqual(t, got, backoff)
+		assert.LessOrEqual(t, got, backoff+backoff/5)
+	}
+
+	assert.Equal(t, time.Duration(0), applyBackoffJitter(0))
+	assert.Equal(t, -time.Second, applyBackoffJitter(-time.Second))
 }

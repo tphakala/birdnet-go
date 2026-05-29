@@ -3,11 +3,10 @@ package ffmpeg
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"math"
-	"math/big"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,8 +24,15 @@ import (
 const ffmpegTimeoutParam = "-timeout"
 
 // ffmpegRTSPTimeoutParam is the RTSP-specific stream timeout flag.
-// FFmpeg ignores -timeout for the RTSP protocol; -stimeout must be used instead.
-const ffmpegRTSPTimeoutParam = "-stimeout"
+// Older FFmpeg used -stimeout for RTSP, but it was removed in FFmpeg 5.x+.
+// Using -timeout works across all supported versions.
+const ffmpegRTSPTimeoutParam = "-timeout"
+
+// ffmpegLegacyRTSPTimeoutParam is the deprecated -stimeout flag that older FFmpeg
+// used for RTSP. We no longer emit it, but we still recognise it in user-supplied
+// parameters so a carried-over value is honoured and the unsupported flag is
+// stripped before reaching FFmpeg.
+const ffmpegLegacyRTSPTimeoutParam = "-stimeout"
 
 // timeoutParamForSource returns the correct FFmpeg timeout flag for the given source type.
 func timeoutParamForSource(st audiocore.SourceType) string {
@@ -45,7 +51,7 @@ func stripTimeoutParams(params []string) []string {
 			skipNext = false
 			continue
 		}
-		if param == ffmpegTimeoutParam || param == ffmpegRTSPTimeoutParam {
+		if param == ffmpegTimeoutParam || param == ffmpegRTSPTimeoutParam || param == ffmpegLegacyRTSPTimeoutParam {
 			skipNext = true
 			continue
 		}
@@ -386,15 +392,28 @@ func ProcessAudioToFile(ctx context.Context, filePath, ffmpegPath string, filter
 }
 
 // BuildFFmpegArgs constructs the complete FFmpeg argument list for a streaming source.
-// It is a pure function suitable for unit testing. The Stream.startProcess method
-// delegates to this function after constructing the input and output format parameters.
+// It is a pure function suitable for unit testing. It produces the same output
+// arguments as the runtime path (Stream.startProcess) by sharing buildOutputArgs;
+// only the input-argument timeout warning logging differs between the two.
 //
 // RTSP-specific flags like -rtsp_transport are only added for RTSP sources.
 // A default -timeout is added unless the caller supplies one via ffmpegParameters.
 func BuildFFmpegArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
-	sampleRate, numChannels, format := GetFFmpegFormat(cfg.SampleRate, cfg.Channels, cfg.BitDepth)
-
 	args := buildInputArgs(cfg, ffmpegParameters)
+	return buildOutputArgs(args, cfg)
+}
+
+// buildOutputArgs appends the post-input FFmpeg flags: the input URL, decode
+// format, channel selection, conditional output resampling, and the stdout pipe.
+// It is shared by BuildFFmpegArgs and Stream.startProcess so the unit-tested
+// argument construction matches the runtime path exactly.
+//
+// -ac (channel count) is always emitted via appendChannelArgs so multi-channel
+// sources are downmixed to mono. -ar (sample rate) is only emitted when the
+// source rate is unknown or differs from the target, avoiding a needless
+// resample when the source already matches.
+func buildOutputArgs(args []string, cfg *StreamConfig) []string {
+	sampleRate, numChannels, format := GetFFmpegFormat(cfg.SampleRate, cfg.Channels, cfg.BitDepth)
 
 	logLevel := cfg.LogLevel
 	if logLevel == "" {
@@ -406,9 +425,11 @@ func BuildFFmpegArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
 		"-loglevel", logLevel,
 		"-vn",
 		"-f", format,
-		"-ar", sampleRate,
 	)
 	args = appendChannelArgs(args, cfg.ChannelMode, cfg.SourceChannels, numChannels)
+	if cfg.needsOutputResampling() {
+		args = append(args, "-ar", sampleRate)
+	}
 	args = append(args, "-hide_banner", "pipe:1")
 
 	return args
@@ -432,7 +453,7 @@ func appendChannelArgs(args []string, channelMode string, sourceChannels int, nu
 
 // buildInputArgs constructs the pre-input FFmpeg flags (transport, timeout, extra parameters).
 // This mirrors the logic in Stream.buildFFmpegInputArgs but accepts explicit parameters.
-// RTSP streams use -stimeout (FFmpeg ignores -timeout for the RTSP protocol).
+// RTSP streams use -timeout for connection timeout.
 func buildInputArgs(cfg *StreamConfig, ffmpegParameters []string) []string {
 	args := make([]string, 0, 8+len(ffmpegParameters))
 	timeoutFlag := timeoutParamForSource(cfg.sourceType())
@@ -489,23 +510,33 @@ func validateTimeout(timeoutStr string) error {
 
 // CalculateBackoff computes the exponential backoff duration for a given restart count.
 // It adds a random jitter of up to restartJitterPercentMax percent of the base backoff.
-// The returned duration is always at least base and at most maxBackoff + maxJitter.
+// The returned duration is always at least base and at most maxBackoff plus that jitter.
 func CalculateBackoff(restartCount int, base, maxBackoff time.Duration) time.Duration {
+	return applyBackoffJitter(computeBaseBackoff(restartCount, base, maxBackoff))
+}
+
+// computeBaseBackoff returns the capped exponential backoff for a restart count,
+// without jitter. The exponent is clamped to [0, maxBackoffExponent] and the
+// result is capped at maxBackoff.
+func computeBaseBackoff(restartCount int, base, maxBackoff time.Duration) time.Duration {
 	exponent := max(restartCount-1, 0)
 	exponent = min(exponent, maxBackoffExponent)
 
-	backoff := min(base*time.Duration(1<<uint(exponent)), maxBackoff) //nolint:gosec // G115: exponent is capped by maxBackoffExponent
+	return min(base*time.Duration(1<<uint(exponent)), maxBackoff) //nolint:gosec // G115: exponent is capped by maxBackoffExponent
+}
 
-	wait := backoff
-	if backoff > 0 {
-		factor := float64(restartJitterPercentMax) / 100.0
-		jitterRange := time.Duration(float64(backoff) * factor)
-		if jitterRange > 0 {
-			if n, err := rand.Int(rand.Reader, big.NewInt(jitterRange.Nanoseconds())); err == nil {
-				wait = backoff + time.Duration(n.Int64())
-			}
-		}
+// applyBackoffJitter adds a random jitter of up to restartJitterPercentMax percent
+// on top of backoff to prevent a thundering herd of simultaneous reconnects. A
+// non-positive backoff (or jitter range) returns backoff unchanged.
+func applyBackoffJitter(backoff time.Duration) time.Duration {
+	if backoff <= 0 {
+		return backoff
 	}
 
-	return wait
+	jitterRange := backoff * restartJitterPercentMax / 100
+	if jitterRange <= 0 {
+		return backoff
+	}
+
+	return backoff + time.Duration(rand.Int64N(jitterRange.Nanoseconds())) //nolint:gosec // G404: non-cryptographic jitter to spread out reconnects
 }

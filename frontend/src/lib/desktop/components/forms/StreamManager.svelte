@@ -803,16 +803,16 @@
             {#if newTestResult && newTestResult.channels > 1}
               {#if newChannelMode === 'downmix'}
                 <div
-                  class="flex items-start gap-2 p-2 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
+                  class="flex items-start gap-2 p-2.5 rounded-lg text-sm leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
                 >
-                  <AlertTriangle class="size-3.5 shrink-0 mt-0.5 text-[var(--color-warning)]" />
+                  <AlertTriangle class="size-4 shrink-0 mt-0.5 text-[var(--color-warning)]" />
                   <span>{t('settings.audio.streams.channelMode.downmixWarning')}</span>
                 </div>
               {:else}
                 <div
-                  class="flex items-start gap-2 p-2 rounded-lg text-xs leading-relaxed bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]"
+                  class="flex items-start gap-2 p-2.5 rounded-lg text-sm leading-relaxed bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]"
                 >
-                  <CircleCheck class="size-3.5 shrink-0 mt-0.5 text-[var(--color-success)]" />
+                  <CircleCheck class="size-4 shrink-0 mt-0.5 text-[var(--color-success)]" />
                   <span>{t('settings.audio.streams.channelMode.singleChannelGood')}</span>
                 </div>
               {/if}
