@@ -129,14 +129,32 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 		return nil
 	}
 
+	// Pre-compute each check's identity once, with per-check panic recovery, so
+	// no later site (the per-check goroutine or the timeout fallback below) ever
+	// calls Name()/Category() unguarded. A panic in an accessor falls back to a
+	// placeholder identity instead of crashing the orchestrator goroutine.
+	names := make([]string, len(checks))
+	categories := make([]Category, len(checks))
+	for i, c := range checks {
+		func() {
+			defer func() {
+				if rec := recover(); rec != nil {
+					names[i] = "unknown_check"
+				}
+			}()
+			names[i] = c.Name()
+			categories[i] = c.Category()
+		}()
+	}
+
 	resCh := make(chan checkResult, len(checks))
 
 	for i, c := range checks {
 		idx, check := i, c
 		go func() {
 			var rs []Result
-			var name string
-			var category Category
+			name := names[idx]
+			category := categories[idx]
 
 			// sent guards against a double send on resCh. resCh is buffered to
 			// exactly len(checks), so a second send would steal another check's
@@ -146,22 +164,17 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 			sent := false
 
 			// Recover from a panic in the check so a single misbehaving check
-			// cannot crash the process. Registered first, before the check's own
-			// Name()/Category() are read below, so a panic in those (for example
-			// a check whose accessors misbehave) is contained too. It runs last
-			// (after defer cancel). A recovered panic is a real bug, not a benign
-			// condition, so it is logged at ERROR with a stack trace before being
-			// surfaced as StatusUnknown: the app stays up, but the panic is not
-			// silently hidden. The recovery must still deliver a result on resCh,
-			// otherwise the orchestrator would block waiting for a result that
-			// never arrives.
+			// cannot crash the process. A recovered panic is a real bug, not a
+			// benign condition, so it is logged at ERROR with a stack trace before
+			// being surfaced as StatusUnknown: the app stays up, but the panic is
+			// not silently hidden. The recovery must still deliver a result on
+			// resCh, otherwise the orchestrator would block waiting for a result
+			// that never arrives. Identity comes from the pre-computed slices, so
+			// the recover path itself never calls the check's accessors.
 			defer func() {
 				rec := recover()
 				if rec == nil {
 					return
-				}
-				if name == "" {
-					name = "unknown_check"
 				}
 				var panicErr error
 				if e, ok := rec.(error); ok {
@@ -187,11 +200,6 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 					}
 				}
 			}()
-
-			// Read the check identity inside the recovered region so a panic in
-			// Name()/Category() is contained by the defer above.
-			name = check.Name()
-			category = check.Category()
 
 			checkCtx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 			defer cancel()
@@ -251,13 +259,15 @@ collect:
 	}
 
 	results := make([]Result, 0, len(checks))
-	for i, c := range checks {
+	for i := range checks {
 		if finished[i] {
 			results = append(results, completed[i]...)
 		} else {
+			// Use the pre-computed identity: the timeout fallback runs on the
+			// orchestrator goroutine, which has no recover of its own.
 			results = append(results, Result{
-				Name:      c.Name(),
-				Category:  c.Category(),
+				Name:      names[i],
+				Category:  categories[i],
 				Status:    StatusUnknown,
 				Message:   "check did not complete within deadline",
 				Timestamp: time.Now(),

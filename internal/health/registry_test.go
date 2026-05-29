@@ -446,13 +446,14 @@ func TestRunChecks_RecoversFromMultiResultPanic(t *testing.T) {
 	assert.False(t, res.Timestamp.IsZero())
 }
 
-// panicNameCheck panics from Name(), to verify the recovery defer is registered
-// before the check identity is read (so a panic in the accessors is contained).
+// panicNameCheck panics from both Name() and Run(), to verify an accessor panic
+// is contained by the up-front identity capture (falling back to a placeholder)
+// and the Run panic is still turned into a StatusUnknown result.
 type panicNameCheck struct{}
 
 func (panicNameCheck) Name() string                 { panic("name boom") }
 func (panicNameCheck) Category() Category           { return CategorySystem }
-func (panicNameCheck) Run(_ context.Context) Result { return Result{Status: StatusHealthy} }
+func (panicNameCheck) Run(_ context.Context) Result { panic("run boom") }
 
 func TestRunChecks_RecoversFromNamePanic(t *testing.T) {
 	t.Parallel()
@@ -464,9 +465,9 @@ func TestRunChecks_RecoversFromNamePanic(t *testing.T) {
 
 	res := results[0]
 	assert.Equal(t, StatusUnknown, res.Status)
-	assert.Equal(t, "unknown_check", res.Name, "a panic before the name is read falls back to a placeholder")
+	assert.Equal(t, "unknown_check", res.Name, "a panic while reading the name falls back to a placeholder")
 	assert.Contains(t, res.Message, "check panicked")
-	assert.Contains(t, res.Message, "name boom")
+	assert.Contains(t, res.Message, "run boom")
 }
 
 func TestRegistry_RejectsTypedNilCheck(t *testing.T) {
