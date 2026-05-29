@@ -137,15 +137,24 @@ func (c *StreamErrorRateCheck) Run(_ context.Context) health.Result {
 	}, start)
 }
 
+// FFmpeg process state strings, matching ProcessState.String() in
+// internal/audiocore/ffmpeg. "stopped" is the terminal state: the process has
+// permanently stopped and will not recover on its own. Any other non-running
+// state (idle, starting, restarting, backoff, circuit_open) is transient.
+const (
+	ffmpegStateRunning = "running"
+	ffmpegStateStopped = "stopped"
+)
+
 // FFmpeg health check message formats.
 const (
-	// ffmpegDeadMsgFormat is used when only dead processes are present.
-	ffmpegDeadMsgFormat = "%d FFmpeg process(es) are dead"
-	// ffmpegNotRunningMsgFormat is used when only not-running processes are present.
+	// ffmpegStoppedMsgFormat is used when only stopped (terminal) processes are present.
+	ffmpegStoppedMsgFormat = "%d FFmpeg process(es) stopped"
+	// ffmpegNotRunningMsgFormat is used when only transient not-running processes are present.
 	ffmpegNotRunningMsgFormat = "%d FFmpeg process(es) are not in running state"
-	// ffmpegDeadAndNotRunningMsgFormat is used when both dead and not-running
-	// processes are present so neither count is masked.
-	ffmpegDeadAndNotRunningMsgFormat = "%d FFmpeg process(es) are dead, %d not in running state"
+	// ffmpegStoppedAndNotRunningMsgFormat is used when both stopped and transient
+	// not-running processes are present so neither count is masked.
+	ffmpegStoppedAndNotRunningMsgFormat = "%d FFmpeg process(es) stopped, %d not in running state"
 )
 
 // FFmpegHealthCheck monitors the process state of the FFmpeg processes backing each RTSP stream.
@@ -177,15 +186,15 @@ func (c *FFmpegHealthCheck) Run(_ context.Context) health.Result {
 		return skippedResult(c.Name(), c.Category(), start)
 	}
 
-	deadCount := 0
+	stoppedCount := 0
 	notRunningCount := 0
 
 	for _, s := range streams {
 		switch s.ProcessState {
-		case "dead":
-			deadCount++
-		case "running":
+		case ffmpegStateRunning:
 			// healthy
+		case ffmpegStateStopped:
+			stoppedCount++
 		default:
 			notRunningCount++
 		}
@@ -195,15 +204,15 @@ func (c *FFmpegHealthCheck) Run(_ context.Context) health.Result {
 	msg := fmt.Sprintf("All %d FFmpeg processes running", len(streams))
 
 	switch {
-	case deadCount > 0 && notRunningCount > 0:
-		// Both dead and not-running processes exist. Dead processes keep the
-		// status critical, but the message must surface both counts so the
-		// not-running processes are not masked.
+	case stoppedCount > 0 && notRunningCount > 0:
+		// Both stopped (terminal) and transient not-running processes exist.
+		// Stopped processes keep the status critical, but the message must
+		// surface both counts so the not-running processes are not masked.
 		status = health.StatusCritical
-		msg = fmt.Sprintf(ffmpegDeadAndNotRunningMsgFormat, deadCount, notRunningCount)
-	case deadCount > 0:
+		msg = fmt.Sprintf(ffmpegStoppedAndNotRunningMsgFormat, stoppedCount, notRunningCount)
+	case stoppedCount > 0:
 		status = health.StatusCritical
-		msg = fmt.Sprintf(ffmpegDeadMsgFormat, deadCount)
+		msg = fmt.Sprintf(ffmpegStoppedMsgFormat, stoppedCount)
 	case notRunningCount > 0:
 		status = health.StatusWarning
 		msg = fmt.Sprintf(ffmpegNotRunningMsgFormat, notRunningCount)
@@ -216,7 +225,7 @@ func (c *FFmpegHealthCheck) Run(_ context.Context) health.Result {
 		Message:  msg,
 		Details: map[string]any{
 			"total":       len(streams),
-			"dead":        deadCount,
+			"stopped":     stoppedCount,
 			"not_running": notRunningCount,
 		},
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,

@@ -445,3 +445,47 @@ func TestRunChecks_RecoversFromMultiResultPanic(t *testing.T) {
 	assert.Contains(t, res.Message, "multi kaboom")
 	assert.False(t, res.Timestamp.IsZero())
 }
+
+// panicNameCheck panics from Name(), to verify the recovery defer is registered
+// before the check identity is read (so a panic in the accessors is contained).
+type panicNameCheck struct{}
+
+func (panicNameCheck) Name() string                 { panic("name boom") }
+func (panicNameCheck) Category() Category           { return CategorySystem }
+func (panicNameCheck) Run(_ context.Context) Result { return Result{Status: StatusHealthy} }
+
+func TestRunChecks_RecoversFromNamePanic(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+	r.Register(panicNameCheck{})
+
+	results := r.RunAll(t.Context())
+	require.Len(t, results, 1)
+
+	res := results[0]
+	assert.Equal(t, StatusUnknown, res.Status)
+	assert.Equal(t, "unknown_check", res.Name, "a panic before the name is read falls back to a placeholder")
+	assert.Contains(t, res.Message, "check panicked")
+	assert.Contains(t, res.Message, "name boom")
+}
+
+func TestRegistry_RejectsTypedNilCheck(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+
+	// A typed nil (*mockCheck)(nil) is a non-nil Check interface wrapping a nil
+	// pointer. It passes a plain c == nil guard but panics when its methods are
+	// called, so Register/RegisterAll must reject it.
+	var typedNil *mockCheck
+	r.Register(typedNil)
+	r.RegisterAll(typedNil, nil)
+
+	// Nothing was registered, and every iteration site stays panic-free.
+	assert.Empty(t, r.Categories())
+	assert.NotPanics(t, func() {
+		assert.Empty(t, r.RunAll(t.Context()))
+	})
+	assert.NotPanics(t, func() {
+		assert.Empty(t, r.RunCategory(t.Context(), CategorySystem))
+	})
+}

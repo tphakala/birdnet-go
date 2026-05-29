@@ -4,11 +4,13 @@ package health
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"reflect"
 	"runtime/debug"
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // DefaultTimeout is the per-check timeout.
@@ -31,7 +33,8 @@ func NewRegistry() *Registry {
 
 // Register adds a check to the registry. Nil checks are silently ignored.
 func (r *Registry) Register(c Check) {
-	if c == nil {
+	if isNilCheck(c) {
+		logger.Global().Module("health").Error("refusing to register a nil check")
 		return
 	}
 	r.mu.Lock()
@@ -44,9 +47,29 @@ func (r *Registry) RegisterAll(checks ...Check) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, c := range checks {
-		if c != nil {
-			r.checks = append(r.checks, c)
+		if isNilCheck(c) {
+			logger.Global().Module("health").Error("refusing to register a nil check")
+			continue
 		}
+		r.checks = append(r.checks, c)
+	}
+}
+
+// isNilCheck reports whether c is nil or a typed nil: a non-nil interface value
+// wrapping a nil pointer, map, slice, channel, or function. A typed nil passes a
+// plain c == nil guard but panics when its methods are called, so it must be
+// rejected at registration to keep iteration sites (runChecks, RunCategory,
+// Categories) crash-free.
+func isNilCheck(c Check) bool {
+	if c == nil {
+		return true
+	}
+	v := reflect.ValueOf(c)
+	switch v.Kind() {
+	case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func:
+		return v.IsNil()
+	default:
+		return false
 	}
 }
 
@@ -112,15 +135,8 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 		idx, check := i, c
 		go func() {
 			var rs []Result
-
-			// Capture the check identity once, before running it. The recover
-			// path below must not call check.Name()/check.Category() again: if
-			// those methods are what panicked (for example a typed-nil check),
-			// calling them inside the recover defer would panic a second time
-			// with no further recovery and crash the process, defeating the
-			// point of recovering here.
-			name := check.Name()
-			category := check.Category()
+			var name string
+			var category Category
 
 			// sent guards against a double send on resCh. resCh is buffered to
 			// exactly len(checks), so a second send would steal another check's
@@ -130,8 +146,10 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 			sent := false
 
 			// Recover from a panic in the check so a single misbehaving check
-			// cannot crash the process. Registered first, so it runs last (after
-			// defer cancel below). A recovered panic is a real bug, not a benign
+			// cannot crash the process. Registered first, before the check's own
+			// Name()/Category() are read below, so a panic in those (for example
+			// a check whose accessors misbehave) is contained too. It runs last
+			// (after defer cancel). A recovered panic is a real bug, not a benign
 			// condition, so it is logged at ERROR with a stack trace before being
 			// surfaced as StatusUnknown: the app stays up, but the panic is not
 			// silently hidden. The recovery must still deliver a result on resCh,
@@ -142,11 +160,20 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 				if rec == nil {
 					return
 				}
-				slog.Error("health check panicked",
-					"check", name,
-					"category", category,
-					"panic", rec,
-					"stack", string(debug.Stack()))
+				if name == "" {
+					name = "unknown_check"
+				}
+				var panicErr error
+				if e, ok := rec.(error); ok {
+					panicErr = fmt.Errorf("check panicked: %w", e)
+				} else {
+					panicErr = fmt.Errorf("check panicked: %v", rec)
+				}
+				logger.Global().Module("health").Error("health check panicked",
+					logger.String("check", name),
+					logger.String("category", string(category)),
+					logger.Error(panicErr),
+					logger.String("stack", string(debug.Stack())))
 				if !sent {
 					resCh <- checkResult{
 						idx: idx,
@@ -154,12 +181,17 @@ func runChecks(ctx context.Context, checks []Check) []Result {
 							Name:      name,
 							Category:  category,
 							Status:    StatusUnknown,
-							Message:   fmt.Sprintf("check panicked: %v", rec),
+							Message:   panicErr.Error(),
 							Timestamp: time.Now(),
 						}},
 					}
 				}
 			}()
+
+			// Read the check identity inside the recovered region so a panic in
+			// Name()/Category() is contained by the defer above.
+			name = check.Name()
+			category = check.Category()
 
 			checkCtx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 			defer cancel()
