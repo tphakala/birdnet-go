@@ -1,13 +1,16 @@
 package api
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+// writerStopTimeout bounds how long the test waits for the background writer
+// goroutine to stop before failing.
+const writerStopTimeout = 2 * time.Second
 
 // TestDebugSkipsControllerFallbackWhenGlobalUnset verifies Debug() remains a
 // no-op when conf.GetSettings() is nil, even while c.Settings is being updated
@@ -48,7 +51,7 @@ func TestDebugSkipsControllerFallbackWhenGlobalUnset(t *testing.T) {
 
 	select {
 	case <-writerDone:
-	case <-time.After(2 * time.Second):
-		require.FailNow(t, "Writer goroutine did not stop", fmt.Sprintf("timed out waiting for writer after %s", 2*time.Second))
+	case <-time.After(writerStopTimeout):
+		require.FailNow(t, "Writer goroutine did not stop", "timed out waiting for writer after %s", writerStopTimeout)
 	}
 }
