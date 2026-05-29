@@ -38,7 +38,7 @@ func TestNewReport_OverallStatus(t *testing.T) {
 		{"all healthy", []Status{StatusHealthy, StatusHealthy}, StatusHealthy},
 		{"warning present", []Status{StatusHealthy, StatusWarning}, StatusWarning},
 		{"critical wins", []Status{StatusWarning, StatusCritical}, StatusCritical},
-		{"empty results", []Status{}, StatusHealthy},
+		{"empty results", []Status{}, StatusUnknown},
 	}
 
 	for _, tt := range tests {
@@ -160,4 +160,51 @@ func TestReportStore_Eviction(t *testing.T) {
 
 	_, ok = store.Get("d")
 	assert.True(t, ok, "new report should be present")
+}
+
+func TestNewReportStore_InvalidMaxSizeUsesDefault(t *testing.T) {
+	t.Parallel()
+	// A non-positive maxSize must fall back to the default rather than
+	// evicting on every Save (which would mean the store never retains
+	// anything). Both zero and negative inputs behave like the default size.
+	for _, maxSize := range []int{0, -1} {
+		store := NewReportStore(maxSize)
+		base := time.Now()
+
+		// Saving up to the default size must retain every report.
+		for i := range DefaultReportStoreSize {
+			id := string(rune('a' + i))
+			store.Save(NewReport(id, base.Add(time.Duration(i)*time.Second), nil))
+		}
+
+		for i := range DefaultReportStoreSize {
+			id := string(rune('a' + i))
+			_, ok := store.Get(id)
+			assert.Truef(t, ok, "report %q should be retained with maxSize=%d", id, maxSize)
+		}
+	}
+}
+
+func TestReportStore_UpdateWhileFullDoesNotEvict(t *testing.T) {
+	t.Parallel()
+	// Updating a report whose ID is already stored must not evict another
+	// entry just because the store is at capacity. Otherwise an in-place
+	// update would silently shrink the effective capacity by one.
+	const size = 3
+	store := NewReportStore(size)
+	base := time.Now()
+
+	for i := range size {
+		id := string(rune('a' + i))
+		store.Save(NewReport(id, base.Add(time.Duration(i)*time.Second), nil))
+	}
+
+	// Re-save an existing ID while full.
+	store.Save(NewReport("a", base.Add(time.Duration(size)*time.Second), nil))
+
+	for i := range size {
+		id := string(rune('a' + i))
+		_, ok := store.Get(id)
+		assert.Truef(t, ok, "report %q must be retained after updating an existing report while full", id)
+	}
 }
