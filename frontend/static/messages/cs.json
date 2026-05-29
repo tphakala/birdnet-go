@@ -177,6 +177,9 @@
         "commentsLabel": "Komentáře",
         "currentStatusTitle": "Aktuální stav",
         "detectionStatusTitle": "Stav detekce",
+        "alternativePredictionsTitle": "Kandidáti klasifikátoru",
+        "alternativePredictionsHelp": "Nejprve detekovaný druh, poté alternativy podle jistoty modelu",
+        "detectedPredictionLabel": "Detekováno",
         "lockLabel": "Stav uzamčení",
         "reviewLabel": "Stav kontroly",
         "saveReview": "Uložit kontrolu"

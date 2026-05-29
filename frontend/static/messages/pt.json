@@ -177,6 +177,9 @@
         "commentsLabel": "Comentários",
         "currentStatusTitle": "Status atual",
         "detectionStatusTitle": "Status da detecção",
+        "alternativePredictionsTitle": "Candidatos do classificador",
+        "alternativePredictionsHelp": "Espécie detectada primeiro, depois alternativas por confiança do modelo",
+        "detectedPredictionLabel": "Detectado",
         "lockLabel": "Status de bloqueio",
         "reviewLabel": "Status de revisão",
         "saveReview": "Salvar revisão"

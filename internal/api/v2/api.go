@@ -428,6 +428,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()),
 		detectionRateCache:   datastore.NewDetectionRateCache(detectionRateCacheTTL),
 	}
+	c.UpdateCommonNameMap(settings.BirdNET.Labels)
 
 	// Propagate the derived FFprobe path from config validation to the
 	// ffmpeg package so executeFFprobe can find it without PATH lookup.

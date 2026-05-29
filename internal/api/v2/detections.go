@@ -167,27 +167,37 @@ type CommentResponse struct {
 	UpdatedAt string `json:"updatedAt"`
 }
 
+// AlternativePredictionResponse represents another classifier candidate for a detection.
+type AlternativePredictionResponse struct {
+	Rank           int     `json:"rank"`
+	ScientificName string  `json:"scientificName"`
+	CommonName     string  `json:"commonName"`
+	SpeciesCode    string  `json:"speciesCode,omitempty"`
+	Confidence     float64 `json:"confidence"`
+}
+
 // DetectionResponse represents a detection in the API response
 type DetectionResponse struct {
-	ID                 uint              `json:"id"`
-	Date               string            `json:"date"`
-	Time               string            `json:"time"`
-	Timestamp          string            `json:"timestamp,omitempty"` // ISO8601/RFC3339 with timezone
-	Source             *SourceInfo       `json:"source,omitempty"`
-	BeginTime          string            `json:"beginTime"`
-	EndTime            string            `json:"endTime"`
-	SpeciesCode        string            `json:"speciesCode"`
-	ScientificName     string            `json:"scientificName"`
-	CommonName         string            `json:"commonName"`
-	Confidence         float64           `json:"confidence"`
-	Verified           string            `json:"verified"`
-	Locked             bool              `json:"locked"`
-	Unlikely           bool              `json:"unlikely,omitempty"`
-	Comments           []CommentResponse `json:"comments,omitempty"`
-	Weather            *WeatherInfo      `json:"weather,omitempty"`
-	TimeOfDay          string            `json:"timeOfDay,omitempty"`
-	IsNewSpecies       bool              `json:"isNewSpecies,omitempty"`       // First seen within tracking window
-	DaysSinceFirstSeen int               `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
+	ID                     uint                            `json:"id"`
+	Date                   string                          `json:"date"`
+	Time                   string                          `json:"time"`
+	Timestamp              string                          `json:"timestamp,omitempty"` // ISO8601/RFC3339 with timezone
+	Source                 *SourceInfo                     `json:"source,omitempty"`
+	BeginTime              string                          `json:"beginTime"`
+	EndTime                string                          `json:"endTime"`
+	SpeciesCode            string                          `json:"speciesCode"`
+	ScientificName         string                          `json:"scientificName"`
+	CommonName             string                          `json:"commonName"`
+	Confidence             float64                         `json:"confidence"`
+	Verified               string                          `json:"verified"`
+	Locked                 bool                            `json:"locked"`
+	Unlikely               bool                            `json:"unlikely,omitempty"`
+	Comments               []CommentResponse               `json:"comments,omitempty"`
+	AlternativePredictions []AlternativePredictionResponse `json:"alternativePredictions,omitempty"`
+	Weather                *WeatherInfo                    `json:"weather,omitempty"`
+	TimeOfDay              string                          `json:"timeOfDay,omitempty"`
+	IsNewSpecies           bool                            `json:"isNewSpecies,omitempty"`       // First seen within tracking window
+	DaysSinceFirstSeen     int                             `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
 
 	// Multi-period tracking metadata
 	IsNewThisYear   bool   `json:"isNewThisYear,omitempty"`   // First time this year
@@ -732,6 +742,152 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 	return detection
 }
 
+// populateAlternativePredictions loads and attaches ranked secondary classifier candidates.
+func (c *Controller) populateAlternativePredictions(detection *DetectionResponse, noteID, primaryScientificName string) error {
+	results, err := c.DS.GetNoteResults(noteID)
+	if err != nil {
+		return err
+	}
+
+	commonNameMap := c.loadCommonNameMap()
+	detection.AlternativePredictions = buildAlternativePredictionResponses(
+		results,
+		primaryScientificName,
+		c.currentSettings(),
+		commonNameMap,
+		c.alternativeSpeciesResolver(commonNameMap),
+	)
+	return nil
+}
+
+type alternativeSpeciesResolver func(speciesLabel string) detectionPkg.Species
+
+func (c *Controller) alternativeSpeciesResolver(commonNameMap map[string]string) alternativeSpeciesResolver {
+	proc := c.Processor
+	if proc != nil {
+		if birdnet := proc.GetBirdNET(); birdnet != nil {
+			return func(speciesLabel string) detectionPkg.Species {
+				scientificName, commonName, speciesCode := birdnet.EnrichResultWithTaxonomy(speciesLabel)
+				scientificName = strings.TrimSpace(scientificName)
+				if scientificName == "" {
+					return parseAlternativeSpeciesFallback(speciesLabel, commonNameMap)
+				}
+				return detectionPkg.Species{
+					ScientificName: scientificName,
+					CommonName:     resolveAlternativeCommonName(commonNameMap, scientificName, commonName),
+					Code:           strings.TrimSpace(speciesCode),
+				}
+			}
+		}
+	}
+
+	return func(speciesLabel string) detectionPkg.Species {
+		return parseAlternativeSpeciesFallback(speciesLabel, commonNameMap)
+	}
+}
+
+func buildAlternativePredictionResponses(
+	results []datastore.Results,
+	primaryScientificName string,
+	settings *conf.Settings,
+	commonNameMap map[string]string,
+	resolveSpecies alternativeSpeciesResolver,
+) []AlternativePredictionResponse {
+	if len(results) == 0 {
+		return nil
+	}
+	if resolveSpecies == nil {
+		resolveSpecies = func(speciesLabel string) detectionPkg.Species {
+			return parseAlternativeSpeciesFallback(speciesLabel, commonNameMap)
+		}
+	}
+
+	primaryScientificName = strings.TrimSpace(primaryScientificName)
+	alternatives := make([]AlternativePredictionResponse, 0, len(results))
+	seen := make(map[string]int, len(results))
+
+	for _, result := range results {
+		species := resolveSpecies(result.Species)
+		scientificName := strings.TrimSpace(species.ScientificName)
+		if scientificName == "" || strings.EqualFold(scientificName, primaryScientificName) {
+			continue
+		}
+		if !alternativePassesLocationFilter(settings, scientificName) {
+			continue
+		}
+
+		confidence := float64(result.Confidence)
+		commonName := strings.TrimSpace(species.CommonName)
+		if commonName == "" {
+			commonName = resolveAlternativeCommonName(commonNameMap, scientificName, "")
+		}
+		normalizedScientificName := strings.ToLower(scientificName)
+		if existing, ok := seen[normalizedScientificName]; ok {
+			if confidence > alternatives[existing].Confidence {
+				alternatives[existing].Confidence = confidence
+			}
+			if alternatives[existing].CommonName == alternatives[existing].ScientificName &&
+				commonName != scientificName {
+				alternatives[existing].CommonName = commonName
+			}
+			continue
+		}
+
+		seen[normalizedScientificName] = len(alternatives)
+		alternatives = append(alternatives, AlternativePredictionResponse{
+			ScientificName: scientificName,
+			CommonName:     commonName,
+			SpeciesCode:    strings.TrimSpace(species.Code),
+			Confidence:     confidence,
+		})
+	}
+
+	if len(alternatives) == 0 {
+		return nil
+	}
+
+	slices.SortFunc(alternatives, func(a, b AlternativePredictionResponse) int {
+		if a.Confidence > b.Confidence {
+			return -1
+		}
+		if a.Confidence < b.Confidence {
+			return 1
+		}
+		return strings.Compare(a.ScientificName, b.ScientificName)
+	})
+
+	for i := range alternatives {
+		alternatives[i].Rank = i + 2
+	}
+
+	return alternatives
+}
+
+func parseAlternativeSpeciesFallback(speciesLabel string, commonNameMap map[string]string) detectionPkg.Species {
+	species := detectionPkg.ParseSpeciesString(speciesLabel)
+	species.ScientificName = strings.TrimSpace(species.ScientificName)
+	species.CommonName = resolveAlternativeCommonName(commonNameMap, species.ScientificName, species.CommonName)
+	species.Code = strings.TrimSpace(species.Code)
+	return species
+}
+
+func resolveAlternativeCommonName(commonNameMap map[string]string, scientificName, parsedCommonName string) string {
+	if commonName := strings.TrimSpace(commonNameMap[scientificName]); commonName != "" {
+		return commonName
+	}
+	if commonName := strings.TrimSpace(parsedCommonName); commonName != "" {
+		return commonName
+	}
+	return scientificName
+}
+
+func alternativePassesLocationFilter(settings *conf.Settings, speciesLabel string) bool {
+	if settings == nil || !settings.BirdNET.LocationConfigured {
+		return true
+	}
+	return settings.IsSpeciesIncluded(speciesLabel)
+}
+
 // applySpeciesTrackingMetadata adds species tracking info to detection response.
 // The detectionDate parameter (YYYY-MM-DD) is used to determine whether this specific
 // detection was the first sighting of the species (ever, this year, or this season).
@@ -1199,6 +1355,9 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 	// For single detection, include weather data by default
 	weatherCache := make(map[string][]datastore.HourlyWeather)
 	detection := c.noteToDetectionResponse(&note, true, weatherCache)
+	if err := c.populateAlternativePredictions(&detection, id, note.ScientificName); err != nil {
+		c.Debug("Failed to load alternative predictions for detection %s: %v", id, err)
+	}
 	return ctx.JSON(http.StatusOK, detection)
 }
 

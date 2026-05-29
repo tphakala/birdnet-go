@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
 // executeNoteCommentsHandler simulates the handler behavior for getting comments.
@@ -605,11 +606,12 @@ func TestGetDetection(t *testing.T) {
 
 	// Test cases
 	testCases := []struct {
-		name           string
-		detectionID    string
-		mockSetup      func(*mock.Mock)
-		expectedStatus int
-		checkResponse  func(*testing.T, *httptest.ResponseRecorder)
+		name              string
+		detectionID       string
+		configureSettings func(*testing.T, *Controller)
+		mockSetup         func(*mock.Mock)
+		expectedStatus    int
+		checkResponse     func(*testing.T, *httptest.ResponseRecorder)
 	}{
 		{
 			name:        "Valid detection",
@@ -617,6 +619,12 @@ func TestGetDetection(t *testing.T) {
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "1").Return(mockNote, nil)
 				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+				m.On("GetNoteResults", "1").Return([]datastore.Results{
+					{Species: "Melanerpes carolinus_Red-bellied Woodpecker_RBWO", Confidence: 0.81},
+					{Species: "Corvus brachyrhynchos_American Crow_AMCRO", Confidence: 0.95},
+					{Species: "Cyanocitta cristata_Blue Jay_BLJA", Confidence: 0.72},
+					{Species: "Melanerpes carolinus_Red-bellied Woodpecker_RBWO", Confidence: 0.86},
+				}, nil)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
@@ -635,6 +643,114 @@ func TestGetDetection(t *testing.T) {
 				assert.Equal(t, uint(1), response.Comments[0].ID)
 				assert.NotEmpty(t, response.Comments[0].CreatedAt)
 				assert.NotEmpty(t, response.Comments[0].UpdatedAt)
+				require.Len(t, response.AlternativePredictions, 2)
+				assert.Equal(t, 2, response.AlternativePredictions[0].Rank)
+				assert.Equal(t, "Melanerpes carolinus", response.AlternativePredictions[0].ScientificName)
+				assert.Equal(t, "Red-bellied Woodpecker", response.AlternativePredictions[0].CommonName)
+				assert.Equal(t, "RBWO", response.AlternativePredictions[0].SpeciesCode)
+				assert.InDelta(t, 0.86, response.AlternativePredictions[0].Confidence, 0.001)
+				assert.Equal(t, 3, response.AlternativePredictions[1].Rank)
+				assert.Equal(t, "Cyanocitta cristata", response.AlternativePredictions[1].ScientificName)
+			},
+		},
+		{
+			name:        "Alternative predictions respect location filter",
+			detectionID: "1",
+			configureSettings: func(t *testing.T, controller *Controller) {
+				t.Helper()
+				previous := controller.currentSettings()
+				filtered := conf.CloneSettings(previous)
+				filtered.BirdNET.LocationConfigured = true
+				filtered.BirdNET.RangeFilter.Species = []string{
+					"Corvus brachyrhynchos_American Crow_AMCRO",
+					"Melanerpes carolinus_Red-bellied Woodpecker_RBWO",
+				}
+				filtered.BirdNET.RangeFilter.IncludedScientificNames = map[string]struct{}{
+					"corvus brachyrhynchos": {},
+					"melanerpes carolinus":  {},
+				}
+
+				conf.SetTestSettings(filtered)
+				controller.Settings = filtered
+				t.Cleanup(func() {
+					conf.SetTestSettings(previous)
+					controller.Settings = previous
+				})
+			},
+			mockSetup: func(m *mock.Mock) {
+				m.On("Get", "1").Return(mockNote, nil)
+				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+				m.On("GetNoteResults", "1").Return([]datastore.Results{
+					{Species: "Melanerpes carolinus_Red-bellied Woodpecker_RBWO", Confidence: 0.86},
+					{Species: "Cyanocitta cristata_Blue Jay_BLJA", Confidence: 0.84},
+					{Species: "Corvus brachyrhynchos_American Crow_AMCRO", Confidence: 0.95},
+				}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var response DetectionResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				require.NoError(t, err)
+				require.Len(t, response.AlternativePredictions, 1)
+				assert.Equal(t, 2, response.AlternativePredictions[0].Rank)
+				assert.Equal(t, "Melanerpes carolinus", response.AlternativePredictions[0].ScientificName)
+				assert.Equal(t, "Red-bellied Woodpecker", response.AlternativePredictions[0].CommonName)
+			},
+		},
+		{
+			name:        "Alternative predictions use configured common names",
+			detectionID: "1",
+			configureSettings: func(t *testing.T, controller *Controller) {
+				t.Helper()
+				previous := controller.loadNameMaps()
+				controller.UpdateCommonNameMap([]string{
+					"Melanerpes carolinus_Red-bellied Woodpecker",
+					"Cyanocitta cristata_Blue Jay",
+				})
+				t.Cleanup(func() {
+					controller.nameMaps.Store(previous)
+				})
+			},
+			mockSetup: func(m *mock.Mock) {
+				m.On("Get", "1").Return(mockNote, nil)
+				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+				m.On("GetNoteResults", "1").Return([]datastore.Results{
+					{Species: "Melanerpes carolinus", Confidence: 0.86},
+					{Species: "Corvus brachyrhynchos", Confidence: 0.95},
+					{Species: "Cyanocitta cristata", Confidence: 0.72},
+				}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var response DetectionResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				require.NoError(t, err)
+				require.Len(t, response.AlternativePredictions, 2)
+				assert.Equal(t, "Melanerpes carolinus", response.AlternativePredictions[0].ScientificName)
+				assert.Equal(t, "Red-bellied Woodpecker", response.AlternativePredictions[0].CommonName)
+				assert.Equal(t, "Cyanocitta cristata", response.AlternativePredictions[1].ScientificName)
+				assert.Equal(t, "Blue Jay", response.AlternativePredictions[1].CommonName)
+			},
+		},
+		{
+			name:        "Alternative predictions load failure does not fail detection",
+			detectionID: "1",
+			mockSetup: func(m *mock.Mock) {
+				m.On("Get", "1").Return(mockNote, nil)
+				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+				m.On("GetNoteResults", "1").Return([]datastore.Results{}, errors.New("results unavailable"))
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var response DetectionResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				require.NoError(t, err)
+				assert.Equal(t, uint(1), response.ID)
+				assert.Equal(t, "Corvus brachyrhynchos", response.ScientificName)
+				assert.Empty(t, response.AlternativePredictions)
 			},
 		},
 		{
@@ -658,6 +774,10 @@ func TestGetDetection(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.configureSettings != nil {
+				tc.configureSettings(t, controller)
+			}
+
 			// Setup mock expectations
 			mockDS.ExpectedCalls = nil
 			tc.mockSetup(&mockDS.Mock)
@@ -683,6 +803,35 @@ func TestGetDetection(t *testing.T) {
 			mockDS.AssertExpectations(t)
 		})
 	}
+}
+
+func TestBuildAlternativePredictionResponsesUsesResolverForScientificOnlyLabels(t *testing.T) {
+	results := []datastore.Results{
+		{Species: "Pseudacris crucifer", Confidence: 0.74},
+		{Species: "Corvus brachyrhynchos", Confidence: 0.95},
+	}
+
+	alternatives := buildAlternativePredictionResponses(
+		results,
+		"Corvus brachyrhynchos",
+		nil,
+		map[string]string{},
+		func(label string) detection.Species {
+			if label == "Pseudacris crucifer" {
+				return detection.Species{
+					ScientificName: label,
+					CommonName:     "Spring Peeper",
+				}
+			}
+			return detection.Species{ScientificName: label, CommonName: label}
+		},
+	)
+
+	require.Len(t, alternatives, 1)
+	assert.Equal(t, 2, alternatives[0].Rank)
+	assert.Equal(t, "Pseudacris crucifer", alternatives[0].ScientificName)
+	assert.Equal(t, "Spring Peeper", alternatives[0].CommonName)
+	assert.InDelta(t, 0.74, alternatives[0].Confidence, 0.001)
 }
 
 // TestGetDetectionCommentFormat verifies that detection comments are returned
@@ -732,6 +881,7 @@ func TestGetDetectionCommentFormat(t *testing.T) {
 	// Setup mock expectations
 	mockDS.On("Get", "42").Return(mockNote, nil)
 	mockDS.On("GetHourlyWeather", "2025-01-09").Return([]datastore.HourlyWeather{}, nil)
+	mockDS.On("GetNoteResults", "42").Return([]datastore.Results{}, nil)
 
 	// Create request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/42", http.NoBody)
@@ -803,6 +953,7 @@ func TestGetDetectionEmptyComments(t *testing.T) {
 
 	mockDS.On("Get", "99").Return(mockNote, nil)
 	mockDS.On("GetHourlyWeather", "2025-01-09").Return([]datastore.HourlyWeather{}, nil)
+	mockDS.On("GetNoteResults", "99").Return([]datastore.Results{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/99", http.NoBody)
 	rec := httptest.NewRecorder()

@@ -177,6 +177,9 @@
         "commentsLabel": "Kommentarer",
         "currentStatusTitle": "Aktuel status",
         "detectionStatusTitle": "Detektionsstatus",
+        "alternativePredictionsTitle": "Klassifikator-kandidater",
+        "alternativePredictionsHelp": "Detekteret art først, derefter alternativer efter modellens sikkerhed",
+        "detectedPredictionLabel": "Detekteret",
         "lockLabel": "Låsestatus",
         "reviewLabel": "Gennemgangsstatus",
         "saveReview": "Gem gennemgang"

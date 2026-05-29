@@ -177,6 +177,9 @@
         "commentsLabel": "Comments",
         "currentStatusTitle": "Current Status",
         "detectionStatusTitle": "Detection Status",
+        "alternativePredictionsTitle": "Classifier candidates",
+        "alternativePredictionsHelp": "Detected species first, then alternatives by model confidence",
+        "detectedPredictionLabel": "Detected",
         "lockLabel": "Lock Status",
         "reviewLabel": "Review Status",
         "saveReview": "Save Review"

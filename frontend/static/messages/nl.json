@@ -177,6 +177,9 @@
         "commentsLabel": "Notitie",
         "currentStatusTitle": "Status momenteel",
         "detectionStatusTitle": "Status herkenning",
+        "alternativePredictionsTitle": "Classificatiekandidaten",
+        "alternativePredictionsHelp": "Gedetecteerde soort eerst, daarna alternatieven op modelvertrouwen",
+        "detectedPredictionLabel": "Gedetecteerd",
         "lockLabel": "Status vergrendeling",
         "reviewLabel": "Status beoordeling",
         "saveReview": "Beoordeling bewaren"
