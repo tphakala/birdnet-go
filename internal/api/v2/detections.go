@@ -1234,6 +1234,9 @@ func (c *Controller) GetRecentDetections(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, detections)
 }
 
+// recentDetectionsMinConfidence returns the global BirdNET threshold used by the
+// dashboard's opt-in recent-detections filter, falling back to no threshold when
+// settings are unavailable.
 func (c *Controller) recentDetectionsMinConfidence() float64 {
 	settings := c.currentSettings()
 	if settings == nil {

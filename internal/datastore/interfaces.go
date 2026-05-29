@@ -908,6 +908,8 @@ func (ds *DataStore) GetLastDetectionsWithMinimumConfidence(numDetections int, m
 	return ds.getLastDetections(numDetections, minConfidence, true)
 }
 
+// getLastDetections keeps the relation preloads and ordering identical for raw
+// and confidence-filtered recent detection queries.
 func (ds *DataStore) getLastDetections(numDetections int, minConfidence float64, filterConfidence bool) ([]Note, error) {
 	var notes []Note
 	now := time.Now()

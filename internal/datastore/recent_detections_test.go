@@ -9,6 +9,8 @@ import (
 	"gorm.io/gorm"
 )
 
+// TestGetLastDetectionsWithMinimumConfidence verifies confidence filtering keeps
+// newest-first ordering while excluding below-threshold notes.
 func TestGetLastDetectionsWithMinimumConfidence(t *testing.T) {
 	const (
 		highConfidence = 0.95

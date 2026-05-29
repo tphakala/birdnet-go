@@ -688,6 +688,8 @@ func TestV2OnlyDatastore_GetLastDetections(t *testing.T) {
 	assert.Len(t, notes, 5)
 }
 
+// TestV2OnlyDatastore_GetLastDetectionsWithMinimumConfidence verifies the v2-only
+// datastore applies the confidence threshold while preserving recent ordering.
 func TestV2OnlyDatastore_GetLastDetectionsWithMinimumConfidence(t *testing.T) {
 	const (
 		highConfidence = 0.95
