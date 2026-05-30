@@ -688,7 +688,7 @@ describe('Component Tests', () => {
 - Toast notifications (`$lib/stores/toast`)
 - Internationalization (`$lib/i18n`)
 - Global browser APIs (fetch, localStorage)
-- Third-party libraries (MapLibre, Chart.js)
+- Third-party libraries (MapLibre, D3)
 
 **✅ Use file-specific mocks for**:
 

@@ -4,18 +4,28 @@
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { formatNumber, formatDateTime } from '$lib/utils/formatters';
   import { getLogger } from '$lib/utils/logger';
-  import { safeArrayAccess, safeGet } from '$lib/utils/security';
+  import { safeArrayAccess } from '$lib/utils/security';
   import { XCircle } from '@lucide/svelte';
-  import Chart from 'chart.js/auto';
-  import 'chartjs-adapter-date-fns';
-  import { onMount, tick } from 'svelte';
+  import { onMount, type Snippet } from 'svelte';
   import FilterForm from '../components/forms/FilterForm.svelte';
-  import ChartCard from '../components/ui/ChartCard.svelte';
   import StatCard from '../components/ui/StatCard.svelte';
+  import BarChart from '../components/charts/d3/BarChart.svelte';
+  import LineChart from '../components/charts/d3/LineChart.svelte';
+  import NewSpeciesTimelineChart from '../components/charts/d3/NewSpeciesTimelineChart.svelte';
+  import {
+    bucketHourlyByPeriod,
+    aggregateTrendPoints,
+    mapNewSpecies,
+  } from '../utils/analyticsTransforms';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
+  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   const logger = getLogger('app');
+
+  // Cap the new-species timeline to the most recent N entries to keep the chart
+  // readable (the prior implementation used the same 20-item limit).
+  const NEW_SPECIES_LIMIT = 20;
 
   // Type definitions
   interface Filters {
@@ -85,66 +95,9 @@
     newSpecies: NewSpeciesData[];
   }
 
-  interface Charts {
-    species: Chart | null;
-    timeOfDay: Chart | null;
-    trend: Chart | null;
-    newSpecies: Chart<'bar', [number, number][]> | null;
-  }
-
   // State variables
   let isLoading = $state<boolean>(true);
   let error = $state<string | null>(null);
-
-  // PERFORMANCE OPTIMIZATION: Cache theme colors with $derived to prevent repeated DOM calculations
-  // In Svelte 5, $derived creates a reactive computed value that only recalculates when dependencies change
-  // This avoids expensive getComputedStyle() and DOM attribute queries on every chart render
-  let cachedTheme = $derived.by(() => {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    let textColor, gridColor, tooltipBgColor, tooltipBorderColor;
-
-    if (currentTheme === 'dark') {
-      textColor = 'rgba(200, 200, 200, 1)';
-      gridColor = 'rgba(255, 255, 255, 0.1)';
-      tooltipBgColor = 'rgba(55, 65, 81, 0.9)';
-      tooltipBorderColor = 'rgba(255, 255, 255, 0.2)';
-    } else {
-      textColor = 'rgba(55, 65, 81, 1)';
-      gridColor = 'rgba(0, 0, 0, 0.1)';
-      tooltipBgColor = 'rgba(255, 255, 255, 0.9)';
-      tooltipBorderColor = 'rgba(0, 0, 0, 0.2)';
-    }
-
-    return {
-      color: {
-        text: textColor,
-        grid: gridColor,
-      },
-      scales: {
-        grid: {
-          color: gridColor,
-        },
-        ticks: {
-          color: textColor,
-        },
-        title: {
-          color: textColor,
-        },
-      },
-      legend: {
-        labels: {
-          color: textColor,
-        },
-      },
-      tooltip: {
-        backgroundColor: tooltipBgColor,
-        titleColor: textColor,
-        bodyColor: textColor,
-        borderColor: tooltipBorderColor,
-        borderWidth: 1,
-      },
-    };
-  });
 
   // Filters
   let filters = $state<Filters>({
@@ -174,14 +127,45 @@
     newSpecies: [],
   });
 
-  // Chart instances - using WeakMap for better memory management
-  const chartCanvases = new WeakMap<HTMLCanvasElement, Chart>();
-  let charts: Charts = {
-    species: null,
-    timeOfDay: null,
-    trend: null,
-    newSpecies: null,
-  };
+  // Derived chart inputs built from the reactive chartData via pure transforms.
+  // Species distribution: sorted desc by count, mapped to labelled bars with
+  // per-species colors from the D3 theme palette (applied inside BarChart).
+  const speciesBars = $derived(
+    [...chartData.species]
+      .sort((a, b) => b.count - a.count)
+      .map(s => ({ label: s.common_name, value: s.count }))
+  );
+
+  // Time of day: hourly counts bucketed into the six fixed periods.
+  const timeOfDayBars = $derived(bucketHourlyByPeriod(chartData.timeOfDay));
+
+  // Detection trend: aggregated/sorted daily points, wrapped as a single series.
+  const trendSeries = $derived([
+    {
+      id: 'daily',
+      label: t('analytics.charts.dailyDetections'),
+      data: aggregateTrendPoints(chartData.trend),
+    },
+  ]);
+
+  // New species: API rows mapped to { commonName, scientificName, firstHeard }.
+  // Sorted desc by date then limited to the most recent NEW_SPECIES_LIMIT, to
+  // match the original chart which capped the display at 20 species.
+  const newSpeciesPoints = $derived(
+    mapNewSpecies(chartData.newSpecies)
+      .sort((a, b) => b.firstHeard.getTime() - a.firstHeard.getTime())
+      .slice(0, NEW_SPECIES_LIMIT)
+  );
+
+  // Optional explicit date range for the time-based charts, derived from the
+  // active filter (null/undefined for the all-time view so charts auto-fit).
+  const chartDateRange = $derived.by<[Date, Date] | undefined>(() => {
+    if (filters.timePeriod === 'all') return undefined;
+    const start = filters.startDate ? parseLocalDateString(filters.startDate) : null;
+    const end = filters.endDate ? parseLocalDateString(filters.endDate) : null;
+    if (!start || !end) return undefined;
+    return [start, end];
+  });
 
   // Format percentage
   function formatPercentage(value: number): string {
@@ -210,64 +194,6 @@
         return t('analytics.periods.customRange');
       default:
         return t('analytics.periods.allTime');
-    }
-  }
-
-  // Get theme color from CSS variables
-  function getThemeColor(colorName: string, opacity = 1) {
-    let color = getComputedStyle(document.documentElement)
-      .getPropertyValue(`--${colorName}`)
-      .trim();
-
-    if (color.startsWith('#')) {
-      const r = parseInt(color.slice(1, 3), 16);
-      const g = parseInt(color.slice(3, 5), 16);
-      const b = parseInt(color.slice(5, 7), 16);
-      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-    }
-
-    if (color.startsWith('rgb')) {
-      if (color.startsWith('rgba')) {
-        return color.replace(/rgba\((.+?),\s*[\d.]+\)/, `rgba($1, ${opacity})`);
-      }
-      return color.replace(/rgb\((.+?)\)/, `rgba($1, ${opacity})`);
-    }
-
-    return color;
-  }
-
-  // Get chart theme configuration
-  function getChartTheme() {
-    // PERFORMANCE OPTIMIZATION: Return cached theme instead of recalculating
-    // Previously this function did expensive DOM queries every time it was called
-    return cachedTheme;
-  }
-
-  // Generate color palette for charts
-  function generateColorPalette(count: number, alpha = 1) {
-    const baseColors = [
-      `rgba(59, 130, 246, ${alpha})`, // Blue
-      `rgba(16, 185, 129, ${alpha})`, // Green
-      `rgba(245, 158, 11, ${alpha})`, // Orange
-      `rgba(236, 72, 153, ${alpha})`, // Pink
-      `rgba(139, 92, 246, ${alpha})`, // Purple
-      `rgba(239, 68, 68, ${alpha})`, // Red
-      `rgba(20, 184, 166, ${alpha})`, // Teal
-      `rgba(234, 179, 8, ${alpha})`, // Yellow
-      `rgba(99, 102, 241, ${alpha})`, // Indigo
-      `rgba(249, 115, 22, ${alpha})`, // Orange-red
-    ];
-
-    if (count <= baseColors.length) {
-      return baseColors.slice(0, count);
-    } else {
-      let palette = [...baseColors];
-      while (palette.length < count) {
-        const newAlpha = alpha * 0.8;
-        const variations = baseColors.map(color => color.replace(`${alpha})`, `${newAlpha})`));
-        palette = [...palette, ...variations];
-      }
-      return palette.slice(0, count);
     }
   }
 
@@ -368,24 +294,9 @@
       error = t('analytics.loadingError');
     }
 
-    // Set loading to false and wait for DOM update before finishing
+    // The D3 chart components render reactively from the derived chart inputs,
+    // so there is nothing to imperatively create here.
     isLoading = false;
-    await tick();
-
-    // Create charts after DOM update
-    // Small timeout ensures canvas elements have proper dimensions
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    timeoutId = setTimeout(() => {
-      createAllCharts();
-      timeoutId = null;
-    }, 50);
-
-    // Return cleanup function if component unmounts during timeout
-    return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
   }
 
   // Fetch summary metrics
@@ -590,568 +501,8 @@
     }
   }
 
-  // Create all charts after data is loaded and DOM is ready
-  function createAllCharts() {
-    const chartDataStats = {
-      speciesCount: chartData.species?.length || 0,
-      timeOfDayCount: chartData.timeOfDay?.length || 0,
-      trendDataCount: chartData.trend?.data?.length || 0,
-      newSpeciesCount: chartData.newSpecies?.length || 0,
-      hasSpeciesData: (chartData.species?.length || 0) > 0,
-      hasTimeData: (chartData.timeOfDay?.length || 0) > 0,
-      hasTrendData: (chartData.trend?.data?.length || 0) > 0,
-      hasNewSpeciesData: (chartData.newSpecies?.length || 0) > 0,
-    };
-
-    logger.debug('Creating all charts with data:', chartDataStats);
-
-    createSpeciesChart(chartData.species);
-    createTimeOfDayChart(chartData.timeOfDay);
-    createTrendChart(chartData.trend);
-    createNewSpeciesChart(chartData.newSpecies);
-  }
-
-  // PERFORMANCE OPTIMIZATION: Update existing charts instead of destroying/recreating
-  // Chart.js destroy() + new Chart() is expensive - instead we update data and call update()
-  // Using update('none') skips animations for better performance during data changes
-  function createSpeciesChart(data: SpeciesData[]) {
-    const canvas = document.getElementById('speciesChart') as HTMLCanvasElement;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx || !canvas) {
-      logger.debug('Species chart canvas not found - component may not be mounted yet');
-      return;
-    }
-
-    // Handle empty data case
-    if (!Array.isArray(data) || data.length === 0) {
-      logger.warn('Species chart has no data to display', null, {
-        dataType: typeof data,
-        isArray: Array.isArray(data),
-        length: data?.length || 0,
-      });
-      if (charts.species) {
-        // Use clean arrays to avoid Chart.js proxy issues
-        charts.species.data.labels = [];
-        charts.species.data.datasets[0].data = [];
-        charts.species.data.datasets[0].backgroundColor = [];
-        charts.species.update('none');
-      }
-      return;
-    }
-
-    data.sort((a: SpeciesData, b: SpeciesData) => b.count - a.count);
-
-    const labels = data.map((item: SpeciesData) => item.common_name);
-    const counts = data.map((item: SpeciesData) => item.count);
-    const backgroundColors = generateColorPalette(data.length, 0.7);
-    const theme = getChartTheme();
-
-    // Update existing chart if it exists
-    if (charts.species) {
-      // Create clean copies to avoid Chart.js proxy issues
-      charts.species.data.labels = [...labels];
-      charts.species.data.datasets[0].data = [...counts];
-      charts.species.data.datasets[0].backgroundColor = [...backgroundColors];
-      // PERFORMANCE: Skip animations with 'none' mode for faster updates
-      charts.species.update('none');
-      return;
-    }
-
-    // Destroy any orphaned Chart.js instance still bound to this canvas (e.g. after re-mount)
-    const existingSpecies = Chart.getChart(canvas);
-    if (existingSpecies) {
-      existingSpecies.destroy();
-    }
-
-    // Create new chart only if it doesn't exist
-    charts.species = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: t('analytics.charts.numberOfDetections'),
-            data: counts,
-            backgroundColor: backgroundColors,
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        indexAxis: 'y',
-        plugins: {
-          legend: {
-            display: false,
-          },
-          tooltip: {
-            ...theme.tooltip,
-            callbacks: {
-              label: context => `Detections: ${formatNumber(context.raw as number)}`,
-            },
-          },
-        },
-        scales: {
-          x: {
-            beginAtZero: true,
-            title: {
-              display: true,
-              text: t('analytics.charts.numberOfDetections'),
-              color: theme.color.text,
-            },
-            ticks: {
-              color: theme.color.text,
-            },
-            grid: {
-              color: theme.color.grid,
-            },
-          },
-          y: {
-            ticks: {
-              color: theme.color.text,
-            },
-            grid: {
-              color: theme.color.grid,
-            },
-          },
-        },
-      },
-    });
-    // Store reference in WeakMap for memory management
-    if (charts.species) {
-      chartCanvases.set(canvas, charts.species);
-    }
-  }
-
-  // PERFORMANCE OPTIMIZATION: Same chart update strategy for time of day chart
-  function createTimeOfDayChart(data: TimeOfDayData[]) {
-    const canvas = document.getElementById('timeOfDayChart') as HTMLCanvasElement;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx || !canvas) {
-      logger.debug('Time of day chart canvas not found - component may not be mounted yet');
-      return;
-    }
-
-    const periods = [
-      'Night (0-4)',
-      'Dawn (5-8)',
-      'Morning (9-11)',
-      'Afternoon (12-16)',
-      'Evening (17-19)',
-      'Night (20-23)',
-    ];
-    const periodCounts = new Array(periods.length).fill(0);
-
-    if (Array.isArray(data)) {
-      data.forEach(entry => {
-        const hour = entry.hour;
-        let periodIndex;
-        if (hour >= 0 && hour < 5) periodIndex = 0;
-        else if (hour >= 5 && hour < 9) periodIndex = 1;
-        else if (hour >= 9 && hour < 12) periodIndex = 2;
-        else if (hour >= 12 && hour < 17) periodIndex = 3;
-        else if (hour >= 17 && hour < 20) periodIndex = 4;
-        else periodIndex = 5;
-
-        const currentCount = safeArrayAccess(periodCounts, periodIndex, 0);
-        periodCounts.splice(periodIndex, 1, currentCount + entry.count);
-      });
-    }
-
-    const backgroundColors = [
-      'rgba(55, 48, 163, 0.7)',
-      'rgba(251, 146, 60, 0.7)',
-      'rgba(250, 204, 21, 0.7)',
-      'rgba(56, 189, 248, 0.7)',
-      'rgba(251, 113, 133, 0.7)',
-      'rgba(42, 36, 122, 0.7)',
-    ];
-
-    const theme = getChartTheme();
-
-    // Update existing chart if it exists
-    if (charts.timeOfDay) {
-      // Create clean copy to avoid Chart.js proxy issues
-      charts.timeOfDay.data.datasets[0].data = [...periodCounts];
-      // PERFORMANCE: Skip animations for faster rendering
-      charts.timeOfDay.update('none');
-      return;
-    }
-
-    // Destroy any orphaned Chart.js instance still bound to this canvas (e.g. after re-mount)
-    const existingTimeOfDay = Chart.getChart(canvas);
-    if (existingTimeOfDay) {
-      existingTimeOfDay.destroy();
-    }
-
-    // Create new chart only if it doesn't exist
-    charts.timeOfDay = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: periods,
-        datasets: [
-          {
-            label: t('analytics.charts.detections'),
-            data: periodCounts,
-            backgroundColor: backgroundColors,
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: false,
-          },
-          tooltip: {
-            ...theme.tooltip,
-            callbacks: {
-              label: context => `Detections: ${formatNumber(context.raw as number)}`,
-            },
-          },
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            title: {
-              display: true,
-              text: t('analytics.charts.numberOfDetections'),
-              color: theme.color.text,
-            },
-            ticks: {
-              color: theme.color.text,
-            },
-            grid: {
-              color: theme.color.grid,
-            },
-          },
-          x: {
-            title: {
-              display: true,
-              text: t('analytics.charts.timePeriod'),
-              color: theme.color.text,
-            },
-            ticks: {
-              color: theme.color.text,
-            },
-            grid: {
-              color: theme.color.grid,
-            },
-          },
-        },
-      },
-    });
-    // Store reference in WeakMap for memory management
-    if (charts.timeOfDay) {
-      chartCanvases.set(canvas, charts.timeOfDay);
-    }
-  }
-
-  // PERFORMANCE OPTIMIZATION: Same chart update strategy for trend chart
-  function createTrendChart(responseData: TrendData | null) {
-    const canvas = document.getElementById('trendChart') as HTMLCanvasElement;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx || !canvas) {
-      logger.debug('Trend chart canvas not found - component may not be mounted yet');
-      return;
-    }
-
-    const data = responseData?.data || [];
-    const dailyDataMap = new Map<string, number>();
-
-    if (Array.isArray(data)) {
-      data.forEach(entry => {
-        const date = entry.date;
-        const currentCount = dailyDataMap.get(date) ?? 0;
-        dailyDataMap.set(date, currentCount + entry.count);
-      });
-    }
-
-    // Convert Map back to object for compatibility with chart code
-    const dailyData: Record<string, number> = {};
-    for (const [date, count] of dailyDataMap.entries()) {
-      Object.assign(dailyData, { [date]: count });
-    }
-
-    const sortedDates = Object.keys(dailyData).sort();
-    const labels = sortedDates;
-    const counts = sortedDates.map(date => safeGet(dailyData, date, 0));
-
-    const theme = getChartTheme();
-    const primaryColor = getThemeColor('primary', 1);
-
-    // Update existing chart if it exists
-    if (charts.trend) {
-      // Create clean copies to avoid Chart.js proxy issues
-      charts.trend.data.labels = [...labels];
-      charts.trend.data.datasets[0].data = [...counts];
-      // PERFORMANCE: Skip animations for faster line chart updates
-      charts.trend.update('none');
-      return;
-    }
-
-    // Destroy any orphaned Chart.js instance still bound to this canvas (e.g. after re-mount)
-    const existingTrend = Chart.getChart(canvas);
-    if (existingTrend) {
-      existingTrend.destroy();
-    }
-
-    // Create new chart only if it doesn't exist
-    charts.trend = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: t('analytics.charts.dailyDetections'),
-            data: counts,
-            fill: false,
-            borderColor: primaryColor,
-            tension: 0.1,
-            pointBackgroundColor: primaryColor,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true,
-            position: 'top',
-            labels: {
-              color: theme.color.text,
-            },
-          },
-          tooltip: {
-            ...theme.tooltip,
-            callbacks: {
-              label: context => `Detections: ${formatNumber(context.raw as number)}`,
-            },
-          },
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            title: {
-              display: true,
-              text: t('analytics.charts.numberOfDetections'),
-              color: theme.color.text,
-            },
-            ticks: {
-              color: theme.color.text,
-            },
-            grid: {
-              color: theme.color.grid,
-            },
-          },
-          x: {
-            title: {
-              display: true,
-              text: t('analytics.charts.date'),
-              color: theme.color.text,
-            },
-            ticks: {
-              color: theme.color.text,
-            },
-            grid: {
-              color: theme.color.grid,
-            },
-          },
-        },
-      },
-    });
-    // Store reference in WeakMap for memory management
-    if (charts.trend) {
-      chartCanvases.set(canvas, charts.trend);
-    }
-  }
-
-  // Create new species chart
-  function createNewSpeciesChart(data: any) {
-    const canvas = document.getElementById('newSpeciesChart') as HTMLCanvasElement;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx) {
-      logger.debug('New species chart canvas not found - component may not be mounted yet');
-      return;
-    }
-
-    // Handle empty data case first
-    if (!Array.isArray(data) || data.length === 0) {
-      if (charts.newSpecies) {
-        charts.newSpecies.destroy();
-        charts.newSpecies = null;
-      }
-      return;
-    }
-
-    // Update existing chart if it exists
-    if (charts.newSpecies) {
-      // PERFORMANCE NOTE: New species chart uses complex time scales, so we still recreate
-      // Time scale charts are difficult to update efficiently, destruction is acceptable here
-      charts.newSpecies.destroy();
-      charts.newSpecies = null;
-    }
-
-    // Helper to add one day
-    const addOneDay = (dateStr: string) => {
-      if (!dateStr || typeof dateStr !== 'string') return null;
-      const date = parseLocalDateString(dateStr);
-      if (!date) return null;
-      date.setDate(date.getDate() + 1);
-
-      // Format as local YYYY-MM-DD string to avoid timezone shifts
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    // Filter and process data
-    const validData = data.filter(item => {
-      const endDate = addOneDay(item.first_heard_date);
-      return item.first_heard_date && typeof item.first_heard_date === 'string' && endDate;
-    });
-
-    if (validData.length === 0) return;
-
-    // Sort and limit data
-    validData.sort((a, b) => {
-      const dateA = parseLocalDateString(a.first_heard_date);
-      const dateB = parseLocalDateString(b.first_heard_date);
-      if (!dateA || !dateB) return 0;
-      return dateB.getTime() - dateA.getTime();
-    });
-    const displayLimit = 20;
-    const limitedData = validData.slice(0, displayLimit);
-    limitedData.sort((a, b) => {
-      const dateA = parseLocalDateString(a.first_heard_date);
-      const dateB = parseLocalDateString(b.first_heard_date);
-      if (!dateA || !dateB) return 0;
-      return dateA.getTime() - dateB.getTime();
-    });
-
-    const labels = limitedData.map(item => item.common_name || item.scientific_name);
-    const chartValues = limitedData.map(item => {
-      const startDate = parseLocalDateString(item.first_heard_date)?.getTime() ?? 0;
-      const endDateStr = addOneDay(item.first_heard_date) || item.first_heard_date;
-      const endDate = parseLocalDateString(endDateStr)?.getTime() ?? 0;
-      return [startDate, endDate] as [number, number];
-    });
-
-    const theme = getChartTheme();
-    const colors = generateColorPalette(labels.length, 0.7);
-
-    let minDate: number | undefined = undefined;
-    let maxDate: number | undefined = undefined;
-
-    if (filters.timePeriod !== 'all') {
-      if (filters.startDate) minDate = parseLocalDateString(filters.startDate)?.getTime();
-      if (filters.endDate) maxDate = parseLocalDateString(filters.endDate)?.getTime();
-    }
-
-    if (!minDate && validData.length > 0) {
-      minDate = parseLocalDateString(validData[0].first_heard_date)?.getTime();
-    }
-    if (!maxDate && validData.length > 0) {
-      const lastDate = addOneDay(validData[validData.length - 1].first_heard_date);
-      const fallbackDate = validData[validData.length - 1].first_heard_date;
-      maxDate = parseLocalDateString(lastDate || fallbackDate)?.getTime();
-    }
-
-    if (maxDate) {
-      maxDate = maxDate + 24 * 60 * 60 * 1000; // Add one day in milliseconds
-    }
-
-    // Destroy any orphaned Chart.js instance still bound to this canvas (e.g. after re-mount)
-    const existingNewSpecies = Chart.getChart(canvas);
-    if (existingNewSpecies) {
-      existingNewSpecies.destroy();
-    }
-
-    charts.newSpecies = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: t('analytics.charts.firstHeardOn'),
-            data: chartValues,
-            backgroundColor: colors,
-            borderWidth: 1,
-            barPercentage: 0.5,
-            categoryPercentage: 0.7,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        indexAxis: 'y',
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            ...theme.tooltip,
-            callbacks: {
-              title: tooltipItems => tooltipItems[0].label,
-              label: context => {
-                const dataPoint = context.dataset.data[context.dataIndex] as [number, number];
-                // dataPoint[0] is already a timestamp, format it directly
-                const startDate = getLocalDateString(new Date(dataPoint[0]));
-                return `${t('analytics.charts.firstHeard')}: ${startDate}`;
-              },
-            },
-          },
-        },
-        scales: {
-          x: {
-            type: 'time',
-            time: {
-              unit: 'day',
-              tooltipFormat: 'yyyy-MM-dd',
-              displayFormats: {
-                day: 'MMM d',
-              },
-            },
-            min: minDate,
-            max: maxDate,
-            title: {
-              display: true,
-              text: t('analytics.charts.firstHeardDate'),
-              color: theme.color.text,
-            },
-            ticks: { color: theme.color.text },
-            grid: { color: theme.color.grid },
-          },
-          y: {
-            type: 'category',
-            ticks: { color: theme.color.text },
-            grid: { display: false },
-          },
-        },
-      },
-    });
-    // Store reference in WeakMap for memory management
-    if (charts.newSpecies && canvas) {
-      chartCanvases.set(canvas, charts.newSpecies);
-    }
-  }
-
   // Initialize on mount
-  onMount(async () => {
-    // Set Chart.js default font
-    try {
-      const bodyFont = window.getComputedStyle(document.body).fontFamily;
-      if (bodyFont) {
-        Chart.defaults.font.family = bodyFont;
-      }
-    } catch (e) {
-      logger.error('Could not set Chart.js default font family:', e);
-    }
-
+  onMount(() => {
     // Set default dates
     const today = new Date();
     const lastMonth = new Date();
@@ -1160,26 +511,9 @@
     filters.endDate = formatDateForInput(today);
     filters.startDate = formatDateForInput(lastMonth);
 
-    // Wait for component to be fully mounted
-    await tick();
-
-    // Fetch initial data
+    // Fetch initial data. The D3 chart components render reactively from the
+    // derived inputs, so no imperative chart lifecycle is needed.
     fetchData();
-  });
-
-  // Cleanup charts when component unmounts using Svelte 5 $effect
-  $effect(() => {
-    // Effect runs when component mounts
-    return () => {
-      // Cleanup function runs when component unmounts
-      Object.values(charts).forEach(chart => {
-        if (chart) {
-          chart.destroy();
-        }
-      });
-      // Clear any remaining chart references from WeakMap
-      // WeakMap will auto-cleanup when canvas elements are garbage collected
-    };
   });
 </script>
 
@@ -1311,31 +645,115 @@
   <!-- Filter Controls -->
   <FilterForm bind:filters {isLoading} onSubmit={fetchData} onReset={resetFilters} />
 
+  {#snippet chartCard(
+    title: string,
+    chartHeight: string,
+    chart: Snippet,
+    empty: boolean,
+    emptyMessage: string
+  )}
+    <div class="card bg-[var(--color-base-100)] shadow-xs">
+      <div class="card-body p-4 md:p-6">
+        <h2 class="card-title">{title}</h2>
+        {#if empty && !isLoading}
+          <div class="text-center py-4 text-[var(--color-base-content)] opacity-50">
+            {emptyMessage}
+          </div>
+        {:else}
+          <div class="relative" aria-busy={isLoading}>
+            <div class="chart-container {chartHeight}" class:invisible={isLoading}>
+              {@render chart()}
+            </div>
+            {#if isLoading}
+              <div class="absolute inset-0 flex justify-center items-center">
+                <LoadingSpinner size="lg" />
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/snippet}
+
   <!-- Charts Section -->
   <div class="grid gap-4 charts-grid">
     <!-- Species Distribution Chart -->
-    <ChartCard title={t('analytics.charts.top10Species')} chartId="speciesChart" {isLoading} />
+    {#snippet speciesChart()}
+      <BarChart
+        data={speciesBars}
+        orientation="horizontal"
+        valueAxisLabel={t('analytics.charts.numberOfDetections')}
+        valueTooltipLabel={t('analytics.charts.detections')}
+        formatValue={formatNumber}
+        ariaLabel={t('analytics.charts.top10Species')}
+      />
+    {/snippet}
+    {@render chartCard(
+      t('analytics.charts.top10Species'),
+      'h-80',
+      speciesChart,
+      speciesBars.length === 0,
+      t('analytics.charts.noDataAvailable')
+    )}
 
     <!-- Time of Day Chart -->
-    <ChartCard
-      title={t('analytics.charts.detectionsByTimeOfDay')}
-      chartId="timeOfDayChart"
-      {isLoading}
-    />
+    {#snippet timeOfDayChart()}
+      <BarChart
+        data={timeOfDayBars}
+        orientation="vertical"
+        valueAxisLabel={t('analytics.charts.numberOfDetections')}
+        categoryAxisLabel={t('analytics.charts.timePeriod')}
+        valueTooltipLabel={t('analytics.charts.detections')}
+        formatValue={formatNumber}
+        ariaLabel={t('analytics.charts.detectionsByTimeOfDay')}
+      />
+    {/snippet}
+    {@render chartCard(
+      t('analytics.charts.detectionsByTimeOfDay'),
+      'h-80',
+      timeOfDayChart,
+      false,
+      t('analytics.charts.noDataAvailable')
+    )}
   </div>
 
   <!-- Trend Charts -->
-  <ChartCard title={t('analytics.charts.detectionTrends')} chartId="trendChart" {isLoading} />
+  {#snippet trendChart()}
+    <LineChart
+      series={trendSeries}
+      valueAxisLabel={t('analytics.charts.numberOfDetections')}
+      dateAxisLabel={t('analytics.charts.date')}
+      valueTooltipLabel={t('analytics.charts.detections')}
+      dateRange={chartDateRange}
+      formatValue={formatNumber}
+      ariaLabel={t('analytics.charts.detectionTrends')}
+    />
+  {/snippet}
+  {@render chartCard(
+    t('analytics.charts.detectionTrends'),
+    'h-80',
+    trendChart,
+    trendSeries[0].data.length === 0,
+    t('analytics.charts.noDataAvailable')
+  )}
 
   <!-- New Species Chart -->
-  <ChartCard
-    title={t('analytics.charts.newSpeciesDetected')}
-    chartId="newSpeciesChart"
-    {isLoading}
-    showEmpty={!isLoading && newSpeciesData.length === 0}
-    emptyMessage={t('analytics.charts.noNewSpecies')}
-    chartHeight="h-auto"
-  />
+  {#snippet newSpeciesChart()}
+    <NewSpeciesTimelineChart
+      data={newSpeciesPoints}
+      dateRange={chartDateRange}
+      firstHeardLabel={t('analytics.charts.firstHeard')}
+      dateAxisLabel={t('analytics.charts.firstHeardDate')}
+      ariaLabel={t('analytics.charts.newSpeciesDetected')}
+    />
+  {/snippet}
+  {@render chartCard(
+    t('analytics.charts.newSpeciesDetected'),
+    'h-96',
+    newSpeciesChart,
+    newSpeciesPoints.length === 0,
+    t('analytics.charts.noNewSpecies')
+  )}
 
   <!-- Data Table for Recent Detections -->
   <div class="card bg-[var(--color-base-100)] shadow-xs">
@@ -1343,7 +761,7 @@
       <h2 class="card-title">{t('analytics.recentDetections.title')}</h2>
       {#if isLoading}
         <div class="flex justify-center items-center p-8">
-          <span class="loading loading-spinner loading-lg text-[var(--color-primary)]"></span>
+          <LoadingSpinner size="lg" />
         </div>
       {:else}
         <!-- Desktop/tablet table -->
@@ -1371,7 +789,7 @@
                         <!-- PERFORMANCE OPTIMIZATION: Enhanced image loading for species thumbnails -->
                         <img
                           src={buildAppUrl(
-                            `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName)}`
+                            `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName ?? '')}`
                           )}
                           alt={detection.commonName || 'Unknown species'}
                           class="w-full h-full object-cover"
@@ -1430,7 +848,7 @@
                 >
                   <img
                     src={buildAppUrl(
-                      `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName)}`
+                      `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName ?? '')}`
                     )}
                     alt={detection.commonName || 'Unknown species'}
                     class="w-full h-full object-cover"

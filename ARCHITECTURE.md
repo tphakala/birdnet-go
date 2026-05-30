@@ -2417,7 +2417,6 @@ npm run build
 # Actual bundle sizes (uncompressed):
 # - Main chunk (index.js):        ~705KB
 # - Vendor chunk (vendor.js):      ~40KB (Svelte core)
-# - Charts chunk (charts.js):     ~202KB (Chart.js)
 # - MapLibre chunk:               ~917KB (Map rendering - largest)
 # - Route chunks:                  11-223KB (lazy-loaded on demand)
 ```
