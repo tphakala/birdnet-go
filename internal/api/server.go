@@ -611,8 +611,8 @@ func (s *Server) startBlocking() error {
 		// Without this, Echo's AutoTLSManager has no storage backend and certs
 		// are lost on every shutdown, triggering a fresh ACME request each time
 		// and quickly exhausting Let's Encrypt's rate limit.
-		if configPaths, pathErr := conf.GetDefaultConfigPaths(); pathErr == nil && len(configPaths) > 0 {
-			cacheDir := filepath.Join(configPaths[0], "tls-acme")
+		if configFile, pathErr := conf.FindConfigFile(); pathErr == nil {
+			cacheDir := filepath.Join(filepath.Dir(configFile), "tls-acme")
 			s.echo.AutoTLSManager.Cache = autocert.DirCache(cacheDir)
 			s.slogger.Info("AutoTLS certificate cache configured", logger.String("path", cacheDir))
 		} else {
