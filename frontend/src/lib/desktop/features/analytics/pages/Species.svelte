@@ -1,5 +1,4 @@
 <script lang="ts">
-  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import { t } from '$lib/i18n';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { downloadBlob } from '$lib/utils/fileHelpers';
@@ -8,6 +7,7 @@
   import { getStoredValue, setStoredValue } from '$lib/utils/storage';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { onMount } from 'svelte';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesDetailModal from '../components/modals/SpeciesDetailModal.svelte';
   import SpeciesCard from '../components/ui/SpeciesCard.svelte';
@@ -21,8 +21,23 @@
     timePeriod: 'all' | 'today' | 'week' | 'month' | '90days' | 'year' | 'custom';
     startDate: string;
     endDate: string;
+    sortOrder:
+      | 'count_desc'
+      | 'count_asc'
+      | 'name_asc'
+      | 'name_desc'
+      | 'first_seen_desc'
+      | 'first_seen_asc'
+      | 'last_seen_desc'
+      | 'last_seen_asc'
+      | 'confidence_desc'
+      | 'confidence_asc'
+      | 'max_confidence_desc'
+      | 'max_confidence_asc';
     searchTerm: string;
   }
+
+  type SortOrder = SpeciesFilters['sortOrder'];
 
   interface SpeciesData {
     common_name: string;
@@ -37,118 +52,63 @@
 
   type ViewMode = 'grid' | 'list';
 
-  // Sortable table columns. Clicking a column header sorts by it; the species
-  // name sorts ascending (A→Z) by default, every other column descending
-  // (largest/most recent first), since that is the most useful first glance.
-  type SortColumn =
-    | 'species'
-    | 'count'
-    | 'avgConfidence'
-    | 'maxConfidence'
-    | 'firstSeen'
-    | 'lastSeen';
-  type SortDirection = 'asc' | 'desc';
-
-  interface SortState {
-    column: SortColumn;
-    direction: SortDirection;
-  }
-
-  // Sortable columns in table order, each mapped to its i18n header label.
-  // Drives both the header rendering and sort-column validation.
-  const SORTABLE_COLUMNS: { field: SortColumn; labelKey: string }[] = [
-    { field: 'species', labelKey: 'analytics.species.headers.species' },
-    { field: 'count', labelKey: 'analytics.species.headers.detections' },
-    { field: 'avgConfidence', labelKey: 'analytics.species.headers.avgConfidence' },
-    { field: 'maxConfidence', labelKey: 'analytics.species.headers.maxConfidence' },
-    { field: 'firstSeen', labelKey: 'analytics.species.headers.firstDetected' },
-    { field: 'lastSeen', labelKey: 'analytics.species.headers.lastDetected' },
-  ];
-
-  const SORT_COLUMN_SET: Set<string> = new Set<string>(SORTABLE_COLUMNS.map(c => c.field));
-
-  // Options for the always-visible sort dropdown. Clicking a table header
-  // applies the same sorting; each option maps to a (column, direction) pair.
-  const SORT_OPTIONS: {
-    value: string;
+  // Sortable table columns mapped to their ascending/descending sort values.
+  // Clicking a header applies the matching sort; the species name defaults to
+  // ascending (A→Z), every other column to descending (most/highest/most
+  // recent first), which is the most useful first glance.
+  const SORTABLE_COLUMNS: {
+    field: string;
     labelKey: string;
-    column: SortColumn;
-    direction: SortDirection;
+    asc: SortOrder;
+    desc: SortOrder;
   }[] = [
     {
-      value: 'count_desc',
-      labelKey: 'analytics.sortOptions.mostDetections',
-      column: 'count',
-      direction: 'desc',
+      field: 'species',
+      labelKey: 'analytics.species.headers.species',
+      asc: 'name_asc',
+      desc: 'name_desc',
     },
     {
-      value: 'count_asc',
-      labelKey: 'analytics.sortOptions.fewestDetections',
-      column: 'count',
-      direction: 'asc',
+      field: 'count',
+      labelKey: 'analytics.species.headers.detections',
+      asc: 'count_asc',
+      desc: 'count_desc',
     },
     {
-      value: 'name_asc',
-      labelKey: 'analytics.sortOptions.nameAZ',
-      column: 'species',
-      direction: 'asc',
+      field: 'avg_confidence',
+      labelKey: 'analytics.species.headers.avgConfidence',
+      asc: 'confidence_asc',
+      desc: 'confidence_desc',
     },
     {
-      value: 'name_desc',
-      labelKey: 'analytics.sortOptions.nameZA',
-      column: 'species',
-      direction: 'desc',
+      field: 'max_confidence',
+      labelKey: 'analytics.species.headers.maxConfidence',
+      asc: 'max_confidence_asc',
+      desc: 'max_confidence_desc',
     },
     {
-      value: 'first_seen_desc',
-      labelKey: 'analytics.sortOptions.recentlyFirstSeen',
-      column: 'firstSeen',
-      direction: 'desc',
+      field: 'first_seen',
+      labelKey: 'analytics.species.headers.firstDetected',
+      asc: 'first_seen_asc',
+      desc: 'first_seen_desc',
     },
     {
-      value: 'first_seen_asc',
-      labelKey: 'analytics.sortOptions.earliestFirstSeen',
-      column: 'firstSeen',
-      direction: 'asc',
-    },
-    {
-      value: 'last_seen_desc',
-      labelKey: 'analytics.sortOptions.recentlyLastSeen',
-      column: 'lastSeen',
-      direction: 'desc',
-    },
-    {
-      value: 'confidence_desc',
-      labelKey: 'analytics.sortOptions.highestConfidence',
-      column: 'avgConfidence',
-      direction: 'desc',
+      field: 'last_seen',
+      labelKey: 'analytics.species.headers.lastDetected',
+      asc: 'last_seen_asc',
+      desc: 'last_seen_desc',
     },
   ];
 
-  const DEFAULT_SORT_COLUMN: SortColumn = 'species';
+  // Default sort and persistence (survives a page refresh). Species name first.
+  const DEFAULT_SORT_ORDER: SortOrder = 'name_asc';
+  const SORT_STORAGE_KEY = 'analytics.species.sortOrder';
+  const VALID_SORT_ORDERS: Set<string> = new Set<string>(
+    SORTABLE_COLUMNS.flatMap(column => [column.asc, column.desc])
+  );
 
-  /** localStorage key persisting the active sort column/direction across refreshes. */
-  const SORT_STORAGE_KEY = 'analytics.species.sort';
-
-  // Species name reads naturally ascending; metrics and dates are most useful
-  // showing the highest/most recent first, so they default to descending.
-  function defaultDirectionFor(column: SortColumn): SortDirection {
-    return column === 'species' ? 'asc' : 'desc';
-  }
-
-  function isSortColumn(field: string): field is SortColumn {
-    return SORT_COLUMN_SET.has(field);
-  }
-
-  function isSortState(value: unknown): value is SortState {
-    if (typeof value !== 'object' || value === null) return false;
-    if (!('column' in value) || !('direction' in value)) return false;
-    const { column, direction } = value;
-    return (
-      typeof column === 'string' &&
-      isSortColumn(column) &&
-      (direction === 'asc' || direction === 'desc')
-    );
+  function isSortOrder(value: unknown): value is SortOrder {
+    return typeof value === 'string' && VALID_SORT_ORDERS.has(value);
   }
 
   let isLoading = $state<boolean>(true);
@@ -162,29 +122,39 @@
     timePeriod: 'all',
     startDate: '',
     endDate: '',
+    // Restore the persisted sort so it survives a refresh; default to species name.
+    sortOrder: getStoredValue<SortOrder>(SORT_STORAGE_KEY, DEFAULT_SORT_ORDER, isSortOrder),
     searchTerm: '',
   });
 
-  // Restore the persisted sort selection so it survives a page refresh.
-  const initialSort = getStoredValue<SortState>(
-    SORT_STORAGE_KEY,
-    { column: DEFAULT_SORT_COLUMN, direction: defaultDirectionFor(DEFAULT_SORT_COLUMN) },
-    isSortState
+  // Active column + direction for the header indicators, derived from sortOrder.
+  let activeColumn = $derived(
+    SORTABLE_COLUMNS.find(
+      column => column.asc === filters.sortOrder || column.desc === filters.sortOrder
+    )
   );
-  let sortColumn = $state<SortColumn>(initialSort.column);
-  let sortDirection = $state<SortDirection>(initialSort.direction);
-
-  // Options (with translated labels) for the sort dropdown.
-  let sortOptions = $derived(
-    SORT_OPTIONS.map(option => ({ value: option.value, label: t(option.labelKey) }))
+  let sortField = $derived(activeColumn?.field ?? '');
+  let sortDirection: 'asc' | 'desc' = $derived(
+    activeColumn?.desc === filters.sortOrder ? 'desc' : 'asc'
   );
 
-  // Current sort expressed as a dropdown value, or '' when the active sort has
-  // no dropdown equivalent (e.g. max confidence, reachable only via a header).
-  let sortValue = $derived(
-    SORT_OPTIONS.find(option => option.column === sortColumn && option.direction === sortDirection)
-      ?.value ?? ''
-  );
+  // Clicking a header re-clicking the active column toggles its direction; a new
+  // column starts at its default (ascending for species name, descending else).
+  function handleSort(field: string) {
+    const column = SORTABLE_COLUMNS.find(c => c.field === field);
+    if (!column) return;
+    const next =
+      sortField === field
+        ? filters.sortOrder === column.asc
+          ? column.desc
+          : column.asc
+        : field === 'species'
+          ? column.asc
+          : column.desc;
+    filters.sortOrder = next;
+    setStoredValue<SortOrder>(SORT_STORAGE_KEY, next);
+    applyFilters();
+  }
 
   // Set default dates on mount
   onMount(() => {
@@ -296,76 +266,67 @@
       );
     }
 
-    // Apply sorting based on the active column/direction. The comparator
-    // always sorts ascending; the direction factor flips it for descending.
-    const directionFactor = sortDirection === 'asc' ? 1 : -1;
-    filtered.sort((a, b) => directionFactor * compareByColumn(a, b, sortColumn));
+    // Apply sorting
+    switch (filters.sortOrder) {
+      case 'count_desc':
+        filtered.sort((a, b) => b.count - a.count);
+        break;
+      case 'count_asc':
+        filtered.sort((a, b) => a.count - b.count);
+        break;
+      case 'name_asc':
+        filtered.sort((a, b) => a.common_name.localeCompare(b.common_name));
+        break;
+      case 'name_desc':
+        filtered.sort((a, b) => b.common_name.localeCompare(a.common_name));
+        break;
+      case 'first_seen_desc':
+        filtered.sort((a, b) => {
+          const dateA = parseLocalDateString(a.first_heard);
+          const dateB = parseLocalDateString(b.first_heard);
+          if (!dateA || !dateB) return 0;
+          return dateB.getTime() - dateA.getTime();
+        });
+        break;
+      case 'first_seen_asc':
+        filtered.sort((a, b) => {
+          const dateA = parseLocalDateString(a.first_heard);
+          const dateB = parseLocalDateString(b.first_heard);
+          if (!dateA || !dateB) return 0;
+          return dateA.getTime() - dateB.getTime();
+        });
+        break;
+      case 'last_seen_desc':
+        filtered.sort((a, b) => {
+          const dateA = parseLocalDateString(a.last_heard);
+          const dateB = parseLocalDateString(b.last_heard);
+          if (!dateA || !dateB) return 0;
+          return dateB.getTime() - dateA.getTime();
+        });
+        break;
+      case 'last_seen_asc':
+        filtered.sort((a, b) => {
+          const dateA = parseLocalDateString(a.last_heard);
+          const dateB = parseLocalDateString(b.last_heard);
+          if (!dateA || !dateB) return 0;
+          return dateA.getTime() - dateB.getTime();
+        });
+        break;
+      case 'confidence_desc':
+        filtered.sort((a, b) => b.avg_confidence - a.avg_confidence);
+        break;
+      case 'confidence_asc':
+        filtered.sort((a, b) => a.avg_confidence - b.avg_confidence);
+        break;
+      case 'max_confidence_desc':
+        filtered.sort((a, b) => b.max_confidence - a.max_confidence);
+        break;
+      case 'max_confidence_asc':
+        filtered.sort((a, b) => a.max_confidence - b.max_confidence);
+        break;
+    }
 
     filteredSpecies = filtered;
-  }
-
-  // Ascending comparator for a given column. Returns 0 when dates can't be
-  // parsed so unparseable rows keep their relative order.
-  function compareByColumn(a: SpeciesData, b: SpeciesData, column: SortColumn): number {
-    switch (column) {
-      case 'species':
-        return a.common_name.localeCompare(b.common_name);
-      case 'count':
-        return a.count - b.count;
-      case 'avgConfidence':
-        return a.avg_confidence - b.avg_confidence;
-      case 'maxConfidence':
-        return a.max_confidence - b.max_confidence;
-      case 'firstSeen': {
-        const dateA = parseLocalDateString(a.first_heard);
-        const dateB = parseLocalDateString(b.first_heard);
-        if (!dateA || !dateB) return 0;
-        return dateA.getTime() - dateB.getTime();
-      }
-      case 'lastSeen': {
-        const dateA = parseLocalDateString(a.last_heard);
-        const dateB = parseLocalDateString(b.last_heard);
-        if (!dateA || !dateB) return 0;
-        return dateA.getTime() - dateB.getTime();
-      }
-      default: {
-        // Exhaustiveness guard: adding a SortColumn without a case is a compile error.
-        const exhaustive: never = column;
-        return exhaustive;
-      }
-    }
-  }
-
-  // Update the active sort column/direction and persist it so the choice
-  // survives a page refresh.
-  function persistSort(column: SortColumn, direction: SortDirection) {
-    sortColumn = column;
-    sortDirection = direction;
-    setStoredValue<SortState>(SORT_STORAGE_KEY, { column, direction });
-  }
-
-  // Toggle direction when re-clicking the active column, otherwise switch to
-  // the new column at its natural default direction. The field arrives as a
-  // string from SortableHeader, so guard it before use.
-  function handleSort(field: string) {
-    if (!isSortColumn(field)) return;
-    const direction =
-      sortColumn === field
-        ? sortDirection === 'asc'
-          ? 'desc'
-          : 'asc'
-        : defaultDirectionFor(field);
-    persistSort(field, direction);
-    applyFilters();
-  }
-
-  // Sort dropdown change: resolve the selected value to its (column, direction)
-  // pair and apply it through the shared sort state.
-  function handleSortValueChange(value: string) {
-    const option = SORT_OPTIONS.find(o => o.value === value);
-    if (!option) return;
-    persistSort(option.column, option.direction);
-    applyFilters();
   }
 
   function getFilteredCount(): number {
@@ -398,10 +359,9 @@
 
   function resetFilters() {
     filters.timePeriod = 'all';
+    filters.sortOrder = DEFAULT_SORT_ORDER;
+    setStoredValue<SortOrder>(SORT_STORAGE_KEY, DEFAULT_SORT_ORDER);
     filters.searchTerm = '';
-
-    // Restore the default sort (species name, ascending) and persist it.
-    persistSort(DEFAULT_SORT_COLUMN, defaultDirectionFor(DEFAULT_SORT_COLUMN));
 
     const today = new Date();
     const lastMonth = new Date();
@@ -589,9 +549,6 @@
     bind:filters
     {isLoading}
     filteredCount={getFilteredCount()}
-    {sortOptions}
-    {sortValue}
-    onSortChange={handleSortValueChange}
     onSubmit={fetchData}
     onReset={resetFilters}
     onExport={exportData}
@@ -679,7 +636,7 @@
                   <SortableHeader
                     label={t(labelKey)}
                     {field}
-                    activeField={sortColumn}
+                    activeField={sortField}
                     direction={sortDirection}
                     onSort={handleSort}
                   />
