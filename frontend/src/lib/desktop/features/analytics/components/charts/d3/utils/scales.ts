@@ -47,11 +47,24 @@ export function createLinearScale(config: LinearScaleConfig): ScaleLinear<number
   return scale;
 }
 
+// One day in milliseconds, used to pad a collapsed (zero-width) time domain.
+const MS_PER_DAY = 86_400_000;
+
 /**
- * Create a time scale for date-based charts
+ * Create a time scale for date-based charts.
+ *
+ * Guards against a collapsed (zero-width) domain, e.g. a single-day filter
+ * such as "today" or data confined to one day. Without this, d3 maps every
+ * point to the same x and the chart renders broken. Equal endpoints are padded
+ * by one day on each side.
  */
 export function createTimeScale(config: TimeScaleConfig): ScaleTime<number, number> {
-  return scaleTime().domain(config.domain).range(config.range);
+  let [start, end] = config.domain;
+  if (start.getTime() === end.getTime()) {
+    start = new Date(start.getTime() - MS_PER_DAY);
+    end = new Date(end.getTime() + MS_PER_DAY);
+  }
+  return scaleTime().domain([start, end]).range(config.range);
 }
 
 /**

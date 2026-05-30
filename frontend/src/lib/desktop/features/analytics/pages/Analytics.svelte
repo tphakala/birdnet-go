@@ -712,7 +712,7 @@
       t('analytics.charts.detectionsByTimeOfDay'),
       'h-80',
       timeOfDayChart,
-      false,
+      timeOfDayBars.every(b => b.value === 0),
       t('analytics.charts.noDataAvailable')
     )}
   </div>
