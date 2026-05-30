@@ -434,7 +434,7 @@ Source: MIT
 
 ### github.com/tphakala/go-audio-resampler
 
-License: https://github.com/tphakala/go-audio-resampler/blob/v1.3.0/LICENSE
+License: https://github.com/tphakala/go-audio-resampler/blob/v1.4.0/LICENSE
 Source: LGPL-3.0
 
 ### github.com/tphakala/go-tflite
@@ -444,7 +444,7 @@ Source: MIT
 
 ### github.com/tphakala/simd
 
-License: https://github.com/tphakala/simd/blob/v1.0.22/LICENSE
+License: https://github.com/tphakala/simd/blob/v1.1.0/LICENSE
 Source: MIT
 
 ### github.com/valyala/bytebufferpool
@@ -540,11 +540,6 @@ Source: BSD-3-Clause
 ### golang.org/x/time/rate
 
 License: https://cs.opensource.google/go/x/time/+/v0.15.0:LICENSE
-Source: BSD-3-Clause
-
-### gonum.org/v1/gonum/dsp/fourier
-
-License: Unknown
 Source: BSD-3-Clause
 
 ### google.golang.org/api
