@@ -618,19 +618,7 @@ func (c *Controller) GetRecentSpeciesActivity(ctx echo.Context) error {
 	since := now.Add(-time.Duration(params.Hours) * time.Hour)
 	candidateLimit := recentSpeciesCandidateLimit(params.Limit)
 
-	filters := &datastore.AdvancedSearchFilters{
-		DateRange: &datastore.DateRange{Start: since, End: now},
-		SortBy:    sortByDateDesc,
-		Limit:     candidateLimit,
-	}
-	if params.MinConfidence > 0 {
-		filters.Confidence = &datastore.ConfidenceFilter{
-			Operator: ">=",
-			Value:    params.MinConfidence,
-		}
-	}
-
-	c.logInfoIfEnabled("Retrieving recent species activity",
+	c.logDebugIfEnabled("Retrieving recent species activity",
 		logger.Int("hours", params.Hours),
 		logger.Int("limit", params.Limit),
 		logger.Int("buckets", params.Buckets),
@@ -640,7 +628,7 @@ func (c *Controller) GetRecentSpeciesActivity(ctx echo.Context) error {
 		logger.String("path", path),
 	)
 
-	notes, _, err := c.DS.SearchNotesAdvanced(filters)
+	notes, err := c.searchRecentSpeciesCandidateNotes(params, since, now, candidateLimit)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get recent species activity",
 			logger.Error(err),
@@ -652,7 +640,7 @@ func (c *Controller) GetRecentSpeciesActivity(ctx echo.Context) error {
 
 	result := c.buildRecentSpeciesActivity(notes, since, now, params)
 
-	c.logInfoIfEnabled("Recent species activity retrieved",
+	c.logDebugIfEnabled("Recent species activity retrieved",
 		logger.Int("species_count", len(result)),
 		logger.Int("candidate_count", len(notes)),
 		logger.String("ip", ip),
@@ -660,6 +648,50 @@ func (c *Controller) GetRecentSpeciesActivity(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, result)
+}
+
+func (c *Controller) searchRecentSpeciesCandidateNotes(params recentSpeciesActivityParams, since, now time.Time, candidateLimit int) ([]datastore.Note, error) {
+	ranges := recentSpeciesSearchDateRanges(since, now)
+	notes := make([]datastore.Note, 0, candidateLimit)
+
+	for i := range ranges {
+		dateRange := ranges[i]
+		filters := &datastore.AdvancedSearchFilters{
+			DateRange: &dateRange,
+			SortBy:    sortByDateDesc,
+			Limit:     candidateLimit,
+		}
+		if params.MinConfidence > 0 {
+			filters.Confidence = &datastore.ConfidenceFilter{
+				Operator: ">=",
+				Value:    params.MinConfidence,
+			}
+		}
+
+		dateNotes, _, err := c.DS.SearchNotesAdvanced(filters)
+		if err != nil {
+			return nil, err
+		}
+		notes = append(notes, dateNotes...)
+	}
+
+	return notes, nil
+}
+
+func recentSpeciesSearchDateRanges(since, now time.Time) []datastore.DateRange {
+	startDate := recentSpeciesDateStart(since)
+	endDate := recentSpeciesDateStart(now)
+	ranges := make([]datastore.DateRange, 0, 2)
+
+	for date := endDate; !date.Before(startDate); date = date.AddDate(0, 0, -1) {
+		ranges = append(ranges, datastore.DateRange{Start: date, End: date})
+	}
+
+	return ranges
+}
+
+func recentSpeciesDateStart(value time.Time) time.Time {
+	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, value.Location())
 }
 
 func (c *Controller) parseRecentSpeciesActivityParams(ctx echo.Context) recentSpeciesActivityParams {

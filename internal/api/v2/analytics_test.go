@@ -1295,13 +1295,34 @@ func TestGetRecentSpeciesActivity(t *testing.T) {
 		noteAt(5, now.Add(-5*time.Hour), "Blue Jay", "Cyanocitta cristata", 0.99),
 	}
 
+	notesForFilter := func(filters *datastore.AdvancedSearchFilters) []datastore.Note {
+		filtered := make([]datastore.Note, 0, len(notes))
+		startDate := filters.DateRange.Start.Format(time.DateOnly)
+		endDate := filters.DateRange.End.Format(time.DateOnly)
+		for _, note := range notes {
+			if note.Date >= startDate && note.Date <= endDate {
+				filtered = append(filtered, note)
+			}
+		}
+		return filtered
+	}
+
 	mockDS.On("SearchNotesAdvanced", mock.MatchedBy(func(filters *datastore.AdvancedSearchFilters) bool {
 		return filters != nil &&
 			filters.DateRange != nil &&
+			filters.DateRange.Start.Format(time.DateOnly) == filters.DateRange.End.Format(time.DateOnly) &&
 			filters.SortBy == sortByDateDesc &&
-			filters.Limit == 400 &&
+			filters.Limit == recentSpeciesCandidateLimit(2) &&
 			filters.Confidence == nil
-	})).Return(notes, int64(len(notes)), nil).Once()
+	})).Return(
+		func(filters *datastore.AdvancedSearchFilters) []datastore.Note {
+			return notesForFilter(filters)
+		},
+		func(filters *datastore.AdvancedSearchFilters) int64 {
+			return int64(len(notesForFilter(filters)))
+		},
+		nil,
+	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/recent?hours=4&limit=2&buckets=4", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -1326,6 +1347,25 @@ func TestGetRecentSpeciesActivity(t *testing.T) {
 	assert.NotContains(t, []string{response[0].CommonName, response[1].CommonName}, "Blue Jay")
 
 	mockDS.AssertExpectations(t)
+}
+
+func TestRecentSpeciesSearchDateRangesSpansMidnight(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("feature", "recent-species-activity")
+	t.Attr("type", "unit")
+
+	loc := time.FixedZone("test", 0)
+	since := time.Date(2026, 5, 1, 22, 0, 0, 0, loc)
+	now := time.Date(2026, 5, 2, 2, 0, 0, 0, loc)
+
+	ranges := recentSpeciesSearchDateRanges(since, now)
+
+	require.Len(t, ranges, 2)
+	assert.Equal(t, "2026-05-02", ranges[0].Start.Format(time.DateOnly))
+	assert.Equal(t, ranges[0].Start, ranges[0].End)
+	assert.Equal(t, "2026-05-01", ranges[1].Start.Format(time.DateOnly))
+	assert.Equal(t, ranges[1].Start, ranges[1].End)
 }
 
 func TestApplySpeciesStatusToSummary_FlagPassThrough(t *testing.T) {

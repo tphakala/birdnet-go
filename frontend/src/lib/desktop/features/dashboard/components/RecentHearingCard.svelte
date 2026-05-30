@@ -38,6 +38,7 @@ compact confidence sparkline for the configured time window.
   const MINUTE_SECONDS = 60;
   const HOUR_SECONDS = 3600;
   const ISO_DATE_LENGTH = 10;
+  const REFRESH_STATUS_ID = 'recent-hearing-refresh-status';
 
   let tick = $state(0);
   let visibleRows = $derived(data.slice(0, MAX_VISIBLE_ROWS));
@@ -103,6 +104,11 @@ compact confidence sparkline for the configured time window.
     if (!item.scientific_name) return '';
     return buildSpeciesDetectionUrl(item.scientific_name, latestHeardDate(item));
   }
+
+  function refreshControlLabel(): string {
+    if (loading) return t('dashboard.recentHearing.loading');
+    return t('dashboard.recentHearing.controls.refresh');
+  }
 </script>
 
 <section
@@ -125,10 +131,14 @@ compact confidence sparkline for the configured time window.
         onclick={onRefresh}
         class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--color-base-content)]/60 transition-colors hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)] disabled:pointer-events-none disabled:opacity-50"
         disabled={loading}
-        title={t('dashboard.recentHearing.controls.refresh')}
-        aria-label={t('dashboard.recentHearing.controls.refresh')}
+        title={refreshControlLabel()}
+        aria-label={refreshControlLabel()}
+        aria-describedby={loading ? REFRESH_STATUS_ID : undefined}
       >
         <RefreshCw class={loading ? 'size-4 animate-spin' : 'size-4'} />
+        {#if loading}
+          <span id={REFRESH_STATUS_ID} class="sr-only">{t('dashboard.recentHearing.loading')}</span>
+        {/if}
       </button>
     {/if}
   </div>
@@ -157,6 +167,8 @@ compact confidence sparkline for the configured time window.
     {:else if error}
       <div
         class="flex h-full min-h-32 items-center justify-center gap-2 px-4 text-sm text-[var(--color-error)]"
+        role="alert"
+        aria-live="assertive"
       >
         <XCircle class="size-4 shrink-0" />
         <span>{error}</span>
@@ -225,6 +237,7 @@ compact confidence sparkline for the configured time window.
                 threshold={HIGH_CONFIDENCE}
                 thresholdColor="var(--color-success)"
                 minValue={0}
+                maxValue={1}
                 viewWidth={92}
                 viewHeight={32}
               />

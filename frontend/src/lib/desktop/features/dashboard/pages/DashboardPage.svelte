@@ -241,6 +241,9 @@ Performance Optimizations:
           : { elements: defaultElements, source: 'hardcoded-defaults' as const }
   );
   let layoutElements = $derived(layoutResolution.elements);
+  let hasRecentHearingTile = $derived(
+    layoutElements.some(element => element.enabled && element.type === 'recent-hearing')
+  );
 
   // Current layout as a DashboardLayout object for DashboardEditMode
   let currentLayout = $derived<DashboardLayout>({ elements: layoutElements });
@@ -543,9 +546,11 @@ Performance Optimizations:
   }
 
   let lastRecentHearingFetch = 0;
+  let recentHearingRequestId = 0;
 
   async function fetchRecentHearing(force = false) {
-    if (!connectionState.isOnline) {
+    if (!hasRecentHearingTile || !connectionState.isOnline) {
+      recentHearingRequestId++;
       isLoadingRecentHearing = false;
       return;
     }
@@ -556,6 +561,7 @@ Performance Optimizations:
     }
     lastRecentHearingFetch = now;
 
+    const requestId = ++recentHearingRequestId;
     isLoadingRecentHearing = true;
     recentHearingError = null;
 
@@ -573,13 +579,17 @@ Performance Optimizations:
         );
       }
       const data = await response.json();
+      if (requestId !== recentHearingRequestId) return;
       recentHearing = isRecentSpeciesActivityArray(data) ? data : [];
     } catch (error) {
+      if (requestId !== recentHearingRequestId) return;
       recentHearingError =
         error instanceof Error ? error.message : t('dashboard.errors.recentHearingLoad');
       logger.error('Error fetching recent hearing:', error);
     } finally {
-      isLoadingRecentHearing = false;
+      if (requestId === recentHearingRequestId) {
+        isLoadingRecentHearing = false;
+      }
     }
   }
 

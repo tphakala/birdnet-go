@@ -66,8 +66,13 @@
       if (threshold > globalMax) globalMax = threshold;
       if (threshold < globalMin) globalMin = threshold;
     }
-    if (minValue != null && minValue < globalMin) globalMin = minValue;
-    if (maxValue != null && maxValue > globalMax) globalMax = maxValue;
+    if (minValue != null) globalMin = minValue;
+    if (maxValue != null) globalMax = maxValue;
+    if (globalMin > globalMax) {
+      const min = globalMax;
+      globalMax = globalMin;
+      globalMin = min;
+    }
     if (!isFinite(globalMin)) globalMin = 0;
     if (!isFinite(globalMax) || globalMax === globalMin) globalMax = globalMin + 1;
 
