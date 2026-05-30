@@ -20,11 +20,11 @@
     filters: SpeciesFilters;
     isLoading?: boolean;
     filteredCount: number;
-    /** Sort options for the mobile-only sort dropdown (value + translated label). */
+    /** Sort options for the sort dropdown (value + translated label). */
     sortOptions?: SortOption[];
     /** Currently selected sort value, or '' when the active sort has no dropdown equivalent. */
     sortValue?: string;
-    /** Called with the selected sort value when the mobile dropdown changes. */
+    /** Called with the selected sort value when the sort dropdown changes. */
     onSortChange?: (_value: string) => void;
     onSubmit: () => void;
     onReset: () => void;
@@ -102,13 +102,9 @@
           </FormField>
         {/if}
 
-        <!-- Sort Order - mobile only: the sortable table headers are hidden
-             below the `sm` breakpoint, so this restores the sort control there. -->
-        <FormField
-          label={t('analytics.filters.sortBy')}
-          id="sortOrder"
-          className="col-span-full sm:hidden"
-        >
+        <!-- Sort Order - always visible; clicking a table header applies the
+             same sorting and keeps this dropdown in sync. -->
+        <FormField label={t('analytics.filters.sortBy')} id="sortOrder">
           <SelectDropdown
             value={sortValue}
             options={sortOptions}

@@ -61,7 +61,7 @@ describe('SpeciesFilterForm', () => {
     expect(timePeriodSelect).toBeInTheDocument();
   });
 
-  it('renders the mobile sort dropdown and emits onSortChange on selection', async () => {
+  it('renders the sort dropdown and emits onSortChange on selection', async () => {
     const onSortChange = vi.fn();
 
     render(SpeciesFilterForm, {
@@ -81,7 +81,7 @@ describe('SpeciesFilterForm', () => {
       },
     });
 
-    // The mobile sort control (desktop uses sortable table headers instead).
+    // The sort control is always visible; table headers offer the same sorting.
     expect(screen.getByText('Sort By')).toBeInTheDocument();
 
     // Trigger shows the current selection; opening it and picking another
