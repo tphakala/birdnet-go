@@ -61,11 +61,19 @@ describe('SpeciesFilterForm', () => {
     expect(timePeriodSelect).toBeInTheDocument();
   });
 
-  it('does not render a sort order dropdown (sorting moved to table headers)', () => {
+  it('renders the mobile sort dropdown and emits onSortChange on selection', async () => {
+    const onSortChange = vi.fn();
+
     render(SpeciesFilterForm, {
       props: {
         filters: createDefaultFilters(),
         filteredCount: 0,
+        sortOptions: [
+          { value: 'name_asc', label: 'Name (A-Z)' },
+          { value: 'count_desc', label: 'Most Detections' },
+        ],
+        sortValue: 'name_asc',
+        onSortChange,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
         onExport: vi.fn(),
@@ -73,8 +81,16 @@ describe('SpeciesFilterForm', () => {
       },
     });
 
-    expect(screen.queryByText('Sort By')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /most detections/i })).not.toBeInTheDocument();
+    // The mobile sort control (desktop uses sortable table headers instead).
+    expect(screen.getByText('Sort By')).toBeInTheDocument();
+
+    // Trigger shows the current selection; opening it and picking another
+    // option forwards the new value to onSortChange.
+    const trigger = screen.getByRole('button', { name: /name \(a-z\)/i });
+    await fireEvent.click(trigger);
+    await fireEvent.click(screen.getByRole('option', { name: /most detections/i }));
+
+    expect(onSortChange).toHaveBeenCalledWith('count_desc');
   });
 
   it('shows custom date fields when custom time period is selected', () => {
