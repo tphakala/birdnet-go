@@ -85,6 +85,7 @@ function lastInstance(): MockEventSource {
 
 describe('ReconnectingEventSource', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     MockEventSource.instances = [];
   });
 
