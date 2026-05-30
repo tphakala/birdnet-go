@@ -105,7 +105,8 @@ Performance Optimizations:
   const MIN_FETCH_LIMIT = 10; // Minimum number of detections to fetch for SSE processing
   const RECENT_HEARING_HOURS = 4;
   const RECENT_HEARING_LIMIT = 8;
-  const RECENT_HEARING_BUCKETS = 12;
+  const RECENT_HEARING_BUCKETS = RECENT_HEARING_HOURS * 4;
+  const RECENT_HEARING_REFRESH_MS = 60000;
   const RECENT_HEARING_FETCH_THROTTLE_MS = 10000;
   // Species limit buffer constants for SSE updates
   // BUFFER_TRIGGER: When array exceeds limit + this, trigger cleanup
@@ -627,6 +628,7 @@ Performance Optimizations:
   let animationCleanupTimers = $state.raw(new Set<ReturnType<typeof setTimeout>>());
   let animationFrame: number | null = null;
   let pendingCleanups = $state.raw(new Map<string, { fn: () => void; timestamp: number }>());
+  let recentHearingRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
   // Clear animation states from daily summary
   function clearDailySummaryAnimations() {
@@ -880,6 +882,9 @@ Performance Optimizations:
     });
     fetchRecentDetections();
     fetchRecentHearing();
+    recentHearingRefreshTimer = setInterval(() => {
+      fetchRecentHearing();
+    }, RECENT_HEARING_REFRESH_MS);
 
     // Setup SSE connection for real-time updates
     connectToDetectionStream();
@@ -921,6 +926,11 @@ Performance Optimizations:
       if (sseFetchTimer) {
         clearTimeout(sseFetchTimer);
         sseFetchTimer = null;
+      }
+
+      if (recentHearingRefreshTimer) {
+        clearInterval(recentHearingRefreshTimer);
+        recentHearingRefreshTimer = null;
       }
 
       // Clean up preload debounce timer

@@ -14,6 +14,8 @@
     datasets?: Dataset[];
     threshold?: number;
     thresholdColor?: string;
+    minValue?: number;
+    maxValue?: number;
     viewWidth?: number;
     viewHeight?: number;
   }
@@ -24,6 +26,8 @@
     datasets,
     threshold,
     thresholdColor = '#ef4444',
+    minValue,
+    maxValue,
     viewWidth = 200,
     viewHeight = 40,
   }: Props = $props();
@@ -62,6 +66,8 @@
       if (threshold > globalMax) globalMax = threshold;
       if (threshold < globalMin) globalMin = threshold;
     }
+    if (minValue != null && minValue < globalMin) globalMin = minValue;
+    if (maxValue != null && maxValue > globalMax) globalMax = maxValue;
     if (!isFinite(globalMin)) globalMin = 0;
     if (!isFinite(globalMax) || globalMax === globalMin) globalMax = globalMin + 1;
 

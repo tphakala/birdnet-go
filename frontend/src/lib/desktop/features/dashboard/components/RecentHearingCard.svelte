@@ -9,6 +9,8 @@ compact confidence sparkline for the configured time window.
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
   import { t } from '$lib/i18n';
   import type { RecentSpeciesActivity } from '$lib/types/detection.types';
+  import { getLocalDateString } from '$lib/utils/date';
+  import { buildSpeciesDetectionUrl } from '$lib/utils/detectionUrls';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { cn } from '$lib/utils/cn';
 
@@ -35,6 +37,7 @@ compact confidence sparkline for the configured time window.
   const MEDIUM_CONFIDENCE = 0.5;
   const MINUTE_SECONDS = 60;
   const HOUR_SECONDS = 3600;
+  const ISO_DATE_LENGTH = 10;
 
   let tick = $state(0);
   let visibleRows = $derived(data.slice(0, MAX_VISIBLE_ROWS));
@@ -87,6 +90,18 @@ compact confidence sparkline for the configured time window.
 
   function rowKey(item: RecentSpeciesActivity): string {
     return item.scientific_name || item.common_name || item.latest_detection_id.toString();
+  }
+
+  function latestHeardDate(item: RecentSpeciesActivity): string {
+    if (/^\d{4}-\d{2}-\d{2}/.test(item.latest_heard_at)) {
+      return item.latest_heard_at.slice(0, ISO_DATE_LENGTH);
+    }
+    return getLocalDateString();
+  }
+
+  function speciesDetectionUrl(item: RecentSpeciesActivity): string {
+    if (!item.scientific_name) return '';
+    return buildSpeciesDetectionUrl(item.scientific_name, latestHeardDate(item));
   }
 </script>
 
@@ -150,6 +165,7 @@ compact confidence sparkline for the configured time window.
       <ul class="divide-y divide-[var(--color-base-200)]" role="list">
         {#each visibleRows as item (rowKey(item))}
           {@const speciesName = displayName(item)}
+          {@const speciesUrl = speciesDetectionUrl(item)}
           {@const relTime = relativeTime(item.latest_heard_at)}
           <li
             class="grid min-h-14 grid-cols-[minmax(0,1fr)_5.75rem_3.25rem] items-center gap-3 px-2 py-2"
@@ -170,11 +186,21 @@ compact confidence sparkline for the configured time window.
               {/if}
 
               <div class="min-w-0">
-                <div
-                  class="truncate text-sm font-medium leading-tight text-[var(--color-base-content)]"
-                >
-                  {speciesName}
-                </div>
+                {#if speciesUrl}
+                  <a
+                    href={speciesUrl}
+                    class="block truncate text-sm font-medium leading-tight text-[var(--color-base-content)] transition-colors hover:text-[var(--color-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+                    title={item.scientific_name}
+                  >
+                    {speciesName}
+                  </a>
+                {:else}
+                  <div
+                    class="truncate text-sm font-medium leading-tight text-[var(--color-base-content)]"
+                  >
+                    {speciesName}
+                  </div>
+                {/if}
                 <div class="truncate text-xs text-[var(--color-base-content)]/55">
                   {#if relTime}
                     {relTime} ·
@@ -198,6 +224,7 @@ compact confidence sparkline for the configured time window.
                 color="var(--color-primary)"
                 threshold={HIGH_CONFIDENCE}
                 thresholdColor="var(--color-success)"
+                minValue={0}
                 viewWidth={92}
                 viewHeight={32}
               />

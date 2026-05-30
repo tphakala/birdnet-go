@@ -1291,7 +1291,8 @@ func TestGetRecentSpeciesActivity(t *testing.T) {
 		noteAt(1, now.Add(-10*time.Minute), "American Robin", "Turdus migratorius", 0.82),
 		noteAt(2, now.Add(-2*time.Hour), "American Robin", "Turdus migratorius", 0.66),
 		noteAt(3, now.Add(-20*time.Minute), "Northern Cardinal", "Cardinalis cardinalis", 0.95), //nolint:misspell // Scientific name.
-		noteAt(4, now.Add(-5*time.Hour), "Blue Jay", "Cyanocitta cristata", 0.99),
+		noteAt(4, now.Add(-25*time.Minute), "Northern Cardinal", "Cardinalis cardinalis", 0.70), //nolint:misspell // Scientific name.
+		noteAt(5, now.Add(-5*time.Hour), "Blue Jay", "Cyanocitta cristata", 0.99),
 	}
 
 	mockDS.On("SearchNotesAdvanced", mock.MatchedBy(func(filters *datastore.AdvancedSearchFilters) bool {
@@ -1318,6 +1319,8 @@ func TestGetRecentSpeciesActivity(t *testing.T) {
 	assert.Equal(t, "Northern Cardinal", response[0].CommonName)
 	assert.Equal(t, uint(3), response[0].LatestDetectionID)
 	assert.Len(t, response[0].ConfidenceTrend, 4)
+	assert.Equal(t, 0.0, response[0].ConfidenceTrend[0])
+	assert.InDelta(t, 0.95, response[0].ConfidenceTrend[3], 0.001)
 	assert.Equal(t, "American Robin", response[1].CommonName)
 	assert.Equal(t, 2, response[1].Count)
 	assert.NotContains(t, []string{response[0].CommonName, response[1].CommonName}, "Blue Jay")

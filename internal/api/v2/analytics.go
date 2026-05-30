@@ -39,9 +39,9 @@ const (
 	maxRecentSpeciesHours       = 24
 	defaultRecentSpeciesLimit   = 8
 	maxRecentSpeciesLimit       = 20
-	defaultRecentSpeciesBuckets = 12
+	recentSpeciesBucketsPerHour = 4
 	minRecentSpeciesBuckets     = 4
-	maxRecentSpeciesBuckets     = 24
+	maxRecentSpeciesBuckets     = maxRecentSpeciesHours * recentSpeciesBucketsPerHour
 
 	recentSpeciesCandidateMultiplier = 200
 	recentSpeciesMinCandidates       = 200
@@ -605,8 +605,7 @@ type recentSpeciesAccumulator struct {
 	latestDetectionID    uint
 	maxConfidence        float64
 	confidenceTotal      float64
-	bucketConfidenceSums []float64
-	bucketCounts         []int
+	bucketMaxConfidences []float64
 }
 
 // GetRecentSpeciesActivity handles GET /api/v2/analytics/species/recent.
@@ -675,7 +674,7 @@ func (c *Controller) parseRecentSpeciesActivityParams(ctx echo.Context) recentSp
 		maxRecentSpeciesLimit,
 	)
 	buckets := clampRecentInt(
-		c.parseOptionalPositiveInt(ctx, "buckets", defaultRecentSpeciesBuckets),
+		c.parseOptionalPositiveInt(ctx, "buckets", hours*recentSpeciesBucketsPerHour),
 		minRecentSpeciesBuckets,
 		maxRecentSpeciesBuckets,
 	)
@@ -725,8 +724,7 @@ func (c *Controller) buildRecentSpeciesActivity(notes []datastore.Note, since, n
 				scientificName:       note.ScientificName,
 				commonName:           note.CommonName,
 				speciesCode:          note.SpeciesCode,
-				bucketConfidenceSums: make([]float64, params.Buckets),
-				bucketCounts:         make([]int, params.Buckets),
+				bucketMaxConfidences: make([]float64, params.Buckets),
 			}
 			bySpecies[key] = acc
 		}
@@ -764,8 +762,9 @@ func updateRecentSpeciesAccumulator(acc *recentSpeciesAccumulator, note *datasto
 	} else if bucketIndex >= buckets {
 		bucketIndex = buckets - 1
 	}
-	acc.bucketConfidenceSums[bucketIndex] += note.Confidence
-	acc.bucketCounts[bucketIndex]++
+	if note.Confidence > acc.bucketMaxConfidences[bucketIndex] {
+		acc.bucketMaxConfidences[bucketIndex] = note.Confidence
+	}
 }
 
 func (c *Controller) recentSpeciesActivitiesFromAccumulators(bySpecies map[string]*recentSpeciesAccumulator, since, now time.Time, params recentSpeciesActivityParams) []RecentSpeciesActivity {
@@ -825,12 +824,8 @@ func buildRecentSpeciesActivityItem(acc *recentSpeciesAccumulator, thumbnailURLs
 }
 
 func buildRecentSpeciesTrend(acc *recentSpeciesAccumulator) []float64 {
-	trend := make([]float64, len(acc.bucketConfidenceSums))
-	for i := range acc.bucketConfidenceSums {
-		if acc.bucketCounts[i] > 0 {
-			trend[i] = acc.bucketConfidenceSums[i] / float64(acc.bucketCounts[i])
-		}
-	}
+	trend := make([]float64, len(acc.bucketMaxConfidences))
+	copy(trend, acc.bucketMaxConfidences)
 	return trend
 }
 
