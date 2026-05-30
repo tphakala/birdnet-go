@@ -207,8 +207,22 @@ Performance Optimizations:
   );
   let layoutElements = $derived(layoutResolution.elements);
 
+  // The New Species Highlights card renders nothing on days without a qualifying
+  // species. Outside edit mode, drop it from the layout in that case so it does not
+  // leave an empty grid cell/gap between cards. In edit mode it is always kept so it
+  // stays visible and configurable.
+  let hasNewSpeciesHighlights = $derived(
+    dailySummary.some(d => d.is_new_species || d.is_new_this_year || d.is_new_this_season)
+  );
+
   // Current layout as a DashboardLayout object for DashboardEditMode
-  let currentLayout = $derived<DashboardLayout>({ elements: layoutElements });
+  let currentLayout = $derived<DashboardLayout>({
+    elements: isEditing
+      ? layoutElements
+      : layoutElements.filter(
+          el => el.type !== 'new-species-highlights' || hasNewSpeciesHighlights
+        ),
+  });
 
   let previousLayoutSource = '';
   $effect(() => {
