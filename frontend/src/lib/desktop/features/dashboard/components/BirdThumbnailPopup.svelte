@@ -11,7 +11,7 @@
     - Positions below thumbnail when there's space
     - Positions above thumbnail when near bottom of viewport
     - Adjusts horizontally to stay within viewport bounds
-  - Uses svelte-portal to escape overflow containers
+  - Uses a local portal action to escape overflow containers
   - Handles image loading states and errors gracefully
   - Fully accessible with proper ARIA attributes
   - Responsive design that works on mobile (tap to show)
@@ -28,7 +28,7 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import type { ImageAttribution } from '$lib/types/detection.types';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import Portal from 'svelte-portal';
+  import { portal } from '$lib/utils/portal';
   import { dropdown } from '$lib/utils/transitions';
   import { Image } from '@lucide/svelte';
 
@@ -211,120 +211,116 @@
 
   <!-- Popup overlay -->
   {#if showPopup}
-    <Portal>
-      <div
-        bind:this={popupElement}
-        id="bird-popup"
-        in:dropdown
-        out:dropdown={{ duration: 100 }}
-        class="fixed z-50 bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-lg shadow-xl p-4"
-        style:left="{popupX}px"
-        style:top="{popupY}px"
-        style:width="320px"
-        role="tooltip"
-        aria-live="polite"
-      >
-        <!-- Popup content -->
-        <div class="space-y-3">
-          <!-- Species information header -->
-          <div class="text-center space-y-1">
-            <h3 class="font-semibold text-[var(--color-base-content)] text-sm leading-tight">
-              {commonName}
-            </h3>
-            <p
-              class="text-xs italic"
-              style:color="color-mix(in srgb, var(--color-base-content) 70%, transparent)"
-            >
-              {scientificName}
-            </p>
-          </div>
-
-          <!-- Large image container -->
-          <div
-            class="relative w-full aspect-[4/3] bg-[var(--color-base-200)] rounded-lg overflow-hidden"
+    <div
+      bind:this={popupElement}
+      use:portal
+      id="bird-popup"
+      in:dropdown
+      out:dropdown={{ duration: 100 }}
+      class="fixed z-50 bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-lg shadow-xl p-4"
+      style:left="{popupX}px"
+      style:top="{popupY}px"
+      style:width="320px"
+      role="tooltip"
+      aria-live="polite"
+    >
+      <!-- Popup content -->
+      <div class="space-y-3">
+        <!-- Species information header -->
+        <div class="text-center space-y-1">
+          <h3 class="font-semibold text-[var(--color-base-content)] text-sm leading-tight">
+            {commonName}
+          </h3>
+          <p
+            class="text-xs italic"
+            style:color="color-mix(in srgb, var(--color-base-content) 70%, transparent)"
           >
-            {#if !imageLoaded && !imageError}
-              <!-- Loading state -->
-              <div class="absolute inset-0 flex items-center justify-center">
-                <div class="loading loading-spinner loading-md"></div>
-              </div>
-            {/if}
-
-            {#if imageError}
-              <!-- Error state -->
-              <div
-                class="absolute inset-0 flex flex-col items-center justify-center"
-                style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
-              >
-                <Image class="size-8 mb-2" />
-                <p class="text-xs text-center">Image not available</p>
-              </div>
-            {:else}
-              <!-- Large image -->
-              <img
-                src={thumbnailUrl}
-                alt={`Large view of ${commonName}`}
-                class="w-full h-full object-contain transition-opacity duration-200"
-                class:opacity-0={!imageLoaded}
-                class:opacity-100={imageLoaded}
-                onload={handleImageLoad}
-                onerror={handleImageError}
-              />
-            {/if}
-
-            <!-- Photo credit overlay -->
-            {#if imageAttribution?.authorName && imageLoaded}
-              <div
-                class="thumbnail-credit"
-                aria-label="Image credit: {imageAttribution.authorName}"
-              >
-                <span class="credit-text">{imageAttribution.authorName}</span>
-                {#if imageAttribution.licenseName}
-                  <span class="credit-separator">·</span>
-                  {#if imageAttribution.licenseURL}
-                    <a
-                      href={imageAttribution.licenseURL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="credit-license">{imageAttribution.licenseName}</a
-                    >
-                  {:else}
-                    <span class="credit-license">{imageAttribution.licenseName}</span>
-                  {/if}
-                {/if}
-              </div>
-            {/if}
-          </div>
-
-          <!-- Action hint -->
-          <div class="text-center">
-            <p
-              class="text-xs"
-              style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
-            >
-              Click to view detections
-            </p>
-          </div>
+            {scientificName}
+          </p>
         </div>
 
-        <!-- Popup arrow pointing to trigger -->
-        {#if popupPosition === 'below'}
-          <!-- Arrow at top of popup -->
-          <div
-            class="absolute w-3 h-3 bg-[var(--color-base-100)] border-l border-t border-[var(--color-base-300)] rotate-45 -z-10"
-            style:left="20px"
-            style:top="-6px"
-          ></div>
-        {:else}
-          <!-- Arrow at bottom of popup -->
-          <div
-            class="absolute w-3 h-3 bg-[var(--color-base-100)] border-r border-b border-[var(--color-base-300)] rotate-45 -z-10"
-            style:left="20px"
-            style:bottom="-6px"
-          ></div>
-        {/if}
+        <!-- Large image container -->
+        <div
+          class="relative w-full aspect-[4/3] bg-[var(--color-base-200)] rounded-lg overflow-hidden"
+        >
+          {#if !imageLoaded && !imageError}
+            <!-- Loading state -->
+            <div class="absolute inset-0 flex items-center justify-center">
+              <div class="loading loading-spinner loading-md"></div>
+            </div>
+          {/if}
+
+          {#if imageError}
+            <!-- Error state -->
+            <div
+              class="absolute inset-0 flex flex-col items-center justify-center"
+              style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
+            >
+              <Image class="size-8 mb-2" />
+              <p class="text-xs text-center">Image not available</p>
+            </div>
+          {:else}
+            <!-- Large image -->
+            <img
+              src={thumbnailUrl}
+              alt={`Large view of ${commonName}`}
+              class="w-full h-full object-contain transition-opacity duration-200"
+              class:opacity-0={!imageLoaded}
+              class:opacity-100={imageLoaded}
+              onload={handleImageLoad}
+              onerror={handleImageError}
+            />
+          {/if}
+
+          <!-- Photo credit overlay -->
+          {#if imageAttribution?.authorName && imageLoaded}
+            <div class="thumbnail-credit" aria-label="Image credit: {imageAttribution.authorName}">
+              <span class="credit-text">{imageAttribution.authorName}</span>
+              {#if imageAttribution.licenseName}
+                <span class="credit-separator">·</span>
+                {#if imageAttribution.licenseURL}
+                  <a
+                    href={imageAttribution.licenseURL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="credit-license">{imageAttribution.licenseName}</a
+                  >
+                {:else}
+                  <span class="credit-license">{imageAttribution.licenseName}</span>
+                {/if}
+              {/if}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Action hint -->
+        <div class="text-center">
+          <p
+            class="text-xs"
+            style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
+          >
+            Click to view detections
+          </p>
+        </div>
       </div>
-    </Portal>
+
+      <!-- Popup arrow pointing to trigger -->
+      {#if popupPosition === 'below'}
+        <!-- Arrow at top of popup -->
+        <div
+          class="absolute w-3 h-3 bg-[var(--color-base-100)] border-l border-t border-[var(--color-base-300)] rotate-45 -z-10"
+          style:left="20px"
+          style:top="-6px"
+        ></div>
+      {:else}
+        <!-- Arrow at bottom of popup -->
+        <div
+          class="absolute w-3 h-3 bg-[var(--color-base-100)] border-r border-b border-[var(--color-base-300)] rotate-45 -z-10"
+          style:left="20px"
+          style:bottom="-6px"
+        ></div>
+      {/if}
+    </div>
   {/if}
 </div>
 
