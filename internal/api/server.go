@@ -35,6 +35,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -610,16 +611,16 @@ func (s *Server) startBlocking() error {
 		// Without this, Echo's AutoTLSManager has no storage backend and certs
 		// are lost on every shutdown, triggering a fresh ACME request each time
 		// and quickly exhausting Let's Encrypt's rate limit.
-		if configFile, pathErr := conf.FindConfigFile(); pathErr == nil {
-			cacheDir := filepath.Join(filepath.Dir(configFile), "tls-acme")
+		if configPaths, pathErr := conf.GetDefaultConfigPaths(); pathErr == nil && len(configPaths) > 0 {
+			cacheDir := filepath.Join(configPaths[0], "tls-acme")
 			s.echo.AutoTLSManager.Cache = autocert.DirCache(cacheDir)
 			s.slogger.Info("AutoTLS certificate cache configured", logger.String("path", cacheDir))
 		} else {
 			s.slogger.Warn("Could not determine config path for AutoTLS cache; certificates will not persist across restarts",
 				logger.Error(pathErr))
 		}
-		if s.settings.Security.Host != "" {
-			s.echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist(s.settings.Security.Host)
+		if h := s.settings.Security.GetHostnameForCertificates(); h != "" {
+			s.echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist(h)
 		}
 		err = s.echo.StartAutoTLS(addr)
 	case s.config.TLSEnabled:
