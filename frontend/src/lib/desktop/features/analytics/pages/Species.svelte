@@ -84,11 +84,12 @@
 
   function isSortState(value: unknown): value is SortState {
     if (typeof value !== 'object' || value === null) return false;
-    const candidate = value as Record<string, unknown>;
+    if (!('column' in value) || !('direction' in value)) return false;
+    const { column, direction } = value;
     return (
-      typeof candidate.column === 'string' &&
-      isSortColumn(candidate.column) &&
-      (candidate.direction === 'asc' || candidate.direction === 'desc')
+      typeof column === 'string' &&
+      isSortColumn(column) &&
+      (direction === 'asc' || direction === 'desc')
     );
   }
 
