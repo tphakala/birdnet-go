@@ -207,7 +207,7 @@ func TestResampleTo_WritesIntoDst(t *testing.T) {
 
 	n, err := r.ResampleTo(input, dst)
 	require.NoError(t, err)
-	assert.Greater(t, n, 0)
+	assert.Positive(t, n)
 	assert.LessOrEqual(t, n, dstSize)
 
 	// Verify output is non-zero (actual audio was written).
@@ -241,7 +241,7 @@ func TestResampleTo_DstTooSmall(t *testing.T) {
 	dst := make([]byte, dstSize)
 	n, err := r.ResampleTo(input, dst)
 	require.NoError(t, err)
-	assert.Greater(t, n, 0)
+	assert.Positive(t, n)
 }
 
 // TestResampleTo_MatchesResampleInto verifies that ResampleTo and ResampleInto
@@ -297,10 +297,10 @@ func TestResampleTo_HighRatio(t *testing.T) {
 
 // resampleBenchCases defines the rate pairs used across benchmarks.
 var resampleBenchCases = []struct {
-	name       string
-	fromRate   int
-	toRate     int
-	inputMs    int // input duration in milliseconds
+	name     string
+	fromRate int
+	toRate   int
+	inputMs  int // input duration in milliseconds
 }{
 	{"48k_to_32k", 48000, 32000, 100},
 	{"256k_to_48k", 256000, 48000, 100},

@@ -27,7 +27,7 @@ const (
 	// Using 32768.0 ensures -32768 maps exactly to -1.0.
 	pcm16Scale = 32768.0
 
-	// pcm16MaxPositive is the scale factor for float64 → int16 conversion.
+	// pcm16MaxPositive is the scale factor for float32 → int16 conversion.
 	// Using 32767.0 avoids overflow when the input is exactly +1.0.
 	pcm16MaxPositive = 32767.0
 )
@@ -36,13 +36,18 @@ const (
 // It keeps pre-allocated buffers that grow as needed but are never shrunk,
 // so subsequent calls with the same input size incur no heap allocations.
 //
+// It uses the float32-native resampler path: 16-bit PCM carries at most 16 bits
+// of precision, which float32 represents exactly, so PCM16 → float32 → resample
+// → PCM16 avoids the float64 round-trip and halves the scratch-buffer footprint
+// with no audible precision loss.
+//
 // Resampler is not safe for concurrent use; callers must serialise calls.
 type Resampler struct {
 	fromRate  int
 	toRate    int
-	inner     *audioresampler.SimpleResampler
-	inFloats  []float64 // scratch buffer for PCM→float64 conversion
-	outFloats []float64 // scratch buffer for resampled float64 output
+	inner     *audioresampler.SimpleResamplerFloat32
+	inFloats  []float32 // scratch buffer for PCM→float32 conversion
+	outFloats []float32 // scratch buffer for resampled float32 output
 	outBuf    []byte    // pre-allocated output buffer for ResampleInto
 }
 
@@ -54,7 +59,7 @@ func NewResampler(fromRate, toRate int) (*Resampler, error) {
 		return nil, nil //nolint:nilnil // intentional: nil means "no resampling needed"
 	}
 
-	inner, err := audioresampler.NewEngine(
+	inner, err := audioresampler.NewEngineFloat32(
 		float64(fromRate),
 		float64(toRate),
 		audioresampler.QualityMedium,
@@ -108,24 +113,37 @@ func (r *Resampler) ResampleTo(input, dst []byte) (int, error) {
 
 	// Grow input scratch buffer if needed.
 	if cap(r.inFloats) < sampleCount {
-		r.inFloats = make([]float64, sampleCount)
+		r.inFloats = make([]float32, sampleCount)
 	}
 	r.inFloats = r.inFloats[:sampleCount]
 
-	// Convert 16-bit PCM bytes → normalised float64.
+	// Convert 16-bit PCM bytes → normalised float32.
 	for i := range sampleCount {
 		sample := int16(binary.LittleEndian.Uint16(input[i*bytesPerSample:])) //nolint:gosec // G115: intentional uint16→int16 bit reinterpretation for PCM audio
-		r.inFloats[i] = float64(sample) / pcm16Scale
+		r.inFloats[i] = float32(sample) / pcm16Scale
 	}
 
 	// Grow output float scratch buffer if needed.
 	needed := r.inner.EstimateOutput(sampleCount)
 	if cap(r.outFloats) < needed {
-		r.outFloats = make([]float64, needed)
+		r.outFloats = make([]float32, needed)
 	}
 	r.outFloats = r.outFloats[:needed]
 
-	// Resample using the zero-allocation path.
+	// Verify dst can hold the maximum possible output before advancing
+	// resampler state, so a too-small buffer fails without consuming input
+	// (matches the documented "no state advance on error" contract).
+	maxBytes := needed * bytesPerSample
+	if len(dst) < maxBytes {
+		return 0, errors.Newf("destination buffer too small: need %d bytes, have %d", maxBytes, len(dst)).
+			Component("audiocore/resample").
+			Category(errors.CategoryValidation).
+			Context("required_bytes", maxBytes).
+			Context("dst_len", len(dst)).
+			Build()
+	}
+
+	// Resample using the zero-allocation float32-native path.
 	n, err := r.inner.ProcessInto(r.inFloats, r.outFloats)
 	if err != nil {
 		return 0, errors.Newf("resampler process failed: %w", err).
@@ -137,18 +155,9 @@ func (r *Resampler) ResampleTo(input, dst []byte) (int, error) {
 			Build()
 	}
 
-	// Verify dst is large enough for the actual output.
 	requiredBytes := n * bytesPerSample
-	if len(dst) < requiredBytes {
-		return 0, errors.Newf("destination buffer too small: need %d bytes, have %d", requiredBytes, len(dst)).
-			Component("audiocore/resample").
-			Category(errors.CategoryValidation).
-			Context("required_bytes", requiredBytes).
-			Context("dst_len", len(dst)).
-			Build()
-	}
 
-	// Convert normalised float64 → 16-bit PCM bytes directly into dst.
+	// Convert normalised float32 → 16-bit PCM bytes directly into dst.
 	for i, f := range r.outFloats[:n] {
 		if f > 1.0 {
 			f = 1.0
@@ -199,7 +208,7 @@ func (r *Resampler) Close() error {
 		return nil
 	}
 
-	// SimpleResampler has no Close method; release references so GC can reclaim them.
+	// SimpleResamplerFloat32 has no Close method; release references so GC can reclaim them.
 	r.inner = nil
 	r.inFloats = nil
 	r.outFloats = nil
