@@ -323,7 +323,7 @@ const wrong = new Date().toISOString().split('T')[0];
 ## SSE (Server-Sent Events)
 
 ```typescript
-import ReconnectingEventSource from 'reconnecting-eventsource';
+import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
 
 const eventSource = new ReconnectingEventSource('/api/endpoint', {
   max_retry_time: 30000,
