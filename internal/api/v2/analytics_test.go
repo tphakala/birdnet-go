@@ -1319,7 +1319,7 @@ func TestGetRecentSpeciesActivity(t *testing.T) {
 	assert.Equal(t, "Northern Cardinal", response[0].CommonName)
 	assert.Equal(t, uint(3), response[0].LatestDetectionID)
 	assert.Len(t, response[0].ConfidenceTrend, 4)
-	assert.Equal(t, 0.0, response[0].ConfidenceTrend[0])
+	assert.InDelta(t, 0.0, response[0].ConfidenceTrend[0], 0.001)
 	assert.InDelta(t, 0.95, response[0].ConfidenceTrend[3], 0.001)
 	assert.Equal(t, "American Robin", response[1].CommonName)
 	assert.Equal(t, 2, response[1].Count)
