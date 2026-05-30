@@ -145,7 +145,10 @@
     const colors = generateSpeciesColors(sorted.length, theme);
 
     // Width of one-day marker in pixels (minimum a few px so it stays visible).
-    const dayWidth = Math.max(4, xScale(new Date(MS_PER_DAY)) - xScale(new Date(0)));
+    const dayWidth = Math.max(
+      4,
+      xScale(new Date(domainStart.getTime() + MS_PER_DAY)) - xScale(domainStart)
+    );
 
     const markers = chartGroup
       .append('g')

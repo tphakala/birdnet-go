@@ -70,6 +70,7 @@
   const POINT_OPACITY = 0.8;
   const TRANSITION_MS = 150;
   const LEGEND_WIDTH = 150;
+  const MS_PER_DAY = 86_400_000;
 
   let tooltip: ChartTooltip | null = null;
   let chartContainer: HTMLDivElement | null = null;
@@ -100,8 +101,20 @@
     const allValues = resolved.flatMap(s => s.data.map(p => p.value));
 
     const dateExtent = extent<Date>(allDates);
-    const safeDateExtent: [Date, Date] =
-      dateExtent[0] && dateExtent[1] ? [dateExtent[0], dateExtent[1]] : [new Date(), new Date()];
+    // Pad a missing or collapsed (single-day) domain so the time scale never
+    // gets a zero-width domain, which would otherwise stack every point at one x.
+    const safeDateExtent: [Date, Date] = (() => {
+      const start = dateExtent[0];
+      const end = dateExtent[1];
+      if (!start || !end) {
+        const now = Date.now();
+        return [new Date(now - MS_PER_DAY), new Date(now + MS_PER_DAY)];
+      }
+      if (start.getTime() === end.getTime()) {
+        return [new Date(start.getTime() - MS_PER_DAY), new Date(end.getTime() + MS_PER_DAY)];
+      }
+      return [start, end];
+    })();
     const maxValue = max(allValues) ?? 0;
 
     const xScale = createTimeScale({

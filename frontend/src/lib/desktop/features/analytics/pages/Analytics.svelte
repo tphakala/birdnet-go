@@ -131,7 +131,7 @@
   // Species distribution: sorted desc by count, mapped to labelled bars with
   // per-species colors from the D3 theme palette (applied inside BarChart).
   const speciesBars = $derived(
-    [...chartData.species]
+    [...(chartData.species ?? [])]
       .sort((a, b) => b.count - a.count)
       .map(s => ({ label: s.common_name, value: s.count }))
   );

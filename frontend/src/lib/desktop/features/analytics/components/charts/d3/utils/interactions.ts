@@ -155,7 +155,8 @@ export class ChartTooltip {
       const colorDot = item.color
         ? `<span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${item.color}; margin-right: 6px;"></span>`
         : '';
-      html += `<div>${colorDot}${escapeHtml(item.label)}: ${escapeHtml(String(item.value))}</div>`;
+      const labelPrefix = item.label ? `${escapeHtml(item.label)}: ` : '';
+      html += `<div>${colorDot}${labelPrefix}${escapeHtml(String(item.value))}</div>`;
     });
 
     return html;
