@@ -166,19 +166,19 @@ func TestBuildSpectrogramPath(t *testing.T) {
 		{
 			name:     "wav file",
 			clipPath: "clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00.wav",
-			want:     "clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00.png",
+			want:     "clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00-norm1.png",
 			wantErr:  false,
 		},
 		{
 			name:     "flac file",
 			clipPath: "clips/test.flac",
-			want:     "clips/test.png",
+			want:     "clips/test-norm1.png",
 			wantErr:  false,
 		},
 		{
 			name:     "mp3 file",
 			clipPath: "/absolute/path/to/audio.mp3",
-			want:     "/absolute/path/to/audio.png",
+			want:     "/absolute/path/to/audio-norm1.png",
 			wantErr:  false,
 		},
 		{
@@ -190,13 +190,13 @@ func TestBuildSpectrogramPath(t *testing.T) {
 		{
 			name:     "multiple dots",
 			clipPath: "clips/file.with.dots.wav",
-			want:     "clips/file.with.dots.png",
+			want:     "clips/file.with.dots-norm1.png",
 			wantErr:  false,
 		},
 		{
 			name:     "hidden file",
 			clipPath: "clips/.hidden.wav",
-			want:     "clips/.hidden.png",
+			want:     "clips/.hidden-norm1.png",
 			wantErr:  false,
 		},
 	}
@@ -228,7 +228,7 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 			audioPath: "clips/audio.wav",
 			width:     258,
 			raw:       false,
-			want:      "clips/audio.sm.png",
+			want:      "clips/audio.sm-norm1.png",
 			wantErr:   false,
 		},
 		{
@@ -236,7 +236,7 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 			audioPath: "clips/audio.wav",
 			width:     514,
 			raw:       false,
-			want:      "clips/audio.md.png",
+			want:      "clips/audio.md-norm1.png",
 			wantErr:   false,
 		},
 		{
@@ -244,7 +244,7 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 			audioPath: "clips/audio.wav",
 			width:     514,
 			raw:       true,
-			want:      "clips/audio.md.raw.png",
+			want:      "clips/audio.md.raw-norm1.png",
 			wantErr:   false,
 		},
 		{
@@ -252,7 +252,7 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 			audioPath: "clips/audio.wav",
 			width:     1026,
 			raw:       false,
-			want:      "clips/audio.lg.png",
+			want:      "clips/audio.lg-norm1.png",
 			wantErr:   false,
 		},
 		{
@@ -260,7 +260,7 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 			audioPath: "clips/audio.wav",
 			width:     2050,
 			raw:       true,
-			want:      "clips/audio.xl.raw.png",
+			want:      "clips/audio.xl.raw-norm1.png",
 			wantErr:   false,
 		},
 		{
@@ -276,7 +276,7 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 			audioPath: "/path/to/audio.flac",
 			width:     514,
 			raw:       true,
-			want:      "/path/to/audio.md.raw.png",
+			want:      "/path/to/audio.md.raw-norm1.png",
 			wantErr:   false,
 		},
 		{
@@ -284,7 +284,7 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 			audioPath: "clips/file.with.dots.wav",
 			width:     1026,
 			raw:       false,
-			want:      "clips/file.with.dots.lg.png",
+			want:      "clips/file.with.dots.lg-norm1.png",
 			wantErr:   false,
 		},
 	}

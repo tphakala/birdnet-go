@@ -333,8 +333,8 @@ func TestServeSpectrogram(t *testing.T) {
 
 	// --- Simulate Spectrogram Generation (by creating the expected file) ---
 	// This allows testing the "file exists" path without running external tools.
-	// Default is raw=true, so the filename format is audio_800px.png
-	spectrogramFilename := "audio_800px.png"
+	// Default is raw=true, so the filename format is audio_800px-norm1.png
+	spectrogramFilename := "audio_800px-norm1.png"
 	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
 	spectrogramContent := "simulated spectrogram content"
 	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o600)
@@ -458,8 +458,8 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Simulate existing spectrogram
-	// Default is raw=true, so the filename format is test_800px.png
-	spectrogramFilename := "test_800px.png"
+	// Default is raw=true, so the filename format is test_800px-norm1.png
+	spectrogramFilename := "test_800px-norm1.png"
 	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
 	spectrogramContent := "test spectrogram content"
 	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o600)
@@ -785,13 +785,13 @@ func TestServeSpectrogramRawParameter(t *testing.T) {
 	require.NoError(t, err)
 
 	// Simulate raw spectrogram (default behavior)
-	rawSpectrogramFilename := "rawtest_800px.png"
+	rawSpectrogramFilename := "rawtest_800px-norm1.png"
 	rawSpectrogramPath := filepath.Join(tempDir, rawSpectrogramFilename)
 	err = os.WriteFile(rawSpectrogramPath, []byte("raw spectrogram"), 0o600)
 	require.NoError(t, err)
 
 	// Simulate spectrogram with legend
-	legendSpectrogramFilename := "rawtest_800px-legend.png"
+	legendSpectrogramFilename := "rawtest_800px-norm1-legend.png"
 	legendSpectrogramPath := filepath.Join(tempDir, legendSpectrogramFilename)
 	err = os.WriteFile(legendSpectrogramPath, []byte("legend spectrogram"), 0o600)
 	require.NoError(t, err)
@@ -1057,13 +1057,13 @@ func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 	require.NoError(t, err)
 
 	// Simulate raw spectrogram (default behavior) using lg size (1026px)
-	rawSpectrogramFilename := "test_raw_param_1026px.png"
+	rawSpectrogramFilename := "test_raw_param_1026px-norm1.png"
 	rawSpectrogramPath := filepath.Join(tempDir, rawSpectrogramFilename)
 	err = os.WriteFile(rawSpectrogramPath, []byte("id raw spectrogram"), 0o600)
 	require.NoError(t, err)
 
 	// Simulate spectrogram with legend
-	legendSpectrogramFilename := "test_raw_param_1026px-legend.png"
+	legendSpectrogramFilename := "test_raw_param_1026px-norm1-legend.png"
 	legendSpectrogramPath := filepath.Join(tempDir, legendSpectrogramFilename)
 	err = os.WriteFile(legendSpectrogramPath, []byte("id legend spectrogram"), 0o600)
 	require.NoError(t, err)
@@ -1507,58 +1507,58 @@ func TestBuildStyleSuffix(t *testing.T) {
 		expected     string
 	}{
 		{
-			name:         "default style and default DR produce no suffix",
+			name:         "default style and default DR include render cache version",
 			style:        "default",
 			dynamicRange: "100",
-			expected:     "",
+			expected:     "-norm1",
 		},
 		{
-			name:         "empty style and empty DR produce no suffix",
+			name:         "empty style and empty DR include render cache version",
 			style:        "",
 			dynamicRange: "",
-			expected:     "",
+			expected:     "-norm1",
 		},
 		{
-			name:         "default style with empty DR produces no suffix",
+			name:         "default style with empty DR includes render cache version",
 			style:        "default",
 			dynamicRange: "",
-			expected:     "",
+			expected:     "-norm1",
 		},
 		{
 			name:         "scientific_dark style with default DR",
 			style:        "scientific_dark",
 			dynamicRange: "100",
-			expected:     "-scientific_dark",
+			expected:     "-scientific_dark-norm1",
 		},
 		{
 			name:         "high_contrast_dark style with default DR",
 			style:        "high_contrast_dark",
 			dynamicRange: "100",
-			expected:     "-high_contrast_dark",
+			expected:     "-high_contrast_dark-norm1",
 		},
 		{
 			name:         "scientific style with default DR",
 			style:        "scientific",
 			dynamicRange: "100",
-			expected:     "-scientific",
+			expected:     "-scientific-norm1",
 		},
 		{
 			name:         "default style with non-default DR",
 			style:        "default",
 			dynamicRange: "80",
-			expected:     "-dr80",
+			expected:     "-dr80-norm1",
 		},
 		{
 			name:         "scientific_dark style with non-default DR",
 			style:        "scientific_dark",
 			dynamicRange: "120",
-			expected:     "-scientific_dark-dr120",
+			expected:     "-scientific_dark-dr120-norm1",
 		},
 		{
 			name:         "empty style with non-default DR",
 			style:        "",
 			dynamicRange: "80",
-			expected:     "-dr80",
+			expected:     "-dr80-norm1",
 		},
 	}
 
@@ -1570,9 +1570,9 @@ func TestBuildStyleSuffix(t *testing.T) {
 	}
 }
 
-// TestBuildSpectrogramPathsWithStyle tests that spectrogram paths include the visual
-// style in the filename, preventing stale cached spectrograms from being served
-// after the user changes the spectrogram style setting.
+// TestBuildSpectrogramPathsWithStyle tests that spectrogram paths include visual
+// style and render version in the filename, preventing stale cached spectrograms
+// after style or rendering changes.
 func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -1590,7 +1590,7 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 			raw:              true,
 			style:            "default",
 			dynamicRange:     "100",
-			expectedFilename: "bird_1026px.png",
+			expectedFilename: "bird_1026px-norm1.png",
 		},
 		{
 			name:             "default style with legend",
@@ -1599,7 +1599,7 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 			raw:              false,
 			style:            "default",
 			dynamicRange:     "100",
-			expectedFilename: "bird_1026px-legend.png",
+			expectedFilename: "bird_1026px-norm1-legend.png",
 		},
 		{
 			name:             "scientific_dark style raw",
@@ -1608,7 +1608,7 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 			raw:              true,
 			style:            "scientific_dark",
 			dynamicRange:     "100",
-			expectedFilename: "bird_1026px-scientific_dark.png",
+			expectedFilename: "bird_1026px-scientific_dark-norm1.png",
 		},
 		{
 			name:             "scientific_dark style with legend",
@@ -1617,7 +1617,7 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 			raw:              false,
 			style:            "scientific_dark",
 			dynamicRange:     "100",
-			expectedFilename: "bird_1026px-scientific_dark-legend.png",
+			expectedFilename: "bird_1026px-scientific_dark-norm1-legend.png",
 		},
 		{
 			name:             "high_contrast_dark with non-default DR raw",
@@ -1626,16 +1626,16 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 			raw:              true,
 			style:            "high_contrast_dark",
 			dynamicRange:     "80",
-			expectedFilename: "bird_514px-high_contrast_dark-dr80.png",
+			expectedFilename: "bird_514px-high_contrast_dark-dr80-norm1.png",
 		},
 		{
-			name:             "empty style and DR produce backward-compatible filename",
+			name:             "empty style and DR include render cache version",
 			relAudioPath:     "clips/2025/01/bird.wav",
 			width:            1026,
 			raw:              true,
 			style:            "",
 			dynamicRange:     "",
-			expectedFilename: "bird_1026px.png",
+			expectedFilename: "bird_1026px-norm1.png",
 		},
 	}
 

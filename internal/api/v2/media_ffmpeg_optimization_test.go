@@ -178,7 +178,7 @@ func TestGetSoxSpectrogramArgs_ArgumentOrder(t *testing.T) {
 
 	// Verify the base arguments are in correct order
 	// Height is FFT-friendly: fftFriendlyHeight(800) = 513 (2^9 + 1, DFT=1024)
-	expectedStart := []string{"-n", "rate", "24k", "spectrogram", "-x", "800", "-y", "513"}
+	expectedStart := []string{"-n", "gain", "-n", "rate", "24k", "spectrogram", "-x", "800", "-y", "513"}
 
 	require.GreaterOrEqual(t, len(args), len(expectedStart),
 		"Not enough arguments returned, got %d, expected at least %d", len(args), len(expectedStart))

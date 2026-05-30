@@ -19,10 +19,11 @@ func TestPreRenderer_Submit_FileAlreadyExists(t *testing.T) {
 
 	// Use a clip path relative to temp dir (this is how it works in production)
 	clipPath := filepath.Join(env.TempDir, "test.wav")
-	spectrogramPath := filepath.Join(env.TempDir, "test.png")
+	spectrogramPath, err := BuildSpectrogramPath(clipPath)
+	require.NoError(t, err, "Failed to build spectrogram path")
 
 	// Create the spectrogram file (simulating it already exists)
-	err := os.WriteFile(spectrogramPath, []byte("fake png"), 0o600)
+	err = os.WriteFile(spectrogramPath, []byte("fake png"), 0o600)
 	require.NoError(t, err, "Failed to create test file")
 
 	// Submit job for file that already exists

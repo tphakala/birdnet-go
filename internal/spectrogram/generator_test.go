@@ -118,6 +118,26 @@ func TestGenerator_GetSoxSpectrogramArgs(t *testing.T) {
 	}
 }
 
+func TestGenerator_GetSoxSpectrogramArgs_NormalizesVisualLevelBeforeRendering(t *testing.T) {
+	gen, tempDir := createTestGenerator(t, 7, true)
+	audioPath := filepath.Join(tempDir, "test.wav")
+	outputPath := filepath.Join(tempDir, "test.png")
+
+	args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 800, true, 15)
+
+	gainIdx := slices.Index(args, soxVisualNormalizeEffect)
+	require.NotEqual(t, -1, gainIdx, "missing Sox visual normalization effect")
+	require.Greater(t, len(args), gainIdx+1, "normalization effect should include its argument")
+	assert.Equal(t, soxVisualNormalizeArg, args[gainIdx+1], "normalization effect argument mismatch")
+
+	rateIdx := slices.Index(args, "rate")
+	spectrogramIdx := slices.Index(args, "spectrogram")
+	require.NotEqual(t, -1, rateIdx, "missing Sox rate effect")
+	require.NotEqual(t, -1, spectrogramIdx, "missing Sox spectrogram effect")
+	assert.Less(t, gainIdx, rateIdx, "normalization must run before resampling")
+	assert.Less(t, rateIdx, spectrogramIdx, "resampling must run before spectrogram rendering")
+}
+
 // createTestGenerator creates a Generator with the specified FFmpeg settings for testing
 func createTestGenerator(t *testing.T, ffmpegMajor int, hasFfmpegVer bool) (gen *Generator, tempDir string) {
 	t.Helper()

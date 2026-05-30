@@ -1828,26 +1828,22 @@ func getSpectrogramLogger() logger.Logger {
 // buildSpectrogramPaths constructs the spectrogram file paths from the audio path and parameters.
 // It returns the base filename, audio directory, spectrogram filename, and full relative spectrogram path.
 //
-// The style and dynamicRange parameters are embedded in the filename to prevent serving
-// stale cached spectrograms when visual settings change. For backward compatibility,
-// the default style ("default") and default dynamic range ("100"/empty) produce the same
-// filename format as before (no style/DR suffix).
+// The style, dynamicRange, and render cache version are embedded in the filename to
+// prevent serving stale cached spectrograms when visual rendering changes.
 func buildSpectrogramPaths(relAudioPath string, width int, raw bool, style, dynamicRange string) (relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath string) {
 	// Get the base filename and directory relative to the secure root
 	relBaseFilename = strings.TrimSuffix(filepath.Base(relAudioPath), filepath.Ext(relAudioPath))
 	relAudioDir = filepath.Dir(relAudioPath)
 
-	// Build style suffix for non-default visual settings.
-	// Default style ("default" or empty) and default dynamic range ("100" or empty)
-	// produce no suffix for backward compatibility with existing cached spectrograms.
+	// Build style suffix for visual settings and render algorithm version.
 	styleSuffix := buildStyleSuffix(style, dynamicRange)
 
 	// Generate spectrogram filename with style suffix
 	if raw {
-		// Raw spectrograms use format: filename_1026px.png (default) or filename_1026px-scientific_dark.png
+		// Raw spectrograms use format: filename_1026px-norm1.png or filename_1026px-scientific_dark-norm1.png
 		spectrogramFilename = fmt.Sprintf("%s_%dpx%s.png", relBaseFilename, width, styleSuffix)
 	} else {
-		// Spectrograms with legends: filename_1026px-legend.png (default) or filename_1026px-scientific_dark-legend.png
+		// Spectrograms with legends: filename_1026px-norm1-legend.png or filename_1026px-scientific_dark-norm1-legend.png
 		spectrogramFilename = fmt.Sprintf("%s_%dpx%s-legend.png", relBaseFilename, width, styleSuffix)
 	}
 
@@ -1859,15 +1855,14 @@ func buildSpectrogramPaths(relAudioPath string, width int, raw bool, style, dyna
 	return relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath
 }
 
-// buildStyleSuffix returns a filename suffix encoding visual style settings.
-// Returns empty string for default settings (backward compatibility).
-// Examples: "" (default), "-scientific_dark", "-scientific_dark-dr80"
+// buildStyleSuffix returns a filename suffix encoding visual style settings and render cache version.
+// Examples: "-norm1" (default), "-scientific_dark-norm1", "-scientific_dark-dr80-norm1"
 func buildStyleSuffix(style, dynamicRange string) string {
 	isDefaultStyle := style == "" || style == conf.SpectrogramStyleDefault
 	isDefaultDR := dynamicRange == "" || dynamicRange == conf.SpectrogramDynamicRangeStandard
 
 	if isDefaultStyle && isDefaultDR {
-		return ""
+		return spectrogram.RenderCacheVersionSuffix
 	}
 
 	var suffix string
@@ -1877,7 +1872,7 @@ func buildStyleSuffix(style, dynamicRange string) string {
 	if !isDefaultDR {
 		suffix += "-dr" + dynamicRange
 	}
-	return suffix
+	return suffix + spectrogram.RenderCacheVersionSuffix
 }
 
 // buildSpectrogramKey generates a consistent unique key for spectrogram queue management.
