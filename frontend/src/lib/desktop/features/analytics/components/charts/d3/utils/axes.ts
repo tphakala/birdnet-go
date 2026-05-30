@@ -149,6 +149,28 @@ export function createHourAxisFormatter(use24Hour = true): (d: number) => string
   };
 }
 
+// Constants for date-range bucketing.
+const MS_PER_DAY = 86400000;
+const WEEK_THRESHOLD = 7;
+const YEAR_THRESHOLD = 365;
+
+/**
+ * Pick the appropriate date-axis bucket for a daily-granularity time domain.
+ *
+ * NOTE: This intentionally NEVER returns 'day'. The 'day' bucket maps to a
+ * clock-time format (%H:%M) via createDateAxisFormatter, which is only correct
+ * for intra-day (hourly) data. The analytics charts that use this helper plot
+ * one point per calendar day, so a short (<= 7 day) span must still show date
+ * labels, not "00:00 00:00 ...". A 7-day or shorter span therefore uses 'week'
+ * (weekday + day), longer spans use 'month', and spans over a year use 'year'.
+ */
+export function pickDateRangeBucket(domain: [Date, Date]): 'day' | 'week' | 'month' | 'year' {
+  const days = (domain[1].getTime() - domain[0].getTime()) / MS_PER_DAY;
+  if (days <= WEEK_THRESHOLD) return 'week';
+  if (days <= YEAR_THRESHOLD) return 'month';
+  return 'year';
+}
+
 /**
  * Create date axis formatter for different time ranges
  */

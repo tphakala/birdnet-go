@@ -6,6 +6,18 @@ import { loggers } from '$lib/utils/logger';
 
 const logger = loggers.ui;
 
+/**
+ * Render context handed to chart components by BaseChart. Shared so the D3
+ * chart components do not each repeat the same inline context type literal.
+ */
+export interface ChartRenderContext {
+  svg: Selection<globalThis.SVGSVGElement, unknown, null, undefined>;
+  chartGroup: Selection<globalThis.SVGGElement, unknown, null, undefined>;
+  innerWidth: number;
+  innerHeight: number;
+  theme: ChartTheme;
+}
+
 export interface AxisTheme {
   color: string;
   fontSize: string;

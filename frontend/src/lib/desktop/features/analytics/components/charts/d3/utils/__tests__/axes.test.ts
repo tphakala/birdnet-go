@@ -5,10 +5,43 @@ import { timeFormatDefaultLocale } from 'd3-time-format';
 import {
   createHourAxisFormatter,
   createDateAxisFormatter,
+  pickDateRangeBucket,
   addAxisLabel,
   createGridLines,
 } from '../axes';
 import type { AxisTheme } from '../theme';
+
+const MS_PER_DAY = 86400000;
+
+describe('pickDateRangeBucket', () => {
+  const base = new Date('2024-01-01T00:00:00');
+  const spanOf = (days: number): [Date, Date] => [
+    base,
+    new Date(base.getTime() + days * MS_PER_DAY),
+  ];
+
+  it('maps a 7-day span to week', () => {
+    expect(pickDateRangeBucket(spanOf(7))).toBe('week');
+  });
+
+  it('maps a 30-day span to month', () => {
+    expect(pickDateRangeBucket(spanOf(30))).toBe('month');
+  });
+
+  it('maps a 200-day span to month', () => {
+    expect(pickDateRangeBucket(spanOf(200))).toBe('month');
+  });
+
+  it('maps a 400-day span to year', () => {
+    expect(pickDateRangeBucket(spanOf(400))).toBe('year');
+  });
+
+  it('maps a same-day (zero) span to week, never day', () => {
+    const bucket = pickDateRangeBucket([base, base]);
+    expect(bucket).toBe('week');
+    expect(bucket).not.toBe('day');
+  });
+});
 
 // Mock DOM setup for jsdom
 let container: SVGGElement;
