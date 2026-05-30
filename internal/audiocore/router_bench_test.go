@@ -25,7 +25,7 @@ func BenchmarkHandleRouteFrame_Resample(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			mgr := buffer.NewManager(GetLogger())
 			r := NewAudioRouter(GetLogger(), mgr)
-			defer r.Close()
+			b.Cleanup(r.Close)
 
 			// Build input frame: 100ms of mono 16-bit PCM at source rate.
 			inputSamples := tc.fromRate / 10
@@ -40,6 +40,7 @@ func BenchmarkHandleRouteFrame_Resample(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
+			b.Cleanup(func() { _ = rs.Close() })
 
 			mc := newMockConsumer("bench-resample")
 			mc.sampleRate = tc.toRate
