@@ -8,24 +8,26 @@
     timePeriod: 'all' | 'today' | 'week' | 'month' | '90days' | 'year' | 'custom';
     startDate: string;
     endDate: string;
+    sortOrder:
+      | 'count_desc'
+      | 'count_asc'
+      | 'name_asc'
+      | 'name_desc'
+      | 'first_seen_desc'
+      | 'first_seen_asc'
+      | 'last_seen_desc'
+      | 'last_seen_asc'
+      | 'confidence_desc'
+      | 'confidence_asc'
+      | 'max_confidence_desc'
+      | 'max_confidence_asc';
     searchTerm: string;
-  }
-
-  interface SortOption {
-    value: string;
-    label: string;
   }
 
   interface Props {
     filters: SpeciesFilters;
     isLoading?: boolean;
     filteredCount: number;
-    /** Sort options for the sort dropdown (value + translated label). */
-    sortOptions?: SortOption[];
-    /** Currently selected sort value, or '' when the active sort has no dropdown equivalent. */
-    sortValue?: string;
-    /** Called with the selected sort value when the sort dropdown changes. */
-    onSortChange?: (_value: string) => void;
     onSubmit: () => void;
     onReset: () => void;
     onExport: () => void;
@@ -36,9 +38,6 @@
     filters = $bindable(),
     isLoading = false,
     filteredCount,
-    sortOptions = [],
-    sortValue = '',
-    onSortChange,
     onSubmit,
     onReset,
     onExport,
@@ -53,6 +52,17 @@
     { value: '90days', label: t('analytics.timePeriodOptions.last90Days') },
     { value: 'year', label: t('analytics.timePeriodOptions.lastYear') },
     { value: 'custom', label: t('analytics.timePeriodOptions.customRange') },
+  ];
+
+  const sortOptions = [
+    { value: 'count_desc', label: t('analytics.sortOptions.mostDetections') },
+    { value: 'count_asc', label: t('analytics.sortOptions.fewestDetections') },
+    { value: 'name_asc', label: t('analytics.sortOptions.nameAZ') },
+    { value: 'name_desc', label: t('analytics.sortOptions.nameZA') },
+    { value: 'first_seen_desc', label: t('analytics.sortOptions.recentlyFirstSeen') },
+    { value: 'first_seen_asc', label: t('analytics.sortOptions.earliestFirstSeen') },
+    { value: 'last_seen_desc', label: t('analytics.sortOptions.recentlyLastSeen') },
+    { value: 'confidence_desc', label: t('analytics.sortOptions.highestConfidence') },
   ];
 
   function handleSubmit(event: Event) {
@@ -102,13 +112,11 @@
           </FormField>
         {/if}
 
-        <!-- Sort Order - always visible; clicking a table header applies the
-             same sorting and keeps this dropdown in sync. -->
+        <!-- Sort Order -->
         <FormField label={t('analytics.filters.sortBy')} id="sortOrder">
           <SelectDropdown
-            value={sortValue}
+            bind:value={filters.sortOrder}
             options={sortOptions}
-            onChange={value => onSortChange?.(typeof value === 'string' ? value : (value[0] ?? ''))}
             variant="select"
             size="sm"
             menuSize="sm"

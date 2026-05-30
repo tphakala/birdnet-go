@@ -5,7 +5,7 @@ import { setBasePath, resetBasePath } from '$lib/utils/urlHelpers';
 import Species from './Species.svelte';
 
 /** Must match SORT_STORAGE_KEY in Species.svelte. */
-const SORT_STORAGE_KEY = 'analytics.species.sort';
+const SORT_STORAGE_KEY = 'analytics.species.sortOrder';
 
 interface SpeciesSummary {
   common_name: string;
@@ -130,7 +130,7 @@ describe('Species (analytics page)', () => {
   });
 });
 
-describe('Species (analytics page) — column header sorting', () => {
+describe('Species (analytics page) — sortable column headers', () => {
   const originalFetch = globalThis.fetch;
 
   // Common names sort A→Z differently from counts, so a wrong sort is visible.
@@ -181,19 +181,14 @@ describe('Species (analytics page) — column header sorting', () => {
 
   const speciesTest = createComponentTestFactory(Species);
 
-  /** Render, switch to the list view, and return its container + table rows. */
+  /** Render, switch to the list/table view, and wait for its rows. */
   async function renderListView() {
     const { container } = speciesTest.render({});
-
     // Switch from the default grid view to the list/table view.
-    const toggleButtons = container.querySelectorAll('.join button');
-    await fireEvent.click(toggleButtons[1]);
-
+    await fireEvent.click(container.querySelectorAll('.join button')[1]);
     await waitFor(
       () => {
-        if (!container.querySelector('table tbody tr')) {
-          throw new Error('table not yet rendered');
-        }
+        if (!container.querySelector('table tbody tr')) throw new Error('table not yet rendered');
       },
       { timeout: 2000 }
     );
@@ -210,25 +205,19 @@ describe('Species (analytics page) — column header sorting', () => {
     const { container } = await renderListView();
 
     expect(rowNames(container)).toEqual(['American Robin', 'Blue Jay', 'Zebra Finch']);
-
-    const speciesHeader = container.querySelector('table thead th');
-    expect(speciesHeader?.getAttribute('aria-sort')).toBe('ascending');
+    expect(container.querySelector('table thead th')?.getAttribute('aria-sort')).toBe('ascending');
   });
 
   it('sorts by detection count descending on first header click and toggles on second', async () => {
     const { container } = await renderListView();
+    const countButton = container.querySelectorAll('table thead th button')[1]; // species, count, …
 
-    const headerButtons = container.querySelectorAll('table thead th button');
-    const countButton = headerButtons[1]; // species, count, avgConf, maxConf, first, last
-
-    // First click → most detections first.
     await fireEvent.click(countButton);
     expect(rowNames(container)).toEqual(['Blue Jay', 'Zebra Finch', 'American Robin']);
     expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
       'descending'
     );
 
-    // Second click on the same column reverses the order.
     await fireEvent.click(countButton);
     expect(rowNames(container)).toEqual(['American Robin', 'Zebra Finch', 'Blue Jay']);
     expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
@@ -236,25 +225,18 @@ describe('Species (analytics page) — column header sorting', () => {
     );
   });
 
-  it('persists the chosen sort column/direction to localStorage', async () => {
+  it('persists the chosen sort order to localStorage', async () => {
     const { container } = await renderListView();
 
-    const countButton = container.querySelectorAll('table thead th button')[1];
-    await fireEvent.click(countButton);
-
-    const stored = JSON.parse(window.localStorage.getItem(SORT_STORAGE_KEY) ?? '{}');
-    expect(stored).toEqual({ column: 'count', direction: 'desc' });
+    await fireEvent.click(container.querySelectorAll('table thead th button')[1]);
+    expect(window.localStorage.getItem(SORT_STORAGE_KEY)).toBe('"count_desc"');
   });
 
-  it('restores a persisted sort selection on a fresh render', async () => {
-    window.localStorage.setItem(
-      SORT_STORAGE_KEY,
-      JSON.stringify({ column: 'count', direction: 'asc' })
-    );
+  it('restores a persisted sort order on a fresh render', async () => {
+    window.localStorage.setItem(SORT_STORAGE_KEY, '"count_asc"');
 
     const { container } = await renderListView();
 
-    // count ascending → fewest first.
     expect(rowNames(container)).toEqual(['American Robin', 'Zebra Finch', 'Blue Jay']);
     expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
       'ascending'
