@@ -126,12 +126,84 @@ func TestShouldReportToSentry_AllowsNetworkCategoryCodeBugs(t *testing.T) {
 	assert.True(t, shouldReportToSentry(ee))
 }
 
+// TestShouldReportToSentry_FiltersWikipediaRateLimitNoise verifies that the
+// imageprovider Wikipedia rate-limit (HTTP 429) and circuit-breaker-open
+// failures are suppressed. These are built with CategoryNetwork (see
+// internal/imageprovider/wikipedia.go: checkCircuitBreaker, handleHTTPStatusError,
+// handleCircuitBreaker, and the diagnostic rate-limit path). The circuit breaker
+// already throttles requests when Wikipedia rate-limits the client, so forwarding
+// a Sentry event for every rejected request is pure noise. The exact wordings
+// asserted here are real substrings of the messages those code paths produce,
+// lowercased to match how shouldReportToSentry compares against
+// networkNoisePatterns.
+func TestShouldReportToSentry_FiltersWikipediaRateLimitNoise(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		err        error
+		wantReport bool
+	}{
+		{
+			// Direct HTTP 429 from handleHTTPStatusError:
+			// "Wikipedia API returned status %d: %s". This is the original,
+			// highest-volume noise (the breaker has not opened yet). 429 is
+			// purely environmental throttling, so every occurrence is suppressed.
+			name:       "direct HTTP 429 is suppressed",
+			err:        fmt.Errorf("Wikipedia API returned status 429: too many requests"),
+			wantReport: false,
+		},
+		{
+			// Produced by checkCircuitBreaker: "Wikipedia API circuit breaker open: %s"
+			// (repeated per-call rejection while the breaker is open).
+			name:       "circuit breaker open rejection is suppressed",
+			err:        fmt.Errorf("Wikipedia API circuit breaker open: Rate limited (HTTP 429): too many requests"),
+			wantReport: false,
+		},
+		{
+			// Produced by the diagnostic path: "Wikipedia rate limit exceeded: %s"
+			name:       "rate limit exceeded diagnostic error is suppressed",
+			err:        fmt.Errorf("Wikipedia rate limit exceeded: Rate limit exceeded (HTTP 429)"),
+			wantReport: false,
+		},
+		{
+			// Regression guard: a genuine server-side failure in the same
+			// category must still reach Sentry so real bugs stay visible.
+			name:       "genuine HTTP 500 is still reported",
+			err:        fmt.Errorf("Wikipedia API returned status 500: internal server error"),
+			wantReport: true,
+		},
+		{
+			// Regression guard: a 403 user-agent policy violation is a real,
+			// actionable signal (not benign throttling) and must still report.
+			// This pins that the suppression is scoped to 429, not all statuses.
+			name:       "HTTP 403 policy violation is still reported",
+			err:        fmt.Errorf("Wikipedia API returned status 403: user-agent policy violation"),
+			wantReport: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ee := New(tt.err).
+				Component("imageprovider").
+				Category(CategoryNetwork).
+				Context("operation", "api_error").
+				Build()
+			got := shouldReportToSentry(ee)
+			assert.Equal(t, tt.wantReport, got,
+				"shouldReportToSentry(%q) = %v, want %v", tt.err, got, tt.wantReport)
+		})
+	}
+}
+
 // TestShouldReportToSentry_CategoryLimitNotificationOnly verifies that the
 // CategoryLimit suppression is scoped to the notification component. The
 // notification.PushCircuitBreaker's ErrCircuitBreakerOpen sentinel is tagged
 // component="notification", and that single sentinel is what every caller
 // (notification push providers AND birdweather uploads, which reuse the
-// same breaker) receives — so the notification-only filter suppresses both
+// same breaker) receives, so the notification-only filter suppresses both
 // in practice. Other CategoryLimit producers (eBird API quota, analysis job
 // queue full, spectrogram pre-render memory limits) are legitimate
 // operational signals that ops needs to see and must still reach Sentry.
@@ -258,7 +330,7 @@ func TestShouldReportToSentry_AllowsRTSPCodeBugs(t *testing.T) {
 }
 
 func TestShouldReportToSentry_RateLimitsDiskFull(t *testing.T) {
-	// Not parallel — mutates package-level state
+	// Not parallel: mutates package-level state
 	lastDiskFullReport.Store(0)
 	t.Cleanup(func() { lastDiskFullReport.Store(0) })
 
@@ -272,7 +344,7 @@ func TestShouldReportToSentry_RateLimitsDiskFull(t *testing.T) {
 }
 
 func TestShouldReportToSentry_DiskFullCooldownExpiry(t *testing.T) {
-	// Not parallel — mutates package-level state
+	// Not parallel: mutates package-level state
 	// Simulate a disk-full report from past the cooldown window
 	lastDiskFullReport.Store(time.Now().Unix() - diskFullCooldown - 1)
 	t.Cleanup(func() { lastDiskFullReport.Store(0) })

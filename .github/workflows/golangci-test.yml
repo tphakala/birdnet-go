@@ -87,7 +87,7 @@ jobs:
           # Note: We must capture PIPESTATUS immediately after the pipeline
           # gotestfmt may return non-zero even when tests pass, so we only check go test's exit code
           # Use noembed,skipfrontend tags to skip model and frontend embedding requirement
-          go test -tags noembed,skipfrontend -json -v -short -timeout 120s ./... 2>&1 | tee /tmp/gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
+          go test -tags noembed,skipfrontend -race -json -v -short -timeout 300s ./... 2>&1 | tee /tmp/gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
 
           if [ $TEST_EXIT_CODE -ne 0 ]; then
             echo "::error title=Test Failure::Unit tests failed - see job summary for details"
@@ -110,7 +110,7 @@ jobs:
           fi
 
           echo "## :white_check_mark: All Tests Passed" >> $GITHUB_STEP_SUMMARY
-        timeout-minutes: 5
+        timeout-minutes: 10
 
       - name: Cleanup any remaining processes
         if: always()

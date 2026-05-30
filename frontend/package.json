@@ -93,6 +93,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
     "@testing-library/user-event": "^14.6.1",
+    "@types/d3": "^7.4.3",
     "@types/node": "^25.6.0",
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.58.2",
@@ -130,21 +131,17 @@
     "@bybas/weather-icons": "^2.0.0",
     "@lucide/svelte": "^1.8.0",
     "@sentry/browser": "^10.48.0",
-    "@types/d3": "^7.4.3",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
     "d3": "^7.9.0",
-    "d3-scale-chromatic": "^3.1.0",
     "d3-time-format": "^4.1.0",
     "date-fns": "^4.1.0",
-    "eventsource": "^4.1.0",
     "hls.js": "^1.6.16",
     "maplibre-gl": "^5.23.0",
     "reconnecting-eventsource": "^1.6.5",
-    "svelte-dnd-action": "^0.9.69",
-    "svelte-portal": "^2.2.1"
+    "svelte-dnd-action": "^0.9.69"
   },
   "bundleDependencies": [
     "svelte"

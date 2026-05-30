@@ -358,3 +358,135 @@ func TestRegistry_RunAll_MultiResultCheck_Empty(t *testing.T) {
 	results := r.RunAll(t.Context())
 	assert.Empty(t, results)
 }
+
+// panicCheck panics when Run is called, to verify the orchestrator recovers.
+type panicCheck struct {
+	name     string
+	category Category
+	panicVal any
+}
+
+func (p *panicCheck) Name() string       { return p.name }
+func (p *panicCheck) Category() Category { return p.category }
+func (p *panicCheck) Run(_ context.Context) Result {
+	panic(p.panicVal)
+}
+
+// panicMultiCheck panics from RunMulti to verify multi-result checks are
+// also protected by panic recovery.
+type panicMultiCheck struct {
+	name     string
+	category Category
+	panicVal any
+}
+
+func (p *panicMultiCheck) Name() string       { return p.name }
+func (p *panicMultiCheck) Category() Category { return p.category }
+func (p *panicMultiCheck) Run(_ context.Context) Result {
+	panic(p.panicVal)
+}
+func (p *panicMultiCheck) RunMulti(_ context.Context) []Result {
+	panic(p.panicVal)
+}
+
+func TestRunChecks_RecoversFromPanic(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+	r.RegisterAll(
+		&panicCheck{
+			name:     "boom",
+			category: CategorySystem,
+			panicVal: "kaboom",
+		},
+		&mockCheck{
+			name:     "ok",
+			category: CategoryAudio,
+			result:   Result{Name: "ok", Category: CategoryAudio, Status: StatusHealthy},
+		},
+	)
+
+	// Must not crash the process and must not hang.
+	results := r.RunAll(t.Context())
+	require.Len(t, results, 2)
+
+	byName := make(map[string]Result, len(results))
+	for _, res := range results {
+		byName[res.Name] = res
+	}
+
+	boom := byName["boom"]
+	assert.Equal(t, StatusUnknown, boom.Status)
+	assert.Equal(t, CategorySystem, boom.Category)
+	assert.Contains(t, boom.Message, "check panicked")
+	assert.Contains(t, boom.Message, "kaboom")
+	assert.False(t, boom.Timestamp.IsZero(), "panic result should carry a timestamp")
+
+	// The sibling healthy check must still report normally.
+	assert.Equal(t, StatusHealthy, byName["ok"].Status)
+}
+
+func TestRunChecks_RecoversFromMultiResultPanic(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+	r.Register(&panicMultiCheck{
+		name:     "multi_boom",
+		category: CategoryAnalysis,
+		panicVal: "multi kaboom",
+	})
+
+	results := r.RunAll(t.Context())
+	require.Len(t, results, 1)
+
+	res := results[0]
+	assert.Equal(t, "multi_boom", res.Name)
+	assert.Equal(t, CategoryAnalysis, res.Category)
+	assert.Equal(t, StatusUnknown, res.Status)
+	assert.Contains(t, res.Message, "check panicked")
+	assert.Contains(t, res.Message, "multi kaboom")
+	assert.False(t, res.Timestamp.IsZero())
+}
+
+// panicNameCheck panics from both Name() and Run(), to verify an accessor panic
+// is contained by the up-front identity capture (falling back to a placeholder)
+// and the Run panic is still turned into a StatusUnknown result.
+type panicNameCheck struct{}
+
+func (panicNameCheck) Name() string                 { panic("name boom") }
+func (panicNameCheck) Category() Category           { return CategorySystem }
+func (panicNameCheck) Run(_ context.Context) Result { panic("run boom") }
+
+func TestRunChecks_RecoversFromNamePanic(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+	r.Register(panicNameCheck{})
+
+	results := r.RunAll(t.Context())
+	require.Len(t, results, 1)
+
+	res := results[0]
+	assert.Equal(t, StatusUnknown, res.Status)
+	assert.Equal(t, "unknown_check", res.Name, "a panic while reading the name falls back to a placeholder")
+	assert.Contains(t, res.Message, "check panicked")
+	assert.Contains(t, res.Message, "run boom")
+}
+
+func TestRegistry_RejectsTypedNilCheck(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+
+	// A typed nil (*mockCheck)(nil) is a non-nil Check interface wrapping a nil
+	// pointer. It passes a plain c == nil guard but panics when its methods are
+	// called, so Register/RegisterAll must reject it.
+	var typedNil *mockCheck
+	r.Register(typedNil)
+	r.RegisterAll(typedNil, nil)
+
+	// Nothing was registered, and every iteration site stays panic-free.
+	assert.Empty(t, r.Categories())
+	assert.NotPanics(t, func() {
+		assert.Empty(t, r.RunAll(t.Context()))
+	})
+	assert.NotPanics(t, func() {
+		assert.Empty(t, r.RunCategory(t.Context(), CategorySystem))
+	})
+}
