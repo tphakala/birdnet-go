@@ -17,7 +17,7 @@
 <script lang="ts">
   import { onMount, onDestroy, setContext } from 'svelte';
   import { Plus, Radio, RefreshCw, Loader2, AlertTriangle, CircleCheck } from '@lucide/svelte';
-  import ReconnectingEventSource from 'reconnecting-eventsource';
+  import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { api } from '$lib/utils/api';

@@ -2,25 +2,26 @@
 
 ## Overview
 
-We use the `reconnecting-eventsource` package to handle Server-Sent Events (SSE) with automatic reconnection capabilities. This replaces manual reconnection logic with a more robust solution.
+We use a small local `ReconnectingEventSource` class to handle Server-Sent Events
+(SSE) with automatic reconnection. It wraps the native browser `EventSource` and
+transparently reconnects when the connection drops, so call sites do not have to
+hand-roll retry logic.
 
-## Installation
-
-```bash
-npm install reconnecting-eventsource
-```
+The class lives at `src/lib/utils/ReconnectingEventSource.ts`. It replaced the
+external `reconnecting-eventsource` npm package to remove a runtime dependency.
+It is self-typed, so no ambient type declaration file is needed.
 
 ## Usage Example
 
 ### Basic Implementation
 
 ```typescript
-import ReconnectingEventSource from 'reconnecting-eventsource';
+import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
 
 // Create connection with options
 const eventSource = new ReconnectingEventSource('/api/endpoint', {
-  max_retry_time: 30000, // Max 30 seconds between reconnection attempts
-  withCredentials: false, // Set to true if you need CORS credentials
+  max_retry_time: 30000, // Upper bound for the reconnect backoff, in ms
+  withCredentials: false, // Set to true to send cookies cross-origin
 });
 
 // Handle connection open
@@ -28,7 +29,7 @@ eventSource.onopen = () => {
   console.log('SSE connection opened');
 };
 
-// Handle messages
+// Handle default (unnamed) messages
 eventSource.onmessage = event => {
   try {
     const data = JSON.parse(event.data);
@@ -37,6 +38,12 @@ eventSource.onmessage = event => {
     console.error('Failed to parse SSE message:', error);
   }
 };
+
+// Handle named events
+eventSource.addEventListener('detection', event => {
+  const data = JSON.parse((event as MessageEvent).data);
+  // Process data
+});
 
 // Handle errors (reconnection is automatic)
 eventSource.onerror = error => {
@@ -48,114 +55,44 @@ eventSource.onerror = error => {
 eventSource.close();
 ```
 
-### TypeScript Support
+## Public Surface
 
-Since the package doesn't include TypeScript definitions, create a type declaration file:
-
-```typescript
-// src/lib/types/reconnecting-eventsource.d.ts
-declare module 'reconnecting-eventsource' {
-  interface ReconnectingEventSourceOptions {
-    withCredentials?: boolean;
-    max_retry_time?: number;
-    eventSourceClass?: typeof EventSource;
-  }
-
-  class ReconnectingEventSource extends EventTarget {
-    constructor(url: string, options?: ReconnectingEventSourceOptions);
-
-    readonly url: string;
-    readonly readyState: number;
-    readonly withCredentials: boolean;
-
-    onopen: ((event: Event) => void) | null;
-    onmessage: ((event: MessageEvent) => void) | null;
-    onerror: ((event: Event) => void) | null;
-
-    close(): void;
-    addEventListener(
-      type: string,
-      listener: EventListenerOrEventListenerObject,
-      options?: boolean | AddEventListenerOptions
-    ): void;
-    removeEventListener(
-      type: string,
-      listener: EventListenerOrEventListenerObject,
-      options?: boolean | EventListenerOptions
-    ): void;
-
-    static readonly CONNECTING: 0;
-    static readonly OPEN: 1;
-    static readonly CLOSED: 2;
-  }
-
-  export = ReconnectingEventSource;
-}
-```
-
-## Benefits
-
-1. **Automatic Reconnection**: No need for manual reconnection logic
-2. **Exponential Backoff**: Built-in intelligent retry delays
-3. **Drop-in Replacement**: Works like standard EventSource
-4. **Configurable**: Customize retry behavior and credentials
+- `new ReconnectingEventSource(url, options?)` where `url` is a `string | URL`
+- Properties: `url`, `withCredentials`, `readyState` (`0` CONNECTING, `1` OPEN, `2` CLOSED)
+- Static and instance constants: `CONNECTING`, `OPEN`, `CLOSED`
+- Settable handlers: `onopen`, `onmessage`, `onerror`
+- Methods: `addEventListener(type, listener)`, `removeEventListener(type, listener)`, `close()`
 
 ## Configuration Options
 
-- `max_retry_time`: Maximum time in milliseconds to wait between reconnection attempts (default: 3000)
-- `withCredentials`: Include cookies in CORS requests (default: false)
-- `eventSourceClass`: Override the EventSource implementation (default: window.EventSource)
+- `max_retry_time`: upper bound for the reconnect backoff delay, in milliseconds (default `3000`)
+- `withCredentials`: include cookies in cross-origin requests (default `false`)
+- `eventSourceClass`: override the `EventSource` implementation, e.g. a polyfill or a test double (default `globalThis.EventSource`)
 
-## Migration from Manual Reconnection
+## Reconnection Behavior
 
-### Before (Manual Reconnection)
+When an open connection drops and the native source gives up (its `readyState`
+reaches `CLOSED`), the wrapper reconnects with full-jitter exponential backoff:
+the delay window starts small (faster recovery from a transient blip), doubles on
+each consecutive failure, and is capped at `max_retry_time`. The window resets
+after a successful (re)connect. At steady state it converges to
+`random(0, max_retry_time)`, so it never waits longer than a flat random delay
+would.
 
-```typescript
-let eventSource: EventSource | null = null;
-let reconnectAttempts = 0;
-let reconnectDelay = 1000;
+A connection that is still `CONNECTING` (the native source is retrying on its
+own) is left alone; the wrapper only takes over once the native source closes.
 
-function setupEventSource() {
-  eventSource = new EventSource('/api/endpoint');
-
-  eventSource.onerror = () => {
-    if (!isNavigating && reconnectAttempts < 10) {
-      setTimeout(() => {
-        reconnectAttempts++;
-        reconnectDelay = Math.min(reconnectDelay * 1.5, 15000);
-        setupEventSource();
-      }, reconnectDelay);
-    }
-  };
-}
-```
-
-### After (ReconnectingEventSource)
-
-```typescript
-import ReconnectingEventSource from 'reconnecting-eventsource';
-
-let eventSource: ReconnectingEventSource | null = null;
-
-function setupEventSource() {
-  eventSource = new ReconnectingEventSource('/api/endpoint', {
-    max_retry_time: 30000,
-  });
-
-  eventSource.onerror = error => {
-    console.error('SSE error:', error);
-    // Reconnection handled automatically
-  };
-}
-```
+Note: the class does not track `lastEventId`. BirdNET-Go's SSE endpoints emit no
+`id:` field and the server reads no `lastEventId` parameter, so resumption
+tracking would be dead code here.
 
 ## Best Practices
 
-1. **Always close connections** when component unmounts
-2. **Handle parse errors** gracefully in message handlers
-3. **Log connection events** for debugging
-4. **Set appropriate max_retry_time** based on your use case
-5. **Consider visibility changes** - close connection when page is hidden
+1. **Always close connections** when the component unmounts.
+2. **Handle parse errors** gracefully in message handlers.
+3. **Log connection events** for debugging.
+4. **Set an appropriate `max_retry_time`** for the endpoint.
+5. **Consider visibility changes** - close the connection when the page is hidden.
 
 ## Example Implementation in Svelte 5
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import ReconnectingEventSource from 'reconnecting-eventsource';
+  import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { Mic, CirclePlay, CircleStop, Check } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { loggers } from '$lib/utils/logger';
