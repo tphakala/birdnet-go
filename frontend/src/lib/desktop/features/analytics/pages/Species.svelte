@@ -67,6 +67,65 @@
 
   const SORT_COLUMN_SET: Set<string> = new Set<string>(SORTABLE_COLUMNS.map(c => c.field));
 
+  // Mobile-only fallback: below the `sm` breakpoint the sortable table (and its
+  // header buttons) are hidden, so a compact sort dropdown restores the control
+  // mobile users had before. Each option maps to a (column, direction) pair.
+  const MOBILE_SORT_OPTIONS: {
+    value: string;
+    labelKey: string;
+    column: SortColumn;
+    direction: SortDirection;
+  }[] = [
+    {
+      value: 'count_desc',
+      labelKey: 'analytics.sortOptions.mostDetections',
+      column: 'count',
+      direction: 'desc',
+    },
+    {
+      value: 'count_asc',
+      labelKey: 'analytics.sortOptions.fewestDetections',
+      column: 'count',
+      direction: 'asc',
+    },
+    {
+      value: 'name_asc',
+      labelKey: 'analytics.sortOptions.nameAZ',
+      column: 'species',
+      direction: 'asc',
+    },
+    {
+      value: 'name_desc',
+      labelKey: 'analytics.sortOptions.nameZA',
+      column: 'species',
+      direction: 'desc',
+    },
+    {
+      value: 'first_seen_desc',
+      labelKey: 'analytics.sortOptions.recentlyFirstSeen',
+      column: 'firstSeen',
+      direction: 'desc',
+    },
+    {
+      value: 'first_seen_asc',
+      labelKey: 'analytics.sortOptions.earliestFirstSeen',
+      column: 'firstSeen',
+      direction: 'asc',
+    },
+    {
+      value: 'last_seen_desc',
+      labelKey: 'analytics.sortOptions.recentlyLastSeen',
+      column: 'lastSeen',
+      direction: 'desc',
+    },
+    {
+      value: 'confidence_desc',
+      labelKey: 'analytics.sortOptions.highestConfidence',
+      column: 'avgConfidence',
+      direction: 'desc',
+    },
+  ];
+
   const DEFAULT_SORT_COLUMN: SortColumn = 'species';
 
   /** localStorage key persisting the active sort column/direction across refreshes. */
@@ -115,6 +174,19 @@
   );
   let sortColumn = $state<SortColumn>(initialSort.column);
   let sortDirection = $state<SortDirection>(initialSort.direction);
+
+  // Options (with translated labels) for the mobile sort dropdown.
+  let mobileSortOptions = $derived(
+    MOBILE_SORT_OPTIONS.map(option => ({ value: option.value, label: t(option.labelKey) }))
+  );
+
+  // Current sort expressed as a mobile-dropdown value, or '' when the active
+  // sort has no dropdown equivalent (e.g. max confidence, desktop-only).
+  let sortValue = $derived(
+    MOBILE_SORT_OPTIONS.find(
+      option => option.column === sortColumn && option.direction === sortDirection
+    )?.value ?? ''
+  );
 
   // Set default dates on mount
   onMount(() => {
@@ -286,6 +358,15 @@
           : 'asc'
         : defaultDirectionFor(field);
     persistSort(field, direction);
+    applyFilters();
+  }
+
+  // Mobile sort dropdown change: resolve the selected value to its
+  // (column, direction) pair and apply it through the shared sort state.
+  function handleSortValueChange(value: string) {
+    const option = MOBILE_SORT_OPTIONS.find(o => o.value === value);
+    if (!option) return;
+    persistSort(option.column, option.direction);
     applyFilters();
   }
 
@@ -510,6 +591,9 @@
     bind:filters
     {isLoading}
     filteredCount={getFilteredCount()}
+    sortOptions={mobileSortOptions}
+    {sortValue}
+    onSortChange={handleSortValueChange}
     onSubmit={fetchData}
     onReset={resetFilters}
     onExport={exportData}

@@ -11,10 +11,21 @@
     searchTerm: string;
   }
 
+  interface SortOption {
+    value: string;
+    label: string;
+  }
+
   interface Props {
     filters: SpeciesFilters;
     isLoading?: boolean;
     filteredCount: number;
+    /** Sort options for the mobile-only sort dropdown (value + translated label). */
+    sortOptions?: SortOption[];
+    /** Currently selected sort value, or '' when the active sort has no dropdown equivalent. */
+    sortValue?: string;
+    /** Called with the selected sort value when the mobile dropdown changes. */
+    onSortChange?: (_value: string) => void;
     onSubmit: () => void;
     onReset: () => void;
     onExport: () => void;
@@ -25,6 +36,9 @@
     filters = $bindable(),
     isLoading = false,
     filteredCount,
+    sortOptions = [],
+    sortValue = '',
+    onSortChange,
     onSubmit,
     onReset,
     onExport,
@@ -87,6 +101,23 @@
             <Input type="date" id="endDate" bind:value={filters.endDate} />
           </FormField>
         {/if}
+
+        <!-- Sort Order - mobile only: the sortable table headers are hidden
+             below the `sm` breakpoint, so this restores the sort control there. -->
+        <FormField
+          label={t('analytics.filters.sortBy')}
+          id="sortOrder"
+          className="col-span-full sm:hidden"
+        >
+          <SelectDropdown
+            value={sortValue}
+            options={sortOptions}
+            onChange={value => onSortChange?.(typeof value === 'string' ? value : (value[0] ?? ''))}
+            variant="select"
+            size="sm"
+            menuSize="sm"
+          />
+        </FormField>
 
         <!-- Search Filter - Full width on mobile -->
         <FormField
