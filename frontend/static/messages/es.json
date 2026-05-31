@@ -3557,6 +3557,20 @@
           "description": "Configura tu ubicación en Ajustes Principales para ver las especies disponibles en tu área. El filtro de rango utiliza tu ubicación para determinar qué especies es probable encontrar cerca.",
           "action": "Configurar ubicación"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Filtro de rango inactivo",
+            "description": "Las detecciones no se están filtrando según tu ubicación en este momento, por lo que se pueden notificar especies de fuera de tu área. Revisa la configuración del modelo de filtro de rango en Ajustes."
+          },
+          "fellBack": {
+            "title": "Usando el filtro de rango integrado",
+            "description": "No se pudo cargar el filtro de rango del geomodelo configurado, por lo que BirdNET-Go recurrió al filtro de rango integrado. El filtrado sigue funcionando, pero revisa Ajustes para restaurar el geomodelo."
+          },
+          "mappedZero": {
+            "title": "El filtro de rango no coincidió con ninguna especie",
+            "description": "El filtro de rango del geomodelo no coincidió con ninguna de las especies del modelo activo, por lo que se filtraría toda detección. Comprueba que el archivo de etiquetas del filtro de rango coincide con el modelo activo."
+          }
+        },
         "columns": {
           "commonName": "Nombre común",
           "scientificName": "Nombre científico",

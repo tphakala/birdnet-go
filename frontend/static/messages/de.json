@@ -3557,6 +3557,20 @@
           "description": "Legen Sie Ihren Standort in den Haupteinstellungen fest, um Arten in Ihrer Umgebung zu sehen. Der Bereichsfilter verwendet Ihren Standort, um zu bestimmen, welche Arten in der Nähe wahrscheinlich vorkommen.",
           "action": "Standort konfigurieren"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Bereichsfilter inaktiv",
+            "description": "Erkennungen werden derzeit nicht nach Ihrem Standort gefiltert, daher können auch Arten von außerhalb Ihrer Umgebung gemeldet werden. Überprüfen Sie die Bereichsfilter-Modellkonfiguration in den Haupteinstellungen."
+          },
+          "fellBack": {
+            "title": "Eingebauter Bereichsfilter wird verwendet",
+            "description": "Der konfigurierte Geomodell-Bereichsfilter konnte nicht geladen werden, daher hat BirdNET-Go auf den eingebauten Bereichsfilter zurückgegriffen. Die Filterung funktioniert weiterhin, aber überprüfen Sie die Haupteinstellungen, um das Geomodell wiederherzustellen."
+          },
+          "mappedZero": {
+            "title": "Bereichsfilter hat keine Arten gefunden",
+            "description": "Der Geomodell-Bereichsfilter stimmte mit keiner der Arten des aktiven Modells überein, daher würde jede Erkennung herausgefiltert. Stellen Sie sicher, dass die Bereichsfilter-Labeldatei zum aktiven Modell passt."
+          }
+        },
         "columns": {
           "commonName": "Name",
           "scientificName": "Wissenschaftlicher Name",

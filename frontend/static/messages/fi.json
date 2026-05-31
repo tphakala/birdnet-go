@@ -3557,6 +3557,20 @@
           "description": "Määritä sijaintisi pääasetuksissa nähdäksesi alueellasi esiintyvät lajit. Aluesuodatin käyttää sijaintiasi määrittääkseen, mitkä lajit todennäköisesti esiintyvät lähistölläsi.",
           "action": "Määritä sijainti"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Aluesuodatin ei ole käytössä",
+            "description": "Havaintoja ei tällä hetkellä suodateta sijaintisi perusteella, joten myös alueesi ulkopuolisia lajeja voidaan raportoida. Tarkista aluesuodattimen mallin asetukset Asetukset-sivulta."
+          },
+          "fellBack": {
+            "title": "Käytössä sisäänrakennettu aluesuodatin",
+            "description": "Määritettyä geomallin aluesuodatinta ei voitu ladata, joten BirdNET-Go siirtyi käyttämään sisäänrakennettua aluesuodatinta. Suodatus toimii edelleen, mutta tarkista Asetukset-sivulta, miten saat geomallin takaisin käyttöön."
+          },
+          "mappedZero": {
+            "title": "Aluesuodatin ei vastannut yhtäkään lajia",
+            "description": "Geomallin aluesuodatin ei vastannut yhtäkään aktiivisen mallin lajia, joten kaikki havainnot suodatettaisiin pois. Tarkista, että aluesuodattimen nimiötiedosto vastaa aktiivista mallia."
+          }
+        },
         "columns": {
           "commonName": "Nimi",
           "scientificName": "Tieteellinen nimi",

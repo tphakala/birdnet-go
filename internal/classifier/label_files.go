@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
-	"path/filepath"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -175,24 +174,4 @@ func GetLabelFileDataWithLogger(modelVersion, localeCode string, logger Logger) 
 		return nil, result.Error
 	}
 	return result.Data, nil
-}
-
-// listAvailableFiles returns a list of available label files for debugging
-func listAvailableFiles() ([]string, error) {
-	availableFiles := []string{}
-	walkErr := fs.WalkDir(v24LabelFiles, "data/labels/V2.4", func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() {
-			availableFiles = append(availableFiles, filepath.Base(p))
-		}
-		return nil
-	})
-
-	if walkErr != nil {
-		return nil, fmt.Errorf("error listing available label files: %w", walkErr)
-	}
-
-	return availableFiles, nil
 }

@@ -216,7 +216,7 @@ func TestModelManager_DownloadFile(t *testing.T) {
 	destPath := filepath.Join(mm.modelsDir, "test-model", "model.onnx")
 
 	mm.downloading["test-download"] = &DownloadState{CatalogID: "test-download", Status: StatusDownloading}
-	err := mm.downloadFile(t.Context(), "test-download", srv.URL+"/model.onnx", destPath, checksum, int64(len(content)), 0)
+	err := mm.downloadFile(t.Context(), "test-download", srv.URL+"/model.onnx", destPath, checksum, 0)
 	require.NoError(t, err)
 
 	// Verify file was written with correct content.
@@ -250,7 +250,7 @@ func TestModelManager_DownloadFile_BadChecksum(t *testing.T) {
 	destPath := filepath.Join(mm.modelsDir, "bad-checksum", "model.onnx")
 
 	mm.downloading["test-bad-checksum"] = &DownloadState{CatalogID: "test-bad-checksum", Status: StatusDownloading}
-	err := mm.downloadFile(t.Context(), "test-bad-checksum", srv.URL+"/model.onnx", destPath, wrongChecksum, int64(len(content)), 0)
+	err := mm.downloadFile(t.Context(), "test-bad-checksum", srv.URL+"/model.onnx", destPath, wrongChecksum, 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checksum")
 
@@ -278,7 +278,7 @@ func TestModelManager_DownloadFile_EmptySHA256(t *testing.T) {
 	destPath := filepath.Join(mm.modelsDir, "no-checksum", "model.onnx")
 
 	mm.downloading["test-no-checksum"] = &DownloadState{CatalogID: "test-no-checksum", Status: StatusDownloading}
-	err := mm.downloadFile(t.Context(), "test-no-checksum", srv.URL+"/model.onnx", destPath, "", int64(len(content)), 0)
+	err := mm.downloadFile(t.Context(), "test-no-checksum", srv.URL+"/model.onnx", destPath, "", 0)
 	require.NoError(t, err, "empty expectedSHA256 should skip verification")
 
 	got, err := os.ReadFile(destPath)
@@ -302,7 +302,7 @@ func TestModelManager_DownloadFile_ContextCancelled(t *testing.T) {
 	cancel()
 
 	mm.downloading["test-cancelled"] = &DownloadState{CatalogID: "test-cancelled", Status: StatusDownloading}
-	err := mm.downloadFile(ctx, "test-cancelled", srv.URL+"/model.onnx", destPath, "", 4, 0)
+	err := mm.downloadFile(ctx, "test-cancelled", srv.URL+"/model.onnx", destPath, "", 0)
 	require.Error(t, err, "cancelled context should produce an error")
 
 	_, statErr := os.Stat(destPath)
@@ -567,6 +567,7 @@ func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 	// unload the primary model, simulating a "model still in use" failure.
 	primaryBN := &BirdNET{ModelInfo: ModelInfo{ID: entry.RegistryID}}
 	orch := &Orchestrator{
+		ModelInfo: primaryBN.ModelInfo, // mirror the primary, as NewOrchestrator does
 		models: map[string]*modelEntry{
 			entry.RegistryID: {instance: primaryBN},
 		},
@@ -594,6 +595,124 @@ func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 		_, statErr := os.Stat(path)
 		assert.NoError(t, statErr, "file %s must still exist after aborted uninstall", f.LocalName)
 	}
+}
+
+// TestModelManager_UninstallDeregistersWhenFileDeletionFails covers the
+// best-effort uninstall behavior: when a model file cannot be removed (here
+// simulated by replacing it with a non-empty directory so os.Remove returns a
+// non-ENOENT error), Uninstall must NOT abort early. It still de-registers the
+// model from the installed map and clears config, then surfaces the deletion
+// failure as an error. Before this change, the first failed os.Remove returned
+// immediately, leaving the model registered.
+func TestModelManager_UninstallDeregistersWhenFileDeletionFails(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok, "expected perch-v2 catalog entry to exist")
+	require.NotEmpty(t, entry.RegistryID, "perch-v2 must have a RegistryID for this test")
+
+	modelsDir := t.TempDir()
+	subdir := filepath.Join(modelsDir, entry.ID)
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+
+	for _, f := range entry.Files {
+		var dir string
+		if isSharedRole(f.Role) {
+			dir = filepath.Join(modelsDir, "shared")
+		} else {
+			dir = subdir
+		}
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("data"), 0o644))
+	}
+
+	// Empty models map: IsModelLoaded returns false, so unload is skipped and
+	// Uninstall proceeds to delete files.
+	orch := &Orchestrator{
+		models: make(map[string]*modelEntry),
+	}
+
+	mm := NewModelManager(modelsDir, orch, nil)
+	mm.ScanInstalled()
+	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before uninstall")
+
+	// Remove the standalone geomodel entry so shared files are not retained,
+	// mirroring TestModelManager_UninstallSucceedsWhenModelNotLoaded.
+	if mm.IsInstalled("birdnet-geomodel-v3") {
+		require.NoError(t, mm.Uninstall("birdnet-geomodel-v3"))
+	}
+
+	// Sabotage one model/data file so os.Remove fails with a non-ENOENT error:
+	// replace the file with a non-empty directory (os.Remove returns ENOTEMPTY).
+	var sabotaged string
+	for _, f := range entry.Files {
+		if f.Role != RoleModel && f.Role != RoleData {
+			continue
+		}
+		path := filepath.Join(subdir, f.LocalName)
+		require.NoError(t, os.Remove(path))
+		require.NoError(t, os.MkdirAll(path, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(path, "blocker"), []byte("x"), 0o644))
+		sabotaged = path
+		break
+	}
+	require.NotEmpty(t, sabotaged, "perch-v2 must have a model or data file to sabotage")
+
+	err := mm.Uninstall(entry.ID)
+	require.Error(t, err, "Uninstall must surface the file-deletion failure")
+	assert.Contains(t, err.Error(), "failed to remove some files")
+	assert.False(t, mm.IsInstalled(entry.ID),
+		"model must be de-registered even when some files could not be deleted")
+}
+
+// TestModelManager_ReinstallRefusesLoadedPrimary documents and guards the
+// behavior of the new pre-overwrite unload step in Reinstall: when the target
+// is the loaded primary model (which UnloadModel refuses to unload), Reinstall
+// aborts with "model still in use" before touching any files, and the model
+// stays installed. This is a deliberate behavior change from the prior code,
+// which overwrote files in place even while the primary was loaded.
+func TestModelManager_ReinstallRefusesLoadedPrimary(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok, "expected perch-v2 catalog entry to exist")
+	require.NotEmpty(t, entry.RegistryID, "perch-v2 must have a RegistryID for this test")
+
+	modelsDir := t.TempDir()
+	subdir := filepath.Join(modelsDir, entry.ID)
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+	for _, f := range entry.Files {
+		var dir string
+		if isSharedRole(f.Role) {
+			dir = filepath.Join(modelsDir, "shared")
+		} else {
+			dir = subdir
+		}
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("data"), 0o644))
+	}
+
+	// Model loaded AND set as primary: UnloadModel refuses the primary, so the
+	// new pre-overwrite guard must abort the reinstall.
+	primaryBN := &BirdNET{ModelInfo: ModelInfo{ID: entry.RegistryID}}
+	orch := &Orchestrator{
+		ModelInfo: primaryBN.ModelInfo, // mirror the primary, as NewOrchestrator does
+		models: map[string]*modelEntry{
+			entry.RegistryID: {instance: primaryBN},
+		},
+		primary: primaryBN,
+	}
+
+	mm := NewModelManager(modelsDir, orch, nil)
+	mm.ScanInstalled()
+	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before reinstall attempt")
+
+	entryCopy := entry
+	// baseURL is never reached: the unload guard aborts before any download.
+	err := mm.Reinstall(t.Context(), &entryCopy, "http://unused.invalid", nil)
+	require.Error(t, err, "Reinstall must abort when the loaded primary cannot be unloaded")
+	assert.Contains(t, err.Error(), "model still in use")
+	assert.True(t, mm.IsInstalled(entry.ID), "model must remain installed after a refused reinstall")
 }
 
 func TestModelManager_Install_SharedGeomodel(t *testing.T) {

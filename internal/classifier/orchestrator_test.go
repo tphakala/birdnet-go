@@ -16,6 +16,7 @@ import (
 type mockModelInstance struct {
 	id      string
 	spec    ModelSpec
+	labels  []string // optional; when nil a single default label is returned
 	predict func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
 }
 
@@ -33,8 +34,13 @@ func (m *mockModelInstance) ModelName() string {
 }
 func (m *mockModelInstance) ModelVersion() string { return "1.0" }
 func (m *mockModelInstance) NumSpecies() int      { return 1 }
-func (m *mockModelInstance) Labels() []string     { return []string{"Turdus merula_Common Blackbird"} }
-func (m *mockModelInstance) Close() error         { return nil }
+func (m *mockModelInstance) Labels() []string {
+	if m.labels != nil {
+		return m.labels
+	}
+	return []string{"Turdus merula_Common Blackbird"}
+}
+func (m *mockModelInstance) Close() error { return nil }
 
 // newTestOrchestrator creates an Orchestrator with mock models for unit testing.
 // It does not require real model files.

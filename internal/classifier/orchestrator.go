@@ -7,13 +7,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -37,8 +40,9 @@ type modelEntry struct {
 //
 // Delete/UnloadModel acquire mu + entry.mu but NOT inferenceMu.
 type Orchestrator struct {
-	// Public fields — same layout as BirdNET for drop-in caller migration.
-	Settings        *conf.Settings
+	// Public fields, same layout as BirdNET for drop-in caller migration.
+	Settings        *conf.Settings // Deprecated: use CurrentSettings() instead.
+	settingsAtomic  atomic.Pointer[conf.Settings]
 	ModelInfo       ModelInfo
 	TaxonomyMap     TaxonomyMap
 	TaxonomyPath    string
@@ -62,10 +66,26 @@ type Orchestrator struct {
 	scheduler atomic.Pointer[nighttimeScheduler]
 }
 
+// CurrentSettings returns the latest settings snapshot published via
+// conf.StoreSettings, or the Orchestrator's constructor-provided settings when none
+// has been published.
+func (o *Orchestrator) CurrentSettings() *conf.Settings {
+	if s := o.settingsAtomic.Load(); s != nil {
+		return conf.CurrentOrFallback(s)
+	}
+	return conf.CurrentOrFallback(o.Settings)
+}
+
 // currentSettings returns the latest settings snapshot so hot-reloaded
 // values (threads, locale, etc.) take effect without restarting.
 func (o *Orchestrator) currentSettings() *conf.Settings {
-	return conf.CurrentOrFallback(o.Settings)
+	return o.CurrentSettings()
+}
+
+// updateSettings updates the settings pointer safely and atomically.
+func (o *Orchestrator) updateSettings(s *conf.Settings) {
+	o.Settings = s
+	o.settingsAtomic.Store(s)
 }
 
 // NewOrchestrator creates a new Orchestrator with BirdNET as the primary model
@@ -102,6 +122,7 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		},
 		primary: bn,
 	}
+	o.settingsAtomic.Store(settings)
 
 	// Pre-compute thread allocation so model constructors receive their share.
 	// BirdNET already uses settings.BirdNET.Threads at construction; additional
@@ -137,23 +158,32 @@ func (o *Orchestrator) SetModelsDir(dir string) {
 // resolver chain. This provides multilingual common name resolution for
 // species not covered by BirdNET's label files.
 //
-// Called during initialization before inference goroutines start, so the
-// unsynchronized append to nameResolvers is safe.
+// The append and the ResolveName read are guarded by o.mu so a future dynamic
+// registration (e.g. a models-directory hot-reload) cannot race with inference
+// goroutines calling ResolveName. Registration is idempotent via a
+// double-checked guard.
 func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
-	if o.Settings == nil {
+	// Read settings via the atomic-safe accessor; o.Settings is reassigned at
+	// runtime by ReloadModel (under o.mu), so raw field reads would race.
+	settings := o.CurrentSettings()
+	if settings == nil {
 		return
 	}
 
-	for _, r := range o.nameResolvers {
-		if _, ok := r.(*TaxonomyResolver); ok {
-			return
-		}
+	// Fast path: a taxonomy resolver is already registered. Read under RLock so
+	// this never races with a concurrent ResolveName on the inference path.
+	o.mu.RLock()
+	exists := o.hasTaxonomyResolverLocked()
+	o.mu.RUnlock()
+	if exists {
+		return
 	}
 
 	log := GetLogger()
 	taxonomyPath := filepath.Join(modelsDir, "shared", "taxonomy.csv")
 
-	locale := o.Settings.BirdNET.Locale
+	locale := settings.BirdNET.Locale
+	// Load the resolver outside the lock; NewTaxonomyResolver does file I/O.
 	resolver, err := NewTaxonomyResolver(taxonomyPath, locale)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -164,11 +194,31 @@ func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
 		return
 	}
 
+	// Append under the write lock, re-checking in case another caller registered
+	// a resolver while this one was loading. Keeps registration idempotent.
+	o.mu.Lock()
+	if o.hasTaxonomyResolverLocked() {
+		o.mu.Unlock()
+		return
+	}
 	o.nameResolvers = append(o.nameResolvers, resolver)
+	o.mu.Unlock()
+
 	log.Info("Taxonomy resolver registered",
 		logger.String("path", taxonomyPath),
 		logger.String("locale", locale),
 		logger.Int("species", len(resolver.index)))
+}
+
+// hasTaxonomyResolverLocked reports whether a TaxonomyResolver is already
+// present in the name-resolver chain. The caller must hold o.mu (read or write).
+func (o *Orchestrator) hasTaxonomyResolverLocked() bool {
+	for _, r := range o.nameResolvers {
+		if _, ok := r.(*TaxonomyResolver); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // SetSunCalc injects the sun calculator into the orchestrator and starts
@@ -353,7 +403,14 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 // ResolveName walks the resolver chain and returns the first non-empty
 // common name for the given scientific name and locale.
 func (o *Orchestrator) ResolveName(scientificName, locale string) string {
-	for _, r := range o.nameResolvers {
+	// Snapshot the resolver chain under RLock so a concurrent
+	// registerTaxonomyResolver append cannot corrupt the slice header.
+	// Resolvers are only ever appended (never mutated in place), so iterating
+	// the snapshot outside the lock is safe.
+	o.mu.RLock()
+	resolvers := o.nameResolvers
+	o.mu.RUnlock()
+	for _, r := range resolvers {
 		if name := r.Resolve(scientificName, locale); name != "" {
 			return name
 		}
@@ -374,9 +431,31 @@ func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float
 }
 
 // GetAllProbableSpeciesWithSettings returns species from all active classifiers.
-// The primary BirdNET model's species are filtered by the range filter using the
-// supplied settings. Additional models (except bat) contribute their full label
-// set since they have no range filter. Results are deduplicated by label.
+//
+// The primary BirdNET model's species are filtered by the range filter using
+// the supplied settings. When the primary uses a v3 geomodel, those primary
+// scores already contain the full geomodel label set above the configured
+// threshold ("ScientificName_CommonName"), exclude-filtered.
+//
+// Additional models (except bat) emit labels in their own convention (Perch v2
+// uses scientific-name-only labels). To decide whether a non-primary species
+// should be added, the geomodel's coverage is consulted by scientific name:
+//
+//   - already represented (present in the primary scores) -> skip (no duplicate)
+//   - geomodel-covered but NOT above threshold            -> skip; the range
+//     filter excludes it (this is the core fix for the active-species balloon
+//     in issue #3250, where exact-string dedup let geomodel-covered Perch
+//     species slip back in at score 1.0)
+//   - geomodel-unmapped (no scientific-name match)        -> pass through at
+//     score 1.0 only when PassUnmappedSpecies is enabled and the species is not
+//     excluded
+//
+// When the primary is not a universal predictor (legacy TFLite range filter
+// with no geomodel) there is no coverage set to consult, so every non-primary
+// label whose scientific name is not already represented is added at score 1.0
+// (exclude honored), preserving prior multi-classifier behavior. Deduplication
+// is by scientific name throughout, never exact label, because the geomodel and
+// Perch use different label conventions for the same species.
 func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
 	// Snapshot primary under read lock to avoid racing with Delete().
 	o.mu.RLock()
@@ -386,14 +465,27 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		return nil, nil
 	}
 
-	scores, err := primary.GetProbableSpeciesWithSettings(date, week, settings)
+	// Get the primary's range-filtered scores together with the geomodel's full
+	// label set, both from the same range-filter snapshot so a concurrent
+	// ReloadRangeFilter cannot desync them. geoLabels is non-nil only on the
+	// universal (v3 geomodel) path, where it covers every scientific name the
+	// geomodel knows regardless of threshold.
+	scores, geoLabels, err := primary.getProbableSpecies(date, week, settings)
 	if err != nil {
 		return nil, err
 	}
+	isUniversal := geoLabels != nil
 
-	seen := make(map[string]bool, len(scores))
+	// Dedup by scientific name (lowercased). seenSci holds species already
+	// represented via the primary scores; geoCovered holds every scientific
+	// name the geomodel can predict at all.
+	seenSci := make(map[string]bool, len(scores))
 	for _, s := range scores {
-		seen[s.Label] = true
+		seenSci[strings.ToLower(detection.ExtractScientificName(s.Label))] = true
+	}
+	geoCovered := make(map[string]bool, len(geoLabels))
+	for _, label := range geoLabels {
+		geoCovered[strings.ToLower(detection.ExtractScientificName(label))] = true
 	}
 
 	type entryRef struct {
@@ -401,9 +493,12 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		entry *modelEntry
 	}
 
-	var refs []entryRef
 	o.mu.RLock()
-	primaryID := primary.ModelInfo.ID
+	// Read o.ModelInfo.ID, the o.mu-guarded copy of the primary's identity, not
+	// primary.ModelInfo.ID: the latter is mutated by BirdNET.ReloadModel under
+	// bn.mu and would race with a concurrent reload.
+	primaryID := o.ModelInfo.ID
+	refs := make([]entryRef, 0, len(o.models))
 	for id, entry := range o.models {
 		if id == primaryID || id == RegistryIDBat {
 			continue
@@ -411,6 +506,15 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		refs = append(refs, entryRef{id: id, entry: entry})
 	}
 	o.mu.RUnlock()
+
+	// Sort non-primary models by ID so dedup-by-scientific-name is
+	// deterministic. When two secondary models emit different labels for the
+	// same scientific name, the surviving label must not depend on Go's
+	// randomized map iteration order.
+	slices.SortFunc(refs, func(a, b entryRef) int { return strings.Compare(a.id, b.id) })
+
+	passUnmapped := settings.BirdNET.RangeFilter.PassUnmappedSpecies
+	excludeList := settings.Realtime.Species.Exclude
 
 	for _, ref := range refs {
 		ref.entry.mu.Lock()
@@ -421,10 +525,38 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		labels := ref.entry.instance.Labels()
 		ref.entry.mu.Unlock()
 
+		// Grow scores capacity once per model; an upper bound is one new entry
+		// per non-primary label.
+		if len(labels) > 0 {
+			scores = slices.Grow(scores, len(labels))
+		}
+
 		for _, label := range labels {
-			if !seen[label] {
-				scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
-				seen[label] = true
+			sci := strings.ToLower(detection.ExtractScientificName(label))
+			switch {
+			case seenSci[sci]:
+				// Already represented via the primary (or an earlier model).
+				continue
+			case isUniversal && geoCovered[sci]:
+				// Geomodel covers this species but it is not in the
+				// above-threshold set, so the range filter excludes it. Skip.
+				continue
+			default:
+				// Geomodel-unmapped, or the primary is not universal.
+				if !isUniversal {
+					// Legacy path: no geomodel to consult. Preserve prior
+					// behavior and include the species, deduped by scientific
+					// name, without gating on PassUnmappedSpecies.
+					if !isSpeciesExcluded(label, excludeList) {
+						scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
+						seenSci[sci] = true
+					}
+					continue
+				}
+				if passUnmapped && !isSpeciesExcluded(label, excludeList) {
+					scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
+					seenSci[sci] = true
+				}
 			}
 		}
 	}
@@ -442,9 +574,28 @@ func (o *Orchestrator) GetSpeciesOccurrenceAtTime(species string, detectionTime 
 	return o.primary.GetSpeciesOccurrenceAtTime(species, detectionTime)
 }
 
+// NumSpecies returns the number of species labels of the primary model.
+func (o *Orchestrator) NumSpecies() int {
+	return o.primary.NumSpecies()
+}
+
+// Labels returns a copy of the species labels of the primary model.
+func (o *Orchestrator) Labels() []string {
+	return o.primary.Labels()
+}
+
 // GetSpeciesCode returns the eBird species code for a given label.
 func (o *Orchestrator) GetSpeciesCode(label string) (string, bool) {
 	return o.primary.GetSpeciesCode(label)
+}
+
+// GetSpeciesNameFromCode returns the species name for a given eBird species code.
+// The second return value reports whether the code was found in the TaxonomyMap
+// by calling GetSpeciesNameFromCode(o.TaxonomyMap, code).
+func (o *Orchestrator) GetSpeciesNameFromCode(code string) (string, bool) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return GetSpeciesNameFromCode(o.TaxonomyMap, code)
 }
 
 // GetSpeciesWithScientificAndCommonName returns the scientific and common name for a label.
@@ -485,6 +636,7 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	rf := settings.BirdNET.RangeFilter
 
 	geomodel, primaryCoverage, geoLabels, _ := primary.PrimaryRangeFilterCoverage()
+	active, fellBack := primary.rangeFilterRuntimeState()
 
 	resp := RangeFilterStatusResponse{
 		Geomodel:            geomodel,
@@ -492,6 +644,9 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		Threshold:           rf.Threshold,
 		LocationConfigured:  settings.BirdNET.LocationConfigured,
 		LastUpdated:         rf.LastUpdated,
+		Active:              active,
+		FellBack:            fellBack,
+		MappedSpecies:       primaryCoverage.WithRangeData,
 	}
 
 	// Always include the primary classifier.
@@ -512,8 +667,12 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 
 	var refs []entryRef
 	o.mu.RLock()
+	// Compare against o.ModelInfo.ID, the o.mu-guarded copy of the primary's
+	// identity, not primary.ModelInfo.ID which is mutated by BirdNET.ReloadModel
+	// under bn.mu and would race with a concurrent reload.
+	primaryID := o.ModelInfo.ID
 	for id, entry := range o.models {
-		if id == primary.ModelInfo.ID || id == RegistryIDBat {
+		if id == primaryID || id == RegistryIDBat {
 			continue
 		}
 		refs = append(refs, entryRef{id: id, entry: entry})
@@ -605,23 +764,6 @@ func (o *Orchestrator) notifyRangeFilterReload() {
 	}
 }
 
-// ReloadBatFilter rebuilds the bat model's high-pass filter from current settings.
-func (o *Orchestrator) ReloadBatFilter() {
-	o.mu.RLock()
-	entry, ok := o.models[RegistryIDBat]
-	o.mu.RUnlock()
-	if !ok || entry == nil {
-		return
-	}
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-	bat, ok := entry.instance.(*Bat)
-	if !ok || bat == nil {
-		return
-	}
-	bat.UpdateFilter()
-}
-
 // RunFilterProcess executes the filter process on demand and prints results.
 func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 	o.primary.RunFilterProcess(dateStr, week)
@@ -641,7 +783,11 @@ func (o *Orchestrator) ReloadModel() error {
 			Category(errors.CategoryValidation).
 			Build()
 	}
-	entry := o.models[primary.ModelInfo.ID]
+	// Key the lookup by o.ModelInfo.ID (o.mu-guarded), not primary.ModelInfo.ID
+	// which BirdNET.ReloadModel mutates under bn.mu. The two are always equal
+	// outside an in-progress reload (which holds o.mu.Lock), and the models map
+	// is keyed by this same ID, so the lookup is unchanged but race-free.
+	entry := o.models[o.ModelInfo.ID]
 	o.mu.RUnlock()
 
 	if entry == nil {
@@ -673,10 +819,11 @@ func (o *Orchestrator) ReloadModel() error {
 			Build()
 	}
 
-	o.ModelInfo = o.primary.ModelInfo
-	o.TaxonomyMap = o.primary.TaxonomyMap
-	o.TaxonomyPath = o.primary.TaxonomyPath
-	o.ScientificIndex = o.primary.ScientificIndex
+	info, taxMap, taxPath, sciIndex := o.primary.ReloadSnapshot()
+	o.ModelInfo = info
+	o.TaxonomyMap = taxMap
+	o.TaxonomyPath = taxPath
+	o.ScientificIndex = sciIndex
 
 	// Re-key the models map in case the model ID changed after reload (Forgejo #270).
 	newModels := make(map[string]*modelEntry, len(o.models))
@@ -687,6 +834,9 @@ func (o *Orchestrator) ReloadModel() error {
 		newModels[e.instance.ModelID()] = e
 	}
 	o.models = newModels
+
+	// Update settings atomically
+	o.updateSettings(o.primary.currentSettings())
 
 	return nil
 }
@@ -839,8 +989,10 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 			Build()
 	}
 
-	// Refuse to unload the primary model.
-	if o.primary != nil && o.primary.ModelInfo.ID == registryID {
+	// Refuse to unload the primary model. Compare against o.ModelInfo.ID
+	// (o.mu-guarded, held here as a write lock) rather than
+	// o.primary.ModelInfo.ID, which BirdNET.ReloadModel mutates under bn.mu.
+	if o.primary != nil && o.ModelInfo.ID == registryID {
 		o.mu.Unlock()
 		return errors.Newf("cannot unload the primary model %s", registryID).
 			Component("classifier.orchestrator").

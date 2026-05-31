@@ -3,7 +3,11 @@
 // key via RegistryID and provides download metadata for HuggingFace repos.
 package classifier
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
+)
 
 // Catalog category constants.
 const (
@@ -218,7 +222,7 @@ func geomodelFiles() []CatalogFile {
 	return []CatalogFile{
 		{
 			RemotePath:      "BirdNET+_Geomodel_V3.0.2_Global_12K_FP16.onnx",
-			LocalName:       "geomodel_v3.0.2_fp16.onnx",
+			LocalName:       conf.GeomodelONNXLocalName,
 			Role:            RoleGeomodelModel,
 			SHA256:          geomodelONNXSHA256,
 			SizeBytes:       geomodelONNXSizeBytes,
@@ -226,7 +230,7 @@ func geomodelFiles() []CatalogFile {
 		},
 		{
 			RemotePath:      "geomodel_v3.0.2_labels.txt",
-			LocalName:       "geomodel_v3.0.2_labels.txt",
+			LocalName:       conf.GeomodelLabelsLocalName,
 			Role:            RoleGeomodelLabels,
 			SHA256:          geomodelLabelsSHA256,
 			SizeBytes:       geomodelLabelsSizeBytes,
@@ -254,7 +258,7 @@ func isSharedRole(role string) bool {
 // IsSharedOnly reports whether all files in a catalog entry use shared roles
 // (stored in models/shared/ rather than a per-model subdirectory).
 func IsSharedOnly(entry *CatalogEntry) bool {
-	if len(entry.Files) == 0 {
+	if entry == nil || len(entry.Files) == 0 {
 		return false
 	}
 	for _, f := range entry.Files {
@@ -267,6 +271,9 @@ func IsSharedOnly(entry *CatalogEntry) bool {
 
 // HasTaxonomyFiles reports whether a catalog entry includes shared taxonomy files.
 func HasTaxonomyFiles(entry *CatalogEntry) bool {
+	if entry == nil {
+		return false
+	}
 	for _, f := range entry.Files {
 		if f.Role == RoleTaxonomy {
 			return true
@@ -277,6 +284,9 @@ func HasTaxonomyFiles(entry *CatalogEntry) bool {
 
 // HasGeomodelFiles reports whether a catalog entry includes shared geomodel files.
 func HasGeomodelFiles(entry *CatalogEntry) bool {
+	if entry == nil {
+		return false
+	}
 	for _, f := range entry.Files {
 		if isGeomodelRole(f.Role) {
 			return true
@@ -287,6 +297,9 @@ func HasGeomodelFiles(entry *CatalogEntry) bool {
 
 // HasEmbeddingsFiles reports whether a catalog entry includes shared embeddings files.
 func HasEmbeddingsFiles(entry *CatalogEntry) bool {
+	if entry == nil {
+		return false
+	}
 	for _, f := range entry.Files {
 		if f.Role == RoleEmbeddings {
 			return true

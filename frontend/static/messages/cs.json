@@ -3557,6 +3557,20 @@
           "description": "Nastavte svou polohu v Hlavních nastaveních, abyste viděli druhy dostupné ve vaší oblasti. Filtr rozsahu používá vaši polohu k určení, které druhy se pravděpodobně vyskytují v okolí.",
           "action": "Nakonfigurovat polohu"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Filtr rozsahu je neaktivní",
+            "description": "Detekce nejsou momentálně filtrovány podle vaší polohy, takže mohou být hlášeny i druhy mimo vaši oblast. Zkontrolujte konfiguraci modelu filtru rozsahu v Nastavení."
+          },
+          "fellBack": {
+            "title": "Používá se vestavěný filtr rozsahu",
+            "description": "Nakonfigurovaný filtr rozsahu geomodelu se nepodařilo načíst, takže BirdNET-Go přešel na vestavěný filtr rozsahu. Filtrování stále funguje, ale zkontrolujte Nastavení, abyste obnovili geomodel."
+          },
+          "mappedZero": {
+            "title": "Filtr rozsahu neodpovídá žádnému druhu",
+            "description": "Filtr rozsahu geomodelu neodpovídá žádnému z druhů aktivního modelu, takže by byla odfiltrována každá detekce. Zkontrolujte, zda soubor štítků filtru rozsahu odpovídá aktivnímu modelu."
+          }
+        },
         "columns": {
           "commonName": "Název",
           "scientificName": "Vědecký název",

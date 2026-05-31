@@ -3557,6 +3557,20 @@
           "description": "Indstil din placering under Hovedindstillinger for at se arter tilgængelige i dit område. Områdefilteret bruger din placering til at bestemme, hvilke arter der sandsynligvis findes i nærheden.",
           "action": "Konfigurer placering"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Områdefilter inaktivt",
+            "description": "Detektioner filtreres lige nu ikke efter din placering, så arter fra områder uden for dit eget kan blive rapporteret. Kontrollér indstillingerne for områdefiltermodellen under Indstillinger."
+          },
+          "fellBack": {
+            "title": "Bruger det indbyggede områdefilter",
+            "description": "Det konfigurerede områdefilter med geomodel kunne ikke indlæses, så BirdNET-Go faldt tilbage til det indbyggede områdefilter. Filtreringen virker stadig, men kontrollér Indstillinger for at gendanne geomodellen."
+          },
+          "mappedZero": {
+            "title": "Områdefilteret matchede ingen arter",
+            "description": "Områdefilteret med geomodel matchede ingen af den aktive models arter, så alle detektioner ville blive filtreret fra. Kontrollér, at områdefilterets labelfil passer til den aktive model."
+          }
+        },
         "columns": {
           "commonName": "Almindeligt navn",
           "scientificName": "Videnskabeligt navn",

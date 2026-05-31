@@ -3557,6 +3557,20 @@
           "description": "Imposta la tua posizione in Impostazioni Principali per vedere specie disponibili nella tua area. Il filtro intervallo usa la tua posizione per determinare quali specie sono probabilmente presenti nelle vicinanze.",
           "action": "Configura Posizione"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Filtro intervallo inattivo",
+            "description": "Al momento i rilevamenti non vengono filtrati in base alla tua posizione, quindi possono essere segnalate specie esterne alla tua zona. Controlla la configurazione del modello del filtro intervallo nelle Impostazioni."
+          },
+          "fellBack": {
+            "title": "Uso del filtro intervallo integrato",
+            "description": "Non è stato possibile caricare il filtro intervallo del geomodello configurato, quindi BirdNET-Go è ricorso al filtro intervallo integrato. Il filtraggio funziona ancora, ma controlla le Impostazioni per ripristinare il geomodello."
+          },
+          "mappedZero": {
+            "title": "Il filtro intervallo non ha trovato corrispondenze con nessuna specie",
+            "description": "Il filtro intervallo del geomodello non corrisponde a nessuna delle specie del modello attivo, quindi ogni rilevamento verrebbe filtrato. Verifica che il file delle etichette del filtro intervallo corrisponda al modello attivo."
+          }
+        },
         "columns": {
           "commonName": "Nome comune",
           "scientificName": "Nome scientifico",

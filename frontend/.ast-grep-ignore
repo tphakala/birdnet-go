@@ -27,6 +27,3 @@ src/test/setup.ts
 # Legacy or vendor files
 vendor/
 legacy/
-
-# Third-party type definitions
-src/lib/types/reconnecting-eventsource.d.ts

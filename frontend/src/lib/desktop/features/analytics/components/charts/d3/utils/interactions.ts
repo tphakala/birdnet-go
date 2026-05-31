@@ -1,6 +1,20 @@
 // D3 interaction utilities for analytics charts
 import * as d3 from 'd3';
 
+/**
+ * Escape a string for safe interpolation into tooltip HTML.
+ * The ampersand must be replaced first so the entities produced by the other
+ * replacements are not double-escaped.
+ */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export interface TooltipData {
   title: string;
   items: { label: string; value: string | number; color?: string }[];
@@ -132,13 +146,17 @@ export class ChartTooltip {
   }
 
   private formatTooltipContent(data: TooltipData): string {
-    let html = `<div style="font-weight: bold; margin-bottom: 4px;">${data.title}</div>`;
+    // Tooltip text (title/label/value) can derive from user-influenced data
+    // such as custom species label files, so escape it before building HTML
+    // that is passed to .html(). item.color is an internal theme value.
+    let html = `<div style="font-weight: bold; margin-bottom: 4px;">${escapeHtml(data.title)}</div>`;
 
     data.items.forEach(item => {
       const colorDot = item.color
         ? `<span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${item.color}; margin-right: 6px;"></span>`
         : '';
-      html += `<div>${colorDot}${item.label}: ${item.value}</div>`;
+      const labelPrefix = item.label ? `${escapeHtml(item.label)}: ` : '';
+      html += `<div>${colorDot}${labelPrefix}${escapeHtml(String(item.value))}</div>`;
     });
 
     return html;

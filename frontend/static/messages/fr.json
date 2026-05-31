@@ -3557,6 +3557,20 @@
           "description": "Définissez votre emplacement dans les Paramètres Principaux pour voir les espèces disponibles dans votre région. Le filtre de portée utilise votre emplacement pour déterminer quelles espèces sont susceptibles d'être présentes à proximité.",
           "action": "Configurer l'emplacement"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Filtre de portée inactif",
+            "description": "Les détections ne sont pas filtrées selon votre emplacement pour le moment, des espèces extérieures à votre région peuvent donc être signalées. Vérifiez la configuration du modèle de filtre de portée dans les Paramètres."
+          },
+          "fellBack": {
+            "title": "Utilisation du filtre de portée intégré",
+            "description": "Le filtre de portée du géomodèle configuré n'a pas pu être chargé, BirdNET-Go s'est donc rabattu sur le filtre de portée intégré. Le filtrage fonctionne toujours, mais vérifiez les Paramètres pour restaurer le géomodèle."
+          },
+          "mappedZero": {
+            "title": "Le filtre de portée n'a correspondu à aucune espèce",
+            "description": "Le filtre de portée du géomodèle ne correspond à aucune des espèces du modèle actif, toutes les détections seraient donc filtrées. Vérifiez que le fichier d'étiquettes du filtre de portée correspond au modèle actif."
+          }
+        },
         "columns": {
           "commonName": "Nom commun",
           "scientificName": "Nom scientifique",

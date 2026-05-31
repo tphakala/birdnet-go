@@ -323,7 +323,7 @@ const wrong = new Date().toISOString().split('T')[0];
 ## SSE (Server-Sent Events)
 
 ```typescript
-import ReconnectingEventSource from 'reconnecting-eventsource';
+import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
 
 const eventSource = new ReconnectingEventSource('/api/endpoint', {
   max_retry_time: 30000,
@@ -688,7 +688,7 @@ describe('Component Tests', () => {
 - Toast notifications (`$lib/stores/toast`)
 - Internationalization (`$lib/i18n`)
 - Global browser APIs (fetch, localStorage)
-- Third-party libraries (MapLibre, Chart.js)
+- Third-party libraries (MapLibre, D3)
 
 **✅ Use file-specific mocks for**:
 

@@ -16,7 +16,7 @@
     getTemperatureSymbol,
     type TemperatureUnit,
   } from '$lib/utils/formatters';
-  import ReconnectingEventSource from 'reconnecting-eventsource';
+  import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { connectionState } from '$lib/stores/connectionState.svelte';
   import type { ModelMetrics } from '$lib/desktop/features/system/types';
 

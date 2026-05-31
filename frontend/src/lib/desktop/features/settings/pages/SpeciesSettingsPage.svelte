@@ -76,6 +76,7 @@
     Bird,
     CalendarClock,
     Activity,
+    TriangleAlert,
   } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
 
@@ -214,6 +215,34 @@
     data: null,
     locationNotConfigured: false,
     initialized: false,
+  });
+
+  // Range-filter health, fetched from /api/v2/range/status. Surfaces the silent
+  // fail-open and fallback states from the range-filter robustness fixes so the user
+  // is never unknowingly running unfiltered or with the wrong filter.
+  let rangeFilterHealth = $state<{
+    active: boolean;
+    fellBack: boolean;
+    geomodelActive: boolean;
+    mappedSpecies: number;
+    locationConfigured: boolean;
+  } | null>(null);
+
+  // Derived banner descriptor for the Active tab. Null when the range filter is healthy
+  // (or not applicable because no location is configured).
+  let rangeFilterWarning = $derived.by(() => {
+    const h = rangeFilterHealth;
+    if (!h || !h.locationConfigured) return null;
+    if (!h.active) {
+      return { level: 'error' as const, key: 'inactive' as const };
+    }
+    if (h.fellBack) {
+      return { level: 'warning' as const, key: 'fellBack' as const };
+    }
+    if (h.geomodelActive && h.mappedSpecies === 0) {
+      return { level: 'warning' as const, key: 'mappedZero' as const };
+    }
+    return null;
   });
 
   // Search/filter/expand state is now handled inside SpeciesTable component
@@ -588,9 +617,14 @@
     if (!locationConfigured) {
       activeSpeciesState.loading = false;
       activeSpeciesState.data = null;
+      rangeFilterHealth = null;
       isLoadingActiveSpecies = false;
       return;
     }
+
+    // Fetch range-filter health alongside the species list so the Active tab can warn
+    // about a fail-open or fallback state. Independent of the species fetch below.
+    void loadRangeFilterStatus();
 
     try {
       const response = await api.post<{
@@ -653,6 +687,30 @@
     } finally {
       activeSpeciesState.loading = false;
       isLoadingActiveSpecies = false;
+    }
+  }
+
+  // Fetch range-filter health from the status endpoint. Failures are non-fatal: the
+  // banner simply does not render if the status cannot be read.
+  async function loadRangeFilterStatus() {
+    try {
+      const status = await api.get<{
+        active: boolean;
+        fellBack: boolean;
+        mappedSpecies: number;
+        locationConfigured: boolean;
+        geomodel: { version: string } | null;
+      }>('/api/v2/range/status');
+      rangeFilterHealth = {
+        active: status.active,
+        fellBack: status.fellBack,
+        geomodelActive: status.geomodel != null,
+        mappedSpecies: status.mappedSpecies,
+        locationConfigured: status.locationConfigured,
+      };
+    } catch (error) {
+      logger.error('Failed to load range filter status:', error);
+      rangeFilterHealth = null;
     }
   }
 
@@ -1014,9 +1072,58 @@
   ]);
 </script>
 
+<!-- Range-filter health banner: surfaces fail-open / fallback / no-match states -->
+{#snippet rangeFilterHealthBanner(isError: boolean, title: string, description: string)}
+  <div
+    role="alert"
+    class="p-4 rounded-lg border {isError
+      ? 'bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] border-[color-mix(in_srgb,var(--color-error)_20%,transparent)]'
+      : 'bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border-[color-mix(in_srgb,var(--color-warning)_20%,transparent)]'}"
+  >
+    <div class="flex items-start gap-3">
+      <TriangleAlert
+        class="w-5 h-5 shrink-0 mt-0.5 {isError
+          ? 'text-[var(--color-error)]'
+          : 'text-[var(--color-warning)]'}"
+      />
+      <div>
+        <p
+          class="font-medium {isError
+            ? 'text-[var(--color-error)]'
+            : 'text-[var(--color-warning)]'}"
+        >
+          {title}
+        </p>
+        <p class="text-sm text-muted mt-1">{description}</p>
+      </div>
+    </div>
+  </div>
+{/snippet}
+
 <!-- Active Species Tab Content -->
 {#snippet activeTabContent()}
   <div class="space-y-4">
+    <!-- Range filter health warning (fail-open, fallback, or no species matched) -->
+    {#if rangeFilterWarning?.key === 'inactive'}
+      {@render rangeFilterHealthBanner(
+        true,
+        t('settings.species.activeSpecies.rangeFilterHealth.inactive.title'),
+        t('settings.species.activeSpecies.rangeFilterHealth.inactive.description')
+      )}
+    {:else if rangeFilterWarning?.key === 'fellBack'}
+      {@render rangeFilterHealthBanner(
+        false,
+        t('settings.species.activeSpecies.rangeFilterHealth.fellBack.title'),
+        t('settings.species.activeSpecies.rangeFilterHealth.fellBack.description')
+      )}
+    {:else if rangeFilterWarning?.key === 'mappedZero'}
+      {@render rangeFilterHealthBanner(
+        false,
+        t('settings.species.activeSpecies.rangeFilterHealth.mappedZero.title'),
+        t('settings.species.activeSpecies.rangeFilterHealth.mappedZero.description')
+      )}
+    {/if}
+
     <!-- Stats Bar -->
     {#if activeSpeciesState.data}
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">

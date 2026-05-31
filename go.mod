@@ -34,9 +34,9 @@ require (
 	github.com/testcontainers/testcontainers-go v0.42.0
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.42.0
 	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
-	github.com/tphakala/go-audio-resampler v1.3.0
+	github.com/tphakala/go-audio-resampler v1.4.0
 	github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7
-	github.com/tphakala/simd v1.0.22
+	github.com/tphakala/simd v1.1.0
 	github.com/yalue/onnxruntime_go v1.30.1
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.52.0
@@ -112,7 +112,6 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/term v0.43.0 // indirect
-	gonum.org/v1/gonum v0.17.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260511170946-3700d4141b60 // indirect
 	google.golang.org/grpc v1.81.1 // indirect
 )
