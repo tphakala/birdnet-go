@@ -120,7 +120,7 @@
     timePeriod: 'all',
     startDate: '',
     endDate: '',
-    // Restore the persisted sort so it survives a refresh; default to species name.
+    // Restore the persisted sort so it survives a refresh; default to detection count descending.
     sortOrder: getStoredValue<SortOrder>(SORT_STORAGE_KEY, DEFAULT_SORT_ORDER, isSortOrder),
     searchTerm: '',
   });
@@ -136,7 +136,13 @@
     activeColumn?.desc === filters.sortOrder ? 'desc' : 'asc'
   );
 
-  // Clicking a header re-clicking the active column toggles its direction; a new
+  // Persist sort order to localStorage whenever it changes (covers both header
+  // clicks and dropdown changes submitted via the filter form).
+  $effect(() => {
+    setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
+  });
+
+  // Clicking a header: re-clicking the active column toggles direction; a new
   // column starts at its default (ascending for species name, descending else).
   function handleSort(field: string) {
     const column = SORTABLE_COLUMNS.find(c => c.field === field);
@@ -146,11 +152,10 @@
         ? filters.sortOrder === column.asc
           ? column.desc
           : column.asc
-        : field === 'species'
+        : field === SORTABLE_COLUMNS[0].field
           ? column.asc
           : column.desc;
     filters.sortOrder = next;
-    setStoredValue<SortOrder>(SORT_STORAGE_KEY, next);
     applyFilters();
   }
 
