@@ -98,8 +98,8 @@
     },
   ];
 
-  // Default sort and persistence (survives a page refresh). Species name first.
-  const DEFAULT_SORT_ORDER: SortOrder = 'name_asc';
+  // Default sort and persistence (survives a page refresh).
+  const DEFAULT_SORT_ORDER: SortOrder = 'count_desc';
   const SORT_STORAGE_KEY = 'analytics.species.sortOrder';
   const VALID_SORT_ORDERS: Set<string> = new Set<string>(
     SORTABLE_COLUMNS.flatMap(column => [column.asc, column.desc])

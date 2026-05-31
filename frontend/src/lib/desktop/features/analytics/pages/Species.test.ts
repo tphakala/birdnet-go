@@ -201,27 +201,29 @@ describe('Species (analytics page) — sortable column headers', () => {
     );
   }
 
-  it('defaults to sorting by species name ascending', async () => {
+  it('defaults to sorting by detection count descending', async () => {
     const { container } = await renderListView();
 
-    expect(rowNames(container)).toEqual(['American Robin', 'Blue Jay', 'Zebra Finch']);
-    expect(container.querySelector('table thead th')?.getAttribute('aria-sort')).toBe('ascending');
-  });
-
-  it('sorts by detection count descending on first header click and toggles on second', async () => {
-    const { container } = await renderListView();
-    const countButton = container.querySelectorAll('table thead th button')[1]; // species, count, …
-
-    await fireEvent.click(countButton);
     expect(rowNames(container)).toEqual(['Blue Jay', 'Zebra Finch', 'American Robin']);
     expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
       'descending'
     );
+  });
+
+  it('toggles detection count to ascending on first header click and back on second', async () => {
+    const { container } = await renderListView();
+    const countButton = container.querySelectorAll('table thead th button')[1]; // species, count, …
 
     await fireEvent.click(countButton);
     expect(rowNames(container)).toEqual(['American Robin', 'Zebra Finch', 'Blue Jay']);
     expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
       'ascending'
+    );
+
+    await fireEvent.click(countButton);
+    expect(rowNames(container)).toEqual(['Blue Jay', 'Zebra Finch', 'American Robin']);
+    expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
+      'descending'
     );
   });
 
@@ -229,7 +231,7 @@ describe('Species (analytics page) — sortable column headers', () => {
     const { container } = await renderListView();
 
     await fireEvent.click(container.querySelectorAll('table thead th button')[1]);
-    expect(window.localStorage.getItem(SORT_STORAGE_KEY)).toBe('"count_desc"');
+    expect(window.localStorage.getItem(SORT_STORAGE_KEY)).toBe('"count_asc"');
   });
 
   it('restores a persisted sort order on a fresh render', async () => {
