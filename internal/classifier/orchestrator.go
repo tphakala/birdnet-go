@@ -7,13 +7,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -374,9 +377,31 @@ func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float
 }
 
 // GetAllProbableSpeciesWithSettings returns species from all active classifiers.
-// The primary BirdNET model's species are filtered by the range filter using the
-// supplied settings. Additional models (except bat) contribute their full label
-// set since they have no range filter. Results are deduplicated by label.
+//
+// The primary BirdNET model's species are filtered by the range filter using
+// the supplied settings. When the primary uses a v3 geomodel, those primary
+// scores already contain the full geomodel label set above the configured
+// threshold ("ScientificName_CommonName"), exclude-filtered.
+//
+// Additional models (except bat) emit labels in their own convention (Perch v2
+// uses scientific-name-only labels). To decide whether a non-primary species
+// should be added, the geomodel's coverage is consulted by scientific name:
+//
+//   - already represented (present in the primary scores) -> skip (no duplicate)
+//   - geomodel-covered but NOT above threshold            -> skip; the range
+//     filter excludes it (this is the core fix for the active-species balloon
+//     in issue #3250, where exact-string dedup let geomodel-covered Perch
+//     species slip back in at score 1.0)
+//   - geomodel-unmapped (no scientific-name match)        -> pass through at
+//     score 1.0 only when PassUnmappedSpecies is enabled and the species is not
+//     excluded
+//
+// When the primary is not a universal predictor (legacy TFLite range filter
+// with no geomodel) there is no coverage set to consult, so every non-primary
+// label whose scientific name is not already represented is added at score 1.0
+// (exclude honored), preserving prior multi-classifier behavior. Deduplication
+// is by scientific name throughout, never exact label, because the geomodel and
+// Perch use different label conventions for the same species.
 func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
 	// Snapshot primary under read lock to avoid racing with Delete().
 	o.mu.RLock()
@@ -391,9 +416,27 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		return nil, err
 	}
 
-	seen := make(map[string]bool, len(scores))
+	// Read the primary's geomodel coverage the same way BuildRangeFilter does.
+	// geoLabels covers every scientific name the geomodel knows, regardless of
+	// threshold; it is empty when the primary is not a universal predictor.
+	primary.mu.Lock()
+	up, isUniversal := primary.rangeFilter.(UniversalSpeciesPredictor)
+	var geoLabels []string
+	if isUniversal {
+		geoLabels = up.GeomodelLabels()
+	}
+	primary.mu.Unlock()
+
+	// Dedup by scientific name (lowercased). seenSci holds species already
+	// represented via the primary scores; geoCovered holds every scientific
+	// name the geomodel can predict at all.
+	seenSci := make(map[string]bool, len(scores))
 	for _, s := range scores {
-		seen[s.Label] = true
+		seenSci[strings.ToLower(detection.ExtractScientificName(s.Label))] = true
+	}
+	geoCovered := make(map[string]bool, len(geoLabels))
+	for _, label := range geoLabels {
+		geoCovered[strings.ToLower(detection.ExtractScientificName(label))] = true
 	}
 
 	type entryRef struct {
@@ -401,9 +444,9 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		entry *modelEntry
 	}
 
-	var refs []entryRef
 	o.mu.RLock()
 	primaryID := primary.ModelInfo.ID
+	refs := make([]entryRef, 0, len(o.models))
 	for id, entry := range o.models {
 		if id == primaryID || id == RegistryIDBat {
 			continue
@@ -411,6 +454,15 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		refs = append(refs, entryRef{id: id, entry: entry})
 	}
 	o.mu.RUnlock()
+
+	// Sort non-primary models by ID so dedup-by-scientific-name is
+	// deterministic. When two secondary models emit different labels for the
+	// same scientific name, the surviving label must not depend on Go's
+	// randomized map iteration order.
+	sort.Slice(refs, func(i, j int) bool { return refs[i].id < refs[j].id })
+
+	passUnmapped := settings.BirdNET.RangeFilter.PassUnmappedSpecies
+	excludeList := settings.Realtime.Species.Exclude
 
 	for _, ref := range refs {
 		ref.entry.mu.Lock()
@@ -421,10 +473,38 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		labels := ref.entry.instance.Labels()
 		ref.entry.mu.Unlock()
 
+		// Grow scores capacity once per model; an upper bound is one new entry
+		// per non-primary label.
+		if len(labels) > 0 {
+			scores = slices.Grow(scores, len(labels))
+		}
+
 		for _, label := range labels {
-			if !seen[label] {
-				scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
-				seen[label] = true
+			sci := strings.ToLower(detection.ExtractScientificName(label))
+			switch {
+			case seenSci[sci]:
+				// Already represented via the primary (or an earlier model).
+				continue
+			case isUniversal && geoCovered[sci]:
+				// Geomodel covers this species but it is not in the
+				// above-threshold set, so the range filter excludes it. Skip.
+				continue
+			default:
+				// Geomodel-unmapped, or the primary is not universal.
+				if !isUniversal {
+					// Legacy path: no geomodel to consult. Preserve prior
+					// behavior and include the species, deduped by scientific
+					// name, without gating on PassUnmappedSpecies.
+					if !isSpeciesExcluded(label, excludeList) {
+						scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
+						seenSci[sci] = true
+					}
+					continue
+				}
+				if passUnmapped && !isSpeciesExcluded(label, excludeList) {
+					scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
+					seenSci[sci] = true
+				}
 			}
 		}
 	}
