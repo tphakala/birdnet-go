@@ -46,8 +46,10 @@ func redirectConfigFile(t *testing.T) {
 func TestDecideGeomodelOrphanAction(t *testing.T) {
 	t.Parallel()
 
-	const modelPath = "/models/shared/geomodel_v3.0.2_fp16.onnx"
-	const labelsPath = "/models/shared/geomodel_v3.0.2_labels.txt"
+	var (
+		modelPath  = "/models/shared/" + geomodelONNXLocalName
+		labelsPath = "/models/shared/" + geomodelLabelsLocalName
+	)
 
 	tests := []struct {
 		name         string
