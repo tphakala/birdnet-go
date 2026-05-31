@@ -40,8 +40,9 @@ type modelEntry struct {
 //
 // Delete/UnloadModel acquire mu + entry.mu but NOT inferenceMu.
 type Orchestrator struct {
-	// Public fields — same layout as BirdNET for drop-in caller migration.
-	Settings        *conf.Settings
+	// Public fields, same layout as BirdNET for drop-in caller migration.
+	Settings        *conf.Settings // Deprecated: use CurrentSettings() instead.
+	settingsAtomic  atomic.Pointer[conf.Settings]
 	ModelInfo       ModelInfo
 	TaxonomyMap     TaxonomyMap
 	TaxonomyPath    string
@@ -65,10 +66,26 @@ type Orchestrator struct {
 	scheduler atomic.Pointer[nighttimeScheduler]
 }
 
+// CurrentSettings returns the latest settings snapshot published via
+// conf.StoreSettings, or the Orchestrator's constructor-provided settings when none
+// has been published.
+func (o *Orchestrator) CurrentSettings() *conf.Settings {
+	if s := o.settingsAtomic.Load(); s != nil {
+		return conf.CurrentOrFallback(s)
+	}
+	return conf.CurrentOrFallback(o.Settings)
+}
+
 // currentSettings returns the latest settings snapshot so hot-reloaded
 // values (threads, locale, etc.) take effect without restarting.
 func (o *Orchestrator) currentSettings() *conf.Settings {
-	return conf.CurrentOrFallback(o.Settings)
+	return o.CurrentSettings()
+}
+
+// updateSettings updates the settings pointer safely and atomically.
+func (o *Orchestrator) updateSettings(s *conf.Settings) {
+	o.Settings = s
+	o.settingsAtomic.Store(s)
 }
 
 // NewOrchestrator creates a new Orchestrator with BirdNET as the primary model
@@ -105,6 +122,7 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		},
 		primary: bn,
 	}
+	o.settingsAtomic.Store(settings)
 
 	// Pre-compute thread allocation so model constructors receive their share.
 	// BirdNET already uses settings.BirdNET.Threads at construction; additional
@@ -553,6 +571,16 @@ func (o *Orchestrator) GetSpeciesOccurrenceAtTime(species string, detectionTime 
 	return o.primary.GetSpeciesOccurrenceAtTime(species, detectionTime)
 }
 
+// NumSpecies returns the number of species labels of the primary model.
+func (o *Orchestrator) NumSpecies() int {
+	return o.primary.NumSpecies()
+}
+
+// Labels returns a copy of the species labels of the primary model.
+func (o *Orchestrator) Labels() []string {
+	return o.primary.Labels()
+}
+
 // GetSpeciesCode returns the eBird species code for a given label.
 func (o *Orchestrator) GetSpeciesCode(label string) (string, bool) {
 	return o.primary.GetSpeciesCode(label)
@@ -803,6 +831,9 @@ func (o *Orchestrator) ReloadModel() error {
 		newModels[e.instance.ModelID()] = e
 	}
 	o.models = newModels
+
+	// Update settings atomically
+	o.updateSettings(o.primary.currentSettings())
 
 	return nil
 }

@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -49,7 +50,8 @@ type BirdNET struct {
 	// and the classifier fell back to its embedded TFLite range filter. Read for health
 	// reporting; guarded by mu alongside rangeFilter.
 	rangeFilterFellBack bool
-	Settings            *conf.Settings
+	Settings            *conf.Settings // Deprecated: use settingsAtomic instead. Kept for struct-literal compatibility in tests.
+	settingsAtomic      atomic.Pointer[conf.Settings]
 	ModelInfo           ModelInfo           // Information about the current model
 	TaxonomyMap         TaxonomyMap         // Mapping of species codes to names and vice versa
 	ScientificIndex     ScientificNameIndex // Index for fast scientific name lookups
@@ -68,7 +70,16 @@ type BirdNET struct {
 // currentSettings returns the latest settings snapshot so UI changes to
 // sensitivity, location, and labels take effect without restarting the service.
 func (bn *BirdNET) currentSettings() *conf.Settings {
+	if s := bn.settingsAtomic.Load(); s != nil {
+		return conf.CurrentOrFallback(s)
+	}
 	return conf.CurrentOrFallback(bn.Settings)
+}
+
+// updateSettings updates the settings pointer safely and atomically.
+func (bn *BirdNET) updateSettings(s *conf.Settings) {
+	bn.Settings = s
+	bn.settingsAtomic.Store(s)
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
@@ -81,6 +92,7 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 		modelVersion: defaultModelVersionString,
 		speciesCache: make(map[string]*speciesCacheEntry),
 	}
+	bn.settingsAtomic.Store(settings)
 
 	// Resolve model identity via the resolution chain
 	var err error
@@ -136,7 +148,7 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			Build()
 	}
 
-	// Load labels before model initialization — ONNX models require labels
+	// Load labels before model initialization; ONNX models require labels
 	// at construction time for output dimension validation.
 	if err := bn.loadLabels(); err != nil {
 		return nil, errors.New(err).
@@ -157,7 +169,7 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			Build()
 	}
 
-	if err := bn.initializeMetaModel(); err != nil {
+	if err := bn.initializeMetaModel(settings); err != nil {
 		GetLogger().Warn("Range filter initialization failed, starting without species filtering (fix via Settings > Species)",
 			logger.Error(err),
 			logger.String("range_filter_model", settings.BirdNET.RangeFilter.Model),
@@ -248,7 +260,7 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 
 	// Update the human-readable model version string for display when a custom
 	// model path is provided. Model identity (ModelInfo.ID) is never modified
-	// here — it was fully resolved by NewBirdNET's 4-tier resolution chain.
+	// here, as it was fully resolved by NewBirdNET's 4-tier resolution chain.
 	if bn.Settings.BirdNET.ModelPath != "" {
 		bn.modelVersion = bn.Settings.BirdNET.ModelPath
 	}
@@ -410,9 +422,8 @@ func (bn *BirdNET) hasNativeRangeFilter() bool {
 	return bn.ModelInfo.Backend == BackendTFLite && bn.ModelInfo.ID == DefaultModelVersion
 }
 
-func (bn *BirdNET) initializeMetaModel() error {
+func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
 	log := GetLogger()
-	settings := bn.currentSettings()
 	rf := settings.BirdNET.RangeFilter
 
 	log.Info("Initializing range filter",
@@ -600,11 +611,22 @@ func (bn *BirdNET) loadExternalLabels() error {
 		"birdnet-label-loading",
 	)
 
-	file, err := os.Open(bn.Settings.BirdNET.LabelPath)
+	labelPath := os.ExpandEnv(bn.Settings.BirdNET.LabelPath)
+	expandedPath, err := conf.ExpandTildePath(labelPath)
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryFileIO).
 			Context("label_path", bn.Settings.BirdNET.LabelPath).
+			Context("operation", "expand_path").
+			Timing("label-file-open", time.Since(start)).
+			Build()
+	}
+
+	file, err := os.Open(expandedPath)
+	if err != nil {
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("label_path", expandedPath).
 			Context("operation", "open").
 			Timing("label-file-open", time.Since(start)).
 			Build()
@@ -613,7 +635,7 @@ func (bn *BirdNET) loadExternalLabels() error {
 		if err := file.Close(); err != nil {
 			GetLogger().Warn("Failed to close label file",
 				logger.Error(err),
-				logger.String("path", bn.Settings.BirdNET.LabelPath))
+				logger.String("path", expandedPath))
 		}
 	}()
 
@@ -622,7 +644,7 @@ func (bn *BirdNET) loadExternalLabels() error {
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryLabelLoad).
-			Context("label_path", bn.Settings.BirdNET.LabelPath).
+			Context("label_path", expandedPath).
 			Context("operation", "parse").
 			Timing("label-file-load", time.Since(start)).
 			Build()
@@ -769,7 +791,7 @@ func (bn *BirdNET) ReloadRangeFilter() error {
 	oldRangeFilter := bn.rangeFilter
 	oldFellBack := bn.rangeFilterFellBack
 
-	if err := bn.initializeMetaModel(); err != nil {
+	if err := bn.initializeMetaModel(bn.currentSettings()); err != nil {
 		// Rollback: restore old range filter (and its fallback state) if init created a
 		// partial one. initializeMetaModel resets rangeFilterFellBack on entry, so the
 		// flag must be restored alongside the filter to keep the health report accurate.
@@ -1023,6 +1045,19 @@ func (bn *BirdNET) validateModelAndLabels() error {
 
 // ReloadModel safely reloads the BirdNET model and labels while handling ongoing analysis
 func (bn *BirdNET) ReloadModel() error {
+	err := bn.reloadModelInternal()
+	if err == nil {
+		// Return freed native pages to the OS. Both backends free native memory in
+		// Close(), but libc may retain freed pages. FreeOSMemory hints the
+		// runtime and libc to release them, reducing RSS after reload.
+		// Run outside the exclusive lock region because synchronous GC and memory
+		// release can take >100ms and stall concurrent requests.
+		debug.FreeOSMemory()
+	}
+	return err
+}
+
+func (bn *BirdNET) reloadModelInternal() error {
 	bn.Debug("Acquiring mutex for model reload")
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
@@ -1030,9 +1065,9 @@ func (bn *BirdNET) ReloadModel() error {
 
 	// Get fresh settings so sub-methods see the latest config.
 	fresh := bn.currentSettings()
-	settingsCopy := *fresh
+	settingsCopy := conf.CloneSettings(fresh)
 	oldSettings := bn.Settings
-	bn.Settings = &settingsCopy
+	bn.Settings = settingsCopy
 
 	// Snapshot all mutable state for transactional rollback on failure.
 	oldClassifier := bn.classifier
@@ -1057,7 +1092,7 @@ func (bn *BirdNET) ReloadModel() error {
 		bn.ModelInfo = oldModelInfo
 		bn.TaxonomyMap = oldTaxonomyMap
 		bn.ScientificIndex = oldScientificIndex
-		bn.Settings = oldSettings
+		bn.updateSettings(oldSettings)
 	}
 
 	// Check if model version changed; if so, the orchestrator must handle
@@ -1126,7 +1161,7 @@ func (bn *BirdNET) ReloadModel() error {
 	}
 	bn.Debug("Taxonomy data reloaded successfully")
 
-	// Reload labels before model initialization — ONNX models require labels
+	// Reload labels before model initialization; ONNX models require labels
 	// at construction time for output dimension validation.
 	if err := bn.loadLabels(); err != nil {
 		rollback()
@@ -1152,7 +1187,7 @@ func (bn *BirdNET) ReloadModel() error {
 	bn.Debug("Model initialized successfully")
 
 	// Initialize new meta model
-	if err := bn.initializeMetaModel(); err != nil {
+	if err := bn.initializeMetaModel(settingsCopy); err != nil {
 		rollback()
 		return errors.New(err).
 			Component("birdnet").
@@ -1185,10 +1220,8 @@ func (bn *BirdNET) ReloadModel() error {
 		oldRangeFilter.Close()
 	}
 
-	// Return freed native pages to the OS. Both backends free native memory in
-	// Close() above, but libc may retain freed pages. FreeOSMemory hints the
-	// runtime and libc to release them, reducing RSS after reload.
-	debug.FreeOSMemory()
+	// Publish the new settings atomically
+	bn.updateSettings(settingsCopy)
 
 	// Clear species cache as model/labels have changed
 	bn.clearSpeciesCache()
@@ -1214,7 +1247,7 @@ func (bn *BirdNET) GetSpeciesWithScientificAndCommonName(label string) (scientif
 // Debug prints debug messages if debug mode is enabled.
 // Uses the centralized logger for structured logging.
 func (bn *BirdNET) Debug(format string, v ...any) {
-	if bn.Settings.BirdNET.Debug {
+	if bn.currentSettings().BirdNET.Debug {
 		GetLogger().Debug(fmt.Sprintf(format, v...))
 	}
 }
@@ -1353,7 +1386,7 @@ func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, co
 	code, exists := GetSpeciesCodeFromName(taxMap, sciIndex, speciesLabel)
 	if !exists {
 		// We got a placeholder code for a species not in our taxonomy
-		if bn.Settings.BirdNET.Debug {
+		if bn.currentSettings().BirdNET.Debug {
 			bn.Debug("Species '%s' not found in taxonomy, using generated placeholder code: %s", speciesLabel, code)
 		}
 	}

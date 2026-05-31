@@ -127,7 +127,9 @@ func (c *Controller) GetAllSpecies(ctx echo.Context) error {
 		logger.String("path", path),
 	)
 
+	c.settingsMutex.RLock()
 	labels := c.Settings.BirdNET.Labels
+	c.settingsMutex.RUnlock()
 	speciesList := make([]RangeFilterSpecies, 0, len(labels))
 
 	for _, label := range labels {
@@ -198,7 +200,8 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 	var matchedLabel string
 	var commonName string
 
-	for _, label := range bn.Settings.BirdNET.Labels {
+	settings := bn.CurrentSettings()
+	for _, label := range settings.BirdNET.Labels {
 		sp := detection.ParseSpeciesString(label)
 		if strings.EqualFold(sp.ScientificName, scientificName) {
 			matchedLabel = label
@@ -258,16 +261,17 @@ func (c *Controller) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLa
 	}
 
 	// Create rarity info
+	settings := bn.CurrentSettings()
 	rarityInfo := &SpeciesRarityInfo{
 		Date:             today.Format(time.DateOnly),
-		LocationBased:    bn.Settings.BirdNET.LocationConfigured,
-		ThresholdApplied: float64(bn.Settings.BirdNET.RangeFilter.Threshold),
+		LocationBased:    settings.BirdNET.LocationConfigured,
+		ThresholdApplied: float64(settings.BirdNET.RangeFilter.Threshold),
 	}
 
 	// Add location if available
 	if rarityInfo.LocationBased {
-		rarityInfo.Latitude = bn.Settings.BirdNET.Latitude
-		rarityInfo.Longitude = bn.Settings.BirdNET.Longitude
+		rarityInfo.Latitude = settings.BirdNET.Latitude
+		rarityInfo.Longitude = settings.BirdNET.Longitude
 	}
 
 	// Find the species score

@@ -580,22 +580,28 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 
 	subdir := filepath.Join(mm.modelsDir, catalogID)
 
+	var deleteErr error
+
 	// Delete model ONNX files and associated data files (calibration, distribution, etc.).
 	for _, f := range entry.Files {
 		if f.Role == RoleModel || f.Role == RoleData {
 			path := filepath.Join(subdir, f.LocalName)
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				return errors.Newf("failed to remove file %s: %v", path, err).
-					Component("classifier.model_manager").
-					Category(errors.CategoryFileIO).
-					Context("catalog_id", catalogID).
-					Context("file", path).
-					Build()
+			err := os.Remove(path)
+			if err == nil {
+				log.Info("Removed file",
+					logger.String("catalog_id", catalogID),
+					logger.String("role", f.Role),
+					logger.String("path", path))
+				continue
 			}
-			log.Info("Removed file",
-				logger.String("catalog_id", catalogID),
-				logger.String("role", f.Role),
-				logger.String("path", path))
+			if !os.IsNotExist(err) {
+				log.Error("Failed to remove file during uninstall",
+					logger.String("path", path),
+					logger.Error(err))
+				if deleteErr == nil {
+					deleteErr = err
+				}
+			}
 		}
 	}
 
@@ -635,6 +641,14 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 
 	log.Info("Model uninstalled",
 		logger.String("catalog_id", catalogID))
+
+	if deleteErr != nil {
+		return errors.Newf("model uninstalled, but failed to remove some files: %v", deleteErr).
+			Component("classifier.model_manager").
+			Category(errors.CategoryFileIO).
+			Context("catalog_id", catalogID).
+			Build()
+	}
 
 	return nil
 }
@@ -751,6 +765,20 @@ func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, base
 			Category(errors.CategoryValidation).
 			Context("catalog_id", entry.ID).
 			Build()
+	}
+
+	// Unload from orchestrator BEFORE overwriting files to avoid crashes.
+	if mm.orchestrator != nil && entry.RegistryID != "" && mm.orchestrator.IsModelLoaded(entry.RegistryID) {
+		if err := mm.orchestrator.UnloadModel(entry.RegistryID); err != nil {
+			mm.mu.Unlock()
+			return errors.Newf("cannot reinstall %s: model still in use", entry.ID).
+				Component("classifier.model_manager").
+				Category(errors.CategorySystem).
+				Context("catalog_id", entry.ID).
+				Context("registry_id", entry.RegistryID).
+				Context("unload_error", err.Error()).
+				Build()
+		}
 	}
 
 	// Record download as in-progress.

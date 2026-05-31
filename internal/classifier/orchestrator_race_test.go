@@ -207,3 +207,77 @@ func TestOrchestrator_ConcurrentReloadSnapshot_NoRace(t *testing.T) {
 	close(start)
 	wg.Wait()
 }
+
+// TestBirdNET_ConcurrentSettingsReadsAndWrites_NoRace verifies that calling currentSettings
+// and Debug concurrently with simulated ReloadModel settings updates does not cause a data race.
+func TestBirdNET_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
+	settings := &conf.Settings{}
+	bn, err := NewBirdNET(settings, nil)
+	require.NoError(t, err)
+
+	const iterations = 1000
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+
+	// Writer: simulates ReloadModel() updating Settings copy
+	wg.Go(func() {
+		<-start
+		for i := range iterations {
+			settingsCopy := conf.CloneSettings(settings)
+			settingsCopy.BirdNET.Debug = i%2 == 0
+			bn.mu.Lock()
+			bn.updateSettings(settingsCopy)
+			bn.mu.Unlock()
+		}
+	})
+
+	// Reader: concurrently calls currentSettings, Debug, and EnrichResultWithTaxonomy
+	wg.Go(func() {
+		<-start
+		for range iterations {
+			_ = bn.currentSettings()
+			bn.Debug("test debug message")
+			_, _, _ = bn.EnrichResultWithTaxonomy("Turdus merula_Common Blackbird")
+		}
+	})
+
+	close(start)
+	wg.Wait()
+}
+
+// TestOrchestrator_ConcurrentSettingsReadsAndWrites_NoRace verifies that calling CurrentSettings
+// concurrently with simulated ReloadModel settings updates on the Orchestrator does not cause a data race.
+func TestOrchestrator_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
+	settings := &conf.Settings{}
+	o, err := NewOrchestrator(settings)
+	require.NoError(t, err)
+
+	const iterations = 1000
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+
+	// Writer: simulates ReloadModel() updating settings on Orchestrator
+	wg.Go(func() {
+		<-start
+		for i := range iterations {
+			settingsCopy := conf.CloneSettings(settings)
+			settingsCopy.BirdNET.Debug = i%2 == 0
+			o.mu.Lock()
+			o.updateSettings(settingsCopy)
+			o.mu.Unlock()
+		}
+	})
+
+	// Reader: concurrently calls CurrentSettings, Labels, and NumSpecies
+	wg.Go(func() {
+		<-start
+		for range iterations {
+			_ = o.CurrentSettings()
+			_ = o.Labels()
+			_ = o.NumSpecies()
+		}
+	})
+
+	close(start)
+	wg.Wait()
+}
