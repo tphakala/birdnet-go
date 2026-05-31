@@ -20,9 +20,11 @@ import (
 func TestResolveRangeFilterBackend(t *testing.T) {
 	t.Parallel()
 
+	const sharedModelPathPrefix = "/data/model/shared/"
+
 	var (
-		geomodelONNX   = "/data/model/shared/" + geomodelONNXLocalName
-		geomodelLabels = "/data/model/shared/" + geomodelLabelsLocalName
+		geomodelONNX   = sharedModelPathPrefix + geomodelONNXLocalName
+		geomodelLabels = sharedModelPathPrefix + geomodelLabelsLocalName
 		customONNX     = "/data/model/custom_rangefilter.onnx"
 	)
 

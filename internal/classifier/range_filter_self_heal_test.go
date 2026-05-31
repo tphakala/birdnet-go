@@ -46,9 +46,11 @@ func redirectConfigFile(t *testing.T) {
 func TestDecideGeomodelOrphanAction(t *testing.T) {
 	t.Parallel()
 
+	const gallerySharedDirPrefix = "/models/shared/"
+
 	var (
-		modelPath  = "/models/shared/" + geomodelONNXLocalName
-		labelsPath = "/models/shared/" + geomodelLabelsLocalName
+		modelPath  = gallerySharedDirPrefix + geomodelONNXLocalName
+		labelsPath = gallerySharedDirPrefix + geomodelLabelsLocalName
 	)
 
 	tests := []struct {
