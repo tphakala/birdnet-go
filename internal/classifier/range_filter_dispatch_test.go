@@ -123,4 +123,13 @@ func TestHasNativeRangeFilter(t *testing.T) {
 			assert.Equal(t, tt.want, bn.hasNativeRangeFilter())
 		})
 	}
+
+	// A custom or future TFLite-backed classifier is not BirdNET v2.4, so it must not
+	// fall back to the v2.4-specific embedded MData range filter; it should surface as
+	// unhealthy instead of silently filtering against mismatched labels.
+	t.Run("custom non-v2.4 TFLite model has no native range filter", func(t *testing.T) {
+		t.Parallel()
+		bn := &BirdNET{ModelInfo: ModelInfo{ID: "Custom_TFLite", Backend: BackendTFLite}}
+		assert.False(t, bn.hasNativeRangeFilter())
+	})
 }

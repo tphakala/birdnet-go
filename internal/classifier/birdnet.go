@@ -400,8 +400,14 @@ func resolveRangeFilterBackend(rf *conf.RangeFilterSettings) rangeFilterBackend 
 // native range filter to fall back to when an ONNX geomodel cannot be loaded. Only
 // BirdNET v2.4 (TFLite backend) carries the embedded MData range filter; Perch v2 and
 // BirdNET v3.0 (ONNX backends) rely solely on the geomodel.
+// hasNativeRangeFilter reports whether the active classifier ships with an embedded
+// native range filter to fall back to when an ONNX geomodel cannot be loaded. The
+// embedded MData range filter is BirdNET v2.4 specific, so only that classifier qualifies.
+// Perch v2 and BirdNET v3.0 (ONNX backends) rely solely on the geomodel, and any other
+// TFLite-backed (custom or future) classifier must surface as unhealthy rather than
+// silently filtering against the v2.4 labels.
 func (bn *BirdNET) hasNativeRangeFilter() bool {
-	return bn.ModelInfo.Backend == BackendTFLite
+	return bn.ModelInfo.Backend == BackendTFLite && bn.ModelInfo.ID == DefaultModelVersion
 }
 
 func (bn *BirdNET) initializeMetaModel() error {
