@@ -51,27 +51,37 @@ func (bn *BirdNET) initializeONNXModel() error {
 	return nil
 }
 
-// initializeONNXMetaModel loads and initializes an ONNX range filter meta model.
-// For v3 geomodel, delegates to initializeV3GeoModel which loads the geomodel
-// with its own 12K labels and wraps it in a mappedRangeFilter.
-func (bn *BirdNET) initializeONNXMetaModel() error {
-	settings := bn.currentSettings()
+// initializeONNXMetaModel loads and initializes an ONNX range filter meta model from
+// the given resolved settings. A geomodel-shaped config (model=="v3" or an ONNX model
+// path paired with a companion labels file) delegates to initializeMappedGeoModel, which
+// loads the geomodel with its own labels and wraps it in a mappedRangeFilter that scores
+// by scientific name. An ONNX model path without a companion labels file uses the strict
+// path, where the model output dimension must match the classifier label count.
+func (bn *BirdNET) initializeONNXMetaModel(settings *conf.Settings) error {
 	start := time.Now()
+	rf := settings.BirdNET.RangeFilter
+	mapped := resolveRangeFilterBackend(&rf) == rangeFilterBackendMappedGeomodel
 
 	modelName := "ONNX range filter"
 	modelCtx := "range_filter"
-	if settings.BirdNET.RangeFilter.Model == "v3" {
+	switch {
+	case rf.Model == "v3":
 		modelName = "v3 geomodel"
 		modelCtx = "v3_geomodel"
+	case mapped:
+		modelName = "geomodel range filter"
+		modelCtx = "geomodel"
 	}
 	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, modelName, modelCtx, ""); err != nil {
 		return err
 	}
 
-	if settings.BirdNET.RangeFilter.Model == "v3" {
-		return bn.initializeV3GeoModel()
+	if mapped {
+		return bn.initializeMappedGeoModel(settings)
 	}
 
+	// Strict path: no companion labels file, so the classifier labels must match the
+	// model output dimension one-to-one.
 	// Ensure ONNX Runtime is initialized (idempotent - may already be init from classifier)
 	if err := inference.InitONNXRuntime(settings.BirdNET.ONNXRuntimePath); err != nil {
 		return errors.New(err).
@@ -82,7 +92,7 @@ func (bn *BirdNET) initializeONNXMetaModel() error {
 	}
 
 	rangeFilter, err := inference.NewONNXRangeFilter(
-		settings.BirdNET.RangeFilter.ModelPath,
+		rf.ModelPath,
 		inference.ONNXRangeFilterOptions{
 			Labels: settings.BirdNET.Labels,
 		},
@@ -91,7 +101,7 @@ func (bn *BirdNET) initializeONNXMetaModel() error {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
 			Context("model_type", "range_filter").
-			Context("range_filter_model", settings.BirdNET.RangeFilter.ModelPath).
+			Context("range_filter_model", rf.ModelPath).
 			Timing("onnx-meta-model-init", time.Since(start)).
 			Build()
 	}
@@ -100,31 +110,33 @@ func (bn *BirdNET) initializeONNXMetaModel() error {
 	return nil
 }
 
-// initializeV3GeoModel loads the v3.0 geomodel ONNX with its own 12K labels,
-// then wraps the raw ONNX range filter in a mappedRangeFilter that remaps
-// geomodel output scores to the classifier's label order by matching scientific
-// names. This enables the 12K-species geomodel to work with any classifier.
-func (bn *BirdNET) initializeV3GeoModel() error {
+// initializeMappedGeoModel loads the geomodel ONNX with its own labels (e.g. 12K
+// species), then wraps the raw ONNX range filter in a mappedRangeFilter that remaps
+// geomodel output scores to the classifier's label order by matching scientific names.
+// This enables the geomodel to work with any classifier and makes a label-count
+// difference a name-matching problem rather than a fatal LabelCountError. Used for both
+// the explicit v3 config and orphaned geomodel configs (model=="" with a labels file).
+func (bn *BirdNET) initializeMappedGeoModel(settings *conf.Settings) error {
 	start := time.Now()
 	log := GetLogger()
-	settings := bn.currentSettings()
 	rfSettings := settings.BirdNET.RangeFilter
 
-	log.Info("V3 geomodel: starting initialization",
+	log.Info("Geomodel range filter: starting initialization",
+		logger.String("model", rfSettings.Model),
 		logger.String("model_path", rfSettings.ModelPath),
 		logger.String("labels_path", rfSettings.LabelsPath),
 		logger.Int("classifier_labels", len(settings.BirdNET.Labels)))
 
 	if rfSettings.ModelPath == "" {
-		return errors.Newf("v3 geomodel requires rangefilter.modelpath to be set").
+		return errors.Newf("geomodel range filter requires rangefilter.modelpath to be set").
 			Category(errors.CategoryModelInit).
-			Context("model", "v3").
+			Context("model_type", "geomodel").
 			Build()
 	}
 	if rfSettings.LabelsPath == "" {
-		return errors.Newf("v3 geomodel requires rangefilter.labelspath to be set").
+		return errors.Newf("geomodel range filter requires rangefilter.labelspath to be set").
 			Category(errors.CategoryModelInit).
-			Context("model", "v3").
+			Context("model_type", "geomodel").
 			Build()
 	}
 
@@ -148,7 +160,7 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 	}
 
 	// Ensure ONNX Runtime is initialized (ORT availability checked by initializeONNXMetaModel)
-	log.Debug("V3 geomodel: initializing ONNX Runtime")
+	log.Debug("Geomodel range filter: initializing ONNX Runtime")
 	if err := inference.InitONNXRuntime(settings.BirdNET.ONNXRuntimePath); err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
@@ -158,29 +170,29 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 	}
 
 	// Load geomodel labels from file
-	log.Debug("V3 geomodel: loading labels", logger.String("path", labelsPath))
+	log.Debug("Geomodel range filter: loading labels", logger.String("path", labelsPath))
 	geoLabels, err := onnx.LoadLabels(labelsPath)
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
-			Context("model_type", "v3_geomodel").
+			Context("model_type", "geomodel").
 			Context("labels_path", labelsPath).
 			Build()
 	}
 
 	if len(geoLabels) == 0 {
-		return errors.Newf("v3 geomodel labels file is empty: %s", labelsPath).
+		return errors.Newf("geomodel labels file is empty: %s", labelsPath).
 			Category(errors.CategoryModelInit).
-			Context("model_type", "v3_geomodel").
+			Context("model_type", "geomodel").
 			Build()
 	}
 
-	log.Debug("V3 geomodel: loaded labels",
+	log.Debug("Geomodel range filter: loaded labels",
 		logger.Int("count", len(geoLabels)),
 		logger.String("first", geoLabels[0]))
 
 	// Create ONNX range filter using the geomodel's own labels
-	log.Debug("V3 geomodel: creating ONNX range filter", logger.String("model_path", modelPath))
+	log.Debug("Geomodel range filter: creating ONNX range filter", logger.String("model_path", modelPath))
 	innerFilter, err := inference.NewONNXRangeFilter(
 		modelPath,
 		inference.ONNXRangeFilterOptions{
@@ -190,9 +202,9 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
-			Context("model_type", "v3_geomodel").
+			Context("model_type", "geomodel").
 			Context("range_filter_model", modelPath).
-			Timing("onnx-v3-geomodel-init", time.Since(start)).
+			Timing("onnx-geomodel-init", time.Since(start)).
 			Build()
 	}
 
@@ -204,11 +216,11 @@ func (bn *BirdNET) initializeV3GeoModel() error {
 	mapped := newMappedRangeFilter(innerFilter, classifierLabels, geoLabels, unmappedScore)
 
 	if mapped.mappedCount == 0 && len(classifierLabels) > 0 {
-		log.Warn("V3 geomodel: no species matched classifier labels, range filter will filter out all detections (check labels file)",
+		log.Warn("Geomodel range filter: no species matched classifier labels, range filter will filter out all detections (check labels file)",
 			logger.Int("classifier_species", len(classifierLabels)),
 			logger.String("labels_path", labelsPath))
 	}
-	log.Info("V3 geomodel initialized with species mapping",
+	log.Info("Geomodel range filter initialized with species mapping",
 		logger.Int("geomodel_species", len(geoLabels)),
 		logger.Int("classifier_species", len(classifierLabels)),
 		logger.Int("mapped_species", mapped.mappedCount),

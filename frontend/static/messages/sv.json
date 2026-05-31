@@ -3535,6 +3535,20 @@
           "description": "Ange din plats i Huvudinställningar för att se arter tillgängliga i ditt område. Intervallfiltret använder din plats för att avgöra vilka arter som sannolikt finns i närheten.",
           "action": "Konfigurera plats"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Områdesfiltret är inaktivt",
+            "description": "Detektioner filtreras just nu inte efter din plats, så arter från områden utanför ditt eget kan rapporteras. Kontrollera inställningarna för områdesfiltermodellen under Inställningar."
+          },
+          "fellBack": {
+            "title": "Använder det inbyggda områdesfiltret",
+            "description": "Det konfigurerade områdesfiltret med geomodell kunde inte laddas, så BirdNET-Go gick tillbaka till det inbyggda områdesfiltret. Filtreringen fungerar fortfarande, men kontrollera Inställningar för att återställa geomodellen."
+          },
+          "mappedZero": {
+            "title": "Områdesfiltret matchade inga arter",
+            "description": "Områdesfiltret med geomodell matchade inga av den aktiva modellens arter, så alla detektioner skulle filtreras bort. Kontrollera att områdesfiltrets etikettfil stämmer överens med den aktiva modellen."
+          }
+        },
         "columns": {
           "commonName": "Vanligt namn",
           "scientificName": "Vetenskapligt namn",

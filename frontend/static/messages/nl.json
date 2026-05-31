@@ -3535,6 +3535,20 @@
           "description": "Stel uw locatie in bij Hoofdinstellingen om soorten in uw omgeving te zien. Het bereikfilter gebruikt uw locatie om te bepalen welke soorten waarschijnlijk in de buurt voorkomen.",
           "action": "Locatie configureren"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Bereikfilter inactief",
+            "description": "Detecties worden op dit moment niet gefilterd op basis van uw locatie, dus soorten van buiten uw omgeving kunnen worden gemeld. Controleer de configuratie van het bereikfiltermodel in Hoofdinstellingen."
+          },
+          "fellBack": {
+            "title": "Ingebouwd bereikfilter wordt gebruikt",
+            "description": "Het geconfigureerde geomodel-bereikfilter kon niet worden geladen, dus BirdNET-Go is teruggevallen op het ingebouwde bereikfilter. Het filteren werkt nog steeds, maar controleer Hoofdinstellingen om het geomodel te herstellen."
+          },
+          "mappedZero": {
+            "title": "Bereikfilter kwam met geen enkele soort overeen",
+            "description": "Het geomodel-bereikfilter kwam met geen enkele soort van het actieve model overeen, dus elke detectie zou worden weggefilterd. Controleer of het labelbestand van het bereikfilter overeenkomt met het actieve model."
+          }
+        },
         "columns": {
           "commonName": "Naam",
           "scientificName": "Wetenschappelijke naam",

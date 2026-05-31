@@ -3535,6 +3535,20 @@
           "description": "Defina sua localização nas Configurações Principais para ver as espécies disponíveis na sua área. O filtro de alcance usa sua localização para determinar quais espécies provavelmente serão encontradas nas proximidades.",
           "action": "Configurar localização"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Filtro de alcance inativo",
+            "description": "As deteções não estão a ser filtradas pela sua localização neste momento, pelo que podem ser comunicadas espécies de fora da sua área. Verifique a configuração do modelo de filtro de alcance nas Configurações."
+          },
+          "fellBack": {
+            "title": "A usar o filtro de alcance integrado",
+            "description": "Não foi possível carregar o filtro de alcance do geomodelo configurado, pelo que o BirdNET-Go recorreu ao filtro de alcance integrado. A filtragem continua a funcionar, mas verifique as Configurações para restaurar o geomodelo."
+          },
+          "mappedZero": {
+            "title": "O filtro de alcance não correspondeu a nenhuma espécie",
+            "description": "O filtro de alcance do geomodelo não correspondeu a nenhuma das espécies do modelo ativo, pelo que todas as deteções seriam filtradas. Verifique se o ficheiro de etiquetas do filtro de alcance corresponde ao modelo ativo."
+          }
+        },
         "columns": {
           "commonName": "Nome comum",
           "scientificName": "Nome científico",

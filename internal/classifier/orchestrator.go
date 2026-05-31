@@ -485,6 +485,7 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	rf := settings.BirdNET.RangeFilter
 
 	geomodel, primaryCoverage, geoLabels, _ := primary.PrimaryRangeFilterCoverage()
+	active, fellBack := primary.rangeFilterRuntimeState()
 
 	resp := RangeFilterStatusResponse{
 		Geomodel:            geomodel,
@@ -492,6 +493,9 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		Threshold:           rf.Threshold,
 		LocationConfigured:  settings.BirdNET.LocationConfigured,
 		LastUpdated:         rf.LastUpdated,
+		Active:              active,
+		FellBack:            fellBack,
+		MappedSpecies:       primaryCoverage.WithRangeData,
 	}
 
 	// Always include the primary classifier.

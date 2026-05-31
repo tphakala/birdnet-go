@@ -545,7 +545,7 @@ func (o *Orchestrator) GetHeatmapService() *HeatmapInferenceService {
 		return nil
 	}
 
-	// Resolve model path (same logic as initializeV3GeoModel)
+	// Resolve model path (same logic as initializeMappedGeoModel)
 	modelPath := os.ExpandEnv(rfSettings.ModelPath)
 	modelPath, err := conf.ExpandTildePath(modelPath)
 	if err != nil {
