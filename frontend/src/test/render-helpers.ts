@@ -268,7 +268,11 @@ export const analyticsI18nTranslations = {
   'analytics.sortOptions.recentlyFirstSeen': 'Recently First Seen',
   'analytics.sortOptions.earliestFirstSeen': 'Earliest First Seen',
   'analytics.sortOptions.recentlyLastSeen': 'Recently Last Seen',
+  'analytics.sortOptions.earliestLastSeen': 'Earliest Last Seen',
   'analytics.sortOptions.highestConfidence': 'Highest Confidence',
+  'analytics.sortOptions.lowestConfidence': 'Lowest Confidence',
+  'analytics.sortOptions.highestMaxConfidence': 'Highest Max Confidence',
+  'analytics.sortOptions.lowestMaxConfidence': 'Lowest Max Confidence',
 };
 
 /**

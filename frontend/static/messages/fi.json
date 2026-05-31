@@ -1578,7 +1578,11 @@
       "recentlyFirstSeen": "Äskettäin ensinäkemä",
       "earliestFirstSeen": "Aikaisin ensinäkemä",
       "recentlyLastSeen": "Äskettäin viimeksi nähty",
-      "highestConfidence": "Korkein luottamus"
+      "earliestLastSeen": "Earliest Last Seen",
+      "highestConfidence": "Korkein luottamus",
+      "lowestConfidence": "Lowest Confidence",
+      "highestMaxConfidence": "Highest Max Confidence",
+      "lowestMaxConfidence": "Lowest Max Confidence"
     },
     "charts": {
       "top10Species": "Top 10 lajia",

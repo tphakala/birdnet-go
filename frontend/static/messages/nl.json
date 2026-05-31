@@ -1578,7 +1578,11 @@
       "recentlyFirstSeen": "Eerst gehoord, aflopend",
       "earliestFirstSeen": "Eerst gehoord, oplopend",
       "recentlyLastSeen": "Laatst gehoord, aflopend",
-      "highestConfidence": "Betrouwbaarheid, hoogste eerst"
+      "earliestLastSeen": "Earliest Last Seen",
+      "highestConfidence": "Betrouwbaarheid, hoogste eerst",
+      "lowestConfidence": "Lowest Confidence",
+      "highestMaxConfidence": "Highest Max Confidence",
+      "lowestMaxConfidence": "Lowest Max Confidence"
     },
     "charts": {
       "top10Species": "Top 10 Soorten",

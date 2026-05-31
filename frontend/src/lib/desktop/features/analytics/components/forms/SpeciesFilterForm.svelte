@@ -62,7 +62,11 @@
     { value: 'first_seen_desc', label: t('analytics.sortOptions.recentlyFirstSeen') },
     { value: 'first_seen_asc', label: t('analytics.sortOptions.earliestFirstSeen') },
     { value: 'last_seen_desc', label: t('analytics.sortOptions.recentlyLastSeen') },
+    { value: 'last_seen_asc', label: t('analytics.sortOptions.earliestLastSeen') },
     { value: 'confidence_desc', label: t('analytics.sortOptions.highestConfidence') },
+    { value: 'confidence_asc', label: t('analytics.sortOptions.lowestConfidence') },
+    { value: 'max_confidence_desc', label: t('analytics.sortOptions.highestMaxConfidence') },
+    { value: 'max_confidence_asc', label: t('analytics.sortOptions.lowestMaxConfidence') },
   ];
 
   function handleSubmit(event: Event) {

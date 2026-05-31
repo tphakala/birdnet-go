@@ -52,10 +52,8 @@
 
   type ViewMode = 'grid' | 'list';
 
-  // Sortable table columns mapped to their ascending/descending sort values.
-  // Clicking a header applies the matching sort; the species name defaults to
-  // ascending (A→Z), every other column to descending (most/highest/most
-  // recent first), which is the most useful first glance.
+  // Species name defaults to ascending (A→Z); every other column defaults to
+  // descending (most/highest/most recent first) on first click.
   const SORTABLE_COLUMNS: {
     field: string;
     labelKey: string;
