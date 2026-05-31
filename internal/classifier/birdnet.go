@@ -1211,7 +1211,11 @@ func (bn *BirdNET) ReloadModel() error {
 
 // GetSpeciesCode returns the eBird species code for a given label
 func (bn *BirdNET) GetSpeciesCode(label string) (string, bool) {
-	return GetSpeciesCodeFromName(bn.TaxonomyMap, bn.ScientificIndex, label)
+	bn.mu.Lock()
+	taxMap := bn.TaxonomyMap
+	sciIndex := bn.ScientificIndex
+	bn.mu.Unlock()
+	return GetSpeciesCodeFromName(taxMap, sciIndex, label)
 }
 
 // GetSpeciesWithScientificAndCommonName returns the scientific name and common name for a label
@@ -1332,6 +1336,14 @@ func (bn *BirdNET) Labels() []string {
 	return slices.Clone(bn.Settings.BirdNET.Labels)
 }
 
+// ReloadSnapshot returns a copy of the model metadata and taxonomy maps safely under bn.mu.
+// Used by the Orchestrator to update its shared state after a model reload.
+func (bn *BirdNET) ReloadSnapshot() (info ModelInfo, taxMap TaxonomyMap, taxPath string, sciIndex ScientificNameIndex) {
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
+	return bn.ModelInfo, bn.TaxonomyMap, bn.TaxonomyPath, bn.ScientificIndex
+}
+
 // Close releases resources held by the BirdNET model.
 // Implements ModelInstance (io.Closer compatible).
 func (bn *BirdNET) Close() error {
@@ -1344,8 +1356,13 @@ func (bn *BirdNET) Close() error {
 func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, common, code string) {
 	scientific, common = SplitSpeciesName(speciesLabel)
 
+	bn.mu.Lock()
+	taxMap := bn.TaxonomyMap
+	sciIndex := bn.ScientificIndex
+	bn.mu.Unlock()
+
 	// Try to get the eBird code
-	code, exists := GetSpeciesCodeFromName(bn.TaxonomyMap, bn.ScientificIndex, speciesLabel)
+	code, exists := GetSpeciesCodeFromName(taxMap, sciIndex, speciesLabel)
 	if !exists {
 		// We got a placeholder code for a species not in our taxonomy
 		if bn.Settings.BirdNET.Debug {
