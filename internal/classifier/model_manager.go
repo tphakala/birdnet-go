@@ -599,7 +599,10 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 				continue
 			}
 			if !os.IsNotExist(err) {
-				log.Error("Failed to remove file during uninstall",
+				// Warn, not Error: a leftover file during best-effort uninstall is a
+				// recoverable/degraded condition (the model is still de-registered),
+				// matching cleanupSharedFiles and avoiding needless Error/Sentry noise.
+				log.Warn("Failed to remove file during uninstall",
 					logger.String("path", path),
 					logger.Error(err))
 				if deleteErr == nil {

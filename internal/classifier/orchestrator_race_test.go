@@ -212,8 +212,16 @@ func TestOrchestrator_ConcurrentReloadSnapshot_NoRace(t *testing.T) {
 // and Debug concurrently with simulated ReloadModel settings updates does not cause a data race.
 func TestBirdNET_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
 	settings := &conf.Settings{}
-	bn, err := NewBirdNET(settings, nil)
-	require.NoError(t, err)
+	// Construct via struct literal (not NewBirdNET) so the test runs under the
+	// noembed build tag, where the embedded model is unavailable. The settings
+	// accessors and reader methods exercised below do not require a loaded model;
+	// GetProbableSpecies returns early when the range filter is nil.
+	bn := &BirdNET{
+		Settings:     settings,
+		speciesCache: make(map[string]*speciesCacheEntry),
+		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
+	}
+	bn.settingsAtomic.Store(settings)
 
 	const iterations = 1000
 	var wg sync.WaitGroup
@@ -254,8 +262,21 @@ func TestBirdNET_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
 // concurrently with simulated ReloadModel settings updates on the Orchestrator does not cause a data race.
 func TestOrchestrator_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
 	settings := &conf.Settings{}
-	o, err := NewOrchestrator(settings)
-	require.NoError(t, err)
+	// Construct via struct literals (not NewOrchestrator) so the test runs under
+	// the noembed build tag, where the embedded model is unavailable.
+	bn := &BirdNET{
+		Settings:     settings,
+		speciesCache: make(map[string]*speciesCacheEntry),
+		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
+	}
+	bn.settingsAtomic.Store(settings)
+	o := &Orchestrator{
+		Settings:  settings,
+		ModelInfo: bn.ModelInfo,
+		primary:   bn,
+		models:    map[string]*modelEntry{bn.ModelInfo.ID: {instance: bn}},
+	}
+	o.settingsAtomic.Store(settings)
 
 	const iterations = 1000
 	var wg sync.WaitGroup

@@ -10,6 +10,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// testLabelsEnvVar is the environment variable the external-label tests use to
+// exercise os.ExpandEnv path expansion in loadExternalLabels.
+const testLabelsEnvVar = "BIRDNET_TEST_LABELS_DIR"
+
 // newExternalLabelBirdNET builds a minimal BirdNET wired to load labels from the
 // given external label path, without invoking the full NewBirdNET model load.
 func newExternalLabelBirdNET(labelPath string) *BirdNET {
@@ -52,9 +56,9 @@ func TestLoadExternalLabels_ExpandsEnvVar(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "labels.txt"), []byte(twoLabelFile), 0o644))
 
-	t.Setenv("BIRDNET_TEST_LABELS_DIR", dir)
+	t.Setenv(testLabelsEnvVar, dir)
 
-	bn := newExternalLabelBirdNET(filepath.Join("$BIRDNET_TEST_LABELS_DIR", "labels.txt"))
+	bn := newExternalLabelBirdNET(filepath.Join("$"+testLabelsEnvVar, "labels.txt"))
 	require.NoError(t, bn.loadLabels(), "loadExternalLabels must expand $VAR in the label path")
 	assert.Equal(t, twoLabelsExpected, bn.Settings.BirdNET.Labels)
 }
@@ -65,10 +69,10 @@ func TestLoadExternalLabels_ExpandsEnvVar(t *testing.T) {
 func TestLoadExternalLabels_MissingPathReportsExpandedPath(t *testing.T) {
 	// Not parallel: t.Setenv mutates process environment.
 	dir := t.TempDir()
-	t.Setenv("BIRDNET_TEST_LABELS_DIR", dir)
+	t.Setenv(testLabelsEnvVar, dir)
 
 	missing := filepath.Join(dir, "does-not-exist.txt")
-	bn := newExternalLabelBirdNET(filepath.Join("$BIRDNET_TEST_LABELS_DIR", "does-not-exist.txt"))
+	bn := newExternalLabelBirdNET(filepath.Join("$"+testLabelsEnvVar, "does-not-exist.txt"))
 	err := bn.loadLabels()
 	require.Error(t, err, "loading a non-existent external label file must fail")
 	assert.Contains(t, err.Error(), missing,
