@@ -559,6 +559,8 @@ func (o *Orchestrator) GetSpeciesCode(label string) (string, bool) {
 }
 
 // GetSpeciesNameFromCode returns the species name for a given eBird species code.
+// The second return value reports whether the code was found in the TaxonomyMap
+// by calling GetSpeciesNameFromCode(o.TaxonomyMap, code).
 func (o *Orchestrator) GetSpeciesNameFromCode(code string) (string, bool) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
