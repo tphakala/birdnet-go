@@ -811,13 +811,11 @@ const DefaultRangeFilterV2ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP1
 // Geomodel v3 local file names used for auto-selection when the geomodel
 // has been downloaded as a shared companion file by the model gallery.
 //
-// These are MIRRORED in internal/conf/range_filter_migration.go as
-// geomodelSharedONNXLocalName / geomodelSharedLabelsLocalName, because conf
-// cannot import classifier (classifier imports conf). If these filenames
-// change, update both places.
+// These refer directly to the source of truth constants in the internal/conf
+// package.
 const (
-	geomodelONNXLocalName   = "geomodel_v3.0.2_fp16.onnx"
-	geomodelLabelsLocalName = "geomodel_v3.0.2_labels.txt"
+	geomodelONNXLocalName   = conf.GeomodelONNXLocalName
+	geomodelLabelsLocalName = conf.GeomodelLabelsLocalName
 )
 
 // DefaultModelDirectory is the default directory name where model files are expected to be found.

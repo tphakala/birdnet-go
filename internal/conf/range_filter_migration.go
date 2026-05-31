@@ -5,15 +5,12 @@ import (
 	"path/filepath"
 )
 
-// Shared geomodel filenames. These MIRROR internal/classifier/birdnet.go
-// geomodelONNXLocalName and geomodelLabelsLocalName. The conf package cannot
-// import classifier (classifier imports conf; importing back would create an
-// import cycle), so the constants are duplicated here. They MUST stay in sync
-// with the classifier definitions; if the gallery changes the shared geomodel
-// filenames, update both places.
+// Shared geomodel filenames. These are defined in the conf package because
+// conf cannot import classifier (classifier imports conf). The classifier package
+// references these constants to avoid duplication.
 const (
-	geomodelSharedONNXLocalName   = "geomodel_v3.0.2_fp16.onnx"
-	geomodelSharedLabelsLocalName = "geomodel_v3.0.2_labels.txt"
+	GeomodelONNXLocalName   = "geomodel_v3.0.2_fp16.onnx"
+	GeomodelLabelsLocalName = "geomodel_v3.0.2_labels.txt"
 )
 
 // rangeFilterGeomodelV3 is the literal that the runtime, status code, and UI
@@ -21,14 +18,12 @@ const (
 // internal/classifier/birdnet.go and internal/conf/validate_services.go).
 const rangeFilterGeomodelV3 = "v3"
 
-// resolveModelsDir computes the model gallery directory the same way
-// internal/analysis/birdnet_service.go initModelManager does, WITHOUT importing
-// the classifier package. If Models.Directory is set, it is used verbatim;
-// otherwise the OS user config directory is used (falling back to
+// ResolveModelsDir computes the model gallery directory. If Models.Directory is set,
+// it is used verbatim; otherwise the OS user config directory is used (falling back to
 // <home>/.config when os.UserConfigDir fails), joined with "birdnet-go/models".
 // The second return value is false when the directory cannot be resolved, in
 // which case callers should do nothing.
-func (s *Settings) resolveModelsDir() (string, bool) {
+func (s *Settings) ResolveModelsDir() (string, bool) {
 	if s.Models.Directory != "" {
 		return s.Models.Directory, true
 	}
@@ -59,14 +54,14 @@ func (s *Settings) resolveModelsDir() (string, bool) {
 //
 // Returns true if the config was changed, false otherwise.
 func (s *Settings) MigrateOrphanGeomodelRangeFilter() bool {
-	modelsDir, ok := s.resolveModelsDir()
+	modelsDir, ok := s.ResolveModelsDir()
 	if !ok {
 		return false
 	}
 
 	sharedDir := filepath.Join(modelsDir, "shared")
-	expectedModelPath := filepath.Join(sharedDir, geomodelSharedONNXLocalName)
-	expectedLabelsPath := filepath.Join(sharedDir, geomodelSharedLabelsLocalName)
+	expectedModelPath := filepath.Join(sharedDir, GeomodelONNXLocalName)
+	expectedLabelsPath := filepath.Join(sharedDir, GeomodelLabelsLocalName)
 
 	rf := &s.BirdNET.RangeFilter
 

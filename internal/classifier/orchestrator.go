@@ -558,6 +558,13 @@ func (o *Orchestrator) GetSpeciesCode(label string) (string, bool) {
 	return o.primary.GetSpeciesCode(label)
 }
 
+// GetSpeciesNameFromCode returns the species name for a given eBird species code.
+func (o *Orchestrator) GetSpeciesNameFromCode(code string) (string, bool) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return GetSpeciesNameFromCode(o.TaxonomyMap, code)
+}
+
 // GetSpeciesWithScientificAndCommonName returns the scientific and common name for a label.
 func (o *Orchestrator) GetSpeciesWithScientificAndCommonName(label string) (scientific, common string) {
 	return o.primary.GetSpeciesWithScientificAndCommonName(label)

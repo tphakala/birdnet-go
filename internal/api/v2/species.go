@@ -604,7 +604,7 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 
 	// Get species name from the taxonomy map using the species code
 	bn := proc.Bn
-	speciesName, exists := classifier.GetSpeciesNameFromCode(bn.TaxonomyMap, speciesCode)
+	speciesName, exists := bn.GetSpeciesNameFromCode(speciesCode)
 
 	if !exists {
 		return c.HandleError(ctx, errors.Newf("species code '%s' not found in taxonomy", speciesCode).
