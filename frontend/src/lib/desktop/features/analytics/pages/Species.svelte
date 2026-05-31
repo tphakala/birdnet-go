@@ -21,21 +21,23 @@
     timePeriod: 'all' | 'today' | 'week' | 'month' | '90days' | 'year' | 'custom';
     startDate: string;
     endDate: string;
+    sortOrder:
+      | 'count_desc'
+      | 'count_asc'
+      | 'name_asc'
+      | 'name_desc'
+      | 'first_seen_desc'
+      | 'first_seen_asc'
+      | 'last_seen_desc'
+      | 'last_seen_asc'
+      | 'confidence_desc'
+      | 'confidence_asc'
+      | 'max_confidence_desc'
+      | 'max_confidence_asc';
     searchTerm: string;
   }
 
-  type SortField =
-    | 'species'
-    | 'count'
-    | 'avg_confidence'
-    | 'max_confidence'
-    | 'first_seen'
-    | 'last_seen';
-  type SortDirection = 'asc' | 'desc';
-  interface SortState {
-    field: SortField;
-    direction: SortDirection;
-  }
+  type SortOrder = SpeciesFilters['sortOrder'];
 
   interface SpeciesData {
     common_name: string;
@@ -50,34 +52,64 @@
 
   type ViewMode = 'grid' | 'list';
 
-  const SORTABLE_COLUMNS: { field: SortField; labelKey: string }[] = [
-    { field: 'species', labelKey: 'analytics.species.headers.species' },
-    { field: 'count', labelKey: 'analytics.species.headers.detections' },
-    { field: 'avg_confidence', labelKey: 'analytics.species.headers.avgConfidence' },
-    { field: 'max_confidence', labelKey: 'analytics.species.headers.maxConfidence' },
-    { field: 'first_seen', labelKey: 'analytics.species.headers.firstDetected' },
-    { field: 'last_seen', labelKey: 'analytics.species.headers.lastDetected' },
+  // Species name defaults to ascending (A→Z); every other column defaults to
+  // descending (most/highest/most recent first) on first click.
+  const SORTABLE_COLUMNS: {
+    field: string;
+    labelKey: string;
+    asc: SortOrder;
+    desc: SortOrder;
+  }[] = [
+    {
+      field: 'species',
+      labelKey: 'analytics.species.headers.species',
+      asc: 'name_asc',
+      desc: 'name_desc',
+    },
+    {
+      field: 'count',
+      labelKey: 'analytics.species.headers.detections',
+      asc: 'count_asc',
+      desc: 'count_desc',
+    },
+    {
+      field: 'avg_confidence',
+      labelKey: 'analytics.species.headers.avgConfidence',
+      asc: 'confidence_asc',
+      desc: 'confidence_desc',
+    },
+    {
+      field: 'max_confidence',
+      labelKey: 'analytics.species.headers.maxConfidence',
+      asc: 'max_confidence_asc',
+      desc: 'max_confidence_desc',
+    },
+    {
+      field: 'first_seen',
+      labelKey: 'analytics.species.headers.firstDetected',
+      asc: 'first_seen_asc',
+      desc: 'first_seen_desc',
+    },
+    {
+      field: 'last_seen',
+      labelKey: 'analytics.species.headers.lastDetected',
+      asc: 'last_seen_asc',
+      desc: 'last_seen_desc',
+    },
   ];
 
+  // Default sort and persistence (survives a page refresh).
+  const DEFAULT_SORT_ORDER: SortOrder = 'count_desc';
   const SORT_STORAGE_KEY = 'analytics.species.sortOrder';
-  const SORT_FIELDS: Set<string> = new Set<string>(SORTABLE_COLUMNS.map(c => c.field));
+  // Only the species-name column defaults to ascending (A→Z) on first click.
+  const SPECIES_COLUMN_FIELD = 'species';
+  const VALID_SORT_ORDERS: Set<string> = new Set<string>(
+    SORTABLE_COLUMNS.flatMap(column => [column.asc, column.desc])
+  );
 
-  function isSortField(value: string): value is SortField {
-    return SORT_FIELDS.has(value);
+  function isSortOrder(value: unknown): value is SortOrder {
+    return typeof value === 'string' && VALID_SORT_ORDERS.has(value);
   }
-
-  function isSortState(value: unknown): value is SortState {
-    if (typeof value !== 'object' || value === null) return false;
-    const c = value as Record<string, unknown>;
-    return (
-      typeof c.field === 'string' &&
-      isSortField(c.field) &&
-      (c.direction === 'asc' || c.direction === 'desc')
-    );
-  }
-
-  const DEFAULT_SORT: SortState = { field: 'count', direction: 'desc' };
-  const initialSort = getStoredValue<SortState>(SORT_STORAGE_KEY, DEFAULT_SORT, isSortState);
 
   let isLoading = $state<boolean>(true);
   let speciesData = $state<SpeciesData[]>([]);
@@ -90,21 +122,36 @@
     timePeriod: 'all',
     startDate: '',
     endDate: '',
+    // Restore the persisted sort so it survives a refresh; default to detection count descending.
+    sortOrder: getStoredValue<SortOrder>(SORT_STORAGE_KEY, DEFAULT_SORT_ORDER, isSortOrder),
     searchTerm: '',
   });
 
-  let sortField = $state<SortField>(initialSort.field);
-  let sortDirection = $state<SortDirection>(initialSort.direction);
+  // Active column + direction for the header indicators, derived from sortOrder.
+  let activeColumn = $derived(
+    SORTABLE_COLUMNS.find(
+      column => column.asc === filters.sortOrder || column.desc === filters.sortOrder
+    )
+  );
+  let sortField = $derived(activeColumn?.field ?? '');
+  let sortDirection: 'asc' | 'desc' = $derived(
+    activeColumn?.desc === filters.sortOrder ? 'desc' : 'asc'
+  );
 
+  // Clicking a header: re-clicking the active column toggles direction; a new
+  // column starts at its default (ascending for species name, descending else).
   function handleSort(field: string) {
-    if (!isSortField(field)) return;
-    if (sortField === field) {
-      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-      sortField = field;
-      sortDirection = field === 'species' ? 'asc' : 'desc';
-    }
-    setStoredValue<SortState>(SORT_STORAGE_KEY, { field: sortField, direction: sortDirection });
+    const column = SORTABLE_COLUMNS.find(c => c.field === field);
+    if (!column) return;
+    const next =
+      sortField === field
+        ? filters.sortOrder === column.asc
+          ? column.desc
+          : column.asc
+        : field === SPECIES_COLUMN_FIELD
+          ? column.asc
+          : column.desc;
+    filters.sortOrder = next;
     applyFilters();
   }
 
@@ -217,6 +264,7 @@
   }
 
   function applyFilters() {
+    setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
     let filtered = [...speciesData];
 
     // Apply search filter
@@ -230,39 +278,46 @@
     }
 
     // Apply sorting
-    switch (sortField) {
-      case 'species':
-        filtered.sort((a, b) =>
-          sortDirection === 'asc'
-            ? a.common_name.localeCompare(b.common_name)
-            : b.common_name.localeCompare(a.common_name)
-        );
+    switch (filters.sortOrder) {
+      case 'count_desc':
+        filtered.sort((a, b) => b.count - a.count);
         break;
-      case 'count':
-        filtered.sort((a, b) => (sortDirection === 'asc' ? a.count - b.count : b.count - a.count));
+      case 'count_asc':
+        filtered.sort((a, b) => a.count - b.count);
         break;
-      case 'avg_confidence':
-        filtered.sort((a, b) =>
-          sortDirection === 'asc'
-            ? a.avg_confidence - b.avg_confidence
-            : b.avg_confidence - a.avg_confidence
-        );
+      case 'name_asc':
+        filtered.sort((a, b) => a.common_name.localeCompare(b.common_name));
         break;
-      case 'max_confidence':
-        filtered.sort((a, b) =>
-          sortDirection === 'asc'
-            ? a.max_confidence - b.max_confidence
-            : b.max_confidence - a.max_confidence
-        );
+      case 'name_desc':
+        filtered.sort((a, b) => b.common_name.localeCompare(a.common_name));
         break;
-      case 'first_seen':
-        filtered.sort(makeDateComparator('first_heard', sortDirection === 'asc'));
+      case 'first_seen_desc':
+        filtered.sort(makeDateComparator('first_heard', false));
         break;
-      case 'last_seen':
-        filtered.sort(makeDateComparator('last_heard', sortDirection === 'asc'));
+      case 'first_seen_asc':
+        filtered.sort(makeDateComparator('first_heard', true));
+        break;
+      case 'last_seen_desc':
+        filtered.sort(makeDateComparator('last_heard', false));
+        break;
+      case 'last_seen_asc':
+        filtered.sort(makeDateComparator('last_heard', true));
+        break;
+      case 'confidence_desc':
+        filtered.sort((a, b) => b.avg_confidence - a.avg_confidence);
+        break;
+      case 'confidence_asc':
+        filtered.sort((a, b) => a.avg_confidence - b.avg_confidence);
+        break;
+      case 'max_confidence_desc':
+        filtered.sort((a, b) => b.max_confidence - a.max_confidence);
+        break;
+      case 'max_confidence_asc':
+        filtered.sort((a, b) => a.max_confidence - b.max_confidence);
         break;
       default: {
-        const _exhaustive: never = sortField;
+        // Exhaustiveness guard: adding a SortOrder value without a case is a compile error.
+        const _exhaustive: never = filters.sortOrder;
         void _exhaustive;
       }
     }
@@ -300,10 +355,9 @@
 
   function resetFilters() {
     filters.timePeriod = 'all';
+    filters.sortOrder = DEFAULT_SORT_ORDER;
+    setStoredValue<SortOrder>(SORT_STORAGE_KEY, DEFAULT_SORT_ORDER);
     filters.searchTerm = '';
-    sortField = DEFAULT_SORT.field;
-    sortDirection = DEFAULT_SORT.direction;
-    setStoredValue<SortState>(SORT_STORAGE_KEY, DEFAULT_SORT);
 
     const today = new Date();
     const lastMonth = new Date();
