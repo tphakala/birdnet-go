@@ -165,3 +165,45 @@ func TestOrchestrator_ConcurrentResolverRegistrationAndResolve_NoRace(t *testing
 	}
 	assert.Equal(t, 1, count, "exactly one taxonomy resolver must be registered under concurrent registration")
 }
+
+// TestOrchestrator_ConcurrentReloadSnapshot_NoRace verifies that calling ReloadSnapshot
+// on the primary model concurrently with writes to its ModelInfo / Taxonomy fields does not race.
+func TestOrchestrator_ConcurrentReloadSnapshot_NoRace(t *testing.T) {
+	bn := &BirdNET{}
+	bn.ModelInfo = ModelInfo{ID: "BirdNET_V3", Name: "BirdNET v3.0"}
+	bn.TaxonomyMap = TaxonomyMap{"test": "test"}
+	bn.TaxonomyPath = "path/to/taxonomy"
+	bn.ScientificIndex = ScientificNameIndex{"test": "test"}
+
+	start := make(chan struct{})
+	const iterations = 500
+	var wg sync.WaitGroup
+
+	// Writer goroutine: simulates ReloadModel writing to BirdNET fields under bn.mu
+	wg.Go(func() {
+		<-start
+		for range iterations {
+			bn.mu.Lock()
+			bn.ModelInfo = ModelInfo{ID: "BirdNET_V3", Name: "BirdNET v3.0"}
+			bn.TaxonomyMap = TaxonomyMap{"test": "test"}
+			bn.TaxonomyPath = "path/to/taxonomy"
+			bn.ScientificIndex = ScientificNameIndex{"test": "test"}
+			bn.mu.Unlock()
+		}
+	})
+
+	// Reader goroutine: simulates Step-2 reading the fields via ReloadSnapshot
+	wg.Go(func() {
+		<-start
+		for range iterations {
+			info, taxMap, taxPath, sciIndex := bn.ReloadSnapshot()
+			_ = info
+			_ = taxMap
+			_ = taxPath
+			_ = sciIndex
+		}
+	})
+
+	close(start)
+	wg.Wait()
+}

@@ -779,10 +779,11 @@ func (o *Orchestrator) ReloadModel() error {
 			Build()
 	}
 
-	o.ModelInfo = o.primary.ModelInfo
-	o.TaxonomyMap = o.primary.TaxonomyMap
-	o.TaxonomyPath = o.primary.TaxonomyPath
-	o.ScientificIndex = o.primary.ScientificIndex
+	info, taxMap, taxPath, sciIndex := o.primary.ReloadSnapshot()
+	o.ModelInfo = info
+	o.TaxonomyMap = taxMap
+	o.TaxonomyPath = taxPath
+	o.ScientificIndex = sciIndex
 
 	// Re-key the models map in case the model ID changed after reload (Forgejo #270).
 	newModels := make(map[string]*modelEntry, len(o.models))
