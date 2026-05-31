@@ -101,6 +101,8 @@
   // Default sort and persistence (survives a page refresh).
   const DEFAULT_SORT_ORDER: SortOrder = 'count_desc';
   const SORT_STORAGE_KEY = 'analytics.species.sortOrder';
+  // Only the species-name column defaults to ascending (A→Z) on first click.
+  const SPECIES_COLUMN_FIELD = 'species';
   const VALID_SORT_ORDERS: Set<string> = new Set<string>(
     SORTABLE_COLUMNS.flatMap(column => [column.asc, column.desc])
   );
@@ -136,12 +138,6 @@
     activeColumn?.desc === filters.sortOrder ? 'desc' : 'asc'
   );
 
-  // Persist sort order to localStorage whenever it changes (covers both header
-  // clicks and dropdown changes submitted via the filter form).
-  $effect(() => {
-    setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
-  });
-
   // Clicking a header: re-clicking the active column toggles direction; a new
   // column starts at its default (ascending for species name, descending else).
   function handleSort(field: string) {
@@ -152,7 +148,7 @@
         ? filters.sortOrder === column.asc
           ? column.desc
           : column.asc
-        : field === SORTABLE_COLUMNS[0].field
+        : field === SPECIES_COLUMN_FIELD
           ? column.asc
           : column.desc;
     filters.sortOrder = next;
@@ -256,7 +252,19 @@
     }
   }
 
+  function makeDateComparator(field: 'first_heard' | 'last_heard', ascending: boolean) {
+    return (a: SpeciesData, b: SpeciesData) => {
+      // eslint-disable-next-line security/detect-object-injection
+      const da = parseLocalDateString(a[field]);
+      // eslint-disable-next-line security/detect-object-injection
+      const db = parseLocalDateString(b[field]);
+      if (!da || !db) return 0;
+      return ascending ? da.getTime() - db.getTime() : db.getTime() - da.getTime();
+    };
+  }
+
   function applyFilters() {
+    setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
     let filtered = [...speciesData];
 
     // Apply search filter
@@ -284,36 +292,16 @@
         filtered.sort((a, b) => b.common_name.localeCompare(a.common_name));
         break;
       case 'first_seen_desc':
-        filtered.sort((a, b) => {
-          const dateA = parseLocalDateString(a.first_heard);
-          const dateB = parseLocalDateString(b.first_heard);
-          if (!dateA || !dateB) return 0;
-          return dateB.getTime() - dateA.getTime();
-        });
+        filtered.sort(makeDateComparator('first_heard', false));
         break;
       case 'first_seen_asc':
-        filtered.sort((a, b) => {
-          const dateA = parseLocalDateString(a.first_heard);
-          const dateB = parseLocalDateString(b.first_heard);
-          if (!dateA || !dateB) return 0;
-          return dateA.getTime() - dateB.getTime();
-        });
+        filtered.sort(makeDateComparator('first_heard', true));
         break;
       case 'last_seen_desc':
-        filtered.sort((a, b) => {
-          const dateA = parseLocalDateString(a.last_heard);
-          const dateB = parseLocalDateString(b.last_heard);
-          if (!dateA || !dateB) return 0;
-          return dateB.getTime() - dateA.getTime();
-        });
+        filtered.sort(makeDateComparator('last_heard', false));
         break;
       case 'last_seen_asc':
-        filtered.sort((a, b) => {
-          const dateA = parseLocalDateString(a.last_heard);
-          const dateB = parseLocalDateString(b.last_heard);
-          if (!dateA || !dateB) return 0;
-          return dateA.getTime() - dateB.getTime();
-        });
+        filtered.sort(makeDateComparator('last_heard', true));
         break;
       case 'confidence_desc':
         filtered.sort((a, b) => b.avg_confidence - a.avg_confidence);
@@ -327,6 +315,11 @@
       case 'max_confidence_asc':
         filtered.sort((a, b) => a.max_confidence - b.max_confidence);
         break;
+      default: {
+        // Exhaustiveness guard: adding a SortOrder value without a case is a compile error.
+        const _exhaustive: never = filters.sortOrder;
+        void _exhaustive;
+      }
     }
 
     filteredSpecies = filtered;
