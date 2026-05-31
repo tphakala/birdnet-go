@@ -1578,11 +1578,11 @@
       "recentlyFirstSeen": "Legutóbb először látva",
       "earliestFirstSeen": "Legrégebben először látva",
       "recentlyLastSeen": "Legutóbb utoljára látva",
-      "earliestLastSeen": "Earliest Last Seen",
+      "earliestLastSeen": "Legrégebben utoljára látva",
       "highestConfidence": "Legmagasabb megbízhatóság",
-      "lowestConfidence": "Lowest Confidence",
-      "highestMaxConfidence": "Highest Max Confidence",
-      "lowestMaxConfidence": "Lowest Max Confidence"
+      "lowestConfidence": "Legalacsonyabb megbízhatóság",
+      "highestMaxConfidence": "Legmagasabb maximális megbízhatóság",
+      "lowestMaxConfidence": "Legalacsonyabb maximális megbízhatóság"
     },
     "charts": {
       "top10Species": "Top 10 faj",

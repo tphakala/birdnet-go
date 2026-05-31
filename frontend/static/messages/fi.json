@@ -1578,11 +1578,11 @@
       "recentlyFirstSeen": "Äskettäin ensinäkemä",
       "earliestFirstSeen": "Aikaisin ensinäkemä",
       "recentlyLastSeen": "Äskettäin viimeksi nähty",
-      "earliestLastSeen": "Earliest Last Seen",
+      "earliestLastSeen": "Aikaisin viimeksi nähty",
       "highestConfidence": "Korkein luottamus",
-      "lowestConfidence": "Lowest Confidence",
-      "highestMaxConfidence": "Highest Max Confidence",
-      "lowestMaxConfidence": "Lowest Max Confidence"
+      "lowestConfidence": "Matalin luottamus",
+      "highestMaxConfidence": "Korkein enimmäisluottamus",
+      "lowestMaxConfidence": "Matalin enimmäisluottamus"
     },
     "charts": {
       "top10Species": "Top 10 lajia",

@@ -1578,11 +1578,11 @@
       "recentlyFirstSeen": "Visto per la Prima Volta Recentemente",
       "earliestFirstSeen": "Visto per la Prima Volta Prima",
       "recentlyLastSeen": "Visto per l'Ultima Volta Recentemente",
-      "earliestLastSeen": "Earliest Last Seen",
+      "earliestLastSeen": "Visto per l'Ultima Volta Prima",
       "highestConfidence": "Confidenza Più Alta",
-      "lowestConfidence": "Lowest Confidence",
-      "highestMaxConfidence": "Highest Max Confidence",
-      "lowestMaxConfidence": "Lowest Max Confidence"
+      "lowestConfidence": "Confidenza Più Bassa",
+      "highestMaxConfidence": "Confidenza Massima Più Alta",
+      "lowestMaxConfidence": "Confidenza Massima Più Bassa"
     },
     "charts": {
       "top10Species": "Top 10 Specie",

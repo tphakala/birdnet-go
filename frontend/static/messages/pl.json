@@ -1578,11 +1578,11 @@
       "recentlyFirstSeen": "Ostatnio Pierwszy Raz Widziany",
       "earliestFirstSeen": "Najwcześniej Pierwszy Raz Widziany",
       "recentlyLastSeen": "Ostatnio Widziany",
-      "earliestLastSeen": "Earliest Last Seen",
+      "earliestLastSeen": "Najwcześniej Ostatnio Widziany",
       "highestConfidence": "Najwyższa Pewność",
-      "lowestConfidence": "Lowest Confidence",
-      "highestMaxConfidence": "Highest Max Confidence",
-      "lowestMaxConfidence": "Lowest Max Confidence"
+      "lowestConfidence": "Najniższa Pewność",
+      "highestMaxConfidence": "Najwyższa Maksymalna Pewność",
+      "lowestMaxConfidence": "Najniższa Maksymalna Pewność"
     },
     "charts": {
       "top10Species": "Top 10 Gatunków",

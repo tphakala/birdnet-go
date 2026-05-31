@@ -1578,11 +1578,11 @@
       "recentlyFirstSeen": "Eerst gehoord, aflopend",
       "earliestFirstSeen": "Eerst gehoord, oplopend",
       "recentlyLastSeen": "Laatst gehoord, aflopend",
-      "earliestLastSeen": "Earliest Last Seen",
+      "earliestLastSeen": "Laatst gehoord, oplopend",
       "highestConfidence": "Betrouwbaarheid, hoogste eerst",
-      "lowestConfidence": "Lowest Confidence",
-      "highestMaxConfidence": "Highest Max Confidence",
-      "lowestMaxConfidence": "Lowest Max Confidence"
+      "lowestConfidence": "Betrouwbaarheid, laagste eerst",
+      "highestMaxConfidence": "Max. betrouwbaarheid, hoogste eerst",
+      "lowestMaxConfidence": "Max. betrouwbaarheid, laagste eerst"
     },
     "charts": {
       "top10Species": "Top 10 Soorten",

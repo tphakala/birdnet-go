@@ -1578,11 +1578,11 @@
       "recentlyFirstSeen": "Nyligen först sedd",
       "earliestFirstSeen": "Tidigast först sedd",
       "recentlyLastSeen": "Nyligen senast sedd",
-      "earliestLastSeen": "Earliest Last Seen",
+      "earliestLastSeen": "Tidigast senast sedd",
       "highestConfidence": "Högst konfidens",
-      "lowestConfidence": "Lowest Confidence",
-      "highestMaxConfidence": "Highest Max Confidence",
-      "lowestMaxConfidence": "Lowest Max Confidence"
+      "lowestConfidence": "Lägst konfidens",
+      "highestMaxConfidence": "Högst maximal konfidens",
+      "lowestMaxConfidence": "Lägst maximal konfidens"
     },
     "charts": {
       "top10Species": "Topp 10 arter",
