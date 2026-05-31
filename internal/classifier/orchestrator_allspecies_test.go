@@ -57,8 +57,9 @@ func buildAllSpeciesOrchestrator(t *testing.T, settings *conf.Settings, rf *fake
 	}
 
 	return &Orchestrator{
-		Settings: settings,
-		primary:  bn,
+		Settings:  settings,
+		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
+		primary:   bn,
 		models: map[string]*modelEntry{
 			primaryID:    {instance: bn},
 			nonPrimaryID: {instance: nonPrimary},
@@ -257,8 +258,9 @@ func TestGetAllProbableSpecies_NonUniversalPrimary(t *testing.T) {
 	}
 
 	o := &Orchestrator{
-		Settings: settings,
-		primary:  bn,
+		Settings:  settings,
+		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
+		primary:   bn,
 		models: map[string]*modelEntry{
 			"BirdNET_V2.4": {instance: bn},
 			"Perch_V2":     {instance: nonPrimary},
@@ -315,8 +317,9 @@ func TestGetAllProbableSpecies_BatModelSkipped(t *testing.T) {
 	}
 
 	o := &Orchestrator{
-		Settings: settings,
-		primary:  bn,
+		Settings:  settings,
+		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
+		primary:   bn,
 		models: map[string]*modelEntry{
 			primaryID:     {instance: bn},
 			RegistryIDBat: {instance: batModel},
@@ -362,8 +365,9 @@ func TestGetAllProbableSpecies_DeterministicDedupByModelID(t *testing.T) {
 	higher := &mockModelInstance{id: "zzz_model", labels: []string{"Aratinga solstitialis_Sun Parakeet"}}
 
 	o := &Orchestrator{
-		Settings: settings,
-		primary:  bn,
+		Settings:  settings,
+		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
+		primary:   bn,
 		models: map[string]*modelEntry{
 			primaryID:   {instance: bn},
 			"aaa_model": {instance: lower},

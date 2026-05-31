@@ -216,7 +216,7 @@ func TestModelManager_DownloadFile(t *testing.T) {
 	destPath := filepath.Join(mm.modelsDir, "test-model", "model.onnx")
 
 	mm.downloading["test-download"] = &DownloadState{CatalogID: "test-download", Status: StatusDownloading}
-	err := mm.downloadFile(t.Context(), "test-download", srv.URL+"/model.onnx", destPath, checksum, int64(len(content)), 0)
+	err := mm.downloadFile(t.Context(), "test-download", srv.URL+"/model.onnx", destPath, checksum, 0)
 	require.NoError(t, err)
 
 	// Verify file was written with correct content.
@@ -250,7 +250,7 @@ func TestModelManager_DownloadFile_BadChecksum(t *testing.T) {
 	destPath := filepath.Join(mm.modelsDir, "bad-checksum", "model.onnx")
 
 	mm.downloading["test-bad-checksum"] = &DownloadState{CatalogID: "test-bad-checksum", Status: StatusDownloading}
-	err := mm.downloadFile(t.Context(), "test-bad-checksum", srv.URL+"/model.onnx", destPath, wrongChecksum, int64(len(content)), 0)
+	err := mm.downloadFile(t.Context(), "test-bad-checksum", srv.URL+"/model.onnx", destPath, wrongChecksum, 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "checksum")
 
@@ -278,7 +278,7 @@ func TestModelManager_DownloadFile_EmptySHA256(t *testing.T) {
 	destPath := filepath.Join(mm.modelsDir, "no-checksum", "model.onnx")
 
 	mm.downloading["test-no-checksum"] = &DownloadState{CatalogID: "test-no-checksum", Status: StatusDownloading}
-	err := mm.downloadFile(t.Context(), "test-no-checksum", srv.URL+"/model.onnx", destPath, "", int64(len(content)), 0)
+	err := mm.downloadFile(t.Context(), "test-no-checksum", srv.URL+"/model.onnx", destPath, "", 0)
 	require.NoError(t, err, "empty expectedSHA256 should skip verification")
 
 	got, err := os.ReadFile(destPath)
@@ -302,7 +302,7 @@ func TestModelManager_DownloadFile_ContextCancelled(t *testing.T) {
 	cancel()
 
 	mm.downloading["test-cancelled"] = &DownloadState{CatalogID: "test-cancelled", Status: StatusDownloading}
-	err := mm.downloadFile(ctx, "test-cancelled", srv.URL+"/model.onnx", destPath, "", 4, 0)
+	err := mm.downloadFile(ctx, "test-cancelled", srv.URL+"/model.onnx", destPath, "", 0)
 	require.Error(t, err, "cancelled context should produce an error")
 
 	_, statErr := os.Stat(destPath)
@@ -567,6 +567,7 @@ func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 	// unload the primary model, simulating a "model still in use" failure.
 	primaryBN := &BirdNET{ModelInfo: ModelInfo{ID: entry.RegistryID}}
 	orch := &Orchestrator{
+		ModelInfo: primaryBN.ModelInfo, // mirror the primary, as NewOrchestrator does
 		models: map[string]*modelEntry{
 			entry.RegistryID: {instance: primaryBN},
 		},

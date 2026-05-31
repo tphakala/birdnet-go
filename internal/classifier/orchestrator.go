@@ -140,23 +140,29 @@ func (o *Orchestrator) SetModelsDir(dir string) {
 // resolver chain. This provides multilingual common name resolution for
 // species not covered by BirdNET's label files.
 //
-// Called during initialization before inference goroutines start, so the
-// unsynchronized append to nameResolvers is safe.
+// The append and the ResolveName read are guarded by o.mu so a future dynamic
+// registration (e.g. a models-directory hot-reload) cannot race with inference
+// goroutines calling ResolveName. Registration is idempotent via a
+// double-checked guard.
 func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
 	if o.Settings == nil {
 		return
 	}
 
-	for _, r := range o.nameResolvers {
-		if _, ok := r.(*TaxonomyResolver); ok {
-			return
-		}
+	// Fast path: a taxonomy resolver is already registered. Read under RLock so
+	// this never races with a concurrent ResolveName on the inference path.
+	o.mu.RLock()
+	exists := o.hasTaxonomyResolverLocked()
+	o.mu.RUnlock()
+	if exists {
+		return
 	}
 
 	log := GetLogger()
 	taxonomyPath := filepath.Join(modelsDir, "shared", "taxonomy.csv")
 
 	locale := o.Settings.BirdNET.Locale
+	// Load the resolver outside the lock; NewTaxonomyResolver does file I/O.
 	resolver, err := NewTaxonomyResolver(taxonomyPath, locale)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -167,11 +173,31 @@ func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
 		return
 	}
 
+	// Append under the write lock, re-checking in case another caller registered
+	// a resolver while this one was loading. Keeps registration idempotent.
+	o.mu.Lock()
+	if o.hasTaxonomyResolverLocked() {
+		o.mu.Unlock()
+		return
+	}
 	o.nameResolvers = append(o.nameResolvers, resolver)
+	o.mu.Unlock()
+
 	log.Info("Taxonomy resolver registered",
 		logger.String("path", taxonomyPath),
 		logger.String("locale", locale),
 		logger.Int("species", len(resolver.index)))
+}
+
+// hasTaxonomyResolverLocked reports whether a TaxonomyResolver is already
+// present in the name-resolver chain. The caller must hold o.mu (read or write).
+func (o *Orchestrator) hasTaxonomyResolverLocked() bool {
+	for _, r := range o.nameResolvers {
+		if _, ok := r.(*TaxonomyResolver); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // SetSunCalc injects the sun calculator into the orchestrator and starts
@@ -356,7 +382,14 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 // ResolveName walks the resolver chain and returns the first non-empty
 // common name for the given scientific name and locale.
 func (o *Orchestrator) ResolveName(scientificName, locale string) string {
-	for _, r := range o.nameResolvers {
+	// Snapshot the resolver chain under RLock so a concurrent
+	// registerTaxonomyResolver append cannot corrupt the slice header.
+	// Resolvers are only ever appended (never mutated in place), so iterating
+	// the snapshot outside the lock is safe.
+	o.mu.RLock()
+	resolvers := o.nameResolvers
+	o.mu.RUnlock()
+	for _, r := range resolvers {
 		if name := r.Resolve(scientificName, locale); name != "" {
 			return name
 		}
@@ -440,7 +473,10 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	}
 
 	o.mu.RLock()
-	primaryID := primary.ModelInfo.ID
+	// Read o.ModelInfo.ID, the o.mu-guarded copy of the primary's identity, not
+	// primary.ModelInfo.ID: the latter is mutated by BirdNET.ReloadModel under
+	// bn.mu and would race with a concurrent reload.
+	primaryID := o.ModelInfo.ID
 	refs := make([]entryRef, 0, len(o.models))
 	for id, entry := range o.models {
 		if id == primaryID || id == RegistryIDBat {
@@ -591,8 +627,12 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 
 	var refs []entryRef
 	o.mu.RLock()
+	// Compare against o.ModelInfo.ID, the o.mu-guarded copy of the primary's
+	// identity, not primary.ModelInfo.ID which is mutated by BirdNET.ReloadModel
+	// under bn.mu and would race with a concurrent reload.
+	primaryID := o.ModelInfo.ID
 	for id, entry := range o.models {
-		if id == primary.ModelInfo.ID || id == RegistryIDBat {
+		if id == primaryID || id == RegistryIDBat {
 			continue
 		}
 		refs = append(refs, entryRef{id: id, entry: entry})
@@ -720,7 +760,11 @@ func (o *Orchestrator) ReloadModel() error {
 			Category(errors.CategoryValidation).
 			Build()
 	}
-	entry := o.models[primary.ModelInfo.ID]
+	// Key the lookup by o.ModelInfo.ID (o.mu-guarded), not primary.ModelInfo.ID
+	// which BirdNET.ReloadModel mutates under bn.mu. The two are always equal
+	// outside an in-progress reload (which holds o.mu.Lock), and the models map
+	// is keyed by this same ID, so the lookup is unchanged but race-free.
+	entry := o.models[o.ModelInfo.ID]
 	o.mu.RUnlock()
 
 	if entry == nil {
@@ -918,8 +962,10 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 			Build()
 	}
 
-	// Refuse to unload the primary model.
-	if o.primary != nil && o.primary.ModelInfo.ID == registryID {
+	// Refuse to unload the primary model. Compare against o.ModelInfo.ID
+	// (o.mu-guarded, held here as a write lock) rather than
+	// o.primary.ModelInfo.ID, which BirdNET.ReloadModel mutates under bn.mu.
+	if o.primary != nil && o.ModelInfo.ID == registryID {
 		o.mu.Unlock()
 		return errors.Newf("cannot unload the primary model %s", registryID).
 			Component("classifier.orchestrator").

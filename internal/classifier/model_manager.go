@@ -884,7 +884,7 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 		}
 		mm.mu.Unlock()
 
-		if err := mm.downloadFile(ctx, entry.ID, url, destPath, f.SHA256, f.SizeBytes, completedBytes); err != nil {
+		if err := mm.downloadFile(ctx, entry.ID, url, destPath, f.SHA256, completedBytes); err != nil {
 			log.Error("Failed to download file",
 				logger.String("catalog_id", entry.ID),
 				logger.String("url", url),
@@ -1231,7 +1231,7 @@ var downloadHTTPClient = &http.Client{
 // polling. completedBytes is the cumulative size of previously downloaded
 // files, used so progress reflects total download, not just the current file.
 // On failure, any temporary file is cleaned up.
-func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPath, expectedSHA256 string, totalBytes, completedBytes int64) error {
+func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPath, expectedSHA256 string, completedBytes int64) error {
 	// Ensure parent directory exists.
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 		return errors.Newf("failed to create directory for %s: %v", destPath, err).
