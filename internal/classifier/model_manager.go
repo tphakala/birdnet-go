@@ -375,8 +375,8 @@ func (mm *ModelManager) applyInstalledGeomodelConfig(log logger.Logger, entry *C
 // orchestrator and to cover cases where the config migration did not persist
 // (e.g. no config file on disk).
 func (mm *ModelManager) healOrphanGeomodelConfig(log logger.Logger) {
-	expectedModelPath := filepath.Join(mm.modelsDir, "shared", geomodelONNXLocalName)
-	expectedLabelsPath := filepath.Join(mm.modelsDir, "shared", geomodelLabelsLocalName)
+	expectedModelPath := filepath.Join(mm.modelsDir, "shared", conf.GeomodelONNXLocalName)
+	expectedLabelsPath := filepath.Join(mm.modelsDir, "shared", conf.GeomodelLabelsLocalName)
 
 	filesPresent := true
 	for _, path := range []string{expectedModelPath, expectedLabelsPath} {

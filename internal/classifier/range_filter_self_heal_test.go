@@ -16,8 +16,8 @@ func writeSharedGeomodel(t *testing.T, modelsDir string) (onnxPath, labelsPath s
 	t.Helper()
 	sharedDir := filepath.Join(modelsDir, "shared")
 	require.NoError(t, os.MkdirAll(sharedDir, 0o755))
-	onnxPath = filepath.Join(sharedDir, geomodelONNXLocalName)
-	labelsPath = filepath.Join(sharedDir, geomodelLabelsLocalName)
+	onnxPath = filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
+	labelsPath = filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 	require.NoError(t, os.WriteFile(onnxPath, []byte("onnx"), 0o644))
 	require.NoError(t, os.WriteFile(labelsPath, []byte("labels"), 0o644))
 	return onnxPath, labelsPath
@@ -27,7 +27,7 @@ func writeSharedGeomodel(t *testing.T, modelsDir string) (onnxPath, labelsPath s
 // modelsDir without creating the files.
 func sharedGeomodelExpectedPaths(modelsDir string) (onnxPath, labelsPath string) {
 	sharedDir := filepath.Join(modelsDir, "shared")
-	return filepath.Join(sharedDir, geomodelONNXLocalName), filepath.Join(sharedDir, geomodelLabelsLocalName)
+	return filepath.Join(sharedDir, conf.GeomodelONNXLocalName), filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 }
 
 // redirectConfigFile points conf persistence at a throwaway file so the orphan
@@ -46,8 +46,12 @@ func redirectConfigFile(t *testing.T) {
 func TestDecideGeomodelOrphanAction(t *testing.T) {
 	t.Parallel()
 
-	const modelPath = "/models/shared/geomodel_v3.0.2_fp16.onnx"
-	const labelsPath = "/models/shared/geomodel_v3.0.2_labels.txt"
+	const gallerySharedDirPrefix = "/models/shared/"
+
+	var (
+		modelPath  = gallerySharedDirPrefix + conf.GeomodelONNXLocalName
+		labelsPath = gallerySharedDirPrefix + conf.GeomodelLabelsLocalName
+	)
 
 	tests := []struct {
 		name         string
