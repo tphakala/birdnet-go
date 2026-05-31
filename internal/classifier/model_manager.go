@@ -217,9 +217,57 @@ func (mm *ModelManager) ScanInstalled() {
 	}
 }
 
+// geomodelOrphanAction is the decision the orphan self-heal makes for a
+// gallery-managed geomodel range filter config when no installed geomodel-capable
+// model was matched.
+type geomodelOrphanAction int
+
+const (
+	// geomodelOrphanNone leaves the config untouched (custom paths, or already
+	// consistent with the on-disk reality).
+	geomodelOrphanNone geomodelOrphanAction = iota
+	// geomodelOrphanPromote sets Model to the v3 literal because the gallery
+	// shared files exist on disk.
+	geomodelOrphanPromote
+	// geomodelOrphanClear wipes the dead geomodel references because the gallery
+	// shared files are absent.
+	geomodelOrphanClear
+)
+
+// geomodelRangeFilterVersion is the literal that the runtime, status code, and
+// UI key off to recognize the geomodel v3 range filter (matches the catalog
+// entry GeomodelVersion for every geomodel-capable model).
+const geomodelRangeFilterVersion = "v3"
+
+// decideGeomodelOrphanAction is the pure decision for the orphan self-heal. It
+// only acts when the range filter points at the EXACT gallery-managed shared
+// paths; custom or hand-edited paths yield geomodelOrphanNone. When the shared
+// files exist it promotes to v3 (no-op if already v3); when they are absent it
+// clears the dead references (no-op if already cleared).
+func decideGeomodelOrphanAction(rf *conf.RangeFilterSettings, expectedModelPath, expectedLabelsPath string, filesPresent bool) geomodelOrphanAction {
+	// Only reconcile gallery-managed configs (exact match on both shared paths).
+	if rf.ModelPath != expectedModelPath || rf.LabelsPath != expectedLabelsPath {
+		return geomodelOrphanNone
+	}
+
+	if filesPresent {
+		if rf.Model == geomodelRangeFilterVersion {
+			return geomodelOrphanNone
+		}
+		return geomodelOrphanPromote
+	}
+
+	// Files absent: the gallery paths are still set (the guard above required an
+	// exact, non-empty match), so clearing them is always a real change.
+	return geomodelOrphanClear
+}
+
 // ensureGeomodelConfig checks if any installed model has geomodel companion
 // files on disk and, if the range filter config doesn't already reflect them,
-// updates the config and reloads the range filter.
+// updates the config and reloads the range filter. When NO installed
+// geomodel-capable model is matched, it runs the orphan self-heal so a persisted
+// config that references the gallery shared geomodel paths stays consistent with
+// reality (promote when the shared files exist, clear when they are absent).
 func (mm *ModelManager) ensureGeomodelConfig(log logger.Logger, installedIDs []string) {
 	if mm.orchestrator == nil {
 		return
@@ -247,53 +295,124 @@ func (mm *ModelManager) ensureGeomodelConfig(log logger.Logger, installedIDs []s
 			continue
 		}
 
-		// Build expected paths from catalog entry.
-		expectedModelPath := ""
-		expectedLabelsPath := ""
-		for _, f := range entry.Files {
-			switch f.Role {
-			case RoleGeomodelModel:
-				expectedModelPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
-			case RoleGeomodelLabels:
-				expectedLabelsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
-			}
-		}
-
-		// Files exist. Check if the config already matches expected paths.
-		currentSettings := conf.GetSettings()
-		rf := currentSettings.BirdNET.RangeFilter
-		if rf.Model == entry.GeomodelVersion &&
-			rf.ModelPath == expectedModelPath &&
-			rf.LabelsPath == expectedLabelsPath {
-			// Config already set; initializeMetaModel handled it at startup.
-			return
-		}
-
-		// Config is stale or missing; update it under settingsMu to
-		// serialize with concurrent install/uninstall config writes.
-		log.Info("Applying geomodel config for installed model",
-			logger.String("catalog_id", catalogID),
-			logger.String("geomodel_version", entry.GeomodelVersion))
-
-		mm.settingsMu.Lock()
-		updated := conf.CloneSettings(conf.GetSettings())
-		updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
-		updated.BirdNET.RangeFilter.ModelPath = expectedModelPath
-		updated.BirdNET.RangeFilter.LabelsPath = expectedLabelsPath
-		conf.StoreSettings(updated)
-		if err := conf.SaveSettings(); err != nil {
-			log.Warn("Failed to persist geomodel config",
-				logger.String("catalog_id", catalogID),
-				logger.Error(err))
-		}
-		mm.settingsMu.Unlock()
-
-		if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
-			log.Warn("Failed to reload range filter after geomodel config update",
-				logger.String("catalog_id", catalogID),
-				logger.Error(err))
-		}
+		// A geomodel-capable model is installed with its files present. Apply
+		// the install promote behavior and stop; the orphan self-heal must not run.
+		mm.applyInstalledGeomodelConfig(log, &entry, catalogID)
 		return
+	}
+
+	// No installed geomodel-capable model was matched. Reconcile a possibly
+	// orphaned gallery-managed config with the shared files on disk.
+	mm.healOrphanGeomodelConfig(log)
+}
+
+// applyInstalledGeomodelConfig promotes the range filter config to match an
+// installed geomodel-capable model whose shared files are present on disk. It is
+// a no-op when the config already matches the expected paths and version.
+func (mm *ModelManager) applyInstalledGeomodelConfig(log logger.Logger, entry *CatalogEntry, catalogID string) {
+	// Build expected paths from catalog entry.
+	expectedModelPath := ""
+	expectedLabelsPath := ""
+	for _, f := range entry.Files {
+		switch f.Role {
+		case RoleGeomodelModel:
+			expectedModelPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+		case RoleGeomodelLabels:
+			expectedLabelsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+		}
+	}
+
+	// Files exist. Check if the config already matches expected paths.
+	rf := conf.GetSettings().BirdNET.RangeFilter
+	if rf.Model == entry.GeomodelVersion &&
+		rf.ModelPath == expectedModelPath &&
+		rf.LabelsPath == expectedLabelsPath {
+		// Config already set; initializeMetaModel handled it at startup.
+		return
+	}
+
+	// Config is stale or missing; update it under settingsMu to
+	// serialize with concurrent install/uninstall config writes.
+	log.Info("Applying geomodel config for installed model",
+		logger.String("catalog_id", catalogID),
+		logger.String("geomodel_version", entry.GeomodelVersion))
+
+	mm.settingsMu.Lock()
+	updated := conf.CloneSettings(conf.GetSettings())
+	updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
+	updated.BirdNET.RangeFilter.ModelPath = expectedModelPath
+	updated.BirdNET.RangeFilter.LabelsPath = expectedLabelsPath
+	conf.StoreSettings(updated)
+	if err := conf.SaveSettings(); err != nil {
+		log.Warn("Failed to persist geomodel config",
+			logger.String("catalog_id", catalogID),
+			logger.Error(err))
+	}
+	mm.settingsMu.Unlock()
+
+	if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
+		log.Warn("Failed to reload range filter after geomodel config update",
+			logger.String("catalog_id", catalogID),
+			logger.Error(err))
+	}
+}
+
+// healOrphanGeomodelConfig reconciles a gallery-managed geomodel range filter
+// config when no geomodel-capable model is installed. It promotes the config to
+// v3 when the shared files are present (e.g. an upgrade that left Model unset),
+// or clears the dead references when the shared files are absent (e.g. the user
+// removed the only geomodel-capable model, leaving BirdNET v2.4 which cleanly
+// uses the embedded TFLite filter). Custom paths are never touched. It only
+// persists and reloads when something actually changed.
+//
+// On a normal startup, conf.Load's MigrateOrphanGeomodelRangeFilter has usually
+// already applied the same promote/clear at config-load time, so this path is
+// then a no-op. It still runs here to reload the range filter on the running
+// orchestrator and to cover cases where the config migration did not persist
+// (e.g. no config file on disk).
+func (mm *ModelManager) healOrphanGeomodelConfig(log logger.Logger) {
+	expectedModelPath := filepath.Join(mm.modelsDir, "shared", geomodelONNXLocalName)
+	expectedLabelsPath := filepath.Join(mm.modelsDir, "shared", geomodelLabelsLocalName)
+
+	filesPresent := true
+	for _, path := range []string{expectedModelPath, expectedLabelsPath} {
+		if _, err := os.Stat(path); err != nil {
+			filesPresent = false
+			break
+		}
+	}
+
+	rf := conf.GetSettings().BirdNET.RangeFilter
+	action := decideGeomodelOrphanAction(&rf, expectedModelPath, expectedLabelsPath, filesPresent)
+	if action == geomodelOrphanNone {
+		return
+	}
+
+	mm.settingsMu.Lock()
+	updated := conf.CloneSettings(conf.GetSettings())
+	switch action {
+	case geomodelOrphanPromote:
+		log.Info("Promoting orphaned geomodel range filter config to v3 (shared files present)")
+		updated.BirdNET.RangeFilter.Model = geomodelRangeFilterVersion
+	case geomodelOrphanClear:
+		log.Info("Clearing orphaned geomodel range filter config (shared files absent)")
+		updated.BirdNET.RangeFilter.Model = ""
+		updated.BirdNET.RangeFilter.ModelPath = ""
+		updated.BirdNET.RangeFilter.LabelsPath = ""
+		updated.BirdNET.RangeFilter.PassUnmappedSpecies = false
+	case geomodelOrphanNone:
+		// Unreachable: handled by the early return above.
+	}
+	conf.StoreSettings(updated)
+	if err := conf.SaveSettings(); err != nil {
+		log.Warn("Failed to persist orphan geomodel config self-heal",
+			logger.Error(err))
+	}
+	mm.settingsMu.Unlock()
+
+	if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
+		log.Warn("Failed to reload range filter after orphan geomodel self-heal",
+			logger.Error(err))
 	}
 }
 

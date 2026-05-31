@@ -106,6 +106,13 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "dashboard layout")
 	}
 
+	// Reconcile an orphaned geomodel-shaped range filter config with the
+	// gallery-managed shared files on disk (promote to v3 when present, clear
+	// dead references when absent).
+	if settings.MigrateOrphanGeomodelRangeFilter() {
+		persistMigration(settings, "orphan geomodel range filter")
+	}
+
 	// Apply default transport to RTSP/RTMP streams that don't specify one
 	settings.Realtime.RTSP.ApplyStreamDefaults()
 
