@@ -411,21 +411,16 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		return nil, nil
 	}
 
-	scores, err := primary.GetProbableSpeciesWithSettings(date, week, settings)
+	// Get the primary's range-filtered scores together with the geomodel's full
+	// label set, both from the same range-filter snapshot so a concurrent
+	// ReloadRangeFilter cannot desync them. geoLabels is non-nil only on the
+	// universal (v3 geomodel) path, where it covers every scientific name the
+	// geomodel knows regardless of threshold.
+	scores, geoLabels, err := primary.getProbableSpecies(date, week, settings)
 	if err != nil {
 		return nil, err
 	}
-
-	// Read the primary's geomodel coverage the same way BuildRangeFilter does.
-	// geoLabels covers every scientific name the geomodel knows, regardless of
-	// threshold; it is empty when the primary is not a universal predictor.
-	primary.mu.Lock()
-	up, isUniversal := primary.rangeFilter.(UniversalSpeciesPredictor)
-	var geoLabels []string
-	if isUniversal {
-		geoLabels = up.GeomodelLabels()
-	}
-	primary.mu.Unlock()
+	isUniversal := geoLabels != nil
 
 	// Dedup by scientific name (lowercased). seenSci holds species already
 	// represented via the primary scores; geoCovered holds every scientific
@@ -459,7 +454,7 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	// deterministic. When two secondary models emit different labels for the
 	// same scientific name, the surviving label must not depend on Go's
 	// randomized map iteration order.
-	sort.Slice(refs, func(i, j int) bool { return refs[i].id < refs[j].id })
+	slices.SortFunc(refs, func(a, b entryRef) int { return strings.Compare(a.id, b.id) })
 
 	passUnmapped := settings.BirdNET.RangeFilter.PassUnmappedSpecies
 	excludeList := settings.Realtime.Species.Exclude

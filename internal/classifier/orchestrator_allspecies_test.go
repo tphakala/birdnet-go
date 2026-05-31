@@ -329,3 +329,61 @@ func TestGetAllProbableSpecies_BatModelSkipped(t *testing.T) {
 	assert.False(t, hasScientificName(scores, "Myotis daubentonii"),
 		"bat model species must never be collected")
 }
+
+// TestGetAllProbableSpecies_DeterministicDedupByModelID verifies that when two
+// non-primary models emit different labels for the same scientific name, the
+// surviving label is deterministic: refs are sorted by model ID, so the
+// lower-ID model is processed first and its label wins the scientific-name
+// dedup (independent of Go's randomized map iteration order).
+func TestGetAllProbableSpecies_DeterministicDedupByModelID(t *testing.T) {
+	settings := universalSettings(t)
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
+
+	rf := &fakeUniversalRangeFilter{
+		geoLabels: []string{"Turdus merula_Common Blackbird"},
+		scores: []SpeciesScore{
+			{Score: 0.9, Label: "Turdus merula_Common Blackbird"},
+		},
+		rawScores: []float32{0.9},
+	}
+
+	const primaryID = "BirdNET_V3"
+	bn := &BirdNET{
+		Settings:     settings,
+		speciesCache: make(map[string]*speciesCacheEntry),
+	}
+	bn.ModelInfo.ID = primaryID
+	bn.rangeFilter = rf
+
+	// Both secondary models emit the same scientific name (geomodel-unmapped, so
+	// it passes through) but with different label strings. The lower model ID
+	// ("aaa_model") is processed first and its label survives.
+	lower := &mockModelInstance{id: "aaa_model", labels: []string{"Aratinga solstitialis"}}
+	higher := &mockModelInstance{id: "zzz_model", labels: []string{"Aratinga solstitialis_Sun Parakeet"}}
+
+	o := &Orchestrator{
+		Settings: settings,
+		primary:  bn,
+		models: map[string]*modelEntry{
+			primaryID:   {instance: bn},
+			"aaa_model": {instance: lower},
+			"zzz_model": {instance: higher},
+		},
+	}
+
+	scores, err := o.GetAllProbableSpeciesWithSettings(time.Now(), 0, settings)
+	require.NoError(t, err)
+
+	count := 0
+	for _, s := range scores {
+		if strings.EqualFold(detection.ExtractScientificName(s.Label), "Aratinga solstitialis") {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "shared scientific name must appear exactly once")
+
+	_, lowerPresent := scoreForLabel(scores, "Aratinga solstitialis")
+	assert.True(t, lowerPresent, "lower model ID label must survive the scientific-name dedup")
+	_, higherPresent := scoreForLabel(scores, "Aratinga solstitialis_Sun Parakeet")
+	assert.False(t, higherPresent, "higher model ID label must be deduped away")
+}
