@@ -163,7 +163,8 @@ func BuildRangeFilter(o *Orchestrator) error {
 			time.Now().Format(time.DateTime),
 			len(includedSpecies))
 		for _, species := range includedSpecies {
-			content.WriteString(species + "\n")
+			content.WriteString(species)
+			content.WriteByte('\n')
 		}
 		if err := os.WriteFile(debugFile, []byte(content.String()), 0o600); err != nil {
 			GetLogger().Warn("Failed to write included species debug file",
