@@ -1341,7 +1341,7 @@ func (bn *BirdNET) Labels() []string {
 func (bn *BirdNET) ReloadSnapshot() (info ModelInfo, taxMap TaxonomyMap, taxPath string, sciIndex ScientificNameIndex) {
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
-	return bn.ModelInfo, bn.TaxonomyMap, bn.TaxonomyPath, bn.ScientificIndex
+	return bn.ModelInfo, maps.Clone(bn.TaxonomyMap), bn.TaxonomyPath, maps.Clone(bn.ScientificIndex)
 }
 
 // Close releases resources held by the BirdNET model.
