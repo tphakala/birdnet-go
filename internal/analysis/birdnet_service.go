@@ -2,8 +2,6 @@ package analysis
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 
 	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -107,25 +105,11 @@ func (a *BirdNETAnalyzer) ModelManager() *classifier.ModelManager {
 func (a *BirdNETAnalyzer) initModelManager(bn *classifier.Orchestrator) {
 	log := GetLogger()
 
-	modelsDir := a.settings.Models.Directory
-	if modelsDir == "" {
-		configDir, err := os.UserConfigDir()
-		if err != nil {
-			homeDir, homeErr := conf.GetUserHomeDir()
-			if homeErr != nil {
-				log.Warn("could not determine config or home directory; model gallery disabled",
-					logger.Error(err),
-					logger.String("home_error", homeErr.Error()),
-					logger.String("service", birdNETAnalyzerName))
-				return
-			}
-			configDir = filepath.Join(homeDir, ".config")
-			log.Warn("UserConfigDir unavailable, falling back to home directory",
-				logger.Error(err),
-				logger.String("fallback", configDir),
-				logger.String("service", birdNETAnalyzerName))
-		}
-		modelsDir = filepath.Join(configDir, "birdnet-go", "models")
+	modelsDir, ok := a.settings.ResolveModelsDir()
+	if !ok {
+		log.Warn("could not determine config or home directory; model gallery disabled",
+			logger.String("service", birdNETAnalyzerName))
+		return
 	}
 
 	a.modelManager = classifier.NewModelManager(modelsDir, bn, a.settings)

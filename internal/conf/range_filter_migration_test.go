@@ -15,15 +15,15 @@ func writeSharedGeomodelFiles(t *testing.T, modelsDir string) {
 	t.Helper()
 	sharedDir := filepath.Join(modelsDir, "shared")
 	require.NoError(t, os.MkdirAll(sharedDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, geomodelSharedONNXLocalName), []byte("onnx"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, geomodelSharedLabelsLocalName), []byte("labels"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, GeomodelONNXLocalName), []byte("onnx"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, GeomodelLabelsLocalName), []byte("labels"), 0o644))
 }
 
 // sharedGeomodelPaths returns the gallery-managed shared ONNX and labels paths
 // under modelsDir.
 func sharedGeomodelPaths(modelsDir string) (onnxPath, labelsPath string) {
 	sharedDir := filepath.Join(modelsDir, "shared")
-	return filepath.Join(sharedDir, geomodelSharedONNXLocalName), filepath.Join(sharedDir, geomodelSharedLabelsLocalName)
+	return filepath.Join(sharedDir, GeomodelONNXLocalName), filepath.Join(sharedDir, GeomodelLabelsLocalName)
 }
 
 func TestMigrateOrphanGeomodelRangeFilter(t *testing.T) {
