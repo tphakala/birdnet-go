@@ -808,16 +808,6 @@ const DefaultRangeFilterV1ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.t
 // This filename is used when RangeFilter.Model is set to "latest" or unspecified in noembed builds.
 const DefaultRangeFilterV2ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite"
 
-// Geomodel v3 local file names used for auto-selection when the geomodel
-// has been downloaded as a shared companion file by the model gallery.
-//
-// These refer directly to the source of truth constants in the internal/conf
-// package.
-const (
-	geomodelONNXLocalName   = conf.GeomodelONNXLocalName
-	geomodelLabelsLocalName = conf.GeomodelLabelsLocalName
-)
-
 // DefaultModelDirectory is the default directory name where model files are expected to be found.
 // This is a relative path that will be resolved against various base paths during model discovery.
 // In Docker containers with WORKDIR /data, this resolves to /data/model/.
@@ -1444,8 +1434,8 @@ func (bn *BirdNET) PrimaryRangeFilterCoverage() (geomodel *GeomodelStatus, prima
 
 	if rf.Model == "v3" && bn.modelsDir != "" {
 		sharedDir := filepath.Join(bn.modelsDir, "shared")
-		expectedONNX := filepath.Join(sharedDir, geomodelONNXLocalName)
-		expectedLabels := filepath.Join(sharedDir, geomodelLabelsLocalName)
+		expectedONNX := filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
+		expectedLabels := filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 		autoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
 	}
 
@@ -1487,8 +1477,8 @@ func shouldAutoSelectV3Geomodel(modelID, modelsDir string) bool {
 		return false
 	}
 	sharedDir := filepath.Join(modelsDir, "shared")
-	onnxPath := filepath.Join(sharedDir, geomodelONNXLocalName)
-	labelsPath := filepath.Join(sharedDir, geomodelLabelsLocalName)
+	onnxPath := filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
+	labelsPath := filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 	if _, err := os.Stat(onnxPath); err != nil {
 		return false
 	}
@@ -1526,6 +1516,6 @@ func applyAutoSelectedGeomodelPaths(settings *conf.Settings, modelsDir string) {
 
 	sharedDir := filepath.Join(modelsDir, "shared")
 	rf.Model = "v3"
-	rf.ModelPath = filepath.Join(sharedDir, geomodelONNXLocalName)
-	rf.LabelsPath = filepath.Join(sharedDir, geomodelLabelsLocalName)
+	rf.ModelPath = filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
+	rf.LabelsPath = filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 }

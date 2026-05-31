@@ -3,7 +3,11 @@
 // key via RegistryID and provides download metadata for HuggingFace repos.
 package classifier
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
+)
 
 // Catalog category constants.
 const (
@@ -218,7 +222,7 @@ func geomodelFiles() []CatalogFile {
 	return []CatalogFile{
 		{
 			RemotePath:      "BirdNET+_Geomodel_V3.0.2_Global_12K_FP16.onnx",
-			LocalName:       geomodelONNXLocalName,
+			LocalName:       conf.GeomodelONNXLocalName,
 			Role:            RoleGeomodelModel,
 			SHA256:          geomodelONNXSHA256,
 			SizeBytes:       geomodelONNXSizeBytes,
@@ -226,7 +230,7 @@ func geomodelFiles() []CatalogFile {
 		},
 		{
 			RemotePath:      "geomodel_v3.0.2_labels.txt",
-			LocalName:       geomodelLabelsLocalName,
+			LocalName:       conf.GeomodelLabelsLocalName,
 			Role:            RoleGeomodelLabels,
 			SHA256:          geomodelLabelsSHA256,
 			SizeBytes:       geomodelLabelsSizeBytes,

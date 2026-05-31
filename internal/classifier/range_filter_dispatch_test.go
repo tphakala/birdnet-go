@@ -23,8 +23,8 @@ func TestResolveRangeFilterBackend(t *testing.T) {
 	const sharedModelPathPrefix = "/data/model/shared/"
 
 	var (
-		geomodelONNX   = sharedModelPathPrefix + geomodelONNXLocalName
-		geomodelLabels = sharedModelPathPrefix + geomodelLabelsLocalName
+		geomodelONNX   = sharedModelPathPrefix + conf.GeomodelONNXLocalName
+		geomodelLabels = sharedModelPathPrefix + conf.GeomodelLabelsLocalName
 		customONNX     = "/data/model/custom_rangefilter.onnx"
 	)
 
