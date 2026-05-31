@@ -231,13 +231,18 @@ func TestBirdNET_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
 		}
 	})
 
-	// Reader: concurrently calls currentSettings, Debug, and EnrichResultWithTaxonomy
+	// Reader: concurrently calls currentSettings, Debug, EnrichResultWithTaxonomy,
+	// and GetProbableSpecies. GetProbableSpecies is the path that previously read
+	// bn.Settings without synchronization; it now reads via the atomic accessor
+	// and this exercises that fix under -race.
 	wg.Go(func() {
 		<-start
+		now := time.Now()
 		for range iterations {
 			_ = bn.currentSettings()
 			bn.Debug("test debug message")
 			_, _, _ = bn.EnrichResultWithTaxonomy("Turdus merula_Common Blackbird")
+			_, _ = bn.GetProbableSpecies(now, 0)
 		}
 	})
 
@@ -268,13 +273,16 @@ func TestOrchestrator_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
 		}
 	})
 
-	// Reader: concurrently calls CurrentSettings, Labels, and NumSpecies
+	// Reader: concurrently calls CurrentSettings, Labels, NumSpecies, and
+	// GetProbableSpecies (which delegates to the primary's settings-reading path).
 	wg.Go(func() {
 		<-start
+		now := time.Now()
 		for range iterations {
 			_ = o.CurrentSettings()
 			_ = o.Labels()
 			_ = o.NumSpecies()
+			_, _ = o.GetProbableSpecies(now, 0)
 		}
 	})
 

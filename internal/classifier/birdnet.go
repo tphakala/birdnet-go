@@ -1093,6 +1093,11 @@ func (bn *BirdNET) reloadModelInternal() error {
 		bn.TaxonomyMap = oldTaxonomyMap
 		bn.ScientificIndex = oldScientificIndex
 		bn.updateSettings(oldSettings)
+		// Degraded-but-recovered: make it explicit in the log that the previous
+		// model was restored, so a failed reload is not mistaken for a dead
+		// detector. The caller logs the underlying error separately.
+		GetLogger().Warn("BirdNET model reload failed; rolled back to previous model",
+			logger.String("model_id", oldModelInfo.ID))
 	}
 
 	// Check if model version changed; if so, the orchestrator must handle

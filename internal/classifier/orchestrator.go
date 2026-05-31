@@ -163,7 +163,10 @@ func (o *Orchestrator) SetModelsDir(dir string) {
 // goroutines calling ResolveName. Registration is idempotent via a
 // double-checked guard.
 func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
-	if o.Settings == nil {
+	// Read settings via the atomic-safe accessor; o.Settings is reassigned at
+	// runtime by ReloadModel (under o.mu), so raw field reads would race.
+	settings := o.CurrentSettings()
+	if settings == nil {
 		return
 	}
 
@@ -179,7 +182,7 @@ func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
 	log := GetLogger()
 	taxonomyPath := filepath.Join(modelsDir, "shared", "taxonomy.csv")
 
-	locale := o.Settings.BirdNET.Locale
+	locale := settings.BirdNET.Locale
 	// Load the resolver outside the lock; NewTaxonomyResolver does file I/O.
 	resolver, err := NewTaxonomyResolver(taxonomyPath, locale)
 	if err != nil {

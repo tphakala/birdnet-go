@@ -568,6 +568,10 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	// running inference engine, so deleting the file could cause a segfault.
 	if mm.orchestrator != nil && entry.RegistryID != "" && mm.orchestrator.IsModelLoaded(entry.RegistryID) {
 		if err := mm.orchestrator.UnloadModel(entry.RegistryID); err != nil {
+			log.Warn("Uninstall refused: model could not be unloaded (still in use)",
+				logger.String("catalog_id", catalogID),
+				logger.String("registry_id", entry.RegistryID),
+				logger.Error(err))
 			return errors.Newf("cannot uninstall %s: model still in use", catalogID).
 				Component("classifier.model_manager").
 				Category(errors.CategorySystem).
@@ -639,16 +643,22 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 			logger.String("path", subdir))
 	}
 
-	log.Info("Model uninstalled",
-		logger.String("catalog_id", catalogID))
-
 	if deleteErr != nil {
+		// Best-effort uninstall: the model is de-registered and config cleared,
+		// but some files remain. Log at Warn (not the clean Info) so the record
+		// matches the returned error and the actual on-disk state.
+		log.Warn("Model uninstalled, but some files could not be removed",
+			logger.String("catalog_id", catalogID),
+			logger.Error(deleteErr))
 		return errors.Newf("model uninstalled, but failed to remove some files: %v", deleteErr).
 			Component("classifier.model_manager").
 			Category(errors.CategoryFileIO).
 			Context("catalog_id", catalogID).
 			Build()
 	}
+
+	log.Info("Model uninstalled",
+		logger.String("catalog_id", catalogID))
 
 	return nil
 }
@@ -771,6 +781,14 @@ func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, base
 	if mm.orchestrator != nil && entry.RegistryID != "" && mm.orchestrator.IsModelLoaded(entry.RegistryID) {
 		if err := mm.orchestrator.UnloadModel(entry.RegistryID); err != nil {
 			mm.mu.Unlock()
+			// Reinstall runs asynchronously, so the HTTP caller cannot surface
+			// this. Log at the always-on manager logger; the API logger that the
+			// handler uses may be disabled, which would otherwise leave a refused
+			// reinstall completely silent.
+			GetLogger().Warn("Reinstall refused: model could not be unloaded (still in use)",
+				logger.String("catalog_id", entry.ID),
+				logger.String("registry_id", entry.RegistryID),
+				logger.Error(err))
 			return errors.Newf("cannot reinstall %s: model still in use", entry.ID).
 				Component("classifier.model_manager").
 				Category(errors.CategorySystem).

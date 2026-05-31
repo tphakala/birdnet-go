@@ -61,7 +61,7 @@ func TestInitializeMetaModel_OrphanGeomodelOnV24(t *testing.T) {
 	}
 	t.Cleanup(bn.Delete)
 
-	require.NoError(t, bn.initializeMetaModel())
+	require.NoError(t, bn.initializeMetaModel(settings))
 
 	mapped, ok := bn.rangeFilter.(*mappedRangeFilter)
 	require.True(t, ok, "orphan geomodel config must produce a mappedRangeFilter, got %T", bn.rangeFilter)

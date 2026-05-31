@@ -44,7 +44,10 @@ type UniversalSpeciesPredictor interface {
 func BuildRangeFilter(o *Orchestrator) error {
 	start := time.Now()
 	today := start.Truncate(24 * time.Hour)
-	settings := conf.CurrentOrFallback(o.Settings)
+	// Read settings via the atomic-safe accessor: o.Settings is reassigned at
+	// runtime by Orchestrator.ReloadModel (under o.mu), so a raw field read here
+	// would race with concurrent reloads.
+	settings := o.CurrentSettings()
 
 	var includedSpecies []string
 
@@ -254,7 +257,7 @@ func addUserOverrideSpecies(includedSpecies *[]string, settings *conf.Settings, 
 // so that UI changes to coordinates, threshold, or LocationConfigured take
 // effect immediately without restarting the service.
 func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
-	scores, _, err := bn.getProbableSpecies(date, week, conf.CurrentOrFallback(bn.Settings))
+	scores, _, err := bn.getProbableSpecies(date, week, bn.currentSettings())
 	return scores, err
 }
 
