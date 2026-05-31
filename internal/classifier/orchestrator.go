@@ -724,23 +724,6 @@ func (o *Orchestrator) notifyRangeFilterReload() {
 	}
 }
 
-// ReloadBatFilter rebuilds the bat model's high-pass filter from current settings.
-func (o *Orchestrator) ReloadBatFilter() {
-	o.mu.RLock()
-	entry, ok := o.models[RegistryIDBat]
-	o.mu.RUnlock()
-	if !ok || entry == nil {
-		return
-	}
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-	bat, ok := entry.instance.(*Bat)
-	if !ok || bat == nil {
-		return
-	}
-	bat.UpdateFilter()
-}
-
 // RunFilterProcess executes the filter process on demand and prints results.
 func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 	o.primary.RunFilterProcess(dateStr, week)
