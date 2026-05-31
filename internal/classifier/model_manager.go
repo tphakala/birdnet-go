@@ -322,23 +322,27 @@ func (mm *ModelManager) applyInstalledGeomodelConfig(log logger.Logger, entry *C
 		}
 	}
 
-	// Files exist. Check if the config already matches expected paths.
-	rf := conf.GetSettings().BirdNET.RangeFilter
+	// Decide and write under settingsMu so the already-matches check and the
+	// store operate on one consistent snapshot. Reading outside the lock would
+	// let a concurrent install/uninstall publish a newer config between the
+	// check and the store, overwriting it with stale data.
+	mm.settingsMu.Lock()
+	current := conf.GetSettings()
+	rf := current.BirdNET.RangeFilter
 	if rf.Model == entry.GeomodelVersion &&
 		rf.ModelPath == expectedModelPath &&
 		rf.LabelsPath == expectedLabelsPath {
 		// Config already set; initializeMetaModel handled it at startup.
+		mm.settingsMu.Unlock()
 		return
 	}
 
-	// Config is stale or missing; update it under settingsMu to
-	// serialize with concurrent install/uninstall config writes.
+	// Config is stale or missing; update it.
 	log.Info("Applying geomodel config for installed model",
 		logger.String("catalog_id", catalogID),
 		logger.String("geomodel_version", entry.GeomodelVersion))
 
-	mm.settingsMu.Lock()
-	updated := conf.CloneSettings(conf.GetSettings())
+	updated := conf.CloneSettings(current)
 	updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
 	updated.BirdNET.RangeFilter.ModelPath = expectedModelPath
 	updated.BirdNET.RangeFilter.LabelsPath = expectedLabelsPath
@@ -382,14 +386,21 @@ func (mm *ModelManager) healOrphanGeomodelConfig(log logger.Logger) {
 		}
 	}
 
-	rf := conf.GetSettings().BirdNET.RangeFilter
+	// Decide and write under settingsMu so the decision and the store operate on
+	// one consistent snapshot. Reading the config outside the lock would let a
+	// concurrent install publish a valid geomodel config between the decision
+	// and the store, after which a stale "clear" would wipe it. The filesystem
+	// check above is independent of settings, so it stays outside the lock.
+	mm.settingsMu.Lock()
+	current := conf.GetSettings()
+	rf := current.BirdNET.RangeFilter
 	action := decideGeomodelOrphanAction(&rf, expectedModelPath, expectedLabelsPath, filesPresent)
 	if action == geomodelOrphanNone {
+		mm.settingsMu.Unlock()
 		return
 	}
 
-	mm.settingsMu.Lock()
-	updated := conf.CloneSettings(conf.GetSettings())
+	updated := conf.CloneSettings(current)
 	switch action {
 	case geomodelOrphanPromote:
 		log.Info("Promoting orphaned geomodel range filter config to v3 (shared files present)")
