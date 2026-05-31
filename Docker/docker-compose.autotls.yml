@@ -20,9 +20,10 @@ services:
       # - BIRDNET_SENSITIVITY=1.0
       # - BIRDNET_OVERLAP=1.5
     volumes:
+      # AutoTLS (Let's Encrypt) certificates are cached under /config/tls-acme,
+      # so they persist across restarts via this bind mount.
       - ./config:/config
       - ./data:/data
-      - ./certs:/certs  # For Let's Encrypt certificates
     # Mount HLS stream segment files directory as tmpfs (RAM disk)
     tmpfs:
       - /config/hls:exec,size=50M,uid=${BIRDNET_UID:-1000},gid=${BIRDNET_GID:-1000},mode=0755
@@ -58,6 +59,4 @@ volumes:
   config:
     driver: local
   data:
-    driver: local
-  certs:
     driver: local
