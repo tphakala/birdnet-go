@@ -12,7 +12,6 @@ const createDefaultFilters = () => ({
   timePeriod: 'all' as const,
   startDate: '',
   endDate: '',
-  sortOrder: 'count_desc' as const,
   searchTerm: '',
 });
 
@@ -62,7 +61,7 @@ describe('SpeciesFilterForm', () => {
     expect(timePeriodSelect).toBeInTheDocument();
   });
 
-  it('displays sort order options', () => {
+  it('does not render a sort order dropdown (sorting moved to table headers)', () => {
     render(SpeciesFilterForm, {
       props: {
         filters: createDefaultFilters(),
@@ -74,10 +73,8 @@ describe('SpeciesFilterForm', () => {
       },
     });
 
-    // SelectDropdown renders as a button with the translated label
-    // Default sort order is count_desc -> "Most Detections"
-    const sortSelect = screen.getByRole('button', { name: /most detections/i });
-    expect(sortSelect).toBeInTheDocument();
+    expect(screen.queryByText('Sort By')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /most detections/i })).not.toBeInTheDocument();
   });
 
   it('shows custom date fields when custom time period is selected', () => {

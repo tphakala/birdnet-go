@@ -8,19 +8,6 @@
     timePeriod: 'all' | 'today' | 'week' | 'month' | '90days' | 'year' | 'custom';
     startDate: string;
     endDate: string;
-    sortOrder:
-      | 'count_desc'
-      | 'count_asc'
-      | 'name_asc'
-      | 'name_desc'
-      | 'first_seen_desc'
-      | 'first_seen_asc'
-      | 'last_seen_desc'
-      | 'last_seen_asc'
-      | 'confidence_desc'
-      | 'confidence_asc'
-      | 'max_confidence_desc'
-      | 'max_confidence_asc';
     searchTerm: string;
   }
 
@@ -52,21 +39,6 @@
     { value: '90days', label: t('analytics.timePeriodOptions.last90Days') },
     { value: 'year', label: t('analytics.timePeriodOptions.lastYear') },
     { value: 'custom', label: t('analytics.timePeriodOptions.customRange') },
-  ];
-
-  const sortOptions = [
-    { value: 'count_desc', label: t('analytics.sortOptions.mostDetections') },
-    { value: 'count_asc', label: t('analytics.sortOptions.fewestDetections') },
-    { value: 'name_asc', label: t('analytics.sortOptions.nameAZ') },
-    { value: 'name_desc', label: t('analytics.sortOptions.nameZA') },
-    { value: 'first_seen_desc', label: t('analytics.sortOptions.recentlyFirstSeen') },
-    { value: 'first_seen_asc', label: t('analytics.sortOptions.earliestFirstSeen') },
-    { value: 'last_seen_desc', label: t('analytics.sortOptions.recentlyLastSeen') },
-    { value: 'last_seen_asc', label: t('analytics.sortOptions.earliestLastSeen') },
-    { value: 'confidence_desc', label: t('analytics.sortOptions.highestConfidence') },
-    { value: 'confidence_asc', label: t('analytics.sortOptions.lowestConfidence') },
-    { value: 'max_confidence_desc', label: t('analytics.sortOptions.highestMaxConfidence') },
-    { value: 'max_confidence_asc', label: t('analytics.sortOptions.lowestMaxConfidence') },
   ];
 
   function handleSubmit(event: Event) {
@@ -115,17 +87,6 @@
             <Input type="date" id="endDate" bind:value={filters.endDate} />
           </FormField>
         {/if}
-
-        <!-- Sort Order -->
-        <FormField label={t('analytics.filters.sortBy')} id="sortOrder">
-          <SelectDropdown
-            bind:value={filters.sortOrder}
-            options={sortOptions}
-            variant="select"
-            size="sm"
-            menuSize="sm"
-          />
-        </FormField>
 
         <!-- Search Filter - Full width on mobile -->
         <FormField

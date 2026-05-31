@@ -231,11 +231,17 @@ describe('Species (analytics page) — sortable column headers', () => {
     const { container } = await renderListView();
 
     await fireEvent.click(container.querySelectorAll('table thead th button')[1]);
-    expect(window.localStorage.getItem(SORT_STORAGE_KEY)).toBe('"count_asc"');
+    expect(JSON.parse(window.localStorage.getItem(SORT_STORAGE_KEY) ?? 'null')).toEqual({
+      field: 'count',
+      direction: 'asc',
+    });
   });
 
   it('restores a persisted sort order on a fresh render', async () => {
-    window.localStorage.setItem(SORT_STORAGE_KEY, '"count_asc"');
+    window.localStorage.setItem(
+      SORT_STORAGE_KEY,
+      JSON.stringify({ field: 'count', direction: 'asc' })
+    );
 
     const { container } = await renderListView();
 
