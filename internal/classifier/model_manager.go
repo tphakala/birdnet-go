@@ -568,6 +568,10 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	// running inference engine, so deleting the file could cause a segfault.
 	if mm.orchestrator != nil && entry.RegistryID != "" && mm.orchestrator.IsModelLoaded(entry.RegistryID) {
 		if err := mm.orchestrator.UnloadModel(entry.RegistryID); err != nil {
+			log.Warn("Uninstall refused: model could not be unloaded (still in use)",
+				logger.String("catalog_id", catalogID),
+				logger.String("registry_id", entry.RegistryID),
+				logger.Error(err))
 			return errors.Newf("cannot uninstall %s: model still in use", catalogID).
 				Component("classifier.model_manager").
 				Category(errors.CategorySystem).
@@ -580,22 +584,31 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 
 	subdir := filepath.Join(mm.modelsDir, catalogID)
 
+	var deleteErr error
+
 	// Delete model ONNX files and associated data files (calibration, distribution, etc.).
 	for _, f := range entry.Files {
 		if f.Role == RoleModel || f.Role == RoleData {
 			path := filepath.Join(subdir, f.LocalName)
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				return errors.Newf("failed to remove file %s: %v", path, err).
-					Component("classifier.model_manager").
-					Category(errors.CategoryFileIO).
-					Context("catalog_id", catalogID).
-					Context("file", path).
-					Build()
+			err := os.Remove(path)
+			if err == nil {
+				log.Info("Removed file",
+					logger.String("catalog_id", catalogID),
+					logger.String("role", f.Role),
+					logger.String("path", path))
+				continue
 			}
-			log.Info("Removed file",
-				logger.String("catalog_id", catalogID),
-				logger.String("role", f.Role),
-				logger.String("path", path))
+			if !os.IsNotExist(err) {
+				// Warn, not Error: a leftover file during best-effort uninstall is a
+				// recoverable/degraded condition (the model is still de-registered),
+				// matching cleanupSharedFiles and avoiding needless Error/Sentry noise.
+				log.Warn("Failed to remove file during uninstall",
+					logger.String("path", path),
+					logger.Error(err))
+				if deleteErr == nil {
+					deleteErr = err
+				}
+			}
 		}
 	}
 
@@ -631,6 +644,20 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	} else if !os.IsNotExist(err) {
 		log.Debug("Model directory not removed (likely non-empty)",
 			logger.String("path", subdir))
+	}
+
+	if deleteErr != nil {
+		// Best-effort uninstall: the model is de-registered and config cleared,
+		// but some files remain. Log at Warn (not the clean Info) so the record
+		// matches the returned error and the actual on-disk state.
+		log.Warn("Model uninstalled, but some files could not be removed",
+			logger.String("catalog_id", catalogID),
+			logger.Error(deleteErr))
+		return errors.Newf("model uninstalled, but failed to remove some files: %v", deleteErr).
+			Component("classifier.model_manager").
+			Category(errors.CategoryFileIO).
+			Context("catalog_id", catalogID).
+			Build()
 	}
 
 	log.Info("Model uninstalled",
@@ -751,6 +778,28 @@ func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, base
 			Category(errors.CategoryValidation).
 			Context("catalog_id", entry.ID).
 			Build()
+	}
+
+	// Unload from orchestrator BEFORE overwriting files to avoid crashes.
+	if mm.orchestrator != nil && entry.RegistryID != "" && mm.orchestrator.IsModelLoaded(entry.RegistryID) {
+		if err := mm.orchestrator.UnloadModel(entry.RegistryID); err != nil {
+			mm.mu.Unlock()
+			// Reinstall runs asynchronously, so the HTTP caller cannot surface
+			// this. Log at the always-on manager logger; the API logger that the
+			// handler uses may be disabled, which would otherwise leave a refused
+			// reinstall completely silent.
+			GetLogger().Warn("Reinstall refused: model could not be unloaded (still in use)",
+				logger.String("catalog_id", entry.ID),
+				logger.String("registry_id", entry.RegistryID),
+				logger.Error(err))
+			return errors.Newf("cannot reinstall %s: model still in use", entry.ID).
+				Component("classifier.model_manager").
+				Category(errors.CategorySystem).
+				Context("catalog_id", entry.ID).
+				Context("registry_id", entry.RegistryID).
+				Context("unload_error", err.Error()).
+				Build()
+		}
 	}
 
 	// Record download as in-progress.

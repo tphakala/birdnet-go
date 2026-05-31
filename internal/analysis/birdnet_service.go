@@ -57,7 +57,7 @@ func (a *BirdNETAnalyzer) Start(_ context.Context) error {
 	a.bn = bn
 
 	events.Emit(context.Background(), "detection", "model_loaded", "BirdNET model loaded", map[string]any{
-		"species_count": len(bn.Settings.BirdNET.Labels),
+		"species_count": bn.NumSpecies(),
 	})
 
 	// Initialize ModelManager for the model gallery. Failure is non-fatal

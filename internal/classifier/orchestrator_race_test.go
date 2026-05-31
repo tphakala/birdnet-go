@@ -207,3 +207,106 @@ func TestOrchestrator_ConcurrentReloadSnapshot_NoRace(t *testing.T) {
 	close(start)
 	wg.Wait()
 }
+
+// TestBirdNET_ConcurrentSettingsReadsAndWrites_NoRace verifies that calling currentSettings
+// and Debug concurrently with simulated ReloadModel settings updates does not cause a data race.
+func TestBirdNET_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
+	settings := &conf.Settings{}
+	// Construct via struct literal (not NewBirdNET) so the test runs under the
+	// noembed build tag, where the embedded model is unavailable. The settings
+	// accessors and reader methods exercised below do not require a loaded model;
+	// GetProbableSpecies returns early when the range filter is nil.
+	bn := &BirdNET{
+		Settings:     settings,
+		speciesCache: make(map[string]*speciesCacheEntry),
+		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
+	}
+	bn.settingsAtomic.Store(settings)
+
+	const iterations = 1000
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+
+	// Writer: simulates ReloadModel() updating Settings copy
+	wg.Go(func() {
+		<-start
+		for i := range iterations {
+			settingsCopy := conf.CloneSettings(settings)
+			settingsCopy.BirdNET.Debug = i%2 == 0
+			bn.mu.Lock()
+			bn.updateSettings(settingsCopy)
+			bn.mu.Unlock()
+		}
+	})
+
+	// Reader: concurrently calls currentSettings, Debug, EnrichResultWithTaxonomy,
+	// and GetProbableSpecies. GetProbableSpecies is the path that previously read
+	// bn.Settings without synchronization; it now reads via the atomic accessor
+	// and this exercises that fix under -race.
+	wg.Go(func() {
+		<-start
+		now := time.Now()
+		for range iterations {
+			_ = bn.currentSettings()
+			bn.Debug("test debug message")
+			_, _, _ = bn.EnrichResultWithTaxonomy("Turdus merula_Common Blackbird")
+			_, _ = bn.GetProbableSpecies(now, 0)
+		}
+	})
+
+	close(start)
+	wg.Wait()
+}
+
+// TestOrchestrator_ConcurrentSettingsReadsAndWrites_NoRace verifies that calling CurrentSettings
+// concurrently with simulated ReloadModel settings updates on the Orchestrator does not cause a data race.
+func TestOrchestrator_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
+	settings := &conf.Settings{}
+	// Construct via struct literals (not NewOrchestrator) so the test runs under
+	// the noembed build tag, where the embedded model is unavailable.
+	bn := &BirdNET{
+		Settings:     settings,
+		speciesCache: make(map[string]*speciesCacheEntry),
+		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
+	}
+	bn.settingsAtomic.Store(settings)
+	o := &Orchestrator{
+		Settings:  settings,
+		ModelInfo: bn.ModelInfo,
+		primary:   bn,
+		models:    map[string]*modelEntry{bn.ModelInfo.ID: {instance: bn}},
+	}
+	o.settingsAtomic.Store(settings)
+
+	const iterations = 1000
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+
+	// Writer: simulates ReloadModel() updating settings on Orchestrator
+	wg.Go(func() {
+		<-start
+		for i := range iterations {
+			settingsCopy := conf.CloneSettings(settings)
+			settingsCopy.BirdNET.Debug = i%2 == 0
+			o.mu.Lock()
+			o.updateSettings(settingsCopy)
+			o.mu.Unlock()
+		}
+	})
+
+	// Reader: concurrently calls CurrentSettings, Labels, NumSpecies, and
+	// GetProbableSpecies (which delegates to the primary's settings-reading path).
+	wg.Go(func() {
+		<-start
+		now := time.Now()
+		for range iterations {
+			_ = o.CurrentSettings()
+			_ = o.Labels()
+			_ = o.NumSpecies()
+			_, _ = o.GetProbableSpecies(now, 0)
+		}
+	})
+
+	close(start)
+	wg.Wait()
+}

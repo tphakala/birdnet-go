@@ -356,7 +356,7 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 	}
 
 	// Rebuild name maps with new locale labels (use fresh settings, not stale pointer)
-	labels := conf.CurrentOrFallback(cm.bn.Settings).BirdNET.Labels
+	labels := cm.bn.Labels()
 	if cm.proc != nil && cm.proc.Ds != nil {
 		cm.proc.Ds.UpdateNameMaps(labels)
 		GetLogger().Info("Datastore name maps updated with new labels")

@@ -15,7 +15,7 @@ import (
 func (bn *BirdNET) initializeONNXModel() error {
 	start := time.Now()
 	log := GetLogger()
-	settings := bn.currentSettings()
+	settings := bn.Settings
 
 	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, "ONNX classifier", "onnx_classifier", ""); err != nil {
 		return err
