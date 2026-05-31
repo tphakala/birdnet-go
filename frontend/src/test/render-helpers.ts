@@ -260,6 +260,14 @@ export const analyticsI18nTranslations = {
   'analytics.timePeriodOptions.lastYear': 'Last Year',
   'analytics.timePeriodOptions.customRange': 'Custom Range',
 
+  // Species table headers
+  'analytics.species.headers.species': 'Species',
+  'analytics.species.headers.detections': 'Detections',
+  'analytics.species.headers.avgConfidence': 'Avg Confidence',
+  'analytics.species.headers.maxConfidence': 'Max Confidence',
+  'analytics.species.headers.firstDetected': 'First Detected',
+  'analytics.species.headers.lastDetected': 'Last Detected',
+
   // Sort options
   'analytics.sortOptions.mostDetections': 'Most Detections',
   'analytics.sortOptions.fewestDetections': 'Fewest Detections',

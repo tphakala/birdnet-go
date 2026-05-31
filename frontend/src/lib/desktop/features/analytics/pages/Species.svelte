@@ -118,24 +118,36 @@
   let selectedSpecies = $state<SpeciesData | null>(null);
   let showDetailModal = $state(false);
 
+  // Read once so both filters and the applied-sort indicator start at the same persisted value.
+  const restoredSortOrder = getStoredValue<SortOrder>(
+    SORT_STORAGE_KEY,
+    DEFAULT_SORT_ORDER,
+    isSortOrder
+  );
+
   let filters = $state<SpeciesFilters>({
     timePeriod: 'all',
     startDate: '',
     endDate: '',
-    // Restore the persisted sort so it survives a refresh; default to detection count descending.
-    sortOrder: getStoredValue<SortOrder>(SORT_STORAGE_KEY, DEFAULT_SORT_ORDER, isSortOrder),
+    sortOrder: restoredSortOrder,
     searchTerm: '',
   });
 
-  // Active column + direction for the header indicators, derived from sortOrder.
+  // Tracks the sort order that is actually applied to the table. Updated inside
+  // applyFilters() so that changing the dropdown without clicking Apply does not
+  // move the column-header arrows before the data has been re-sorted.
+  let appliedSortOrder = $state<SortOrder>(restoredSortOrder);
+
+  // Active column + direction for the header indicators, derived from the
+  // applied sort (not the pending dropdown selection).
   let activeColumn = $derived(
     SORTABLE_COLUMNS.find(
-      column => column.asc === filters.sortOrder || column.desc === filters.sortOrder
+      column => column.asc === appliedSortOrder || column.desc === appliedSortOrder
     )
   );
   let sortField = $derived(activeColumn?.field ?? '');
   let sortDirection: 'asc' | 'desc' = $derived(
-    activeColumn?.desc === filters.sortOrder ? 'desc' : 'asc'
+    activeColumn?.desc === appliedSortOrder ? 'desc' : 'asc'
   );
 
   // Clicking a header: re-clicking the active column toggles direction; a new
@@ -152,6 +164,7 @@
           ? column.asc
           : column.desc;
     filters.sortOrder = next;
+    setStoredValue<SortOrder>(SORT_STORAGE_KEY, next);
     applyFilters();
   }
 
@@ -178,6 +191,7 @@
 
   async function fetchData() {
     isLoading = true;
+    setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
 
     try {
       // Determine date range based on time period
@@ -264,7 +278,7 @@
   }
 
   function applyFilters() {
-    setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
+    appliedSortOrder = filters.sortOrder;
     let filtered = [...speciesData];
 
     // Apply search filter
