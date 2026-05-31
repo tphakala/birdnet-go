@@ -3535,6 +3535,20 @@
           "description": "Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.",
           "action": "Configure Location"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Range filter inactive",
+            "description": "Detections are not being filtered by your location right now, so species from outside your area can be reported. Check the range filter model configuration in Settings."
+          },
+          "fellBack": {
+            "title": "Using the built-in range filter",
+            "description": "The configured geomodel range filter could not be loaded, so BirdNET-Go fell back to the built-in range filter. Filtering still works, but check Settings to restore the geomodel."
+          },
+          "mappedZero": {
+            "title": "Range filter matched no species",
+            "description": "The geomodel range filter did not match any of the active model's species, so every detection would be filtered out. Check that the range filter labels file matches the active model."
+          }
+        },
         "columns": {
           "commonName": "Common Name",
           "scientificName": "Scientific Name",

@@ -3535,6 +3535,20 @@
           "description": "Iestatiet savu atrašanās vietu galvenajos iestatījumos, lai redzētu jūsu apkārtnē pieejamās sugas. Diapazona filtrs izmanto jūsu atrašanās vietu, lai noteiktu, kuras sugas, visticamāk, atrodamas tuvumā.",
           "action": "Konfigurēt atrašanās vietu"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Areāla filtrs nav aktīvs",
+            "description": "Noteikšanas pašlaik netiek filtrētas pēc jūsu atrašanās vietas, tāpēc var tikt ziņots arī par sugām, kas sastopamas ārpus jūsu apgabala. Pārbaudiet areāla filtra modeļa konfigurāciju Iestatījumu lapā."
+          },
+          "fellBack": {
+            "title": "Tiek izmantots iebūvētais areāla filtrs",
+            "description": "Konfigurēto ģeomodeļa areāla filtru neizdevās ielādēt, tāpēc BirdNET-Go pārslēdzās uz iebūvēto areāla filtru. Filtrēšana joprojām darbojas, taču pārbaudiet Iestatījumu lapu, lai atjaunotu ģeomodeli."
+          },
+          "mappedZero": {
+            "title": "Areāla filtrs neatbilda nevienai sugai",
+            "description": "Ģeomodeļa areāla filtrs neatbilda nevienai aktīvā modeļa sugai, tāpēc tiktu izfiltrētas visas noteikšanas. Pārbaudiet, vai areāla filtra etiķešu fails atbilst aktīvajam modelim."
+          }
+        },
         "columns": {
           "commonName": "Parastais nosaukums",
           "scientificName": "Zinātniskais nosaukums",

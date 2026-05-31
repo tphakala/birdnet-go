@@ -3535,6 +3535,20 @@
           "description": "Ustaw swoją lokalizację w Ustawieniach Głównych, aby zobaczyć gatunki dostępne w Twojej okolicy. Filtr zasięgu wykorzystuje Twoją lokalizację do określenia, które gatunki prawdopodobnie występują w pobliżu.",
           "action": "Skonfiguruj lokalizację"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Filtr zasięgu jest nieaktywny",
+            "description": "Wykrycia nie są obecnie filtrowane według Twojej lokalizacji, więc mogą być zgłaszane gatunki spoza Twojej okolicy. Sprawdź konfigurację modelu filtra zasięgu w Ustawieniach."
+          },
+          "fellBack": {
+            "title": "Używany jest wbudowany filtr zasięgu",
+            "description": "Nie udało się załadować skonfigurowanego filtra zasięgu geomodelu, więc BirdNET-Go przełączył się na wbudowany filtr zasięgu. Filtrowanie nadal działa, ale sprawdź Ustawienia, aby przywrócić geomodel."
+          },
+          "mappedZero": {
+            "title": "Filtr zasięgu nie dopasował żadnego gatunku",
+            "description": "Filtr zasięgu geomodelu nie dopasował żadnego z gatunków aktywnego modelu, więc każde wykrycie zostałoby odfiltrowane. Sprawdź, czy plik etykiet filtra zasięgu odpowiada aktywnemu modelowi."
+          }
+        },
         "columns": {
           "commonName": "Nazwa",
           "scientificName": "Nazwa naukowa",

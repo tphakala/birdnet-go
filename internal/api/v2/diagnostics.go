@@ -118,6 +118,20 @@ func (c *Controller) registerHealthChecks() {
 			status := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
 			return status.Available, status.Initialized, status.Version, status.LibraryPath, status.Error
 		}),
+		checks.NewRangeFilterCheck(func() checks.RangeFilterStatusInfo {
+			orch, err := c.getBirdNETInstance()
+			if err != nil || orch == nil {
+				return checks.RangeFilterStatusInfo{}
+			}
+			st := orch.RangeFilterStatus()
+			return checks.RangeFilterStatusInfo{
+				LocationConfigured: st.LocationConfigured,
+				Active:             st.Active,
+				FellBack:           st.FellBack,
+				GeomodelActive:     st.Geomodel != nil,
+				MappedSpecies:      st.MappedSpecies,
+			}
+		}),
 
 		// Stream checks
 		checks.NewStreamConnectivityCheck(getStreamHealthInfos),

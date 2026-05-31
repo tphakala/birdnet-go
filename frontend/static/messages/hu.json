@@ -3535,6 +3535,20 @@
           "description": "Állítsa be a helyszínét a Fő beállításokban a környékén elérhető fajok megtekintéséhez. A tartomány szűrő az Ön helyszíne alapján határozza meg, mely fajok valószínűsíthetők a közelben.",
           "action": "Helyszín konfigurálása"
         },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "A tartomány szűrő nem aktív",
+            "description": "A detektálásokat jelenleg nem szűri a helyszíned, így a területeden kívüli fajok is jelentésre kerülhetnek. Ellenőrizd a tartomány szűrő modell beállítását a Beállítások oldalon."
+          },
+          "fellBack": {
+            "title": "A beépített tartomány szűrő használata",
+            "description": "A beállított geomodell tartomány szűrőt nem sikerült betölteni, ezért a BirdNET-Go a beépített tartomány szűrőre váltott. A szűrés továbbra is működik, de a geomodell visszaállításához ellenőrizd a Beállítások oldalt."
+          },
+          "mappedZero": {
+            "title": "A tartomány szűrő egyetlen fajra sem illeszkedett",
+            "description": "A geomodell tartomány szűrő az aktív modell egyetlen fajára sem illeszkedett, így minden detektálás kiszűrésre kerülne. Ellenőrizd, hogy a tartomány szűrő címkefájlja megegyezik-e az aktív modellel."
+          }
+        },
         "columns": {
           "commonName": "Közhasználatú név",
           "scientificName": "Tudományos név",
