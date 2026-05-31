@@ -2148,7 +2148,6 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, "info", toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", "info", toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, "warning", toastDurationExtended},
-	{"Bat filter", "reconfigure_bat_filter", batFilterSettingsChanged, "", "", "", 0},
 	{"Log deduplication", "reconfigure_log_deduplication", logDeduplicationSettingsChanged, "Reconfiguring log deduplication...", "", "info", toastDurationShort},
 	{"RTSP health", "reconfigure_rtsp_health", rtspHealthSettingsChanged, "Reconfiguring RTSP health monitoring...", "", "info", toastDurationShort},
 	{"Monitoring", "reconfigure_monitoring", monitoringSettingsChanged, "Reconfiguring system monitoring...", "", "info", toastDurationShort},
@@ -2519,13 +2518,6 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	}
 
 	return false
-}
-
-// batFilterSettingsChanged checks if bat high-pass filter settings have changed.
-func batFilterSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
-	return oldSettings.Bat.FilterEnabled != currentSettings.Bat.FilterEnabled ||
-		oldSettings.Bat.FilterCutoffHz != currentSettings.Bat.FilterCutoffHz ||
-		oldSettings.Bat.FilterPassCount != currentSettings.Bat.FilterPassCount
 }
 
 // logDeduplicationSettingsChanged checks if log deduplication settings have changed.

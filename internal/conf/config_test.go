@@ -1,9 +1,12 @@
 package conf
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAudioSettings_NeedsFfprobeWorkaround(t *testing.T) {
@@ -127,4 +130,33 @@ func TestAudioSettings_HasFfmpegVersion(t *testing.T) {
 				"AudioSettings.HasFfmpegVersion() mismatch")
 		})
 	}
+}
+
+func TestBackwardCompatibility_RemovedBatFilterFields(t *testing.T) {
+	t.Parallel()
+
+	// YAML content containing the removed bat high-pass filter fields.
+	yamlContent := `
+bat:
+  threshold: 0.75
+  nighttimeonly: true
+  filterenabled: true
+  filtercutoffhz: 5000.0
+  filterpasscount: 2
+`
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	err := v.ReadConfig(strings.NewReader(yamlContent))
+	require.NoError(t, err)
+
+	var settings Settings
+	err = v.Unmarshal(&settings, viper.DecodeHook(DurationDecodeHook()))
+	require.NoError(t, err)
+
+	// Verify that the parser successfully ignored the removed filter fields,
+	// but correctly loaded the other active BatConfig fields.
+	assert.InDelta(t, 0.75, settings.Bat.Threshold, 1e-9)
+	assert.True(t, settings.Bat.NighttimeOnly)
 }

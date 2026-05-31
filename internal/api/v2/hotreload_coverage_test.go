@@ -69,7 +69,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Perch": {categories: []hotReloadCategory{hotReloadRestart}},
 
 	// --- Bat ---
-	"Bat": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_bat_filter"},
+	"Bat": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- BSG ---
 	"BSG": {categories: []hotReloadCategory{hotReloadRestart}},
