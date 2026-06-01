@@ -1464,6 +1464,18 @@ func (ds *Datastore) GetNoteClipPath(noteID string) (string, error) {
 	return ds.detection.GetClipPath(ctx, id)
 }
 
+// GetNoteModelType returns the AI model type for a detection by note ID.
+// It JOINs detections with ai_models to retrieve the model_type field.
+// Returns "bird" as default if the model type cannot be determined.
+func (ds *Datastore) GetNoteModelType(noteID string) (string, error) {
+	ctx := context.Background()
+	id, err := parseID(noteID)
+	if err != nil {
+		return string(entities.ModelTypeBird), err
+	}
+	return ds.detection.GetModelType(ctx, id)
+}
+
 // DeleteNoteClipPath deletes the clip path for a note.
 func (ds *Datastore) DeleteNoteClipPath(noteID string) error {
 	ctx := context.Background()

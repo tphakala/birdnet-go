@@ -64,11 +64,12 @@ type PreRenderer struct {
 
 // Job represents a single spectrogram generation task.
 type Job struct {
-	PCMData    []byte    // Raw PCM data from memory (s16le, mono)
-	SampleRate int       // PCM sample rate in Hz (0 = use conf.SampleRate default)
-	ClipPath   string    // Full absolute path to audio clip; PNG path is derived by swapping extension
-	NoteID     uint      // For logging correlation
-	Timestamp  time.Time // Job submission time
+	PCMData          []byte           // Raw PCM data from memory (s16le, mono)
+	SampleRate       int              // PCM sample rate in Hz (0 = use conf.SampleRate default)
+	ClipPath         string           // Full absolute path to audio clip; PNG path is derived by swapping extension
+	NoteID           uint             // For logging correlation
+	Timestamp        time.Time        // Job submission time
+	FrequencyProfile FrequencyProfile // Frequency profile for spectrogram generation (bird vs bat)
 }
 
 // Methods to match the interface (allows Job to be submitted directly in tests)
@@ -77,6 +78,14 @@ func (j *Job) GetSampleRate() int      { return j.SampleRate }
 func (j *Job) GetClipPath() string     { return j.ClipPath }
 func (j *Job) GetNoteID() uint         { return j.NoteID }
 func (j *Job) GetTimestamp() time.Time { return j.Timestamp }
+
+// GetModelType returns the model type string for DTO interface compatibility.
+func (j *Job) GetModelType() string {
+	if j.FrequencyProfile.IsBird() {
+		return "bird"
+	}
+	return "bat"
+}
 
 // Stats tracks pre-rendering statistics.
 type Stats struct {
@@ -198,14 +207,16 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	GetClipPath() string
 	GetNoteID() uint
 	GetTimestamp() time.Time
+	GetModelType() string
 }) (err error) {
 	// Convert DTO to internal Job type
 	job := &Job{
-		PCMData:    jobDTO.GetPCMData(),
-		SampleRate: jobDTO.GetSampleRate(),
-		ClipPath:   jobDTO.GetClipPath(),
-		NoteID:     jobDTO.GetNoteID(),
-		Timestamp:  jobDTO.GetTimestamp(),
+		PCMData:          jobDTO.GetPCMData(),
+		SampleRate:       jobDTO.GetSampleRate(),
+		ClipPath:         jobDTO.GetClipPath(),
+		NoteID:           jobDTO.GetNoteID(),
+		Timestamp:        jobDTO.GetTimestamp(),
+		FrequencyProfile: ProfileForModelType(jobDTO.GetModelType()),
 	}
 
 	// Early check: skip if spectrogram already exists (avoid queueing duplicate jobs)
@@ -431,7 +442,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		logger.String("operation", "spectrogram_generation_start"))
 
 	// Generate spectrogram using shared generator
-	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, specSettings.Raw, job.SampleRate); err != nil {
+	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, specSettings.Raw, job.SampleRate, WithFrequencyProfile(job.FrequencyProfile)); err != nil {
 		// Check if this is an expected operational error (context canceled, process killed)
 		// These are normal events during shutdown, timeout, or resource management
 		if IsOperationalError(err) {

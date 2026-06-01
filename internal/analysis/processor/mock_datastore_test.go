@@ -178,6 +178,9 @@ func (m *ActionMockDatastore) SearchNotesAdvanced(_ *datastore.AdvancedSearchFil
 func (m *ActionMockDatastore) GetNoteClipPath(_ string) (string, error) {
 	return "", nil
 }
+func (m *ActionMockDatastore) GetNoteModelType(_ string) (string, error) {
+	return "bird", nil
+}
 func (m *ActionMockDatastore) DeleteNoteClipPath(_ string) error {
 	return nil
 }

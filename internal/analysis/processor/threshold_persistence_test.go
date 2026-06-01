@@ -80,7 +80,8 @@ func (m *MockDatastore) SearchNotesAdvanced(*datastore.AdvancedSearchFilters) ([
 func (m *MockDatastore) GetNoteClipPath(string) (string, error) {
 	return "", datastore.ErrNoteReviewNotFound
 }
-func (m *MockDatastore) DeleteNoteClipPath(string) error { return nil }
+func (m *MockDatastore) GetNoteModelType(_ string) (string, error) { return "bird", nil }
+func (m *MockDatastore) DeleteNoteClipPath(string) error           { return nil }
 func (m *MockDatastore) GetNoteReview(string) (*datastore.NoteReview, error) {
 	return nil, datastore.ErrNoteReviewNotFound
 }

@@ -125,6 +125,8 @@ func (m *mockCorruptStore) GetAllImageCaches(providerName string) ([]datastore.I
 	return m.mockStore.GetAllImageCaches(providerName)
 }
 
+func (m *mockCorruptStore) GetNoteModelType(_ string) (string, error) { return "bird", nil }
+
 // TestImageCacheDisablesReadsOnCorruption verifies that once GetImageCache
 // reports SQLite corruption, the cache stops issuing further reads or writes
 // for the rest of the session. Without this latch the same fatal error gets

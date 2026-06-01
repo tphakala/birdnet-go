@@ -124,6 +124,7 @@ type PreRenderJob struct {
 	ClipPath   string    // Full absolute path to audio clip file
 	NoteID     uint      // For logging correlation
 	Timestamp  time.Time // Job submission time
+	ModelType  string    // AI model type ("bird", "bat", "multi") for frequency profile selection
 }
 
 // Methods to expose fields (allows prerenderer to access without importing processor)
@@ -132,6 +133,7 @@ func (j *PreRenderJob) GetSampleRate() int      { return j.SampleRate }
 func (j *PreRenderJob) GetClipPath() string     { return j.ClipPath }
 func (j *PreRenderJob) GetNoteID() uint         { return j.NoteID }
 func (j *PreRenderJob) GetTimestamp() time.Time { return j.Timestamp }
+func (j *PreRenderJob) GetModelType() string    { return j.ModelType }
 
 // PreRendererSubmit is an interface for submitting pre-render jobs.
 // Callers create PreRenderJob instances, and the implementation adapts them
@@ -143,6 +145,7 @@ type PreRendererSubmit interface {
 		GetClipPath() string
 		GetNoteID() uint
 		GetTimestamp() time.Time
+		GetModelType() string
 	}) error
 	Stop() // Graceful shutdown
 }
