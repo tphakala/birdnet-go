@@ -72,6 +72,9 @@ func (r *AuxiliaryMigrationResult) sections() []auxSection {
 // LogErrors logs a warning for each auxiliary section that encountered errors.
 // Weather is handled separately because it tracks daily and hourly counts.
 func (r *AuxiliaryMigrationResult) LogErrors(log logger.Logger) {
+	if log == nil {
+		return
+	}
 	for _, s := range r.sections() {
 		if s.err != nil {
 			log.Warn(s.name+" migration had errors",
