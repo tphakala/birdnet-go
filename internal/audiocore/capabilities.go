@@ -25,7 +25,7 @@ var (
 
 // CandidateSampleRates are the rates tested during device probing.
 // Derived from conf.ValidSampleRates to keep validation and probing in sync.
-var CandidateSampleRates = slices.Clone(conf.ValidSampleRates)
+var CandidateSampleRates = conf.ValidSampleRates()
 
 // MinCaptureSampleRate is the lowest rate considered useful for capture.
 const MinCaptureSampleRate = 48000

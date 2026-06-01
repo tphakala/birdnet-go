@@ -100,9 +100,14 @@ var ValidStreamTypes = map[string]bool{
 	StreamTypeUDP:  true,
 }
 
-// ValidSampleRates is the canonical list of supported capture sample rates (sorted ascending).
-// Used by both validation and audiocore device probing to prevent drift.
-var ValidSampleRates = []int{48000, 96000, 192000, 256000, 384000}
+// validSampleRates is the canonical list of supported capture sample rates (sorted ascending).
+var validSampleRates = []int{48000, 96000, 192000, 256000, 384000}
+
+// ValidSampleRates returns a copy of the canonical sample rate list.
+// Returning a clone prevents callers from mutating the shared source of truth.
+func ValidSampleRates() []int {
+	return slices.Clone(validSampleRates)
+}
 
 // Validate validates a single stream configuration
 func (s *StreamConfig) Validate() error {
@@ -315,9 +320,9 @@ func (a *AudioSourceConfig) Validate() error {
 
 	// Validate sample rate if specified (0 means use default 48000)
 	if a.SampleRate != 0 {
-		if !slices.Contains(ValidSampleRates, a.SampleRate) {
-			rateStrs := make([]string, len(ValidSampleRates))
-			for i, r := range ValidSampleRates {
+		if !slices.Contains(validSampleRates, a.SampleRate) {
+			rateStrs := make([]string, len(validSampleRates))
+			for i, r := range validSampleRates {
 				rateStrs[i] = strconv.Itoa(r)
 			}
 			return fmt.Errorf("audio source '%s': sample rate %d Hz is not a supported value (valid: %s)", a.Name, a.SampleRate, strings.Join(rateStrs, ", "))

@@ -138,15 +138,6 @@ func (c *StreamErrorRateCheck) Run(_ context.Context) health.Result {
 	}, start)
 }
 
-// FFmpeg process state strings, matching ProcessState.String() in
-// internal/audiocore/ffmpeg. "stopped" is the terminal state: the process has
-// permanently stopped and will not recover on its own. Any other non-running
-// state (idle, starting, restarting, backoff, circuit_open) is transient.
-const (
-	ffmpegStateRunning = ffmpeg.ProcessStateRunning
-	ffmpegStateStopped = ffmpeg.ProcessStateStopped
-)
-
 // FFmpeg health check message formats.
 const (
 	// ffmpegStoppedMsgFormat is used when only stopped (terminal) processes are present.
@@ -192,9 +183,9 @@ func (c *FFmpegHealthCheck) Run(_ context.Context) health.Result {
 
 	for _, s := range streams {
 		switch s.ProcessState {
-		case ffmpegStateRunning:
+		case ffmpeg.ProcessStateRunning:
 			// healthy
-		case ffmpegStateStopped:
+		case ffmpeg.ProcessStateStopped:
 			stoppedCount++
 		default:
 			notRunningCount++
