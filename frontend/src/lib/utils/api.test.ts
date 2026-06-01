@@ -173,6 +173,35 @@ describe('API utilities', () => {
       expect(result).toBeNull();
     });
 
+    it('retries with a fresh CSRF token when a state-changing request gets 403', async () => {
+      // Override refreshCsrfToken to return true for this test
+      const appState = await import('$lib/stores/appState.svelte');
+      vi.mocked(appState.refreshCsrfToken).mockResolvedValueOnce(true);
+
+      // First call: 403 (CSRF token expired)
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        headers: new Headers(),
+        json: () => Promise.resolve({ error: 'CSRF token invalid' }),
+      });
+
+      // Second call (retry): 200 OK
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ saved: true }),
+      });
+
+      const result = await fetchWithCSRF('/api/settings', { method: 'POST', body: { key: 'val' } });
+
+      expect(appState.refreshCsrfToken).toHaveBeenCalledOnce();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ saved: true });
+    });
+
     it('returns text for non-JSON responses', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

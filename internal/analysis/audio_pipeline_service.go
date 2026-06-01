@@ -671,7 +671,6 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 	if slInterval <= 0 {
 		slInterval = 10 // default 10-second aggregation window
 	}
-	audioSettings := &settings.Realtime.Audio
 	for _, sid := range sourceIDs {
 		// Skip sources that already have a registered soundlevel consumer so
 		// the function is safe to call with overlapping source ID sets across
@@ -693,7 +692,6 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 		if src != nil {
 			sourceName = src.DisplayName
 		}
-		override := settings.ResolveEQOverride(sourceName)
 
 		// Use per-source sample rate when available; fall back to global constant.
 		sourceSampleRate := conf.SampleRate
@@ -701,7 +699,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 			sourceSampleRate = src.SampleRate
 		}
 
-		eqChain := equalizer.BuildFilterChainWithOverride(override, audioSettings.Equalizer, sourceName, sourceSampleRate)
+		eqChain := equalizer.ResolveAndBuildFilterChain(settings, sourceName, sourceSampleRate)
 
 		slProc, slErr := soundlevel.NewProcessor(sid, sid, sourceSampleRate, slInterval)
 		if slErr != nil {
@@ -887,7 +885,6 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 	bufMgr := p.engine.BufferManager()
 	currentSettings := conf.Setting()
-	audioSettings := &currentSettings.Realtime.Audio
 
 	for _, sid := range sourceIDs {
 		// Look up per-source gain from the registry.
@@ -901,7 +898,6 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 		if src != nil {
 			sourceName = src.DisplayName
 		}
-		eqOverride := currentSettings.ResolveEQOverride(sourceName)
 
 		// Resolve per-source model targets. Fall back to primary if the
 		// source has no configured models or none could be resolved.
@@ -977,14 +973,14 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				logger.String("source_id", sid), logger.Error(bcErr), logger.String("operation", operation))
 			continue
 		}
-		bcChain := equalizer.BuildFilterChainWithOverride(eqOverride, audioSettings.Equalizer, sourceName, sourceSampleRate)
+		bcChain := equalizer.ResolveAndBuildFilterChain(currentSettings, sourceName, sourceSampleRate)
 		if routeErr := p.engine.Router().AddRoute(sid, bc, sourceSampleRate, gainDB, bcChain); routeErr != nil {
 			log.Warn("failed to add buffer route",
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 		}
 
 		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, sourceSampleRate, conf.BitDepth, 1)
-		alcChain := equalizer.BuildFilterChainWithOverride(eqOverride, audioSettings.Equalizer, sourceName, sourceSampleRate)
+		alcChain := equalizer.ResolveAndBuildFilterChain(currentSettings, sourceName, sourceSampleRate)
 		if routeErr := p.engine.Router().AddRoute(sid, alc, sourceSampleRate, gainDB, alcChain); routeErr != nil {
 			log.Warn("failed to add audio level route",
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))

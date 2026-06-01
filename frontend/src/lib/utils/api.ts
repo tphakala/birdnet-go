@@ -348,21 +348,6 @@ export async function fetchWithCSRF<T = unknown>(
       if (parsedUrl.origin !== window.location.origin) {
         throw new ApiError('Cross-origin requests not allowed', 400, new Response());
       }
-
-      // Additional hostname validation
-      const hostname = parsedUrl.hostname;
-      if (
-        hostname === 'localhost' ||
-        hostname === '127.0.0.1' ||
-        hostname.startsWith('192.168.') ||
-        hostname.startsWith('10.') ||
-        hostname.startsWith('172.')
-      ) {
-        // Only allow if it matches current origin
-        if (parsedUrl.origin !== window.location.origin) {
-          throw new ApiError('Private network access not allowed', 400, new Response());
-        }
-      }
     } catch (urlError) {
       if (urlError instanceof ApiError) throw urlError;
       throw new ApiError('Malformed URL', 400, new Response());

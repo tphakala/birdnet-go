@@ -215,3 +215,80 @@ func TestBuildFilterChainWithOverride_DisabledOverride(t *testing.T) {
 	chain := equalizer.BuildFilterChainWithOverride(override, globalEQ, "test-source", 48000)
 	assert.Nil(t, chain, "disabled override should return nil chain regardless of global")
 }
+
+func TestResolveAndBuildFilterChain_UsesPerSourceOverride(t *testing.T) {
+	t.Parallel()
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{
+			Name: "Front Mic",
+			Equalizer: &conf.EqualizerSettings{
+				Enabled: true,
+				Filters: []conf.EqualizerFilter{
+					{Type: "HighPass", Frequency: 300, Q: 0.707, Passes: 1},
+				},
+			},
+		},
+	}
+	settings.Realtime.Audio.Equalizer = conf.EqualizerSettings{
+		Enabled: true,
+		Filters: []conf.EqualizerFilter{
+			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
+			{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 1},
+		},
+	}
+
+	chain := equalizer.ResolveAndBuildFilterChain(settings, "Front Mic", 48000)
+	require.NotNil(t, chain)
+	assert.Equal(t, 1, chain.Length(), "should use 1-filter per-source override, not 2-filter global")
+}
+
+func TestResolveAndBuildFilterChain_FallsBackToGlobal(t *testing.T) {
+	t.Parallel()
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Equalizer = conf.EqualizerSettings{
+		Enabled: true,
+		Filters: []conf.EqualizerFilter{
+			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
+			{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 1},
+		},
+	}
+
+	chain := equalizer.ResolveAndBuildFilterChain(settings, "Unknown Source", 48000)
+	require.NotNil(t, chain)
+	assert.Equal(t, 2, chain.Length(), "should use 2-filter global when no per-source override exists")
+}
+
+func TestResolveAndBuildFilterChain_DisabledGlobal(t *testing.T) {
+	t.Parallel()
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Equalizer = conf.EqualizerSettings{
+		Enabled: false,
+		Filters: []conf.EqualizerFilter{
+			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
+		},
+	}
+
+	chain := equalizer.ResolveAndBuildFilterChain(settings, "Any Source", 48000)
+	assert.Nil(t, chain, "disabled global EQ should return nil chain")
+}
+
+func TestResolveAndBuildFilterChain_RespectsSampleRate(t *testing.T) {
+	t.Parallel()
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Equalizer = conf.EqualizerSettings{
+		Enabled: true,
+		Filters: []conf.EqualizerFilter{
+			{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 1},
+		},
+	}
+
+	// Both sample rates should produce a valid chain (the filter coefficients
+	// differ internally, but the chain structure is the same).
+	chain48k := equalizer.ResolveAndBuildFilterChain(settings, "src-a", 48000)
+	chain16k := equalizer.ResolveAndBuildFilterChain(settings, "src-b", 16000)
+	require.NotNil(t, chain48k)
+	require.NotNil(t, chain16k)
+	assert.Equal(t, 1, chain48k.Length())
+	assert.Equal(t, 1, chain16k.Length())
+}
