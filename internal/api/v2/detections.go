@@ -799,6 +799,9 @@ func (c *Controller) populateWeatherData(detection *DetectionResponse, note *dat
 	detectionTimeStr := note.Date + " " + note.Time
 	detectionTime, err := time.ParseInLocation("2006-01-02 15:04:05", detectionTimeStr, time.Local)
 	if err != nil {
+		c.logWarnIfEnabled("Failed to parse detection time for weather data",
+			logger.String("time_str", detectionTimeStr),
+			logger.Error(err))
 		return
 	}
 

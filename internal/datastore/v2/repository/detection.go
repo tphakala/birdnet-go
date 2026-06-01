@@ -266,6 +266,10 @@ type DetectionRepository interface {
 	// Returns ErrDetectionNotFound if not found.
 	GetClipPath(ctx context.Context, id uint) (string, error)
 
+	// GetModelType returns the AI model type for a detection by JOINing
+	// the detections table with ai_models. Returns "bird" if not found.
+	GetModelType(ctx context.Context, id uint) (string, error)
+
 	// Exists checks if a detection with the given ID exists.
 	Exists(ctx context.Context, id uint) (bool, error)
 

@@ -1977,14 +1977,7 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	if settings.Realtime.MQTT.Enabled {
 		mqttClient := p.GetMQTTClient()
 		if mqttClient != nil {
-			// Create MQTT retry config from settings
-			mqttRetryConfig := jobqueue.RetryConfig{
-				Enabled:      settings.Realtime.MQTT.RetrySettings.Enabled,
-				MaxRetries:   settings.Realtime.MQTT.RetrySettings.MaxRetries,
-				InitialDelay: time.Duration(settings.Realtime.MQTT.RetrySettings.InitialDelay) * time.Second,
-				MaxDelay:     time.Duration(settings.Realtime.MQTT.RetrySettings.MaxDelay) * time.Second,
-				Multiplier:   settings.Realtime.MQTT.RetrySettings.BackoffMultiplier,
-			}
+			mqttRetryConfig := retryConfigFromSettings(settings.Realtime.MQTT.RetrySettings)
 
 			mqttAction = &MqttAction{
 				Settings:       settings,
@@ -2061,14 +2054,7 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	if settings.Realtime.Birdweather.Enabled {
 		bwClient := p.GetBwClient() // Use getter for thread safety
 		if bwClient != nil {
-			// Create BirdWeather retry config from settings
-			bwRetryConfig := jobqueue.RetryConfig{
-				Enabled:      settings.Realtime.Birdweather.RetrySettings.Enabled,
-				MaxRetries:   settings.Realtime.Birdweather.RetrySettings.MaxRetries,
-				InitialDelay: time.Duration(settings.Realtime.Birdweather.RetrySettings.InitialDelay) * time.Second,
-				MaxDelay:     time.Duration(settings.Realtime.Birdweather.RetrySettings.MaxDelay) * time.Second,
-				Multiplier:   settings.Realtime.Birdweather.RetrySettings.BackoffMultiplier,
-			}
+			bwRetryConfig := retryConfigFromSettings(settings.Realtime.Birdweather.RetrySettings)
 
 			actions = append(actions, &BirdWeatherAction{
 				Settings:      settings,
@@ -2098,6 +2084,17 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	}
 
 	return actions
+}
+
+// retryConfigFromSettings converts user-facing retry settings into a jobqueue RetryConfig.
+func retryConfigFromSettings(rs conf.RetrySettings) jobqueue.RetryConfig {
+	return jobqueue.RetryConfig{
+		Enabled:      rs.Enabled,
+		MaxRetries:   rs.MaxRetries,
+		InitialDelay: time.Duration(rs.InitialDelay) * time.Second,
+		MaxDelay:     time.Duration(rs.MaxDelay) * time.Second,
+		Multiplier:   rs.BackoffMultiplier,
+	}
 }
 
 // buildSaveAudioAction creates a SaveAudioAction for the given detection.

@@ -3055,6 +3055,62 @@ func (_c *MockInterface_GetNoteLock_Call) RunAndReturn(run func(string) (*datast
 	return _c
 }
 
+// GetNoteModelType provides a mock function with given fields: noteID
+func (_m *MockInterface) GetNoteModelType(noteID string) (string, error) {
+	ret := _m.Called(noteID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetNoteModelType")
+	}
+
+	var r0 string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string) (string, error)); ok {
+		return rf(noteID)
+	}
+	if rf, ok := ret.Get(0).(func(string) string); ok {
+		r0 = rf(noteID)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(noteID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetNoteModelType_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetNoteModelType'
+type MockInterface_GetNoteModelType_Call struct {
+	*mock.Call
+}
+
+// GetNoteModelType is a helper method to define mock.On call
+//   - noteID string
+func (_e *MockInterface_Expecter) GetNoteModelType(noteID interface{}) *MockInterface_GetNoteModelType_Call {
+	return &MockInterface_GetNoteModelType_Call{Call: _e.mock.On("GetNoteModelType", noteID)}
+}
+
+func (_c *MockInterface_GetNoteModelType_Call) Run(run func(noteID string)) *MockInterface_GetNoteModelType_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetNoteModelType_Call) Return(_a0 string, _a1 error) *MockInterface_GetNoteModelType_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetNoteModelType_Call) RunAndReturn(run func(string) (string, error)) *MockInterface_GetNoteModelType_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetNoteResults provides a mock function with given fields: noteID
 func (_m *MockInterface) GetNoteResults(noteID string) ([]datastore.Results, error) {
 	ret := _m.Called(noteID)

@@ -486,6 +486,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 			ClipPath:   outputPath, // Use full path to audio file
 			NoteID:     a.NoteID,
 			Timestamp:  time.Now(),
+			ModelType:  string(detection.ResolveModelType(a.modelName, "")),
 		}
 
 		// Non-blocking submission - errors logged but don't fail action

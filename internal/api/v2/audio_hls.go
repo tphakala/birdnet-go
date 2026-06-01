@@ -1613,11 +1613,18 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	if src != nil {
 		sourceName = src.DisplayName
 	}
-	override := settings.ResolveEQOverride(sourceName)
-	eqChain := equalizer.BuildFilterChainWithOverride(override, settings.Realtime.Audio.Equalizer, sourceName, sampleRate)
+	eqChain := equalizer.ResolveAndBuildFilterChain(settings, sourceName, sampleRate)
+
+	// Determine the actual sample rate of the capture source
+	sourceSampleRate := sampleRate // Fallback to target rate
+	if src != nil && src.SampleRate > 0 {
+		sourceSampleRate = src.SampleRate
+	} else {
+		GetLogger().Warn("Audio source sample rate unavailable, falling back to HLS target rate", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.Int("fallback_rate", sampleRate))
+	}
 
 	// Add route on the AudioRouter
-	if routeErr := eng.Router().AddRoute(sourceID, consumer, sampleRate, gainDB, eqChain); routeErr != nil {
+	if routeErr := eng.Router().AddRoute(sourceID, consumer, sourceSampleRate, gainDB, eqChain); routeErr != nil {
 		return nil, nil, fmt.Errorf("failed to add HLS route: %w", routeErr)
 	}
 

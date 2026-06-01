@@ -114,6 +114,7 @@ type Interface interface {
 	SearchNotes(query string, sortAscending bool, limit int, offset int) ([]Note, int64, error)
 	SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note, int64, error)
 	GetNoteClipPath(noteID string) (string, error)
+	GetNoteModelType(noteID string) (string, error)
 	DeleteNoteClipPath(noteID string) error
 	GetNoteReview(noteID string) (*NoteReview, error)
 	SaveNoteReview(review *NoteReview) error
@@ -572,6 +573,12 @@ func (ds *DataStore) GetNoteClipPath(noteID string) (string, error) {
 	}
 
 	return clipPath.ClipName, nil
+}
+
+// GetNoteModelType returns the AI model type for a detection.
+// The legacy schema does not track model types, so this always returns "bird".
+func (ds *DataStore) GetNoteModelType(_ string) (string, error) {
+	return "bird", nil
 }
 
 // DeleteNoteClipPath deletes the field representing the path to the audio clip associated with a note.

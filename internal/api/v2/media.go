@@ -981,7 +981,17 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 	defer func() { _ = os.Remove(tmpSpectrogramPath) }()
 
 	params := c.parseSpectrogramParameters(ctx)
-	if err := c.spectrogramGenerator.GenerateFromFile(ctx.Request().Context(), tmpPath, tmpSpectrogramPath, params.width, params.raw); err != nil {
+
+	// Resolve frequency profile from detection's model type
+	modelType, mtErr := c.DS.GetNoteModelType(noteID)
+	if mtErr != nil {
+		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+			logger.String("note_id", noteID),
+			logger.Error(mtErr))
+	}
+	profileOpt := spectrogram.WithFrequencyProfile(spectrogram.ProfileForModelType(modelType))
+
+	if err := c.spectrogramGenerator.GenerateFromFile(ctx.Request().Context(), tmpPath, tmpSpectrogramPath, params.width, params.raw, profileOpt); err != nil {
 		if ctx.Request().Context().Err() != nil {
 			return nil
 		}
@@ -1214,10 +1224,10 @@ func (c *Controller) returnSpectrogramNotGeneratedError(ctx echo.Context) (bool,
 }
 
 // handleAutoPreRenderMode handles spectrogram generation and serving in auto/prerender modes.
-func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters) error {
+func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, extraOpts ...spectrogram.GenerateOption) error {
 	// Auto or prerender mode - generate on-demand if needed
 	generationStart := time.Now()
-	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw, params.style, params.dynamicRange)
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw, params.style, params.dynamicRange, extraOpts...)
 	generationDuration := time.Since(generationStart)
 
 	if err != nil {
@@ -1342,6 +1352,15 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	// Parse query parameters
 	params := c.parseSpectrogramParameters(ctx)
 
+	// Resolve frequency profile from detection's model type
+	modelType, err := c.DS.GetNoteModelType(noteID)
+	if err != nil {
+		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+			logger.String("note_id", noteID),
+			logger.Error(err))
+	}
+	profileOpt := spectrogram.WithFrequencyProfile(spectrogram.ProfileForModelType(modelType))
+
 	// Log request details
 	c.logDebugIfEnabled("Spectrogram requested by ID",
 		logger.String("note_id", noteID),
@@ -1349,6 +1368,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		logger.Int("width", params.width),
 		logger.Bool("raw", params.raw),
 		logger.String("size_param", params.sizeStr),
+		logger.String("model_type", modelType),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()))
 
@@ -1364,7 +1384,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Handle auto or prerender mode
-	return c.handleAutoPreRenderMode(ctx, noteID, clipPath, params)
+	return c.handleAutoPreRenderMode(ctx, noteID, clipPath, params, profileOpt)
 }
 
 // ServeAudioByQueryID serves an audio clip using query parameter for ID
@@ -1688,7 +1708,16 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		bgCtx, cancel := context.WithTimeout(c.ctx, spectrogramGenerationTimeout)
 		defer cancel()
 
-		spectrogramPath, err := c.generateSpectrogram(bgCtx, clipPath, params.width, params.raw, params.style, params.dynamicRange)
+		// Resolve frequency profile inside goroutine to avoid blocking the HTTP handler
+		modelType, mtErr := c.DS.GetNoteModelType(noteID)
+		if mtErr != nil {
+			c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+				logger.String("note_id", noteID),
+				logger.Error(mtErr))
+		}
+		profileOpt := spectrogram.WithFrequencyProfile(spectrogram.ProfileForModelType(modelType))
+
+		spectrogramPath, err := c.generateSpectrogram(bgCtx, clipPath, params.width, params.raw, params.style, params.dynamicRange, profileOpt)
 
 		if err != nil {
 			// Update queue status so polling clients see the failure
@@ -2427,7 +2456,7 @@ func (c *Controller) acquireSemaphoreSlot(ctx context.Context, spectrogramKey st
 }
 
 // performSpectrogramGeneration executes the actual spectrogram generation logic
-func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectrogramPath, absAudioPath, absSpectrogramPath, spectrogramKey string, width int, raw bool, validatedDuration float64) (any, error) {
+func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectrogramPath, absAudioPath, absSpectrogramPath, spectrogramKey string, width int, raw bool, validatedDuration float64, extraOpts ...spectrogram.GenerateOption) (any, error) {
 	// Fast path inside the group – now race-free
 	getSpectrogramLogger().Debug("Inside singleflight group, double-checking if spectrogram exists",
 		logger.String("spectrogram_key", spectrogramKey))
@@ -2482,7 +2511,7 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 		logger.Int("max_slots", maxConcurrentSpectrograms))
 
 	// Generate the spectrogram with SoX or FFmpeg fallback
-	if err := c.generateWithFallback(ctx, absAudioPath, absSpectrogramPath, spectrogramKey, width, raw, validatedDuration); err != nil {
+	if err := c.generateWithFallback(ctx, absAudioPath, absSpectrogramPath, spectrogramKey, width, raw, validatedDuration, extraOpts...); err != nil {
 		return nil, err
 	}
 
@@ -2560,7 +2589,7 @@ func (c *Controller) verifySpectrogramFile(absPath, relPath string) error {
 }
 
 // generateWithFallback attempts to generate a spectrogram with SoX, falling back to FFmpeg on failure
-func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, absSpectrogramPath, spectrogramKey string, width int, raw bool, validatedDuration float64) error {
+func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, absSpectrogramPath, spectrogramKey string, width int, raw bool, validatedDuration float64, extraOpts ...spectrogram.GenerateOption) error {
 	generationStart := time.Now()
 
 	getSpectrogramLogger().Debug("Starting spectrogram generation via shared generator",
@@ -2576,6 +2605,7 @@ func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, abs
 	if validatedDuration > 0 {
 		genOpts = append(genOpts, spectrogram.WithDuration(validatedDuration))
 	}
+	genOpts = append(genOpts, extraOpts...)
 	if err := c.spectrogramGenerator.GenerateFromFile(ctx, absAudioPath, absSpectrogramPath, width, raw, genOpts...); err != nil {
 		// Check if this is an expected operational error (context canceled, process killed)
 		// These are normal events during shutdown, timeout, or resource management
@@ -2610,7 +2640,7 @@ func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, abs
 // It accepts a context for cancellation and timeout.
 // It returns the relative path to the generated spectrogram, suitable for use with c.SFS.ServeFile.
 // Optimized: Fast path check happens before expensive audio validation.
-func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool, style, dynamicRange string) (string, error) {
+func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool, style, dynamicRange string, extraOpts ...spectrogram.GenerateOption) (string, error) {
 	start := time.Now()
 	getSpectrogramLogger().Debug("Spectrogram generation requested",
 		logger.String("audio_path", audioPath),
@@ -2726,7 +2756,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 				logger.Int("slots_now_available", maxConcurrentSpectrograms-slotsAfterRelease),
 				logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
 		}()
-		return c.performSpectrogramGeneration(sharedCtx, relSpectrogramPath, absAudioPath, absSpectrogramPath, spectrogramKey, width, raw, validatedDuration)
+		return c.performSpectrogramGeneration(sharedCtx, relSpectrogramPath, absAudioPath, absSpectrogramPath, spectrogramKey, width, raw, validatedDuration, extraOpts...)
 	})
 
 	// Wait for either the singleflight result or caller's context cancellation.

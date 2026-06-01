@@ -18,8 +18,11 @@ func NotifyError(component string, err error) {
 		return
 	}
 
-	// Use the service's error notification method
-	_, _ = service.CreateErrorNotification(err)
+	if _, createErr := service.CreateErrorNotification(err); createErr != nil {
+		GetLogger().Warn("failed to create error notification",
+			logger.Error(createErr),
+			logger.String("original_error", fmt.Sprintf("%v", err)))
+	}
 }
 
 // NotifySystemAlert creates a system alert notification
@@ -33,7 +36,11 @@ func NotifySystemAlert(priority Priority, title, message string) {
 		return
 	}
 
-	_, _ = service.CreateWithComponent(TypeSystem, priority, title, message, "system")
+	if _, err := service.CreateWithComponent(TypeSystem, priority, title, message, "system"); err != nil {
+		GetLogger().Warn("failed to create system alert notification",
+			logger.Error(err),
+			logger.String("title", title))
+	}
 }
 
 // NotifyDetection creates a bird detection notification
@@ -112,7 +119,11 @@ func NotifyInfo(title, message string) {
 		return
 	}
 
-	_, _ = service.Create(TypeInfo, PriorityLow, title, message)
+	if _, err := service.Create(TypeInfo, PriorityLow, title, message); err != nil {
+		GetLogger().Warn("failed to create info notification",
+			logger.Error(err),
+			logger.String("title", title))
+	}
 }
 
 // NotifyWarning creates a warning notification
@@ -126,7 +137,12 @@ func NotifyWarning(component, title, message string) {
 		return
 	}
 
-	_, _ = service.CreateWithComponent(TypeWarning, PriorityMedium, title, message, component)
+	if _, err := service.CreateWithComponent(TypeWarning, PriorityMedium, title, message, component); err != nil {
+		GetLogger().Warn("failed to create warning notification",
+			logger.Error(err),
+			logger.String("title", title),
+			logger.String("component", component))
+	}
 }
 
 // NotifyStartup creates a notification when the application starts

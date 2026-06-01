@@ -691,6 +691,7 @@ func (s *testLegacyInterface) SearchNotesAdvanced(_ *datastore.AdvancedSearchFil
 	return nil, 0, nil
 }
 func (s *testLegacyInterface) GetNoteClipPath(_ string) (string, error)              { return "", nil }
+func (s *testLegacyInterface) GetNoteModelType(_ string) (string, error)             { return "bird", nil }
 func (s *testLegacyInterface) DeleteNoteClipPath(_ string) error                     { return nil }
 func (s *testLegacyInterface) GetNoteReview(_ string) (*datastore.NoteReview, error) { return nil, nil } //nolint:nilnil // stub
 func (s *testLegacyInterface) SaveNoteReview(_ *datastore.NoteReview) error          { return nil }

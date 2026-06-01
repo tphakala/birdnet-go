@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // deduplicateIDs returns a new slice with duplicate IDs removed, preserving order.
@@ -83,6 +84,9 @@ func (c *Controller) BatchDeleteDetections(ctx echo.Context) error {
 	for _, idStr := range ids {
 		note, err := c.DS.Get(idStr)
 		if err != nil {
+			c.logWarnIfEnabled("Batch delete: failed to get detection",
+				logger.String("id", idStr),
+				logger.Error(err))
 			skipped++
 			continue
 		}
@@ -93,6 +97,9 @@ func (c *Controller) BatchDeleteDetections(ctx echo.Context) error {
 
 		clipName := note.ClipName
 		if err := c.DS.Delete(idStr); err != nil {
+			c.logWarnIfEnabled("Batch delete: failed to delete detection",
+				logger.String("id", idStr),
+				logger.Error(err))
 			skipped++
 			continue
 		}
@@ -139,6 +146,9 @@ func (c *Controller) BatchReviewDetections(ctx echo.Context) error {
 	for _, idStr := range ids {
 		note, err := c.DS.Get(idStr)
 		if err != nil {
+			c.logWarnIfEnabled("Batch review: failed to get detection",
+				logger.String("id", idStr),
+				logger.Error(err))
 			skipped++
 			continue
 		}
@@ -149,6 +159,9 @@ func (c *Controller) BatchReviewDetections(ctx echo.Context) error {
 		}
 
 		if err := c.AddReview(note.ID, verification.Verified); err != nil {
+			c.logWarnIfEnabled("Batch review: failed to set verification",
+				logger.String("id", idStr),
+				logger.Error(err))
 			skipped++
 			continue
 		}
@@ -184,6 +197,9 @@ func (c *Controller) BatchLockDetections(ctx echo.Context) error {
 	for _, idStr := range ids {
 		note, err := c.DS.Get(idStr)
 		if err != nil {
+			c.logWarnIfEnabled("Batch lock: failed to get detection",
+				logger.String("id", idStr),
+				logger.Error(err))
 			skipped++
 			continue
 		}
@@ -194,6 +210,9 @@ func (c *Controller) BatchLockDetections(ctx echo.Context) error {
 		}
 
 		if err := c.AddLock(note.ID, req.Locked); err != nil {
+			c.logWarnIfEnabled("Batch lock: failed to set lock state",
+				logger.String("id", idStr),
+				logger.Error(err))
 			skipped++
 			continue
 		}

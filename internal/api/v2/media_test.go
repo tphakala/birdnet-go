@@ -1071,6 +1071,7 @@ func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 	// Setup mock data store
 	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("GetNoteClipPath", "123").Return(testFilename, nil)
+	mockDS.On("GetNoteModelType", "123").Return("bird", nil)
 	controller.DS = mockDS
 
 	// Test cases

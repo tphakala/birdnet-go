@@ -281,13 +281,22 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 
 		// Check if table exists
 		exists, err := c.tableExistsMySQL(db, tableName)
-		if err != nil || !exists {
-			continue // Table doesn't exist, skip
+		if err != nil {
+			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
+				logger.String("table", tableName),
+				logger.Error(err))
+			continue
+		}
+		if !exists {
+			continue
 		}
 
 		// Get row count
 		err = db.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&tableInfo.RowCount).Error
 		if err != nil {
+			c.logWarnIfEnabled("Legacy cleanup: failed to query row count",
+				logger.String("table", tableName),
+				logger.Error(err))
 			tableInfo.RowCount = 0
 		}
 		totalRows += tableInfo.RowCount
@@ -299,7 +308,11 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 			FROM information_schema.tables
 			WHERE table_schema = ? AND table_name = ?`,
 			c.Settings.Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
-		if err == nil {
+		if err != nil {
+			c.logWarnIfEnabled("Legacy cleanup: failed to query table size",
+				logger.String("table", tableName),
+				logger.Error(err))
+		} else {
 			tableInfo.SizeBytes = dataLength + indexLength
 			totalSize += tableInfo.SizeBytes
 		}
@@ -464,8 +477,14 @@ func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 
 		// Check if table exists first
 		exists, err := c.tableExistsMySQL(db, tableName)
-		if err != nil || !exists {
-			continue // Table doesn't exist, skip
+		if err != nil {
+			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
+				logger.String("table", tableName),
+				logger.Error(err))
+			continue
+		}
+		if !exists {
+			continue
 		}
 
 		// Drop the table
@@ -518,13 +537,28 @@ func (c *Controller) getMySQLLegacySize() int64 {
 
 	var totalSize int64
 	for _, tableName := range legacyTables {
+		exists, err := c.tableExistsMySQL(db, tableName)
+		if err != nil {
+			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
+				logger.String("table", tableName),
+				logger.Error(err))
+			continue
+		}
+		if !exists {
+			continue
+		}
+
 		var dataLength, indexLength int64
-		err := db.Raw(`
+		err = db.Raw(`
 			SELECT COALESCE(data_length, 0), COALESCE(index_length, 0)
 			FROM information_schema.tables
 			WHERE table_schema = ? AND table_name = ?`,
 			c.Settings.Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
-		if err == nil {
+		if err != nil {
+			c.logWarnIfEnabled("Legacy cleanup: failed to query table size",
+				logger.String("table", tableName),
+				logger.Error(err))
+		} else {
 			totalSize += dataLength + indexLength
 		}
 	}

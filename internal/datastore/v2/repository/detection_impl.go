@@ -1685,6 +1685,29 @@ func (r *detectionRepository) GetClipPath(ctx context.Context, id uint) (string,
 	return *result.ClipName, nil
 }
 
+// GetModelType returns the AI model type for a detection by JOINing with
+// the ai_models table. Returns "bird" as default if not found.
+func (r *detectionRepository) GetModelType(ctx context.Context, id uint) (string, error) {
+	var result struct {
+		ModelType *string `gorm:"column:model_type"`
+	}
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Select(r.modelsTable()+".model_type").
+		Joins("LEFT JOIN "+r.modelsTable()+" ON "+r.modelsTable()+".id = "+r.tableName()+".model_id").
+		Where(r.tableName()+".id = ?", id).
+		Take(&result).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return string(entities.ModelTypeBird), nil
+		}
+		return "", err
+	}
+	if result.ModelType == nil || *result.ModelType == "" {
+		return string(entities.ModelTypeBird), nil
+	}
+	return *result.ModelType, nil
+}
+
 // Exists checks if a detection with the given ID exists.
 func (r *detectionRepository) Exists(ctx context.Context, id uint) (bool, error) {
 	var count int64
