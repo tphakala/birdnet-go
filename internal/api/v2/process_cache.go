@@ -149,6 +149,9 @@ func (c *processingCache) evictIfNeeded() {
 
 	// Remove oldest until under limit
 	toRemove := len(files) - c.maxFiles + 1 // make room for the new entry
+	if toRemove <= 0 {
+		return
+	}
 	for i := range min(toRemove, len(files)) {
 		if err := os.Remove(files[i].path); err != nil {
 			GetLogger().Debug("Processing cache: failed to remove file during eviction",

@@ -685,6 +685,7 @@ func (dw *DualWriteRepository) Lock(ctx context.Context, id string) error {
 	dualWrite, dualWriteErr := dw.stateManager.IsInDualWriteMode()
 	if dualWriteErr != nil {
 		dw.logger.Warn("failed to check dual-write mode", logger.Error(dualWriteErr))
+		dualWrite = false
 	}
 	if dualWrite {
 		uid, err := parseDetectionID(id)
@@ -707,6 +708,7 @@ func (dw *DualWriteRepository) Unlock(ctx context.Context, id string) error {
 	dualWrite, dualWriteErr := dw.stateManager.IsInDualWriteMode()
 	if dualWriteErr != nil {
 		dw.logger.Warn("failed to check dual-write mode", logger.Error(dualWriteErr))
+		dualWrite = false
 	}
 	if dualWrite {
 		uid, err := parseDetectionID(id)
@@ -734,6 +736,7 @@ func (dw *DualWriteRepository) SetReview(ctx context.Context, id, verified strin
 	dualWrite, dualWriteErr := dw.stateManager.IsInDualWriteMode()
 	if dualWriteErr != nil {
 		dw.logger.Warn("failed to check dual-write mode", logger.Error(dualWriteErr))
+		dualWrite = false
 	}
 	if dualWrite {
 		uid, err := parseDetectionID(id)
@@ -765,6 +768,7 @@ func (dw *DualWriteRepository) AddComment(ctx context.Context, id, comment strin
 	dualWrite, dualWriteErr := dw.stateManager.IsInDualWriteMode()
 	if dualWriteErr != nil {
 		dw.logger.Warn("failed to check dual-write mode", logger.Error(dualWriteErr))
+		dualWrite = false
 	}
 	if dualWrite {
 		uid, err := parseDetectionID(id)
@@ -796,6 +800,7 @@ func (dw *DualWriteRepository) UpdateComment(ctx context.Context, commentID uint
 	dualWrite, dualWriteErr := dw.stateManager.IsInDualWriteMode()
 	if dualWriteErr != nil {
 		dw.logger.Warn("failed to check dual-write mode", logger.Error(dualWriteErr))
+		dualWrite = false
 	}
 	if dualWrite {
 		if err := dw.v2.UpdateComment(ctx, commentID, entry); err != nil && !errors.Is(err, ErrCommentNotFound) {
@@ -815,6 +820,7 @@ func (dw *DualWriteRepository) DeleteComment(ctx context.Context, commentID uint
 	dualWrite, dualWriteErr := dw.stateManager.IsInDualWriteMode()
 	if dualWriteErr != nil {
 		dw.logger.Warn("failed to check dual-write mode", logger.Error(dualWriteErr))
+		dualWrite = false
 	}
 	if dualWrite {
 		if err := dw.v2.DeleteComment(ctx, commentID); err != nil && !errors.Is(err, ErrCommentNotFound) {
