@@ -537,8 +537,19 @@ func (c *Controller) getMySQLLegacySize() int64 {
 
 	var totalSize int64
 	for _, tableName := range legacyTables {
+		exists, err := c.tableExistsMySQL(db, tableName)
+		if err != nil {
+			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
+				logger.String("table", tableName),
+				logger.Error(err))
+			continue
+		}
+		if !exists {
+			continue
+		}
+
 		var dataLength, indexLength int64
-		err := db.Raw(`
+		err = db.Raw(`
 			SELECT COALESCE(data_length, 0), COALESCE(index_length, 0)
 			FROM information_schema.tables
 			WHERE table_schema = ? AND table_name = ?`,

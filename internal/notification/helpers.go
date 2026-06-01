@@ -18,8 +18,10 @@ func NotifyError(component string, err error) {
 		return
 	}
 
-	if _, err := service.CreateErrorNotification(err); err != nil {
-		GetLogger().Warn("failed to create error notification", logger.Error(err))
+	if _, createErr := service.CreateErrorNotification(err); createErr != nil {
+		GetLogger().Warn("failed to create error notification",
+			logger.Error(createErr),
+			logger.String("original_error", fmt.Sprintf("%v", err)))
 	}
 }
 
@@ -35,7 +37,9 @@ func NotifySystemAlert(priority Priority, title, message string) {
 	}
 
 	if _, err := service.CreateWithComponent(TypeSystem, priority, title, message, "system"); err != nil {
-		GetLogger().Warn("failed to create system alert notification", logger.Error(err))
+		GetLogger().Warn("failed to create system alert notification",
+			logger.Error(err),
+			logger.String("title", title))
 	}
 }
 
@@ -116,7 +120,9 @@ func NotifyInfo(title, message string) {
 	}
 
 	if _, err := service.Create(TypeInfo, PriorityLow, title, message); err != nil {
-		GetLogger().Warn("failed to create info notification", logger.Error(err))
+		GetLogger().Warn("failed to create info notification",
+			logger.Error(err),
+			logger.String("title", title))
 	}
 }
 
@@ -132,7 +138,10 @@ func NotifyWarning(component, title, message string) {
 	}
 
 	if _, err := service.CreateWithComponent(TypeWarning, PriorityMedium, title, message, component); err != nil {
-		GetLogger().Warn("failed to create warning notification", logger.Error(err))
+		GetLogger().Warn("failed to create warning notification",
+			logger.Error(err),
+			logger.String("title", title),
+			logger.String("component", component))
 	}
 }
 
