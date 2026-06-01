@@ -4006,13 +4006,29 @@ configure_web_port() {
 
 # Generate systemd service content
 generate_systemd_service_content() {
-    # Use configured timezone if available, otherwise fall back to system timezone
-    local TZ
+    # Use configured timezone if available, otherwise fall back to system timezone.
+    # Mirror the multi-method detection from configure_timezone() so newer
+    # systemd distributions without /etc/timezone (e.g. Debian 13) still resolve
+    # the host zone instead of silently defaulting to UTC.
+    local TZ=""
     if [ -n "$CONFIGURED_TZ" ]; then
         TZ="$CONFIGURED_TZ"
-    elif [ -f /etc/timezone ]; then
-        TZ=$(cat /etc/timezone)
-    else
+    fi
+
+    if [ -z "$TZ" ] && [ -f /etc/timezone ]; then
+        TZ=$(cat /etc/timezone 2>/dev/null | tr -d '\n' | tr -d ' ')
+    fi
+
+    if [ -z "$TZ" ] && command_exists timedatectl; then
+        TZ=$(timedatectl show --property=Timezone --value 2>/dev/null | tr -d '\n' | tr -d ' ')
+    fi
+
+    if [ -z "$TZ" ] && [ -L /etc/localtime ]; then
+        local tz_path=$(readlink -f /etc/localtime)
+        TZ=${tz_path#/usr/share/zoneinfo/}
+    fi
+
+    if [ -z "$TZ" ]; then
         TZ="UTC"
     fi
 
