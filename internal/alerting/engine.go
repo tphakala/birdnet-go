@@ -231,6 +231,10 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 			if floatVal, err := toFloat64(val); err == nil {
 				trackerKey := metricBufferKey(event.MetricName, event.Properties)
 				e.metricTracker.Record(trackerKey, floatVal, event.Timestamp)
+			} else {
+				e.log.Debug("Failed to parse metric value for tracking",
+					logger.String("metric", event.MetricName),
+					logger.Error(err))
 			}
 		}
 	}

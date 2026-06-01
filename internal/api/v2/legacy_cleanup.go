@@ -294,6 +294,9 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 		// Get row count
 		err = db.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&tableInfo.RowCount).Error
 		if err != nil {
+			c.logWarnIfEnabled("Legacy cleanup: failed to query row count",
+				logger.String("table", tableName),
+				logger.Error(err))
 			tableInfo.RowCount = 0
 		}
 		totalRows += tableInfo.RowCount
@@ -305,7 +308,11 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 			FROM information_schema.tables
 			WHERE table_schema = ? AND table_name = ?`,
 			c.Settings.Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
-		if err == nil {
+		if err != nil {
+			c.logWarnIfEnabled("Legacy cleanup: failed to query table size",
+				logger.String("table", tableName),
+				logger.Error(err))
+		} else {
 			tableInfo.SizeBytes = dataLength + indexLength
 			totalSize += tableInfo.SizeBytes
 		}
@@ -536,7 +543,11 @@ func (c *Controller) getMySQLLegacySize() int64 {
 			FROM information_schema.tables
 			WHERE table_schema = ? AND table_name = ?`,
 			c.Settings.Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
-		if err == nil {
+		if err != nil {
+			c.logWarnIfEnabled("Legacy cleanup: failed to query table size",
+				logger.String("table", tableName),
+				logger.Error(err))
+		} else {
 			totalSize += dataLength + indexLength
 		}
 	}

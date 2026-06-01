@@ -219,6 +219,11 @@ func metricMessage(rule *entities.AlertRule, event *AlertEvent) (key string, par
 	if step, ok := event.Properties[PropertyThresholdStep]; ok {
 		if stepFloat, err := toFloat64(step); err == nil {
 			threshold = formatMetricValue(stepFloat)
+		} else {
+			log := logger.Global().Module("alerting")
+			log.Debug("Failed to parse escalation step threshold",
+				logger.String("metric", event.MetricName),
+				logger.Error(err))
 		}
 	}
 	if threshold == "" {

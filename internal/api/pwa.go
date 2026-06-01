@@ -97,7 +97,9 @@ func (sfs *StaticFileServer) readPWAFromEmbed(filename string) ([]byte, error) {
 	log := GetLogger()
 	file, err := frontend.DistFS.Open(filename)
 	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusNotFound, "File not found")
+		httpErr := echo.NewHTTPError(http.StatusNotFound, "File not found")
+		httpErr.Internal = err
+		return nil, httpErr
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
