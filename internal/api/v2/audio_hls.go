@@ -1613,8 +1613,7 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	if src != nil {
 		sourceName = src.DisplayName
 	}
-	override := settings.ResolveEQOverride(sourceName)
-	eqChain := equalizer.BuildFilterChainWithOverride(override, settings.Realtime.Audio.Equalizer, sourceName, sampleRate)
+	eqChain := equalizer.ResolveAndBuildFilterChain(settings, sourceName, sampleRate)
 
 	// Add route on the AudioRouter
 	if routeErr := eng.Router().AddRoute(sourceID, consumer, sampleRate, gainDB, eqChain); routeErr != nil {

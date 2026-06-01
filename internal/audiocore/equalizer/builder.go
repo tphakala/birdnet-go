@@ -113,6 +113,15 @@ func BuildFilterChainWithOverride(override *conf.EqualizerSettings, globalEQ con
 	return BuildFilterChain(eqSettings, sampleRate)
 }
 
+// ResolveAndBuildFilterChain resolves the per-source EQ override for the given
+// source name and builds the corresponding filter chain. It combines the
+// "resolve override + build chain" pattern that was previously duplicated across
+// the analysis pipeline, sound level consumers, HLS audio, and settings handlers.
+func ResolveAndBuildFilterChain(settings *conf.Settings, sourceName string, sampleRate int) *FilterChain {
+	override := settings.ResolveEQOverride(sourceName)
+	return BuildFilterChainWithOverride(override, settings.Realtime.Audio.Equalizer, sourceName, sampleRate)
+}
+
 // buildFilter creates a single Filter from a config entry.
 // Returns (nil, nil) for unknown filter types.
 func buildFilter(f *conf.EqualizerFilter, sampleRate float64, passes int) (*Filter, error) {

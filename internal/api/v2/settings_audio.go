@@ -138,13 +138,11 @@ func (c *Controller) handleEqualizerChange(currentSettings *conf.Settings) error
 	}
 
 	router := eng.Router()
-	globalEQ := currentSettings.Realtime.Audio.Equalizer
 
 	for _, src := range eng.Registry().List() {
 		displayName := src.DisplayName
-		override := currentSettings.ResolveEQOverride(displayName)
 		router.UpdateFilterChain(src.ID, func(sampleRate int) *equalizer.FilterChain {
-			return equalizer.BuildFilterChainWithOverride(override, globalEQ, displayName, sampleRate)
+			return equalizer.ResolveAndBuildFilterChain(currentSettings, displayName, sampleRate)
 		})
 	}
 
