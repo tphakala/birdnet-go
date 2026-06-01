@@ -181,7 +181,8 @@ func (c *Collector) collectDiskUsage(points map[string]float64) {
 		}
 		usage, err := disk.Usage(p.Mountpoint)
 		if err != nil {
-			continue // skip individual mount failures silently
+			c.logOnce("disk_usage_"+p.Mountpoint, "failed to get disk usage for %s: %v", p.Mountpoint, err)
+			continue
 		}
 		key := fmt.Sprintf(metricDiskUsedPercent, sanitizeMountpoint(p.Mountpoint))
 		points[key] = usage.UsedPercent

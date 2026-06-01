@@ -677,7 +677,10 @@ func (dw *DualWriteRepository) Lock(ctx context.Context, id string) error {
 		return err
 	}
 
-	dualWrite, _ := dw.stateManager.IsInDualWriteMode()
+	dualWrite, dualWriteErr := dw.stateManager.IsInDualWriteMode()
+	if dualWriteErr != nil {
+		dw.logger.Debug("failed to check dual-write mode", logger.Error(dualWriteErr))
+	}
 	if dualWrite {
 		uid, err := parseDetectionID(id)
 		if err == nil {
@@ -696,7 +699,10 @@ func (dw *DualWriteRepository) Unlock(ctx context.Context, id string) error {
 		return err
 	}
 
-	dualWrite, _ := dw.stateManager.IsInDualWriteMode()
+	dualWrite, dualWriteErr := dw.stateManager.IsInDualWriteMode()
+	if dualWriteErr != nil {
+		dw.logger.Debug("failed to check dual-write mode", logger.Error(dualWriteErr))
+	}
 	if dualWrite {
 		uid, err := parseDetectionID(id)
 		if err == nil {
@@ -720,7 +726,10 @@ func (dw *DualWriteRepository) SetReview(ctx context.Context, id, verified strin
 		return err
 	}
 
-	dualWrite, _ := dw.stateManager.IsInDualWriteMode()
+	dualWrite, dualWriteErr := dw.stateManager.IsInDualWriteMode()
+	if dualWriteErr != nil {
+		dw.logger.Debug("failed to check dual-write mode", logger.Error(dualWriteErr))
+	}
 	if dualWrite {
 		uid, err := parseDetectionID(id)
 		if err == nil {
@@ -748,7 +757,10 @@ func (dw *DualWriteRepository) AddComment(ctx context.Context, id, comment strin
 		return err
 	}
 
-	dualWrite, _ := dw.stateManager.IsInDualWriteMode()
+	dualWrite, dualWriteErr := dw.stateManager.IsInDualWriteMode()
+	if dualWriteErr != nil {
+		dw.logger.Debug("failed to check dual-write mode", logger.Error(dualWriteErr))
+	}
 	if dualWrite {
 		uid, err := parseDetectionID(id)
 		if err == nil {
@@ -776,7 +788,10 @@ func (dw *DualWriteRepository) UpdateComment(ctx context.Context, commentID uint
 		return err
 	}
 
-	dualWrite, _ := dw.stateManager.IsInDualWriteMode()
+	dualWrite, dualWriteErr := dw.stateManager.IsInDualWriteMode()
+	if dualWriteErr != nil {
+		dw.logger.Debug("failed to check dual-write mode", logger.Error(dualWriteErr))
+	}
 	if dualWrite {
 		if err := dw.v2.UpdateComment(ctx, commentID, entry); err != nil && !errors.Is(err, ErrCommentNotFound) {
 			dw.logger.Warn("v2 comment update failed", logger.Uint64("commentID", uint64(commentID)), logger.Error(err))
@@ -792,7 +807,10 @@ func (dw *DualWriteRepository) DeleteComment(ctx context.Context, commentID uint
 		return err
 	}
 
-	dualWrite, _ := dw.stateManager.IsInDualWriteMode()
+	dualWrite, dualWriteErr := dw.stateManager.IsInDualWriteMode()
+	if dualWriteErr != nil {
+		dw.logger.Debug("failed to check dual-write mode", logger.Error(dualWriteErr))
+	}
 	if dualWrite {
 		if err := dw.v2.DeleteComment(ctx, commentID); err != nil && !errors.Is(err, ErrCommentNotFound) {
 			dw.logger.Warn("v2 comment delete failed", logger.Uint64("commentID", uint64(commentID)), logger.Error(err))

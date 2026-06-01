@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 const (
@@ -105,7 +107,13 @@ func (c *processingCache) put(key string, data []byte) error {
 // evictIfNeeded removes oldest files if cache exceeds maxFiles.
 func (c *processingCache) evictIfNeeded() {
 	entries, err := os.ReadDir(c.dir)
-	if err != nil || len(entries) < c.maxFiles {
+	if err != nil {
+		GetLogger().Debug("Processing cache: failed to read directory for eviction",
+			logger.String("dir", c.dir),
+			logger.Error(err))
+		return
+	}
+	if len(entries) < c.maxFiles {
 		return
 	}
 
@@ -120,6 +128,9 @@ func (c *processingCache) evictIfNeeded() {
 		}
 		info, err := e.Info()
 		if err != nil {
+			GetLogger().Debug("Processing cache: failed to stat entry during eviction",
+				logger.String("name", e.Name()),
+				logger.Error(err))
 			continue
 		}
 		files = append(files, fileAge{
@@ -145,6 +156,9 @@ func (c *processingCache) cleanExpired() {
 	defer c.mu.Unlock()
 	entries, err := os.ReadDir(c.dir)
 	if err != nil {
+		GetLogger().Debug("Processing cache: failed to read directory for cleanup",
+			logger.String("dir", c.dir),
+			logger.Error(err))
 		return
 	}
 	for _, e := range entries {
@@ -153,6 +167,9 @@ func (c *processingCache) cleanExpired() {
 		}
 		info, err := e.Info()
 		if err != nil {
+			GetLogger().Debug("Processing cache: failed to stat entry during cleanup",
+				logger.String("name", e.Name()),
+				logger.Error(err))
 			continue
 		}
 		if time.Since(info.ModTime()) > processingCacheTTL {
