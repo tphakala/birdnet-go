@@ -205,6 +205,10 @@ func metricMessage(rule *entities.AlertRule, event *AlertEvent) (key string, par
 	}
 	floatVal, err := toFloat64(val)
 	if err != nil {
+		log := logger.Global().Module("alerting")
+		log.Debug("Failed to parse metric value for alert message",
+			logger.String("metric", event.MetricName),
+			logger.Error(err))
 		return "", nil, ""
 	}
 	formatted := formatMetricValue(floatVal)
@@ -215,6 +219,11 @@ func metricMessage(rule *entities.AlertRule, event *AlertEvent) (key string, par
 	if step, ok := event.Properties[PropertyThresholdStep]; ok {
 		if stepFloat, err := toFloat64(step); err == nil {
 			threshold = formatMetricValue(stepFloat)
+		} else {
+			log := logger.Global().Module("alerting")
+			log.Debug("Failed to parse escalation step threshold",
+				logger.String("metric", event.MetricName),
+				logger.Error(err))
 		}
 	}
 	if threshold == "" {
@@ -248,6 +257,9 @@ func detectionMessage(event *AlertEvent) (key string, params map[string]any, fal
 	}
 	confFloat, err := toFloat64(confVal)
 	if err != nil {
+		log := logger.Global().Module("alerting")
+		log.Debug("Failed to parse confidence value for alert message",
+			logger.Error(err))
 		return "", nil, ""
 	}
 	confStr := fmt.Sprintf("%.0f", confFloat*100)

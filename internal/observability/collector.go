@@ -181,7 +181,8 @@ func (c *Collector) collectDiskUsage(points map[string]float64) {
 		}
 		usage, err := disk.Usage(p.Mountpoint)
 		if err != nil {
-			continue // skip individual mount failures silently
+			c.logOnce("disk_usage_"+p.Mountpoint, "failed to get disk usage for %s: %v", p.Mountpoint, err)
+			continue
 		}
 		key := fmt.Sprintf(metricDiskUsedPercent, sanitizeMountpoint(p.Mountpoint))
 		points[key] = usage.UsedPercent
@@ -366,7 +367,7 @@ func (c *Collector) logOnce(category, format string, args ...any) {
 		return
 	}
 	c.loggedErrors[category] = true
-	GetLogger().Debug(fmt.Sprintf(format, args...))
+	GetLogger().Warn(fmt.Sprintf(format, args...))
 }
 
 // sanitizeMountpoint converts a mountpoint path to a metric-safe name.

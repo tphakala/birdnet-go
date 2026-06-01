@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // EvaluateConditions checks if all conditions match against event properties.
@@ -74,10 +75,19 @@ func listContains(listValue, propValue string) bool {
 func evaluateNumeric(operator string, propVal any, condVal string) bool {
 	propFloat, err := toFloat64(propVal)
 	if err != nil {
+		log := logger.Global().Module("alerting")
+		log.Debug("Failed to parse property value for numeric evaluation",
+			logger.String("operator", operator),
+			logger.Error(err))
 		return false
 	}
 	condFloat, err := strconv.ParseFloat(condVal, 64)
 	if err != nil {
+		log := logger.Global().Module("alerting")
+		log.Warn("Alert condition has unparseable threshold value",
+			logger.String("operator", operator),
+			logger.String("condition_value", condVal),
+			logger.Error(err))
 		return false
 	}
 
