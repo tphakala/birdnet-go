@@ -2313,14 +2313,295 @@ grep -rn 'Emit.*"entity".*"action"' --include="*.go"
 grep -rn 'func.*InterfaceName\|func.*).*MethodName(' --include="*.go"
 ```
 
+## Check 9: Read-Time Filter vs Write-Time Invariant (Semantic Regression via Feature Interaction)
+
+This is the one Agent 5 check that requires whole-codebase reasoning rather than wiring completeness. It catches changes that are locally correct, fully tested, and backward compatible on the wire, yet silently contradict the intent of another feature.
+
+**Trigger (mechanical, to keep precision high).** Only apply this check when the change introduces a NEW filter on a *persistent* data entity (DB rows, cache entries, event-store records) in a READ path:
+
+- a new SQL `WHERE`/`HAVING` clause on a query that returns stored records,
+- a new `.filter()` / predicate / `continue`-to-skip over stored rows before returning them,
+- a new conditional that excludes stored records from an API response, list, export, or default render.
+
+If the change does not add a read-time filter over persisted data, skip this check; it does not apply to new UI toggles, in-memory transforms of request-scoped data, or filters over data that never hits storage.
+
+**Method (structural trace, NOT keyword grep).** When the trigger fires:
+
+1. Identify the model/entity being filtered (e.g. `Detection`, `Note`).
+2. Trace that model's WRITE path: find where rows are created/saved (`Save`, `Create`, an ingestion or flush function). Read the validation immediately preceding the write.
+3. Compare the new read-time filter against the write-time logic and answer:
+   - **(a) Redundant?** If every stored row already satisfies the criterion at write time, the read filter does nothing useful (and may mislead future readers into thinking it does).
+   - **(b) Contradictory?** If the write path admits rows by a *finer-grained or dynamically-adjusted* version of the same criterion (per-entity overrides, adaptive/dynamic thresholds, per-model settings, time-varying gates), a coarser *static* read filter will silently drop rows that were stored on purpose.
+
+Case (b) is a **behavioral/intent conflict**: route it to Phase 3 category (d) Maintainer-confirm. Do not auto-fix. Severity **High** (legitimate stored data hidden from the user).
+
+```go
+// WORKED EXAMPLE (real PR, rejected by maintainer)
+//
+// Change: dashboard "recent detections" now calls a new datastore method that runs
+//   WHERE confidence >= settings.BirdNET.Threshold   // static global threshold
+// API is opt-in (?aboveThreshold=true), default unchanged. Additive, tested, CI-green.
+// Reviewers 1-4 and 6 all pass it on contract grounds: no wire/schema/contract break.
+//
+// Check 9 trigger fires: new WHERE on the persisted Detection entity in a read path.
+// Trace the WRITE path -> internal/analysis/processor/processor.go, shouldFilterDetection():
+//   a detection is saved only if result.Confidence > effectiveThreshold, where
+//   effectiveThreshold may be a per-species custom threshold, the bat-model threshold,
+//   or a DYNAMICALLY LOWERED threshold (dynamic-threshold feature drops the bar for a
+//   species already confirmed at high confidence, down to a 0.20 floor).
+//
+// => Every stored row already passed its EFFECTIVE threshold at write time.
+//    The new read filter re-applies the COARSER static global threshold, so it hides
+//    detections that dynamic/per-species/bat thresholds intentionally let through
+//    (e.g. a confirmed species later detected at 0.50 while global is 0.80).
+//
+// Verdict: case (b) contradiction. The change defeats the dynamic-threshold feature.
+// Action: category (d) Maintainer-confirm, High. Name the colliding feature
+// (dynamic confidence threshold), state the consequence (legitimate detections vanish
+// from the dashboard), hold for maintainer decision. Do NOT auto-fix or revert.
+```
+
 ## Severity Guide
 
 | Category | Severity | Description |
 |----------|----------|-------------|
 | Data silently dropped | **High** | New data collected but never serialized/archived/returned |
+| Read filter contradicts write-time invariant | **High** | Static read filter hides rows an adaptive/per-entity write gate kept on purpose (category d, maintainer-confirm) |
 | Security gap in recursive processing | **High** | Sensitive data in unhandled composite types bypasses redaction |
 | Validation gap | **Medium** | New option not included in "at least one required" check |
 | Event schema inconsistency | **Medium** | Metadata keys differ across emission sites for same event |
 | Constructor missing new field | **Medium** | New field not initialized in some construction paths |
 | Sibling function asymmetry | **Medium** | Change applied to one function but not its semantic sibling |
 | Cosmetic inconsistency | **Low** | Non-functional naming or ordering differences |
+
+---
+
+# Agent 6: Regression & Backward Compatibility Patterns
+
+Agent 6 (Reviewer 6) finds changes that break or silently alter behavior for users who already run the software and then upgrade. It does its own diff analysis first, then (if a secondary model is available) runs an independent cross-validation to confirm/refute and extend its findings.
+
+**The core distinction:** a regression/compat issue requires a *prior working behavior* to break. New code with no predecessor cannot regress. So read the diff, not just the current file: the removed (`-`) and changed lines are where breaks hide. A field that disappears, a default that flips, a column that is dropped, a flag that is renamed: these are invisible if you only look at the final state. But do NOT mistake "additive on the wire" for "behavior-preserving for the user" (see Surface 6).
+
+## The Diff-Comparison Method
+
+For each hunk in the diff, ask in order:
+
+1. **Did a name in a stable contract change?** Struct tags (`yaml`, `koanf`, `mapstructure`, `json`), exported identifiers, route paths, flag names, DB column names. A rename is a removal plus an addition: old clients/configs/databases still use the old name.
+2. **Did a default change?** A literal default in a config struct, flag definition, or `if x == "" { x = ... }` fallback. Users who never set the value inherit the new behavior silently.
+3. **Did a type change?** Scalar to list, string to enum, int to struct. Existing serialized data (config file, DB row, API payload) no longer unmarshals.
+4. **Did existing logic change its output?** A threshold, comparison, rounding, ordering, or branch that now produces a different result for an input that previously worked.
+5. **Is the change additive and safe, or does it require existing data to migrate?** Additive (new optional field with a default) is safe. Destructive (drop/rename/retype) needs a migration or alias.
+
+## Surface 1: Config & Settings Schema
+
+BirdNET-Go loads `config.yaml` into a settings struct. The struct tag is the wire contract with every existing config file on disk. Renaming or removing a tag orphans that user's value: it loads as the zero value or default, silently changing behavior.
+
+```go
+// BAD: renaming the yaml tag orphans every existing config.yaml that used "locale"
+type Settings struct {
+    // before: Locale string `yaml:"locale"`
+    Language string `yaml:"language"` // existing "locale:" lines now ignored -> default
+}
+
+// GOOD: keep the old key working via an alias / deprecation, or migrate on load
+type Settings struct {
+    Language string `yaml:"language"`
+    Locale   string `yaml:"locale"` // deprecated alias; migrate to Language on load, then warn
+}
+```
+
+```go
+// BAD: changing a default silently alters behavior for users who never set it
+// before: Threshold float64 with default 0.8
+DefaultThreshold = 0.3 // every existing install starts detecting far more / fewer birds
+
+// A default change is a behavioral change. It may be intended, but it MUST be
+// called out (release notes) and, for detection-affecting defaults, justified.
+```
+
+**What to flag:** any removed/renamed/retyped struct tag in a settings type; any changed literal default; any new *required* field with no default that breaks loading of older configs; removal of a config section without a migration path.
+
+**Search commands:**
+```bash
+# Tag changes in the diff (look for - lines removing/renaming yaml/koanf/json tags)
+git diff -- 'internal/conf/*' | grep -E '^[-+].*`(yaml|koanf|mapstructure|json):'
+
+# Find the loader / migration code that should absorb renamed keys
+grep -rn 'koanf\|viper\|yaml.Unmarshal\|UnmarshalExact\|migrate.*[Cc]onfig' internal/conf/
+```
+
+## Surface 2: REST API v2 Contracts
+
+Handlers and response structs under `internal/api/v2/` define the contract the frontend and any external client depend on. Removing or renaming a `json` field, changing a status code, or changing a route is a breaking change for anything already calling that endpoint.
+
+```go
+// BAD: renaming a json field breaks every client reading "common_name"
+type DetectionResponse struct {
+    // before: CommonName string `json:"common_name"`
+    Name string `json:"name"` // frontend + API consumers still read common_name -> undefined
+}
+
+// GOOD: additive change - new field, old fields preserved
+type DetectionResponse struct {
+    CommonName string `json:"common_name"`
+    Name       string `json:"name,omitempty"` // new, optional; old clients ignore it
+}
+```
+
+**What to flag:** removed/renamed/retyped `json` response fields; changed or removed route paths/methods; changed HTTP status codes for the same condition; new required request params or body fields; renamed query parameters.
+
+**Search commands:**
+```bash
+# json tag and route changes in the API diff
+git diff -- 'internal/api/v2/*' | grep -E '^[-+].*(`json:|e\.(GET|POST|PUT|DELETE|PATCH)\(|http\.Status)'
+
+# Confirm the frontend still references any field you changed
+grep -rn 'common_name\|fieldYouChanged' frontend/src
+```
+
+## Surface 3: DB Schema & Migrations
+
+GORM models map to columns in the user's existing SQLite/MySQL database. AutoMigrate adds new columns/tables but does NOT drop, rename, or retype safely: a rename appears as "drop old column + add new column", losing the data in the old column. Retyping can fail or silently coerce.
+
+```go
+// BAD: renaming a model field renames the column -> AutoMigrate adds a new empty
+// column and abandons the old one; existing rows lose the value.
+type Note struct {
+    // before: ConfidenceScore float64
+    Score float64 // old "confidence_score" data stranded / dropped
+}
+
+// GOOD: additive only, or an explicit migration that copies data before drop
+// 1. add new column, 2. backfill from old, 3. drop old in a later release
+```
+
+**What to flag:** dropped or renamed model fields/columns; retyped columns; new `NOT NULL` columns without a default (fails on existing rows); migrations that are destructive or have no down/rollback; any non-additive change lacking explicit migration code.
+
+**Search commands:**
+```bash
+# Model field changes in the datastore diff
+git diff -- 'internal/datastore/*' | grep -E '^[-+]\s+[A-Z]\w+\s+'
+
+# Find AutoMigrate / explicit migration code
+grep -rn 'AutoMigrate\|Migrator()\|func.*[Mm]igrate' internal/datastore/
+```
+
+## Surface 4: CLI Flags & User UX
+
+Cobra flags, their defaults, and detection-affecting defaults are part of the user-visible contract. Removing or renaming a flag breaks scripts and systemd units; changing a default changes behavior for everyone who relied on it.
+
+```go
+// BAD: renaming a flag breaks existing invocations and install.sh / systemd units
+// before: cmd.Flags().String("rtsp-url", "", "...")
+cmd.Flags().String("rtsp", "", "...") // scripts passing --rtsp-url now error out
+
+// GOOD: keep the old flag as a hidden deprecated alias that maps to the new one
+cmd.Flags().String("rtsp", "", "...")
+cmd.Flags().String("rtsp-url", "", "deprecated: use --rtsp")
+_ = cmd.Flags().MarkDeprecated("rtsp-url", "use --rtsp")
+```
+
+Also flag changes to user-parsed output: clip filename templates, export/CSV column order, log line formats, and notification payloads. Users and downstream scripts parse these.
+
+**Search commands:**
+```bash
+# Flag definitions and defaults changed in the diff
+git diff | grep -E '^[-+].*(Flags\(\)\.|MarkDeprecated|filenameTemplate|default.*[Tt]hreshold)'
+
+# Find where defaults / thresholds live
+grep -rn 'Flags()\.\|threshold\|overlap\|sensitivity' --include="*.go" cmd/ internal/
+```
+
+## Surface 5: Regressions in Existing Logic
+
+A pure logic change with no schema involved can still break a path that worked. Look for changed conditionals, thresholds, loop bounds, error handling that now returns early, validation that now rejects previously-accepted input, or reordered operations that change observable results.
+
+```go
+// BAD: tightened validation now rejects inputs the old code accepted
+// before: if name == "" { return errEmpty }
+if !isValidScientificName(name) { return errInvalid } // existing data with loose names now fails
+
+// BAD: changed comparison flips behavior at the boundary
+// before: if score >= threshold
+if score > threshold { ... } // detections exactly at threshold no longer fire
+```
+
+**Review action:** for every changed conditional/threshold/validation, construct one input that the *old* code handled and confirm the *new* code still handles it the same way. If it does not, that is a regression unless intended and documented.
+
+## Surface 6: Additive-on-the-Wire but Behavior-Changing (Feature Interaction)
+
+A change can be fully additive at the API/DB/CLI contract layer (a new opt-in query param, a new optional field, a new column) and STILL regress behavior, when an existing client surface is modified to consume it in a way that alters what existing users see or do. The user experience is what regresses, not the JSON contract.
+
+The highest-value case is the **read-time filter vs write-time invariant** conflict (also covered by Reviewer 5 check 9): a new read-path filter over persisted data re-applies a coarser criterion than the write path already enforced, hiding rows that an adaptive or per-entity feature (dynamic thresholds, per-species overrides, per-model settings) deliberately stored.
+
+```go
+// WORKED EXAMPLE (real PR, rejected by maintainer)
+//
+// Additive on the wire: new opt-in GET /api/v2/detections/recent?aboveThreshold=true,
+// default unchanged. But the dashboard (an existing surface) was switched to pass
+// aboveThreshold=true, applying WHERE confidence >= settings.BirdNET.Threshold.
+//
+// Every stored detection already passed its EFFECTIVE threshold at write time
+// (per-species / bat-model / DYNAMICALLY-LOWERED). The static global read filter hides
+// detections the dynamic-threshold feature intentionally kept (e.g. 0.50 while global 0.80).
+//
+// Verdict: behavioral/intent conflict. Route to Phase 3 category (d) Maintainer-confirm.
+// Do NOT auto-fix. Severity High.
+```
+
+**Review action:** when an existing client surface (dashboard call, default-rendered list, default report, existing workflow) is changed to consume a new additive field/param, ask "what does an existing user see differently after upgrade, and does that contradict the intent of another feature?" If yes, this is category (d), High, hold for maintainer.
+
+## Step 2: Secondary-Model Cross-Validation
+
+After Step 1, if you have access to an independent secondary model (a different model family than the one running this review), use it to confirm/refute your candidates and surface anything missed. The reference mechanism in this environment is the Gemini CLI, which any tool with shell access can invoke. The secondary model can only read files inside the project workspace, so write the diff to a temp file in the repo, then remove it afterward.
+
+```bash
+# Capture the diff so the secondary model can see removed/old lines (use "git diff HEAD" if changes are staged)
+git diff > .preflight-regression-review.diff
+
+gemini -m gemini-3-pro-preview -p "REVIEW ONLY - Do NOT modify any files.
+
+Project: BirdNET-Go (Go backend + Svelte frontend). I am cross-validating a pre-push review focused ONLY on REGRESSIONS, BACKWARD-COMPATIBILITY breaks, and user-facing BEHAVIORAL changes that would hurt EXISTING users when they upgrade. Ignore generic code quality, style, and unrelated bugs; other reviewers cover those.
+
+The change set is in .preflight-regression-review.diff (read it to see removed/old lines). Current file state is in these files:
+<absolute paths of changed files>
+
+Focus surfaces:
+1) Config/settings schema: renamed/removed/retyped yaml/koanf tags, changed defaults, configs that will not load after upgrade.
+2) REST API v2 contracts: removed/renamed/retyped JSON fields, changed paths/methods/status codes, new required params.
+3) DB schema and migrations: dropped/renamed/retyped columns, non-additive or destructive migrations, data loss on upgrade.
+4) CLI flags and defaults: removed/renamed flags, changed defaults, changed detection thresholds, changed output/notification formats users parse.
+5) Regressions: logic changes that alter output for inputs that previously worked.
+6) Additive-on-the-wire but behavior-changing: a new optional field/param that an existing surface (dashboard, default list) now consumes in a way that changes what existing users see, especially a read-time filter that contradicts a write-time invariant.
+
+I found these candidate issues:
+<numbered list: surface, change old -> new, file:line, why it breaks for existing users>
+
+For EACH of my candidates, reply CONFIRMED or REFUTED with a one-line reason. Then list any ADDITIONAL regression / backward-compat / behavioral issues I missed, each with file:line and a suggested migration path. Be specific and cite the diff; do not restate generic best practices."
+
+# Clean up so the temp diff is never committed
+rm -f .preflight-regression-review.diff
+```
+
+If your environment exposes a different secondary model (not Gemini), use that model with the same prompt and the same temp-diff method. If NO secondary model is available, do not silently skip the step: proceed with Step 1 findings only and state in the report that secondary-model cross-validation was unavailable, so the maintainer knows the regression pass was single-model.
+
+Reconcile: keep CONFIRMED findings, drop convincingly REFUTED ones (note any disagreement you are unsure about), and verify each new secondary-model-surfaced issue against the diff before adding it. Do not blindly accept the secondary model's output; it is a second opinion, not the verdict.
+
+## Severity Guide
+
+| Category | Severity | Description |
+|----------|----------|-------------|
+| Silent data loss on upgrade | **Critical** | Destructive/renaming migration, dropped column with live data, config that fails to load |
+| Breaking contract change, no migration | **High** | Removed/renamed API field or config key, removed CLI flag, retyped persisted field |
+| Detection-affecting default change | **High** | Changed threshold/sensitivity/default that silently alters what users detect |
+| Read filter contradicts write-time invariant | **High** | Static read filter hides rows an adaptive/per-entity write gate kept on purpose (category d, maintainer-confirm) |
+| Undocumented behavioral change | **Medium** | Defensible change with no deprecation path or release-note callout |
+| Changed user-parsed output format | **Medium** | Filename template, CSV columns, log/notification format that scripts parse |
+| Cosmetic / easily tolerated | **Low** | Change unlikely to affect any real existing user |
+
+## When NOT to Flag
+
+- Purely additive changes that NO existing surface consumes differently: a new optional config key with a default, a new `omitempty` JSON field, a new nullable column, a new CLI flag. Old configs/clients/databases keep working AND no existing rendered behavior changes.
+- New features with no prior behavior to regress and no existing surface rewired to use them.
+- Internal/unexported refactors that do not cross a user-visible contract (config, API, DB, CLI, parsed output) and do not change observable behavior.
+- Changes already paired with a migration, alias, or deprecation shim that preserves the old path.
