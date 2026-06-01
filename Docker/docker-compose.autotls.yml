@@ -54,9 +54,3 @@ services:
   #   #   - ./cloudflared:/etc/cloudflared
   #   depends_on:
   #     - birdnet-go
-      
-volumes:
-  config:
-    driver: local
-  data:
-    driver: local
