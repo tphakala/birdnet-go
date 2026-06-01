@@ -100,6 +100,18 @@ func getStreamLogger() logger.Logger {
 	return audiocore.GetLogger()
 }
 
+// String representations of ProcessState values, exported so that other
+// packages can compare against them without duplicating raw literals.
+const (
+	ProcessStateIdle        = "idle"
+	ProcessStateStarting    = "starting"
+	ProcessStateRunning     = "running"
+	ProcessStateRestarting  = "restarting"
+	ProcessStateBackoff     = "backoff"
+	ProcessStateCircuitOpen = "circuit_open"
+	ProcessStateStopped     = "stopped"
+)
+
 // ProcessState represents the current lifecycle state of an FFmpeg process.
 type ProcessState int
 
@@ -124,19 +136,19 @@ const (
 func (s ProcessState) String() string {
 	switch s {
 	case StateIdle:
-		return "idle"
+		return ProcessStateIdle
 	case StateStarting:
-		return "starting"
+		return ProcessStateStarting
 	case StateRunning:
-		return "running"
+		return ProcessStateRunning
 	case StateRestarting:
-		return "restarting"
+		return ProcessStateRestarting
 	case StateBackoff:
-		return "backoff"
+		return ProcessStateBackoff
 	case StateCircuitOpen:
-		return "circuit_open"
+		return ProcessStateCircuitOpen
 	case StateStopped:
-		return "stopped"
+		return ProcessStateStopped
 	default:
 		return fmt.Sprintf("unknown(%d)", s)
 	}
