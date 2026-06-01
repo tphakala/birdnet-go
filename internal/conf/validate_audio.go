@@ -392,8 +392,6 @@ func validateAudioSettings(settings *AudioSettings) error {
 	// Validate and determine the effective FFmpeg path
 	validatedFfmpegPath, ffmpegErr := ValidateToolPath(settings.FfmpegPath, GetFfmpegBinaryName())
 	if ffmpegErr != nil {
-		GetLogger().Warn("FFmpeg validation failed", logger.Error(ffmpegErr), logger.String("impact", "Audio export/conversion requiring FFmpeg might be disabled or use defaults"))
-		// Log validation warning for telemetry
 		logValidationWarning(ffmpegErr, "audio-tool-ffmpeg", "ffmpeg-not-available")
 		settings.clearFfmpegMetadata()
 	} else {

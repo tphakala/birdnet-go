@@ -60,7 +60,11 @@ func (c *processingCache) get(key string) []byte {
 		return nil
 	}
 	if time.Since(info.ModTime()) > processingCacheTTL {
-		_ = os.Remove(path)
+		if err := os.Remove(path); err != nil {
+			GetLogger().Debug("Processing cache: failed to remove expired entry on read",
+				logger.String("path", path),
+				logger.Error(err))
+		}
 		return nil
 	}
 	data, err := os.ReadFile(path) //nolint:gosec // G304: path derived from controlled cache key
@@ -146,7 +150,11 @@ func (c *processingCache) evictIfNeeded() {
 	// Remove oldest until under limit
 	toRemove := len(files) - c.maxFiles + 1 // make room for the new entry
 	for i := range min(toRemove, len(files)) {
-		_ = os.Remove(files[i].path)
+		if err := os.Remove(files[i].path); err != nil {
+			GetLogger().Debug("Processing cache: failed to remove file during eviction",
+				logger.String("path", files[i].path),
+				logger.Error(err))
+		}
 	}
 }
 
@@ -173,7 +181,11 @@ func (c *processingCache) cleanExpired() {
 			continue
 		}
 		if time.Since(info.ModTime()) > processingCacheTTL {
-			_ = os.Remove(filepath.Join(c.dir, e.Name()))
+			if err := os.Remove(filepath.Join(c.dir, e.Name())); err != nil {
+				GetLogger().Debug("Processing cache: failed to remove expired file",
+					logger.String("name", e.Name()),
+					logger.Error(err))
+			}
 		}
 	}
 }

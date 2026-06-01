@@ -367,7 +367,7 @@ func (c *Collector) logOnce(category, format string, args ...any) {
 		return
 	}
 	c.loggedErrors[category] = true
-	GetLogger().Debug(fmt.Sprintf(format, args...))
+	GetLogger().Warn(fmt.Sprintf(format, args...))
 }
 
 // sanitizeMountpoint converts a mountpoint path to a metric-safe name.
