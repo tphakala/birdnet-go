@@ -316,7 +316,11 @@ func (a *AudioSourceConfig) Validate() error {
 	// Validate sample rate if specified (0 means use default 48000)
 	if a.SampleRate != 0 {
 		if !slices.Contains(ValidSampleRates, a.SampleRate) {
-			return fmt.Errorf("audio source '%s': sample rate %d Hz is not a supported value (valid: %v)", a.Name, a.SampleRate, ValidSampleRates)
+			rateStrs := make([]string, len(ValidSampleRates))
+			for i, r := range ValidSampleRates {
+				rateStrs[i] = strconv.Itoa(r)
+			}
+			return fmt.Errorf("audio source '%s': sample rate %d Hz is not a supported value (valid: %s)", a.Name, a.SampleRate, strings.Join(rateStrs, ", "))
 		}
 	}
 
