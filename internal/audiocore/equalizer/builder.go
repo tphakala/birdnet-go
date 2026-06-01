@@ -67,31 +67,6 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *FilterCh
 	return chain
 }
 
-// BuildFilterChainForSource resolves the effective EQ settings for a source
-// (per-source override or global default) and builds a FilterChain.
-// Returns nil when EQ is disabled or has no filters. Falls back to global
-// settings if sourceCfg is nil or has no per-source override.
-func BuildFilterChainForSource(sourceCfg *conf.AudioSourceConfig, globalEQ conf.EqualizerSettings, sampleRate int) *FilterChain {
-	eqSettings := globalEQ
-	if sourceCfg != nil && sourceCfg.Equalizer != nil {
-		eqSettings = *sourceCfg.Equalizer
-		eqLog.Debug("using per-source EQ override",
-			logger.String("source", sourceCfg.Name),
-			logger.Bool("enabled", eqSettings.Enabled),
-			logger.Int("filter_count", len(eqSettings.Filters)))
-	} else {
-		sourceName := "unknown"
-		if sourceCfg != nil {
-			sourceName = sourceCfg.Name
-		}
-		eqLog.Debug("using global EQ for source",
-			logger.String("source", sourceName),
-			logger.Bool("enabled", globalEQ.Enabled),
-			logger.Int("filter_count", len(globalEQ.Filters)))
-	}
-	return BuildFilterChain(eqSettings, sampleRate)
-}
-
 // BuildFilterChainWithOverride builds a FilterChain from the given EQ override
 // settings, or from globalEQ if override is nil. This is the preferred entry
 // point for callers that have already resolved the per-source/per-stream override
@@ -114,9 +89,7 @@ func BuildFilterChainWithOverride(override *conf.EqualizerSettings, globalEQ con
 }
 
 // ResolveAndBuildFilterChain resolves the per-source EQ override for the given
-// source name and builds the corresponding filter chain. It combines the
-// "resolve override + build chain" pattern that was previously duplicated across
-// the analysis pipeline, sound level consumers, HLS audio, and settings handlers.
+// source name and builds the corresponding filter chain.
 func ResolveAndBuildFilterChain(settings *conf.Settings, sourceName string, sampleRate int) *FilterChain {
 	override := settings.ResolveEQOverride(sourceName)
 	return BuildFilterChainWithOverride(override, settings.Realtime.Audio.Equalizer, sourceName, sampleRate)
