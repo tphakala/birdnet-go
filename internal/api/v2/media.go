@@ -983,7 +983,12 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 	params := c.parseSpectrogramParameters(ctx)
 
 	// Resolve frequency profile from detection's model type
-	modelType, _ := c.DS.GetNoteModelType(noteID)
+	modelType, mtErr := c.DS.GetNoteModelType(noteID)
+	if mtErr != nil {
+		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+			logger.String("note_id", noteID),
+			logger.Error(mtErr))
+	}
 	profileOpt := spectrogram.WithFrequencyProfile(spectrogram.ProfileForModelType(modelType))
 
 	if err := c.spectrogramGenerator.GenerateFromFile(ctx.Request().Context(), tmpPath, tmpSpectrogramPath, params.width, params.raw, profileOpt); err != nil {
@@ -1348,8 +1353,13 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	params := c.parseSpectrogramParameters(ctx)
 
 	// Resolve frequency profile from detection's model type
-	modelType, _ := c.DS.GetNoteModelType(noteID)
-	profile := spectrogram.ProfileForModelType(modelType)
+	modelType, err := c.DS.GetNoteModelType(noteID)
+	if err != nil {
+		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+			logger.String("note_id", noteID),
+			logger.Error(err))
+	}
+	profileOpt := spectrogram.WithFrequencyProfile(spectrogram.ProfileForModelType(modelType))
 
 	// Log request details
 	c.logDebugIfEnabled("Spectrogram requested by ID",
@@ -1364,8 +1374,6 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 
 	// Check spectrogram generation mode
 	spectrogramMode := c.Settings.Realtime.Dashboard.Spectrogram.GetMode()
-
-	profileOpt := spectrogram.WithFrequencyProfile(profile)
 
 	// Handle user-requested mode
 	if spectrogramMode == conf.SpectrogramModeUserRequested {
@@ -1685,7 +1693,12 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	c.initializeQueueStatus(spectrogramKey)
 
 	// Resolve frequency profile from detection's model type
-	modelType, _ := c.DS.GetNoteModelType(noteID)
+	modelType, err := c.DS.GetNoteModelType(noteID)
+	if err != nil {
+		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+			logger.String("note_id", noteID),
+			logger.Error(err))
+	}
 	profileOpt := spectrogram.WithFrequencyProfile(spectrogram.ProfileForModelType(modelType))
 
 	// Start async generation in background with proper cleanup and panic recovery

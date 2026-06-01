@@ -70,6 +70,7 @@ type Job struct {
 	NoteID           uint             // For logging correlation
 	Timestamp        time.Time        // Job submission time
 	FrequencyProfile FrequencyProfile // Frequency profile for spectrogram generation (bird vs bat)
+	modelType        string           // Original model type string for DTO getter
 }
 
 // Methods to match the interface (allows Job to be submitted directly in tests)
@@ -80,12 +81,7 @@ func (j *Job) GetNoteID() uint         { return j.NoteID }
 func (j *Job) GetTimestamp() time.Time { return j.Timestamp }
 
 // GetModelType returns the model type string for DTO interface compatibility.
-func (j *Job) GetModelType() string {
-	if j.FrequencyProfile.IsBird() {
-		return "bird"
-	}
-	return "bat"
-}
+func (j *Job) GetModelType() string { return j.modelType }
 
 // Stats tracks pre-rendering statistics.
 type Stats struct {
@@ -210,13 +206,15 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	GetModelType() string
 }) (err error) {
 	// Convert DTO to internal Job type
+	modelType := jobDTO.GetModelType()
 	job := &Job{
 		PCMData:          jobDTO.GetPCMData(),
 		SampleRate:       jobDTO.GetSampleRate(),
 		ClipPath:         jobDTO.GetClipPath(),
 		NoteID:           jobDTO.GetNoteID(),
 		Timestamp:        jobDTO.GetTimestamp(),
-		FrequencyProfile: ProfileForModelType(jobDTO.GetModelType()),
+		FrequencyProfile: ProfileForModelType(modelType),
+		modelType:        modelType,
 	}
 
 	// Early check: skip if spectrogram already exists (avoid queueing duplicate jobs)

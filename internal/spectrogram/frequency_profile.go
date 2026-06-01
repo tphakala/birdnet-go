@@ -5,16 +5,12 @@ package spectrogram
 // bat settings (no resample, high-pass at 18 kHz), everything else gets
 // bird defaults (resample to 24 kHz, full range).
 type FrequencyProfile struct {
-	MinFreqHz    int // Lower bound of visible frequency range
-	MaxFreqHz    int // Upper bound of visible frequency range
 	ResampleRate int // Target sample rate in Hz; 0 means keep native rate
 	HighPassHz   int // High-pass filter cutoff in Hz; 0 means no filter
 }
 
 const (
 	batHighPassHz   = 18000
-	batMaxFreqHz    = 128000
-	birdMaxFreqHz   = 12000
 	birdResampleHz  = 24000
 	modelTypeBatStr = "bat"
 )
@@ -22,8 +18,6 @@ const (
 // BirdProfile returns the default frequency profile for bird detections.
 func BirdProfile() FrequencyProfile {
 	return FrequencyProfile{
-		MinFreqHz:    0,
-		MaxFreqHz:    birdMaxFreqHz,
 		ResampleRate: birdResampleHz,
 		HighPassHz:   0,
 	}
@@ -35,8 +29,6 @@ func BirdProfile() FrequencyProfile {
 // floor.
 func BatProfile() FrequencyProfile {
 	return FrequencyProfile{
-		MinFreqHz:    batHighPassHz,
-		MaxFreqHz:    batMaxFreqHz,
 		ResampleRate: 0,
 		HighPassHz:   batHighPassHz,
 	}
@@ -49,9 +41,4 @@ func ProfileForModelType(modelType string) FrequencyProfile {
 		return BatProfile()
 	}
 	return BirdProfile()
-}
-
-// IsBird returns true if the profile uses bird-default settings.
-func (fp FrequencyProfile) IsBird() bool {
-	return fp.ResampleRate > 0
 }

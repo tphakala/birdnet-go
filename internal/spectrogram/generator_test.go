@@ -712,6 +712,69 @@ func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 	assert.True(t, hasRaw, "should contain -r flag when raw=true")
 }
 
+// TestGetSoxSpectrogramArgs_BatProfile verifies that the bat frequency profile
+// produces a high-pass sinc filter instead of rate resampling.
+func TestGetSoxSpectrogramArgs_BatProfile(t *testing.T) {
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.Export.Length = 15
+
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
+
+	audioPath := filepath.Join(env.TempDir, "test.wav")
+	outputPath := filepath.Join(env.TempDir, "test.png")
+
+	args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0, BatProfile())
+
+	// Bat profile: sinc high-pass filter, no rate resampling
+	assert.Contains(t, args, "sinc", "bat profile should use sinc high-pass filter")
+	assert.Contains(t, args, "18000-", "bat profile should filter at 18 kHz")
+	assert.NotContains(t, args, "rate", "bat profile should not resample")
+}
+
+// TestGetSoxSpectrogramArgs_BirdProfile verifies that the bird frequency profile
+// produces rate resampling without a high-pass filter.
+func TestGetSoxSpectrogramArgs_BirdProfile(t *testing.T) {
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.Export.Length = 15
+
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
+
+	audioPath := filepath.Join(env.TempDir, "test.wav")
+	outputPath := filepath.Join(env.TempDir, "test.png")
+
+	args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0, BirdProfile())
+
+	// Bird profile: rate resampling, no sinc filter
+	assert.Contains(t, args, "rate", "bird profile should resample")
+	assert.Contains(t, args, "24000", "bird profile should resample to 24 kHz")
+	assert.NotContains(t, args, "sinc", "bird profile should not use sinc filter")
+}
+
+// TestProfileForModelType verifies model type to frequency profile mapping.
+func TestProfileForModelType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		modelType    string
+		wantResample int
+		wantHighPass int
+	}{
+		{"bird model", "bird", 24000, 0},
+		{"bat model", "bat", 0, 18000},
+		{"multi model defaults to bird", "multi", 24000, 0},
+		{"empty defaults to bird", "", 24000, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := ProfileForModelType(tt.modelType)
+			assert.Equal(t, tt.wantResample, p.ResampleRate)
+			assert.Equal(t, tt.wantHighPass, p.HighPassHz)
+		})
+	}
+}
+
 // TestGetSoxSpectrogramArgs_UsesProvidedDuration verifies that a non-zero preValidatedDuration
 // is used directly for the -d parameter, skipping the sox --info duration query.
 func TestGetSoxSpectrogramArgs_UsesProvidedDuration(t *testing.T) {

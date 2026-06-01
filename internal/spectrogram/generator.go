@@ -290,7 +290,7 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 		logger.Int("width", width),
 		logger.Bool("raw", raw),
 		logger.Float64("pre_validated_duration", options.preValidatedDuration),
-		logger.Bool("bat_profile", !profile.IsBird()))
+		logger.Bool("bat_profile", profile.HighPassHz > 0))
 
 	// Validate inputs before filesystem operations
 	if outputPath == "" {
@@ -400,7 +400,7 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 		logger.Int("pcm_bytes", len(pcmData)),
 		logger.Int("width", width),
 		logger.Bool("raw", raw),
-		logger.Bool("bat_profile", !profile.IsBird()))
+		logger.Bool("bat_profile", profile.HighPassHz > 0))
 
 	// Validate inputs before filesystem operations
 	if outputPath == "" {
@@ -581,7 +581,7 @@ func (g *Generator) killSoxProcess(soxCmd *exec.Cmd, soxPid int) {
 
 // generateWithFFmpegSoxPipeline generates a spectrogram using FFmpeg piped to Sox.
 // Used when the audio file format is not natively supported by Sox.
-func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64, profile ...FrequencyProfile) error {
+func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64, profile FrequencyProfile) error {
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	soxBinary := settings.Realtime.Audio.SoxPath
 
@@ -605,12 +605,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings 
 
 	// FFmpeg converts audio to Sox format and pipes to Sox
 	ffmpegArgs := []string{"-hide_banner", "-i", audioPath, "-f", "sox", "-"}
-	// Resolve frequency profile for Sox args
-	fp := BirdProfile()
-	if len(profile) > 0 {
-		fp = profile[0]
-	}
-	soxArgs := append([]string{"-t", "sox", "-"}, g.getSoxSpectrogramArgs(ctx, settings, audioPath, outputPath, width, raw, preValidatedDuration, fp)...)
+	soxArgs := append([]string{"-t", "sox", "-"}, g.getSoxSpectrogramArgs(ctx, settings, audioPath, outputPath, width, raw, preValidatedDuration, profile)...)
 
 	ffmpegCmd := createCommandWithNice(ctx, ffmpegBinary, ffmpegArgs)
 	soxCmd := createCommandWithNice(ctx, soxBinary, soxArgs)
