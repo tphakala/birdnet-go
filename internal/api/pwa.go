@@ -75,13 +75,17 @@ func rewriteManifestBasePath(content []byte, basePath string) []byte {
 func (sfs *StaticFileServer) readPWAFromDisk(filename string) ([]byte, error) {
 	root, err := os.OpenRoot(sfs.devModePath)
 	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Failed to open dist directory")
+		httpErr := echo.NewHTTPError(http.StatusInternalServerError, "Failed to open dist directory")
+		httpErr.Internal = err
+		return nil, httpErr
 	}
 	defer sfs.closeWithLog(root, "root handle")
 
 	file, err := root.Open(filename)
 	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusNotFound, "File not found")
+		httpErr := echo.NewHTTPError(http.StatusNotFound, "File not found")
+		httpErr.Internal = err
+		return nil, httpErr
 	}
 	defer sfs.closeFileWithLog(file, filename)
 

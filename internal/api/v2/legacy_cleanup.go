@@ -281,8 +281,14 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 
 		// Check if table exists
 		exists, err := c.tableExistsMySQL(db, tableName)
-		if err != nil || !exists {
-			continue // Table doesn't exist, skip
+		if err != nil {
+			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
+				logger.String("table", tableName),
+				logger.Error(err))
+			continue
+		}
+		if !exists {
+			continue
 		}
 
 		// Get row count
@@ -464,8 +470,14 @@ func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 
 		// Check if table exists first
 		exists, err := c.tableExistsMySQL(db, tableName)
-		if err != nil || !exists {
-			continue // Table doesn't exist, skip
+		if err != nil {
+			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
+				logger.String("table", tableName),
+				logger.Error(err))
+			continue
+		}
+		if !exists {
+			continue
 		}
 
 		// Drop the table

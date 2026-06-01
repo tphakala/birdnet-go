@@ -134,6 +134,10 @@ func (e *Engine) clearEscalationIfRecovered(rules []entities.AlertRule, event *A
 	}
 	floatVal, err := toFloat64(val)
 	if err != nil {
+		e.log.Debug("Failed to parse metric value for escalation recovery",
+			logger.String("metric", event.MetricName),
+			logger.String("object_type", event.ObjectType),
+			logger.Error(err))
 		return
 	}
 
@@ -148,7 +152,7 @@ func (e *Engine) clearEscalationIfRecovered(rules []entities.AlertRule, event *A
 		if len(rule.EscalationSteps) == 0 {
 			continue
 		}
-		// Find the lowest step (base threshold) — steps may not be sorted.
+		// Find the lowest step (base threshold) - steps may not be sorted.
 		baseStep := slices.Min(rule.EscalationSteps)
 		if floatVal < baseStep {
 			key := escalationKey(rule.ID, event.MetricName, event.Properties)
@@ -174,6 +178,10 @@ func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *Alert
 	}
 	floatVal, err := toFloat64(val)
 	if err != nil {
+		e.log.Debug("Failed to parse metric value for escalation check",
+			logger.String("metric", event.MetricName),
+			logger.String("object_type", event.ObjectType),
+			logger.Error(err))
 		return false, event.Properties
 	}
 
