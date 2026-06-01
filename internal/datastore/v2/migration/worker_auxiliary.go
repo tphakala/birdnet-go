@@ -51,6 +51,45 @@ type AuxiliaryMigrationResult struct {
 	}
 }
 
+// auxSection pairs a section name with its migration stats for iteration.
+type auxSection struct {
+	name     string
+	total    int
+	migrated int
+	err      error
+}
+
+// sections returns the standard (non-weather) auxiliary migration sections.
+func (r *AuxiliaryMigrationResult) sections() []auxSection {
+	return []auxSection{
+		{"image cache", r.ImageCaches.Total, r.ImageCaches.Migrated, r.ImageCaches.Error},
+		{"threshold", r.Thresholds.Total, r.Thresholds.Migrated, r.Thresholds.Error},
+		{"threshold events", r.ThresholdEvents.Total, r.ThresholdEvents.Migrated, r.ThresholdEvents.Error},
+		{"notifications", r.Notifications.Total, r.Notifications.Migrated, r.Notifications.Error},
+	}
+}
+
+// LogErrors logs a warning for each auxiliary section that encountered errors.
+// Weather is handled separately because it tracks daily and hourly counts.
+func (r *AuxiliaryMigrationResult) LogErrors(log logger.Logger) {
+	for _, s := range r.sections() {
+		if s.err != nil {
+			log.Warn(s.name+" migration had errors",
+				logger.Int("total", s.total),
+				logger.Int("migrated", s.migrated),
+				logger.Error(s.err))
+		}
+	}
+	if r.Weather.Error != nil {
+		log.Warn("weather migration had errors",
+			logger.Int("daily_total", r.Weather.DailyEventsTotal),
+			logger.Int("daily_migrated", r.Weather.DailyEventsMigrated),
+			logger.Int("hourly_total", r.Weather.HourlyWeatherTotal),
+			logger.Int("hourly_migrated", r.Weather.HourlyWeatherMigrated),
+			logger.Error(r.Weather.Error))
+	}
+}
+
 // HasErrors returns true if any migration step encountered errors fetching legacy data.
 func (r *AuxiliaryMigrationResult) HasErrors() bool {
 	return r.ImageCaches.Error != nil ||
