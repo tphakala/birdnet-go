@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -34,6 +35,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+
+	"golang.org/x/crypto/acme/autocert"
 )
 
 // ImageDataFs holds the embedded image provider data filesystem.
@@ -593,6 +596,10 @@ func (s *Server) Start() {
 	}
 }
 
+// autoTLSCacheDirName is the subdirectory under the config directory where
+// AutoTLS (Let's Encrypt) certificates are cached so they survive restarts.
+const autoTLSCacheDirName = "tls-acme"
+
 // startBlocking begins serving HTTP requests and blocks until the server is shut down.
 func (s *Server) startBlocking() error {
 	addr := s.config.Address()
@@ -604,6 +611,32 @@ func (s *Server) startBlocking() error {
 	case s.config.AutoTLS:
 		// AutoTLS with Let's Encrypt
 		s.slogger.Info("Starting with AutoTLS (Let's Encrypt)")
+		// Configure persistent cert cache so certificates survive restarts.
+		// Without this, Echo's AutoTLSManager has no storage backend and certs
+		// are lost on every shutdown, triggering a fresh ACME request each time
+		// and quickly exhausting Let's Encrypt's rate limit.
+		if configFile, pathErr := conf.FindConfigFile(); pathErr == nil {
+			cacheDir := filepath.Join(filepath.Dir(configFile), autoTLSCacheDirName)
+			s.echo.AutoTLSManager.Cache = autocert.DirCache(cacheDir)
+			s.slogger.Info("AutoTLS certificate cache configured", logger.String("path", cacheDir))
+		} else {
+			s.slogger.Warn("Could not determine config path for AutoTLS cache; certificates will not persist across restarts",
+				logger.Error(pathErr))
+		}
+		// Restrict ACME issuance to the configured hostname. A nil HostPolicy
+		// lets autocert request a certificate for any SNI presented, which on a
+		// public host is a Let's Encrypt rate-limit exhaustion vector. Config
+		// validation (validateTLSMode) already requires a hostname for AutoTLS,
+		// so an empty value here means validation was bypassed: fail closed
+		// rather than start with an open policy.
+		host := s.settings.Security.GetHostnameForCertificates()
+		if host == "" {
+			return errors.Newf("AutoTLS enabled but no hostname configured; set security.host or a hostname in security.baseURL").
+				Category(errors.CategoryValidation).
+				Context("operation", "configure-autotls-host-policy").
+				Build()
+		}
+		s.echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist(host)
 		err = s.echo.StartAutoTLS(addr)
 	case s.config.TLSEnabled:
 		// Manual/Self-signed TLS: HTTPS on TLSPort, HTTP stays on configured port
