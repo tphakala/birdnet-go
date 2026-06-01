@@ -760,8 +760,9 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 		"-n", // No audio output (null output)
 	}
 
-	// Frequency-dependent effects: resample (bird) or high-pass filter (bat)
-	if profile.HighPassHz > 0 {
+	// Frequency-dependent effects: resample (bird) or high-pass filter (bat).
+	// Guard: sinc filter requires sample rate > 2*cutoff (Nyquist constraint).
+	if profile.HighPassHz > 0 && effectiveRate > 2*profile.HighPassHz {
 		args = append(args, "sinc", strconv.Itoa(profile.HighPassHz)+"-")
 	} else if profile.ResampleRate > 0 {
 		args = append(args, "rate", strconv.Itoa(profile.ResampleRate))

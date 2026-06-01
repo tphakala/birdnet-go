@@ -1471,7 +1471,7 @@ func (ds *Datastore) GetNoteModelType(noteID string) (string, error) {
 	ctx := context.Background()
 	id, err := parseID(noteID)
 	if err != nil {
-		return string(entities.ModelTypeBird), err
+		return "", fmt.Errorf("invalid note ID for model type lookup: %w", err)
 	}
 	return ds.detection.GetModelType(ctx, id)
 }

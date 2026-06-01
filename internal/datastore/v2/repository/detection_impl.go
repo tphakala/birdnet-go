@@ -1647,14 +1647,14 @@ func (r *detectionRepository) GetModelType(ctx context.Context, id uint) (string
 	}
 	err := r.db.WithContext(ctx).Table(r.tableName()).
 		Select(r.modelsTable()+".model_type").
-		Joins("JOIN "+r.modelsTable()+" ON "+r.modelsTable()+".id = "+r.tableName()+".model_id").
+		Joins("LEFT JOIN "+r.modelsTable()+" ON "+r.modelsTable()+".id = "+r.tableName()+".model_id").
 		Where(r.tableName()+".id = ?", id).
 		Take(&result).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return string(entities.ModelTypeBird), nil
 		}
-		return string(entities.ModelTypeBird), err
+		return "", err
 	}
 	if result.ModelType == nil || *result.ModelType == "" {
 		return string(entities.ModelTypeBird), nil

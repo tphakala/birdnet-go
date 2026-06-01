@@ -1692,15 +1692,6 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	// Initialize queue status BEFORE spawning goroutine (prevents "not_started" flicker)
 	c.initializeQueueStatus(spectrogramKey)
 
-	// Resolve frequency profile from detection's model type
-	modelType, err := c.DS.GetNoteModelType(noteID)
-	if err != nil {
-		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
-			logger.String("note_id", noteID),
-			logger.Error(err))
-	}
-	profileOpt := spectrogram.WithFrequencyProfile(spectrogram.ProfileForModelType(modelType))
-
 	// Start async generation in background with proper cleanup and panic recovery
 	// Track goroutine lifecycle for graceful shutdown
 	c.wg.Go(func() {
@@ -1716,6 +1707,15 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		// Use controller context (respects shutdown signals) with timeout
 		bgCtx, cancel := context.WithTimeout(c.ctx, spectrogramGenerationTimeout)
 		defer cancel()
+
+		// Resolve frequency profile inside goroutine to avoid blocking the HTTP handler
+		modelType, mtErr := c.DS.GetNoteModelType(noteID)
+		if mtErr != nil {
+			c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+				logger.String("note_id", noteID),
+				logger.Error(mtErr))
+		}
+		profileOpt := spectrogram.WithFrequencyProfile(spectrogram.ProfileForModelType(modelType))
 
 		spectrogramPath, err := c.generateSpectrogram(bgCtx, clipPath, params.width, params.raw, params.style, params.dynamicRange, profileOpt)
 
