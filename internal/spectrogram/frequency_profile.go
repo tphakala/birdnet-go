@@ -10,9 +10,8 @@ type FrequencyProfile struct {
 }
 
 const (
-	batHighPassHz   = 18000
-	birdResampleHz  = 24000
-	modelTypeBatStr = "bat"
+	batHighPassHz  = 18000
+	birdResampleHz = 24000
 )
 
 // BirdProfile returns the default frequency profile for bird detections.
@@ -36,9 +35,8 @@ func BatProfile() FrequencyProfile {
 
 // ProfileForModelType selects the appropriate frequency profile based on
 // the AI model's type string (as stored in ai_models.model_type).
+// Bat profile is temporarily disabled due to spectrogram generation bugs;
+// all detections use bird defaults until the issues are resolved.
 func ProfileForModelType(modelType string) FrequencyProfile {
-	if modelType == modelTypeBatStr {
-		return BatProfile()
-	}
 	return BirdProfile()
 }
