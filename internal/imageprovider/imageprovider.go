@@ -338,17 +338,12 @@ func (c *BirdImageCache) findStaleEntries(entries []datastore.ImageCache) []stri
 			continue
 		}
 		isNegative := entries[i].URL == negativeEntryMarker
-		// Non-avian species (Siren, Dog, etc.) will never have images;
-		// skip their negative entries so they never expire and re-fetch.
-		if isNegative && isNonAvianClass(entries[i].ScientificName) {
+		// Negative entries expire for direct user-triggered lookups, but the
+		// hourly background refresh must not re-query providers for known misses.
+		if isNegative {
 			continue
 		}
-		if isCacheEntryStale(entries[i].CachedAt, isNegative) {
-			if isNegative {
-				log.Debug("Found stale negative entry",
-					logger.String("scientific_name", entries[i].ScientificName),
-					logger.Time("cached_at", entries[i].CachedAt))
-			}
+		if isCacheEntryStale(entries[i].CachedAt, false) {
 			staleEntries = append(staleEntries, entries[i].ScientificName)
 		}
 	}
