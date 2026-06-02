@@ -593,16 +593,16 @@
     },
     "rejected": "Rechazado",
     "newSpeciesHighlights": {
-      "title": "New Species Highlights",
-      "categoryLifetime": "New species",
-      "categoryYear": "New this year",
-      "categorySeason": "New this season",
-      "categorySeasonNamed": "New this {season}",
-      "detectionsToday": "Detections today",
-      "maxConfidence": "Max confidence",
-      "lastDetection": "Last detection",
-      "firstSeen": "First seen",
-      "daysAgo": "{days, plural, =0 {today} one {# day ago} other {# days ago}}"
+      "title": "Nuevas especies destacadas",
+      "categoryLifetime": "Especie nueva",
+      "categoryYear": "Nueva este año",
+      "categorySeason": "Nueva esta temporada",
+      "categorySeasonNamed": "Nueva esta {season}",
+      "detectionsToday": "Detecciones hoy",
+      "maxConfidence": "Confianza máx.",
+      "lastDetection": "Última detección",
+      "firstSeen": "Visto por primera vez",
+      "daysAgo": "{days, plural, =0 {hoy} one {hace # día} other {hace # días}}"
     },
     "dailySummary": {
       "title": "Actividad Diaria",
@@ -770,7 +770,7 @@
     "elements": {
       "banner": "Banner del panel",
       "dailySummary": "Resumen diario",
-      "newSpeciesHighlights": "New Species Highlights",
+      "newSpeciesHighlights": "Nuevas especies destacadas",
       "currentlyHearing": "Escuchando actualmente",
       "detectionsGrid": "Detecciones recientes",
       "liveSpectrogram": "Espectrograma en vivo",

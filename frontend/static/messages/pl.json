@@ -593,16 +593,16 @@
     },
     "rejected": "Odrzucone",
     "newSpeciesHighlights": {
-      "title": "New Species Highlights",
-      "categoryLifetime": "New species",
-      "categoryYear": "New this year",
-      "categorySeason": "New this season",
-      "categorySeasonNamed": "New this {season}",
-      "detectionsToday": "Detections today",
-      "maxConfidence": "Max confidence",
-      "lastDetection": "Last detection",
-      "firstSeen": "First seen",
-      "daysAgo": "{days, plural, =0 {today} one {# day ago} other {# days ago}}"
+      "title": "Nowe gatunki – przegląd",
+      "categoryLifetime": "Nowy gatunek",
+      "categoryYear": "Nowy w tym roku",
+      "categorySeason": "Nowy w tym sezonie",
+      "categorySeasonNamed": "Nowy w tym {season}",
+      "detectionsToday": "Wykrycia dzisiaj",
+      "maxConfidence": "Maks. pewność",
+      "lastDetection": "Ostatnie wykrycie",
+      "firstSeen": "Zaobserwowany po raz pierwszy",
+      "daysAgo": "{days, plural, =0 {dzisiaj} one {# dzień temu} few {# dni temu} many {# dni temu} other {# dnia temu}}"
     },
     "dailySummary": {
       "title": "Dzienna Aktywność",
@@ -770,7 +770,7 @@
     "elements": {
       "banner": "Baner pulpitu",
       "dailySummary": "Podsumowanie dnia",
-      "newSpeciesHighlights": "New Species Highlights",
+      "newSpeciesHighlights": "Nowe gatunki – przegląd",
       "currentlyHearing": "Aktualnie słyszane",
       "detectionsGrid": "Ostatnie detekcje",
       "liveSpectrogram": "Spektrogram na żywo",

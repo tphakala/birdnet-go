@@ -593,16 +593,16 @@
     },
     "rejected": "Hylätty",
     "newSpeciesHighlights": {
-      "title": "New Species Highlights",
-      "categoryLifetime": "New species",
-      "categoryYear": "New this year",
-      "categorySeason": "New this season",
-      "categorySeasonNamed": "New this {season}",
-      "detectionsToday": "Detections today",
-      "maxConfidence": "Max confidence",
-      "lastDetection": "Last detection",
-      "firstSeen": "First seen",
-      "daysAgo": "{days, plural, =0 {today} one {# day ago} other {# days ago}}"
+      "title": "Uudet lajihavainnot",
+      "categoryLifetime": "Uusi laji",
+      "categoryYear": "Uusi tänä vuonna",
+      "categorySeason": "Uusi tällä kaudella",
+      "categorySeasonNamed": "Uusi tällä {season}",
+      "detectionsToday": "Havainnot tänään",
+      "maxConfidence": "Maks. varmuus",
+      "lastDetection": "Viimeisin havainto",
+      "firstSeen": "Nähty ensimmäistä kertaa",
+      "daysAgo": "{days, plural, =0 {tänään} one {# päivä sitten} other {# päivää sitten}}"
     },
     "dailySummary": {
       "title": "Päivän aktiivisuus",
@@ -770,7 +770,7 @@
     "elements": {
       "banner": "Kojelaudan banneri",
       "dailySummary": "Päivittäinen yhteenveto",
-      "newSpeciesHighlights": "New Species Highlights",
+      "newSpeciesHighlights": "Uudet lajihavainnot",
       "currentlyHearing": "Juuri nyt kuuluu",
       "detectionsGrid": "Viimeisimmät havainnot",
       "liveSpectrogram": "Reaaliaikainen spektrogrammi",
