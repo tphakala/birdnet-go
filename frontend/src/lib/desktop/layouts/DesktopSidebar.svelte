@@ -83,6 +83,7 @@ Performance Optimizations:
   import { GITHUB_REPO_URL, GITHUB_DISCUSSIONS_URL } from '$lib/utils/externalUrls';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { resetDateToToday } from '$lib/utils/datePersistence';
+  import { getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
   import LoginModal from '../components/modals/LoginModal.svelte';
   import LogoBadge from '$lib/components/LogoBadge.svelte';
   import { scheme } from '$lib/stores/scheme';
@@ -120,6 +121,9 @@ Performance Optimizations:
 
   // State for login modal and collapsible sections
   let showLoginModal = $state(false);
+  // Snapshot of the URL (path + query) the user was on when they opened the login
+  // modal, so a login from a filtered view returns them to that exact view (#3306).
+  let loginRedirectUrl = $state('/ui/');
   let analyticsExpanded = $state(false);
   let settingsExpanded = $state(false);
   let systemExpanded = $state(false);
@@ -403,6 +407,9 @@ Performance Optimizations:
   }
 
   function handleLogin() {
+    // Capture the full current location (path + query) at click time so the
+    // post-login redirect returns the user to the exact filtered view (#3306).
+    loginRedirectUrl = getCurrentPathWithQuery();
     showLoginModal = true;
   }
 
@@ -746,7 +753,7 @@ Performance Optimizations:
 <LoginModal
   isOpen={showLoginModal}
   onClose={() => (showLoginModal = false)}
-  redirectUrl={window.location.pathname}
+  redirectUrl={loginRedirectUrl}
   {authConfig}
 />
 
