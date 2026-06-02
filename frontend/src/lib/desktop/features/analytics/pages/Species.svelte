@@ -133,9 +133,11 @@
     searchTerm: '',
   });
 
-  // Tracks the sort order that is actually applied to the table. Updated inside
-  // applyFilters() so that changing the dropdown without clicking Apply does not
-  // move the column-header arrows before the data has been re-sorted.
+  // Tracks the sort order that is actually applied to the table. Only the
+  // explicit commit points (header click in handleSort, Apply Filters/mount/reset
+  // via fetchData) update it; applyFilters() renders from it without mutating it.
+  // This keeps a pending dropdown change from being committed by an unrelated
+  // applyFilters() call (e.g. a background thumbnail batch or a search rerender).
   let appliedSortOrder = $state<SortOrder>(restoredSortOrder);
 
   // Active column + direction for the header indicators, derived from the
@@ -164,6 +166,7 @@
           ? column.asc
           : column.desc;
     filters.sortOrder = next;
+    appliedSortOrder = next;
     setStoredValue<SortOrder>(SORT_STORAGE_KEY, next);
     applyFilters();
   }
@@ -191,6 +194,8 @@
 
   async function fetchData() {
     isLoading = true;
+    // Apply Filters (and mount/reset) commit the pending dropdown selection.
+    appliedSortOrder = filters.sortOrder;
     setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
 
     try {
@@ -282,7 +287,6 @@
   }
 
   function applyFilters() {
-    appliedSortOrder = filters.sortOrder;
     let filtered = [...speciesData];
 
     // Apply search filter
@@ -295,8 +299,8 @@
       );
     }
 
-    // Apply sorting
-    switch (filters.sortOrder) {
+    // Apply sorting from the committed sort, not the pending dropdown selection.
+    switch (appliedSortOrder) {
       case 'count_desc':
         filtered.sort((a, b) => b.count - a.count);
         break;
@@ -335,7 +339,7 @@
         break;
       default: {
         // Exhaustiveness guard: adding a SortOrder value without a case is a compile error.
-        const _exhaustive: never = filters.sortOrder;
+        const _exhaustive: never = appliedSortOrder;
         void _exhaustive;
       }
     }
