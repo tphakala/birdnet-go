@@ -3069,9 +3069,18 @@
           "energyRight": "Jobb csatorna",
           "label": "Csatornamód",
           "left": "Csak bal csatorna",
+          "monoNoSelection": "Egycsatornás forrás. Minden csatornamód azonos hangot ad, ezért nincs szükség választásra.",
           "recommended": "Ajánlott: {channel}",
           "right": "Csak jobb csatorna",
           "singleChannelGood": "Egycsatornás kiválasztva, optimális az érzékelési pontossághoz."
+        },
+        "format": {
+          "label": "Hangformátum",
+          "mono": "Mono (1 csatorna)",
+          "multi": "{count} csatorna",
+          "stereo": "Sztereó (2 csatorna)",
+          "untested": "Tesztelje a streamet a hangformátum felismeréséhez",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Sztereó stream észlelve. A több csatorna keverése csökkentheti az érzékelési pontosságot a csatornák közötti fáziskülönbségek miatt. Válasszon konkrét csatornát (bal/jobb) vagy használja a csatornadetektort a legjobb eredményekhez.",

@@ -3069,9 +3069,18 @@
           "energyRight": "Höger kanal",
           "label": "Kanalläge",
           "left": "Endast vänster kanal",
+          "monoNoSelection": "Enkanalig källa. Alla kanallägen ger identiskt ljud, så inget val behövs.",
           "recommended": "Rekommenderad: {channel}",
           "right": "Endast höger kanal",
           "singleChannelGood": "Enskild kanal vald, optimalt för detektionsnoggrannhet."
+        },
+        "format": {
+          "label": "Ljudformat",
+          "mono": "Mono (1 kanal)",
+          "multi": "{count} kanaler",
+          "stereo": "Stereo (2 kanaler)",
+          "untested": "Testa strömmen för att identifiera ljudformatet",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Stereoström detekterad. Nedmixning av flera kanaler kan minska detektionsnoggrannheten på grund av fasskillnader mellan kanaler. Välj en specifik kanal (vänster/höger) eller använd kanaldetektorn för bästa resultat.",

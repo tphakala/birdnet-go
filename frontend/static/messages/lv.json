@@ -3069,9 +3069,18 @@
           "energyRight": "Labais kanāls",
           "label": "Kanāla režīms",
           "left": "Tikai kreisais kanāls",
+          "monoNoSelection": "Viena kanāla avots. Visi kanālu režīmi rada identisku skaņu, tāpēc izvēle nav nepieciešama.",
           "recommended": "Ieteicamais: {channel}",
           "right": "Tikai labais kanāls",
           "singleChannelGood": "Izvēlēts viens kanāls, optimāli noteikšanas precizitātei."
+        },
+        "format": {
+          "label": "Audio formāts",
+          "mono": "Mono (1 kanāls)",
+          "multi": "{count} kanāli",
+          "stereo": "Stereo (2 kanāli)",
+          "untested": "Pārbaudiet straumi, lai noteiktu tās audio formātu",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Konstatēta stereo straume. Vairāku kanālu samazināšana var pazemināt noteikšanas precizitāti fāzu atšķirību dēļ starp kanāliem. Izvēlieties konkrētu kanālu (kreiso/labo) vai izmantojiet kanālu detektoru labākajiem rezultātiem.",

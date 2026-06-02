@@ -3069,9 +3069,18 @@
           "energyRight": "Højre kanal",
           "label": "Kanaltilstand",
           "left": "Kun venstre kanal",
+          "monoNoSelection": "Enkeltkanalskilde. Alle kanaltilstande giver identisk lyd, så der er ikke behov for at vælge.",
           "recommended": "Anbefalet: {channel}",
           "right": "Kun højre kanal",
           "singleChannelGood": "Enkelt kanal valgt, optimalt for detektionsnøjagtighed."
+        },
+        "format": {
+          "label": "Lydformat",
+          "mono": "Mono (1 kanal)",
+          "multi": "{count} kanaler",
+          "stereo": "Stereo (2 kanaler)",
+          "untested": "Test streamen for at registrere lydformatet",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Stereostream detekteret. Downmixing af flere kanaler kan reducere detektionsnøjagtigheden på grund af faseforskelle mellem kanaler. Vælg en specifik kanal (venstre/højre) eller brug kanaldetektoren for bedste resultater.",

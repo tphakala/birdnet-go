@@ -562,6 +562,18 @@ const (
 // DefaultChannelMode is used when no channel mode is specified.
 const DefaultChannelMode = ChannelModeDownmix
 
+// Canonical returns the effective channel mode, treating an empty value as the
+// default (downmix). An unset mode and an explicit "downmix" produce identical
+// FFmpeg arguments, so callers comparing modes (e.g. hot-reload change detection)
+// should compare canonical values to avoid treating that no-op transition as a
+// real change that would needlessly restart the stream.
+func (m ChannelMode) Canonical() ChannelMode {
+	if m == "" {
+		return DefaultChannelMode
+	}
+	return m
+}
+
 // ValidChannelModes is the set of accepted channel mode values.
 var ValidChannelModes = map[ChannelMode]bool{
 	ChannelModeDownmix: true,
