@@ -44,6 +44,11 @@ type speciesCacheEntry struct {
 
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
 type BirdNET struct {
+	// classifier and rangeFilter are the native inference backends (TFLite/ONNX).
+	// They are NOT goroutine-safe and free native resources in Close(). Per the mu
+	// invariant below, callers read the field and run the native call (Predict /
+	// PredictSpeciesScores) under mu, and Close() the backend under mu, so a
+	// concurrent reload or Delete can never free an interpreter mid-call (issue #3336).
 	classifier  inference.Classifier  // species classification backend
 	rangeFilter inference.RangeFilter // geographic range filter backend (may be nil)
 	// rangeFilterFellBack is true when the configured ONNX geomodel could not be loaded
@@ -58,9 +63,14 @@ type BirdNET struct {
 	TaxonomyPath        string              // Path to custom taxonomy file, if used
 	modelVersion        string              // Human-readable model version string (per-instance to avoid shared global state)
 	modelsDir           string              // base directory for gallery-installed models (set by Orchestrator)
-	mu                  sync.Mutex
-	resultsBuffer       []datastore.Results // Pre-allocated buffer for results to reduce allocations
-	confidenceBuffer    []float32           // Pre-allocated buffer for confidence values to reduce allocations
+	// mu guards the inference backends (classifier, rangeFilter, rangeFilterFellBack)
+	// and the model metadata reloaded with them. Inference holds mu for the full
+	// duration of the native call, not just the field read: the backends are not
+	// goroutine-safe and reload/Delete Close() them under mu, so dropping mu before
+	// the native call would reintroduce the issue #3336 use-after-free segfault.
+	mu               sync.Mutex
+	resultsBuffer    []datastore.Results // Pre-allocated buffer for results to reduce allocations
+	confidenceBuffer []float32           // Pre-allocated buffer for confidence values to reduce allocations
 
 	// Species occurrence cache to avoid repeated GetProbableSpecies calls within same day
 	speciesCacheMu sync.RWMutex
@@ -760,7 +770,9 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	return out, nil
 }
 
-// Delete releases resources used by the inference backends.
+// Delete releases resources used by the inference backends. The backends are
+// Closed under mu so the native free cannot race with an in-flight inference,
+// which would otherwise be a use-after-free segfault (issue #3336).
 func (bn *BirdNET) Delete() {
 	bn.mu.Lock()
 	if bn.classifier != nil {
@@ -1214,7 +1226,9 @@ func (bn *BirdNET) reloadModelInternal() error {
 			Build()
 	}
 
-	// Explicitly close old backends to release native resources promptly.
+	// Explicitly close old backends to release native resources promptly. This runs
+	// under mu (held for the whole reload), so it cannot race with an in-flight
+	// inference, which also holds mu across its native call (issue #3336).
 	// ONNX Close() calls session.Destroy() which frees via ort_api->ReleaseSession().
 	// TFLite Close() calls interpreter.Delete() which immediately frees native
 	// resources via C.TfLiteInterpreterDelete and cascades to model/options/delegates.
