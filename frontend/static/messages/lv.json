@@ -765,7 +765,9 @@
       "settings": "Iestatījumi",
       "resetDashboard": "Atiestatīt informācijas paneli",
       "resetConfirm": "Atiestatīt informācijas paneli uz noklusējuma izkārtojumu? Tas noņems visus pielāgojumus.",
-      "resetting": "Atiestata..."
+      "resetting": "Atiestata...",
+      "saveSuccess": "Paneļa izkārtojums saglabāts",
+      "saveFailed": "Neizdevās saglabāt paneļa izkārtojumu"
     },
     "elements": {
       "banner": "Informācijas paneļa baneris",

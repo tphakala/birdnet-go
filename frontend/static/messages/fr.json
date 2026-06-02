@@ -765,7 +765,9 @@
       "settings": "Paramètres",
       "resetDashboard": "Réinitialiser le tableau de bord",
       "resetConfirm": "Réinitialiser le tableau de bord à sa disposition par défaut ? Toutes les personnalisations seront supprimées.",
-      "resetting": "Réinitialisation..."
+      "resetting": "Réinitialisation...",
+      "saveSuccess": "Disposition du tableau de bord enregistrée",
+      "saveFailed": "Impossible d'enregistrer la disposition du tableau de bord"
     },
     "elements": {
       "banner": "Bannière du tableau de bord",

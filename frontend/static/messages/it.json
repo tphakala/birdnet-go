@@ -765,7 +765,9 @@
       "settings": "Impostazioni",
       "resetDashboard": "Reimposta dashboard",
       "resetConfirm": "Reimpostare la dashboard al layout predefinito? Tutte le personalizzazioni verranno rimosse.",
-      "resetting": "Reimpostazione..."
+      "resetting": "Reimpostazione...",
+      "saveSuccess": "Layout della dashboard salvato",
+      "saveFailed": "Impossibile salvare il layout della dashboard"
     },
     "elements": {
       "banner": "Banner della dashboard",

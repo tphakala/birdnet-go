@@ -765,7 +765,9 @@
       "settings": "Ustawienia",
       "resetDashboard": "Resetuj pulpit",
       "resetConfirm": "Zresetować pulpit do domyślnego układu? Wszystkie dostosowania zostaną usunięte.",
-      "resetting": "Resetowanie..."
+      "resetting": "Resetowanie...",
+      "saveSuccess": "Zapisano układ panelu",
+      "saveFailed": "Nie udało się zapisać układu panelu"
     },
     "elements": {
       "banner": "Baner pulpitu",

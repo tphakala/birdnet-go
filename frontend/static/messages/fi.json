@@ -765,7 +765,9 @@
       "settings": "Asetukset",
       "resetDashboard": "Palauta kojelauta",
       "resetConfirm": "Palautetaanko kojelauta oletusasetteluun? Kaikki mukautukset poistetaan.",
-      "resetting": "Palautetaan..."
+      "resetting": "Palautetaan...",
+      "saveSuccess": "Koontinäytön asettelu tallennettu",
+      "saveFailed": "Koontinäytön asettelun tallennus epäonnistui"
     },
     "elements": {
       "banner": "Kojelaudan banneri",

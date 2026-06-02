@@ -765,7 +765,9 @@
       "settings": "Einstellungen",
       "resetDashboard": "Dashboard zurücksetzen",
       "resetConfirm": "Dashboard auf das Standardlayout zurücksetzen? Alle Anpassungen gehen verloren.",
-      "resetting": "Wird zurückgesetzt..."
+      "resetting": "Wird zurückgesetzt...",
+      "saveSuccess": "Dashboard-Layout gespeichert",
+      "saveFailed": "Dashboard-Layout konnte nicht gespeichert werden"
     },
     "elements": {
       "banner": "Dashboard-Banner",
