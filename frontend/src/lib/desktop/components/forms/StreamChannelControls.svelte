@@ -77,7 +77,7 @@
 
   // Also honor the parent form's disabled state so the detect button cannot be
   // triggered while the whole form is disabled.
-  let canAnalyze = $derived(!disabled && !isAnalyzing && analyzeUrl.trim().length > 0);
+  let canAnalyze = $derived(!disabled && !isAnalyzing && (analyzeUrl ?? '').trim().length > 0);
 
   // Energy bar geometry: dBFS spans -96 (silence) to 0 (full scale); clamp the
   // rendered width between a minimum (so a near-silent channel stays visible)
@@ -153,7 +153,7 @@
                   MIN_BAR_PERCENT,
                   Math.min(
                     MAX_BAR_PERCENT,
-                    ((ch.rmsDbfs + DBFS_RANGE) / DBFS_RANGE) * MAX_BAR_PERCENT
+                    (((ch.rmsDbfs ?? -DBFS_RANGE) + DBFS_RANGE) / DBFS_RANGE) * MAX_BAR_PERCENT
                   )
                 )}%"
               ></div>
