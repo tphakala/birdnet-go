@@ -472,6 +472,11 @@ func TestV2AuthFlow_OpenRedirectPrevention(t *testing.T) {
 			maliciousURL:   "/ui/detections?q=" + strings.Repeat("a", 3000),
 			expectedResult: "/",
 		},
+		{
+			name:           "backslashes in the query value are preserved (not mangled to slashes)",
+			maliciousURL:   `/ui/search?q=C:\Temp\bird.wav`,
+			expectedResult: `/ui/search?q=C:\Temp\bird.wav`,
+		},
 	}
 
 	for _, tc := range testCases {

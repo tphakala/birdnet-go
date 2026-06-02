@@ -625,8 +625,15 @@ func validateAndSanitizeRedirect(redirect string) string {
 		return "/"
 	}
 
-	// Replace ALL backslashes with forward slashes for robust normalization
-	cleanedRedirect := strings.ReplaceAll(redirect, "\\", "/")
+	// Normalize backslashes to forward slashes in the PATH only (this catches the
+	// "/\evil.com" protocol-relative trick). The query is left untouched so a
+	// legitimate backslash in a filter value (e.g. a Windows path the user
+	// searched for) survives instead of being mangled into forward slashes.
+	pathPart, queryPart, hasQuery := strings.Cut(redirect, "?")
+	cleanedRedirect := strings.ReplaceAll(pathPart, "\\", "/")
+	if hasQuery {
+		cleanedRedirect += "?" + queryPart
+	}
 
 	// Apply the authoritative, query-aware redirect validation so this OAuth
 	// callback entry point enforces the same rules as the login gate: length
