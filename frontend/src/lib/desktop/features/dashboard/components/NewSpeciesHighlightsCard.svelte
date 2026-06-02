@@ -16,6 +16,7 @@ Two view modes (persisted in the dashboard element config via onViewModeChange):
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { buildSpeciesDetectionUrl } from '$lib/utils/detectionUrls';
+  import { getLocalDateString } from '$lib/utils/date';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { CalendarDays, Image as ImageIcon, LayoutGrid, Leaf, Star } from '@lucide/svelte';
 
@@ -73,6 +74,10 @@ Two view modes (persisted in the dashboard element config via onViewModeChange):
   const visibleHighlights = $derived(highlights.slice(0, MAX_VISIBLE));
   const overflowCount = $derived(Math.max(0, highlights.length - MAX_VISIBLE));
   const moreUrl = buildAppUrl('/ui/analytics/species');
+
+  // The absence gap reflects live tracker state, so it is only accurate for
+  // the current day; for past dates the recency stat is omitted.
+  const isToday = $derived(selectedDate === getLocalDateString());
 
   function categoryLabel(category: HighlightCategory, season?: string): string {
     switch (category) {
@@ -139,11 +144,11 @@ Two view modes (persisted in the dashboard element config via onViewModeChange):
       <span aria-hidden="true"> · </span>
       <span>{t('dashboard.newSpeciesHighlights.maxConfidenceShort', { confidence: percent })}</span>
     {/if}
-    {#if species.days_since_first_seen !== undefined}
+    {#if isToday && species.days_since_last_seen !== undefined && species.days_since_last_seen > 0}
       <span aria-hidden="true"> · </span>
       <span
         >{t('dashboard.newSpeciesHighlights.lastSeen', {
-          days: species.days_since_first_seen,
+          days: species.days_since_last_seen,
         })}</span
       >
     {/if}

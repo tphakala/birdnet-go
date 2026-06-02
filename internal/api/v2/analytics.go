@@ -46,6 +46,7 @@ type SpeciesDailySummary struct {
 	ThumbnailURL       string  `json:"thumbnail_url,omitempty"`
 	IsNewSpecies       bool    `json:"is_new_species,omitempty"`        // First seen within tracking window
 	DaysSinceFirstSeen int     `json:"days_since_first_seen,omitempty"` // Days since species was first detected
+	DaysSinceLastSeen  int     `json:"days_since_last_seen,omitempty"`  // Days since the previous detection before this return (0 if absent/first-ever)
 	// Multi-period tracking metadata
 	IsNewThisYear   bool   `json:"is_new_this_year,omitempty"`   // First time this year
 	IsNewThisSeason bool   `json:"is_new_this_season,omitempty"` // First time this season
@@ -538,6 +539,12 @@ func applySpeciesStatusToSummary(summary *SpeciesDailySummary, status *species.S
 
 	if status.DaysSinceFirst >= 0 {
 		summary.DaysSinceFirstSeen = status.DaysSinceFirst
+	}
+
+	// Only a genuine absence gap (>0) is meaningful; -1 (first-ever) and 0
+	// (already seen the same day) are omitted.
+	if status.DaysSinceLastSeen > 0 {
+		summary.DaysSinceLastSeen = status.DaysSinceLastSeen
 	}
 
 	summary.IsNewThisYear = status.IsNewThisYear
