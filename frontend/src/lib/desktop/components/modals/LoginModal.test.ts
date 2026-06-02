@@ -35,10 +35,11 @@ describe('LoginModal', () => {
   const loginModalTest = createComponentTestFactory(LoginModal);
 
   // Helper function to mock window.location
-  function mockWindowLocation(pathname = '/ui/') {
+  function mockWindowLocation(pathname = '/ui/', search = '') {
     const mockLocation = {
       href: '',
       pathname,
+      search,
       reload: vi.fn(),
     };
     Object.defineProperty(window, 'location', {
@@ -384,6 +385,38 @@ describe('LoginModal', () => {
   });
 
   describe('Redirect URL Duplication Prevention', () => {
+    it('should preserve the query string when extracting the relative redirect path', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
+
+      mockWindowLocation('/ui/detections', '?queryType=species&species=Phoenicurus+phoenicurus');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/detections?queryType=species&species=Phoenicurus+phoenicurus',
+        authConfig: { basicEnabled: true, enabledProviders: [] },
+      });
+
+      const passwordInput = screen.getByLabelText('auth.password');
+      const loginButton = screen.getByRole('button', { name: /continue with password/i });
+
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            // Base path stripped, query string preserved.
+            redirectUrl: '/detections?queryType=species&species=Phoenicurus+phoenicurus',
+            basePath: '/ui/',
+          })
+        );
+      });
+    });
+
     it('should extract relative path when redirectUrl contains base path', async () => {
       const { api } = await import('$lib/utils/api');
       const postSpy = vi.mocked(api.post);
