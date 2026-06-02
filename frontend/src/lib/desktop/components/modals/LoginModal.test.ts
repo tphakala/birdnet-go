@@ -35,10 +35,11 @@ describe('LoginModal', () => {
   const loginModalTest = createComponentTestFactory(LoginModal);
 
   // Helper function to mock window.location
-  function mockWindowLocation(pathname = '/ui/') {
+  function mockWindowLocation(pathname = '/ui/', search = '') {
     const mockLocation = {
       href: '',
       pathname,
+      search,
       reload: vi.fn(),
     };
     Object.defineProperty(window, 'location', {
@@ -110,6 +111,19 @@ describe('LoginModal', () => {
       });
 
       // Should fallback to the detected base path (/ui/)
+      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      expect(redirectInput).toBeDefined();
+      expect(redirectInput.value).toBe('/ui/');
+    });
+
+    it('should reject backslash protocol-relative URLs and fallback to base path', () => {
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/\\evil.com/malicious',
+      });
+
+      // Browsers normalize '/\' to '//', so this must fall back to the base path.
       const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/');
@@ -384,6 +398,38 @@ describe('LoginModal', () => {
   });
 
   describe('Redirect URL Duplication Prevention', () => {
+    it('should preserve the query string when extracting the relative redirect path', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
+
+      mockWindowLocation('/ui/detections', '?queryType=species&species=Phoenicurus+phoenicurus');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/detections?queryType=species&species=Phoenicurus+phoenicurus',
+        authConfig: { basicEnabled: true, enabledProviders: [] },
+      });
+
+      const passwordInput = screen.getByLabelText('auth.password');
+      const loginButton = screen.getByRole('button', { name: /continue with password/i });
+
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            // Base path stripped, query string preserved.
+            redirectUrl: '/detections?queryType=species&species=Phoenicurus+phoenicurus',
+            basePath: '/ui/',
+          })
+        );
+      });
+    });
+
     it('should extract relative path when redirectUrl contains base path', async () => {
       const { api } = await import('$lib/utils/api');
       const postSpy = vi.mocked(api.post);
@@ -743,6 +789,7 @@ describe('LoginModal', () => {
     it('should handle OAuth callback redirect preserving original URL', async () => {
       const { api } = await import('$lib/utils/api');
       const postSpy = vi.mocked(api.post);
+      const onCloseMock = vi.fn();
       const mockLocation = mockWindowLocation('/ui/settings/main');
 
       // Mock successful login with OAuth callback
@@ -754,7 +801,7 @@ describe('LoginModal', () => {
 
       loginModalTest.render({
         isOpen: true,
-        onClose: vi.fn(),
+        onClose: onCloseMock,
         redirectUrl: '/ui/settings/main', // User was on settings page
         authConfig: { basicEnabled: true, enabledProviders: [] },
       });
@@ -779,6 +826,10 @@ describe('LoginModal', () => {
 
       // Verify OAuth redirect happens immediately
       expect(mockLocation.href).toBe('/api/v2/auth/callback?code=123&state=settings%2Fmain');
+
+      // Modal is closed before navigating so its cleanup resets loading state and
+      // the submit button is gone (prevents deadlock / double-submit on navigation).
+      expect(onCloseMock).toHaveBeenCalled();
     });
 
     it('should handle edge case of user on root path', async () => {

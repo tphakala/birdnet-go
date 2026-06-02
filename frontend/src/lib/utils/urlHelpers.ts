@@ -74,7 +74,21 @@ export function isRelativePath(path: string): boolean {
     return false;
   }
 
-  return path.startsWith('/') && !path.startsWith('//');
+  // Must start with a single '/' and not be protocol-relative.
+  if (!path.startsWith('/') || path.startsWith('//')) {
+    return false;
+  }
+
+  // Robust open-redirect guard: resolve against a sentinel origin and require
+  // the result to stay same-origin. This delegates to the browser's URL parser,
+  // which catches backslash variants ('/\host' -> '//host'), mixed slashes, and
+  // control-character tricks that manual string checks can miss.
+  try {
+    const base = 'http://relative-check.internal';
+    return new URL(path, base).origin === base;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -206,4 +220,32 @@ export function buildAppUrl(path: string): string {
   }
 
   return basePath + path;
+}
+
+/**
+ * Returns the current location's path together with its query string
+ * (e.g. '/ui/detections?species=Foo&date=2026-06-02'), excluding origin and hash.
+ *
+ * Use this to capture a post-login redirect target so a user who logs in from a
+ * filtered view returns to the exact same view. The hash fragment is intentionally
+ * omitted: it is never sent to the server and would not survive the server-driven
+ * OAuth callback redirect that completes the login.
+ *
+ * @returns The current relative URL (path + query), or '/' when window is unavailable (SSR/tests).
+ *
+ * @example
+ * // location: /ui/detections?species=Foo&offset=0
+ * getCurrentPathWithQuery() // returns '/ui/detections?species=Foo&offset=0'
+ *
+ * @example
+ * // location: /ui/dashboard (no query)
+ * getCurrentPathWithQuery() // returns '/ui/dashboard'
+ */
+export function getCurrentPathWithQuery(): string {
+  if (typeof window === 'undefined') {
+    return '/';
+  }
+  // window.location.search is '' when there is no query string and always
+  // includes the leading '?' when one is present.
+  return window.location.pathname + window.location.search;
 }
