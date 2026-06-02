@@ -7,6 +7,7 @@ import {
   buildAppUrl,
   setBasePath,
   resetBasePath,
+  getCurrentPathWithQuery,
 } from './urlHelpers';
 import { loggers } from './logger';
 
@@ -578,6 +579,47 @@ describe('URL Helpers', () => {
 
       expect(buildAppUrl('/api/v2/detections/123')).toBe('/api/v2/detections/123');
       expect(buildAppUrl('/ui/assets/messages/en.json')).toBe('/ui/assets/messages/en.json');
+    });
+  });
+
+  describe('getCurrentPathWithQuery', () => {
+    // window.location's assignment target is effectively `string & Location`, so a
+    // `search` property in an object literal collides with String.prototype.search.
+    // Defining the property directly sidesteps that setter typing (same approach as
+    // LoginModal.test.ts) and keeps the literal prettier-stable.
+    function setLocation(pathname: string, search: string) {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: { pathname, search },
+      });
+    }
+
+    it('returns path plus query string when a query is present', () => {
+      setLocation(
+        '/ui/detections',
+        '?queryType=species&species=Phoenicurus+phoenicurus&date=2026-06-02&hour=7'
+      );
+      expect(getCurrentPathWithQuery()).toBe(
+        '/ui/detections?queryType=species&species=Phoenicurus+phoenicurus&date=2026-06-02&hour=7'
+      );
+    });
+
+    it('returns only the path when there is no query string', () => {
+      setLocation('/ui/dashboard', '');
+      expect(getCurrentPathWithQuery()).toBe('/ui/dashboard');
+    });
+
+    it('returns the bare base path with its query string from the root UI path', () => {
+      setLocation('/ui/', '?date=2026-06-02');
+      expect(getCurrentPathWithQuery()).toBe('/ui/?date=2026-06-02');
+    });
+
+    it('preserves an already-encoded query string verbatim', () => {
+      setLocation('/ui/detections', '?species=Erithacus%20rubecula&offset=0');
+      expect(getCurrentPathWithQuery()).toBe(
+        '/ui/detections?species=Erithacus%20rubecula&offset=0'
+      );
     });
   });
 });
