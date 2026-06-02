@@ -157,7 +157,7 @@
     if (!column) return;
     const next =
       sortField === field
-        ? filters.sortOrder === column.asc
+        ? appliedSortOrder === column.asc
           ? column.desc
           : column.asc
         : field === SPECIES_COLUMN_FIELD
