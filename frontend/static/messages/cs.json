@@ -765,9 +765,7 @@
       "settings": "Nastavení",
       "resetDashboard": "Obnovit Dashboard",
       "resetConfirm": "Obnovit Dashboard na výchozí rozložení? Veškeré úpravy budou odstraněny.",
-      "resetting": "Obnovování…",
-      "saveSuccess": "Rozvržení panelu uloženo",
-      "saveFailed": "Rozvržení panelu se nepodařilo uložit"
+      "resetting": "Obnovování…"
     },
     "elements": {
       "banner": "Banner Dashboardu",

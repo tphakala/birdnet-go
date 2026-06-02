@@ -3,9 +3,9 @@ package conf
 const defaultDashboardSummaryLimit = 30
 
 // MigrateDashboardLayout migrates existing installations to the new dashboard layout format.
-// It creates a default layout with the standard elements (daily-summary, new-species-highlights,
-// currently-hearing, live-spectrogram, detections-grid) in their original fixed order, and moves
-// SummaryLimit into the daily-summary element config.
+// It creates a default layout with the three elements (daily-summary, currently-hearing,
+// detections-grid) in their original fixed order, and moves SummaryLimit into the daily-summary
+// element config.
 //
 // Returns true if migration occurred, false if skipped (already has layout elements).
 func (s *Settings) MigrateDashboardLayout() bool {
@@ -27,11 +27,6 @@ func (s *Settings) MigrateDashboardLayout() bool {
 				Summary: &DailySummaryConfig{
 					SummaryLimit: summaryLimit,
 				},
-			},
-			{
-				ID:      "new-species-highlights-0",
-				Type:    "new-species-highlights",
-				Enabled: true,
 			},
 			{
 				ID:      "currently-hearing-0",

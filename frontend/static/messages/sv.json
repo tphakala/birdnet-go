@@ -765,9 +765,7 @@
       "settings": "Inställningar",
       "resetDashboard": "Återställ instrumentpanelen",
       "resetConfirm": "Återställa instrumentpanelen till standardlayouten? Detta tar bort eventuella anpassningar.",
-      "resetting": "Återställer...",
-      "saveSuccess": "Instrumentpanelens layout sparad",
-      "saveFailed": "Det gick inte att spara instrumentpanelens layout"
+      "resetting": "Återställer..."
     },
     "elements": {
       "banner": "Instrumentpanelens banner",

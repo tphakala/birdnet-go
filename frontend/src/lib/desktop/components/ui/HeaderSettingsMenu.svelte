@@ -73,8 +73,6 @@
     navigation.navigate('/ui/dashboard');
   }
 
-  // Keep in sync with the canonical default layout (frontend defaultElements in
-  // DashboardPage and the backend dashboard migration default).
   const DEFAULT_LAYOUT: DashboardLayout = {
     elements: [
       {
@@ -83,9 +81,7 @@
         enabled: true,
         summary: { summaryLimit: 30 },
       },
-      { id: 'new-species-highlights-0', type: 'new-species-highlights', enabled: true },
       { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true },
-      { id: 'live-spectrogram-0', type: 'live-spectrogram', enabled: true },
       { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
     ],
   };

@@ -21,7 +21,6 @@
     SUPPORTS_HALF,
   } from '$lib/desktop/features/dashboard/utils/elementWidths';
   import { api } from '$lib/utils/api';
-  import { toastActions } from '$lib/stores/toast';
   import { getLogger } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte';
@@ -149,13 +148,8 @@
       onLayoutChange(newLayout);
       editElements = [];
       onEditModeChange(false);
-      toastActions.success(t('dashboard.editMode.saveSuccess'));
     } catch (error) {
-      // Surface the failure instead of silently leaving the user in edit mode.
-      // The detailed cause is logged for diagnosis; the toast confirms the save
-      // did not take effect (e.g. the server rejected the layout).
       logger.error('Failed to save dashboard layout:', error);
-      toastActions.error(t('dashboard.editMode.saveFailed'));
     } finally {
       isSaving = false;
     }

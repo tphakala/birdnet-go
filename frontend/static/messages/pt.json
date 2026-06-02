@@ -765,9 +765,7 @@
       "settings": "Configurações",
       "resetDashboard": "Redefinir painel",
       "resetConfirm": "Redefinir o painel para o layout padrão? Todas as personalizações serão removidas.",
-      "resetting": "Redefinindo...",
-      "saveSuccess": "Esquema do painel guardado",
-      "saveFailed": "Não foi possível guardar o esquema do painel"
+      "resetting": "Redefinindo..."
     },
     "elements": {
       "banner": "Banner do painel",

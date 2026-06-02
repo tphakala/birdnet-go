@@ -765,9 +765,7 @@
       "settings": "Configuración",
       "resetDashboard": "Restablecer panel",
       "resetConfirm": "¿Restablecer el panel a su diseño predeterminado? Se eliminarán todas las personalizaciones.",
-      "resetting": "Restableciendo...",
-      "saveSuccess": "Diseño del panel guardado",
-      "saveFailed": "No se pudo guardar el diseño del panel"
+      "resetting": "Restableciendo..."
     },
     "elements": {
       "banner": "Banner del panel",

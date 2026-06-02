@@ -765,9 +765,7 @@
       "settings": "Settings",
       "resetDashboard": "Reset Dashboard",
       "resetConfirm": "Reset the dashboard to its default layout? This will remove any customizations.",
-      "resetting": "Resetting...",
-      "saveSuccess": "Dashboard layout saved",
-      "saveFailed": "Couldn't save the dashboard layout"
+      "resetting": "Resetting..."
     },
     "elements": {
       "banner": "Dashboard Banner",

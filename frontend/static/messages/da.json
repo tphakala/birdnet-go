@@ -765,9 +765,7 @@
       "settings": "Indstillinger",
       "resetDashboard": "Nulstil instrumentpanel",
       "resetConfirm": "Nulstil instrumentpanelet til standardlayoutet? Dette fjerner alle tilpasninger.",
-      "resetting": "Nulstiller...",
-      "saveSuccess": "Dashboard-layout gemt",
-      "saveFailed": "Dashboard-layoutet kunne ikke gemmes"
+      "resetting": "Nulstiller..."
     },
     "elements": {
       "banner": "Instrumentpanelbanner",

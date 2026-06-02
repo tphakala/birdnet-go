@@ -765,9 +765,7 @@
       "settings": "Instellingen",
       "resetDashboard": "Dashboard resetten",
       "resetConfirm": "Dashboard naar de standaardindeling resetten? Alle aanpassingen worden verwijderd.",
-      "resetting": "Resetten...",
-      "saveSuccess": "Dashboardindeling opgeslagen",
-      "saveFailed": "Kan de dashboardindeling niet opslaan"
+      "resetting": "Resetten..."
     },
     "elements": {
       "banner": "Dashboard-banner",
