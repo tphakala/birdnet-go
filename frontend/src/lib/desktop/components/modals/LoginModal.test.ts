@@ -789,6 +789,7 @@ describe('LoginModal', () => {
     it('should handle OAuth callback redirect preserving original URL', async () => {
       const { api } = await import('$lib/utils/api');
       const postSpy = vi.mocked(api.post);
+      const onCloseMock = vi.fn();
       const mockLocation = mockWindowLocation('/ui/settings/main');
 
       // Mock successful login with OAuth callback
@@ -800,7 +801,7 @@ describe('LoginModal', () => {
 
       loginModalTest.render({
         isOpen: true,
-        onClose: vi.fn(),
+        onClose: onCloseMock,
         redirectUrl: '/ui/settings/main', // User was on settings page
         authConfig: { basicEnabled: true, enabledProviders: [] },
       });
@@ -825,6 +826,10 @@ describe('LoginModal', () => {
 
       // Verify OAuth redirect happens immediately
       expect(mockLocation.href).toBe('/api/v2/auth/callback?code=123&state=settings%2Fmain');
+
+      // Modal is closed before navigating so its cleanup resets loading state and
+      // the submit button is gone (prevents deadlock / double-submit on navigation).
+      expect(onCloseMock).toHaveBeenCalled();
     });
 
     it('should handle edge case of user on root path', async () => {

@@ -74,9 +74,21 @@ export function isRelativePath(path: string): boolean {
     return false;
   }
 
-  // Reject protocol-relative URLs ('//host') and the backslash variant ('/\\host'),
-  // which browsers normalize to '//host' and would enable an open redirect.
-  return path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\');
+  // Must start with a single '/' and not be protocol-relative.
+  if (!path.startsWith('/') || path.startsWith('//')) {
+    return false;
+  }
+
+  // Robust open-redirect guard: resolve against a sentinel origin and require
+  // the result to stay same-origin. This delegates to the browser's URL parser,
+  // which catches backslash variants ('/\host' -> '//host'), mixed slashes, and
+  // control-character tricks that manual string checks can miss.
+  try {
+    const base = 'http://relative-check.internal';
+    return new URL(path, base).origin === base;
+  } catch {
+    return false;
+  }
 }
 
 /**

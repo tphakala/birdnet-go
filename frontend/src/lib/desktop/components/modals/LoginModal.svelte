@@ -65,14 +65,8 @@
   // SECURITY: Validate redirect URL to prevent open redirects
   function validateRedirectUrl(url: string): boolean {
     try {
-      // Only allow relative URLs starting with /
-      if (!url.startsWith('/')) {
-        return false;
-      }
-
-      // Prevent protocol-relative URLs, including the backslash variant ('/\')
-      // that browsers normalize to '//' (open-redirect vector).
-      if (url.startsWith('//') || url.startsWith('/\\')) {
+      // Only allow relative URLs starting with a single '/' (not protocol-relative).
+      if (!url.startsWith('/') || url.startsWith('//')) {
         return false;
       }
 
@@ -83,6 +77,15 @@
 
       // Check length
       if (url.length > MAX_REDIRECT_LENGTH) {
+        return false;
+      }
+
+      // Robust open-redirect guard: resolve against a sentinel origin and require
+      // the result to stay same-origin. The browser's URL parser catches backslash
+      // variants ('/\host' -> '//host'), mixed slashes, and control-character tricks
+      // that manual string checks can miss.
+      const base = 'http://relative-check.internal';
+      if (new URL(url, base).origin !== base) {
         return false;
       }
 
@@ -196,8 +199,11 @@
           action: 'handlePasswordLogin',
         });
 
-        // Backend returned OAuth callback URL to complete authentication
-        // Redirect immediately to complete the OAuth flow
+        // Backend returned OAuth callback URL to complete authentication.
+        // Close the modal first: its cleanup resets the loading state and removes
+        // the submit button, so if the navigation never commits we avoid both a UI
+        // deadlock (controls stuck disabled) and a double-submit during navigation.
+        onClose();
         window.location.href = response.redirectUrl;
         return; // Exit early - OAuth callback will handle the rest
       }
