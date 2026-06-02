@@ -106,11 +106,11 @@
   // SECURITY: Sanitize and validate password input
   function validatePassword(pwd: string): { isValid: boolean; error?: string } {
     if (!pwd) {
-      return { isValid: false, error: 'Password is required' };
+      return { isValid: false, error: t('auth.errors.passwordRequired') };
     }
 
     if (pwd.length > MAX_PASSWORD_LENGTH) {
-      return { isValid: false, error: 'Password is too long' };
+      return { isValid: false, error: t('auth.errors.passwordTooLong') };
     }
 
     // Check for control characters (ASCII < 32) and other dangerous characters
@@ -118,7 +118,7 @@
       const charCode = pwd.charCodeAt(i);
       if (charCode < 32 && charCode !== 9) {
         // Allow tab (9) but reject other control chars
-        return { isValid: false, error: 'Password contains invalid characters' };
+        return { isValid: false, error: t('auth.errors.invalidCharacters') };
       }
     }
 
@@ -134,7 +134,7 @@
     const trimmedPassword = password.trim();
     const passwordValidation = validatePassword(trimmedPassword);
     if (!passwordValidation.isValid) {
-      error = passwordValidation.error || 'Invalid input';
+      error = passwordValidation.error || t('auth.errors.invalidInput');
       return;
     }
 
@@ -200,7 +200,7 @@
         window.location.reload();
       }, 500);
     } catch {
-      error = 'Invalid credentials. Please try again.';
+      error = t('auth.errors.loginFailed');
       // Only re-enable on failure. On success the page navigates away (OAuth
       // callback redirect) or reloads, so keeping the control disabled here
       // prevents a double-submit firing redundant login requests mid-navigation.
@@ -213,7 +213,7 @@
     // Get provider from registry
     const provider = getProvider(providerId);
     if (!provider) {
-      error = 'Unknown authentication provider.';
+      error = t('auth.errors.configurationError');
       return;
     }
 
@@ -223,7 +223,7 @@
 
     // SECURITY: Basic endpoint validation - accept OAuth and API v2 auth formats
     if (!endpoint || (!endpoint.startsWith('/auth/') && !endpoint.startsWith('/api/v2/auth/'))) {
-      error = 'Configuration error. Please contact your administrator.';
+      error = t('auth.errors.configurationError');
       return;
     }
 

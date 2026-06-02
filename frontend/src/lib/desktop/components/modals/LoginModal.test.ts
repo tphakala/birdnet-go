@@ -283,7 +283,7 @@ describe('LoginModal', () => {
       // Check if error is displayed
       const errorElement = screen.queryByRole('alert');
       expect(errorElement).toBeInTheDocument();
-      expect(errorElement?.textContent).toBe('Password contains invalid characters');
+      expect(errorElement?.textContent).toBe('auth.errors.invalidCharacters');
 
       // Verify that the API was NOT called (validation should prevent it)
       expect(postSpy).not.toHaveBeenCalled();
@@ -782,7 +782,7 @@ describe('LoginModal', () => {
       await fireEvent.click(loginButton);
 
       await waitFor(() => {
-        expect(screen.getByText('Invalid credentials. Please try again.')).toBeInTheDocument();
+        expect(screen.getByText('auth.errors.loginFailed')).toBeInTheDocument();
       });
     });
   });
