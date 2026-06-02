@@ -594,14 +594,15 @@
     "rejected": "Elutasítva",
     "newSpeciesHighlights": {
       "title": "Új fajok – kiemeltek",
-      "subtitle": "Ezen a napon először észlelt fajok",
       "categoryLifetime": "Új faj",
       "categoryYear": "Új ebben az évben",
       "categorySeason": "Új ebben a szezonban",
       "categorySeasonNamed": "Új ezen a szezonon: {season}",
-      "maxConfidenceShort": "Max {confidence}%",
       "detectionsToday": "Mai észlelések",
-      "lastDetection": "Utolsó észlelés"
+      "maxConfidence": "Max. megbízhatóság",
+      "lastDetection": "Utolsó észlelés",
+      "firstSeen": "Először látva",
+      "daysAgo": "{days, plural, =0 {ma} one {# napja} other {# napja}}"
     },
     "dailySummary": {
       "title": "Napi aktivitás",

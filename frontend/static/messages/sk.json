@@ -594,14 +594,15 @@
     "rejected": "Zamietnuté",
     "newSpeciesHighlights": {
       "title": "Nové druhy – prehľad",
-      "subtitle": "Druhy zaznamenané prvýkrát v tento deň",
       "categoryLifetime": "Nový druh",
       "categoryYear": "Nový tento rok",
       "categorySeason": "Nový túto sezónu",
       "categorySeasonNamed": "Nový túto {season}",
-      "maxConfidenceShort": "Max {confidence} %",
       "detectionsToday": "Detekcie dnes",
-      "lastDetection": "Posledná detekcia"
+      "maxConfidence": "Max. istota",
+      "lastDetection": "Posledná detekcia",
+      "firstSeen": "Prvýkrát zaznamenaný",
+      "daysAgo": "{days, plural, =0 {dnes} one {pred # dňom} few {pred # dňami} other {pred # dňami}}"
     },
     "dailySummary": {
       "title": "Denná aktivita",

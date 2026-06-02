@@ -594,14 +594,15 @@
     "rejected": "Rejected",
     "newSpeciesHighlights": {
       "title": "New Species Highlights",
-      "subtitle": "Species seen for the first time on this day",
       "categoryLifetime": "New species",
       "categoryYear": "New this year",
       "categorySeason": "New this season",
       "categorySeasonNamed": "New this {season}",
-      "maxConfidenceShort": "Max {confidence}%",
       "detectionsToday": "Detections today",
-      "lastDetection": "Last detection"
+      "maxConfidence": "Max confidence",
+      "lastDetection": "Last detection",
+      "firstSeen": "First seen",
+      "daysAgo": "{days, plural, =0 {today} one {# day ago} other {# days ago}}"
     },
     "dailySummary": {
       "title": "Daily Activity",
