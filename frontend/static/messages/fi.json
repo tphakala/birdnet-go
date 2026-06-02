@@ -594,15 +594,18 @@
     "rejected": "Hylätty",
     "newSpeciesHighlights": {
       "title": "Uudet lajihavainnot",
+      "subtitle": "Tänä päivänä ensimmäistä kertaa havaitut lajit",
       "categoryLifetime": "Uusi laji",
       "categoryYear": "Uusi tänä vuonna",
       "categorySeason": "Uusi tällä kaudella",
       "categorySeasonNamed": "Uusi tällä {season}",
-      "detectionsToday": "Havainnot tänään",
-      "maxConfidence": "Maks. varmuus",
-      "lastDetection": "Viimeisin havainto",
-      "firstSeen": "Nähty ensimmäistä kertaa",
-      "daysAgo": "{days, plural, =0 {tänään} one {# päivä sitten} other {# päivää sitten}}"
+      "maxConfidenceShort": "Maks {confidence} %",
+      "viewToggle": "Näkymätila",
+      "viewCompact": "Tiivis näkymä",
+      "viewFull": "Täysi näkymä",
+      "detections": "{count, plural, one {# havainto} other {# havaintoa}}",
+      "firstSeen": "{days, plural, =0 {havaittu ensi kertaa tänään} one {havaittu ensi kertaa # päivä sitten} other {havaittu ensi kertaa # päivää sitten}}",
+      "moreCount": "+{count} lisää"
     },
     "dailySummary": {
       "title": "Päivän aktiivisuus",

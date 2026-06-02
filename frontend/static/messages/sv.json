@@ -594,15 +594,18 @@
     "rejected": "Avvisad",
     "newSpeciesHighlights": {
       "title": "Nya artsrekord",
+      "subtitle": "Arter som setts för första gången denna dag",
       "categoryLifetime": "Ny art",
       "categoryYear": "Ny i år",
       "categorySeason": "Ny denna säsong",
       "categorySeasonNamed": "Ny detta {season}",
-      "detectionsToday": "Observationer idag",
-      "maxConfidence": "Max. konfidens",
-      "lastDetection": "Senaste observation",
-      "firstSeen": "Sedd för första gången",
-      "daysAgo": "{days, plural, =0 {idag} one {för # dag sedan} other {för # dagar sedan}}"
+      "maxConfidenceShort": "Max {confidence} %",
+      "viewToggle": "Visningsläge",
+      "viewCompact": "Kompakt vy",
+      "viewFull": "Fullständig vy",
+      "detections": "{count, plural, one {# upptäckt} other {# upptäckter}}",
+      "firstSeen": "{days, plural, =0 {sedd för första gången idag} one {sedd för första gången för # dag sedan} other {sedd för första gången för # dagar sedan}}",
+      "moreCount": "+{count} till"
     },
     "dailySummary": {
       "title": "Daglig aktivitet",

@@ -594,15 +594,18 @@
     "rejected": "Afvist",
     "newSpeciesHighlights": {
       "title": "Nye artsrekorder",
+      "subtitle": "Arter set for første gang denne dag",
       "categoryLifetime": "Ny art",
       "categoryYear": "Ny i år",
       "categorySeason": "Ny denne sæson",
       "categorySeasonNamed": "Ny denne {season}",
-      "detectionsToday": "Registreringer i dag",
-      "maxConfidence": "Maks. sikkerhed",
-      "lastDetection": "Seneste registrering",
-      "firstSeen": "Første gang set",
-      "daysAgo": "{days, plural, =0 {i dag} one {for # dag siden} other {for # dage siden}}"
+      "maxConfidenceShort": "Maks {confidence} %",
+      "viewToggle": "Visningstilstand",
+      "viewCompact": "Kompakt visning",
+      "viewFull": "Fuld visning",
+      "detections": "{count, plural, one {# registrering} other {# registreringer}}",
+      "firstSeen": "{days, plural, =0 {set for første gang i dag} one {set for første gang for # dag siden} other {set for første gang for # dage siden}}",
+      "moreCount": "+{count} mere"
     },
     "dailySummary": {
       "title": "Daglig aktivitet",

@@ -594,15 +594,18 @@
     "rejected": "Afgewezen",
     "newSpeciesHighlights": {
       "title": "Nieuwe soorten in de kijker",
+      "subtitle": "Soorten die op deze dag voor het eerst zijn waargenomen",
       "categoryLifetime": "Nieuwe soort",
       "categoryYear": "Nieuw dit jaar",
       "categorySeason": "Nieuw dit seizoen",
       "categorySeasonNamed": "Nieuw dit {season}",
-      "detectionsToday": "Detecties vandaag",
-      "maxConfidence": "Max. betrouwbaarheid",
-      "lastDetection": "Laatste detectie",
-      "firstSeen": "Eerste waarneming",
-      "daysAgo": "{days, plural, =0 {vandaag} one {# dag geleden} other {# dagen geleden}}"
+      "maxConfidenceShort": "Max {confidence}%",
+      "viewToggle": "Weergavemodus",
+      "viewCompact": "Compacte weergave",
+      "viewFull": "Volledige weergave",
+      "detections": "{count, plural, one {# detectie} other {# detecties}}",
+      "firstSeen": "{days, plural, =0 {vandaag voor het eerst gezien} one {# dag geleden voor het eerst gezien} other {# dagen geleden voor het eerst gezien}}",
+      "moreCount": "+{count} meer"
     },
     "dailySummary": {
       "title": "Dagactiviteit",

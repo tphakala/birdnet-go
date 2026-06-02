@@ -605,6 +605,7 @@ export interface DashboardElement {
   video?: VideoEmbedConfig;
   summary?: DailySummaryConfig;
   grid?: DetectionsGridConfig;
+  highlights?: NewSpeciesHighlightsConfig;
 }
 
 // Banner element configuration
@@ -634,6 +635,11 @@ export interface DailySummaryConfig {
 
 // Detections grid element configuration (placeholder for future card display options)
 export type DetectionsGridConfig = Record<string, never>;
+
+// New species highlights element configuration
+export interface NewSpeciesHighlightsConfig {
+  compact: boolean; // true for the reduced card view, false for the full image-background view
+}
 
 export interface Thumbnails {
   debug?: boolean;
