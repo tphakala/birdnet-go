@@ -10,8 +10,8 @@
 -->
 <script lang="ts">
   import { api } from '$lib/utils/api';
-  import { safeGet, safeArrayAccess, safeElementAccess } from '$lib/utils/security';
-  import { extractRelativePath } from '$lib/utils/urlHelpers';
+  import { safeGet, safeElementAccess } from '$lib/utils/security';
+  import { extractRelativePath, getUiBasePath } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
   import { X, ShieldCheck, KeyRound } from '@lucide/svelte';
@@ -20,6 +20,9 @@
 
   // SECURITY: Define maximum password length to prevent DoS
   const MAX_PASSWORD_LENGTH = 512; // Reasonable limit for security
+  // Client-side cap on the captured redirect (path + query). Intentionally a bit
+  // tighter than the backend's authoritative security.MaxSafeRedirectLength (2048)
+  // so anything the client sends comfortably passes server validation.
   const MAX_REDIRECT_LENGTH = 2000;
 
   // Logger for authentication debugging
@@ -38,7 +41,10 @@
   let {
     isOpen = false,
     onClose,
-    redirectUrl = '/ui/',
+    // Empty by default so an omitted prop falls through to the proxy-aware
+    // getUiBasePath() fallback instead of a hardcoded '/ui/' that ignores any
+    // reverse-proxy prefix.
+    redirectUrl = '',
     authConfig = {
       basicEnabled: true,
       enabledProviders: [],
@@ -51,7 +57,7 @@
 
   // Compute safe redirect URL immediately
   let safeRedirectUrl = $derived(
-    redirectUrl && validateRedirectUrl(redirectUrl) ? redirectUrl : detectBasePath()
+    redirectUrl && validateRedirectUrl(redirectUrl) ? redirectUrl : getUiBasePath()
   );
 
   // Get enabled OAuth providers from registry
@@ -70,13 +76,20 @@
         return false;
       }
 
-      // Prevent javascript: or data: URLs
-      if (url.toLowerCase().includes('javascript:') || url.toLowerCase().includes('data:')) {
+      // Check length (path + query). A generous cap covers heavily-filtered views.
+      if (url.length > MAX_REDIRECT_LENGTH) {
         return false;
       }
 
-      // Check length
-      if (url.length > MAX_REDIRECT_LENGTH) {
+      // Reject javascript:/data: schemes, but only when the PATH itself starts
+      // with one. A query value may legitimately contain a literal
+      // 'javascript:'/'data:' (e.g. a free-text search term), and a same-origin
+      // route may contain it mid-path (e.g. /ui/help/javascript:basics); both are
+      // inert because the redirect is navigated as a same-origin relative URL and
+      // the same-origin guard below is the real check. Scanning the whole string
+      // would falsely drop the user back to the base path.
+      const pathPart = url.split(/[?#]/, 1)[0].toLowerCase();
+      if (/^\/(?:javascript|data):/.test(pathPart)) {
         return false;
       }
 
@@ -98,11 +111,11 @@
   // SECURITY: Sanitize and validate password input
   function validatePassword(pwd: string): { isValid: boolean; error?: string } {
     if (!pwd) {
-      return { isValid: false, error: 'Password is required' };
+      return { isValid: false, error: t('auth.errors.passwordRequired') };
     }
 
     if (pwd.length > MAX_PASSWORD_LENGTH) {
-      return { isValid: false, error: 'Password is too long' };
+      return { isValid: false, error: t('auth.errors.passwordTooLong') };
     }
 
     // Check for control characters (ASCII < 32) and other dangerous characters
@@ -110,37 +123,11 @@
       const charCode = pwd.charCodeAt(i);
       if (charCode < 32 && charCode !== 9) {
         // Allow tab (9) but reject other control chars
-        return { isValid: false, error: 'Password contains invalid characters' };
+        return { isValid: false, error: t('auth.errors.invalidCharacters') };
       }
     }
 
     return { isValid: true };
-  }
-
-  // SECURITY: Extract current base path from window location
-  function detectBasePath(): string {
-    // Ensure we have a valid pathname (for tests and SSR)
-    const pathname = window.location?.pathname || '/';
-
-    // Common UI base paths to check
-    const commonBasePaths = ['/ui/', '/app/', '/admin/', '/dashboard/'];
-
-    for (const basePath of commonBasePaths) {
-      if (pathname.startsWith(basePath)) {
-        return basePath;
-      }
-    }
-
-    // If no common base path found, check if we're in a subfolder
-    const pathSegments = pathname.split('/').filter(Boolean);
-    if (pathSegments.length > 0) {
-      // Return the first segment as base path
-      const firstSegment = safeArrayAccess(pathSegments, 0);
-      return firstSegment ? `/${firstSegment}/` : '/';
-    }
-
-    // Default to root
-    return '/';
   }
 
   async function handlePasswordLogin() {
@@ -152,12 +139,12 @@
     const trimmedPassword = password.trim();
     const passwordValidation = validatePassword(trimmedPassword);
     if (!passwordValidation.isValid) {
-      error = passwordValidation.error || 'Invalid input';
+      error = passwordValidation.error || t('auth.errors.invalidInput');
       return;
     }
 
-    // SECURITY: Detect current base path
-    const currentBasePath = detectBasePath();
+    // SECURITY: Detect current base path (proxy-aware, shared helper)
+    const currentBasePath = getUiBasePath();
 
     error = '';
     loadingState = 'password';
@@ -218,7 +205,7 @@
         window.location.reload();
       }, 500);
     } catch {
-      error = 'Invalid credentials. Please try again.';
+      error = t('auth.errors.loginFailed');
       // Only re-enable on failure. On success the page navigates away (OAuth
       // callback redirect) or reloads, so keeping the control disabled here
       // prevents a double-submit firing redundant login requests mid-navigation.
@@ -231,7 +218,7 @@
     // Get provider from registry
     const provider = getProvider(providerId);
     if (!provider) {
-      error = 'Unknown authentication provider.';
+      error = t('auth.errors.configurationError');
       return;
     }
 
@@ -241,7 +228,7 @@
 
     // SECURITY: Basic endpoint validation - accept OAuth and API v2 auth formats
     if (!endpoint || (!endpoint.startsWith('/auth/') && !endpoint.startsWith('/api/v2/auth/'))) {
-      error = 'Configuration error. Please contact your administrator.';
+      error = t('auth.errors.configurationError');
       return;
     }
 

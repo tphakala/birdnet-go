@@ -4,6 +4,7 @@ import {
   isRelativePath,
   normalizePath,
   getAppBasePath,
+  getUiBasePath,
   buildAppUrl,
   setBasePath,
   resetBasePath,
@@ -334,6 +335,54 @@ describe('URL Helpers', () => {
       // @ts-expect-error - Mocking window.location
       window.location = { pathname: '/ui' };
       expect(getAppBasePath()).toBe('');
+    });
+  });
+
+  describe('getUiBasePath', () => {
+    it('should return /ui/ for direct access', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/ui/dashboard' };
+      expect(getUiBasePath()).toBe('/ui/');
+    });
+
+    it('should return /ui/ for the root /ui path', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/ui/' };
+      expect(getUiBasePath()).toBe('/ui/');
+    });
+
+    it('should include the Home Assistant Ingress prefix', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = {
+        pathname: '/api/hassio_ingress/TOKEN123/ui/detections',
+      };
+      expect(getUiBasePath()).toBe('/api/hassio_ingress/TOKEN123/ui/');
+    });
+
+    it('should include a simple reverse-proxy prefix', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/proxy/birdnet/ui/settings' };
+      expect(getUiBasePath()).toBe('/proxy/birdnet/ui/');
+    });
+
+    it('should fall back to /ui/ when pathname has no /ui segment', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/some/other/path' };
+      expect(getUiBasePath()).toBe('/ui/');
+    });
+
+    it('should honor the backend-provided base path', () => {
+      setBasePath('/custom/prefix');
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/anything/ui/dashboard' };
+      expect(getUiBasePath()).toBe('/custom/prefix/ui/');
+    });
+
+    it('should not produce a double slash when the base path ends with a slash', () => {
+      setBasePath('/custom/prefix/');
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/anything/ui/dashboard' };
+      expect(getUiBasePath()).toBe('/custom/prefix/ui/');
     });
   });
 
