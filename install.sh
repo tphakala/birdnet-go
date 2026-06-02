@@ -4031,9 +4031,12 @@ generate_systemd_service_content() {
     # Validate the detected zone against the zoneinfo database before trusting it.
     # timedatectl can report "n/a" on unconfigured images, and a non-standard
     # /etc/localtime symlink can leave TZ as an absolute path; neither is a valid
-    # zone identifier. Drop anything that does not resolve to a real zoneinfo file
-    # so the UTC fallback below applies, mirroring configure_timezone()'s validation.
-    if [ -n "$TZ" ] && [ ! -f "/usr/share/zoneinfo/$TZ" ]; then
+    # zone identifier. A value containing ".." would also let the existence check
+    # below escape /usr/share/zoneinfo/ and accept a non-zone file, so reject those
+    # outright. Drop anything that is not a relative path resolving to a real
+    # zoneinfo file so the UTC fallback applies, mirroring configure_timezone()'s
+    # validation.
+    if [ -n "$TZ" ] && { [[ "$TZ" == *..* ]] || [ ! -f "/usr/share/zoneinfo/$TZ" ]; }; then
         TZ=""
     fi
 
