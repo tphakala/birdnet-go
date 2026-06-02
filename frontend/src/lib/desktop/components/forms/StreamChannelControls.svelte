@@ -158,7 +158,9 @@
                 )}%"
               ></div>
             </div>
-            <span class="font-mono w-16 text-right">{ch.rmsDbfs.toFixed(1)} dBFS</span>
+            <span class="font-mono w-16 text-right"
+              >{(ch.rmsDbfs ?? -DBFS_RANGE).toFixed(1)} dBFS</span
+            >
           </div>
         {/each}
         {#if analysisResult.recommended !== 'downmix'}
@@ -175,7 +177,7 @@
     {/if}
 
     {#if analysisError}
-      <p class="text-xs text-[var(--color-error)]">
+      <p class="text-xs text-[var(--color-error)]" role="alert">
         {t('settings.audio.streams.channelMode.analyzeError')}: {analysisError}
       </p>
     {/if}
