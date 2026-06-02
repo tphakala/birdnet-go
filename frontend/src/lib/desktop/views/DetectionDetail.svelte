@@ -25,7 +25,7 @@
   import type { Detection, ImageAttribution } from '$lib/types/detection.types';
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { formatLocalDateTime } from '$lib/utils/date';
-  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { buildAppUrl, getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import {
     Download,
@@ -394,7 +394,7 @@
       }
 
       const newUrl = url.pathname + url.search;
-      if (newUrl !== window.location.pathname + window.location.search) {
+      if (newUrl !== getCurrentPathWithQuery()) {
         window.history.replaceState(null, '', newUrl);
       }
     }
