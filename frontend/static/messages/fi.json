@@ -3069,9 +3069,18 @@
           "energyRight": "Oikea kanava",
           "label": "Kanavatila",
           "left": "Vain vasen kanava",
+          "monoNoSelection": "Yksikanavainen lähde. Kaikki kanavatilat tuottavat saman äänen, joten valintaa ei tarvita.",
           "recommended": "Suositeltu: {channel}",
           "right": "Vain oikea kanava",
           "singleChannelGood": "Yksittäinen kanava valittu, optimaalinen tunnistustarkkuudelle."
+        },
+        "format": {
+          "label": "Äänimuoto",
+          "mono": "Mono (1 kanava)",
+          "multi": "{count} kanavaa",
+          "stereo": "Stereo (2 kanavaa)",
+          "untested": "Testaa striimi tunnistaaksesi sen äänimuodon",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Stereovirta havaittu. Useiden kanavien sekoittaminen voi heikentää tunnistustarkkuutta kanavien välisten vaihe-erojen vuoksi. Valitse tietty kanava (vasen/oikea) tai käytä kanavatunnistinta parhaiden tulosten saavuttamiseksi.",

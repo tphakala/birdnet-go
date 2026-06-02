@@ -77,6 +77,38 @@ func TestSourceNeedsReconfigure(t *testing.T) {
 			},
 			expected: true,
 		},
+		{
+			// Unset and explicit "downmix" produce identical FFmpeg args, so the
+			// transition must not trigger a stream restart.
+			name: "channel mode unset to downmix is a no-op",
+			running: &audiocore.AudioSource{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, ChannelMode: "",
+			},
+			desired: &audiocore.SourceConfig{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, ChannelMode: "downmix",
+			},
+			expected: false,
+		},
+		{
+			name: "channel mode downmix to left changes",
+			running: &audiocore.AudioSource{
+				SampleRate: 48000, BitDepth: 16, Channels: 2, ChannelMode: "downmix",
+			},
+			desired: &audiocore.SourceConfig{
+				SampleRate: 48000, BitDepth: 16, Channels: 2, ChannelMode: "left",
+			},
+			expected: true,
+		},
+		{
+			name: "channel mode left to right changes",
+			running: &audiocore.AudioSource{
+				SampleRate: 48000, BitDepth: 16, Channels: 2, ChannelMode: "left",
+			},
+			desired: &audiocore.SourceConfig{
+				SampleRate: 48000, BitDepth: 16, Channels: 2, ChannelMode: "right",
+			},
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {
