@@ -594,15 +594,14 @@
     "rejected": "Rejeté",
     "newSpeciesHighlights": {
       "title": "Nouvelles espèces marquantes",
+      "subtitle": "Espèces observées pour la première fois ce jour",
       "categoryLifetime": "Nouvelle espèce",
       "categoryYear": "Nouvelle cette année",
       "categorySeason": "Nouvelle cette saison",
       "categorySeasonNamed": "Nouvelle ce {season}",
+      "maxConfidenceShort": "Max {confidence} %",
       "detectionsToday": "Détections aujourd'hui",
-      "maxConfidence": "Confiance max",
-      "lastDetection": "Dernière détection",
-      "firstSeen": "Première observation",
-      "daysAgo": "{days, plural, =0 {aujourd'hui} one {il y a # jour} other {il y a # jours}}"
+      "lastDetection": "Dernière détection"
     },
     "dailySummary": {
       "title": "Activité Quotidienne",

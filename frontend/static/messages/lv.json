@@ -594,15 +594,14 @@
     "rejected": "Noraidīts",
     "newSpeciesHighlights": {
       "title": "Jaunu sugu apskats",
+      "subtitle": "Sugas, kas šajā dienā novērotas pirmo reizi",
       "categoryLifetime": "Jauna suga",
       "categoryYear": "Jauna šogad",
       "categorySeason": "Jauna šosezon",
       "categorySeasonNamed": "Jauna šajā {season}",
+      "maxConfidenceShort": "Maks {confidence} %",
       "detectionsToday": "Konstatācijas šodien",
-      "maxConfidence": "Maks. ticamība",
-      "lastDetection": "Pēdējā konstatācija",
-      "firstSeen": "Novērots pirmo reizi",
-      "daysAgo": "{days, plural, =0 {šodien} one {pirms # dienas} other {pirms # dienām}}"
+      "lastDetection": "Pēdējā konstatācija"
     },
     "dailySummary": {
       "title": "Dienas aktivitāte",
