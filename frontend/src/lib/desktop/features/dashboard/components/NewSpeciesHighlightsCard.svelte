@@ -1,8 +1,22 @@
 <!--
 NewSpeciesHighlightsCard.svelte - Highlights newly detected species for the selected day
 
-Renders nothing when no qualifying species exist for the day.
-Data source: same DailySpeciesSummary[] already loaded by the dashboard page.
+Purpose:
+- Surfaces species that triggered a "new species" indicator on the selected day,
+  reusing the same novelty rules as the daily summary table:
+    * new lifetime species (⭐)
+    * new species this year (📅)
+    * new species this season (🌿)
+- Renders nothing when no qualifying species exist for the day, so the widget only
+  appears when it has something meaningful to show.
+
+Data source:
+- Consumes the same `DailySpeciesSummary[]` already loaded by the dashboard page.
+  No additional network request is made by this component.
+
+Props:
+- data: DailySpeciesSummary[] - Array of species detection summaries for the day
+- selectedDate: string - Currently selected date in YYYY-MM-DD format (for detail links)
 -->
 
 <script lang="ts">
@@ -10,15 +24,24 @@ Data source: same DailySpeciesSummary[] already loaded by the dashboard page.
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { buildSpeciesDetectionUrl } from '$lib/utils/detectionUrls';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { Star } from '@lucide/svelte';
+  import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
+  import ConfidenceBadge from './ConfidenceBadge.svelte';
 
   interface Props {
+    /** Daily species summaries (already fetched by the dashboard). */
     data?: DailySpeciesSummary[];
+    /** Selected date in YYYY-MM-DD format, used to build detail links. */
     selectedDate: string;
+    /** Show thumbnails or rely on the colored placeholder (default: true). */
+    showThumbnails?: boolean;
   }
 
-  let { data = [], selectedDate }: Props = $props();
+  let { data = [], selectedDate, showThumbnails = true }: Props = $props();
 
+  // Novelty category, mirroring the mutually-exclusive priority used by the
+  // daily summary indicators: lifetime > year > season.
   type HighlightCategory = 'lifetime' | 'year' | 'season';
 
   interface Highlight {
@@ -33,31 +56,28 @@ Data source: same DailySpeciesSummary[] already loaded by the dashboard page.
     return null;
   }
 
-  const categoryRank: Record<HighlightCategory, number> = { lifetime: 0, year: 1, season: 2 };
+  // Order so that the most significant novelty appears first, then by detections.
+  const categoryRank: Record<HighlightCategory, number> = {
+    lifetime: 0,
+    year: 1,
+    season: 2,
+  };
 
   const highlights = $derived.by<Highlight[]>(() => {
     const result: Highlight[] = [];
     for (const species of data) {
       const category = resolveCategory(species);
-      if (category !== null) result.push({ species, category });
+      if (category !== null) {
+        result.push({ species, category });
+      }
     }
     result.sort((a, b) => {
       const rankDiff = categoryRank[a.category] - categoryRank[b.category];
-      return rankDiff !== 0 ? rankDiff : b.species.count - a.species.count;
+      if (rankDiff !== 0) return rankDiff;
+      return b.species.count - a.species.count;
     });
     return result;
   });
-
-  function categoryIcon(category: HighlightCategory): string {
-    switch (category) {
-      case 'lifetime':
-        return '⭐';
-      case 'year':
-        return '📅';
-      case 'season':
-        return '🌿';
-    }
-  }
 
   function categoryLabel(category: HighlightCategory, season?: string): string {
     switch (category) {
@@ -72,7 +92,8 @@ Data source: same DailySpeciesSummary[] already loaded by the dashboard page.
     }
   }
 
-  function categoryBorderColor(category: HighlightCategory): string {
+  // Theme color variable per category (matches the daily summary indicators).
+  function categoryColorVar(category: HighlightCategory): string {
     switch (category) {
       case 'lifetime':
         return 'var(--color-warning)';
@@ -83,65 +104,132 @@ Data source: same DailySpeciesSummary[] already loaded by the dashboard page.
     }
   }
 
+  function daysSinceFirstSeen(item: DailySpeciesSummary): number | undefined {
+    return item.is_new_species ? item.days_since_first_seen : undefined;
+  }
+
+  // first_heard / latest_heard are local time-of-day strings (HH:MM:SS) for the day.
   function formatTime(value: string | undefined): string {
     if (!value) return '';
+    // Trim seconds for a cleaner display while tolerating HH:MM input.
     const parts = value.split(':');
-    return parts.length >= 2 ? `${parts[0]}:${parts[1]}` : value;
+    if (parts.length >= 2) return `${parts[0]}:${parts[1]}`;
+    return value;
   }
 
   function speciesUrl(item: DailySpeciesSummary): string {
     return buildSpeciesDetectionUrl(item.scientific_name, selectedDate);
+  }
+
+  function thumbnailUrl(item: DailySpeciesSummary): string {
+    return item.thumbnail_url
+      ? buildAppUrl(item.thumbnail_url)
+      : buildAppUrl(`/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`);
   }
 </script>
 
 {#if highlights.length > 0}
   <Card padding={false}>
     {#snippet header()}
-      <div class="flex items-center gap-2 px-4 py-3">
+      <div class="flex items-center gap-2 px-6 py-4">
         <Star class="size-4 fill-current text-[var(--color-warning)]" />
-        <h2 class="text-sm font-semibold">
+        <h2 class="text-lg font-semibold">
           {t('dashboard.newSpeciesHighlights.title')}
         </h2>
         <span
-          class="inline-flex items-center justify-center rounded-full bg-[var(--color-base-200)] px-1.5 text-xs font-medium text-[var(--color-base-content)]/70"
+          class="ml-1 inline-flex items-center justify-center rounded-full bg-[var(--color-base-200)] px-2 text-xs font-medium text-[var(--color-base-content)]/70"
         >
           {highlights.length}
         </span>
       </div>
     {/snippet}
 
-    <div class="grid grid-cols-2 gap-2 px-3 pb-3 lg:grid-cols-3 xl:grid-cols-4">
+    <div class="grid grid-cols-1 gap-4 px-6 pb-6 sm:grid-cols-2 lg:grid-cols-3">
       {#each highlights as { species, category } (species.scientific_name)}
-        <a
-          href={speciesUrl(species)}
-          class="flex flex-col justify-between gap-1 rounded-md border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-2.5 transition-colors hover:bg-[var(--color-base-200)]"
-          style:border-left-width="3px"
-          style:border-left-color={categoryBorderColor(category)}
-          title={categoryLabel(category, species.current_season)}
+        {@const days = daysSinceFirstSeen(species)}
+        <div
+          class="flex flex-col gap-3 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-4 shadow-sm transition-shadow hover:shadow-md"
         >
-          <!-- Species name -->
-          <div class="min-w-0">
-            <span class="block truncate text-sm font-medium leading-snug">
-              {categoryIcon(category)}&nbsp;{species.common_name}
+          <!-- Category badge -->
+          <div class="flex items-center justify-between">
+            <span
+              class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
+              style:color={categoryColorVar(category)}
+              style:background-color="color-mix(in srgb, {categoryColorVar(category)} 12%, transparent)"
+            >
+              <span aria-hidden="true">
+                {#if category === 'lifetime'}⭐{:else if category === 'year'}📅{:else}🌿{/if}
+              </span>
+              {categoryLabel(category, species.current_season)}
             </span>
-            <span class="block truncate text-xs italic text-[var(--color-base-content)]/55">
-              {species.scientific_name}
-            </span>
+            {#if species.max_confidence !== undefined && species.max_confidence > 0}
+              <ConfidenceBadge confidence={species.max_confidence} />
+            {/if}
           </div>
 
-          <!-- Stats line -->
-          <div
-            class="flex flex-wrap items-center gap-x-2 text-xs text-[var(--color-base-content)]/65"
-          >
-            <span>{species.count}&times;</span>
+          <!-- Species identity -->
+          <div class="flex items-center gap-3">
+            {#if showThumbnails}
+              <BirdThumbnailPopup
+                thumbnailUrl={thumbnailUrl(species)}
+                commonName={species.common_name}
+                scientificName={species.scientific_name}
+                detectionUrl={speciesUrl(species)}
+              />
+            {/if}
+            <div class="min-w-0">
+              <a
+                href={speciesUrl(species)}
+                class="block truncate font-medium leading-tight hover:text-[var(--color-primary)]"
+                title={species.common_name}
+              >
+                {species.common_name}
+              </a>
+              <span
+                class="block truncate text-xs italic text-[var(--color-base-content)]/60"
+                title={species.scientific_name}
+              >
+                {species.scientific_name}
+              </span>
+            </div>
+          </div>
+
+          <!-- Stats -->
+          <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            <div>
+              <dt class="text-xs text-[var(--color-base-content)]/60">
+                {t('dashboard.newSpeciesHighlights.detectionsToday')}
+              </dt>
+              <dd class="font-semibold">{species.count}</dd>
+            </div>
             {#if species.max_confidence !== undefined && species.max_confidence > 0}
-              <span>{Math.round(species.max_confidence * 100)}%</span>
+              <div>
+                <dt class="text-xs text-[var(--color-base-content)]/60">
+                  {t('dashboard.newSpeciesHighlights.maxConfidence')}
+                </dt>
+                <dd class="font-semibold">{Math.round(species.max_confidence * 100)}%</dd>
+              </div>
             {/if}
             {#if species.latest_heard}
-              <span>{formatTime(species.latest_heard)}</span>
+              <div>
+                <dt class="text-xs text-[var(--color-base-content)]/60">
+                  {t('dashboard.newSpeciesHighlights.lastDetection')}
+                </dt>
+                <dd class="font-semibold">{formatTime(species.latest_heard)}</dd>
+              </div>
             {/if}
-          </div>
-        </a>
+            {#if days !== undefined}
+              <div>
+                <dt class="text-xs text-[var(--color-base-content)]/60">
+                  {t('dashboard.newSpeciesHighlights.firstSeen')}
+                </dt>
+                <dd class="font-semibold">
+                  {t('dashboard.newSpeciesHighlights.daysAgo', { days })}
+                </dd>
+              </div>
+            {/if}
+          </dl>
+        </div>
       {/each}
     </div>
   </Card>
