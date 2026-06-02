@@ -63,11 +63,13 @@ type BirdNET struct {
 	TaxonomyPath        string              // Path to custom taxonomy file, if used
 	modelVersion        string              // Human-readable model version string (per-instance to avoid shared global state)
 	modelsDir           string              // base directory for gallery-installed models (set by Orchestrator)
-	// mu guards the inference backends (classifier, rangeFilter, rangeFilterFellBack)
-	// and the model metadata reloaded with them. Inference holds mu for the full
-	// duration of the native call, not just the field read: the backends are not
-	// goroutine-safe and reload/Delete Close() them under mu, so dropping mu before
-	// the native call would reintroduce the issue #3336 use-after-free segfault.
+	// mu guards the inference backends (classifier, rangeFilter, rangeFilterFellBack).
+	// Inference holds mu for the full duration of the native call, not just the field
+	// read: the backends are not goroutine-safe and reload/Delete Close() them under
+	// mu, so dropping mu before the native call would reintroduce the issue #3336
+	// use-after-free segfault. (mu is not a complete guard for ModelInfo, which
+	// reloadModelInternal writes under mu but the Spec/ModelID/ModelName getters read
+	// without it.)
 	mu               sync.Mutex
 	resultsBuffer    []datastore.Results // Pre-allocated buffer for results to reduce allocations
 	confidenceBuffer []float32           // Pre-allocated buffer for confidence values to reduce allocations

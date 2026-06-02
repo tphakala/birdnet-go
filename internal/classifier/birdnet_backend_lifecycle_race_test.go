@@ -2,9 +2,11 @@ package classifier
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
@@ -23,18 +25,29 @@ import (
 // inference call that no longer holds bn.mu races on `live` against the
 // concurrent Close(), so this test fails the moment the invariant is broken.
 
+// lifecycleStats counts inference calls that actually reached a live backend
+// (nil backends short-circuit before Predict), shared across every fake instance
+// installed during one subtest. The final assertions use it to confirm the test
+// did not pass vacuously by only ever hitting nil-backend fast paths.
+type lifecycleStats struct {
+	classifierCalls  atomic.Int64
+	rangeFilterCalls atomic.Int64
+}
+
 // lifecycleClassifier implements inference.Classifier and models a native
 // classifier whose Close() frees a buffer that Predict() reads.
 type lifecycleClassifier struct {
 	numSpecies int
+	stats      *lifecycleStats
 	live       []float32 // native interpreter buffer; freed by Close, read by Predict
 }
 
-func newLifecycleClassifier(numSpecies int) *lifecycleClassifier {
-	return &lifecycleClassifier{numSpecies: numSpecies, live: make([]float32, numSpecies)}
+func newLifecycleClassifier(numSpecies int, stats *lifecycleStats) *lifecycleClassifier {
+	return &lifecycleClassifier{numSpecies: numSpecies, stats: stats, live: make([]float32, numSpecies)}
 }
 
 func (c *lifecycleClassifier) Predict(_ []float32) ([]float32, error) {
+	c.stats.classifierCalls.Add(1)
 	out := make([]float32, c.numSpecies)
 	copy(out, c.live) // touch the freed-on-Close resource
 	return out, nil
@@ -46,14 +59,16 @@ func (c *lifecycleClassifier) Close()          { c.live = nil }
 // path: GetProbableSpecies -> predictFilter -> rangeFilter.Predict).
 type lifecycleRangeFilter struct {
 	numSpecies int
+	stats      *lifecycleStats
 	live       []float32
 }
 
-func newLifecycleRangeFilter(numSpecies int) *lifecycleRangeFilter {
-	return &lifecycleRangeFilter{numSpecies: numSpecies, live: make([]float32, numSpecies)}
+func newLifecycleRangeFilter(numSpecies int, stats *lifecycleStats) *lifecycleRangeFilter {
+	return &lifecycleRangeFilter{numSpecies: numSpecies, stats: stats, live: make([]float32, numSpecies)}
 }
 
 func (r *lifecycleRangeFilter) Predict(_, _, _ float32) ([]float32, error) {
+	r.stats.rangeFilterCalls.Add(1)
 	out := make([]float32, r.numSpecies)
 	copy(out, r.live) // touch the freed-on-Close resource
 	return out, nil
@@ -65,14 +80,16 @@ func (r *lifecycleRangeFilter) Close()          { r.live = nil }
 // so GetProbableSpecies takes the universal (PredictSpeciesScores) path.
 type lifecycleUniversalRangeFilter struct {
 	labels []string
+	stats  *lifecycleStats
 	live   []float32
 }
 
-func newLifecycleUniversalRangeFilter(labels []string) *lifecycleUniversalRangeFilter {
-	return &lifecycleUniversalRangeFilter{labels: labels, live: make([]float32, len(labels))}
+func newLifecycleUniversalRangeFilter(labels []string, stats *lifecycleStats) *lifecycleUniversalRangeFilter {
+	return &lifecycleUniversalRangeFilter{labels: labels, stats: stats, live: make([]float32, len(labels))}
 }
 
 func (r *lifecycleUniversalRangeFilter) Predict(_, _, _ float32) ([]float32, error) {
+	r.stats.rangeFilterCalls.Add(1)
 	out := make([]float32, len(r.labels))
 	copy(out, r.live)
 	return out, nil
@@ -82,6 +99,7 @@ func (r *lifecycleUniversalRangeFilter) Close()                   { r.live = nil
 func (r *lifecycleUniversalRangeFilter) GeomodelLabels() []string { return r.labels }
 
 func (r *lifecycleUniversalRangeFilter) PredictSpeciesScores(_, _, _, _ float32) ([]SpeciesScore, error) {
+	r.stats.rangeFilterCalls.Add(1)
 	probe := make([]float32, len(r.labels))
 	copy(probe, r.live) // touch the freed-on-Close resource
 	scores := make([]SpeciesScore, len(r.labels))
@@ -104,20 +122,26 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		newFilter func() inference.RangeFilter
+		newFilter func(stats *lifecycleStats) inference.RangeFilter
 	}{
 		{
-			name:      "legacy range filter Predict path",
-			newFilter: func() inference.RangeFilter { return newLifecycleRangeFilter(len(labels)) },
+			name: "legacy range filter Predict path",
+			newFilter: func(stats *lifecycleStats) inference.RangeFilter {
+				return newLifecycleRangeFilter(len(labels), stats)
+			},
 		},
 		{
-			name:      "universal range filter PredictSpeciesScores path",
-			newFilter: func() inference.RangeFilter { return newLifecycleUniversalRangeFilter(labels) },
+			name: "universal range filter PredictSpeciesScores path",
+			newFilter: func(stats *lifecycleStats) inference.RangeFilter {
+				return newLifecycleUniversalRangeFilter(labels, stats)
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			stats := &lifecycleStats{}
+
 			// Build via struct literal (not NewBirdNET) so the test runs without an
 			// embedded model. The explicit-settings range-filter call below uses this
 			// snapshot directly, so location/labels take effect regardless of any
@@ -133,8 +157,8 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 				Settings:     settings,
 				speciesCache: make(map[string]*speciesCacheEntry),
 				ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
-				classifier:   newLifecycleClassifier(len(labels)),
-				rangeFilter:  tt.newFilter(),
+				classifier:   newLifecycleClassifier(len(labels), stats),
+				rangeFilter:  tt.newFilter(stats),
 			}
 			bn.settingsAtomic.Store(settings)
 
@@ -142,6 +166,15 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 			ctx := t.Context()
 			sample := [][]float32{{0.1}}
 			now := time.Now()
+
+			// Warm up both inference paths on the initial live backends before the
+			// concurrent storm. The fakes count the call as they enter the native
+			// step, so this guarantees each path is exercised at least once even if
+			// the Delete writer below keeps the backends nil for much of the run.
+			// It makes the call-count assertions deterministic rather than relying
+			// on the scheduler to land a read on a live backend.
+			_, _ = bn.Predict(ctx, sample)
+			_, _ = bn.GetProbableSpeciesWithSettings(now, 0, settings)
 
 			var wg sync.WaitGroup
 			start := make(chan struct{})
@@ -174,11 +207,11 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 					if bn.classifier != nil {
 						bn.classifier.Close()
 					}
-					bn.classifier = newLifecycleClassifier(len(labels))
+					bn.classifier = newLifecycleClassifier(len(labels), stats)
 					if bn.rangeFilter != nil {
 						bn.rangeFilter.Close()
 					}
-					bn.rangeFilter = tt.newFilter()
+					bn.rangeFilter = tt.newFilter(stats)
 					bn.mu.Unlock()
 				}
 			})
@@ -195,6 +228,14 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 
 			close(start)
 			wg.Wait()
+
+			// Guard against a vacuous pass: confirm both inference paths actually ran
+			// on a live backend (nil backends short-circuit before the native call),
+			// so the race window above was genuinely exercised.
+			require.Positive(t, stats.classifierCalls.Load(),
+				"classifier Predict path never ran on a live backend")
+			require.Positive(t, stats.rangeFilterCalls.Load(),
+				"range-filter inference path never ran on a live backend")
 		})
 	}
 }
