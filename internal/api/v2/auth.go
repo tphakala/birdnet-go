@@ -645,11 +645,14 @@ func validateAndSanitizeRedirect(redirect string) string {
 		return "/"
 	}
 
-	// Passed all checks, construct safe redirect preserving path and query
+	// Passed all checks, construct safe redirect preserving path and query.
+	// Use EscapedPath so special characters (spaces, raw Unicode) are properly
+	// encoded in the Location header per RFC 3986; IsSafePath validated the
+	// decoded path above.
 	if parsedURL.RawQuery != "" {
-		return parsedURL.Path + "?" + parsedURL.RawQuery
+		return parsedURL.EscapedPath() + "?" + parsedURL.RawQuery
 	}
-	return parsedURL.Path
+	return parsedURL.EscapedPath()
 }
 
 // randomDelay introduces a random sleep duration within the specified range [minMs, maxMs).

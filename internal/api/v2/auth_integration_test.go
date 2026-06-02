@@ -457,6 +457,11 @@ func TestV2AuthFlow_OpenRedirectPrevention(t *testing.T) {
 			maliciousURL:   "/ui/detections?queryType=search&q=a..b//c",
 			expectedResult: "/ui/detections?queryType=search&q=a..b//c",
 		},
+		{
+			name:           "special characters in the path are emitted percent-encoded",
+			maliciousURL:   "/ui/a%20b",
+			expectedResult: "/ui/a%20b",
+		},
 	}
 
 	for _, tc := range testCases {

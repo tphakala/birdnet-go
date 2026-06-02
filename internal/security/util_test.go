@@ -687,6 +687,11 @@ func TestIsValidRedirect(t *testing.T) {
 			expected: false,
 		},
 		{
+			name:     "double-encoded null byte in query is rejected",
+			path:     "/ui/detections?x=a%2500b",
+			expected: false,
+		},
+		{
 			name:     "redirect over total length budget is rejected",
 			path:     "/ui/detections?q=" + strings.Repeat("a", 3000),
 			expected: false,

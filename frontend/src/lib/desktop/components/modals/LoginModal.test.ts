@@ -230,9 +230,40 @@ describe('LoginModal', () => {
         redirectUrl: '/javascript:alert(1)/foo',
       });
 
-      // A dangerous scheme in the PATH must still fall back to the base path.
+      // A dangerous scheme at the start of the PATH must still fall back.
       const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
       expect(redirectInput.value).toBe('/ui/');
+    });
+
+    it('should accept a same-origin path containing a scheme-like segment', () => {
+      // The scheme check is anchored to the path start, so a mid-path
+      // 'javascript:' on a same-origin route must not be rejected.
+      mockWindowLocation('/ui/');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/help/javascript:basics',
+      });
+
+      const redirectInput = screen.getByDisplayValue(
+        '/ui/help/javascript:basics'
+      ) as HTMLInputElement;
+      expect(redirectInput.value).toBe('/ui/help/javascript:basics');
+    });
+
+    it('falls back to the proxy-aware UI root when no redirectUrl prop is given', () => {
+      // With no redirectUrl prop, the derived value must fall through to the
+      // proxy-aware getUiBasePath() rather than a hardcoded '/ui/'.
+      mockWindowLocation('/proxy/birdnet/ui/dashboard');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+      });
+
+      const redirectInput = screen.getByDisplayValue('/proxy/birdnet/ui/') as HTMLInputElement;
+      expect(redirectInput.value).toBe('/proxy/birdnet/ui/');
     });
   });
 

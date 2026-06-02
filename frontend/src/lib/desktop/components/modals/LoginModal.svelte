@@ -41,7 +41,10 @@
   let {
     isOpen = false,
     onClose,
-    redirectUrl = '/ui/',
+    // Empty by default so an omitted prop falls through to the proxy-aware
+    // getUiBasePath() fallback instead of a hardcoded '/ui/' that ignores any
+    // reverse-proxy prefix.
+    redirectUrl = '',
     authConfig = {
       basicEnabled: true,
       enabledProviders: [],
@@ -78,13 +81,15 @@
         return false;
       }
 
-      // Prevent javascript:/data: schemes, but check only the PATH component. A
-      // query value may legitimately contain a literal 'javascript:'/'data:' (e.g.
-      // a free-text search term); since the redirect is always navigated as a
-      // same-origin relative URL, such a query value is inert. Checking the whole
-      // string would falsely drop the user back to the base path.
-      const pathPart = url.split('?', 1)[0].toLowerCase();
-      if (pathPart.includes('javascript:') || pathPart.includes('data:')) {
+      // Reject javascript:/data: schemes, but only when the PATH itself starts
+      // with one. A query value may legitimately contain a literal
+      // 'javascript:'/'data:' (e.g. a free-text search term), and a same-origin
+      // route may contain it mid-path (e.g. /ui/help/javascript:basics); both are
+      // inert because the redirect is navigated as a same-origin relative URL and
+      // the same-origin guard below is the real check. Scanning the whole string
+      // would falsely drop the user back to the base path.
+      const pathPart = url.split(/[?#]/, 1)[0].toLowerCase();
+      if (/^\/(?:javascript|data):/.test(pathPart)) {
         return false;
       }
 

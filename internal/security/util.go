@@ -199,7 +199,8 @@ func IsValidRedirect(redirectPath string) bool {
 func isSafeRedirectTarget(redirect string) bool {
 	// Bound the full target. The path component is bounded more tightly by
 	// IsSafePath; this larger budget covers the path plus a long query string.
-	if len(redirect) >= MaxSafeRedirectLength {
+	// MaxSafeRedirectLength is the maximum allowed length (inclusive).
+	if len(redirect) > MaxSafeRedirectLength {
 		return false
 	}
 
@@ -229,8 +230,11 @@ func isSafeRedirectQuery(query string) bool {
 		return false
 	}
 
-	// Reject percent-encoded null bytes (a raw NUL is caught by the control scan below).
-	if strings.Contains(strings.ToLower(query), "%00") {
+	// Reject percent-encoded and double-encoded null bytes (a raw NUL is caught by
+	// the control scan below). Mirrors the encoded-null checks in IsSafePath so a
+	// downstream decode step cannot reintroduce a NUL.
+	lower := strings.ToLower(query)
+	if strings.Contains(lower, "%00") || strings.Contains(lower, "%2500") {
 		return false
 	}
 
