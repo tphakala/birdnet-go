@@ -751,6 +751,10 @@ func TestGetSoxSpectrogramArgs_BirdProfile(t *testing.T) {
 }
 
 // TestProfileForModelType verifies model type to frequency profile mapping.
+// The bat profile is temporarily disabled (see ProfileForModelType and commit
+// e2edab6d2): every model type, including "bat", resolves to bird defaults
+// until the bat spectrogram generation bugs are fixed. Restore the bat case to
+// {wantResample: 0, wantHighPass: 18000} when the bat profile is re-enabled.
 func TestProfileForModelType(t *testing.T) {
 	t.Parallel()
 
@@ -761,7 +765,7 @@ func TestProfileForModelType(t *testing.T) {
 		wantHighPass int
 	}{
 		{"bird model", "bird", 24000, 0},
-		{"bat model", "bat", 0, 18000},
+		{"bat model disabled, falls back to bird", "bat", 24000, 0},
 		{"multi model defaults to bird", "multi", 24000, 0},
 		{"empty defaults to bird", "", 24000, 0},
 	}

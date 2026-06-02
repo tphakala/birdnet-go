@@ -625,23 +625,39 @@ func validateAndSanitizeRedirect(redirect string) string {
 		return "/"
 	}
 
-	// Replace ALL backslashes with forward slashes for robust normalization
-	cleanedRedirect := strings.ReplaceAll(redirect, "\\", "/")
+	// Normalize backslashes to forward slashes in the PATH only (this catches the
+	// "/\evil.com" protocol-relative trick). The query is left untouched so a
+	// legitimate backslash in a filter value (e.g. a Windows path the user
+	// searched for) survives instead of being mangled into forward slashes.
+	pathPart, queryPart, hasQuery := strings.Cut(redirect, "?")
+	cleanedRedirect := strings.ReplaceAll(pathPart, "\\", "/")
+	if hasQuery {
+		cleanedRedirect += "?" + queryPart
+	}
+
+	// Apply the authoritative, query-aware redirect validation so this OAuth
+	// callback entry point enforces the same rules as the login gate: length
+	// bounds, path-traversal on the path, and CRLF/null/control-character
+	// rejection on the query (including double- and triple-encoded variants).
+	// The query stays permissive for inert ".."/"//" sequences.
+	if !security.IsValidRedirect(cleanedRedirect) {
+		return "/"
+	}
+
+	// Re-parse to emit a properly percent-encoded path in the Location header.
+	// isValidRelativePath guards the parse result before EscapedPath is used.
 	parsedURL, err := url.Parse(cleanedRedirect)
 	if err != nil || !isValidRelativePath(parsedURL) {
 		return "/"
 	}
 
-	// Check for CR/LF injection in path and query
-	if containsCRLFCharacters(parsedURL.Path) || containsCRLFCharacters(parsedURL.RawQuery) {
-		return "/"
-	}
-
-	// Passed all checks, construct safe redirect preserving path and query
+	// Use EscapedPath so special characters (spaces, raw Unicode) are properly
+	// encoded in the Location header per RFC 3986; the decoded path was already
+	// validated by IsValidRedirect above.
 	if parsedURL.RawQuery != "" {
-		return parsedURL.Path + "?" + parsedURL.RawQuery
+		return parsedURL.EscapedPath() + "?" + parsedURL.RawQuery
 	}
-	return parsedURL.Path
+	return parsedURL.EscapedPath()
 }
 
 // randomDelay introduces a random sleep duration within the specified range [minMs, maxMs).

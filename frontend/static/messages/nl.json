@@ -3091,9 +3091,18 @@
           "energyRight": "Rechterkanaal",
           "label": "Kanaalmodus",
           "left": "Alleen linkerkanaal",
+          "monoNoSelection": "Bron met één kanaal. Alle kanaalmodi leveren identieke audio, dus selecteren is niet nodig.",
           "recommended": "Aanbevolen: {channel}",
           "right": "Alleen rechterkanaal",
           "singleChannelGood": "Enkel kanaal geselecteerd, optimaal voor detectienauwkeurigheid."
+        },
+        "format": {
+          "label": "Audioformaat",
+          "mono": "Mono (1 kanaal)",
+          "multi": "{count} kanalen",
+          "stereo": "Stereo (2 kanalen)",
+          "untested": "Test de stream om het audioformaat te detecteren",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Stereostream gedetecteerd. Het downmixen van meerdere kanalen kan de detectienauwkeurigheid verminderen door faseverschillen tussen kanalen. Selecteer een specifiek kanaal (links/rechts) of gebruik de kanaaldetector voor de beste resultaten.",

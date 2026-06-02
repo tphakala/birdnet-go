@@ -3091,9 +3091,18 @@
           "energyRight": "Pravý kanál",
           "label": "Režim kanálu",
           "left": "Len ľavý kanál",
+          "monoNoSelection": "Jednokanálový zdroj. Všetky režimy kanálov produkujú rovnaký zvuk, takže nie je potrebné nič vyberať.",
           "recommended": "Odporúčané: {channel}",
           "right": "Len pravý kanál",
           "singleChannelGood": "Vybraný jeden kanál, optimálne pre presnosť detekcie."
+        },
+        "format": {
+          "label": "Formát zvuku",
+          "mono": "Mono (1 kanál)",
+          "multi": "{count} kanálov",
+          "stereo": "Stereo (2 kanály)",
+          "untested": "Otestujte stream na zistenie formátu zvuku",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Detekovaný stereo stream. Zmiešanie viacerých kanálov môže znížiť presnosť detekcie kvôli fázovým rozdielom medzi kanálmi. Pre najlepšie výsledky vyberte konkrétny kanál (ľavý/pravý) alebo použite detektor kanálov.",

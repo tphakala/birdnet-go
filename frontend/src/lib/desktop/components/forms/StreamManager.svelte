@@ -16,7 +16,7 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy, setContext } from 'svelte';
-  import { Plus, Radio, RefreshCw, Loader2, AlertTriangle, CircleCheck } from '@lucide/svelte';
+  import { Plus, Radio, RefreshCw } from '@lucide/svelte';
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
@@ -43,12 +43,8 @@
   import type { ChannelAnalysis } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
   import StreamTestButton from './StreamTestButton.svelte';
-  import {
-    streamTypeOptions,
-    transportOptions,
-    getChannelModeOptions,
-    analyzeStreamChannels,
-  } from './streamOptions';
+  import StreamChannelControls from './StreamChannelControls.svelte';
+  import { streamTypeOptions, transportOptions, analyzeStreamChannels } from './streamOptions';
 
   const logger = loggers.audio;
 
@@ -141,6 +137,10 @@
   let urlError = $state<string | null>(null);
   let newTestResult = $state<{ sampleRate: number; channels: number } | null>(null);
   let newSourceSampleRate = $derived(newTestResult?.sampleRate ?? 48000);
+  // Detected channel count for a new stream comes only from a stream test
+  // (0 = not yet tested). Drives the adaptive channel controls.
+  let newDetectedChannels = $derived(newTestResult?.channels ?? 0);
+  let newDetectedSampleRate = $derived(newTestResult?.sampleRate);
   let isAnalyzing = $state(false);
   let analysisResult = $state<ChannelAnalysis | null>(null);
   let analysisError = $state<string | null>(null);
@@ -728,95 +728,19 @@
               {/if}
             </div>
 
-            <!-- Channel Mode -->
-            <SelectDropdown
-              value={newChannelMode}
-              label={t('settings.audio.streams.channelMode.label')}
-              options={getChannelModeOptions()}
+            <!-- Channel handling: format display, selector, and stereo analysis -->
+            <StreamChannelControls
+              channelMode={newChannelMode}
+              channels={newDetectedChannels}
+              sampleRate={newDetectedSampleRate}
+              analyzeUrl={newUrl}
+              {isAnalyzing}
+              {analysisResult}
+              {analysisError}
               {disabled}
-              onChange={value => (newChannelMode = value as ChannelMode)}
-              groupBy={false}
-              menuSize="sm"
-              helpText={t('settings.audio.streams.channelMode.description')}
+              onChange={mode => (newChannelMode = mode)}
+              onAnalyze={url => analyzeChannels(url)}
             />
-
-            <!-- Channel analysis results (shown after testing a stereo stream) -->
-            {#if newTestResult && newTestResult.channels > 1}
-              <div class="space-y-2">
-                {#if isAnalyzing}
-                  <div
-                    class="flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/70"
-                  >
-                    <Loader2 class="size-4 animate-spin" />
-                    {t('settings.audio.streams.channelMode.analyzing')}
-                  </div>
-                {/if}
-
-                {#if analysisResult}
-                  <div class="space-y-1 text-xs">
-                    {#each analysisResult.energy as ch (ch.channel)}
-                      <div class="flex items-center gap-2">
-                        <span class="w-20 text-[var(--color-base-content)]/70"
-                          >{ch.channel === 0
-                            ? t('settings.audio.streams.channelMode.energyLeft')
-                            : t('settings.audio.streams.channelMode.energyRight')}:</span
-                        >
-                        <div
-                          class="flex-1 h-2 bg-[var(--color-base-200)] rounded-full overflow-hidden"
-                        >
-                          <div
-                            class="h-full rounded-full {(ch.channel === 0 ? 'left' : 'right') ===
-                            analysisResult.recommended
-                              ? 'bg-[var(--color-success)]'
-                              : 'bg-[var(--color-base-400)]'}"
-                            style:width="{Math.max(
-                              2,
-                              Math.min(100, ((ch.rmsDbfs + 96) / 96) * 100)
-                            )}%"
-                          ></div>
-                        </div>
-                        <span class="font-mono w-16 text-right">{ch.rmsDbfs.toFixed(1)} dBFS</span>
-                      </div>
-                    {/each}
-                    {#if analysisResult.recommended !== 'downmix'}
-                      <p class="text-[var(--color-success)] font-medium">
-                        {t('settings.audio.streams.channelMode.recommended', {
-                          channel:
-                            analysisResult.recommended === 'left'
-                              ? t('settings.audio.streams.channelMode.energyLeft')
-                              : t('settings.audio.streams.channelMode.energyRight'),
-                        })}
-                      </p>
-                    {/if}
-                  </div>
-                {/if}
-
-                {#if analysisError}
-                  <p class="text-xs text-[var(--color-error)]">
-                    {t('settings.audio.streams.channelMode.analyzeError')}: {analysisError}
-                  </p>
-                {/if}
-              </div>
-            {/if}
-
-            <!-- Channel mode warnings (shown after stereo stream detected) -->
-            {#if newTestResult && newTestResult.channels > 1}
-              {#if newChannelMode === 'downmix'}
-                <div
-                  class="flex items-start gap-2 p-2.5 rounded-lg text-sm leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
-                >
-                  <AlertTriangle class="size-4 shrink-0 mt-0.5 text-[var(--color-warning)]" />
-                  <span>{t('settings.audio.streams.channelMode.downmixWarning')}</span>
-                </div>
-              {:else}
-                <div
-                  class="flex items-start gap-2 p-2.5 rounded-lg text-sm leading-relaxed bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]"
-                >
-                  <CircleCheck class="size-4 shrink-0 mt-0.5 text-[var(--color-success)]" />
-                  <span>{t('settings.audio.streams.channelMode.singleChannelGood')}</span>
-                </div>
-              {/if}
-            {/if}
 
             <!-- Model Selection -->
             <ModelCheckboxList

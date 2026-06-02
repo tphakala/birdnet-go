@@ -3091,9 +3091,18 @@
           "energyRight": "Canale destro",
           "label": "Modalità canale",
           "left": "Solo canale sinistro",
+          "monoNoSelection": "Sorgente a canale singolo. Tutte le modalità di canale producono lo stesso audio, quindi non è necessaria alcuna selezione.",
           "recommended": "Consigliato: {channel}",
           "right": "Solo canale destro",
           "singleChannelGood": "Canale singolo selezionato, ottimale per la precisione del rilevamento."
+        },
+        "format": {
+          "label": "Formato audio",
+          "mono": "Mono (1 canale)",
+          "multi": "{count} canali",
+          "stereo": "Stereo (2 canali)",
+          "untested": "Prova lo stream per rilevare il formato audio",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Stream stereo rilevato. Il downmix di più canali può ridurre la precisione del rilevamento a causa delle differenze di fase tra i canali. Seleziona un canale specifico (sinistro/destro) o usa il rilevatore di canali per i migliori risultati.",

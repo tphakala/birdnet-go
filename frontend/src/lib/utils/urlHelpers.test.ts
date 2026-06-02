@@ -4,9 +4,11 @@ import {
   isRelativePath,
   normalizePath,
   getAppBasePath,
+  getUiBasePath,
   buildAppUrl,
   setBasePath,
   resetBasePath,
+  getCurrentPathWithQuery,
 } from './urlHelpers';
 import { loggers } from './logger';
 
@@ -172,6 +174,12 @@ describe('URL Helpers', () => {
       expect(isRelativePath('//example.com/path')).toBe(false);
     });
 
+    it('should return false for backslash protocol-relative URLs', () => {
+      // Browsers normalize '/\' to '//', so these are open-redirect vectors.
+      expect(isRelativePath('/\\evil.com')).toBe(false);
+      expect(isRelativePath('/\\\\evil.com')).toBe(false);
+    });
+
     it('should return false for absolute URLs', () => {
       expect(isRelativePath('http://example.com')).toBe(false);
       expect(isRelativePath('https://example.com')).toBe(false);
@@ -327,6 +335,54 @@ describe('URL Helpers', () => {
       // @ts-expect-error - Mocking window.location
       window.location = { pathname: '/ui' };
       expect(getAppBasePath()).toBe('');
+    });
+  });
+
+  describe('getUiBasePath', () => {
+    it('should return /ui/ for direct access', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/ui/dashboard' };
+      expect(getUiBasePath()).toBe('/ui/');
+    });
+
+    it('should return /ui/ for the root /ui path', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/ui/' };
+      expect(getUiBasePath()).toBe('/ui/');
+    });
+
+    it('should include the Home Assistant Ingress prefix', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = {
+        pathname: '/api/hassio_ingress/TOKEN123/ui/detections',
+      };
+      expect(getUiBasePath()).toBe('/api/hassio_ingress/TOKEN123/ui/');
+    });
+
+    it('should include a simple reverse-proxy prefix', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/proxy/birdnet/ui/settings' };
+      expect(getUiBasePath()).toBe('/proxy/birdnet/ui/');
+    });
+
+    it('should fall back to /ui/ when pathname has no /ui segment', () => {
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/some/other/path' };
+      expect(getUiBasePath()).toBe('/ui/');
+    });
+
+    it('should honor the backend-provided base path', () => {
+      setBasePath('/custom/prefix');
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/anything/ui/dashboard' };
+      expect(getUiBasePath()).toBe('/custom/prefix/ui/');
+    });
+
+    it('should not produce a double slash when the base path ends with a slash', () => {
+      setBasePath('/custom/prefix/');
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/anything/ui/dashboard' };
+      expect(getUiBasePath()).toBe('/custom/prefix/ui/');
     });
   });
 
@@ -578,6 +634,47 @@ describe('URL Helpers', () => {
 
       expect(buildAppUrl('/api/v2/detections/123')).toBe('/api/v2/detections/123');
       expect(buildAppUrl('/ui/assets/messages/en.json')).toBe('/ui/assets/messages/en.json');
+    });
+  });
+
+  describe('getCurrentPathWithQuery', () => {
+    // window.location's assignment target is effectively `string & Location`, so a
+    // `search` property in an object literal collides with String.prototype.search.
+    // Defining the property directly sidesteps that setter typing (same approach as
+    // LoginModal.test.ts) and keeps the literal prettier-stable.
+    function setLocation(pathname: string, search: string) {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: { pathname, search },
+      });
+    }
+
+    it('returns path plus query string when a query is present', () => {
+      setLocation(
+        '/ui/detections',
+        '?queryType=species&species=Phoenicurus+phoenicurus&date=2026-06-02&hour=7'
+      );
+      expect(getCurrentPathWithQuery()).toBe(
+        '/ui/detections?queryType=species&species=Phoenicurus+phoenicurus&date=2026-06-02&hour=7'
+      );
+    });
+
+    it('returns only the path when there is no query string', () => {
+      setLocation('/ui/dashboard', '');
+      expect(getCurrentPathWithQuery()).toBe('/ui/dashboard');
+    });
+
+    it('returns the bare base path with its query string from the root UI path', () => {
+      setLocation('/ui/', '?date=2026-06-02');
+      expect(getCurrentPathWithQuery()).toBe('/ui/?date=2026-06-02');
+    });
+
+    it('preserves an already-encoded query string verbatim', () => {
+      setLocation('/ui/detections', '?species=Erithacus%20rubecula&offset=0');
+      expect(getCurrentPathWithQuery()).toBe(
+        '/ui/detections?species=Erithacus%20rubecula&offset=0'
+      );
     });
   });
 });

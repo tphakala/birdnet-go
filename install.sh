@@ -4006,13 +4006,41 @@ configure_web_port() {
 
 # Generate systemd service content
 generate_systemd_service_content() {
-    # Use configured timezone if available, otherwise fall back to system timezone
-    local TZ
+    # Use configured timezone if available, otherwise fall back to system timezone.
+    # Mirror the multi-method detection from configure_timezone() so newer
+    # systemd distributions without /etc/timezone (e.g. Debian 13) still resolve
+    # the host zone instead of silently defaulting to UTC.
+    local TZ=""
     if [ -n "$CONFIGURED_TZ" ]; then
         TZ="$CONFIGURED_TZ"
-    elif [ -f /etc/timezone ]; then
-        TZ=$(cat /etc/timezone)
-    else
+    fi
+
+    if [ -z "$TZ" ] && [ -f /etc/timezone ]; then
+        TZ=$(cat /etc/timezone 2>/dev/null | tr -d '\n' | tr -d ' ')
+    fi
+
+    if [ -z "$TZ" ] && command_exists timedatectl; then
+        TZ=$(timedatectl show --property=Timezone --value 2>/dev/null | tr -d '\n' | tr -d ' ')
+    fi
+
+    if [ -z "$TZ" ] && [ -L /etc/localtime ]; then
+        local tz_path=$(readlink -f /etc/localtime)
+        TZ=${tz_path#/usr/share/zoneinfo/}
+    fi
+
+    # Validate the detected zone against the zoneinfo database before trusting it.
+    # timedatectl can report "n/a" on unconfigured images, and a non-standard
+    # /etc/localtime symlink can leave TZ as an absolute path; neither is a valid
+    # zone identifier. A value containing ".." would also let the existence check
+    # below escape /usr/share/zoneinfo/ and accept a non-zone file, so reject those
+    # outright. Drop anything that is not a relative path resolving to a real
+    # zoneinfo file so the UTC fallback applies, mirroring configure_timezone()'s
+    # validation.
+    if [ -n "$TZ" ] && { [[ "$TZ" == *..* ]] || [ ! -f "/usr/share/zoneinfo/$TZ" ]; }; then
+        TZ=""
+    fi
+
+    if [ -z "$TZ" ]; then
         TZ="UTC"
     fi
 

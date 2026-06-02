@@ -3091,9 +3091,18 @@
           "energyRight": "Rechter Kanal",
           "label": "Kanalmodus",
           "left": "Nur linker Kanal",
+          "monoNoSelection": "Einkanalige Quelle. Alle Kanalmodi erzeugen identischen Ton, eine Auswahl ist daher nicht nötig.",
           "recommended": "Empfohlen: {channel}",
           "right": "Nur rechter Kanal",
           "singleChannelGood": "Einzelkanal ausgewählt, optimal für die Erkennungsgenauigkeit."
+        },
+        "format": {
+          "label": "Audioformat",
+          "mono": "Mono (1 Kanal)",
+          "multi": "{count} Kanäle",
+          "stereo": "Stereo (2 Kanäle)",
+          "untested": "Stream testen, um das Audioformat zu erkennen",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Stereo-Stream erkannt. Das Abmischen mehrerer Kanäle kann die Erkennungsgenauigkeit aufgrund von Phasenunterschieden zwischen den Kanälen verringern. Wählen Sie einen bestimmten Kanal (links/rechts) oder verwenden Sie den Kanaldetektor für beste Ergebnisse.",

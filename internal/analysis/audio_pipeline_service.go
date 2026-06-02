@@ -1017,11 +1017,16 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 		running.SourceSampleRate != desired.SourceSampleRate
 	sourceChannelsChanged := desired.SourceChannels != 0 &&
 		running.SourceChannels != desired.SourceChannels
+	// Compare canonical channel modes so an unset value and an explicit "downmix"
+	// (which build identical FFmpeg args) are not treated as a change that would
+	// needlessly restart the stream.
+	channelModeChanged := conf.ChannelMode(running.ChannelMode).Canonical() !=
+		conf.ChannelMode(desired.ChannelMode).Canonical()
 	return running.SampleRate != desired.SampleRate ||
 		sourceSampleRateChanged ||
 		running.BitDepth != desired.BitDepth ||
 		running.Channels != desired.Channels ||
-		running.ChannelMode != desired.ChannelMode ||
+		channelModeChanged ||
 		sourceChannelsChanged
 }
 

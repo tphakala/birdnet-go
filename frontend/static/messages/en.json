@@ -3091,9 +3091,18 @@
           "energyRight": "Right channel",
           "label": "Channel mode",
           "left": "Left channel only",
+          "monoNoSelection": "Single channel source. All channel modes produce identical audio, so no selection is needed.",
           "recommended": "Recommended: {channel}",
           "right": "Right channel only",
           "singleChannelGood": "Single channel selected, optimal for detection accuracy."
+        },
+        "format": {
+          "label": "Audio format",
+          "mono": "Mono (1 channel)",
+          "multi": "{count} channels",
+          "stereo": "Stereo (2 channels)",
+          "untested": "Test the stream to detect its audio format",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Stereo stream detected. Downmixing multiple channels can reduce detection accuracy due to phase differences between channels. Select a specific channel (left/right) or use the channel detector for best results.",

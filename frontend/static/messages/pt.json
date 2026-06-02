@@ -3091,9 +3091,18 @@
           "energyRight": "Canal direito",
           "label": "Modo de canal",
           "left": "Apenas canal esquerdo",
+          "monoNoSelection": "Fonte de canal único. Todos os modos de canal produzem o mesmo áudio, por isso não é necessária qualquer seleção.",
           "recommended": "Recomendado: {channel}",
           "right": "Apenas canal direito",
           "singleChannelGood": "Canal único selecionado, ótimo para a precisão de detecção."
+        },
+        "format": {
+          "label": "Formato de áudio",
+          "mono": "Mono (1 canal)",
+          "multi": "{count} canais",
+          "stereo": "Estéreo (2 canais)",
+          "untested": "Teste o stream para detetar o formato de áudio",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Stream estéreo detectado. A mistura de múltiplos canais pode reduzir a precisão de detecção devido a diferenças de fase entre canais. Selecione um canal específico (esquerdo/direito) ou use o detector de canais para melhores resultados.",

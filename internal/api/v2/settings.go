@@ -2351,7 +2351,7 @@ func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 			oldStream.IsEnabled() != newStream.IsEnabled() ||
 			oldStream.Type != newStream.Type ||
 			oldStream.Transport != newStream.Transport ||
-			oldStream.ChannelMode != newStream.ChannelMode ||
+			oldStream.ChannelMode.Canonical() != newStream.ChannelMode.Canonical() ||
 			!slices.Equal(oldStream.Models, newStream.Models) {
 			return true
 		}

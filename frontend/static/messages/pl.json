@@ -3091,9 +3091,18 @@
           "energyRight": "Prawy kanał",
           "label": "Tryb kanału",
           "left": "Tylko lewy kanał",
+          "monoNoSelection": "Źródło jednokanałowe. Wszystkie tryby kanałów dają identyczny dźwięk, więc wybór nie jest potrzebny.",
           "recommended": "Zalecane: {channel}",
           "right": "Tylko prawy kanał",
           "singleChannelGood": "Wybrany pojedynczy kanał, optymalny dla dokładności detekcji."
+        },
+        "format": {
+          "label": "Format dźwięku",
+          "mono": "Mono (1 kanał)",
+          "multi": "{count} kanałów",
+          "stereo": "Stereo (2 kanały)",
+          "untested": "Przetestuj strumień, aby wykryć jego format dźwięku",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Wykryto strumień stereo. Miksowanie wielu kanałów może zmniejszyć dokładność detekcji z powodu różnic fazowych między kanałami. Wybierz konkretny kanał (lewy/prawy) lub użyj detektora kanałów, aby uzyskać najlepsze wyniki.",
