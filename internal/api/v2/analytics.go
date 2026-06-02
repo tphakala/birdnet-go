@@ -34,15 +34,13 @@ const (
 
 // SpeciesDailySummary represents a bird in the daily species summary API response
 type SpeciesDailySummary struct {
-	ScientificName string `json:"scientific_name"`
-	CommonName     string `json:"common_name"`
-	SpeciesCode    string `json:"species_code,omitempty"`
-	Count          int    `json:"count"`
-	HourlyCounts   []int  `json:"hourly_counts"`
-	HighConfidence bool   `json:"high_confidence"`
-	// MaxConfidence is the highest detection confidence for this species on the
-	// selected day, expressed as a fraction in the range [0,1].
-	MaxConfidence      float64 `json:"max_confidence,omitempty"`
+	ScientificName     string  `json:"scientific_name"`
+	CommonName         string  `json:"common_name"`
+	SpeciesCode        string  `json:"species_code,omitempty"`
+	Count              int     `json:"count"`
+	HourlyCounts       []int   `json:"hourly_counts"`
+	HighConfidence     bool    `json:"high_confidence"`
+	MaxConfidence      float64 `json:"max_confidence,omitempty"` // Highest detection confidence on this day (0..1)
 	FirstHeard         string  `json:"first_heard,omitempty"`
 	LatestHeard        string  `json:"latest_heard,omitempty"`
 	ThumbnailURL       string  `json:"thumbnail_url,omitempty"`
