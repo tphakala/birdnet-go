@@ -604,7 +604,7 @@
       "viewCompact": "Vista compatta",
       "viewFull": "Vista completa",
       "detections": "{count, plural, one {# rilevamento} other {# rilevamenti}}",
-      "firstSeen": "{days, plural, =0 {visto per la prima volta oggi} one {visto per la prima volta # giorno fa} other {visto per la prima volta # giorni fa}}",
+      "lastSeen": "Ultimo: {days, plural, =0 {oggi} one {# giorno fa} other {# giorni fa}}",
       "moreCount": "+{count} altri"
     },
     "dailySummary": {

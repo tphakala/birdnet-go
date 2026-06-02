@@ -604,7 +604,7 @@
       "viewCompact": "Kompakt visning",
       "viewFull": "Fuld visning",
       "detections": "{count, plural, one {# registrering} other {# registreringer}}",
-      "firstSeen": "{days, plural, =0 {set for første gang i dag} one {set for første gang for # dag siden} other {set for første gang for # dage siden}}",
+      "lastSeen": "Senest: {days, plural, =0 {i dag} one {for # dag siden} other {for # dage siden}}",
       "moreCount": "+{count} mere"
     },
     "dailySummary": {

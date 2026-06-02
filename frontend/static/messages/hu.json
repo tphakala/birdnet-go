@@ -604,7 +604,7 @@
       "viewCompact": "Kompakt nézet",
       "viewFull": "Teljes nézet",
       "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
-      "firstSeen": "{days, plural, =0 {ma látták először} one {# napja látták először} other {# napja látták először}}",
+      "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}",
       "moreCount": "+{count} további"
     },
     "dailySummary": {

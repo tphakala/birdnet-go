@@ -604,7 +604,7 @@
       "viewCompact": "Kompaktné zobrazenie",
       "viewFull": "Úplné zobrazenie",
       "detections": "{count, plural, one {# detekcia} few {# detekcie} other {# detekcií}}",
-      "firstSeen": "{days, plural, =0 {prvýkrát zaznamenané dnes} one {prvýkrát zaznamenané pred # dňom} few {prvýkrát zaznamenané pred # dňami} other {prvýkrát zaznamenané pred # dňami}}",
+      "lastSeen": "Naposledy: {days, plural, =0 {dnes} one {pred # dňom} few {pred # dňami} other {pred # dňami}}",
       "moreCount": "+{count} ďalších"
     },
     "dailySummary": {

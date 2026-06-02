@@ -604,7 +604,7 @@
       "viewCompact": "Kompakt vy",
       "viewFull": "Fullständig vy",
       "detections": "{count, plural, one {# upptäckt} other {# upptäckter}}",
-      "firstSeen": "{days, plural, =0 {sedd för första gången idag} one {sedd för första gången för # dag sedan} other {sedd för första gången för # dagar sedan}}",
+      "lastSeen": "Senast: {days, plural, =0 {idag} one {för # dag sedan} other {för # dagar sedan}}",
       "moreCount": "+{count} till"
     },
     "dailySummary": {

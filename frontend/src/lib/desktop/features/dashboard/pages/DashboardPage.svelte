@@ -1589,7 +1589,6 @@ Performance Optimizations:
         <NewSpeciesHighlightsCard
           data={dailySummary}
           {selectedDate}
-          {showThumbnails}
           compact={element.highlights?.compact ?? true}
           showViewToggle={!inEditMode}
           onViewModeChange={compact =>

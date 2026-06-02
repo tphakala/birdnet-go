@@ -604,7 +604,7 @@
       "viewCompact": "Kompaktais skats",
       "viewFull": "Pilnais skats",
       "detections": "{count, plural, zero {# noteikšanu} one {# noteikšana} other {# noteikšanas}}",
-      "firstSeen": "{days, plural, zero {pirmoreiz redzēts šodien} one {pirmoreiz redzēts pirms # dienas} other {pirmoreiz redzēts pirms # dienām}}",
+      "lastSeen": "Pēdējoreiz: {days, plural, zero {šodien} one {pirms # dienas} other {pirms # dienām}}",
       "moreCount": "+{count} vairāk"
     },
     "dailySummary": {

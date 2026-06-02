@@ -604,7 +604,7 @@
       "viewCompact": "Compacte weergave",
       "viewFull": "Volledige weergave",
       "detections": "{count, plural, one {# detectie} other {# detecties}}",
-      "firstSeen": "{days, plural, =0 {vandaag voor het eerst gezien} one {# dag geleden voor het eerst gezien} other {# dagen geleden voor het eerst gezien}}",
+      "lastSeen": "Laatst: {days, plural, =0 {vandaag} one {# dag geleden} other {# dagen geleden}}",
       "moreCount": "+{count} meer"
     },
     "dailySummary": {
