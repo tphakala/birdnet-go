@@ -173,6 +173,12 @@ describe('URL Helpers', () => {
       expect(isRelativePath('//example.com/path')).toBe(false);
     });
 
+    it('should return false for backslash protocol-relative URLs', () => {
+      // Browsers normalize '/\' to '//', so these are open-redirect vectors.
+      expect(isRelativePath('/\\evil.com')).toBe(false);
+      expect(isRelativePath('/\\\\evil.com')).toBe(false);
+    });
+
     it('should return false for absolute URLs', () => {
       expect(isRelativePath('http://example.com')).toBe(false);
       expect(isRelativePath('https://example.com')).toBe(false);

@@ -70,8 +70,9 @@
         return false;
       }
 
-      // Prevent protocol-relative URLs
-      if (url.startsWith('//')) {
+      // Prevent protocol-relative URLs, including the backslash variant ('/\')
+      // that browsers normalize to '//' (open-redirect vector).
+      if (url.startsWith('//') || url.startsWith('/\\')) {
         return false;
       }
 
@@ -212,7 +213,9 @@
       }, 500);
     } catch {
       error = 'Invalid credentials. Please try again.';
-    } finally {
+      // Only re-enable on failure. On success the page navigates away (OAuth
+      // callback redirect) or reloads, so keeping the control disabled here
+      // prevents a double-submit firing redundant login requests mid-navigation.
       loadingState = 'idle';
     }
   }

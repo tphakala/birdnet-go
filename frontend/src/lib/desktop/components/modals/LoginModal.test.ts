@@ -116,6 +116,19 @@ describe('LoginModal', () => {
       expect(redirectInput.value).toBe('/ui/');
     });
 
+    it('should reject backslash protocol-relative URLs and fallback to base path', () => {
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/\\evil.com/malicious',
+      });
+
+      // Browsers normalize '/\' to '//', so this must fall back to the base path.
+      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      expect(redirectInput).toBeDefined();
+      expect(redirectInput.value).toBe('/ui/');
+    });
+
     it('should reject javascript: URLs and fallback to base path', () => {
       loginModalTest.render({
         isOpen: true,

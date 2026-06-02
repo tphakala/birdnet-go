@@ -74,7 +74,9 @@ export function isRelativePath(path: string): boolean {
     return false;
   }
 
-  return path.startsWith('/') && !path.startsWith('//');
+  // Reject protocol-relative URLs ('//host') and the backslash variant ('/\\host'),
+  // which browsers normalize to '//host' and would enable an open redirect.
+  return path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\');
 }
 
 /**
