@@ -9,6 +9,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -85,27 +86,27 @@ func TestSourceNeedsReconfigure(t *testing.T) {
 				SampleRate: 48000, BitDepth: 16, Channels: 1, ChannelMode: "",
 			},
 			desired: &audiocore.SourceConfig{
-				SampleRate: 48000, BitDepth: 16, Channels: 1, ChannelMode: "downmix",
+				SampleRate: 48000, BitDepth: 16, Channels: 1, ChannelMode: string(conf.ChannelModeDownmix),
 			},
 			expected: false,
 		},
 		{
 			name: "channel mode downmix to left changes",
 			running: &audiocore.AudioSource{
-				SampleRate: 48000, BitDepth: 16, Channels: 2, ChannelMode: "downmix",
+				SampleRate: 48000, BitDepth: 16, Channels: 2, ChannelMode: string(conf.ChannelModeDownmix),
 			},
 			desired: &audiocore.SourceConfig{
-				SampleRate: 48000, BitDepth: 16, Channels: 2, ChannelMode: "left",
+				SampleRate: 48000, BitDepth: 16, Channels: 2, ChannelMode: string(conf.ChannelModeLeft),
 			},
 			expected: true,
 		},
 		{
 			name: "channel mode left to right changes",
 			running: &audiocore.AudioSource{
-				SampleRate: 48000, BitDepth: 16, Channels: 2, ChannelMode: "left",
+				SampleRate: 48000, BitDepth: 16, Channels: 2, ChannelMode: string(conf.ChannelModeLeft),
 			},
 			desired: &audiocore.SourceConfig{
-				SampleRate: 48000, BitDepth: 16, Channels: 2, ChannelMode: "right",
+				SampleRate: 48000, BitDepth: 16, Channels: 2, ChannelMode: string(conf.ChannelModeRight),
 			},
 			expected: true,
 		},

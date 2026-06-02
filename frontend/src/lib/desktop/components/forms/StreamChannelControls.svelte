@@ -75,7 +75,16 @@
     return channelsText;
   });
 
-  let canAnalyze = $derived(!isAnalyzing && analyzeUrl.trim().length > 0);
+  // Also honor the parent form's disabled state so the detect button cannot be
+  // triggered while the whole form is disabled.
+  let canAnalyze = $derived(!disabled && !isAnalyzing && analyzeUrl.trim().length > 0);
+
+  // Energy bar geometry: dBFS spans -96 (silence) to 0 (full scale); clamp the
+  // rendered width between a minimum (so a near-silent channel stays visible)
+  // and the full track width.
+  const DBFS_RANGE = 96;
+  const MIN_BAR_PERCENT = 2;
+  const MAX_BAR_PERCENT = 100;
 </script>
 
 <div class="space-y-2">
@@ -140,7 +149,13 @@
                 analysisResult.recommended
                   ? 'bg-[var(--color-success)]'
                   : 'bg-[var(--color-base-400)]'}"
-                style:width="{Math.max(2, Math.min(100, ((ch.rmsDbfs + 96) / 96) * 100))}%"
+                style:width="{Math.max(
+                  MIN_BAR_PERCENT,
+                  Math.min(
+                    MAX_BAR_PERCENT,
+                    ((ch.rmsDbfs + DBFS_RANGE) / DBFS_RANGE) * MAX_BAR_PERCENT
+                  )
+                )}%"
               ></div>
             </div>
             <span class="font-mono w-16 text-right">{ch.rmsDbfs.toFixed(1)} dBFS</span>
