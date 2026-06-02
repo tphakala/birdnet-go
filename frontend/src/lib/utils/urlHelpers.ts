@@ -197,7 +197,13 @@ const UI_PATH_SEGMENT = '/ui/';
  * getUiBasePath() // returns '/api/hassio_ingress/TOKEN/ui/'
  */
 export function getUiBasePath(): string {
-  return `${getAppBasePath()}${UI_PATH_SEGMENT}`;
+  // Defensively strip a trailing slash from the prefix so a backend-provided
+  // base path that ends with '/' does not produce a double slash (e.g.
+  // '/prefix//ui/'). The URL heuristic never emits a trailing slash, but the
+  // cached value from the backend might.
+  const appBase = getAppBasePath();
+  const prefix = appBase.endsWith('/') ? appBase.slice(0, -1) : appBase;
+  return `${prefix}${UI_PATH_SEGMENT}`;
 }
 
 /**

@@ -462,6 +462,16 @@ func TestV2AuthFlow_OpenRedirectPrevention(t *testing.T) {
 			maliciousURL:   "/ui/a%20b",
 			expectedResult: "/ui/a%20b",
 		},
+		{
+			name:           "double-encoded CRLF in the query is rejected",
+			maliciousURL:   "/ui/detections?x=a%250d%250aSet-Cookie:evil",
+			expectedResult: "/",
+		},
+		{
+			name:           "redirect over the length budget is rejected",
+			maliciousURL:   "/ui/detections?q=" + strings.Repeat("a", 3000),
+			expectedResult: "/",
+		},
 	}
 
 	for _, tc := range testCases {

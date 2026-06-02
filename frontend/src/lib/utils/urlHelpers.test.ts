@@ -377,6 +377,13 @@ describe('URL Helpers', () => {
       window.location = { pathname: '/anything/ui/dashboard' };
       expect(getUiBasePath()).toBe('/custom/prefix/ui/');
     });
+
+    it('should not produce a double slash when the base path ends with a slash', () => {
+      setBasePath('/custom/prefix/');
+      // @ts-expect-error - Mocking window.location
+      window.location = { pathname: '/anything/ui/dashboard' };
+      expect(getUiBasePath()).toBe('/custom/prefix/ui/');
+    });
   });
 
   describe('buildAppUrl', () => {

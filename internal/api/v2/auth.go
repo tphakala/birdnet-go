@@ -627,28 +627,26 @@ func validateAndSanitizeRedirect(redirect string) string {
 
 	// Replace ALL backslashes with forward slashes for robust normalization
 	cleanedRedirect := strings.ReplaceAll(redirect, "\\", "/")
+
+	// Apply the authoritative, query-aware redirect validation so this OAuth
+	// callback entry point enforces the same rules as the login gate: length
+	// bounds, path-traversal on the path, and CRLF/null/control-character
+	// rejection on the query (including double- and triple-encoded variants).
+	// The query stays permissive for inert ".."/"//" sequences.
+	if !security.IsValidRedirect(cleanedRedirect) {
+		return "/"
+	}
+
+	// Re-parse to emit a properly percent-encoded path in the Location header.
+	// isValidRelativePath guards the parse result before EscapedPath is used.
 	parsedURL, err := url.Parse(cleanedRedirect)
 	if err != nil || !isValidRelativePath(parsedURL) {
 		return "/"
 	}
 
-	// Check for CR/LF injection in path and query
-	if containsCRLFCharacters(parsedURL.Path) || containsCRLFCharacters(parsedURL.RawQuery) {
-		return "/"
-	}
-
-	// Reject path-traversal in the PATH component (url.Parse decodes percent-encoded
-	// variants, so this catches "%2e%2e" too). The query is intentionally left
-	// permissive: ".."/"//" in a query are inert and must survive, matching the
-	// query-aware gate in security.IsValidRedirect.
-	if !security.IsSafePath(parsedURL.Path) {
-		return "/"
-	}
-
-	// Passed all checks, construct safe redirect preserving path and query.
 	// Use EscapedPath so special characters (spaces, raw Unicode) are properly
-	// encoded in the Location header per RFC 3986; IsSafePath validated the
-	// decoded path above.
+	// encoded in the Location header per RFC 3986; the decoded path was already
+	// validated by IsValidRedirect above.
 	if parsedURL.RawQuery != "" {
 		return parsedURL.EscapedPath() + "?" + parsedURL.RawQuery
 	}
