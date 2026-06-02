@@ -272,7 +272,11 @@
       const da = parseLocalDateString(a[field]);
       // eslint-disable-next-line security/detect-object-injection
       const db = parseLocalDateString(b[field]);
-      if (!da || !db) return 0;
+      // Sort invalid/missing dates consistently to the end so the comparator
+      // stays transitive (returning 0 for any null pair would break sort order).
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
       return ascending ? da.getTime() - db.getTime() : db.getTime() - da.getTime();
     };
   }
