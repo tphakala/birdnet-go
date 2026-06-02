@@ -4028,6 +4028,15 @@ generate_systemd_service_content() {
         TZ=${tz_path#/usr/share/zoneinfo/}
     fi
 
+    # Validate the detected zone against the zoneinfo database before trusting it.
+    # timedatectl can report "n/a" on unconfigured images, and a non-standard
+    # /etc/localtime symlink can leave TZ as an absolute path; neither is a valid
+    # zone identifier. Drop anything that does not resolve to a real zoneinfo file
+    # so the UTC fallback below applies, mirroring configure_timezone()'s validation.
+    if [ -n "$TZ" ] && [ ! -f "/usr/share/zoneinfo/$TZ" ]; then
+        TZ=""
+    fi
+
     if [ -z "$TZ" ]; then
         TZ="UTC"
     fi
