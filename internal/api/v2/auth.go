@@ -637,6 +637,14 @@ func validateAndSanitizeRedirect(redirect string) string {
 		return "/"
 	}
 
+	// Reject path-traversal in the PATH component (url.Parse decodes percent-encoded
+	// variants, so this catches "%2e%2e" too). The query is intentionally left
+	// permissive: ".."/"//" in a query are inert and must survive, matching the
+	// query-aware gate in security.IsValidRedirect.
+	if !security.IsSafePath(parsedURL.Path) {
+		return "/"
+	}
+
 	// Passed all checks, construct safe redirect preserving path and query
 	if parsedURL.RawQuery != "" {
 		return parsedURL.Path + "?" + parsedURL.RawQuery

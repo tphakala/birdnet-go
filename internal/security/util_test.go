@@ -2,6 +2,7 @@ package security
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -640,6 +641,54 @@ func TestIsValidRedirect(t *testing.T) {
 		{
 			name:     "invalid path without leading slash",
 			path:     "dashboard",
+			expected: false,
+		},
+
+		// Query-aware validation: path-traversal heuristics must apply
+		// only to the path component, not to a legitimate filter query string.
+		{
+			name:     "simple filter query is allowed",
+			path:     "/ui/detections?queryType=species&date=2026-06-02",
+			expected: true,
+		},
+		{
+			name:     "dotdot in query value is allowed",
+			path:     "/ui/detections?queryType=search&q=foo..bar",
+			expected: true,
+		},
+		{
+			name:     "double slash in query value is allowed",
+			path:     "/ui/detections?next=//example/path",
+			expected: true,
+		},
+		{
+			name:     "long filter query under total budget is allowed",
+			path:     "/ui/detections?q=" + strings.Repeat("a", 600),
+			expected: true,
+		},
+		{
+			name:     "traversal in path is rejected even with a query",
+			path:     "/ui/../secret?tab=1",
+			expected: false,
+		},
+		{
+			name:     "encoded CRLF in query is rejected",
+			path:     "/ui/detections?x=a%0d%0aSet-Cookie:evil",
+			expected: false,
+		},
+		{
+			name:     "raw newline in query is rejected",
+			path:     "/ui/detections?x=a\nb",
+			expected: false,
+		},
+		{
+			name:     "null byte in query is rejected",
+			path:     "/ui/detections?x=a\x00b",
+			expected: false,
+		},
+		{
+			name:     "redirect over total length budget is rejected",
+			path:     "/ui/detections?q=" + strings.Repeat("a", 3000),
 			expected: false,
 		},
 	}

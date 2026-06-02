@@ -169,9 +169,9 @@ describe('LoginModal', () => {
       expect(redirectInput.value).toBe('/ui/');
     });
 
-    it('should use different base paths based on current location', () => {
-      // Change the mock location to /app/
-      mockWindowLocation('/app/settings');
+    it('should fall back to the proxy-aware UI base path when the redirect is invalid', () => {
+      // Simulate a reverse-proxy deployment under a custom subpath.
+      mockWindowLocation('/proxy/birdnet/ui/settings');
 
       loginModalTest.render({
         isOpen: true,
@@ -179,10 +179,60 @@ describe('LoginModal', () => {
         redirectUrl: 'invalid-url', // No leading slash
       });
 
-      // Should fallback to /app/ based on current location
-      const redirectInput = screen.getByDisplayValue('/app/') as HTMLInputElement;
+      // Fallback must include the reverse-proxy prefix (via the shared
+      // getUiBasePath helper), not a hand-rolled, prefix-unaware guess.
+      const redirectInput = screen.getByDisplayValue('/proxy/birdnet/ui/') as HTMLInputElement;
       expect(redirectInput).toBeDefined();
-      expect(redirectInput.value).toBe('/app/');
+      expect(redirectInput.value).toBe('/proxy/birdnet/ui/');
+    });
+
+    it('should accept a query string containing path-like sequences', () => {
+      // '..' and '//' inside a query are meaningful only as a path; they must not
+      // cause an otherwise-safe redirect to be rejected.
+      mockWindowLocation('/ui/detections', '?queryType=search&q=a..b//c');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/detections?queryType=search&q=a..b//c',
+      });
+
+      const redirectInput = screen.getByDisplayValue(
+        '/ui/detections?queryType=search&q=a..b//c'
+      ) as HTMLInputElement;
+      expect(redirectInput.value).toBe('/ui/detections?queryType=search&q=a..b//c');
+    });
+
+    it('should accept a query value containing a literal javascript: term', () => {
+      // A free-text search term may legitimately contain 'javascript:'. The
+      // redirect is navigated as a same-origin relative URL, so the query is
+      // inert and must not trip the path-oriented scheme check.
+      mockWindowLocation('/ui/detections', '?q=javascript:tutorial');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/detections?q=javascript:tutorial',
+      });
+
+      const redirectInput = screen.getByDisplayValue(
+        '/ui/detections?q=javascript:tutorial'
+      ) as HTMLInputElement;
+      expect(redirectInput.value).toBe('/ui/detections?q=javascript:tutorial');
+    });
+
+    it('should still reject a dangerous scheme in the path component', () => {
+      mockWindowLocation('/ui/');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/javascript:alert(1)/foo',
+      });
+
+      // A dangerous scheme in the PATH must still fall back to the base path.
+      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      expect(redirectInput.value).toBe('/ui/');
     });
   });
 
@@ -587,17 +637,17 @@ describe('LoginModal', () => {
       });
     });
 
-    it('should handle different base paths correctly', async () => {
+    it('should handle reverse-proxy (Home Assistant Ingress) base paths correctly', async () => {
       const { api } = await import('$lib/utils/api');
       const postSpy = vi.mocked(api.post);
       postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
 
-      mockWindowLocation('/app/dashboard');
+      mockWindowLocation('/api/hassio_ingress/abc123/ui/dashboard');
 
       loginModalTest.render({
         isOpen: true,
         onClose: vi.fn(),
-        redirectUrl: '/app/settings',
+        redirectUrl: '/api/hassio_ingress/abc123/ui/settings',
         authConfig: { basicEnabled: true, enabledProviders: [] },
       });
 
@@ -611,8 +661,10 @@ describe('LoginModal', () => {
         expect(postSpy).toHaveBeenCalledWith(
           '/api/v2/auth/login',
           expect.objectContaining({
+            // The reverse-proxy prefix is stripped along with the /ui/ segment,
+            // and the full proxy-aware base path is sent to the backend.
             redirectUrl: '/settings',
-            basePath: '/app/',
+            basePath: '/api/hassio_ingress/abc123/ui/',
           })
         );
       });

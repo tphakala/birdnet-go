@@ -171,6 +171,35 @@ export function getAppBasePath(): string {
   return '/' + segments.slice(0, uiIndex).join('/');
 }
 
+// The Svelte UI is always served under the '/ui/' segment; getAppBasePath()
+// returns the reverse-proxy prefix that precedes it.
+const UI_PATH_SEGMENT = '/ui/';
+
+/**
+ * Returns the full base path under which the Svelte UI is served, including any
+ * reverse-proxy prefix and the trailing '/ui/' segment.
+ *
+ * This is the proxy-aware UI root: getAppBasePath() (the prefix before the 'ui'
+ * segment) combined with the 'ui' segment itself. Use it for a post-login
+ * fallback redirect target and for stripping the base from a captured location
+ * before sending a relative redirect to the backend, so reverse-proxy prefixes
+ * (e.g. Home Assistant Ingress) are handled consistently instead of by ad-hoc,
+ * prefix-unaware detection.
+ *
+ * @returns The UI base path, always ending in '/ui/'.
+ *
+ * @example
+ * // Direct access (pathname: '/ui/dashboard')
+ * getUiBasePath() // returns '/ui/'
+ *
+ * @example
+ * // Home Assistant Ingress (pathname: '/api/hassio_ingress/TOKEN/ui/dashboard')
+ * getUiBasePath() // returns '/api/hassio_ingress/TOKEN/ui/'
+ */
+export function getUiBasePath(): string {
+  return `${getAppBasePath()}${UI_PATH_SEGMENT}`;
+}
+
 /**
  * Builds a full URL path that works with any proxy configuration.
  * Automatically detects and prepends the app's base path (if behind a proxy).

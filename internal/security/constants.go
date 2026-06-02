@@ -53,6 +53,12 @@ const (
 	// Path validation limits
 	MaxSafePathLength = 512
 
+	// MaxSafeRedirectLength bounds a full redirect target (path plus query).
+	// The path component is bounded more tightly by MaxSafePathLength; the
+	// larger overall budget accommodates legitimate, heavily-filtered query
+	// strings without dropping the user back to the base path after login.
+	MaxSafeRedirectLength = 2048
+
 	// OIDC discovery retry settings
 	OIDCRetryInitialBackoff = 5 * time.Second
 	OIDCRetryMaxBackoff     = 60 * time.Second

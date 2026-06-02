@@ -10,8 +10,8 @@
 -->
 <script lang="ts">
   import { api } from '$lib/utils/api';
-  import { safeGet, safeArrayAccess, safeElementAccess } from '$lib/utils/security';
-  import { extractRelativePath } from '$lib/utils/urlHelpers';
+  import { safeGet, safeElementAccess } from '$lib/utils/security';
+  import { extractRelativePath, getUiBasePath } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
   import { X, ShieldCheck, KeyRound } from '@lucide/svelte';
@@ -20,6 +20,9 @@
 
   // SECURITY: Define maximum password length to prevent DoS
   const MAX_PASSWORD_LENGTH = 512; // Reasonable limit for security
+  // Client-side cap on the captured redirect (path + query). Intentionally a bit
+  // tighter than the backend's authoritative security.MaxSafeRedirectLength (2048)
+  // so anything the client sends comfortably passes server validation.
   const MAX_REDIRECT_LENGTH = 2000;
 
   // Logger for authentication debugging
@@ -51,7 +54,7 @@
 
   // Compute safe redirect URL immediately
   let safeRedirectUrl = $derived(
-    redirectUrl && validateRedirectUrl(redirectUrl) ? redirectUrl : detectBasePath()
+    redirectUrl && validateRedirectUrl(redirectUrl) ? redirectUrl : getUiBasePath()
   );
 
   // Get enabled OAuth providers from registry
@@ -70,13 +73,18 @@
         return false;
       }
 
-      // Prevent javascript: or data: URLs
-      if (url.toLowerCase().includes('javascript:') || url.toLowerCase().includes('data:')) {
+      // Check length (path + query). A generous cap covers heavily-filtered views.
+      if (url.length > MAX_REDIRECT_LENGTH) {
         return false;
       }
 
-      // Check length
-      if (url.length > MAX_REDIRECT_LENGTH) {
+      // Prevent javascript:/data: schemes, but check only the PATH component. A
+      // query value may legitimately contain a literal 'javascript:'/'data:' (e.g.
+      // a free-text search term); since the redirect is always navigated as a
+      // same-origin relative URL, such a query value is inert. Checking the whole
+      // string would falsely drop the user back to the base path.
+      const pathPart = url.split('?', 1)[0].toLowerCase();
+      if (pathPart.includes('javascript:') || pathPart.includes('data:')) {
         return false;
       }
 
@@ -117,32 +125,6 @@
     return { isValid: true };
   }
 
-  // SECURITY: Extract current base path from window location
-  function detectBasePath(): string {
-    // Ensure we have a valid pathname (for tests and SSR)
-    const pathname = window.location?.pathname || '/';
-
-    // Common UI base paths to check
-    const commonBasePaths = ['/ui/', '/app/', '/admin/', '/dashboard/'];
-
-    for (const basePath of commonBasePaths) {
-      if (pathname.startsWith(basePath)) {
-        return basePath;
-      }
-    }
-
-    // If no common base path found, check if we're in a subfolder
-    const pathSegments = pathname.split('/').filter(Boolean);
-    if (pathSegments.length > 0) {
-      // Return the first segment as base path
-      const firstSegment = safeArrayAccess(pathSegments, 0);
-      return firstSegment ? `/${firstSegment}/` : '/';
-    }
-
-    // Default to root
-    return '/';
-  }
-
   async function handlePasswordLogin() {
     if (loadingState !== 'idle') {
       return;
@@ -156,8 +138,8 @@
       return;
     }
 
-    // SECURITY: Detect current base path
-    const currentBasePath = detectBasePath();
+    // SECURITY: Detect current base path (proxy-aware, shared helper)
+    const currentBasePath = getUiBasePath();
 
     error = '';
     loadingState = 'password';
