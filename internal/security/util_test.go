@@ -597,6 +597,11 @@ func TestIsSafePath(t *testing.T) {
 			expected: false,
 		},
 		{
+			name:     "triple-encoded null byte",
+			path:     "/path%252500evil",
+			expected: false,
+		},
+		{
 			name:     "triple-encoded directory traversal",
 			path:     "/path/%25252e%25252e/etc",
 			expected: false,
@@ -689,6 +694,11 @@ func TestIsValidRedirect(t *testing.T) {
 		{
 			name:     "double-encoded null byte in query is rejected",
 			path:     "/ui/detections?x=a%2500b",
+			expected: false,
+		},
+		{
+			name:     "triple-encoded null byte in query is rejected",
+			path:     "/ui/detections?x=a%252500b",
 			expected: false,
 		},
 		{

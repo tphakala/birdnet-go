@@ -149,6 +149,11 @@ func IsSafePath(pathStr string) bool {
 		return false
 	}
 
+	// Check for triple-encoded null byte (%252500)
+	if strings.Contains(lower, "%252500") {
+		return false
+	}
+
 	// Check for URL-encoded backslash (%5c)
 	if strings.Contains(lower, "%5c") {
 		return false
@@ -230,11 +235,12 @@ func isSafeRedirectQuery(query string) bool {
 		return false
 	}
 
-	// Reject percent-encoded and double-encoded null bytes (a raw NUL is caught by
-	// the control scan below). Mirrors the encoded-null checks in IsSafePath so a
-	// downstream decode step cannot reintroduce a NUL.
+	// Reject percent-encoded null bytes through triple encoding (a raw NUL is
+	// caught by the control scan below). Mirrors the encoded-null and encoded-CRLF
+	// checks in IsSafePath/containsCRLF so repeated downstream decodes cannot
+	// reintroduce a NUL.
 	lower := strings.ToLower(query)
-	if strings.Contains(lower, "%00") || strings.Contains(lower, "%2500") {
+	if strings.Contains(lower, "%00") || strings.Contains(lower, "%2500") || strings.Contains(lower, "%252500") {
 		return false
 	}
 
