@@ -21,9 +21,9 @@ const (
 	wavAudioFormat = 1
 )
 
-// SavePCMDataToWAV saves raw 16-bit mono PCM data as a WAV file at filePath.
+// SavePCMDataToWAV saves raw 16-bit PCM data as a WAV file at filePath.
 // sampleRate specifies the sample rate in Hz (e.g. 48000), and bitDepth specifies
-// the number of bits per sample (must be 16).
+// the number of bits per sample (must be 16). The output is always mono.
 // Parent directories are created automatically if they do not exist.
 //
 // Limitation: Only 16-bit PCM is supported. The go-audio/wav encoder and
@@ -31,12 +31,6 @@ const (
 // TODO: Support 24-bit and 32-bit WAV encoding when go-audio adds multi-depth
 // IntBuffer support, or by writing the WAV header manually.
 func SavePCMDataToWAV(filePath string, pcmData []byte, sampleRate, bitDepth int) error {
-	return SavePCMDataToWAVWithChannels(filePath, pcmData, sampleRate, bitDepth, wavNumChannels)
-}
-
-// SavePCMDataToWAVWithChannels saves raw 16-bit PCM data as a WAV file at
-// filePath using the supplied interleaved channel count.
-func SavePCMDataToWAVWithChannels(filePath string, pcmData []byte, sampleRate, bitDepth, channels int) error {
 	if filePath == "" {
 		return errors.Newf("empty file path provided for WAV save operation").
 			Component("audiocore/convert").
@@ -54,15 +48,6 @@ func SavePCMDataToWAVWithChannels(filePath string, pcmData []byte, sampleRate, b
 			Build()
 	}
 
-	if channels <= 0 {
-		return errors.Newf("invalid channel count %d for WAV save operation", channels).
-			Component("audiocore/convert").
-			Category(errors.CategoryValidation).
-			Context("operation", "save_pcm_to_wav").
-			Context("channels", channels).
-			Build()
-	}
-
 	if bitDepth != 16 {
 		return errors.Newf("unsupported bit depth %d: SavePCMDataToWAV requires 16-bit PCM", bitDepth).
 			Component("audiocore/convert").
@@ -73,16 +58,14 @@ func SavePCMDataToWAVWithChannels(filePath string, pcmData []byte, sampleRate, b
 	}
 
 	bytesPerSample := bitDepth / 8
-	frameBytes := bytesPerSample * channels
-	if len(pcmData)%frameBytes != 0 {
-		return errors.Newf("PCM data size (%d bytes) is not aligned with bit depth (%d bits, %d bytes per sample) and channel count (%d)", len(pcmData), bitDepth, bytesPerSample, channels).
+	if len(pcmData)%bytesPerSample != 0 {
+		return errors.Newf("PCM data size (%d bytes) is not aligned with bit depth (%d bits, %d bytes per sample)", len(pcmData), bitDepth, bytesPerSample).
 			Component("audiocore/convert").
 			Category(errors.CategoryValidation).
 			Context("operation", "save_pcm_to_wav").
 			Context("data_size", len(pcmData)).
 			Context("bit_depth", bitDepth).
 			Context("bytes_per_sample", bytesPerSample).
-			Context("channels", channels).
 			Build()
 	}
 
@@ -109,7 +92,7 @@ func SavePCMDataToWAVWithChannels(filePath string, pcmData []byte, sampleRate, b
 		_ = outFile.Close()
 	}()
 
-	enc := wav.NewEncoder(outFile, sampleRate, bitDepth, channels, wavAudioFormat)
+	enc := wav.NewEncoder(outFile, sampleRate, bitDepth, wavNumChannels, wavAudioFormat)
 	if enc == nil {
 		return errors.Newf("failed to create WAV encoder").
 			Component("audiocore/convert").
@@ -117,7 +100,6 @@ func SavePCMDataToWAVWithChannels(filePath string, pcmData []byte, sampleRate, b
 			Context("operation", "save_pcm_to_wav").
 			Context("sample_rate", sampleRate).
 			Context("bit_depth", bitDepth).
-			Context("channels", channels).
 			Build()
 	}
 
@@ -125,7 +107,7 @@ func SavePCMDataToWAVWithChannels(filePath string, pcmData []byte, sampleRate, b
 
 	buf := &audio.IntBuffer{
 		Data:   intSamples,
-		Format: &audio.Format{SampleRate: sampleRate, NumChannels: channels},
+		Format: &audio.Format{SampleRate: sampleRate, NumChannels: wavNumChannels},
 	}
 	if err := enc.Write(buf); err != nil {
 		return errors.New(err).

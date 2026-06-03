@@ -28,9 +28,6 @@ const minExportPhaseTimeout = 30 * time.Second
 // beyond the PCM duration for long extended-capture clips.
 const exportPhaseTimeoutMargin = 30 * time.Second
 
-// exportTimeout is the maximum time allowed for a single PCM-to-file export operation.
-const exportTimeout = 30 * time.Second
-
 // Format-specific maximum bitrate limits (kbps). Requested bitrates above
 // these values are clamped to prevent encoder errors or bloated output.
 const (
@@ -317,7 +314,7 @@ func buildExportAudioFilter(ctx context.Context, opts *ExportOptions) (string, e
 }
 
 func buildNormalizationFilter(ctx context.Context, opts *ExportOptions) (string, error) {
-	stats, err := AnalyzePCMLoudnessWithChannels(ctx, opts.PCMData, opts.FFmpegPath, opts.SampleRate, opts.BitDepth, opts.Channels)
+	stats, err := AnalyzePCMLoudness(ctx, opts.PCMData, opts.FFmpegPath, opts.SampleRate, opts.BitDepth)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", err
