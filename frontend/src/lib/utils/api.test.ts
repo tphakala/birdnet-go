@@ -220,6 +220,21 @@ describe('API utilities', () => {
       const result = await fetchWithCSRF('/api/test');
       expect(result).toBe('Plain text response');
     });
+
+    it('rejects protocol-relative and backslash-trick URLs to prevent CSRF token leakage', async () => {
+      // "//evil.com/x" satisfies includes('//') yet also starts with '/', so it
+      // would slip past the absolute-URL SSRF guard. Backslash variants like
+      // "/\evil.com" resolve to a foreign origin via URL normalization. Both
+      // must be rejected before any fetch so the CSRF-bearing request can never
+      // target a foreign origin.
+      for (const evil of ['//evil.com/steal', '/\\evil.com/steal']) {
+        await expect(fetchWithCSRF(evil)).rejects.toMatchObject({
+          status: 400,
+          message: 'Protocol-relative URLs are not allowed',
+        });
+      }
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
   });
 
   describe('401 redirect to login', () => {
@@ -370,6 +385,28 @@ describe('API utilities', () => {
 
       expect(result).toBe('pending');
       expect(window.location.href).toBe('/ui/');
+    });
+
+    it('throws ApiError instead of hanging when the redirect is suppressed by the cooldown', async () => {
+      // A very recent prior redirect trips the reload-loop cooldown, so
+      // redirectToLogin suppresses navigation. In that branch it must reject
+      // (not return a never-resolving promise) so the awaiting caller can stop
+      // its loading state. Regression test for the never-resolving-promise hang.
+      sessionStorage.setItem('last_401_redirect', Date.now().toString());
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+      });
+
+      await expect(fetchWithCSRF('/api/test')).rejects.toMatchObject({
+        status: 401,
+        message: 'errors.api.unauthorized',
+      });
+      // The suppressed branch must not navigate.
+      expect(window.location.href).not.toBe('/ui/');
     });
   });
 

@@ -61,10 +61,21 @@ type AuthStatus struct {
 	Method        string `json:"auth_method,omitempty"`
 }
 
+// Auth route path fragments, registered relative to the v2 API group in
+// initAuthRoutes. They are reused by isPrivateModeExempt so the PrivateMode
+// exempt allow-list cannot drift from the registered routes.
+const (
+	authGroupPath    = "/auth"
+	authLoginPath    = "/login"
+	authCallbackPath = "/callback"
+	authLogoutPath   = "/logout"
+	authStatusPath   = "/status"
+)
+
 // initAuthRoutes registers all authentication-related API endpoints
 func (c *Controller) initAuthRoutes() {
 	// Create auth API group
-	authGroup := c.Group.Group("/auth")
+	authGroup := c.Group.Group(authGroupPath)
 
 	// Create rate limiter for login endpoint to prevent brute force attacks
 	// Allow 5 login attempts per 15 minutes per IP address
@@ -102,16 +113,16 @@ func (c *Controller) initAuthRoutes() {
 	})
 
 	// Routes that don't require authentication (but are rate limited)
-	authGroup.POST("/login", c.Login, loginRateLimiter)
+	authGroup.POST(authLoginPath, c.Login, loginRateLimiter)
 
 	// OAuth callback endpoint - public, completes the OAuth flow
 	// This is the V2 replacement for /api/v1/oauth2/callback
-	authGroup.GET("/callback", c.OAuthCallback)
+	authGroup.GET(authCallbackPath, c.OAuthCallback)
 
 	// Routes that require authentication
 	protectedGroup := authGroup.Group("", c.authMiddleware)
-	protectedGroup.POST("/logout", c.Logout)
-	protectedGroup.GET("/status", c.GetAuthStatus)
+	protectedGroup.POST(authLogoutPath, c.Logout)
+	protectedGroup.GET(authStatusPath, c.GetAuthStatus)
 }
 
 // Login handles POST /api/v2/auth/login
@@ -250,7 +261,11 @@ func (c *Controller) Login(ctx echo.Context) error {
 	if requestBase != "" {
 		finalRedirect = ensurePathWithinBase(finalRedirect, requestBase+"/")
 	}
-	redirectURL := fmt.Sprintf("%s/api/v2/auth/callback?code=%s&redirect=%s", requestBase, url.QueryEscape(authCode), url.QueryEscape(finalRedirect))
+	// Compose the callback path from the same constants used to register the
+	// route (see initAuthRoutes) so the client-facing redirect URL cannot drift
+	// from the actual route on a prefix or fragment rename.
+	callbackPath := apiV2Prefix + authGroupPath + authCallbackPath
+	redirectURL := fmt.Sprintf("%s%s?code=%s&redirect=%s", requestBase, callbackPath, url.QueryEscape(authCode), url.QueryEscape(finalRedirect))
 
 	c.logInfoIfEnabled("Returning successful login response with redirect",
 		logger.Username(req.Username),

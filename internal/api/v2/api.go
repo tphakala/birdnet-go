@@ -44,6 +44,12 @@ import (
 // Tunnel provider constant for unknown providers
 const tunnelProviderUnknown = "unknown"
 
+// apiV2Prefix is the base path prefix for all v2 API routes (the Echo group
+// prefix; see Controller.Group). It is the single source of truth used to
+// compose full route paths for PrivateMode exemption matching, so the exempt
+// allow-list in isPrivateModeExempt cannot drift from the registered routes.
+const apiV2Prefix = "/api/v2"
+
 // Controller manages the API routes and handlers
 type Controller struct {
 	Echo              *echo.Echo
@@ -489,7 +495,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	}
 
 	// Create v2 API group
-	c.Group = e.Group("/api/v2")
+	c.Group = e.Group(apiV2Prefix)
 
 	// Configure middlewares
 	c.Group.Use(middleware.Recover())          // Recover should be early
