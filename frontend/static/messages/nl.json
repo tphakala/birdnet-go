@@ -593,19 +593,16 @@
     },
     "rejected": "Afgewezen",
     "newSpeciesHighlights": {
-      "title": "Nieuwe soorten in de kijker",
-      "subtitle": "Soorten die op deze dag voor het eerst zijn waargenomen",
+      "title": "Nieuwe & terugkerende soorten",
+      "subtitle": "Eerste waarnemingen en recente terugkeer",
+      "show": "Tonen:",
       "categoryLifetime": "Nieuwe soort",
       "categoryYear": "Nieuw dit jaar",
       "categorySeason": "Nieuw dit seizoen",
       "categorySeasonNamed": "Nieuw dit {season}",
       "maxConfidenceShort": "Max {confidence}%",
-      "viewToggle": "Weergavemodus",
-      "viewCompact": "Compacte weergave",
-      "viewFull": "Volledige weergave",
       "detections": "{count, plural, one {# detectie} other {# detecties}}",
-      "lastSeen": "Laatst: {days, plural, =0 {vandaag} one {# dag geleden} other {# dagen geleden}}",
-      "moreCount": "+{count} meer"
+      "lastSeen": "Laatst: {days, plural, =0 {vandaag} one {# dag geleden} other {# dagen geleden}}"
     },
     "dailySummary": {
       "title": "Dagactiviteit",

@@ -593,19 +593,16 @@
     },
     "rejected": "Elutasítva",
     "newSpeciesHighlights": {
-      "title": "Új fajok – kiemeltek",
-      "subtitle": "Ezen a napon először észlelt fajok",
+      "title": "Új és visszatérő fajok",
+      "subtitle": "Első észlelések és nemrégi visszatérők",
+      "show": "Megjelenítés:",
       "categoryLifetime": "Új faj",
       "categoryYear": "Új ebben az évben",
       "categorySeason": "Új ebben a szezonban",
       "categorySeasonNamed": "Új ezen a szezonon: {season}",
       "maxConfidenceShort": "Max {confidence}%",
-      "viewToggle": "Nézet mód",
-      "viewCompact": "Kompakt nézet",
-      "viewFull": "Teljes nézet",
       "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
-      "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}",
-      "moreCount": "+{count} további"
+      "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}"
     },
     "dailySummary": {
       "title": "Napi aktivitás",

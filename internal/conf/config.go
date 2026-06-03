@@ -197,11 +197,10 @@ type DashboardElement struct {
 	Type       string                      `json:"type" yaml:"type"`                                 // "banner", "daily-summary", "new-species-highlights", "currently-hearing", "detections-grid", "live-spectrogram", "video-embed"
 	Enabled    bool                        `json:"enabled" yaml:"enabled"`                           // whether this element is visible
 	Width      string                      `json:"width,omitempty" yaml:"width,omitempty"`           // "full" or "half"; defaults to "full" if empty
-	Banner     *BannerConfig               `json:"banner,omitempty" yaml:"banner,omitempty"`         // config for banner element
-	Video      *VideoEmbedConfig           `json:"video,omitempty" yaml:"video,omitempty"`           // config for video embed element
-	Summary    *DailySummaryConfig         `json:"summary,omitempty" yaml:"summary,omitempty"`       // config for daily summary element
-	Grid       *DetectionsGridConfig       `json:"grid,omitempty" yaml:"grid,omitempty"`             // config for detections grid element
-	Highlights *NewSpeciesHighlightsConfig `json:"highlights,omitempty" yaml:"highlights,omitempty"` // config for new species highlights element
+	Banner  *BannerConfig         `json:"banner,omitempty" yaml:"banner,omitempty"`   // config for banner element
+	Video   *VideoEmbedConfig     `json:"video,omitempty" yaml:"video,omitempty"`     // config for video embed element
+	Summary *DailySummaryConfig   `json:"summary,omitempty" yaml:"summary,omitempty"` // config for daily summary element
+	Grid    *DetectionsGridConfig `json:"grid,omitempty" yaml:"grid,omitempty"`       // config for detections grid element
 }
 
 // BannerConfig holds configuration for the dashboard banner element.
@@ -231,11 +230,6 @@ type DailySummaryConfig struct {
 // DetectionsGridConfig holds configuration for the detections grid element.
 type DetectionsGridConfig struct {
 	// Future: card display options
-}
-
-// NewSpeciesHighlightsConfig holds configuration for the new species highlights element.
-type NewSpeciesHighlightsConfig struct {
-	Compact bool `yaml:"compact" json:"compact"` // true for the reduced card view, false for the full image-background view
 }
 
 // Spectrogram generation mode constants

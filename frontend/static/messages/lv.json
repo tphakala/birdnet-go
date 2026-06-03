@@ -593,19 +593,16 @@
     },
     "rejected": "Noraidīts",
     "newSpeciesHighlights": {
-      "title": "Jaunu sugu apskats",
-      "subtitle": "Sugas, kas šajā dienā novērotas pirmo reizi",
+      "title": "Jaunās un atgriežas sugas",
+      "subtitle": "Pirmie novērojumi un nesenās atgriešanās",
+      "show": "Rādīt:",
       "categoryLifetime": "Jauna suga",
       "categoryYear": "Jauna šogad",
       "categorySeason": "Jauna šosezon",
       "categorySeasonNamed": "Jauna šajā {season}",
       "maxConfidenceShort": "Maks {confidence} %",
-      "viewToggle": "Skata režīms",
-      "viewCompact": "Kompaktais skats",
-      "viewFull": "Pilnais skats",
       "detections": "{count, plural, zero {# noteikšanu} one {# noteikšana} other {# noteikšanas}}",
-      "lastSeen": "Pēdējoreiz: {days, plural, zero {šodien} one {pirms # dienas} other {pirms # dienām}}",
-      "moreCount": "+{count} vairāk"
+      "lastSeen": "Pēdējoreiz: {days, plural, zero {šodien} one {pirms # dienas} other {pirms # dienām}}"
     },
     "dailySummary": {
       "title": "Dienas aktivitāte",

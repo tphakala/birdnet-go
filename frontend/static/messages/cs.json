@@ -593,19 +593,16 @@
     },
     "rejected": "Zamítnuto",
     "newSpeciesHighlights": {
-      "title": "Nové druhy – přehled",
-      "subtitle": "Druhy zaznamenané poprvé v tento den",
+      "title": "Nové a vracející se druhy",
+      "subtitle": "První pozorování a nedávné návraty",
+      "show": "Zobrazit:",
       "categoryLifetime": "Nový druh",
       "categoryYear": "Nový letos",
       "categorySeason": "Nový tuto sezónu",
       "categorySeasonNamed": "Nový toto {season}",
       "maxConfidenceShort": "Max {confidence} %",
-      "viewToggle": "Režim zobrazení",
-      "viewCompact": "Kompaktní zobrazení",
-      "viewFull": "Úplné zobrazení",
       "detections": "{count, plural, one {# detekce} few {# detekce} other {# detekcí}}",
-      "lastSeen": "Naposledy: {days, plural, =0 {dnes} one {před # dnem} few {před # dny} other {před # dny}}",
-      "moreCount": "+{count} dalších"
+      "lastSeen": "Naposledy: {days, plural, =0 {dnes} one {před # dnem} few {před # dny} other {před # dny}}"
     },
     "dailySummary": {
       "title": "Denní aktivita",

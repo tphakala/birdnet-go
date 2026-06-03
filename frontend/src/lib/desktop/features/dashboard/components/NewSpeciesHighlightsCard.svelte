@@ -1,13 +1,11 @@
 <!--
-NewSpeciesHighlightsCard.svelte - Highlights newly detected species for the selected day
+NewSpeciesHighlightsCard.svelte - Highlights newly detected / returning species for the day
 
 Renders nothing when no qualifying species exist for the day.
 Data source: same DailySpeciesSummary[] already loaded by the dashboard page.
 
-Two view modes (persisted in the dashboard element config via onViewModeChange):
-- compact: dense cards; the bird picture is shown only when the daily-summary
-  thumbnail setting is enabled, otherwise a colored initials badge is used.
-- full: larger cards with the bird picture as background and text overlaid.
+A small "how many to show" dropdown (top-right, like Recent Detections) controls
+the visible count, persisted to localStorage.
 -->
 
 <script lang="ts">
@@ -17,30 +15,43 @@ Two view modes (persisted in the dashboard element config via onViewModeChange):
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { buildSpeciesDetectionUrl } from '$lib/utils/detectionUrls';
   import { getLocalDateString } from '$lib/utils/date';
+  import { getLogger } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import { CalendarDays, Image as ImageIcon, LayoutGrid, Leaf, Star } from '@lucide/svelte';
+  import { AudioLines } from '@lucide/svelte';
+  import LimitDropdown from './LimitDropdown.svelte';
+
+  const logger = getLogger('dashboard');
 
   interface Props {
     data?: DailySpeciesSummary[];
     selectedDate: string;
-    /** true = reduced card view, false = full image-background view. */
-    compact?: boolean;
-    /** Show the full/compact view toggle (hidden during dashboard edit mode). */
-    showViewToggle?: boolean;
-    /** Persist a view-mode change to the dashboard element config. */
-    onViewModeChange?: (_compact: boolean) => void;
+    /** Daily-activity thumbnail setting; the picture is shown only when enabled. */
+    showThumbnails?: boolean;
   }
 
-  let {
-    data = [],
-    selectedDate,
-    compact = true,
-    showViewToggle = true,
-    onViewModeChange,
-  }: Props = $props();
+  let { data = [], selectedDate, showThumbnails = true }: Props = $props();
 
-  // Maximum cards rendered before collapsing the rest into a "+N more" link.
-  const MAX_VISIBLE = 12;
+  const LIMIT_OPTIONS = [6, 12, 24, 48];
+  const DEFAULT_LIMIT = 6;
+  const LIMIT_STORAGE_KEY = 'newSpeciesHighlightsLimit';
+
+  function loadLimit(): number {
+    if (typeof window === 'undefined') return DEFAULT_LIMIT;
+    const stored = Number(localStorage.getItem(LIMIT_STORAGE_KEY));
+    return LIMIT_OPTIONS.includes(stored) ? stored : DEFAULT_LIMIT;
+  }
+
+  let limit = $state(loadLimit());
+
+  function setLimit(value: number) {
+    limit = value;
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(LIMIT_STORAGE_KEY, String(value));
+    } catch (e) {
+      logger.error('Failed to save highlights limit:', e);
+    }
+  }
 
   type HighlightCategory = 'lifetime' | 'year' | 'season';
 
@@ -71,12 +82,10 @@ Two view modes (persisted in the dashboard element config via onViewModeChange):
     return result;
   });
 
-  const visibleHighlights = $derived(highlights.slice(0, MAX_VISIBLE));
-  const overflowCount = $derived(Math.max(0, highlights.length - MAX_VISIBLE));
-  const moreUrl = buildAppUrl('/ui/analytics/species');
+  const visibleHighlights = $derived(highlights.slice(0, limit));
 
-  // The absence gap reflects live tracker state, so it is only accurate for
-  // the current day; for past dates the recency stat is omitted.
+  // The absence gap reflects live tracker state, so it is only accurate for the
+  // current day; for past dates the recency stat is omitted.
   const isToday = $derived(selectedDate === getLocalDateString());
 
   function categoryLabel(category: HighlightCategory, season?: string): string {
@@ -92,7 +101,7 @@ Two view modes (persisted in the dashboard element config via onViewModeChange):
     }
   }
 
-  // Background color for the category overlay icon (matches daily summary indicators).
+  // Left-border accent color per novelty category (matches daily summary indicators).
   function categoryColorVar(category: HighlightCategory): string {
     switch (category) {
       case 'lifetime':
@@ -129,65 +138,7 @@ Two view modes (persisted in the dashboard element config via onViewModeChange):
       ? buildAppUrl(item.thumbnail_url)
       : buildAppUrl(`/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`);
   }
-
-  function setMode(nextCompact: boolean) {
-    if (nextCompact === compact) return;
-    onViewModeChange?.(nextCompact);
-  }
 </script>
-
-{#snippet statsLine(species: DailySpeciesSummary, muted: boolean)}
-  {@const percent = confidencePercent(species)}
-  <div class={muted ? 'text-white/85' : 'text-[var(--color-base-content)]/60'}>
-    <span>{t('dashboard.newSpeciesHighlights.detections', { count: species.count })}</span>
-    {#if percent !== undefined}
-      <span aria-hidden="true"> · </span>
-      <span>{t('dashboard.newSpeciesHighlights.maxConfidenceShort', { confidence: percent })}</span>
-    {/if}
-    {#if isToday && species.days_since_last_seen !== undefined && species.days_since_last_seen > 0}
-      <span aria-hidden="true"> · </span>
-      <span
-        >{t('dashboard.newSpeciesHighlights.lastSeen', {
-          days: species.days_since_last_seen,
-        })}</span
-      >
-    {/if}
-  </div>
-{/snippet}
-
-{#snippet categoryIcon(category: HighlightCategory, season: string | undefined)}
-  <span
-    class="shrink-0"
-    style:color={categoryColorVar(category)}
-    title={categoryLabel(category, season)}
-    aria-label={categoryLabel(category, season)}
-  >
-    {#if category === 'lifetime'}
-      <Star class="size-3.5 fill-current" />
-    {:else if category === 'year'}
-      <CalendarDays class="size-3.5" />
-    {:else}
-      <Leaf class="size-3.5" />
-    {/if}
-  </span>
-{/snippet}
-
-{#snippet categoryBadge(category: HighlightCategory, season: string | undefined, cls: string)}
-  <span
-    class="flex items-center justify-center rounded-full text-white shadow {cls}"
-    style:background-color={categoryColorVar(category)}
-    title={categoryLabel(category, season)}
-    aria-label={categoryLabel(category, season)}
-  >
-    {#if category === 'lifetime'}
-      <Star class="size-3.5 fill-current" />
-    {:else if category === 'year'}
-      <CalendarDays class="size-3.5" />
-    {:else}
-      <Leaf class="size-3.5" />
-    {/if}
-  </span>
-{/snippet}
 
 {#if highlights.length > 0}
   <Card padding={false}>
@@ -199,124 +150,73 @@ Two view modes (persisted in the dashboard element config via onViewModeChange):
             {t('dashboard.newSpeciesHighlights.subtitle')}
           </p>
         </div>
-
-        <!-- View-mode toggle -->
-        {#if showViewToggle}
-          <div
-            class="flex shrink-0 rounded-lg border border-[var(--color-base-300)] p-0.5"
-            role="group"
-            aria-label={t('dashboard.newSpeciesHighlights.viewToggle')}
-          >
-            <button
-              type="button"
-              onclick={() => setMode(true)}
-              aria-pressed={compact}
-              title={t('dashboard.newSpeciesHighlights.viewCompact')}
-              aria-label={t('dashboard.newSpeciesHighlights.viewCompact')}
-              class="flex size-7 items-center justify-center rounded-md transition-colors {compact
-                ? 'bg-[var(--color-base-300)] text-[var(--color-base-content)]'
-                : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'}"
-            >
-              <LayoutGrid class="size-4" />
-            </button>
-            <button
-              type="button"
-              onclick={() => setMode(false)}
-              aria-pressed={!compact}
-              title={t('dashboard.newSpeciesHighlights.viewFull')}
-              aria-label={t('dashboard.newSpeciesHighlights.viewFull')}
-              class="flex size-7 items-center justify-center rounded-md transition-colors {!compact
-                ? 'bg-[var(--color-base-300)] text-[var(--color-base-content)]'
-                : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'}"
-            >
-              <ImageIcon class="size-4" />
-            </button>
-          </div>
-        {/if}
+        <LimitDropdown
+          value={limit}
+          options={LIMIT_OPTIONS}
+          ariaLabel={t('dashboard.newSpeciesHighlights.show')}
+          onChange={setLimit}
+        />
       </div>
     {/snippet}
 
-    {#if compact}
-      <!-- Reduced cards: text only -->
-      <div class="grid grid-cols-2 gap-2 px-4 pb-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-        {#each visibleHighlights as { species, category } (species.scientific_name)}
-          <a
-            href={speciesUrl(species)}
-            class="group flex flex-col gap-0.5 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-2.5 shadow-sm transition-shadow hover:shadow-md"
-          >
-            <!-- Line 1: common name + category icon (as in the daily summary) -->
-            <span
-              class="flex items-center gap-1 text-sm font-medium leading-tight group-hover:text-[var(--color-primary)]"
-            >
-              <span class="truncate" title={species.common_name}>{species.common_name}</span>
-              {@render categoryIcon(category, species.current_season)}
-            </span>
-            <!-- Line 2: stats -->
-            <div class="truncate text-xs">
-              {@render statsLine(species, false)}
-            </div>
-          </a>
-        {/each}
-      </div>
-    {:else}
-      <!-- Full cards: photo background with overlaid text -->
-      <div class="grid grid-cols-1 gap-3 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {#each visibleHighlights as { species, category } (species.scientific_name)}
-          {@const percent = confidencePercent(species)}
-          <a
-            href={speciesUrl(species)}
-            class="group relative block aspect-[4/3] overflow-hidden rounded-lg shadow-sm transition-shadow hover:shadow-md"
-          >
+    <div class="grid grid-cols-1 gap-2 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {#each visibleHighlights as { species, category } (species.scientific_name)}
+        {@const percent = confidencePercent(species)}
+        <a
+          href={speciesUrl(species)}
+          class="group flex items-center gap-2.5 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-2.5 shadow-sm transition-shadow hover:shadow-md"
+          style:border-left-width="3px"
+          style:border-left-color={categoryColorVar(category)}
+          title={categoryLabel(category, species.current_season)}
+        >
+          {#if showThumbnails}
             <img
               src={thumbnailUrl(species)}
               alt={species.common_name}
               loading="lazy"
               onerror={handleBirdImageError}
-              class="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:scale-105"
+              class="size-10 shrink-0 rounded-md object-cover"
             />
-            <!-- Scrim for legibility -->
-            <div
-              class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"
-            ></div>
+          {/if}
 
-            {@render categoryBadge(
-              category,
-              species.current_season,
-              'absolute left-2 top-2 size-6'
-            )}
-            {#if percent !== undefined}
+          <div class="min-w-0 flex-1">
+            <!-- Common name + confidence pill -->
+            <div class="flex items-center justify-between gap-1.5">
               <span
-                class="absolute right-2 top-2 rounded-full px-1.5 py-0.5 text-xs font-semibold shadow {confidenceClasses(
-                  percent
-                )}"
-              >
-                {t('dashboard.newSpeciesHighlights.maxConfidenceShort', { confidence: percent })}
-              </span>
-            {/if}
-
-            <div class="absolute inset-x-0 bottom-0 p-3 text-white">
-              <span
-                class="block truncate text-sm font-semibold leading-tight"
-                style:text-shadow="0 1px 3px rgb(0 0 0 / 0.6)"
-                title={species.common_name}
+                class="truncate text-sm font-medium leading-tight group-hover:text-[var(--color-primary)]"
               >
                 {species.common_name}
               </span>
-              <div class="mt-0.5 truncate text-xs" style:text-shadow="0 1px 3px rgb(0 0 0 / 0.6)">
-                {@render statsLine(species, true)}
-              </div>
+              {#if percent !== undefined}
+                <span
+                  class="shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold {confidenceClasses(
+                    percent
+                  )}"
+                >
+                  {t('dashboard.newSpeciesHighlights.maxConfidenceShort', { confidence: percent })}
+                </span>
+              {/if}
             </div>
-          </a>
-        {/each}
-      </div>
-    {/if}
 
-    {#if overflowCount > 0}
-      <div class="px-4 pb-4">
-        <a href={moreUrl} class="text-sm font-medium text-[var(--color-primary)] hover:underline">
-          {t('dashboard.newSpeciesHighlights.moreCount', { count: overflowCount })}
+            <!-- Detections + last-seen -->
+            <div
+              class="mt-0.5 flex items-center gap-1.5 truncate text-xs text-[var(--color-base-content)]/60"
+            >
+              <AudioLines class="size-3.5 shrink-0" />
+              <span>{t('dashboard.newSpeciesHighlights.detections', { count: species.count })}</span
+              >
+              {#if isToday && species.days_since_last_seen !== undefined && species.days_since_last_seen > 0}
+                <span aria-hidden="true">·</span>
+                <span class="truncate">
+                  {t('dashboard.newSpeciesHighlights.lastSeen', {
+                    days: species.days_since_last_seen,
+                  })}
+                </span>
+              {/if}
+            </div>
+          </div>
         </a>
-      </div>
-    {/if}
+      {/each}
+    </div>
   </Card>
 {/if}

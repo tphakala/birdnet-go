@@ -593,19 +593,16 @@
     },
     "rejected": "Zamietnuté",
     "newSpeciesHighlights": {
-      "title": "Nové druhy – prehľad",
-      "subtitle": "Druhy zaznamenané prvýkrát v tento deň",
+      "title": "Nové a vracajúce sa druhy",
+      "subtitle": "Prvé pozorovania a nedávne návraty",
+      "show": "Zobraziť:",
       "categoryLifetime": "Nový druh",
       "categoryYear": "Nový tento rok",
       "categorySeason": "Nový túto sezónu",
       "categorySeasonNamed": "Nový túto {season}",
       "maxConfidenceShort": "Max {confidence} %",
-      "viewToggle": "Režim zobrazenia",
-      "viewCompact": "Kompaktné zobrazenie",
-      "viewFull": "Úplné zobrazenie",
       "detections": "{count, plural, one {# detekcia} few {# detekcie} other {# detekcií}}",
-      "lastSeen": "Naposledy: {days, plural, =0 {dnes} one {pred # dňom} few {pred # dňami} other {pred # dňami}}",
-      "moreCount": "+{count} ďalších"
+      "lastSeen": "Naposledy: {days, plural, =0 {dnes} one {pred # dňom} few {pred # dňami} other {pred # dňami}}"
     },
     "dailySummary": {
       "title": "Denná aktivita",

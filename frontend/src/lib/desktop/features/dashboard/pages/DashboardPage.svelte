@@ -275,22 +275,6 @@ Performance Optimizations:
     fetchDashboardConfig();
   }
 
-  // Persist a single element's config change outside edit mode (e.g. the new
-  // species highlights view toggle). Mirrors DashboardEditMode.saveLayout:
-  // guests persist to localStorage, authenticated users PATCH the settings API.
-  async function persistElementConfig(updated: DashboardElement) {
-    const newLayout: DashboardLayout = {
-      elements: layoutElements.map(el => (el.id === updated.id ? updated : el)),
-    };
-    handleLayoutChange(newLayout);
-    if (isGuest) return;
-    try {
-      await api.patch('/api/v2/settings/dashboard', { layout: newLayout });
-    } catch (error) {
-      logger.error('Failed to persist dashboard element config:', error);
-    }
-  }
-
   // SSE throttling timer
   let sseFetchTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1586,14 +1570,7 @@ Performance Optimizations:
           }}
         />
       {:else if element.type === 'new-species-highlights'}
-        <NewSpeciesHighlightsCard
-          data={dailySummary}
-          {selectedDate}
-          compact={element.highlights?.compact ?? true}
-          showViewToggle={!inEditMode}
-          onViewModeChange={compact =>
-            persistElementConfig({ ...element, highlights: { compact } })}
-        />
+        <NewSpeciesHighlightsCard data={dailySummary} {selectedDate} {showThumbnails} />
       {:else if element.type === 'currently-hearing'}
         <CurrentlyHearingCard detections={isViewingToday ? pendingDetections : []} />
       {:else if element.type === 'live-spectrogram'}
