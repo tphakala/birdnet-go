@@ -239,6 +239,84 @@ func (c *Controller) publicLiveAudioAuth(next echo.HandlerFunc) echo.HandlerFunc
 	}
 }
 
+// privateModeAuth is a dynamic middleware applied at the v2 API group level
+// that requires authentication for every endpoint when Security.PrivateMode
+// is enabled. A small set of paths stay public so the frontend can complete
+// the bootstrap and login flow and so the existing PublicAccess.LiveAudio
+// carve-out is preserved (those routes fall through to their own
+// publicLiveAudioAuth middleware which decides based on PublicAccess.LiveAudio).
+// The check runs per-request so the setting hot-reloads without a server
+// restart.
+func (c *Controller) privateModeAuth(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(ctx echo.Context) error {
+		c.settingsMutex.RLock()
+		privateMode := c.Settings.Security.PrivateMode
+		c.settingsMutex.RUnlock()
+
+		if !privateMode {
+			return next(ctx)
+		}
+		// Fail closed: if PrivateMode is requested but no auth middleware
+		// is configured the request must be rejected, not silently allowed.
+		// Auth middleware is always wired up in production; reaching this
+		// branch in a real deployment means the controller is misconfigured.
+		if c.authMiddleware == nil {
+			return c.HandleError(
+				ctx,
+				nil,
+				"Private mode is enabled but authentication is not configured",
+				http.StatusServiceUnavailable,
+			)
+		}
+		// Use ctx.Path() (the registered route pattern) rather than the raw
+		// request URL so the match is robust to trailing slashes, ingress
+		// prefixes, and other URL normalisation differences. The method is
+		// matched explicitly so that a future handler bound to the same
+		// path with a different verb does not inherit the public exemption.
+		if isPrivateModeExempt(ctx.Request().Method, ctx.Path()) {
+			return next(ctx)
+		}
+		return c.authMiddleware(next)(ctx)
+	}
+}
+
+// isPrivateModeExempt returns true for v2 API (method, route pattern)
+// pairs that must remain reachable without authentication even when
+// PrivateMode is on. Two categories are exempt:
+//
+//  1. Bootstrap and auth flow paths so the frontend can fetch /app/config
+//     and complete a login (including OAuth callback) from an unauthenticated
+//     state.
+//  2. Live audio (HLS) paths that already have their own publicLiveAudioAuth
+//     middleware. Letting them through privateModeAuth preserves the
+//     PublicAccess.LiveAudio carve-out: when LiveAudio is enabled the route
+//     stays public, when it is disabled the per-route middleware applies
+//     authMiddleware as before.
+//
+// The allow-list is keyed on method + path so any future handler added
+// at one of these paths under a different verb is fail-closed by default.
+func isPrivateModeExempt(method, path string) bool {
+	switch {
+	case method == http.MethodGet && path == "/api/v2/app/config":
+		return true
+	case method == http.MethodPost && path == "/api/v2/auth/login":
+		return true
+	case method == http.MethodGet && path == "/api/v2/auth/callback":
+		return true
+	case method == http.MethodPost && path == "/api/v2/streams/hls/:sourceID/start":
+		return true
+	case method == http.MethodPost && path == "/api/v2/streams/hls/heartbeat":
+		return true
+	case method == http.MethodGet && path == "/api/v2/streams/hls/status":
+		return true
+	case method == http.MethodGet && path == "/api/v2/streams/hls/t/:streamToken/playlist.m3u8":
+		return true
+	case method == http.MethodGet && path == "/api/v2/streams/hls/t/:streamToken/*":
+		return true
+	}
+	return false
+}
+
 // generateStreamToken creates a crypto-random 32-character hex token for stream URL access.
 func generateStreamToken() (string, error) {
 	b := make([]byte, 16)

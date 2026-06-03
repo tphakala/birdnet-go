@@ -3429,6 +3429,10 @@
         "liveAudioHelp": "Quando ativado, qualquer pessoa pode ouvir transmissões de áudio em direto sem iniciar sessão. Definições e eliminação continuam a requerer autenticação.",
         "warningText": "Ativar funcionalidades de acesso público expõe-nas a qualquer pessoa que consiga aceder a este servidor. Ative apenas se confia no seu ambiente de rede."
       },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
         "host": "Por exemplo, localhost:8080 ou example.domain.com",

@@ -627,3 +627,62 @@ func TestHLSConsumer_WriteDoesNotRetainFrameData(t *testing.T) {
 		t.Fatal("no frame delivered to channel")
 	}
 }
+
+// TestIsPrivateModeExempt verifies the (method, route) allow-list that
+// privateModeAuth uses when Security.PrivateMode is enabled. Bootstrap/auth
+// paths must stay reachable for unauthenticated clients so the frontend can
+// fetch the /app/config endpoint and complete a login; HLS live audio routes
+// must stay exempt so the per-route publicLiveAudioAuth middleware can honour
+// PublicAccess.LiveAudio. Exemptions are method-specific so unrelated
+// handlers added on the same paths later fail closed by default.
+func TestIsPrivateModeExempt(t *testing.T) {
+	t.Parallel()
+
+	exempt := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/v2/app/config"},
+		{http.MethodPost, "/api/v2/auth/login"},
+		{http.MethodGet, "/api/v2/auth/callback"},
+		{http.MethodPost, "/api/v2/streams/hls/:sourceID/start"},
+		{http.MethodPost, "/api/v2/streams/hls/heartbeat"},
+		{http.MethodGet, "/api/v2/streams/hls/status"},
+		{http.MethodGet, "/api/v2/streams/hls/t/:streamToken/playlist.m3u8"},
+		{http.MethodGet, "/api/v2/streams/hls/t/:streamToken/*"},
+	}
+	for _, tt := range exempt {
+		t.Run("exempt/"+tt.method+"_"+tt.path, func(t *testing.T) {
+			t.Parallel()
+			assert.True(t, isPrivateModeExempt(tt.method, tt.path),
+				"expected %s %q to be exempt", tt.method, tt.path)
+		})
+	}
+
+	notExempt := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, ""},
+		{http.MethodGet, "/api/v2/detections"},
+		{http.MethodGet, "/api/v2/notifications"},
+		{http.MethodGet, "/api/v2/settings/dashboard"},
+		{http.MethodPost, "/api/v2/auth/logout"},
+		{http.MethodGet, "/api/v2/auth/status"},
+		{http.MethodPost, "/api/v2/streams/hls/:sourceID/stop"}, // mutation, always auth-gated
+		{http.MethodGet, "/api/v2/streams/audio-level"},
+		{http.MethodGet, "/api/v2/streams/sources"},
+		{http.MethodGet, "/health"},
+		// Method mismatches must NOT match the allow-list.
+		{http.MethodGet, "/api/v2/auth/login"},  // login is POST-only
+		{http.MethodPost, "/api/v2/app/config"}, // config is GET-only
+		{http.MethodDelete, "/api/v2/app/config"},
+	}
+	for _, tt := range notExempt {
+		t.Run("not_exempt/"+tt.method+"_"+tt.path, func(t *testing.T) {
+			t.Parallel()
+			assert.False(t, isPrivateModeExempt(tt.method, tt.path),
+				"expected %s %q to NOT be exempt", tt.method, tt.path)
+		})
+	}
+}

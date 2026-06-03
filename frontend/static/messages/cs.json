@@ -433,7 +433,7 @@
       },
       "buffer": {
         "overloadTitle": "Analýza zvuku přetížena",
-        "overloadMessage": "Váš systém zahazuje {dropRate} % zvukových vzorků ze zdroje „{sourceName}“, protože nestíhá analýzu. Snižte hodnotu překryvu BirdNET v nastavení detekce nebo zvažte výkonnější procesor."
+        "overloadMessage": "Váš systém zahazuje {dropRate} % zvukových vzorků ze zdroje ''{sourceName}'', protože nestíhá analýzu. Snižte hodnotu překryvu BirdNET v nastavení detekce nebo zvažte výkonnější procesor."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime není k dispozici",
@@ -815,23 +815,23 @@
       "showing": "Zobrazuje se {from} až {to} z {total} výsledků"
     },
     "selection": {
-      "select": "Select",
-      "nSelected": "{count} selected",
-      "selectAllMatching": "Select all {count} matching detections",
-      "allSelected": "All {count} selected",
-      "clear": "Clear selection",
-      "toolbarLabel": "Bulk actions",
-      "confirmBulkDelete": "Delete {count} detections? This cannot be undone.",
-      "confirmBulkMarkCorrect": "Mark {count} detections as correct?",
-      "confirmBulkMarkFalsePositive": "Mark {count} detections as false positive?",
-      "confirmBulkLock": "Lock {count} detections?",
-      "confirmBulkUnlock": "Unlock {count} detections?",
-      "bulkSuccess": "{count} detections updated",
-      "bulkDeleteSuccess": "{count} detections deleted",
-      "bulkPartial": "{processed} updated, {skipped} skipped (locked)",
-      "tooManyDetections": "Too many detections ({count}). Narrow your filters to select fewer than 500.",
-      "bulkError": "Bulk operation failed. Please try again.",
-      "switchToTable": "Switch to table view to select detections"
+      "select": "Vybrat",
+      "nSelected": "{count} vybráno",
+      "selectAllMatching": "Vybrat všech {count} odpovídajících detekcí",
+      "allSelected": "Vybráno všech {count}",
+      "clear": "Zrušit výběr",
+      "toolbarLabel": "Hromadné akce",
+      "confirmBulkDelete": "Smazat {count} detekcí? Akci nelze vrátit zpět.",
+      "confirmBulkMarkCorrect": "Označit {count} detekcí jako správné?",
+      "confirmBulkMarkFalsePositive": "Označit {count} detekcí jako falešně pozitivní?",
+      "confirmBulkLock": "Uzamknout {count} detekcí?",
+      "confirmBulkUnlock": "Odemknout {count} detekcí?",
+      "bulkSuccess": "{count} detekcí aktualizováno",
+      "bulkDeleteSuccess": "{count} detekcí smazáno",
+      "bulkPartial": "{processed} aktualizováno, {skipped} přeskočeno (uzamčeno)",
+      "tooManyDetections": "Příliš mnoho detekcí ({count}). Zužte filtry, abyste vybrali méně než 500.",
+      "bulkError": "Hromadná operace selhala. Zkuste to prosím znovu.",
+      "switchToTable": "Pro výběr detekcí přepněte na zobrazení tabulky"
     },
     "weather": {
       "title": "Informace o počasí",
@@ -902,8 +902,8 @@
     },
     "row": {
       "viewDetails": "Zobrazit podrobnosti pro {species}",
-      "play": "Play",
-      "playAudio": "Play audio"
+      "play": "Přehrát",
+      "playAudio": "Přehrát zvuk"
     },
     "media": {
       "title": "Nahrávka a spektrogram",
@@ -3428,6 +3428,10 @@
         "liveAudioLabel": "Povolit veřejné přehrávání živého zvuku",
         "liveAudioHelp": "Pokud je povoleno, kdokoli může poslouchat živé audio streamy bez přihlášení. Nastavení a mazání nadále vyžaduje ověření.",
         "warningText": "Povolením funkcí veřejného přístupu je zpřístupníte komukoli, kdo se může připojit k tomuto serveru. Povolte pouze pokud důvěřujete svému síťovému prostředí."
+      },
+      "privateMode": {
+        "label": "Vyžadovat přihlášení pro všechny stránky UI (soukromý režim)",
+        "help": "Pokud je povoleno, stránky nástěnka, detekce, analytika, vyhledávání, o aplikaci a oznámení všechny vyžadují ověření. Stránky nastavení a systému jsou vždy chráněny bez ohledu na toto nastavení. Přepínač Veřejný živý zvuk níže je respektován nezávisle – pokud zůstane zapnutý, stále umožňuje přehrávání bez přihlášení. Výchozí hodnota je vypnuto, takže hosté mohou procházet UI v režimu jen pro čtení."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
