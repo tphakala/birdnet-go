@@ -598,7 +598,7 @@
   </div>
   <!-- Private mode: force login form before any app UI is visible -->
 {:else if requireLogin}
-  <div class="flex h-screen w-full items-center justify-center bg-base-200">
+  <div class="flex h-screen w-full items-center justify-center bg-[var(--color-base-200)]">
     <LoginModal isOpen={true} onClose={() => {}} redirectUrl={postLoginRedirect} {authConfig} />
   </div>
   <!-- Show fatal error page if initialization failed -->
