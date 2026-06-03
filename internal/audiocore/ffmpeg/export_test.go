@@ -298,9 +298,11 @@ func TestExportAudio_NormalizationBoostsGatedQuietAudio(t *testing.T) {
 	require.NoError(t, err)
 	assert.FileExists(t, outPath)
 
+	// Minimum RMS level (dBFS) a gated quiet clip must reach to be considered audible.
+	const minAudibleRMSdBFS = -35.0
 	decoded := decodePCM16(t, ffmpegPath, outPath)
 	rmsDB := rmsDBFS(decoded)
-	assert.Greater(t, rmsDB, -35.0, "quiet clips below loudnorm's gate should still be made audible")
+	assert.Greater(t, rmsDB, minAudibleRMSdBFS, "quiet clips below loudnorm's gate should still be made audible")
 
 	if sampleRateOut, ok := probeSampleRate(t, outPath); ok {
 		assert.Equal(t, sampleRate, sampleRateOut)
