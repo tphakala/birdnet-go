@@ -17,7 +17,7 @@ the visible count, persisted to localStorage.
   import { getLocalDateString } from '$lib/utils/date';
   import { getLogger } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import { AudioLines } from '@lucide/svelte';
+  import { AudioLines, CalendarDays, Leaf, Star } from '@lucide/svelte';
   import LimitDropdown from './LimitDropdown.svelte';
 
   const logger = getLogger('dashboard');
@@ -140,6 +140,23 @@ the visible count, persisted to localStorage.
   }
 </script>
 
+{#snippet categoryIcon(category: HighlightCategory, season: string | undefined)}
+  <span
+    class="shrink-0"
+    style:color={categoryColorVar(category)}
+    title={categoryLabel(category, season)}
+    aria-label={categoryLabel(category, season)}
+  >
+    {#if category === 'lifetime'}
+      <Star class="size-3.5 fill-current" />
+    {:else if category === 'year'}
+      <CalendarDays class="size-3.5" />
+    {:else}
+      <Leaf class="size-3.5" />
+    {/if}
+  </span>
+{/snippet}
+
 {#if highlights.length > 0}
   <Card padding={false}>
     {#snippet header()}
@@ -180,12 +197,15 @@ the visible count, persisted to localStorage.
           {/if}
 
           <div class="min-w-0 flex-1">
-            <!-- Common name + confidence pill -->
+            <!-- Common name (with novelty icon) + confidence pill -->
             <div class="flex items-center justify-between gap-1.5">
-              <span
-                class="truncate text-sm font-medium leading-tight group-hover:text-[var(--color-primary)]"
-              >
-                {species.common_name}
+              <span class="flex min-w-0 items-center gap-1">
+                {@render categoryIcon(category, species.current_season)}
+                <span
+                  class="truncate text-sm font-medium leading-tight group-hover:text-[var(--color-primary)]"
+                >
+                  {species.common_name}
+                </span>
               </span>
               {#if percent !== undefined}
                 <span
