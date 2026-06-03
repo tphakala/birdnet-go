@@ -258,9 +258,9 @@ func parseLoudnessJSON(stderr string) (*LoudnessStats, error) {
 	return &stats, nil
 }
 
-// AnalyzePCMLoudness analyzes the loudness of raw PCM audio data using FFmpeg's
-// loudnorm filter. It writes pcmData to a temporary WAV file, runs loudness
-// analysis via AnalyzeFileLoudness, and cleans up the temp file.
+// AnalyzePCMLoudness analyzes the loudness of raw mono PCM audio data using
+// FFmpeg's loudnorm filter. It writes pcmData to a temporary WAV file, runs
+// loudness analysis via AnalyzeFileLoudness, and cleans up the temp file.
 // sampleRate and bitDepth describe the PCM encoding (e.g. 48000, 16).
 func AnalyzePCMLoudness(ctx context.Context, pcmData []byte, ffmpegPath string, sampleRate, bitDepth int) (*LoudnessStats, error) {
 	if len(pcmData) == 0 {
