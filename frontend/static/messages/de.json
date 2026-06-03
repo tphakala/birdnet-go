@@ -177,6 +177,9 @@
         "commentsLabel": "Kommentare",
         "currentStatusTitle": "Aktueller Status",
         "detectionStatusTitle": "Erkennungsstatus",
+        "alternativePredictionsTitle": "Klassifikator-Kandidaten",
+        "alternativePredictionsHelp": "Erkannte Art zuerst, dann Alternativen nach Modellkonfidenz",
+        "detectedPredictionLabel": "Erkannt",
         "lockLabel": "Sperrstatus",
         "reviewLabel": "Überprüfungsstatus",
         "saveReview": "Überprüfung speichern"

@@ -177,6 +177,9 @@
         "commentsLabel": "Kommentit",
         "currentStatusTitle": "Nykyinen tila",
         "detectionStatusTitle": "Havainnon tila",
+        "alternativePredictionsTitle": "Luokittimen ehdokkaat",
+        "alternativePredictionsHelp": "Havaittu laji ensin, sitten vaihtoehdot mallin varmuuden mukaan",
+        "detectedPredictionLabel": "Havaittu",
         "lockLabel": "Lukitustila",
         "reviewLabel": "Tarkistustila",
         "saveReview": "Tallenna tarkistus"

@@ -177,6 +177,9 @@
         "commentsLabel": "Megjegyzések",
         "currentStatusTitle": "Jelenlegi állapot",
         "detectionStatusTitle": "Detektálás állapota",
+        "alternativePredictionsTitle": "Osztályozó jelöltjei",
+        "alternativePredictionsHelp": "Először az észlelt faj, majd az alternatívák a modell megbízhatósága szerint",
+        "detectedPredictionLabel": "Észlelt",
         "lockLabel": "Zárolás állapota",
         "reviewLabel": "Áttekintés állapota",
         "saveReview": "Áttekintés mentése"

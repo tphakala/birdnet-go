@@ -2,7 +2,7 @@
   ConfidenceBadge.svelte
 
   A circular badge displaying confidence level with color coding.
-  Designed for overlay on spectrogram cards.
+  Shared by detection cards and review candidate lists.
 
   Color Thresholds (uses CSS variables for theme support):
   - ≥90%: success
@@ -16,6 +16,7 @@
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
 
   interface Props {
@@ -51,8 +52,8 @@
 
 <div
   class={cn('confidence-badge', colorClasses, className)}
-  title="Confidence: {confidencePercent}%"
-  aria-label="Confidence: {confidencePercent}%"
+  title="{t('common.labels.confidence')}: {confidencePercent}%"
+  aria-label="{t('common.labels.confidence')}: {confidencePercent}%"
 >
   {confidencePercent}%
 </div>

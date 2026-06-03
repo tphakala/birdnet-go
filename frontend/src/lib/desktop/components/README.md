@@ -22,6 +22,7 @@ This folder contains **shared components** used across the application. Feature-
 
 ## Data
 
+- `ConfidenceBadge.svelte` - Confidence level badge display
 - `ConfidenceCircle.svelte` - Circular confidence indicator with progress ring
 - `DataTable.svelte` - Generic data table with sorting and pagination
 - `StatsCard.svelte` - Statistical information card
@@ -155,7 +156,6 @@ The following components are located in their feature directories:
 - `DetectionCardGrid.svelte` - Card grid view of recent detections
 - `DetectionCard.svelte` - Individual detection card with spectrogram background
 - `PlayOverlay.svelte` - Audio play button overlay for detection cards
-- `ConfidenceBadge.svelte` - Confidence level badge display
 - `WeatherBadge.svelte` - Weather condition badge display
 - `SpeciesInfoBar.svelte` - Species information bar with thumbnail
 - `BirdThumbnailPopup.svelte` - Hover popup showing larger bird image

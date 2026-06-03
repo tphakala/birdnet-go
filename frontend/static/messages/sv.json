@@ -177,6 +177,9 @@
         "commentsLabel": "Kommentarer",
         "currentStatusTitle": "Nuvarande status",
         "detectionStatusTitle": "Detektionsstatus",
+        "alternativePredictionsTitle": "Klassificeringskandidater",
+        "alternativePredictionsHelp": "Detekterad art först, sedan alternativ efter modellens konfidens",
+        "detectedPredictionLabel": "Detekterad",
         "lockLabel": "Låsstatus",
         "reviewLabel": "Granskningsstatus",
         "saveReview": "Spara granskning"

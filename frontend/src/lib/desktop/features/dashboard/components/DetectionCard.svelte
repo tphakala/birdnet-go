@@ -17,7 +17,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import type { Detection } from '$lib/types/detection.types';
-  import ConfidenceBadge from './ConfidenceBadge.svelte';
+  import ConfidenceBadge from '$lib/desktop/components/data/ConfidenceBadge.svelte';
   import WeatherBadge from './WeatherBadge.svelte';
   import MoonBadge from './MoonBadge.svelte';
   import PlayOverlay from './PlayOverlay.svelte';

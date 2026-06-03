@@ -15,8 +15,9 @@
 <script lang="ts">
   import { fetchWithCSRF } from '$lib/utils/api';
   import { t } from '$lib/i18n';
-  import { XCircle, TriangleAlert, ChevronRight } from '@lucide/svelte';
+  import { CheckCircle, XCircle, TriangleAlert, ChevronRight } from '@lucide/svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
+  import ConfidenceBadge from '$lib/desktop/components/data/ConfidenceBadge.svelte';
   import type { Detection } from '$lib/types/detection.types';
 
   interface Props {
@@ -34,6 +35,18 @@
   let isLoadingReview = $state(false);
   let reviewErrorMessage = $state<string | null>(null);
   let showCommentSection = $state(false);
+  let showAllAlternativePredictions = $state(false);
+
+  const alternativePredictionPreviewLimit = 2;
+  const alternativePredictions = $derived(detection.alternativePredictions ?? []);
+  const hiddenAlternativePredictionCount = $derived(
+    Math.max(0, alternativePredictions.length - alternativePredictionPreviewLimit)
+  );
+  const visibleAlternativePredictions = $derived(
+    showAllAlternativePredictions
+      ? alternativePredictions
+      : alternativePredictions.slice(0, alternativePredictionPreviewLimit)
+  );
 
   // Initialize review form when detection changes
   $effect(() => {
@@ -51,6 +64,7 @@
       // Use firstComment (local variable) instead of comment ($state) to avoid
       // creating a reactive dependency that would reset the section when typing
       showCommentSection = !!firstComment;
+      showAllAlternativePredictions = false;
       reviewErrorMessage = null;
     }
   });
@@ -111,6 +125,87 @@
         <XCircle class="size-6" />
         <span>{reviewErrorMessage}</span>
       </div>
+    {/if}
+
+    {#if alternativePredictions.length > 0}
+      <section
+        class="bg-[var(--color-base-200)] rounded-lg p-4 mb-6"
+        aria-labelledby="alternative-predictions-title"
+      >
+        <div class="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+          <h4 id="alternative-predictions-title" class="font-medium">
+            {t('common.review.form.alternativePredictionsTitle')}
+          </h4>
+          <p class="text-xs text-[var(--color-base-content)]/60">
+            {t('common.review.form.alternativePredictionsHelp')}
+          </p>
+        </div>
+        <ol class="mt-3 space-y-2">
+          <li
+            class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-[var(--color-primary)]/25 bg-[var(--color-base-100)] px-3 py-2 text-sm"
+          >
+            <span
+              class="flex size-7 items-center justify-center rounded-full bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+              aria-label={t('common.review.form.detectedPredictionLabel')}
+            >
+              <CheckCircle class="size-4" />
+            </span>
+            <span class="min-w-0">
+              <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span class="truncate font-medium">{detection.commonName}</span>
+                <span
+                  class="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-[0.6875rem] font-semibold text-[var(--color-primary)]"
+                >
+                  {t('common.review.form.detectedPredictionLabel')}
+                </span>
+              </span>
+              {#if detection.scientificName !== detection.commonName}
+                <span class="block truncate text-xs italic text-[var(--color-base-content)]/60">
+                  {detection.scientificName}
+                </span>
+              {/if}
+            </span>
+            <ConfidenceBadge confidence={detection.confidence} className="shadow-none" />
+          </li>
+          {#each visibleAlternativePredictions as prediction (prediction.scientificName)}
+            <li
+              class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-[var(--color-base-100)] px-3 py-2 text-sm"
+            >
+              <span
+                class="flex size-7 items-center justify-center rounded-full bg-[var(--color-base-300)] text-xs font-semibold"
+              >
+                {prediction.rank}
+              </span>
+              <span class="min-w-0">
+                <span class="block truncate font-medium">{prediction.commonName}</span>
+                {#if prediction.scientificName !== prediction.commonName}
+                  <span class="block truncate text-xs italic text-[var(--color-base-content)]/60">
+                    {prediction.scientificName}
+                  </span>
+                {/if}
+              </span>
+              <ConfidenceBadge confidence={prediction.confidence} className="shadow-none" />
+            </li>
+          {/each}
+        </ol>
+        {#if hiddenAlternativePredictionCount > 0}
+          <button
+            type="button"
+            class="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)]/10 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+            aria-expanded={showAllAlternativePredictions}
+            onclick={() => (showAllAlternativePredictions = !showAllAlternativePredictions)}
+          >
+            <span class="transition-transform" class:rotate-90={showAllAlternativePredictions}>
+              <ChevronRight class="size-3" aria-hidden="true" />
+            </span>
+            {#if showAllAlternativePredictions}
+              {t('common.ui.showLess')}
+            {:else}
+              {t('common.ui.showMore')} ({hiddenAlternativePredictionCount})
+            {/if}
+          </button>
+        {/if}
+      </section>
     {/if}
 
     <!-- Review Controls Container -->

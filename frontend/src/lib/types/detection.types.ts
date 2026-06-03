@@ -11,6 +11,14 @@ export interface SourceInfo {
   displayName?: string;
 }
 
+export interface AlternativePrediction {
+  rank: number;
+  scientificName: string;
+  commonName: string;
+  speciesCode?: string;
+  confidence: number;
+}
+
 export interface Detection {
   id: number;
   date: string;
@@ -27,6 +35,7 @@ export interface Detection {
   locked: boolean;
   unlikely?: boolean;
   comments?: Comment[];
+  alternativePredictions?: AlternativePrediction[];
   clipName?: string;
   weather?: Weather;
   timeOfDay?: string;

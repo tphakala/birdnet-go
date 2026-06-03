@@ -177,6 +177,9 @@
         "commentsLabel": "Komentāri",
         "currentStatusTitle": "Pašreizējais statuss",
         "detectionStatusTitle": "Noteikšanas statuss",
+        "alternativePredictionsTitle": "Klasifikatora kandidāti",
+        "alternativePredictionsHelp": "Vispirms noteiktā suga, pēc tam alternatīvas pēc modeļa pārliecības",
+        "detectedPredictionLabel": "Noteikta",
         "lockLabel": "Bloķēšanas statuss",
         "reviewLabel": "Pārskatīšanas statuss",
         "saveReview": "Saglabāt pārskatīšanu"
