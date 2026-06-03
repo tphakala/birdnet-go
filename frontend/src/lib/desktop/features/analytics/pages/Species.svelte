@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from '$lib/i18n';
+  import { t, type TranslationKey } from '$lib/i18n';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { downloadBlob } from '$lib/utils/fileHelpers';
   import { formatNumber, formatDateTime } from '$lib/utils/formatters';
@@ -56,7 +56,7 @@
   // descending (most/highest/most recent first) on first click.
   const SORTABLE_COLUMNS: {
     field: string;
-    labelKey: string;
+    labelKey: TranslationKey;
     asc: SortOrder;
     desc: SortOrder;
   }[] = [
