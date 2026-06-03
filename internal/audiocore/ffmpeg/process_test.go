@@ -10,6 +10,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
+func TestAnalyzePCMLoudnessWithChannelsRejectsInvalidChannelCount(t *testing.T) {
+	t.Parallel()
+
+	_, err := AnalyzePCMLoudnessWithChannels(t.Context(), []byte{0, 0}, "ffmpeg", 48000, 16, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid channel count")
+}
+
 // TestBuildFFmpegArgs_RTSP verifies that BuildFFmpegArgs produces the correct
 // argument sequence for an RTSP stream source.
 func TestBuildFFmpegArgs_RTSP(t *testing.T) {

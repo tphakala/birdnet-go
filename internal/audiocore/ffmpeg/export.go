@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,13 @@ import (
 // Audio files are written with this suffix during encoding and renamed upon
 // completion to ensure atomic file operations.
 const TempExt = ".temp"
+
+// minExportPhaseTimeout is the minimum time allowed for a single FFmpeg export phase.
+const minExportPhaseTimeout = 30 * time.Second
+
+// exportPhaseTimeoutMargin gives FFmpeg startup, muxing, and cleanup a buffer
+// beyond the PCM duration for long extended-capture clips.
+const exportPhaseTimeoutMargin = 30 * time.Second
 
 // exportTimeout is the maximum time allowed for a single PCM-to-file export operation.
 const exportTimeout = 30 * time.Second
@@ -92,9 +100,7 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 		return fmt.Errorf("empty PCM data provided for export")
 	}
 
-	// Apply a per-call timeout so the operation cannot hang indefinitely.
-	ctx, cancel := context.WithTimeout(ctx, exportTimeout)
-	defer cancel()
+	phaseTimeout := exportPhaseTimeout(opts)
 
 	// Create the output directory if needed.
 	outputDir := filepath.Dir(opts.OutputPath)
@@ -115,7 +121,17 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 		}
 	}()
 
-	if err := runExportFFmpeg(ctx, opts, tempPath); err != nil {
+	filterCtx, filterCancel := context.WithTimeout(ctx, phaseTimeout)
+	audioFilter, err := buildExportAudioFilter(filterCtx, opts)
+	filterCancel()
+	if err != nil {
+		return fmt.Errorf("failed to prepare audio export filter: %w", err)
+	}
+
+	exportCtx, exportCancel := context.WithTimeout(ctx, phaseTimeout)
+	err = runExportFFmpeg(exportCtx, opts, tempPath, audioFilter)
+	exportCancel()
+	if err != nil {
 		return fmt.Errorf("FFmpeg export failed: %w", err)
 	}
 
@@ -131,9 +147,35 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 	return nil
 }
 
+func exportPhaseTimeout(opts *ExportOptions) time.Duration {
+	if opts == nil || opts.SampleRate <= 0 || opts.Channels <= 0 || opts.BitDepth <= 0 {
+		return minExportPhaseTimeout
+	}
+
+	bytesPerSample := opts.BitDepth / 8
+	if bytesPerSample <= 0 {
+		return minExportPhaseTimeout
+	}
+
+	bytesPerSecond := int64(opts.SampleRate) * int64(opts.Channels) * int64(bytesPerSample)
+	if bytesPerSecond <= 0 {
+		return minExportPhaseTimeout
+	}
+
+	audioDuration := time.Duration(int64(len(opts.PCMData))) * time.Second / time.Duration(bytesPerSecond)
+	if audioDuration <= 0 {
+		return minExportPhaseTimeout
+	}
+	if audioDuration < minExportPhaseTimeout {
+		return minExportPhaseTimeout
+	}
+
+	return audioDuration + exportPhaseTimeoutMargin
+}
+
 // runExportFFmpeg executes FFmpeg, writing PCM from stdin to the temp output file.
-func runExportFFmpeg(ctx context.Context, opts *ExportOptions, tempPath string) error {
-	args := buildExportFFmpegArgs(opts, tempPath)
+func runExportFFmpeg(ctx context.Context, opts *ExportOptions, tempPath, audioFilter string) error {
+	args := buildExportFFmpegArgs(opts, tempPath, audioFilter)
 
 	cmd := exec.CommandContext(ctx, opts.FFmpegPath, args...) //nolint:gosec // G204: FFmpegPath validated by ValidateFFmpegPath, args built internally
 
@@ -218,7 +260,7 @@ var losslessFormats = map[string]bool{
 }
 
 // buildExportFFmpegArgs constructs the FFmpeg argument list for PCM-to-file export.
-func buildExportFFmpegArgs(opts *ExportOptions, tempPath string) []string {
+func buildExportFFmpegArgs(opts *ExportOptions, tempPath, audioFilter string) []string {
 	sampleRateStr, channelsStr, formatStr := GetFFmpegFormat(opts.SampleRate, opts.Channels, opts.BitDepth)
 
 	outputEncoder := getEncoder(opts.Format)
@@ -233,9 +275,14 @@ func buildExportFFmpegArgs(opts *ExportOptions, tempPath string) []string {
 	}
 
 	// Add audio filter if normalization or gain is requested.
-	audioFilter := buildExportAudioFilter(opts)
 	if audioFilter != "" {
 		args = append(args, "-af", audioFilter)
+	}
+	if opts.Normalization.Enabled {
+		// loudnorm internally upsamples to 192 kHz for true-peak detection.
+		// Pin the encoded file back to the source rate so saved clips keep
+		// their configured sample rate and avoid inflated FLAC output.
+		args = append(args, "-ar", sampleRateStr)
 	}
 
 	args = append(args, "-c:a", outputEncoder)
@@ -257,23 +304,99 @@ func buildExportFFmpegArgs(opts *ExportOptions, tempPath string) []string {
 
 // buildExportAudioFilter constructs the FFmpeg -af filter string for PCM export.
 // Normalization takes precedence over gain adjustment.
-func buildExportAudioFilter(opts *ExportOptions) string {
+func buildExportAudioFilter(ctx context.Context, opts *ExportOptions) (string, error) {
 	if opts.Normalization.Enabled {
-		return fmt.Sprintf("loudnorm=I=%.1f:TP=%.1f:LRA=%.1f",
-			opts.Normalization.TargetLUFS,
-			opts.Normalization.TruePeak,
-			opts.Normalization.LoudnessRange,
-		)
+		return buildNormalizationFilter(ctx, opts)
 	}
 
 	if opts.GainDB != 0 {
-		if opts.GainDB > 0 {
-			return fmt.Sprintf("volume=+%.1fdB", opts.GainDB)
-		}
-		return fmt.Sprintf("volume=%.1fdB", opts.GainDB) // negative sign included
+		return buildVolumeFilter(opts.GainDB), nil
 	}
 
-	return ""
+	return "", nil
+}
+
+func buildNormalizationFilter(ctx context.Context, opts *ExportOptions) (string, error) {
+	stats, err := AnalyzePCMLoudnessWithChannels(ctx, opts.PCMData, opts.FFmpegPath, opts.SampleRate, opts.BitDepth, opts.Channels)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", err
+		}
+		// Preserve the previous single-pass behavior if FFmpeg cannot produce
+		// loudness stats for reasons other than gated near-silence.
+		return buildSinglePassLoudnormFilter(opts.Normalization), nil
+	}
+
+	if stats == nil || !stats.isValid() {
+		offsetDB, ok := loudnormGateFallbackOffset(stats, opts.Normalization)
+		if !ok {
+			return buildSinglePassLoudnormFilter(opts.Normalization), nil
+		}
+		return buildLoudnormOffsetFilter(opts.Normalization, offsetDB), nil
+	}
+
+	return buildTwoPassLoudnormFilter(opts.Normalization, stats), nil
+}
+
+func buildSinglePassLoudnormFilter(norm ExportNormalization) string {
+	return fmt.Sprintf("loudnorm=I=%.1f:TP=%.1f:LRA=%.1f",
+		norm.TargetLUFS,
+		norm.TruePeak,
+		norm.LoudnessRange,
+	)
+}
+
+func buildTwoPassLoudnormFilter(norm ExportNormalization, stats *LoudnessStats) string {
+	return fmt.Sprintf("loudnorm=I=%.1f:TP=%.1f:LRA=%.1f:measured_I=%s:measured_LRA=%s:measured_TP=%s:measured_thresh=%s:linear=true:offset=%s",
+		norm.TargetLUFS,
+		norm.TruePeak,
+		norm.LoudnessRange,
+		stats.InputI,
+		stats.InputLRA,
+		stats.InputTP,
+		stats.InputThresh,
+		stats.TargetOffset,
+	)
+}
+
+func buildLoudnormOffsetFilter(norm ExportNormalization, offsetDB float64) string {
+	return fmt.Sprintf("%s:offset=%.1f",
+		buildSinglePassLoudnormFilter(norm),
+		offsetDB,
+	)
+}
+
+func buildVolumeFilter(gainDB float64) string {
+	if gainDB > 0 {
+		return fmt.Sprintf("volume=+%.1fdB", gainDB)
+	}
+	return fmt.Sprintf("volume=%.1fdB", gainDB) // negative sign included
+}
+
+func loudnormGateFallbackOffset(stats *LoudnessStats, norm ExportNormalization) (float64, bool) {
+	if stats == nil {
+		return 0, false
+	}
+
+	inputTP, ok := parseFiniteFloat(stats.InputTP)
+	if !ok {
+		return 0, false
+	}
+	offsetDB := norm.TruePeak - inputTP
+	offsetDB = math.Max(-MaxGainDB, math.Min(MaxGainDB, offsetDB))
+	if math.Abs(offsetDB) < 0.05 {
+		return 0, false
+	}
+
+	return offsetDB, true
+}
+
+func parseFiniteFloat(value string) (float64, bool) {
+	f, err := strconv.ParseFloat(value, 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0, false
+	}
+	return f, true
 }
 
 // parseBitrateKbps extracts the numeric portion of a bitrate string like "192k"
