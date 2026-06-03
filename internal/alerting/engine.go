@@ -113,8 +113,8 @@ func cooldownKey(rule *entities.AlertRule, event *AlertEvent) string {
 	if rule.TriggerType == TriggerTypeMetric {
 		return fmt.Sprintf("%d|%s", rule.ID, metricBufferKey(rule.MetricName, event.Properties))
 	}
-	if isSpeciesScopedDetectionRule(rule, event) {
-		return fmt.Sprintf("%d|%s", rule.ID, detectionSpeciesKey(event))
+	if speciesKey := detectionSpeciesKey(event); isSpeciesScopedDetectionRule(rule, event, speciesKey) {
+		return fmt.Sprintf("%d|%s", rule.ID, speciesKey)
 	}
 	return fmt.Sprintf("%d", rule.ID)
 }
@@ -137,27 +137,24 @@ func detectionSpeciesKey(event *AlertEvent) string {
 	return unknownDetectionSpeciesKey
 }
 
-func isNoveltyProperty(property string) bool {
-	switch property {
-	case PropertyDaysSinceLastSeen, PropertyNoveltyEpisodeDays, PropertyNoveltyEpisodeStart:
-		return true
-	default:
-		return false
-	}
-}
-
-func isSpeciesScopedDetectionRule(rule *entities.AlertRule, event *AlertEvent) bool {
+// isSpeciesScopedDetectionRule reports whether a detection rule's cooldown and
+// escalation state should be tracked per species rather than per rule. The
+// caller passes speciesKey from detectionSpeciesKey(event); species-less
+// detections (unknownDetectionSpeciesKey) always use per-rule scoping. Novelty
+// conditions reuse detectionMetadataProperties as the single source of truth
+// for which properties scope a rule to a species.
+func isSpeciesScopedDetectionRule(rule *entities.AlertRule, event *AlertEvent, speciesKey string) bool {
 	if rule.TriggerType != TriggerTypeEvent || !isDetectionEvent(event.EventName) {
 		return false
 	}
-	if detectionSpeciesKey(event) == unknownDetectionSpeciesKey {
+	if speciesKey == unknownDetectionSpeciesKey {
 		return false
 	}
 	if len(rule.EscalationSteps) > 0 {
 		return true
 	}
 	for i := range rule.Conditions {
-		if isNoveltyProperty(rule.Conditions[i].Property) {
+		if slices.Contains(detectionMetadataProperties, rule.Conditions[i].Property) {
 			return true
 		}
 	}
@@ -165,8 +162,20 @@ func isSpeciesScopedDetectionRule(rule *entities.AlertRule, event *AlertEvent) b
 }
 
 func detectionEscalationKey(rule *entities.AlertRule, event *AlertEvent, speciesKey string) string {
+	// Derive a stable per-episode component. NoveltyEpisodeStart is contractually
+	// a string today, but format time.Time explicitly so a future type change
+	// can't break episode grouping via fmt's verbose %v (monotonic clock, nanos).
 	var episodeStart string
-	if value, ok := event.Properties[PropertyNoveltyEpisodeStart]; ok && value != nil {
+	switch value := event.Properties[PropertyNoveltyEpisodeStart].(type) {
+	case time.Time:
+		if !value.IsZero() {
+			episodeStart = value.UTC().Format(time.RFC3339)
+		}
+	case string:
+		episodeStart = strings.TrimSpace(value)
+	case nil:
+		// No episode metadata; fall back to the event day below.
+	default:
 		episodeStart = strings.TrimSpace(fmt.Sprintf("%v", value))
 	}
 	if episodeStart == "" {
@@ -223,6 +232,20 @@ func (e *Engine) clearEscalationIfRecovered(rules []entities.AlertRule, event *A
 	}
 }
 
+// highestStepExceeded returns the highest escalation step that value meets or
+// exceeds. found is false when value is below every step. Explicit max tracking
+// keeps the result correct for unsorted steps and negative thresholds (e.g.
+// temperature), where a plain running max with a zero sentinel would be wrong.
+func highestStepExceeded(steps []float64, value float64) (step float64, found bool) {
+	for _, s := range steps {
+		if value >= s && (!found || s > step) {
+			step = s
+			found = true
+		}
+	}
+	return step, found
+}
+
 // shouldSuppressEscalation checks if a metric rule should be suppressed
 // because the metric hasn't crossed a new escalation step. Returns true
 // if the rule should NOT fire. When it returns false (allow fire), it also
@@ -241,18 +264,7 @@ func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *Alert
 		return false, event.Properties
 	}
 
-	// Find the highest step the current value exceeds.
-	// Uses explicit max tracking so the result is correct even if
-	// EscalationSteps is not sorted ascending. A boolean flag avoids
-	// issues with negative step values (e.g., temperature thresholds).
-	var currentStep float64
-	stepFound := false
-	for _, step := range rule.EscalationSteps {
-		if floatVal >= step && (!stepFound || step > currentStep) {
-			currentStep = step
-			stepFound = true
-		}
-	}
+	currentStep, stepFound := highestStepExceeded(rule.EscalationSteps, floatVal)
 	if !stepFound {
 		return true, nil
 	}
@@ -295,14 +307,7 @@ func (e *Engine) shouldSuppressDetectionEscalation(rule *entities.AlertRule, eve
 		return true, nil
 	}
 
-	var currentStep float64
-	stepFound := false
-	for _, step := range rule.EscalationSteps {
-		if confidenceFloat >= step && (!stepFound || step > currentStep) {
-			currentStep = step
-			stepFound = true
-		}
-	}
+	currentStep, stepFound := highestStepExceeded(rule.EscalationSteps, confidenceFloat)
 	if !stepFound {
 		return true, nil
 	}
@@ -334,6 +339,8 @@ func (e *Engine) shouldSuppressDetectionEscalation(rule *entities.AlertRule, eve
 	return false, propsCopy
 }
 
+// cooldownExpiredLocked reports whether the cooldown for key has elapsed (or is
+// disabled). Callers must hold e.cooldownsMu.
 func (e *Engine) cooldownExpiredLocked(key string, cooldownSec int, now time.Time) bool {
 	if cooldownSec <= 0 {
 		return true
@@ -342,6 +349,9 @@ func (e *Engine) cooldownExpiredLocked(key string, cooldownSec int, now time.Tim
 	return !exists || now.Sub(lastFired) >= time.Duration(cooldownSec)*time.Second
 }
 
+// pruneDetectionEscalationsLocked removes escalation entries for older episodes
+// of the same rule and species, keeping only currentKey. Callers must hold
+// e.escalationsMu.
 func (e *Engine) pruneDetectionEscalationsLocked(ruleID uint, speciesKey, currentKey string) {
 	prefix := detectionEscalationKeyPrefix(ruleID, speciesKey)
 	for key := range e.escalations {
