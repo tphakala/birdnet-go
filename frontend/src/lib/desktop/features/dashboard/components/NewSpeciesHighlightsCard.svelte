@@ -179,12 +179,12 @@ the visible count, persisted to localStorage.
             <!-- Common name (with novelty icon) + confidence pill -->
             <div class="flex items-center justify-between gap-1.5">
               <span class="flex min-w-0 items-center gap-1">
-                {@render categoryIcon(category, species.current_season)}
                 <span
                   class="truncate text-sm font-medium leading-tight group-hover:text-[var(--color-primary)]"
                 >
                   {species.common_name}
                 </span>
+                {@render categoryIcon(category, species.current_season)}
               </span>
               {#if percent !== undefined}
                 <span
