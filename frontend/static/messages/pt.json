@@ -1600,7 +1600,11 @@
       "recentlyFirstSeen": "Visto pela primeira vez recentemente",
       "earliestFirstSeen": "Visto pela primeira vez mais cedo",
       "recentlyLastSeen": "Visto pela última vez recentemente",
-      "highestConfidence": "Maior confiança"
+      "earliestLastSeen": "Visto pela última vez mais cedo",
+      "highestConfidence": "Maior confiança",
+      "lowestConfidence": "Menor confiança",
+      "highestMaxConfidence": "Maior confiança máxima",
+      "lowestMaxConfidence": "Menor confiança máxima"
     },
     "charts": {
       "top10Species": "Top 10 espécies",
@@ -3446,6 +3450,10 @@
         "liveAudioLabel": "Permitir reprodução pública de áudio em direto",
         "liveAudioHelp": "Quando ativado, qualquer pessoa pode ouvir transmissões de áudio em direto sem iniciar sessão. Definições e eliminação continuam a requerer autenticação.",
         "warningText": "Ativar funcionalidades de acesso público expõe-nas a qualquer pessoa que consiga aceder a este servidor. Ative apenas se confia no seu ambiente de rede."
+      },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",

@@ -141,20 +141,16 @@ if [ -n "$TZ" ]; then
         echo "  Legacy names may be removed in future Debian releases"
     fi
 
-    # Validate timezone exists in tzdata
+    # Go and glibc tools read the TZ env var directly; they don't need
+    # /etc/localtime or /etc/timezone written (those writes fail rootless).
+    # Just validate the zone exists in tzdata.
     if [ -f "/usr/share/zoneinfo/$TZ" ]; then
-        if ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime 2>/dev/null; then
-            echo "$TZ" > /etc/timezone 2>/dev/null || true
-            echo "Timezone configured: $TZ"
-        else
-            echo "Timezone $TZ requested (system config skipped in rootless mode)"
-        fi
+        echo "Timezone configured: $TZ"
     else
-        echo "ERROR: Timezone '$TZ' not found" >&2
-        echo "  Available timezones: ls /usr/share/zoneinfo/" >&2
+        echo "ERROR: Timezone '$TZ' not found in /usr/share/zoneinfo" >&2
+        echo "  Install tzdata-legacy if using US/*, Etc/*, or other legacy names" >&2
         echo "  Falling back to UTC" >&2
-        ln -snf "/usr/share/zoneinfo/UTC" /etc/localtime 2>/dev/null || true
-        echo "UTC" > /etc/timezone 2>/dev/null || true
+        export TZ="UTC"
     fi
 else
     echo "No TZ environment variable set, using container default (UTC)"

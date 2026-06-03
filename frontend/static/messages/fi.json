@@ -1600,7 +1600,11 @@
       "recentlyFirstSeen": "Äskettäin ensinäkemä",
       "earliestFirstSeen": "Aikaisin ensinäkemä",
       "recentlyLastSeen": "Äskettäin viimeksi nähty",
-      "highestConfidence": "Korkein luottamus"
+      "earliestLastSeen": "Aikaisin viimeksi nähty",
+      "highestConfidence": "Korkein luottamus",
+      "lowestConfidence": "Matalin luottamus",
+      "highestMaxConfidence": "Korkein enimmäisluottamus",
+      "lowestMaxConfidence": "Matalin enimmäisluottamus"
     },
     "charts": {
       "top10Species": "Top 10 lajia",
@@ -3446,6 +3450,10 @@
         "liveAudioLabel": "Salli julkinen reaaliaikaisen äänen toisto",
         "liveAudioHelp": "Kun käytössä, kuka tahansa voi kuunnella reaaliaikaisia äänilähetyksiä kirjautumatta. Asetukset ja poistaminen vaativat edelleen tunnistautumisen.",
         "warningText": "Julkisen pääsyn ominaisuuksien käyttöönotto altistaa ne kaikille, jotka pääsevät tälle palvelimelle. Ota käyttöön vain, jos luotat verkkoympäristöösi."
+      },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",

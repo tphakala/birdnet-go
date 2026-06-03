@@ -58,6 +58,10 @@ type SecurityConfigDTO struct {
 	AccessAllowed bool            `json:"accessAllowed"`
 	AuthConfig    AuthConfigDTO   `json:"authConfig"`
 	PublicAccess  PublicAccessDTO `json:"publicAccess"`
+	// PrivateMode mirrors Security.PrivateMode so the frontend knows to
+	// redirect to login on any 401 instead of silently treating gated
+	// endpoints as graceful guest-mode limitations.
+	PrivateMode bool `json:"privateMode"`
 }
 
 // PublicAccessDTO exposes which features are accessible without authentication.
@@ -92,10 +96,14 @@ func (c *Controller) initAppRoutes() {
 	// that was previously injected server-side into the HTML template.
 	c.Group.GET(AppConfigEndpoint, c.GetAppConfig)
 
-	// Wizard dismiss endpoint - always public.
+	// Wizard dismiss endpoint - public in the default configuration.
 	// Only writes last_seen_version to app_metadata (no data exposure, no privilege
-	// escalation). Must be accessible pre-auth so the onboarding wizard can be
-	// dismissed before login.
+	// escalation), and is reachable pre-auth so the onboarding wizard can be
+	// dismissed before login. When Security.PrivateMode is enabled this route is
+	// gated like every other UI/API route: an unauthenticated user is shown the
+	// login form rather than the wizard, so dismissing it pre-auth serves no
+	// purpose and it is intentionally NOT on the privateModeAuth exempt allow-list
+	// (see isPrivateModeExempt).
 	c.Group.POST(WizardDismissEndpoint, c.DismissWizard)
 }
 
@@ -154,6 +162,7 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 			PublicAccess: PublicAccessDTO{
 				LiveAudio: c.Settings.Security.PublicAccess.LiveAudio,
 			},
+			PrivateMode: c.Settings.Security.PrivateMode,
 		},
 		Version:         c.Settings.Version,
 		BasePath:        basePath,

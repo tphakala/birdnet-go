@@ -453,6 +453,7 @@ export interface SecuritySettings {
   publicAccess?: {
     liveAudio: boolean;
   };
+  privateMode?: boolean;
 }
 
 // Legacy OAuth settings interface (deprecated)

@@ -1600,7 +1600,11 @@
       "recentlyFirstSeen": "Nesen pirmo reizi redzētas",
       "earliestFirstSeen": "Agrākās pirmo reizi redzētās",
       "recentlyLastSeen": "Nesen pēdējo reizi redzētas",
-      "highestConfidence": "Augstākā ticamība"
+      "earliestLastSeen": "Agrākās pēdējo reizi redzētās",
+      "highestConfidence": "Augstākā ticamība",
+      "lowestConfidence": "Zemākā ticamība",
+      "highestMaxConfidence": "Augstākā maksimālā ticamība",
+      "lowestMaxConfidence": "Zemākā maksimālā ticamība"
     },
     "charts": {
       "top10Species": "Top 10 sugas",
@@ -3446,6 +3450,10 @@
         "liveAudioLabel": "Atļaut publisku tiešraides audio atskaņošanu",
         "liveAudioHelp": "Kad iespējots, ikviens var klausīties tiešraides audio straumes bez pieteikšanās. Iestatījumiem un dzēšanai joprojām nepieciešama autentifikācija.",
         "warningText": "Publiskās piekļuves funkciju iespējošana padara tās pieejamas ikvienam, kas var sasniegt šo serveri. Iespējojiet tikai tad, ja uzticaties savam tīkla videi."
+      },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",

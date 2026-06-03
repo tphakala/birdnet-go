@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { t } from '$lib/i18n';
+  import { t, type TranslationKey } from '$lib/i18n';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { downloadBlob } from '$lib/utils/fileHelpers';
   import { formatNumber, formatDateTime } from '$lib/utils/formatters';
   import { loggers } from '$lib/utils/logger';
+  import { getStoredValue, setStoredValue } from '$lib/utils/storage';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { onMount } from 'svelte';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesDetailModal from '../components/modals/SpeciesDetailModal.svelte';
   import SpeciesCard from '../components/ui/SpeciesCard.svelte';
@@ -27,7 +29,11 @@
       | 'first_seen_desc'
       | 'first_seen_asc'
       | 'last_seen_desc'
-      | 'confidence_desc';
+      | 'last_seen_asc'
+      | 'confidence_desc'
+      | 'confidence_asc'
+      | 'max_confidence_desc'
+      | 'max_confidence_asc';
     searchTerm: string;
     /**
      * Selected source group display names. Empty array means "all sources".
@@ -59,6 +65,8 @@
     count: number;
   }
 
+  type SortOrder = SpeciesFilters['sortOrder'];
+
   interface SpeciesData {
     common_name: string;
     scientific_name: string;
@@ -72,6 +80,65 @@
 
   type ViewMode = 'grid' | 'list';
 
+  // Species name defaults to ascending (A→Z); every other column defaults to
+  // descending (most/highest/most recent first) on first click.
+  const SORTABLE_COLUMNS: {
+    field: string;
+    labelKey: TranslationKey;
+    asc: SortOrder;
+    desc: SortOrder;
+  }[] = [
+    {
+      field: 'species',
+      labelKey: 'analytics.species.headers.species',
+      asc: 'name_asc',
+      desc: 'name_desc',
+    },
+    {
+      field: 'count',
+      labelKey: 'analytics.species.headers.detections',
+      asc: 'count_asc',
+      desc: 'count_desc',
+    },
+    {
+      field: 'avg_confidence',
+      labelKey: 'analytics.species.headers.avgConfidence',
+      asc: 'confidence_asc',
+      desc: 'confidence_desc',
+    },
+    {
+      field: 'max_confidence',
+      labelKey: 'analytics.species.headers.maxConfidence',
+      asc: 'max_confidence_asc',
+      desc: 'max_confidence_desc',
+    },
+    {
+      field: 'first_seen',
+      labelKey: 'analytics.species.headers.firstDetected',
+      asc: 'first_seen_asc',
+      desc: 'first_seen_desc',
+    },
+    {
+      field: 'last_seen',
+      labelKey: 'analytics.species.headers.lastDetected',
+      asc: 'last_seen_asc',
+      desc: 'last_seen_desc',
+    },
+  ];
+
+  // Default sort and persistence (survives a page refresh).
+  const DEFAULT_SORT_ORDER: SortOrder = 'count_desc';
+  const SORT_STORAGE_KEY = 'analytics.species.sortOrder';
+  // Only the species-name column defaults to ascending (A→Z) on first click.
+  const SPECIES_COLUMN_FIELD = 'species';
+  const VALID_SORT_ORDERS: Set<string> = new Set<string>(
+    SORTABLE_COLUMNS.flatMap(column => [column.asc, column.desc])
+  );
+
+  function isSortOrder(value: unknown): value is SortOrder {
+    return typeof value === 'string' && VALID_SORT_ORDERS.has(value);
+  }
+
   let isLoading = $state<boolean>(true);
   let speciesData = $state<SpeciesData[]>([]);
   let filteredSpecies = $state<SpeciesData[]>([]);
@@ -79,11 +146,18 @@
   let selectedSpecies = $state<SpeciesData | null>(null);
   let showDetailModal = $state(false);
 
+  // Read once so both filters and the applied-sort indicator start at the same persisted value.
+  const restoredSortOrder = getStoredValue<SortOrder>(
+    SORT_STORAGE_KEY,
+    DEFAULT_SORT_ORDER,
+    isSortOrder
+  );
+
   let filters = $state<SpeciesFilters>({
     timePeriod: 'all',
     startDate: '',
     endDate: '',
-    sortOrder: 'count_desc',
+    sortOrder: restoredSortOrder,
     searchTerm: '',
     sourceGroups: [],
   });
@@ -145,6 +219,44 @@
     }
   }
 
+  // Tracks the sort order that is actually applied to the table. Only the
+  // explicit commit points (header click in handleSort, Apply Filters/mount/reset
+  // via fetchData) update it; applyFilters() renders from it without mutating it.
+  // This keeps a pending dropdown change from being committed by an unrelated
+  // applyFilters() call (e.g. a background thumbnail batch or a search rerender).
+  let appliedSortOrder = $state<SortOrder>(restoredSortOrder);
+
+  // Active column + direction for the header indicators, derived from the
+  // applied sort (not the pending dropdown selection).
+  let activeColumn = $derived(
+    SORTABLE_COLUMNS.find(
+      column => column.asc === appliedSortOrder || column.desc === appliedSortOrder
+    )
+  );
+  let sortField = $derived(activeColumn?.field ?? '');
+  let sortDirection: 'asc' | 'desc' = $derived(
+    activeColumn?.desc === appliedSortOrder ? 'desc' : 'asc'
+  );
+
+  // Clicking a header: re-clicking the active column toggles direction; a new
+  // column starts at its default (ascending for species name, descending else).
+  function handleSort(field: string) {
+    const column = SORTABLE_COLUMNS.find(c => c.field === field);
+    if (!column) return;
+    const next =
+      sortField === field
+        ? appliedSortOrder === column.asc
+          ? column.desc
+          : column.asc
+        : field === SPECIES_COLUMN_FIELD
+          ? column.asc
+          : column.desc;
+    filters.sortOrder = next;
+    appliedSortOrder = next;
+    setStoredValue<SortOrder>(SORT_STORAGE_KEY, next);
+    applyFilters();
+  }
+
   // Set default dates on mount
   onMount(() => {
     const today = new Date();
@@ -171,6 +283,9 @@
 
   async function fetchData() {
     isLoading = true;
+    // Apply Filters (and mount/reset) commit the pending dropdown selection.
+    appliedSortOrder = filters.sortOrder;
+    setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
 
     try {
       // Determine date range based on time period
@@ -248,6 +363,21 @@
     }
   }
 
+  function makeDateComparator(field: 'first_heard' | 'last_heard', ascending: boolean) {
+    return (a: SpeciesData, b: SpeciesData) => {
+      // eslint-disable-next-line security/detect-object-injection
+      const da = parseLocalDateString(a[field]);
+      // eslint-disable-next-line security/detect-object-injection
+      const db = parseLocalDateString(b[field]);
+      // Sort invalid/missing dates consistently to the end so the comparator
+      // stays transitive (returning 0 for any null pair would break sort order).
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return ascending ? da.getTime() - db.getTime() : db.getTime() - da.getTime();
+    };
+  }
+
   function applyFilters() {
     let filtered = [...speciesData];
 
@@ -261,8 +391,8 @@
       );
     }
 
-    // Apply sorting
-    switch (filters.sortOrder) {
+    // Apply sorting from the committed sort, not the pending dropdown selection.
+    switch (appliedSortOrder) {
       case 'count_desc':
         filtered.sort((a, b) => b.count - a.count);
         break;
@@ -276,32 +406,34 @@
         filtered.sort((a, b) => b.common_name.localeCompare(a.common_name));
         break;
       case 'first_seen_desc':
-        filtered.sort((a, b) => {
-          const dateA = parseLocalDateString(a.first_heard);
-          const dateB = parseLocalDateString(b.first_heard);
-          if (!dateA || !dateB) return 0;
-          return dateB.getTime() - dateA.getTime();
-        });
+        filtered.sort(makeDateComparator('first_heard', false));
         break;
       case 'first_seen_asc':
-        filtered.sort((a, b) => {
-          const dateA = parseLocalDateString(a.first_heard);
-          const dateB = parseLocalDateString(b.first_heard);
-          if (!dateA || !dateB) return 0;
-          return dateA.getTime() - dateB.getTime();
-        });
+        filtered.sort(makeDateComparator('first_heard', true));
         break;
       case 'last_seen_desc':
-        filtered.sort((a, b) => {
-          const dateA = parseLocalDateString(a.last_heard);
-          const dateB = parseLocalDateString(b.last_heard);
-          if (!dateA || !dateB) return 0;
-          return dateB.getTime() - dateA.getTime();
-        });
+        filtered.sort(makeDateComparator('last_heard', false));
+        break;
+      case 'last_seen_asc':
+        filtered.sort(makeDateComparator('last_heard', true));
         break;
       case 'confidence_desc':
         filtered.sort((a, b) => b.avg_confidence - a.avg_confidence);
         break;
+      case 'confidence_asc':
+        filtered.sort((a, b) => a.avg_confidence - b.avg_confidence);
+        break;
+      case 'max_confidence_desc':
+        filtered.sort((a, b) => b.max_confidence - a.max_confidence);
+        break;
+      case 'max_confidence_asc':
+        filtered.sort((a, b) => a.max_confidence - b.max_confidence);
+        break;
+      default: {
+        // Exhaustiveness guard: adding a SortOrder value without a case is a compile error.
+        const _exhaustive: never = appliedSortOrder;
+        void _exhaustive;
+      }
     }
 
     filteredSpecies = filtered;
@@ -337,7 +469,8 @@
 
   function resetFilters() {
     filters.timePeriod = 'all';
-    filters.sortOrder = 'count_desc';
+    filters.sortOrder = DEFAULT_SORT_ORDER;
+    // fetchData() below commits and persists the reset sort order (single commit point).
     filters.searchTerm = '';
     filters.sourceGroups = [];
 
@@ -611,12 +744,15 @@
           <table class="table w-full hidden sm:table">
             <thead>
               <tr>
-                <th>{t('analytics.species.headers.species')}</th>
-                <th>{t('analytics.species.headers.detections')}</th>
-                <th>{t('analytics.species.headers.avgConfidence')}</th>
-                <th>{t('analytics.species.headers.maxConfidence')}</th>
-                <th>{t('analytics.species.headers.firstDetected')}</th>
-                <th>{t('analytics.species.headers.lastDetected')}</th>
+                {#each SORTABLE_COLUMNS as { field, labelKey } (field)}
+                  <SortableHeader
+                    label={t(labelKey)}
+                    {field}
+                    activeField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                {/each}
               </tr>
             </thead>
             <tbody>

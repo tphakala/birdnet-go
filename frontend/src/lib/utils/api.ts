@@ -11,12 +11,13 @@
 
 import { loggers } from '$lib/utils/logger';
 import {
+  appState,
   getCsrfToken as getAppStateCsrfToken,
   isGuestMode,
   isSentryEnabled,
   refreshCsrfToken,
 } from '$lib/stores/appState.svelte';
-import { buildAppUrl } from '$lib/utils/urlHelpers';
+import { buildAppUrl, isRelativePath } from '$lib/utils/urlHelpers';
 import { t } from '$lib/i18n';
 import { markOnline } from '$lib/stores/connectionState.svelte';
 
@@ -34,7 +35,7 @@ let _redirectingToLogin = false;
 /** Minimum interval between 401 redirects (ms) to prevent infinite reload loops */
 const REDIRECT_COOLDOWN_MS = 5_000;
 
-// Lazy Sentry capture — only loaded when telemetry is enabled.
+// Lazy Sentry capture: only loaded when telemetry is enabled.
 // Uses ApiErrorLike interface to avoid coupling to the ApiError class.
 type ApiErrorLike = { message: string; status: number; isNetworkError: boolean };
 let _captureApiError: ((error: ApiErrorLike, context?: Record<string, string>) => void) | null =
@@ -42,7 +43,7 @@ let _captureApiError: ((error: ApiErrorLike, context?: Record<string, string>) =
 let _captureAttempted = false;
 
 async function getSentryCaptureApiError(): Promise<typeof _captureApiError> {
-  // Check opt-in state first — if disabled (or not yet initialized), return null
+  // Check opt-in state first; if disabled (or not yet initialized), return null
   // without caching the failure, so we can retry after initApp() completes.
   if (!isSentryEnabled()) return null;
 
@@ -52,7 +53,7 @@ async function getSentryCaptureApiError(): Promise<typeof _captureApiError> {
     const mod = await import('$lib/telemetry/sentry');
     _captureApiError = mod.captureApiError;
   } catch {
-    // Sentry not available — allow retry on later errors
+    // Sentry not available; allow retry on later errors
     _captureAttempted = false;
   }
   return _captureApiError;
@@ -85,8 +86,11 @@ export class ApiError extends Error {
  * expired-session errors), we redirect the whole page to the login URL.
  * The full-page navigation clears all in-memory state (stores, etc.).
  *
- * Returns a Promise that never resolves, so callers awaiting fetchWithCSRF
- * simply hang until the browser navigates away.
+ * When a redirect actually starts, this returns a Promise that never resolves,
+ * so callers awaiting fetchWithCSRF simply hang until the browser navigates
+ * away. When the redirect is suppressed by the reload-loop cooldown (no
+ * navigation happens), it returns a rejected promise (ApiError) instead so
+ * awaiting callers can stop their loading state rather than hang forever.
  */
 function redirectToLogin(): Promise<never> {
   if (!_redirectingToLogin) {
@@ -96,19 +100,37 @@ function redirectToLogin(): Promise<never> {
     // the server keeps returning 401 due to IPv6 subnet bypass failure), stop and
     // let the user see the current page rather than looping endlessly.
     // sessionStorage survives page reloads but not tab close.
+    let redirectSuppressed = false;
     try {
       const lastRedirect = sessionStorage.getItem('last_401_redirect');
       if (lastRedirect && Date.now() - parseInt(lastRedirect, 10) < REDIRECT_COOLDOWN_MS) {
         logger.warn('Suppressing rapid 401 redirect to prevent reload loop');
         _redirectingToLogin = false; // Reset so future legitimate 401s can redirect
-        return new Promise<never>(() => {});
+        redirectSuppressed = true;
+      } else {
+        sessionStorage.setItem('last_401_redirect', Date.now().toString());
       }
-      sessionStorage.setItem('last_401_redirect', Date.now().toString());
     } catch {
-      // sessionStorage unavailable (e.g., Safari private browsing) — proceed with redirect
+      // sessionStorage unavailable (e.g., Safari private browsing): proceed with redirect
     }
 
-    logger.info('Session expired (401) — redirecting to login');
+    if (redirectSuppressed) {
+      // We are NOT navigating in this branch, so returning a never-resolving
+      // promise would leave awaiting callers stuck in a loading state forever.
+      // Reject so the caller can surface the error and stop loading. Return a
+      // rejected promise (not a synchronous throw) to honour the Promise<never>
+      // return type, and use the canonical 401 message; the reload-loop reason
+      // is already logged above.
+      return Promise.reject(
+        new ApiError(getSecureErrorMessage(401), 401, new Response(null, { status: 401 }))
+      );
+    }
+
+    logger.info('Session expired (401): redirecting to login');
+    // Reload the SPA from a public route. The SPA inspects the latest
+    // /api/v2/app/config on bootstrap and either renders the dashboard
+    // (when accessAllowed) or the full-screen login form (when PrivateMode
+    // is enabled and the user is unauthenticated).
     window.location.href = buildAppUrl('/ui/');
   }
   // Return a never-resolving promise so callers don't continue
@@ -329,6 +351,19 @@ export async function fetchWithCSRF<T = unknown>(
     throw new ApiError('Invalid URL provided', 400, new Response());
   }
 
+  // SECURITY: Reject protocol-relative and backslash-trick URLs ("//evil.com",
+  // "/\evil.com") that look relative but resolve to a foreign origin. Any URL
+  // beginning with "/" must be a genuine same-origin relative path; reuse
+  // isRelativePath(), which resolves it with the URL parser and so catches the
+  // backslash and control-character variants a literal "//" check would miss.
+  // Absolute URLs (http://...) do not start with "/" and are validated by the
+  // same-origin block below. buildAppUrl() enforces this again downstream, but
+  // failing fast here gives callers a clear error instead of a silently
+  // misrouted, CSRF-bearing request.
+  if (url.startsWith('/') && !isRelativePath(url)) {
+    throw new ApiError('Protocol-relative URLs are not allowed', 400, new Response());
+  }
+
   // SECURITY: Enhanced SSRF protection with comprehensive URL validation
   if (url.includes('//') && !url.startsWith('/')) {
     // For absolute URLs, perform strict validation
@@ -432,9 +467,17 @@ export async function fetchWithCSRF<T = unknown>(
     markOnline();
 
     // Guests get an ApiError so callers handle auth-gated endpoints
-    // gracefully; session-expired users redirect to login.
+    // gracefully; session-expired users redirect to login. PrivateMode
+    // disables the guest carve-out so guests are forced to log in instead
+    // of silently rendering empty widgets. The login endpoint itself is
+    // always exempted so LoginModal can display "Invalid credentials"
+    // rather than triggering a full-page redirect.
     if (response.status === 401) {
-      if (isGuestMode()) {
+      const isLoginRequest = url === '/api/v2/auth/login' || url.startsWith('/api/v2/auth/login?');
+      if (isLoginRequest) {
+        throw new ApiError(getSecureErrorMessage(401), 401, response);
+      }
+      if (isGuestMode() && !appState.security.privateMode) {
         throw new ApiError(getSecureErrorMessage(401), 401, response);
       }
       return redirectToLogin();
@@ -463,7 +506,7 @@ export async function fetchWithCSRF<T = unknown>(
   } catch (error) {
     clearTimeout(timeoutId);
 
-    // Fire-and-forget Sentry capture — never blocks error flow
+    // Fire-and-forget Sentry capture; never blocks error flow
     const method = (finalOptions.method ?? 'GET').toUpperCase();
     if (error instanceof ApiError) {
       getSentryCaptureApiError().then(capture => {

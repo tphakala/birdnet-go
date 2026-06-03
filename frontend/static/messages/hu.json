@@ -1600,7 +1600,11 @@
       "recentlyFirstSeen": "Legutóbb először látva",
       "earliestFirstSeen": "Legrégebben először látva",
       "recentlyLastSeen": "Legutóbb utoljára látva",
-      "highestConfidence": "Legmagasabb megbízhatóság"
+      "earliestLastSeen": "Legrégebben utoljára látva",
+      "highestConfidence": "Legmagasabb megbízhatóság",
+      "lowestConfidence": "Legalacsonyabb megbízhatóság",
+      "highestMaxConfidence": "Legmagasabb maximális megbízhatóság",
+      "lowestMaxConfidence": "Legalacsonyabb maximális megbízhatóság"
     },
     "charts": {
       "top10Species": "Top 10 faj",
@@ -3446,6 +3450,10 @@
         "liveAudioLabel": "Élő hang lejátszás engedélyezése",
         "liveAudioHelp": "Ha engedélyezve van, bárki hallgathatja az élő hang streameket bejelentkezés nélkül. A beállítások és törlés továbbra is hitelesítést igényel.",
         "warningText": "A nyilvános hozzáférési funkciók engedélyezése kiteszi azokat bárkinek, aki elérheti ezt a szervert. Csak akkor engedélyezze, ha megbízik a hálózati környezetében."
+      },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",

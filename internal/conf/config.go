@@ -1374,7 +1374,16 @@ type Security struct {
 	RedirectToHTTPS   bool              `yaml:"redirecttohttps" json:"redirectToHttps"`     // true to redirect to HTTPS
 	AllowSubnetBypass AllowSubnetBypass `yaml:"allowsubnetbypass" json:"allowSubnetBypass"` // subnet bypass configuration
 	PublicAccess      PublicAccess      `yaml:"publicaccess" json:"publicAccess"`           // features accessible without authentication
-	BasicAuth         BasicAuth         `yaml:"basicauth" json:"basicAuth"`                 // password authentication configuration
+	// PrivateMode, when true, requires the user to authenticate before any
+	// UI data is shown. Enforcement lives at the v2 API data layer, which
+	// returns 401 to unauthenticated requests; the public SPA shell is still
+	// served so it can render a login form instead of the dashboard,
+	// detections, analytics, search, about, and notifications views. Settings
+	// and system routes are additionally auth-gated at the HTTP layer.
+	// PublicAccess.LiveAudio still applies independently.
+	// Default is false to preserve guest-friendly upstream behavior.
+	PrivateMode bool      `yaml:"privatemode" json:"privateMode"`
+	BasicAuth   BasicAuth `yaml:"basicauth" json:"basicAuth"` // password authentication configuration
 
 	// OAuthProviders is the new array-based OAuth configuration.
 	// This is the preferred format for configuring OAuth providers.

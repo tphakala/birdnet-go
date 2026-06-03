@@ -1600,7 +1600,11 @@
       "recentlyFirstSeen": "Eerst gehoord, aflopend",
       "earliestFirstSeen": "Eerst gehoord, oplopend",
       "recentlyLastSeen": "Laatst gehoord, aflopend",
-      "highestConfidence": "Betrouwbaarheid, hoogste eerst"
+      "earliestLastSeen": "Laatst gehoord, oplopend",
+      "highestConfidence": "Betrouwbaarheid, hoogste eerst",
+      "lowestConfidence": "Betrouwbaarheid, laagste eerst",
+      "highestMaxConfidence": "Max. betrouwbaarheid, hoogste eerst",
+      "lowestMaxConfidence": "Max. betrouwbaarheid, laagste eerst"
     },
     "charts": {
       "top10Species": "Top 10 Soorten",
@@ -3446,6 +3450,10 @@
         "liveAudioLabel": "Sta openbare live audio-weergave toe",
         "liveAudioHelp": "Wanneer ingeschakeld, kan iedereen luisteren naar live audiostreams zonder in te loggen. Instellingen en verwijderen vereisen nog steeds authenticatie.",
         "warningText": "Het inschakelen van openbare toegangsfuncties maakt ze beschikbaar voor iedereen die deze server kan bereiken. Schakel alleen in als je je netwerkomgeving vertrouwt."
+      },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
