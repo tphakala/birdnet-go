@@ -1578,7 +1578,11 @@
       "recentlyFirstSeen": "Nesen pirmo reizi redzētas",
       "earliestFirstSeen": "Agrākās pirmo reizi redzētās",
       "recentlyLastSeen": "Nesen pēdējo reizi redzētas",
-      "highestConfidence": "Augstākā ticamība"
+      "earliestLastSeen": "Agrākās pēdējo reizi redzētās",
+      "highestConfidence": "Augstākā ticamība",
+      "lowestConfidence": "Zemākā ticamība",
+      "highestMaxConfidence": "Augstākā maksimālā ticamība",
+      "lowestMaxConfidence": "Zemākā maksimālā ticamība"
     },
     "charts": {
       "top10Species": "Top 10 sugas",

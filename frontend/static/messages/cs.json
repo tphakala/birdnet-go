@@ -1578,7 +1578,11 @@
       "recentlyFirstSeen": "Naposledy poprvé spatřeno",
       "earliestFirstSeen": "Nejdříve poprvé spatřeno",
       "recentlyLastSeen": "Naposledy spatřeno",
-      "highestConfidence": "Nejvyšší spolehlivost"
+      "earliestLastSeen": "Nejdříve naposledy spatřeno",
+      "highestConfidence": "Nejvyšší spolehlivost",
+      "lowestConfidence": "Nejnižší spolehlivost",
+      "highestMaxConfidence": "Nejvyšší maximální spolehlivost",
+      "lowestMaxConfidence": "Nejnižší maximální spolehlivost"
     },
     "charts": {
       "top10Species": "Top 10 druhů",

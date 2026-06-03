@@ -1578,7 +1578,11 @@
       "recentlyFirstSeen": "Ostatnio Pierwszy Raz Widziany",
       "earliestFirstSeen": "Najwcześniej Pierwszy Raz Widziany",
       "recentlyLastSeen": "Ostatnio Widziany",
-      "highestConfidence": "Najwyższa Pewność"
+      "earliestLastSeen": "Najwcześniej Ostatnio Widziany",
+      "highestConfidence": "Najwyższa Pewność",
+      "lowestConfidence": "Najniższa Pewność",
+      "highestMaxConfidence": "Najwyższa Maksymalna Pewność",
+      "lowestMaxConfidence": "Najniższa Maksymalna Pewność"
     },
     "charts": {
       "top10Species": "Top 10 Gatunków",
