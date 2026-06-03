@@ -595,7 +595,7 @@
     "newSpeciesHighlights": {
       "title": "Nové a vracející se druhy",
       "subtitle": "První pozorování a nedávné návraty",
-      "show": "Zobrazit:",
+      "trackingDisabled": "Chcete-li tuto funkci používat, aktivujte „Povolit sledování druhů“.",
       "categoryLifetime": "Nový druh",
       "categoryYear": "Nový letos",
       "categorySeason": "Nový tuto sezónu",

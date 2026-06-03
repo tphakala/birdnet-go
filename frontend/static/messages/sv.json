@@ -595,7 +595,7 @@
     "newSpeciesHighlights": {
       "title": "Nya & återvändande arter",
       "subtitle": "Förstagångsobservationer och nyligen återvända",
-      "show": "Visa:",
+      "trackingDisabled": "Aktivera \"Aktivera artspårning\" för att använda den här funktionen.",
       "categoryLifetime": "Ny art",
       "categoryYear": "Ny i år",
       "categorySeason": "Ny denna säsong",

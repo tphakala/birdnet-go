@@ -15,12 +15,9 @@ the visible count, persisted to localStorage.
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { buildSpeciesDetectionUrl } from '$lib/utils/detectionUrls';
   import { getLocalDateString } from '$lib/utils/date';
-  import { getLogger } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { speciesTrackingSettings } from '$lib/stores/settings';
   import { AudioLines, CalendarDays, Leaf, Star } from '@lucide/svelte';
-  import LimitDropdown from './LimitDropdown.svelte';
-
-  const logger = getLogger('dashboard');
 
   interface Props {
     data?: DailySpeciesSummary[];
@@ -31,27 +28,11 @@ the visible count, persisted to localStorage.
 
   let { data = [], selectedDate, showThumbnails = true }: Props = $props();
 
-  const LIMIT_OPTIONS = [6, 12, 24, 48];
-  const DEFAULT_LIMIT = 6;
-  const LIMIT_STORAGE_KEY = 'newSpeciesHighlightsLimit';
+  // Maximum number of species shown.
+  const MAX_VISIBLE = 12;
 
-  function loadLimit(): number {
-    if (typeof window === 'undefined') return DEFAULT_LIMIT;
-    const stored = Number(localStorage.getItem(LIMIT_STORAGE_KEY));
-    return LIMIT_OPTIONS.includes(stored) ? stored : DEFAULT_LIMIT;
-  }
-
-  let limit = $state(loadLimit());
-
-  function setLimit(value: number) {
-    limit = value;
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem(LIMIT_STORAGE_KEY, String(value));
-    } catch (e) {
-      logger.error('Failed to save highlights limit:', e);
-    }
-  }
+  // The widget relies on the species tracker; warn when it is turned off.
+  const trackingDisabled = $derived($speciesTrackingSettings?.enabled === false);
 
   type HighlightCategory = 'lifetime' | 'year' | 'season';
 
@@ -82,7 +63,7 @@ the visible count, persisted to localStorage.
     return result;
   });
 
-  const visibleHighlights = $derived(highlights.slice(0, limit));
+  const visibleHighlights = $derived(highlights.slice(0, MAX_VISIBLE));
 
   // The absence gap reflects live tracker state, so it is only accurate for the
   // current day; for past dates the recency stat is omitted.
@@ -157,25 +138,23 @@ the visible count, persisted to localStorage.
   </span>
 {/snippet}
 
-{#if highlights.length > 0}
-  <Card padding={false}>
-    {#snippet header()}
-      <div class="flex items-start justify-between gap-2">
-        <div class="flex flex-col gap-0.5">
-          <h3 class="font-semibold">{t('dashboard.newSpeciesHighlights.title')}</h3>
-          <p class="text-sm text-[var(--color-base-content)]/60">
-            {t('dashboard.newSpeciesHighlights.subtitle')}
-          </p>
-        </div>
-        <LimitDropdown
-          value={limit}
-          options={LIMIT_OPTIONS}
-          ariaLabel={t('dashboard.newSpeciesHighlights.show')}
-          onChange={setLimit}
-        />
-      </div>
-    {/snippet}
+{#snippet cardHeader()}
+  <div class="flex flex-col gap-0.5">
+    <h3 class="font-semibold">{t('dashboard.newSpeciesHighlights.title')}</h3>
+    <p class="text-sm text-[var(--color-base-content)]/60">
+      {t('dashboard.newSpeciesHighlights.subtitle')}
+    </p>
+  </div>
+{/snippet}
 
+{#if trackingDisabled}
+  <Card padding={false} header={cardHeader}>
+    <p class="px-4 pb-4 text-sm text-[var(--color-base-content)]/70">
+      {t('dashboard.newSpeciesHighlights.trackingDisabled')}
+    </p>
+  </Card>
+{:else if highlights.length > 0}
+  <Card padding={false} header={cardHeader}>
     <div class="grid grid-cols-1 gap-2 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {#each visibleHighlights as { species, category } (species.scientific_name)}
         {@const percent = confidencePercent(species)}

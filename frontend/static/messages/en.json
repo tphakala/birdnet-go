@@ -595,7 +595,7 @@
     "newSpeciesHighlights": {
       "title": "New & Returning Species",
       "subtitle": "First-time and recently returned detections",
-      "show": "Show:",
+      "trackingDisabled": "Please activate \"Enable Species Tracking\" to use this feature.",
       "categoryLifetime": "New species",
       "categoryYear": "New this year",
       "categorySeason": "New this season",

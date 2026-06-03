@@ -595,7 +595,7 @@
     "newSpeciesHighlights": {
       "title": "Neue & zurückkehrende Arten",
       "subtitle": "Erstnachweise und kürzlich zurückgekehrte Arten",
-      "show": "Anzeigen:",
+      "trackingDisabled": "Bitte aktivieren Sie „Artenverfolgung aktivieren“, um diese Funktion zu nutzen.",
       "categoryLifetime": "Neue Art",
       "categoryYear": "Neu dieses Jahr",
       "categorySeason": "Neu diese Saison",

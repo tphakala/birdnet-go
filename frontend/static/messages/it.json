@@ -595,7 +595,7 @@
     "newSpeciesHighlights": {
       "title": "Specie nuove e di ritorno",
       "subtitle": "Prime osservazioni e ritorni recenti",
-      "show": "Mostra:",
+      "trackingDisabled": "Attiva \"Abilita tracciamento delle specie\" per usare questa funzione.",
       "categoryLifetime": "Nuova specie",
       "categoryYear": "Nuova quest'anno",
       "categorySeason": "Nuova questa stagione",

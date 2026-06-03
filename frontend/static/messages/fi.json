@@ -595,7 +595,7 @@
     "newSpeciesHighlights": {
       "title": "Uudet ja palaavat lajit",
       "subtitle": "Ensihavainnot ja äskettäin palanneet",
-      "show": "Näytä:",
+      "trackingDisabled": "Ota käyttöön \"Ota lajiseuranta käyttöön\" käyttääksesi tätä ominaisuutta.",
       "categoryLifetime": "Uusi laji",
       "categoryYear": "Uusi tänä vuonna",
       "categorySeason": "Uusi tällä kaudella",

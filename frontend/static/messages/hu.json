@@ -595,7 +595,7 @@
     "newSpeciesHighlights": {
       "title": "Új és visszatérő fajok",
       "subtitle": "Első észlelések és nemrégi visszatérők",
-      "show": "Megjelenítés:",
+      "trackingDisabled": "A funkció használatához kapcsolja be a „Fajkövetés engedélyezése” lehetőséget.",
       "categoryLifetime": "Új faj",
       "categoryYear": "Új ebben az évben",
       "categorySeason": "Új ebben a szezonban",

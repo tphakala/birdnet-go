@@ -595,7 +595,7 @@
     "newSpeciesHighlights": {
       "title": "Nieuwe & terugkerende soorten",
       "subtitle": "Eerste waarnemingen en recente terugkeer",
-      "show": "Tonen:",
+      "trackingDisabled": "Schakel \"Soorten volgen inschakelen\" in om deze functie te gebruiken.",
       "categoryLifetime": "Nieuwe soort",
       "categoryYear": "Nieuw dit jaar",
       "categorySeason": "Nieuw dit seizoen",
