@@ -193,29 +193,43 @@ var hlsMgr = &hlsManager{
 	verboseLogging: os.Getenv(hlsVerboseEnvVar) != "",
 }
 
+// HLS route path fragments, registered relative to the v2 API group in
+// initHLSRoutes. They are reused by isPrivateModeExempt so the PrivateMode
+// exempt allow-list cannot drift from the registered routes.
+const (
+	hlsGroupPath      = "/streams/hls"
+	hlsTokenGroupPath = "/t"
+	hlsStartPath      = "/:sourceID/start"
+	hlsStopPath       = "/:sourceID/stop"
+	hlsHeartbeatPath  = "/heartbeat"
+	hlsStatusPath     = "/status"
+	hlsPlaylistPath   = "/:streamToken/playlist.m3u8"
+	hlsContentPath    = "/:streamToken/*"
+)
+
 // initHLSRoutes registers HLS streaming endpoints
 func (c *Controller) initHLSRoutes() {
 	// Get authentication middleware
 	authMiddleware := c.authMiddleware
 
 	// HLS base group (no auth by default)
-	hlsGroup := c.Group.Group("/streams/hls")
+	hlsGroup := c.Group.Group(hlsGroupPath)
 
 	// Stream control endpoints
 	// Start uses dynamic middleware that checks PublicAccess.LiveAudio per-request,
 	// so changes take effect immediately without server restart.
 	// Stop always requires authentication to prevent abuse.
-	hlsGroup.POST("/:sourceID/start", c.StartHLSStream, c.publicLiveAudioAuth)
-	hlsGroup.POST("/:sourceID/stop", c.StopHLSStream, authMiddleware)
+	hlsGroup.POST(hlsStartPath, c.StartHLSStream, c.publicLiveAudioAuth)
+	hlsGroup.POST(hlsStopPath, c.StopHLSStream, authMiddleware)
 
 	// Auth-gated endpoints
-	hlsGroup.POST("/heartbeat", c.HLSHeartbeat, c.publicLiveAudioAuth)
-	hlsGroup.GET("/status", c.GetHLSStatus, c.publicLiveAudioAuth)
+	hlsGroup.POST(hlsHeartbeatPath, c.HLSHeartbeat, c.publicLiveAudioAuth)
+	hlsGroup.GET(hlsStatusPath, c.GetHLSStatus, c.publicLiveAudioAuth)
 
 	// Token-based content serving
-	hlsTokenGroup := hlsGroup.Group("/t")
-	hlsTokenGroup.GET("/:streamToken/playlist.m3u8", c.ServeHLSPlaylist)
-	hlsTokenGroup.GET("/:streamToken/*", c.ServeHLSContent)
+	hlsTokenGroup := hlsGroup.Group(hlsTokenGroupPath)
+	hlsTokenGroup.GET(hlsPlaylistPath, c.ServeHLSPlaylist)
+	hlsTokenGroup.GET(hlsContentPath, c.ServeHLSContent)
 
 	// Start the HLS activity sync goroutine (only once across all controller instances)
 	hlsMgr.activitySyncOnce.Do(func() {
@@ -296,22 +310,30 @@ func (c *Controller) privateModeAuth(next echo.HandlerFunc) echo.HandlerFunc {
 // The allow-list is keyed on method + path so any future handler added
 // at one of these paths under a different verb is fail-closed by default.
 func isPrivateModeExempt(method, path string) bool {
+	// Compose the exempt paths from the same constants used at the route
+	// registration sites (see initHLSRoutes, initAuthRoutes and the app config
+	// route in initAppRoutes) so the allow-list cannot silently drift from the
+	// actual routes. TestPrivateModeExemptPathsAreRegisteredRoutes asserts this
+	// correspondence.
+	authBase := apiV2Prefix + authGroupPath
+	hlsBase := apiV2Prefix + hlsGroupPath
+	hlsTokenBase := hlsBase + hlsTokenGroupPath
 	switch {
-	case method == http.MethodGet && path == "/api/v2/app/config":
+	case method == http.MethodGet && path == apiV2Prefix+AppConfigEndpoint:
 		return true
-	case method == http.MethodPost && path == "/api/v2/auth/login":
+	case method == http.MethodPost && path == authBase+authLoginPath:
 		return true
-	case method == http.MethodGet && path == "/api/v2/auth/callback":
+	case method == http.MethodGet && path == authBase+authCallbackPath:
 		return true
-	case method == http.MethodPost && path == "/api/v2/streams/hls/:sourceID/start":
+	case method == http.MethodPost && path == hlsBase+hlsStartPath:
 		return true
-	case method == http.MethodPost && path == "/api/v2/streams/hls/heartbeat":
+	case method == http.MethodPost && path == hlsBase+hlsHeartbeatPath:
 		return true
-	case method == http.MethodGet && path == "/api/v2/streams/hls/status":
+	case method == http.MethodGet && path == hlsBase+hlsStatusPath:
 		return true
-	case method == http.MethodGet && path == "/api/v2/streams/hls/t/:streamToken/playlist.m3u8":
+	case method == http.MethodGet && path == hlsTokenBase+hlsPlaylistPath:
 		return true
-	case method == http.MethodGet && path == "/api/v2/streams/hls/t/:streamToken/*":
+	case method == http.MethodGet && path == hlsTokenBase+hlsContentPath:
 		return true
 	}
 	return false

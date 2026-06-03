@@ -100,7 +100,7 @@ func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterfa
 	// Create a controller with the test datastore and default settings
 	// to prevent nil pointer panics if a handler accesses c.Settings.
 	controller := &Controller{
-		Group:    e.Group("/api/v2"),
+		Group:    e.Group(apiV2Prefix),
 		DS:       mockDS,
 		Settings: newValidTestSettings(),
 	}
