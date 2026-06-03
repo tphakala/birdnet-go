@@ -602,7 +602,7 @@
       "categorySeasonNamed": "Jauna šajā {season}",
       "maxConfidenceShort": "Maks {confidence} %",
       "detections": "{count, plural, zero {# noteikšanu} one {# noteikšana} other {# noteikšanas}}",
-      "lastSeen": "Pēdējoreiz: {days, plural, zero {šodien} one {pirms # dienas} other {pirms # dienām}}"
+      "lastSeen": "Pēdējoreiz: {days, plural, =0 {šodien} one {pirms # dienas} other {pirms # dienām}}"
     },
     "dailySummary": {
       "title": "Dienas aktivitāte",

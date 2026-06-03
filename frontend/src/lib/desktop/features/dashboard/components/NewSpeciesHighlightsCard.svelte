@@ -3,9 +3,7 @@ NewSpeciesHighlightsCard.svelte - Highlights newly detected / returning species 
 
 Renders nothing when no qualifying species exist for the day.
 Data source: same DailySpeciesSummary[] already loaded by the dashboard page.
-
-A small "how many to show" dropdown (top-right, like Recent Detections) controls
-the visible count, persisted to localStorage.
+Shows up to 12 species, ordered by novelty category then detection count.
 -->
 
 <script lang="ts">
