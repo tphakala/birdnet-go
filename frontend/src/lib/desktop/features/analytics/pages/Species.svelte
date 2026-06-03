@@ -378,7 +378,7 @@
   function resetFilters() {
     filters.timePeriod = 'all';
     filters.sortOrder = DEFAULT_SORT_ORDER;
-    setStoredValue<SortOrder>(SORT_STORAGE_KEY, DEFAULT_SORT_ORDER);
+    // fetchData() below commits and persists the reset sort order (single commit point).
     filters.searchTerm = '';
 
     const today = new Date();
