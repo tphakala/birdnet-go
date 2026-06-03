@@ -147,6 +147,7 @@ if [ -n "$TZ" ]; then
         echo "❌ ERROR: Timezone '$TZ' not found in /usr/share/zoneinfo"
         echo "   Install tzdata-legacy if using US/*, Etc/*, or other legacy names"
         echo "   Falling back to UTC"
+        export TZ="UTC"
     fi
 else
     echo "No TZ environment variable set, using container default (UTC)"
