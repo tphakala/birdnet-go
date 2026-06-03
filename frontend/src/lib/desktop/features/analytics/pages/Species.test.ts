@@ -133,6 +133,14 @@ describe('Species (analytics page)', () => {
 describe('Species (analytics page) — sortable column headers', () => {
   const originalFetch = globalThis.fetch;
 
+  // Column order in SORTABLE_COLUMNS: species(0), count(1), avgConfidence(2), …
+  const COUNT_COLUMN_INDEX = 1;
+  // The grid/list view toggle renders two `.join` buttons; index 1 is the list/table view.
+  const TABLE_VIEW_TOGGLE_INDEX = 1;
+  // localStorage persists the sort order JSON-encoded.
+  const COUNT_ASC_SORT_ORDER = 'count_asc';
+  const COUNT_ASC_STORED = JSON.stringify(COUNT_ASC_SORT_ORDER);
+
   // Common names sort A→Z differently from counts, so a wrong sort is visible.
   const summary = [
     {
@@ -165,6 +173,7 @@ describe('Species (analytics page) — sortable column headers', () => {
   ];
 
   beforeEach(() => {
+    vi.clearAllMocks();
     globalThis.fetch = mockFetchSequence({
       '/api/v2/analytics/species/summary': () => summary,
       '/api/v2/analytics/species/thumbnails': () => ({}),
@@ -177,6 +186,7 @@ describe('Species (analytics page) — sortable column headers', () => {
     resetBasePath();
     globalThis.fetch = originalFetch;
     window.localStorage.clear();
+    vi.restoreAllMocks();
   });
 
   const speciesTest = createComponentTestFactory(Species);
@@ -185,7 +195,7 @@ describe('Species (analytics page) — sortable column headers', () => {
   async function renderListView() {
     const { container } = speciesTest.render({});
     // Switch from the default grid view to the list/table view.
-    await fireEvent.click(container.querySelectorAll('.join button')[1]);
+    await fireEvent.click(container.querySelectorAll('.join button')[TABLE_VIEW_TOGGLE_INDEX]);
     await waitFor(
       () => {
         if (!container.querySelector('table tbody tr')) throw new Error('table not yet rendered');
@@ -205,43 +215,43 @@ describe('Species (analytics page) — sortable column headers', () => {
     const { container } = await renderListView();
 
     expect(rowNames(container)).toEqual(['Blue Jay', 'Zebra Finch', 'American Robin']);
-    expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
-      'descending'
-    );
+    expect(
+      container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
+    ).toBe('descending');
   });
 
   it('toggles detection count to ascending on first header click and back on second', async () => {
     const { container } = await renderListView();
-    const countButton = container.querySelectorAll('table thead th button')[1]; // species, count, …
+    const countButton = container.querySelectorAll('table thead th button')[COUNT_COLUMN_INDEX];
 
     await fireEvent.click(countButton);
     expect(rowNames(container)).toEqual(['American Robin', 'Zebra Finch', 'Blue Jay']);
-    expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
-      'ascending'
-    );
+    expect(
+      container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
+    ).toBe('ascending');
 
     await fireEvent.click(countButton);
     expect(rowNames(container)).toEqual(['Blue Jay', 'Zebra Finch', 'American Robin']);
-    expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
-      'descending'
-    );
+    expect(
+      container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
+    ).toBe('descending');
   });
 
   it('persists the chosen sort order to localStorage', async () => {
     const { container } = await renderListView();
 
-    await fireEvent.click(container.querySelectorAll('table thead th button')[1]);
-    expect(window.localStorage.getItem(SORT_STORAGE_KEY)).toBe('"count_asc"');
+    await fireEvent.click(container.querySelectorAll('table thead th button')[COUNT_COLUMN_INDEX]);
+    expect(window.localStorage.getItem(SORT_STORAGE_KEY)).toBe(COUNT_ASC_STORED);
   });
 
   it('restores a persisted sort order on a fresh render', async () => {
-    window.localStorage.setItem(SORT_STORAGE_KEY, '"count_asc"');
+    window.localStorage.setItem(SORT_STORAGE_KEY, COUNT_ASC_STORED);
 
     const { container } = await renderListView();
 
     expect(rowNames(container)).toEqual(['American Robin', 'Zebra Finch', 'Blue Jay']);
-    expect(container.querySelectorAll('table thead th')[1].getAttribute('aria-sort')).toBe(
-      'ascending'
-    );
+    expect(
+      container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
+    ).toBe('ascending');
   });
 });
