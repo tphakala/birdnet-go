@@ -89,8 +89,8 @@ export class ApiError extends Error {
  * When a redirect actually starts, this returns a Promise that never resolves,
  * so callers awaiting fetchWithCSRF simply hang until the browser navigates
  * away. When the redirect is suppressed by the reload-loop cooldown (no
- * navigation happens), it throws an ApiError instead so awaiting callers can
- * stop their loading state rather than hang forever.
+ * navigation happens), it returns a rejected promise (ApiError) instead so
+ * awaiting callers can stop their loading state rather than hang forever.
  */
 function redirectToLogin(): Promise<never> {
   if (!_redirectingToLogin) {
@@ -117,11 +117,12 @@ function redirectToLogin(): Promise<never> {
     if (redirectSuppressed) {
       // We are NOT navigating in this branch, so returning a never-resolving
       // promise would leave awaiting callers stuck in a loading state forever.
-      // Throw instead so the caller can surface the error and stop loading.
-      throw new ApiError(
-        'Session expired; login redirect suppressed to prevent a reload loop',
-        401,
-        new Response(null, { status: 401 })
+      // Reject so the caller can surface the error and stop loading. Return a
+      // rejected promise (not a synchronous throw) to honour the Promise<never>
+      // return type, and use the canonical 401 message; the reload-loop reason
+      // is already logged above.
+      return Promise.reject(
+        new ApiError(getSecureErrorMessage(401), 401, new Response(null, { status: 401 }))
       );
     }
 

@@ -207,6 +207,15 @@ const (
 	hlsContentPath    = "/:streamToken/*"
 )
 
+// hlsPlaylistURL builds the client-facing playlist URL for a stream token from
+// the same route constants used to register the playlist route (see
+// initHLSRoutes), so the emitted URL cannot drift from the actual route on a
+// prefix or fragment rename.
+func hlsPlaylistURL(token string) string {
+	tokenPath := strings.Replace(hlsPlaylistPath, ":streamToken", token, 1)
+	return apiV2Prefix + hlsGroupPath + hlsTokenGroupPath + tokenPath
+}
+
 // initHLSRoutes registers HLS streaming endpoints
 func (c *Controller) initHLSRoutes() {
 	// Get authentication middleware
@@ -315,9 +324,11 @@ func isPrivateModeExempt(method, path string) bool {
 	// route in initAppRoutes) so the allow-list cannot silently drift from the
 	// actual routes. TestPrivateModeExemptPathsAreRegisteredRoutes asserts this
 	// correspondence.
-	authBase := apiV2Prefix + authGroupPath
-	hlsBase := apiV2Prefix + hlsGroupPath
-	hlsTokenBase := hlsBase + hlsTokenGroupPath
+	const (
+		authBase     = apiV2Prefix + authGroupPath
+		hlsBase      = apiV2Prefix + hlsGroupPath
+		hlsTokenBase = hlsBase + hlsTokenGroupPath
+	)
 	switch {
 	case method == http.MethodGet && path == apiV2Prefix+AppConfigEndpoint:
 		return true
@@ -478,7 +489,7 @@ func (c *Controller) buildHLSStreamResponse(ctx echo.Context, sourceID string, s
 	}
 
 	// Build the API URL using the stream token (not the sourceID)
-	playlistURL := fmt.Sprintf("/api/v2/streams/hls/t/%s/playlist.m3u8", token)
+	playlistURL := hlsPlaylistURL(token)
 
 	// Determine playlist ready status
 	var isReady bool
@@ -637,7 +648,7 @@ func (c *Controller) GetHLSStatus(ctx echo.Context) error {
 		token, hasToken := hlsMgr.sourceTokens[sourceID]
 		hlsMgr.tokensMu.RUnlock()
 		if hasToken {
-			playlistURL = fmt.Sprintf("/api/v2/streams/hls/t/%s/playlist.m3u8", token)
+			playlistURL = hlsPlaylistURL(token)
 		}
 
 		// Check actual playlist readiness instead of hardcoding true

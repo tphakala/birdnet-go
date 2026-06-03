@@ -403,7 +403,7 @@ describe('API utilities', () => {
 
       await expect(fetchWithCSRF('/api/test')).rejects.toMatchObject({
         status: 401,
-        message: 'Session expired; login redirect suppressed to prevent a reload loop',
+        message: 'errors.api.unauthorized',
       });
       // The suppressed branch must not navigate.
       expect(window.location.href).not.toBe('/ui/');

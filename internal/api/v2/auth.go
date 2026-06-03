@@ -261,7 +261,11 @@ func (c *Controller) Login(ctx echo.Context) error {
 	if requestBase != "" {
 		finalRedirect = ensurePathWithinBase(finalRedirect, requestBase+"/")
 	}
-	redirectURL := fmt.Sprintf("%s/api/v2/auth/callback?code=%s&redirect=%s", requestBase, url.QueryEscape(authCode), url.QueryEscape(finalRedirect))
+	// Compose the callback path from the same constants used to register the
+	// route (see initAuthRoutes) so the client-facing redirect URL cannot drift
+	// from the actual route on a prefix or fragment rename.
+	callbackPath := apiV2Prefix + authGroupPath + authCallbackPath
+	redirectURL := fmt.Sprintf("%s%s?code=%s&redirect=%s", requestBase, callbackPath, url.QueryEscape(authCode), url.QueryEscape(finalRedirect))
 
 	c.logInfoIfEnabled("Returning successful login response with redirect",
 		logger.Username(req.Username),
