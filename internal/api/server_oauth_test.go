@@ -39,9 +39,10 @@ func TestIsValidOAuthProvider(t *testing.T) {
 	}
 }
 
+// Not parallel: isAllowedOAuthUser reads the live settings snapshot
+// (conf.GetSettings), and the sibling TestIsAllowedOAuthUserHotReload mutates that
+// global snapshot. Running serially keeps the two tests from coupling.
 func TestIsAllowedOAuthUser(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name         string
 		gothProvider string
@@ -140,7 +141,6 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
 			var settings *conf.Settings
 			if tt.providers != nil {
 				settings = &conf.Settings{
@@ -154,4 +154,42 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestIsAllowedOAuthUserHotReload reproduces the issue #3370 class for the OAuth
+// allowed-users check: the provider/user allowlist edited through the web UI must
+// apply without a restart. The construction-time Server.settings holds a startup
+// snapshot where the provider is disabled with no allowed users, while the live
+// snapshot (published via the atomic pointer) enables it and adds the user.
+// Not parallel: it mutates the global settings snapshot.
+func TestIsAllowedOAuthUserHotReload(t *testing.T) {
+	// Startup snapshot: provider disabled, no allowed users.
+	startup := &conf.Settings{
+		Security: conf.Security{
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{Provider: "google", Enabled: false, ClientID: "id", ClientSecret: "s", UserID: ""},
+			},
+		},
+	}
+	s := &Server{settings: startup}
+
+	// Sanity: with only the stale startup snapshot, the user is not allowed.
+	conf.SetTestSettings(startup)
+	assert.False(t, s.isAllowedOAuthUser(security.ProviderGoogle, "google-123", "user@gmail.com"),
+		"user should not be allowed under the startup snapshot")
+
+	// Simulate a UI save: enable the provider and allow the user, published via
+	// the atomic pointer.
+	updated := &conf.Settings{
+		Security: conf.Security{
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{Provider: "google", Enabled: true, ClientID: "id", ClientSecret: "s", UserID: "user@gmail.com"},
+			},
+		},
+	}
+	conf.SetTestSettings(updated)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+	assert.True(t, s.isAllowedOAuthUser(security.ProviderGoogle, "google-123", "user@gmail.com"),
+		"allowlist change made via UI must apply without a restart")
 }

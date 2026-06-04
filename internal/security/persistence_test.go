@@ -133,7 +133,7 @@ func TestLocalNetworkCookieStore(t *testing.T) {
 
 	// Test with CookieStore
 	gothic.Store = sessions.NewCookieStore([]byte("test-secret"))
-	server.configureLocalNetworkCookieStore()
+	server.configureLocalNetworkCookieStore(server.Settings)
 
 	cookieStore, ok := gothic.Store.(*sessions.CookieStore)
 	assert.True(t, ok, "Gothic store should be a CookieStore")
@@ -143,7 +143,7 @@ func TestLocalNetworkCookieStore(t *testing.T) {
 	tempDir := t.TempDir()
 
 	gothic.Store = sessions.NewFilesystemStore(tempDir, []byte("test-secret"))
-	server.configureLocalNetworkCookieStore()
+	server.configureLocalNetworkCookieStore(server.Settings)
 
 	fileStore, ok := gothic.Store.(*sessions.FilesystemStore)
 	assert.True(t, ok, "Gothic store should be a FilesystemStore")
@@ -171,7 +171,7 @@ func TestConfigureLocalNetworkWithUnknownStore(t *testing.T) {
 
 	// This should not panic - the function handles unknown store types gracefully
 	assert.NotPanics(t, func() {
-		server.configureLocalNetworkCookieStore()
+		server.configureLocalNetworkCookieStore(server.Settings)
 	}, "configureLocalNetworkCookieStore should not panic with unknown store type")
 }
 
@@ -199,7 +199,7 @@ func TestConfigureLocalNetworkWithMissingSessionSecret(t *testing.T) {
 	// This should not panic - the function handles unknown store types gracefully
 	// even with an empty session secret
 	assert.NotPanics(t, func() {
-		server.configureLocalNetworkCookieStore()
+		server.configureLocalNetworkCookieStore(server.Settings)
 	}, "configureLocalNetworkCookieStore should not panic with unknown store type and empty session secret")
 }
 
