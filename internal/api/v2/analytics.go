@@ -46,7 +46,7 @@ type SpeciesDailySummary struct {
 	ThumbnailURL       string  `json:"thumbnail_url,omitempty"`
 	IsNewSpecies       bool    `json:"is_new_species,omitempty"`        // First seen within tracking window
 	DaysSinceFirstSeen int     `json:"days_since_first_seen,omitempty"` // Days since species was first detected
-	DaysSinceLastSeen  int     `json:"days_since_last_seen,omitempty"`  // Days since the previous detection before this return (0 if absent/first-ever)
+	DaysSinceLastSeen  int     `json:"days_since_last_seen,omitempty"`  // Days since the previous detection before this return; omitted unless > 0 (first-ever and same-day re-detections are not emitted)
 	// Multi-period tracking metadata
 	IsNewThisYear   bool   `json:"is_new_this_year,omitempty"`   // First time this year
 	IsNewThisSeason bool   `json:"is_new_this_season,omitempty"` // First time this season

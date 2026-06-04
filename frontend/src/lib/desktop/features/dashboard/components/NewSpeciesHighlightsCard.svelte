@@ -54,6 +54,9 @@ Shows up to 12 species, ordered by novelty category then detection count.
 
   const highlights = $derived.by<Highlight[]>(() => {
     const result: Highlight[] = [];
+    // Guard against a null payload: the default [] only applies for undefined,
+    // and the daily-summary endpoint can return a null body.
+    if (!data) return result;
     for (const species of data) {
       const category = resolveCategory(species);
       if (category !== null) result.push({ species, category });
