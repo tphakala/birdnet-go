@@ -212,7 +212,6 @@ func (t *SpeciesTracker) loadNoveltyEpisodesFromDatabase(now time.Time) error {
 			continue
 		}
 
-		latestDate := dates[len(dates)-1]
 		runStart := findContiguousNoveltyRunStart(dates)
 		if calculateDaysSince(now, runStart) > t.windowDays {
 			continue
@@ -226,8 +225,18 @@ func (t *SpeciesTracker) loadNoveltyEpisodesFromDatabase(now time.Time) error {
 			continue
 		}
 
+		// DaysSinceLastSeen is the absence gap that triggered the episode, matching
+		// the live path's episode-creation snapshot. restoredNoveltyEpisodeDays
+		// returns the firstEverNoveltyEpisodeDays sentinel for first-ever species;
+		// those have no prior sighting, so fall back to the inactive sentinel
+		// instead of reporting a spurious multi-decade gap.
+		daysSinceLastSeen := episodeDays
+		if episodeDays == firstEverNoveltyEpisodeDays {
+			daysSinceLastSeen = inactiveNoveltyValue
+		}
+
 		episodes[scientificName] = NoveltyStatus{
-			DaysSinceLastSeen:    calculateDaysSince(now, latestDate),
+			DaysSinceLastSeen:    daysSinceLastSeen,
 			NoveltyEpisodeDays:   episodeDays,
 			NoveltyEpisodeStart:  runStart,
 			NoveltyEpisodeActive: true,
