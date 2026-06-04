@@ -1719,7 +1719,11 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		}
 		profileOpt := spectrogram.WithFrequencyProfile(spectrogram.ProfileForModelType(modelType))
 
-		spectrogramPath, err := c.generateSpectrogram(bgCtx, clipPath, params.width, params.raw, params.style, params.dynamicRange, profileOpt)
+		// Thread the relative audio path the handler already validated against
+		// Export.Path so the worker derives the same queue key the client received,
+		// even if Export.Path changed after the handler returned. Re-deriving it
+		// here (via generateSpectrogram) would reopen the queue-key TOCTOU.
+		spectrogramPath, err := c.generateSpectrogramFromRel(bgCtx, relAudioPath, clipPath, params.width, params.raw, params.style, params.dynamicRange, profileOpt)
 
 		if err != nil {
 			// Update queue status so polling clients see the failure
@@ -2642,21 +2646,39 @@ func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, abs
 // It accepts a context for cancellation and timeout.
 // It returns the relative path to the generated spectrogram, suitable for use with c.SFS.ServeFile.
 // Optimized: Fast path check happens before expensive audio validation.
+//
+// It normalizes audioPath against the live Realtime.Audio.Export.Path and then
+// delegates to generateSpectrogramFromRel. Callers that have already validated
+// the relative path at a request boundary (e.g. GenerateSpectrogramByID) must
+// call generateSpectrogramFromRel directly and thread that path in, so the queue
+// key cannot drift if Export.Path changes mid-flight.
 func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool, style, dynamicRange string, extraOpts ...spectrogram.GenerateOption) (string, error) {
-	start := time.Now()
-	getSpectrogramLogger().Debug("Spectrogram generation requested",
-		logger.String("audio_path", audioPath),
-		logger.Int("width", width),
-		logger.Bool("raw", raw),
-		logger.String("style", style),
-		logger.String("dynamic_range", dynamicRange),
-		logger.String("request_time", start.Format(time.DateTime)))
-
 	// Step 1: Normalize and validate path
 	relAudioPath, err := c.normalizeAndValidatePath(audioPath)
 	if err != nil {
 		return "", err
 	}
+	return c.generateSpectrogramFromRel(ctx, relAudioPath, audioPath, width, raw, style, dynamicRange, extraOpts...)
+}
+
+// generateSpectrogramFromRel generates a spectrogram for an already normalized,
+// SecureFS-validated relative audio path. It derives the spectrogram path and the
+// queue key purely from relAudioPath, so callers that resolved that path at a
+// request boundary get a stable key regardless of later Realtime.Audio.Export.Path
+// changes. This closes the TOCTOU where GenerateSpectrogramByID returned one key
+// to the client while the worker, re-reading Export.Path, ran (and cleaned up)
+// under a different key, orphaning the queued entry. audioPath is retained only
+// for log and error context.
+func (c *Controller) generateSpectrogramFromRel(ctx context.Context, relAudioPath, audioPath string, width int, raw bool, style, dynamicRange string, extraOpts ...spectrogram.GenerateOption) (string, error) {
+	start := time.Now()
+	getSpectrogramLogger().Debug("Spectrogram generation requested",
+		logger.String("audio_path", audioPath),
+		logger.String("relative_audio_path", relAudioPath),
+		logger.Int("width", width),
+		logger.Bool("raw", raw),
+		logger.String("style", style),
+		logger.String("dynamic_range", dynamicRange),
+		logger.String("request_time", start.Format(time.DateTime)))
 
 	// Step 2: Calculate spectrogram paths early (needed for fast path check)
 	relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw, style, dynamicRange)

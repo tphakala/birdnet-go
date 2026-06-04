@@ -294,7 +294,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}
-	c.Settings = updated
+	c.publishSettings(updated)
 
 	// Run cross-field side-effects (interval tracking, telemetry toggles, etc.)
 	// against the published pair. handleSettingsChanges is read-only on both.
@@ -304,7 +304,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		if publishGlobal {
 			conf.StoreSettings(current)
 		}
-		c.Settings = current
+		c.publishSettings(current)
 		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to apply settings changes, rolling back", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
@@ -317,7 +317,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		if err := conf.SaveSettings(); err != nil {
 			// Rollback in-memory; disk write never happened successfully.
 			conf.StoreSettings(current)
-			c.Settings = current
+			c.publishSettings(current)
 			c.logAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
@@ -575,12 +575,12 @@ func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) err
 	if c.isGlobalOwner {
 		conf.StoreSettings(updated)
 	}
-	c.Settings = updated
+	c.publishSettings(updated)
 
 	if c.isGlobalOwner && !c.DisableSaveSettings {
 		if err := conf.SaveSettings(); err != nil {
 			conf.StoreSettings(current)
-			c.Settings = current
+			c.publishSettings(current)
 			return fmt.Errorf("failed to save settings: %w", err)
 		}
 	}
@@ -704,13 +704,13 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}
-	c.Settings = updated
+	c.publishSettings(updated)
 
 	if err := c.handleSettingsChanges(current, updated); err != nil {
 		if publishGlobal {
 			conf.StoreSettings(current)
 		}
-		c.Settings = current
+		c.publishSettings(current)
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
@@ -721,7 +721,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	if publishGlobal && !c.DisableSaveSettings {
 		if err := conf.SaveSettings(); err != nil {
 			conf.StoreSettings(current)
-			c.Settings = current
+			c.publishSettings(current)
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
 		c.logAPIRequest(ctx, logger.LogLevelInfo, "Section settings saved successfully",

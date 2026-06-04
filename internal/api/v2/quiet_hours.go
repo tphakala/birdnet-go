@@ -40,7 +40,9 @@ func (c *Controller) initQuietHoursRoutes() {
 // indicator count active suppressions. Authenticated requests (e.g. the
 // StreamManager settings form) continue to receive the sanitized URL map.
 func (c *Controller) GetQuietHoursStatus(ctx echo.Context) error {
-	settings := c.Settings
+	// Read the live snapshot (race-free, hot-reloading) rather than the bare
+	// c.Settings field, which races the c.Settings republish in UpdateSettings.
+	settings := c.currentSettings()
 	var scheduler *schedule.QuietHoursScheduler
 	if eng := c.engine.Load(); eng != nil {
 		scheduler = eng.Scheduler()
