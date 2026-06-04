@@ -943,7 +943,8 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 	// sending the user on the provider round-trip, so a disabled or half-configured
 	// provider fails fast with a clear security.log entry here instead of an opaque
 	// error after the redirect (issue #3381). The visitor only sees a generic message.
-	if settings := s.currentSettings(); settings == nil || !settings.IsOAuthProviderEnabled(s.configProviderFor(provider)) {
+	configProvider := s.configProviderFor(provider)
+	if settings := s.currentSettings(); settings == nil || configProvider == "" || !settings.IsOAuthProviderEnabled(configProvider) {
 		log.Warn("OAuth login rejected: provider is disabled or not fully configured")
 		return c.String(http.StatusBadRequest, "OAuth provider not available")
 	}

@@ -1166,9 +1166,10 @@
                   onchange={(value) => (providerFormData.userId = value)}
                 />
 
-                <!-- Warn (do not block) when no allowed users are set: an enabled
-                     provider with an empty allowlist denies every login (issue #3381). -->
-                {#if hasNoAllowedUsers(providerFormData.userId)}
+                <!-- Warn (do not block) when an enabled provider has no allowed users:
+                     such a provider denies every login (issue #3381). Gated on enabled to
+                     match the providers-list badge and avoid noise for draft/disabled providers. -->
+                {#if providerFormData.enabled && hasNoAllowedUsers(providerFormData.userId)}
                   <p
                     class="text-xs text-[var(--color-warning)] -mt-2 flex items-start gap-1.5"
                     role="status"
