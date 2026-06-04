@@ -125,8 +125,8 @@ func TestIsDevBuild(t *testing.T) {
 // =============================================================================
 
 func TestDetermineWizardState(t *testing.T) {
-	// Not parallel: each subtest publishes its own settings to the global
-	// snapshot (read via currentSettings), which is process-wide.
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		version         string                            // Settings.Version
@@ -210,6 +210,7 @@ func TestDetermineWizardState(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c := &Controller{
 				Settings: &conf.Settings{Version: tt.version},
 			}
@@ -217,11 +218,9 @@ func TestDetermineWizardState(t *testing.T) {
 			if tt.v2Manager != nil {
 				c.V2Manager = tt.v2Manager(t)
 			}
-			// determineWizardState reads the live snapshot via currentSettings();
-			// publish this subtest's settings so the read resolves to them.
-			publishTestSettings(t, c.Settings)
-
-			freshInstall, newVersion, previousVersion := c.determineWizardState(t.Context())
+			// determineWizardState now takes the settings snapshot directly, so
+			// the subtest stays fully per-controller and parallel-safe.
+			freshInstall, newVersion, previousVersion := c.determineWizardState(t.Context(), c.Settings)
 
 			assert.Equal(t, tt.wantFresh, freshInstall, "freshInstall mismatch")
 			assert.Equal(t, tt.wantNew, newVersion, "newVersion mismatch")

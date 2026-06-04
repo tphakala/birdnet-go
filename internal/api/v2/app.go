@@ -132,6 +132,9 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 	// published configuration and every read below is race-free against a
 	// concurrent settings save (see currentSettings).
 	settings := c.currentSettings()
+	if settings == nil {
+		return c.HandleError(ctx, nil, "Settings not initialized", http.StatusServiceUnavailable)
+	}
 
 	// Get enabled OAuth providers from the new array-based config
 	// This returns provider IDs for all enabled providers with valid credentials
@@ -151,8 +154,9 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 	// Priority: X-Ingress-Path > X-Forwarded-Prefix > config BasePath > empty.
 	basePath := requestBasePath(ctx, settings)
 
-	// Determine wizard state (freshInstall, newVersion, previousVersion)
-	freshInstall, newVersion, previousVersion := c.determineWizardState(ctx.Request().Context())
+	// Determine wizard state (freshInstall, newVersion, previousVersion) from the
+	// same snapshot so the whole response is internally consistent.
+	freshInstall, newVersion, previousVersion := c.determineWizardState(ctx.Request().Context(), settings)
 
 	// Build response
 	response := AppConfigResponse{
@@ -211,9 +215,7 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 //   - If last_seen_version is missing and isExistingInstall returns true: auto-seed and skip wizard.
 //   - If last_seen_version is missing and no install signals: freshInstall = true.
 //   - If last_seen_version differs from the current version: newVersion = true.
-func (c *Controller) determineWizardState(ctx context.Context) (freshInstall, newVersion bool, previousVersion string) {
-	settings := c.currentSettings()
-
+func (c *Controller) determineWizardState(ctx context.Context, settings *conf.Settings) (freshInstall, newVersion bool, previousVersion string) {
 	// Skip wizard triggers for dev builds
 	if isDevBuild(settings.Version) {
 		return false, false, ""
@@ -232,7 +234,7 @@ func (c *Controller) determineWizardState(ctx context.Context) (freshInstall, ne
 
 	// If last_seen_version has never been set, distinguish fresh from existing install
 	if lastSeenVersion == "" {
-		if c.isExistingInstall(ctx) {
+		if c.isExistingInstall(ctx, settings) {
 			// Auto-seed: existing install predates wizard tracking.
 			// Intentional write inside GET handler (idempotent upsert, fires once per install).
 			if err := c.appMetadataRepo.Set(ctx, appMetadataKeyLastSeenVersion, settings.Version); err != nil {
@@ -278,8 +280,7 @@ func (c *Controller) hasZeroDetections(ctx context.Context) bool {
 
 // isExistingInstall returns true if multiple signals indicate this is a configured
 // installation rather than a genuinely fresh one. Checks are ordered cheapest-first.
-func (c *Controller) isExistingInstall(ctx context.Context) bool {
-	settings := c.currentSettings()
+func (c *Controller) isExistingInstall(ctx context.Context, settings *conf.Settings) bool {
 	if settings.BirdNET.Latitude != 0 || settings.BirdNET.Longitude != 0 {
 		return true
 	}
@@ -332,7 +333,11 @@ func (c *Controller) DismissWizard(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "App metadata not available", http.StatusServiceUnavailable)
 	}
 
-	if err := c.appMetadataRepo.Set(ctx.Request().Context(), appMetadataKeyLastSeenVersion, c.currentSettings().Version); err != nil {
+	settings := c.currentSettings()
+	if settings == nil {
+		return c.HandleError(ctx, nil, "Settings not initialized", http.StatusServiceUnavailable)
+	}
+	if err := c.appMetadataRepo.Set(ctx.Request().Context(), appMetadataKeyLastSeenVersion, settings.Version); err != nil {
 		return c.HandleError(ctx, err, "Failed to dismiss wizard", http.StatusInternalServerError)
 	}
 

@@ -363,7 +363,7 @@ func (c *Controller) initBackupRoutes() {
 		// plus os.TempDir() for files created by older versions.
 		var dbDirs []string
 		settings := c.currentSettings()
-		if settings.Output.SQLite.Path != "" {
+		if settings != nil && settings.Output.SQLite.Path != "" {
 			dbDirs = append(dbDirs, filepath.Dir(settings.Output.SQLite.Path))
 		}
 		if c.V2Manager != nil && !c.V2Manager.IsMySQL() {
@@ -638,7 +638,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 func (c *Controller) getBackupDBInfo(dbType string) (string, *gorm.DB, error) {
 	if dbType == dbTypeLegacy {
 		settings := c.currentSettings()
-		if settings.Output.SQLite.Path == "" {
+		if settings == nil || settings.Output.SQLite.Path == "" {
 			return "", nil, fmt.Errorf("backup only available for SQLite databases")
 		}
 		if c.DS == nil {

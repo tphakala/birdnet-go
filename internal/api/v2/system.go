@@ -922,9 +922,9 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 
 	// Get active audio device from settings (first configured source)
 	var deviceName string
-	sources := c.currentSettings().Realtime.Audio.Sources
-	if len(sources) > 0 {
-		deviceName = sources[0].Device
+	settings := c.currentSettings()
+	if settings != nil && len(settings.Realtime.Audio.Sources) > 0 {
+		deviceName = settings.Realtime.Audio.Sources[0].Device
 	}
 
 	// Check if no device is configured
@@ -1651,7 +1651,7 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 	if dbType == dbTypeLegacy {
 		// Check if it's SQLite
 		settings := c.currentSettings()
-		if settings.Output.SQLite.Path == "" {
+		if settings == nil || settings.Output.SQLite.Path == "" {
 			return c.HandleError(ctx, fmt.Errorf("not sqlite"),
 				"Backup download only available for SQLite databases. Use MySQL tools for MySQL backup.",
 				http.StatusBadRequest)

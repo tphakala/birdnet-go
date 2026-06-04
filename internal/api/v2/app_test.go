@@ -126,6 +126,10 @@ func setupAppConfigTestWithAuth(t *testing.T, securityConfig *conf.Security) (*e
 	controlChan := make(chan string, testControlChannelBuf)
 	mockMetrics, _ := observability.NewMetrics()
 
+	// Publish settings to the global snapshot so GetAppConfig (which reads via
+	// currentSettings) observes this controller's settings, not a leaked snapshot.
+	publishTestSettings(t, settings)
+
 	// Create OAuth2Server for auth
 	oauth2Server := security.NewOAuth2ServerForTesting(t, settings)
 	authService := auth.NewSecurityAdapter(oauth2Server)
