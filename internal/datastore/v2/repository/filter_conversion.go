@@ -441,29 +441,31 @@ func ResolveCommonNameToLabelIDs(ctx context.Context, deps *FilterLookupDeps, sp
 
 	needle := strings.ToLower(norm.NFC.String(species))
 	matchedScientific := make([]string, 0, 16)
-	// Returns true once enough matches are collected to fill the cap, so the caller stops early.
-	collect := func(sci, foldedCommon string) bool {
+	collect := func(sci, foldedCommon string) {
 		if strings.Contains(foldedCommon, needle) {
 			matchedScientific = append(matchedScientific, sci)
-			return len(matchedScientific) >= maxCommonNameLabelIDs
 		}
-		return false
 	}
 	if len(deps.SciToCommonFolded) > 0 {
 		for sci, folded := range deps.SciToCommonFolded {
-			if collect(sci, folded) {
-				break
-			}
+			collect(sci, folded)
 		}
 	} else {
 		for sci, common := range deps.SciToCommon {
-			if collect(sci, strings.ToLower(norm.NFC.String(common))) {
-				break
-			}
+			collect(sci, strings.ToLower(norm.NFC.String(common)))
 		}
 	}
 	if len(matchedScientific) == 0 {
 		return nil, nil
+	}
+
+	// Sort then cap before the DB lookup so a degenerate query (e.g. a single letter matching
+	// thousands of species) is bounded AND returns a STABLE subset across calls. Map iteration
+	// order is randomized, so without sorting both the matched scientific set and the final label
+	// IDs would vary per query.
+	slices.Sort(matchedScientific)
+	if len(matchedScientific) > maxCommonNameLabelIDs {
+		matchedScientific = matchedScientific[:maxCommonNameLabelIDs]
 	}
 
 	commonLabels, err := deps.LabelRepo.GetByScientificNames(ctx, matchedScientific)
@@ -481,6 +483,7 @@ func ResolveCommonNameToLabelIDs(ctx context.Context, deps *FilterLookupDeps, sp
 		return nil, nil
 	}
 	ids := slices.Collect(maps.Keys(labelIDSet))
+	slices.Sort(ids)
 	if len(ids) > maxCommonNameLabelIDs {
 		ids = ids[:maxCommonNameLabelIDs]
 	}

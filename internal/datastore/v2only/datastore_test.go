@@ -750,6 +750,7 @@ func TestV2OnlyDatastore_SearchNotes_CommonName(t *testing.T) {
 		notes, total, err := ds.SearchNotes("Corvus", false, 10, 0)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), total)
+		require.Len(t, notes, 1)
 		assert.Equal(t, "Corvus corone", notes[0].ScientificName)
 	})
 
@@ -757,6 +758,7 @@ func TestV2OnlyDatastore_SearchNotes_CommonName(t *testing.T) {
 		notes, total, err := ds.SearchNotes("Corneille", false, 10, 0)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), total, "partial French common name should match (issue #3378)")
+		require.Len(t, notes, 1)
 		assert.Equal(t, "Corvus corone", notes[0].ScientificName)
 	})
 
@@ -788,6 +790,7 @@ func TestV2OnlyDatastore_SearchNotesAdvanced_CommonName(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), total, "advanced search free-text should match common name (issue #3378)")
+	require.Len(t, notes, 1)
 	assert.Equal(t, "Corvus corone", notes[0].ScientificName)
 }
 
