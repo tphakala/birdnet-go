@@ -111,6 +111,10 @@ func (s *OAuth2Server) HandleBasicAuthorize(c echo.Context) error {
 	// Read the live snapshot once so UI changes to the client id and redirect URI
 	// apply without a restart (issue #3370).
 	settings := s.currentSettings()
+	if settings == nil {
+		secLog.Error("Basic authorization failed: settings unavailable")
+		return c.String(http.StatusInternalServerError, "Internal server error")
+	}
 	expectedClientID := settings.Security.BasicAuth.ClientID
 	if clientID != expectedClientID {
 		secLog.Warn("Invalid client_id provided", logger.String("expected", expectedClientID))
@@ -154,6 +158,10 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	// through the web UI apply without a restart (issue #3370) and the whole
 	// request observes a single consistent view.
 	settings := s.currentSettings()
+	if settings == nil {
+		secLog.Error("Basic auth token request failed: settings unavailable")
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	}
 
 	// Use constant-time comparison to prevent timing attacks on credentials.
 	// Both comparisons are performed and combined with bitwise AND to prevent

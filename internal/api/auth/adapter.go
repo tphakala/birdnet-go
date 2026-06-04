@@ -170,7 +170,12 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 	// Snapshot the live settings once so credentials configured through the web
 	// UI take effect without a restart (issue #3370), and so the enabled and
 	// credential checks observe a single consistent view (TOCTOU guard).
-	basicAuth := a.OAuth2Server.CurrentSettings().Security.BasicAuth
+	settings := a.OAuth2Server.CurrentSettings()
+	if settings == nil {
+		a.log().Warn("Basic authentication failed: settings unavailable", logger.Username(username))
+		return "", ErrBasicAuthDisabled
+	}
+	basicAuth := settings.Security.BasicAuth
 
 	if err := a.validateBasicAuthEnabled(basicAuth.Enabled, username); err != nil {
 		return "", err
@@ -311,6 +316,9 @@ func (a *SecurityAdapter) getProviderLogoutURLDirect(c echo.Context, postLogoutR
 // This handles sessions created before the auth_provider key was introduced.
 func (a *SecurityAdapter) getProviderLogoutURLFallback(c echo.Context, postLogoutRedirectURI string, log logger.Logger) string {
 	settings := a.OAuth2Server.CurrentSettings()
+	if settings == nil {
+		return ""
+	}
 	for configProvider, gothProviderName := range security.ConfigToGothProvider {
 		provider := settings.GetOAuthProvider(configProvider)
 		if provider == nil || !provider.Enabled {
