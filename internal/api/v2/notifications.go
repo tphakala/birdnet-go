@@ -643,7 +643,7 @@ func (c *Controller) logNotificationConnection(clientID, ip, userAgent string, c
 		action = "disconnected"
 	}
 
-	if c.Settings != nil && c.Settings.WebServer.Debug && connected {
+	if s := c.currentSettings(); s != nil && s.WebServer.Debug && connected {
 		c.logDebugIfEnabled("notification SSE client "+action,
 			logger.String("clientId", clientID),
 			logger.String("ip", privacy.AnonymizeIP(ip)),
@@ -664,7 +664,7 @@ func (c *Controller) logNotificationError(message string, err error, clientID st
 
 // logToastSent logs successful toast sending
 func (c *Controller) logToastSent(clientID string, notif *notification.Notification) {
-	if c.Settings != nil && c.Settings.WebServer.Debug {
+	if s := c.currentSettings(); s != nil && s.WebServer.Debug {
 		toastType, _ := notif.Metadata["toastType"].(string)
 		c.logDebugIfEnabled("toast sent via SSE",
 			logger.String("clientId", clientID),
@@ -676,7 +676,7 @@ func (c *Controller) logToastSent(clientID string, notif *notification.Notificat
 
 // logNotificationSent logs successful notification sending
 func (c *Controller) logNotificationSent(clientID string, notif *notification.Notification) {
-	if c.Settings != nil && c.Settings.WebServer.Debug {
+	if s := c.currentSettings(); s != nil && s.WebServer.Debug {
 		c.logDebugIfEnabled("notification sent via SSE",
 			logger.String("clientId", clientID),
 			logger.String("notification_id", notif.ID),
@@ -744,7 +744,7 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 		}
 	}
 
-	if c.Settings != nil && c.Settings.WebServer.Debug {
+	if s := c.currentSettings(); s != nil && s.WebServer.Debug {
 		c.logDebugIfEnabled("listing notifications",
 			logger.Any("status", filter.Status),
 			logger.Any("types", filter.Types),
@@ -779,7 +779,7 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 		notifications = filtered
 	}
 
-	if c.Settings != nil && c.Settings.WebServer.Debug {
+	if s := c.currentSettings(); s != nil && s.WebServer.Debug {
 		unreadCount, err := service.GetUnreadCount()
 		if err != nil {
 			c.logErrorIfEnabled("failed to get unread count", logger.Error(err))
@@ -903,19 +903,20 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 
 // CreateTestNewSpeciesNotification creates a test new species detection notification
 func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
-	if c.Settings == nil {
+	settings := c.currentSettings()
+	if settings == nil {
 		return c.HandleError(ctx, nil, "Settings not initialized", http.StatusServiceUnavailable)
 	}
 
 	service := notification.GetService()
 
 	// Build base URL for links
-	baseURL := c.Settings.Security.GetBaseURL(c.Settings.WebServer.Port)
+	baseURL := settings.Security.GetBaseURL(settings.WebServer.Port)
 
 	// Format detection time according to user's time format preference
 	now := time.Now()
 	var detectionTime string
-	if c.Settings.Main.TimeAs24h {
+	if settings.Main.TimeAs24h {
 		detectionTime = now.Format(time.TimeOnly)
 	} else {
 		detectionTime = now.Format("3:04:05 PM")
@@ -941,12 +942,12 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 
 	// Render notification using templates with defaults
 	title := renderTemplateWithDefault("title",
-		c.Settings.Notification.Templates.NewSpecies.Title,
+		settings.Notification.Templates.NewSpecies.Title,
 		"New Species: Test Bird Species",
 		testTemplateData, nil)
 
 	message := renderTemplateWithDefault("message",
-		c.Settings.Notification.Templates.NewSpecies.Message,
+		settings.Notification.Templates.NewSpecies.Message,
 		"First detection of Test Bird Species (Testus birdicus) at Fake Test Location",
 		testTemplateData, nil)
 
@@ -972,7 +973,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to create test notification", http.StatusInternalServerError)
 	}
 
-	if c.Settings != nil && c.Settings.WebServer.Debug {
+	if settings.WebServer.Debug {
 		c.logDebugIfEnabled("test new species notification created",
 			logger.String("notification_id", testNotification.ID),
 			logger.String("species", testTemplateData.CommonName),

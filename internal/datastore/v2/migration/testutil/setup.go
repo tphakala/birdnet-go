@@ -691,6 +691,7 @@ func (s *testLegacyInterface) SearchNotesAdvanced(_ *datastore.AdvancedSearchFil
 	return nil, 0, nil
 }
 func (s *testLegacyInterface) GetNoteClipPath(_ string) (string, error)              { return "", nil }
+func (s *testLegacyInterface) GetNoteModelType(_ string) (string, error)             { return "bird", nil }
 func (s *testLegacyInterface) DeleteNoteClipPath(_ string) error                     { return nil }
 func (s *testLegacyInterface) GetNoteReview(_ string) (*datastore.NoteReview, error) { return nil, nil } //nolint:nilnil // stub
 func (s *testLegacyInterface) SaveNoteReview(_ *datastore.NoteReview) error          { return nil }
@@ -802,6 +803,18 @@ func (s *testLegacyInterface) PingWithLatency(_ context.Context) (time.Duration,
 	return 0, nil
 }
 func (s *testLegacyInterface) CountDetectionsSince(_ context.Context, _ time.Time) (int, error) {
+	return 0, nil
+}
+func (s *testLegacyInterface) SaveAppEvent(_ context.Context, _, _, _ string, _ map[string]any) error {
+	return nil
+}
+func (s *testLegacyInterface) GetRecentAppEvents(_ context.Context, _ int) ([]datastore.AppEvent, error) {
+	return nil, nil
+}
+func (s *testLegacyInterface) GetAppEventsSince(_ context.Context, _ time.Time, _ int) ([]datastore.AppEvent, error) {
+	return nil, nil
+}
+func (s *testLegacyInterface) PruneAppEvents(_ context.Context, _ int) (int64, error) {
 	return 0, nil
 }
 

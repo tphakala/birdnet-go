@@ -9,8 +9,10 @@ import (
 
 func TestWorstStatus_Empty(t *testing.T) {
 	t.Parallel()
-	got := WorstStatus([]Result{})
-	assert.Equal(t, StatusHealthy, got)
+	// An empty slice means there is no data to aggregate. No data is not
+	// "healthy"; it is unknown.
+	assert.Equal(t, StatusUnknown, WorstStatus([]Result{}))
+	assert.Equal(t, StatusUnknown, WorstStatus(nil))
 }
 
 func TestWorstStatus_AllHealthy(t *testing.T) {
@@ -42,14 +44,39 @@ func TestWorstStatus_MixedStatuses(t *testing.T) {
 			want:     StatusCritical,
 		},
 		{
-			name:     "skipped beats healthy",
+			name:     "healthy with skipped stays healthy",
 			statuses: []Status{StatusHealthy, StatusSkipped},
+			want:     StatusHealthy,
+		},
+		{
+			name:     "healthy with unknown stays healthy",
+			statuses: []Status{StatusHealthy, StatusUnknown},
+			want:     StatusHealthy,
+		},
+		{
+			name:     "all skipped returns skipped",
+			statuses: []Status{StatusSkipped, StatusSkipped},
 			want:     StatusSkipped,
 		},
 		{
-			name:     "unknown beats healthy",
-			statuses: []Status{StatusHealthy, StatusUnknown},
+			name:     "all unknown returns unknown",
+			statuses: []Status{StatusUnknown, StatusUnknown},
 			want:     StatusUnknown,
+		},
+		{
+			name:     "mixed skipped and unknown returns unknown",
+			statuses: []Status{StatusSkipped, StatusUnknown},
+			want:     StatusUnknown,
+		},
+		{
+			name:     "single skipped returns skipped",
+			statuses: []Status{StatusSkipped},
+			want:     StatusSkipped,
+		},
+		{
+			name:     "warning with skipped stays warning",
+			statuses: []Status{StatusWarning, StatusSkipped},
+			want:     StatusWarning,
 		},
 		{
 			name:     "critical beats all",
@@ -79,16 +106,16 @@ func TestWorstStatus_MixedStatuses(t *testing.T) {
 func TestSeverityOrdering(t *testing.T) {
 	t.Parallel()
 	// Verify the ordering: healthy < skipped == unknown < warning < critical
-	assert.Less(t, severity(StatusHealthy), severity(StatusSkipped))
-	assert.Less(t, severity(StatusHealthy), severity(StatusUnknown))
-	assert.Equal(t, severity(StatusSkipped), severity(StatusUnknown))
-	assert.Less(t, severity(StatusSkipped), severity(StatusWarning))
-	assert.Less(t, severity(StatusUnknown), severity(StatusWarning))
-	assert.Less(t, severity(StatusWarning), severity(StatusCritical))
+	assert.Less(t, Severity(StatusHealthy), Severity(StatusSkipped))
+	assert.Less(t, Severity(StatusHealthy), Severity(StatusUnknown))
+	assert.Equal(t, Severity(StatusSkipped), Severity(StatusUnknown))
+	assert.Less(t, Severity(StatusSkipped), Severity(StatusWarning))
+	assert.Less(t, Severity(StatusUnknown), Severity(StatusWarning))
+	assert.Less(t, Severity(StatusWarning), Severity(StatusCritical))
 }
 
 func TestSeverityUnknownStatus(t *testing.T) {
 	t.Parallel()
 	// An unrecognised status string should map to severity 0 (same as healthy)
-	assert.Equal(t, severity(StatusHealthy), severity(Status("bogus")))
+	assert.Equal(t, Severity(StatusHealthy), Severity(Status("bogus")))
 }

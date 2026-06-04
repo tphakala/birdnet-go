@@ -73,6 +73,7 @@ This folder contains **shared components** used across the application. Feature-
 - `SoundCardCard.svelte` - Individual sound card source card with device, gain, model, equalizer, quiet hours
 - `SoundCardManager.svelte` - Manage multiple sound card audio sources
 - `StreamCard.svelte` - Individual stream card for stream management
+- `StreamChannelControls.svelte` - Adaptive channel handling UI (format display, downmix/left/right selector, stereo energy analysis) shared by the stream add and edit forms
 - `StreamManager.svelte` - Manage multiple video/audio streams
 - `SubnetInput.svelte` - Subnet input with validation
 - `TextInput.svelte` - Text input field
@@ -169,7 +170,6 @@ The following components are located in their feature directories:
 
 - `FilterForm.svelte` - Generic filtering form
 - `SpeciesFilterForm.svelte` - Species-specific filtering
-- `ChartCard.svelte` - Card wrapper for charts
 - `SpeciesCard.svelte` - Species information card
 - `StatCard.svelte` - Statistics card
 

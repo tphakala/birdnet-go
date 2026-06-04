@@ -123,6 +123,7 @@ func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *data
 		DS:       testDS,
 		Repo:     mockRepo,
 	}
+	publishTestSettings(t, controller.Settings)
 
 	return e, controller, sm
 }

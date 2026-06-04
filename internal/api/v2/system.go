@@ -224,8 +224,8 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	// Check if processor is available
-	if c.Processor == nil {
+	proc := c.Processor
+	if proc == nil {
 		c.logErrorIfEnabled("Processor not available for job queue stats",
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -233,8 +233,8 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("processor not available"), "Processor not available", http.StatusInternalServerError)
 	}
 
-	// Check if job queue is available
-	if c.Processor.JobQueue == nil {
+	jq := proc.JobQueue
+	if jq == nil {
 		c.logErrorIfEnabled("Job queue not available",
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -242,8 +242,7 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("job queue not available"), "Job queue not available", http.StatusInternalServerError)
 	}
 
-	// Get job queue stats
-	stats := c.Processor.JobQueue.GetStats()
+	stats := jq.GetStats()
 
 	// Convert to JSON
 	jsonStats, err := stats.ToJSON()
@@ -810,18 +809,12 @@ func getDeviceBaseName(device string) string {
 
 // isRemoteFilesystem returns true if the filesystem is a network mount
 func isRemoteFilesystem(fstype string) bool {
-	remoteFsTypes := map[string]bool{
-		"nfs":        true,
-		"nfs4":       true,
-		"cifs":       true,
-		"smbfs":      true,
-		"sshfs":      true,
-		"fuse.sshfs": true,
-		"afs":        true,
-		"9p":         true,
-		"ncpfs":      true,
+	switch fstype {
+	case "nfs", "nfs4", "cifs", "smbfs", "sshfs", "fuse.sshfs", "afs", "9p", "ncpfs":
+		return true
+	default:
+		return false
 	}
-	return remoteFsTypes[fstype]
 }
 
 // isReadOnlyMount returns true if the filesystem is mounted as read-only
@@ -929,8 +922,9 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 
 	// Get active audio device from settings (first configured source)
 	var deviceName string
-	if len(c.Settings.Realtime.Audio.Sources) > 0 {
-		deviceName = c.Settings.Realtime.Audio.Sources[0].Device
+	settings := c.currentSettings()
+	if settings != nil && len(settings.Realtime.Audio.Sources) > 0 {
+		deviceName = settings.Realtime.Audio.Sources[0].Device
 	}
 
 	// Check if no device is configured
@@ -1442,22 +1436,18 @@ var fsTypeCategories = map[string]FileSystemCategory{
 	"rpc_pipefs":  SpecialFS,
 }
 
+// skipFsPrefixes lists filesystem type prefixes that indicate virtual or system filesystems.
+var skipFsPrefixes = [...]string{"fuse", "cgroup", "proc", "sys", "dev"}
+
 // skipFilesystem returns true if the filesystem type should be skipped
 func skipFilesystem(fstype string) bool {
-	// Check if we have a category for this filesystem type
 	if _, exists := fsTypeCategories[fstype]; exists {
 		return true
 	}
 
-	// Additional checks for common patterns in filesystem types
-	// that might indicate a virtual or system filesystem
-	if len(fstype) >= minRequiredElements {
-		// Check for common filesystem type prefixes
-		commonPrefixes := []string{"fuse", "cgroup", "proc", "sys", "dev"}
-		for _, prefix := range commonPrefixes {
-			if len(fstype) >= len(prefix) && fstype[:len(prefix)] == prefix {
-				return true
-			}
+	for _, prefix := range skipFsPrefixes {
+		if strings.HasPrefix(fstype, prefix) {
+			return true
 		}
 	}
 
@@ -1479,9 +1469,8 @@ func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
 }
 
 // GetDatabaseStats handles GET /api/v2/system/database/stats
-// This endpoint returns statistics for the primary database.
-// In v2-only mode (fresh install or post-migration), it returns v2 database stats.
-// In legacy mode, it returns legacy database stats.
+// Delegates to c.DS.GetDatabaseStats which returns the correct stats
+// for the active store (legacy SQLite/MySQL or v2only.Datastore).
 func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.logInfoIfEnabled("Getting database statistics",
@@ -1489,38 +1478,8 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 		logger.String("ip", ip),
 	)
 
-	// In enhanced database mode, return v2 database stats as the primary database
-	if isV2OnlyMode {
-		c.logInfoIfEnabled("Running in enhanced database mode, returning v2 database as primary",
-			logger.String("path", path),
-			logger.String("ip", ip),
-		)
-		// Get v2 database stats
-		v2Stats, ok := c.getV2Stats(path, ip)
-		if ok {
-			// Return v2 stats as the primary database stats
-			return ctx.JSON(http.StatusOK, &datastore.DatabaseStats{
-				Type:            v2Stats.Type,
-				Location:        v2Stats.Location,
-				SizeBytes:       v2Stats.SizeBytes,
-				TotalDetections: v2Stats.TotalDetections,
-				Connected:       v2Stats.Connected,
-			})
-		}
-		// V2 database not available, return disconnected state
-		c.logWarnIfEnabled("Enhanced database mode but v2 database not available",
-			logger.String("path", path),
-			logger.String("ip", ip),
-		)
-		return ctx.JSON(http.StatusOK, &datastore.DatabaseStats{
-			Type:      "none",
-			Connected: false,
-			Location:  "",
-		})
-	}
-
-	// Check if datastore is available
-	if c.DS == nil {
+	ds := c.DS
+	if ds == nil {
 		c.logErrorIfEnabled("Datastore not available",
 			logger.String("path", path),
 			logger.String("ip", ip),
@@ -1528,8 +1487,7 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("datastore not available"), "Database not configured", http.StatusServiceUnavailable)
 	}
 
-	// Get database stats from the datastore
-	stats, err := c.DS.GetDatabaseStats(ctx.Request().Context())
+	stats, err := ds.GetDatabaseStats(ctx.Request().Context())
 
 	// Handle errors first
 	isPartialStats := false
@@ -1584,92 +1542,64 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, stats)
 }
 
-// V2DatabaseStatsResponse represents v2 database statistics.
-type V2DatabaseStatsResponse struct {
-	Type            string `json:"type"`
-	Location        string `json:"location"`
-	SizeBytes       int64  `json:"size_bytes"`
-	TotalDetections int64  `json:"total_detections"`
-	Connected       bool   `json:"connected"`
-}
-
-// getV2Stats is a helper method that retrieves v2 database statistics.
-// It returns the stats and a boolean indicating if stats were successfully retrieved.
-// If the v2 database is not available, it returns nil and false.
-func (c *Controller) getV2Stats(logPath, logIP string) (*V2DatabaseStatsResponse, bool) {
-	// Check if V2Manager is available
-	if c.V2Manager == nil {
-		c.logInfoIfEnabled("V2 database not initialized",
-			logger.String("path", logPath), logger.String("ip", logIP))
+// getV2ManagerStats retrieves v2 database statistics directly from V2Manager.
+func (c *Controller) getV2ManagerStats(ctx context.Context) (*datastore.DatabaseStats, bool) {
+	mgr := c.V2Manager
+	if mgr == nil || !mgr.Exists() {
 		return nil, false
 	}
 
-	// Check if database exists
-	if !c.V2Manager.Exists() {
-		c.logInfoIfEnabled("V2 database does not exist yet",
-			logger.String("path", logPath), logger.String("ip", logIP))
-		return nil, false
-	}
-
-	// Build response
-	response := &V2DatabaseStatsResponse{
+	stats := &datastore.DatabaseStats{
 		Type:      datastore.DialectSQLite,
-		Location:  c.V2Manager.Path(),
+		Location:  mgr.Path(),
 		Connected: true,
 	}
 
-	// Adjust type for MySQL
-	if c.V2Manager.IsMySQL() {
-		response.Type = datastore.DialectMySQL
+	if mgr.IsMySQL() {
+		stats.Type = datastore.DialectMySQL
 	}
 
-	// Get database size
-	db := c.V2Manager.DB()
-	if !c.V2Manager.IsMySQL() {
-		// SQLite: get file size
-		if fi, err := os.Stat(c.V2Manager.Path()); err == nil {
-			response.SizeBytes = fi.Size()
+	db := mgr.DB()
+	if db == nil {
+		stats.Connected = false
+		return stats, true
+	}
+
+	if !mgr.IsMySQL() {
+		if err := db.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Scan(&stats.SizeBytes).Error; err != nil {
+			c.logWarnIfEnabled("Failed to get v2 SQLite database size", logger.Error(err))
 		}
-	} else if db != nil {
-		// MySQL: query information_schema for database size
-		// Extract database name from location (format: host:port/database)
-		location := c.V2Manager.Path()
-		if idx := strings.LastIndex(location, "/"); idx != -1 {
-			dbName := location[idx+1:]
-			var sizeBytes int64
-			err := db.Raw(`
-				SELECT COALESCE(SUM(data_length + index_length), 0) as size
+	} else {
+		prefix := mgr.TablePrefix()
+		if prefix != "" {
+			// Escape underscore for MySQL LIKE (underscore is single-char wildcard)
+			escaped := strings.ReplaceAll(prefix, "_", "\\_")
+			if err := db.WithContext(ctx).Raw(`
+				SELECT COALESCE(SUM(data_length + index_length), 0)
 				FROM information_schema.TABLES
-				WHERE table_schema = ?
-			`, dbName).Scan(&sizeBytes).Error
-			if err == nil {
-				response.SizeBytes = sizeBytes
-			} else {
-				c.logWarnIfEnabled("Failed to get MySQL database size",
-					logger.Error(err), logger.String("path", logPath), logger.String("ip", logIP))
+				WHERE table_schema = DATABASE() AND table_name LIKE ?
+			`, escaped+"%").Scan(&stats.SizeBytes).Error; err != nil {
+				c.logWarnIfEnabled("Failed to get v2 MySQL database size", logger.Error(err))
+			}
+		} else {
+			if err := db.WithContext(ctx).Raw(`
+				SELECT COALESCE(SUM(data_length + index_length), 0)
+				FROM information_schema.TABLES
+				WHERE table_schema = DATABASE()
+			`).Scan(&stats.SizeBytes).Error; err != nil {
+				c.logWarnIfEnabled("Failed to get v2 MySQL database size", logger.Error(err))
 			}
 		}
 	}
 
-	// Count total detections from v2 database
-	if db != nil {
-		var count int64
-		if err := db.Table("detections").Count(&count).Error; err == nil {
-			response.TotalDetections = count
-		} else {
-			c.logWarnIfEnabled("Failed to count v2 detections",
-				logger.Error(err), logger.String("path", logPath), logger.String("ip", logIP))
-		}
+	var count int64
+	if err := db.WithContext(ctx).Table(mgr.TablePrefix() + "detections").Count(&count).Error; err != nil {
+		c.logWarnIfEnabled("Failed to count v2 detections", logger.Error(err))
+	} else {
+		stats.TotalDetections = count
 	}
 
-	c.logInfoIfEnabled("V2 database statistics retrieved successfully",
-		logger.String("type", response.Type),
-		logger.Any("size_bytes", response.SizeBytes),
-		logger.Any("total_detections", response.TotalDetections),
-		logger.Bool("connected", response.Connected),
-		logger.String("path", logPath), logger.String("ip", logIP))
-
-	return response, true
+	return stats, true
 }
 
 // GetV2DatabaseStats handles GET /api/v2/system/database/v2/stats
@@ -1678,7 +1608,7 @@ func (c *Controller) GetV2DatabaseStats(ctx echo.Context) error {
 	c.logInfoIfEnabled("Getting v2 database statistics",
 		logger.String("path", path), logger.String("ip", ip))
 
-	stats, ok := c.getV2Stats(path, ip)
+	stats, ok := c.getV2ManagerStats(ctx.Request().Context())
 	if !ok {
 		return c.HandleError(ctx, fmt.Errorf("v2 database not available"),
 			"V2 database not initialized", http.StatusNotFound)
@@ -1720,19 +1650,21 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 
 	if dbType == dbTypeLegacy {
 		// Check if it's SQLite
-		if c.Settings.Output.SQLite.Path == "" {
+		settings := c.currentSettings()
+		if settings == nil || settings.Output.SQLite.Path == "" {
 			return c.HandleError(ctx, fmt.Errorf("not sqlite"),
 				"Backup download only available for SQLite databases. Use MySQL tools for MySQL backup.",
 				http.StatusBadRequest)
 		}
-		dbPath = c.Settings.Output.SQLite.Path
+		dbPath = settings.Output.SQLite.Path
 
 		// Get the underlying GORM DB from the datastore
-		if c.DS == nil {
+		ds := c.DS
+		if ds == nil {
 			return c.HandleError(ctx, fmt.Errorf("datastore not available"),
 				"Database not configured", http.StatusServiceUnavailable)
 		}
-		sqliteStore, ok := c.DS.(*datastore.SQLiteStore)
+		sqliteStore, ok := ds.(*datastore.SQLiteStore)
 		if !ok {
 			return c.HandleError(ctx, fmt.Errorf("unsupported datastore type"),
 				"Cannot perform backup on this datastore type", http.StatusInternalServerError)
@@ -1740,17 +1672,18 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 		gormDB = sqliteStore.DB
 	} else {
 		// V2 database
-		if c.V2Manager == nil {
+		mgr := c.V2Manager
+		if mgr == nil {
 			return c.HandleError(ctx, fmt.Errorf("v2 not available"),
 				"V2 database not initialized", http.StatusNotFound)
 		}
-		if c.V2Manager.IsMySQL() {
+		if mgr.IsMySQL() {
 			return c.HandleError(ctx, fmt.Errorf("not sqlite"),
 				"Backup download only available for SQLite databases. Use MySQL tools for MySQL backup.",
 				http.StatusBadRequest)
 		}
-		dbPath = c.V2Manager.Path()
-		gormDB = c.V2Manager.DB()
+		dbPath = mgr.Path()
+		gormDB = mgr.DB()
 	}
 
 	// Verify we have a valid database handle before proceeding

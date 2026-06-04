@@ -435,6 +435,10 @@
         "overloadTitle": "Ljudanalys överbelastad",
         "overloadMessage": "Ditt system förlorar {dropRate}% av ljudsamplingarna för källa ''{sourceName}'' eftersom det inte kan hålla jämna steg med analysen. Minska BirdNET-överlappningsvärdet i detektionsinställningarna eller överväg att uppgradera till en snabbare CPU."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime inte tillgänglig",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} krävs för {modelName} men hittades inte. Se installationsguiden: {installGuideURL}"
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nuvarande värde: {value}% (tröskel: {threshold}%)",
@@ -937,7 +941,10 @@
     "aria": {
       "loading": "Laddar detekteringsinformation...",
       "loaded": "Detekteringsinformation laddad för {species}",
-      "error": "Fel vid laddning av detektering: {error}"
+      "error": "Fel vid laddning av detektering: {error}",
+      "loadingResults": "Laddar {count} resultat...",
+      "thumbnailLoading": "Laddar {species} miniatyrbild...",
+      "thumbnailLoaded": "Miniatyrbild av {species} laddad"
     },
     "errors": {
       "notFound": "Detekteringen hittades inte. Den kan ha tagits bort eller så är ID:t felaktigt.",
@@ -1576,7 +1583,11 @@
       "recentlyFirstSeen": "Nyligen först sedd",
       "earliestFirstSeen": "Tidigast först sedd",
       "recentlyLastSeen": "Nyligen senast sedd",
-      "highestConfidence": "Högst konfidens"
+      "earliestLastSeen": "Tidigast senast sedd",
+      "highestConfidence": "Högst konfidens",
+      "lowestConfidence": "Lägst konfidens",
+      "highestMaxConfidence": "Högst maximal konfidens",
+      "lowestMaxConfidence": "Lägst maximal konfidens"
     },
     "charts": {
       "top10Species": "Topp 10 arter",
@@ -2991,6 +3002,7 @@
         "unknown": "okänd",
         "refresh": "Uppdatera",
         "addStream": "Lägg till ström",
+        "testRequired": "Kör ett lyckat strömtest innan du sparar",
         "deleteConfirm": "Ta bort denna ström?",
         "restartCount": "Omstartad {count} gång(er)",
         "healthLoadError": "Kunde inte ladda strömmens hälsostatus",
@@ -3043,6 +3055,47 @@
           "degraded": "Försämrad",
           "failed": "Misslyckad",
           "unknown": "Okänd"
+        },
+        "test": {
+          "button": "Testa ström",
+          "probing": "Testar...",
+          "result": "Testresultat",
+          "error": "Test misslyckades",
+          "batCompatible": "Fladdermus-kompatibel",
+          "batIncompatible": "Inte fladdermus-kompatibel"
+        },
+        "batWarning": "Fladdermusmodeller kräver strömmar med en förlustfri kodek (PCM) och en samplingsfrekvens på minst 96 kHz. Använd knappen Testa ström ovan för att verifiera kompatibilitet.",
+        "codecWarning": {
+          "lossy": "Förlustbringande codecs (AAC, Opus, MP3) förstör ultraljudsfrekvenser över ~20 kHz, vilket gör strömmen olämplig för fladdermusdetektion."
+        },
+        "channelMode": {
+          "analyzeError": "Kanalanalys misslyckades",
+          "analyzing": "Analyserar kanaler...",
+          "description": "Hur flerkanaligt ljud hanteras. Välj en specifik kanal om din källa skickar stereo.",
+          "detectBest": "Detektera bästa kanal",
+          "downmix": "Nedmixa till mono",
+          "downmixWarning": "Nedmixning rekommenderas inte för stereoströmmar. Fasskillnader mellan kanaler orsakar kamfiltrering som minskar detektionsnoggrannheten. Välj en specifik kanal istället.",
+          "energyLeft": "Vänster kanal",
+          "energyRight": "Höger kanal",
+          "label": "Kanalläge",
+          "left": "Endast vänster kanal",
+          "monoNoSelection": "Enkanalig källa. Alla kanallägen ger identiskt ljud, så inget val behövs.",
+          "recommended": "Rekommenderad: {channel}",
+          "right": "Endast höger kanal",
+          "singleChannelGood": "Enskild kanal vald, optimalt för detektionsnoggrannhet."
+        },
+        "format": {
+          "label": "Ljudformat",
+          "mono": "Mono (1 kanal)",
+          "multi": "{count} kanaler",
+          "stereo": "Stereo (2 kanaler)",
+          "untested": "Testa strömmen för att identifiera ljudformatet",
+          "withSampleRate": "{rate} kHz, {channels}"
+        },
+        "stereoWarning": {
+          "message": "Stereoström detekterad. Nedmixning av flera kanaler kan minska detektionsnoggrannheten på grund av fasskillnader mellan kanaler. Välj en specifik kanal (vänster/höger) eller använd kanaldetektorn för bästa resultat.",
+          "short": "Stereo nedmix aktiv. Detektionsnoggrannheten kan vara nedsatt. Redigera för att välja en specifik kanal.",
+          "tooltip": "Stereo nedmix aktiv. Detektionsnoggrannheten kan vara nedsatt. Redigera för att välja en specifik kanal."
         }
       },
       "audioFilters": {
@@ -3218,6 +3271,10 @@
         "devicesLoadFailed": "Kunde inte ladda ljudenheter. Kontrollera systembehörigheterna.",
         "invalidBitrate": "Ogiltigt bithastighetsvärde",
         "invalidRetentionPolicy": "Ogiltig lagringspolicy"
+      },
+      "models": {
+        "recommendBoth": "För bästa artdetekteringstäckning rekommenderas att köra både BirdNET och Perch tillsammans.",
+        "perchOnlyWarning": "Perch ensamt ger färre detektioner. Sänk konfidensströskeln till 0.50 för meningsfulla resultat, eller aktivera BirdNET bredvid för bästa täckning."
       }
     },
     "security": {
@@ -3378,6 +3435,10 @@
         "liveAudioHelp": "När aktiverad kan vem som helst lyssna på liveaudioströmmar utan att logga in. Inställningar och borttagning kräver fortfarande autentisering.",
         "warningText": "Att aktivera offentlig åtkomst exponerar funktionerna för alla som kan nå denna server. Aktivera bara om du litar på din nätverksmiljö."
       },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
         "host": "Till exempel localhost:8080 eller example.domain.com",
@@ -3496,6 +3557,20 @@
           "title": "Plats ej konfigurerad",
           "description": "Ange din plats i Huvudinställningar för att se arter tillgängliga i ditt område. Intervallfiltret använder din plats för att avgöra vilka arter som sannolikt finns i närheten.",
           "action": "Konfigurera plats"
+        },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Områdesfiltret är inaktivt",
+            "description": "Detektioner filtreras just nu inte efter din plats, så arter från områden utanför ditt eget kan rapporteras. Kontrollera inställningarna för områdesfiltermodellen under Inställningar."
+          },
+          "fellBack": {
+            "title": "Använder det inbyggda områdesfiltret",
+            "description": "Det konfigurerade områdesfiltret med geomodell kunde inte laddas, så BirdNET-Go gick tillbaka till det inbyggda områdesfiltret. Filtreringen fungerar fortfarande, men kontrollera Inställningar för att återställa geomodellen."
+          },
+          "mappedZero": {
+            "title": "Områdesfiltret matchade inga arter",
+            "description": "Områdesfiltret med geomodell matchade inga av den aktiva modellens arter, så alla detektioner skulle filtreras bort. Kontrollera att områdesfiltrets etikettfil stämmer överens med den aktiva modellen."
+          }
         },
         "columns": {
           "commonName": "Vanligt namn",
@@ -3919,6 +3994,8 @@
           "species_name": "Artnamn",
           "scientific_name": "Vetenskapligt namn",
           "confidence": "Konfidens",
+          "days_since_last_seen": "Dagar sedan senast sedd",
+          "novelty_episode_days": "Dagar i nyhetsepisod",
           "location": "Plats",
           "stream_name": "Strömmens namn",
           "stream_url": "Strömmens URL",
@@ -3929,6 +4006,8 @@
         "operators": {
           "is": "är",
           "is_not": "är inte",
+          "in": "finns i listan",
+          "not_in": "finns inte i listan",
           "contains": "innehåller",
           "not_contains": "innehåller inte",
           "greater_than": "större än",
@@ -4193,7 +4272,31 @@
       "playbackSpeed": "Uppspelningshastighet",
       "speed": "Hastighet",
       "loop": "Växla upprepning",
-      "player": "Ljudspelare"
+      "player": "Ljudspelare",
+      "autoplayBlocked": "Klicka för att spela (autouppspelning blockerad)",
+      "hlsNotSupported": "HLS-uppspelning stöds inte i den här webbläsaren",
+      "streamStarting": "Startar ljudström...",
+      "levelFor": "Ljudnivå för {source}",
+      "levelForNoSource": "Ljudnivå: ingen källa",
+      "noSource": "Ingen källa",
+      "levelAnnouncement": "Aktuell ljudnivå: {level} procent",
+      "levelAnnouncementClipping": "Aktuell ljudnivå: {level} procent, klippning upptäckt",
+      "sourceSelection": "Val av ljudkälla",
+      "sources": "Ljudkällor",
+      "noSourcesAvailable": "Inga ljudkällor tillgängliga",
+      "silent": "(tyst)",
+      "stopPlayback": "Stoppa ljuduppspelning",
+      "startPlayback": "Starta ljuduppspelning",
+      "nowPlaying": "Spelar nu ljud från {source}",
+      "nowPlayingNoSource": "Spelar upp ljud",
+      "playbackStopped": "Ljuduppspelning stoppad",
+      "loginRequired": "Inloggning krävs för att strömma ljud",
+      "streamError": "Fel vid start av ström",
+      "streamTitle": "Fågelljudström - {source}",
+      "streamTitleDefault": "Fågelljudström",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Livestream",
+      "playbackError": "Uppspelningsfel: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammet har inte genererats ännu",
@@ -4418,6 +4521,16 @@
       "hostRequired": "Värdparameter krävs",
       "invalidHost": "Ogiltig värdparameter",
       "rateLimit": "För många anslutningsförsök till aviseringsströmmen, vänta innan du försöker igen"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Ogiltig begärandekropp",
+        "urlRequired": "Ström-URL krävs",
+        "invalidUrl": "Ogiltigt URL-format. Ange en fullständig URL, t.ex. rtsp://värd:port/sökväg",
+        "unsupportedScheme": "URL-schema \"{scheme}\" stöds inte. Använd rtsp, rtsps, http, https, rtmp eller udp",
+        "blockedDestination": "Denna destination är blockerad av säkerhetsskäl",
+        "connectionFailed": "Kunde inte ansluta till strömmen. Kontrollera att URL:en är korrekt och att strömmen är tillgänglig"
+      }
     },
     "debug": {
       "notEnabled": "Felsökningsläge är inte aktiverat"
@@ -4683,7 +4796,10 @@
       "reinstall": "Installera om",
       "reinstalling": "Installerar om...",
       "reinstallComplete": "Filer verifierade",
-      "geomodelBadge": "Inkluderar BirdNET v3.0 geomodell"
+      "geomodelBadge": "Inkluderar BirdNET v3.0 geomodell",
+      "onnxRuntimeRequired": "Kräver ONNX Runtime som inte är tillgängligt på detta system.",
+      "onnxRuntimeMissing": "ONNX Runtime är inte tillgängligt. Denna modell kan inte köras.",
+      "unavailable": "Ej tillgänglig"
     },
     "bird": {
       "title": "Fågeldetektering",
@@ -4713,7 +4829,7 @@
     "title": "Hjälp och support",
     "subtitle": "Få hjälp, rapportera problem och anslut till gemenskapen",
     "reportBug": {
-      "description": "Om du stöter på ett problem, generera först ett supportpaket för att samla systeminformation och loggar, öppna sedan en felrapport på GitHub."
+      "description": "Om du stöter på ett problem, öppna först en felrapport på GitHub för att beskriva problemet, generera sedan ett supportpaket med ärendenumret för att underlätta felsökning."
     },
     "askQuestion": {
       "description": "Har du en fråga om installation, funktioner eller användning? GitHub Discussions är det bästa stället att få hjälp från gemenskapen."
@@ -4761,23 +4877,21 @@
         "description": "Generera och ladda upp ett supportpaket nedan. Det samlar loggar och konfiguration som avsevärt snabbar på felsökningen."
       }
     },
-    "supportDump": {
-      "title": "Generera supportpaket",
-      "description": "Att ladda upp ett supportpaket med din felrapport underlättar avsevärt vid felsökning. Det samlar din konfiguration och senaste loggar med känsliga uppgifter borttagna."
-    },
     "openIssue": {
       "title": "Öppna ett GitHub-ärende",
-      "description": "När du har samlat informationen ovan och genererat ett supportpaket, öppna ett ärende på GitHub för att beskriva problemet.",
+      "description": "Öppna ett ärende på GitHub för att beskriva problemet. Du behöver ärendenumret i nästa steg.",
       "button": "Öppna ärende på GitHub"
+    },
+    "supportDump": {
+      "title": "Generera supportpaket",
+      "description": "Efter att ha skapat ditt ärende, generera ett supportpaket och ange GitHub-ärendenumret. Detta kopplar din diagnostik till felrapporten och underlättar felsökning."
     }
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Uppdatera",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4789,6 +4903,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Allt OK",
+      "needsAttention": "Kräver uppmärksamhet",
+      "failing": "Misslyckas",
+      "allClear": "Inga problem",
+      "noData": "Inga data",
+      "none": "Inga"
+    },
+    "diagnostics": "Diagnostik",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4817,6 +4940,41 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Vanligaste felen",
+      "errorCount": "Antal",
+      "errorComponent": "Komponent",
+      "errorLevel": "Nivå",
+      "errorMessage": "Meddelande"
+    },
+    "window": {
+      "label": "Utvärderingsfönster",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Senaste händelse",
+      "recentEvents": "Senaste händelser",
+      "time": "Tid",
+      "source": "Källa",
+      "count": "Antal",
+      "lifetime": "totalt",
+      "sparklineLabel": "Aktivitetsdiagram",
+      "activeHours": "Aktiva timmar",
+      "windowTotal": "I fönster",
+      "velocity": "Trend",
+      "velocityStable": "Stabil",
+      "velocityIncreasing": "Ökande",
+      "velocityDecreasing": "Minskande",
+      "pattern": "Mönster",
+      "patternNone": "Inget",
+      "patternTransient": "Övergående",
+      "patternSustained": "Ihållande"
     }
   }
 }

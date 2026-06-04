@@ -1,5 +1,5 @@
 <script lang="ts">
-  /* global AnalyserNode, ResizeObserver, performance, requestAnimationFrame, cancelAnimationFrame */
+  /* global AnalyserNode, ResizeObserver, ResizeObserverEntry, performance, requestAnimationFrame, cancelAnimationFrame */
   /**
    * SpectrogramCanvas — Pure waterfall spectrogram renderer
    *
@@ -16,10 +16,15 @@
     type ColorMapName,
   } from '$lib/utils/spectrogramColorMaps';
   import { loggers } from '$lib/utils/logger';
+  import { createDebounce } from '$lib/utils/debounce';
 
   const logger = loggers.audio;
   /** Interval between debug time markers on the waterfall (seconds) */
   const DEBUG_MARKER_INTERVAL_SEC = 5;
+  /** Maximum safe canvas dimension in device pixels */
+  const MAX_CANVAS_DIM = 8192;
+  /** Maximum frame delta (seconds) accepted by RAF loop to prevent OOM after tab resume */
+  const MAX_FRAME_DELTA_SEC = 0.1;
 
   interface Props {
     /** AnalyserNode to read frequency data from */
@@ -114,24 +119,19 @@
   // ResizeObserver with debouncing (100ms)
   $effect(() => {
     if (!containerEl) return;
-
-    let resizeTimer: ReturnType<typeof setTimeout>;
-    const observer = new ResizeObserver(entries => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        for (const entry of entries) {
-          const { width, height } = entry.contentRect;
-          if (width > 0 && height > 0) {
-            cssWidth = Math.round(width);
-            cssHeight = Math.round(height);
-          }
+    const handleResize = createDebounce((entries: ResizeObserverEntry[]) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0 && isFinite(width) && isFinite(height)) {
+          cssWidth = Math.round(width);
+          cssHeight = Math.round(height);
         }
-      }, 100);
-    });
-
+      }
+    }, 100);
+    const observer = new ResizeObserver(entries => handleResize(entries));
     observer.observe(containerEl);
     return () => {
-      clearTimeout(resizeTimer);
+      handleResize.cancel();
       observer.disconnect();
     };
   });
@@ -269,8 +269,9 @@
       // Read frequency data from analyser
       analyser.getByteFrequencyData(frequencyData);
 
-      // Compute device pixels to scroll
-      scrollAccumulator += deviceScrollSpeed * deltaTime;
+      // Compute device pixels to scroll; cap deltaTime to prevent OOM after tab resume
+      const clampedDelta = Math.min(deltaTime, MAX_FRAME_DELTA_SEC);
+      scrollAccumulator += deviceScrollSpeed * clampedDelta;
       const pixelsToScroll = Math.floor(scrollAccumulator);
       scrollAccumulator -= pixelsToScroll;
 
@@ -278,27 +279,29 @@
         const w = deviceWidth;
         const h = deviceHeight;
 
-        // Self-blit: shift existing content left (GPU-composited)
-        ctx.drawImage(canvasEl!, -pixelsToScroll, 0);
+        if (w > 0 && h > 0 && w <= MAX_CANVAS_DIM && h <= MAX_CANVAS_DIM) {
+          // Self-blit: shift existing content left (GPU-composited)
+          ctx.drawImage(canvasEl!, -pixelsToScroll, 0);
 
-        // Draw new column(s) at right edge using device pixel dimensions
-        const imgData = ctx.createImageData(pixelsToScroll, h);
-        const data = new Uint32Array(imgData.data.buffer);
-        const currentBinMap = pixelToBinMap;
-        const currentLUT = colorLUT;
+          // Draw new column(s) at right edge using device pixel dimensions
+          const imgData = ctx.createImageData(pixelsToScroll, h);
+          const data = new Uint32Array(imgData.data.buffer);
+          const currentBinMap = pixelToBinMap;
+          const currentLUT = colorLUT;
 
-        for (let col = 0; col < pixelsToScroll; col++) {
-          for (let y = 0; y < h; y++) {
-            /* eslint-disable security/detect-object-injection -- loop indices and typed array lookups */
-            const binIndex = currentBinMap[y];
-            const magnitude = frequencyData[binIndex];
-            data[y * pixelsToScroll + col] = currentLUT[magnitude];
-            /* eslint-enable security/detect-object-injection */
+          for (let col = 0; col < pixelsToScroll; col++) {
+            for (let y = 0; y < h; y++) {
+              /* eslint-disable security/detect-object-injection -- loop indices and typed array lookups */
+              const binIndex = currentBinMap[y];
+              const magnitude = frequencyData[binIndex];
+              data[y * pixelsToScroll + col] = currentLUT[magnitude];
+              /* eslint-enable security/detect-object-injection */
+            }
           }
-        }
 
-        // putImageData works in raw device pixel coordinates (no transform needed)
-        ctx.putImageData(imgData, w - pixelsToScroll, 0);
+          // putImageData works in raw device pixel coordinates (no transform needed)
+          ctx.putImageData(imgData, w - pixelsToScroll, 0);
+        }
       }
 
       // --- Overlay: detection labels + debug time markers ---

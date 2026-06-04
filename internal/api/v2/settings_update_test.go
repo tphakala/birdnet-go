@@ -783,3 +783,52 @@ func TestStreamsSettingsChanged_BackwardCompatibility(t *testing.T) {
 		})
 	}
 }
+
+// TestStreamsSettingsChanged_ChannelMode verifies that a real channel-mode edit
+// triggers reconfiguration while a no-op transition between the empty default and
+// its canonical form ("" <-> "downmix") does NOT. An unset mode and an explicit
+// "downmix" produce identical FFmpeg arguments, so treating them as a change would
+// restart the stream (a brief audio drop) for no functional reason. The frontend
+// now sends an explicit "downmix" where it previously sent "", which is exactly
+// when this no-op transition occurs on the first save.
+func TestStreamsSettingsChanged_ChannelMode(t *testing.T) {
+	t.Parallel()
+
+	makeSettings := func(mode conf.ChannelMode) *conf.Settings {
+		s := &conf.Settings{}
+		s.Realtime.RTSP.Streams = []conf.StreamConfig{{
+			Name:        "Front Yard",
+			URL:         "rtsp://192.168.1.10/stream",
+			Type:        conf.StreamTypeRTSP,
+			Transport:   "tcp",
+			Enabled:     true,
+			ChannelMode: mode,
+			Models:      []string{"birdnet"},
+		}}
+		return s
+	}
+
+	tests := []struct {
+		name string
+		old  conf.ChannelMode
+		new  conf.ChannelMode
+		want bool
+	}{
+		{"unset to explicit downmix is a no-op", "", conf.ChannelModeDownmix, false},
+		{"explicit downmix to unset is a no-op", conf.ChannelModeDownmix, "", false},
+		{"identical left", conf.ChannelModeLeft, conf.ChannelModeLeft, false},
+		{"unset to left changes", "", conf.ChannelModeLeft, true},
+		{"downmix to left changes", conf.ChannelModeDownmix, conf.ChannelModeLeft, true},
+		{"left to right changes", conf.ChannelModeLeft, conf.ChannelModeRight, true},
+		{"left to downmix changes", conf.ChannelModeLeft, conf.ChannelModeDownmix, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			old := makeSettings(tc.old)
+			cur := makeSettings(tc.new)
+			assert.Equal(t, tc.want, streamsSettingsChanged(old, cur))
+		})
+	}
+}

@@ -27,7 +27,7 @@
 -->
 <script lang="ts">
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
-  import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
+  import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
   import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
@@ -316,8 +316,8 @@
         <!-- Screen reader announcement for loading state -->
         <span class="sr-only" role="status" aria-live="polite">
           {thumbnailLoader.loading
-            ? `Loading ${detection.commonName} thumbnail...`
-            : `${detection.commonName} thumbnail loaded`}
+            ? t('detections.aria.thumbnailLoading', { species: detection.commonName })
+            : t('detections.aria.thumbnailLoaded', { species: detection.commonName })}
         </span>
 
         <!-- Loading spinner overlay -->
@@ -404,7 +404,7 @@
 
 <!-- Status -->
 <td>
-  <StatusBadges {detection} />
+  <VerificationBadges {detection} />
 </td>
 
 <!-- Recording/Spectrogram -->

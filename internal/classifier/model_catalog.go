@@ -3,7 +3,11 @@
 // key via RegistryID and provides download metadata for HuggingFace repos.
 package classifier
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
+)
 
 // Catalog category constants.
 const (
@@ -39,6 +43,7 @@ type CatalogEntry struct {
 	GeomodelVersion string        // geomodel range filter version (e.g., "v3"); empty if no geomodel
 	RegistryID      string        // maps to a ModelRegistry key; empty if loader not yet implemented
 	Hidden          bool          // if true, entry is excluded from the gallery UI
+	RequiresONNX    bool          // if true, model needs ONNX Runtime (not just TFLite)
 	UpstreamURL     string        // URL to the upstream project repository
 	HuggingFaceRepo string        // HuggingFace repository path
 	Files           []CatalogFile // files to download for this model
@@ -73,6 +78,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		GeomodelVersion: "v3",
 		RegistryID:      RegistryIDBirdNETV3,
 		Hidden:          true,
+		RequiresONNX:    true,
 		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
 		HuggingFaceRepo: "tphakala/BirdNET-v3.0",
 		Files: slices.Concat([]CatalogFile{
@@ -83,7 +89,7 @@ var EmbeddedCatalog = []CatalogEntry{
 	{
 		ID:              "perch-v2",
 		Name:            "Google Perch v2",
-		Description:     "Google Perch v2 classifier with approximately 14,795 species (scientific names only)",
+		Description:     "Google Perch v2 multi-taxa classifier with approximately 14,795 species including birds, insects, amphibians, and mammals (scientific names only)",
 		Author:          "Google Research",
 		License:         "Apache-2.0",
 		CommercialUse:   true,
@@ -93,6 +99,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Version:         "2",
 		GeomodelVersion: "v3",
 		RegistryID:      RegistryIDPerchV2,
+		RequiresONNX:    true,
 		UpstreamURL:     "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
 		HuggingFaceRepo: "tphakala/Perch-v2",
 		Files: slices.Concat([]CatalogFile{
@@ -113,6 +120,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Version:         "4.4",
 		RegistryID:      RegistryIDBSG,
 		Hidden:          true,
+		RequiresONNX:    true,
 		UpstreamURL:     "https://github.com/luomus/BSG",
 		HuggingFaceRepo: "tphakala/BSG",
 		Files: []CatalogFile{
@@ -138,6 +146,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Version:         "3.0.2",
 		GeomodelVersion: "v3",
 		RegistryID:      "",
+		RequiresONNX:    true,
 		UpstreamURL:     "https://github.com/birdnet-team/geomodel",
 		HuggingFaceRepo: geomodelHuggingFaceRepo,
 		Files:           geomodelFiles(),
@@ -213,7 +222,7 @@ func geomodelFiles() []CatalogFile {
 	return []CatalogFile{
 		{
 			RemotePath:      "BirdNET+_Geomodel_V3.0.2_Global_12K_FP16.onnx",
-			LocalName:       "geomodel_v3.0.2_fp16.onnx",
+			LocalName:       conf.GeomodelONNXLocalName,
 			Role:            RoleGeomodelModel,
 			SHA256:          geomodelONNXSHA256,
 			SizeBytes:       geomodelONNXSizeBytes,
@@ -221,7 +230,7 @@ func geomodelFiles() []CatalogFile {
 		},
 		{
 			RemotePath:      "geomodel_v3.0.2_labels.txt",
-			LocalName:       "geomodel_v3.0.2_labels.txt",
+			LocalName:       conf.GeomodelLabelsLocalName,
 			Role:            RoleGeomodelLabels,
 			SHA256:          geomodelLabelsSHA256,
 			SizeBytes:       geomodelLabelsSizeBytes,
@@ -249,7 +258,7 @@ func isSharedRole(role string) bool {
 // IsSharedOnly reports whether all files in a catalog entry use shared roles
 // (stored in models/shared/ rather than a per-model subdirectory).
 func IsSharedOnly(entry *CatalogEntry) bool {
-	if len(entry.Files) == 0 {
+	if entry == nil || len(entry.Files) == 0 {
 		return false
 	}
 	for _, f := range entry.Files {
@@ -262,6 +271,9 @@ func IsSharedOnly(entry *CatalogEntry) bool {
 
 // HasTaxonomyFiles reports whether a catalog entry includes shared taxonomy files.
 func HasTaxonomyFiles(entry *CatalogEntry) bool {
+	if entry == nil {
+		return false
+	}
 	for _, f := range entry.Files {
 		if f.Role == RoleTaxonomy {
 			return true
@@ -272,6 +284,9 @@ func HasTaxonomyFiles(entry *CatalogEntry) bool {
 
 // HasGeomodelFiles reports whether a catalog entry includes shared geomodel files.
 func HasGeomodelFiles(entry *CatalogEntry) bool {
+	if entry == nil {
+		return false
+	}
 	for _, f := range entry.Files {
 		if isGeomodelRole(f.Role) {
 			return true
@@ -282,6 +297,9 @@ func HasGeomodelFiles(entry *CatalogEntry) bool {
 
 // HasEmbeddingsFiles reports whether a catalog entry includes shared embeddings files.
 func HasEmbeddingsFiles(entry *CatalogEntry) bool {
+	if entry == nil {
+		return false
+	}
 	for _, f := range entry.Files {
 		if f.Role == RoleEmbeddings {
 			return true
@@ -322,6 +340,7 @@ func batCatalogEntry(id, name, region string, speciesCount int, fileRegion strin
 		SpeciesCount:    speciesCount,
 		Version:         "1.0",
 		RegistryID:      RegistryIDBat,
+		RequiresONNX:    true,
 		UpstreamURL:     "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
 		HuggingFaceRepo: "tphakala/BattyBirdNET-onnx",
 		Files: []CatalogFile{

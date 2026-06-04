@@ -45,27 +45,10 @@ jobs:
         uses: ./.github/actions/setup-onnxruntime
 
       - name: Install FFmpeg, SoX, and test dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: ./.github/actions/setup-apt-packages
         with:
           packages: ffmpeg sox procps
-          version: 1.1
-          execute_install_scripts: true
-
-      - name: Refresh shared library cache and verify FFmpeg
-        run: |
-          sudo ldconfig
-          if ffmpeg -version > /dev/null 2>&1; then
-            echo "FFmpeg is working"
-          else
-            echo "::warning::FFmpeg broken after cache restore, diagnosing..."
-            echo "Missing libraries:"
-            ldd /usr/bin/ffmpeg 2>&1 | grep "not found" || echo "(binary not found or not ELF)"
-            echo "Reinstalling via apt..."
-            sudo apt-get update -qq
-            sudo apt-get install -y --fix-broken ffmpeg sox procps
-            sudo ldconfig
-            ffmpeg -version
-          fi
+        timeout-minutes: 3
 
       - name: Cache Go tools
         uses: actions/cache@v5
@@ -104,7 +87,7 @@ jobs:
           # Note: We must capture PIPESTATUS immediately after the pipeline
           # gotestfmt may return non-zero even when tests pass, so we only check go test's exit code
           # Use noembed,skipfrontend tags to skip model and frontend embedding requirement
-          go test -tags noembed,skipfrontend -json -v -short -timeout 120s ./... 2>&1 | tee /tmp/gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
+          go test -tags noembed,skipfrontend -race -json -v -short -timeout 300s ./... 2>&1 | tee /tmp/gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
 
           if [ $TEST_EXIT_CODE -ne 0 ]; then
             echo "::error title=Test Failure::Unit tests failed - see job summary for details"
@@ -127,7 +110,7 @@ jobs:
           fi
 
           echo "## :white_check_mark: All Tests Passed" >> $GITHUB_STEP_SUMMARY
-        timeout-minutes: 5
+        timeout-minutes: 10
 
       - name: Cleanup any remaining processes
         if: always()
@@ -199,27 +182,10 @@ jobs:
         uses: ./.github/actions/setup-tensorflow
 
       - name: Install FFmpeg and Sox for integration tests
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: ./.github/actions/setup-apt-packages
         with:
           packages: ffmpeg sox
-          version: 1.1
-          execute_install_scripts: true
-
-      - name: Refresh shared library cache and verify FFmpeg
-        run: |
-          sudo ldconfig
-          if ffmpeg -version > /dev/null 2>&1; then
-            echo "FFmpeg is working"
-          else
-            echo "::warning::FFmpeg broken after cache restore, diagnosing..."
-            echo "Missing libraries:"
-            ldd /usr/bin/ffmpeg 2>&1 | grep "not found" || echo "(binary not found or not ELF)"
-            echo "Reinstalling via apt..."
-            sudo apt-get update -qq
-            sudo apt-get install -y --fix-broken ffmpeg sox
-            sudo ldconfig
-            ffmpeg -version
-          fi
+        timeout-minutes: 3
 
       - name: Run testcontainer integration tests
         run: |

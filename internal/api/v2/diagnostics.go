@@ -3,6 +3,8 @@ package api
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -14,10 +16,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
+	"github.com/tphakala/birdnet-go/internal/inference"
+	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/weather"
 )
 
 // diagnosticsStatusResponse is the quick health summary returned by GET /status.
@@ -35,6 +42,8 @@ func (c *Controller) initDiagnosticsRoutes() {
 		c.healthErrors = health.NewErrorRingBuffer(health.DefaultErrorBufferSize)
 	}
 	c.healthRegistry = health.NewRegistry()
+	c.healthMetricsStore = observability.NewHealthMetricsStore()
+	c.healthEvents = observability.NewHealthEventBuffer(observability.DefaultEventBufferCapacity)
 
 	c.registerHealthChecks()
 
@@ -72,7 +81,7 @@ func (c *Controller) registerHealthChecks() {
 				}
 				return 0, errNoTempSensors
 			}
-			var maxTemp float64
+			maxTemp := math.Inf(-1)
 			for _, t := range temps {
 				if t.Temperature > maxTemp {
 					maxTemp = t.Temperature
@@ -85,58 +94,48 @@ func (c *Controller) registerHealthChecks() {
 		// Audio checks
 		checks.NewSourceStatusCheck(snapshotProvider),
 		checks.NewPipelineLivenessCheck(snapshotProvider),
-		checks.NewBufferDropsCheck(),
-		checks.NewAudioLevelCheck(),
-		checks.NewBufferOverrunCheck(),
-		checks.NewCaptureBufferCheck(),
+		checks.NewBufferDropsCheck(c.healthMetricsStore, c.healthEvents.Recent),
+		checks.NewAudioLevelCheck(c.buildAudioLevelProvider()),
+		checks.NewBufferOverrunCheck(c.healthMetricsStore, c.healthEvents.Recent),
+		checks.NewCaptureBufferCheck(c.buildCaptureBufferHealthProvider()),
 
-		// Analysis checks
-		checks.NewModelLoadedCheck(
-			func() bool { return true },
-			func() string { return c.currentSettings().BirdNET.ModelPath },
-		),
-		checks.NewInferenceLatencyCheck(func() (avgMS, p99MS, windowMS float64) {
-			counters := classifier.GetInferenceCounters()
-			snapshots := counters.PeekAll()
-			if len(snapshots) == 0 {
-				return 0, 0, 0
-			}
-			var totalUs, maxUs, count int64
-			for _, s := range snapshots {
-				totalUs += s.InvokeTotalUs
-				count += s.InvokeCount
-				if s.InvokeMaxUs > maxUs {
-					maxUs = s.InvokeMaxUs
-				}
-			}
-			if count == 0 {
-				return 0, 0, 0
-			}
-			avgMS = float64(totalUs) / float64(count) / 1000.0
-			// max used as p99 approximation; true p99 requires histogram data
-			p99MS = float64(maxUs) / 1000.0
-			stride := 3.0 - c.currentSettings().BirdNET.Overlap
-			if stride <= 0 {
-				stride = 3.0
-			}
-			windowMS = stride * 1000.0
-			return avgMS, p99MS, windowMS
-		}),
+		// Analysis checks (multi-model aware)
+		checks.NewModelsLoadedCheck(c.buildModelLoadInfoProvider()),
+		checks.NewPerModelInferenceLatencyCheck(c.buildPerModelInferenceProvider()),
 		checks.NewDetectionRateCheck(func(ctx context.Context, hours int) (int, error) {
-			if c.DS == nil {
+			ds := c.DS
+			if ds == nil {
 				return 0, errors.NewStd("datastore unavailable")
 			}
 			since := time.Now().Add(-time.Duration(hours) * time.Hour)
-			return c.DS.CountDetectionsSince(ctx, since)
+			return ds.CountDetectionsSince(ctx, since)
 		}),
 		checks.NewQueueDepthCheck(func() (int, int) {
 			q := classifier.ResultsQueue
 			return len(q), cap(q)
 		}),
+		checks.NewORTAvailabilityCheck(func() (available, initialized bool, version, libraryPath, errMsg string) {
+			status := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
+			return status.Available, status.Initialized, status.Version, status.LibraryPath, status.Error
+		}),
+		checks.NewRangeFilterCheck(func() checks.RangeFilterStatusInfo {
+			orch, err := c.getBirdNETInstance()
+			if err != nil || orch == nil {
+				return checks.RangeFilterStatusInfo{}
+			}
+			st := orch.RangeFilterStatus()
+			return checks.RangeFilterStatusInfo{
+				LocationConfigured: st.LocationConfigured,
+				Active:             st.Active,
+				FellBack:           st.FellBack,
+				GeomodelActive:     st.Geomodel != nil,
+				MappedSpecies:      st.MappedSpecies,
+			}
+		}),
 
 		// Stream checks
 		checks.NewStreamConnectivityCheck(getStreamHealthInfos),
-		checks.NewStreamErrorRateCheck(getStreamHealthInfos),
+		checks.NewStreamErrorRateCheck(c.healthMetricsStore, c.healthEvents.Recent),
 		checks.NewFFmpegHealthCheck(getStreamHealthInfos),
 
 		// Database checks
@@ -154,20 +153,33 @@ func (c *Controller) registerHealthChecks() {
 			return true, dbType + " (auto-migrated at startup)", nil
 		}),
 		checks.NewDatabasePerformanceCheck(func(ctx context.Context) (time.Duration, error) {
-			if c.DS == nil {
+			ds := c.DS
+			if ds == nil {
 				return 0, errors.NewStd("datastore unavailable")
 			}
-			return c.DS.PingWithLatency(ctx)
+			return ds.PingWithLatency(ctx)
+		}),
+		checks.NewDatabaseIntegrityCheck(func() (string, bool) {
+			ds := c.DS
+			if ds == nil {
+				return "", false
+			}
+			sqliteStore, ok := ds.(*datastore.SQLiteStore)
+			if !ok || sqliteStore == nil {
+				return "", false
+			}
+			return sqliteStore.IntegrityResult()
 		}),
 
 		// Network checks
 		checks.NewMQTTCheck(
 			func() bool { return c.currentSettings().Realtime.MQTT.Enabled },
 			func() bool {
-				if c.Processor == nil {
+				proc := c.Processor
+				if proc == nil {
 					return false
 				}
-				client := c.Processor.GetMQTTClient()
+				client := proc.GetMQTTClient()
 				if client == nil {
 					return false
 				}
@@ -176,15 +188,65 @@ func (c *Controller) registerHealthChecks() {
 		),
 		checks.NewBirdWeatherCheck(
 			func() bool { return c.currentSettings().Realtime.Birdweather.Enabled },
-			nil, // TODO: wire actual BirdWeather status
+			func() (bool, string) {
+				proc := c.Processor
+				if proc == nil {
+					return false, "Processor unavailable"
+				}
+				bw := proc.GetBwClient()
+				if bw == nil {
+					return false, "BirdWeather client not initialized"
+				}
+				return bw.Status()
+			},
 		),
-		checks.NewNotificationProvidersCheck(),
-		checks.NewWeatherCheck(func() bool {
-			p := c.currentSettings().Realtime.Weather.Provider
-			return p != "" && p != string(conf.WeatherNone)
+		checks.NewNotificationProvidersCheck(func() (int, int, string) {
+			providers := notification.GetAllPushProviderHealth()
+			if len(providers) == 0 {
+				return 0, 0, ""
+			}
+			total := len(providers)
+			healthy := 0
+			for i := range providers {
+				if providers[i].Healthy {
+					healthy++
+				}
+			}
+			unhealthy := total - healthy
+			var msg string
+			switch unhealthy {
+			case 0:
+				msg = fmt.Sprintf("All %d providers healthy", total)
+			case total:
+				msg = fmt.Sprintf("All %d providers failing", total)
+			default:
+				msg = fmt.Sprintf("%d of %d providers unhealthy", unhealthy, total)
+			}
+			return total, healthy, msg
 		}),
+		checks.NewWeatherCheck(
+			func() bool {
+				p := c.currentSettings().Realtime.Weather.Provider
+				return p != string(conf.WeatherNone)
+			},
+			weather.GetStatus,
+		),
 
 		// Config checks
+		checks.NewToolAvailabilityCheck(func() []checks.ToolInfo {
+			s := c.currentSettings()
+			return []checks.ToolInfo{
+				{
+					Name:    "FFmpeg",
+					Path:    s.Realtime.Audio.FfmpegPath,
+					Version: s.Realtime.Audio.FfmpegVersion,
+				},
+				{
+					Name: "Sox",
+					Path: s.Realtime.Audio.SoxPath,
+				},
+			}
+		}),
 		checks.NewPathAccessCheck(map[string]string{
 			"data": filepath.Dir(c.currentSettings().Output.SQLite.Path),
 		}),
@@ -199,6 +261,84 @@ func (c *Controller) registerHealthChecks() {
 		checks.NewErrorTrendCheck(c.healthErrors),
 		checks.NewCriticalEventsCheck(c.healthErrors),
 	)
+}
+
+// buildModelLoadInfoProvider returns a closure that queries the orchestrator for
+// all loaded models and converts them to the health check's ModelLoadInfo format.
+func (c *Controller) buildModelLoadInfoProvider() func() []checks.ModelLoadInfo {
+	return func() []checks.ModelLoadInfo {
+		p := c.Processor
+		if p == nil {
+			return nil
+		}
+		bn := p.GetBirdNET()
+		if bn == nil {
+			return nil
+		}
+		infos := bn.ModelInfos()
+		result := make([]checks.ModelLoadInfo, 0, len(infos))
+		for i := range infos {
+			m := &infos[i]
+			result = append(result, checks.ModelLoadInfo{
+				ID:      m.ID,
+				Name:    m.DisplayName(),
+				Loaded:  true,
+				Backend: m.Backend,
+				SpecInfo: fmt.Sprintf("%dkHz, %ss clips",
+					m.Spec.SampleRate/1000,
+					strconv.FormatFloat(m.Spec.ClipLength.Seconds(), 'f', -1, 64)),
+			})
+		}
+		return result
+	}
+}
+
+// buildPerModelInferenceProvider returns a closure that queries per-model
+// inference counters and model specs to produce per-model latency stats.
+// Each model's analysis window is derived from its own BufferInterval
+// (ClipLength / 2), not from a global setting.
+func (c *Controller) buildPerModelInferenceProvider() func() []checks.ModelInferenceInfo {
+	return func() []checks.ModelInferenceInfo {
+		p := c.Processor
+		if p == nil {
+			return nil
+		}
+		bn := p.GetBirdNET()
+		if bn == nil {
+			return nil
+		}
+		counters := classifier.GetInferenceCounters()
+		snapshots := counters.PeekAll()
+		if len(snapshots) == 0 {
+			return nil
+		}
+		infos := bn.ModelInfos()
+		infoMap := make(map[string]*classifier.ModelInfo, len(infos))
+		for i := range infos {
+			infoMap[infos[i].ID] = &infos[i]
+		}
+		result := make([]checks.ModelInferenceInfo, 0, len(snapshots))
+		for modelID, s := range snapshots {
+			mi, ok := infoMap[modelID]
+			if !ok {
+				continue
+			}
+			var avgMS, p99MS float64
+			if s.InvokeCount > 0 {
+				avgMS = float64(s.InvokeTotalUs) / float64(s.InvokeCount) / 1000.0
+			}
+			p99MS = float64(s.InvokeMaxUs) / 1000.0
+			windowMS := float64(mi.Spec.BufferInterval().Milliseconds())
+			result = append(result, checks.ModelInferenceInfo{
+				ModelID:   modelID,
+				ModelName: mi.DisplayName(),
+				AvgMS:     avgMS,
+				P99MS:     p99MS,
+				WindowMS:  windowMS,
+			})
+		}
+		return result
+	}
 }
 
 // errNoTempSensors is returned when no temperature sensors are found on the system.
@@ -240,6 +380,139 @@ func (c *Controller) buildStreamHealthProvider() func() []checks.StreamHealthInf
 				ProcessState: sh.ProcessState.String(),
 				RestartCount: sh.RestartCount,
 				Error:        errMsg,
+			})
+		}
+		return infos
+	}
+}
+
+// buildAudioRouterSnapshotProvider returns a closure that reads cumulative
+// audio counter values from the audio router for the health metrics collector.
+func (c *Controller) buildAudioRouterSnapshotProvider() func() []observability.AudioRouterSnapshot {
+	return func() []observability.AudioRouterSnapshot {
+		eng := c.engine.Load()
+		if eng == nil {
+			return nil
+		}
+		router := eng.Router()
+		if router == nil {
+			return nil
+		}
+		sourceIDs := router.ActiveSourceIDs()
+		if len(sourceIDs) == 0 {
+			return nil
+		}
+		snaps := make([]observability.AudioRouterSnapshot, 0, len(sourceIDs))
+		for _, sid := range sourceIDs {
+			var totalDrops, totalErrors int64
+			for _, ri := range router.Routes(sid) {
+				totalDrops += ri.Drops
+				totalErrors += ri.Errors
+			}
+			snaps = append(snaps, observability.AudioRouterSnapshot{
+				SourceID: sid,
+				Drops:    totalDrops,
+				Errors:   totalErrors,
+			})
+		}
+		return snaps
+	}
+}
+
+// buildStreamHealthSnapshotProvider returns a closure that reads cumulative
+// stream restart counts for the health metrics collector.
+func (c *Controller) buildStreamHealthSnapshotProvider() func() []observability.StreamHealthSnapshot {
+	return func() []observability.StreamHealthSnapshot {
+		eng := c.engine.Load()
+		if eng == nil {
+			return nil
+		}
+		mgr := eng.FFmpegManager()
+		if mgr == nil {
+			return nil
+		}
+		healthMap := mgr.AllStreamHealth()
+		if len(healthMap) == 0 {
+			return nil
+		}
+		snaps := make([]observability.StreamHealthSnapshot, 0, len(healthMap))
+		for sourceID, sh := range healthMap {
+			snaps = append(snaps, observability.StreamHealthSnapshot{
+				SourceID:     sourceID,
+				RestartCount: sh.RestartCount,
+			})
+		}
+		return snaps
+	}
+}
+
+// buildAudioLevelProvider returns a closure that reads the latest audio level
+// per source from the global audio level manager, filtered to active sources.
+func (c *Controller) buildAudioLevelProvider() func() []checks.AudioLevelInfo {
+	return func() []checks.AudioLevelInfo {
+		levels := LatestAudioLevels()
+		if len(levels) == 0 {
+			return nil
+		}
+
+		// Require engine/router so checks skip cleanly before startup and after teardown.
+		eng := c.engine.Load()
+		if eng == nil {
+			return nil
+		}
+		router := eng.Router()
+		if router == nil {
+			return nil
+		}
+		ids := router.ActiveSourceIDs()
+		if len(ids) == 0 {
+			return nil
+		}
+		activeSources := make(map[string]struct{}, len(ids))
+		for _, id := range ids {
+			activeSources[id] = struct{}{}
+		}
+
+		infos := make([]checks.AudioLevelInfo, 0, len(levels))
+		for _, l := range levels {
+			if _, ok := activeSources[l.Source]; !ok {
+				continue
+			}
+			infos = append(infos, checks.AudioLevelInfo{
+				Source:   l.Source,
+				Level:    l.Level,
+				Clipping: l.Clipping,
+			})
+		}
+		if len(infos) == 0 {
+			return nil
+		}
+		return infos
+	}
+}
+
+// buildCaptureBufferHealthProvider returns a closure that reads capture buffer
+// utilization from the buffer manager.
+func (c *Controller) buildCaptureBufferHealthProvider() func() []checks.CaptureBufferInfo {
+	return func() []checks.CaptureBufferInfo {
+		eng := c.engine.Load()
+		if eng == nil {
+			return nil
+		}
+		mgr := eng.BufferManager()
+		if mgr == nil {
+			return nil
+		}
+		snapshots := mgr.CaptureBufferHealthAll()
+		if len(snapshots) == 0 {
+			return nil
+		}
+		infos := make([]checks.CaptureBufferInfo, 0, len(snapshots))
+		for _, s := range snapshots {
+			infos = append(infos, checks.CaptureBufferInfo{
+				SourceID:    s.SourceID,
+				Capacity:    s.Capacity,
+				Initialized: s.Initialized,
 			})
 		}
 		return infos
@@ -288,12 +561,40 @@ func (c *Controller) GetDiagnosticsStatus(ctx echo.Context) error {
 	})
 }
 
+// validWindows maps accepted window parameter values to durations.
+var validWindows = map[string]time.Duration{
+	"15m": 15 * time.Minute,
+	"30m": 30 * time.Minute,
+	"1h":  time.Hour,
+	"6h":  6 * time.Hour,
+	"24h": 24 * time.Hour,
+	"7d":  7 * 24 * time.Hour,
+}
+
+// parseWindow converts a window query parameter to a duration.
+// Returns the default (1h) for empty input, or an error for invalid values.
+func parseWindow(s string) (time.Duration, error) {
+	if s == "" {
+		return time.Hour, nil
+	}
+	d, ok := validWindows[s]
+	if !ok {
+		return 0, fmt.Errorf("invalid window %q: valid values are 15m, 30m, 1h, 6h, 24h, 7d", s)
+	}
+	return d, nil
+}
+
 // RunDiagnostics executes all registered health checks and stores the report.
 func (c *Controller) RunDiagnostics(ctx echo.Context) error {
+	window, err := parseWindow(ctx.QueryParam("window"))
+	if err != nil {
+		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
+	}
+
 	id := uuid.New().String()
 	startedAt := time.Now()
 
-	results := c.healthRegistry.RunAll(ctx.Request().Context())
+	results := c.healthRegistry.RunAllWithWindow(ctx.Request().Context(), window)
 	report := health.NewReport(id, startedAt, results)
 	c.healthReports.Save(report)
 

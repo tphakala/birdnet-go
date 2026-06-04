@@ -1,6 +1,8 @@
 // Package alerting provides the notification alerting rules engine.
 package alerting
 
+import "github.com/tphakala/birdnet-go/internal/events"
+
 // Object types define the categories of things that can be monitored.
 const (
 	ObjectTypeStream      = "stream"
@@ -50,6 +52,8 @@ const (
 const (
 	OperatorIs             = "is"
 	OperatorIsNot          = "is_not"
+	OperatorIn             = "in"
+	OperatorNotIn          = "not_in"
 	OperatorContains       = "contains"
 	OperatorNotContains    = "not_contains"
 	OperatorGreaterThan    = "greater_than"
@@ -73,13 +77,15 @@ const (
 	PropertyBroker         = "broker"
 	PropertyThresholdStep  = "threshold_step"
 
-	// Properties for detection event metadata passthrough.
-	// These are not used for condition evaluation but carry data
-	// needed by the notification adapter for webhook template enrichment.
-	PropertyEventMetadata      = "event_metadata"
-	PropertyEventTimestamp     = "event_timestamp"
-	PropertyDaysSinceFirstSeen = "days_since_first_seen"
-	PropertyIsNewSpecies       = "is_new_species"
+	// Properties for detection event metadata passthrough and optional
+	// alert condition/template data.
+	PropertyEventMetadata       = "event_metadata"
+	PropertyEventTimestamp      = "event_timestamp"
+	PropertyDaysSinceFirstSeen  = "days_since_first_seen"
+	PropertyDaysSinceLastSeen   = events.DetectionMetadataDaysSinceLastSeen
+	PropertyNoveltyEpisodeDays  = events.DetectionMetadataNoveltyEpisodeDays
+	PropertyNoveltyEpisodeStart = events.DetectionMetadataNoveltyEpisodeStart
+	PropertyIsNewSpecies        = "is_new_species"
 )
 
 // Action targets identify where notifications are sent.

@@ -435,6 +435,10 @@
         "overloadTitle": "Analisi audio sovraccaricata",
         "overloadMessage": "Il sistema sta scartando il {dropRate} % dei campioni audio della sorgente ''{sourceName}'' perché non riesce a tenere il passo con l'analisi. Riduci il valore di sovrapposizione BirdNET nelle impostazioni di rilevamento o considera l'aggiornamento a una CPU più veloce."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime non disponibile",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} è richiesto per {modelName} ma non è stato trovato. Consulta la guida all'installazione: {installGuideURL}"
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valore attuale: {value}% (soglia: {threshold}%)",
@@ -937,7 +941,10 @@
     "aria": {
       "loading": "Caricamento dettagli rilevamento...",
       "loaded": "Dettagli rilevamento caricati per {species}",
-      "error": "Errore caricamento rilevamento: {error}"
+      "error": "Errore caricamento rilevamento: {error}",
+      "loadingResults": "Caricamento di {count} risultati...",
+      "thumbnailLoading": "Caricamento miniatura di {species}...",
+      "thumbnailLoaded": "Miniatura di {species} caricata"
     },
     "errors": {
       "notFound": "Rilevamento non trovato. Potrebbe essere stato eliminato o l'ID non è corretto.",
@@ -1576,7 +1583,11 @@
       "recentlyFirstSeen": "Visto per la Prima Volta Recentemente",
       "earliestFirstSeen": "Visto per la Prima Volta Prima",
       "recentlyLastSeen": "Visto per l'Ultima Volta Recentemente",
-      "highestConfidence": "Confidenza Più Alta"
+      "earliestLastSeen": "Visto per l'Ultima Volta Prima",
+      "highestConfidence": "Confidenza Più Alta",
+      "lowestConfidence": "Confidenza Più Bassa",
+      "highestMaxConfidence": "Confidenza Massima Più Alta",
+      "lowestMaxConfidence": "Confidenza Massima Più Bassa"
     },
     "charts": {
       "top10Species": "Top 10 Specie",
@@ -2991,6 +3002,7 @@
         "unknown": "sconosciuto",
         "refresh": "Aggiorna",
         "addStream": "Aggiungi Flusso",
+        "testRequired": "Esegui un test dello stream riuscito prima di salvare",
         "deleteConfirm": "Rimuovere questo flusso?",
         "restartCount": "Riavviato {count} volta/e",
         "healthLoadError": "Impossibile caricare stato salute flusso",
@@ -3043,6 +3055,47 @@
           "degraded": "Degradato",
           "failed": "Fallito",
           "unknown": "Sconosciuto"
+        },
+        "test": {
+          "button": "Testa stream",
+          "probing": "Test in corso...",
+          "result": "Risultato del test",
+          "error": "Test fallito",
+          "batCompatible": "Compatibile con pipistrelli",
+          "batIncompatible": "Non compatibile con pipistrelli"
+        },
+        "batWarning": "I modelli per pipistrelli richiedono flussi con un codec lossless (PCM) e una frequenza di campionamento di almeno 96 kHz. Usa il pulsante Testa stream sopra per verificare la compatibilità.",
+        "codecWarning": {
+          "lossy": "I codec con perdita (AAC, Opus, MP3) distruggono le frequenze ultrasoniche sopra i ~20 kHz, rendendo lo stream inadatto al rilevamento dei pipistrelli."
+        },
+        "channelMode": {
+          "analyzeError": "Analisi dei canali fallita",
+          "analyzing": "Analisi dei canali...",
+          "description": "Come gestire l'audio multicanale. Seleziona un canale specifico se la tua sorgente invia stereo.",
+          "detectBest": "Rileva il canale migliore",
+          "downmix": "Downmix a mono",
+          "downmixWarning": "Il downmix non è raccomandato per gli stream stereo. Le differenze di fase tra i canali causano filtraggio a pettine che riduce la precisione del rilevamento. Seleziona invece un canale specifico.",
+          "energyLeft": "Canale sinistro",
+          "energyRight": "Canale destro",
+          "label": "Modalità canale",
+          "left": "Solo canale sinistro",
+          "monoNoSelection": "Sorgente a canale singolo. Tutte le modalità di canale producono lo stesso audio, quindi non è necessaria alcuna selezione.",
+          "recommended": "Consigliato: {channel}",
+          "right": "Solo canale destro",
+          "singleChannelGood": "Canale singolo selezionato, ottimale per la precisione del rilevamento."
+        },
+        "format": {
+          "label": "Formato audio",
+          "mono": "Mono (1 canale)",
+          "multi": "{count} canali",
+          "stereo": "Stereo (2 canali)",
+          "untested": "Prova lo stream per rilevare il formato audio",
+          "withSampleRate": "{rate} kHz, {channels}"
+        },
+        "stereoWarning": {
+          "message": "Stream stereo rilevato. Il downmix di più canali può ridurre la precisione del rilevamento a causa delle differenze di fase tra i canali. Seleziona un canale specifico (sinistro/destro) o usa il rilevatore di canali per i migliori risultati.",
+          "short": "Downmix stereo attivo. La precisione del rilevamento potrebbe essere ridotta. Modifica per selezionare un canale specifico.",
+          "tooltip": "Downmix stereo attivo. La precisione del rilevamento potrebbe essere ridotta. Modifica per selezionare un canale specifico."
         }
       },
       "audioFilters": {
@@ -3218,6 +3271,10 @@
         "devicesLoadFailed": "Impossibile caricare dispositivi audio. Controlla permessi sistema.",
         "invalidBitrate": "Valore bitrate non valido",
         "invalidRetentionPolicy": "Politica conservazione non valida"
+      },
+      "models": {
+        "recommendBoth": "Per la migliore copertura di rilevamento delle specie, si consiglia di eseguire insieme sia BirdNET che Perch.",
+        "perchOnlyWarning": "Perch da solo produce meno rilevamenti. Abbassare la soglia di confidenza a 0.50 per risultati significativi, oppure attivare BirdNET per una migliore copertura."
       }
     },
     "security": {
@@ -3378,6 +3435,10 @@
         "liveAudioHelp": "Quando abilitato, chiunque può ascoltare gli stream audio dal vivo senza effettuare l'accesso. Le impostazioni e l'eliminazione richiedono comunque l'autenticazione.",
         "warningText": "Abilitare le funzionalità di accesso pubblico le espone a chiunque possa raggiungere questo server. Abilita solo se ti fidi del tuo ambiente di rete."
       },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.esempio.com:5500",
         "host": "Per esempio, localhost:8080 o esempio.dominio.com",
@@ -3496,6 +3557,20 @@
           "title": "Posizione Non Configurata",
           "description": "Imposta la tua posizione in Impostazioni Principali per vedere specie disponibili nella tua area. Il filtro intervallo usa la tua posizione per determinare quali specie sono probabilmente presenti nelle vicinanze.",
           "action": "Configura Posizione"
+        },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Filtro intervallo inattivo",
+            "description": "Al momento i rilevamenti non vengono filtrati in base alla tua posizione, quindi possono essere segnalate specie esterne alla tua zona. Controlla la configurazione del modello del filtro intervallo nelle Impostazioni."
+          },
+          "fellBack": {
+            "title": "Uso del filtro intervallo integrato",
+            "description": "Non è stato possibile caricare il filtro intervallo del geomodello configurato, quindi BirdNET-Go è ricorso al filtro intervallo integrato. Il filtraggio funziona ancora, ma controlla le Impostazioni per ripristinare il geomodello."
+          },
+          "mappedZero": {
+            "title": "Il filtro intervallo non ha trovato corrispondenze con nessuna specie",
+            "description": "Il filtro intervallo del geomodello non corrisponde a nessuna delle specie del modello attivo, quindi ogni rilevamento verrebbe filtrato. Verifica che il file delle etichette del filtro intervallo corrisponda al modello attivo."
+          }
         },
         "columns": {
           "commonName": "Nome comune",
@@ -3919,6 +3994,8 @@
           "species_name": "Nome specie",
           "scientific_name": "Nome scientifico",
           "confidence": "Confidenza",
+          "days_since_last_seen": "Giorni dall'ultimo rilevamento",
+          "novelty_episode_days": "Giorni dell'episodio di novità",
           "location": "Posizione",
           "stream_name": "Nome flusso",
           "stream_url": "URL flusso",
@@ -3929,6 +4006,8 @@
         "operators": {
           "is": "è",
           "is_not": "non è",
+          "in": "è nell'elenco",
+          "not_in": "non è nell'elenco",
           "contains": "contiene",
           "not_contains": "non contiene",
           "greater_than": "maggiore di",
@@ -4193,7 +4272,31 @@
       "playbackSpeed": "Velocità riproduzione",
       "speed": "Velocità",
       "loop": "Attiva/disattiva ripetizione",
-      "player": "Lettore audio"
+      "player": "Lettore audio",
+      "autoplayBlocked": "Clicca per riprodurre (riproduzione automatica bloccata)",
+      "hlsNotSupported": "La riproduzione HLS non è supportata in questo browser",
+      "streamStarting": "Avvio dello stream audio...",
+      "levelFor": "Livello audio per {source}",
+      "levelForNoSource": "Livello audio: nessuna sorgente",
+      "noSource": "Nessuna sorgente",
+      "levelAnnouncement": "Livello audio attuale: {level} percento",
+      "levelAnnouncementClipping": "Livello audio attuale: {level} percento, distorsione rilevata",
+      "sourceSelection": "Selezione sorgente audio",
+      "sources": "Sorgenti audio",
+      "noSourcesAvailable": "Nessuna sorgente audio disponibile",
+      "silent": "(silenzioso)",
+      "stopPlayback": "Interrompi riproduzione audio",
+      "startPlayback": "Avvia riproduzione audio",
+      "nowPlaying": "Riproduzione audio da {source}",
+      "nowPlayingNoSource": "Riproduzione audio in corso",
+      "playbackStopped": "Riproduzione audio interrotta",
+      "loginRequired": "Accesso richiesto per lo streaming audio",
+      "streamError": "Errore nell'avvio dello stream",
+      "streamTitle": "Stream audio uccelli - {source}",
+      "streamTitleDefault": "Stream audio uccelli",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Diretta",
+      "playbackError": "Errore di riproduzione: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spettrogramma non ancora generato",
@@ -4418,6 +4521,16 @@
       "hostRequired": "Il parametro host è obbligatorio",
       "invalidHost": "Parametro host non valido",
       "rateLimit": "Troppi tentativi di connessione al flusso di notifiche, attendere prima di riprovare"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Corpo della richiesta non valido",
+        "urlRequired": "L'URL dello stream è obbligatorio",
+        "invalidUrl": "Formato URL non valido. Inserisci un URL completo, ad es. rtsp://host:porta/percorso",
+        "unsupportedScheme": "Schema URL non supportato \"{scheme}\". Usa rtsp, rtsps, http, https, rtmp o udp",
+        "blockedDestination": "Questa destinazione è bloccata per motivi di sicurezza",
+        "connectionFailed": "Impossibile connettersi allo stream. Verifica che l'URL sia corretto e che lo stream sia accessibile"
+      }
     },
     "debug": {
       "notEnabled": "Modalità debug non abilitata"
@@ -4683,7 +4796,10 @@
       "reinstall": "Reinstalla",
       "reinstalling": "Reinstallazione...",
       "reinstallComplete": "File verificati con successo",
-      "geomodelBadge": "Include il geomodel BirdNET v3.0"
+      "geomodelBadge": "Include il geomodel BirdNET v3.0",
+      "onnxRuntimeRequired": "Richiede ONNX Runtime che non è disponibile su questo sistema.",
+      "onnxRuntimeMissing": "ONNX Runtime non è disponibile. Questo modello non può essere eseguito.",
+      "unavailable": "Non disponibile"
     },
     "bird": {
       "title": "Rilevamento uccelli",
@@ -4713,7 +4829,7 @@
     "title": "Aiuto e supporto",
     "subtitle": "Ottieni aiuto, segnala problemi e connettiti con la comunità",
     "reportBug": {
-      "description": "Se riscontri un problema, genera prima un pacchetto di supporto per acquisire le informazioni di sistema e i log, poi apri una segnalazione bug su GitHub."
+      "description": "Se riscontri un problema, apri prima una segnalazione bug su GitHub per descrivere il problema, poi genera un pacchetto di supporto con il numero della segnalazione per facilitare la diagnosi."
     },
     "askQuestion": {
       "description": "Hai una domanda sulla configurazione, le funzionalità o l'utilizzo? Il forum GitHub Discussions è il posto migliore per ottenere aiuto dalla comunità."
@@ -4761,23 +4877,21 @@
         "description": "Genera e carica un pacchetto di supporto qui sotto. Cattura log e configurazione che velocizzano significativamente la risoluzione dei problemi."
       }
     },
-    "supportDump": {
-      "title": "Genera pacchetto di supporto",
-      "description": "Caricare un pacchetto di supporto con la segnalazione aiuta significativamente nella diagnosi. Cattura la configurazione e i log recenti con i dati sensibili rimossi."
-    },
     "openIssue": {
       "title": "Apri una segnalazione su GitHub",
-      "description": "Una volta raccolte le informazioni sopra e generato il pacchetto di supporto, apri una segnalazione su GitHub per descrivere il problema.",
+      "description": "Apri una segnalazione su GitHub per descrivere il problema. Avrai bisogno del numero della segnalazione nel passaggio successivo.",
       "button": "Apri segnalazione su GitHub"
+    },
+    "supportDump": {
+      "title": "Genera pacchetto di supporto",
+      "description": "Dopo aver creato la segnalazione, genera un pacchetto di supporto e inserisci il numero della segnalazione GitHub. Questo collega la diagnostica alla segnalazione bug e facilita la risoluzione."
     }
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Aggiorna",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4789,6 +4903,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Tutto OK",
+      "needsAttention": "Richiede attenzione",
+      "failing": "In errore",
+      "allClear": "Tutto a posto",
+      "noData": "Nessun dato",
+      "none": "Nessuno"
+    },
+    "diagnostics": "Diagnostica",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4817,6 +4940,41 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Errori frequenti",
+      "errorCount": "Conteggio",
+      "errorComponent": "Componente",
+      "errorLevel": "Livello",
+      "errorMessage": "Messaggio"
+    },
+    "window": {
+      "label": "Finestra di valutazione",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Ultimo evento",
+      "recentEvents": "Eventi recenti",
+      "time": "Ora",
+      "source": "Sorgente",
+      "count": "Conteggio",
+      "lifetime": "totale",
+      "sparklineLabel": "Grafico di attività",
+      "activeHours": "Ore attive",
+      "windowTotal": "Nella finestra",
+      "velocity": "Tendenza",
+      "velocityStable": "Stabile",
+      "velocityIncreasing": "In aumento",
+      "velocityDecreasing": "In calo",
+      "pattern": "Schema",
+      "patternNone": "Nessuno",
+      "patternTransient": "Transitorio",
+      "patternSustained": "Persistente"
     }
   }
 }

@@ -64,6 +64,7 @@ func newSettingsAuthTestEnv(t *testing.T) *echo.Echo {
 	})
 
 	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 
 	settings := &conf.Settings{
 		Version: "1.0.0-test",

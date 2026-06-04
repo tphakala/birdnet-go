@@ -149,6 +149,11 @@ func IsSafePath(pathStr string) bool {
 		return false
 	}
 
+	// Check for triple-encoded null byte (%252500)
+	if strings.Contains(lower, "%252500") {
+		return false
+	}
+
 	// Check for URL-encoded backslash (%5c)
 	if strings.Contains(lower, "%5c") {
 		return false
@@ -175,15 +180,78 @@ func IsSafePath(pathStr string) bool {
 	return true
 }
 
-// IsValidRedirect ensures the redirect path is safe and internal by checking IsSafePath.
-// It logs a warning if the path is deemed unsafe.
+// IsValidRedirect ensures the redirect path is safe and internal.
+// It is query-aware: strict path-traversal checks apply to the path component,
+// while the query string is validated more permissively (see isSafeRedirectTarget).
+// It logs a warning if the redirect is deemed unsafe.
 func IsValidRedirect(redirectPath string) bool {
-	isSafe := IsSafePath(redirectPath) // Use the exported function
+	isSafe := isSafeRedirectTarget(redirectPath)
 	if !isSafe {
 		// Log potentially unsafe redirect attempt using the security logger
 		GetLogger().Warn("invalid or potentially unsafe redirect path detected", logger.String("path", redirectPath))
 	}
 	return isSafe
+}
+
+// isSafeRedirectTarget reports whether redirect is a safe same-origin relative
+// redirect target. It is query-aware: the strict path-traversal heuristics in
+// IsSafePath are applied only to the path component, while the query component is
+// checked for response-splitting and control characters but is otherwise allowed
+// to contain sequences (such as ".." or "//") that are meaningful only as a path.
+// This prevents a legitimate filter query string (e.g. a free-text detections
+// search) from causing an otherwise-safe redirect to be rejected, which would
+// silently drop the user back to the base path after login.
+func isSafeRedirectTarget(redirect string) bool {
+	// Bound the full target. The path component is bounded more tightly by
+	// IsSafePath; this larger budget covers the path plus a long query string.
+	// MaxSafeRedirectLength is the maximum allowed length (inclusive).
+	if len(redirect) > MaxSafeRedirectLength {
+		return false
+	}
+
+	// Split the path from the query at the first '?'. The query never changes
+	// the redirect's same-origin target, so running traversal heuristics over it
+	// would only produce false rejections.
+	pathPart, queryPart, hasQuery := strings.Cut(redirect, "?")
+
+	if !IsSafePath(pathPart) {
+		return false
+	}
+
+	if hasQuery && !isSafeRedirectQuery(queryPart) {
+		return false
+	}
+
+	return true
+}
+
+// isSafeRedirectQuery reports whether a redirect query string is free of
+// sequences that could enable HTTP response splitting/smuggling when the
+// redirect is emitted in a Location header. Unlike the path, the query is not
+// subject to path-traversal checks.
+func isSafeRedirectQuery(query string) bool {
+	// Reject CR/LF and their percent-encoded variants (header injection).
+	if containsCRLF(query) {
+		return false
+	}
+
+	// Reject percent-encoded null bytes through triple encoding (a raw NUL is
+	// caught by the control scan below). Mirrors the encoded-null and encoded-CRLF
+	// checks in IsSafePath/containsCRLF so repeated downstream decodes cannot
+	// reintroduce a NUL.
+	lower := strings.ToLower(query)
+	if strings.Contains(lower, "%00") || strings.Contains(lower, "%2500") || strings.Contains(lower, "%252500") {
+		return false
+	}
+
+	// Reject raw C0 control characters (tab is permitted); this also covers a raw
+	// null byte. Legitimate query strings arrive percent-encoded, so raw control
+	// bytes are abnormal.
+	if strings.IndexFunc(query, func(r rune) bool { return r < 0x20 && r != '\t' }) >= 0 {
+		return false
+	}
+
+	return true
 }
 
 // ValidateAuthCallbackRedirect validates and sanitizes a redirect path for auth callbacks.

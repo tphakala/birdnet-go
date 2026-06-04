@@ -184,6 +184,7 @@ func (m *mockStore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters
 	return nil, 0, nil
 }
 func (m *mockStore) GetNoteClipPath(noteID string) (string, error) { return "", nil }
+func (m *mockStore) GetNoteModelType(_ string) (string, error)     { return "bird", nil }
 func (m *mockStore) DeleteNoteClipPath(noteID string) error        { return nil }
 func (m *mockStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]datastore.ClipForRemoval, error) {
 	return nil, nil
@@ -325,6 +326,16 @@ func (m *mockStore) PingWithLatency(_ context.Context) (time.Duration, error) { 
 func (m *mockStore) CountDetectionsSince(_ context.Context, _ time.Time) (int, error) {
 	return 0, nil
 }
+func (m *mockStore) SaveAppEvent(_ context.Context, _, _, _ string, _ map[string]any) error {
+	return nil
+}
+func (m *mockStore) GetRecentAppEvents(_ context.Context, _ int) ([]datastore.AppEvent, error) {
+	return nil, nil
+}
+func (m *mockStore) GetAppEventsSince(_ context.Context, _ time.Time, _ int) ([]datastore.AppEvent, error) {
+	return nil, nil
+}
+func (m *mockStore) PruneAppEvents(_ context.Context, _ int) (int64, error) { return 0, nil }
 
 func (m *mockStore) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
 	return nil, nil

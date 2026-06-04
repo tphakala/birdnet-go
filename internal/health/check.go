@@ -57,18 +57,65 @@ type Check interface {
 	Run(ctx context.Context) Result
 }
 
-// WorstStatus returns the most severe status from a slice of results.
+// MultiResultCheck is implemented by checks that produce multiple results
+// at run time, such as per-model health checks. The registry detects this
+// interface and calls RunMulti instead of Run when present.
+type MultiResultCheck interface {
+	Check
+	RunMulti(ctx context.Context) []Result
+}
+
+// WindowedCheck is implemented by counter-based checks that support
+// time-windowed evaluation. The registry calls WithWindow before Run
+// to configure the evaluation window for the current diagnostics request.
+//
+// Note: WithWindow returns the narrower Check interface, so an implementation
+// that also satisfies MultiResultCheck will lose that capability after the
+// registry rewraps it. Currently no check is both windowed and multi-result;
+// if that changes, this interface should return the same dynamic type.
+type WindowedCheck interface {
+	Check
+	WithWindow(d time.Duration) Check
+}
+
+// WorstStatus returns the most severe actionable status from a slice of results.
+// Skipped and unknown results are ignored when actionable results (healthy,
+// warning, critical) exist. If every result is non-actionable, it returns
+// StatusUnknown when any unknown result is present, otherwise StatusSkipped.
+//
+// An empty (or nil) slice means there is no data to aggregate. Absence of data
+// is not "healthy", so it reports StatusUnknown.
 func WorstStatus(results []Result) Status {
+	if len(results) == 0 {
+		return StatusUnknown
+	}
 	worst := StatusHealthy
+	hasActionable := false
+	sawUnknown := false
 	for _, r := range results {
-		if severity(r.Status) > severity(worst) {
+		if r.Status == StatusSkipped || r.Status == StatusUnknown {
+			if r.Status == StatusUnknown {
+				sawUnknown = true
+			}
+			continue
+		}
+		hasActionable = true
+		if Severity(r.Status) > Severity(worst) {
 			worst = r.Status
 		}
+	}
+	if !hasActionable {
+		if sawUnknown {
+			return StatusUnknown
+		}
+		return StatusSkipped
 	}
 	return worst
 }
 
-func severity(s Status) int {
+// Severity returns the numeric severity of a status for comparison.
+// Higher values indicate more severe conditions.
+func Severity(s Status) int {
 	switch s {
 	case StatusHealthy:
 		return 0

@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 const (
@@ -71,6 +73,12 @@ func (t *MetricTracker) IsSustained(metricName, operator, value string, duration
 
 	threshold, err := strconv.ParseFloat(value, 64)
 	if err != nil {
+		log := logger.Global().Module("alerting")
+		log.Warn("Alert sustained-check has unparseable threshold value",
+			logger.String("metric", metricName),
+			logger.String("operator", operator),
+			logger.String("value", value),
+			logger.Error(err))
 		return false
 	}
 

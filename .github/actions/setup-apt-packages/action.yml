@@ -1,0 +1,55 @@
+name: 'Setup APT Packages'
+description: 'Install APT packages with caching, timeouts, and automatic fallback'
+
+inputs:
+  packages:
+    description: 'Space-separated list of APT packages to install'
+    required: true
+  cache-version:
+    description: 'Cache key version (bump to invalidate)'
+    required: false
+    default: '1.1'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install APT packages (cached)
+      uses: awalsh128/cache-apt-pkgs-action@acb598e5ddbc6f68a970c5da0688d2f3a9f04d05 # v1.6.0
+      with:
+        packages: ${{ inputs.packages }}
+        version: ${{ inputs.cache-version }}
+        execute_install_scripts: true
+
+    - name: Refresh shared library cache and verify
+      shell: bash
+      run: |
+        sudo ldconfig
+
+        # Verify key binaries work; reinstall on failure
+        FAILED=""
+        for pkg in ${{ inputs.packages }}; do
+          case "$pkg" in
+            ffmpeg)
+              if ! ffmpeg -version > /dev/null 2>&1; then
+                FAILED="$FAILED ffmpeg"
+              fi
+              ;;
+            sox)
+              if ! sox --version > /dev/null 2>&1; then
+                FAILED="$FAILED sox"
+              fi
+              ;;
+          esac
+        done
+
+        if [ -n "$FAILED" ]; then
+          echo "::warning::Broken after cache restore:$FAILED. Reinstalling..."
+          sudo apt-get update -qq \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=30
+          sudo apt-get install -y --fix-broken \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=30 \
+            ${{ inputs.packages }}
+          sudo ldconfig
+        fi

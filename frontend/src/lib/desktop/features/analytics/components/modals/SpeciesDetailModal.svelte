@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import { t } from '$lib/i18n';
-  import { parseLocalDateString } from '$lib/utils/date';
+  import { formatDate } from '$lib/utils/formatters';
 
   interface SpeciesData {
     common_name: string;
@@ -50,13 +50,6 @@
 
   function formatPercentage(value: number): string {
     return (value * 100).toFixed(1) + '%';
-  }
-
-  function formatDate(dateString: string): string {
-    if (!dateString) return '';
-    const date = parseLocalDateString(dateString);
-    if (!date) return '';
-    return date.toLocaleDateString();
   }
 
   function handleClose() {

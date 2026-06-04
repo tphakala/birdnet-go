@@ -7,6 +7,7 @@ import (
 	"maps"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +28,8 @@ const (
 	cleanupMaxRetries = 3
 	// cleanupBaseDelay is the base delay for exponential backoff between cleanup retries.
 	cleanupBaseDelay = 100 * time.Millisecond
+	// unknownDetectionSpeciesKey is used when detection events lack species metadata.
+	unknownDetectionSpeciesKey = "unknown"
 )
 
 // ActionFunc is called when a rule fires. Receives the rule and triggering event.
@@ -110,6 +113,9 @@ func cooldownKey(rule *entities.AlertRule, event *AlertEvent) string {
 	if rule.TriggerType == TriggerTypeMetric {
 		return fmt.Sprintf("%d|%s", rule.ID, metricBufferKey(rule.MetricName, event.Properties))
 	}
+	if speciesKey := detectionSpeciesKey(event); isSpeciesScopedDetectionRule(rule, event, speciesKey) {
+		return fmt.Sprintf("%d|%s", rule.ID, speciesKey)
+	}
 	return fmt.Sprintf("%d", rule.ID)
 }
 
@@ -117,6 +123,73 @@ func cooldownKey(rule *entities.AlertRule, event *AlertEvent) string {
 // instance (path). Multiple mount points are tracked independently.
 func escalationKey(ruleID uint, metricName string, properties map[string]any) string {
 	return fmt.Sprintf("%d|%s", ruleID, metricBufferKey(metricName, properties))
+}
+
+func detectionSpeciesKey(event *AlertEvent) string {
+	for _, propertyName := range []string{PropertyScientificName, PropertySpeciesName} {
+		if value, ok := event.Properties[propertyName].(string); ok {
+			key := strings.TrimSpace(strings.ToLower(value))
+			if key != "" {
+				return key
+			}
+		}
+	}
+	return unknownDetectionSpeciesKey
+}
+
+// isSpeciesScopedDetectionRule reports whether a detection rule's cooldown and
+// escalation state should be tracked per species rather than per rule. The
+// caller passes speciesKey from detectionSpeciesKey(event); species-less
+// detections (unknownDetectionSpeciesKey) always use per-rule scoping. Novelty
+// conditions reuse detectionMetadataProperties as the single source of truth
+// for which properties scope a rule to a species.
+func isSpeciesScopedDetectionRule(rule *entities.AlertRule, event *AlertEvent, speciesKey string) bool {
+	if rule.TriggerType != TriggerTypeEvent || !isDetectionEvent(event.EventName) {
+		return false
+	}
+	if speciesKey == unknownDetectionSpeciesKey {
+		return false
+	}
+	if len(rule.EscalationSteps) > 0 {
+		return true
+	}
+	for i := range rule.Conditions {
+		if slices.Contains(detectionMetadataProperties, rule.Conditions[i].Property) {
+			return true
+		}
+	}
+	return false
+}
+
+func detectionEscalationKey(rule *entities.AlertRule, event *AlertEvent, speciesKey string) string {
+	// Derive a stable per-episode component. NoveltyEpisodeStart is contractually
+	// a string today, but format time.Time explicitly so a future type change
+	// can't break episode grouping via fmt's verbose %v (monotonic clock, nanos).
+	var episodeStart string
+	switch value := event.Properties[PropertyNoveltyEpisodeStart].(type) {
+	case time.Time:
+		if !value.IsZero() {
+			episodeStart = value.UTC().Format(time.RFC3339)
+		}
+	case string:
+		episodeStart = strings.TrimSpace(value)
+	case nil:
+		// No episode metadata; fall back to the event day below.
+	default:
+		episodeStart = strings.TrimSpace(fmt.Sprintf("%v", value))
+	}
+	if episodeStart == "" {
+		eventTime := event.Timestamp
+		if eventTime.IsZero() {
+			eventTime = time.Now()
+		}
+		episodeStart = eventTime.Format(time.DateOnly)
+	}
+	return fmt.Sprintf("%d|%s|%s", rule.ID, speciesKey, episodeStart)
+}
+
+func detectionEscalationKeyPrefix(ruleID uint, speciesKey string) string {
+	return fmt.Sprintf("%d|%s|", ruleID, speciesKey)
 }
 
 // clearEscalationIfRecovered clears escalation state for rules whose metric
@@ -134,6 +207,10 @@ func (e *Engine) clearEscalationIfRecovered(rules []entities.AlertRule, event *A
 	}
 	floatVal, err := toFloat64(val)
 	if err != nil {
+		e.log.Debug("Failed to parse metric value for escalation recovery",
+			logger.String("metric", event.MetricName),
+			logger.String("object_type", event.ObjectType),
+			logger.Error(err))
 		return
 	}
 
@@ -148,7 +225,7 @@ func (e *Engine) clearEscalationIfRecovered(rules []entities.AlertRule, event *A
 		if len(rule.EscalationSteps) == 0 {
 			continue
 		}
-		// Find the lowest step (base threshold) — steps may not be sorted.
+		// Find the lowest step (base threshold) - steps may not be sorted.
 		baseStep := slices.Min(rule.EscalationSteps)
 		if floatVal < baseStep {
 			key := escalationKey(rule.ID, event.MetricName, event.Properties)
@@ -157,6 +234,20 @@ func (e *Engine) clearEscalationIfRecovered(rules []entities.AlertRule, event *A
 			e.escalationsMu.Unlock()
 		}
 	}
+}
+
+// highestStepExceeded returns the highest escalation step that value meets or
+// exceeds. found is false when value is below every step. Explicit max tracking
+// keeps the result correct for unsorted steps and negative thresholds (e.g.
+// temperature), where a plain running max with a zero sentinel would be wrong.
+func highestStepExceeded(steps []float64, value float64) (step float64, found bool) {
+	for _, s := range steps {
+		if value >= s && (!found || s > step) {
+			step = s
+			found = true
+		}
+	}
+	return step, found
 }
 
 // shouldSuppressEscalation checks if a metric rule should be suppressed
@@ -174,21 +265,14 @@ func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *Alert
 	}
 	floatVal, err := toFloat64(val)
 	if err != nil {
+		e.log.Debug("Failed to parse metric value for escalation check",
+			logger.String("metric", event.MetricName),
+			logger.String("object_type", event.ObjectType),
+			logger.Error(err))
 		return false, event.Properties
 	}
 
-	// Find the highest step the current value exceeds.
-	// Uses explicit max tracking so the result is correct even if
-	// EscalationSteps is not sorted ascending. A boolean flag avoids
-	// issues with negative step values (e.g., temperature thresholds).
-	var currentStep float64
-	stepFound := false
-	for _, step := range rule.EscalationSteps {
-		if floatVal >= step && (!stepFound || step > currentStep) {
-			currentStep = step
-			stepFound = true
-		}
-	}
+	currentStep, stepFound := highestStepExceeded(rule.EscalationSteps, floatVal)
 	if !stepFound {
 		return true, nil
 	}
@@ -214,6 +298,77 @@ func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *Alert
 	return false, propsCopy
 }
 
+// shouldSuppressDetectionEscalation applies confidence laddering to detection
+// event rules. It is keyed by species and novelty episode, so a higher
+// confidence step can notify again without waiting for the rule cooldown.
+func (e *Engine) shouldSuppressDetectionEscalation(rule *entities.AlertRule, event *AlertEvent, cdKey, speciesKey string) (suppress bool, props map[string]any) {
+	if len(rule.EscalationSteps) == 0 {
+		return false, event.Properties
+	}
+
+	confidence, ok := event.Properties[PropertyConfidence]
+	if !ok {
+		return true, nil
+	}
+	confidenceFloat, err := toFloat64(confidence)
+	if err != nil {
+		return true, nil
+	}
+
+	currentStep, stepFound := highestStepExceeded(rule.EscalationSteps, confidenceFloat)
+	if !stepFound {
+		return true, nil
+	}
+
+	key := detectionEscalationKey(rule, event, speciesKey)
+	now := time.Now()
+
+	e.cooldownsMu.Lock()
+	e.escalationsMu.Lock()
+	lastStep, exists := e.escalations[key]
+	cooldownExpired := e.cooldownExpiredLocked(cdKey, rule.CooldownSec, now)
+	if exists && lastStep >= currentStep && !cooldownExpired {
+		e.escalationsMu.Unlock()
+		e.cooldownsMu.Unlock()
+		return true, nil
+	}
+	e.pruneDetectionEscalationsLocked(rule.ID, speciesKey, key)
+	e.escalations[key] = currentStep
+	e.escalationsMu.Unlock()
+	if rule.CooldownSec > 0 {
+		e.cooldowns[cdKey] = now
+	}
+	e.cooldownsMu.Unlock()
+
+	propsCopy := make(map[string]any, len(event.Properties)+1)
+	maps.Copy(propsCopy, event.Properties)
+	propsCopy[PropertyThresholdStep] = currentStep
+
+	return false, propsCopy
+}
+
+// cooldownExpiredLocked reports whether the cooldown for key has elapsed (or is
+// disabled). Callers must hold e.cooldownsMu.
+func (e *Engine) cooldownExpiredLocked(key string, cooldownSec int, now time.Time) bool {
+	if cooldownSec <= 0 {
+		return true
+	}
+	lastFired, exists := e.cooldowns[key]
+	return !exists || now.Sub(lastFired) >= time.Duration(cooldownSec)*time.Second
+}
+
+// pruneDetectionEscalationsLocked removes escalation entries for older episodes
+// of the same rule and species, keeping only currentKey. Callers must hold
+// e.escalationsMu.
+func (e *Engine) pruneDetectionEscalationsLocked(ruleID uint, speciesKey, currentKey string) {
+	prefix := detectionEscalationKeyPrefix(ruleID, speciesKey)
+	for key := range e.escalations {
+		if key != currentKey && strings.HasPrefix(key, prefix) {
+			delete(e.escalations, key)
+		}
+	}
+}
+
 // HandleEvent evaluates an event against all enabled rules.
 func (e *Engine) HandleEvent(event *AlertEvent) {
 	// Record metric sample once before rule iteration to avoid duplicates
@@ -223,6 +378,10 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 			if floatVal, err := toFloat64(val); err == nil {
 				trackerKey := metricBufferKey(event.MetricName, event.Properties)
 				e.metricTracker.Record(trackerKey, floatVal, event.Timestamp)
+			} else {
+				e.log.Debug("Failed to parse metric value for tracking",
+					logger.String("metric", event.MetricName),
+					logger.Error(err))
 			}
 		}
 	}
@@ -276,6 +435,31 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 			}
 			e.fireRule(rule, augmentedEvent)
 			continue
+		}
+
+		if rule.TriggerType == TriggerTypeEvent && isDetection && len(rule.EscalationSteps) > 0 {
+			speciesKey := detectionSpeciesKey(event)
+			if speciesKey != unknownDetectionSpeciesKey {
+				suppress, props := e.shouldSuppressDetectionEscalation(rule, event, cdKey, speciesKey)
+				if suppress {
+					continue
+				}
+				augmentedEvent := &AlertEvent{
+					ObjectType: event.ObjectType,
+					EventName:  event.EventName,
+					MetricName: event.MetricName,
+					Properties: props,
+					Timestamp:  event.Timestamp,
+				}
+				e.log.Debug("Detection rule fired at confidence escalation step",
+					logger.String("component", "alerting.engine"),
+					logger.String("event_name", event.EventName),
+					logger.Uint64("rule_id", uint64(rule.ID)),
+					logger.String("rule_name", rule.Name),
+					logger.String("operation", "fire_detection_escalation_rule"))
+				e.fireRule(rule, augmentedEvent)
+				continue
+			}
 		}
 
 		if e.tryAcquireCooldown(cdKey, rule.CooldownSec) {

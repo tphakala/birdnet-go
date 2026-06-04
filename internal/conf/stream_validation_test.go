@@ -511,3 +511,44 @@ func TestApplyStreamDefaults(t *testing.T) {
 		})
 	}
 }
+
+func TestStreamConfig_ChannelModeValidation(t *testing.T) {
+	t.Parallel()
+
+	base := func() StreamConfig {
+		return StreamConfig{
+			Name:    "Test Stream",
+			URL:     "rtsp://192.168.1.10/stream",
+			Enabled: true,
+			Type:    StreamTypeRTSP,
+		}
+	}
+
+	tests := []struct {
+		name        string
+		channelMode ChannelMode
+		wantErr     bool
+	}{
+		{"empty defaults to downmix", "", false},
+		{"explicit downmix", ChannelModeDownmix, false},
+		{"left channel", ChannelModeLeft, false},
+		{"right channel", ChannelModeRight, false},
+		{"invalid mode rejected", ChannelMode("stereo"), true},
+		{"invalid mode center", ChannelMode("center"), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := base()
+			s.ChannelMode = tt.channelMode
+			err := s.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "invalid channel mode")
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

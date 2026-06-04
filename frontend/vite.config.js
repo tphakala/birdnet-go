@@ -148,11 +148,6 @@ export default defineConfig({
         assetFileNames: '[name]-[hash].[ext]',
         manualChunks(id) {
           if (id.includes('node_modules/svelte/')) return 'vendor';
-          if (
-            id.includes('node_modules/chart.js/') ||
-            id.includes('node_modules/chartjs-adapter-date-fns/')
-          )
-            return 'charts';
           // Catch the whole d3 family: bare `d3/` and the `d3-*` packages
           // (d3-scale-chromatic, d3-time-format, d3-array, etc.). Requiring
           // a `/` or `-` after `d3` avoids matching unrelated packages like

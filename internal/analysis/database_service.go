@@ -28,6 +28,29 @@ import (
 // databaseServiceName is the service name used for logging and diagnostics.
 const databaseServiceName = "database"
 
+// schemaCorruptionRecoveryHint is the user-facing instruction emitted alongside every
+// v2-schema-corruption log entry. Kept in one place so every call site shows the same
+// recovery steps; the path matches the tool's real location on disk.
+const schemaCorruptionRecoveryHint = "run tools/db-doctor/db-doctor.py --fix or restore from backup"
+
+// abortOnV2SchemaCorruption inspects an error returned by a v2 schema initializer.
+// If the error chains to datastoreV2.ErrV2SchemaCorrupted it logs at Error level with
+// the recovery hint and returns a wrapped error the caller must propagate; this stops
+// silent fallback to legacy mode that would mask the real failure mode (GitHub #3211).
+// Returns nil for non-corruption errors and for nil input so the caller's existing
+// fallback path stays in effect for transient problems.
+func abortOnV2SchemaCorruption(log logger.Logger, err error, operation, modeLabel string) error {
+	if err == nil || !errors.Is(err, datastoreV2.ErrV2SchemaCorrupted) {
+		return nil
+	}
+	log.Error("v2 database schema is corrupted, refusing to fall back to legacy mode",
+		logger.Error(err),
+		logger.String("mode", modeLabel),
+		logger.String("operation", operation),
+		logger.String("recovery_hint", schemaCorruptionRecoveryHint))
+	return fmt.Errorf("v2 schema corrupted in %s mode, refusing silent fallback to legacy mode: %w", modeLabel, err)
+}
+
 // DatabaseService manages the database lifecycle as an app.Service with TierCore shutdown.
 // It owns both the primary datastore (v1) and the optional v2 database manager.
 type DatabaseService struct {
@@ -161,7 +184,12 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		var err error
 		v2OnlyDatastore, err = initializeV2OnlyMode(settings)
 		if err != nil {
-			// Enhanced database mode failed, fall back to legacy startup
+			if corrErr := abortOnV2SchemaCorruption(datastoreLog, err,
+				"initialize_enhanced_database_mode", "v2-only"); corrErr != nil {
+				return corrErr
+			}
+			// Non-corruption errors (disk, permissions, etc.) keep the legacy fallback so
+			// the app remains usable in a degraded mode while the operator investigates.
 			datastoreLog.Warn("enhanced database mode initialization failed, falling back to legacy mode",
 				logger.Error(err),
 				logger.String("operation", "initialize_enhanced_database_mode"))
@@ -184,7 +212,11 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		var err error
 		v2OnlyDatastore, err = v2only.InitializeFreshInstall(settings, GetLogger(), freshSciIndex)
 		if err != nil {
-			// Fresh install failed, fall back to legacy mode
+			if corrErr := abortOnV2SchemaCorruption(GetLogger(), err,
+				"initialize_fresh_install", "fresh-install"); corrErr != nil {
+				return corrErr
+			}
+			// Non-corruption errors fall back to legacy mode for graceful degradation.
 			GetLogger().Warn("fresh install failed, falling back to legacy mode",
 				logger.Error(err),
 				logger.String("operation", "initialize_fresh_install"))
@@ -241,7 +273,17 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		// Store the returned manager so Stop() can close the v2 database connection.
 		migrationManager, err := initializeMigrationInfrastructure(settings, d.dataStore)
 		if err != nil {
-			// Migration infrastructure is optional - log warning but continue
+			// Schema corruption during migration setup is the same silent-fallback class
+			// of failure the v2-only and fresh-install arms now refuse. A migration v2
+			// database with a missing column will lose every detection the worker tries
+			// to tail-sync, exactly the symptom from GitHub #3211; surface it instead of
+			// hiding behind a Warn.
+			if corrErr := abortOnV2SchemaCorruption(GetLogger(), err,
+				"initialize_migration_infrastructure", "migration"); corrErr != nil {
+				return corrErr
+			}
+			// Non-corruption migration setup failures remain optional: the legacy
+			// datastore is already open and the app stays usable in degraded mode.
 			GetLogger().Warn("migration infrastructure initialization failed",
 				logger.Error(err),
 				logger.String("operation", "initialize_migration_infrastructure"))
@@ -411,7 +453,12 @@ func initializeV2WithSelfHealing(manager datastoreV2.Manager, v2Path string, log
 // empty and no migration is in progress.
 func isV2DatabaseSafeToDelete(dbPath string, log logger.Logger) bool {
 	// Open database in read-only mode.
-	dsn := dbPath + "?mode=ro&_journal_mode=WAL&_busy_timeout=5000"
+	// Use safe separator in case dbPath already contains query parameters.
+	sep := "?"
+	if strings.Contains(dbPath, "?") {
+		sep = "&"
+	}
+	dsn := dbPath + sep + "mode=ro&_journal_mode=WAL&_busy_timeout=5000"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gorm_logger.Default.LogMode(gorm_logger.Silent),
 	})

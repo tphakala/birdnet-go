@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -21,18 +22,36 @@ import (
 const (
 	supportLogDurationWeeks = 4           // Weeks of logs to collect
 	supportMaxLogSizeMB     = 50          // Maximum log size in MB
-	supportBytesPerKB       = 1024        // Bytes per kilobyte
 	supportBytesPerMB       = 1024 * 1024 // Bytes per megabyte
+	supportDumpTimeout      = 120 * time.Second
 )
+
+// valueContext wraps a cancellation-bearing context while delegating
+// Value lookups to a separate context. This lets the support dump
+// handler use the server lifecycle context (c.ctx) for cancellation
+// while still reading trace IDs from the HTTP request context.
+type valueContext struct {
+	context.Context
+	values context.Context
+}
+
+func (vc valueContext) Value(key any) any {
+	if val := vc.values.Value(key); val != nil {
+		return val
+	}
+	return vc.Context.Value(key)
+}
 
 // GenerateSupportDumpRequest represents the request for generating a support dump
 type GenerateSupportDumpRequest struct {
-	IncludeLogs       bool   `json:"include_logs"`
-	IncludeConfig     bool   `json:"include_config"`
-	IncludeSystemInfo bool   `json:"include_system_info"`
-	UserMessage       string `json:"user_message"`
-	UploadToSentry    bool   `json:"upload_to_sentry"`
-	GitHubIssueNumber string `json:"github_issue_number"`
+	IncludeLogs         bool   `json:"include_logs"`
+	IncludeConfig       bool   `json:"include_config"`
+	IncludeSystemInfo   bool   `json:"include_system_info"`
+	IncludeDatabaseInfo bool   `json:"include_database_info"`
+	IncludeAppEvents    bool   `json:"include_app_events"`
+	UserMessage         string `json:"user_message"`
+	UploadToSentry      bool   `json:"upload_to_sentry"`
+	GitHubIssueNumber   string `json:"github_issue_number"`
 }
 
 // GenerateSupportDumpResponse represents the response for support dump generation
@@ -58,6 +77,27 @@ func sanitizeGitHubIssueNumber(issueNum string) string {
 func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	c.logDebugIfEnabled("Support dump generation started")
 
+	// Use the server lifecycle context for cancellation so the dump
+	// stops on shutdown, but delegate Value lookups to the request
+	// context so trace IDs remain accessible.
+	parentCtx := c.ctx
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	dumpCtx, cancel := context.WithTimeout(
+		valueContext{Context: parentCtx, values: ctx.Request().Context()},
+		supportDumpTimeout,
+	)
+	defer cancel()
+
+	// Extend the HTTP write deadline so the server does not close the
+	// TCP connection before the handler finishes (default WriteTimeout
+	// is 30s, but the dump can take much longer).
+	rc := http.NewResponseController(ctx.Response().Writer)
+	if err := rc.SetWriteDeadline(time.Now().Add(supportDumpTimeout)); err != nil {
+		c.logDebugIfEnabled("Failed to extend write deadline for support dump", logger.Error(err))
+	}
+
 	// Parse JSON request
 	var req GenerateSupportDumpRequest
 	if err := ctx.Bind(&req); err != nil {
@@ -71,15 +111,19 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		logger.Bool("include_logs", req.IncludeLogs),
 		logger.Bool("include_config", req.IncludeConfig),
 		logger.Bool("include_system_info", req.IncludeSystemInfo),
+		logger.Bool("include_database_info", req.IncludeDatabaseInfo),
+		logger.Bool("include_app_events", req.IncludeAppEvents),
 		logger.Bool("upload_to_sentry", req.UploadToSentry),
 		logger.String("github_issue", req.GitHubIssueNumber),
 		logger.Bool("has_user_message", req.UserMessage != ""))
 
 	// Set defaults if nothing is selected
-	if !req.IncludeLogs && !req.IncludeConfig && !req.IncludeSystemInfo {
+	if !req.IncludeLogs && !req.IncludeConfig && !req.IncludeSystemInfo && !req.IncludeDatabaseInfo && !req.IncludeAppEvents {
 		req.IncludeLogs = true
 		req.IncludeConfig = true
 		req.IncludeSystemInfo = true
+		req.IncludeDatabaseInfo = true
+		req.IncludeAppEvents = true
 		c.logDebugIfEnabled("Set default options for support dump")
 	}
 
@@ -103,19 +147,44 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		settings.Version,
 	)
 
+	// Wire database info provider if V2Manager is available
+	if req.IncludeDatabaseInfo && c.V2Manager != nil && c.DS != nil {
+		dialect := datastore.DialectSQLite
+		if c.V2Manager.IsMySQL() {
+			dialect = datastore.DialectMySQL
+		}
+		dbCollector := support.NewGormDatabaseInfoCollector(
+			c.V2Manager.DB(),
+			dialect,
+			c.V2Manager.Path(),
+			c.DS.SchemaVersion(),
+			c.V2Manager.TablePrefix(),
+		)
+		collector.SetDatabaseInfoProvider(dbCollector)
+	}
+
+	// Wire app events provider
+	if req.IncludeAppEvents && c.DS != nil {
+		collector.SetAppEventsProvider(support.NewDatastoreAppEventsProvider(c.DS, nil))
+	}
+
 	// Set collection options
 	opts := support.CollectorOptions{
-		IncludeLogs:       req.IncludeLogs,
-		IncludeConfig:     req.IncludeConfig,
-		IncludeSystemInfo: req.IncludeSystemInfo,
-		LogDuration:       supportLogDurationWeeks * daysPerWeek * HoursPerDay * time.Hour, // 4 weeks
-		MaxLogSize:        supportMaxLogSizeMB * supportBytesPerMB,                         // 50MB to accommodate more logs
-		ScrubSensitive:    true,
+		IncludeLogs:           req.IncludeLogs,
+		IncludeConfig:         req.IncludeConfig,
+		IncludeSystemInfo:     req.IncludeSystemInfo,
+		IncludeDatabaseInfo:   req.IncludeDatabaseInfo,
+		IncludeDeploymentInfo: true,
+		IncludeAppEvents:      req.IncludeAppEvents,
+		LogDuration:           supportLogDurationWeeks * daysPerWeek * HoursPerDay * time.Hour, // 4 weeks
+		MaxLogSize:            supportMaxLogSizeMB * supportBytesPerMB,                         // 50MB to accommodate more logs
+		ScrubSensitive:        true,
+		AnonymizePII:          true,
 	}
 
 	// Collect data
 	c.logDebugIfEnabled("Starting support data collection", logger.String("system_id", settings.SystemID))
-	dump, err := collector.Collect(ctx.Request().Context(), opts)
+	dump, err := collector.Collect(dumpCtx, opts)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to collect support data",
 			logger.Error(err),
@@ -128,12 +197,12 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 
 	// Create archive
 	c.logDebugIfEnabled("Creating support archive", logger.String("dump_id", dump.ID))
-	archiveData, err := collector.CreateArchive(ctx.Request().Context(), dump, opts)
+	archiveData, err := collector.CreateArchive(dumpCtx, dump, opts)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to create support archive",
 			logger.Error(err),
 			logger.String("dump_id", dump.ID),
-			logger.Any("context_err", ctx.Request().Context().Err()),
+			logger.Any("context_err", dumpCtx.Err()),
 		)
 		return c.HandleError(ctx, err, "Failed to create support archive", http.StatusInternalServerError)
 	}
@@ -164,7 +233,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		// Proceed with upload if still requested
 		if req.UploadToSentry {
 			uploader := telemetry.GetAttachmentUploader()
-			if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, settings.SystemID, req.UserMessage, req.GitHubIssueNumber); err != nil {
+			if err := uploader.UploadSupportDump(dumpCtx, archiveData, settings.SystemID, req.UserMessage, req.GitHubIssueNumber); err != nil {
 				// Log error but don't fail the request
 				c.logErrorIfEnabled("Failed to upload support dump to Sentry",
 					logger.Error(err),
@@ -203,7 +272,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	c.logInfoIfEnabled("Support dump generated",
 		logger.String("dump_id", dump.ID),
 		logger.Int("size", len(archiveData)),
-		logger.Bool("uploaded", req.UploadToSentry && settings.Sentry.Enabled),
+		logger.Bool("uploaded", response.UploadedAt != ""),
 	)
 
 	return ctx.JSON(http.StatusOK, response)
@@ -272,6 +341,9 @@ func (c *Controller) initSupportRoutes() {
 	if c.ctx != nil {
 		c.wg.Go(func() {
 			c.startSupportDumpCleanup(c.ctx)
+		})
+		c.wg.Go(func() {
+			c.startAppEventPruning(c.ctx)
 		})
 	}
 }
@@ -350,4 +422,50 @@ func (c *Controller) tryRemoveOldFile(file string, cutoff time.Time) bool {
 		return false
 	}
 	return true
+}
+
+// appEventRetentionDays is the default retention period for application events.
+const appEventRetentionDays = 90
+
+// startAppEventPruning runs periodic pruning of old application events.
+func (c *Controller) startAppEventPruning(ctx context.Context) {
+	if ctx == nil || c.DS == nil {
+		return
+	}
+
+	// Prune once at startup, but check for early cancellation first
+	select {
+	case <-ctx.Done():
+		return
+	default:
+		c.pruneAppEvents(ctx)
+	}
+
+	// Then prune daily
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			c.pruneAppEvents(ctx)
+		}
+	}
+}
+
+// pruneAppEvents removes application events older than the retention period.
+func (c *Controller) pruneAppEvents(ctx context.Context) {
+	if c.DS == nil {
+		return
+	}
+	pruned, err := c.DS.PruneAppEvents(ctx, appEventRetentionDays)
+	if err != nil {
+		c.logWarnIfEnabled("Failed to prune app events", logger.Error(err))
+		return
+	}
+	if pruned > 0 {
+		c.logInfoIfEnabled("Pruned old app events", logger.Int64("count", pruned))
+	}
 }

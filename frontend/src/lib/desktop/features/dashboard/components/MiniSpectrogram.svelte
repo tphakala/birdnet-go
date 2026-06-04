@@ -14,7 +14,7 @@
    */
 
   import Hls from 'hls.js';
-  import ReconnectingEventSource from 'reconnecting-eventsource';
+  import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { onMount } from 'svelte';
 
   import { Volume, Volume1, Volume2, VolumeX, Play, Square, Tag } from '@lucide/svelte';

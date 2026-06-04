@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -25,21 +26,22 @@ type ModelListItem struct {
 
 // CatalogEntryResponse represents a model in the catalog API response.
 type CatalogEntryResponse struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	Author         string `json:"author"`
-	License        string `json:"license"`
-	CommercialUse  bool   `json:"commercialUse"`
-	Category       string `json:"category"`
-	Region         string `json:"region"`
-	SpeciesCount   int    `json:"speciesCount"`
-	Version        string `json:"version"`
-	UpstreamURL    string `json:"upstreamUrl,omitempty"`
-	Installed      bool   `json:"installed"`
-	Compatible     bool   `json:"compatible"`
-	TotalSizeBytes int64  `json:"totalSizeBytes"`
-	HasGeomodel    bool   `json:"hasGeomodel"`
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Description        string `json:"description"`
+	Author             string `json:"author"`
+	License            string `json:"license"`
+	CommercialUse      bool   `json:"commercialUse"`
+	Category           string `json:"category"`
+	Region             string `json:"region"`
+	SpeciesCount       int    `json:"speciesCount"`
+	Version            string `json:"version"`
+	UpstreamURL        string `json:"upstreamUrl,omitempty"`
+	Installed          bool   `json:"installed"`
+	Compatible         bool   `json:"compatible"`
+	IncompatibleReason string `json:"incompatibleReason,omitempty"`
+	TotalSizeBytes     int64  `json:"totalSizeBytes"`
+	HasGeomodel        bool   `json:"hasGeomodel"`
 }
 
 // initModelRoutes registers model-related API routes.
@@ -105,6 +107,9 @@ func (c *Controller) GetModelCatalog(ctx echo.Context) error {
 	visible := classifier.VisibleCatalog()
 	catalog := make([]CatalogEntryResponse, 0, len(visible))
 
+	// Check ORT availability once, reuse for all entries that require ONNX.
+	ortStatus := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
+
 	for i := range visible {
 		entry := &visible[i]
 
@@ -120,22 +125,31 @@ func (c *Controller) GetModelCatalog(ctx echo.Context) error {
 			installed = c.ModelManager.IsInstalled(entry.ID)
 		}
 
+		// Models requiring ONNX Runtime are incompatible when ORT is absent.
+		compatible := true
+		incompatibleReason := ""
+		if entry.RequiresONNX && !ortStatus.Available {
+			compatible = false
+			incompatibleReason = ortStatus.Error
+		}
+
 		catalog = append(catalog, CatalogEntryResponse{
-			ID:             entry.ID,
-			Name:           entry.Name,
-			Description:    entry.Description,
-			Author:         entry.Author,
-			License:        entry.License,
-			CommercialUse:  entry.CommercialUse,
-			Category:       entry.Category,
-			Region:         entry.Region,
-			SpeciesCount:   entry.SpeciesCount,
-			Version:        entry.Version,
-			UpstreamURL:    entry.UpstreamURL,
-			Installed:      installed,
-			Compatible:     true, // build tag check deferred to a later task
-			TotalSizeBytes: totalSize,
-			HasGeomodel:    classifier.HasGeomodelFiles(entry),
+			ID:                 entry.ID,
+			Name:               entry.Name,
+			Description:        entry.Description,
+			Author:             entry.Author,
+			License:            entry.License,
+			CommercialUse:      entry.CommercialUse,
+			Category:           entry.Category,
+			Region:             entry.Region,
+			SpeciesCount:       entry.SpeciesCount,
+			Version:            entry.Version,
+			UpstreamURL:        entry.UpstreamURL,
+			Installed:          installed,
+			Compatible:         compatible,
+			IncompatibleReason: incompatibleReason,
+			TotalSizeBytes:     totalSize,
+			HasGeomodel:        classifier.HasGeomodelFiles(entry),
 		})
 	}
 
@@ -168,6 +182,16 @@ func (c *Controller) InstallModel(ctx echo.Context) error {
 
 	if c.ModelManager == nil {
 		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
+	}
+
+	// Reject installation of ONNX-dependent models when ORT is unavailable.
+	if entry.RequiresONNX {
+		ortStatus := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
+		if !ortStatus.Available {
+			return c.HandleError(ctx, nil,
+				"model requires ONNX Runtime "+inference.ORTRequiredVersion()+": "+ortStatus.Error,
+				http.StatusConflict)
+		}
 	}
 
 	// Start async install in a background goroutine.
@@ -219,6 +243,16 @@ func (c *Controller) ReinstallModel(ctx echo.Context) error {
 
 	if !c.ModelManager.IsInstalled(catalogID) {
 		return c.HandleError(ctx, nil, "model "+catalogID+" is not installed", http.StatusBadRequest)
+	}
+
+	// Reject reinstall of ONNX-dependent models when ORT is unavailable.
+	if entry.RequiresONNX {
+		ortStatus := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
+		if !ortStatus.Available {
+			return c.HandleError(ctx, nil,
+				"model requires ONNX Runtime "+inference.ORTRequiredVersion()+": "+ortStatus.Error,
+				http.StatusConflict)
+		}
 	}
 
 	// Start async reinstall in a background goroutine.

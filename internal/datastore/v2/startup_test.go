@@ -46,6 +46,25 @@ func TestCheckMigrationState_FreshInstall_CustomPath(t *testing.T) {
 	assert.False(t, state.LegacyRequired, "should not require legacy")
 }
 
+func TestCheckMigrationState_FreshInstall_WarnsAboutNearbyDBFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a .db file that is NOT the configured path
+	existingDB := filepath.Join(tmpDir, "old-birdnet.db")
+	require.NoError(t, os.WriteFile(existingDB, make([]byte, 1024), 0o644))
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(tmpDir, "birdnet.db")
+
+	state := CheckMigrationStateBeforeStartup(settings)
+
+	// Behavior is unchanged: still fresh install
+	assert.True(t, state.FreshInstall, "should still detect fresh install")
+	assert.False(t, state.LegacyRequired)
+	assert.NoError(t, state.Error)
+}
+
 func TestCheckMigrationState_ExistingLegacy_SQLite(t *testing.T) {
 	tmpDir := t.TempDir()
 	legacyPath := filepath.Join(tmpDir, "birdnet.db")
@@ -453,5 +472,52 @@ func TestReportStartupError_NilSafe(t *testing.T) {
 	assert.NotPanics(t, func() {
 		reportStartupError("sqlite", "openDatabase", fmt.Errorf("database is locked"))
 		reportStartupError("sqlite", "openV2Database", fmt.Errorf("open /home/user/birdnet_v2.db: denied"), "/home/user/birdnet_v2.db")
+	})
+}
+
+// mysqlTestSettings builds conf.Settings from a MySQLConfig for startup tests.
+func mysqlTestSettings(cfg *MySQLConfig) *conf.Settings {
+	settings := &conf.Settings{}
+	settings.Output.MySQL.Enabled = true
+	settings.Output.MySQL.Host = cfg.Host
+	settings.Output.MySQL.Port = cfg.Port
+	settings.Output.MySQL.Username = cfg.Username
+	settings.Output.MySQL.Password = cfg.Password
+	settings.Output.MySQL.Database = cfg.Database
+	return settings
+}
+
+// TestCheckMySQLMigrationState_NativePasswordAuth verifies that the MySQL
+// startup check works with mysql_native_password authentication, which is the
+// default for MariaDB and some MySQL configurations.
+func TestCheckMySQLMigrationState_NativePasswordAuth(t *testing.T) {
+	settings := mysqlTestSettings(skipIfNoMySQL(t))
+
+	state := checkMySQLMigrationState(settings)
+
+	// Before the fix, mysql_native_password servers would get
+	// ErrV2DatabaseCorrupted because AllowNativePasswords defaulted to false.
+	require.NoError(t, state.Error, "startup check must not fail due to auth plugin rejection")
+	assert.NotEmpty(t, string(state.MigrationStatus), "migration status should be set")
+}
+
+// TestHasUnmigratedLegacyMySQL_NativePasswordAuth verifies that the unmigrated
+// records check connects successfully with mysql_native_password.
+func TestHasUnmigratedLegacyMySQL_NativePasswordAuth(t *testing.T) {
+	settings := mysqlTestSettings(skipIfNoMySQL(t))
+
+	// Should not panic or fail due to auth plugin rejection.
+	assert.NotPanics(t, func() {
+		_ = hasUnmigratedLegacyMySQL(settings, testStartupLogger())
+	})
+}
+
+// TestCheckMySQLHasFreshV2Schema_NativePasswordAuth verifies that the fresh v2
+// schema check connects successfully with mysql_native_password.
+func TestCheckMySQLHasFreshV2Schema_NativePasswordAuth(t *testing.T) {
+	settings := mysqlTestSettings(skipIfNoMySQL(t))
+
+	assert.NotPanics(t, func() {
+		_ = CheckMySQLHasFreshV2Schema(settings)
 	})
 }

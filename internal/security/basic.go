@@ -77,8 +77,10 @@ func buildSessionOptions(secure bool, maxAge int) *sessions.Options {
 	}
 }
 
-// configureLocalNetworkCookieStore configures the cookie store for local network access
-func (s *OAuth2Server) configureLocalNetworkCookieStore() {
+// configureLocalNetworkCookieStore configures the cookie store for local network access.
+// The caller passes its live settings snapshot so the whole request observes one
+// consistent view (issue #3370); session-duration changes apply without a restart.
+func (s *OAuth2Server) configureLocalNetworkCookieStore(settings *conf.Settings) {
 	GetLogger().Info("Configuring cookie store for local network access (allowing non-HTTPS cookies)")
 	// Configure session options based on store type
 	switch store := gothic.Store.(type) {
@@ -86,11 +88,11 @@ func (s *OAuth2Server) configureLocalNetworkCookieStore() {
 		// For CookieStore, use default session duration (session cookie if 0)
 		store.Options = buildSessionOptions(false, 0)
 	case *sessions.FilesystemStore:
-		// Calculate MaxAge in seconds from the configured session duration
-		// If not configured, default to 7 days
+		// Calculate MaxAge in seconds from the configured session duration.
+		// If not configured, default to 7 days.
 		maxAge := DefaultSessionMaxAgeSeconds
-		if s.Settings.Security.SessionDuration > 0 {
-			maxAge = int(s.Settings.Security.SessionDuration.Seconds())
+		if sessionDuration := settings.Security.SessionDuration; sessionDuration > 0 {
+			maxAge = int(sessionDuration.Seconds())
 		}
 		store.Options = buildSessionOptions(false, maxAge)
 	default:
@@ -106,13 +108,21 @@ func (s *OAuth2Server) HandleBasicAuthorize(c echo.Context) error {
 	secLog := GetLogger().With(logger.String("client_id", clientID), logger.String("redirect_uri", redirectURI))
 	secLog.Info("Handling basic authorization request")
 
-	if clientID != s.Settings.Security.BasicAuth.ClientID {
-		secLog.Warn("Invalid client_id provided", logger.String("expected", s.Settings.Security.BasicAuth.ClientID))
+	// Read the live snapshot once so UI changes to the client id and redirect URI
+	// apply without a restart (issue #3370).
+	settings := s.currentSettings()
+	if settings == nil {
+		secLog.Error("Basic authorization failed: settings unavailable")
+		return c.String(http.StatusInternalServerError, "Internal server error")
+	}
+	expectedClientID := settings.Security.BasicAuth.ClientID
+	if clientID != expectedClientID {
+		secLog.Warn("Invalid client_id provided", logger.String("expected", expectedClientID))
 		return c.String(http.StatusBadRequest, "Invalid client_id")
 	}
 
-	// Validate redirect URI using the shared function and pre-parsed expected URI
-	if err := ValidateRedirectURI(redirectURI, s.ExpectedBasicRedirectURI); err != nil {
+	// Validate redirect URI using the shared function and the live expected URI
+	if err := ValidateRedirectURI(redirectURI, parseBasicAuthRedirectURI(settings)); err != nil {
 		secLog.Warn("Redirect URI validation failed", logger.Error(err))
 		// Return the specific error message for better client-side debugging
 		return c.String(http.StatusBadRequest, err.Error())
@@ -144,11 +154,20 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Missing or malformed Authorization header"})
 	}
 
+	// Snapshot the live settings once so credentials and options configured
+	// through the web UI apply without a restart (issue #3370) and the whole
+	// request observes a single consistent view.
+	settings := s.currentSettings()
+	if settings == nil {
+		secLog.Error("Basic auth token request failed: settings unavailable")
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	}
+
 	// Use constant-time comparison to prevent timing attacks on credentials.
 	// Both comparisons are performed and combined with bitwise AND to prevent
 	// short-circuit evaluation from leaking timing information about valid IDs.
-	clientIDMatch := subtle.ConstantTimeCompare([]byte(clientID), []byte(s.Settings.Security.BasicAuth.ClientID))
-	clientSecretMatch := subtle.ConstantTimeCompare([]byte(clientSecret), []byte(s.Settings.Security.BasicAuth.ClientSecret))
+	clientIDMatch := subtle.ConstantTimeCompare([]byte(clientID), []byte(settings.Security.BasicAuth.ClientID))
+	clientSecretMatch := subtle.ConstantTimeCompare([]byte(clientSecret), []byte(settings.Security.BasicAuth.ClientSecret))
 	if (clientIDMatch & clientSecretMatch) != 1 {
 		secLog.Warn("Invalid client credentials provided")
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid client id or secret"})
@@ -156,11 +175,11 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 
 	// Check if client is in local subnet and configure cookie store accordingly
 	// Only relax cookie security when subnet bypass is explicitly enabled
-	if s.Settings.Security.AllowSubnetBypass.Enabled {
+	if settings.Security.AllowSubnetBypass.Enabled {
 		if clientIP := parseIPWithZone(c.RealIP()); IsInLocalSubnet(clientIP) {
 			// For clients in the local subnet, allow non-HTTPS cookies
 			secLog.Info("Client is in local subnet, configuring cookie store for non-HTTPS")
-			s.configureLocalNetworkCookieStore()
+			s.configureLocalNetworkCookieStore(settings)
 		}
 	}
 
@@ -182,8 +201,8 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unsupported grant type"})
 	}
 
-	// Validate redirect URI using the shared function and pre-parsed expected URI
-	if err := ValidateRedirectURI(redirectURI, s.ExpectedBasicRedirectURI); err != nil {
+	// Validate redirect URI using the shared function and the live expected URI
+	if err := ValidateRedirectURI(redirectURI, parseBasicAuthRedirectURI(settings)); err != nil {
 		secLog.Warn("Redirect URI validation failed", logger.String("provided_uri", redirectURI), logger.Error(err))
 		// Return a generic error to the client, log the specific one internally
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid redirect_uri"})
@@ -219,7 +238,7 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	c.Response().Header().Set("Content-Type", "application/json")
 
 	// Return the access token in the response body
-	expiresInSeconds := int(s.Settings.Security.BasicAuth.AccessTokenExp.Seconds())
+	expiresInSeconds := int(settings.Security.BasicAuth.AccessTokenExp.Seconds())
 	resp := map[string]any{ // Use interface{} for mixed types
 		"access_token": accessToken, // This is sent to the client, unavoidable
 		"token_type":   "Bearer",

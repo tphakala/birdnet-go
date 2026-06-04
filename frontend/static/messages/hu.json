@@ -435,6 +435,10 @@
         "overloadTitle": "Hang elemzés túlterhelve",
         "overloadMessage": "A rendszere {dropRate}% hangmintát dob el a ''{sourceName}'' forrásból, mert nem bírja az elemzést. Csökkentse a BirdNET átfedési értékét a detektálási beállításokban, vagy fontoljon meg egy gyorsabb CPU-ra való váltást."
       },
+      "ort": {
+        "unavailableTitle": "Az ONNX Runtime nem elérhető",
+        "unavailableMessage": "Az ONNX Runtime {requiredVersion} szükséges a(z) {modelName} modellhez, de nem található. Lásd a telepítési útmutatót: {installGuideURL}"
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Jelenlegi érték: {value}% (küszöbérték: {threshold}%)",
@@ -937,7 +941,10 @@
     "aria": {
       "loading": "Detektálás részleteinek betöltése...",
       "loaded": "Detektálás részletei betöltve: {species}",
-      "error": "Hiba a detektálás betöltésekor: {error}"
+      "error": "Hiba a detektálás betöltésekor: {error}",
+      "loadingResults": "{count} eredmény betöltése...",
+      "thumbnailLoading": "{species} bélyegkép betöltése...",
+      "thumbnailLoaded": "{species} bélyegkép betöltve"
     },
     "errors": {
       "notFound": "A detektálás nem található. Lehet, hogy törölték vagy az ID hibás.",
@@ -1576,7 +1583,11 @@
       "recentlyFirstSeen": "Legutóbb először látva",
       "earliestFirstSeen": "Legrégebben először látva",
       "recentlyLastSeen": "Legutóbb utoljára látva",
-      "highestConfidence": "Legmagasabb megbízhatóság"
+      "earliestLastSeen": "Legrégebben utoljára látva",
+      "highestConfidence": "Legmagasabb megbízhatóság",
+      "lowestConfidence": "Legalacsonyabb megbízhatóság",
+      "highestMaxConfidence": "Legmagasabb maximális megbízhatóság",
+      "lowestMaxConfidence": "Legalacsonyabb maximális megbízhatóság"
     },
     "charts": {
       "top10Species": "Top 10 faj",
@@ -2991,6 +3002,7 @@
         "unknown": "ismeretlen",
         "refresh": "Frissítés",
         "addStream": "Stream hozzáadása",
+        "testRequired": "Futtasson sikeres streamtesztet a mentés előtt",
         "deleteConfirm": "Eltávolítja ezt a streamet?",
         "restartCount": "{count} alkalommal újraindítva",
         "healthLoadError": "A stream egészségi állapot betöltése sikertelen",
@@ -3043,6 +3055,47 @@
           "degraded": "Degradált",
           "failed": "Sikertelen",
           "unknown": "Ismeretlen"
+        },
+        "test": {
+          "button": "Stream tesztelése",
+          "probing": "Tesztelés...",
+          "result": "Teszt eredménye",
+          "error": "Teszt sikertelen",
+          "batCompatible": "Denevér-kompatibilis",
+          "batIncompatible": "Nem denevér-kompatibilis"
+        },
+        "batWarning": "A denevérmodellek veszteségmentes kodeket (PCM) és legalább 96 kHz-es mintavételezési frekvenciát igényelnek. Használja a fenti Stream tesztelése gombot a kompatibilitás ellenőrzéséhez.",
+        "codecWarning": {
+          "lossy": "A veszteséges kodekek (AAC, Opus, MP3) megsemmisítik az ~20 kHz feletti ultrahang-frekvenciákat, így a stream alkalmatlanná válik a denevérek észlelésére."
+        },
+        "channelMode": {
+          "analyzeError": "A csatornaanalízis sikertelen",
+          "analyzing": "Csatornák elemzése...",
+          "description": "Hogyan kezelje a többcsatornás hangot. Válasszon konkrét csatornát, ha a forrása sztereót küld.",
+          "detectBest": "Legjobb csatorna felismerése",
+          "downmix": "Keverés monóba",
+          "downmixWarning": "A monóba keverés nem ajánlott sztereó streamekhez. A csatornák közötti fáziskülönbségek fésűszűrést okoznak, ami csökkenti az érzékelési pontosságot. Válasszon inkább egy konkrét csatornát.",
+          "energyLeft": "Bal csatorna",
+          "energyRight": "Jobb csatorna",
+          "label": "Csatornamód",
+          "left": "Csak bal csatorna",
+          "monoNoSelection": "Egycsatornás forrás. Minden csatornamód azonos hangot ad, ezért nincs szükség választásra.",
+          "recommended": "Ajánlott: {channel}",
+          "right": "Csak jobb csatorna",
+          "singleChannelGood": "Egycsatornás kiválasztva, optimális az érzékelési pontossághoz."
+        },
+        "format": {
+          "label": "Hangformátum",
+          "mono": "Mono (1 csatorna)",
+          "multi": "{count} csatorna",
+          "stereo": "Sztereó (2 csatorna)",
+          "untested": "Tesztelje a streamet a hangformátum felismeréséhez",
+          "withSampleRate": "{rate} kHz, {channels}"
+        },
+        "stereoWarning": {
+          "message": "Sztereó stream észlelve. A több csatorna keverése csökkentheti az érzékelési pontosságot a csatornák közötti fáziskülönbségek miatt. Válasszon konkrét csatornát (bal/jobb) vagy használja a csatornadetektort a legjobb eredményekhez.",
+          "short": "Sztereó downmix aktív. Az érzékelési pontosság csökkent lehet. Szerkessze a konkrét csatorna kiválasztásához.",
+          "tooltip": "Sztereó downmix aktív. Az érzékelési pontosság csökkent lehet. Szerkessze a konkrét csatorna kiválasztásához."
         }
       },
       "audioFilters": {
@@ -3218,6 +3271,10 @@
         "devicesLoadFailed": "A hang eszközök betöltése sikertelen. Kérjük, ellenőrizze a rendszer engedélyeket.",
         "invalidBitrate": "Érvénytelen bitráta érték",
         "invalidRetentionPolicy": "Érvénytelen megőrzési szabályzat"
+      },
+      "models": {
+        "recommendBoth": "A legjobb fajészlelési lefedettség érdekében javasolt a BirdNET és a Perch modellek együttes futtatása.",
+        "perchOnlyWarning": "A Perch önmagában kevesebb észlelést produkál. Az érdemi eredményekhez csökkentse a megbízhatósági küszöböt 0.50-re, vagy aktiválja a BirdNET-et is a jobb lefedettség érdekében."
       }
     },
     "security": {
@@ -3378,6 +3435,10 @@
         "liveAudioHelp": "Ha engedélyezve van, bárki hallgathatja az élő hang streameket bejelentkezés nélkül. A beállítások és törlés továbbra is hitelesítést igényel.",
         "warningText": "A nyilvános hozzáférési funkciók engedélyezése kiteszi azokat bárkinek, aki elérheti ezt a szervert. Csak akkor engedélyezze, ha megbízik a hálózati környezetében."
       },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
         "host": "Például localhost:8080 vagy example.domain.com",
@@ -3496,6 +3557,20 @@
           "title": "Helyszín nincs konfigurálva",
           "description": "Állítsa be a helyszínét a Fő beállításokban a környékén elérhető fajok megtekintéséhez. A tartomány szűrő az Ön helyszíne alapján határozza meg, mely fajok valószínűsíthetők a közelben.",
           "action": "Helyszín konfigurálása"
+        },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "A tartomány szűrő nem aktív",
+            "description": "A detektálásokat jelenleg nem szűri a helyszíned, így a területeden kívüli fajok is jelentésre kerülhetnek. Ellenőrizd a tartomány szűrő modell beállítását a Beállítások oldalon."
+          },
+          "fellBack": {
+            "title": "A beépített tartomány szűrő használata",
+            "description": "A beállított geomodell tartomány szűrőt nem sikerült betölteni, ezért a BirdNET-Go a beépített tartomány szűrőre váltott. A szűrés továbbra is működik, de a geomodell visszaállításához ellenőrizd a Beállítások oldalt."
+          },
+          "mappedZero": {
+            "title": "A tartomány szűrő egyetlen fajra sem illeszkedett",
+            "description": "A geomodell tartomány szűrő az aktív modell egyetlen fajára sem illeszkedett, így minden detektálás kiszűrésre kerülne. Ellenőrizd, hogy a tartomány szűrő címkefájlja megegyezik-e az aktív modellel."
+          }
         },
         "columns": {
           "commonName": "Közhasználatú név",
@@ -3919,6 +3994,8 @@
           "species_name": "Faj neve",
           "scientific_name": "Tudományos név",
           "confidence": "Megbízhatóság",
+          "days_since_last_seen": "Napok az utolsó észlelés óta",
+          "novelty_episode_days": "Újdonsági epizód napjai",
           "location": "Helyszín",
           "stream_name": "Stream neve",
           "stream_url": "Adatfolyam URL",
@@ -3929,6 +4006,8 @@
         "operators": {
           "is": "egyenlő",
           "is_not": "nem egyenlő",
+          "in": "szerepel a listában",
+          "not_in": "nem szerepel a listában",
           "contains": "tartalmazza",
           "not_contains": "nem tartalmazza",
           "greater_than": "nagyobb mint",
@@ -4193,7 +4272,31 @@
       "playbackSpeed": "Lejátszási sebesség",
       "speed": "Sebesség",
       "loop": "Ismétlés be/ki",
-      "player": "Hang lejátszó"
+      "player": "Hang lejátszó",
+      "autoplayBlocked": "Kattintson a lejátszáshoz (automatikus lejátszás letiltva)",
+      "hlsNotSupported": "A HLS lejátszás nem támogatott ebben a böngészőben",
+      "streamStarting": "Audio stream indítása...",
+      "levelFor": "Hangszint: {source}",
+      "levelForNoSource": "Hangszint: nincs forrás",
+      "noSource": "Nincs forrás",
+      "levelAnnouncement": "Jelenlegi hangszint: {level} százalék",
+      "levelAnnouncementClipping": "Jelenlegi hangszint: {level} százalék, túlvezérlés észlelve",
+      "sourceSelection": "Hangforrás kiválasztása",
+      "sources": "Hangforrások",
+      "noSourcesAvailable": "Nem érhető el hangforrás",
+      "silent": "(néma)",
+      "stopPlayback": "Hang lejátszás leállítása",
+      "startPlayback": "Hang lejátszás indítása",
+      "nowPlaying": "Hang lejátszása innen: {source}",
+      "nowPlayingNoSource": "Hang lejátszása folyamatban",
+      "playbackStopped": "Hang lejátszás leállítva",
+      "loginRequired": "Bejelentkezés szükséges az audio streameléshez",
+      "streamError": "Hiba a stream indításakor",
+      "streamTitle": "Madárhang stream - {source}",
+      "streamTitleDefault": "Madárhang stream",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Élő közvetítés",
+      "playbackError": "Lejátszási hiba: {details}"
     },
     "spectrogram": {
       "notGenerated": "A spektrogram még nincs generálva",
@@ -4418,6 +4521,16 @@
       "hostRequired": "A host paraméter kötelező",
       "invalidHost": "Érvénytelen host paraméter",
       "rateLimit": "Túl sok értesítési stream csatlakozási kísérlet, kérjük, várjon, mielőtt újra próbálkozik"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Érvénytelen kéréstörzs",
+        "urlRequired": "A stream URL megadása kötelező",
+        "invalidUrl": "Érvénytelen URL-formátum. Adjon meg egy teljes URL-t, pl. rtsp://host:port/útvonal",
+        "unsupportedScheme": "Nem támogatott URL-séma: \"{scheme}\". Használjon rtsp, rtsps, http, https, rtmp vagy udp sémát",
+        "blockedDestination": "Ez a cél biztonsági okokból le van tiltva",
+        "connectionFailed": "Nem sikerült csatlakozni a streamhez. Ellenőrizze, hogy az URL helyes-e és a stream elérhető-e"
+      }
     },
     "debug": {
       "notEnabled": "A debug mód nincs engedélyezve"
@@ -4683,7 +4796,10 @@
       "reinstall": "Újratelepítés",
       "reinstalling": "Újratelepítés...",
       "reinstallComplete": "Fájlok sikeresen ellenőrizve",
-      "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt"
+      "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt",
+      "onnxRuntimeRequired": "ONNX Runtime szükséges, amely nem elérhető ezen a rendszeren.",
+      "onnxRuntimeMissing": "Az ONNX Runtime nem elérhető. Ez a modell nem futtatható.",
+      "unavailable": "Nem elérhető"
     },
     "bird": {
       "title": "Madárészlelés",
@@ -4713,7 +4829,7 @@
     "title": "Súgó és támogatás",
     "subtitle": "Kérjen segítséget, jelentsen problémákat és csatlakozzon a közösséghez",
     "reportBug": {
-      "description": "Ha problémát tapasztal, először hozzon létre egy támogatási csomagot a rendszerinformációk és naplók rögzítéséhez, majd nyisson hibajelentést a GitHubon."
+      "description": "Ha problémát tapasztal, nyisson hibajelentést a GitHubon a probléma leírásához, majd hozzon létre egy támogatási csomagot a hibajelentés számával a hibaelhárítás segítéséhez."
     },
     "askQuestion": {
       "description": "Kérdése van a beállítással, funkciókkal vagy használattal kapcsolatban? A GitHub Discussions fórum a legjobb hely, ahol segítséget kaphat a közösségtől."
@@ -4761,23 +4877,21 @@
         "description": "Hozzon létre és töltsön fel egy támogatási csomagot alább. Ez rögzíti a naplókat és a konfigurációt, amelyek jelentősen felgyorsítják a hibaelhárítást."
       }
     },
-    "supportDump": {
-      "title": "Támogatási csomag létrehozása",
-      "description": "A támogatási csomag feltöltése a hibajelentéssel együtt jelentősen segíti a hibaelhárítást. Rögzíti a konfigurációt és a legutóbbi naplókat az érzékeny adatok eltávolításával."
-    },
     "openIssue": {
       "title": "GitHub issue megnyitása",
-      "description": "Miután összegyűjtötte a fenti információkat és létrehozta a támogatási csomagot, nyisson egy issue-t a GitHubon a probléma leírásához.",
+      "description": "Nyisson egy issue-t a GitHubon a probléma leírásához. Az issue számára szüksége lesz a következő lépésben.",
       "button": "Issue megnyitása a GitHubon"
+    },
+    "supportDump": {
+      "title": "Támogatási csomag létrehozása",
+      "description": "A hibajelentés létrehozása után hozzon létre egy támogatási csomagot és adja meg a GitHub issue számát. Ez összekapcsolja a diagnosztikát a hibajelentéssel és segíti a hibaelhárítást."
     }
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Frissítés",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4789,6 +4903,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Minden rendben",
+      "needsAttention": "Figyelmet igényel",
+      "failing": "Sikertelen",
+      "allClear": "Nincs probléma",
+      "noData": "Nincs adat",
+      "none": "Nincs"
+    },
+    "diagnostics": "Diagnosztika",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4817,6 +4940,41 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Leggyakoribb hibák",
+      "errorCount": "Darab",
+      "errorComponent": "Komponens",
+      "errorLevel": "Szint",
+      "errorMessage": "Üzenet"
+    },
+    "window": {
+      "label": "Kiértékelési időablak",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Utolsó esemény",
+      "recentEvents": "Legutóbbi események",
+      "time": "Idő",
+      "source": "Forrás",
+      "count": "Darab",
+      "lifetime": "összesen",
+      "sparklineLabel": "Aktivitási diagram",
+      "activeHours": "Aktív órák",
+      "windowTotal": "Az ablakban",
+      "velocity": "Tendencia",
+      "velocityStable": "Stabil",
+      "velocityIncreasing": "Növekvő",
+      "velocityDecreasing": "Csökkenő",
+      "pattern": "Minta",
+      "patternNone": "Nincs",
+      "patternTransient": "Átmeneti",
+      "patternSustained": "Tartós"
     }
   }
 }

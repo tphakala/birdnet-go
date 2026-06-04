@@ -41,10 +41,8 @@ func setupOAuth2ServerTest(t *testing.T, requestClientID, requestRedirectURI, ex
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	parsedExpectedURI := parseURLOrFail(t, expectedRedirectURI)
-
 	server := &OAuth2Server{
-		Settings: &conf.Settings{
+		settings: &conf.Settings{
 			Security: conf.Security{
 				BasicAuth: conf.BasicAuth{
 					ClientID:    expectedClientID,
@@ -52,10 +50,15 @@ func setupOAuth2ServerTest(t *testing.T, requestClientID, requestRedirectURI, ex
 				},
 			},
 		},
-		authCodes:                make(map[string]AuthCode),
-		accessTokens:             make(map[string]AccessToken),
-		ExpectedBasicRedirectURI: parsedExpectedURI,
+		authCodes:    make(map[string]AuthCode),
+		accessTokens: make(map[string]AccessToken),
 	}
+
+	// Publish the settings as the global snapshot so currentSettings() (used by
+	// the basic-auth handlers after the issue #3370 fix) returns these values
+	// rather than a snapshot leaked by a sibling test.
+	conf.SetTestSettings(server.settings)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
 
 	return server, c, rec
 }
@@ -131,23 +134,26 @@ func TestHandleBasicAuthTokenSuccess(t *testing.T) {
 	// Initialize Gothic session
 	gothic.Store = sessions.NewFilesystemStore(os.TempDir(), []byte("secret-key"))
 
-	parsedExpectedCallbackURI := parseURLOrFail(t, "http://example.com/callback")
-
 	s := &OAuth2Server{
-		Settings: &conf.Settings{
+		settings: &conf.Settings{
 			Security: conf.Security{
 				BasicAuth: conf.BasicAuth{
 					ClientID:       "validClientID",
 					ClientSecret:   "validClientSecret",
+					RedirectURI:    "http://example.com/callback",
 					AccessTokenExp: time.Hour,
 				},
 				Host: "example.com",
 			},
 		},
-		authCodes:                make(map[string]AuthCode),
-		accessTokens:             make(map[string]AccessToken),
-		ExpectedBasicRedirectURI: parsedExpectedCallbackURI,
+		authCodes:    make(map[string]AuthCode),
+		accessTokens: make(map[string]AccessToken),
 	}
+
+	// Publish the settings as the global snapshot so currentSettings() (used by
+	// HandleBasicAuthToken after the issue #3370 fix) returns these values.
+	conf.SetTestSettings(s.settings)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
 
 	// Pre-populate a valid auth code
 	s.authCodes["validCode"] = AuthCode{
@@ -176,7 +182,7 @@ func TestHandleBasicAuthTokenMissingFields(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	s := &OAuth2Server{
-		Settings: &conf.Settings{
+		settings: &conf.Settings{
 			Security: conf.Security{
 				BasicAuth: conf.BasicAuth{
 					ClientID:     "validClientID",
@@ -187,6 +193,11 @@ func TestHandleBasicAuthTokenMissingFields(t *testing.T) {
 		authCodes:    make(map[string]AuthCode),
 		accessTokens: make(map[string]AccessToken),
 	}
+
+	// Publish the settings as the global snapshot so currentSettings() (used by
+	// HandleBasicAuthToken after the issue #3370 fix) returns these values.
+	conf.SetTestSettings(s.settings)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
 
 	c.SetParamNames("grant_type", "code", "redirect_uri")
 	c.SetParamValues("", "", "")
@@ -201,6 +212,65 @@ func TestHandleBasicAuthTokenMissingFields(t *testing.T) {
 	require.NoError(t, err, "should unmarshal response JSON")
 
 	assert.Equal(t, "Missing required fields", response["error"])
+}
+
+// TestHandleBasicAuthTokenHotReloadAfterEnable reproduces the issue #3370 class
+// for the OAuth token path: credentials configured through the web UI after
+// startup must be accepted without a restart. The construction-time
+// OAuth2Server.settings holds the (empty) startup snapshot while the live
+// snapshot, published via the atomic pointer, carries the new credentials.
+// Not parallel: it mutates the global settings snapshot.
+func TestHandleBasicAuthTokenHotReloadAfterEnable(t *testing.T) {
+	e := echo.New()
+	formData := strings.NewReader("grant_type=authorization_code&code=validCode&redirect_uri=http://example.com/callback")
+	req := httptest.NewRequest(http.MethodPost, "/", formData)
+	req.Header.Set(echo.HeaderAuthorization, "Basic "+base64.StdEncoding.EncodeToString([]byte("newClientID:newClientSecret")))
+	req.Header.Set(echo.HeaderContentType, "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	gothic.Store = sessions.NewFilesystemStore(os.TempDir(), []byte("secret-key"))
+
+	// Startup snapshot: basic auth not configured (no client credentials).
+	s := &OAuth2Server{
+		settings:     &conf.Settings{},
+		authCodes:    make(map[string]AuthCode),
+		accessTokens: make(map[string]AccessToken),
+	}
+
+	// Simulate a UI save publishing new credentials (including the redirect URI)
+	// through the atomic pointer.
+	updated := &conf.Settings{
+		Security: conf.Security{
+			BasicAuth: conf.BasicAuth{
+				Enabled:        true,
+				ClientID:       "newClientID",
+				ClientSecret:   "newClientSecret",
+				RedirectURI:    "http://example.com/callback",
+				AccessTokenExp: time.Hour,
+			},
+			Host: "example.com",
+		},
+	}
+	conf.SetTestSettings(updated)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+	s.authCodes["validCode"] = AuthCode{
+		Code:      "validCode",
+		ExpiresAt: time.Now().Add(time.Minute),
+	}
+
+	err := s.HandleBasicAuthToken(c)
+	require.NoError(t, err, "HandleBasicAuthToken should not return error")
+
+	// Credentials configured via UI are accepted without restart: a 401 here
+	// would mean the stale (empty) startup credentials were used.
+	assert.Equal(t, http.StatusOK, rec.Code, "token request must accept UI-configured credentials without restart")
+
+	var response map[string]any
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err, "should unmarshal response JSON")
+	assert.NotEmpty(t, response["access_token"], "expected access token in response")
 }
 
 // TestHandleBasicAuthCallback tests the basic authorization callback handler
@@ -397,7 +467,7 @@ func TestHandleBasicAuthCallback(t *testing.T) {
 			c := e.NewContext(req, rec)
 
 			server := &OAuth2Server{
-				Settings: &conf.Settings{
+				settings: &conf.Settings{
 					Security: conf.Security{
 						BasicAuth: conf.BasicAuth{
 							Enabled:        true,
@@ -440,7 +510,7 @@ func TestHandleBasicAuthCallbackSessionRegeneration(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	server := &OAuth2Server{
-		Settings: &conf.Settings{
+		settings: &conf.Settings{
 			Security: conf.Security{
 				BasicAuth: conf.BasicAuth{
 					Enabled:        true,
@@ -630,7 +700,7 @@ func TestExchangeCodeWithTimeout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := &OAuth2Server{
-				Settings: &conf.Settings{
+				settings: &conf.Settings{
 					Security: conf.Security{
 						BasicAuth: conf.BasicAuth{
 							AccessTokenExp: time.Hour,
@@ -692,7 +762,7 @@ func TestHandleTokenExchangeError(t *testing.T) {
 			c := e.NewContext(req, rec)
 
 			server := &OAuth2Server{
-				Settings: &conf.Settings{},
+				settings: &conf.Settings{},
 			}
 
 			log := newTestBasicLogger()
@@ -732,7 +802,7 @@ func TestRegenerateAndStoreToken(t *testing.T) {
 			c := e.NewContext(req, rec)
 
 			server := &OAuth2Server{
-				Settings: &conf.Settings{},
+				settings: &conf.Settings{},
 			}
 
 			log := newTestBasicLogger()
@@ -753,7 +823,7 @@ func TestRegenerateAndStoreToken(t *testing.T) {
 // TestExchangeCodeWithTimeoutContextCancellation tests context cancellation
 func TestExchangeCodeWithTimeoutContextCancellation(t *testing.T) {
 	server := &OAuth2Server{
-		Settings: &conf.Settings{
+		settings: &conf.Settings{
 			Security: conf.Security{
 				BasicAuth: conf.BasicAuth{
 					AccessTokenExp: time.Hour,

@@ -6,6 +6,9 @@ clips/
 models/
 plans/
 superpowers/
+docs/plans/
+docs/specs/
+docs/superpowers/
 db/
 cache/
 spectrograms/
@@ -46,3 +49,4 @@ frontend/playwright-report*.zip
 REFACTOR_CHANGELOG.md
 .worktrees/
 .leann/
+.serena/

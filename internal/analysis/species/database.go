@@ -4,6 +4,7 @@ package species
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -38,6 +39,13 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 			Context("operation", "load_lifetime_data").
 			Context("sync_time", now.Format(time.DateTime)).
 			Build()
+	}
+
+	if err := t.loadNoveltyEpisodesFromDatabase(now); err != nil {
+		getLog().Error("Failed to restore novelty episodes from database",
+			logger.Error(err),
+			logger.String("operation", "load_novelty_episodes"),
+			logger.String("impact", "Novelty episode metadata may restart from the next detection"))
 	}
 
 	// Step 2: Load yearly tracking data if enabled
@@ -84,6 +92,7 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 
 	getLog().Debug("Database initialization complete",
 		logger.Int("lifetime_species", len(t.speciesFirstSeen)),
+		logger.Int("novelty_episodes", len(t.noveltyEpisodes)),
 		logger.Int("yearly_species", len(t.speciesThisYear)),
 		logger.Int("total_seasons", len(t.speciesBySeason)),
 		logger.Int("notification_history_loaded", len(t.notificationLastSent)))
@@ -116,6 +125,7 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 	case len(newSpeciesData) > 0:
 		// Clear and populate lifetime tracking map with new data
 		t.speciesFirstSeen = make(map[string]time.Time, len(newSpeciesData))
+		t.speciesLastSeen = make(map[string]time.Time, len(newSpeciesData))
 		for _, species := range newSpeciesData {
 			if species.FirstSeenDate != "" {
 				firstSeen, err := time.Parse(time.DateOnly, species.FirstSeenDate)
@@ -127,6 +137,18 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 					continue
 				}
 				t.speciesFirstSeen[species.ScientificName] = firstSeen
+				t.speciesLastSeen[species.ScientificName] = firstSeen
+			}
+			if species.LastSeenDate != "" {
+				lastSeen, err := time.Parse(time.DateOnly, species.LastSeenDate)
+				if err != nil {
+					getLog().Debug("Failed to parse last seen date",
+						logger.String("species", species.ScientificName),
+						logger.String("date", species.LastSeenDate),
+						logger.Error(err))
+					continue
+				}
+				t.speciesLastSeen[species.ScientificName] = lastSeen
 			}
 		}
 		getLog().Debug("Loaded species data from database",
@@ -134,6 +156,7 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 	case len(t.speciesFirstSeen) == 0:
 		// No data from database and no existing data - initialize empty map
 		t.speciesFirstSeen = make(map[string]time.Time, initialSpeciesCapacity)
+		t.speciesLastSeen = make(map[string]time.Time, initialSpeciesCapacity)
 		getLog().Debug("No species data from database, initialized empty tracking")
 	default:
 		// Database returned empty data but we have existing data - keep it
@@ -142,6 +165,156 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 	}
 
 	return nil
+}
+
+// loadNoveltyEpisodesFromDatabase reconstructs active novelty episodes from detection dates.
+func (t *SpeciesTracker) loadNoveltyEpisodesFromDatabase(now time.Time) error {
+	history, ok := t.ds.(speciesDetectionHistoryDatastore)
+	if !ok {
+		return nil
+	}
+
+	ctx := context.Background()
+	endDate := trackerDateOnly(now)
+	startDate := endDate.AddDate(0, 0, -(t.windowDays + 1))
+
+	detections, err := history.GetSpeciesDetectionDatesInPeriod(ctx, startDate.Format(time.DateOnly), endDate.Format(time.DateOnly), defaultDBQueryLimit, 0)
+	if err != nil {
+		return errors.Newf("failed to load novelty detection dates from database: %w", err).
+			Component("new-species-tracker").
+			Category(errors.CategoryDatabase).
+			Context("operation", "load_novelty_detection_dates").
+			Context("start_date", startDate.Format(time.DateOnly)).
+			Context("end_date", endDate.Format(time.DateOnly)).
+			Build()
+	}
+
+	datesBySpecies := make(map[string][]time.Time, len(detections))
+	for _, detection := range detections {
+		if detection.ScientificName == "" || detection.Date == "" {
+			continue
+		}
+		detectionDate, parseErr := time.Parse(time.DateOnly, detection.Date)
+		if parseErr != nil {
+			getLog().Debug("Failed to parse novelty detection date",
+				logger.String("species", detection.ScientificName),
+				logger.String("date", detection.Date),
+				logger.Error(parseErr))
+			continue
+		}
+		datesBySpecies[detection.ScientificName] = append(datesBySpecies[detection.ScientificName], detectionDate)
+	}
+
+	episodes := make(map[string]NoveltyStatus, len(datesBySpecies))
+	for scientificName, dates := range datesBySpecies {
+		dates = normalizeNoveltyDetectionDates(dates)
+		if len(dates) == 0 {
+			continue
+		}
+
+		latestDate := dates[len(dates)-1]
+		runStart := findContiguousNoveltyRunStart(dates)
+		if calculateDaysSince(now, runStart) > t.windowDays {
+			continue
+		}
+
+		episodeDays, restored, restoreErr := t.restoredNoveltyEpisodeDays(ctx, history, scientificName, runStart)
+		if restoreErr != nil {
+			return restoreErr
+		}
+		if !restored {
+			continue
+		}
+
+		episodes[scientificName] = NoveltyStatus{
+			DaysSinceLastSeen:    calculateDaysSince(now, latestDate),
+			NoveltyEpisodeDays:   episodeDays,
+			NoveltyEpisodeStart:  runStart,
+			NoveltyEpisodeActive: true,
+		}
+	}
+
+	t.noveltyEpisodes = episodes
+	getLog().Debug("Restored active novelty episodes from database",
+		logger.Int("episodes", len(episodes)))
+
+	return nil
+}
+
+func (t *SpeciesTracker) restoredNoveltyEpisodeDays(ctx context.Context, history speciesDetectionHistoryDatastore, scientificName string, runStart time.Time) (episodeDays int, restored bool, err error) {
+	if firstSeen, exists := t.speciesFirstSeen[scientificName]; exists && sameTrackerDate(firstSeen, runStart) {
+		return firstEverNoveltyEpisodeDays, true, nil
+	}
+
+	previousDate, err := history.GetSpeciesLastDetectionDateBefore(ctx, scientificName, runStart.Format(time.DateOnly))
+	if err != nil {
+		return 0, false, errors.Newf("failed to load previous novelty detection date from database: %w", err).
+			Component("new-species-tracker").
+			Category(errors.CategoryDatabase).
+			Context("operation", "load_previous_novelty_detection_date").
+			Context("scientific_name", scientificName).
+			Context("before_date", runStart.Format(time.DateOnly)).
+			Build()
+	}
+	if previousDate == "" {
+		return 0, false, nil
+	}
+
+	previous, parseErr := time.Parse(time.DateOnly, previousDate)
+	if parseErr != nil {
+		getLog().Debug("Failed to parse previous novelty detection date",
+			logger.String("species", scientificName),
+			logger.String("date", previousDate),
+			logger.Error(parseErr))
+		return 0, false, nil
+	}
+
+	absenceDays := calculateDaysSince(runStart, previous)
+	if absenceDays <= 0 {
+		return 0, false, nil
+	}
+
+	return absenceDays, true, nil
+}
+
+func findContiguousNoveltyRunStart(dates []time.Time) time.Time {
+	runStart := dates[len(dates)-1]
+	for i := len(dates) - 2; i >= 0; i-- {
+		if calculateDaysSince(runStart, dates[i]) != 1 {
+			break
+		}
+		runStart = dates[i]
+	}
+	return runStart
+}
+
+func normalizeNoveltyDetectionDates(dates []time.Time) []time.Time {
+	sort.Slice(dates, func(i, j int) bool {
+		return dates[i].Before(dates[j])
+	})
+
+	unique := dates[:0]
+	var lastDate string
+	for _, date := range dates {
+		dateKey := date.Format(time.DateOnly)
+		if dateKey == lastDate {
+			continue
+		}
+		unique = append(unique, date)
+		lastDate = dateKey
+	}
+	return unique
+}
+
+func trackerDateOnly(ts time.Time) time.Time {
+	year, month, day := ts.Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, ts.Location())
+}
+
+func sameTrackerDate(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	return ay == by && am == bm && ad == bd
 }
 
 // loadYearlyDataFromDatabase loads first detection data for the current year

@@ -7,6 +7,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/health"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // SourceStatusCheck monitors the health state of audio sources via the liveness watchdog.
@@ -162,12 +163,32 @@ func (c *PipelineLivenessCheck) Run(_ context.Context) health.Result {
 	}
 }
 
-// BufferDropsCheck monitors audio buffer drop statistics.
-// Metrics are not yet collected; this check always returns StatusSkipped.
-type BufferDropsCheck struct{}
+// DefaultWindow is the default evaluation window for windowed checks.
+const DefaultWindow = time.Hour
 
-// NewBufferDropsCheck creates a BufferDropsCheck.
-func NewBufferDropsCheck() *BufferDropsCheck { return &BufferDropsCheck{} }
+// Threshold constants for audio health checks.
+const (
+	dropsBaseWarnThreshold   = 10
+	dropsBaseCritThreshold   = 50
+	overrunBaseWarnThreshold = 5
+	overrunBaseCritThreshold = 25
+)
+
+// BufferDropsCheck monitors audio buffer drop statistics using time-windowed evaluation.
+type BufferDropsCheck struct {
+	store     *observability.HealthMetricsStore
+	getEvents func(metric string, n int) []observability.HealthEvent
+	window    time.Duration
+}
+
+// NewBufferDropsCheck creates a BufferDropsCheck using the health metrics store and event getter.
+func NewBufferDropsCheck(store *observability.HealthMetricsStore, getEvents func(metric string, n int) []observability.HealthEvent) *BufferDropsCheck {
+	return &BufferDropsCheck{
+		store:     store,
+		getEvents: getEvents,
+		window:    DefaultWindow,
+	}
+}
 
 // Name returns the check identifier.
 func (c *BufferDropsCheck) Name() string { return "buffer_drops" }
@@ -175,17 +196,46 @@ func (c *BufferDropsCheck) Name() string { return "buffer_drops" }
 // Category returns the audio category.
 func (c *BufferDropsCheck) Category() health.Category { return health.CategoryAudio }
 
-// Run returns StatusSkipped because buffer drop metrics are not yet available.
+// WithWindow returns a copy of this check configured with the given evaluation window.
+// Returns the receiver unchanged when d equals the current window to avoid an allocation.
+func (c *BufferDropsCheck) WithWindow(d time.Duration) health.Check {
+	if d == c.window {
+		return c
+	}
+	cp := *c
+	cp.window = d
+	return &cp
+}
+
+// Run evaluates audio buffer drop statistics within the configured time window.
 func (c *BufferDropsCheck) Run(_ context.Context) health.Result {
-	return skippedResult(c.Name(), c.Category(), time.Now())
+	start := time.Now()
+
+	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
+		baseWarnThreshold: dropsBaseWarnThreshold,
+		baseCritThreshold: dropsBaseCritThreshold,
+		sustainedHours:    defaultSustainedHours,
+		metricPrefix:      observability.MetricPrefixAudioDrops,
+		window:            c.window,
+	}, start)
+}
+
+// AudioLevelInfo holds audio level data for a single source.
+type AudioLevelInfo struct {
+	Source   string `json:"source"`
+	Level    int    `json:"level"`
+	Clipping bool   `json:"clipping"`
 }
 
 // AudioLevelCheck monitors audio input levels for silence or clipping.
-// Metrics are not yet collected; this check always returns StatusSkipped.
-type AudioLevelCheck struct{}
+type AudioLevelCheck struct {
+	getAudioLevels func() []AudioLevelInfo
+}
 
-// NewAudioLevelCheck creates an AudioLevelCheck.
-func NewAudioLevelCheck() *AudioLevelCheck { return &AudioLevelCheck{} }
+// NewAudioLevelCheck creates an AudioLevelCheck using the given level provider.
+func NewAudioLevelCheck(getAudioLevels func() []AudioLevelInfo) *AudioLevelCheck {
+	return &AudioLevelCheck{getAudioLevels: getAudioLevels}
+}
 
 // Name returns the check identifier.
 func (c *AudioLevelCheck) Name() string { return "audio_level" }
@@ -193,17 +243,75 @@ func (c *AudioLevelCheck) Name() string { return "audio_level" }
 // Category returns the audio category.
 func (c *AudioLevelCheck) Category() health.Category { return health.CategoryAudio }
 
-// Run returns StatusSkipped because audio level metrics are not yet available.
+// Run evaluates audio input levels for silence or clipping.
 func (c *AudioLevelCheck) Run(_ context.Context) health.Result {
-	return skippedResult(c.Name(), c.Category(), time.Now())
+	start := time.Now()
+
+	if c.getAudioLevels == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	levels := c.getAudioLevels()
+	if len(levels) == 0 {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	silentCount := 0
+	clippingCount := 0
+	for _, l := range levels {
+		if l.Level == 0 {
+			silentCount++
+		}
+		if l.Clipping {
+			clippingCount++
+		}
+	}
+
+	status := health.StatusHealthy
+	msg := fmt.Sprintf("Audio levels normal across %d source(s)", len(levels))
+
+	switch {
+	case silentCount == len(levels):
+		status = health.StatusWarning
+		msg = fmt.Sprintf("All %d source(s) reporting silence", len(levels))
+	case clippingCount > 0:
+		status = health.StatusWarning
+		msg = fmt.Sprintf("Clipping detected on %d of %d source(s)", clippingCount, len(levels))
+	case silentCount > 0:
+		status = health.StatusWarning
+		msg = fmt.Sprintf("Silence detected on %d of %d source(s)", silentCount, len(levels))
+	}
+
+	return health.Result{
+		Name:     c.Name(),
+		Category: c.Category(),
+		Status:   status,
+		Message:  msg,
+		Details: map[string]any{
+			"sources":  len(levels),
+			"silent":   silentCount,
+			"clipping": clippingCount,
+		},
+		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+		Timestamp:  time.Now(),
+	}
 }
 
-// BufferOverrunCheck monitors the audio capture ring buffer for overrun events.
-// Metrics are not yet collected; this check always returns StatusSkipped.
-type BufferOverrunCheck struct{}
+// BufferOverrunCheck monitors audio processing overrun events using time-windowed evaluation.
+type BufferOverrunCheck struct {
+	store     *observability.HealthMetricsStore
+	getEvents func(metric string, n int) []observability.HealthEvent
+	window    time.Duration
+}
 
-// NewBufferOverrunCheck creates a BufferOverrunCheck.
-func NewBufferOverrunCheck() *BufferOverrunCheck { return &BufferOverrunCheck{} }
+// NewBufferOverrunCheck creates a BufferOverrunCheck using the health metrics store and event getter.
+func NewBufferOverrunCheck(store *observability.HealthMetricsStore, getEvents func(metric string, n int) []observability.HealthEvent) *BufferOverrunCheck {
+	return &BufferOverrunCheck{
+		store:     store,
+		getEvents: getEvents,
+		window:    DefaultWindow,
+	}
+}
 
 // Name returns the check identifier.
 func (c *BufferOverrunCheck) Name() string { return "buffer_overrun" }
@@ -211,17 +319,49 @@ func (c *BufferOverrunCheck) Name() string { return "buffer_overrun" }
 // Category returns the audio category.
 func (c *BufferOverrunCheck) Category() health.Category { return health.CategoryAudio }
 
-// Run returns StatusSkipped because buffer overrun metrics are not yet available.
-func (c *BufferOverrunCheck) Run(_ context.Context) health.Result {
-	return skippedResult(c.Name(), c.Category(), time.Now())
+// WithWindow returns a copy of this check configured with the given evaluation window.
+// Returns the receiver unchanged when d equals the current window to avoid an allocation.
+func (c *BufferOverrunCheck) WithWindow(d time.Duration) health.Check {
+	if d == c.window {
+		return c
+	}
+	cp := *c
+	cp.window = d
+	return &cp
 }
 
-// CaptureBufferCheck monitors the health of the audio capture buffer.
-// Metrics are not yet collected; this check always returns StatusSkipped.
-type CaptureBufferCheck struct{}
+// Run evaluates audio processing overrun statistics within the configured time window.
+func (c *BufferOverrunCheck) Run(_ context.Context) health.Result {
+	start := time.Now()
 
-// NewCaptureBufferCheck creates a CaptureBufferCheck.
-func NewCaptureBufferCheck() *CaptureBufferCheck { return &CaptureBufferCheck{} }
+	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
+		baseWarnThreshold: overrunBaseWarnThreshold,
+		baseCritThreshold: overrunBaseCritThreshold,
+		sustainedHours:    defaultSustainedHours,
+		metricPrefix:      observability.MetricPrefixAudioOverruns,
+		window:            c.window,
+	}, start)
+}
+
+// CaptureBufferInfo holds status data for a single capture buffer.
+type CaptureBufferInfo struct {
+	SourceID    string `json:"source_id"`
+	Capacity    int    `json:"capacity"`
+	Initialized bool   `json:"initialized"`
+}
+
+// CaptureBufferCheck monitors the health of the audio capture buffers.
+// Capture buffers are circular (ring) buffers that are always "full" after
+// warmup, so fill ratio is not a meaningful health metric. Instead, this
+// check verifies that buffers exist and are allocated for all active sources.
+type CaptureBufferCheck struct {
+	getBufferHealth func() []CaptureBufferInfo
+}
+
+// NewCaptureBufferCheck creates a CaptureBufferCheck using the given health provider.
+func NewCaptureBufferCheck(getBufferHealth func() []CaptureBufferInfo) *CaptureBufferCheck {
+	return &CaptureBufferCheck{getBufferHealth: getBufferHealth}
+}
 
 // Name returns the check identifier.
 func (c *CaptureBufferCheck) Name() string { return "capture_buffer" }
@@ -229,7 +369,47 @@ func (c *CaptureBufferCheck) Name() string { return "capture_buffer" }
 // Category returns the audio category.
 func (c *CaptureBufferCheck) Category() health.Category { return health.CategoryAudio }
 
-// Run returns StatusSkipped because capture buffer metrics are not yet available.
+// Run verifies that capture buffers are allocated for all active sources.
 func (c *CaptureBufferCheck) Run(_ context.Context) health.Result {
-	return skippedResult(c.Name(), c.Category(), time.Now())
+	start := time.Now()
+
+	if c.getBufferHealth == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	buffers := c.getBufferHealth()
+	if len(buffers) == 0 {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	uninitCount := 0
+	var totalCapacity int
+	for _, b := range buffers {
+		totalCapacity += b.Capacity
+		if !b.Initialized {
+			uninitCount++
+		}
+	}
+
+	status := health.StatusHealthy
+	msg := fmt.Sprintf("%d capture buffer(s) allocated (%d KB total)", len(buffers), totalCapacity/1024)
+
+	if uninitCount > 0 {
+		status = health.StatusWarning
+		msg = fmt.Sprintf("%d of %d capture buffer(s) not yet initialized", uninitCount, len(buffers))
+	}
+
+	return health.Result{
+		Name:     c.Name(),
+		Category: c.Category(),
+		Status:   status,
+		Message:  msg,
+		Details: map[string]any{
+			"buffers":        len(buffers),
+			"total_capacity": totalCapacity,
+			"uninitialized":  uninitCount,
+		},
+		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+		Timestamp:  time.Now(),
+	}
 }

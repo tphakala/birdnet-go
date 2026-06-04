@@ -6,7 +6,13 @@ vi.unmock('$lib/utils/logger');
 // Mock appState module to control CSRF token and security state in tests
 let mockCsrfToken = '';
 let mockGuestMode = false;
+let mockPrivateMode = false;
 vi.mock('$lib/stores/appState.svelte', () => ({
+  appState: {
+    get security() {
+      return { privateMode: mockPrivateMode };
+    },
+  },
   getCsrfToken: () => mockCsrfToken,
   isGuestMode: () => mockGuestMode,
   isSentryEnabled: () => false,
@@ -25,6 +31,7 @@ describe('API utilities', () => {
     // Set up a default CSRF token for all tests to prevent warning logs
     mockCsrfToken = 'test-csrf-token-default';
     mockGuestMode = false;
+    mockPrivateMode = false;
   });
 
   afterEach(() => {
@@ -173,6 +180,35 @@ describe('API utilities', () => {
       expect(result).toBeNull();
     });
 
+    it('retries with a fresh CSRF token when a state-changing request gets 403', async () => {
+      // Override refreshCsrfToken to return true for this test
+      const appState = await import('$lib/stores/appState.svelte');
+      vi.mocked(appState.refreshCsrfToken).mockResolvedValueOnce(true);
+
+      // First call: 403 (CSRF token expired)
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        headers: new Headers(),
+        json: () => Promise.resolve({ error: 'CSRF token invalid' }),
+      });
+
+      // Second call (retry): 200 OK
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ saved: true }),
+      });
+
+      const result = await fetchWithCSRF('/api/settings', { method: 'POST', body: { key: 'val' } });
+
+      expect(appState.refreshCsrfToken).toHaveBeenCalledOnce();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ saved: true });
+    });
+
     it('returns text for non-JSON responses', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -183,6 +219,21 @@ describe('API utilities', () => {
 
       const result = await fetchWithCSRF('/api/test');
       expect(result).toBe('Plain text response');
+    });
+
+    it('rejects protocol-relative and backslash-trick URLs to prevent CSRF token leakage', async () => {
+      // "//evil.com/x" satisfies includes('//') yet also starts with '/', so it
+      // would slip past the absolute-URL SSRF guard. Backslash variants like
+      // "/\evil.com" resolve to a foreign origin via URL normalization. Both
+      // must be rejected before any fetch so the CSRF-bearing request can never
+      // target a foreign origin.
+      for (const evil of ['//evil.com/steal', '/\\evil.com/steal']) {
+        await expect(fetchWithCSRF(evil)).rejects.toMatchObject({
+          status: 400,
+          message: 'Protocol-relative URLs are not allowed',
+        });
+      }
+      expect(mockFetch).not.toHaveBeenCalled();
     });
   });
 
@@ -294,6 +345,67 @@ describe('API utilities', () => {
         status: 401,
       });
       // Should NOT redirect
+      expect(window.location.href).not.toBe('/ui/');
+    });
+
+    it('throws ApiError instead of redirecting when the login endpoint returns 401', async () => {
+      // The login endpoint is the only place a user can recover from 401;
+      // redirecting away would prevent LoginModal from showing the error.
+      mockPrivateMode = true;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+      });
+
+      await expect(fetchWithCSRF('/api/v2/auth/login')).rejects.toMatchObject({
+        message: 'errors.api.unauthorized',
+        status: 401,
+      });
+      expect(window.location.href).not.toBe('/ui/');
+    });
+
+    it('redirects to login in private mode even when in guest mode', async () => {
+      mockGuestMode = true;
+      mockPrivateMode = true;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+      });
+
+      const result = await Promise.race([
+        fetchWithCSRF('/api/test').then(() => 'resolved'),
+        new Promise<string>(resolve => setTimeout(() => resolve('pending'), 50)),
+      ]);
+
+      expect(result).toBe('pending');
+      expect(window.location.href).toBe('/ui/');
+    });
+
+    it('throws ApiError instead of hanging when the redirect is suppressed by the cooldown', async () => {
+      // A very recent prior redirect trips the reload-loop cooldown, so
+      // redirectToLogin suppresses navigation. In that branch it must reject
+      // (not return a never-resolving promise) so the awaiting caller can stop
+      // its loading state. Regression test for the never-resolving-promise hang.
+      sessionStorage.setItem('last_401_redirect', Date.now().toString());
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+      });
+
+      await expect(fetchWithCSRF('/api/test')).rejects.toMatchObject({
+        status: 401,
+        message: 'errors.api.unauthorized',
+      });
+      // The suppressed branch must not navigate.
       expect(window.location.href).not.toBe('/ui/');
     });
   });

@@ -10,6 +10,87 @@ import (
 	"github.com/tphakala/birdnet-go/internal/health"
 )
 
+// ToolInfo holds the runtime availability status of an external tool (FFmpeg, Sox, etc.).
+type ToolInfo struct {
+	Name    string // e.g. "FFmpeg", "Sox"
+	Path    string // resolved absolute path, empty if unavailable
+	Version string // version string, empty if unknown
+}
+
+// ToolAvailabilityCheck verifies that required external tools (FFmpeg, Sox) are present.
+type ToolAvailabilityCheck struct {
+	getTools func() []ToolInfo
+}
+
+// NewToolAvailabilityCheck creates a check using the given provider closure.
+// getTools must return the current availability status of each tool.
+func NewToolAvailabilityCheck(getTools func() []ToolInfo) *ToolAvailabilityCheck {
+	return &ToolAvailabilityCheck{getTools: getTools}
+}
+
+// Name returns the check identifier.
+func (c *ToolAvailabilityCheck) Name() string { return "tool_availability" }
+
+// Category returns the config category.
+func (c *ToolAvailabilityCheck) Category() health.Category { return health.CategoryConfig }
+
+// Run checks whether each required tool is available.
+func (c *ToolAvailabilityCheck) Run(_ context.Context) health.Result {
+	start := time.Now()
+
+	if c.getTools == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	tools := c.getTools()
+	if len(tools) == 0 {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	type toolResult struct {
+		Name    string `json:"name"`
+		Path    string `json:"path,omitempty"`
+		Version string `json:"version,omitempty"`
+		Status  string `json:"status"`
+	}
+
+	results := make([]toolResult, 0, len(tools))
+	var missing []string
+
+	for _, t := range tools {
+		tr := toolResult{Name: t.Name}
+		if t.Path == "" {
+			tr.Status = "missing"
+			missing = append(missing, t.Name)
+		} else {
+			tr.Path = t.Path
+			tr.Version = t.Version
+			tr.Status = "available"
+		}
+		results = append(results, tr)
+	}
+
+	status := health.StatusHealthy
+	msg := fmt.Sprintf("All %d tools available", len(tools))
+
+	if len(missing) > 0 {
+		status = health.StatusWarning
+		msg = fmt.Sprintf("Missing tools: %s", strings.Join(missing, ", "))
+	}
+
+	return health.Result{
+		Name:     c.Name(),
+		Category: c.Category(),
+		Status:   status,
+		Message:  msg,
+		Details: map[string]any{
+			"tools": results,
+		},
+		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+		Timestamp:  time.Now(),
+	}
+}
+
 // PathAccessCheck verifies write access to configured filesystem paths.
 type PathAccessCheck struct {
 	paths map[string]string // label -> path

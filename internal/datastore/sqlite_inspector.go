@@ -239,14 +239,7 @@ func quoteIdentifier(name string) string {
 // RunIntegrityCheck executes PRAGMA quick_check and caches the result.
 // Called by the monitoring goroutine on a daily schedule.
 func (s *SQLiteStore) RunIntegrityCheck() {
-	var results []string
-	if err := s.DB.Raw("PRAGMA quick_check").Scan(&results).Error; err != nil {
-		results = []string{err.Error()}
-	}
-	result := strings.Join(results, "; ")
-	if result == "" {
-		result = "ok"
-	}
+	result := s.runQuickCheck()
 	s.integrityMu.Lock()
 	s.integrityResult = result
 	s.integrityMu.Unlock()

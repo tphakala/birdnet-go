@@ -52,7 +52,7 @@ func checkDurationFlag(t *testing.T, args []string) bool {
 // checkRequiredSoxParams verifies essential SoX parameters are present.
 func checkRequiredSoxParams(t *testing.T, args []string) {
 	t.Helper()
-	requiredParams := []string{"-n", "rate", "24k", "spectrogram", "-x", "-y", "-z", "-o"}
+	requiredParams := []string{"-n", "rate", "24000", "spectrogram", "-x", "-y", "-z", "-o"}
 	for _, param := range requiredParams {
 		assert.Contains(t, args, param, "Required SoX parameter %q missing from args", param)
 	}
@@ -178,7 +178,7 @@ func TestGetSoxSpectrogramArgs_ArgumentOrder(t *testing.T) {
 
 	// Verify the base arguments are in correct order
 	// Height is FFT-friendly: fftFriendlyHeight(800) = 513 (2^9 + 1, DFT=1024)
-	expectedStart := []string{"-n", "rate", "24k", "spectrogram", "-x", "800", "-y", "513"}
+	expectedStart := []string{"-n", "rate", "24000", "spectrogram", "-x", "800", "-y", "513"}
 
 	require.GreaterOrEqual(t, len(args), len(expectedStart),
 		"Not enough arguments returned, got %d, expected at least %d", len(args), len(expectedStart))

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
-	"github.com/tphakala/birdnet-go/internal/errors"
+	"gorm.io/gorm"
 )
 
 func TestNewSQLiteManager(t *testing.T) {
@@ -660,7 +660,7 @@ func TestValidateV2SchemaIntegrity_DetectsContamination(t *testing.T) {
 		"image_caches should have been dropped because it was empty and contaminated")
 }
 
-func TestValidateV2SchemaIntegrity_ErrorsOnPopulatedContamination(t *testing.T) {
+func TestValidateV2SchemaIntegrity_ToleratesPopulatedContamination(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
@@ -686,13 +686,11 @@ func TestValidateV2SchemaIntegrity_ErrorsOnPopulatedContamination(t *testing.T) 
 	err = mgr.DB().Exec("ALTER TABLE image_caches ADD COLUMN bogus_column TEXT DEFAULT ''").Error
 	require.NoError(t, err)
 
-	// Run validation — should return an error for the populated contaminated table
+	// Run validation: extra columns in populated tables are tolerated (warn, not error).
+	// This changed from the original behavior (ErrV2SchemaCorrupted) to prevent
+	// the cascade failure from Discussion #3210.
 	err = mgr.validateV2SchemaIntegrity()
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrV2SchemaCorrupted),
-		"error should wrap ErrV2SchemaCorrupted, got: %v", err)
-	assert.Contains(t, err.Error(), "bogus_column",
-		"error should mention the unexpected column name")
+	require.NoError(t, err, "extra columns in populated tables should be tolerated")
 }
 
 func TestValidateV2SchemaIntegrity_PassesCleanSchema(t *testing.T) {
@@ -709,6 +707,232 @@ func TestValidateV2SchemaIntegrity_PassesCleanSchema(t *testing.T) {
 	// Run validation on a clean schema - should pass with no error
 	err = mgr.validateV2SchemaIntegrity()
 	require.NoError(t, err)
+}
+
+// TestSchemaEvolution_ExtraColumnsDoNotBlockInitialize reproduces Discussion #3210:
+// a database created on an earlier nightly has extra columns from schema evolution
+// (e.g. label_count in ai_models, label_type/taxonomic_class in labels).
+// These extra columns are harmless (GORM ignores them) and must not prevent
+// Initialize from running AutoMigrate.
+func TestSchemaEvolution_ExtraColumnsDoNotBlockInitialize(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Step 1: Create a clean v2 database
+	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+	err = mgr.Initialize()
+	require.NoError(t, err)
+
+	// Step 2: Add extra columns that simulate schema evolution
+	// (columns that existed in earlier entity versions but were later removed)
+	extraColumns := []struct {
+		table  string
+		column string
+		sql    string
+	}{
+		{"ai_models", "label_count", "ALTER TABLE ai_models ADD COLUMN label_count INTEGER DEFAULT 0"},
+		{"labels", "label_type", "ALTER TABLE labels ADD COLUMN label_type TEXT DEFAULT 'species'"},
+		{"labels", "taxonomic_class", "ALTER TABLE labels ADD COLUMN taxonomic_class TEXT DEFAULT ''"},
+		{"detections", "sensitivity", "ALTER TABLE detections ADD COLUMN sensitivity REAL"},
+		{"detections", "threshold", "ALTER TABLE detections ADD COLUMN threshold REAL"},
+		{"detections", "created_at", "ALTER TABLE detections ADD COLUMN created_at DATETIME"},
+		{"daily_events", "created_at", "ALTER TABLE daily_events ADD COLUMN created_at DATETIME"},
+		{"daily_events", "updated_at", "ALTER TABLE daily_events ADD COLUMN updated_at DATETIME"},
+	}
+	for _, ec := range extraColumns {
+		err = mgr.DB().Exec(ec.sql).Error
+		require.NoError(t, err, "failed to add %s.%s", ec.table, ec.column)
+	}
+
+	// Step 3: Insert data into contaminated tables (mimics a real user's database)
+	// ai_models already has a seeded row from Initialize, so just update it with the extra column
+	err = mgr.DB().Exec("UPDATE ai_models SET label_count = 6522 WHERE name = 'BirdNET'").Error
+	require.NoError(t, err)
+	err = mgr.DB().Exec("INSERT INTO daily_events (date, sunrise, sunset, country, city_name) VALUES ('2026-05-20', 1716184800, 1716228000, 'US', 'Test City')").Error
+	require.NoError(t, err)
+
+	// Insert a label so we can insert a detection with valid FK
+	err = mgr.DB().Exec("INSERT INTO labels (scientific_name, model_id, label_type_id) VALUES ('Turdus merula', 1, 1)").Error
+	require.NoError(t, err)
+	// Insert a detection row so the table is populated (mimics 463K detections in user's DB)
+	err = mgr.DB().Exec("INSERT INTO detections (model_id, label_id, detected_at, confidence) VALUES (1, 1, 1716184800, 0.85)").Error
+	require.NoError(t, err)
+
+	// Close and reopen to simulate app restart after upgrade
+	err = mgr.Close()
+	require.NoError(t, err)
+
+	// Step 4: Re-open and Initialize (simulating upgrade to newer build)
+	mgr2, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr2.Close() })
+
+	// This is the critical assertion: Initialize must succeed despite extra columns.
+	// Before the fix, validateV2SchemaIntegrity() would return ErrV2SchemaCorrupted
+	// and block AutoMigrate from running.
+	err = mgr2.Initialize()
+	require.NoError(t, err, "Initialize must succeed with harmless extra columns from schema evolution")
+
+	// Verify that the extra columns still exist (they're harmless, not dropped)
+	var colCount int64
+	err = mgr2.DB().Raw("SELECT COUNT(*) FROM pragma_table_info('ai_models') WHERE name = 'label_count'").Scan(&colCount).Error
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), colCount, "extra columns should be preserved (harmless)")
+
+	// Verify GORM operations work despite extra columns
+	var models []entities.AIModel
+	err = mgr2.DB().Find(&models).Error
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, len(models), 1, "should be able to query with extra columns present")
+}
+
+// TestValidateV2SchemaIntegrity_DetectsMissingColumn covers GitHub #3211: GORM
+// AutoMigrate sometimes silently fails to add a newly-introduced column to an existing
+// table. The post-AutoMigrate validator must catch this so callers can surface a real
+// error instead of letting INSERTs fail with "table has no column named X".
+func TestValidateV2SchemaIntegrity_DetectsMissingColumn(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	require.NoError(t, mgr.Initialize())
+
+	// Disable FK checks so we can populate detections without lookup setup.
+	require.NoError(t, mgr.DB().Exec("PRAGMA foreign_keys = OFF").Error)
+	require.NoError(t, mgr.DB().Exec(
+		"INSERT INTO labels (scientific_name, model_id, label_type_id) VALUES ('Turdus merula', 1, 1)").Error)
+	require.NoError(t, mgr.DB().Exec(
+		"INSERT INTO detections (model_id, label_id, detected_at, confidence) VALUES (1, 1, 1716184800, 0.85)").Error)
+	require.NoError(t, mgr.DB().Exec("PRAGMA foreign_keys = ON").Error)
+
+	// Simulate AutoMigrate silently failing to add the `unlikely` column that was
+	// introduced in PR #3072 / commit e805e6eb0.
+	require.NoError(t, mgr.DB().Exec("ALTER TABLE detections DROP COLUMN unlikely").Error)
+
+	err = mgr.validateV2SchemaIntegrity()
+	require.Error(t, err, "missing column must be reported as corruption")
+	require.ErrorIs(t, err, ErrV2SchemaCorrupted)
+	assert.Contains(t, err.Error(), "detections", "error should name the table")
+	assert.Contains(t, err.Error(), "unlikely", "error should name the missing column")
+}
+
+// TestValidateV2SchemaIntegrity_DetectsMissingColumnEmptyTable verifies missing column
+// detection also fires on empty tables. Row count must not affect corruption verdict.
+func TestValidateV2SchemaIntegrity_DetectsMissingColumnEmptyTable(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	require.NoError(t, mgr.Initialize())
+
+	require.NoError(t, mgr.DB().Exec("ALTER TABLE detections DROP COLUMN unlikely").Error)
+
+	err = mgr.validateV2SchemaIntegrity()
+	require.Error(t, err, "missing column must be reported even on empty tables")
+	require.ErrorIs(t, err, ErrV2SchemaCorrupted)
+}
+
+// TestValidateV2SchemaIntegrity_MissingColumnWinsOverExtras verifies that when a table
+// has both extra and missing columns, the missing-column corruption is reported.
+// Extra columns alone are harmless (additive-only rule from PR #3222), but a missing
+// column means GORM-generated INSERTs will fail.
+func TestValidateV2SchemaIntegrity_MissingColumnWinsOverExtras(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	require.NoError(t, mgr.Initialize())
+
+	// Add a harmless extra column from older schema evolution.
+	require.NoError(t, mgr.DB().Exec(
+		"ALTER TABLE detections ADD COLUMN legacy_extra TEXT DEFAULT ''").Error)
+	// Also drop a required column.
+	require.NoError(t, mgr.DB().Exec("ALTER TABLE detections DROP COLUMN unlikely").Error)
+
+	err = mgr.validateV2SchemaIntegrity()
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrV2SchemaCorrupted)
+	assert.Contains(t, err.Error(), "unlikely")
+}
+
+// TestValidateSchemaIntegrity_MySQLParity_DetectsMissingColumn exercises the shared
+// validator with a stub columnLister that mimics MySQL information_schema returning a
+// table missing a column. SQLite is used as the actual backing store so we can keep
+// the test hermetic, but the validator path covered is the MySQL one.
+func TestValidateSchemaIntegrity_MySQLParity_DetectsMissingColumn(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	require.NoError(t, mgr.Initialize())
+
+	// Stub lister: returns the real SQLite columns for every table EXCEPT
+	// `detections`, where it drops the `unlikely` column to simulate a MySQL
+	// information_schema result on a database that pre-dates PR #3072.
+	stubLister := func(db *gorm.DB, tableName string) ([]string, error) {
+		cols, listErr := sqliteColumnLister(db, tableName)
+		if listErr != nil {
+			return nil, listErr
+		}
+		if tableName != "detections" {
+			return cols, nil
+		}
+		filtered := make([]string, 0, len(cols))
+		for _, c := range cols {
+			if c == "unlikely" {
+				continue
+			}
+			filtered = append(filtered, c)
+		}
+		return filtered, nil
+	}
+
+	err = validateSchemaIntegrity(mgr.DB(), mgr.log, "mysql", stubLister)
+	require.Error(t, err, "MySQL listing path must also report missing columns")
+	require.ErrorIs(t, err, ErrV2SchemaCorrupted)
+	assert.Contains(t, err.Error(), "detections")
+	assert.Contains(t, err.Error(), "unlikely")
+}
+
+// TestInitialize_PostAutoMigrate_HealsDroppedColumn verifies that validation runs
+// AFTER AutoMigrate. If AutoMigrate successfully re-adds a column that was previously
+// missing, Initialize must succeed and not surface a stale "missing column" error.
+// This pins the ordering change so a future refactor that moves the validator back
+// before AutoMigrate fails this test loudly.
+func TestInitialize_PostAutoMigrate_HealsDroppedColumn(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	require.NoError(t, mgr.Initialize())
+
+	// Drop the column that PR #3072 added so the schema looks like a pre-PR #3072
+	// database. AutoMigrate on the next Initialize should re-add it.
+	require.NoError(t, mgr.DB().Exec("ALTER TABLE detections DROP COLUMN unlikely").Error)
+	require.NoError(t, mgr.Close())
+
+	mgr2, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr2.Close() })
+
+	require.NoError(t, mgr2.Initialize(),
+		"Initialize must succeed: AutoMigrate should re-add the missing column "+
+			"and the post-AutoMigrate validator should then see a healthy schema")
+
+	var colCount int64
+	require.NoError(t, mgr2.DB().Raw(
+		"SELECT COUNT(*) FROM pragma_table_info('detections') WHERE name = 'unlikely'",
+	).Scan(&colCount).Error)
+	assert.Equal(t, int64(1), colCount, "AutoMigrate must have re-added the column")
 }
 
 func TestSQLiteManager_Close_NilsOutDB(t *testing.T) {

@@ -435,6 +435,10 @@
         "overloadTitle": "Analýza zvuku přetížena",
         "overloadMessage": "Váš systém zahazuje {dropRate} % zvukových vzorků ze zdroje ''{sourceName}'', protože nestíhá analýzu. Snižte hodnotu překryvu BirdNET v nastavení detekce nebo zvažte výkonnější procesor."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime není k dispozici",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} je vyžadován pro {modelName}, ale nebyl nalezen. Viz průvodce instalací: {installGuideURL}"
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuální hodnota: {value} % (práh: {threshold} %)",
@@ -937,7 +941,10 @@
     "aria": {
       "loading": "Načítání podrobností detekce…",
       "loaded": "Podrobnosti detekce načteny pro {species}",
-      "error": "Chyba při načítání detekce: {error}"
+      "error": "Chyba při načítání detekce: {error}",
+      "loadingResults": "Načítání {count} výsledků...",
+      "thumbnailLoading": "Načítání náhledu {species}...",
+      "thumbnailLoaded": "Náhled {species} načten"
     },
     "errors": {
       "notFound": "Detekce nebyla nalezena. Možná byla odstraněna nebo je ID nesprávné.",
@@ -1576,7 +1583,11 @@
       "recentlyFirstSeen": "Naposledy poprvé spatřeno",
       "earliestFirstSeen": "Nejdříve poprvé spatřeno",
       "recentlyLastSeen": "Naposledy spatřeno",
-      "highestConfidence": "Nejvyšší spolehlivost"
+      "earliestLastSeen": "Nejdříve naposledy spatřeno",
+      "highestConfidence": "Nejvyšší spolehlivost",
+      "lowestConfidence": "Nejnižší spolehlivost",
+      "highestMaxConfidence": "Nejvyšší maximální spolehlivost",
+      "lowestMaxConfidence": "Nejnižší maximální spolehlivost"
     },
     "charts": {
       "top10Species": "Top 10 druhů",
@@ -2991,6 +3002,7 @@
         "unknown": "neznámý",
         "refresh": "Obnovit",
         "addStream": "Přidat stream",
+        "testRequired": "Před uložením proveďte úspěšný test streamu",
         "deleteConfirm": "Odstranit tento stream?",
         "restartCount": "Restartováno {count}krát",
         "healthLoadError": "Nepodařilo se načíst stav streamu",
@@ -3043,6 +3055,47 @@
           "degraded": "Zhoršené",
           "failed": "Selhalo",
           "unknown": "Neznámé"
+        },
+        "test": {
+          "button": "Testovat stream",
+          "probing": "Testování...",
+          "result": "Výsledek testu",
+          "error": "Test selhal",
+          "batCompatible": "Kompatibilní s netopýry",
+          "batIncompatible": "Nekompatibilní s netopýry"
+        },
+        "batWarning": "Modely netopýrů vyžadují streamy s bezeztrátovým kodekem (PCM) a vzorkovací frekvencí alespoň 96 kHz. Pomocí tlačítka Testovat stream výše ověřte kompatibilitu.",
+        "codecWarning": {
+          "lossy": "Ztrátové kodeky (AAC, Opus, MP3) ničí ultrazvukové frekvence nad ~20 kHz, čímž se stream stává nevhodným pro detekci netopýrů."
+        },
+        "channelMode": {
+          "analyzeError": "Analýza kanálů selhala",
+          "analyzing": "Analýza kanálů...",
+          "description": "Jak zacházet s vícekánalovým zvukem. Vyberte konkrétní kanál, pokud váš zdroj vysílá stereo.",
+          "detectBest": "Detekovat nejlepší kanál",
+          "downmix": "Smíchat do mono",
+          "downmixWarning": "Smíchání do mono není doporučeno pro stereo streamy. Fázové rozdíly mezi kanály způsobují hřebenový filtr, který snižuje přesnost detekce. Místo toho vyberte konkrétní kanál.",
+          "energyLeft": "Levý kanál",
+          "energyRight": "Pravý kanál",
+          "label": "Režim kanálu",
+          "left": "Pouze levý kanál",
+          "monoNoSelection": "Jednokanálový zdroj. Všechny režimy kanálů produkují stejný zvuk, takže není třeba nic vybírat.",
+          "recommended": "Doporučeno: {channel}",
+          "right": "Pouze pravý kanál",
+          "singleChannelGood": "Vybrán jeden kanál, optimální pro přesnost detekce."
+        },
+        "format": {
+          "label": "Formát zvuku",
+          "mono": "Mono (1 kanál)",
+          "multi": "{count} kanálů",
+          "stereo": "Stereo (2 kanály)",
+          "untested": "Otestujte stream pro zjištění formátu zvuku",
+          "withSampleRate": "{rate} kHz, {channels}"
+        },
+        "stereoWarning": {
+          "message": "Detekován stereo stream. Smíchání více kanálů může snížit přesnost detekce kvůli fázovým rozdílům mezi kanály. Pro nejlepší výsledky vyberte konkrétní kanál (levý/pravý) nebo použijte detektor kanálů.",
+          "short": "Aktivní stereo downmix. Přesnost detekce může být snížena. Upravte pro výběr konkrétního kanálu.",
+          "tooltip": "Aktivní stereo downmix. Přesnost detekce může být snížena. Upravte pro výběr konkrétního kanálu."
         }
       },
       "audioFilters": {
@@ -3218,6 +3271,10 @@
         "devicesLoadFailed": "Nepodařilo se načíst zvuková zařízení. Zkontrolujte oprávnění systému.",
         "invalidBitrate": "Neplatná hodnota datového toku",
         "invalidRetentionPolicy": "Neplatná pravidla uchování"
+      },
+      "models": {
+        "recommendBoth": "Pro nejlepší pokrytí detekce druhů se doporučuje spustit oba modely BirdNET a Perch společně.",
+        "perchOnlyWarning": "Samotný Perch produkuje méně detekcí. Pro smysluplné výsledky snižte práh spolehlivosti na 0.50, nebo pro lepší pokrytí aktivujte i BirdNET."
       }
     },
     "security": {
@@ -3378,6 +3435,10 @@
         "liveAudioHelp": "Pokud je povoleno, kdokoli může poslouchat živé audio streamy bez přihlášení. Nastavení a mazání nadále vyžaduje ověření.",
         "warningText": "Povolením funkcí veřejného přístupu je zpřístupníte komukoli, kdo se může připojit k tomuto serveru. Povolte pouze pokud důvěřujete svému síťovému prostředí."
       },
+      "privateMode": {
+        "label": "Vyžadovat přihlášení pro všechny stránky UI (soukromý režim)",
+        "help": "Pokud je povoleno, stránky nástěnka, detekce, analytika, vyhledávání, o aplikaci a oznámení všechny vyžadují ověření. Stránky nastavení a systému jsou vždy chráněny bez ohledu na toto nastavení. Přepínač Veřejný živý zvuk níže je respektován nezávisle – pokud zůstane zapnutý, stále umožňuje přehrávání bez přihlášení. Výchozí hodnota je vypnuto, takže hosté mohou procházet UI v režimu jen pro čtení."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
         "host": "Například localhost:8080 nebo example.domain.com",
@@ -3496,6 +3557,20 @@
           "title": "Poloha není nakonfigurována",
           "description": "Nastavte svou polohu v Hlavních nastaveních, abyste viděli druhy dostupné ve vaší oblasti. Filtr rozsahu používá vaši polohu k určení, které druhy se pravděpodobně vyskytují v okolí.",
           "action": "Nakonfigurovat polohu"
+        },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Filtr rozsahu je neaktivní",
+            "description": "Detekce nejsou momentálně filtrovány podle vaší polohy, takže mohou být hlášeny i druhy mimo vaši oblast. Zkontrolujte konfiguraci modelu filtru rozsahu v Nastavení."
+          },
+          "fellBack": {
+            "title": "Používá se vestavěný filtr rozsahu",
+            "description": "Nakonfigurovaný filtr rozsahu geomodelu se nepodařilo načíst, takže BirdNET-Go přešel na vestavěný filtr rozsahu. Filtrování stále funguje, ale zkontrolujte Nastavení, abyste obnovili geomodel."
+          },
+          "mappedZero": {
+            "title": "Filtr rozsahu neodpovídá žádnému druhu",
+            "description": "Filtr rozsahu geomodelu neodpovídá žádnému z druhů aktivního modelu, takže by byla odfiltrována každá detekce. Zkontrolujte, zda soubor štítků filtru rozsahu odpovídá aktivnímu modelu."
+          }
         },
         "columns": {
           "commonName": "Název",
@@ -3919,6 +3994,8 @@
           "species_name": "Název druhu",
           "scientific_name": "Vědecký název",
           "confidence": "Spolehlivost",
+          "days_since_last_seen": "Dny od posledního pozorování",
+          "novelty_episode_days": "Dny epizody novosti",
           "location": "Poloha",
           "stream_name": "Název streamu",
           "stream_url": "URL streamu",
@@ -3929,6 +4006,8 @@
         "operators": {
           "is": "je",
           "is_not": "není",
+          "in": "je v seznamu",
+          "not_in": "není v seznamu",
           "contains": "obsahuje",
           "not_contains": "neobsahuje",
           "greater_than": "větší než",
@@ -4193,7 +4272,31 @@
       "playbackSpeed": "Rychlost přehrávání",
       "speed": "Rychlost",
       "loop": "Přepnout opakování",
-      "player": "Přehrávač zvuku"
+      "player": "Přehrávač zvuku",
+      "autoplayBlocked": "Kliknutím spustíte přehrávání (automatické přehrávání blokováno)",
+      "hlsNotSupported": "Přehrávání HLS není v tomto prohlížeči podporováno",
+      "streamStarting": "Spouštění audio streamu...",
+      "levelFor": "Úroveň zvuku pro {source}",
+      "levelForNoSource": "Úroveň zvuku: žádný zdroj",
+      "noSource": "Žádný zdroj",
+      "levelAnnouncement": "Aktuální úroveň zvuku: {level} procent",
+      "levelAnnouncementClipping": "Aktuální úroveň zvuku: {level} procent, detekováno ořezávání",
+      "sourceSelection": "Výběr zdroje zvuku",
+      "sources": "Zdroje zvuku",
+      "noSourcesAvailable": "Žádné dostupné zdroje zvuku",
+      "silent": "(ticho)",
+      "stopPlayback": "Zastavit přehrávání zvuku",
+      "startPlayback": "Spustit přehrávání zvuku",
+      "nowPlaying": "Nyní se přehrává zvuk z {source}",
+      "nowPlayingNoSource": "Přehrává se zvuk",
+      "playbackStopped": "Přehrávání zvuku zastaveno",
+      "loginRequired": "Pro streamování zvuku je vyžadováno přihlášení",
+      "streamError": "Chyba při spouštění streamu",
+      "streamTitle": "Audio stream ptáků - {source}",
+      "streamTitleDefault": "Audio stream ptáků",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Živý přenos",
+      "playbackError": "Chyba přehrávání: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram zatím nebyl vygenerován",
@@ -4418,6 +4521,16 @@
       "hostRequired": "Parametr hostitele je povinný",
       "invalidHost": "Neplatný parametr hostitele",
       "rateLimit": "Příliš mnoho pokusů o připojení k proudu oznámení, počkejte prosím chvíli a zkuste to znovu"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Neplatné tělo požadavku",
+        "urlRequired": "URL streamu je povinné",
+        "invalidUrl": "Neplatný formát URL. Zadejte úplnou URL, např. rtsp://host:port/cesta",
+        "unsupportedScheme": "Nepodporované schéma URL \"{scheme}\". Použijte rtsp, rtsps, http, https, rtmp nebo udp",
+        "blockedDestination": "Tento cíl je z bezpečnostních důvodů blokován",
+        "connectionFailed": "Nelze se připojit ke streamu. Zkontrolujte, zda je URL správná a stream je dostupný"
+      }
     },
     "debug": {
       "notEnabled": "Režim ladění není povolen"
@@ -4683,7 +4796,10 @@
       "reinstall": "Přeinstalovat",
       "reinstalling": "Přeinstalování…",
       "reinstallComplete": "Soubory úspěšně ověřeny",
-      "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel"
+      "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Vyžaduje ONNX Runtime, který není v tomto systému k dispozici.",
+      "onnxRuntimeMissing": "ONNX Runtime není k dispozici. Tento model nelze spustit.",
+      "unavailable": "Nedostupné"
     },
     "bird": {
       "title": "Detekce ptáků",
@@ -4713,7 +4829,7 @@
     "title": "Nápověda a podpora",
     "subtitle": "Získejte pomoc, nahlaste problémy a spojte se s komunitou",
     "reportBug": {
-      "description": "Pokud narazíte na problém, nejprve vygenerujte diagnostický balíček s informacemi o systému a logy, poté otevřete hlášení chyby na GitHubu."
+      "description": "Pokud narazíte na problém, otevřete hlášení chyby na GitHubu a popište problém, poté vygenerujte diagnostický balíček s číslem hlášení pro usnadnění řešení."
     },
     "askQuestion": {
       "description": "Máte dotaz ohledně nastavení, funkcí nebo používání? Fórum GitHub Discussions je nejlepší místo, kde získáte pomoc od komunity."
@@ -4761,23 +4877,21 @@
         "description": "Vygenerujte a nahrajte diagnostický balíček níže. Zachytí logy a konfiguraci, které výrazně urychlí řešení problému."
       }
     },
-    "supportDump": {
-      "title": "Generovat diagnostický balíček",
-      "description": "Nahrání diagnostického balíčku k hlášení chyby výrazně pomáhá při řešení problémů. Zachytí vaši konfiguraci a nedávné logy s odstraněnými citlivými údaji."
-    },
     "openIssue": {
       "title": "Otevřít hlášení na GitHubu",
-      "description": "Jakmile shromáždíte výše uvedené informace a vygenerujete diagnostický balíček, otevřete hlášení na GitHubu a popište problém.",
+      "description": "Otevřete hlášení na GitHubu a popište problém. Číslo hlášení budete potřebovat v dalším kroku.",
       "button": "Otevřít hlášení na GitHubu"
+    },
+    "supportDump": {
+      "title": "Generovat diagnostický balíček",
+      "description": "Po vytvoření hlášení vygenerujte diagnostický balíček a zadejte číslo GitHub hlášení. Tím propojíte diagnostiku s hlášením chyby a usnadníte řešení."
     }
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Obnovit",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4789,6 +4903,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Vše v pořádku",
+      "needsAttention": "Vyžaduje pozornost",
+      "failing": "Selhává",
+      "allClear": "Bez problémů",
+      "noData": "Žádná data",
+      "none": "Žádné"
+    },
+    "diagnostics": "Diagnostika",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4817,6 +4940,41 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Nejčastější chyby",
+      "errorCount": "Počet",
+      "errorComponent": "Komponenta",
+      "errorLevel": "Úroveň",
+      "errorMessage": "Zpráva"
+    },
+    "window": {
+      "label": "Časové okno vyhodnocení",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Poslední událost",
+      "recentEvents": "Nedávné události",
+      "time": "Čas",
+      "source": "Zdroj",
+      "count": "Počet",
+      "lifetime": "celkem",
+      "sparklineLabel": "Graf aktivity",
+      "activeHours": "Aktivní hodiny",
+      "windowTotal": "V okně",
+      "velocity": "Trend",
+      "velocityStable": "Stabilní",
+      "velocityIncreasing": "Stoupající",
+      "velocityDecreasing": "Klesající",
+      "pattern": "Vzor",
+      "patternNone": "Žádný",
+      "patternTransient": "Přechodný",
+      "patternSustained": "Trvalý"
     }
   }
 }

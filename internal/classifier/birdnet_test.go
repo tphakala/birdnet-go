@@ -39,8 +39,8 @@ func TestShouldAutoSelectV3Geomodel(t *testing.T) {
 	modelsDir := t.TempDir()
 	sharedDir := filepath.Join(modelsDir, "shared")
 	require.NoError(t, os.MkdirAll(sharedDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, geomodelONNXLocalName), []byte("fake-onnx"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, geomodelLabelsLocalName), []byte("fake-labels"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, conf.GeomodelONNXLocalName), []byte("fake-onnx"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, conf.GeomodelLabelsLocalName), []byte("fake-labels"), 0o644))
 
 	// A separate temp dir that has no geomodel files.
 	emptyModelsDir := t.TempDir()
@@ -120,8 +120,8 @@ func TestApplyAutoSelectedGeomodelPaths(t *testing.T) {
 		applyAutoSelectedGeomodelPaths(settings, modelsDir)
 
 		assert.Equal(t, "v3", settings.BirdNET.RangeFilter.Model)
-		assert.Equal(t, filepath.Join(sharedDir, geomodelONNXLocalName), settings.BirdNET.RangeFilter.ModelPath)
-		assert.Equal(t, filepath.Join(sharedDir, geomodelLabelsLocalName), settings.BirdNET.RangeFilter.LabelsPath)
+		assert.Equal(t, filepath.Join(sharedDir, conf.GeomodelONNXLocalName), settings.BirdNET.RangeFilter.ModelPath)
+		assert.Equal(t, filepath.Join(sharedDir, conf.GeomodelLabelsLocalName), settings.BirdNET.RangeFilter.LabelsPath)
 	})
 
 	t.Run("does not override existing valid v3 config", func(t *testing.T) {
@@ -166,8 +166,8 @@ func TestApplyAutoSelectedGeomodelPaths(t *testing.T) {
 
 		// Paths should be overridden because the configured files don't exist.
 		assert.Equal(t, "v3", settings.BirdNET.RangeFilter.Model)
-		assert.Equal(t, filepath.Join(sharedDir, geomodelONNXLocalName), settings.BirdNET.RangeFilter.ModelPath)
-		assert.Equal(t, filepath.Join(sharedDir, geomodelLabelsLocalName), settings.BirdNET.RangeFilter.LabelsPath)
+		assert.Equal(t, filepath.Join(sharedDir, conf.GeomodelONNXLocalName), settings.BirdNET.RangeFilter.ModelPath)
+		assert.Equal(t, filepath.Join(sharedDir, conf.GeomodelLabelsLocalName), settings.BirdNET.RangeFilter.LabelsPath)
 	})
 }
 
@@ -217,8 +217,8 @@ func TestPrimaryRangeFilterCoverage_WithMappedFilter(t *testing.T) {
 	sharedDir := filepath.Join(modelsDir, "shared")
 	require.NoError(t, os.MkdirAll(sharedDir, 0o755))
 
-	expectedONNX := filepath.Join(sharedDir, geomodelONNXLocalName)
-	expectedLabels := filepath.Join(sharedDir, geomodelLabelsLocalName)
+	expectedONNX := filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
+	expectedLabels := filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 
 	settings := &conf.Settings{}
 	settings.BirdNET.RangeFilter.Model = "v3"
@@ -279,8 +279,8 @@ func TestRangeFilterStatus_PerClassifierCoverage(t *testing.T) {
 	sharedDir := filepath.Join(modelsDir, "shared")
 	require.NoError(t, os.MkdirAll(sharedDir, 0o755))
 
-	expectedONNX := filepath.Join(sharedDir, geomodelONNXLocalName)
-	expectedLabels := filepath.Join(sharedDir, geomodelLabelsLocalName)
+	expectedONNX := filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
+	expectedLabels := filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 
 	settings := &conf.Settings{}
 	settings.BirdNET.RangeFilter.Model = "v3"

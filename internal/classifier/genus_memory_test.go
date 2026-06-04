@@ -91,10 +91,11 @@ func TestMemoryLeaks(t *testing.T) {
 		t.Skip("Skipping memory leak test in short mode")
 	}
 
-	t.Parallel()
 	t.Attr("component", "birdnet-genus")
 	t.Attr("category", "memory")
 
+	// This test measures process-wide heap state, so it must not run in
+	// parallel with classifier tests that load TFLite models in this process.
 	db, err := LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 

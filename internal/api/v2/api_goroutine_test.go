@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
@@ -36,6 +37,7 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 
 	// Create mock datastore
 	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 
 	// Create settings with required paths
 	settings := &conf.Settings{

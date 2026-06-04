@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -34,6 +35,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+
+	"golang.org/x/crypto/acme/autocert"
 )
 
 // ImageDataFs holds the embedded image provider data filesystem.
@@ -593,6 +596,10 @@ func (s *Server) Start() {
 	}
 }
 
+// autoTLSCacheDirName is the subdirectory under the config directory where
+// AutoTLS (Let's Encrypt) certificates are cached so they survive restarts.
+const autoTLSCacheDirName = "tls-acme"
+
 // startBlocking begins serving HTTP requests and blocks until the server is shut down.
 func (s *Server) startBlocking() error {
 	addr := s.config.Address()
@@ -604,6 +611,32 @@ func (s *Server) startBlocking() error {
 	case s.config.AutoTLS:
 		// AutoTLS with Let's Encrypt
 		s.slogger.Info("Starting with AutoTLS (Let's Encrypt)")
+		// Configure persistent cert cache so certificates survive restarts.
+		// Without this, Echo's AutoTLSManager has no storage backend and certs
+		// are lost on every shutdown, triggering a fresh ACME request each time
+		// and quickly exhausting Let's Encrypt's rate limit.
+		if configFile, pathErr := conf.FindConfigFile(); pathErr == nil {
+			cacheDir := filepath.Join(filepath.Dir(configFile), autoTLSCacheDirName)
+			s.echo.AutoTLSManager.Cache = autocert.DirCache(cacheDir)
+			s.slogger.Info("AutoTLS certificate cache configured", logger.String("path", cacheDir))
+		} else {
+			s.slogger.Warn("Could not determine config path for AutoTLS cache; certificates will not persist across restarts",
+				logger.Error(pathErr))
+		}
+		// Restrict ACME issuance to the configured hostname. A nil HostPolicy
+		// lets autocert request a certificate for any SNI presented, which on a
+		// public host is a Let's Encrypt rate-limit exhaustion vector. Config
+		// validation (validateTLSMode) already requires a hostname for AutoTLS,
+		// so an empty value here means validation was bypassed: fail closed
+		// rather than start with an open policy.
+		host := s.settings.Security.GetHostnameForCertificates()
+		if host == "" {
+			return errors.Newf("AutoTLS enabled but no hostname configured; set security.host or a hostname in security.baseURL").
+				Category(errors.CategoryValidation).
+				Context("operation", "configure-autotls-host-policy").
+				Build()
+		}
+		s.echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist(host)
 		err = s.echo.StartAutoTLS(addr)
 	case s.config.TLSEnabled:
 		// Manual/Self-signed TLS: HTTPS on TLSPort, HTTP stays on configured port
@@ -774,19 +807,32 @@ func (s *Server) IsDevMode() bool {
 
 // registerSPARoutes registers all frontend SPA routes.
 // These routes serve the HTML shell that loads the Svelte application.
+// All SPA routes are public so the SPA can bootstrap and render the login
+// form when Security.PrivateMode is enabled. The data layer (v2 API
+// endpoints) is the actual security boundary: it is gated by
+// privateModeAuth in api/v2/api.go and returns 401 to unauthenticated
+// requests in private mode, prompting the SPA to render the login form.
+// Settings and system routes remain auth-gated at this layer too so deep
+// links to those pages still server-side redirect to /login for unauth
+// browser navigations.
 func (s *Server) registerSPARoutes() {
 	// Redirect root path to dashboard
 	s.echo.GET("/", func(c echo.Context) error {
 		return c.Redirect(http.StatusFound, ingressPath(c, s.currentSettings())+"/ui/dashboard")
 	})
 
-	// Public routes (no authentication required)
+	authMiddleware := s.getAuthMiddleware()
+
+	// Public SPA shell routes — the SPA itself decides what to render
+	// based on Security.PrivateMode and the authenticated/guest state
+	// returned by /api/v2/app/config.
 	publicRoutes := []string{
 		"/login",
 		"/ui",
 		"/ui/",
 		"/ui/dashboard",
 		"/ui/detections",
+		"/ui/detections/:id",
 		"/ui/notifications",
 		"/ui/analytics",
 		"/ui/analytics/species",
@@ -794,22 +840,13 @@ func (s *Server) registerSPARoutes() {
 		"/ui/search",
 		"/ui/about",
 	}
-
-	// Public dynamic routes (with path parameters)
-	publicDynamicRoutes := []string{
-		"/ui/detections/:id", // Detection detail page
-	}
-
 	for _, route := range publicRoutes {
 		s.echo.GET(route, s.spaHandler.ServeApp)
 	}
 
-	for _, route := range publicDynamicRoutes {
-		s.echo.GET(route, s.spaHandler.ServeApp)
-	}
-
-	// Protected routes (authentication required)
-	// These will be protected by the API v2 auth middleware
+	// Settings and system routes are always protected at the SPA layer
+	// so direct deep links from a browser hit the auth middleware (which
+	// redirects to /login) instead of loading the SPA shell.
 	protectedRoutes := []string{
 		"/ui/system",
 		"/ui/settings",
@@ -823,10 +860,6 @@ func (s *Server) registerSPARoutes() {
 		"/ui/settings/support",
 		"/ui/settings/userinterface",
 	}
-
-	// Get the auth middleware from API controller if available
-	authMiddleware := s.getAuthMiddleware()
-
 	for _, route := range protectedRoutes {
 		if authMiddleware != nil {
 			s.echo.GET(route, s.spaHandler.ServeApp, authMiddleware)
@@ -836,23 +869,18 @@ func (s *Server) registerSPARoutes() {
 	}
 
 	// Protected catch-all for settings routes
-	// Any /ui/settings/* route not explicitly listed above requires authentication
-	// This ensures new settings pages are protected by default
 	if authMiddleware != nil {
 		s.echo.GET("/ui/settings/*", s.spaHandler.ServeApp, authMiddleware)
 	} else {
 		s.echo.GET("/ui/settings/*", s.spaHandler.ServeApp)
 	}
 
-	// Catch-all route for any unmatched /ui/* paths (public)
-	// This ensures SPA handles client-side routing for unknown routes
-	// Must be registered last to not override specific routes
+	// Public catch-all for any other unmatched /ui/* paths so the SPA can
+	// handle client-side routing for unknown routes consistently.
 	s.echo.GET("/ui/*", s.spaHandler.ServeApp)
 
 	s.slogger.Debug("SPA routes registered",
-		logger.Int("public_routes", len(publicRoutes)),
-		logger.Int("public_dynamic_routes", len(publicDynamicRoutes)),
-		logger.Int("protected_routes", len(protectedRoutes)),
+		logger.Bool("auth_enabled", authMiddleware != nil),
 	)
 }
 
@@ -1028,7 +1056,11 @@ func (s *Server) isValidOAuthProvider(provider string) bool {
 // isAllowedOAuthUser checks if the OAuth user is in the allowed users list for the provider.
 // Uses the OAuthProviders array with a reverse lookup from goth provider name to config provider ID.
 func (s *Server) isAllowedOAuthUser(gothProvider, userID, email string) bool {
-	if s.settings == nil {
+	// Read the live snapshot so changes to the allowed OAuth users (or a
+	// provider's enabled flag) made through the UI apply without a restart
+	// (issue #3370).
+	settings := s.currentSettings()
+	if settings == nil {
 		return false
 	}
 
@@ -1044,7 +1076,7 @@ func (s *Server) isAllowedOAuthUser(gothProvider, userID, email string) bool {
 		return false
 	}
 
-	provider := s.settings.GetOAuthProvider(configProvider)
+	provider := settings.GetOAuthProvider(configProvider)
 	if provider == nil || !provider.Enabled || provider.UserID == "" {
 		return false
 	}

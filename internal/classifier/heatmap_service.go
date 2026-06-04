@@ -512,8 +512,10 @@ func (o *Orchestrator) GetHeatmapService() *HeatmapInferenceService {
 		return heatmapServiceInstance
 	}
 
-	// Get model path and labels from current range filter config
-	settings := o.Settings
+	// Get model path and labels from current range filter config.
+	// Use the atomic-safe accessor; o.Settings is reassigned at runtime by
+	// Orchestrator.ReloadModel (under o.mu) and a raw read would race with it.
+	settings := o.CurrentSettings()
 	rfSettings := settings.BirdNET.RangeFilter
 
 	if rfSettings.ModelPath == "" {
@@ -545,7 +547,7 @@ func (o *Orchestrator) GetHeatmapService() *HeatmapInferenceService {
 		return nil
 	}
 
-	// Resolve model path (same logic as initializeV3GeoModel)
+	// Resolve model path (same logic as initializeMappedGeoModel)
 	modelPath := os.ExpandEnv(rfSettings.ModelPath)
 	modelPath, err := conf.ExpandTildePath(modelPath)
 	if err != nil {

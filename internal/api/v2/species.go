@@ -127,7 +127,9 @@ func (c *Controller) GetAllSpecies(ctx echo.Context) error {
 		logger.String("path", path),
 	)
 
+	c.settingsMutex.RLock()
 	labels := c.Settings.BirdNET.Labels
+	c.settingsMutex.RUnlock()
 	speciesList := make([]RangeFilterSpecies, 0, len(labels))
 
 	for _, label := range labels {
@@ -183,21 +185,23 @@ func (c *Controller) GetSpeciesInfo(ctx echo.Context) error {
 
 // getSpeciesInfo retrieves species information including rarity status
 func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) (*SpeciesInfo, error) {
-	// Get the BirdNET instance from the processor
-	if c.Processor == nil || c.Processor.Bn == nil {
+	// Snapshot to avoid TOCTOU race on c.Processor
+	proc := c.Processor
+	if proc == nil || proc.Bn == nil {
 		return nil, errors.Newf("BirdNET processor not available").
 			Category(errors.CategorySystem).
 			Component("api-species").
 			Build()
 	}
 
-	bn := c.Processor.Bn
+	bn := proc.Bn
 
 	// Find the full label for this species from BirdNET labels
 	var matchedLabel string
 	var commonName string
 
-	for _, label := range bn.Settings.BirdNET.Labels {
+	settings := bn.CurrentSettings()
+	for _, label := range settings.BirdNET.Labels {
 		sp := detection.ParseSpeciesString(label)
 		if strings.EqualFold(sp.ScientificName, scientificName) {
 			matchedLabel = label
@@ -257,23 +261,25 @@ func (c *Controller) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLa
 	}
 
 	// Create rarity info
+	settings := bn.CurrentSettings()
 	rarityInfo := &SpeciesRarityInfo{
 		Date:             today.Format(time.DateOnly),
-		LocationBased:    bn.Settings.BirdNET.LocationConfigured,
-		ThresholdApplied: float64(bn.Settings.BirdNET.RangeFilter.Threshold),
+		LocationBased:    settings.BirdNET.LocationConfigured,
+		ThresholdApplied: float64(settings.BirdNET.RangeFilter.Threshold),
 	}
 
 	// Add location if available
 	if rarityInfo.LocationBased {
-		rarityInfo.Latitude = bn.Settings.BirdNET.Latitude
-		rarityInfo.Longitude = bn.Settings.BirdNET.Longitude
+		rarityInfo.Latitude = settings.BirdNET.Latitude
+		rarityInfo.Longitude = settings.BirdNET.Longitude
 	}
 
 	// Find the species score
 	var score float64
 	found := false
+	targetSci := detection.ExtractScientificName(speciesLabel)
 	for _, ss := range speciesScores {
-		if ss.Label == speciesLabel {
+		if strings.EqualFold(detection.ExtractScientificName(ss.Label), targetSci) {
 			score = ss.Score
 			found = true
 			break
@@ -583,16 +589,17 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 		logger.String("path", ctx.Request().URL.Path),
 	)
 
-	// Check if BirdNET processor is available
-	if c.Processor == nil || c.Processor.Bn == nil {
+	// Snapshot to avoid TOCTOU race on c.Processor
+	proc := c.Processor
+	if proc == nil || proc.Bn == nil {
 		return c.HandleError(ctx, errors.Newf("BirdNET processor not available").
 			Category(errors.CategorySystem).
 			Component("api-species").
 			Build(), "BirdNET service unavailable", http.StatusServiceUnavailable)
 	}
 
-	// Check if BirdImageCache is available
-	if c.BirdImageCache == nil {
+	cache := c.BirdImageCache
+	if cache == nil {
 		return c.HandleError(ctx, errors.Newf("image service unavailable").
 			Category(errors.CategorySystem).
 			Component("api-species").
@@ -600,8 +607,8 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 	}
 
 	// Get species name from the taxonomy map using the species code
-	bn := c.Processor.Bn
-	speciesName, exists := classifier.GetSpeciesNameFromCode(bn.TaxonomyMap, speciesCode)
+	bn := proc.Bn
+	speciesName, exists := bn.GetSpeciesNameFromCode(speciesCode)
 
 	if !exists {
 		return c.HandleError(ctx, errors.Newf("species code '%s' not found in taxonomy", speciesCode).

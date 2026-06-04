@@ -92,7 +92,7 @@
 <div class="col-span-12 space-y-4">
   <!-- Page Header -->
   <Card className="bg-[var(--color-base-100)] shadow-sm">
-    <div class="flex flex-col items-center text-center pt-2">
+    <div class="flex flex-col items-center text-center">
       <div
         class="w-20 h-20 rounded-full bg-gradient-to-b from-[var(--surface-200)] to-[var(--color-base-100)] flex items-center justify-center border border-[var(--border-100)]"
       >
@@ -237,20 +237,7 @@
     </div>
   </Card>
 
-  <!-- Step 3: Generate Support Dump -->
-  <Card title={t('reportBug.supportDump.title')} className="bg-[var(--color-base-100)] shadow-sm">
-    <div
-      class="flex items-start gap-3 p-3 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] mb-4"
-    >
-      <Info class="size-5 shrink-0 text-[var(--color-info)]" />
-      <p class="text-sm text-[var(--color-base-content)] opacity-80">
-        {t('reportBug.supportDump.description')}
-      </p>
-    </div>
-    <SupportDumpCard />
-  </Card>
-
-  <!-- Step 4: Open GitHub Issue -->
+  <!-- Step 3: Open GitHub Issue -->
   <Card title={t('reportBug.openIssue.title')} className="bg-[var(--color-base-100)] shadow-sm">
     <p class="text-[var(--color-base-content)] opacity-80 mb-4">
       {t('reportBug.openIssue.description')}
@@ -267,5 +254,18 @@
       {t('reportBug.openIssue.button')}
       <ExternalLink class="size-3 opacity-60" />
     </a>
+  </Card>
+
+  <!-- Step 4: Generate Support Dump -->
+  <Card title={t('reportBug.supportDump.title')} className="bg-[var(--color-base-100)] shadow-sm">
+    <div
+      class="flex items-start gap-3 p-3 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] mb-4"
+    >
+      <Info class="size-5 shrink-0 text-[var(--color-info)]" />
+      <p class="text-sm text-[var(--color-base-content)] opacity-80">
+        {t('reportBug.supportDump.description')}
+      </p>
+    </div>
+    <SupportDumpCard />
   </Card>
 </div>

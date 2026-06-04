@@ -620,6 +620,120 @@ grep -rn 'func.*Add\|func.*Store\|func.*Put' --include="*.go" | grep -v '_test.g
 grep -rn 'sync.Mutex\|sync.RWMutex' -l --include="*.go" | xargs grep -l 'map\[\|^\s*\w\+\s\+\[\]'
 ```
 
+## Context Lifecycle Through Embedded Structs
+
+Context fields on embedded structs may be modified by methods on either the parent or the embedded struct. A goroutine capturing a context set by the parent can be silently killed when an embedded struct's lifecycle method cancels and replaces that context.
+
+```go
+// BAD: Open() initializes monitoringCtx, then goroutine captures it.
+// But StartMonitoring() (on embedded DataStore) cancels and replaces monitoringCtx.
+// The goroutine's context is cancelled shortly after Open() returns.
+
+type DataStore struct {
+    monitoringCtx    context.Context
+    monitoringCancel context.CancelFunc
+}
+
+func (ds *DataStore) StartMonitoring() {
+    if ds.monitoringCancel != nil {
+        ds.monitoringCancel()  // Cancels the context from Open()!
+    }
+    ds.monitoringCtx, ds.monitoringCancel = context.WithCancel(context.Background())
+    // ...
+}
+
+type SQLiteStore struct {
+    DataStore  // Embedded struct
+}
+
+func (s *SQLiteStore) Open() error {
+    // Gate suggested: initialize context before integrity check
+    s.monitoringCtx, s.monitoringCancel = context.WithCancel(context.Background())
+
+    if err := s.performStartupIntegrityCheck(); err != nil {
+        // Goroutine captures s.monitoringCtx for deferred notification
+        go s.notifyCorruptionDeferred(s.monitoringCtx, err)
+    }
+
+    return nil
+    // After Open() returns, caller calls s.StartMonitoring()
+    // which cancels s.monitoringCtx, killing the goroutine above
+}
+
+// GOOD: Use a dedicated context for the goroutine, independent of struct state
+func (s *SQLiteStore) Open() error {
+    if err := s.performStartupIntegrityCheck(); err != nil {
+        // Own context with timeout, not shared struct field
+        notifyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+        go func() {
+            defer cancel()
+            s.notifyCorruptionDeferred(notifyCtx, err)
+        }()
+    }
+    return nil
+}
+```
+
+**When to flag:** Any code that:
+1. Sets a context field on a struct, then captures that field in a goroutine
+2. Uses a context field from an embedded struct without checking who else writes it
+3. Embeds a struct with lifecycle methods that cancel/replace context fields
+
+**Review action:** When code reads or writes a `context.Context` field on a struct:
+1. `grep -rn 'fieldName\s*=' pkg/` to find ALL assignments
+2. Check if any embedded struct method modifies the same field
+3. Check if any goroutine captures the field (will it survive lifecycle transitions?)
+
+**Search patterns:**
+```bash
+# Find all context field assignments in a package
+grep -rn 'monitoringCtx\s*=' internal/datastore/
+grep -rn 'Ctx\s*=\|ctx\s*=' --include="*.go" | grep -v '_test.go' | grep 'context\.'
+
+# Find embedded structs
+grep -rn 'type.*struct {' -A5 --include="*.go" | grep '^\s\+\w\+\s*$\|^\s\+\*\?\w\+\s*$'
+
+# Find lifecycle methods on embedded types
+grep -rn 'func.*Start\|func.*Stop\|func.*Close\|func.*Open\|func.*Init\|func.*Monitor' --include="*.go"
+```
+
+## Fix-Introduces-Bug Pattern
+
+When a gate agent suggests a fix that touches shared state (contexts, mutexes, atomics, channels), the fix itself may introduce a new bug through interactions with code the agent didn't examine. The fix is superficially correct in isolation but wrong in the context of the full system.
+
+```go
+// SCENARIO: Gate finds that a goroutine uses an uninitialized context.
+// Gate suggests: "Initialize the context before launching the goroutine."
+//
+// The fix looks correct in sqlite_integrity.go:
+//   s.monitoringCtx, s.monitoringCancel = context.WithCancel(context.Background())
+//   go s.notifyCorruptionDeferred(s.monitoringCtx, err)
+//
+// But in monitoring.go (not reviewed by the agent):
+//   func (ds *DataStore) StartMonitoring() {
+//       ds.monitoringCancel()  // Cancels the context we just set!
+//       ds.monitoringCtx, ds.monitoringCancel = context.WithCancel(...)
+//   }
+//
+// The fix created a race: the goroutine's context is cancelled
+// 50ms after Open() returns, when StartMonitoring() is called.
+```
+
+**Verification steps after any fix touching shared state:**
+1. Identify the shared state the fix touches (context, mutex, channel, atomic, map, global)
+2. `grep -rn 'stateName' pkg/` to find ALL readers and writers
+3. For each writer: does it conflict with the fix? (cancel, replace, close, reset)
+4. For each reader: does it assume a state the fix changes?
+5. If the state is on an embedded struct: check the embedded struct's methods too
+
+**When to flag:** Any suggested fix that:
+- Initializes or reassigns a struct field that other methods also write
+- Adds a goroutine that captures struct state
+- Modifies shutdown/cleanup ordering
+- Changes when a resource is created or destroyed
+
+**This pattern is a process check, not a code pattern.** It applies during Phase 3 fix verification, not during the initial review.
+
 ## Common Bugs
 
 **Go:**
@@ -667,6 +781,79 @@ let { x, y } = position; // x, y won't update
 let pos = $state({ x: 0, y: 0 });
 // Use pos.x and pos.y
 </script>
+```
+
+## Non-DST-Safe Time Arithmetic
+
+Using `time.Duration` multiplication for calendar-day offsets loses or gains an hour near DST transitions. A "day" is not always 24 hours.
+
+```go
+// BAD: Loses an hour on spring-forward, gains on fall-back
+cutoff := time.Now().Add(-30 * 24 * time.Hour)
+
+// BAD: Same problem with named constant
+const thirtyDays = 30 * 24 * time.Hour
+cutoff := time.Now().Add(-thirtyDays)
+
+// GOOD: DST-safe calendar arithmetic
+cutoff := time.Now().AddDate(0, 0, -30)
+
+// GOOD: When you genuinely need exactly 24*N hours (rare - e.g., cache TTL)
+expiry := time.Now().Add(24 * time.Hour) // 24h TTL is intentionally clock-hours
+```
+
+**When to flag:** Any `N * 24 * time.Hour` (or `N * time.Hour * 24`) used to compute a date boundary, retention window, or "days ago" cutoff. These should use `AddDate(0, 0, -N)`.
+
+**When NOT to flag:** Genuine duration-based timeouts (cache TTL, request timeout, heartbeat interval) where you want exactly N hours regardless of calendar.
+
+**Search patterns:**
+```bash
+# Find day-level duration arithmetic
+grep -rn '24 \* time\.Hour\|time\.Hour \* 24' --include="*.go" | grep -v '_test.go'
+
+# Find patterns like N * 24 * time.Hour
+grep -rn '[0-9]\+ \* 24 \* time\.Hour' --include="*.go"
+```
+
+## Event Emission Ordering (Query-Before-Emit)
+
+In event-sourced patterns, emitting a new event before querying for the previous one creates a race: you may read back your own event instead of the prior state.
+
+```go
+// BAD: Race - may read back your own event as the "previous" one
+func (s *Service) RecordDeployment(ctx context.Context) error {
+    s.events.Emit(ctx, "deploy", "started", metadata)
+    prev, err := s.repo.GetLatestEvent("deploy", "started")
+    // prev might be the one we just emitted!
+    if prev != nil {
+        s.logTimeSinceLast(prev.Timestamp)
+    }
+    return err
+}
+
+// GOOD: Query first, then emit
+func (s *Service) RecordDeployment(ctx context.Context) error {
+    prev, err := s.repo.GetLatestEvent("deploy", "started")
+    if err != nil {
+        return fmt.Errorf("querying previous deployment: %w", err)
+    }
+    s.events.Emit(ctx, "deploy", "started", metadata)
+    if prev != nil {
+        s.logTimeSinceLast(prev.Timestamp)
+    }
+    return nil
+}
+```
+
+**When to flag:** Any code path that (1) emits/inserts an event, then (2) queries for the "latest" or "previous" event of the same type. The query must come before the emit.
+
+**Search patterns:**
+```bash
+# Find emit-then-query patterns (look for Emit followed by Get/Find/Query on same entity)
+grep -rn 'Emit\|EmitEvent\|PublishEvent' --include="*.go" -A10 | grep -i 'latest\|previous\|last\|recent'
+
+# Find event insertion followed by query
+grep -rn 'Create\|Insert\|Save.*Event' --include="*.go" -A10 | grep -i 'GetLatest\|FindLast\|MostRecent'
 ```
 
 ---
@@ -1596,7 +1783,7 @@ grep -rn 'title="[^"$]*[A-Za-z]\|aria-label="[^"$]*[A-Za-z]' --include="*.svelte
 
 # Agent 4: i18n Translation Integrity Patterns
 
-Translation files live at `frontend/static/messages/`. `en.json` is the source of truth. All 14 non-English files must mirror its key structure exactly with properly translated values.
+Translation files live at `frontend/static/messages/`. `en.json` is the source of truth. All 13 non-English files must mirror its key structure exactly with properly translated values.
 
 ## Flattening JSON to Dot-Notation
 
@@ -1620,7 +1807,7 @@ cd frontend/static/messages
 # Generate sorted key lists
 jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > /tmp/en_keys.txt
 
-for lang in cs da de es fi fr hu it lv nl pl pt sk sv; do
+for lang in da de es fi fr hu it lv nl pl pt sk sv; do
   jq -r '[paths(scalars)] | .[] | join(".")' "${lang}.json" | sort > "/tmp/${lang}_keys.txt"
   missing=$(comm -23 /tmp/en_keys.txt "/tmp/${lang}_keys.txt")
   if [ -n "$missing" ]; then
@@ -1631,7 +1818,7 @@ done
 ```
 
 **Example finding:**
-```text
+```
 === fi.json: MISSING KEYS ===
 wizard.steps.locationLanguage.geolocationRequiresHttps
 wizard.steps.locationLanguage.geolocationDenied
@@ -1647,7 +1834,7 @@ Values in non-English files identical to the English value. English placeholders
 ```bash
 cd frontend/static/messages
 
-for lang in cs da de es fi fr hu it lv nl pl pt sk sv; do
+for lang in da de es fi fr hu it lv nl pl pt sk sv; do
   echo "=== ${lang}.json: ENGLISH PLACEHOLDERS ==="
   # Compare values at matching key paths
   jq -r 'paths(scalars) as $p | "\($p | join("."))=\(getpath($p))"' en.json | sort > /tmp/en_kv.txt
@@ -1658,7 +1845,7 @@ done
 ```
 
 **Example finding:**
-```text
+```
 === de.json: ENGLISH PLACEHOLDERS ===
 common.loading=Loading...
 settings.audio.captureLength=Capture Length
@@ -1689,7 +1876,7 @@ Keys present in a non-English file but absent from `en.json`. These are leftover
 ```bash
 cd frontend/static/messages
 
-for lang in cs da de es fi fr hu it lv nl pl pt sk sv; do
+for lang in da de es fi fr hu it lv nl pl pt sk sv; do
   orphaned=$(comm -13 /tmp/en_keys.txt "/tmp/${lang}_keys.txt")
   if [ -n "$orphaned" ]; then
     echo "=== ${lang}.json: ORPHANED KEYS ==="
@@ -1712,7 +1899,7 @@ jq -r '[paths | select(length > 0)] | map(join(".")) | .[]' en.json | sort -u > 
 jq -r '[paths(scalars)] | .[] | join(".")' en.json | sort > /tmp/en_scalar_paths.txt
 comm -23 /tmp/en_all_paths.txt /tmp/en_scalar_paths.txt | sort > /tmp/en_object_paths.txt
 
-for lang in cs da de es fi fr hu it lv nl pl pt sk sv; do
+for lang in da de es fi fr hu it lv nl pl pt sk sv; do
   jq -r '[paths(scalars)] | .[] | join(".")' "${lang}.json" | sort > "/tmp/${lang}_scalar.txt"
   # Flag: path is an object in en.json but a scalar in this file (or vice versa)
   mismatches=$(comm -12 /tmp/en_object_paths.txt "/tmp/${lang}_scalar.txt")
@@ -1724,7 +1911,7 @@ done
 ```
 
 **Example:**
-```text
+```
 en.json:   "common": { "actions": { "download": "Download" } }
 fi.json:   "common": { "actions": "Toiminnot" }
                         ^^^^^^^^^ scalar where en.json has an object
@@ -1740,3 +1927,681 @@ This is always a Critical finding since the i18n library will throw when travers
 | Missing keys (gaps) | **High** - broken UI strings |
 | English placeholders | **High** - untranslated UI |
 | Orphaned keys | **Low** - dead code, cleanup |
+
+---
+
+# Agent 5: Integration & Wiring Patterns
+
+Agent 5 reads full changed files (not the diff) and checks how new code integrates with existing pipelines. It receives a structured "what's new" list from the coordinator and uses grep/search to trace data flow through the codebase.
+
+## Check 1: End-to-End Data Flow
+
+For each new struct field or type, trace every stage of the pipeline: populate -> store -> serialize -> consume. Flag any stage that doesn't handle the new field.
+
+**Pattern:** A new field is added to a data struct. The collection code populates it, but the serialization/archive code was never updated to write it. The data is collected and silently dropped.
+
+```go
+// Trace a new struct field through the pipeline:
+
+// Stage 1: Population (Collect method)
+func (c *Collector) Collect(ctx context.Context, opts Options) (*Report, error) {
+    data := &Report{}
+    if opts.IncludeMetrics {
+        data.Metrics, _ = c.collectMetrics()  // Populated here
+    }
+    return data, nil
+}
+
+// Stage 2: Serialization (Export method) - CHECK THIS EXISTS
+func (c *Collector) Export(data *Report) ([]byte, error) {
+    // Does this method write data.Metrics to the output?
+    // If not: High severity - data silently dropped
+}
+
+// Stage 3: Consumption (consumer reads the export)
+// Does the consumer know how to deserialize the new data type?
+```
+
+**Search commands to trace data flow:**
+```bash
+# Find where a new struct field is read (consumed)
+grep -rn 'Metrics\|\.Metrics' --include="*.go"
+
+# Find all serialization points for a struct type
+grep -rn 'func.*Report.*\(Write\|Marshal\|Encode\|Export\|Serialize\)' --include="*.go"
+
+# Find all places a struct is constructed
+grep -rn 'Report{' --include="*.go"
+```
+
+## Check 2: Validation & Guard Completeness
+
+When a new option/flag is added to a struct, find all validation functions that enumerate the struct's fields. Flag if the new field is missing from any enumeration.
+
+**Pattern:** A new boolean flag is added to an options struct, but the validation check that enumerates all flags ("at least one must be true") only lists the original flags.
+
+```go
+// New flag added to options struct
+type ExportOptions struct {
+    IncludeHeaders  bool
+    IncludeBody     bool
+    IncludeMetadata bool
+    IncludeMetrics  bool  // NEW
+}
+
+// Validation function - does it know about the new flag?
+func (opts ExportOptions) Validate() error {
+    // BAD: Only checks original 3 flags
+    if !opts.IncludeHeaders && !opts.IncludeBody &&
+       !opts.IncludeMetadata {
+        return errors.New("at least one include option must be true")
+    }
+
+    // GOOD: Includes new flag
+    if !opts.IncludeHeaders && !opts.IncludeBody &&
+       !opts.IncludeMetadata && !opts.IncludeMetrics {
+        return errors.New("at least one include option must be true")
+    }
+    return nil
+}
+```
+
+**Search commands:**
+```bash
+# Find all validation functions for an options struct
+grep -rn 'func.*Options.*\(Validate\|validate\|check\|Check\)' --include="*.go"
+
+# Find boolean enumerations (the "at least one" pattern)
+grep -rn 'Include\|include' --include="*.go" | grep '&&\|if !'
+
+# Find switch/case that may need new cases
+grep -rn 'switch.*opts\.\|case.*opts\.' --include="*.go"
+```
+
+## Check 3: Sibling Function Consistency
+
+When a function is modified, find sibling functions and check if the same change should apply. Siblings can be identified by:
+- Same receiver type (method on same struct)
+- Same file, similar name pattern (e.g., `checkSQLite*` / `checkMySQL*`)
+- Same semantic role (both handle settings updates, both process events, both validate input)
+
+**Pattern (name-based siblings):** A logging call is added to all return points in `checkSQLiteMigrationState` but `checkMySQLMigrationState` (same file, same structure, same number of return points) gets none.
+
+**Pattern (role-based siblings):** A `settings_saved` event is emitted from `UpdateSettings` but not from `UpdateSectionSettings`. These are sibling functions performing the same domain operation (modifying settings) even though their names differ.
+
+```go
+// Sibling by name pattern:
+func checkSQLiteMigrationState(db *sql.DB) MigrationDecision { ... }  // Modified
+func checkMySQLMigrationState(db *sql.DB) MigrationDecision { ... }   // Check this!
+
+// Sibling by semantic role:
+func (h *Handler) UpdateSettings(ctx echo.Context) error {
+    // ... modifies settings, emits "settings_saved" event
+}
+func (h *Handler) UpdateSectionSettings(ctx echo.Context) error {
+    // ... also modifies settings - does it also emit the event?
+}
+```
+
+**Search commands:**
+```bash
+# Find sibling functions by name pattern
+grep -rn 'func.*check.*MigrationState\|func.*Check.*Migration' --include="*.go"
+
+# Find functions with same receiver type
+grep -rn 'func (h \*Handler)' --include="*.go" | grep -i 'update\|save\|settings'
+
+# Find all event emission sites for a specific event
+grep -rn 'Emit.*settings_saved\|Emit.*"settings"' --include="*.go"
+
+# Find functions performing same domain operation
+grep -rn 'func.*Update.*Settings\|func.*Save.*Settings\|func.*Modify.*Settings' --include="*.go"
+```
+
+## Check 4: Pipeline Stage Coverage
+
+For each new collection/provider method, trace the full pipeline and flag missing stages.
+
+**Pattern:** A new `collectMetrics()` method is added to a collector. The collect stage works, but the export stage has no code to write metrics to the output.
+
+```
+Pipeline: collect -> store in struct -> write to archive -> read from archive
+                                        ^^^^^^^^^^^^^^
+                                        Missing stage!
+```
+
+**Search commands:**
+```bash
+# Find all methods on a collector/provider type
+grep -rn 'func (c \*Collector)' --include="*.go"
+
+# Find archive/write/serialize methods
+grep -rn 'func.*\(Create\|Write\|Build\).*\(Archive\|Output\|Response\)' --include="*.go"
+
+# Find consumer/reader methods
+grep -rn 'func.*\(Read\|Parse\|Load\|Extract\).*\(Archive\|Dump\|Support\)' --include="*.go"
+```
+
+## Check 5: Constructor & Factory Consistency
+
+When a struct gains a new field, check all constructors and factory functions that create instances. Flag any that don't initialize the new field.
+
+```go
+type Config struct {
+    Host     string
+    Port     int
+    MaxRetry int  // NEW field
+}
+
+// Constructor 1 - initializes MaxRetry
+func NewConfig(host string, port int) *Config {
+    return &Config{Host: host, Port: port, MaxRetry: 3}
+}
+
+// Constructor 2 - MISSING MaxRetry initialization
+func NewConfigFromEnv() *Config {
+    return &Config{
+        Host: os.Getenv("HOST"),
+        Port: envInt("PORT", 8080),
+        // MaxRetry not set - defaults to 0, which may cause issues
+    }
+}
+
+// Factory function - also MISSING
+func DefaultConfig() *Config {
+    return &Config{Host: "localhost", Port: 8080}
+    // MaxRetry not set
+}
+```
+
+**Search commands:**
+```bash
+# Find all constructors for a type
+grep -rn 'func New.*Config\|func Default.*Config\|func.*Config{' --include="*.go"
+
+# Find struct literal construction
+grep -rn 'Config{' --include="*.go" | grep -v '_test.go'
+
+# Find factory methods returning the type
+grep -rn 'func.*\*Config' --include="*.go" | grep -v '_test.go'
+```
+
+## Check 6: Event Schema Consistency Across Emission Sites
+
+When the same event type is emitted from multiple code paths, all emissions must have a consistent metadata schema. Missing keys at some sites means consumers get inconsistent data.
+
+**Pattern:** A `delivery_attempt` event is emitted from 3 code paths with inconsistent metadata:
+- Success path: includes `attempts`, `duration`, `status`
+- Circuit-breaker path: includes `duration`, `status` but NOT `attempts`
+- Final-failure path: includes `attempts`, `status` but NOT `error`
+
+```go
+// Site 1: Success path
+events.Emit(ctx, "notification", "delivery_attempt", "success", map[string]any{
+    "attempts": attempts,
+    "duration": elapsed,
+    "status":   "delivered",
+})
+
+// Site 2: Circuit-breaker path - MISSING "attempts"
+events.Emit(ctx, "notification", "delivery_attempt", "circuit_open", map[string]any{
+    "duration": elapsed,
+    "status":   "circuit_open",
+    // "attempts" key is missing!
+})
+
+// Site 3: Final failure - MISSING "error"
+events.Emit(ctx, "notification", "delivery_attempt", "failed", map[string]any{
+    "attempts": attempts,
+    "status":   "failed",
+    // "error" key is missing (present in success path as optional)
+})
+```
+
+**Search commands:**
+```bash
+# Find ALL emission sites for a specific event type
+grep -rn 'Emit.*"delivery_attempt"\|Emit.*delivery_attempt' --include="*.go"
+
+# Find all Emit calls and group by event name
+grep -rn '\.Emit(' --include="*.go" | sort
+
+# Compare metadata keys across sites (manual review needed)
+grep -rn '\.Emit(' --include="*.go" -A5 | grep 'map\[string\]any{'
+```
+
+**Review action:** For each `Emit()` call in changed code:
+1. Extract the entity + action pair (e.g., "notification", "delivery_attempt")
+2. Search for ALL other emissions with the same pair
+3. List metadata keys at each site
+4. Flag any site missing keys present at other sites
+
+## Check 7: Recursive Type Handling in Serialization Pipelines
+
+When a function processes values via type-switch, it must handle all composite types that can appear in the input. Missing a composite type means nested data passes through unprocessed.
+
+**Pattern:** A `flattenInto` function recurses into `map[string]any` but not `[]any` slices. Sensitive fields nested inside arrays (e.g., `targets.0.password`) pass through unredacted because the redaction function never sees the leaf keys.
+
+```go
+// BAD: Handles maps but not slices - array contents pass through unprocessed
+func flattenInto(prefix string, v any, out map[string]string) {
+    switch val := v.(type) {
+    case map[string]any:
+        for k, v := range val {
+            flattenInto(prefix+"."+k, v, out)
+        }
+    case string:
+        out[prefix] = val
+    case float64:
+        out[prefix] = fmt.Sprintf("%v", val)
+    // Missing: []any - arrays are silently skipped!
+    }
+}
+
+// GOOD: Handle all composite types
+func flattenInto(prefix string, v any, out map[string]string) {
+    switch val := v.(type) {
+    case map[string]any:
+        for k, v := range val {
+            flattenInto(prefix+"."+k, v, out)
+        }
+    case []any:
+        for i, v := range val {
+            flattenInto(fmt.Sprintf("%s.%d", prefix, i), v, out)
+        }
+    case []map[string]any:
+        for i, m := range val {
+            flattenInto(fmt.Sprintf("%s.%d", prefix, i), m, out)
+        }
+    case string:
+        out[prefix] = val
+    default:
+        out[prefix] = fmt.Sprintf("%v", val)
+    }
+}
+```
+
+**Search commands:**
+```bash
+# Find type-switch on any/interface{}
+grep -rn 'switch.*:=.*\.\(type\)' --include="*.go"
+
+# Find flatten/walk/traverse functions
+grep -rn 'func.*\(flatten\|walk\|traverse\|visit\|recurse\)' --include="*.go" -i
+
+# Check if a type-switch handles both map and slice cases
+grep -rn 'case map\[string\]any' --include="*.go" -A20 | grep -c 'case \[\]any'
+
+# Find functions that feed into security operations
+grep -rn 'Sensitive\|Redact\|Scrub\|Sanitize\|Mask' --include="*.go" | grep -i 'func\|call'
+```
+
+**Review action:** For any function with a `switch v.(type)` that handles `map[string]any`:
+1. Check if `[]any` is also handled (array of mixed types)
+2. Check if `[]map[string]any` is also handled (array of objects)
+3. Assess whether the missing type could carry security-sensitive data
+4. Severity: High if the function feeds into redaction/scrubbing, Medium otherwise
+
+## Check 8: Embedded Struct Method Tracing
+
+When a struct embeds another struct, method calls on the outer struct may resolve to the embedded struct's methods via Go's promotion rules. These promoted methods can modify shared state (contexts, mutexes, channels) that the outer struct's code also uses, creating hidden conflicts.
+
+```go
+// SQLiteStore embeds DataStore
+type SQLiteStore struct {
+    DataStore  // Embedded - its methods are promoted to SQLiteStore
+}
+
+// Calling s.StartMonitoring() on a SQLiteStore actually calls DataStore.StartMonitoring()
+// This method cancels and replaces monitoringCtx, which Open() may have just set
+
+type DataStore struct {
+    monitoringCtx    context.Context
+    monitoringCancel context.CancelFunc
+}
+
+func (ds *DataStore) StartMonitoring() {
+    if ds.monitoringCancel != nil {
+        ds.monitoringCancel()  // Cancels any existing context
+    }
+    ds.monitoringCtx, ds.monitoringCancel = context.WithCancel(context.Background())
+    go ds.monitorLoop()  // Uses the NEW context
+}
+```
+
+**Review action:** When reviewing a struct that embeds another struct:
+1. Identify all embedded structs: `grep -rn 'type.*struct {' -A10 file.go | grep '^\s\+\*\?\w\+\s*$'`
+2. For each embedded struct, find its lifecycle methods: `grep -rn 'func.*EmbeddedType.*\(Start\|Stop\|Close\|Open\|Init\|Monitor\|Shutdown\)' --include="*.go"`
+3. Check if any embedded method modifies the same state that the changed code uses
+4. Trace the call sequence: does the caller invoke both the changed code AND the embedded method? In what order?
+
+**Severity guide:**
+- **High**: Embedded method cancels/replaces state (context, channel) that changed code depends on
+- **Medium**: Embedded method modifies state that changed code reads but doesn't depend on for correctness
+- **Low**: Embedded method touches unrelated state
+
+**Search patterns:**
+```bash
+# Find all embedded structs in a type
+grep -rn 'type SQLiteStore struct' -A20 --include="*.go" | grep '^\s\+\*\?\w\+\s*$'
+
+# Find methods on the embedded type
+grep -rn 'func (ds \*DataStore)' --include="*.go"
+
+# Find all callers that invoke both Open() and StartMonitoring() in sequence
+grep -rn 'Open()\|StartMonitoring()' --include="*.go"
+```
+
+## General Search Strategy for Agent 5
+
+Agent 5 should use these patterns to systematically trace new code through the codebase:
+
+```bash
+# 1. For each new struct field: find all references
+grep -rn 'NewFieldName\|\.NewFieldName' --include="*.go"
+
+# 2. For each new function: find all callers
+grep -rn 'NewFunctionName(' --include="*.go"
+
+# 3. For each modified function: find siblings
+grep -rn 'func.*ReceiverType' --include="*.go"
+
+# 4. For each new event emission: find all same-type emissions
+grep -rn 'Emit.*"entity".*"action"' --include="*.go"
+
+# 5. For each new interface method: find all implementations
+grep -rn 'func.*InterfaceName\|func.*).*MethodName(' --include="*.go"
+```
+
+## Check 9: Read-Time Filter vs Write-Time Invariant (Semantic Regression via Feature Interaction)
+
+This is the one Agent 5 check that requires whole-codebase reasoning rather than wiring completeness. It catches changes that are locally correct, fully tested, and backward compatible on the wire, yet silently contradict the intent of another feature.
+
+**Trigger (mechanical, to keep precision high).** Only apply this check when the change introduces a NEW filter on a *persistent* data entity (DB rows, cache entries, event-store records) in a READ path:
+
+- a new SQL `WHERE`/`HAVING` clause on a query that returns stored records,
+- a new `.filter()` / predicate / `continue`-to-skip over stored rows before returning them,
+- a new conditional that excludes stored records from an API response, list, export, or default render.
+
+If the change does not add a read-time filter over persisted data, skip this check; it does not apply to new UI toggles, in-memory transforms of request-scoped data, or filters over data that never hits storage.
+
+**Method (structural trace, NOT keyword grep).** When the trigger fires:
+
+1. Identify the model/entity being filtered (e.g. `Detection`, `Note`).
+2. Trace that model's WRITE path: find where rows are created/saved (`Save`, `Create`, an ingestion or flush function). Read the validation immediately preceding the write.
+3. Compare the new read-time filter against the write-time logic and answer:
+   - **(a) Redundant?** If every stored row already satisfies the criterion at write time, the read filter does nothing useful (and may mislead future readers into thinking it does).
+   - **(b) Contradictory?** If the write path admits rows by a *finer-grained or dynamically-adjusted* version of the same criterion (per-entity overrides, adaptive/dynamic thresholds, per-model settings, time-varying gates), a coarser *static* read filter will silently drop rows that were stored on purpose.
+
+Case (b) is a **behavioral/intent conflict**: route it to Phase 3 category (d) Maintainer-confirm. Do not auto-fix. Severity **High** (legitimate stored data hidden from the user).
+
+```go
+// WORKED EXAMPLE (real PR, rejected by maintainer)
+//
+// Change: dashboard "recent detections" now calls a new datastore method that runs
+//   WHERE confidence >= settings.BirdNET.Threshold   // static global threshold
+// API is opt-in (?aboveThreshold=true), default unchanged. Additive, tested, CI-green.
+// Reviewers 1-4 and 6 all pass it on contract grounds: no wire/schema/contract break.
+//
+// Check 9 trigger fires: new WHERE on the persisted Detection entity in a read path.
+// Trace the WRITE path -> internal/analysis/processor/processor.go, shouldFilterDetection():
+//   a detection is saved only if result.Confidence > effectiveThreshold, where
+//   effectiveThreshold may be a per-species custom threshold, the bat-model threshold,
+//   or a DYNAMICALLY LOWERED threshold (dynamic-threshold feature drops the bar for a
+//   species already confirmed at high confidence, down to a 0.20 floor).
+//
+// => Every stored row already passed its EFFECTIVE threshold at write time.
+//    The new read filter re-applies the COARSER static global threshold, so it hides
+//    detections that dynamic/per-species/bat thresholds intentionally let through
+//    (e.g. a confirmed species later detected at 0.50 while global is 0.80).
+//
+// Verdict: case (b) contradiction. The change defeats the dynamic-threshold feature.
+// Action: category (d) Maintainer-confirm, High. Name the colliding feature
+// (dynamic confidence threshold), state the consequence (legitimate detections vanish
+// from the dashboard), hold for maintainer decision. Do NOT auto-fix or revert.
+```
+
+## Severity Guide
+
+| Category | Severity | Description |
+|----------|----------|-------------|
+| Data silently dropped | **High** | New data collected but never serialized/archived/returned |
+| Read filter contradicts write-time invariant | **High** | Static read filter hides rows an adaptive/per-entity write gate kept on purpose (category d, maintainer-confirm) |
+| Security gap in recursive processing | **High** | Sensitive data in unhandled composite types bypasses redaction |
+| Validation gap | **Medium** | New option not included in "at least one required" check |
+| Event schema inconsistency | **Medium** | Metadata keys differ across emission sites for same event |
+| Constructor missing new field | **Medium** | New field not initialized in some construction paths |
+| Sibling function asymmetry | **Medium** | Change applied to one function but not its semantic sibling |
+| Cosmetic inconsistency | **Low** | Non-functional naming or ordering differences |
+
+---
+
+# Agent 6: Regression & Backward Compatibility Patterns
+
+Agent 6 (Reviewer 6) finds changes that break or silently alter behavior for users who already run the software and then upgrade. It does its own diff analysis first, then (if a secondary model is available) runs an independent cross-validation to confirm/refute and extend its findings.
+
+**The core distinction:** a regression/compat issue requires a *prior working behavior* to break. New code with no predecessor cannot regress. So read the diff, not just the current file: the removed (`-`) and changed lines are where breaks hide. A field that disappears, a default that flips, a column that is dropped, a flag that is renamed: these are invisible if you only look at the final state. But do NOT mistake "additive on the wire" for "behavior-preserving for the user" (see Surface 6).
+
+## The Diff-Comparison Method
+
+For each hunk in the diff, ask in order:
+
+1. **Did a name in a stable contract change?** Struct tags (`yaml`, `koanf`, `mapstructure`, `json`), exported identifiers, route paths, flag names, DB column names. A rename is a removal plus an addition: old clients/configs/databases still use the old name.
+2. **Did a default change?** A literal default in a config struct, flag definition, or `if x == "" { x = ... }` fallback. Users who never set the value inherit the new behavior silently.
+3. **Did a type change?** Scalar to list, string to enum, int to struct. Existing serialized data (config file, DB row, API payload) no longer unmarshals.
+4. **Did existing logic change its output?** A threshold, comparison, rounding, ordering, or branch that now produces a different result for an input that previously worked.
+5. **Is the change additive and safe, or does it require existing data to migrate?** Additive (new optional field with a default) is safe. Destructive (drop/rename/retype) needs a migration or alias.
+
+## Surface 1: Config & Settings Schema
+
+BirdNET-Go loads `config.yaml` into a settings struct. The struct tag is the wire contract with every existing config file on disk. Renaming or removing a tag orphans that user's value: it loads as the zero value or default, silently changing behavior.
+
+```go
+// BAD: renaming the yaml tag orphans every existing config.yaml that used "locale"
+type Settings struct {
+    // before: Locale string `yaml:"locale"`
+    Language string `yaml:"language"` // existing "locale:" lines now ignored -> default
+}
+
+// GOOD: keep the old key working via an alias / deprecation, or migrate on load
+type Settings struct {
+    Language string `yaml:"language"`
+    Locale   string `yaml:"locale"` // deprecated alias; migrate to Language on load, then warn
+}
+```
+
+```go
+// BAD: changing a default silently alters behavior for users who never set it
+// before: Threshold float64 with default 0.8
+DefaultThreshold = 0.3 // every existing install starts detecting far more / fewer birds
+
+// A default change is a behavioral change. It may be intended, but it MUST be
+// called out (release notes) and, for detection-affecting defaults, justified.
+```
+
+**What to flag:** any removed/renamed/retyped struct tag in a settings type; any changed literal default; any new *required* field with no default that breaks loading of older configs; removal of a config section without a migration path.
+
+**Search commands:**
+```bash
+# Tag changes in the diff (look for - lines removing/renaming yaml/koanf/json tags)
+git diff -- 'internal/conf/*' | grep -E '^[-+].*`(yaml|koanf|mapstructure|json):'
+
+# Find the loader / migration code that should absorb renamed keys
+grep -rn 'koanf\|viper\|yaml.Unmarshal\|UnmarshalExact\|migrate.*[Cc]onfig' internal/conf/
+```
+
+## Surface 2: REST API v2 Contracts
+
+Handlers and response structs under `internal/api/v2/` define the contract the frontend and any external client depend on. Removing or renaming a `json` field, changing a status code, or changing a route is a breaking change for anything already calling that endpoint.
+
+```go
+// BAD: renaming a json field breaks every client reading "common_name"
+type DetectionResponse struct {
+    // before: CommonName string `json:"common_name"`
+    Name string `json:"name"` // frontend + API consumers still read common_name -> undefined
+}
+
+// GOOD: additive change - new field, old fields preserved
+type DetectionResponse struct {
+    CommonName string `json:"common_name"`
+    Name       string `json:"name,omitempty"` // new, optional; old clients ignore it
+}
+```
+
+**What to flag:** removed/renamed/retyped `json` response fields; changed or removed route paths/methods; changed HTTP status codes for the same condition; new required request params or body fields; renamed query parameters.
+
+**Search commands:**
+```bash
+# json tag and route changes in the API diff
+git diff -- 'internal/api/v2/*' | grep -E '^[-+].*(`json:|e\.(GET|POST|PUT|DELETE|PATCH)\(|http\.Status)'
+
+# Confirm the frontend still references any field you changed
+grep -rn 'common_name\|fieldYouChanged' frontend/src
+```
+
+## Surface 3: DB Schema & Migrations
+
+GORM models map to columns in the user's existing SQLite/MySQL database. AutoMigrate adds new columns/tables but does NOT drop, rename, or retype safely: a rename appears as "drop old column + add new column", losing the data in the old column. Retyping can fail or silently coerce.
+
+```go
+// BAD: renaming a model field renames the column -> AutoMigrate adds a new empty
+// column and abandons the old one; existing rows lose the value.
+type Note struct {
+    // before: ConfidenceScore float64
+    Score float64 // old "confidence_score" data stranded / dropped
+}
+
+// GOOD: additive only, or an explicit migration that copies data before drop
+// 1. add new column, 2. backfill from old, 3. drop old in a later release
+```
+
+**What to flag:** dropped or renamed model fields/columns; retyped columns; new `NOT NULL` columns without a default (fails on existing rows); migrations that are destructive or have no down/rollback; any non-additive change lacking explicit migration code.
+
+**Search commands:**
+```bash
+# Model field changes in the datastore diff
+git diff -- 'internal/datastore/*' | grep -E '^[-+]\s+[A-Z]\w+\s+'
+
+# Find AutoMigrate / explicit migration code
+grep -rn 'AutoMigrate\|Migrator()\|func.*[Mm]igrate' internal/datastore/
+```
+
+## Surface 4: CLI Flags & User UX
+
+Cobra flags, their defaults, and detection-affecting defaults are part of the user-visible contract. Removing or renaming a flag breaks scripts and systemd units; changing a default changes behavior for everyone who relied on it.
+
+```go
+// BAD: renaming a flag breaks existing invocations and install.sh / systemd units
+// before: cmd.Flags().String("rtsp-url", "", "...")
+cmd.Flags().String("rtsp", "", "...") // scripts passing --rtsp-url now error out
+
+// GOOD: keep the old flag as a hidden deprecated alias that maps to the new one
+cmd.Flags().String("rtsp", "", "...")
+cmd.Flags().String("rtsp-url", "", "deprecated: use --rtsp")
+_ = cmd.Flags().MarkDeprecated("rtsp-url", "use --rtsp")
+```
+
+Also flag changes to user-parsed output: clip filename templates, export/CSV column order, log line formats, and notification payloads. Users and downstream scripts parse these.
+
+**Search commands:**
+```bash
+# Flag definitions and defaults changed in the diff
+git diff | grep -E '^[-+].*(Flags\(\)\.|MarkDeprecated|filenameTemplate|default.*[Tt]hreshold)'
+
+# Find where defaults / thresholds live
+grep -rn 'Flags()\.\|threshold\|overlap\|sensitivity' --include="*.go" cmd/ internal/
+```
+
+## Surface 5: Regressions in Existing Logic
+
+A pure logic change with no schema involved can still break a path that worked. Look for changed conditionals, thresholds, loop bounds, error handling that now returns early, validation that now rejects previously-accepted input, or reordered operations that change observable results.
+
+```go
+// BAD: tightened validation now rejects inputs the old code accepted
+// before: if name == "" { return errEmpty }
+if !isValidScientificName(name) { return errInvalid } // existing data with loose names now fails
+
+// BAD: changed comparison flips behavior at the boundary
+// before: if score >= threshold
+if score > threshold { ... } // detections exactly at threshold no longer fire
+```
+
+**Review action:** for every changed conditional/threshold/validation, construct one input that the *old* code handled and confirm the *new* code still handles it the same way. If it does not, that is a regression unless intended and documented.
+
+## Surface 6: Additive-on-the-Wire but Behavior-Changing (Feature Interaction)
+
+A change can be fully additive at the API/DB/CLI contract layer (a new opt-in query param, a new optional field, a new column) and STILL regress behavior, when an existing client surface is modified to consume it in a way that alters what existing users see or do. The user experience is what regresses, not the JSON contract.
+
+The highest-value case is the **read-time filter vs write-time invariant** conflict (also covered by Reviewer 5 check 9): a new read-path filter over persisted data re-applies a coarser criterion than the write path already enforced, hiding rows that an adaptive or per-entity feature (dynamic thresholds, per-species overrides, per-model settings) deliberately stored.
+
+```go
+// WORKED EXAMPLE (real PR, rejected by maintainer)
+//
+// Additive on the wire: new opt-in GET /api/v2/detections/recent?aboveThreshold=true,
+// default unchanged. But the dashboard (an existing surface) was switched to pass
+// aboveThreshold=true, applying WHERE confidence >= settings.BirdNET.Threshold.
+//
+// Every stored detection already passed its EFFECTIVE threshold at write time
+// (per-species / bat-model / DYNAMICALLY-LOWERED). The static global read filter hides
+// detections the dynamic-threshold feature intentionally kept (e.g. 0.50 while global 0.80).
+//
+// Verdict: behavioral/intent conflict. Route to Phase 3 category (d) Maintainer-confirm.
+// Do NOT auto-fix. Severity High.
+```
+
+**Review action:** when an existing client surface (dashboard call, default-rendered list, default report, existing workflow) is changed to consume a new additive field/param, ask "what does an existing user see differently after upgrade, and does that contradict the intent of another feature?" If yes, this is category (d), High, hold for maintainer.
+
+## Step 2: Secondary-Model Cross-Validation
+
+After Step 1, if you have access to an independent secondary model (a different model family than the one running this review), use it to confirm/refute your candidates and surface anything missed. The reference mechanism in this environment is the Gemini CLI, which any tool with shell access can invoke. The secondary model can only read files inside the project workspace, so write the diff to a temp file in the repo, then remove it afterward.
+
+```bash
+# Capture the diff so the secondary model can see removed/old lines (use "git diff HEAD" if changes are staged)
+git diff > .preflight-regression-review.diff
+
+gemini -m gemini-3-pro-preview -p "REVIEW ONLY - Do NOT modify any files.
+
+Project: BirdNET-Go (Go backend + Svelte frontend). I am cross-validating a pre-push review focused ONLY on REGRESSIONS, BACKWARD-COMPATIBILITY breaks, and user-facing BEHAVIORAL changes that would hurt EXISTING users when they upgrade. Ignore generic code quality, style, and unrelated bugs; other reviewers cover those.
+
+The change set is in .preflight-regression-review.diff (read it to see removed/old lines). Current file state is in these files:
+<absolute paths of changed files>
+
+Focus surfaces:
+1) Config/settings schema: renamed/removed/retyped yaml/koanf tags, changed defaults, configs that will not load after upgrade.
+2) REST API v2 contracts: removed/renamed/retyped JSON fields, changed paths/methods/status codes, new required params.
+3) DB schema and migrations: dropped/renamed/retyped columns, non-additive or destructive migrations, data loss on upgrade.
+4) CLI flags and defaults: removed/renamed flags, changed defaults, changed detection thresholds, changed output/notification formats users parse.
+5) Regressions: logic changes that alter output for inputs that previously worked.
+6) Additive-on-the-wire but behavior-changing: a new optional field/param that an existing surface (dashboard, default list) now consumes in a way that changes what existing users see, especially a read-time filter that contradicts a write-time invariant.
+
+I found these candidate issues:
+<numbered list: surface, change old -> new, file:line, why it breaks for existing users>
+
+For EACH of my candidates, reply CONFIRMED or REFUTED with a one-line reason. Then list any ADDITIONAL regression / backward-compat / behavioral issues I missed, each with file:line and a suggested migration path. Be specific and cite the diff; do not restate generic best practices."
+
+# Clean up so the temp diff is never committed
+rm -f .preflight-regression-review.diff
+```
+
+If your environment exposes a different secondary model (not Gemini), use that model with the same prompt and the same temp-diff method. If NO secondary model is available, do not silently skip the step: proceed with Step 1 findings only and state in the report that secondary-model cross-validation was unavailable, so the maintainer knows the regression pass was single-model.
+
+Reconcile: keep CONFIRMED findings, drop convincingly REFUTED ones (note any disagreement you are unsure about), and verify each new secondary-model-surfaced issue against the diff before adding it. Do not blindly accept the secondary model's output; it is a second opinion, not the verdict.
+
+## Severity Guide
+
+| Category | Severity | Description |
+|----------|----------|-------------|
+| Silent data loss on upgrade | **Critical** | Destructive/renaming migration, dropped column with live data, config that fails to load |
+| Breaking contract change, no migration | **High** | Removed/renamed API field or config key, removed CLI flag, retyped persisted field |
+| Detection-affecting default change | **High** | Changed threshold/sensitivity/default that silently alters what users detect |
+| Read filter contradicts write-time invariant | **High** | Static read filter hides rows an adaptive/per-entity write gate kept on purpose (category d, maintainer-confirm) |
+| Undocumented behavioral change | **Medium** | Defensible change with no deprecation path or release-note callout |
+| Changed user-parsed output format | **Medium** | Filename template, CSV columns, log/notification format that scripts parse |
+| Cosmetic / easily tolerated | **Low** | Change unlikely to affect any real existing user |
+
+## When NOT to Flag
+
+- Purely additive changes that NO existing surface consumes differently: a new optional config key with a default, a new `omitempty` JSON field, a new nullable column, a new CLI flag. Old configs/clients/databases keep working AND no existing rendered behavior changes.
+- New features with no prior behavior to regress and no existing surface rewired to use them.
+- Internal/unexported refactors that do not cross a user-visible contract (config, API, DB, CLI, parsed output) and do not change observable behavior.
+- Changes already paired with a migration, alias, or deprecation shim that preserves the old path.

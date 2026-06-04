@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -99,6 +100,15 @@ var ValidStreamTypes = map[string]bool{
 	StreamTypeUDP:  true,
 }
 
+// validSampleRates is the canonical list of supported capture sample rates (sorted ascending).
+var validSampleRates = []int{48000, 96000, 192000, 256000, 384000}
+
+// ValidSampleRates returns a copy of the canonical sample rate list.
+// Returning a clone prevents callers from mutating the shared source of truth.
+func ValidSampleRates() []int {
+	return slices.Clone(validSampleRates)
+}
+
 // Validate validates a single stream configuration
 func (s *StreamConfig) Validate() error {
 	// Normalize fields in-place so downstream code sees trimmed values.
@@ -128,6 +138,11 @@ func (s *StreamConfig) Validate() error {
 	// Validate transport (only tcp/udp allowed, empty defaults to tcp)
 	if s.Transport != "" && s.Transport != "tcp" && s.Transport != "udp" {
 		return fmt.Errorf("invalid transport '%s' for '%s': must be tcp or udp", s.Transport, s.Name)
+	}
+
+	// Validate channel mode (empty defaults to downmix, explicit values must be valid)
+	if s.ChannelMode != "" && !ValidChannelModes[s.ChannelMode] {
+		return fmt.Errorf("invalid channel mode '%s' for '%s': must be downmix, left, or right", s.ChannelMode, s.Name)
 	}
 
 	// Validate URL scheme matches type
@@ -304,13 +319,13 @@ func (a *AudioSourceConfig) Validate() error {
 	}
 
 	// Validate sample rate if specified (0 means use default 48000)
-	// NOTE: These rates must stay in sync with audiocore.CandidateSampleRates.
 	if a.SampleRate != 0 {
-		validRates := map[int]struct{}{
-			48000: {}, 96000: {}, 192000: {}, 256000: {}, 384000: {},
-		}
-		if _, ok := validRates[a.SampleRate]; !ok {
-			return fmt.Errorf("audio source '%s': sample rate %d Hz is not a supported value (valid: 48000, 96000, 192000, 256000, 384000)", a.Name, a.SampleRate)
+		if !slices.Contains(validSampleRates, a.SampleRate) {
+			rateStrs := make([]string, len(validSampleRates))
+			for i, r := range validSampleRates {
+				rateStrs[i] = strconv.Itoa(r)
+			}
+			return fmt.Errorf("audio source '%s': sample rate %d Hz is not a supported value (valid: %s)", a.Name, a.SampleRate, strings.Join(rateStrs, ", "))
 		}
 	}
 
@@ -387,8 +402,6 @@ func validateAudioSettings(settings *AudioSettings) error {
 	// Validate and determine the effective FFmpeg path
 	validatedFfmpegPath, ffmpegErr := ValidateToolPath(settings.FfmpegPath, GetFfmpegBinaryName())
 	if ffmpegErr != nil {
-		GetLogger().Warn("FFmpeg validation failed", logger.Error(ffmpegErr), logger.String("impact", "Audio export/conversion requiring FFmpeg might be disabled or use defaults"))
-		// Log validation warning for telemetry
 		logValidationWarning(ffmpegErr, "audio-tool-ffmpeg", "ffmpeg-not-available")
 		settings.clearFfmpegMetadata()
 	} else {

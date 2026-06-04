@@ -8,6 +8,7 @@ import (
 	"regexp"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // MinSoundLevelInterval is the minimum sound level interval in seconds to prevent excessive CPU usage
@@ -82,8 +83,15 @@ func (ve ValidationError) Error() string {
 	return fmt.Sprintf("Validation errors: %v", ve.Errors)
 }
 
-// logValidationWarning logs a validation warning for telemetry purposes without returning an error
+// logValidationWarning logs a validation warning both locally and for telemetry without returning an error.
 func logValidationWarning(err error, validationType, warningType string) {
+	// Log locally so administrators can see config issues in their logs
+	log := logger.Global().Module("conf")
+	log.Warn("Configuration validation warning",
+		logger.String("validation_type", validationType),
+		logger.String("warning", warningType),
+		logger.Error(err))
+
 	// Create an enhanced error for telemetry tracking
 	_ = errors.New(err).
 		Category(errors.CategoryValidation).

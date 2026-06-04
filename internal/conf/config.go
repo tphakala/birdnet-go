@@ -550,16 +550,48 @@ const (
 // DefaultTransport is the default RTSP/RTMP transport protocol
 const DefaultTransport = "tcp"
 
+// ChannelMode controls how multi-channel audio is handled before analysis.
+type ChannelMode string
+
+const (
+	ChannelModeDownmix ChannelMode = "downmix" // Mix all channels to mono (default)
+	ChannelModeLeft    ChannelMode = "left"    // Use left (first) channel only
+	ChannelModeRight   ChannelMode = "right"   // Use right (second) channel only
+)
+
+// DefaultChannelMode is used when no channel mode is specified.
+const DefaultChannelMode = ChannelModeDownmix
+
+// Canonical returns the effective channel mode, treating an empty value as the
+// default (downmix). An unset mode and an explicit "downmix" produce identical
+// FFmpeg arguments, so callers comparing modes (e.g. hot-reload change detection)
+// should compare canonical values to avoid treating that no-op transition as a
+// real change that would needlessly restart the stream.
+func (m ChannelMode) Canonical() ChannelMode {
+	if m == "" {
+		return DefaultChannelMode
+	}
+	return m
+}
+
+// ValidChannelModes is the set of accepted channel mode values.
+var ValidChannelModes = map[ChannelMode]bool{
+	ChannelModeDownmix: true,
+	ChannelModeLeft:    true,
+	ChannelModeRight:   true,
+}
+
 // StreamConfig represents a single audio stream source
 type StreamConfig struct {
-	Name       string             `yaml:"name" json:"name" mapstructure:"name"`                                    // Required: descriptive name like "Front Yard"
-	URL        string             `yaml:"url" json:"url" mapstructure:"url"`                                       // Required: stream URL
-	Enabled    bool               `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                           // true when the configured stream should be active
-	Type       string             `yaml:"type" json:"type" mapstructure:"type"`                                    // Stream type: rtsp, http, hls, rtmp, udp
-	Transport  string             `yaml:"transport" json:"transport" mapstructure:"transport"`                     // Transport: tcp or udp (for RTSP/RTMP)
-	Equalizer  *EqualizerSettings `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"` // Per-stream EQ (nil = use global)
-	QuietHours QuietHoursConfig   `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                  // Quiet hours configuration
-	Models     []string           `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"`          // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
+	Name        string             `yaml:"name" json:"name" mapstructure:"name"`                                    // Required: descriptive name like "Front Yard"
+	URL         string             `yaml:"url" json:"url" mapstructure:"url"`                                       // Required: stream URL
+	Enabled     bool               `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                           // true when the configured stream should be active
+	Type        string             `yaml:"type" json:"type" mapstructure:"type"`                                    // Stream type: rtsp, http, hls, rtmp, udp
+	Transport   string             `yaml:"transport" json:"transport" mapstructure:"transport"`                     // Transport: tcp or udp (for RTSP/RTMP)
+	ChannelMode ChannelMode        `yaml:"channelMode,omitempty" json:"channelMode" mapstructure:"channelMode"`     // Channel handling: downmix, left, or right
+	Equalizer   *EqualizerSettings `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"` // Per-stream EQ (nil = use global)
+	QuietHours  QuietHoursConfig   `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                  // Quiet hours configuration
+	Models      []string           `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"`          // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
 }
 
 // IsEnabled returns the effective enabled state for a stream.
@@ -1213,9 +1245,6 @@ type BatConfig struct {
 	LabelPath           string                      `yaml:"labelpath,omitempty" json:"labelPath,omitempty"`             // path to bat species labels file
 	Threshold           float64                     `yaml:"threshold" json:"threshold"`                                 // confidence threshold for bat detections
 	Locale              string                      `yaml:"locale,omitempty" json:"locale,omitempty"`                   // locale for species label translation
-	FilterEnabled       bool                        `yaml:"filterenabled" json:"filterEnabled"`                         // enable high-pass filter for bat audio
-	FilterCutoffHz      float64                     `yaml:"filtercutoffhz,omitempty" json:"filterCutoffHz,omitempty"`   // high-pass filter cutoff frequency in Hz
-	FilterPassCount     int                         `yaml:"filterpasscount,omitempty" json:"filterPassCount,omitempty"` // number of filter passes for steeper rolloff
 	NighttimeOnly       bool                        `yaml:"nighttimeonly" json:"nighttimeOnly"`                         // restrict bat detection to nighttime (civil dusk to civil dawn)
 	FalsePositiveFilter FalsePositiveFilterSettings `yaml:"falsepositivefilter" json:"falsePositiveFilter"`             // false positive filtering for bat detections (level 0-5)
 	UltrasonicFilter    UltrasonicFilterConfig      `yaml:"ultrasonicfilter" json:"ultrasonicFilter"`                   // post-detection ultrasonic validation filter
@@ -1345,7 +1374,16 @@ type Security struct {
 	RedirectToHTTPS   bool              `yaml:"redirecttohttps" json:"redirectToHttps"`     // true to redirect to HTTPS
 	AllowSubnetBypass AllowSubnetBypass `yaml:"allowsubnetbypass" json:"allowSubnetBypass"` // subnet bypass configuration
 	PublicAccess      PublicAccess      `yaml:"publicaccess" json:"publicAccess"`           // features accessible without authentication
-	BasicAuth         BasicAuth         `yaml:"basicauth" json:"basicAuth"`                 // password authentication configuration
+	// PrivateMode, when true, requires the user to authenticate before any
+	// UI data is shown. Enforcement lives at the v2 API data layer, which
+	// returns 401 to unauthenticated requests; the public SPA shell is still
+	// served so it can render a login form instead of the dashboard,
+	// detections, analytics, search, about, and notifications views. Settings
+	// and system routes are additionally auth-gated at the HTTP layer.
+	// PublicAccess.LiveAudio still applies independently.
+	// Default is false to preserve guest-friendly upstream behavior.
+	PrivateMode bool      `yaml:"privatemode" json:"privateMode"`
+	BasicAuth   BasicAuth `yaml:"basicauth" json:"basicAuth"` // password authentication configuration
 
 	// OAuthProviders is the new array-based OAuth configuration.
 	// This is the preferred format for configuring OAuth providers.

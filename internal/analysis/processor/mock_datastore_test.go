@@ -178,6 +178,9 @@ func (m *ActionMockDatastore) SearchNotesAdvanced(_ *datastore.AdvancedSearchFil
 func (m *ActionMockDatastore) GetNoteClipPath(_ string) (string, error) {
 	return "", nil
 }
+func (m *ActionMockDatastore) GetNoteModelType(_ string) (string, error) {
+	return "bird", nil
+}
 func (m *ActionMockDatastore) DeleteNoteClipPath(_ string) error {
 	return nil
 }
@@ -359,6 +362,18 @@ func (m *ActionMockDatastore) PingWithLatency(_ context.Context) (time.Duration,
 	return 0, nil
 }
 func (m *ActionMockDatastore) CountDetectionsSince(_ context.Context, _ time.Time) (int, error) {
+	return 0, nil
+}
+func (m *ActionMockDatastore) SaveAppEvent(_ context.Context, _, _, _ string, _ map[string]any) error {
+	return nil
+}
+func (m *ActionMockDatastore) GetRecentAppEvents(_ context.Context, _ int) ([]datastore.AppEvent, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) GetAppEventsSince(_ context.Context, _ time.Time, _ int) ([]datastore.AppEvent, error) {
+	return nil, nil
+}
+func (m *ActionMockDatastore) PruneAppEvents(_ context.Context, _ int) (int64, error) {
 	return 0, nil
 }
 

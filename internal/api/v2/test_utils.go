@@ -34,6 +34,26 @@ func newMinimalController() *Controller {
 	}
 }
 
+// publishTestSettings publishes settings as the global atomic snapshot so that
+// handlers reading via c.currentSettings() observe them, and restores the
+// previous snapshot on cleanup so the publish does not leak into sibling tests.
+//
+// IMPORTANT: tests using this helper must NOT call t.Parallel(). It mutates the
+// process-global settings snapshot, so parallel tests would observe each
+// other's settings and flake.
+//
+// Routing handler reads through currentSettings() makes every
+// handler read the lock-free global snapshot rather than the controller-cached
+// c.Settings field. Tests that inject a per-controller *conf.Settings must
+// therefore publish it here (pass nil to exercise a handler's nil-settings
+// fallback path).
+func publishTestSettings(tb testing.TB, settings *conf.Settings) {
+	tb.Helper()
+	prev := conf.GetSettings()
+	conf.SetTestSettings(settings)
+	tb.Cleanup(func() { conf.SetTestSettings(prev) })
+}
+
 // safeSlice is a helper for mock methods returning slices.
 // It safely handles nil arguments and performs type assertion.
 func safeSlice[T any](args mock.Arguments, index int) []T {
@@ -100,7 +120,7 @@ func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterfa
 	// Create a controller with the test datastore and default settings
 	// to prevent nil pointer panics if a handler accesses c.Settings.
 	controller := &Controller{
-		Group:    e.Group("/api/v2"),
+		Group:    e.Group(apiV2Prefix),
 		DS:       mockDS,
 		Settings: newValidTestSettings(),
 	}
@@ -179,8 +199,10 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 
 	// Sync controller settings with the global conf.settingsInstance so that
 	// functions like conf.SaveSettings() (called by toggleSpeciesInIgnoredList)
-	// operate on the same instance the controller uses.
-	conf.SetTestSettings(settings)
+	// operate on the same instance the controller uses, and so handlers reading
+	// via currentSettings() observe this controller's settings. Restored on
+	// cleanup so it does not leak into sibling tests.
+	publishTestSettings(t, settings)
 
 	// Create API controller without initializing routes to avoid starting background goroutines
 	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics, false)

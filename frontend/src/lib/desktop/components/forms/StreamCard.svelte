@@ -19,12 +19,14 @@
 -->
 <script lang="ts">
   import { getContext } from 'svelte';
+  import { generateId } from '$lib/utils/uuid';
   import {
     Settings,
     Trash2,
     Check,
     X,
     AlertCircle,
+    AlertTriangle,
     Radio,
     ChevronDown,
     Moon,
@@ -45,10 +47,16 @@
     StreamType,
     EqualizerFilterType,
     QuietHoursConfig,
+    ChannelMode,
+    ChannelAnalysis,
   } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
   import type { StreamHealthResponse } from './StreamManager.svelte';
+  import StreamTestButton from './StreamTestButton.svelte';
   import StreamTimeline from './StreamTimeline.svelte';
+  import StreamChannelControls from './StreamChannelControls.svelte';
+  import { streamTypeOptions, transportOptions, analyzeStreamChannels } from './streamOptions';
+  import { normalizeChannelMode } from './streamChannel';
 
   interface LocalEqualizerSettings {
     enabled: boolean;
@@ -111,7 +119,9 @@
 
   // Utility functions for formatting
   function formatBytes(bytes: number): string {
-    if (!bytes || bytes === 0) return '--';
+    // Guard <= 0 (not just === 0): a negative value would make Math.log return
+    // NaN and render "NaN undefined".
+    if (!bytes || bytes <= 0) return '--';
     const units = ['B', 'KB', 'MB', 'GB'];
     // Clamp index to valid array bounds (0 to 3) to prevent out-of-bounds access
     const rawIndex = Math.floor(Math.log(bytes) / Math.log(1024));
@@ -166,6 +176,15 @@
     return 'Unknown';
   });
 
+  let testResult = $state<{ sampleRate: number; channels: number } | null>(null);
+
+  // Show a warning when a stereo source is still set to downmix mode.
+  // normalizeChannelMode treats an unset/empty mode as the real default (downmix),
+  // which a bare `?? 'downmix'` misses because the API returns "" not undefined.
+  let showStereoWarning = $derived(
+    (health?.source_channels ?? 0) >= 2 && normalizeChannelMode(stream.channelMode) === 'downmix'
+  );
+
   // Local editing state - initialized with defaults, synced from props in startEdit()
   let isEditing = $state(false);
   let editName = $state('');
@@ -178,21 +197,11 @@
   let editQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let showDeleteConfirm = $state(false);
   let showEqualizer = $state(false);
-
-  // Stream type options (all supported types)
-  const streamTypeOptions = [
-    { value: 'rtsp', label: 'RTSP' },
-    { value: 'http', label: 'HTTP' },
-    { value: 'hls', label: 'HLS' },
-    { value: 'rtmp', label: 'RTMP' },
-    { value: 'udp', label: 'UDP/RTP' },
-  ];
-
-  // Transport protocol options
-  const transportOptions = [
-    { value: 'tcp', label: 'TCP' },
-    { value: 'udp', label: 'UDP' },
-  ];
+  let editChannelMode = $state<ChannelMode>('downmix');
+  let isAnalyzing = $state(false);
+  let analysisResult = $state<ChannelAnalysis | null>(null);
+  let analysisError = $state<string | null>(null);
+  let analysisSeq = 0;
 
   // Get icon colors based on stream status - using CSS variables for theme compatibility
   function getIconColors(s: StreamStatus): { bg: string; text: string; border: string } {
@@ -309,6 +318,7 @@
     editName = stream.name;
     editUrl = stream.url;
     editTransport = stream.transport ?? 'tcp';
+    editChannelMode = normalizeChannelMode(stream.channelMode);
     editStreamType = stream.type;
     editEnabled = stream.enabled;
     editModels = stream.models?.length ? [...stream.models] : [DEFAULT_MODEL_ID];
@@ -317,15 +327,28 @@
       : { enabled: false, filters: [] };
     editQuietHours = { ...defaultQuietHoursConfig, ...stream.quietHours };
     showEqualizer = false;
+    // Channel count for an already-running stream comes from the live probe
+    // (health.source_channels) via detectedChannels; a fresh test result, when
+    // present, takes precedence and also carries the source sample rate.
+    testResult = null;
+    // Invalidate any analysis still in flight from a previous edit session so a
+    // late result cannot write editChannelMode/analysisResult into this one.
+    analysisSeq++;
+    analysisResult = null;
+    analysisError = null;
     isEditing = true;
   }
 
   function cancelEdit() {
     isEditing = false;
     showDeleteConfirm = false;
+    // Cancel any pending channel analysis so its late result is discarded.
+    analysisSeq++;
+    isAnalyzing = false;
   }
 
   function saveEdit() {
+    if (needsTest) return;
     if (editName.trim() && editUrl.trim()) {
       const transformedEqualizer =
         editEqualizer.enabled || editEqualizer.filters.length > 0
@@ -333,7 +356,7 @@
               enabled: editEqualizer.enabled,
               filters: editEqualizer.filters.map(f => ({
                 ...f,
-                id: f.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)),
+                id: f.id || generateId(),
               })),
             }
           : undefined;
@@ -344,6 +367,7 @@
         enabled: editEnabled,
         type: editStreamType,
         models: editModels,
+        channelMode: editChannelMode,
         // Use selected transport for RTSP/RTMP, omit for others
         ...(showTransportInEdit ? { transport: editTransport } : {}),
         equalizer: transformedEqualizer,
@@ -379,6 +403,44 @@
     } else if (event.key === 'Escape') {
       event.preventDefault();
       cancelEdit();
+    }
+  }
+
+  async function analyzeChannels(url: string) {
+    const seq = ++analysisSeq;
+    isAnalyzing = true;
+    analysisResult = null;
+    analysisError = null;
+    try {
+      const result = await analyzeStreamChannels(url);
+      if (seq !== analysisSeq) return;
+      analysisResult = result;
+      if (result.recommended && result.recommended !== 'downmix') {
+        editChannelMode = result.recommended;
+      }
+    } catch (err: unknown) {
+      if (seq !== analysisSeq) return;
+      analysisError = err instanceof Error ? err.message : String(err);
+    } finally {
+      if (seq === analysisSeq) isAnalyzing = false;
+    }
+  }
+
+  let urlChanged = $derived(editUrl.trim() !== stream.url);
+  let needsTest = $derived(urlChanged && !testResult);
+  let sourceSampleRate = $derived(testResult?.sampleRate ?? 48000);
+
+  // Detected channel count: a fresh stream test wins; otherwise fall back to the
+  // running stream's probe (health). 0 means "not yet known". Sample rate is only
+  // surfaced when it comes from an actual test (health does not report it).
+  let detectedChannels = $derived(testResult?.channels ?? health?.source_channels ?? 0);
+  let detectedSampleRate = $derived(testResult?.sampleRate);
+
+  function handleTestResult(result: { sampleRate: number; channels: number } | null) {
+    testResult = result;
+    if (!result) {
+      analysisResult = null;
+      analysisError = null;
     }
   }
 
@@ -468,6 +530,15 @@
           />
         </div>
 
+        <!-- Test Stream -->
+        <StreamTestButton
+          url={editUrl}
+          models={availableModels}
+          selectedModels={editModels}
+          {disabled}
+          onResult={handleTestResult}
+        />
+
         <!-- Type and Transport Row -->
         <div class="grid grid-cols-2 gap-4">
           <div>
@@ -495,6 +566,20 @@
           {/if}
         </div>
 
+        <!-- Channel handling: format display, selector, and stereo analysis -->
+        <StreamChannelControls
+          channelMode={editChannelMode}
+          channels={detectedChannels}
+          sampleRate={detectedSampleRate}
+          analyzeUrl={editUrl || stream.url}
+          {isAnalyzing}
+          {analysisResult}
+          {analysisError}
+          {disabled}
+          onChange={mode => (editChannelMode = mode)}
+          onAnalyze={url => analyzeChannels(url)}
+        />
+
         <Checkbox
           checked={editEnabled}
           onchange={checked => (editEnabled = checked)}
@@ -507,6 +592,8 @@
         <ModelCheckboxList
           models={availableModels}
           selectedModels={editModels}
+          {sourceSampleRate}
+          isStream={true}
           {disabled}
           onToggle={models => (editModels = models)}
         />
@@ -561,15 +648,17 @@
             <X class="size-4" />
             {t('common.cancel')}
           </button>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            onclick={saveEdit}
-            disabled={!editName.trim() || !editUrl.trim()}
-          >
-            <Check class="size-4" />
-            {t('common.save')}
-          </button>
+          <span title={needsTest ? t('settings.audio.streams.testRequired') : undefined}>
+            <button
+              type="button"
+              class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onclick={saveEdit}
+              disabled={!editName.trim() || !editUrl.trim() || needsTest}
+            >
+              <Check class="size-4" />
+              {t('common.save')}
+            </button>
+          </span>
         </div>
       </div>
     {:else}
@@ -660,6 +749,17 @@
                 {stream.transport.toUpperCase()}
               </span>
             {/if}
+            {#if stream.channelMode === 'left'}
+              <span
+                class="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
+                >L</span
+              >
+            {:else if stream.channelMode === 'right'}
+              <span
+                class="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
+                >R</span
+              >
+            {/if}
           </div>
 
           <!-- Action Buttons -->
@@ -700,6 +800,17 @@
           </div>
         </div>
       </div>
+
+      <!-- Stereo downmix warning: shown when a stereo source is still using downmix -->
+      {#if showStereoWarning}
+        <div
+          class="flex items-center gap-2 px-3 py-1.5 border-t border-[var(--color-warning)]/20 bg-[var(--color-warning)]/5 text-[var(--color-warning)]"
+          title={t('settings.audio.streams.stereoWarning.tooltip')}
+        >
+          <AlertTriangle class="size-3.5 flex-shrink-0" />
+          <span class="text-xs">{t('settings.audio.streams.stereoWarning.short')}</span>
+        </div>
+      {/if}
 
       <!-- Expandable Diagnostics Panel -->
       {#if expanded}

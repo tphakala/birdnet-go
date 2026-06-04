@@ -435,6 +435,10 @@
         "overloadTitle": "Audio Analysis Overloaded",
         "overloadMessage": "Your system is dropping {dropRate}% of audio samples for source ''{sourceName}'' because it cannot keep up with analysis. Reduce the BirdNET overlap value in detection settings or consider upgrading to a faster CPU."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime Not Available",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. See the install guide: {installGuideURL}"
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
@@ -937,7 +941,10 @@
     "aria": {
       "loading": "Loading detection details...",
       "loaded": "Detection details loaded for {species}",
-      "error": "Error loading detection: {error}"
+      "error": "Error loading detection: {error}",
+      "loadingResults": "Loading {count} results...",
+      "thumbnailLoading": "Loading {species} thumbnail...",
+      "thumbnailLoaded": "{species} thumbnail loaded"
     },
     "errors": {
       "notFound": "Detection not found. It may have been deleted or the ID is incorrect.",
@@ -1576,7 +1583,11 @@
       "recentlyFirstSeen": "Recently First Seen",
       "earliestFirstSeen": "Earliest First Seen",
       "recentlyLastSeen": "Recently Last Seen",
-      "highestConfidence": "Highest Confidence"
+      "earliestLastSeen": "Earliest Last Seen",
+      "highestConfidence": "Highest Confidence",
+      "lowestConfidence": "Lowest Confidence",
+      "highestMaxConfidence": "Highest Max Confidence",
+      "lowestMaxConfidence": "Lowest Max Confidence"
     },
     "charts": {
       "top10Species": "Top 10 Species",
@@ -2991,6 +3002,7 @@
         "unknown": "unknown",
         "refresh": "Refresh",
         "addStream": "Add Stream",
+        "testRequired": "Run a successful stream test before saving",
         "deleteConfirm": "Remove this stream?",
         "restartCount": "Restarted {count} time(s)",
         "healthLoadError": "Failed to load stream health status",
@@ -3043,6 +3055,47 @@
           "degraded": "Degraded",
           "failed": "Failed",
           "unknown": "Unknown"
+        },
+        "test": {
+          "button": "Test Stream",
+          "probing": "Testing...",
+          "result": "Test Result",
+          "error": "Test failed",
+          "batCompatible": "Bat compatible",
+          "batIncompatible": "Not bat compatible"
+        },
+        "batWarning": "Bat models require streams with a lossless codec (PCM) and a sample rate of at least 96 kHz. Use the Test Stream button above to verify compatibility.",
+        "codecWarning": {
+          "lossy": "Lossy codecs (AAC, Opus, MP3) destroy ultrasonic frequencies above ~20 kHz, making the stream unsuitable for bat detection."
+        },
+        "channelMode": {
+          "analyzeError": "Channel analysis failed",
+          "analyzing": "Analyzing channels...",
+          "description": "How to handle multi-channel audio. Select a specific channel if your source sends stereo.",
+          "detectBest": "Detect best channel",
+          "downmix": "Downmix to mono",
+          "downmixWarning": "Downmix is not recommended for stereo streams. Phase differences between channels cause comb filtering that reduces detection accuracy. Select a specific channel instead.",
+          "energyLeft": "Left channel",
+          "energyRight": "Right channel",
+          "label": "Channel mode",
+          "left": "Left channel only",
+          "monoNoSelection": "Single channel source. All channel modes produce identical audio, so no selection is needed.",
+          "recommended": "Recommended: {channel}",
+          "right": "Right channel only",
+          "singleChannelGood": "Single channel selected, optimal for detection accuracy."
+        },
+        "format": {
+          "label": "Audio format",
+          "mono": "Mono (1 channel)",
+          "multi": "{count} channels",
+          "stereo": "Stereo (2 channels)",
+          "untested": "Test the stream to detect its audio format",
+          "withSampleRate": "{rate} kHz, {channels}"
+        },
+        "stereoWarning": {
+          "message": "Stereo stream detected. Downmixing multiple channels can reduce detection accuracy due to phase differences between channels. Select a specific channel (left/right) or use the channel detector for best results.",
+          "short": "Stereo downmix active. Detection accuracy may be reduced. Edit to select a specific channel.",
+          "tooltip": "Stereo downmix active. Detection accuracy may be reduced. Edit to select a specific channel."
         }
       },
       "audioFilters": {
@@ -3218,6 +3271,10 @@
         "devicesLoadFailed": "Failed to load audio devices. Please check system permissions.",
         "invalidBitrate": "Invalid bitrate value",
         "invalidRetentionPolicy": "Invalid retention policy"
+      },
+      "models": {
+        "recommendBoth": "Running both BirdNET and Perch together is recommended for best species detection coverage.",
+        "perchOnlyWarning": "Perch alone produces fewer detections. Lower the confidence threshold to 0.50 for meaningful results, or enable BirdNET alongside for best coverage."
       }
     },
     "security": {
@@ -3378,6 +3435,10 @@
         "liveAudioHelp": "When enabled, anyone can listen to live audio streams without logging in. Settings and deletion still require authentication.",
         "warningText": "Enabling public access features exposes them to anyone who can reach this server. Only enable if you trust your network environment."
       },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
         "host": "For example, localhost:8080 or example.domain.com",
@@ -3496,6 +3557,20 @@
           "title": "Location Not Configured",
           "description": "Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.",
           "action": "Configure Location"
+        },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Range filter inactive",
+            "description": "Detections are not being filtered by your location right now, so species from outside your area can be reported. Check the range filter model configuration in Settings."
+          },
+          "fellBack": {
+            "title": "Using the built-in range filter",
+            "description": "The configured geomodel range filter could not be loaded, so BirdNET-Go fell back to the built-in range filter. Filtering still works, but check Settings to restore the geomodel."
+          },
+          "mappedZero": {
+            "title": "Range filter matched no species",
+            "description": "The geomodel range filter did not match any of the active model's species, so every detection would be filtered out. Check that the range filter labels file matches the active model."
+          }
         },
         "columns": {
           "commonName": "Common Name",
@@ -3919,6 +3994,8 @@
           "species_name": "Species Name",
           "scientific_name": "Scientific Name",
           "confidence": "Confidence",
+          "days_since_last_seen": "Days Since Last Seen",
+          "novelty_episode_days": "Novelty Episode Days",
           "location": "Location",
           "stream_name": "Stream Name",
           "stream_url": "Stream URL",
@@ -3929,6 +4006,8 @@
         "operators": {
           "is": "is",
           "is_not": "is not",
+          "in": "is in list",
+          "not_in": "is not in list",
           "contains": "contains",
           "not_contains": "does not contain",
           "greater_than": "greater than",
@@ -4193,7 +4272,31 @@
       "playbackSpeed": "Playback speed",
       "speed": "Speed",
       "loop": "Toggle loop",
-      "player": "Audio player"
+      "player": "Audio player",
+      "autoplayBlocked": "Click to play (autoplay blocked)",
+      "hlsNotSupported": "HLS playback not supported in this browser",
+      "streamStarting": "Starting audio stream...",
+      "levelFor": "Audio level for {source}",
+      "levelForNoSource": "Audio level: no source",
+      "noSource": "No source",
+      "levelAnnouncement": "Current audio level: {level} percent",
+      "levelAnnouncementClipping": "Current audio level: {level} percent, clipping detected",
+      "sourceSelection": "Audio Source Selection",
+      "sources": "Audio Sources",
+      "noSourcesAvailable": "No audio sources available",
+      "silent": "(silent)",
+      "stopPlayback": "Stop audio playback",
+      "startPlayback": "Start audio playback",
+      "nowPlaying": "Now playing audio from {source}",
+      "nowPlayingNoSource": "Now playing audio",
+      "playbackStopped": "Audio playback stopped",
+      "loginRequired": "Login required to stream audio",
+      "streamError": "Error starting stream",
+      "streamTitle": "Bird Audio Stream - {source}",
+      "streamTitleDefault": "Bird Audio Stream",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Live Stream",
+      "playbackError": "Playback error: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spectrogram not yet generated",
@@ -4418,6 +4521,16 @@
       "hostRequired": "Host parameter is required",
       "invalidHost": "Invalid host parameter",
       "rateLimit": "Too many notification stream connection attempts, please wait before trying again"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Invalid request body",
+        "urlRequired": "Stream URL is required",
+        "invalidUrl": "Invalid URL format. Enter a full URL like rtsp://host:port/path",
+        "unsupportedScheme": "Unsupported URL scheme \"{scheme}\". Use rtsp, rtsps, http, https, rtmp, or udp",
+        "blockedDestination": "This destination is blocked for security reasons",
+        "connectionFailed": "Could not connect to the stream. Check that the URL is correct and the stream is accessible"
+      }
     },
     "debug": {
       "notEnabled": "Debug mode not enabled"
@@ -4683,7 +4796,10 @@
       "reinstall": "Reinstall",
       "reinstalling": "Reinstalling...",
       "reinstallComplete": "Files verified successfully",
-      "geomodelBadge": "Includes BirdNET v3.0 geomodel"
+      "geomodelBadge": "Includes BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Requires ONNX Runtime which is not available on this system.",
+      "onnxRuntimeMissing": "ONNX Runtime is not available. This model cannot run.",
+      "unavailable": "Unavailable"
     },
     "bird": {
       "title": "Bird Detection",
@@ -4713,7 +4829,7 @@
     "title": "Help & Support",
     "subtitle": "Get help, report issues, and connect with the community",
     "reportBug": {
-      "description": "If you encounter a problem, generate a support dump first to capture your system info and logs, then open a bug report on GitHub to describe the issue."
+      "description": "If you encounter a problem, open a bug report on GitHub to describe the issue, then generate a support dump with the issue number to help with troubleshooting."
     },
     "askQuestion": {
       "description": "Have a question about setup, features, or usage? The GitHub Discussions forum is the best place to get help from the community."
@@ -4761,23 +4877,21 @@
         "description": "Generate and upload a support dump below. This captures logs and configuration that greatly speed up troubleshooting."
       }
     },
-    "supportDump": {
-      "title": "Generate Support Dump",
-      "description": "Uploading a support dump with your bug report greatly helps with troubleshooting and providing a fix. It captures your configuration and recent logs with sensitive data removed."
-    },
     "openIssue": {
       "title": "Open a GitHub Issue",
-      "description": "Once you have gathered the information above and generated a support dump, open an issue on GitHub to describe the problem.",
+      "description": "Open an issue on GitHub to describe the problem. You will need the issue number for the next step.",
       "button": "Open Issue on GitHub"
+    },
+    "supportDump": {
+      "title": "Generate Support Dump",
+      "description": "After filing your issue, generate a support dump and enter the GitHub issue number. This links your diagnostics to the bug report and helps with troubleshooting."
     }
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Refresh",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4789,6 +4903,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "All passing",
+      "needsAttention": "Needs attention",
+      "failing": "Failing",
+      "allClear": "All clear",
+      "noData": "No recent data",
+      "none": "None"
+    },
+    "diagnostics": "Diagnostics",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4817,6 +4940,41 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Top error patterns",
+      "errorCount": "Count",
+      "errorComponent": "Component",
+      "errorLevel": "Level",
+      "errorMessage": "Message"
+    },
+    "window": {
+      "label": "Evaluation window",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Last event",
+      "recentEvents": "Recent events",
+      "time": "Time",
+      "source": "Source",
+      "count": "Count",
+      "lifetime": "lifetime",
+      "sparklineLabel": "Activity sparkline",
+      "activeHours": "Active hours",
+      "windowTotal": "In window",
+      "velocity": "Trend",
+      "velocityStable": "Stable",
+      "velocityIncreasing": "Increasing",
+      "velocityDecreasing": "Decreasing",
+      "pattern": "Pattern",
+      "patternNone": "None",
+      "patternTransient": "Transient",
+      "patternSustained": "Sustained"
     }
   }
 }

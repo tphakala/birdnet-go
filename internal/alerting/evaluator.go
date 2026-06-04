@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // EvaluateConditions checks if all conditions match against event properties.
@@ -34,6 +35,10 @@ func evaluateCondition(cond *entities.AlertCondition, properties map[string]any)
 		return strings.EqualFold(propStr, condVal)
 	case OperatorIsNot:
 		return !strings.EqualFold(propStr, condVal)
+	case OperatorIn:
+		return listContains(condVal, propStr)
+	case OperatorNotIn:
+		return !listContains(condVal, propStr)
 	case OperatorContains:
 		return strings.Contains(strings.ToLower(propStr), strings.ToLower(condVal))
 	case OperatorNotContains:
@@ -45,13 +50,44 @@ func evaluateCondition(cond *entities.AlertCondition, properties map[string]any)
 	}
 }
 
+// listContains checks whether propValue appears in a comma, semicolon, or newline
+// delimited list. Items are trimmed, empty items are skipped, and comparisons are
+// case-insensitive.
+func listContains(listValue, propValue string) bool {
+	if propValue == "" {
+		return false
+	}
+
+	for item := range strings.FieldsFuncSeq(listValue, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r'
+	}) {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		if strings.EqualFold(trimmed, propValue) {
+			return true
+		}
+	}
+	return false
+}
+
 func evaluateNumeric(operator string, propVal any, condVal string) bool {
 	propFloat, err := toFloat64(propVal)
 	if err != nil {
+		log := logger.Global().Module("alerting")
+		log.Debug("Failed to parse property value for numeric evaluation",
+			logger.String("operator", operator),
+			logger.Error(err))
 		return false
 	}
 	condFloat, err := strconv.ParseFloat(condVal, 64)
 	if err != nil {
+		log := logger.Global().Module("alerting")
+		log.Warn("Alert condition has unparseable threshold value",
+			logger.String("operator", operator),
+			logger.String("condition_value", condVal),
+			logger.Error(err))
 		return false
 	}
 

@@ -691,9 +691,11 @@ func TestLookupGenusByScientificName(t *testing.T) {
 			wantOK:         false,
 		},
 		{
-			name:           "non-bird species returns false",
+			name:           "non-bird amphibian species found",
 			scientificName: "Acris crepitans",
-			wantOK:         false,
+			wantGenus:      "acris",
+			wantFamily:     "Hylidae",
+			wantOK:         true,
 		},
 		{
 			name:           "empty string returns false",
@@ -847,6 +849,109 @@ func TestLookupConsistencyWithGet(t *testing.T) {
 	orderGet, err := db.GetAllSpeciesInOrder("Strigiformes")
 	require.NoError(t, err)
 	assert.ElementsMatch(t, orderGet, orderLookup)
+}
+
+// TestGetSpeciesTree_MultiTaxa verifies that GetSpeciesTree returns the correct
+// Class and Phylum for non-bird species (insects, amphibians, mammals).
+func TestGetSpeciesTree_MultiTaxa(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "birdnet-genus")
+	t.Attr("category", "multi-taxa")
+
+	db, err := LoadTaxonomyDatabase()
+	require.NoError(t, err, "Failed to load taxonomy database")
+
+	tests := []struct {
+		name           string
+		scientificName string
+		wantClass      string
+		wantPhylum     string
+		wantOrder      string
+		wantFamily     string
+	}{
+		{
+			name:           "bird species unchanged",
+			scientificName: "Turdus migratorius",
+			wantClass:      "Aves",
+			wantPhylum:     "Chordata",
+			wantOrder:      "Passeriformes",
+			wantFamily:     "Turdidae",
+		},
+		{
+			name:           "insect species",
+			scientificName: "Gryllus campestris",
+			wantClass:      "Insecta",
+			wantPhylum:     "Arthropoda",
+			wantOrder:      "Orthoptera",
+			wantFamily:     "Gryllidae",
+		},
+		{
+			name:           "amphibian species",
+			scientificName: "Acris crepitans",
+			wantClass:      "Amphibia",
+			wantPhylum:     "Chordata",
+			wantOrder:      "Anura",
+			wantFamily:     "Hylidae",
+		},
+		{
+			name:           "mammal species",
+			scientificName: "Acinonyx jubatus",
+			wantClass:      "Mammalia",
+			wantPhylum:     "Chordata",
+			wantOrder:      "Carnivora",
+			wantFamily:     "Felidae",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := db.GetSpeciesTree(tt.scientificName)
+			require.NoError(t, err, "Unexpected error for %s", tt.scientificName)
+			require.NotNil(t, result)
+			require.NotNil(t, result.TaxonomyTree)
+
+			tree := result.TaxonomyTree
+			assert.Equal(t, "Animalia", tree.Kingdom)
+			assert.Equal(t, tt.wantPhylum, tree.Phylum)
+			assert.Equal(t, tt.wantClass, tree.Class)
+			assert.Equal(t, tt.wantOrder, tree.Order)
+			assert.Equal(t, tt.wantFamily, tree.Family)
+		})
+	}
+}
+
+func TestPhylumForClass(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		class      string
+		wantPhylum string
+	}{
+		{"Aves", "Aves", "Chordata"},
+		{"Mammalia", "Mammalia", "Chordata"},
+		{"Amphibia", "Amphibia", "Chordata"},
+		{"Reptilia", "Reptilia", "Chordata"},
+		{"Actinopterygii", "Actinopterygii", "Chordata"},
+		{"Insecta", "Insecta", "Arthropoda"},
+		{"Arachnida", "Arachnida", "Arthropoda"},
+		{"Malacostraca", "Malacostraca", "Arthropoda"},
+		{"Gastropoda", "Gastropoda", "Mollusca"},
+		{"Bivalvia", "Bivalvia", "Mollusca"},
+		{"Cephalopoda", "Cephalopoda", "Mollusca"},
+		{"Hydrozoa", "Hydrozoa", "Cnidaria"},
+		{"Trematoda", "Trematoda", "Platyhelminthes"},
+		{"empty_string", "", "Chordata"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.wantPhylum, phylumForClass(tt.class))
+		})
+	}
 }
 
 // BenchmarkLookupGenusByScientificName benchmarks the non-telemetry lookup

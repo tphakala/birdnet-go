@@ -1603,6 +1603,66 @@ func (_c *MockInterface_GetAllReviews_Call) RunAndReturn(run func() ([]datastore
 	return _c
 }
 
+// GetAppEventsSince provides a mock function with given fields: ctx, since, limit
+func (_m *MockInterface) GetAppEventsSince(ctx context.Context, since time.Time, limit int) ([]datastore.AppEvent, error) {
+	ret := _m.Called(ctx, since, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAppEventsSince")
+	}
+
+	var r0 []datastore.AppEvent
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, int) ([]datastore.AppEvent, error)); ok {
+		return rf(ctx, since, limit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, int) []datastore.AppEvent); ok {
+		r0 = rf(ctx, since, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.AppEvent)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time, int) error); ok {
+		r1 = rf(ctx, since, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetAppEventsSince_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAppEventsSince'
+type MockInterface_GetAppEventsSince_Call struct {
+	*mock.Call
+}
+
+// GetAppEventsSince is a helper method to define mock.On call
+//   - ctx context.Context
+//   - since time.Time
+//   - limit int
+func (_e *MockInterface_Expecter) GetAppEventsSince(ctx interface{}, since interface{}, limit interface{}) *MockInterface_GetAppEventsSince_Call {
+	return &MockInterface_GetAppEventsSince_Call{Call: _e.mock.On("GetAppEventsSince", ctx, since, limit)}
+}
+
+func (_c *MockInterface_GetAppEventsSince_Call) Run(run func(ctx context.Context, since time.Time, limit int)) *MockInterface_GetAppEventsSince_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(time.Time), args[2].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetAppEventsSince_Call) Return(_a0 []datastore.AppEvent, _a1 error) *MockInterface_GetAppEventsSince_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetAppEventsSince_Call) RunAndReturn(run func(context.Context, time.Time, int) ([]datastore.AppEvent, error)) *MockInterface_GetAppEventsSince_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetBatchHourlyOccurrences provides a mock function with given fields: date, species, minConfidence
 func (_m *MockInterface) GetBatchHourlyOccurrences(date string, species []string, minConfidence float64) (map[string][24]int, error) {
 	ret := _m.Called(date, species, minConfidence)
@@ -2920,6 +2980,62 @@ func (_c *MockInterface_GetNoteLock_Call) RunAndReturn(run func(string) (*datast
 	return _c
 }
 
+// GetNoteModelType provides a mock function with given fields: noteID
+func (_m *MockInterface) GetNoteModelType(noteID string) (string, error) {
+	ret := _m.Called(noteID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetNoteModelType")
+	}
+
+	var r0 string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string) (string, error)); ok {
+		return rf(noteID)
+	}
+	if rf, ok := ret.Get(0).(func(string) string); ok {
+		r0 = rf(noteID)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(noteID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetNoteModelType_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetNoteModelType'
+type MockInterface_GetNoteModelType_Call struct {
+	*mock.Call
+}
+
+// GetNoteModelType is a helper method to define mock.On call
+//   - noteID string
+func (_e *MockInterface_Expecter) GetNoteModelType(noteID interface{}) *MockInterface_GetNoteModelType_Call {
+	return &MockInterface_GetNoteModelType_Call{Call: _e.mock.On("GetNoteModelType", noteID)}
+}
+
+func (_c *MockInterface_GetNoteModelType_Call) Run(run func(noteID string)) *MockInterface_GetNoteModelType_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetNoteModelType_Call) Return(_a0 string, _a1 error) *MockInterface_GetNoteModelType_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetNoteModelType_Call) RunAndReturn(run func(string) (string, error)) *MockInterface_GetNoteModelType_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetNoteResults provides a mock function with given fields: noteID
 func (_m *MockInterface) GetNoteResults(noteID string) ([]datastore.Results, error) {
 	ret := _m.Called(noteID)
@@ -3091,6 +3207,65 @@ func (_c *MockInterface_GetNotificationHistory_Call) Return(_a0 *datastore.Notif
 }
 
 func (_c *MockInterface_GetNotificationHistory_Call) RunAndReturn(run func(string, string) (*datastore.NotificationHistory, error)) *MockInterface_GetNotificationHistory_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetRecentAppEvents provides a mock function with given fields: ctx, limit
+func (_m *MockInterface) GetRecentAppEvents(ctx context.Context, limit int) ([]datastore.AppEvent, error) {
+	ret := _m.Called(ctx, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetRecentAppEvents")
+	}
+
+	var r0 []datastore.AppEvent
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int) ([]datastore.AppEvent, error)); ok {
+		return rf(ctx, limit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int) []datastore.AppEvent); ok {
+		r0 = rf(ctx, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.AppEvent)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int) error); ok {
+		r1 = rf(ctx, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetRecentAppEvents_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetRecentAppEvents'
+type MockInterface_GetRecentAppEvents_Call struct {
+	*mock.Call
+}
+
+// GetRecentAppEvents is a helper method to define mock.On call
+//   - ctx context.Context
+//   - limit int
+func (_e *MockInterface_Expecter) GetRecentAppEvents(ctx interface{}, limit interface{}) *MockInterface_GetRecentAppEvents_Call {
+	return &MockInterface_GetRecentAppEvents_Call{Call: _e.mock.On("GetRecentAppEvents", ctx, limit)}
+}
+
+func (_c *MockInterface_GetRecentAppEvents_Call) Run(run func(ctx context.Context, limit int)) *MockInterface_GetRecentAppEvents_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetRecentAppEvents_Call) Return(_a0 []datastore.AppEvent, _a1 error) *MockInterface_GetRecentAppEvents_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetRecentAppEvents_Call) RunAndReturn(run func(context.Context, int) ([]datastore.AppEvent, error)) *MockInterface_GetRecentAppEvents_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -3879,6 +4054,63 @@ func (_c *MockInterface_PingWithLatency_Call) RunAndReturn(run func(context.Cont
 	return _c
 }
 
+// PruneAppEvents provides a mock function with given fields: ctx, retentionDays
+func (_m *MockInterface) PruneAppEvents(ctx context.Context, retentionDays int) (int64, error) {
+	ret := _m.Called(ctx, retentionDays)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PruneAppEvents")
+	}
+
+	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int) (int64, error)); ok {
+		return rf(ctx, retentionDays)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int) int64); ok {
+		r0 = rf(ctx, retentionDays)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int) error); ok {
+		r1 = rf(ctx, retentionDays)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_PruneAppEvents_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PruneAppEvents'
+type MockInterface_PruneAppEvents_Call struct {
+	*mock.Call
+}
+
+// PruneAppEvents is a helper method to define mock.On call
+//   - ctx context.Context
+//   - retentionDays int
+func (_e *MockInterface_Expecter) PruneAppEvents(ctx interface{}, retentionDays interface{}) *MockInterface_PruneAppEvents_Call {
+	return &MockInterface_PruneAppEvents_Call{Call: _e.mock.On("PruneAppEvents", ctx, retentionDays)}
+}
+
+func (_c *MockInterface_PruneAppEvents_Call) Run(run func(ctx context.Context, retentionDays int)) *MockInterface_PruneAppEvents_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_PruneAppEvents_Call) Return(_a0 int64, _a1 error) *MockInterface_PruneAppEvents_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_PruneAppEvents_Call) RunAndReturn(run func(context.Context, int) (int64, error)) *MockInterface_PruneAppEvents_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Save provides a mock function with given fields: note, results
 func (_m *MockInterface) Save(note *datastore.Note, results []datastore.Results) error {
 	ret := _m.Called(note, results)
@@ -3922,6 +4154,56 @@ func (_c *MockInterface_Save_Call) Return(_a0 error) *MockInterface_Save_Call {
 }
 
 func (_c *MockInterface_Save_Call) RunAndReturn(run func(*datastore.Note, []datastore.Results) error) *MockInterface_Save_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SaveAppEvent provides a mock function with given fields: ctx, category, eventType, message, metadata
+func (_m *MockInterface) SaveAppEvent(ctx context.Context, category string, eventType string, message string, metadata map[string]interface{}) error {
+	ret := _m.Called(ctx, category, eventType, message, metadata)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SaveAppEvent")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, map[string]interface{}) error); ok {
+		r0 = rf(ctx, category, eventType, message, metadata)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockInterface_SaveAppEvent_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SaveAppEvent'
+type MockInterface_SaveAppEvent_Call struct {
+	*mock.Call
+}
+
+// SaveAppEvent is a helper method to define mock.On call
+//   - ctx context.Context
+//   - category string
+//   - eventType string
+//   - message string
+//   - metadata map[string]interface{}
+func (_e *MockInterface_Expecter) SaveAppEvent(ctx interface{}, category interface{}, eventType interface{}, message interface{}, metadata interface{}) *MockInterface_SaveAppEvent_Call {
+	return &MockInterface_SaveAppEvent_Call{Call: _e.mock.On("SaveAppEvent", ctx, category, eventType, message, metadata)}
+}
+
+func (_c *MockInterface_SaveAppEvent_Call) Run(run func(ctx context.Context, category string, eventType string, message string, metadata map[string]interface{})) *MockInterface_SaveAppEvent_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string), args[4].(map[string]interface{}))
+	})
+	return _c
+}
+
+func (_c *MockInterface_SaveAppEvent_Call) Return(_a0 error) *MockInterface_SaveAppEvent_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockInterface_SaveAppEvent_Call) RunAndReturn(run func(context.Context, string, string, string, map[string]interface{}) error) *MockInterface_SaveAppEvent_Call {
 	_c.Call.Return(run)
 	return _c
 }

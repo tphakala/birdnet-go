@@ -13,6 +13,12 @@ func TestEvaluateConditions_EmptyConditions(t *testing.T) {
 }
 
 func TestEvaluateConditions_StringOperators(t *testing.T) {
+	const (
+		commonSpeciesList     = "Turdus migratorius, Sitta carolinensis"
+		bayBreastedWarblerSci = "Setophaga castanea"
+		whiteBreastedNuthatch = "Sitta carolinensis"
+	)
+
 	tests := []struct {
 		name     string
 		operator string
@@ -26,6 +32,18 @@ func TestEvaluateConditions_StringOperators(t *testing.T) {
 		{"is no match", OperatorIs, "species_name", "Eagle", "Robin", false},
 		{"is_not match", OperatorIsNot, "species_name", "Eagle", "Robin", true},
 		{"is_not no match", OperatorIsNot, "species_name", "Robin", "Robin", false},
+		{"in match", OperatorIn, PropertyScientificName, commonSpeciesList, whiteBreastedNuthatch, true},
+		{"in no match", OperatorIn, PropertyScientificName, commonSpeciesList, bayBreastedWarblerSci, false},
+		{"in case insensitive", OperatorIn, PropertyScientificName, commonSpeciesList, "SITTA CAROLINENSIS", true},
+		{"in semicolon separator", OperatorIn, PropertyScientificName, "Turdus migratorius;Sitta carolinensis", whiteBreastedNuthatch, true},
+		{"in newline separator", OperatorIn, PropertyScientificName, "Turdus migratorius\nSitta carolinensis", whiteBreastedNuthatch, true},
+		{"in trims whitespace", OperatorIn, PropertyScientificName, "Turdus migratorius , Sitta carolinensis", whiteBreastedNuthatch, true},
+		{"in empty list", OperatorIn, PropertyScientificName, "", whiteBreastedNuthatch, false},
+		{"in ignores empty list items", OperatorIn, PropertyScientificName, "Turdus migratorius, ,\n", "", false},
+		{"not_in match", OperatorNotIn, PropertyScientificName, commonSpeciesList, bayBreastedWarblerSci, true},
+		{"not_in no match", OperatorNotIn, PropertyScientificName, commonSpeciesList, whiteBreastedNuthatch, false},
+		{"not_in empty list", OperatorNotIn, PropertyScientificName, "", whiteBreastedNuthatch, true},
+		{"not_in ignores empty list items", OperatorNotIn, PropertyScientificName, "Turdus migratorius, ,\n", "", true},
 		{"contains match", OperatorContains, "species_name", "Owl", "Great Horned Owl", true},
 		{"contains case insensitive", OperatorContains, "species_name", "owl", "Great Horned Owl", true},
 		{"contains no match", OperatorContains, "species_name", "Eagle", "Great Horned Owl", false},

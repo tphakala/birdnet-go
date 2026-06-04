@@ -158,6 +158,20 @@ func (b *ErrorRingBuffer) CountSince(since time.Time) int {
 	return count
 }
 
+// EntriesSince returns cloned entries with timestamps at or after the given time.
+// Like CountSince, all valid entries are scanned regardless of insertion order.
+func (b *ErrorRingBuffer) EntriesSince(since time.Time) []LogEntry {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	result := make([]LogEntry, 0, b.count)
+	for i := range b.count {
+		if !b.entries[i].Timestamp.Before(since) {
+			result = append(result, cloneEntry(&b.entries[i]))
+		}
+	}
+	return result
+}
+
 // Clear removes all entries from the buffer, zeroing the backing slice to release references.
 func (b *ErrorRingBuffer) Clear() {
 	b.mu.Lock()

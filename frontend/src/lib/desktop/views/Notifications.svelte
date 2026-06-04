@@ -31,6 +31,8 @@
   import { toastActions } from '$lib/stores/toast';
   import { api, ApiError } from '$lib/utils/api';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { formatDate } from '$lib/utils/formatters';
+  import { getStoredValue, setStoredValue } from '$lib/utils/storage';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -39,14 +41,11 @@
   // View mode: 'grouped' or 'flat' with localStorage persistence
   const STORAGE_KEY = 'notifications-view-mode';
   let viewMode = $state(
-    (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY)) || 'grouped'
+    getStoredValue(STORAGE_KEY, 'grouped', v => v === 'grouped' || v === 'flat')
   );
 
-  // Persist view mode changes to localStorage
   $effect(() => {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, viewMode);
-    }
+    setStoredValue(STORAGE_KEY, viewMode);
   });
 
   /** @type {import('$lib/utils/notifications').Notification[]} */
@@ -434,7 +433,7 @@
     if (diff < 604800000)
       return t('notifications.timeAgo.daysAgo', { days: Math.floor(diff / 86400000) });
 
-    return date.toLocaleDateString();
+    return formatDate(date);
   }
 
   onMount(() => {

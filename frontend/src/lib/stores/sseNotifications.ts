@@ -1,4 +1,4 @@
-import ReconnectingEventSource from 'reconnecting-eventsource';
+import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
 import { toastActions } from './toast';
 import type { ToastType, ToastPosition } from './toast';
 import { loggers } from '$lib/utils/logger';

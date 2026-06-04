@@ -56,7 +56,15 @@ type NewSpeciesData struct {
 	ScientificName string `json:"scientific_name"`
 	CommonName     string `json:"common_name"`
 	FirstSeenDate  string `json:"first_seen_date"` // The absolute first date
+	LastSeenDate   string `json:"last_seen_date"`  // The most recent detection date
 	CountInPeriod  int    `json:"count_in_period"` // Optional: How many times seen in the query period
+}
+
+// SpeciesDetectionDate represents a species detected on a specific calendar date.
+type SpeciesDetectionDate struct {
+	ScientificName string `json:"scientific_name"`
+	CommonName     string `json:"common_name"`
+	Date           string `json:"date"`
 }
 
 // GetSpeciesSummaryData retrieves overall statistics for all bird species
@@ -617,6 +625,81 @@ func (ds *DataStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, start
 	return speciesData, nil
 }
 
+// GetSpeciesDetectionDatesInPeriod returns distinct species/date pairs within a period.
+func (ds *DataStore) GetSpeciesDetectionDatesInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]SpeciesDetectionDate, error) {
+	if startDate != "" && endDate != "" && startDate > endDate {
+		return nil, errors.Newf("start date cannot be after end date").
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_species_detection_dates_in_period").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
+	}
+
+	if limit <= 0 {
+		limit = 10000
+	}
+
+	query := fmt.Sprintf(`
+	SELECT
+		notes.scientific_name,
+		MAX(notes.common_name) as common_name,
+		notes.date
+	FROM notes
+	LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
+	WHERE notes.date BETWEEN ? AND ?
+		AND notes.date != ''
+		AND notes.date IS NOT NULL
+		AND (note_reviews.verified IS NULL OR note_reviews.verified != '%s')
+	GROUP BY notes.scientific_name, notes.date
+	ORDER BY notes.date ASC, notes.scientific_name ASC
+	LIMIT ? OFFSET ?
+	`, entities.VerificationFalsePositive)
+
+	var results []SpeciesDetectionDate
+	if err := ds.DB.WithContext(ctx).Raw(query, startDate, endDate, limit, offset).Scan(&results).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_detection_dates_in_period").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
+	}
+
+	return results, nil
+}
+
+// GetSpeciesLastDetectionDateBefore returns the last detection date before the given date.
+func (ds *DataStore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scientificName, beforeDate string) (string, error) {
+	query := fmt.Sprintf(`
+	SELECT COALESCE(MAX(notes.date), '') as last_seen_date
+	FROM notes
+	LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
+	WHERE notes.scientific_name = ?
+		AND notes.date < ?
+		AND notes.date != ''
+		AND notes.date IS NOT NULL
+		AND (note_reviews.verified IS NULL OR note_reviews.verified != '%s')
+	`, entities.VerificationFalsePositive)
+
+	var result struct {
+		LastSeenDate string `gorm:"column:last_seen_date"`
+	}
+	if err := ds.DB.WithContext(ctx).Raw(query, scientificName, beforeDate).Scan(&result).Error; err != nil {
+		return "", errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_last_detection_date_before").
+			Context("scientific_name", scientificName).
+			Context("before_date", beforeDate).
+			Build()
+	}
+
+	return result.LastSeenDate, nil
+}
+
 // GetNewSpeciesDetections finds species whose absolute first detection falls within the specified date range.
 // This is suitable for lifetime tracking only - NOT for seasonal or yearly tracking.
 // It supports pagination with limit and offset parameters.
@@ -627,6 +710,7 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 		ScientificName     string
 		CommonName         string
 		FirstDetectionDate string // Scan directly into string
+		LastDetectionDate  string
 		CountInPeriod      int
 	}
 	var rawResults []RawNewSpeciesResult
@@ -655,7 +739,8 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 	WITH SpeciesFirstSeen AS (
 	    SELECT
 	        notes.scientific_name,
-	        MIN(CASE WHEN notes.date != '' AND notes.date IS NOT NULL THEN notes.date ELSE NULL END) as first_detection_date
+	        MIN(CASE WHEN notes.date != '' AND notes.date IS NOT NULL THEN notes.date ELSE NULL END) as first_detection_date,
+	        MAX(CASE WHEN notes.date != '' AND notes.date IS NOT NULL THEN notes.date ELSE NULL END) as last_detection_date
 	    FROM notes
 	    LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
 	    WHERE (note_reviews.verified IS NULL OR note_reviews.verified != '%s')
@@ -677,6 +762,7 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 	    sfs.scientific_name,
 	    COALESCE(sip.common_name, sfs.scientific_name) as common_name,
 	    sfs.first_detection_date,
+	    sfs.last_detection_date,
 	    sip.count_in_period
 	FROM SpeciesFirstSeen sfs
 	JOIN SpeciesInPeriod sip ON sfs.scientific_name = sip.scientific_name
@@ -707,6 +793,7 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 				ScientificName: raw.ScientificName,
 				CommonName:     raw.CommonName,
 				FirstSeenDate:  raw.FirstDetectionDate, // Assign only if valid
+				LastSeenDate:   raw.LastDetectionDate,
 				CountInPeriod:  raw.CountInPeriod,
 			})
 		} else {

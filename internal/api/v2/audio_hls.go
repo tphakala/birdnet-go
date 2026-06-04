@@ -193,29 +193,52 @@ var hlsMgr = &hlsManager{
 	verboseLogging: os.Getenv(hlsVerboseEnvVar) != "",
 }
 
+// HLS route path fragments, registered relative to the v2 API group in
+// initHLSRoutes. They are reused by isPrivateModeExempt so the PrivateMode
+// exempt allow-list cannot drift from the registered routes.
+const (
+	hlsGroupPath      = "/streams/hls"
+	hlsTokenGroupPath = "/t"
+	hlsStartPath      = "/:sourceID/start"
+	hlsStopPath       = "/:sourceID/stop"
+	hlsHeartbeatPath  = "/heartbeat"
+	hlsStatusPath     = "/status"
+	hlsPlaylistPath   = "/:streamToken/playlist.m3u8"
+	hlsContentPath    = "/:streamToken/*"
+)
+
+// hlsPlaylistURL builds the client-facing playlist URL for a stream token from
+// the same route constants used to register the playlist route (see
+// initHLSRoutes), so the emitted URL cannot drift from the actual route on a
+// prefix or fragment rename.
+func hlsPlaylistURL(token string) string {
+	tokenPath := strings.Replace(hlsPlaylistPath, ":streamToken", token, 1)
+	return apiV2Prefix + hlsGroupPath + hlsTokenGroupPath + tokenPath
+}
+
 // initHLSRoutes registers HLS streaming endpoints
 func (c *Controller) initHLSRoutes() {
 	// Get authentication middleware
 	authMiddleware := c.authMiddleware
 
 	// HLS base group (no auth by default)
-	hlsGroup := c.Group.Group("/streams/hls")
+	hlsGroup := c.Group.Group(hlsGroupPath)
 
 	// Stream control endpoints
 	// Start uses dynamic middleware that checks PublicAccess.LiveAudio per-request,
 	// so changes take effect immediately without server restart.
 	// Stop always requires authentication to prevent abuse.
-	hlsGroup.POST("/:sourceID/start", c.StartHLSStream, c.publicLiveAudioAuth)
-	hlsGroup.POST("/:sourceID/stop", c.StopHLSStream, authMiddleware)
+	hlsGroup.POST(hlsStartPath, c.StartHLSStream, c.publicLiveAudioAuth)
+	hlsGroup.POST(hlsStopPath, c.StopHLSStream, authMiddleware)
 
 	// Auth-gated endpoints
-	hlsGroup.POST("/heartbeat", c.HLSHeartbeat, c.publicLiveAudioAuth)
-	hlsGroup.GET("/status", c.GetHLSStatus, c.publicLiveAudioAuth)
+	hlsGroup.POST(hlsHeartbeatPath, c.HLSHeartbeat, c.publicLiveAudioAuth)
+	hlsGroup.GET(hlsStatusPath, c.GetHLSStatus, c.publicLiveAudioAuth)
 
 	// Token-based content serving
-	hlsTokenGroup := hlsGroup.Group("/t")
-	hlsTokenGroup.GET("/:streamToken/playlist.m3u8", c.ServeHLSPlaylist)
-	hlsTokenGroup.GET("/:streamToken/*", c.ServeHLSContent)
+	hlsTokenGroup := hlsGroup.Group(hlsTokenGroupPath)
+	hlsTokenGroup.GET(hlsPlaylistPath, c.ServeHLSPlaylist)
+	hlsTokenGroup.GET(hlsContentPath, c.ServeHLSContent)
 
 	// Start the HLS activity sync goroutine (only once across all controller instances)
 	hlsMgr.activitySyncOnce.Do(func() {
@@ -231,14 +254,100 @@ func (c *Controller) initHLSRoutes() {
 // to take effect immediately without a server restart.
 func (c *Controller) publicLiveAudioAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		c.settingsMutex.RLock()
-		isPublic := c.Settings.Security.PublicAccess.LiveAudio
-		c.settingsMutex.RUnlock()
+		isPublic := c.currentSettings().Security.PublicAccess.LiveAudio
 		if isPublic {
 			return next(ctx)
 		}
 		return c.authMiddleware(next)(ctx)
 	}
+}
+
+// privateModeAuth is a dynamic middleware applied at the v2 API group level
+// that requires authentication for every endpoint when Security.PrivateMode
+// is enabled. A small set of paths stay public so the frontend can complete
+// the bootstrap and login flow and so the existing PublicAccess.LiveAudio
+// carve-out is preserved (those routes fall through to their own
+// publicLiveAudioAuth middleware which decides based on PublicAccess.LiveAudio).
+// The check runs per-request so the setting hot-reloads without a server
+// restart.
+func (c *Controller) privateModeAuth(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(ctx echo.Context) error {
+		c.settingsMutex.RLock()
+		privateMode := c.Settings.Security.PrivateMode
+		c.settingsMutex.RUnlock()
+
+		if !privateMode {
+			return next(ctx)
+		}
+		// Fail closed: if PrivateMode is requested but no auth middleware
+		// is configured the request must be rejected, not silently allowed.
+		// Auth middleware is always wired up in production; reaching this
+		// branch in a real deployment means the controller is misconfigured.
+		if c.authMiddleware == nil {
+			return c.HandleError(
+				ctx,
+				nil,
+				"Private mode is enabled but authentication is not configured",
+				http.StatusServiceUnavailable,
+			)
+		}
+		// Use ctx.Path() (the registered route pattern) rather than the raw
+		// request URL so the match is robust to trailing slashes, ingress
+		// prefixes, and other URL normalisation differences. The method is
+		// matched explicitly so that a future handler bound to the same
+		// path with a different verb does not inherit the public exemption.
+		if isPrivateModeExempt(ctx.Request().Method, ctx.Path()) {
+			return next(ctx)
+		}
+		return c.authMiddleware(next)(ctx)
+	}
+}
+
+// isPrivateModeExempt returns true for v2 API (method, route pattern)
+// pairs that must remain reachable without authentication even when
+// PrivateMode is on. Two categories are exempt:
+//
+//  1. Bootstrap and auth flow paths so the frontend can fetch /app/config
+//     and complete a login (including OAuth callback) from an unauthenticated
+//     state.
+//  2. Live audio (HLS) paths that already have their own publicLiveAudioAuth
+//     middleware. Letting them through privateModeAuth preserves the
+//     PublicAccess.LiveAudio carve-out: when LiveAudio is enabled the route
+//     stays public, when it is disabled the per-route middleware applies
+//     authMiddleware as before.
+//
+// The allow-list is keyed on method + path so any future handler added
+// at one of these paths under a different verb is fail-closed by default.
+func isPrivateModeExempt(method, path string) bool {
+	// Compose the exempt paths from the same constants used at the route
+	// registration sites (see initHLSRoutes, initAuthRoutes and the app config
+	// route in initAppRoutes) so the allow-list cannot silently drift from the
+	// actual routes. TestPrivateModeExemptPathsAreRegisteredRoutes asserts this
+	// correspondence.
+	const (
+		authBase     = apiV2Prefix + authGroupPath
+		hlsBase      = apiV2Prefix + hlsGroupPath
+		hlsTokenBase = hlsBase + hlsTokenGroupPath
+	)
+	switch {
+	case method == http.MethodGet && path == apiV2Prefix+AppConfigEndpoint:
+		return true
+	case method == http.MethodPost && path == authBase+authLoginPath:
+		return true
+	case method == http.MethodGet && path == authBase+authCallbackPath:
+		return true
+	case method == http.MethodPost && path == hlsBase+hlsStartPath:
+		return true
+	case method == http.MethodPost && path == hlsBase+hlsHeartbeatPath:
+		return true
+	case method == http.MethodGet && path == hlsBase+hlsStatusPath:
+		return true
+	case method == http.MethodGet && path == hlsTokenBase+hlsPlaylistPath:
+		return true
+	case method == http.MethodGet && path == hlsTokenBase+hlsContentPath:
+		return true
+	}
+	return false
 }
 
 // generateStreamToken creates a crypto-random 32-character hex token for stream URL access.
@@ -380,7 +489,7 @@ func (c *Controller) buildHLSStreamResponse(ctx echo.Context, sourceID string, s
 	}
 
 	// Build the API URL using the stream token (not the sourceID)
-	playlistURL := fmt.Sprintf("/api/v2/streams/hls/t/%s/playlist.m3u8", token)
+	playlistURL := hlsPlaylistURL(token)
 
 	// Determine playlist ready status
 	var isReady bool
@@ -539,7 +648,7 @@ func (c *Controller) GetHLSStatus(ctx echo.Context) error {
 		token, hasToken := hlsMgr.sourceTokens[sourceID]
 		hlsMgr.tokensMu.RUnlock()
 		if hasToken {
-			playlistURL = fmt.Sprintf("/api/v2/streams/hls/t/%s/playlist.m3u8", token)
+			playlistURL = hlsPlaylistURL(token)
 		}
 
 		// Check actual playlist readiness instead of hardcoding true
@@ -953,7 +1062,7 @@ func (c *Controller) setHLSHeaders(ctx echo.Context) {
 
 // getEffectiveSegmentLength returns the configured segment length with defaults and limits applied
 func (c *Controller) getEffectiveSegmentLength() int {
-	segmentLength := c.Settings.WebServer.LiveStream.SegmentLength
+	segmentLength := c.currentSettings().WebServer.LiveStream.SegmentLength
 	switch {
 	case segmentLength < hlsMinSegmentLen:
 		return hlsDefaultSegmentLen // Default
@@ -1125,7 +1234,7 @@ func (c *Controller) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 	}
 
 	// Validate FFmpeg path (defense-in-depth against ingress path contamination, see #2195)
-	ffmpegPath := c.Settings.Realtime.Audio.FfmpegPath
+	ffmpegPath := c.currentSettings().Realtime.Audio.FfmpegPath
 	if err := ffmpeg.ValidateFFmpegPath(ffmpegPath); err != nil {
 		streamCancel()
 		return nil, fmt.Errorf("invalid FFmpeg path: %w", err)
@@ -1323,7 +1432,7 @@ func (c *Controller) setupHLSFFmpeg(ctx context.Context, ffmpegPath, inputSource
 
 // buildFFmpegArgs constructs FFmpeg command line arguments
 func (c *Controller) buildFFmpegArgs(inputSource, outputDir, playlistPath string) []string {
-	settings := c.Settings.WebServer.LiveStream
+	settings := c.currentSettings().WebServer.LiveStream
 
 	// Apply defaults and limits
 	bitrate := 128
@@ -1583,8 +1692,9 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	consumerID := fmt.Sprintf("hls_%s_%s", privacy.SanitizeStreamUrl(sourceID), uuid.New().String()[:8])
 	// Use the configured live stream sample rate, falling back to the default HLS sample rate.
 	sampleRate := hlsDefaultSampleRate
-	if c.Settings.WebServer.LiveStream.SampleRate > 0 {
-		sampleRate = c.Settings.WebServer.LiveStream.SampleRate
+	liveStream := c.currentSettings().WebServer.LiveStream
+	if liveStream.SampleRate > 0 {
+		sampleRate = liveStream.SampleRate
 	}
 
 	consumer := &hlsConsumer{
@@ -1614,11 +1724,18 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	if src != nil {
 		sourceName = src.DisplayName
 	}
-	override := settings.ResolveEQOverride(sourceName)
-	eqChain := equalizer.BuildFilterChainWithOverride(override, settings.Realtime.Audio.Equalizer, sourceName, sampleRate)
+	eqChain := equalizer.ResolveAndBuildFilterChain(settings, sourceName, sampleRate)
+
+	// Determine the actual sample rate of the capture source
+	sourceSampleRate := sampleRate // Fallback to target rate
+	if src != nil && src.SampleRate > 0 {
+		sourceSampleRate = src.SampleRate
+	} else {
+		GetLogger().Warn("Audio source sample rate unavailable, falling back to HLS target rate", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.Int("fallback_rate", sampleRate))
+	}
 
 	// Add route on the AudioRouter
-	if routeErr := eng.Router().AddRoute(sourceID, consumer, sampleRate, gainDB, eqChain); routeErr != nil {
+	if routeErr := eng.Router().AddRoute(sourceID, consumer, sourceSampleRate, gainDB, eqChain); routeErr != nil {
 		return nil, nil, fmt.Errorf("failed to add HLS route: %w", routeErr)
 	}
 
@@ -1961,6 +2078,17 @@ func (c *Controller) cleanupExistingHLSStream(sourceID string) {
 				}
 			}
 		}
+	}
+}
+
+// RestartHLSStreams stops all active HLS streams so they restart with fresh settings.
+func (c *Controller) RestartHLSStreams() {
+	hlsMgr.streamsMu.Lock()
+	sourceIDs := slices.Collect(maps.Keys(hlsMgr.streams))
+	hlsMgr.streamsMu.Unlock()
+
+	for _, id := range sourceIDs {
+		c.stopHLSStream(id, "settings changed")
 	}
 }
 

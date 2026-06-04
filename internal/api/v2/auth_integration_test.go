@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +35,7 @@ func setupAuthIntegrationTest(t *testing.T) (*echo.Echo, *Controller, *conf.Sett
 
 	// Create mock datastore
 	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 
 	// Create settings with BasicAuth enabled
 	settings := &conf.Settings{
@@ -171,6 +173,90 @@ func TestV2AuthFlow_CompleteLogin(t *testing.T) {
 	_ = settings // Use settings if needed for additional assertions
 }
 
+// TestV2AuthFlow_FilterQueryRedirectSurvives verifies that a post-login redirect
+// to a filtered view whose query string legitimately contains path-like
+// sequences (".." / "//") survives validation instead of being silently dropped
+// back to the base path. Regression guard for the query-aware redirect fix:
+// path-traversal heuristics must only apply to the path, not to the query.
+func TestV2AuthFlow_FilterQueryRedirectSurvives(t *testing.T) {
+	e, controller, _ := setupAuthIntegrationTest(t)
+
+	const filteredRedirect = "/detections?queryType=species&q=a..b//c"
+	const wantFinalRedirect = "/ui/detections?queryType=species&q=a..b//c"
+
+	loginPayload := `{
+		"username": "birdnet-client",
+		"password": "testpassword123",
+		"redirectUrl": "` + filteredRedirect + `",
+		"basePath": "/ui/"
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/login", strings.NewReader(loginPayload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, controller.Login(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var loginResp AuthResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &loginResp))
+	require.True(t, loginResp.Success)
+
+	// The callback URL must carry the full filtered target, not the bare base path.
+	callbackURL, err := url.Parse(loginResp.RedirectURL)
+	require.NoError(t, err)
+	gotRedirect := callbackURL.Query().Get("redirect")
+	assert.Equal(t, wantFinalRedirect, gotRedirect,
+		"filtered redirect with '..'/'//' in the query must survive login validation")
+
+	// Following the callback must 302 to the filtered view with the query intact.
+	callbackReq := httptest.NewRequest(http.MethodGet, loginResp.RedirectURL, http.NoBody)
+	callbackRec := httptest.NewRecorder()
+	require.NoError(t, controller.OAuthCallback(e.NewContext(callbackReq, callbackRec)))
+
+	assert.Equal(t, http.StatusFound, callbackRec.Code)
+	assert.Equal(t, wantFinalRedirect, callbackRec.Header().Get("Location"),
+		"callback must redirect to the filtered view, not the base path")
+}
+
+// TestV2AuthFlow_ProxyPrefixedBasePathRedirect verifies that a reverse-proxy
+// (Home Assistant Ingress) base path produced by the frontend's getUiBasePath()
+// is accepted end-to-end: the redirect is re-rooted under the proxy prefix
+// rather than dropped to the default base path. Regression guard for the
+// proxy-aware base-path handling.
+func TestV2AuthFlow_ProxyPrefixedBasePathRedirect(t *testing.T) {
+	e, controller, _ := setupAuthIntegrationTest(t)
+
+	// HA Ingress tokens are base64url (alphanumeric, '-', '_'), accepted by the
+	// backend basePath regex.
+	const basePath = "/api/hassio_ingress/aBcD-_1234567890/ui/"
+	const wantFinalRedirect = "/api/hassio_ingress/aBcD-_1234567890/ui/detections?queryType=species"
+
+	loginPayload := `{
+		"username": "birdnet-client",
+		"password": "testpassword123",
+		"redirectUrl": "/detections?queryType=species",
+		"basePath": "` + basePath + `"
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/login", strings.NewReader(loginPayload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	require.NoError(t, controller.Login(e.NewContext(req, rec)))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var loginResp AuthResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &loginResp))
+	require.True(t, loginResp.Success)
+
+	callbackURL, err := url.Parse(loginResp.RedirectURL)
+	require.NoError(t, err)
+	assert.Equal(t, wantFinalRedirect, callbackURL.Query().Get("redirect"),
+		"redirect must be re-rooted under the reverse-proxy base path")
+}
+
 // TestV2AuthFlow_InvalidCredentials tests login with wrong password.
 func TestV2AuthFlow_InvalidCredentials(t *testing.T) {
 	e, controller, _ := setupAuthIntegrationTest(t)
@@ -205,6 +291,7 @@ func TestV2AuthFlow_EmptyClientID_V1Compatible(t *testing.T) {
 	// Create custom test environment with empty ClientID
 	e := echo.New()
 	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 
 	settings := &conf.Settings{
 		WebServer: conf.WebServerSettings{Debug: true},
@@ -354,6 +441,41 @@ func TestV2AuthFlow_OpenRedirectPrevention(t *testing.T) {
 			name:           "valid path with query",
 			maliciousURL:   "/ui/settings?tab=main",
 			expectedResult: "/ui/settings?tab=main",
+		},
+		{
+			name:           "path traversal in the path component is rejected",
+			maliciousURL:   "/ui/../../etc/passwd?x=1",
+			expectedResult: "/",
+		},
+		{
+			name:           "encoded path traversal in the path component is rejected",
+			maliciousURL:   "/ui/%2e%2e/secret",
+			expectedResult: "/",
+		},
+		{
+			name:           "path-like sequences in the query are preserved",
+			maliciousURL:   "/ui/detections?queryType=search&q=a..b//c",
+			expectedResult: "/ui/detections?queryType=search&q=a..b//c",
+		},
+		{
+			name:           "special characters in the path are emitted percent-encoded",
+			maliciousURL:   "/ui/a%20b",
+			expectedResult: "/ui/a%20b",
+		},
+		{
+			name:           "double-encoded CRLF in the query is rejected",
+			maliciousURL:   "/ui/detections?x=a%250d%250aSet-Cookie:evil",
+			expectedResult: "/",
+		},
+		{
+			name:           "redirect over the length budget is rejected",
+			maliciousURL:   "/ui/detections?q=" + strings.Repeat("a", 3000),
+			expectedResult: "/",
+		},
+		{
+			name:           "backslashes in the query value are preserved (not mangled to slashes)",
+			maliciousURL:   `/ui/search?q=C:\Temp\bird.wav`,
+			expectedResult: `/ui/search?q=C:\Temp\bird.wav`,
 		},
 	}
 

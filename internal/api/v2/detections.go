@@ -738,14 +738,20 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 // Without this, all detections of a recently-first-seen species would incorrectly
 // show isNewSpecies=true instead of only the actual first detection.
 func (c *Controller) applySpeciesTrackingMetadata(detection *DetectionResponse, scientificName, detectionDate string) {
-	if c.Processor == nil || c.Processor.NewSpeciesTracker == nil {
+	// Snapshot processor and tracker to avoid TOCTOU race
+	proc := c.Processor
+	if proc == nil {
+		return
+	}
+	tracker := proc.GetNewSpeciesTracker()
+	if tracker == nil {
 		return
 	}
 	// GetSpeciesStatus is called with time.Now() intentionally: the "days since"
 	// counters (DaysSinceFirstSeen, DaysThisYear, DaysThisSeason) describe the
 	// species' current tracking state, not the state at the detection's time.
 	// The boolean flags (IsNew*) are computed below using date comparison instead.
-	status := c.Processor.NewSpeciesTracker.GetSpeciesStatus(scientificName, time.Now())
+	status := tracker.GetSpeciesStatus(scientificName, time.Now())
 
 	// Set flags based on whether THIS detection's date matches the first-seen date
 	// for each tracking period, rather than using the tracker's window-based "IsNew" flag.
@@ -789,6 +795,9 @@ func (c *Controller) populateWeatherData(detection *DetectionResponse, note *dat
 	detectionTimeStr := note.Date + " " + note.Time
 	detectionTime, err := time.ParseInLocation("2006-01-02 15:04:05", detectionTimeStr, time.Local)
 	if err != nil {
+		c.logWarnIfEnabled("Failed to parse detection time for weather data",
+			logger.String("time_str", detectionTimeStr),
+			logger.Error(err))
 		return
 	}
 
@@ -1268,7 +1277,7 @@ func (c *Controller) removeDetectionFiles(clipName string) {
 	log := c.apiLogger
 
 	// Normalize the clip path to get a relative path within SecureFS
-	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	clipsPrefix := c.currentSettings().Realtime.Audio.Export.Path
 	normalized := NormalizeClipPath(clipName, clipsPrefix)
 	if normalized == "" {
 		log.Warn("Cannot remove detection files: empty normalized clip path",
@@ -1537,13 +1546,9 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 
 // GetExcludedSpecies returns the list of excluded species
 func (c *Controller) GetExcludedSpecies(ctx echo.Context) error {
-	settings := c.Settings
-
-	// Create a copy of the slice to avoid race conditions
-	c.speciesExcludeMutex.Lock()
-	species := make([]string, len(settings.Realtime.Species.Exclude))
-	copy(species, settings.Realtime.Species.Exclude)
-	c.speciesExcludeMutex.Unlock()
+	c.settingsMutex.RLock()
+	species := slices.Clone(c.getSettingsOrFallback().Realtime.Species.Exclude)
+	c.settingsMutex.RUnlock()
 
 	return ctx.JSON(http.StatusOK, ExcludedSpeciesResponse{
 		Species: species,
@@ -1567,40 +1572,42 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 		return "", false, nil
 	}
 
-	// Use the controller's mutex to protect this operation
-	c.speciesExcludeMutex.Lock()
-	defer c.speciesExcludeMutex.Unlock()
+	// Serialise against concurrent settings saves so that out-of-band
+	// StoreSettings calls (range filter rebuild, etc.) cannot desynchronise
+	// c.Settings from the live atomic pointer between read and publish.
+	c.settingsMutex.Lock()
+	defer c.settingsMutex.Unlock()
 
-	// Access settings via dependency injection (not the global singleton)
-	settings := c.Settings
+	// Always read the live atomic snapshot; c.Settings may be stale after
+	// UpdateIncludedSpecies or other out-of-band StoreSettings calls.
+	current := c.getSettingsOrFallback()
 
-	// Check if species is already in the excluded list
-	wasExcluded := slices.Contains(settings.Realtime.Species.Exclude, species)
+	wasExcluded := slices.Contains(current.Realtime.Species.Exclude, species)
 
+	updated := conf.CloneSettings(current)
 	if wasExcluded {
-		// Remove from excluded list
-		newExcludeList := make([]string, 0, len(settings.Realtime.Species.Exclude)-1)
-		for _, s := range settings.Realtime.Species.Exclude {
-			if s != species {
-				newExcludeList = append(newExcludeList, s)
-			}
-		}
-		settings.Realtime.Species.Exclude = newExcludeList
+		updated.Realtime.Species.Exclude = slices.DeleteFunc(updated.Realtime.Species.Exclude, func(s string) bool {
+			return s == species
+		})
 		action = "removed"
 		isExcluded = false
 	} else {
-		// Add to excluded list
-		newExcludeList := make([]string, len(settings.Realtime.Species.Exclude), len(settings.Realtime.Species.Exclude)+1)
-		copy(newExcludeList, settings.Realtime.Species.Exclude)
-		newExcludeList = append(newExcludeList, species)
-		settings.Realtime.Species.Exclude = newExcludeList
+		updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
 		action = "added"
 		isExcluded = true
 	}
 
-	// Save settings using the package function that handles concurrency
-	if err := conf.SaveSettings(); err != nil {
-		return "", wasExcluded, fmt.Errorf("failed to save settings: %w", err)
+	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		return "", wasExcluded, err
+	}
+
+	// Trigger side-effects (range filter rebuild, etc.) so the include list
+	// reflects the updated exclude list without waiting for the daily rebuild.
+	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
+		GetLogger().Warn("Failed to trigger settings side-effects after species exclusion change",
+			logger.Error(handleErr),
+			logger.String("species", species),
+			logger.String("action", action))
 	}
 
 	return action, isExcluded, nil
@@ -1613,32 +1620,25 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 		return nil
 	}
 
-	// Use the controller's mutex to protect this operation
-	c.speciesExcludeMutex.Lock()
-	defer c.speciesExcludeMutex.Unlock()
+	c.settingsMutex.Lock()
+	defer c.settingsMutex.Unlock()
 
-	// Access settings via dependency injection (not the global singleton)
-	settings := c.Settings
+	current := c.getSettingsOrFallback()
+	if slices.Contains(current.Realtime.Species.Exclude, species) {
+		return nil
+	}
 
-	// Check if species is already in the excluded list
-	isExcluded := slices.Contains(settings.Realtime.Species.Exclude, species)
+	updated := conf.CloneSettings(current)
+	updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
 
-	// If not already excluded, add it
-	if !isExcluded {
-		// Create a copy of the current exclude list to avoid race conditions
-		newExcludeList := make([]string, len(settings.Realtime.Species.Exclude), len(settings.Realtime.Species.Exclude)+1)
-		copy(newExcludeList, settings.Realtime.Species.Exclude)
+	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		return err
+	}
 
-		// Add the new species to the list
-		newExcludeList = append(newExcludeList, species)
-
-		// Update the settings with the new list
-		settings.Realtime.Species.Exclude = newExcludeList
-
-		// Save settings using the package function that handles concurrency
-		if err := conf.SaveSettings(); err != nil {
-			return fmt.Errorf("failed to save settings: %w", err)
-		}
+	if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
+		GetLogger().Warn("Failed to trigger settings side-effects after species exclusion change",
+			logger.Error(handleErr),
+			logger.String("species", species))
 	}
 
 	return nil

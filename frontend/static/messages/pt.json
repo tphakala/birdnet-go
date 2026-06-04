@@ -435,6 +435,10 @@
         "overloadTitle": "Análise de áudio sobrecarregada",
         "overloadMessage": "O seu sistema está a descartar {dropRate} % das amostras de áudio da fonte ''{sourceName}'' porque não consegue acompanhar a análise. Reduza o valor de sobreposição do BirdNET nas definições de deteção ou considere atualizar para um CPU mais rápido."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime não disponível",
+        "unavailableMessage": "O ONNX Runtime {requiredVersion} é necessário para {modelName}, mas não foi encontrado. Consulte o guia de instalação: {installGuideURL}"
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valor atual: {value}% (limite: {threshold}%)",
@@ -937,7 +941,10 @@
     "aria": {
       "loading": "Carregando detalhes da detecção...",
       "loaded": "Detalhes de detecção carregados para {species}",
-      "error": "Erro ao carregar detecção: {error}"
+      "error": "Erro ao carregar detecção: {error}",
+      "loadingResults": "Carregando {count} resultados...",
+      "thumbnailLoading": "Carregando miniatura de {species}...",
+      "thumbnailLoaded": "Miniatura de {species} carregada"
     },
     "errors": {
       "notFound": "Detecção não encontrada. Pode ter sido excluída ou o ID está incorreto.",
@@ -1576,7 +1583,11 @@
       "recentlyFirstSeen": "Visto pela primeira vez recentemente",
       "earliestFirstSeen": "Visto pela primeira vez mais cedo",
       "recentlyLastSeen": "Visto pela última vez recentemente",
-      "highestConfidence": "Maior confiança"
+      "earliestLastSeen": "Visto pela última vez mais cedo",
+      "highestConfidence": "Maior confiança",
+      "lowestConfidence": "Menor confiança",
+      "highestMaxConfidence": "Maior confiança máxima",
+      "lowestMaxConfidence": "Menor confiança máxima"
     },
     "charts": {
       "top10Species": "Top 10 espécies",
@@ -2991,6 +3002,7 @@
         "unknown": "desconhecido",
         "refresh": "Atualizar",
         "addStream": "Adicionar Stream",
+        "testRequired": "Execute um teste de stream bem-sucedido antes de guardar",
         "deleteConfirm": "Remover este stream?",
         "restartCount": "Reiniciado {count} vez(es)",
         "healthLoadError": "Falha ao carregar status do stream",
@@ -3043,6 +3055,47 @@
           "degraded": "Degradada",
           "failed": "Falhou",
           "unknown": "Desconhecido"
+        },
+        "test": {
+          "button": "Testar stream",
+          "probing": "Testando...",
+          "result": "Resultado do teste",
+          "error": "Teste falhou",
+          "batCompatible": "Compatível com morcegos",
+          "batIncompatible": "Não compatível com morcegos"
+        },
+        "batWarning": "Os modelos de morcegos requerem streams com um codec sem perda (PCM) e uma taxa de amostragem de pelo menos 96 kHz. Use o botão Testar stream acima para verificar a compatibilidade.",
+        "codecWarning": {
+          "lossy": "Codecs com perdas (AAC, Opus, MP3) destroem frequências ultrassónicas acima de ~20 kHz, tornando o stream inadequado para a deteção de morcegos."
+        },
+        "channelMode": {
+          "analyzeError": "Falha na análise de canais",
+          "analyzing": "Analisando canais...",
+          "description": "Como lidar com áudio multicanal. Selecione um canal específico se sua fonte envia estéreo.",
+          "detectBest": "Detectar melhor canal",
+          "downmix": "Misturar para mono",
+          "downmixWarning": "A mistura para mono não é recomendada para streams estéreo. Diferenças de fase entre canais causam filtragem em pente que reduz a precisão de detecção. Selecione um canal específico em vez disso.",
+          "energyLeft": "Canal esquerdo",
+          "energyRight": "Canal direito",
+          "label": "Modo de canal",
+          "left": "Apenas canal esquerdo",
+          "monoNoSelection": "Fonte de canal único. Todos os modos de canal produzem o mesmo áudio, por isso não é necessária qualquer seleção.",
+          "recommended": "Recomendado: {channel}",
+          "right": "Apenas canal direito",
+          "singleChannelGood": "Canal único selecionado, ótimo para a precisão de detecção."
+        },
+        "format": {
+          "label": "Formato de áudio",
+          "mono": "Mono (1 canal)",
+          "multi": "{count} canais",
+          "stereo": "Estéreo (2 canais)",
+          "untested": "Teste o stream para detetar o formato de áudio",
+          "withSampleRate": "{rate} kHz, {channels}"
+        },
+        "stereoWarning": {
+          "message": "Stream estéreo detectado. A mistura de múltiplos canais pode reduzir a precisão de detecção devido a diferenças de fase entre canais. Selecione um canal específico (esquerdo/direito) ou use o detector de canais para melhores resultados.",
+          "short": "Downmix estéreo ativo. A precisão de detecção pode estar reduzida. Edite para selecionar um canal específico.",
+          "tooltip": "Downmix estéreo ativo. A precisão de detecção pode estar reduzida. Edite para selecionar um canal específico."
         }
       },
       "audioFilters": {
@@ -3218,6 +3271,10 @@
         "devicesLoadFailed": "Falha ao carregar dispositivos de áudio. Por favor, verifique as permissões do sistema.",
         "invalidBitrate": "Valor de taxa de bits inválido",
         "invalidRetentionPolicy": "Política de retenção inválida"
+      },
+      "models": {
+        "recommendBoth": "Para melhor cobertura de deteção de espécies, recomenda-se executar tanto o BirdNET como o Perch em conjunto.",
+        "perchOnlyWarning": "O Perch sozinho produz menos deteções. Reduza o limiar de confiança para 0.50 para resultados significativos, ou ative o BirdNET em paralelo para melhor cobertura."
       }
     },
     "security": {
@@ -3378,6 +3435,10 @@
         "liveAudioHelp": "Quando ativado, qualquer pessoa pode ouvir transmissões de áudio em direto sem iniciar sessão. Definições e eliminação continuam a requerer autenticação.",
         "warningText": "Ativar funcionalidades de acesso público expõe-nas a qualquer pessoa que consiga aceder a este servidor. Ative apenas se confia no seu ambiente de rede."
       },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
         "host": "Por exemplo, localhost:8080 ou example.domain.com",
@@ -3496,6 +3557,20 @@
           "title": "Localização não configurada",
           "description": "Defina sua localização nas Configurações Principais para ver as espécies disponíveis na sua área. O filtro de alcance usa sua localização para determinar quais espécies provavelmente serão encontradas nas proximidades.",
           "action": "Configurar localização"
+        },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Filtro de alcance inativo",
+            "description": "As deteções não estão a ser filtradas pela sua localização neste momento, pelo que podem ser comunicadas espécies de fora da sua área. Verifique a configuração do modelo de filtro de alcance nas Configurações."
+          },
+          "fellBack": {
+            "title": "A usar o filtro de alcance integrado",
+            "description": "Não foi possível carregar o filtro de alcance do geomodelo configurado, pelo que o BirdNET-Go recorreu ao filtro de alcance integrado. A filtragem continua a funcionar, mas verifique as Configurações para restaurar o geomodelo."
+          },
+          "mappedZero": {
+            "title": "O filtro de alcance não correspondeu a nenhuma espécie",
+            "description": "O filtro de alcance do geomodelo não correspondeu a nenhuma das espécies do modelo ativo, pelo que todas as deteções seriam filtradas. Verifique se o ficheiro de etiquetas do filtro de alcance corresponde ao modelo ativo."
+          }
         },
         "columns": {
           "commonName": "Nome comum",
@@ -3919,6 +3994,8 @@
           "species_name": "Nome da espécie",
           "scientific_name": "Nome científico",
           "confidence": "Confiança",
+          "days_since_last_seen": "Dias desde a última detecção",
+          "novelty_episode_days": "Dias do episódio de novidade",
           "location": "Localização",
           "stream_name": "Nome do fluxo",
           "stream_url": "URL do fluxo",
@@ -3929,6 +4006,8 @@
         "operators": {
           "is": "é",
           "is_not": "não é",
+          "in": "está na lista",
+          "not_in": "não está na lista",
           "contains": "contém",
           "not_contains": "não contém",
           "greater_than": "maior que",
@@ -4193,7 +4272,31 @@
       "playbackSpeed": "Velocidade de reprodução",
       "speed": "Velocidade",
       "loop": "Alternar repetição",
-      "player": "Reprodutor de áudio"
+      "player": "Reprodutor de áudio",
+      "autoplayBlocked": "Clique para reproduzir (reprodução automática bloqueada)",
+      "hlsNotSupported": "A reprodução HLS não é suportada neste navegador",
+      "streamStarting": "Iniciando transmissão de áudio...",
+      "levelFor": "Nível de áudio para {source}",
+      "levelForNoSource": "Nível de áudio: sem fonte",
+      "noSource": "Sem fonte",
+      "levelAnnouncement": "Nível de áudio atual: {level} por cento",
+      "levelAnnouncementClipping": "Nível de áudio atual: {level} por cento, distorção detetada",
+      "sourceSelection": "Seleção de fonte de áudio",
+      "sources": "Fontes de áudio",
+      "noSourcesAvailable": "Nenhuma fonte de áudio disponível",
+      "silent": "(silencioso)",
+      "stopPlayback": "Parar reprodução de áudio",
+      "startPlayback": "Iniciar reprodução de áudio",
+      "nowPlaying": "Reproduzindo áudio de {source}",
+      "nowPlayingNoSource": "Reproduzindo áudio",
+      "playbackStopped": "Reprodução de áudio parada",
+      "loginRequired": "Login necessário para transmitir áudio",
+      "streamError": "Erro ao iniciar a transmissão",
+      "streamTitle": "Transmissão de áudio de pássaros - {source}",
+      "streamTitleDefault": "Transmissão de áudio de pássaros",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Transmissão ao vivo",
+      "playbackError": "Erro de reprodução: {details}"
     },
     "spectrogram": {
       "notGenerated": "Espectrograma ainda não gerado",
@@ -4418,6 +4521,16 @@
       "hostRequired": "O parâmetro de host é obrigatório",
       "invalidHost": "Parâmetro de host inválido",
       "rateLimit": "Demasiadas tentativas de ligação ao fluxo de notificações, aguarde antes de tentar novamente"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Corpo do pedido inválido",
+        "urlRequired": "O URL do stream é obrigatório",
+        "invalidUrl": "Formato de URL inválido. Introduza um URL completo, por ex. rtsp://host:porta/caminho",
+        "unsupportedScheme": "Esquema de URL não suportado \"{scheme}\". Use rtsp, rtsps, http, https, rtmp ou udp",
+        "blockedDestination": "Este destino está bloqueado por razões de segurança",
+        "connectionFailed": "Não foi possível ligar ao stream. Verifique se o URL está correto e se o stream está acessível"
+      }
     },
     "debug": {
       "notEnabled": "O modo de depuração não está ativado"
@@ -4683,7 +4796,10 @@
       "reinstall": "Reinstalar",
       "reinstalling": "Reinstalando...",
       "reinstallComplete": "Ficheiros verificados com sucesso",
-      "geomodelBadge": "Inclui BirdNET v3.0 geomodel"
+      "geomodelBadge": "Inclui BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Requer ONNX Runtime que não está disponível neste sistema.",
+      "onnxRuntimeMissing": "O ONNX Runtime não está disponível. Este modelo não pode ser executado.",
+      "unavailable": "Indisponível"
     },
     "bird": {
       "title": "Deteção de aves",
@@ -4713,7 +4829,7 @@
     "title": "Ajuda e suporte",
     "subtitle": "Obtenha ajuda, reporte problemas e conecte-se com a comunidade",
     "reportBug": {
-      "description": "Se encontrar um problema, primeiro gere um pacote de suporte para capturar as informações do sistema e os registros, depois abra um relatório de erro no GitHub."
+      "description": "Se encontrar um problema, abra primeiro um relatório de erro no GitHub para descrever o problema, depois gere um pacote de suporte com o número do issue para ajudar na resolução."
     },
     "askQuestion": {
       "description": "Tem uma pergunta sobre configuração, funcionalidades ou utilização? O fórum GitHub Discussions é o melhor local para obter ajuda da comunidade."
@@ -4761,23 +4877,21 @@
         "description": "Gere e envie um pacote de suporte abaixo. Ele captura registros e configuração que aceleram significativamente a resolução de problemas."
       }
     },
-    "supportDump": {
-      "title": "Gerar pacote de suporte",
-      "description": "Enviar um pacote de suporte com seu relatório de erro ajuda significativamente na resolução de problemas. Ele captura sua configuração e registros recentes com dados sensíveis removidos."
-    },
     "openIssue": {
       "title": "Abrir issue no GitHub",
-      "description": "Depois de reunir as informações acima e gerar um pacote de suporte, abra um issue no GitHub para descrever o problema.",
+      "description": "Abra um issue no GitHub para descrever o problema. Vai precisar do número do issue no próximo passo.",
       "button": "Abrir issue no GitHub"
+    },
+    "supportDump": {
+      "title": "Gerar pacote de suporte",
+      "description": "Após criar o issue, gere um pacote de suporte e insira o número do issue do GitHub. Isto liga os seus diagnósticos ao relatório de erro e ajuda na resolução."
     }
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Atualizar",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4789,6 +4903,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Tudo OK",
+      "needsAttention": "Requer atenção",
+      "failing": "A falhar",
+      "allClear": "Sem problemas",
+      "noData": "Sem dados",
+      "none": "Nenhum"
+    },
+    "diagnostics": "Diagnóstico",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4817,6 +4940,41 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Erros frequentes",
+      "errorCount": "Contagem",
+      "errorComponent": "Componente",
+      "errorLevel": "Nível",
+      "errorMessage": "Mensagem"
+    },
+    "window": {
+      "label": "Janela de avaliação",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Último evento",
+      "recentEvents": "Eventos recentes",
+      "time": "Hora",
+      "source": "Fonte",
+      "count": "Contagem",
+      "lifetime": "total",
+      "sparklineLabel": "Gráfico de atividade",
+      "activeHours": "Horas ativas",
+      "windowTotal": "Na janela",
+      "velocity": "Tendência",
+      "velocityStable": "Estável",
+      "velocityIncreasing": "Em aumento",
+      "velocityDecreasing": "Em queda",
+      "pattern": "Padrão",
+      "patternNone": "Nenhum",
+      "patternTransient": "Transitório",
+      "patternSustained": "Persistente"
     }
   }
 }

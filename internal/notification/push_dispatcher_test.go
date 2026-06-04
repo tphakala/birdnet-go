@@ -1345,3 +1345,57 @@ func TestPushDispatcher_ForwardsNoTargetNotification(t *testing.T) {
 		require.Fail(t, "no-target notification should reach push provider (backwards compat)")
 	}
 }
+
+func TestGetAllPushProviderHealth_NilDispatcher(t *testing.T) {
+	dispatcherMu.Lock()
+	saved := globalPushDispatcher
+	globalPushDispatcher = nil
+	dispatcherMu.Unlock()
+	t.Cleanup(func() {
+		dispatcherMu.Lock()
+		globalPushDispatcher = saved
+		dispatcherMu.Unlock()
+	})
+
+	result := GetAllPushProviderHealth()
+	assert.Nil(t, result)
+}
+
+func TestGetAllPushProviderHealth_NilHealthChecker(t *testing.T) {
+	pd := &pushDispatcher{healthChecker: nil}
+
+	dispatcherMu.Lock()
+	saved := globalPushDispatcher
+	globalPushDispatcher = pd
+	dispatcherMu.Unlock()
+	t.Cleanup(func() {
+		dispatcherMu.Lock()
+		globalPushDispatcher = saved
+		dispatcherMu.Unlock()
+	})
+
+	result := GetAllPushProviderHealth()
+	assert.Nil(t, result)
+}
+
+func TestGetAllPushProviderHealth_WithProviders(t *testing.T) {
+	hc := NewHealthChecker(DefaultHealthCheckConfig(), nil, nil)
+	fp := newFakeProvider("test-push", true)
+	hc.RegisterProvider(fp, nil)
+
+	pd := &pushDispatcher{healthChecker: hc}
+
+	dispatcherMu.Lock()
+	saved := globalPushDispatcher
+	globalPushDispatcher = pd
+	dispatcherMu.Unlock()
+	t.Cleanup(func() {
+		dispatcherMu.Lock()
+		globalPushDispatcher = saved
+		dispatcherMu.Unlock()
+	})
+
+	result := GetAllPushProviderHealth()
+	require.Len(t, result, 1)
+	assert.Equal(t, "test-push", result[0].ProviderName)
+}

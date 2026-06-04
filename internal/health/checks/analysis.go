@@ -9,127 +9,205 @@ import (
 	"github.com/tphakala/birdnet-go/internal/health"
 )
 
-// ModelLoadedCheck verifies that the BirdNET analysis model is loaded and ready.
-type ModelLoadedCheck struct {
-	isLoaded  func() bool
-	modelName func() string
+const (
+	latencyCriticalRatio = 0.90
+	latencyWarningRatio  = 0.50
+)
+
+// ModelLoadInfo describes a loaded model for health reporting.
+type ModelLoadInfo struct {
+	ID       string
+	Name     string
+	Loaded   bool
+	Backend  string
+	SpecInfo string // e.g. "48kHz, 3s clips"
 }
 
-// NewModelLoadedCheck creates a ModelLoadedCheck using the given predicate and name provider.
-func NewModelLoadedCheck(isLoaded func() bool, modelName func() string) *ModelLoadedCheck {
-	return &ModelLoadedCheck{isLoaded: isLoaded, modelName: modelName}
+// ModelsLoadedCheck verifies that all analysis models are loaded and ready.
+// Implements MultiResultCheck to produce one result per model.
+type ModelsLoadedCheck struct {
+	getModels func() []ModelLoadInfo
+}
+
+// NewModelsLoadedCheck creates a ModelsLoadedCheck using the given model provider.
+func NewModelsLoadedCheck(getModels func() []ModelLoadInfo) *ModelsLoadedCheck {
+	return &ModelsLoadedCheck{getModels: getModels}
 }
 
 // Name returns the check identifier.
-func (c *ModelLoadedCheck) Name() string { return "model_loaded" }
+func (c *ModelsLoadedCheck) Name() string { return "models_loaded" }
 
 // Category returns the analysis category.
-func (c *ModelLoadedCheck) Category() health.Category { return health.CategoryAnalysis }
+func (c *ModelsLoadedCheck) Category() health.Category { return health.CategoryAnalysis }
 
-// Run verifies that the analysis model is loaded.
-func (c *ModelLoadedCheck) Run(_ context.Context) health.Result {
+// Run returns a single aggregate result (worst status across all models).
+func (c *ModelsLoadedCheck) Run(ctx context.Context) health.Result {
+	start := time.Now()
+	r := worstResult(c.Name(), c.Category(), c.RunMulti(ctx))
+	r.DurationMS = float64(time.Since(start).Microseconds()) / 1000
+	if r.Timestamp.IsZero() {
+		r.Timestamp = time.Now()
+	}
+	return r
+}
+
+// RunMulti returns one result per loaded model.
+func (c *ModelsLoadedCheck) RunMulti(_ context.Context) []health.Result {
 	start := time.Now()
 
-	if c.isLoaded == nil {
-		return skippedResult(c.Name(), c.Category(), start)
+	if c.getModels == nil {
+		return []health.Result{skippedResult(c.Name(), c.Category(), start)}
 	}
 
-	name := ""
-	if c.modelName != nil {
-		name = c.modelName()
+	models := c.getModels()
+	if len(models) == 0 {
+		return []health.Result{{
+			Name:       c.Name(),
+			Category:   c.Category(),
+			Status:     health.StatusCritical,
+			Message:    "No analysis models loaded",
+			DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+			Timestamp:  time.Now(),
+		}}
 	}
 
-	status := health.StatusHealthy
-	msg := fmt.Sprintf("Model loaded: %s", name)
-	if name == "" {
-		msg = "Model loaded"
-	}
+	results := make([]health.Result, 0, len(models))
+	for _, m := range models {
+		checkName := "model_loaded_" + sanitizeID(m.ID)
+		status := health.StatusHealthy
+		msg := fmt.Sprintf("%s loaded (%s)", m.Name, m.SpecInfo)
 
-	if !c.isLoaded() {
-		status = health.StatusCritical
-		msg = "Analysis model is not loaded"
-		if name != "" {
-			msg = fmt.Sprintf("Analysis model not loaded: %s", name)
+		if !m.Loaded {
+			status = health.StatusCritical
+			msg = fmt.Sprintf("%s not loaded", m.Name)
 		}
-	}
 
-	return health.Result{
-		Name:     c.Name(),
-		Category: c.Category(),
-		Status:   status,
-		Message:  msg,
-		Details: map[string]any{
-			"model_name": name,
-		},
-		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
-		Timestamp:  time.Now(),
+		results = append(results, health.Result{
+			Name:     checkName,
+			Category: c.Category(),
+			Status:   status,
+			Message:  msg,
+			Details: map[string]any{
+				"model_id":   m.ID,
+				"model_name": m.Name,
+				"backend":    m.Backend,
+				"spec":       m.SpecInfo,
+			},
+			Timestamp: time.Now(),
+		})
 	}
+	return results
 }
 
-// InferenceLatencyCheck verifies that inference latency is within acceptable bounds
-// relative to the analysis window size.
-type InferenceLatencyCheck struct {
-	getStats func() (avgMS, p99MS, windowMS float64)
+// ModelInferenceInfo describes per-model inference statistics for health reporting.
+type ModelInferenceInfo struct {
+	ModelID   string
+	ModelName string
+	AvgMS     float64
+	P99MS     float64
+	WindowMS  float64 // model-specific analysis window (BufferInterval in ms)
 }
 
-// NewInferenceLatencyCheck creates an InferenceLatencyCheck using the given stats provider.
-func NewInferenceLatencyCheck(getStats func() (avgMS, p99MS, windowMS float64)) *InferenceLatencyCheck {
-	return &InferenceLatencyCheck{getStats: getStats}
+// PerModelInferenceLatencyCheck verifies that inference latency for each model
+// is within acceptable bounds relative to that model's analysis window.
+// Implements MultiResultCheck to produce one result per model.
+type PerModelInferenceLatencyCheck struct {
+	getStats func() []ModelInferenceInfo
+}
+
+// NewPerModelInferenceLatencyCheck creates a check that evaluates each model's
+// inference latency against its own analysis window.
+func NewPerModelInferenceLatencyCheck(getStats func() []ModelInferenceInfo) *PerModelInferenceLatencyCheck {
+	return &PerModelInferenceLatencyCheck{getStats: getStats}
 }
 
 // Name returns the check identifier.
-func (c *InferenceLatencyCheck) Name() string { return "inference_latency" }
+func (c *PerModelInferenceLatencyCheck) Name() string { return "inference_latency" }
 
 // Category returns the analysis category.
-func (c *InferenceLatencyCheck) Category() health.Category { return health.CategoryAnalysis }
+func (c *PerModelInferenceLatencyCheck) Category() health.Category { return health.CategoryAnalysis }
 
-// Run evaluates inference latency against the analysis window duration.
-func (c *InferenceLatencyCheck) Run(_ context.Context) health.Result {
+// Run returns a single aggregate result (worst status across all models).
+func (c *PerModelInferenceLatencyCheck) Run(ctx context.Context) health.Result {
+	start := time.Now()
+	r := worstResult(c.Name(), c.Category(), c.RunMulti(ctx))
+	r.DurationMS = float64(time.Since(start).Microseconds()) / 1000
+	if r.Timestamp.IsZero() {
+		r.Timestamp = time.Now()
+	}
+	return r
+}
+
+// RunMulti evaluates each model's inference latency independently.
+func (c *PerModelInferenceLatencyCheck) RunMulti(_ context.Context) []health.Result {
 	start := time.Now()
 
 	if c.getStats == nil {
-		return skippedResult(c.Name(), c.Category(), start)
+		return []health.Result{skippedResult(c.Name(), c.Category(), start)}
 	}
 
-	avgMS, p99MS, windowMS := c.getStats()
-
-	if windowMS <= 0 {
-		return health.Result{
+	stats := c.getStats()
+	if len(stats) == 0 {
+		return []health.Result{{
 			Name:       c.Name(),
 			Category:   c.Category(),
 			Status:     health.StatusUnknown,
 			Message:    "Inference stats not available",
 			DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 			Timestamp:  time.Now(),
+		}}
+	}
+
+	results := make([]health.Result, 0, len(stats))
+	for _, s := range stats {
+		checkName := "inference_latency_" + sanitizeID(s.ModelID)
+
+		if s.WindowMS <= 0 {
+			results = append(results, health.Result{
+				Name:     checkName,
+				Category: c.Category(),
+				Status:   health.StatusUnknown,
+				Message:  fmt.Sprintf("%s: inference stats not available", s.ModelName),
+				Details: map[string]any{
+					"model_id":   s.ModelID,
+					"model_name": s.ModelName,
+				},
+				Timestamp: time.Now(),
+			})
+			continue
 		}
-	}
 
-	ratio := p99MS / windowMS
-	status := health.StatusHealthy
-	msg := fmt.Sprintf("Inference latency OK (p99=%.1fms, window=%.1fms)", p99MS, windowMS)
+		ratio := s.P99MS / s.WindowMS
+		status := health.StatusHealthy
+		msg := fmt.Sprintf("%s latency OK (p99=%.1fms, window=%.1fms)", s.ModelName, s.P99MS, s.WindowMS)
 
-	switch {
-	case ratio >= 0.90:
-		status = health.StatusCritical
-		msg = fmt.Sprintf("Inference p99 (%.1fms) exceeds 90%% of analysis window (%.1fms)", p99MS, windowMS)
-	case ratio >= 0.50:
-		status = health.StatusWarning
-		msg = fmt.Sprintf("Inference p99 (%.1fms) exceeds 50%% of analysis window (%.1fms)", p99MS, windowMS)
-	}
+		switch {
+		case ratio >= latencyCriticalRatio:
+			status = health.StatusCritical
+			msg = fmt.Sprintf("%s p99 (%.1fms) exceeds %.0f%% of analysis window (%.1fms)",
+				s.ModelName, s.P99MS, latencyCriticalRatio*100, s.WindowMS)
+		case ratio >= latencyWarningRatio:
+			status = health.StatusWarning
+			msg = fmt.Sprintf("%s p99 (%.1fms) exceeds %.0f%% of analysis window (%.1fms)",
+				s.ModelName, s.P99MS, latencyWarningRatio*100, s.WindowMS)
+		}
 
-	return health.Result{
-		Name:     c.Name(),
-		Category: c.Category(),
-		Status:   status,
-		Message:  msg,
-		Details: map[string]any{
-			"avg_ms":    avgMS,
-			"p99_ms":    p99MS,
-			"window_ms": windowMS,
-		},
-		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
-		Timestamp:  time.Now(),
+		results = append(results, health.Result{
+			Name:     checkName,
+			Category: c.Category(),
+			Status:   status,
+			Message:  msg,
+			Details: map[string]any{
+				"model_id":   s.ModelID,
+				"model_name": s.ModelName,
+				"avg_ms":     s.AvgMS,
+				"p99_ms":     s.P99MS,
+				"window_ms":  s.WindowMS,
+			},
+			Timestamp: time.Now(),
+		})
 	}
+	return results
 }
 
 // DetectionRateCheck monitors whether detections are occurring at expected intervals.
@@ -269,6 +347,66 @@ func (c *QueueDepthCheck) Run(_ context.Context) health.Result {
 			"max":     capacity,
 			"percent": percent,
 		},
+		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+		Timestamp:  time.Now(),
+	}
+}
+
+// ORTAvailabilityCheck verifies that the ONNX Runtime library is available
+// and version-compatible for models that require it (Perch, geomodel, bat).
+type ORTAvailabilityCheck struct {
+	getStatus func() (available, initialized bool, version, libraryPath, errMsg string)
+}
+
+// NewORTAvailabilityCheck creates an ORTAvailabilityCheck using the given status provider.
+func NewORTAvailabilityCheck(getStatus func() (available, initialized bool, version, libraryPath, errMsg string)) *ORTAvailabilityCheck {
+	return &ORTAvailabilityCheck{getStatus: getStatus}
+}
+
+// Name returns the check identifier.
+func (c *ORTAvailabilityCheck) Name() string { return "ort_availability" }
+
+// Category returns the analysis category.
+func (c *ORTAvailabilityCheck) Category() health.Category { return health.CategoryAnalysis }
+
+// Run checks ONNX Runtime availability and version compatibility.
+func (c *ORTAvailabilityCheck) Run(_ context.Context) health.Result {
+	start := time.Now()
+
+	if c.getStatus == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	available, initialized, version, libPath, errMsg := c.getStatus()
+
+	details := map[string]any{
+		"initialized":  initialized,
+		"version":      version,
+		"library_path": libPath,
+	}
+
+	if available {
+		msg := fmt.Sprintf("ONNX Runtime %s available", version)
+		if !initialized {
+			msg = "ONNX Runtime library found (not yet initialized)"
+		}
+		return health.Result{
+			Name:       c.Name(),
+			Category:   c.Category(),
+			Status:     health.StatusHealthy,
+			Message:    msg,
+			Details:    details,
+			DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+			Timestamp:  time.Now(),
+		}
+	}
+
+	return health.Result{
+		Name:       c.Name(),
+		Category:   c.Category(),
+		Status:     health.StatusWarning,
+		Message:    errMsg,
+		Details:    details,
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
 	}

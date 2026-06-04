@@ -93,21 +93,33 @@ type AudioSource struct {
 	// Type identifies the transport protocol or device class.
 	Type SourceType `json:"type"`
 
-	// connectionString holds the raw URL or device path — never logged or serialised.
+	// connectionString holds the raw URL or device path, never logged or serialised.
 	connectionString string
 
 	// SafeString is a sanitised version of the connection string safe for logging
 	// (e.g., credentials replaced with "***").
 	SafeString string `json:"safeString"`
 
-	// SampleRate is the capture sample rate in Hz (e.g., 48000).
+	// SampleRate is the desired output sample rate in Hz (e.g., 48000).
 	SampleRate int `json:"sampleRate"`
+
+	// SourceSampleRate is the actual sample rate of the remote source,
+	// discovered by probing. Zero means unknown.
+	SourceSampleRate int `json:"sourceSampleRate,omitempty"`
 
 	// BitDepth is the capture bit depth (e.g., 16).
 	BitDepth int `json:"bitDepth"`
 
 	// Channels is the number of capture channels (e.g., 1 for mono).
 	Channels int `json:"channels"`
+
+	// SourceChannels is the actual channel count of the remote source,
+	// discovered by probing. Zero means unknown (probe failed or mono assumed).
+	SourceChannels int `json:"sourceChannels,omitempty"`
+
+	// ChannelMode controls how multi-channel audio is handled.
+	// Values: "downmix" (default), "left", "right".
+	ChannelMode string `json:"channelMode,omitempty"`
 
 	// Gain is the configured input gain in dB. 0 means no adjustment.
 	Gain float64 `json:"gain"`
@@ -191,14 +203,26 @@ type SourceConfig struct {
 	// ConnectionString is the raw URL or device path (treated as sensitive).
 	ConnectionString string
 
-	// SampleRate is the desired capture sample rate in Hz.
+	// SampleRate is the desired output sample rate in Hz (what the pipeline expects).
 	SampleRate int
+
+	// SourceSampleRate is the actual sample rate of the remote source, discovered
+	// by probing. Zero means unknown (probe failed or not probed).
+	SourceSampleRate int
 
 	// BitDepth is the desired capture bit depth (e.g., 16).
 	BitDepth int
 
 	// Channels is the desired number of capture channels.
 	Channels int
+
+	// SourceChannels is the actual channel count of the remote source,
+	// discovered by probing. Zero means unknown (probe failed or mono assumed).
+	SourceChannels int
+
+	// ChannelMode controls how multi-channel audio is handled.
+	// Values: "downmix" (default), "left", "right".
+	ChannelMode string
 
 	// Gain is the input gain adjustment in dB. 0 means no adjustment.
 	// Positive values amplify, negative values attenuate.

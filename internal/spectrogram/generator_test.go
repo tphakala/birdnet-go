@@ -107,7 +107,7 @@ func TestGenerator_GetSoxSpectrogramArgs(t *testing.T) {
 			audioPath := filepath.Join(tempDir, "test.wav")
 			outputPath := filepath.Join(tempDir, "test.png")
 
-			args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, tt.width, tt.raw, 0)
+			args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, tt.width, tt.raw, 0, BirdProfile())
 			result := parseSoxSpectrogramArgs(args)
 
 			assert.Equal(t, tt.wantDuration, result.hasDuration, "duration parameter mismatch")
@@ -142,7 +142,7 @@ func TestGenerator_GetSoxArgs(t *testing.T) {
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
-	args := gen.getSoxArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 800, false, SoxInputFile, 0)
+	args := gen.getSoxArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 800, false, SoxInputFile, 0, BirdProfile())
 
 	// First argument should be the audio file path
 	require.NotEmpty(t, args, "getSoxArgs() should return args")
@@ -587,9 +587,9 @@ func TestGenerateWithSoxDirect_MissingBinary(t *testing.T) {
 	err := os.WriteFile(audioPath, []byte("fake audio"), 0o600)
 	require.NoError(t, err, "Failed to create test file")
 
-	err = gen.generateWithSoxDirect(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0)
+	err = gen.generateWithSoxDirect(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0, BirdProfile())
 	require.Error(t, err, "should error when Sox binary not configured")
-	assert.Contains(t, err.Error(), "sox binary not configured", "error should mention sox binary")
+	assert.Contains(t, err.Error(), "invalid Sox path", "error should mention invalid sox path")
 }
 
 // TestGenerateWithFFmpegSoxPipeline_MissingBinaries tests error handling for missing binaries.
@@ -612,7 +612,7 @@ func TestGenerateWithFFmpegSoxPipeline_MissingBinaries(t *testing.T) {
 			name:       "missing sox",
 			ffmpegPath: "/usr/bin/ffmpeg",
 			soxPath:    "",
-			errContain: "sox binary not configured",
+			errContain: "invalid Sox path",
 		},
 	}
 
@@ -626,7 +626,7 @@ func TestGenerateWithFFmpegSoxPipeline_MissingBinaries(t *testing.T) {
 			audioPath := filepath.Join(env.TempDir, "test.wav")
 			outputPath := filepath.Join(env.TempDir, "test.png")
 
-			err := gen.generateWithFFmpegSoxPipeline(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0)
+			err := gen.generateWithFFmpegSoxPipeline(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0, BirdProfile())
 			require.Error(t, err, "should error when binary not configured")
 			assert.Contains(t, err.Error(), tt.errContain, "error should mention missing binary")
 		})
@@ -643,7 +643,7 @@ func TestGenerateWithFFmpeg_MissingBinary(t *testing.T) {
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
-	err := gen.generateWithFFmpeg(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false)
+	err := gen.generateWithFFmpeg(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, BirdProfile())
 	require.Error(t, err, "should error when FFmpeg binary not configured")
 	assert.Contains(t, err.Error(), "invalid FFmpeg path", "error should mention ffmpeg binary")
 }
@@ -658,9 +658,9 @@ func TestGenerateWithSoxPCM_MissingBinary(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "test.png")
 	pcmData := []byte{0, 1, 2, 3, 4, 5, 6, 7}
 
-	err := gen.generateWithSoxPCM(t.Context(), gen.currentSettings(), pcmData, outputPath, 400, false, 0)
+	err := gen.generateWithSoxPCM(t.Context(), gen.currentSettings(), pcmData, outputPath, 400, false, 0, BirdProfile())
 	require.Error(t, err, "should error when Sox binary not configured")
-	assert.Contains(t, err.Error(), "sox binary not configured", "error should mention sox binary")
+	assert.Contains(t, err.Error(), "invalid Sox path", "error should mention invalid sox path")
 }
 
 // TestGetSoxArgs_FileInput tests getSoxArgs for file input type.
@@ -673,7 +673,7 @@ func TestGetSoxArgs_FileInput(t *testing.T) {
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
-	args := gen.getSoxArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 800, false, SoxInputFile, 0)
+	args := gen.getSoxArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 800, false, SoxInputFile, 0, BirdProfile())
 
 	// First argument should be the audio file for SoxInputFile
 	require.NotEmpty(t, args, "args should not be empty")
@@ -702,14 +702,81 @@ func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	// Test with raw=false
-	argsNoRaw := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0)
+	argsNoRaw := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0, BirdProfile())
 	hasRaw := slices.Contains(argsNoRaw, "-r")
 	assert.False(t, hasRaw, "should not contain -r flag when raw=false")
 
 	// Test with raw=true
-	argsWithRaw := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, true, 0)
+	argsWithRaw := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, true, 0, BirdProfile())
 	hasRaw = slices.Contains(argsWithRaw, "-r")
 	assert.True(t, hasRaw, "should contain -r flag when raw=true")
+}
+
+// TestGetSoxSpectrogramArgs_BatProfile verifies that the bat frequency profile
+// produces a high-pass sinc filter instead of rate resampling.
+func TestGetSoxSpectrogramArgs_BatProfile(t *testing.T) {
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.Export.Length = 15
+
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
+
+	audioPath := filepath.Join(env.TempDir, "test.wav")
+	outputPath := filepath.Join(env.TempDir, "test.png")
+
+	args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0, BatProfile())
+
+	// Bat profile: sinc high-pass filter, no rate resampling
+	assert.Contains(t, args, "sinc", "bat profile should use sinc high-pass filter")
+	assert.Contains(t, args, "18000-", "bat profile should filter at 18 kHz")
+	assert.NotContains(t, args, "rate", "bat profile should not resample")
+}
+
+// TestGetSoxSpectrogramArgs_BirdProfile verifies that the bird frequency profile
+// produces rate resampling without a high-pass filter.
+func TestGetSoxSpectrogramArgs_BirdProfile(t *testing.T) {
+	env := setupTestEnv(t)
+	env.Settings.Realtime.Audio.Export.Length = 15
+
+	gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
+
+	audioPath := filepath.Join(env.TempDir, "test.wav")
+	outputPath := filepath.Join(env.TempDir, "test.png")
+
+	args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0, BirdProfile())
+
+	// Bird profile: rate resampling, no sinc filter
+	assert.Contains(t, args, "rate", "bird profile should resample")
+	assert.Contains(t, args, "24000", "bird profile should resample to 24 kHz")
+	assert.NotContains(t, args, "sinc", "bird profile should not use sinc filter")
+}
+
+// TestProfileForModelType verifies model type to frequency profile mapping.
+// The bat profile is temporarily disabled (see ProfileForModelType and commit
+// e2edab6d2): every model type, including "bat", resolves to bird defaults
+// until the bat spectrogram generation bugs are fixed. Restore the bat case to
+// {wantResample: 0, wantHighPass: 18000} when the bat profile is re-enabled.
+func TestProfileForModelType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		modelType    string
+		wantResample int
+		wantHighPass int
+	}{
+		{"bird model", "bird", 24000, 0},
+		{"bat model disabled, falls back to bird", "bat", 24000, 0},
+		{"multi model defaults to bird", "multi", 24000, 0},
+		{"empty defaults to bird", "", 24000, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := ProfileForModelType(tt.modelType)
+			assert.Equal(t, tt.wantResample, p.ResampleRate)
+			assert.Equal(t, tt.wantHighPass, p.HighPassHz)
+		})
+	}
 }
 
 // TestGetSoxSpectrogramArgs_UsesProvidedDuration verifies that a non-zero preValidatedDuration
@@ -720,7 +787,7 @@ func TestGetSoxSpectrogramArgs_UsesProvidedDuration(t *testing.T) {
 	audioPath := filepath.Join(tempDir, "input.mp3")
 	outputPath := filepath.Join(tempDir, "out.png")
 
-	args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 12.6)
+	args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 12.6, BirdProfile())
 
 	idx := slices.Index(args, "-d")
 	require.NotEqual(t, -1, idx, "should contain -d parameter")
@@ -751,7 +818,7 @@ func TestGetSoxSpectrogramArgs_DimensionCalculation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("width_"+strconv.Itoa(tt.width), func(t *testing.T) {
-			args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, tt.width, false, 0)
+			args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, tt.width, false, 0, BirdProfile())
 
 			widthStr := strconv.Itoa(tt.width)
 			heightStr := strconv.Itoa(tt.expectedHeight)
@@ -898,7 +965,7 @@ func TestNewGenerator_WithNilLogger(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	// getSoxSpectrogramArgs uses g.log().Warn internally
-	args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0)
+	args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0, BirdProfile())
 	assert.NotEmpty(t, args, "should return valid args without panic")
 }
 
@@ -1104,7 +1171,7 @@ func TestGetSoxSpectrogramArgs_StyleArgs(t *testing.T) {
 			audioPath := filepath.Join(env.TempDir, "test.wav")
 			outputPath := filepath.Join(env.TempDir, "test.png")
 
-			args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0)
+			args := gen.getSoxSpectrogramArgs(t.Context(), gen.currentSettings(), audioPath, outputPath, 400, false, 0, BirdProfile())
 
 			for _, want := range tt.wantContains {
 				assert.True(t, slices.Contains(args, want),

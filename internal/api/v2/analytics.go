@@ -435,7 +435,7 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 		thumbnailURL := getThumbnailWithFallback(thumbnailURLs, scientificName)
 		summary := buildSpeciesSummaryFromData(&data, thumbnailURL)
 		if status, exists := batchSpeciesStatus[scientificName]; exists {
-			applySpeciesStatusToSummary(&summary, &status, selectedDate)
+			applySpeciesStatusToSummary(&summary, &status)
 		}
 		result = append(result, summary)
 	}
@@ -457,11 +457,12 @@ func collectSpeciesWithDetections(aggregatedData map[string]aggregatedBirdInfo) 
 // batchFetchCachedThumbnails fetches thumbnail URLs from cache only
 func (c *Controller) batchFetchCachedThumbnails(scientificNames []string) map[string]string {
 	thumbnailURLs := make(map[string]string)
-	if c.BirdImageCache == nil || len(scientificNames) == 0 {
+	cache := c.BirdImageCache
+	if cache == nil || len(scientificNames) == 0 {
 		return thumbnailURLs
 	}
 
-	batchResults := c.BirdImageCache.GetBatchCachedOnly(scientificNames)
+	batchResults := cache.GetBatchCachedOnly(scientificNames)
 	for name := range batchResults {
 		if img := batchResults[name]; img.URL != "" && !img.IsNegativeEntry() {
 			thumbnailURLs[name] = imageprovider.ProxyImageURL(name)
@@ -485,10 +486,16 @@ func parseStatusTimeFromDate(selectedDate string) time.Time {
 
 // batchFetchSpeciesStatus fetches species tracking status to avoid N+1 queries
 func (c *Controller) batchFetchSpeciesStatus(scientificNames []string, statusTime time.Time) map[string]species.SpeciesStatus {
-	if c.Processor == nil || c.Processor.NewSpeciesTracker == nil || len(scientificNames) == 0 {
+	// Snapshot processor and tracker to avoid TOCTOU race
+	proc := c.Processor
+	if proc == nil || len(scientificNames) == 0 {
 		return nil
 	}
-	return c.Processor.NewSpeciesTracker.GetBatchSpeciesStatus(scientificNames, statusTime)
+	tracker := proc.GetNewSpeciesTracker()
+	if tracker == nil {
+		return nil
+	}
+	return tracker.GetBatchSpeciesStatus(scientificNames, statusTime)
 }
 
 // getThumbnailWithFallback returns thumbnail URL or placeholder
@@ -518,21 +525,17 @@ func buildSpeciesSummaryFromData(data *aggregatedBirdInfo, thumbnailURL string) 
 }
 
 // applySpeciesStatusToSummary applies tracking metadata to summary.
-// The selectedDate parameter (YYYY-MM-DD) is compared against first-seen dates
-// so the "new" flags are true only on the actual first-sighting date.
-func applySpeciesStatusToSummary(summary *SpeciesDailySummary, status *species.SpeciesStatus, selectedDate string) {
-	// Mark as new only if the selected date matches the species' first-seen date
-	summary.IsNewSpecies = !status.FirstSeenTime.IsZero() &&
-		selectedDate == status.FirstSeenTime.Format(time.DateOnly)
+// Uses the tracker's window-based flags so that "new" indicators persist
+// for the configured window period, not just the first-seen calendar day.
+func applySpeciesStatusToSummary(summary *SpeciesDailySummary, status *species.SpeciesStatus) {
+	summary.IsNewSpecies = status.IsNew
 
 	if status.DaysSinceFirst >= 0 {
 		summary.DaysSinceFirstSeen = status.DaysSinceFirst
 	}
 
-	summary.IsNewThisYear = status.FirstThisYear != nil &&
-		selectedDate == status.FirstThisYear.Format(time.DateOnly)
-	summary.IsNewThisSeason = status.FirstThisSeason != nil &&
-		selectedDate == status.FirstThisSeason.Format(time.DateOnly)
+	summary.IsNewThisYear = status.IsNewThisYear
+	summary.IsNewThisSeason = status.IsNewThisSeason
 
 	if status.DaysThisYear >= 0 {
 		summary.DaysThisYear = status.DaysThisYear
@@ -621,7 +624,8 @@ func extractScientificNames(summaryData []datastore.SpeciesSummaryData) []string
 
 // batchFetchThumbnailsWithLogging fetches thumbnails with debug logging
 func (c *Controller) batchFetchThumbnailsWithLogging(scientificNames []string, ip, path string) map[string]imageprovider.BirdImage {
-	if c.BirdImageCache == nil || len(scientificNames) == 0 {
+	cache := c.BirdImageCache
+	if cache == nil || len(scientificNames) == 0 {
 		return nil
 	}
 
@@ -631,7 +635,7 @@ func (c *Controller) batchFetchThumbnailsWithLogging(scientificNames []string, i
 		logger.String("path", path),
 	)
 	thumbStart := time.Now()
-	thumbnailURLs := c.BirdImageCache.GetBatchCachedOnly(scientificNames)
+	thumbnailURLs := cache.GetBatchCachedOnly(scientificNames)
 	thumbDuration := time.Since(thumbStart)
 	c.logInfoIfEnabled("Cached thumbnail fetch completed",
 		logger.Int64("duration_ms", thumbDuration.Milliseconds()),
@@ -1160,11 +1164,12 @@ func extractNewSpeciesNames(data []datastore.NewSpeciesData) []string {
 // batchFetchThumbnailURLs fetches thumbnail URLs from cache
 func (c *Controller) batchFetchThumbnailURLs(scientificNames []string) map[string]string {
 	thumbnailURLs := make(map[string]string)
-	if c.BirdImageCache == nil {
+	cache := c.BirdImageCache
+	if cache == nil {
 		return thumbnailURLs
 	}
 
-	batchResults := c.BirdImageCache.GetBatch(scientificNames)
+	batchResults := cache.GetBatch(scientificNames)
 	for name := range batchResults {
 		if img := batchResults[name]; img.URL != "" && !img.IsNegativeEntry() {
 			thumbnailURLs[name] = imageprovider.ProxyImageURL(name)
@@ -1272,16 +1277,15 @@ func (c *Controller) GetSpeciesThumbnails(ctx echo.Context) error {
 func (c *Controller) buildThumbnailMap(speciesParams []string) map[string]string {
 	result := make(map[string]string)
 
-	if c.BirdImageCache == nil {
-		// No image cache, return placeholders for all
+	cache := c.BirdImageCache
+	if cache == nil {
 		for _, name := range speciesParams {
 			result[name] = placeholderImageURL
 		}
 		return result
 	}
 
-	// Get thumbnails in batch from cache
-	images := c.BirdImageCache.GetBatch(speciesParams)
+	images := cache.GetBatch(speciesParams)
 
 	// Convert to simple map of scientific name -> proxy URL
 	for name := range images {

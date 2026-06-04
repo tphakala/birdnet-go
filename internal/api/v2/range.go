@@ -65,10 +65,12 @@ func calculateWeek(date time.Time) float32 {
 
 // getBirdNETInstance returns the BirdNET instance or an error if unavailable.
 func (c *Controller) getBirdNETInstance() (*classifier.Orchestrator, error) {
-	if c.Processor == nil {
+	// Snapshot processor to avoid TOCTOU race
+	proc := c.Processor
+	if proc == nil {
 		return nil, fmt.Errorf("BirdNET processor not available")
 	}
-	instance := c.Processor.GetBirdNET()
+	instance := proc.GetBirdNET()
 	if instance == nil {
 		return nil, fmt.Errorf("BirdNET instance not available")
 	}
@@ -508,7 +510,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 	}
 
 	// Get probable species for the test parameters
-	speciesScores, err := birdnetInstance.GetProbableSpeciesWithSettings(testDate, week, testSettings)
+	speciesScores, err := birdnetInstance.GetAllProbableSpeciesWithSettings(testDate, week, testSettings)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get probable species", http.StatusInternalServerError)
 	}

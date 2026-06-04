@@ -78,6 +78,39 @@ func TestIsCacheEntryStale(t *testing.T) {
 	}
 }
 
+func TestFindStaleEntriesSkipsNegativeEntries(t *testing.T) {
+	t.Parallel()
+
+	cache := &BirdImageCache{providerName: "wikimedia"}
+	now := time.Now()
+	entries := []datastore.ImageCache{
+		{
+			ScientificName: "Turdus merula",
+			URL:            "https://example.com/blackbird.jpg",
+			CachedAt:       now.Add(-defaultCacheTTL - time.Hour),
+		},
+		{
+			ScientificName: "Parus major",
+			URL:            "https://example.com/great-tit.jpg",
+			CachedAt:       now.Add(-time.Hour),
+		},
+		{
+			ScientificName: "Crack",
+			URL:            negativeEntryMarker,
+			CachedAt:       now.Add(-negativeCacheTTL - time.Hour),
+		},
+		{
+			ScientificName: "Orchelimum concinnum",
+			URL:            negativeEntryMarker,
+			CachedAt:       now.Add(-defaultCacheTTL - time.Hour),
+		},
+	}
+
+	staleEntries := cache.findStaleEntries(entries)
+
+	assert.ElementsMatch(t, []string{"Turdus merula"}, staleEntries)
+}
+
 // TestDbEntryToBirdImage tests the conversion from datastore.ImageCache to BirdImage.
 func TestDbEntryToBirdImage(t *testing.T) {
 	t.Parallel()

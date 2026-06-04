@@ -457,8 +457,15 @@ func (c *Controller) getExpectedTodayRegionalImpl(ctx echo.Context) error {
 		})
 	}
 
-	lat := c.Settings.BirdNET.Latitude
-	lng := c.Settings.BirdNET.Longitude
+	settings := c.currentSettings()
+	if settings == nil {
+		return ctx.JSON(http.StatusOK, ExpectedTodayRegionalResponse{
+			Species:   []RegionalSpeciesItem{},
+			Available: false,
+		})
+	}
+	lat := settings.BirdNET.Latitude
+	lng := settings.BirdNET.Longitude
 	if lat == 0 && lng == 0 {
 		return ctx.JSON(http.StatusOK, ExpectedTodayRegionalResponse{
 			Species:   []RegionalSpeciesItem{},
@@ -578,17 +585,17 @@ func (c *Controller) getDawnChorusImpl(ctx echo.Context) error {
 		earliestSeconds int
 		daysObserved    int
 	}
-	speciesMap := make(map[uint]*speciesData)
+	speciesMap := make(map[string]*speciesData)
 	loc := time.Local
 
 	for _, entry := range rawEntries {
-		sd, ok := speciesMap[entry.LabelID]
+		sd, ok := speciesMap[entry.ScientificName]
 		if !ok {
 			sd = &speciesData{
 				scientificName:  entry.ScientificName,
 				earliestSeconds: 24 * 3600, // sentinel max
 			}
-			speciesMap[entry.LabelID] = sd
+			speciesMap[entry.ScientificName] = sd
 		}
 
 		t := time.Unix(entry.EarliestAt, 0).In(loc)

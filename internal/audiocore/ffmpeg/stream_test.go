@@ -15,8 +15,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 )
 
-// ffmpegTimeoutFlag is the FFmpeg flag name for connection timeout used in tests.
+// ffmpegTimeoutFlag is the FFmpeg connection timeout flag emitted for all source
+// types, including RTSP (the legacy -stimeout was removed in FFmpeg 5.x+).
 const ffmpegTimeoutFlag = "-timeout"
+
+// ffmpegLegacyTimeoutFlag is the deprecated RTSP -stimeout flag. It must never be
+// emitted, but is still recognised when present in user-supplied parameters.
+const ffmpegLegacyTimeoutFlag = "-stimeout"
 
 // newTestConfig returns a minimal StreamConfig suitable for unit tests.
 func newTestConfig() StreamConfig {
@@ -715,10 +720,8 @@ func TestStream_ConditionalFailureReset_NotEnoughBytes(t *testing.T) {
 	assert.Equal(t, 5, stream.getConsecutiveFailures(), "Failures should NOT be reset without enough bytes")
 }
 
-func TestStream_ValidateUserTimeout(t *testing.T) {
+func TestValidateTimeout(t *testing.T) {
 	t.Parallel()
-
-	stream := newTestStream(t)
 
 	tests := []struct {
 		name          string
@@ -742,7 +745,7 @@ func TestStream_ValidateUserTimeout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := stream.validateUserTimeout(tt.timeoutStr)
+			err := validateTimeout(tt.timeoutStr)
 
 			if tt.expectError {
 				require.Error(t, err, "Expected error for timeout: %s", tt.timeoutStr)
@@ -768,9 +771,13 @@ func TestDetectUserTimeout(t *testing.T) {
 		{"empty_params", []string{}, false, ""},
 		{"no_timeout_param", []string{"-loglevel", "debug"}, false, ""},
 		{"timeout_with_value", []string{"-timeout", "5000000"}, true, "5000000"},
-		{"timeout_without_value", []string{"-timeout"}, false, ""},
+		{"timeout_without_value", []string{"-timeout"}, true, ""},
 		{"timeout_in_middle", []string{"-loglevel", "debug", "-timeout", "10000000", "-rtsp_flags", "prefer_tcp"}, true, "10000000"},
 		{"first_timeout_wins", []string{"-timeout", "5000000", "-timeout", "10000000"}, true, "5000000"},
+		{"stimeout_with_value", []string{"-stimeout", "5000000"}, true, "5000000"},
+		{"stimeout_without_value", []string{"-stimeout"}, true, ""},
+		{"stimeout_in_middle", []string{"-loglevel", "debug", "-stimeout", "8000000"}, true, "8000000"},
+		{"timeout_before_stimeout", []string{"-timeout", "3000000", "-stimeout", "7000000"}, true, "3000000"},
 	}
 
 	for _, tt := range tests {
@@ -794,7 +801,8 @@ func TestStream_BuildFFmpegInputArgs_RTSP(t *testing.T) {
 
 	assert.Contains(t, args, "-rtsp_transport")
 	assert.Contains(t, args, "tcp")
-	assert.Contains(t, args, ffmpegTimeoutFlag)
+	assert.Contains(t, args, ffmpegTimeoutFlag, "RTSP must use -timeout")
+	assert.NotContains(t, args, ffmpegLegacyTimeoutFlag, "RTSP must not use legacy -stimeout")
 }
 
 func TestStream_BuildFFmpegInputArgs_HTTP(t *testing.T) {
@@ -808,26 +816,22 @@ func TestStream_BuildFFmpegInputArgs_HTTP(t *testing.T) {
 	args := stream.buildFFmpegInputArgs(nil)
 
 	assert.NotContains(t, args, "-rtsp_transport", "HTTP stream should not have RTSP transport")
-	assert.Contains(t, args, ffmpegTimeoutFlag)
+	assert.Contains(t, args, ffmpegTimeoutFlag, "HTTP must use -timeout")
+	assert.NotContains(t, args, ffmpegLegacyTimeoutFlag, "HTTP must not use legacy -stimeout")
 }
 
 func TestStream_BuildFFmpegInputArgs_InvalidTimeout(t *testing.T) {
 	t.Parallel()
 
-	cfg := newTestConfig()
+	cfg := newTestConfig() // default is RTSP
 	stream := newTestStreamWithConfig(t, &cfg)
 
 	params := []string{"-timeout", "abc", "-loglevel", "debug"}
 	args := stream.buildFFmpegInputArgs(params)
 
-	timeoutIdx := -1
-	for i, a := range args {
-		if a == ffmpegTimeoutFlag {
-			timeoutIdx = i
-			break
-		}
-	}
-	require.NotEqual(t, -1, timeoutIdx, "-timeout flag must be present")
+	// RTSP stream: invalid user -timeout should be replaced with the -timeout default.
+	timeoutIdx := slices.Index(args, ffmpegTimeoutFlag)
+	require.NotEqual(t, -1, timeoutIdx, "-timeout flag must be present for RTSP")
 	require.Less(t, timeoutIdx+1, len(args), "-timeout must have a following value")
 	assert.NotEqual(t, "abc", args[timeoutIdx+1], "invalid timeout value must not reach FFmpeg")
 
@@ -839,6 +843,7 @@ func TestStream_BuildFFmpegInputArgs_InvalidTimeout(t *testing.T) {
 	}
 	assert.Equal(t, 1, count, "-timeout must appear exactly once")
 
+	assert.NotContains(t, args, ffmpegLegacyTimeoutFlag, "RTSP must not contain legacy -stimeout")
 	assert.Contains(t, args, "-loglevel")
 	assert.Contains(t, args, "debug")
 }
@@ -853,10 +858,10 @@ func TestStream_BuildFFmpegInputArgs_ProtocolSpecific(t *testing.T) {
 		transport         string
 		ffmpegParams      []string
 		wantRTSPTransport bool
-		wantTimeout       bool
+		wantTimeout       bool // all source types now use -timeout
 	}{
 		{
-			name:              "rtsp_stream_includes_rtsp_transport",
+			name:              "rtsp_stream_uses_timeout",
 			url:               "rtsp://192.168.1.100/stream",
 			sourceType:        "rtsp",
 			transport:         "tcp",
@@ -865,7 +870,7 @@ func TestStream_BuildFFmpegInputArgs_ProtocolSpecific(t *testing.T) {
 			wantTimeout:       true,
 		},
 		{
-			name:              "http_stream_excludes_rtsp_transport",
+			name:              "http_stream_uses_timeout",
 			url:               "http://192.168.1.183/stream",
 			sourceType:        "http",
 			transport:         "tcp",
@@ -874,7 +879,7 @@ func TestStream_BuildFFmpegInputArgs_ProtocolSpecific(t *testing.T) {
 			wantTimeout:       true,
 		},
 		{
-			name:              "hls_stream_excludes_rtsp_transport",
+			name:              "hls_stream_uses_timeout",
 			url:               "http://example.com/stream.m3u8",
 			sourceType:        "hls",
 			transport:         "tcp",
@@ -883,7 +888,7 @@ func TestStream_BuildFFmpegInputArgs_ProtocolSpecific(t *testing.T) {
 			wantTimeout:       true,
 		},
 		{
-			name:              "rtsp_with_user_timeout",
+			name:              "rtsp_with_user_timeout_stays_timeout",
 			url:               "rtsp://192.168.1.100/stream",
 			sourceType:        "rtsp",
 			transport:         "udp",
@@ -907,9 +912,11 @@ func TestStream_BuildFFmpegInputArgs_ProtocolSpecific(t *testing.T) {
 
 			hasRTSPTransport := slices.Contains(args, "-rtsp_transport")
 			hasTimeout := slices.Contains(args, ffmpegTimeoutFlag)
+			hasLegacyTimeout := slices.Contains(args, ffmpegLegacyTimeoutFlag)
 
 			assert.Equal(t, tt.wantRTSPTransport, hasRTSPTransport, "rtsp_transport flag presence mismatch")
-			assert.Equal(t, tt.wantTimeout, hasTimeout, "timeout flag presence mismatch")
+			assert.Equal(t, tt.wantTimeout, hasTimeout, "-timeout flag presence mismatch")
+			assert.False(t, hasLegacyTimeout, "legacy -stimeout must never be emitted")
 		})
 	}
 }
@@ -1211,6 +1218,39 @@ func TestStream_SourceTypeDetection(t *testing.T) {
 			t.Parallel()
 			cfg := StreamConfig{Type: tt.configType}
 			assert.Equal(t, tt.expected, cfg.sourceType().String())
+		})
+	}
+}
+
+func TestStreamConfig_NeedsOutputResampling(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		sampleRate       int
+		sourceSampleRate int
+		want             bool
+	}{
+		{"unknown_source_resamples", 48000, 0, true},
+		{"8kHz_to_48kHz_resamples", 48000, 8000, true},
+		{"16kHz_to_48kHz_resamples", 48000, 16000, true},
+		{"44100Hz_to_48kHz_resamples", 48000, 44100, true},
+		{"48kHz_to_48kHz_passthrough", 48000, 48000, false},
+		{"96kHz_source_downsampled_for_bird", 48000, 96000, true},
+		{"96kHz_bat_passthrough", 96000, 96000, false},
+		{"192kHz_bat_passthrough", 192000, 192000, false},
+		{"256kHz_bat_passthrough", 256000, 256000, false},
+		{"384kHz_bat_passthrough", 384000, 384000, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := StreamConfig{
+				SampleRate:       tt.sampleRate,
+				SourceSampleRate: tt.sourceSampleRate,
+			}
+			assert.Equal(t, tt.want, cfg.needsOutputResampling())
 		})
 	}
 }

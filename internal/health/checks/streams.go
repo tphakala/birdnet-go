@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/health"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // StreamHealthInfo is a snapshot of a single RTSP stream's health.
@@ -14,7 +16,7 @@ type StreamHealthInfo struct {
 	URL string
 	// IsHealthy indicates whether the stream is considered healthy.
 	IsHealthy bool
-	// ProcessState is the current state of the underlying FFmpeg process (e.g. "running", "dead").
+	// ProcessState is the current state of the underlying FFmpeg process (e.g. "running", "stopped").
 	ProcessState string
 	// RestartCount is the number of times this stream has been restarted.
 	RestartCount int
@@ -84,14 +86,26 @@ func (c *StreamConnectivityCheck) Run(_ context.Context) health.Result {
 	}
 }
 
-// StreamErrorRateCheck monitors RTSP stream restart counts to detect error loops.
+// Threshold constants for stream health checks.
+const (
+	streamBaseWarnThreshold = 3
+	streamBaseCritThreshold = 10
+)
+
+// StreamErrorRateCheck monitors RTSP stream restart counts using time-windowed evaluation.
 type StreamErrorRateCheck struct {
-	getStreams func() []StreamHealthInfo
+	store     *observability.HealthMetricsStore
+	getEvents func(metric string, n int) []observability.HealthEvent
+	window    time.Duration
 }
 
-// NewStreamErrorRateCheck creates a StreamErrorRateCheck using the given stream provider.
-func NewStreamErrorRateCheck(getStreams func() []StreamHealthInfo) *StreamErrorRateCheck {
-	return &StreamErrorRateCheck{getStreams: getStreams}
+// NewStreamErrorRateCheck creates a StreamErrorRateCheck using the health metrics store and event getter.
+func NewStreamErrorRateCheck(store *observability.HealthMetricsStore, getEvents func(metric string, n int) []observability.HealthEvent) *StreamErrorRateCheck {
+	return &StreamErrorRateCheck{
+		store:     store,
+		getEvents: getEvents,
+		window:    DefaultWindow,
+	}
 }
 
 // Name returns the check identifier.
@@ -100,62 +114,40 @@ func (c *StreamErrorRateCheck) Name() string { return "stream_error_rate" }
 // Category returns the streams category.
 func (c *StreamErrorRateCheck) Category() health.Category { return health.CategoryStreams }
 
-// Run evaluates the restart count of each RTSP stream.
+// WithWindow returns a copy of this check configured with the given evaluation window.
+// Returns the receiver unchanged when d equals the current window to avoid an allocation.
+func (c *StreamErrorRateCheck) WithWindow(d time.Duration) health.Check {
+	if d == c.window {
+		return c
+	}
+	cp := *c
+	cp.window = d
+	return &cp
+}
+
+// Run evaluates stream restart counts within the configured time window.
 func (c *StreamErrorRateCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
-	if c.getStreams == nil {
-		return skippedResult(c.Name(), c.Category(), start)
-	}
-
-	streams := c.getStreams()
-	if len(streams) == 0 {
-		return skippedResult(c.Name(), c.Category(), start)
-	}
-
-	const warnRestarts = 3
-	const critRestarts = 10
-
-	status := health.StatusHealthy
-	var msg string
-	warnCount := 0
-	critCount := 0
-
-	for _, s := range streams {
-		switch {
-		case s.RestartCount > critRestarts:
-			critCount++
-		case s.RestartCount > warnRestarts:
-			warnCount++
-		}
-	}
-
-	switch {
-	case critCount > 0:
-		status = health.StatusCritical
-		msg = fmt.Sprintf("%d stream(s) have restarted more than %d times", critCount, critRestarts)
-	case warnCount > 0:
-		status = health.StatusWarning
-		msg = fmt.Sprintf("%d stream(s) have restarted more than %d times", warnCount, warnRestarts)
-	default:
-		msg = "Stream restart counts within normal range"
-	}
-
-	return health.Result{
-		Name:     c.Name(),
-		Category: c.Category(),
-		Status:   status,
-		Message:  msg,
-		Details: map[string]any{
-			"streams_above_warn_threshold": warnCount,
-			"streams_above_crit_threshold": critCount,
-			"warn_threshold":               warnRestarts,
-			"crit_threshold":               critRestarts,
-		},
-		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
-		Timestamp:  time.Now(),
-	}
+	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
+		baseWarnThreshold: streamBaseWarnThreshold,
+		baseCritThreshold: streamBaseCritThreshold,
+		sustainedHours:    defaultSustainedHours,
+		metricPrefix:      observability.MetricPrefixStreamRestarts,
+		window:            c.window,
+	}, start)
 }
+
+// FFmpeg health check message formats.
+const (
+	// ffmpegStoppedMsgFormat is used when only stopped (terminal) processes are present.
+	ffmpegStoppedMsgFormat = "%d FFmpeg process(es) stopped"
+	// ffmpegNotRunningMsgFormat is used when only transient not-running processes are present.
+	ffmpegNotRunningMsgFormat = "%d FFmpeg process(es) are not in running state"
+	// ffmpegStoppedAndNotRunningMsgFormat is used when both stopped and transient
+	// not-running processes are present so neither count is masked.
+	ffmpegStoppedAndNotRunningMsgFormat = "%d FFmpeg process(es) stopped, %d not in running state"
+)
 
 // FFmpegHealthCheck monitors the process state of the FFmpeg processes backing each RTSP stream.
 type FFmpegHealthCheck struct {
@@ -186,15 +178,15 @@ func (c *FFmpegHealthCheck) Run(_ context.Context) health.Result {
 		return skippedResult(c.Name(), c.Category(), start)
 	}
 
-	deadCount := 0
+	stoppedCount := 0
 	notRunningCount := 0
 
 	for _, s := range streams {
 		switch s.ProcessState {
-		case "dead":
-			deadCount++
-		case "running":
+		case ffmpeg.ProcessStateRunning:
 			// healthy
+		case ffmpeg.ProcessStateStopped:
+			stoppedCount++
 		default:
 			notRunningCount++
 		}
@@ -204,12 +196,18 @@ func (c *FFmpegHealthCheck) Run(_ context.Context) health.Result {
 	msg := fmt.Sprintf("All %d FFmpeg processes running", len(streams))
 
 	switch {
-	case deadCount > 0:
+	case stoppedCount > 0 && notRunningCount > 0:
+		// Both stopped (terminal) and transient not-running processes exist.
+		// Stopped processes keep the status critical, but the message must
+		// surface both counts so the not-running processes are not masked.
 		status = health.StatusCritical
-		msg = fmt.Sprintf("%d FFmpeg process(es) are dead", deadCount)
+		msg = fmt.Sprintf(ffmpegStoppedAndNotRunningMsgFormat, stoppedCount, notRunningCount)
+	case stoppedCount > 0:
+		status = health.StatusCritical
+		msg = fmt.Sprintf(ffmpegStoppedMsgFormat, stoppedCount)
 	case notRunningCount > 0:
 		status = health.StatusWarning
-		msg = fmt.Sprintf("%d FFmpeg process(es) are not in running state", notRunningCount)
+		msg = fmt.Sprintf(ffmpegNotRunningMsgFormat, notRunningCount)
 	}
 
 	return health.Result{
@@ -219,7 +217,7 @@ func (c *FFmpegHealthCheck) Run(_ context.Context) health.Result {
 		Message:  msg,
 		Details: map[string]any{
 			"total":       len(streams),
-			"dead":        deadCount,
+			"stopped":     stoppedCount,
 			"not_running": notRunningCount,
 		},
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,

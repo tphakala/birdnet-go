@@ -183,6 +183,8 @@ export const StreamTypes = {
 
 export type StreamType = (typeof StreamTypes)[keyof typeof StreamTypes];
 
+export type ChannelMode = 'downmix' | 'left' | 'right';
+
 // QuietHoursConfig represents quiet hours configuration for a stream or sound card
 export interface QuietHoursConfig {
   enabled: boolean;
@@ -214,9 +216,24 @@ export interface StreamConfig {
   enabled: boolean; // Materialized during settings coercion for backward compatibility
   type: StreamType; // Stream type: rtsp, http, hls, rtmp, udp
   transport?: 'tcp' | 'udp'; // Transport protocol (for RTSP/RTMP only)
+  channelMode?: ChannelMode; // Channel selection mode: downmix, left, or right
   models?: string[]; // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
   equalizer?: EqualizerSettings; // Per-stream EQ (undefined = use global)
   quietHours?: QuietHoursConfig; // Quiet hours configuration
+}
+
+// ChannelEnergy represents the energy level of a single audio channel
+export interface ChannelEnergy {
+  channel: number;
+  label: string;
+  rmsDbfs: number;
+}
+
+// ChannelAnalysis represents the result of analyzing audio channels for a stream
+export interface ChannelAnalysis {
+  channels: number;
+  energy: ChannelEnergy[];
+  recommended: ChannelMode;
 }
 
 // RTSPHealthSettings matches backend RTSPHealthSettings
@@ -436,6 +453,7 @@ export interface SecuritySettings {
   publicAccess?: {
     liveAudio: boolean;
   };
+  privateMode?: boolean;
 }
 
 // Legacy OAuth settings interface (deprecated)

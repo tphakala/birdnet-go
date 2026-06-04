@@ -7,7 +7,7 @@ import type { CatalogResponse, DownloadProgress, InstalledModel } from '$lib/typ
 import { api } from '$lib/utils/api';
 import { getLogger } from '$lib/utils/logger';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
-import ReconnectingEventSource from 'reconnecting-eventsource';
+import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
 
 const logger = getLogger('modelsApi');
 

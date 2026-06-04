@@ -74,6 +74,18 @@ func (dt *DatastoreTelemetry) CaptureEnhancedError(err error, operation string, 
 		return
 	}
 
+	// Suppress duplicate Sentry events for corruption errors once the
+	// corruption latch is set. The first corruption event is always sent
+	// (the latch is set after the first CaptureEnhancedError call).
+	// Subsequent corruption errors are logged locally but not sent to Sentry.
+	if IsDatabaseCorruption(err) {
+		if corruptible, ok := store.(interface{ IsCorrupted() bool }); ok && corruptible.IsCorrupted() {
+			GetLogger().Debug("Suppressing duplicate Sentry event for database corruption",
+				logger.String("operation", operation))
+			return
+		}
+	}
+
 	// Gather comprehensive error context
 	context := dt.gatherErrorContext(err, operation, store)
 

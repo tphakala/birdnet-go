@@ -407,6 +407,9 @@ func TestGetDatabaseDirectoryResolved_NilSettings(t *testing.T) {
 	t.Attr("feature", "prerequisites")
 
 	controller := &Controller{Settings: nil}
+	// Publish a nil global so currentSettings() falls back to the controller's
+	// nil c.Settings and exercises the "settings not available" path.
+	publishTestSettings(t, nil)
 
 	_, err := controller.getDatabaseDirectoryResolved()
 
@@ -521,6 +524,7 @@ func setupPrerequisitesTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *
 		DS:       testDS,
 		Repo:     mockRepo,
 	}
+	publishTestSettings(t, controller.Settings)
 
 	return e, controller, sm
 }

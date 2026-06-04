@@ -58,6 +58,10 @@ type SecurityConfigDTO struct {
 	AccessAllowed bool            `json:"accessAllowed"`
 	AuthConfig    AuthConfigDTO   `json:"authConfig"`
 	PublicAccess  PublicAccessDTO `json:"publicAccess"`
+	// PrivateMode mirrors Security.PrivateMode so the frontend knows to
+	// redirect to login on any 401 instead of silently treating gated
+	// endpoints as graceful guest-mode limitations.
+	PrivateMode bool `json:"privateMode"`
 }
 
 // PublicAccessDTO exposes which features are accessible without authentication.
@@ -92,10 +96,14 @@ func (c *Controller) initAppRoutes() {
 	// that was previously injected server-side into the HTML template.
 	c.Group.GET(AppConfigEndpoint, c.GetAppConfig)
 
-	// Wizard dismiss endpoint - always public.
+	// Wizard dismiss endpoint - public in the default configuration.
 	// Only writes last_seen_version to app_metadata (no data exposure, no privilege
-	// escalation). Must be accessible pre-auth so the onboarding wizard can be
-	// dismissed before login.
+	// escalation), and is reachable pre-auth so the onboarding wizard can be
+	// dismissed before login. When Security.PrivateMode is enabled this route is
+	// gated like every other UI/API route: an unauthenticated user is shown the
+	// login form rather than the wizard, so dismissing it pre-auth serves no
+	// purpose and it is intentionally NOT on the privateModeAuth exempt allow-list
+	// (see isPrivateModeExempt).
 	c.Group.POST(WizardDismissEndpoint, c.DismissWizard)
 }
 
@@ -120,26 +128,35 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to generate CSRF token", http.StatusInternalServerError)
 	}
 
+	// Snapshot the live settings once so the response reflects the latest
+	// published configuration and every read below is race-free against a
+	// concurrent settings save (see currentSettings).
+	settings := c.currentSettings()
+	if settings == nil {
+		return c.HandleError(ctx, nil, "Settings not initialized", http.StatusServiceUnavailable)
+	}
+
 	// Get enabled OAuth providers from the new array-based config
 	// This returns provider IDs for all enabled providers with valid credentials
-	enabledProviders := c.Settings.GetEnabledOAuthProviders()
+	enabledProviders := settings.GetEnabledOAuthProviders()
 	// Ensure we always return an array (not null) for JSON serialization
 	if enabledProviders == nil {
 		enabledProviders = []string{}
 	}
 
 	// Determine if any security method is enabled
-	securityEnabled := c.Settings.Security.BasicAuth.Enabled || len(enabledProviders) > 0
+	securityEnabled := settings.Security.BasicAuth.Enabled || len(enabledProviders) > 0
 
 	// Determine if access is currently allowed
 	accessAllowed := c.determineAccessAllowed(ctx, securityEnabled)
 
 	// Determine the effective base path for reverse proxy support.
 	// Priority: X-Ingress-Path > X-Forwarded-Prefix > config BasePath > empty.
-	basePath := requestBasePath(ctx, c.Settings)
+	basePath := requestBasePath(ctx, settings)
 
-	// Determine wizard state (freshInstall, newVersion, previousVersion)
-	freshInstall, newVersion, previousVersion := c.determineWizardState(ctx.Request().Context())
+	// Determine wizard state (freshInstall, newVersion, previousVersion) from the
+	// same snapshot so the whole response is internally consistent.
+	freshInstall, newVersion, previousVersion := c.determineWizardState(ctx.Request().Context(), settings)
 
 	// Build response
 	response := AppConfigResponse{
@@ -148,35 +165,36 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 			Enabled:       securityEnabled,
 			AccessAllowed: accessAllowed,
 			AuthConfig: AuthConfigDTO{
-				BasicEnabled:     c.Settings.Security.BasicAuth.Enabled,
+				BasicEnabled:     settings.Security.BasicAuth.Enabled,
 				EnabledProviders: enabledProviders,
 			},
 			PublicAccess: PublicAccessDTO{
-				LiveAudio: c.Settings.Security.PublicAccess.LiveAudio,
+				LiveAudio: settings.Security.PublicAccess.LiveAudio,
 			},
+			PrivateMode: settings.Security.PrivateMode,
 		},
-		Version:         c.Settings.Version,
+		Version:         settings.Version,
 		BasePath:        basePath,
-		ColorScheme:     c.Settings.Realtime.Dashboard.ColorScheme,
-		CustomColors:    c.Settings.Realtime.Dashboard.CustomColors,
-		LogoStyle:       c.Settings.Realtime.Dashboard.LogoStyle,
-		LiveSpectrogram: c.Settings.Realtime.Dashboard.LiveSpectrogram,
+		ColorScheme:     settings.Realtime.Dashboard.ColorScheme,
+		CustomColors:    settings.Realtime.Dashboard.CustomColors,
+		LogoStyle:       settings.Realtime.Dashboard.LogoStyle,
+		LiveSpectrogram: settings.Realtime.Dashboard.LiveSpectrogram,
 		FreshInstall:    freshInstall,
 		NewVersion:      newVersion,
 		PreviousVersion: previousVersion,
 	}
 
 	// Include dashboard layout for guest/pre-auth rendering if configured
-	if len(c.Settings.Realtime.Dashboard.Layout.Elements) > 0 {
-		response.Layout = &c.Settings.Realtime.Dashboard.Layout
+	if len(settings.Realtime.Dashboard.Layout.Elements) > 0 {
+		response.Layout = &settings.Realtime.Dashboard.Layout
 	}
 
 	// Include Sentry frontend config when telemetry is enabled
-	if c.Settings.Sentry.Enabled {
+	if settings.Sentry.Enabled {
 		response.Sentry = &SentryFrontendConfig{
 			Enabled:  true,
 			DSN:      telemetry.GetFrontendDSN(),
-			SystemID: c.Settings.SystemID,
+			SystemID: settings.SystemID,
 		}
 	}
 
@@ -197,9 +215,9 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 //   - If last_seen_version is missing and isExistingInstall returns true: auto-seed and skip wizard.
 //   - If last_seen_version is missing and no install signals: freshInstall = true.
 //   - If last_seen_version differs from the current version: newVersion = true.
-func (c *Controller) determineWizardState(ctx context.Context) (freshInstall, newVersion bool, previousVersion string) {
+func (c *Controller) determineWizardState(ctx context.Context, settings *conf.Settings) (freshInstall, newVersion bool, previousVersion string) {
 	// Skip wizard triggers for dev builds
-	if isDevBuild(c.Settings.Version) {
+	if isDevBuild(settings.Version) {
 		return false, false, ""
 	}
 
@@ -216,19 +234,19 @@ func (c *Controller) determineWizardState(ctx context.Context) (freshInstall, ne
 
 	// If last_seen_version has never been set, distinguish fresh from existing install
 	if lastSeenVersion == "" {
-		if c.isExistingInstall(ctx) {
+		if c.isExistingInstall(ctx, settings) {
 			// Auto-seed: existing install predates wizard tracking.
 			// Intentional write inside GET handler (idempotent upsert, fires once per install).
-			if err := c.appMetadataRepo.Set(ctx, appMetadataKeyLastSeenVersion, c.Settings.Version); err != nil {
+			if err := c.appMetadataRepo.Set(ctx, appMetadataKeyLastSeenVersion, settings.Version); err != nil {
 				c.logWarnIfEnabled("Failed to auto-seed last_seen_version", logger.Error(err))
 			}
-			return false, false, c.Settings.Version
+			return false, false, settings.Version
 		}
 		return true, false, ""
 	}
 
 	// If versions differ, this is an upgrade
-	if lastSeenVersion != c.Settings.Version {
+	if lastSeenVersion != settings.Version {
 		return false, true, lastSeenVersion
 	}
 
@@ -262,14 +280,14 @@ func (c *Controller) hasZeroDetections(ctx context.Context) bool {
 
 // isExistingInstall returns true if multiple signals indicate this is a configured
 // installation rather than a genuinely fresh one. Checks are ordered cheapest-first.
-func (c *Controller) isExistingInstall(ctx context.Context) bool {
-	if c.Settings.BirdNET.Latitude != 0 || c.Settings.BirdNET.Longitude != 0 {
+func (c *Controller) isExistingInstall(ctx context.Context, settings *conf.Settings) bool {
+	if settings.BirdNET.Latitude != 0 || settings.BirdNET.Longitude != 0 {
 		return true
 	}
-	if len(c.Settings.Realtime.Audio.Sources) > 0 {
+	if len(settings.Realtime.Audio.Sources) > 0 {
 		return true
 	}
-	if c.Settings.Security.BasicAuth.Enabled || len(c.Settings.GetEnabledOAuthProviders()) > 0 {
+	if settings.Security.BasicAuth.Enabled || len(settings.GetEnabledOAuthProviders()) > 0 {
 		return true
 	}
 	if !c.hasZeroDetections(ctx) {
@@ -315,7 +333,11 @@ func (c *Controller) DismissWizard(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "App metadata not available", http.StatusServiceUnavailable)
 	}
 
-	if err := c.appMetadataRepo.Set(ctx.Request().Context(), appMetadataKeyLastSeenVersion, c.Settings.Version); err != nil {
+	settings := c.currentSettings()
+	if settings == nil {
+		return c.HandleError(ctx, nil, "Settings not initialized", http.StatusServiceUnavailable)
+	}
+	if err := c.appMetadataRepo.Set(ctx.Request().Context(), appMetadataKeyLastSeenVersion, settings.Version); err != nil {
 		return c.HandleError(ctx, err, "Failed to dismiss wizard", http.StatusInternalServerError)
 	}
 

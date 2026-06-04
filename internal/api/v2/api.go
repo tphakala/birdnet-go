@@ -44,22 +44,27 @@ import (
 // Tunnel provider constant for unknown providers
 const tunnelProviderUnknown = "unknown"
 
+// apiV2Prefix is the base path prefix for all v2 API routes (the Echo group
+// prefix; see Controller.Group). It is the single source of truth used to
+// compose full route paths for PrivateMode exemption matching, so the exempt
+// allow-list in isPrivateModeExempt cannot drift from the registered routes.
+const apiV2Prefix = "/api/v2"
+
 // Controller manages the API routes and handlers
 type Controller struct {
-	Echo                *echo.Echo
-	Group               *echo.Group
-	DS                  datastore.Interface           // Deprecated: Use Repo for new detection operations
-	Repo                datastore.DetectionRepository // New: Preferred for detection CRUD operations
-	Settings            *conf.Settings
-	BirdImageCache      *imageprovider.BirdImageCache
-	SunCalc             *suncalc.SunCalc
-	Processor           *processor.Processor
-	EBirdClient         *ebird.Client
-	TaxonomyDB          *classifier.TaxonomyDatabase
-	controlChan         chan string
-	shutdownRequester   ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
-	shutdownMu          sync.RWMutex      // protects shutdownRequester
-	speciesExcludeMutex sync.RWMutex      // Mutex for species exclude list operations
+	Echo              *echo.Echo
+	Group             *echo.Group
+	DS                datastore.Interface           // Deprecated: Use Repo for new detection operations
+	Repo              datastore.DetectionRepository // New: Preferred for detection CRUD operations
+	Settings          *conf.Settings
+	BirdImageCache    *imageprovider.BirdImageCache
+	SunCalc           *suncalc.SunCalc
+	Processor         *processor.Processor
+	EBirdClient       *ebird.Client
+	TaxonomyDB        *classifier.TaxonomyDatabase
+	controlChan       chan string
+	shutdownRequester ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
+	shutdownMu        sync.RWMutex      // protects shutdownRequester
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.
@@ -139,9 +144,11 @@ type Controller struct {
 	audioWatchdog atomic.Pointer[audiocore.LivenessWatchdog]
 
 	// Health check infrastructure for the diagnostics endpoints.
-	healthRegistry *health.Registry
-	healthReports  *health.ReportStore
-	healthErrors   *health.ErrorRingBuffer
+	healthRegistry     *health.Registry
+	healthReports      *health.ReportStore
+	healthErrors       *health.ErrorRingBuffer
+	healthMetricsStore *observability.HealthMetricsStore
+	healthEvents       *observability.HealthEventBuffer
 
 	// sourceRestarter restarts a single audio source by ID. Set during
 	// pipeline Start() and called by the restart-source control endpoint.
@@ -158,8 +165,35 @@ type ShutdownRequester interface {
 
 // currentSettings returns the latest settings snapshot so UI changes
 // take effect in API responses without restarting the service.
+//
+// It resolves the lock-free global atomic snapshot first and only falls back
+// to c.Settings when no snapshot has been published (standalone unit-test
+// controllers). The fallback is read lazily, so in production (where a
+// snapshot is always published) c.Settings is never dereferenced here. That
+// keeps the accessor race-free against the c.Settings reassignment the
+// settings update handlers perform under c.settingsMutex: the equivalent
+// conf.CurrentOrFallback(c.Settings) would evaluate c.Settings eagerly and
+// race that write.
 func (c *Controller) currentSettings() *conf.Settings {
-	return conf.CurrentOrFallback(c.Settings)
+	if latest := conf.GetSettings(); latest != nil {
+		return latest
+	}
+	return c.Settings
+}
+
+// lockedSettings returns this controller's own cached settings snapshot, read
+// under settingsMutex so it cannot race the c.Settings reassignment the settings
+// update handlers perform. Unlike currentSettings(), it deliberately does NOT
+// consult the process-global atomic snapshot: use it for reads whose result is
+// asserted per-controller (e.g. debug-gated response verbosity), where the
+// shared global snapshot would couple otherwise-independent parallel tests.
+// c.Settings is repointed on every save, so it stays live for such reads. The
+// returned snapshot is immutable (copy-on-write), so callers may dereference its
+// fields after the lock is released.
+func (c *Controller) lockedSettings() *conf.Settings {
+	c.settingsMutex.RLock()
+	defer c.settingsMutex.RUnlock()
+	return c.Settings
 }
 
 // Option is a functional option for configuring the Controller.
@@ -488,7 +522,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	}
 
 	// Create v2 API group
-	c.Group = e.Group("/api/v2")
+	c.Group = e.Group(apiV2Prefix)
 
 	// Configure middlewares
 	c.Group.Use(middleware.Recover())          // Recover should be early
@@ -498,6 +532,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// Removing duplicate CORS here to avoid conflicts with global CORS configuration
 	c.Group.Use(middleware.BodyLimit("1M")) // Limit request body to 1MB to prevent DoS attacks
 	c.Group.Use(c.LoggingMiddleware())      // Use custom structured logging middleware
+	c.Group.Use(c.privateModeAuth)          // Gate all API endpoints behind auth when PrivateMode is enabled
 
 	// NOTE: CSRF token is provided by the /app/config endpoint using middleware.EnsureCSRFToken()
 	// which handles Echo v4.15.0's Sec-Fetch-Site optimization that may skip token generation
@@ -638,6 +673,7 @@ func (c *Controller) initRoutes() {
 		{"settings routes", c.initSettingsRoutes},
 		{"filesystem routes", c.initFileSystemRoutes},
 		{"stream health routes", c.initStreamHealthRoutes},
+		{"stream test routes", c.initStreamTestRoutes},
 		{"audio health routes", c.initAudioHealthRoutes},
 		{"quiet hours routes", c.initQuietHoursRoutes},
 		{"audio level routes", c.initAudioLevelRoutes},
@@ -649,6 +685,7 @@ func (c *Controller) initRoutes() {
 		{"range routes", c.initRangeRoutes},
 		{"heatmap routes", c.initHeatmapRoutes},
 		{"sse routes", c.initSSERoutes},
+		{"diagnostics routes", c.initDiagnosticsRoutes},
 		{"metrics history routes", c.initMetricsHistoryRoutes},
 		{"notification routes", c.initNotificationRoutes},
 		{"support routes", c.initSupportRoutes},
@@ -659,7 +696,6 @@ func (c *Controller) initRoutes() {
 		{"model routes", c.initModelRoutes},
 		{"insights routes", c.initInsightsRoutes},
 		{"tls routes", c.initTLSRoutes},
-		{"diagnostics routes", c.initDiagnosticsRoutes},
 	}
 
 	for _, initializer := range routeInitializers {
@@ -686,16 +722,26 @@ func (c *Controller) initRoutes() {
 
 // HealthCheck handles the API health check endpoint
 func (c *Controller) HealthCheck(ctx echo.Context) error {
+	// Read version/build/debug from this controller's own snapshot (nil-safe for
+	// standalone test controllers).
+	var version, buildDate string
+	debug := false
+	if settings := c.lockedSettings(); settings != nil {
+		version = settings.Version
+		buildDate = settings.BuildDate
+		debug = settings.WebServer.Debug
+	}
+
 	// Create response structure
 	response := map[string]any{
 		"status":     "healthy",
-		"version":    c.Settings.Version,
-		"build_date": c.Settings.BuildDate,
+		"version":    version,
+		"build_date": buildDate,
 		"timestamp":  time.Now().Format(time.RFC3339),
 	}
 
-	// Add environment if available in settings
-	if c.Settings != nil && c.Settings.WebServer.Debug {
+	// Add environment based on debug mode
+	if debug {
 		response["environment"] = "development"
 	} else {
 		response["environment"] = "production"
@@ -845,10 +891,16 @@ func (c *Controller) newErrorResponse(err error, message string, code int) *Erro
 	// Generate a random correlation ID (8 characters should be sufficient)
 	correlationID := generateCorrelationID()
 
-	// Only expose raw err.Error() in debug mode — it can contain internal
+	// Only expose raw err.Error() in debug mode: it can contain internal
 	// paths, SQL errors, stack traces, etc. In production, use the
 	// sanitized message parameter instead.
 	var errorStr string
+	// Read the controller's own debug flag without locking: this is reached from
+	// HandleError while UpdateSettings holds c.settingsMutex, so it must not
+	// acquire the lock, and the flag must remain per-controller (handlers assert
+	// debug-gated error verbosity per controller, not via the shared global
+	// snapshot). A fully race-free per-controller read would require making
+	// c.Settings an atomic pointer; left as a focused follow-up.
 	if err != nil && c.Settings != nil && c.Settings.WebServer.Debug {
 		errorStr = err.Error()
 	} else {
@@ -993,16 +1045,20 @@ func (c *Controller) HandleErrorForTest(ctx echo.Context, err error, message str
 //
 // Reads the debug flag via conf.GetSettings() rather than c.Settings so the
 // check is race-free against concurrent c.Settings writes in the settings
-// handlers: c.Settings is plain a *conf.Settings field with no locking on
+// handlers: c.Settings is a plain *conf.Settings field with no locking on
 // the Debug read path, while conf.GetSettings() is a lock-free atomic.Load.
-// Falls back to c.Settings when the global snapshot has not been set (tests
-// that inject a standalone Controller without touching the global).
+// Returns silently when the global snapshot has not been set (e.g. in unit
+// tests with a standalone Controller).
 func (c *Controller) Debug(format string, v ...any) {
 	settings := conf.GetSettings()
 	if settings == nil {
-		settings = c.Settings
+		// Skip debug logging when the global snapshot hasn't been set
+		// (e.g. in unit tests with a standalone Controller). Reading
+		// c.Settings here would race with concurrent writes in the
+		// settings update handlers.
+		return
 	}
-	if settings != nil && settings.WebServer.Debug {
+	if settings.WebServer.Debug {
 		msg := fmt.Sprintf(format, v...)
 		c.logDebugIfEnabled(msg)
 	}

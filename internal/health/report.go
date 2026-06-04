@@ -47,6 +47,10 @@ func NewReport(id string, startedAt time.Time, results []Result) *DiagnosticsRep
 	}
 }
 
+// DefaultReportStoreSize is the number of reports a ReportStore retains when
+// NewReportStore is given a non-positive maxSize.
+const DefaultReportStoreSize = 10
+
 // ReportStore keeps recent reports in memory.
 type ReportStore struct {
 	mu      sync.RWMutex
@@ -55,7 +59,13 @@ type ReportStore struct {
 }
 
 // NewReportStore creates a store that keeps up to maxSize reports.
+// If maxSize is less than or equal to zero, it falls back to
+// DefaultReportStoreSize. Without this guard a non-positive maxSize would make
+// Save evict on every call, so the store would never retain any report.
 func NewReportStore(maxSize int) *ReportStore {
+	if maxSize <= 0 {
+		maxSize = DefaultReportStoreSize
+	}
 	return &ReportStore{
 		reports: make(map[string]*DiagnosticsReport),
 		maxSize: maxSize,
@@ -70,7 +80,10 @@ func (s *ReportStore) Save(report *DiagnosticsReport) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.reports) >= s.maxSize {
+	// Only evict when inserting a new ID. Updating an existing report in place
+	// must not evict another entry, which would otherwise shrink the effective
+	// capacity by one on every update of an already-stored report.
+	if _, exists := s.reports[report.ID]; !exists && len(s.reports) >= s.maxSize {
 		var oldestID string
 		var oldestTime time.Time
 		for id, r := range s.reports {

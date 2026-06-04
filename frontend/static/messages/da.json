@@ -435,6 +435,10 @@
         "overloadTitle": "Lydanalyse overbelastet",
         "overloadMessage": "Dit system dropper {dropRate}% af lydprøverne for kilden ''{sourceName}'', fordi det ikke kan følge med analysen. Reducer BirdNET-overlapværdien i detektionsindstillingerne eller overvej at opgradere til en hurtigere CPU."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime ikke tilgængelig",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} er påkrævet til {modelName}, men blev ikke fundet. Se installationsguiden: {installGuideURL}"
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuel værdi: {value}% (grænse: {threshold}%)",
@@ -937,7 +941,10 @@
     "aria": {
       "loading": "Indlæser registreringsdetaljer...",
       "loaded": "Registreringsdetaljer indlæst for {species}",
-      "error": "Fejl ved indlæsning af registrering: {error}"
+      "error": "Fejl ved indlæsning af registrering: {error}",
+      "loadingResults": "Indlæser {count} resultater...",
+      "thumbnailLoading": "Indlæser {species} miniaturebillede...",
+      "thumbnailLoaded": "Miniaturebillede af {species} indlæst"
     },
     "errors": {
       "notFound": "Registrering ikke fundet. Den kan være blevet slettet, eller ID'et er forkert.",
@@ -1576,7 +1583,11 @@
       "recentlyFirstSeen": "Nyligt først set",
       "earliestFirstSeen": "Tidligst først set",
       "recentlyLastSeen": "Nyligt sidst set",
-      "highestConfidence": "Højeste sikkerhed"
+      "earliestLastSeen": "Tidligst sidst set",
+      "highestConfidence": "Højeste sikkerhed",
+      "lowestConfidence": "Laveste sikkerhed",
+      "highestMaxConfidence": "Højeste maks. sikkerhed",
+      "lowestMaxConfidence": "Laveste maks. sikkerhed"
     },
     "charts": {
       "top10Species": "Top 10 arter",
@@ -2991,6 +3002,7 @@
         "unknown": "ukendt",
         "refresh": "Opdater",
         "addStream": "Tilføj strøm",
+        "testRequired": "Kør en vellykket streamtest før du gemmer",
         "deleteConfirm": "Fjern denne strøm?",
         "restartCount": "Genstartet {count} gang(e)",
         "healthLoadError": "Kunne ikke indlæse strømmens sundhedsstatus",
@@ -3043,6 +3055,47 @@
           "degraded": "Forringet",
           "failed": "Fejlet",
           "unknown": "Ukendt"
+        },
+        "test": {
+          "button": "Test stream",
+          "probing": "Tester...",
+          "result": "Testresultat",
+          "error": "Test mislykkedes",
+          "batCompatible": "Kompatibel med flagermus",
+          "batIncompatible": "Ikke kompatibel med flagermus"
+        },
+        "batWarning": "Flagermusmodeller kræver streams med en tabsfri codec (PCM) og en samplerate på mindst 96 kHz. Brug knappen Test stream ovenfor for at verificere kompatibilitet.",
+        "codecWarning": {
+          "lossy": "Tabsgivende codecs (AAC, Opus, MP3) ødelægger ultralydsfrekvenser over ~20 kHz, hvilket gør streamen uegnet til detektering af flagermus."
+        },
+        "channelMode": {
+          "analyzeError": "Kanalanalyse mislykkedes",
+          "analyzing": "Analyserer kanaler...",
+          "description": "Hvordan multikanallyd håndteres. Vælg en specifik kanal, hvis din kilde sender stereo.",
+          "detectBest": "Detekter bedste kanal",
+          "downmix": "Downmix til mono",
+          "downmixWarning": "Downmix anbefales ikke til stereostreams. Faseforskelle mellem kanaler forårsager kamfiltrering, der reducerer detektionsnøjagtigheden. Vælg en specifik kanal i stedet.",
+          "energyLeft": "Venstre kanal",
+          "energyRight": "Højre kanal",
+          "label": "Kanaltilstand",
+          "left": "Kun venstre kanal",
+          "monoNoSelection": "Enkeltkanalskilde. Alle kanaltilstande giver identisk lyd, så der er ikke behov for at vælge.",
+          "recommended": "Anbefalet: {channel}",
+          "right": "Kun højre kanal",
+          "singleChannelGood": "Enkelt kanal valgt, optimalt for detektionsnøjagtighed."
+        },
+        "format": {
+          "label": "Lydformat",
+          "mono": "Mono (1 kanal)",
+          "multi": "{count} kanaler",
+          "stereo": "Stereo (2 kanaler)",
+          "untested": "Test streamen for at registrere lydformatet",
+          "withSampleRate": "{rate} kHz, {channels}"
+        },
+        "stereoWarning": {
+          "message": "Stereostream detekteret. Downmixing af flere kanaler kan reducere detektionsnøjagtigheden på grund af faseforskelle mellem kanaler. Vælg en specifik kanal (venstre/højre) eller brug kanaldetektoren for bedste resultater.",
+          "short": "Stereo downmix aktiv. Detektionsnøjagtighed kan være reduceret. Rediger for at vælge en specifik kanal.",
+          "tooltip": "Stereo downmix aktiv. Detektionsnøjagtighed kan være reduceret. Rediger for at vælge en specifik kanal."
         }
       },
       "audioFilters": {
@@ -3218,6 +3271,10 @@
         "devicesLoadFailed": "Kunne ikke indlæse lydenheder. Kontroller venligst systemtilladelserne.",
         "invalidBitrate": "Ugyldig bitrateværdi",
         "invalidRetentionPolicy": "Ugyldig opbevaringspolitik"
+      },
+      "models": {
+        "recommendBoth": "For bedste artsdækning anbefales det at køre både BirdNET og Perch sammen.",
+        "perchOnlyWarning": "Perch alene producerer færre detektioner. Sænk konfidenstærsklen til 0.50 for meningsfulde resultater, eller aktiver BirdNET ved siden af for bedste dækning."
       }
     },
     "security": {
@@ -3378,6 +3435,10 @@
         "liveAudioHelp": "Når aktiveret kan alle lytte til live lydstrømme uden at logge ind. Indstillinger og sletning kræver stadig godkendelse.",
         "warningText": "Aktivering af offentlige adgangsfunktioner eksponerer dem for alle, der kan nå denne server. Aktiver kun, hvis du stoler på dit netværksmiljø."
       },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
         "host": "For eksempel localhost:8080 eller example.domain.com",
@@ -3496,6 +3557,20 @@
           "title": "Placering ikke konfigureret",
           "description": "Indstil din placering under Hovedindstillinger for at se arter tilgængelige i dit område. Områdefilteret bruger din placering til at bestemme, hvilke arter der sandsynligvis findes i nærheden.",
           "action": "Konfigurer placering"
+        },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Områdefilter inaktivt",
+            "description": "Detektioner filtreres lige nu ikke efter din placering, så arter fra områder uden for dit eget kan blive rapporteret. Kontrollér indstillingerne for områdefiltermodellen under Indstillinger."
+          },
+          "fellBack": {
+            "title": "Bruger det indbyggede områdefilter",
+            "description": "Det konfigurerede områdefilter med geomodel kunne ikke indlæses, så BirdNET-Go faldt tilbage til det indbyggede områdefilter. Filtreringen virker stadig, men kontrollér Indstillinger for at gendanne geomodellen."
+          },
+          "mappedZero": {
+            "title": "Områdefilteret matchede ingen arter",
+            "description": "Områdefilteret med geomodel matchede ingen af den aktive models arter, så alle detektioner ville blive filtreret fra. Kontrollér, at områdefilterets labelfil passer til den aktive model."
+          }
         },
         "columns": {
           "commonName": "Almindeligt navn",
@@ -3919,6 +3994,8 @@
           "species_name": "Artsnavn",
           "scientific_name": "Videnskabeligt navn",
           "confidence": "Tillid",
+          "days_since_last_seen": "Dage siden sidst set",
+          "novelty_episode_days": "Dage i nyhedsepisode",
           "location": "Placering",
           "stream_name": "Strømnavn",
           "stream_url": "Strøm-URL",
@@ -3929,6 +4006,8 @@
         "operators": {
           "is": "er",
           "is_not": "er ikke",
+          "in": "er på listen",
+          "not_in": "er ikke på listen",
           "contains": "indeholder",
           "not_contains": "indeholder ikke",
           "greater_than": "større end",
@@ -4193,7 +4272,31 @@
       "playbackSpeed": "Afspilningshastighed",
       "speed": "Hastighed",
       "loop": "Skift gentag",
-      "player": "Lydafspiller"
+      "player": "Lydafspiller",
+      "autoplayBlocked": "Klik for at afspille (autoplay blokeret)",
+      "hlsNotSupported": "HLS-afspilning understøttes ikke i denne browser",
+      "streamStarting": "Starter lydstrøm...",
+      "levelFor": "Lydniveau for {source}",
+      "levelForNoSource": "Lydniveau: ingen kilde",
+      "noSource": "Ingen kilde",
+      "levelAnnouncement": "Aktuelt lydniveau: {level} procent",
+      "levelAnnouncementClipping": "Aktuelt lydniveau: {level} procent, klipning registreret",
+      "sourceSelection": "Valg af lydkilde",
+      "sources": "Lydkilder",
+      "noSourcesAvailable": "Ingen lydkilder tilgængelige",
+      "silent": "(stille)",
+      "stopPlayback": "Stop lydafspilning",
+      "startPlayback": "Start lydafspilning",
+      "nowPlaying": "Afspiller nu lyd fra {source}",
+      "nowPlayingNoSource": "Afspiller lyd",
+      "playbackStopped": "Lydafspilning stoppet",
+      "loginRequired": "Login påkrævet for at streame lyd",
+      "streamError": "Fejl ved start af strøm",
+      "streamTitle": "Fuglelydstrøm - {source}",
+      "streamTitleDefault": "Fuglelydstrøm",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Live stream",
+      "playbackError": "Afspilningsfejl: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram er endnu ikke genereret",
@@ -4418,6 +4521,16 @@
       "hostRequired": "Host-parameter er påkrævet",
       "invalidHost": "Ugyldig host-parameter",
       "rateLimit": "For mange forsøg på at oprette notifikationsstrøm, vent venligst før du prøver igen"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Ugyldig forespørgselstekst",
+        "urlRequired": "Stream-URL er påkrævet",
+        "invalidUrl": "Ugyldigt URL-format. Indtast en fuld URL som rtsp://host:port/sti",
+        "unsupportedScheme": "Ikke-understøttet URL-skema \"{scheme}\". Brug rtsp, rtsps, http, https, rtmp eller udp",
+        "blockedDestination": "Denne destination er blokeret af sikkerhedsmæssige årsager",
+        "connectionFailed": "Kunne ikke oprette forbindelse til streamen. Kontrollér, at URL'en er korrekt, og at streamen er tilgængelig"
+      }
     },
     "debug": {
       "notEnabled": "Fejlretningstilstand er ikke aktiveret"
@@ -4683,7 +4796,10 @@
       "reinstall": "Geninstaller",
       "reinstalling": "Geninstallerer...",
       "reinstallComplete": "Filer verificeret succesfuldt",
-      "geomodelBadge": "Inkluderer BirdNET v3.0 geomodel"
+      "geomodelBadge": "Inkluderer BirdNET v3.0 geomodel",
+      "onnxRuntimeRequired": "Kræver ONNX Runtime, som ikke er tilgængelig på dette system.",
+      "onnxRuntimeMissing": "ONNX Runtime er ikke tilgængelig. Denne model kan ikke køre.",
+      "unavailable": "Ikke tilgængelig"
     },
     "bird": {
       "title": "Fugleregistrering",
@@ -4713,7 +4829,7 @@
     "title": "Hjælp og support",
     "subtitle": "Få hjælp, rapportér problemer og forbind med fællesskabet",
     "reportBug": {
-      "description": "Hvis du støder på et problem, skal du først generere en supportpakke for at indfange systeminfo og logfiler, og derefter åbne en fejlrapport på GitHub."
+      "description": "Hvis du støder på et problem, åbn en fejlrapport på GitHub for at beskrive problemet, og generer derefter en supportpakke med sagsnummeret for at hjælpe med fejlfinding."
     },
     "askQuestion": {
       "description": "Har du et spørgsmål om opsætning, funktioner eller brug? GitHub Discussions er det bedste sted at få hjælp fra fællesskabet."
@@ -4761,23 +4877,21 @@
         "description": "Generér og upload en supportpakke nedenfor. Den indfanger logfiler og konfiguration, der markant fremskynder fejlfinding."
       }
     },
-    "supportDump": {
-      "title": "Generér supportpakke",
-      "description": "Upload af en supportpakke med din fejlrapport hjælper markant med fejlfinding. Den indfanger din konfiguration og seneste logfiler med følsomme data fjernet."
-    },
     "openIssue": {
       "title": "Åbn en GitHub-sag",
-      "description": "Når du har samlet ovenstående oplysninger og genereret en supportpakke, åbn en sag på GitHub for at beskrive problemet.",
+      "description": "Åbn en sag på GitHub for at beskrive problemet. Du skal bruge sagsnummeret i næste trin.",
       "button": "Åbn sag på GitHub"
+    },
+    "supportDump": {
+      "title": "Generér supportpakke",
+      "description": "Efter oprettelse af din sag, generer en supportpakke og indtast GitHub-sagsnummeret. Dette kobler din diagnostik til fejlrapporten og hjælper med fejlfinding."
     }
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Opdater",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4789,6 +4903,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Alt OK",
+      "needsAttention": "Kræver opmærksomhed",
+      "failing": "Fejler",
+      "allClear": "Alt klart",
+      "noData": "Ingen data",
+      "none": "Ingen"
+    },
+    "diagnostics": "Diagnostik",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4817,6 +4940,41 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Hyppigste fejl",
+      "errorCount": "Antal",
+      "errorComponent": "Komponent",
+      "errorLevel": "Niveau",
+      "errorMessage": "Besked"
+    },
+    "window": {
+      "label": "Evalueringsvindue",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Seneste hændelse",
+      "recentEvents": "Seneste hændelser",
+      "time": "Tid",
+      "source": "Kilde",
+      "count": "Antal",
+      "lifetime": "i alt",
+      "sparklineLabel": "Aktivitetsgraf",
+      "activeHours": "Aktive timer",
+      "windowTotal": "I vindue",
+      "velocity": "Tendens",
+      "velocityStable": "Stabil",
+      "velocityIncreasing": "Stigende",
+      "velocityDecreasing": "Faldende",
+      "pattern": "Mønster",
+      "patternNone": "Ingen",
+      "patternTransient": "Forbigående",
+      "patternSustained": "Vedvarende"
     }
   }
 }

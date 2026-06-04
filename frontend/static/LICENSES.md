@@ -417,6 +417,11 @@ Source: ISC
 License: Unknown
 Source: Unknown
 
+### github.com/tphakala/birdnet-go/scripts/generate-multi-taxa
+
+License: Unknown
+Source: Unknown
+
 ### github.com/tphakala/birdnet-go/tools/dbexport
 
 License: Unknown
@@ -429,7 +434,7 @@ Source: MIT
 
 ### github.com/tphakala/go-audio-resampler
 
-License: https://github.com/tphakala/go-audio-resampler/blob/v1.3.0/LICENSE
+License: https://github.com/tphakala/go-audio-resampler/blob/v1.4.0/LICENSE
 Source: LGPL-3.0
 
 ### github.com/tphakala/go-tflite
@@ -439,7 +444,7 @@ Source: MIT
 
 ### github.com/tphakala/simd
 
-License: https://github.com/tphakala/simd/blob/v1.0.22/LICENSE
+License: https://github.com/tphakala/simd/blob/v1.1.0/LICENSE
 Source: MIT
 
 ### github.com/valyala/bytebufferpool
@@ -499,12 +504,12 @@ Source: MIT
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.51.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.52.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.54.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.55.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -519,7 +524,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.44.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.45.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
@@ -537,14 +542,9 @@ Source: BSD-3-Clause
 License: https://cs.opensource.google/go/x/time/+/v0.15.0:LICENSE
 Source: BSD-3-Clause
 
-### gonum.org/v1/gonum/dsp/fourier
-
-License: Unknown
-Source: BSD-3-Clause
-
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.278.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.280.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
@@ -554,7 +554,7 @@ Source: Apache-2.0
 
 ### google.golang.org/grpc
 
-License: https://github.com/grpc/grpc-go/blob/v1.81.0/LICENSE
+License: https://github.com/grpc/grpc-go/blob/v1.81.1/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/protobuf

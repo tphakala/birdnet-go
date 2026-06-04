@@ -8,19 +8,21 @@ body:
       value: |
         Thanks for taking the time to file a bug report.
 
+        Tip: the dashboard has a guided **Help -> Report a Bug** page (in the sidebar) that gathers your version, build date, OS and hardware with a one-click **Copy** button, and can generate a support dump. Using it makes filling out this form much easier.
+
         Before submitting, please make sure:
-        1. You are running the latest release: https://github.com/tphakala/birdnet-go/releases
+        1. You are running the **latest release**. Check your version against the releases page and upgrade if you are behind: https://github.com/tphakala/birdnet-go/releases
         2. You have searched existing issues (open and closed) for duplicates.
 
-        **Bug reports with missing required information will be closed without investigation** — without the details below it is not possible to debug the issue.
+        **Bug reports with missing required information will be closed without investigation**, without the details below it is not possible to debug the issue.
 
   - type: input
     id: version
     attributes:
       label: BirdNET-Go version / build date
       description: |
-        Run `./birdnet-go` or copy from the web UI (Settings > About). Expected format: `BirdNET-Go build date: YYYY-MM-DDTHH:MM:SSZ ...`
-      placeholder: "e.g. BirdNET-Go build date: 2026-04-10T08:15:00Z"
+        Easiest: open **Help -> Report a Bug** in the dashboard sidebar and use the **Copy** button to grab your version and build date. The build date also appears on the top-level **About** page (info icon in the sidebar, it is NOT under Settings) next to **Build date**. Native binary users can instead run `./birdnet-go` and copy the build date printed at startup. Expected format: `YYYY-MM-DDTHH:MM:SSZ`.
+      placeholder: "e.g. 2026-04-10T08:15:00Z"
     validations:
       required: true
 
@@ -29,7 +31,7 @@ body:
     attributes:
       label: Install method
       description: |
-        Note: `install.sh` installs BirdNET-Go as a Docker container managed by a systemd service. It is NOT a native binary install.
+        Note: `install.sh` installs BirdNET-Go as a Docker container managed by a systemd service. It is NOT a native binary install. If you installed through a third-party or community package (Home Assistant add-on, DietPi, Unraid, etc.), please pick that option. Those images are maintained outside this project and may lag behind the latest release.
       options:
         - Docker via install.sh (recommended installer script)
         - Docker run / docker-compose (manual, ghcr.io/tphakala/birdnet-go)
@@ -37,6 +39,10 @@ body:
         - Podman / rootless container
         - Native binary (downloaded release, no container)
         - Built from source
+        - Home Assistant add-on (community, third-party)
+        - DietPi (dietpi-software, third-party)
+        - Unraid Community Applications (third-party)
+        - Other third-party / community package (describe in Additional context)
         - Other (describe in Additional context)
     validations:
       required: true
@@ -62,6 +68,21 @@ body:
     attributes:
       label: Operating system and version
       placeholder: "e.g. Raspberry Pi OS Bookworm 64-bit, Ubuntu 24.04, Debian 12"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: audio_source
+    attributes:
+      label: Audio source
+      description: How is BirdNET-Go capturing audio for this setup? This helps narrow down audio-related bugs.
+      options:
+        - USB or built-in sound card (local capture device)
+        - Network audio stream - RTSP / RTSPS (e.g. IP camera)
+        - Network audio stream - HTTP / HLS / other
+        - Both a sound card and a network stream
+        - Audio file / directory analysis
+        - Other / not sure (describe in Additional context)
     validations:
       required: true
 
@@ -112,6 +133,21 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: regression
+    attributes:
+      label: When did this start?
+      description: |
+        A best guess is fine. If it used to work, telling me roughly which version broke it is a big help.
+      options:
+        - First time setting up BirdNET-Go (never worked)
+        - Worked before, started after I updated
+        - Worked before, started without any update
+        - Happens intermittently / hard to pin down
+        - Not sure
+    validations:
+      required: false
+
   - type: textarea
     id: logs
     attributes:
@@ -119,6 +155,21 @@ body:
       description: |
         Paste logs from around the time the bug occurred. Remove or redact anything private (IPs, hostnames, credentials, API keys).
       render: shell
+
+  - type: textarea
+    id: support_dump
+    attributes:
+      label: Support dump (optional, but the single most helpful thing you can add)
+      description: |
+        A support dump captures your config, logs, OS and hardware automatically, so I do not have to rely on the fields above (which are easy to fill in wrong). Two ways to send one:
+
+        1. **Upload (recommended):** after you submit this issue, open **Help -> Report a Bug -> Generate Support Dump** in the dashboard, enter THIS issue's number in the GitHub issue field, and upload. That links the dump to this issue for me automatically; you do not need to paste anything here.
+        2. **Download and attach:** on the same page, untick the upload option to download the dump file, then drag it into this box.
+
+        Dumps are only accessible to the maintainer, not shown publicly. If you already have a dump ID from a previous upload, paste it here too.
+      placeholder: "Drag a downloaded support dump file here, or paste an existing dump ID."
+    validations:
+      required: false
 
   - type: textarea
     id: rtsp
@@ -132,7 +183,7 @@ body:
     attributes:
       label: Pre-submission checks
       options:
-        - label: I am running the latest release or have tested with the `:dev` container image.
+        - label: I am running the [latest release](https://github.com/tphakala/birdnet-go/releases) or have tested with the `:dev` container image.
           required: true
         - label: I have searched existing open and closed issues and this does not appear to be a duplicate.
           required: true

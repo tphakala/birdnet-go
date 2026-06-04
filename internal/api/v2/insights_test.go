@@ -73,7 +73,7 @@ func TestGetPhantomSpecies_Handler(t *testing.T) {
 	t.Parallel()
 	mockRepo := &mockInsightsRepo{
 		phantomSpecies: []repository.PhantomSpecies{
-			{LabelID: 1, ScientificName: "Parus major", DetectionCount: 5, AvgConfidence: 0.42, MaxConfidence: 0.58},
+			{ScientificName: "Parus major", DetectionCount: 5, AvgConfidence: 0.42, MaxConfidence: 0.58},
 		},
 	}
 	e, controller := setupInsightsTestController(t, mockRepo)
@@ -130,10 +130,10 @@ func TestGetMigration_Handler(t *testing.T) {
 	now := time.Now()
 	mockRepo := &mockInsightsRepo{
 		newArrivals: []repository.NewArrival{
-			{LabelID: 1, ScientificName: "Parus major", FirstDetected: now.AddDate(0, 0, -3).Unix(), DetectionCount: 5},
+			{ScientificName: "Parus major", FirstDetected: now.AddDate(0, 0, -3).Unix(), DetectionCount: 5},
 		},
 		goneQuiet: []repository.GoneQuietSpecies{
-			{LabelID: 2, ScientificName: "Turdus merula", LastDetected: now.AddDate(0, 0, -20).Unix(), TotalDetections: 15},
+			{ScientificName: "Turdus merula", LastDetected: now.AddDate(0, 0, -20).Unix(), TotalDetections: 15},
 		},
 	}
 	e, controller := setupInsightsTestController(t, mockRepo)

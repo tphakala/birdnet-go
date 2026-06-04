@@ -435,6 +435,10 @@
         "overloadTitle": "Audio analīze pārslogota",
         "overloadMessage": "Jūsu sistēma izlaiž {dropRate}% audio paraugu avotam ''{sourceName}'', jo tā nespēj sekot līdzi analīzei. Samaziniet BirdNET pārklāšanās vērtību noteikšanas iestatījumos vai apsveriet jaudīgāka procesora izmantošanu."
       },
+      "ort": {
+        "unavailableTitle": "ONNX Runtime nav pieejams",
+        "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Skatiet instalēšanas rokasgrāmatu: {installGuideURL}"
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Pašreizējā vērtība: {value}% (slieksnis: {threshold}%)",
@@ -937,7 +941,10 @@
     "aria": {
       "loading": "Ielādē atklāšanas informāciju...",
       "loaded": "Atklāšanas informācija ielādēta sugai {species}",
-      "error": "Kļūda, ielādējot atklāšanu: {error}"
+      "error": "Kļūda, ielādējot atklāšanu: {error}",
+      "loadingResults": "Ielādē {count} rezultātus...",
+      "thumbnailLoading": "Ielādē {species} sīktēlu...",
+      "thumbnailLoaded": "Sīktēls {species} ielādēts"
     },
     "errors": {
       "notFound": "Atklāšana nav atrasta. Tā, iespējams, ir dzēsta vai ID ir nepareizs.",
@@ -1576,7 +1583,11 @@
       "recentlyFirstSeen": "Nesen pirmo reizi redzētas",
       "earliestFirstSeen": "Agrākās pirmo reizi redzētās",
       "recentlyLastSeen": "Nesen pēdējo reizi redzētas",
-      "highestConfidence": "Augstākā ticamība"
+      "earliestLastSeen": "Agrākās pēdējo reizi redzētās",
+      "highestConfidence": "Augstākā ticamība",
+      "lowestConfidence": "Zemākā ticamība",
+      "highestMaxConfidence": "Augstākā maksimālā ticamība",
+      "lowestMaxConfidence": "Zemākā maksimālā ticamība"
     },
     "charts": {
       "top10Species": "Top 10 sugas",
@@ -2991,6 +3002,7 @@
         "unknown": "nezināma",
         "refresh": "Atsvaidzināt",
         "addStream": "Pievienot straumi",
+        "testRequired": "Pirms saglabāšanas veiciet veiksmīgu straumes testu",
         "deleteConfirm": "Noņemt šo straumi?",
         "restartCount": "Pārstartēta {count} reizi(-es)",
         "healthLoadError": "Neizdevās ielādēt straumes veselības statusu",
@@ -3043,6 +3055,47 @@
           "degraded": "Pasliktināts",
           "failed": "Neizdevies",
           "unknown": "Nezināms"
+        },
+        "test": {
+          "button": "Testēt straumi",
+          "probing": "Testē...",
+          "result": "Pārbaudes rezultāts",
+          "error": "Tests neizdevās",
+          "batCompatible": "Saderīgs ar sikspārņiem",
+          "batIncompatible": "Nav saderīgs ar sikspārņiem"
+        },
+        "batWarning": "Sikspārņu modeļiem nepieciešamas straumes ar bezzudumu kodeku (PCM) un iztveršanas frekvenci vismaz 96 kHz. Izmantojiet pogu Testēt straumi augstāk, lai pārbaudītu saderību.",
+        "codecWarning": {
+          "lossy": "Zudumu kodeki (AAC, Opus, MP3) iznīcina ultraskaņas frekvences virs ~20 kHz, padarot straumi nepiemērotu sikspārņu noteikšanai."
+        },
+        "channelMode": {
+          "analyzeError": "Kanālu analīze neizdevās",
+          "analyzing": "Analizē kanālus...",
+          "description": "Kā apstrādāt daudzkanālu audio. Izvēlieties konkrētu kanālu, ja jūsu avots sūta stereo.",
+          "detectBest": "Noteikt labāko kanālu",
+          "downmix": "Samazināt uz mono",
+          "downmixWarning": "Samazināšana uz mono nav ieteicama stereo straumēm. Fāzu atšķirības starp kanāliem izraisa ķemmes filtrēšanu, kas samazina noteikšanas precizitāti. Tā vietā izvēlieties konkrētu kanālu.",
+          "energyLeft": "Kreisais kanāls",
+          "energyRight": "Labais kanāls",
+          "label": "Kanāla režīms",
+          "left": "Tikai kreisais kanāls",
+          "monoNoSelection": "Viena kanāla avots. Visi kanālu režīmi rada identisku skaņu, tāpēc izvēle nav nepieciešama.",
+          "recommended": "Ieteicamais: {channel}",
+          "right": "Tikai labais kanāls",
+          "singleChannelGood": "Izvēlēts viens kanāls, optimāli noteikšanas precizitātei."
+        },
+        "format": {
+          "label": "Audio formāts",
+          "mono": "Mono (1 kanāls)",
+          "multi": "{count} kanāli",
+          "stereo": "Stereo (2 kanāli)",
+          "untested": "Pārbaudiet straumi, lai noteiktu tās audio formātu",
+          "withSampleRate": "{rate} kHz, {channels}"
+        },
+        "stereoWarning": {
+          "message": "Konstatēta stereo straume. Vairāku kanālu samazināšana var pazemināt noteikšanas precizitāti fāzu atšķirību dēļ starp kanāliem. Izvēlieties konkrētu kanālu (kreiso/labo) vai izmantojiet kanālu detektoru labākajiem rezultātiem.",
+          "short": "Stereo downmix aktīvs. Noteikšanas precizitāte var būt samazināta. Rediģējiet, lai izvēlētos konkrētu kanālu.",
+          "tooltip": "Stereo downmix aktīvs. Noteikšanas precizitāte var būt samazināta. Rediģējiet, lai izvēlētos konkrētu kanālu."
         }
       },
       "audioFilters": {
@@ -3218,6 +3271,10 @@
         "devicesLoadFailed": "Neizdevās ielādēt audio ierīces. Lūdzu, pārbaudiet sistēmas atļaujas.",
         "invalidBitrate": "Nederīga bitu pārraides ātruma vērtība",
         "invalidRetentionPolicy": "Nederīga saglabāšanas politika"
+      },
+      "models": {
+        "recommendBoth": "Labākai sugu noteikšanas pārklājumam ieteicams izmantot gan BirdNET, gan Perch modeļus kopā.",
+        "perchOnlyWarning": "Perch vien rada mazāk noteikšanu. Samaziniet ticamības slieksni līdz 0.50, lai iegūtu jēgpilnus rezultātus, vai aktivizējiet arī BirdNET labākam pārklājumam."
       }
     },
     "security": {
@@ -3378,6 +3435,10 @@
         "liveAudioHelp": "Kad iespējots, ikviens var klausīties tiešraides audio straumes bez pieteikšanās. Iestatījumiem un dzēšanai joprojām nepieciešama autentifikācija.",
         "warningText": "Publiskās piekļuves funkciju iespējošana padara tās pieejamas ikvienam, kas var sasniegt šo serveri. Iespējojiet tikai tad, ja uzticaties savam tīkla videi."
       },
+      "privateMode": {
+        "label": "Require login for all UI pages (private mode)",
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
         "host": "Piemēram, localhost:8080 vai example.domain.com",
@@ -3496,6 +3557,20 @@
           "title": "Atrašanās vieta nav konfigurēta",
           "description": "Iestatiet savu atrašanās vietu galvenajos iestatījumos, lai redzētu jūsu apkārtnē pieejamās sugas. Diapazona filtrs izmanto jūsu atrašanās vietu, lai noteiktu, kuras sugas, visticamāk, atrodamas tuvumā.",
           "action": "Konfigurēt atrašanās vietu"
+        },
+        "rangeFilterHealth": {
+          "inactive": {
+            "title": "Areāla filtrs nav aktīvs",
+            "description": "Noteikšanas pašlaik netiek filtrētas pēc jūsu atrašanās vietas, tāpēc var tikt ziņots arī par sugām, kas sastopamas ārpus jūsu apgabala. Pārbaudiet areāla filtra modeļa konfigurāciju Iestatījumu lapā."
+          },
+          "fellBack": {
+            "title": "Tiek izmantots iebūvētais areāla filtrs",
+            "description": "Konfigurēto ģeomodeļa areāla filtru neizdevās ielādēt, tāpēc BirdNET-Go pārslēdzās uz iebūvēto areāla filtru. Filtrēšana joprojām darbojas, taču pārbaudiet Iestatījumu lapu, lai atjaunotu ģeomodeli."
+          },
+          "mappedZero": {
+            "title": "Areāla filtrs neatbilda nevienai sugai",
+            "description": "Ģeomodeļa areāla filtrs neatbilda nevienai aktīvā modeļa sugai, tāpēc tiktu izfiltrētas visas noteikšanas. Pārbaudiet, vai areāla filtra etiķešu fails atbilst aktīvajam modelim."
+          }
         },
         "columns": {
           "commonName": "Parastais nosaukums",
@@ -3919,6 +3994,8 @@
           "species_name": "Sugas nosaukums",
           "scientific_name": "Zinātniskais nosaukums",
           "confidence": "Ticamība",
+          "days_since_last_seen": "Dienas kopš pēdējā novērojuma",
+          "novelty_episode_days": "Jaunuma epizodes dienas",
           "location": "Atrašanās vieta",
           "stream_name": "Straumes nosaukums",
           "stream_url": "Straumes URL",
@@ -3929,6 +4006,8 @@
         "operators": {
           "is": "ir",
           "is_not": "nav",
+          "in": "ir sarakstā",
+          "not_in": "nav sarakstā",
           "contains": "satur",
           "not_contains": "nesatur",
           "greater_than": "lielāks par",
@@ -4193,7 +4272,31 @@
       "playbackSpeed": "Atskaņošanas ātrums",
       "speed": "Ātrums",
       "loop": "Pārslēgt cilpu",
-      "player": "Audio atskaņotājs"
+      "player": "Audio atskaņotājs",
+      "autoplayBlocked": "Noklikšķiniet, lai atskaņotu (automātiskā atskaņošana bloķēta)",
+      "hlsNotSupported": "HLS atskaņošana šajā pārlūkā netiek atbalstīta",
+      "streamStarting": "Tiek startēta audio straume...",
+      "levelFor": "Audio līmenis avotam {source}",
+      "levelForNoSource": "Audio līmenis: nav avota",
+      "noSource": "Nav avota",
+      "levelAnnouncement": "Pašreizējais audio līmenis: {level} procenti",
+      "levelAnnouncementClipping": "Pašreizējais audio līmenis: {level} procenti, konstatēta pārslodze",
+      "sourceSelection": "Audio avota izvēle",
+      "sources": "Audio avoti",
+      "noSourcesAvailable": "Nav pieejamu audio avotu",
+      "silent": "(kluss)",
+      "stopPlayback": "Apturēt audio atskaņošanu",
+      "startPlayback": "Sākt audio atskaņošanu",
+      "nowPlaying": "Tagad tiek atskaņots audio no {source}",
+      "nowPlayingNoSource": "Tiek atskaņots audio",
+      "playbackStopped": "Audio atskaņošana apturēta",
+      "loginRequired": "Lai straumētu audio, nepieciešama pieteikšanās",
+      "streamError": "Kļūda, startējot straumi",
+      "streamTitle": "Putnu audio straume - {source}",
+      "streamTitleDefault": "Putnu audio straume",
+      "streamArtist": "BirdNET-Go",
+      "streamAlbum": "Tiešraide",
+      "playbackError": "Atskaņošanas kļūda: {details}"
     },
     "spectrogram": {
       "notGenerated": "Spektrogramma vēl nav ģenerēta",
@@ -4418,6 +4521,16 @@
       "hostRequired": "Resursdatora parametrs ir obligāts",
       "invalidHost": "Nederīgs resursdatora parametrs",
       "rateLimit": "Pārāk daudz paziņojumu straumes pieslēgšanās mēģinājumu, lūdzu, uzgaidiet pirms atkārtota mēģinājuma"
+    },
+    "streams": {
+      "test": {
+        "invalidBody": "Nederīgs pieprasījuma saturs",
+        "urlRequired": "Straumes URL ir obligāts",
+        "invalidUrl": "Nederīgs URL formāts. Ievadiet pilnu URL, piem., rtsp://resursdators:ports/ceļš",
+        "unsupportedScheme": "Neatbalstīta URL shēma \"{scheme}\". Izmantojiet rtsp, rtsps, http, https, rtmp vai udp",
+        "blockedDestination": "Šis galamērķis ir bloķēts drošības apsvērumu dēļ",
+        "connectionFailed": "Nevarēja izveidot savienojumu ar straumi. Pārbaudiet, vai URL ir pareizs un straume ir pieejama"
+      }
     },
     "debug": {
       "notEnabled": "Atkļūdošanas režīms nav iespējots"
@@ -4683,7 +4796,10 @@
       "reinstall": "Pārinstalēt",
       "reinstalling": "Pārinstalē...",
       "reinstallComplete": "Faili veiksmīgi pārbaudīti",
-      "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis"
+      "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis",
+      "onnxRuntimeRequired": "Nepieciešams ONNX Runtime, kas šajā sistēmā nav pieejams.",
+      "onnxRuntimeMissing": "ONNX Runtime nav pieejams. Šo modeli nevar palaist.",
+      "unavailable": "Nav pieejams"
     },
     "bird": {
       "title": "Putnu noteikšana",
@@ -4713,7 +4829,7 @@
     "title": "Palīdzība un atbalsts",
     "subtitle": "Saņemiet palīdzību, ziņojiet par problēmām un sazinieties ar kopienu",
     "reportBug": {
-      "description": "Ja saskaraties ar problēmu, vispirms izveidojiet atbalsta pakotni, lai saglabātu sistēmas informāciju un žurnālus, pēc tam atveriet kļūdas ziņojumu GitHub."
+      "description": "Ja saskaraties ar problēmu, vispirms atveriet kļūdas ziņojumu GitHub, lai aprakstītu problēmu, pēc tam izveidojiet atbalsta pakotni ar ziņojuma numuru, lai palīdzētu problēmu novēršanā."
     },
     "askQuestion": {
       "description": "Vai jums ir jautājums par iestatīšanu, funkcijām vai lietošanu? GitHub Discussions forums ir labākā vieta, kur saņemt palīdzību no kopienas."
@@ -4761,23 +4877,21 @@
         "description": "Izveidojiet un augšupielādējiet atbalsta pakotni zemāk. Tā saglabā žurnālus un konfigurāciju, kas ievērojami paātrina problēmu novēršanu."
       }
     },
-    "supportDump": {
-      "title": "Izveidot atbalsta pakotni",
-      "description": "Atbalsta pakotnes augšupielāde kopā ar kļūdas ziņojumu ievērojami palīdz problēmu novēršanā. Tā saglabā jūsu konfigurāciju un jaunākos žurnālus ar noņemtiem sensitīviem datiem."
-    },
     "openIssue": {
       "title": "Atvērt GitHub ziņojumu",
-      "description": "Kad esat savācis iepriekš minēto informāciju un izveidojis atbalsta pakotni, atveriet ziņojumu GitHub, lai aprakstītu problēmu.",
+      "description": "Atveriet ziņojumu GitHub, lai aprakstītu problēmu. Ziņojuma numurs būs nepieciešams nākamajā solī.",
       "button": "Atvērt ziņojumu GitHub"
+    },
+    "supportDump": {
+      "title": "Izveidot atbalsta pakotni",
+      "description": "Pēc ziņojuma izveidošanas izveidojiet atbalsta pakotni un ievadiet GitHub ziņojuma numuru. Tas savieno diagnostiku ar kļūdas ziņojumu un palīdz problēmu novēršanā."
     }
   },
   "health": {
     "title": "System Health",
-    "subtitle": "Run diagnostics to check your system's health and identify potential issues",
-    "runDiagnostics": "Run Diagnostics",
     "running": "Running diagnostics...",
     "lastRun": "Last run",
-    "noResults": "No diagnostics have been run yet. Click 'Run Diagnostics' to check your system.",
+    "refresh": "Atjaunot",
     "exportText": "Copy Report",
     "exportJSON": "Download JSON",
     "copied": "Report copied to clipboard",
@@ -4789,6 +4903,15 @@
       "skipped": "Skipped",
       "total": "Total checks"
     },
+    "metricFooter": {
+      "allPassing": "Viss kārtībā",
+      "needsAttention": "Nepieciešama uzmanība",
+      "failing": "Neizdodas",
+      "allClear": "Bez problēmām",
+      "noData": "Nav datu",
+      "none": "Nav"
+    },
+    "diagnostics": "Diagnostika",
     "categories": {
       "system": "System",
       "audio": "Audio Pipeline",
@@ -4817,6 +4940,41 @@
       "timeLabel": "Time",
       "durationLabel": "Duration",
       "checksLabel": "Checks"
+    },
+    "logs": {
+      "topErrors": "Biežākās kļūdas",
+      "errorCount": "Skaits",
+      "errorComponent": "Komponents",
+      "errorLevel": "Līmenis",
+      "errorMessage": "Ziņojums"
+    },
+    "window": {
+      "label": "Novērtēšanas logs",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "detail": {
+      "lastEvent": "Pēdējais notikums",
+      "recentEvents": "Nesenie notikumi",
+      "time": "Laiks",
+      "source": "Avots",
+      "count": "Skaits",
+      "lifetime": "kopā",
+      "sparklineLabel": "Aktivitātes diagramma",
+      "activeHours": "Aktīvās stundas",
+      "windowTotal": "Logā",
+      "velocity": "Tendence",
+      "velocityStable": "Stabila",
+      "velocityIncreasing": "Pieaugoša",
+      "velocityDecreasing": "Dilstoša",
+      "pattern": "Raksts",
+      "patternNone": "Nav",
+      "patternTransient": "Īslaicīgs",
+      "patternSustained": "Ilgstošs"
     }
   }
 }

@@ -1555,10 +1555,14 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 			MIN(d.label_id) as label_id,
 			species_first.scientific_name,
 			species_first.lifetime_first as first_detected,
+			species_first.lifetime_last as last_detected,
 			MIN(d.id) as detection_id,
 			MAX(d.confidence) as confidence
 		FROM (
-			SELECT l2.scientific_name, MIN(d2.detected_at) as lifetime_first
+			SELECT
+				l2.scientific_name,
+				MIN(d2.detected_at) as lifetime_first,
+				MAX(d2.detected_at) as lifetime_last
 			FROM %s d2
 			JOIN %s l2 ON l2.id = d2.label_id
 			GROUP BY l2.scientific_name
@@ -1633,6 +1637,29 @@ func (r *detectionRepository) GetClipPath(ctx context.Context, id uint) (string,
 		return "", ErrNoClipPath
 	}
 	return *result.ClipName, nil
+}
+
+// GetModelType returns the AI model type for a detection by JOINing with
+// the ai_models table. Returns "bird" as default if not found.
+func (r *detectionRepository) GetModelType(ctx context.Context, id uint) (string, error) {
+	var result struct {
+		ModelType *string `gorm:"column:model_type"`
+	}
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Select(r.modelsTable()+".model_type").
+		Joins("LEFT JOIN "+r.modelsTable()+" ON "+r.modelsTable()+".id = "+r.tableName()+".model_id").
+		Where(r.tableName()+".id = ?", id).
+		Take(&result).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return string(entities.ModelTypeBird), nil
+		}
+		return "", err
+	}
+	if result.ModelType == nil || *result.ModelType == "" {
+		return string(entities.ModelTypeBird), nil
+	}
+	return *result.ModelType, nil
 }
 
 // Exists checks if a detection with the given ID exists.

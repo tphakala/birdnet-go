@@ -483,7 +483,8 @@
     </div>
   </div>
 
-  {#if selection.selectionActive && selection.selectedCount > 0}
+  {#if selection.selectionActive}
+    {@const hasSelection = selection.selectedCount > 0}
     <SelectionToolbar
       selectedCount={selection.selectedCount}
       totalCount={data?.totalResults ?? 0}
@@ -494,25 +495,35 @@
       onClear={() => selection.clear()}
     >
       {#snippet actions()}
-        <Button variant="default" size="sm" onclick={handleBulkMarkCorrect}>
-          <CircleCheck class="size-4 text-[var(--color-success)]" />
+        <Button
+          variant="default"
+          size="sm"
+          disabled={!hasSelection}
+          onclick={handleBulkMarkCorrect}
+        >
+          <CircleCheck class="size-4 {hasSelection ? 'text-[var(--color-success)]' : ''}" />
           {t('dashboard.recentDetections.actions.markCorrect')}
         </Button>
-        <Button variant="default" size="sm" onclick={handleBulkMarkFalsePositive}>
-          <CircleX class="size-4 text-[var(--color-error)]" />
+        <Button
+          variant="default"
+          size="sm"
+          disabled={!hasSelection}
+          onclick={handleBulkMarkFalsePositive}
+        >
+          <CircleX class="size-4 {hasSelection ? 'text-[var(--color-error)]' : ''}" />
           {t('dashboard.recentDetections.actions.markFalsePositive')}
         </Button>
-        <Button variant="default" size="sm" onclick={handleBulkLock}>
+        <Button variant="default" size="sm" disabled={!hasSelection} onclick={handleBulkLock}>
           <Lock class="size-4" />
           {t('dashboard.recentDetections.modals.lockDetection')}
         </Button>
-        <Button variant="default" size="sm" onclick={handleBulkUnlock}>
+        <Button variant="default" size="sm" disabled={!hasSelection} onclick={handleBulkUnlock}>
           <LockOpen class="size-4" />
           {t('dashboard.recentDetections.modals.unlockDetection')}
         </Button>
         <div class="w-px h-6 bg-[var(--color-base-300)] mx-1" role="separator"></div>
-        <Button variant="default" size="sm" onclick={handleBulkDelete}>
-          <Trash2 class="size-4 text-[var(--color-error)]" />
+        <Button variant="default" size="sm" disabled={!hasSelection} onclick={handleBulkDelete}>
+          <Trash2 class="size-4 {hasSelection ? 'text-[var(--color-error)]' : ''}" />
           {t('dashboard.recentDetections.actions.deleteDetection')}
         </Button>
       {/snippet}
@@ -522,9 +533,13 @@
   <!-- ARIA live region for accessibility -->
   <div class="sr-only" aria-live="polite">
     {#if loading}
-      Loading {selectedNumResults} results...
+      {t('detections.aria.loadingResults', { count: selectedNumResults })}
     {:else if data}
-      Showing {data.showingFrom} to {data.showingTo} of {data.totalResults} results
+      {t('detections.pagination.showing', {
+        from: data.showingFrom,
+        to: data.showingTo,
+        total: data.totalResults,
+      })}
     {/if}
   </div>
 

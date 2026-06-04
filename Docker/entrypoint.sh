@@ -81,23 +81,23 @@ else
     # Just ensure directories exist (permissions already set in Dockerfile)
     mkdir -p /config /data/clips /data/models 2>/dev/null || true
 
-    # Use current user
-    USER_NAME=$(whoami)
+    # K8s/OpenShift arbitrary-UID pods have no /etc/passwd entry, so id -un fails
+    USER_NAME=$(id -un 2>/dev/null || echo "uid-${CURRENT_UID}")
     echo "Running as user: $USER_NAME"
 fi
 
 # Set read permissions for model files (only when running as root)
 if [ "$RUNNING_AS_ROOT" = true ]; then
-    chmod -R a+r /data/models/*.tflite 2>/dev/null || true
+    find /data/models -type f \( -name '*.tflite' -o -name '*.onnx' -o -name '*.csv' \) -exec chmod a+r {} + 2>/dev/null || true
     # Ensure directory is executable (browsable)
     chmod a+x /data/models 2>/dev/null || true
 fi
 
 # Check if user has custom model path configured via environment variable
-if [ ! -z "$BIRDNET_MODELPATH" ]; then
+if [ -n "$BIRDNET_MODELPATH" ]; then
     echo "Custom model path configured: $BIRDNET_MODELPATH"
-    # Expand environment variables in the path using shell expansion
-    EXPANDED_PATH=$(eval echo "$BIRDNET_MODELPATH")
+    # Safe tilde expansion without eval (prevents command injection)
+    EXPANDED_PATH="${BIRDNET_MODELPATH/#\~/$HOME}"
     if [ -f "$EXPANDED_PATH" ]; then
         echo "Custom model file found at: $EXPANDED_PATH"
     else
@@ -141,19 +141,13 @@ if [ -n "$TZ" ]; then
         echo "    Legacy names may be removed in future Debian releases"
     fi
 
-    # Validate timezone exists in tzdata
     if [ -f "/usr/share/zoneinfo/$TZ" ]; then
-        ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime
-        echo "$TZ" > /etc/timezone
         echo "✓ Timezone configured: $TZ"
     else
-        echo "❌ ERROR: Timezone '$TZ' not found"
-        echo "   Available timezones: ls /usr/share/zoneinfo/"
+        echo "❌ ERROR: Timezone '$TZ' not found in /usr/share/zoneinfo"
         echo "   Install tzdata-legacy if using US/*, Etc/*, or other legacy names"
         echo "   Falling back to UTC"
-        # Actually configure UTC as fallback
-        ln -snf "/usr/share/zoneinfo/UTC" /etc/localtime
-        echo "UTC" > /etc/timezone
+        export TZ="UTC"
     fi
 else
     echo "No TZ environment variable set, using container default (UTC)"

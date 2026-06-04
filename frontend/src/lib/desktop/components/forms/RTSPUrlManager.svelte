@@ -1,5 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
+  import { generateId } from '$lib/utils/uuid';
   import FormField from './FormField.svelte';
   import ToggleField from './ToggleField.svelte';
   import type { HTMLAttributes } from 'svelte/elements';
@@ -83,8 +84,8 @@
     return null;
   }
 
-  function generateId(): string {
-    return `rtsp-${crypto?.randomUUID?.() ?? Math.random().toString(36).substring(2, 11)}`;
+  function generateRtspId(): string {
+    return generateId('rtsp');
   }
 
   function addUrl() {
@@ -110,7 +111,7 @@
     }
 
     const newRTSPUrl: RTSPUrl = {
-      id: generateId(),
+      id: generateRtspId(),
       url: trimmedUrl,
       name: trimmedName,
       active: true,

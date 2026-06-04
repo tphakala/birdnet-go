@@ -155,7 +155,9 @@ func (sfs *StaticFileServer) readAssetFromEmbed(path string) ([]byte, error) {
 	log := GetLogger()
 	file, err := frontend.DistFS.Open(path)
 	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusNotFound, "File not found")
+		httpErr := echo.NewHTTPError(http.StatusNotFound, "File not found")
+		httpErr.Internal = err
+		return nil, httpErr
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
@@ -201,7 +203,9 @@ func (sfs *StaticFileServer) openDevRoot() (*os.Root, error) {
 	root, err := os.OpenRoot(sfs.devModePath)
 	if err != nil {
 		sfs.logError("Failed to open frontend dist directory", sfs.devModePath, err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Failed to open dist directory")
+		httpErr := echo.NewHTTPError(http.StatusInternalServerError, "Failed to open dist directory")
+		httpErr.Internal = err
+		return nil, httpErr
 	}
 	return root, nil
 }
@@ -215,12 +219,18 @@ func (sfs *StaticFileServer) openFileFromRoot(root *os.Root, path string) (*os.F
 
 	switch {
 	case os.IsNotExist(err):
-		return nil, echo.NewHTTPError(http.StatusNotFound, "File not found")
+		httpErr := echo.NewHTTPError(http.StatusNotFound, "File not found")
+		httpErr.Internal = err
+		return nil, httpErr
 	case os.IsPermission(err):
-		return nil, echo.NewHTTPError(http.StatusForbidden, "Access denied")
+		httpErr := echo.NewHTTPError(http.StatusForbidden, "Access denied")
+		httpErr.Internal = err
+		return nil, httpErr
 	default:
 		sfs.logError("Failed to open file", path, err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Failed to open file")
+		httpErr := echo.NewHTTPError(http.StatusInternalServerError, "Failed to open file")
+		httpErr.Internal = err
+		return nil, httpErr
 	}
 }
 
@@ -263,7 +273,9 @@ func (sfs *StaticFileServer) serveFromEmbed(c echo.Context, path string) error {
 	// Open the file from embedded FS
 	file, err := frontend.DistFS.Open(path)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "File not found")
+		httpErr := echo.NewHTTPError(http.StatusNotFound, "File not found")
+		httpErr.Internal = err
+		return httpErr
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
@@ -343,7 +355,9 @@ func (sfs *StaticFileServer) ServeEmbeddedFS(c echo.Context, fsys fs.FS, path st
 
 	file, err := fsys.Open(path)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "File not found")
+		httpErr := echo.NewHTTPError(http.StatusNotFound, "File not found")
+		httpErr.Internal = err
+		return httpErr
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
