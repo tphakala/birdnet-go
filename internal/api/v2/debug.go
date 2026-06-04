@@ -48,7 +48,7 @@ type DebugSystemStatus struct {
 // This is defense-in-depth — debug routes are already conditionally registered.
 func (c *Controller) requireDebugMode(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		if c.Settings == nil || !c.Settings.Debug {
+		if s := c.lockedSettings(); s == nil || !s.Debug {
 			return c.HandleErrorWithKey(ctx, nil, "Debug mode not enabled", http.StatusForbidden, notification.MsgErrDebugNotEnabled, nil)
 		}
 		return next(ctx)
@@ -185,13 +185,18 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 
 // DebugSystemStatus returns current system status for debugging
 func (c *Controller) DebugSystemStatus(ctx echo.Context) error {
+	settings := c.lockedSettings()
+	debug := false
+	if settings != nil {
+		debug = settings.Debug
+	}
 	status := DebugSystemStatus{
 		Timestamp: time.Now().Format(time.RFC3339),
-		Debug:     c.Settings.Debug,
+		Debug:     debug,
 	}
 
 	// Get telemetry status
-	if telemetryStatus := getTelemetryStatus(c.Settings); telemetryStatus != nil {
+	if telemetryStatus := getTelemetryStatus(settings); telemetryStatus != nil {
 		status.Telemetry = telemetryStatus
 	}
 

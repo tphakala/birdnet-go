@@ -1,7 +1,7 @@
 // adapter_test.go: Regression tests for SecurityAdapter ensuring basic-auth
 // credentials configured via the web UI take effect without a server restart
 // (GitHub issue #3370). The bug was that AuthenticateBasic read the
-// construction-time OAuth2Server.Settings pointer instead of the live snapshot.
+// construction-time OAuth2Server.settings pointer instead of the live snapshot.
 
 package auth
 
@@ -20,12 +20,12 @@ import (
 // TestAuthenticateBasicHotReloadAfterEnable reproduces issue #3370: a user starts
 // BirdNET-Go without security, then enables basic auth and sets a password through
 // the web portal. The save publishes a new settings snapshot via the atomic
-// pointer, but the construction-time OAuth2Server.Settings pointer remains the
+// pointer, but the construction-time OAuth2Server.settings pointer remains the
 // (disabled) startup snapshot. Login must succeed against the freshly configured
 // credentials without restarting the process.
 func TestAuthenticateBasicHotReloadAfterEnable(t *testing.T) {
 	// Startup snapshot: basic auth disabled, no credentials. This becomes the
-	// construction-time OAuth2Server.Settings pointer.
+	// construction-time OAuth2Server.settings pointer.
 	startup := &conf.Settings{}
 
 	server := security.NewOAuth2ServerForTesting(t, startup)

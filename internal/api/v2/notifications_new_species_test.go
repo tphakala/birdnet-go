@@ -77,6 +77,9 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	// Set default templates from config.yaml
 	controller.Settings.Notification.Templates.NewSpecies.Title = "New Species: {{.CommonName}}"
 	controller.Settings.Notification.Templates.NewSpecies.Message = "First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}. View: {{.DetectionURL}}"
+	// CreateTestNewSpeciesNotification reads the live snapshot via currentSettings();
+	// publish the controller's settings so the read resolves to them.
+	publishTestSettings(t, controller.Settings)
 
 	err = controller.CreateTestNewSpeciesNotification(c)
 	require.NoError(t, err)

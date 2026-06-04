@@ -716,7 +716,7 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 		End:        req.End,
 		Format:     req.Format,
 		Filters:    filters,
-		FFmpegPath: c.Settings.Realtime.Audio.FfmpegPath,
+		FFmpegPath: c.currentSettings().Realtime.Audio.FfmpegPath,
 	})
 	if err != nil {
 		if ctx.Request().Context().Err() != nil {
@@ -853,7 +853,7 @@ func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
 	defer os.Remove(tmpPath) //nolint:errcheck // best-effort cleanup
 
 	if err := ffmpeg.ProcessAudioToFile(ctx.Request().Context(), absolutePath,
-		c.Settings.Realtime.Audio.FfmpegPath, filters, tmpPath); err != nil {
+		c.currentSettings().Realtime.Audio.FfmpegPath, filters, tmpPath); err != nil {
 		if ctx.Request().Context().Err() != nil {
 			return nil // Client disconnected
 		}
@@ -964,7 +964,7 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 	defer func() { _ = os.Remove(tmpPath) }()
 
 	if err := ffmpeg.ProcessAudioToFile(ctx.Request().Context(), absolutePath,
-		c.Settings.Realtime.Audio.FfmpegPath, filters, tmpPath); err != nil {
+		c.currentSettings().Realtime.Audio.FfmpegPath, filters, tmpPath); err != nil {
 		if ctx.Request().Context().Err() != nil {
 			return nil // Client disconnected
 		}
@@ -1068,12 +1068,13 @@ type spectrogramParameters struct {
 // global settings that affect the visual appearance of all spectrograms. Including them
 // in the filename prevents serving stale cached spectrograms when these settings change.
 func (c *Controller) parseSpectrogramParameters(ctx echo.Context) spectrogramParameters {
+	spec := c.currentSettings().Realtime.Dashboard.Spectrogram
 	params := spectrogramParameters{
 		width:        SpectrogramSizeLg, // Default width (lg) - single render size for all contexts
 		sizeStr:      ctx.QueryParam("size"),
 		raw:          parseRawParameter(ctx.QueryParam("raw")),
-		style:        c.Settings.Realtime.Dashboard.Spectrogram.Style,
-		dynamicRange: c.Settings.Realtime.Dashboard.Spectrogram.DynamicRange,
+		style:        spec.Style,
+		dynamicRange: spec.DynamicRange,
 	}
 
 	// Parse size parameter
@@ -1151,7 +1152,7 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 // Returns true if the request was handled (either success or error response sent).
 func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters) (bool, error) {
 	// Normalize and validate the audio path
-	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	clipsPrefix := c.currentSettings().Realtime.Audio.Export.Path
 	normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
 	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
 
@@ -1373,7 +1374,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()))
 
 	// Check spectrogram generation mode
-	spectrogramMode := c.Settings.Realtime.Dashboard.Spectrogram.GetMode()
+	spectrogramMode := c.currentSettings().Realtime.Dashboard.Spectrogram.GetMode()
 
 	// Handle user-requested mode
 	if spectrogramMode == conf.SpectrogramModeUserRequested {
@@ -1440,8 +1441,9 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	raw := parseRawParameter(ctx.QueryParam("raw"))
 
 	// Read style settings for filename generation (prevents serving stale cached spectrograms)
-	style := c.Settings.Realtime.Dashboard.Spectrogram.Style
-	dynamicRange := c.Settings.Realtime.Dashboard.Spectrogram.DynamicRange
+	spec := c.currentSettings().Realtime.Dashboard.Spectrogram
+	style := spec.Style
+	dynamicRange := spec.DynamicRange
 
 	// Pass the request context for cancellation/timeout
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width, raw, style, dynamicRange)
@@ -1508,7 +1510,7 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	// Build spectrogram path and key for status lookup
 	// Must compute relSpectrogramPath BEFORE checking queue to ensure consistent key format
 	audioPath := detection.ClipName
-	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	clipsPrefix := c.currentSettings().Realtime.Audio.Export.Path
 	normalizedPath := NormalizeClipPath(audioPath, clipsPrefix)
 	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
 	if err != nil {
@@ -1625,7 +1627,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 
 	// Check if spectrogram already exists (fast path)
 	// Also compute spectrogramKey for queue management
-	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	clipsPrefix := c.currentSettings().Realtime.Audio.Export.Path
 	normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
 	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
 	if err != nil {
@@ -2178,7 +2180,7 @@ func (c *Controller) normalizeAndValidatePath(audioPath string) (string, error) 
 //
 // This reduces duplication across the codebase where this pattern is used.
 func (c *Controller) normalizeAndValidatePathWithLogger(audioPath string, log logger.Logger) (string, error) {
-	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	clipsPrefix := c.currentSettings().Realtime.Audio.Export.Path
 	normalizedPath := NormalizeClipPath(audioPath, clipsPrefix)
 
 	if log != nil && normalizedPath != audioPath {

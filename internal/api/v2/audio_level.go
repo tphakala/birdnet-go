@@ -448,8 +448,12 @@ func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audi
 // getAudioCardSources retrieves all configured audio card sources from the registry.
 func (c *Controller) getAudioCardSources(registry *audiocore.SourceRegistry) []*audiocore.AudioSource {
 	var sources []*audiocore.AudioSource
-	for i := range c.Settings.Realtime.Audio.Sources {
-		src := &c.Settings.Realtime.Audio.Sources[i]
+	settings := c.currentSettings()
+	if settings == nil {
+		return nil
+	}
+	for i := range settings.Realtime.Audio.Sources {
+		src := &settings.Realtime.Audio.Sources[i]
 		if src.Device == "" {
 			continue
 		}
@@ -462,7 +466,11 @@ func (c *Controller) getAudioCardSources(registry *audiocore.SourceRegistry) []*
 
 // addStreamSourcesToLevels adds all configured stream sources to the levels map.
 func (c *Controller) addStreamSourcesToLevels(registry *audiocore.SourceRegistry, levels map[string]audiocore.AudioLevelData, isAuthenticated bool) {
-	for i, stream := range c.Settings.Realtime.RTSP.EnabledStreams() {
+	settings := c.currentSettings()
+	if settings == nil {
+		return
+	}
+	for i, stream := range settings.Realtime.RTSP.EnabledStreams() {
 		source, ok := registry.GetByConnection(stream.URL)
 		if !ok {
 			continue

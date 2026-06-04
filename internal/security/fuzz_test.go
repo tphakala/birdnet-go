@@ -455,7 +455,7 @@ func FuzzIsRequestFromAllowedSubnet(f *testing.F) {
 		conf.SetTestSettings(settings)
 		t.Cleanup(func() { conf.SetTestSettings(nil) })
 
-		server := &OAuth2Server{Settings: settings}
+		server := &OAuth2Server{settings: settings}
 
 		// Should never panic
 		result := server.IsRequestFromAllowedSubnet(ipStr)

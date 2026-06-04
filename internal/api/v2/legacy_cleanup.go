@@ -72,7 +72,7 @@ func (c *Controller) tableExistsMySQL(db *gorm.DB, tableName string) (bool, erro
 	var count int64
 	err := db.Raw(
 		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
-		c.Settings.Output.MySQL.Database, tableName,
+		c.currentSettings().Output.MySQL.Database, tableName,
 	).Scan(&count).Error
 	if err != nil {
 		return false, err
@@ -180,7 +180,7 @@ func (c *Controller) GetLegacyStatus(ctx echo.Context) error {
 
 // getLegacyStatusSQLite handles legacy status for SQLite deployments.
 func (c *Controller) getLegacyStatusSQLite(ctx echo.Context, response *LegacyStatusResponse) error {
-	legacyPath := c.Settings.Output.SQLite.Path
+	legacyPath := c.currentSettings().Output.SQLite.Path
 	response.Location = legacyPath
 
 	// Check if legacy file exists
@@ -249,7 +249,7 @@ func (c *Controller) getLegacyStatusSQLite(ctx echo.Context, response *LegacySta
 
 // getLegacyStatusMySQL handles legacy status for MySQL deployments.
 func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusResponse) error {
-	response.Location = c.Settings.Output.MySQL.Database
+	response.Location = c.currentSettings().Output.MySQL.Database
 
 	// Check if we're in v2-only mode (required for cleanup)
 	if !isV2OnlyMode {
@@ -307,7 +307,7 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 			SELECT COALESCE(data_length, 0), COALESCE(index_length, 0)
 			FROM information_schema.tables
 			WHERE table_schema = ? AND table_name = ?`,
-			c.Settings.Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
+			c.currentSettings().Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
 		if err != nil {
 			c.logWarnIfEnabled("Legacy cleanup: failed to query table size",
 				logger.String("table", tableName),
@@ -416,7 +416,7 @@ func (c *Controller) cleanupSQLiteLegacy(ctx context.Context) error {
 	default:
 	}
 
-	legacyPath := c.Settings.Output.SQLite.Path
+	legacyPath := c.currentSettings().Output.SQLite.Path
 
 	c.logInfoIfEnabled("Starting SQLite legacy database cleanup",
 		logger.String("path", legacyPath))
@@ -511,7 +511,7 @@ func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 
 // getSQLiteLegacySize returns the total size of SQLite legacy files.
 func (c *Controller) getSQLiteLegacySize() int64 {
-	legacyPath := c.Settings.Output.SQLite.Path
+	legacyPath := c.currentSettings().Output.SQLite.Path
 	var totalSize int64
 
 	if info, err := os.Stat(legacyPath); err == nil {
@@ -553,7 +553,7 @@ func (c *Controller) getMySQLLegacySize() int64 {
 			SELECT COALESCE(data_length, 0), COALESCE(index_length, 0)
 			FROM information_schema.tables
 			WHERE table_schema = ? AND table_name = ?`,
-			c.Settings.Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
+			c.currentSettings().Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
 		if err != nil {
 			c.logWarnIfEnabled("Legacy cleanup: failed to query table size",
 				logger.String("table", tableName),
