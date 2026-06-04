@@ -8,8 +8,14 @@ type VerificationFilter entities.VerificationStatus
 // SearchFilters provides advanced search criteria for detections.
 // All timestamps are Unix int64 for consistency and indexing performance.
 type SearchFilters struct {
-	// Query provides text search across scientific names.
+	// Query provides text search across scientific names (unbounded SQL LIKE).
 	Query string
+
+	// CommonLabelIDs holds label IDs whose common name (active locale) matched the free-text
+	// query. It is OR-ed with the scientific_name LIKE produced by Query in buildSearchJoins,
+	// so common-name search works even though the labels table has no common_name column.
+	// nil or empty means no common-name match (the OR branch is omitted).
+	CommonLabelIDs []uint
 
 	// LabelIDs filters by specific label IDs.
 	LabelIDs []uint

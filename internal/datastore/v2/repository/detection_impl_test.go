@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -55,6 +56,97 @@ func createBulkDetections(t *testing.T, db *gorm.DB, count int) (dets []*entitie
 		ids[i] = d.ID
 	}
 	return dets, ids
+}
+
+// setupDetectionTestDBWithLabels migrates the labels table alongside the detection tables so
+// text-search joins can be exercised.
+func setupDetectionTestDBWithLabels(t *testing.T) *gorm.DB {
+	t.Helper()
+	db := setupDetectionTestDB(t)
+	require.NoError(t, db.AutoMigrate(&entities.Label{}), "failed to migrate labels table")
+	return db
+}
+
+func createTestLabel(t *testing.T, db *gorm.DB, scientificName string, modelID uint) *entities.Label {
+	t.Helper()
+	label := &entities.Label{ScientificName: scientificName, ModelID: modelID, LabelTypeID: 1}
+	require.NoError(t, db.Table(tableLabels).Create(label).Error)
+	return label
+}
+
+func createDetectionForLabel(t *testing.T, db *gorm.DB, labelID uint, detectedAt int64) *entities.Detection {
+	t.Helper()
+	det := &entities.Detection{LabelID: labelID, ModelID: 1, Confidence: 0.9, DetectedAt: detectedAt}
+	require.NoError(t, db.Table(tableDetections).Create(det).Error)
+	return det
+}
+
+// TestSearch_QueryAndCommonLabelIDs verifies buildSearchJoins ORs the unbounded scientific_name
+// LIKE (Query) with common-name-resolved label IDs (CommonLabelIDs). See issue #3378.
+func TestSearch_QueryAndCommonLabelIDs(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	corone := createTestLabel(t, db, "Corvus corone", 1)
+	cornix := createTestLabel(t, db, "Corvus cornix", 1)
+	robin := createTestLabel(t, db, "Erithacus rubecula", 1)
+
+	dCorone := createDetectionForLabel(t, db, corone.ID, 1000)
+	_ = createDetectionForLabel(t, db, cornix.ID, 1001)
+	dRobin := createDetectionForLabel(t, db, robin.ID, 1002)
+
+	t.Run("scientific substring matches via Query LIKE", func(t *testing.T) {
+		_, total, err := repo.Search(ctx, &SearchFilters{Query: "Corvus", Limit: 100})
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), total)
+	})
+
+	t.Run("common-only label IDs match when Query has no scientific hit", func(t *testing.T) {
+		results, total, err := repo.Search(ctx, &SearchFilters{
+			Query: "Corneille", CommonLabelIDs: []uint{corone.ID}, Limit: 100,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), total)
+		require.Len(t, results, 1)
+		assert.Equal(t, dCorone.ID, results[0].ID)
+	})
+
+	t.Run("scientific LIKE OR common label IDs returns the union", func(t *testing.T) {
+		_, total, err := repo.Search(ctx, &SearchFilters{
+			Query: "Corvus", CommonLabelIDs: []uint{robin.ID}, Limit: 100,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, int64(3), total)
+	})
+
+	t.Run("common label IDs without Query need no join", func(t *testing.T) {
+		results, total, err := repo.Search(ctx, &SearchFilters{
+			CommonLabelIDs: []uint{robin.ID}, Limit: 100,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), total)
+		require.Len(t, results, 1)
+		assert.Equal(t, dRobin.ID, results[0].ID)
+	})
+}
+
+// TestSearch_ScientificLikeNotTruncated guards against the prior 100-row cap: the scientific
+// LIKE runs in SQL and must return all matches, not a capped subset. See issue #3378.
+func TestSearch_ScientificLikeNotTruncated(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	const n = 150
+	for i := range n {
+		l := createTestLabel(t, db, fmt.Sprintf("Owlspecies%03d aves", i), 1)
+		createDetectionForLabel(t, db, l.ID, int64(1000+i))
+	}
+
+	_, total, err := repo.Search(ctx, &SearchFilters{Query: "Owlspecies", Limit: 1000})
+	require.NoError(t, err)
+	assert.Equal(t, int64(n), total, "scientific LIKE must not be capped at 100 labels")
 }
 
 func TestDeleteBatch_SkipsLockedDetections(t *testing.T) {
