@@ -3337,8 +3337,10 @@
         "clientIdHelpText": "Az OAuth 2.0 Client ID a szolgáltató fejlesztői konzoljáról",
         "clientSecretLabel": "Kliens titok",
         "clientSecretHelpText": "Az OAuth 2.0 Client Secret a szolgáltató fejlesztői konzoljáról",
-        "userIdLabel": "Felhasználói ID (opcionális)",
-        "userIdHelpText": "Korlátozza a hozzáférést egy adott felhasználói fiókhoz e-mail vagy ID szerint",
+        "userIdLabel": "Engedélyezett felhasználók",
+        "userIdHelpText": "Vesszővel elválasztott e-mailek vagy felhasználói azonosítók, akik bejelentkezhetnek ezzel a szolgáltatóval. Ha üres, senki sem tud bejelentkezni.",
+        "allowedUsersEmptyWarning": "Ennek a szolgáltatónak nincsenek engedélyezett felhasználói, ezért minden bejelentkezési kísérlet elutasításra kerül. Adjon meg legalább egy e-mailt vagy felhasználói azonosítót a hozzáférés engedélyezéséhez.",
+        "allowedUsersMissingBadge": "Nincsenek engedélyezett felhasználók - a bejelentkezés sikertelen lesz",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Google OAuth2 bejelentkezés engedélyezése",

@@ -46,7 +46,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { settingsAPI, type TLSCertificateInfo } from '$lib/utils/settingsApi';
   import { toastActions } from '$lib/stores/toast';
-  import { ExternalLink, Server, KeyRound, Users, Plus, Pencil, Trash2, Terminal, ShieldCheck, Upload, Globe, RefreshCw } from '@lucide/svelte';
+  import { ExternalLink, Server, KeyRound, Users, Plus, Pencil, Trash2, Terminal, ShieldCheck, Upload, Globe, RefreshCw, TriangleAlert } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { GoogleIcon, AUTH_PROVIDERS } from '$lib/auth';
   import type { Component } from 'svelte';
@@ -502,6 +502,13 @@
     if (!/^https?:\/\/[^/\s]+/.test(url)) return t('settings.security.oauth.oidc.issuerUrlInvalid');
     return '';
   });
+
+  // Mirror the backend allowlist check (isAllowedOAuthUser): a userId made up of
+  // only blank/comma entries (e.g. "" or ",") allows no one, so an enabled
+  // provider with such a value denies every login (issue #3381).
+  function hasNoAllowedUsers(userId: string | undefined): boolean {
+    return !(userId ?? '').split(',').some(entry => entry.trim() !== '');
+  }
 
   function saveProvider() {
     // Build the provider config
@@ -1159,6 +1166,18 @@
                   onchange={(value) => (providerFormData.userId = value)}
                 />
 
+                <!-- Warn (do not block) when no allowed users are set: an enabled
+                     provider with an empty allowlist denies every login (issue #3381). -->
+                {#if hasNoAllowedUsers(providerFormData.userId)}
+                  <p
+                    class="text-xs text-[var(--color-warning)] -mt-2 flex items-start gap-1.5"
+                    role="status"
+                  >
+                    <TriangleAlert class="size-3.5 shrink-0 mt-0.5" />
+                    <span>{t('settings.security.oauth.allowedUsersEmptyWarning')}</span>
+                  </p>
+                {/if}
+
                 <Checkbox
                   checked={providerFormData.enabled}
                   label={t('settings.security.oauth.enableProviderLabel')}
@@ -1235,6 +1254,19 @@
                           {#if provider.userId}
                             <div class="text-xs text-[var(--color-base-content)] opacity-60 truncate">
                               {provider.userId}
+                            </div>
+                          {/if}
+                          <!-- Flag enabled providers whose allowlist is empty: nobody
+                               can log in with them (issue #3381). -->
+                          {#if provider.enabled && hasNoAllowedUsers(provider.userId)}
+                            <div
+                              class="text-xs text-[var(--color-warning)] flex items-center gap-1 mt-0.5"
+                              role="status"
+                            >
+                              <TriangleAlert class="size-3 shrink-0" />
+                              <span class="truncate"
+                                >{t('settings.security.oauth.allowedUsersMissingBadge')}</span
+                              >
                             </div>
                           {/if}
                         </div>

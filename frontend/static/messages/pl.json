@@ -3337,8 +3337,10 @@
         "clientIdHelpText": "ID klienta OAuth 2.0 z konsoli deweloperskiej dostawcy",
         "clientSecretLabel": "Sekret klienta",
         "clientSecretHelpText": "Sekret klienta OAuth 2.0 z konsoli deweloperskiej dostawcy",
-        "userIdLabel": "ID użytkownika (opcjonalnie)",
-        "userIdHelpText": "Ogranicz dostęp do określonego konta użytkownika według adresu e-mail lub ID",
+        "userIdLabel": "Dozwoleni użytkownicy",
+        "userIdHelpText": "Rozdzielone przecinkami adresy e-mail lub identyfikatory użytkowników, którzy mogą logować się za pomocą tego dostawcy. Jeśli pole jest puste, nikt nie może się zalogować.",
+        "allowedUsersEmptyWarning": "Ten dostawca nie ma dozwolonych użytkowników, więc każda próba logowania zostanie odrzucona. Dodaj co najmniej jeden adres e-mail lub identyfikator użytkownika, aby zezwolić na dostęp.",
+        "allowedUsersMissingBadge": "Nie ustawiono dozwolonych użytkowników - logowanie się nie powiedzie",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Zezwalaj na Logowanie OAuth2 przez Google",

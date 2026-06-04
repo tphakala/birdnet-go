@@ -3337,8 +3337,10 @@
         "clientIdHelpText": "OAuth 2.0 klient-ID fra din udbyders udviklerkonsol",
         "clientSecretLabel": "Klienthemmelighed",
         "clientSecretHelpText": "OAuth 2.0 klienthemmelighed fra din udbyders udviklerkonsol",
-        "userIdLabel": "Bruger-ID (valgfrit)",
-        "userIdHelpText": "Begræns adgang til en bestemt brugerkonto via e-mail eller ID",
+        "userIdLabel": "Tilladte brugere",
+        "userIdHelpText": "Kommaseparerede e-mails eller bruger-id'er, der må logge ind med denne udbyder. Hvis feltet er tomt, kan ingen logge ind.",
+        "allowedUsersEmptyWarning": "Denne udbyder har ingen tilladte brugere, så alle loginforsøg afvises. Tilføj mindst én e-mail eller et bruger-id for at give adgang.",
+        "allowedUsersMissingBadge": "Ingen tilladte brugere angivet - login vil mislykkes",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Tillad OAuth2-login via Google",

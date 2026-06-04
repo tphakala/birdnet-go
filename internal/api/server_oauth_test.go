@@ -51,6 +51,7 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 		email        string
 		providers    []conf.OAuthProviderConfig
 		want         bool
+		wantReason   oauthDenyReason
 	}{
 		{
 			name:         "OIDC user allowed by email",
@@ -60,7 +61,8 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 			providers: []conf.OAuthProviderConfig{
 				{Provider: "oidc", Enabled: true, ClientID: "id", ClientSecret: "s", IssuerURL: "https://idp.example.com", UserID: "user@example.com"},
 			},
-			want: true,
+			want:       true,
+			wantReason: oauthAuthorized,
 		},
 		{
 			name:         "OIDC user allowed by userID (sub claim)",
@@ -70,7 +72,8 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 			providers: []conf.OAuthProviderConfig{
 				{Provider: "oidc", Enabled: true, ClientID: "id", ClientSecret: "s", IssuerURL: "https://idp.example.com", UserID: "sub-123"},
 			},
-			want: true,
+			want:       true,
+			wantReason: oauthAuthorized,
 		},
 		{
 			name:         "OIDC user not in allowed list",
@@ -80,7 +83,8 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 			providers: []conf.OAuthProviderConfig{
 				{Provider: "oidc", Enabled: true, ClientID: "id", ClientSecret: "s", IssuerURL: "https://idp.example.com", UserID: "user@example.com"},
 			},
-			want: false,
+			want:       false,
+			wantReason: oauthDenyUserNotAllowed,
 		},
 		{
 			name:         "OIDC provider disabled",
@@ -90,17 +94,30 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 			providers: []conf.OAuthProviderConfig{
 				{Provider: "oidc", Enabled: false, ClientID: "id", ClientSecret: "s", IssuerURL: "https://idp.example.com", UserID: "user@example.com"},
 			},
-			want: false,
+			want:       false,
+			wantReason: oauthDenyProviderDisabled,
 		},
 		{
-			name:         "OIDC empty UserID configured - deny all",
+			name:         "OIDC empty UserID configured - deny all (issue #3381)",
 			gothProvider: security.ProviderOIDC,
 			userID:       "sub-123",
 			email:        "user@example.com",
 			providers: []conf.OAuthProviderConfig{
 				{Provider: "oidc", Enabled: true, ClientID: "id", ClientSecret: "s", IssuerURL: "https://idp.example.com", UserID: ""},
 			},
-			want: false,
+			want:       false,
+			wantReason: oauthDenyAllowlistEmpty,
+		},
+		{
+			name:         "OIDC whitespace-only UserID treated as empty allowlist",
+			gothProvider: security.ProviderOIDC,
+			userID:       "sub-123",
+			email:        "user@example.com",
+			providers: []conf.OAuthProviderConfig{
+				{Provider: "oidc", Enabled: true, ClientID: "id", ClientSecret: "s", IssuerURL: "https://idp.example.com", UserID: "  ,  "},
+			},
+			want:       false,
+			wantReason: oauthDenyAllowlistEmpty,
 		},
 		{
 			name:         "Google user via OAuthProviders array",
@@ -110,7 +127,8 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 			providers: []conf.OAuthProviderConfig{
 				{Provider: "google", Enabled: true, ClientID: "id", ClientSecret: "s", UserID: "user@gmail.com"},
 			},
-			want: true,
+			want:       true,
+			wantReason: oauthAuthorized,
 		},
 		{
 			name:         "multiple allowed users comma separated",
@@ -120,7 +138,8 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 			providers: []conf.OAuthProviderConfig{
 				{Provider: "oidc", Enabled: true, ClientID: "id", ClientSecret: "s", IssuerURL: "https://idp.example.com", UserID: "first@example.com, second@example.com"},
 			},
-			want: true,
+			want:       true,
+			wantReason: oauthAuthorized,
 		},
 		{
 			name:         "unknown goth provider name",
@@ -129,6 +148,16 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 			email:        "user@fb.com",
 			providers:    []conf.OAuthProviderConfig{},
 			want:         false,
+			wantReason:   oauthDenyProviderUnknown,
+		},
+		{
+			name:         "provider recognized but not configured in settings",
+			gothProvider: security.ProviderGoogle,
+			userID:       "google-123",
+			email:        "user@gmail.com",
+			providers:    []conf.OAuthProviderConfig{},
+			want:         false,
+			wantReason:   oauthDenyProviderMissing,
 		},
 		{
 			name:         "nil settings",
@@ -137,6 +166,7 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 			email:        "user@example.com",
 			providers:    nil,
 			want:         false,
+			wantReason:   oauthDenySettingsMissing,
 		},
 	}
 
@@ -157,8 +187,9 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 			prev := conf.GetSettings()
 			conf.SetTestSettings(settings)
 			t.Cleanup(func() { conf.SetTestSettings(prev) })
-			got := s.isAllowedOAuthUser(tt.gothProvider, tt.userID, tt.email)
+			got, reason := s.isAllowedOAuthUser(tt.gothProvider, tt.userID, tt.email)
 			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.wantReason, reason, "deny reason should classify the cause for security.log diagnostics")
 		})
 	}
 }
@@ -182,8 +213,8 @@ func TestIsAllowedOAuthUserHotReload(t *testing.T) {
 
 	// Sanity: with only the stale startup snapshot, the user is not allowed.
 	conf.SetTestSettings(startup)
-	assert.False(t, s.isAllowedOAuthUser(security.ProviderGoogle, "google-123", "user@gmail.com"),
-		"user should not be allowed under the startup snapshot")
+	allowed, _ := s.isAllowedOAuthUser(security.ProviderGoogle, "google-123", "user@gmail.com")
+	assert.False(t, allowed, "user should not be allowed under the startup snapshot")
 
 	// Simulate a UI save: enable the provider and allow the user, published via
 	// the atomic pointer.
@@ -197,6 +228,6 @@ func TestIsAllowedOAuthUserHotReload(t *testing.T) {
 	conf.SetTestSettings(updated)
 	t.Cleanup(func() { conf.SetTestSettings(nil) })
 
-	assert.True(t, s.isAllowedOAuthUser(security.ProviderGoogle, "google-123", "user@gmail.com"),
-		"allowlist change made via UI must apply without a restart")
+	allowedAfter, _ := s.isAllowedOAuthUser(security.ProviderGoogle, "google-123", "user@gmail.com")
+	assert.True(t, allowedAfter, "allowlist change made via UI must apply without a restart")
 }
