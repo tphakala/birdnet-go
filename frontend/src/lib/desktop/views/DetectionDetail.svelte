@@ -24,11 +24,19 @@
   import { t } from '$lib/i18n';
   import type { Detection, ImageAttribution } from '$lib/types/detection.types';
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
+  import {
+    downloadDetectionRecording,
+    RECORDING_DOWNLOAD_FORMATS,
+    recordingDownloadErrorMessage,
+    type RecordingDownloadFormat,
+  } from '$lib/utils/audioDownload';
   import { formatLocalDateTime } from '$lib/utils/date';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
+  import { toastActions } from '$lib/stores/toast';
   import {
     Download,
+    Loader2,
     Camera,
     Clock,
     History,
@@ -37,6 +45,7 @@
     Moon,
     Sunrise,
     Sunset,
+    X,
   } from '@lucide/svelte';
 
   // Interface definitions for API responses
@@ -110,6 +119,8 @@
   let isLoadingTaxonomy = $state(false);
   let detectionError = $state<string | null>(null);
   let imageAttribution = $state<ImageAttribution | null>(null);
+  let showDownloadFormatModal = $state(false);
+  let isDownloadingRecording = $state(false);
 
   // Derived state for subspecies with proper typing
   let subspeciesList = $derived<Subspecies[]>(
@@ -349,6 +360,34 @@
     }
   }
 
+  async function handleRecordingDownload(format: RecordingDownloadFormat) {
+    if (!detection) return;
+
+    showDownloadFormatModal = false;
+    isDownloadingRecording = true;
+
+    try {
+      await downloadDetectionRecording(detection, format);
+    } catch (error) {
+      toastActions.error(recordingDownloadErrorMessage(error));
+      logger.error('Error downloading detection recording:', error);
+    } finally {
+      isDownloadingRecording = false;
+    }
+  }
+
+  function handleDownloadDialogKeydown(event: KeyboardEvent) {
+    if (showDownloadFormatModal && event.key === 'Escape') {
+      showDownloadFormatModal = false;
+    }
+  }
+
+  function closeDownloadFormatModalFromBackdrop(event: MouseEvent) {
+    if (event.target === event.currentTarget) {
+      showDownloadFormatModal = false;
+    }
+  }
+
   // Keyboard navigation handler for tab buttons
   function handleTabKeydown(e: KeyboardEvent) {
     const tabs: TabType[] = ['overview', 'history', 'notes'];
@@ -427,6 +466,8 @@
     }
   });
 </script>
+
+<svelte:window onkeydown={handleDownloadDialogKeydown} />
 
 <!-- Snippets for better organization -->
 
@@ -589,15 +630,20 @@
       <!-- Download -->
       {#if det.clipName}
         <div class="meta-section">
-          <a
-            href={buildAppUrl(`/api/v2/media/audio/${det.clipName}`)}
-            download
+          <button
+            type="button"
             class="meta-download"
+            disabled={isDownloadingRecording}
+            onclick={() => (showDownloadFormatModal = true)}
             aria-label="Download audio clip for {det.commonName} detection"
           >
-            <Download class="w-4 h-4" />
+            {#if isDownloadingRecording}
+              <Loader2 class="w-4 h-4 animate-spin" />
+            {:else}
+              <Download class="w-4 h-4" />
+            {/if}
             <span>{t('media.audio.download')}</span>
-          </a>
+          </button>
         </div>
       {/if}
     </div>
@@ -902,6 +948,49 @@
   {/if}
 </main>
 
+{#if showDownloadFormatModal && detection}
+  <div
+    class="download-format-backdrop"
+    role="presentation"
+    onclick={closeDownloadFormatModalFromBackdrop}
+  >
+    <div
+      class="download-format-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="download-format-title"
+      tabindex="-1"
+    >
+      <div class="download-format-header">
+        <h2 id="download-format-title" class="download-format-title">
+          {t('media.audio.download')}
+        </h2>
+        <button
+          type="button"
+          class="download-format-close"
+          aria-label={t('common.aria.closeModal')}
+          onclick={() => (showDownloadFormatModal = false)}
+        >
+          <X class="size-5" />
+        </button>
+      </div>
+
+      <div class="download-format-options" aria-label={t('media.audio.download')}>
+        {#each RECORDING_DOWNLOAD_FORMATS as format (format.id)}
+          <button
+            type="button"
+            class="download-format-option"
+            onclick={() => handleRecordingDownload(format.id)}
+          >
+            <Download class="size-4" />
+            <span>{format.labelKey ? t(format.labelKey) : format.label}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
   /* ===========================================
      DETECTION DETAIL - Editorial Design System
@@ -1063,15 +1152,116 @@
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+    width: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
     font-size: 0.8125rem;
     font-weight: 500;
     color: var(--color-base-content);
     opacity: 0.6;
     transition: opacity 0.15s ease;
+    cursor: pointer;
   }
 
-  .meta-download:hover {
+  .meta-download:hover:not(:disabled) {
     opacity: 1;
+  }
+
+  .meta-download:disabled {
+    cursor: wait;
+    opacity: 0.45;
+  }
+
+  .download-format-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 1rem;
+    background: oklch(0% 0 0deg / 0.45);
+  }
+
+  .download-format-sheet {
+    width: 100%;
+    max-height: min(80vh, 28rem);
+    overflow-y: auto;
+    background: var(--color-base-100);
+    border: 1px solid var(--border-100);
+    border-radius: 1rem 1rem 0.75rem 0.75rem;
+    box-shadow: var(--shadow-xl);
+    padding: 1rem;
+  }
+
+  .download-format-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .download-format-title {
+    font-size: 0.9375rem;
+    font-weight: 650;
+    color: var(--color-base-content);
+  }
+
+  .download-format-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 0;
+    border-radius: var(--radius-field);
+    background: transparent;
+    color: var(--color-base-content);
+    cursor: pointer;
+  }
+
+  .download-format-close:hover {
+    background: var(--color-base-200);
+  }
+
+  .download-format-options {
+    display: grid;
+    gap: 0.375rem;
+  }
+
+  .download-format-option {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-height: 2.75rem;
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: var(--radius-field);
+    background: transparent;
+    color: var(--color-base-content);
+    padding: 0.625rem 0.75rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .download-format-option:hover {
+    background: var(--color-base-200);
+    border-color: var(--border-100);
+  }
+
+  @media (min-width: 640px) {
+    .download-format-backdrop {
+      align-items: center;
+    }
+
+    .download-format-sheet {
+      max-width: 24rem;
+      border-radius: var(--radius-box);
+    }
   }
 
   /* Species thumbnail — 4:3 to match avicommons 320×240 source images */

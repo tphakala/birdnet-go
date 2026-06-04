@@ -115,6 +115,87 @@ func TestExtractClip_InvalidInputs(t *testing.T) {
 	}
 }
 
+// TestTranscodeAudio verifies whole-file transcoding for multiple output formats.
+func TestTranscodeAudio(t *testing.T) {
+	t.Parallel()
+
+	ffmpegPath, err := findFFmpegBinary()
+	if err != nil {
+		t.Skip("FFmpeg not available:", err)
+	}
+
+	testDir := t.TempDir()
+	testFile := filepath.Join(testDir, "test.wav")
+	makeTestWAVSilence(t, testFile, 3)
+
+	tests := []struct {
+		name   string
+		format string
+	}{
+		{name: "transcode WAV", format: ffmpeg.FormatWAV},
+		{name: "transcode MP3", format: ffmpeg.FormatMP3},
+		{name: "transcode FLAC", format: ffmpeg.FormatFLAC},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			buf, err := ffmpeg.TranscodeAudio(t.Context(), &ffmpeg.TranscodeOptions{
+				InputPath:  testFile,
+				Format:     tt.format,
+				FFmpegPath: ffmpegPath,
+			})
+			require.NoError(t, err)
+			assert.Positive(t, buf.Len())
+		})
+	}
+}
+
+// TestTranscodeAudio_InvalidInputs verifies malformed transcode options.
+func TestTranscodeAudio_InvalidInputs(t *testing.T) {
+	t.Parallel()
+
+	ffmpegPath, err := findFFmpegBinary()
+	if err != nil {
+		t.Skip("FFmpeg not available:", err)
+	}
+
+	testDir := t.TempDir()
+	testFile := filepath.Join(testDir, "test.wav")
+	makeTestWAVSilence(t, testFile, 3)
+
+	tests := []struct {
+		name string
+		opts *ffmpeg.TranscodeOptions
+	}{
+		{
+			name: "nil options",
+			opts: nil,
+		},
+		{
+			name: "unsupported format",
+			opts: &ffmpeg.TranscodeOptions{InputPath: testFile, Format: "wma", FFmpegPath: ffmpegPath},
+		},
+		{
+			name: "nonexistent input file",
+			opts: &ffmpeg.TranscodeOptions{InputPath: "/nonexistent/file.wav", Format: ffmpeg.FormatWAV, FFmpegPath: ffmpegPath},
+		},
+		{
+			name: "empty FFmpeg path",
+			opts: &ffmpeg.TranscodeOptions{InputPath: testFile, Format: ffmpeg.FormatWAV, FFmpegPath: ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ffmpeg.TranscodeAudio(t.Context(), tt.opts)
+			assert.Error(t, err)
+		})
+	}
+}
+
 // TestExtractClip_ContextCancellation verifies that a cancelled context is honoured.
 func TestExtractClip_ContextCancellation(t *testing.T) {
 	t.Parallel()
