@@ -48,7 +48,7 @@ type DebugSystemStatus struct {
 // This is defense-in-depth — debug routes are already conditionally registered.
 func (c *Controller) requireDebugMode(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		if s := c.lockedSettings(); s == nil || !s.Debug {
+		if s := c.controllerSettings(); s == nil || !s.Debug {
 			return c.HandleErrorWithKey(ctx, nil, "Debug mode not enabled", http.StatusForbidden, notification.MsgErrDebugNotEnabled, nil)
 		}
 		return next(ctx)
@@ -185,7 +185,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 
 // DebugSystemStatus returns current system status for debugging
 func (c *Controller) DebugSystemStatus(ctx echo.Context) error {
-	settings := c.lockedSettings()
+	settings := c.controllerSettings()
 	debug := false
 	if settings != nil {
 		debug = settings.Debug
