@@ -130,7 +130,7 @@ func TestLoadNoveltyEpisodesFromDatabase_RestoresActiveEpisode(t *testing.T) {
 	assert.Equal(t, runStart.Format(time.DateOnly), novelty.NoveltyEpisodeStart.Format(time.DateOnly))
 }
 
-func TestLoadNoveltyEpisodesFromDatabase_RestoresAbsenceGap(t *testing.T) {
+func TestLoadNoveltyEpisodesFromDatabase(t *testing.T) {
 	t.Parallel()
 
 	const scientificName = "Setophaga castanea"
@@ -138,72 +138,76 @@ func TestLoadNoveltyEpisodesFromDatabase_RestoresAbsenceGap(t *testing.T) {
 	runStart := trackerDateOnly(now)
 	previousDate := runStart.AddDate(0, 0, -12)
 
-	ds := &noveltyHistoryDatastore{
-		lifetime: []datastore.NewSpeciesData{
-			{
-				ScientificName: scientificName,
-				CommonName:     "Bay-breasted Warbler",
-				FirstSeenDate:  previousDate.Format(time.DateOnly),
-				LastSeenDate:   runStart.Format(time.DateOnly),
+	tests := []struct {
+		name                   string
+		ds                     *noveltyHistoryDatastore
+		wantDaysSinceLastSeen  int
+		wantNoveltyEpisodeDays int
+	}{
+		{
+			// The restored absence gap must match the value the live path records
+			// at episode creation (12), not days-since-latest-detection (0).
+			name: "restores absence gap",
+			ds: &noveltyHistoryDatastore{
+				lifetime: []datastore.NewSpeciesData{
+					{
+						ScientificName: scientificName,
+						CommonName:     "Bay-breasted Warbler",
+						FirstSeenDate:  previousDate.Format(time.DateOnly),
+						LastSeenDate:   runStart.Format(time.DateOnly),
+					},
+				},
+				detectionDates: []datastore.SpeciesDetectionDate{
+					{ScientificName: scientificName, Date: runStart.Format(time.DateOnly)},
+				},
+				previousDates: map[string]string{
+					scientificName + "|" + runStart.Format(time.DateOnly): previousDate.Format(time.DateOnly),
+				},
 			},
+			wantDaysSinceLastSeen:  12,
+			wantNoveltyEpisodeDays: 12,
 		},
-		detectionDates: []datastore.SpeciesDetectionDate{
-			{ScientificName: scientificName, Date: runStart.Format(time.DateOnly)},
-		},
-		previousDates: map[string]string{
-			scientificName + "|" + runStart.Format(time.DateOnly): previousDate.Format(time.DateOnly),
+		{
+			// A first-ever species has no prior sighting, so the restored episode
+			// must use the inactive sentinel for DaysSinceLastSeen rather than the
+			// multi-decade firstEver sentinel, which the API would surface as a gap.
+			name: "first ever has no absence gap",
+			ds: &noveltyHistoryDatastore{
+				lifetime: []datastore.NewSpeciesData{
+					{
+						ScientificName: scientificName,
+						CommonName:     "Bay-breasted Warbler",
+						FirstSeenDate:  runStart.Format(time.DateOnly),
+						LastSeenDate:   runStart.Format(time.DateOnly),
+					},
+				},
+				detectionDates: []datastore.SpeciesDetectionDate{
+					{ScientificName: scientificName, Date: runStart.Format(time.DateOnly)},
+				},
+			},
+			wantDaysSinceLastSeen:  inactiveNoveltyValue,
+			wantNoveltyEpisodeDays: firstEverNoveltyEpisodeDays,
 		},
 	}
 
-	tracker := testNoveltyTracker(7)
-	tracker.ds = ds
-	require.NoError(t, tracker.loadLifetimeDataFromDatabase(now))
-	require.NoError(t, tracker.loadNoveltyEpisodesFromDatabase(now))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	// Inspect the restored episode directly, before any new detection re-runs the
-	// live path. The restored absence gap must match the value the live path
-	// records at episode creation (12), not days-since-latest-detection (0).
-	episode, ok := tracker.noveltyEpisodes[scientificName]
-	require.True(t, ok)
-	assert.True(t, episode.NoveltyEpisodeActive)
-	assert.Equal(t, 12, episode.DaysSinceLastSeen)
-	assert.Equal(t, 12, episode.NoveltyEpisodeDays)
-}
+			tracker := testNoveltyTracker(7)
+			tracker.ds = tt.ds
+			require.NoError(t, tracker.loadLifetimeDataFromDatabase(now))
+			require.NoError(t, tracker.loadNoveltyEpisodesFromDatabase(now))
 
-func TestLoadNoveltyEpisodesFromDatabase_FirstEverHasNoAbsenceGap(t *testing.T) {
-	t.Parallel()
-
-	const scientificName = "Setophaga castanea"
-	now := time.Date(2026, 5, 23, 10, 0, 0, 0, time.UTC)
-	runStart := trackerDateOnly(now)
-
-	ds := &noveltyHistoryDatastore{
-		lifetime: []datastore.NewSpeciesData{
-			{
-				ScientificName: scientificName,
-				CommonName:     "Bay-breasted Warbler",
-				FirstSeenDate:  runStart.Format(time.DateOnly),
-				LastSeenDate:   runStart.Format(time.DateOnly),
-			},
-		},
-		detectionDates: []datastore.SpeciesDetectionDate{
-			{ScientificName: scientificName, Date: runStart.Format(time.DateOnly)},
-		},
+			// Inspect the restored episode directly, before any new detection
+			// re-runs the live path and overwrites the restored value.
+			episode, ok := tracker.noveltyEpisodes[scientificName]
+			require.True(t, ok)
+			assert.True(t, episode.NoveltyEpisodeActive)
+			assert.Equal(t, tt.wantDaysSinceLastSeen, episode.DaysSinceLastSeen)
+			assert.Equal(t, tt.wantNoveltyEpisodeDays, episode.NoveltyEpisodeDays)
+		})
 	}
-
-	tracker := testNoveltyTracker(7)
-	tracker.ds = ds
-	require.NoError(t, tracker.loadLifetimeDataFromDatabase(now))
-	require.NoError(t, tracker.loadNoveltyEpisodesFromDatabase(now))
-
-	// A first-ever species has no prior sighting, so the restored episode must use
-	// the inactive sentinel for DaysSinceLastSeen rather than the multi-decade
-	// firstEver sentinel, which the API would otherwise surface as a huge gap.
-	episode, ok := tracker.noveltyEpisodes[scientificName]
-	require.True(t, ok)
-	assert.True(t, episode.NoveltyEpisodeActive)
-	assert.Equal(t, inactiveNoveltyValue, episode.DaysSinceLastSeen)
-	assert.Equal(t, firstEverNoveltyEpisodeDays, episode.NoveltyEpisodeDays)
 }
 
 type noveltyHistoryDatastore struct {
