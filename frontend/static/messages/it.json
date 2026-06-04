@@ -3337,8 +3337,10 @@
         "clientIdHelpText": "L'ID Client OAuth 2.0 dalla console sviluppatori del tuo fornitore",
         "clientSecretLabel": "Segreto Client",
         "clientSecretHelpText": "Il Segreto Client OAuth 2.0 dalla console sviluppatori del tuo fornitore",
-        "userIdLabel": "ID Utente (opzionale)",
-        "userIdHelpText": "Limita accesso a specifico account utente per email o ID",
+        "userIdLabel": "Utenti consentiti",
+        "userIdHelpText": "Email o ID utente separati da virgole autorizzati ad accedere con questo provider. Se vuoto, nessuno può accedere.",
+        "allowedUsersEmptyWarning": "Questo provider non ha utenti consentiti, quindi ogni tentativo di accesso verrà rifiutato. Aggiungi almeno un'email o un ID utente per consentire l'accesso.",
+        "allowedUsersMissingBadge": "Nessun utente consentito impostato - l'accesso fallirà",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Consenti Login OAuth2 via Google",

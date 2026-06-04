@@ -3337,8 +3337,10 @@
         "clientIdHelpText": "OAuth 2.0 Client ID z vývojářské konzole vašeho poskytovatele",
         "clientSecretLabel": "Client Secret",
         "clientSecretHelpText": "OAuth 2.0 Client Secret z vývojářské konzole vašeho poskytovatele",
-        "userIdLabel": "ID uživatele (volitelné)",
-        "userIdHelpText": "Omezit přístup na konkrétní uživatelský účet podle e-mailu nebo ID",
+        "userIdLabel": "Povolení uživatelé",
+        "userIdHelpText": "E-maily nebo ID uživatelů oddělené čárkami, kteří se mohou přihlásit přes tohoto poskytovatele. Pokud zůstane prázdné, nikdo se nepřihlásí.",
+        "allowedUsersEmptyWarning": "Tento poskytovatel nemá žádné povolené uživatele, takže každý pokus o přihlášení bude odmítnut. Přidejte alespoň jeden e-mail nebo ID uživatele pro povolení přístupu.",
+        "allowedUsersMissingBadge": "Nejsou nastaveni žádní povolení uživatelé - přihlášení selže",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Povolit přihlášení OAuth2 přes Google",

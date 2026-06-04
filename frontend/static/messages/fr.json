@@ -3337,8 +3337,10 @@
         "clientIdHelpText": "L'ID client OAuth 2.0 de la console développeur de votre fournisseur",
         "clientSecretLabel": "Secret client",
         "clientSecretHelpText": "Le secret client OAuth 2.0 de la console développeur de votre fournisseur",
-        "userIdLabel": "ID utilisateur (optionnel)",
-        "userIdHelpText": "Restreindre l'accès à un compte utilisateur spécifique par e-mail ou ID",
+        "userIdLabel": "Utilisateurs autorisés",
+        "userIdHelpText": "E-mails ou identifiants d'utilisateur séparés par des virgules autorisés à se connecter avec ce fournisseur. Si vide, personne ne peut se connecter.",
+        "allowedUsersEmptyWarning": "Ce fournisseur n'a aucun utilisateur autorisé, donc chaque tentative de connexion sera refusée. Ajoutez au moins un e-mail ou un identifiant d'utilisateur pour autoriser l'accès.",
+        "allowedUsersMissingBadge": "Aucun utilisateur autorisé défini - la connexion échouera",
         "google": {
           "title": "OAuth Google",
           "enableLabel": "Autoriser la connexion OAuth2 via Google",
