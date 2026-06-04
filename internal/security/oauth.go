@@ -143,9 +143,6 @@ type OAuth2Server struct {
 	tokensFile    string
 	persistTokens bool
 
-	// Expected Redirect URI for Basic Auth (pre-parsed)
-	ExpectedBasicRedirectURI *url.URL
-
 	// Throttling
 	throttledMessages map[string]time.Time
 }
@@ -185,9 +182,6 @@ func NewOAuth2Server() *OAuth2Server {
 
 	// Validate and potentially fix session secret
 	validateSessionSecret(settings)
-
-	// Pre-parse the Basic Auth Redirect URI
-	server.ExpectedBasicRedirectURI = parseBasicAuthRedirectURI(settings)
 
 	// Initialize Gothic with the provided configuration
 	InitializeGoth(settings)
@@ -255,7 +249,10 @@ func handleWeakSessionSecret(settings *conf.Settings) {
 		Build()
 }
 
-// parseBasicAuthRedirectURI parses and validates the Basic Auth redirect URI
+// parseBasicAuthRedirectURI parses and validates the Basic Auth redirect URI from
+// the given settings snapshot. It is called per request from the basic-auth handlers
+// so that changes to Security.BasicAuth.RedirectURI made via the web UI take effect
+// without a restart (issue #3370). Returns nil on a missing or invalid configuration.
 func parseBasicAuthRedirectURI(settings *conf.Settings) *url.URL {
 	secLog := GetLogger().With(logger.String("uri", settings.Security.BasicAuth.RedirectURI))
 
@@ -276,7 +273,7 @@ func parseBasicAuthRedirectURI(settings *conf.Settings) *url.URL {
 		return nil
 	}
 
-	secLog.Info("Pre-parsed and validated Basic Auth Redirect URI")
+	secLog.Debug("Validated Basic Auth Redirect URI")
 	return parsedURI
 }
 

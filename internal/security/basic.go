@@ -108,16 +108,17 @@ func (s *OAuth2Server) HandleBasicAuthorize(c echo.Context) error {
 	secLog := GetLogger().With(logger.String("client_id", clientID), logger.String("redirect_uri", redirectURI))
 	secLog.Info("Handling basic authorization request")
 
-	// Read the live snapshot so UI changes to the client id apply without a
-	// restart (issue #3370).
-	expectedClientID := s.currentSettings().Security.BasicAuth.ClientID
+	// Read the live snapshot once so UI changes to the client id and redirect URI
+	// apply without a restart (issue #3370).
+	settings := s.currentSettings()
+	expectedClientID := settings.Security.BasicAuth.ClientID
 	if clientID != expectedClientID {
 		secLog.Warn("Invalid client_id provided", logger.String("expected", expectedClientID))
 		return c.String(http.StatusBadRequest, "Invalid client_id")
 	}
 
-	// Validate redirect URI using the shared function and pre-parsed expected URI
-	if err := ValidateRedirectURI(redirectURI, s.ExpectedBasicRedirectURI); err != nil {
+	// Validate redirect URI using the shared function and the live expected URI
+	if err := ValidateRedirectURI(redirectURI, parseBasicAuthRedirectURI(settings)); err != nil {
 		secLog.Warn("Redirect URI validation failed", logger.Error(err))
 		// Return the specific error message for better client-side debugging
 		return c.String(http.StatusBadRequest, err.Error())
@@ -192,8 +193,8 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unsupported grant type"})
 	}
 
-	// Validate redirect URI using the shared function and pre-parsed expected URI
-	if err := ValidateRedirectURI(redirectURI, s.ExpectedBasicRedirectURI); err != nil {
+	// Validate redirect URI using the shared function and the live expected URI
+	if err := ValidateRedirectURI(redirectURI, parseBasicAuthRedirectURI(settings)); err != nil {
 		secLog.Warn("Redirect URI validation failed", logger.String("provided_uri", redirectURI), logger.Error(err))
 		// Return a generic error to the client, log the specific one internally
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid redirect_uri"})

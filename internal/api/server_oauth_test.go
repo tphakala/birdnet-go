@@ -39,9 +39,10 @@ func TestIsValidOAuthProvider(t *testing.T) {
 	}
 }
 
+// Not parallel: isAllowedOAuthUser reads the live settings snapshot
+// (conf.GetSettings), and the sibling TestIsAllowedOAuthUserHotReload mutates that
+// global snapshot. Running serially keeps the two tests from coupling.
 func TestIsAllowedOAuthUser(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name         string
 		gothProvider string
@@ -140,7 +141,6 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
 			var settings *conf.Settings
 			if tt.providers != nil {
 				settings = &conf.Settings{
