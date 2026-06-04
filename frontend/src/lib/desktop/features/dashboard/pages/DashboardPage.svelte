@@ -1570,7 +1570,12 @@ Performance Optimizations:
           }}
         />
       {:else if element.type === 'new-species-highlights'}
-        <NewSpeciesHighlightsCard data={dailySummary} {selectedDate} {showThumbnails} />
+        <NewSpeciesHighlightsCard
+          data={dailySummary}
+          {selectedDate}
+          {showThumbnails}
+          isToday={isViewingToday}
+        />
       {:else if element.type === 'currently-hearing'}
         <CurrentlyHearingCard detections={isViewingToday ? pendingDetections : []} />
       {:else if element.type === 'live-spectrogram'}

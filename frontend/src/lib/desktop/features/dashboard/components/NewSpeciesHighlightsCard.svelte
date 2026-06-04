@@ -12,7 +12,6 @@ Shows up to 12 species, ordered by novelty category then detection count.
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { buildSpeciesDetectionUrl } from '$lib/utils/detectionUrls';
-  import { getLocalDateString } from '$lib/utils/date';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { speciesTrackingSettings } from '$lib/stores/settings';
   import { AudioLines, CalendarDays, Leaf, Star } from '@lucide/svelte';
@@ -22,9 +21,14 @@ Shows up to 12 species, ordered by novelty category then detection count.
     selectedDate: string;
     /** Daily-activity thumbnail setting; the picture is shown only when enabled. */
     showThumbnails?: boolean;
+    /**
+     * Server-timezone-aware flag for "the selected date is today". The absence
+     * gap reflects live tracker state, so the last-seen stat is only shown today.
+     */
+    isToday?: boolean;
   }
 
-  let { data = [], selectedDate, showThumbnails = true }: Props = $props();
+  let { data = [], selectedDate, showThumbnails = true, isToday = false }: Props = $props();
 
   // Maximum number of species shown.
   const MAX_VISIBLE = 12;
@@ -62,10 +66,6 @@ Shows up to 12 species, ordered by novelty category then detection count.
   });
 
   const visibleHighlights = $derived(highlights.slice(0, MAX_VISIBLE));
-
-  // The absence gap reflects live tracker state, so it is only accurate for the
-  // current day; for past dates the recency stat is omitted.
-  const isToday = $derived(selectedDate === getLocalDateString());
 
   function categoryLabel(category: HighlightCategory, season?: string): string {
     switch (category) {
