@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { waitFor, cleanup } from '@testing-library/svelte';
+import { cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../test/render-helpers';
 import DetectionDetail from './DetectionDetail.svelte';
 import type { Detection } from '$lib/types/detection.types';
+import { t } from '$lib/i18n';
 
 // Heavy / context-dependent children are not relevant to the fetch-race logic.
 vi.mock('$lib/desktop/components/media/AudioPlayer.svelte');
@@ -131,10 +132,11 @@ describe('DetectionDetail audio download', () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
-  it('uses the ID-based endpoint when downloading the original audio', async () => {
+  it('offers recording formats and uses the ID-based endpoint for the original audio', async () => {
     const detection = makeDetection({
       id: 1239,
       scientificName: 'Phalaenoptilus nuttallii',
@@ -152,16 +154,41 @@ describe('DetectionDetail audio download', () => {
       })
     );
 
+    let clickedHref = '';
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      clickedHref = this.href;
+    });
+
     const { container } = detailTest.render({ detectionId: '1239' });
 
     await waitFor(() => {
-      expect(container.querySelector('a.meta-download')).not.toBeNull();
+      expect(container.querySelector('button.meta-download')).not.toBeNull();
     });
 
-    const downloadLink = container.querySelector<HTMLAnchorElement>('a.meta-download');
-    expect(downloadLink?.getAttribute('href')).toBe('/api/v2/audio/1239');
-    // Keep the attribute valueless so the response's Content-Disposition header
-    // supplies the canonical filename and extension.
-    expect(downloadLink).toHaveAttribute('download', '');
+    const downloadButton = container.querySelector<HTMLButtonElement>('button.meta-download');
+    requireElement(downloadButton);
+    await fireEvent.click(downloadButton);
+
+    const formatButtons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('#modal-body > div > button')
+    );
+    expect(formatButtons.map(button => button.textContent.trim())).toEqual([
+      t('components.audioPlayer.processing.exportOriginal'),
+      'WAV',
+      'FLAC',
+      'MP3',
+      'AAC',
+      'Opus',
+      'ALAC',
+    ]);
+
+    await fireEvent.click(formatButtons[0]);
+    expect(clickedHref).toContain('/api/v2/audio/1239');
   });
 });
+
+function requireElement<T extends Element>(element: T | null): asserts element is T {
+  expect(element).not.toBeNull();
+}

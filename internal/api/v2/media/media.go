@@ -286,6 +286,14 @@ type ProcessAudioRequest struct {
 	GainDB    float64 `json:"gain_db"`
 }
 
+// AudioExportRequest defines the request body for POST /api/v2/audio/:id/export.
+type AudioExportRequest struct {
+	Format    string  `json:"format"`
+	Normalize bool    `json:"normalize"`
+	Denoise   string  `json:"denoise"`
+	GainDB    float64 `json:"gain_db"`
+}
+
 // RegisterRoutes registers the media domain routes. It is called by the facade
 // in the deterministic initRoutes order, at the same slot the former
 // initMediaRoutes occupied, so the registered route set stays byte-identical.
@@ -341,6 +349,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 
 	// Clip extraction (requires authentication)
 	c.Echo.POST("/api/v2/audio/:id/clip", c.ExtractAudioClipByID, c.AuthMiddleware)
+	c.Echo.POST("/api/v2/audio/:id/export", c.ExportAudioByID, c.AuthMiddleware)
 
 	// Audio processing / preview (requires authentication)
 	c.Echo.POST("/api/v2/audio/:id/process", c.ProcessAudioByID, c.AuthMiddleware)
@@ -1156,6 +1165,93 @@ func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 	ctx.Response().Header().Set("Content-Type", mimeType)
 
 	filename := fmt.Sprintf("clip_%.1f-%.1f.%s", req.Start, req.End, clipFileExtension(req.Format))
+	ctx.Response().Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename*=UTF-8''%s", url.QueryEscape(filename)))
+
+	return ctx.Blob(http.StatusOK, mimeType, buf.Bytes())
+}
+
+// ExportAudioByID re-encodes a detection's full recording and returns it as a
+// downloadable attachment. Requires authentication.
+//
+// POST /api/v2/audio/:id/export
+// Body: {"format": "mp3"}
+func (c *Handler) ExportAudioByID(ctx echo.Context) error {
+	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
+	if err != nil {
+		return err
+	}
+
+	var req AudioExportRequest
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
+	}
+
+	if !ffmpeg.IsSupportedClipFormat(req.Format) {
+		return c.HandleError(ctx, fmt.Errorf("unsupported format: %s", req.Format),
+			"Unsupported audio format", http.StatusBadRequest)
+	}
+	if !ffmpeg.IsValidDenoisePreset(req.Denoise) {
+		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
+			"Invalid denoise preset", http.StatusBadRequest)
+	}
+	if !ffmpeg.IsValidGainDB(req.GainDB) {
+		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
+			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+	}
+
+	normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.APILogger)
+	if err != nil {
+		return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
+	}
+
+	absolutePath := filepath.Join(c.SFS.BaseDir(), normalizedPath)
+	if _, statErr := c.SFS.StatRel(normalizedPath); statErr != nil {
+		if c.isAudioBeingEncoded(normalizedPath) {
+			return c.handleAudioNotReady(ctx)
+		}
+		return c.HandleError(ctx, statErr, "Audio clip not found", http.StatusNotFound)
+	}
+
+	select {
+	case clipExtractionSemaphore <- struct{}{}:
+		defer func() { <-clipExtractionSemaphore }()
+	default:
+		return c.HandleError(ctx, fmt.Errorf("export queue full"),
+			"Server busy, try again later", http.StatusServiceUnavailable)
+	}
+
+	var filters *ffmpeg.AudioFilters
+	if req.Normalize || req.Denoise != "" || req.GainDB != 0 {
+		filters = &ffmpeg.AudioFilters{
+			Normalize: req.Normalize,
+			Denoise:   req.Denoise,
+			GainDB:    req.GainDB,
+		}
+	}
+
+	buf, err := ffmpeg.TranscodeAudio(ctx.Request().Context(), &ffmpeg.TranscodeOptions{
+		InputPath:  absolutePath,
+		Format:     req.Format,
+		Filters:    filters,
+		FFmpegPath: c.CurrentSettings().Realtime.Audio.FfmpegPath,
+	})
+	if err != nil {
+		if handled, contextErr := c.handleRequestContextError(ctx); handled {
+			return contextErr
+		}
+		c.logTranscodeFailure(noteID, "media_audio_export_failed", req.Format, filters, err)
+		return c.HandleError(ctx, err, "Failed to export audio", http.StatusInternalServerError)
+	}
+
+	mimeType := clipMIMEType(req.Format)
+	ctx.Response().Header().Set("Content-Type", mimeType)
+
+	baseName := strings.TrimSuffix(filepath.Base(clipPath), filepath.Ext(clipPath))
+	filename := fmt.Sprintf("%s.%s", baseName, clipFileExtension(req.Format))
+	if !isValidFilename(filename) {
+		filename = fmt.Sprintf("recording_%s.%s", noteID, clipFileExtension(req.Format))
+	}
 	ctx.Response().Header().Set("Content-Disposition",
 		fmt.Sprintf("attachment; filename*=UTF-8''%s", url.QueryEscape(filename)))
 

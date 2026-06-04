@@ -1,6 +1,21 @@
-import { describe, it, expect } from 'vitest';
-import { buildDetectionAudioFilename } from './audioDownload';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildDetectionAudioFilename,
+  downloadDetectionRecording,
+  RECORDING_DOWNLOAD_FORMATS,
+  type RecordingDownloadFormat,
+} from './audioDownload';
 import type { Detection } from '$lib/types/detection.types';
+import { downloadBlob } from '$lib/utils/fileHelpers';
+
+vi.mock('$lib/utils/fileHelpers', () => ({
+  downloadBlob: vi.fn(),
+}));
+
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.unstubAllGlobals();
+});
 
 function makeDetection(overrides: Partial<Detection>): Detection {
   return {
@@ -37,5 +52,58 @@ describe('buildDetectionAudioFilename', () => {
     expect(buildDetectionAudioFilename(makeDetection({ commonName: '' }))).toBe(
       'detection_2026-06-22_14-30-05.wav'
     );
+  });
+});
+
+describe('downloadDetectionRecording', () => {
+  it('offers the original plus every supported transcode format', () => {
+    expect(RECORDING_DOWNLOAD_FORMATS.map(format => format.id)).toEqual([
+      'original',
+      'wav',
+      'flac',
+      'mp3',
+      'aac',
+      'opus',
+      'alac',
+    ]);
+  });
+
+  it.each<[RecordingDownloadFormat, string]>([
+    ['mp3', 'mp3'],
+    ['aac', 'm4a'],
+    ['opus', 'ogg'],
+  ])(
+    'posts a %s export and downloads it with the expected extension',
+    async (format, extension) => {
+      const audioBlob = new Blob(['audio']);
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        blob: vi.fn().mockResolvedValue(audioBlob),
+      } as unknown as Response);
+      vi.stubGlobal('fetch', fetchMock);
+
+      await downloadDetectionRecording(makeDetection({}), format);
+
+      expect(fetchMock).toHaveBeenCalledOnce();
+      const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/api/v2/audio/42/export');
+      expect(request).toMatchObject({
+        method: 'POST',
+        credentials: 'same-origin',
+        body: JSON.stringify({ format }),
+      });
+      expect(new Headers(request.headers).get('Content-Type')).toBe('application/json');
+      expect(downloadBlob).toHaveBeenCalledWith(
+        expect.any(Blob),
+        `House_Sparrow_2026-06-22_14-30-05.${extension}`
+      );
+    }
+  );
+
+  it('does not download an error response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
+
+    await expect(downloadDetectionRecording(makeDetection({}), 'wav')).rejects.toThrow();
+    expect(downloadBlob).not.toHaveBeenCalled();
   });
 });

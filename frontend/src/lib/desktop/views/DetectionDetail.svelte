@@ -18,19 +18,28 @@
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import WeatherDetails from '$lib/desktop/components/data/WeatherDetails.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
+  import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
   import type { Detection, ImageAttribution } from '$lib/types/detection.types';
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
+  import {
+    downloadDetectionRecording,
+    RECORDING_DOWNLOAD_FORMATS,
+    recordingDownloadErrorMessage,
+    type RecordingDownloadFormat,
+  } from '$lib/utils/audioDownload';
   import { formatLocalDateTime } from '$lib/utils/date';
   import { buildAppUrl, getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { toastActions } from '$lib/stores/toast';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import {
     Download,
+    Loader2,
     Camera,
     Clock,
     History,
@@ -112,6 +121,12 @@
   let isLoadingTaxonomy = $state(false);
   let detectionError = $state<string | null>(null);
   let imageAttribution = $state<ImageAttribution | null>(null);
+  let showDownloadFormatModal = $state(false);
+  let isDownloadingRecording = $state(false);
+
+  let availableRecordingDownloadFormats = $derived(
+    clipExtractionEnabled ? RECORDING_DOWNLOAD_FORMATS : RECORDING_DOWNLOAD_FORMATS.slice(0, 1)
+  );
 
   // Derived state for subspecies with proper typing
   let subspeciesList = $derived<Subspecies[]>(
@@ -419,6 +434,20 @@
     }
   }
 
+  async function handleRecordingDownload(format: RecordingDownloadFormat) {
+    if (!detection || isDownloadingRecording) return;
+
+    showDownloadFormatModal = false;
+    isDownloadingRecording = true;
+    try {
+      await downloadDetectionRecording(detection, format);
+    } catch (error) {
+      toastActions.error(recordingDownloadErrorMessage(error));
+    } finally {
+      isDownloadingRecording = false;
+    }
+  }
+
   // Keyboard navigation handler for tab buttons
   function handleTabKeydown(e: KeyboardEvent) {
     const tabs: TabType[] = ['overview', 'history', 'notes'];
@@ -689,15 +718,20 @@
       <!-- Download -->
       {#if det.clipName}
         <div class="meta-section">
-          <a
-            href={buildAppUrl(`/api/v2/audio/${det.id}`)}
-            download
+          <button
+            type="button"
             class="meta-download"
+            disabled={isDownloadingRecording}
+            onclick={() => (showDownloadFormatModal = true)}
             aria-label={t('detections.detail.aria.downloadAudioClip', { name: displayName })}
           >
-            <Download class="w-4 h-4" />
+            {#if isDownloadingRecording}
+              <Loader2 class="w-4 h-4 animate-spin" />
+            {:else}
+              <Download class="w-4 h-4" />
+            {/if}
             <span>{t('media.audio.download')}</span>
-          </a>
+          </button>
         </div>
       {/if}
     </div>
@@ -1015,6 +1049,27 @@
   {/if}
 </main>
 
+<Modal
+  isOpen={showDownloadFormatModal}
+  title={t('media.audio.download')}
+  size="sm"
+  loading={isDownloadingRecording}
+  onClose={() => (showDownloadFormatModal = false)}
+>
+  <div class="grid gap-1" aria-label={t('media.audio.download')}>
+    {#each availableRecordingDownloadFormats as format (format.id)}
+      <button
+        type="button"
+        class="flex min-h-11 w-full items-center gap-2 rounded-[var(--radius-field)] border border-transparent px-3 py-2 text-left text-sm font-medium text-[var(--color-base-content)] transition-colors hover:border-[var(--border-100)] hover:bg-[var(--color-base-200)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+        onclick={() => handleRecordingDownload(format.id)}
+      >
+        <Download class="size-4" />
+        <span>{format.labelKey ? t(format.labelKey) : format.label}</span>
+      </button>
+    {/each}
+  </div>
+</Modal>
+
 <style>
   /* ===========================================
      DETECTION DETAIL - Editorial Design System
@@ -1176,6 +1231,10 @@
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+    width: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
     font-size: 0.8125rem;
     font-weight: 500;
     color: var(--color-base-content);
@@ -1183,8 +1242,13 @@
     transition: opacity 0.15s ease;
   }
 
-  .meta-download:hover {
+  .meta-download:hover:not(:disabled) {
     opacity: 1;
+  }
+
+  .meta-download:disabled {
+    cursor: wait;
+    opacity: 0.45;
   }
 
   /* Species thumbnail - 4:3 to match avicommons 320×240 source images */
