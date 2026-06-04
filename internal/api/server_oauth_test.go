@@ -39,6 +39,53 @@ func TestIsValidOAuthProvider(t *testing.T) {
 	}
 }
 
+func TestConfigProviderFor(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{}
+
+	tests := []struct {
+		name         string
+		gothProvider string
+		want         string
+	}{
+		{name: "google", gothProvider: security.ProviderGoogle, want: security.ConfigGoogle},
+		{name: "oidc", gothProvider: security.ProviderOIDC, want: security.ConfigOIDC},
+		{name: "case insensitive", gothProvider: "OpenID-Connect", want: security.ConfigOIDC},
+		{name: "unknown goth provider", gothProvider: "facebook", want: ""},
+		{name: "empty", gothProvider: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, s.configProviderFor(tt.gothProvider))
+		})
+	}
+}
+
+func TestOAuthIdentity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		email  string
+		userID string
+		want   string
+	}{
+		{name: "prefers email", email: "user@example.com", userID: "sub-123", want: "user@example.com"},
+		{name: "falls back to userID", email: "", userID: "sub-123", want: "sub-123"},
+		{name: "both empty", email: "", userID: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, oauthIdentity(tt.email, tt.userID))
+		})
+	}
+}
+
 // Not parallel: each subtest publishes its own snapshot to the process-global
 // settings (read by isAllowedOAuthUser via conf.GetSettings) and restores it on
 // cleanup, so the subtests neither depend on the global being nil nor couple
@@ -211,6 +258,11 @@ func TestIsAllowedOAuthUserHotReload(t *testing.T) {
 	}
 	s := &Server{settings: startup}
 
+	// Save and restore the prior global snapshot so this test does not leave the
+	// process-global settings mutated for sibling tests, regardless of ordering.
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conf.SetTestSettings(prev) })
+
 	// Sanity: with only the stale startup snapshot, the user is not allowed.
 	conf.SetTestSettings(startup)
 	allowed, _ := s.isAllowedOAuthUser(security.ProviderGoogle, "google-123", "user@gmail.com")
@@ -226,7 +278,6 @@ func TestIsAllowedOAuthUserHotReload(t *testing.T) {
 		},
 	}
 	conf.SetTestSettings(updated)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
 
 	allowedAfter, _ := s.isAllowedOAuthUser(security.ProviderGoogle, "google-123", "user@gmail.com")
 	assert.True(t, allowedAfter, "allowlist change made via UI must apply without a restart")
