@@ -626,11 +626,27 @@ func (r *detectionRepository) buildSearchFilters(query *gorm.DB, filters *Search
 
 // buildSearchJoins applies JOIN clauses for filters requiring related tables.
 func (r *detectionRepository) buildSearchJoins(query *gorm.DB, filters *SearchFilters) *gorm.DB {
-	// Text search on scientific name (requires labels join)
-	if filters.Query != "" {
+	// Text search: scientific name LIKE (unbounded, requires labels join) OR-ed with
+	// CommonLabelIDs (labels whose active-locale common name matched the query, resolved in Go
+	// because the labels table has no common_name column). label_id lives on the detections table,
+	// so the common-name branch alone needs no join.
+	hasQuery := filters.Query != ""
+	hasCommon := len(filters.CommonLabelIDs) > 0
+	switch {
+	case hasQuery && hasCommon:
+		// Both predicates reference the joined labels table (labels.id = detections.label_id under
+		// the INNER join), keeping the whole OR on the small labels table so the planner can filter
+		// labels first and index-join into detections.
+		query = query.Joins(fmt.Sprintf("JOIN %s ON %s.id = %s.label_id",
+			r.labelsTable(), r.labelsTable(), r.tableName())).
+			Where(fmt.Sprintf("(%s.scientific_name LIKE ? OR %s.id IN ?)",
+				r.labelsTable(), r.labelsTable()), "%"+filters.Query+"%", filters.CommonLabelIDs)
+	case hasQuery:
 		query = query.Joins(fmt.Sprintf("JOIN %s ON %s.id = %s.label_id",
 			r.labelsTable(), r.labelsTable(), r.tableName())).
 			Where(fmt.Sprintf("%s.scientific_name LIKE ?", r.labelsTable()), "%"+filters.Query+"%")
+	case hasCommon:
+		query = query.Where(fmt.Sprintf("%s.label_id IN ?", r.tableName()), filters.CommonLabelIDs)
 	}
 
 	// Verified filter (requires reviews join for specific status)
