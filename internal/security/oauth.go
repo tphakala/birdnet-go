@@ -156,6 +156,13 @@ func (s *OAuth2Server) currentSettings() *conf.Settings {
 	return conf.CurrentOrFallback(s.Settings)
 }
 
+// CurrentSettings returns the latest settings snapshot for callers outside the
+// security package (e.g. the API auth adapter) so they read live configuration
+// instead of the construction-time pointer. See currentSettings.
+func (s *OAuth2Server) CurrentSettings() *conf.Settings {
+	return s.currentSettings()
+}
+
 // For testing purposes
 var testConfigPath string
 

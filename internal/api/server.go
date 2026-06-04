@@ -1056,7 +1056,11 @@ func (s *Server) isValidOAuthProvider(provider string) bool {
 // isAllowedOAuthUser checks if the OAuth user is in the allowed users list for the provider.
 // Uses the OAuthProviders array with a reverse lookup from goth provider name to config provider ID.
 func (s *Server) isAllowedOAuthUser(gothProvider, userID, email string) bool {
-	if s.settings == nil {
+	// Read the live snapshot so changes to the allowed OAuth users (or a
+	// provider's enabled flag) made through the UI apply without a restart
+	// (issue #3370).
+	settings := s.currentSettings()
+	if settings == nil {
 		return false
 	}
 
@@ -1072,7 +1076,7 @@ func (s *Server) isAllowedOAuthUser(gothProvider, userID, email string) bool {
 		return false
 	}
 
-	provider := s.settings.GetOAuthProvider(configProvider)
+	provider := settings.GetOAuthProvider(configProvider)
 	if provider == nil || !provider.Enabled || provider.UserID == "" {
 		return false
 	}
