@@ -16,7 +16,7 @@ func NewOAuth2ServerForTesting(tb testing.TB, settings *conf.Settings) *OAuth2Se
 	conf.SetTestSettings(settings)
 	tb.Cleanup(func() { conf.SetTestSettings(nil) })
 	return &OAuth2Server{
-		Settings:          settings,
+		settings:          settings,
 		authCodes:         make(map[string]AuthCode),
 		accessTokens:      make(map[string]AccessToken),
 		throttledMessages: make(map[string]time.Time),

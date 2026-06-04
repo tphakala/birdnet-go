@@ -74,6 +74,8 @@ func setupAppConfigTest(t *testing.T, securityConfig *conf.Security) (*echo.Echo
 	controlChan := make(chan string, testControlChannelBuf)
 	mockMetrics, _ := observability.NewMetrics()
 
+	publishTestSettings(t, settings)
+
 	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics, false)
 	require.NoError(t, err, "Failed to create test API controller")
 
@@ -950,6 +952,7 @@ func FuzzGetAppConfig_Headers(f *testing.F) {
 			Settings:    settings,
 			authService: nil,
 		}
+		publishTestSettings(t, settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 		if accept != "" {
@@ -1077,6 +1080,7 @@ func FuzzGetAppConfig_CSRFToken(f *testing.F) {
 			Settings:    settings,
 			authService: nil,
 		}
+		publishTestSettings(t, settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -1142,6 +1146,7 @@ func FuzzGetAppConfig_Version(f *testing.F) {
 			Settings:    settings,
 			authService: nil,
 		}
+		publishTestSettings(t, settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -1295,6 +1300,7 @@ func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
 			Settings:    settings,
 			authService: nil,
 		}
+		publishTestSettings(t, settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -1374,8 +1380,8 @@ func TestGetAppConfig_LiveSpectrogramField(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
+			// Not parallel: setupAppConfigTest publishes settings to the
+			// process-global snapshot that GetAppConfig reads via currentSettings.
 			e, controller := setupAppConfigTest(t, nil)
 
 			// Set the LiveSpectrogram value for this test case
@@ -1400,8 +1406,8 @@ func TestGetAppConfig_LiveSpectrogramField(t *testing.T) {
 
 // TestGetAppConfig_SentryConfigWhenEnabled tests that Sentry config is included when telemetry is enabled.
 func TestGetAppConfig_SentryConfigWhenEnabled(t *testing.T) {
-	t.Parallel()
-
+	// Not parallel: publishes settings to the process-global snapshot that
+	// GetAppConfig reads via currentSettings.
 	_, controller := setupAppConfigTest(t, nil)
 
 	// Enable Sentry in settings
@@ -1429,8 +1435,8 @@ func TestGetAppConfig_SentryConfigWhenEnabled(t *testing.T) {
 
 // TestGetAppConfig_SentryConfigWhenDisabled tests that Sentry config is omitted when telemetry is disabled.
 func TestGetAppConfig_SentryConfigWhenDisabled(t *testing.T) {
-	t.Parallel()
-
+	// Not parallel: publishes settings to the process-global snapshot that
+	// GetAppConfig reads via currentSettings.
 	_, controller := setupAppConfigTest(t, nil)
 
 	// Sentry disabled (default)

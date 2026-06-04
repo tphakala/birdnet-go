@@ -125,8 +125,8 @@ func TestIsDevBuild(t *testing.T) {
 // =============================================================================
 
 func TestDetermineWizardState(t *testing.T) {
-	t.Parallel()
-
+	// Not parallel: each subtest publishes its own settings to the global
+	// snapshot (read via currentSettings), which is process-wide.
 	tests := []struct {
 		name            string
 		version         string                            // Settings.Version
@@ -210,8 +210,6 @@ func TestDetermineWizardState(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			c := &Controller{
 				Settings: &conf.Settings{Version: tt.version},
 			}
@@ -219,6 +217,9 @@ func TestDetermineWizardState(t *testing.T) {
 			if tt.v2Manager != nil {
 				c.V2Manager = tt.v2Manager(t)
 			}
+			// determineWizardState reads the live snapshot via currentSettings();
+			// publish this subtest's settings so the read resolves to them.
+			publishTestSettings(t, c.Settings)
 
 			freshInstall, newVersion, previousVersion := c.determineWizardState(t.Context())
 
@@ -234,14 +235,14 @@ func TestDetermineWizardState(t *testing.T) {
 // =============================================================================
 
 func TestDismissWizard_Success(t *testing.T) {
-	t.Parallel()
-
+	// Not parallel: publishes settings to the process-wide global snapshot.
 	mockRepo := newMockAppMetadataRepo()
 	e := echo.New()
 	c := &Controller{
 		Settings:        &conf.Settings{Version: "v0.9.0"},
 		appMetadataRepo: mockRepo,
 	}
+	publishTestSettings(t, c.Settings)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/app/wizard/dismiss", http.NoBody)
 	rec := httptest.NewRecorder()

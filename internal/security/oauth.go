@@ -131,7 +131,11 @@ type providerAuthConfig struct {
 }
 
 type OAuth2Server struct {
-	Settings     *conf.Settings
+	// settings is the construction-time snapshot. It is unexported so external
+	// callers cannot read it directly and observe a stale value: all runtime
+	// reads must go through currentSettings() / CurrentSettings(), which resolve
+	// the live atomic snapshot (GitHub #3370).
+	settings     *conf.Settings
 	authCodes    map[string]AuthCode
 	accessTokens map[string]AccessToken
 	mutex        sync.RWMutex
@@ -150,7 +154,7 @@ type OAuth2Server struct {
 // currentSettings returns the latest settings snapshot so security
 // configuration changes take effect without recreating the OAuth2Server.
 func (s *OAuth2Server) currentSettings() *conf.Settings {
-	return conf.CurrentOrFallback(s.Settings)
+	return conf.CurrentOrFallback(s.settings)
 }
 
 // CurrentSettings returns the latest settings snapshot for callers outside the
@@ -175,7 +179,7 @@ func NewOAuth2Server() *OAuth2Server {
 	settings := conf.GetSettings()
 
 	server := &OAuth2Server{
-		Settings:     settings,
+		settings:     settings,
 		authCodes:    make(map[string]AuthCode),
 		accessTokens: make(map[string]AccessToken),
 	}

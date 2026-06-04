@@ -39,9 +39,10 @@ func TestIsValidOAuthProvider(t *testing.T) {
 	}
 }
 
-// Not parallel: isAllowedOAuthUser reads the live settings snapshot
-// (conf.GetSettings), and the sibling TestIsAllowedOAuthUserHotReload mutates that
-// global snapshot. Running serially keeps the two tests from coupling.
+// Not parallel: each subtest publishes its own snapshot to the process-global
+// settings (read by isAllowedOAuthUser via conf.GetSettings) and restores it on
+// cleanup, so the subtests neither depend on the global being nil nor couple
+// with the sibling TestIsAllowedOAuthUserHotReload.
 func TestIsAllowedOAuthUser(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -150,6 +151,12 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 				}
 			}
 			s := &Server{settings: settings}
+			// Publish this subtest's snapshot so isAllowedOAuthUser (which reads
+			// conf.GetSettings via currentSettings) resolves to it rather than
+			// depending on the global being nil. Restored on cleanup.
+			prev := conf.GetSettings()
+			conf.SetTestSettings(settings)
+			t.Cleanup(func() { conf.SetTestSettings(prev) })
 			got := s.isAllowedOAuthUser(tt.gothProvider, tt.userID, tt.email)
 			assert.Equal(t, tt.want, got)
 		})

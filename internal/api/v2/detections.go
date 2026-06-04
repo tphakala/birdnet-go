@@ -1277,7 +1277,7 @@ func (c *Controller) removeDetectionFiles(clipName string) {
 	log := c.apiLogger
 
 	// Normalize the clip path to get a relative path within SecureFS
-	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	clipsPrefix := c.currentSettings().Realtime.Audio.Export.Path
 	normalized := NormalizeClipPath(clipName, clipsPrefix)
 	if normalized == "" {
 		log.Warn("Cannot remove detection files: empty normalized clip path",

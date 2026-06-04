@@ -165,8 +165,35 @@ type ShutdownRequester interface {
 
 // currentSettings returns the latest settings snapshot so UI changes
 // take effect in API responses without restarting the service.
+//
+// It resolves the lock-free global atomic snapshot first and only falls back
+// to c.Settings when no snapshot has been published (standalone unit-test
+// controllers). The fallback is read lazily, so in production (where a
+// snapshot is always published) c.Settings is never dereferenced here. That
+// keeps the accessor race-free against the c.Settings reassignment the
+// settings update handlers perform under c.settingsMutex: the equivalent
+// conf.CurrentOrFallback(c.Settings) would evaluate c.Settings eagerly and
+// race that write.
 func (c *Controller) currentSettings() *conf.Settings {
-	return conf.CurrentOrFallback(c.Settings)
+	if latest := conf.GetSettings(); latest != nil {
+		return latest
+	}
+	return c.Settings
+}
+
+// lockedSettings returns this controller's own cached settings snapshot, read
+// under settingsMutex so it cannot race the c.Settings reassignment the settings
+// update handlers perform. Unlike currentSettings(), it deliberately does NOT
+// consult the process-global atomic snapshot: use it for reads whose result is
+// asserted per-controller (e.g. debug-gated response verbosity), where the
+// shared global snapshot would couple otherwise-independent parallel tests.
+// c.Settings is repointed on every save, so it stays live for such reads. The
+// returned snapshot is immutable (copy-on-write), so callers may dereference its
+// fields after the lock is released.
+func (c *Controller) lockedSettings() *conf.Settings {
+	c.settingsMutex.RLock()
+	defer c.settingsMutex.RUnlock()
+	return c.Settings
 }
 
 // Option is a functional option for configuring the Controller.
@@ -695,16 +722,26 @@ func (c *Controller) initRoutes() {
 
 // HealthCheck handles the API health check endpoint
 func (c *Controller) HealthCheck(ctx echo.Context) error {
+	// Read version/build/debug from this controller's own snapshot (nil-safe for
+	// standalone test controllers).
+	var version, buildDate string
+	debug := false
+	if settings := c.lockedSettings(); settings != nil {
+		version = settings.Version
+		buildDate = settings.BuildDate
+		debug = settings.WebServer.Debug
+	}
+
 	// Create response structure
 	response := map[string]any{
 		"status":     "healthy",
-		"version":    c.Settings.Version,
-		"build_date": c.Settings.BuildDate,
+		"version":    version,
+		"build_date": buildDate,
 		"timestamp":  time.Now().Format(time.RFC3339),
 	}
 
-	// Add environment if available in settings
-	if c.Settings != nil && c.Settings.WebServer.Debug {
+	// Add environment based on debug mode
+	if debug {
 		response["environment"] = "development"
 	} else {
 		response["environment"] = "production"
@@ -854,10 +891,16 @@ func (c *Controller) newErrorResponse(err error, message string, code int) *Erro
 	// Generate a random correlation ID (8 characters should be sufficient)
 	correlationID := generateCorrelationID()
 
-	// Only expose raw err.Error() in debug mode — it can contain internal
+	// Only expose raw err.Error() in debug mode: it can contain internal
 	// paths, SQL errors, stack traces, etc. In production, use the
 	// sanitized message parameter instead.
 	var errorStr string
+	// Read the controller's own debug flag without locking: this is reached from
+	// HandleError while UpdateSettings holds c.settingsMutex, so it must not
+	// acquire the lock, and the flag must remain per-controller (handlers assert
+	// debug-gated error verbosity per controller, not via the shared global
+	// snapshot). A fully race-free per-controller read would require making
+	// c.Settings an atomic pointer; left as a focused follow-up.
 	if err != nil && c.Settings != nil && c.Settings.WebServer.Debug {
 		errorStr = err.Error()
 	} else {
