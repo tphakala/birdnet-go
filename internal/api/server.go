@@ -51,10 +51,11 @@ var ImageProviderRegistry *imageprovider.ImageProviderRegistry
 // It manages the Echo framework instance, middleware, and all HTTP routes.
 type Server struct {
 	// Core components
-	echo     *echo.Echo
-	config   *Config
-	settings *conf.Settings
-	slogger  logger.Logger // Centralized structured logger
+	echo           *echo.Echo
+	config         *Config
+	settings       *conf.Settings
+	slogger        logger.Logger // Centralized structured logger (Module("api"))
+	securityLogger logger.Logger // OAuth login-flow logger (Module("security"), issue #3381)
 
 	// Dependencies
 	dataStore      datastore.Interface
@@ -293,8 +294,9 @@ func New(settings *conf.Settings, opts ...ServerOption) (*Server, error) {
 	// This must happen before any settings validation that checks locale values.
 	conf.SetValidUILocales(conf.DiscoverUILocales(frontend.DistFS))
 
-	// Initialize structured logger
-	s.slogger = GetLogger() // Uses Module("api")
+	// Initialize structured loggers
+	s.slogger = GetLogger()                 // Uses Module("api")
+	s.securityLogger = security.GetLogger() // Uses Module("security") for the OAuth login flow (issue #3381)
 
 	// Initialize Echo
 	s.echo = echo.New()
@@ -889,6 +891,22 @@ func (s *Server) getAuthMiddleware() echo.MiddlewareFunc {
 	return s.authMiddleware
 }
 
+// securityLog returns the logger scoped to the "security" module. The OAuth
+// login flow uses it so authentication events land in logs/security.log next to
+// the provider-init logging, instead of logs/api.log where admins do not think
+// to look (issue #3381). The detail it records is for server-side diagnostics
+// only and must never be reflected back to unauthenticated visitors.
+//
+// It returns the cached securityLogger (set in the constructor, matching how
+// s.slogger is cached) and falls back to a fresh module logger when the Server
+// was built without the constructor (e.g. in unit tests).
+func (s *Server) securityLog() logger.Logger {
+	if s.securityLogger != nil {
+		return s.securityLogger
+	}
+	return security.GetLogger()
+}
+
 // registerOAuthRoutes registers social OAuth provider routes.
 // These routes handle OAuth flow for Google, GitHub, and Microsoft providers.
 func (s *Server) registerOAuthRoutes() {
@@ -908,19 +926,27 @@ func (s *Server) registerOAuthRoutes() {
 // GET /auth/:provider
 func (s *Server) handleOAuthBegin(c echo.Context) error {
 	provider := c.Param("provider")
-
-	s.slogger.Info("OAuth begin request",
+	log := s.securityLog().With(
 		logger.String("provider", provider),
 		logger.String("ip", c.RealIP()),
 	)
 
+	log.Info("OAuth login begin request")
+
 	// Validate provider is one we support
 	if !s.isValidOAuthProvider(provider) {
-		s.slogger.Warn("Invalid OAuth provider requested",
-			logger.String("provider", provider),
-			logger.String("ip", c.RealIP()),
-		)
+		log.Warn("OAuth login rejected: unsupported or unrecognized provider requested")
 		return c.String(http.StatusBadRequest, "Invalid OAuth provider")
+	}
+
+	// Reject providers that are not currently enabled and fully configured before
+	// sending the user on the provider round-trip, so a disabled or half-configured
+	// provider fails fast with a clear security.log entry here instead of an opaque
+	// error after the redirect (issue #3381). The visitor only sees a generic message.
+	configProvider := s.configProviderFor(provider)
+	if settings := s.currentSettings(); settings == nil || configProvider == "" || !settings.IsOAuthProviderEnabled(configProvider) {
+		log.Warn("OAuth login rejected: provider is disabled or not fully configured")
+		return c.String(http.StatusBadRequest, "OAuth provider not available")
 	}
 
 	// Add provider to request context for gothic
@@ -928,16 +954,15 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 
 	// Try to complete auth if user already has a valid session
 	if user, err := gothic.CompleteUserAuth(c.Response(), req); err == nil {
-		s.slogger.Info("User already authenticated via OAuth",
-			logger.String("provider", provider),
-			logger.String("user_id", user.UserID),
-			logger.String("email", user.Email),
+		log.Info("OAuth login: user already authenticated, redirecting to dashboard",
+			logger.Username(oauthIdentity(user.Email, user.UserID)),
 		)
 		// User is already authenticated, redirect to dashboard
 		return c.Redirect(http.StatusFound, ingressPath(c, s.currentSettings())+"/ui/dashboard")
 	}
 
 	// Begin OAuth flow - this will redirect to the provider
+	log.Debug("Redirecting to OAuth provider to begin authentication")
 	gothic.BeginAuthHandler(c.Response(), req)
 	return nil
 }
@@ -946,11 +971,12 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 // GET /auth/:provider/callback
 func (s *Server) handleOAuthCallback(c echo.Context) error {
 	provider := c.Param("provider")
-
-	s.slogger.Info("OAuth callback received",
+	log := s.securityLog().With(
 		logger.String("provider", provider),
 		logger.String("ip", c.RealIP()),
 	)
+
+	log.Info("OAuth login callback received")
 
 	// Add provider to request context for gothic
 	req := gothic.GetContextWithProvider(c.Request(), provider)
@@ -958,84 +984,77 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 	// Complete the OAuth flow and get user info
 	user, err := gothic.CompleteUserAuth(c.Response(), req)
 	if err != nil {
-		s.slogger.Error("OAuth authentication failed",
-			logger.String("provider", provider),
+		// Log the detailed provider/token error for the admin, but return a
+		// generic message so internal details are not exposed to the visitor.
+		log.Error("OAuth login failed: could not complete authentication with provider",
 			logger.Error(err),
-			logger.String("ip", c.RealIP()),
 		)
-		return c.String(http.StatusUnauthorized, "Authentication failed: "+err.Error())
+		return c.String(http.StatusUnauthorized, "Authentication failed")
 	}
 
-	s.slogger.Info("OAuth authentication successful",
-		logger.String("provider", provider),
-		logger.String("user_id", user.UserID),
-		logger.String("email", user.Email),
-		logger.String("name", user.Name),
-		logger.String("ip", c.RealIP()),
+	// Log a hashed identity (logger.Username) rather than the raw email/name so
+	// security.log stays free of plaintext PII while still allowing an admin to
+	// correlate repeated attempts by the same user (matches the basic-auth flow).
+	log.Info("OAuth provider authentication succeeded, checking authorization",
+		logger.Username(oauthIdentity(user.Email, user.UserID)),
 	)
 
-	// Validate user is allowed (check against configured allowed user IDs)
-	if !s.isAllowedOAuthUser(provider, user.UserID, user.Email) {
-		s.slogger.Warn("OAuth user not in allowed list",
-			logger.String("provider", provider),
-			logger.String("user_id", user.UserID),
-			logger.String("email", user.Email),
-			logger.String("ip", c.RealIP()),
+	// Validate user is allowed (check against configured allowed user IDs).
+	// The deny reason is for server-side diagnostics only; the response to the
+	// visitor stays generic so configuration problems are not disclosed to
+	// unauthenticated users (issue #3381).
+	if allowed, reason := s.isAllowedOAuthUser(provider, user.UserID, user.Email); !allowed {
+		log.Warn("OAuth login denied: user not authorized",
+			logger.String("reason", string(reason)),
+			logger.Username(oauthIdentity(user.Email, user.UserID)),
 		)
+		if reason == oauthDenyAllowlistEmpty {
+			// The single most common misconfiguration (issue #3381): the provider
+			// is enabled but has no allowed users, so nobody can ever log in.
+			log.Warn("OAuth provider has no allowed users configured; no one can log in until at least one allowed user or email is added under Settings > Security > Authentication")
+		}
 		return c.String(http.StatusForbidden, "Access denied: user not authorized")
 	}
 
-	// Store user info in session
-	// Use email as userId if available, otherwise use provider's UserID
-	userId := user.Email
-	if userId == "" {
-		userId = user.UserID
-	}
+	// Persist the authenticated session. The userId, provider, and active-provider
+	// keys are read by the auth middleware on every subsequent request, so a write
+	// failure here means the redirect would land on a page that immediately bounces
+	// the user back. Fail fast with a generic error instead of redirecting into a
+	// broken session.
+	userId := oauthIdentity(user.Email, user.UserID)
 
 	if err := gothic.StoreInSession("userId", userId, req, c.Response()); err != nil {
-		s.slogger.Error("Failed to store userId in session",
-			logger.Error(err),
-			logger.String("provider", provider),
-		)
+		log.Error("OAuth login failed: could not persist userId in session", logger.Error(err))
+		return c.String(http.StatusInternalServerError, "Authentication failed")
 	}
 
 	// Store provider name in session for later reference
 	if err := gothic.StoreInSession(provider, user.UserID, req, c.Response()); err != nil {
-		s.slogger.Error("Failed to store provider session",
-			logger.Error(err),
-			logger.String("provider", provider),
-		)
+		log.Error("OAuth login failed: could not persist provider session", logger.Error(err))
+		return c.String(http.StatusInternalServerError, "Authentication failed")
 	}
 
 	// Store active provider name for direct lookup (avoids iterating all providers)
 	if err := gothic.StoreInSession(security.SessionKeyAuthProvider, provider, req, c.Response()); err != nil {
-		s.slogger.Error("Failed to store active auth provider in session",
-			logger.Error(err),
-			logger.String("provider", provider),
-		)
+		log.Error("OAuth login failed: could not persist active auth provider in session", logger.Error(err))
+		return c.String(http.StatusInternalServerError, "Authentication failed")
 	}
 
-	// Store or clear ID token for RP-Initiated Logout (OIDC providers)
+	// Store or clear ID token for RP-Initiated Logout (OIDC providers). Best-effort:
+	// a failure here does not break authentication, only later RP-initiated logout.
 	if user.IDToken != "" {
 		if err := gothic.StoreInSession("id_token", user.IDToken, req, c.Response()); err != nil {
-			s.slogger.Error("Failed to store ID token in session",
-				logger.Error(err),
-				logger.String("provider", provider),
-			)
+			log.Error("Failed to store ID token in session", logger.Error(err))
 		}
 	} else {
 		// Clear stale ID token to prevent reuse across auth flows
 		if err := gothic.StoreInSession("id_token", "", req, c.Response()); err != nil {
-			s.slogger.Error("Failed to clear ID token in session",
-				logger.Error(err),
-				logger.String("provider", provider),
-			)
+			log.Error("Failed to clear ID token in session", logger.Error(err))
 		}
 	}
 
-	s.slogger.Info("OAuth session established, redirecting to dashboard",
-		logger.String("provider", provider),
-		logger.String("user_id", userId),
+	log.Info("OAuth login successful, session established, redirecting to dashboard",
+		logger.Username(userId),
 	)
 
 	// Redirect to dashboard after successful authentication
@@ -1053,39 +1072,96 @@ func (s *Server) isValidOAuthProvider(provider string) bool {
 	return false
 }
 
-// isAllowedOAuthUser checks if the OAuth user is in the allowed users list for the provider.
-// Uses the OAuthProviders array with a reverse lookup from goth provider name to config provider ID.
-func (s *Server) isAllowedOAuthUser(gothProvider, userID, email string) bool {
-	if s.settings == nil {
-		return false
-	}
-
-	// Reverse lookup: goth provider name → config provider ID
-	configProvider := ""
+// configProviderFor maps a goth provider name back to its config provider ID
+// (the reverse of ConfigToGothProvider), or returns "" when the goth name is not
+// recognized. The match is case-insensitive to tolerate proxies or clients that
+// alter the path casing.
+func (s *Server) configProviderFor(gothProvider string) string {
 	for cfg, gothName := range security.ConfigToGothProvider {
 		if strings.EqualFold(gothName, gothProvider) {
-			configProvider = cfg
-			break
+			return cfg
 		}
 	}
+	return ""
+}
+
+// oauthIdentity returns the identifier used both as the session userId and as
+// the hashed identity logged to security.log: the email when present, else the
+// provider's opaque user ID.
+func oauthIdentity(email, userID string) string {
+	if email != "" {
+		return email
+	}
+	return userID
+}
+
+// oauthDenyReason classifies why an OAuth user was not authorized to log in.
+// It is recorded in logs/security.log for admin-side diagnostics only and is
+// never returned to the client, so it cannot disclose configuration problems to
+// unauthenticated visitors (issue #3381).
+type oauthDenyReason string
+
+const (
+	// oauthAuthorized indicates the user is allowed (no denial).
+	oauthAuthorized oauthDenyReason = ""
+	// oauthDenySettingsMissing: the live settings snapshot was unavailable.
+	oauthDenySettingsMissing oauthDenyReason = "settings_unavailable"
+	// oauthDenyProviderUnknown: the goth provider name is not in the config map.
+	oauthDenyProviderUnknown oauthDenyReason = "provider_not_recognized"
+	// oauthDenyProviderMissing: no matching provider entry exists in settings.
+	oauthDenyProviderMissing oauthDenyReason = "provider_not_configured"
+	// oauthDenyProviderDisabled: the provider exists but is disabled.
+	oauthDenyProviderDisabled oauthDenyReason = "provider_disabled"
+	// oauthDenyAllowlistEmpty: the provider is enabled but has no allowed users,
+	// so nobody can ever log in. This is the most common misconfiguration.
+	oauthDenyAllowlistEmpty oauthDenyReason = "allowed_users_empty"
+	// oauthDenyUserNotAllowed: the user is not present in a non-empty allowlist.
+	oauthDenyUserNotAllowed oauthDenyReason = "user_not_in_allowed_list"
+)
+
+// isAllowedOAuthUser reports whether the authenticated OAuth user may log in,
+// together with an oauthDenyReason describing the cause when access is denied.
+// It uses the OAuthProviders array with a reverse lookup from the goth provider
+// name to the config provider ID. The reason is for server-side logging only;
+// callers must keep the response to the client generic (issue #3381).
+func (s *Server) isAllowedOAuthUser(gothProvider, userID, email string) (allowed bool, reason oauthDenyReason) {
+	// Read the live snapshot so changes to the allowed OAuth users (or a
+	// provider's enabled flag) made through the UI apply without a restart
+	// (issue #3370).
+	settings := s.currentSettings()
+	if settings == nil {
+		return false, oauthDenySettingsMissing
+	}
+
+	configProvider := s.configProviderFor(gothProvider)
 	if configProvider == "" {
-		return false
+		return false, oauthDenyProviderUnknown
 	}
 
-	provider := s.settings.GetOAuthProvider(configProvider)
-	if provider == nil || !provider.Enabled || provider.UserID == "" {
-		return false
+	provider := settings.GetOAuthProvider(configProvider)
+	if provider == nil {
+		return false, oauthDenyProviderMissing
+	}
+	if !provider.Enabled {
+		return false, oauthDenyProviderDisabled
 	}
 
-	// Check if user ID or email matches any allowed user
+	// Walk the configured allowlist. Track whether any non-empty entry exists so
+	// an empty allowlist (a misconfiguration where nobody can log in) is reported
+	// distinctly from a genuine non-match.
+	hasAllowedEntry := false
 	for allowed := range strings.SplitSeq(provider.UserID, ",") {
 		trimmed := strings.TrimSpace(allowed)
 		if trimmed == "" {
 			continue
 		}
+		hasAllowedEntry = true
 		if strings.EqualFold(trimmed, userID) || strings.EqualFold(trimmed, email) {
-			return true
+			return true, oauthAuthorized
 		}
 	}
-	return false
+	if !hasAllowedEntry {
+		return false, oauthDenyAllowlistEmpty
+	}
+	return false, oauthDenyUserNotAllowed
 }

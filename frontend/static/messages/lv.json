@@ -3359,8 +3359,10 @@
         "clientIdHelpText": "OAuth 2.0 klienta ID no jūsu nodrošinātāja izstrādātāju konsoles",
         "clientSecretLabel": "Klienta noslēpums",
         "clientSecretHelpText": "OAuth 2.0 klienta noslēpums no jūsu nodrošinātāja izstrādātāju konsoles",
-        "userIdLabel": "Lietotāja ID (neobligāts)",
-        "userIdHelpText": "Ierobežot piekļuvi konkrētam lietotāja kontam pēc e-pasta vai ID",
+        "userIdLabel": "Atļautie lietotāji",
+        "userIdHelpText": "Ar komatu atdalīti e-pasti vai lietotāju ID, kuriem atļauts pieteikties ar šo pakalpojumu sniedzēju. Ja atstāts tukšs, neviens nevarēs pieteikties.",
+        "allowedUsersEmptyWarning": "Šim pakalpojumu sniedzējam nav atļauto lietotāju, tāpēc katrs pieteikšanās mēģinājums tiks noraidīts. Pievienojiet vismaz vienu e-pastu vai lietotāja ID, lai atļautu piekļuvi.",
+        "allowedUsersMissingBadge": "Nav iestatīts neviens atļautais lietotājs - pieteikšanās neizdosies",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Atļaut OAuth2 pieteikšanos caur Google",

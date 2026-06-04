@@ -3359,8 +3359,10 @@
         "clientIdHelpText": "O ID do cliente OAuth 2.0 do console de desenvolvedor do seu provedor",
         "clientSecretLabel": "Segredo do cliente",
         "clientSecretHelpText": "O segredo do cliente OAuth 2.0 do console de desenvolvedor do seu provedor",
-        "userIdLabel": "ID do usuário (opcional)",
-        "userIdHelpText": "Restringir acesso a uma conta de usuário específica por e-mail ou ID",
+        "userIdLabel": "Utilizadores permitidos",
+        "userIdHelpText": "E-mails ou IDs de utilizador separados por vírgulas autorizados a iniciar sessão com este fornecedor. Se vazio, ninguém pode iniciar sessão.",
+        "allowedUsersEmptyWarning": "Este fornecedor não tem utilizadores permitidos, por isso todas as tentativas de início de sessão serão recusadas. Adicione pelo menos um e-mail ou ID de utilizador para permitir o acesso.",
+        "allowedUsersMissingBadge": "Nenhum utilizador permitido definido - o início de sessão falhará",
         "google": {
           "title": "OAuth do Google",
           "enableLabel": "Permitir login OAuth2 via Google",

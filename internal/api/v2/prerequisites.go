@@ -139,10 +139,11 @@ func (c *Controller) GetPrerequisites(ctx echo.Context) error {
 
 // isUsingMySQL returns true if the application is configured to use MySQL.
 func (c *Controller) isUsingMySQL() bool {
-	if c.Settings == nil {
+	settings := c.currentSettings()
+	if settings == nil {
 		return false
 	}
-	return c.Settings.Output.MySQL.Enabled
+	return settings.Output.MySQL.Enabled
 }
 
 // checkStateIdle verifies the migration is in IDLE state.
@@ -211,8 +212,8 @@ func (c *Controller) checkDiskSpace() PrerequisiteCheck {
 	requiredSpace := uint64(MinDiskSpaceBytes)
 	dbSizeInfo := ""
 
-	if c.Settings != nil && !c.Settings.Output.MySQL.Enabled {
-		dbPath := c.Settings.Output.SQLite.Path
+	if settings := c.currentSettings(); settings != nil && !settings.Output.MySQL.Enabled {
+		dbPath := settings.Output.SQLite.Path
 		if !filepath.IsAbs(dbPath) {
 			dbPath, _ = filepath.Abs(dbPath)
 		}
@@ -253,16 +254,17 @@ func (c *Controller) checkDiskSpace() PrerequisiteCheck {
 // Returns an error if the directory cannot be determined or verified.
 // For MySQL, returns empty string with nil error (disk space check not applicable to remote DB).
 func (c *Controller) getDatabaseDirectoryResolved() (string, error) {
-	if c.Settings == nil {
+	settings := c.currentSettings()
+	if settings == nil {
 		return "", fmt.Errorf("settings not available")
 	}
 
-	if c.Settings.Output.MySQL.Enabled {
+	if settings.Output.MySQL.Enabled {
 		// For MySQL, disk space check is not applicable (remote database)
 		return "", nil
 	}
 
-	dbPath := c.Settings.Output.SQLite.Path
+	dbPath := settings.Output.SQLite.Path
 	if dbPath == "" {
 		return "", fmt.Errorf("SQLite database path not configured")
 	}

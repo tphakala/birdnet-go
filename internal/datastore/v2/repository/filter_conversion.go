@@ -262,9 +262,15 @@ var sentinelNoMatchIDs = []uint{0}
 
 // FilterLookupDeps contains dependencies for filter entity lookups.
 type FilterLookupDeps struct {
-	LabelRepo   LabelRepository
-	SourceRepo  AudioSourceRepository
+	LabelRepo  LabelRepository
+	SourceRepo AudioSourceRepository
+	// SciToCommon maps scientific name -> common name (active locale). Used by
+	// ResolveCommonNameToLabelIDs when SciToCommonFolded is not supplied.
 	SciToCommon map[string]string
+	// SciToCommonFolded maps scientific name -> lower-cased NFC-normalized common name.
+	// Precomputed once per locale change so common-name search does not normalize every
+	// map value on every query. When present it is preferred over SciToCommon.
+	SciToCommonFolded map[string]string
 }
 
 // ResolveSpeciesToLabelIDs converts species names to label IDs.
@@ -403,58 +409,85 @@ func singleTimeOfDayToHours(timeOfDay string) []int {
 	}
 }
 
-// ResolveSpeciesToLabelIDsWithCommonName converts a species search string to label IDs.
-// Searches both scientific names (via LabelRepo.Search LIKE) and common names
-// (via deps.SciToCommon) for partial matches.
-// Returns nil if species is empty (no filtering).
-// Returns sentinel []uint{0} if species is non-empty but no labels are found.
-func ResolveSpeciesToLabelIDsWithCommonName(ctx context.Context, deps *FilterLookupDeps, species string) ([]uint, error) {
+// maxCommonNameLabelIDs bounds the number of common-name-matched label IDs returned. This keeps
+// the resulting `label_id IN (...)` clause in buildSearchJoins well under SQLite's default 999
+// bound-variable limit even for a very broad query (e.g. a single letter) that matches thousands
+// of species across multiple models. Scientific-name matches are unaffected: they go through the
+// unbounded scientific_name LIKE. A query broad enough to hit this cap is already degenerate, so
+// returning a bounded subset (still OR-ed with the scientific LIKE) is acceptable.
+const maxCommonNameLabelIDs = 500
+
+// ResolveCommonNameToLabelIDs returns the label IDs whose common name (active locale) contains the
+// query as a case-insensitive substring. It prefers deps.SciToCommonFolded (precomputed lower-case
+// NFC form) and falls back to normalizing deps.SciToCommon on the fly.
+//
+// Scientific-name matching is deliberately NOT done here: it is handled by the unbounded
+// scientific_name LIKE in buildSearchJoins (via SearchFilters.Query), so this resolver covers
+// only the common-name dimension. The two are OR-ed together downstream.
+//
+// Returns nil (NOT the no-match sentinel) when the query is empty, deps/name maps are unavailable,
+// or no common name matches, because the result is OR-ed with the scientific LIKE and must not
+// force an empty result set. The returned slice is capped at maxCommonNameLabelIDs.
+func ResolveCommonNameToLabelIDs(ctx context.Context, deps *FilterLookupDeps, species string) ([]uint, error) {
 	if species == "" {
 		return nil, nil
 	}
 	if deps == nil || deps.LabelRepo == nil {
 		return nil, nil
 	}
+	if len(deps.SciToCommonFolded) == 0 && len(deps.SciToCommon) == 0 {
+		return nil, nil
+	}
 
-	normalized := norm.NFC.String(species)
+	needle := strings.ToLower(norm.NFC.String(species))
+	matchedScientific := make([]string, 0, 16)
+	collect := func(sci, foldedCommon string) {
+		if strings.Contains(foldedCommon, needle) {
+			matchedScientific = append(matchedScientific, sci)
+		}
+	}
+	if len(deps.SciToCommonFolded) > 0 {
+		for sci, folded := range deps.SciToCommonFolded {
+			collect(sci, folded)
+		}
+	} else {
+		for sci, common := range deps.SciToCommon {
+			collect(sci, strings.ToLower(norm.NFC.String(common)))
+		}
+	}
+	if len(matchedScientific) == 0 {
+		return nil, nil
+	}
 
-	labels, err := deps.LabelRepo.Search(ctx, normalized, 100)
+	// Sort then cap before the DB lookup so a degenerate query (e.g. a single letter matching
+	// thousands of species) is bounded AND returns a STABLE subset across calls. Map iteration
+	// order is randomized, so without sorting both the matched scientific set and the final label
+	// IDs would vary per query.
+	slices.Sort(matchedScientific)
+	if len(matchedScientific) > maxCommonNameLabelIDs {
+		matchedScientific = matchedScientific[:maxCommonNameLabelIDs]
+	}
+
+	commonLabels, err := deps.LabelRepo.GetByScientificNames(ctx, matchedScientific)
 	if err != nil {
 		return nil, err
 	}
 
-	labelIDSet := make(map[uint]struct{}, len(labels))
-	for _, label := range labels {
-		labelIDSet[label.ID] = struct{}{}
-	}
-
-	// Also search common names for partial matches.
-	if len(deps.SciToCommon) > 0 {
-		needle := strings.ToLower(normalized)
-		matchedScientific := make([]string, 0, 16)
-		for sci, common := range deps.SciToCommon {
-			if strings.Contains(strings.ToLower(norm.NFC.String(common)), needle) {
-				matchedScientific = append(matchedScientific, sci)
-			}
-		}
-		if len(matchedScientific) > 0 {
-			commonLabels, err := deps.LabelRepo.GetByScientificNames(ctx, matchedScientific)
-			if err != nil {
-				return nil, err
-			}
-			for _, labelsForSci := range commonLabels {
-				for _, label := range labelsForSci {
-					labelIDSet[label.ID] = struct{}{}
-				}
-			}
+	labelIDSet := make(map[uint]struct{}, len(commonLabels))
+	for _, labelsForSci := range commonLabels {
+		for _, label := range labelsForSci {
+			labelIDSet[label.ID] = struct{}{}
 		}
 	}
-
 	if len(labelIDSet) == 0 {
-		return sentinelNoMatchIDs, nil
+		return nil, nil
 	}
-
-	return slices.Collect(maps.Keys(labelIDSet)), nil
+	ids := slices.Collect(maps.Keys(labelIDSet))
+	slices.Sort(ids)
+	if len(ids) > maxCommonNameLabelIDs {
+		ids = ids[:maxCommonNameLabelIDs]
+	}
+	return ids, nil
 }
 
 // ResolveDeviceToSourceIDs converts a device name to audio source IDs.
@@ -605,10 +638,11 @@ func ConvertSearchFilters(
 	sf.Limit = perPage
 	sf.Offset = (page - 1) * perPage
 
-	// Entity lookups (require deps)
+	// Species text search: scientific names matched by the unbounded LIKE on Query, common
+	// names (active locale) matched via CommonLabelIDs. buildSearchJoins ORs the two branches.
+	sf.Query = filters.Species
 	if deps != nil {
-		// Convert species string to label IDs (LIKE search on scientific + common names)
-		sf.LabelIDs, err = ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, filters.Species)
+		sf.CommonLabelIDs, err = ResolveCommonNameToLabelIDs(ctx, deps, filters.Species)
 		if err != nil {
 			return nil, err
 		}
@@ -711,6 +745,13 @@ func ConvertAdvancedFilters(
 
 		// Convert species names to label IDs
 		sf.LabelIDs, err = ResolveSpeciesToLabelIDs(ctx, deps, filters.Species)
+		if err != nil {
+			return nil, err
+		}
+
+		// Free-text query also matches common names (active locale); scientific names are
+		// matched by the unbounded LIKE on sf.Query (= filters.TextQuery) in buildSearchJoins.
+		sf.CommonLabelIDs, err = ResolveCommonNameToLabelIDs(ctx, deps, filters.TextQuery)
 		if err != nil {
 			return nil, err
 		}

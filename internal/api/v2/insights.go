@@ -457,8 +457,15 @@ func (c *Controller) getExpectedTodayRegionalImpl(ctx echo.Context) error {
 		})
 	}
 
-	lat := c.Settings.BirdNET.Latitude
-	lng := c.Settings.BirdNET.Longitude
+	settings := c.currentSettings()
+	if settings == nil {
+		return ctx.JSON(http.StatusOK, ExpectedTodayRegionalResponse{
+			Species:   []RegionalSpeciesItem{},
+			Available: false,
+		})
+	}
+	lat := settings.BirdNET.Latitude
+	lng := settings.BirdNET.Longitude
 	if lat == 0 && lng == 0 {
 		return ctx.JSON(http.StatusOK, ExpectedTodayRegionalResponse{
 			Species:   []RegionalSpeciesItem{},

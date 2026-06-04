@@ -25,7 +25,7 @@ func TestTokenPersistence(t *testing.T) {
 
 	// Create test server with custom token file
 	server := &OAuth2Server{
-		Settings:      &conf.Settings{Security: conf.Security{BasicAuth: conf.BasicAuth{AccessTokenExp: time.Hour}}},
+		settings:      &conf.Settings{Security: conf.Security{BasicAuth: conf.BasicAuth{AccessTokenExp: time.Hour}}},
 		accessTokens:  make(map[string]AccessToken),
 		authCodes:     make(map[string]AuthCode),
 		tokensFile:    filepath.Join(tempDir, "tokens.json"),
@@ -52,7 +52,7 @@ func TestTokenPersistence(t *testing.T) {
 
 	// Create a new server instance to load tokens
 	newServer := &OAuth2Server{
-		Settings:      &conf.Settings{},
+		settings:      &conf.Settings{},
 		accessTokens:  make(map[string]AccessToken),
 		tokensFile:    filepath.Join(tempDir, "tokens.json"),
 		persistTokens: true,
@@ -124,7 +124,7 @@ func TestFilesystemStore(t *testing.T) {
 func TestLocalNetworkCookieStore(t *testing.T) {
 	// Create test server with settings
 	server := &OAuth2Server{
-		Settings: &conf.Settings{
+		settings: &conf.Settings{
 			Security: conf.Security{
 				SessionSecret: "test-secret",
 			},
@@ -133,7 +133,7 @@ func TestLocalNetworkCookieStore(t *testing.T) {
 
 	// Test with CookieStore
 	gothic.Store = sessions.NewCookieStore([]byte("test-secret"))
-	server.configureLocalNetworkCookieStore()
+	server.configureLocalNetworkCookieStore(server.settings)
 
 	cookieStore, ok := gothic.Store.(*sessions.CookieStore)
 	assert.True(t, ok, "Gothic store should be a CookieStore")
@@ -143,7 +143,7 @@ func TestLocalNetworkCookieStore(t *testing.T) {
 	tempDir := t.TempDir()
 
 	gothic.Store = sessions.NewFilesystemStore(tempDir, []byte("test-secret"))
-	server.configureLocalNetworkCookieStore()
+	server.configureLocalNetworkCookieStore(server.settings)
 
 	fileStore, ok := gothic.Store.(*sessions.FilesystemStore)
 	assert.True(t, ok, "Gothic store should be a FilesystemStore")
@@ -159,7 +159,7 @@ func TestConfigureLocalNetworkWithUnknownStore(t *testing.T) {
 
 	// Create test server with settings
 	server := &OAuth2Server{
-		Settings: &conf.Settings{
+		settings: &conf.Settings{
 			Security: conf.Security{
 				SessionSecret: "test-secret",
 			},
@@ -171,7 +171,7 @@ func TestConfigureLocalNetworkWithUnknownStore(t *testing.T) {
 
 	// This should not panic - the function handles unknown store types gracefully
 	assert.NotPanics(t, func() {
-		server.configureLocalNetworkCookieStore()
+		server.configureLocalNetworkCookieStore(server.settings)
 	}, "configureLocalNetworkCookieStore should not panic with unknown store type")
 }
 
@@ -181,7 +181,7 @@ func TestConfigureLocalNetworkWithUnknownStore(t *testing.T) {
 func TestConfigureLocalNetworkWithMissingSessionSecret(t *testing.T) {
 	// Create test server with empty session secret
 	server := &OAuth2Server{
-		Settings: &conf.Settings{
+		settings: &conf.Settings{
 			Security: conf.Security{
 				SessionSecret: "", // Empty session secret - should not cause issues with unknown store
 			},
@@ -199,7 +199,7 @@ func TestConfigureLocalNetworkWithMissingSessionSecret(t *testing.T) {
 	// This should not panic - the function handles unknown store types gracefully
 	// even with an empty session secret
 	assert.NotPanics(t, func() {
-		server.configureLocalNetworkCookieStore()
+		server.configureLocalNetworkCookieStore(server.settings)
 	}, "configureLocalNetworkCookieStore should not panic with unknown store type and empty session secret")
 }
 
@@ -213,7 +213,7 @@ func TestLoadCorruptedTokensFile(t *testing.T) {
 	require.NoError(t, err, "Failed to write corrupted tokens file")
 
 	server := &OAuth2Server{
-		Settings: &conf.Settings{},
+		settings: &conf.Settings{},
 		accessTokens: map[string]AccessToken{
 			"test_token": {
 				Token:     "test_token",
@@ -255,7 +255,7 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 	}()
 
 	server := &OAuth2Server{
-		Settings: &conf.Settings{},
+		settings: &conf.Settings{},
 		accessTokens: map[string]AccessToken{
 			"test_token": {
 				Token:     "test_token",
@@ -283,7 +283,7 @@ func TestAtomicTokenSaving(t *testing.T) {
 	tokensFile := filepath.Join(tempDir, "tokens.json")
 
 	server := &OAuth2Server{
-		Settings: &conf.Settings{},
+		settings: &conf.Settings{},
 		accessTokens: map[string]AccessToken{
 			"test_token": {
 				Token:     "test_token",

@@ -3359,8 +3359,10 @@
         "clientIdHelpText": "OAuth 2.0 -asiakastunnus tarjoajasi kehittäjäkonsolista",
         "clientSecretLabel": "Asiakassalaisuus",
         "clientSecretHelpText": "OAuth 2.0 -asiakassalaisuus tarjoajasi kehittäjäkonsolista",
-        "userIdLabel": "Käyttäjätunnus (valinnainen)",
-        "userIdHelpText": "Rajoita pääsy tiettyyn käyttäjätiliin sähköpostiosoitteen tai tunnuksen perusteella",
+        "userIdLabel": "Sallitut käyttäjät",
+        "userIdHelpText": "Pilkuilla erotellut sähköpostit tai käyttäjätunnukset, jotka voivat kirjautua tällä palveluntarjoajalla. Jos kenttä on tyhjä, kukaan ei voi kirjautua.",
+        "allowedUsersEmptyWarning": "Tällä palveluntarjoajalla ei ole sallittuja käyttäjiä, joten jokainen kirjautumisyritys hylätään. Lisää vähintään yksi sähköposti tai käyttäjätunnus salliaksesi pääsyn.",
+        "allowedUsersMissingBadge": "Sallittuja käyttäjiä ei ole määritetty - kirjautuminen epäonnistuu",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Salli OAuth2-kirjautuminen Googlen kautta",

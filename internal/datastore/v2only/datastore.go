@@ -41,6 +41,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	obmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"golang.org/x/text/unicode/norm"
 	"gorm.io/gorm"
 )
 
@@ -109,6 +110,10 @@ func parseDetectionTimestamp(date, timeStr string, tz *time.Location) int64 {
 type nameMaps struct {
 	// common maps scientific name → common name (display lookup).
 	common map[string]string
+	// commonFolded maps scientific name → lower-cased NFC-normalized common name. Precomputed
+	// once here so common-name search (ResolveCommonNameToLabelIDs) does not normalize every map
+	// value on every query.
+	commonFolded map[string]string
 	// species maps lowercase common name → scientific name (reverse lookup).
 	species map[string]string
 }
@@ -309,6 +314,7 @@ func New(cfg *Config) (*Datastore, error) {
 func buildNameMaps(labels []string) *nameMaps {
 	speciesMap := make(map[string]string, len(labels))
 	commonMap := make(map[string]string, len(labels))
+	commonFoldedMap := make(map[string]string, len(labels))
 	for _, label := range labels {
 		if scientificName, commonName, found := strings.Cut(label, "_"); found {
 			scientificName = strings.TrimSpace(scientificName)
@@ -316,10 +322,11 @@ func buildNameMaps(labels []string) *nameMaps {
 			if commonName != "" && scientificName != "" {
 				speciesMap[strings.ToLower(commonName)] = scientificName
 				commonMap[scientificName] = commonName
+				commonFoldedMap[scientificName] = strings.ToLower(norm.NFC.String(commonName))
 			}
 		}
 	}
-	return &nameMaps{common: commonMap, species: speciesMap}
+	return &nameMaps{common: commonMap, commonFolded: commonFoldedMap, species: speciesMap}
 }
 
 // UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
@@ -342,8 +349,21 @@ func (ds *Datastore) loadNameMaps() *nameMaps {
 		return m
 	}
 	return &nameMaps{
-		common:  make(map[string]string),
-		species: make(map[string]string),
+		common:       make(map[string]string),
+		commonFolded: make(map[string]string),
+		species:      make(map[string]string),
+	}
+}
+
+// filterLookupDeps builds the dependency set used by repository filter resolution (species and
+// device lookups, plus common-name search via the active-locale name maps).
+func (ds *Datastore) filterLookupDeps() *repository.FilterLookupDeps {
+	nm := ds.loadNameMaps()
+	return &repository.FilterLookupDeps{
+		LabelRepo:         ds.label,
+		SourceRepo:        ds.source,
+		SciToCommon:       nm.common,
+		SciToCommonFolded: nm.commonFolded,
 	}
 }
 
@@ -1406,6 +1426,15 @@ func (ds *Datastore) SearchNotes(query string, sortAscending bool, limit, offset
 		SortDesc: !sortAscending,
 	}
 
+	// Resolve common names (active locale) so the free-text search matches both scientific and
+	// common names. Scientific names stay on the unbounded LIKE via filters.Query; common-name
+	// matches are OR-ed in via CommonLabelIDs. See issue #3378.
+	commonIDs, err := repository.ResolveCommonNameToLabelIDs(ctx, ds.filterLookupDeps(), query)
+	if err != nil {
+		return nil, 0, err
+	}
+	filters.CommonLabelIDs = commonIDs
+
 	dets, total, err := ds.detection.Search(ctx, filters)
 	if err != nil {
 		return nil, 0, err
@@ -1426,11 +1455,9 @@ func (ds *Datastore) SearchNotes(query string, sortAscending bool, limit, offset
 func (ds *Datastore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
 	ctx := context.Background()
 
-	// Set up dependencies for entity lookups
-	deps := &repository.FilterLookupDeps{
-		LabelRepo:  ds.label,
-		SourceRepo: ds.source,
-	}
+	// Set up dependencies for entity lookups. The name maps enable common-name resolution for the
+	// free-text query (active locale), matching the dashboard search behavior. See issue #3378.
+	deps := ds.filterLookupDeps()
 
 	// Convert API-level filters to repository filters
 	repoFilters, err := repository.ConvertAdvancedFilters(ctx, filters, deps, ds.timezone)
@@ -1954,12 +1981,8 @@ func (ds *Datastore) SearchDetections(filters *datastore.SearchFilters) ([]datas
 	// Note: Validation is handled by ConvertSearchFilters which applies defaults
 	// for Page, PerPage, ConfidenceMax, etc.
 
-	// Set up dependencies for entity lookups
-	deps := &repository.FilterLookupDeps{
-		LabelRepo:   ds.label,
-		SourceRepo:  ds.source,
-		SciToCommon: ds.loadNameMaps().common,
-	}
+	// Set up dependencies for entity lookups (species/common-name and device resolution).
+	deps := ds.filterLookupDeps()
 
 	// Convert API-level filters to repository filters
 	repoFilters, err := repository.ConvertSearchFilters(ctx, filters, deps, ds.timezone)

@@ -3359,8 +3359,10 @@
         "clientIdHelpText": "The OAuth 2.0 Client ID from your provider's developer console",
         "clientSecretLabel": "Client Secret",
         "clientSecretHelpText": "The OAuth 2.0 Client Secret from your provider's developer console",
-        "userIdLabel": "User ID (optional)",
-        "userIdHelpText": "Restrict access to a specific user account by email or ID",
+        "userIdLabel": "Allowed Users",
+        "userIdHelpText": "Comma-separated emails or user IDs allowed to sign in with this provider. If left empty, no one can log in.",
+        "allowedUsersEmptyWarning": "This provider has no allowed users, so every login attempt will be denied. Add at least one email or user ID to allow access.",
+        "allowedUsersMissingBadge": "No allowed users set - login will fail",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Allow OAuth2 Login via Google",

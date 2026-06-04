@@ -729,6 +729,71 @@ func TestV2OnlyDatastore_SearchNotes(t *testing.T) {
 	assert.Equal(t, int64(len(notes)), total, "total should match returned rows for limit=10, offset=0")
 }
 
+// TestV2OnlyDatastore_SearchNotes_CommonName reproduces issue #3378: a French-locale instance
+// must find detections by a partial of the displayed common name, not only by scientific name.
+func TestV2OnlyDatastore_SearchNotes_CommonName(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{
+		"Corvus corone_Corneille noire",
+		"Erithacus rubecula_Rougegorge familier",
+	})
+	defer cleanup()
+
+	require.NoError(t, ds.Save(&datastore.Note{
+		Date:           "2026-06-04",
+		Time:           "09:44:26",
+		ScientificName: "Corvus corone",
+		CommonName:     "Corneille noire",
+		Confidence:     0.9,
+	}, nil))
+
+	t.Run("scientific name still matches", func(t *testing.T) {
+		notes, total, err := ds.SearchNotes("Corvus", false, 10, 0)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), total)
+		require.Len(t, notes, 1)
+		assert.Equal(t, "Corvus corone", notes[0].ScientificName)
+	})
+
+	t.Run("partial common name (active locale) matches", func(t *testing.T) {
+		notes, total, err := ds.SearchNotes("Corneille", false, 10, 0)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), total, "partial French common name should match (issue #3378)")
+		require.Len(t, notes, 1)
+		assert.Equal(t, "Corvus corone", notes[0].ScientificName)
+	})
+
+	t.Run("unrelated query returns nothing", func(t *testing.T) {
+		notes, total, err := ds.SearchNotes("Pinson", false, 10, 0)
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), total)
+		assert.Empty(t, notes)
+	})
+}
+
+// TestV2OnlyDatastore_SearchNotesAdvanced_CommonName ensures the advanced-search free-text query
+// also resolves common names (active locale). See issue #3378.
+func TestV2OnlyDatastore_SearchNotesAdvanced_CommonName(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Corvus corone_Corneille noire"})
+	defer cleanup()
+
+	require.NoError(t, ds.Save(&datastore.Note{
+		Date:           "2026-06-04",
+		Time:           "09:44:26",
+		ScientificName: "Corvus corone",
+		CommonName:     "Corneille noire",
+		Confidence:     0.9,
+	}, nil))
+
+	notes, total, err := ds.SearchNotesAdvanced(&datastore.AdvancedSearchFilters{
+		TextQuery: "Corneille",
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total, "advanced search free-text should match common name (issue #3378)")
+	require.Len(t, notes, 1)
+	assert.Equal(t, "Corvus corone", notes[0].ScientificName)
+}
+
 func TestV2OnlyDatastore_GetLastDetections(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()

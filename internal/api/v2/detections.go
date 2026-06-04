@@ -1281,7 +1281,7 @@ func (c *Controller) removeDetectionFiles(clipName string) {
 	log := c.apiLogger
 
 	// Normalize the clip path to get a relative path within SecureFS
-	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	clipsPrefix := c.currentSettings().Realtime.Audio.Export.Path
 	normalized := NormalizeClipPath(clipName, clipsPrefix)
 	if normalized == "" {
 		log.Warn("Cannot remove detection files: empty normalized clip path",
@@ -1761,13 +1761,11 @@ func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTime
 // All temperatures are stored in Celsius internally; this determines display format.
 // Returns "imperial" for Fahrenheit or "metric" for Celsius to match frontend expectations.
 func (c *Controller) getWeatherUnits() string {
-	// Read settings with mutex
-	c.settingsMutex.RLock()
-	defer c.settingsMutex.RUnlock()
-
-	// Use dashboard temperature unit preference for display
-	// All temperatures are now stored in Celsius internally
-	switch c.Settings.Realtime.Dashboard.TemperatureUnit {
+	// Use dashboard temperature unit preference for display. Read the live
+	// snapshot (race-free, hot-reloading) rather than the bare c.Settings field,
+	// matching the rest of the Dashboard subtree reads.
+	// All temperatures are now stored in Celsius internally.
+	switch c.currentSettings().Realtime.Dashboard.TemperatureUnit {
 	case conf.TemperatureUnitFahrenheit:
 		return "imperial"
 	case conf.TemperatureUnitCelsius:

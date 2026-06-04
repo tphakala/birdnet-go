@@ -52,11 +52,19 @@ const apiV2Prefix = "/api/v2"
 
 // Controller manages the API routes and handlers
 type Controller struct {
-	Echo              *echo.Echo
-	Group             *echo.Group
-	DS                datastore.Interface           // Deprecated: Use Repo for new detection operations
-	Repo              datastore.DetectionRepository // New: Preferred for detection CRUD operations
-	Settings          *conf.Settings
+	Echo     *echo.Echo
+	Group    *echo.Group
+	DS       datastore.Interface           // Deprecated: Use Repo for new detection operations
+	Repo     datastore.DetectionRepository // New: Preferred for detection CRUD operations
+	Settings *conf.Settings
+	// settingsAtomic mirrors Settings as a lock-free per-controller snapshot.
+	// The settings update handlers publish it alongside the Settings field on
+	// every save (under settingsMutex), so reads that must stay per-controller
+	// but cannot take the mutex (newErrorResponse is reached from HandleError
+	// while UpdateSettings holds the write lock, so an RLock would deadlock) read
+	// it via controllerSettings() instead of the bare Settings field, which would
+	// race the reassignment. See controllerSettings.
+	settingsAtomic    atomic.Pointer[conf.Settings]
 	BirdImageCache    *imageprovider.BirdImageCache
 	SunCalc           *suncalc.SunCalc
 	Processor         *processor.Processor
@@ -165,8 +173,56 @@ type ShutdownRequester interface {
 
 // currentSettings returns the latest settings snapshot so UI changes
 // take effect in API responses without restarting the service.
+//
+// It resolves the lock-free global atomic snapshot first and only falls back
+// to c.Settings when no snapshot has been published (standalone unit-test
+// controllers). The fallback is read lazily, so in production (where a
+// snapshot is always published) c.Settings is never dereferenced here. That
+// keeps the accessor race-free against the c.Settings reassignment the
+// settings update handlers perform under c.settingsMutex: the equivalent
+// conf.CurrentOrFallback(c.Settings) would evaluate c.Settings eagerly and
+// race that write.
 func (c *Controller) currentSettings() *conf.Settings {
-	return conf.CurrentOrFallback(c.Settings)
+	if latest := conf.GetSettings(); latest != nil {
+		return latest
+	}
+	return c.Settings
+}
+
+// controllerSettings returns this controller's own settings snapshot, read
+// lock-free from the settingsAtomic mirror that the settings update handlers
+// publish alongside c.Settings on every save. Unlike currentSettings(), it
+// deliberately does NOT consult the process-global atomic snapshot: use it for
+// reads whose result is asserted per-controller (e.g. debug-gated response
+// verbosity), where the shared global snapshot would couple otherwise-independent
+// parallel tests.
+//
+// Reading the atomic mirror (rather than the bare c.Settings field under
+// settingsMutex.RLock) is what makes this safe to call from newErrorResponse,
+// which is reached from HandleError while UpdateSettings already holds
+// settingsMutex.Lock: a non-reentrant RLock there would deadlock. The mirror is
+// published under that same write lock, so the read sees a consistent snapshot.
+//
+// The c.Settings fallback only runs for standalone test controllers that never
+// published the mirror; production always publishes it at construction, so the
+// fallback never races a concurrent write. The returned snapshot is immutable
+// (copy-on-write), so callers may dereference its fields freely.
+func (c *Controller) controllerSettings() *conf.Settings {
+	if s := c.settingsAtomic.Load(); s != nil {
+		return s
+	}
+	return c.Settings
+}
+
+// publishSettings repoints this controller's settings snapshot to s, updating
+// both the c.Settings field and the lock-free settingsAtomic mirror together so
+// per-controller readers (controllerSettings) never observe a mirror that has
+// drifted from the field. It is the single write path for the snapshot: routing
+// every save and rollback through it keeps the dual-write invariant in one place.
+// Callers must hold c.settingsMutex (the field write is not itself synchronized).
+func (c *Controller) publishSettings(s *conf.Settings) {
+	c.Settings = s
+	c.settingsAtomic.Store(s)
 }
 
 // Option is a functional option for configuring the Controller.
@@ -434,6 +490,10 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()),
 		detectionRateCache:   datastore.NewDetectionRateCache(detectionRateCacheTTL),
 	}
+	// Publish the per-controller settings mirror so controllerSettings() reads it
+	// lock-free. Kept in sync with the c.Settings field on every save; see the
+	// settingsAtomic field doc and the settings update handlers.
+	c.settingsAtomic.Store(settings)
 
 	// Propagate the derived FFprobe path from config validation to the
 	// ffmpeg package so executeFFprobe can find it without PATH lookup.
@@ -695,16 +755,26 @@ func (c *Controller) initRoutes() {
 
 // HealthCheck handles the API health check endpoint
 func (c *Controller) HealthCheck(ctx echo.Context) error {
+	// Read version/build/debug from this controller's own snapshot (nil-safe for
+	// standalone test controllers).
+	var version, buildDate string
+	debug := false
+	if settings := c.controllerSettings(); settings != nil {
+		version = settings.Version
+		buildDate = settings.BuildDate
+		debug = settings.WebServer.Debug
+	}
+
 	// Create response structure
 	response := map[string]any{
 		"status":     "healthy",
-		"version":    c.Settings.Version,
-		"build_date": c.Settings.BuildDate,
+		"version":    version,
+		"build_date": buildDate,
 		"timestamp":  time.Now().Format(time.RFC3339),
 	}
 
-	// Add environment if available in settings
-	if c.Settings != nil && c.Settings.WebServer.Debug {
+	// Add environment based on debug mode
+	if debug {
 		response["environment"] = "development"
 	} else {
 		response["environment"] = "production"
@@ -854,11 +924,19 @@ func (c *Controller) newErrorResponse(err error, message string, code int) *Erro
 	// Generate a random correlation ID (8 characters should be sufficient)
 	correlationID := generateCorrelationID()
 
-	// Only expose raw err.Error() in debug mode — it can contain internal
+	// Only expose raw err.Error() in debug mode: it can contain internal
 	// paths, SQL errors, stack traces, etc. In production, use the
 	// sanitized message parameter instead.
 	var errorStr string
-	if err != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+	// Read the controller's own debug flag via the lock-free atomic mirror: this
+	// is reached from HandleError while UpdateSettings holds c.settingsMutex, so
+	// it must not acquire the lock (a non-reentrant RLock would deadlock), and the
+	// flag must remain per-controller (handlers assert debug-gated error verbosity
+	// per controller, not via the shared global snapshot). controllerSettings()
+	// reads the per-controller snapshot published under that same write lock, so
+	// the read is race-free. See controllerSettings.
+	settings := c.controllerSettings()
+	if err != nil && settings != nil && settings.WebServer.Debug {
 		errorStr = err.Error()
 	} else {
 		errorStr = message

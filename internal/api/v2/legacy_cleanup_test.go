@@ -28,7 +28,11 @@ func createTestSettings(legacyPath string) *conf.Settings {
 }
 
 // createLegacyTestController creates a controller with initialized cleanupStatus for testing.
-func createLegacyTestController(e *echo.Echo, settings *conf.Settings) *Controller {
+func createLegacyTestController(tb testing.TB, e *echo.Echo, settings *conf.Settings) *Controller {
+	tb.Helper()
+	// Handlers read the live snapshot via currentSettings(); publish the test's
+	// settings so the read resolves to them (restored on cleanup).
+	publishTestSettings(tb, settings)
 	return &Controller{
 		Settings:      settings,
 		Echo:          e,
@@ -47,7 +51,7 @@ func TestGetLegacyStatus_V2OnlyMode_NoLegacy(t *testing.T) {
 
 	// Create settings with non-existent legacy path
 	settings := createTestSettings(filepath.Join(tmpDir, "nonexistent.db"))
-	controller := createLegacyTestController(e, settings)
+	controller := createLegacyTestController(t, e, settings)
 
 	// Set v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -85,7 +89,7 @@ func TestGetLegacyStatus_V2OnlyMode_WithLegacy(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestController(e, settings)
+	controller := createLegacyTestController(t, e, settings)
 
 	// Set v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -123,7 +127,7 @@ func TestGetLegacyStatus_NotV2OnlyMode(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestController(e, settings)
+	controller := createLegacyTestController(t, e, settings)
 
 	// NOT in v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -160,7 +164,7 @@ func TestStartLegacyCleanup_NotV2OnlyMode(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestController(e, settings)
+	controller := createLegacyTestController(t, e, settings)
 
 	// NOT in v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -203,7 +207,7 @@ func TestStartLegacyCleanup_SQLite_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestController(e, settings)
+	controller := createLegacyTestController(t, e, settings)
 
 	// Set v2-only mode
 	prevV2OnlyMode := isV2OnlyMode
@@ -284,7 +288,7 @@ func TestStartLegacyCleanup_SQLite_V2DatabaseSafetyCheck(t *testing.T) {
 	require.NoError(t, db.Close())
 
 	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestController(e, settings)
+	controller := createLegacyTestController(t, e, settings)
 
 	prevV2OnlyMode := isV2OnlyMode
 	isV2OnlyMode = true
@@ -327,7 +331,7 @@ func TestStartLegacyCleanup_AlreadyInProgress(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := createTestSettings(legacyPath)
-	controller := createLegacyTestController(e, settings)
+	controller := createLegacyTestController(t, e, settings)
 
 	prevV2OnlyMode := isV2OnlyMode
 	isV2OnlyMode = true
@@ -368,7 +372,7 @@ func TestGetLegacyStatus_MySQL_NoDBProvider(t *testing.T) {
 
 	e := echo.New()
 	settings := createMySQLTestSettings()
-	controller := createLegacyTestController(e, settings)
+	controller := createLegacyTestController(t, e, settings)
 	// Repo is nil, so gormDBProvider cast will fail
 
 	prevV2OnlyMode := isV2OnlyMode
@@ -399,7 +403,7 @@ func TestStartLegacyCleanup_MySQL_NoDBProvider(t *testing.T) {
 
 	e := echo.New()
 	settings := createMySQLTestSettings()
-	controller := createLegacyTestController(e, settings)
+	controller := createLegacyTestController(t, e, settings)
 	// Repo is nil, so gormDBProvider cast will fail
 
 	prevV2OnlyMode := isV2OnlyMode

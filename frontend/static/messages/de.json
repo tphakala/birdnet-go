@@ -3359,8 +3359,10 @@
         "clientIdHelpText": "Die OAuth 2.0 Client-ID aus der Entwicklerkonsole Ihres Anbieters",
         "clientSecretLabel": "Client-Geheimnis",
         "clientSecretHelpText": "Das OAuth 2.0 Client-Geheimnis aus der Entwicklerkonsole Ihres Anbieters",
-        "userIdLabel": "Benutzer-ID (optional)",
-        "userIdHelpText": "Zugriff auf ein bestimmtes Benutzerkonto per E-Mail oder ID beschränken",
+        "userIdLabel": "Zugelassene Benutzer",
+        "userIdHelpText": "Kommagetrennte E-Mails oder Benutzer-IDs, die sich mit diesem Anbieter anmelden dürfen. Wenn leer, kann sich niemand anmelden.",
+        "allowedUsersEmptyWarning": "Dieser Anbieter hat keine zugelassenen Benutzer, daher wird jeder Anmeldeversuch abgelehnt. Fügen Sie mindestens eine E-Mail oder Benutzer-ID hinzu, um den Zugriff zu erlauben.",
+        "allowedUsersMissingBadge": "Keine zugelassenen Benutzer festgelegt - Anmeldung schlägt fehl",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "OAuth2-Anmeldung über Google erlauben",

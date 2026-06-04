@@ -362,8 +362,9 @@ func (c *Controller) initBackupRoutes() {
 		// Scan database directories where backup files are now written,
 		// plus os.TempDir() for files created by older versions.
 		var dbDirs []string
-		if c.Settings.Output.SQLite.Path != "" {
-			dbDirs = append(dbDirs, filepath.Dir(c.Settings.Output.SQLite.Path))
+		settings := c.currentSettings()
+		if settings != nil && settings.Output.SQLite.Path != "" {
+			dbDirs = append(dbDirs, filepath.Dir(settings.Output.SQLite.Path))
 		}
 		if c.V2Manager != nil && !c.V2Manager.IsMySQL() {
 			dbDirs = append(dbDirs, filepath.Dir(c.V2Manager.Path()))
@@ -636,7 +637,8 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 // getBackupDBInfo returns the database path and GORM DB for the given type.
 func (c *Controller) getBackupDBInfo(dbType string) (string, *gorm.DB, error) {
 	if dbType == dbTypeLegacy {
-		if c.Settings.Output.SQLite.Path == "" {
+		settings := c.currentSettings()
+		if settings == nil || settings.Output.SQLite.Path == "" {
 			return "", nil, fmt.Errorf("backup only available for SQLite databases")
 		}
 		if c.DS == nil {
@@ -646,7 +648,7 @@ func (c *Controller) getBackupDBInfo(dbType string) (string, *gorm.DB, error) {
 		if !ok {
 			return "", nil, fmt.Errorf("cannot perform backup on this datastore type")
 		}
-		return c.Settings.Output.SQLite.Path, sqliteStore.DB, nil
+		return settings.Output.SQLite.Path, sqliteStore.DB, nil
 	}
 
 	// V2 database

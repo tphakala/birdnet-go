@@ -922,8 +922,9 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 
 	// Get active audio device from settings (first configured source)
 	var deviceName string
-	if len(c.Settings.Realtime.Audio.Sources) > 0 {
-		deviceName = c.Settings.Realtime.Audio.Sources[0].Device
+	settings := c.currentSettings()
+	if settings != nil && len(settings.Realtime.Audio.Sources) > 0 {
+		deviceName = settings.Realtime.Audio.Sources[0].Device
 	}
 
 	// Check if no device is configured
@@ -1649,12 +1650,13 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 
 	if dbType == dbTypeLegacy {
 		// Check if it's SQLite
-		if c.Settings.Output.SQLite.Path == "" {
+		settings := c.currentSettings()
+		if settings == nil || settings.Output.SQLite.Path == "" {
 			return c.HandleError(ctx, fmt.Errorf("not sqlite"),
 				"Backup download only available for SQLite databases. Use MySQL tools for MySQL backup.",
 				http.StatusBadRequest)
 		}
-		dbPath = c.Settings.Output.SQLite.Path
+		dbPath = settings.Output.SQLite.Path
 
 		// Get the underlying GORM DB from the datastore
 		ds := c.DS

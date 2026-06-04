@@ -131,7 +131,11 @@ type providerAuthConfig struct {
 }
 
 type OAuth2Server struct {
-	Settings     *conf.Settings
+	// settings is the construction-time snapshot. It is unexported so external
+	// callers cannot read it directly and observe a stale value: all runtime
+	// reads must go through currentSettings() / CurrentSettings(), which resolve
+	// the live atomic snapshot (GitHub #3370).
+	settings     *conf.Settings
 	authCodes    map[string]AuthCode
 	accessTokens map[string]AccessToken
 	mutex        sync.RWMutex
@@ -143,9 +147,6 @@ type OAuth2Server struct {
 	tokensFile    string
 	persistTokens bool
 
-	// Expected Redirect URI for Basic Auth (pre-parsed)
-	ExpectedBasicRedirectURI *url.URL
-
 	// Throttling
 	throttledMessages map[string]time.Time
 }
@@ -153,7 +154,14 @@ type OAuth2Server struct {
 // currentSettings returns the latest settings snapshot so security
 // configuration changes take effect without recreating the OAuth2Server.
 func (s *OAuth2Server) currentSettings() *conf.Settings {
-	return conf.CurrentOrFallback(s.Settings)
+	return conf.CurrentOrFallback(s.settings)
+}
+
+// CurrentSettings returns the latest settings snapshot for callers outside the
+// security package (e.g. the API auth adapter) so they read live configuration
+// instead of the construction-time pointer. See currentSettings.
+func (s *OAuth2Server) CurrentSettings() *conf.Settings {
+	return s.currentSettings()
 }
 
 // For testing purposes
@@ -171,16 +179,13 @@ func NewOAuth2Server() *OAuth2Server {
 	settings := conf.GetSettings()
 
 	server := &OAuth2Server{
-		Settings:     settings,
+		settings:     settings,
 		authCodes:    make(map[string]AuthCode),
 		accessTokens: make(map[string]AccessToken),
 	}
 
 	// Validate and potentially fix session secret
 	validateSessionSecret(settings)
-
-	// Pre-parse the Basic Auth Redirect URI
-	server.ExpectedBasicRedirectURI = parseBasicAuthRedirectURI(settings)
 
 	// Initialize Gothic with the provided configuration
 	InitializeGoth(settings)
@@ -248,7 +253,10 @@ func handleWeakSessionSecret(settings *conf.Settings) {
 		Build()
 }
 
-// parseBasicAuthRedirectURI parses and validates the Basic Auth redirect URI
+// parseBasicAuthRedirectURI parses and validates the Basic Auth redirect URI from
+// the given settings snapshot. It is called per request from the basic-auth handlers
+// so that changes to Security.BasicAuth.RedirectURI made via the web UI take effect
+// without a restart (issue #3370). Returns nil on a missing or invalid configuration.
 func parseBasicAuthRedirectURI(settings *conf.Settings) *url.URL {
 	secLog := GetLogger().With(logger.String("uri", settings.Security.BasicAuth.RedirectURI))
 
@@ -269,7 +277,7 @@ func parseBasicAuthRedirectURI(settings *conf.Settings) *url.URL {
 		return nil
 	}
 
-	secLog.Info("Pre-parsed and validated Basic Auth Redirect URI")
+	secLog.Debug("Validated Basic Auth Redirect URI")
 	return parsedURI
 }
 

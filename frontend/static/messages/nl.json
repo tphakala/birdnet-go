@@ -3359,8 +3359,10 @@
         "clientIdHelpText": "De OAuth 2.0 Client-ID van de ontwikkelaarsconsole van uw provider",
         "clientSecretLabel": "Clientgeheim",
         "clientSecretHelpText": "Het OAuth 2.0 Client Secret van de ontwikkelaarsconsole van uw provider",
-        "userIdLabel": "Gebruikers-ID (optioneel)",
-        "userIdHelpText": "Beperk toegang tot een specifiek gebruikersaccount via e-mail of ID",
+        "userIdLabel": "Toegestane gebruikers",
+        "userIdHelpText": "Door komma's gescheiden e-mails of gebruikers-ID's die mogen inloggen met deze provider. Als dit leeg is, kan niemand inloggen.",
+        "allowedUsersEmptyWarning": "Deze provider heeft geen toegestane gebruikers, dus elke inlogpoging wordt geweigerd. Voeg ten minste één e-mail of gebruikers-ID toe om toegang te verlenen.",
+        "allowedUsersMissingBadge": "Geen toegestane gebruikers ingesteld - inloggen mislukt",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Sta OAuth2 Inloggen via Google toe",

@@ -115,7 +115,7 @@ func TestOAuth2Server(t *testing.T) {
 			test: func(t *testing.T, s *OAuth2Server) {
 				t.Helper()
 				// Override settings and publish as global so currentSettings() returns them
-				s.Settings = &conf.Settings{
+				s.settings = &conf.Settings{
 					Security: conf.Security{
 						BasicAuth: conf.BasicAuth{
 							Enabled:        true,
@@ -126,7 +126,7 @@ func TestOAuth2Server(t *testing.T) {
 						},
 					},
 				}
-				conf.SetTestSettings(s.Settings)
+				conf.SetTestSettings(s.settings)
 
 				// Generate and immediately use the auth code
 				code, err := s.GenerateAuthCode()
@@ -146,11 +146,11 @@ func TestOAuth2Server(t *testing.T) {
 			name: "subnet bypass validation",
 			test: func(t *testing.T, s *OAuth2Server) {
 				t.Helper()
-				s.Settings.Security.AllowSubnetBypass = conf.AllowSubnetBypass{
+				s.settings.Security.AllowSubnetBypass = conf.AllowSubnetBypass{
 					Enabled: true,
 					Subnet:  "192.168.1.0/24",
 				}
-				conf.SetTestSettings(s.Settings)
+				conf.SetTestSettings(s.settings)
 
 				assert.True(t, s.IsRequestFromAllowedSubnet("192.168.1.100"), "expected IP to be allowed")
 				assert.False(t, s.IsRequestFromAllowedSubnet("10.0.0.1"), "expected IP to be denied")
@@ -184,7 +184,7 @@ func TestNewOAuth2ServerForTesting(t *testing.T) {
 	server := NewOAuth2ServerForTesting(t, settings)
 
 	require.NotNil(t, server)
-	assert.Equal(t, settings, server.Settings)
+	assert.Equal(t, settings, server.settings)
 	assert.NotNil(t, server.authCodes)
 	assert.NotNil(t, server.accessTokens)
 	assert.NotNil(t, server.throttledMessages)
@@ -450,7 +450,7 @@ func TestIsValidUserId(t *testing.T) {
 // TestValidateAccessToken tests the ValidateAccessToken method
 func TestValidateAccessToken(t *testing.T) {
 	server := &OAuth2Server{
-		Settings:     &conf.Settings{},
+		settings:     &conf.Settings{},
 		accessTokens: make(map[string]AccessToken),
 	}
 
@@ -513,7 +513,7 @@ func TestGenerateAuthCode(t *testing.T) {
 	t.Cleanup(func() { conf.NewTestSettings().Apply() })
 
 	server := &OAuth2Server{
-		Settings:     settings,
+		settings:     settings,
 		authCodes:    make(map[string]AuthCode),
 		accessTokens: make(map[string]AccessToken),
 	}
@@ -534,7 +534,7 @@ func TestGenerateAuthCode(t *testing.T) {
 // TestExchangeAuthCode tests the ExchangeAuthCode method
 func TestExchangeAuthCode(t *testing.T) {
 	server := &OAuth2Server{
-		Settings: &conf.Settings{
+		settings: &conf.Settings{
 			Security: conf.Security{
 				BasicAuth: conf.BasicAuth{
 					AuthCodeExp:    10 * time.Minute,
@@ -606,7 +606,7 @@ func TestExchangeAuthCode(t *testing.T) {
 // TestExchangeAuthCodeContextCancellation tests context cancellation handling
 func TestExchangeAuthCodeContextCancellation(t *testing.T) {
 	server := &OAuth2Server{
-		Settings: &conf.Settings{
+		settings: &conf.Settings{
 			Security: conf.Security{
 				BasicAuth: conf.BasicAuth{
 					AccessTokenExp: time.Hour,
@@ -1028,7 +1028,7 @@ func TestCheckBasicAuthToken(t *testing.T) {
 			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
 
 			server := &OAuth2Server{
-				Settings:     &conf.Settings{},
+				settings:     &conf.Settings{},
 				accessTokens: make(map[string]AccessToken),
 			}
 			tt.setupServer(server)
@@ -1093,7 +1093,7 @@ func TestCheckSocialAuthSessions(t *testing.T) {
 			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
 
 			server := &OAuth2Server{
-				Settings: &conf.Settings{
+				settings: &conf.Settings{
 					Security: conf.Security{
 						OAuthProviders: tt.providers,
 					},
@@ -1229,7 +1229,7 @@ func TestCheckSocialAuthDirect(t *testing.T) {
 			conf.SetTestSettings(settings)
 			t.Cleanup(func() { conf.NewTestSettings().Apply() })
 
-			server := &OAuth2Server{Settings: settings}
+			server := &OAuth2Server{settings: settings}
 
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req = tt.setupSession(t, req)
@@ -1284,7 +1284,7 @@ func TestCheckSocialAuthFallback(t *testing.T) {
 			conf.SetTestSettings(settings)
 			t.Cleanup(func() { conf.NewTestSettings().Apply() })
 
-			server := &OAuth2Server{Settings: settings}
+			server := &OAuth2Server{settings: settings}
 
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req = tt.setupSession(t, req)
@@ -1311,7 +1311,7 @@ func TestCheckSocialAuthSessionsWithAuthProviderKey(t *testing.T) {
 	conf.SetTestSettings(settings)
 	t.Cleanup(func() { conf.NewTestSettings().Apply() })
 
-	server := &OAuth2Server{Settings: settings}
+	server := &OAuth2Server{settings: settings}
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req = storeMultipleInSession(t, req,
@@ -1369,7 +1369,7 @@ func TestCheckProviderAuth(t *testing.T) {
 			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
 
 			server := &OAuth2Server{
-				Settings: &conf.Settings{},
+				settings: &conf.Settings{},
 			}
 
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
