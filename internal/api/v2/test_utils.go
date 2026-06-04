@@ -38,6 +38,10 @@ func newMinimalController() *Controller {
 // handlers reading via c.currentSettings() observe them, and restores the
 // previous snapshot on cleanup so the publish does not leak into sibling tests.
 //
+// IMPORTANT: tests using this helper must NOT call t.Parallel(). It mutates the
+// process-global settings snapshot, so parallel tests would observe each
+// other's settings and flake.
+//
 // Routing handler reads through currentSettings() makes every
 // handler read the lock-free global snapshot rather than the controller-cached
 // c.Settings field. Tests that inject a per-controller *conf.Settings must
