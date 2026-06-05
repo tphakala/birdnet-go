@@ -1784,7 +1784,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		if err != nil {
 			// Update queue status so polling clients see the failure
 			if queueKey != "" {
-				c.updateQueueStatus(queueKey, spectrogramStatusFailed, 0, "Generation failed: "+err.Error())
+				c.updateQueueStatus(queueKey, spectrogramStatusFailed, 0, "Generation failed")
 			}
 
 			c.logErrorIfEnabled("Async spectrogram generation failed",
@@ -2905,7 +2905,7 @@ func (c *Controller) generateSpectrogramFromRel(ctx context.Context, relAudioPat
 		// Mark the queue entry failed BEFORE returning so the deferred cleanupQueueStatus
 		// retains it for the polling window. Otherwise cleanup deletes the still-"generating"
 		// entry on the way out and a polling client sees "not_started" instead of the error.
-		c.updateQueueStatus(queueKey, spectrogramStatusFailed, 0, "Generation failed: "+err.Error())
+		c.updateQueueStatus(queueKey, spectrogramStatusFailed, 0, "Generation failed")
 
 		getSpectrogramLogger().Debug("Spectrogram generation failed",
 			logger.String("queue_key", queueKey),
