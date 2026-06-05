@@ -873,6 +873,39 @@ func (c *Controller) logDebugIfEnabled(msg string, fields ...logger.Field) {
 	}
 }
 
+// The logSecurity* helpers mirror the api-module helpers above but write to the
+// "security" module logger, so authentication events (form login/logout, OAuth
+// callback) are co-located with the OAuth and provider-init logging where
+// admins look when debugging auth.
+
+// logSecurityInfoIfEnabled logs an info message to the security module if enabled.
+func (c *Controller) logSecurityInfoIfEnabled(msg string, fields ...logger.Field) {
+	if c.securityLogger != nil {
+		c.securityLogger.Info(msg, fields...)
+	}
+}
+
+// logSecurityWarnIfEnabled logs a warning message to the security module if enabled.
+func (c *Controller) logSecurityWarnIfEnabled(msg string, fields ...logger.Field) {
+	if c.securityLogger != nil {
+		c.securityLogger.Warn(msg, fields...)
+	}
+}
+
+// logSecurityErrorIfEnabled logs an error message to the security module if enabled.
+func (c *Controller) logSecurityErrorIfEnabled(msg string, fields ...logger.Field) {
+	if c.securityLogger != nil {
+		c.securityLogger.Error(msg, fields...)
+	}
+}
+
+// logSecurityDebugIfEnabled logs a debug message to the security module if enabled.
+func (c *Controller) logSecurityDebugIfEnabled(msg string, fields ...logger.Field) {
+	if c.securityLogger != nil {
+		c.securityLogger.Debug(msg, fields...)
+	}
+}
+
 // =============================================================================
 // Batch Response Helpers
 // =============================================================================

@@ -36,23 +36,43 @@ import (
 )
 
 var oidcRetryCancelMu sync.Mutex
-var oidcRetryCancelFunc context.CancelFunc
 
-// cancelOIDCRetry cancels any running OIDC discovery retry goroutine.
-func cancelOIDCRetry() {
+// oidcRetryCancels tracks in-flight OIDC discovery retry goroutines, keyed by
+// issuer URL. Keying per issuer (rather than a single package-global) lets
+// multiple OIDC providers retry independently: configuring a second provider no
+// longer cancels or orphans the first provider's retry. Guarded by
+// oidcRetryCancelMu.
+//
+// A retry goroutine that finishes on its own (provider registered, or the retry
+// deadline elapsed) leaves its now-inert cancel func in the map; these spent
+// entries are reaped by the next cancelAllOIDCRetries (settings reload or
+// shutdown). The map is therefore bounded by the number of distinct configured
+// issuer URLs, not by retry attempts.
+var oidcRetryCancels = make(map[string]context.CancelFunc)
+
+// cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry.
+// Used on settings reload, where InitializeGoth rebuilds all providers from
+// scratch, and on application shutdown.
+func cancelAllOIDCRetries() {
 	oidcRetryCancelMu.Lock()
 	defer oidcRetryCancelMu.Unlock()
-	if oidcRetryCancelFunc != nil {
-		oidcRetryCancelFunc()
-		oidcRetryCancelFunc = nil
+	for issuerURL, cancel := range oidcRetryCancels {
+		cancel()
+		delete(oidcRetryCancels, issuerURL)
 	}
 }
 
-// setOIDCRetryCancel stores the cancel function for the current OIDC retry goroutine.
-func setOIDCRetryCancel(cancel context.CancelFunc) {
+// setOIDCRetryCancel stores the cancel function for the retry goroutine of the
+// given issuer URL, cancelling and replacing any existing retry for that same
+// issuer first. Per-issuer keying prevents a second provider's init from
+// orphaning another provider's retry.
+func setOIDCRetryCancel(issuerURL string, cancel context.CancelFunc) {
 	oidcRetryCancelMu.Lock()
 	defer oidcRetryCancelMu.Unlock()
-	oidcRetryCancelFunc = cancel
+	if existing, ok := oidcRetryCancels[issuerURL]; ok {
+		existing()
+	}
+	oidcRetryCancels[issuerURL] = cancel
 }
 
 // startOIDCRetry starts a background goroutine that retries OIDC discovery with exponential backoff.
@@ -77,7 +97,7 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 				return
 			case <-time.After(backoff):
 				if time.Now().After(deadline) {
-					secLog.Error("OIDC discovery retry exhausted — provider not available. Save settings to retry.",
+					secLog.Error("OIDC discovery retry exhausted; provider not available. Save settings to retry.",
 						logger.String("issuer_url", providerConfig.IssuerURL))
 					return
 				}
@@ -173,7 +193,11 @@ var (
 	ErrTokenExpired  = errors.NewStd("token expired")
 )
 
-func NewOAuth2Server() *OAuth2Server {
+// NewOAuth2Server creates and initializes an OAuth2Server. The supplied context
+// governs background goroutines owned by the server (currently the periodic
+// expired-token cleanup); cancelling it stops them, giving the cleanup goroutine
+// a proper shutdown path instead of running for the process lifetime.
+func NewOAuth2Server(ctx context.Context) *OAuth2Server {
 	// Use the security logger from the start
 	GetLogger().Info("Initializing OAuth2 server")
 	settings := conf.GetSettings()
@@ -193,9 +217,19 @@ func NewOAuth2Server() *OAuth2Server {
 	// Set up token persistence
 	server.setupTokenPersistence()
 
-	// Clean up expired tokens every hour
-	// TODO: Pass application shutdown context for graceful cleanup termination
-	server.StartAuthCleanup(context.Background(), time.Hour)
+	// Clean up expired tokens every hour. The caller's context terminates the
+	// goroutine on application shutdown.
+	server.StartAuthCleanup(ctx, time.Hour)
+
+	// Stop any in-flight OIDC discovery retries when the application shuts down.
+	// The retries are package-global (goth's provider registry is global), so a
+	// lightweight watcher on the lifecycle context cancels them, rather than
+	// threading a context field through the global provider-init path (which the
+	// fatcontext linter forbids).
+	go func() {
+		<-ctx.Done()
+		cancelAllOIDCRetries()
+	}()
 
 	GetLogger().Info("OAuth2 server initialization complete")
 	return server
@@ -539,10 +573,11 @@ func initializeOIDCProvider(providerConfig *conf.OAuthProviderConfig, redirectUR
 		providerLog.Error("Failed to initialize OIDC provider (is the issuer URL reachable?)",
 			logger.Error(err),
 			logger.String("issuer_url", providerConfig.IssuerURL))
-		// Cancel any previous retry and start a new one
-		cancelOIDCRetry()
+		// Cancel any previous retry for this issuer and start a new one.
+		// Keying by issuer URL keeps multiple OIDC providers' retries independent;
+		// setOIDCRetryCancel cancels and replaces only this issuer's prior retry.
 		ctx, cancel := context.WithCancel(context.Background())
-		setOIDCRetryCancel(cancel)
+		setOIDCRetryCancel(providerConfig.IssuerURL, cancel)
 		startOIDCRetry(ctx, *providerConfig, redirectURI, scopes)
 		return nil
 	}
@@ -567,7 +602,7 @@ func SetTestConfigPath(path string) {
 
 func (s *OAuth2Server) UpdateProviders() {
 	GetLogger().Info("Updating Goth providers based on potentially changed settings")
-	cancelOIDCRetry()
+	cancelAllOIDCRetries()
 	InitializeGoth(s.currentSettings())
 }
 
