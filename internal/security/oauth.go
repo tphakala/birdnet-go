@@ -137,6 +137,17 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 		timer := time.NewTimer(backoff)
 		defer timer.Stop()
 		for {
+			// Prioritize cancellation: a single select with both ctx.Done() and
+			// timer.C ready picks pseudo-randomly, so on shutdown the timer case
+			// could win and start one more (uncancellable) discovery request,
+			// delaying graceful shutdown. Check ctx first, then block on the timer.
+			select {
+			case <-ctx.Done():
+				secLog.Info("OIDC discovery retry canceled")
+				return
+			default:
+			}
+
 			select {
 			case <-ctx.Done():
 				secLog.Info("OIDC discovery retry canceled")
