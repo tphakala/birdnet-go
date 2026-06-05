@@ -1329,7 +1329,6 @@
           onchange={updateSubnetBypassEnabled}
         />
 
-        <!-- Always-trusted local network behavior is non-obvious; explain it before the subnet field -->
         <SettingsNote>
           <p>{t('settings.security.subnetBypassLocalNote')}</p>
         </SettingsNote>
