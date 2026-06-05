@@ -150,23 +150,23 @@ func (dw *DualWriteRepository) Shutdown() {
 // synced to v2; if it was deleted from legacy, the v2 ghost is removed.
 func (dw *DualWriteRepository) StartReconciliation() {
 	dw.reconcileOnce.Do(func() {
-		ticker := time.NewTicker(reconcileInterval)
-		done := make(chan struct{})
-
 		dw.reconcileMu.Lock()
 		// Re-check shutdown under the same lock Shutdown takes (Shutdown closes
 		// shutdownCh before acquiring reconcileMu). This closes a race where a
 		// concurrent Shutdown reads a still-nil reconcileTicker and returns
 		// without waiting on the goroutine: either Shutdown observes the
 		// registered ticker and waits on done, or we observe the close here and
-		// never start the goroutine.
+		// never start the goroutine. Defer creating the ticker until after this
+		// check so no timer is registered with the runtime when already shutting down.
 		select {
 		case <-dw.shutdownCh:
 			dw.reconcileMu.Unlock()
-			ticker.Stop()
 			return
 		default:
 		}
+
+		ticker := time.NewTicker(reconcileInterval)
+		done := make(chan struct{})
 		dw.reconcileTicker = ticker
 		dw.reconcileDone = done
 		dw.reconcileMu.Unlock()
