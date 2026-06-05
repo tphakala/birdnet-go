@@ -35,44 +35,85 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-var oidcRetryCancelMu sync.Mutex
+var (
+	oidcRetryCancelMu sync.Mutex
 
-// oidcRetryCancels tracks in-flight OIDC discovery retry goroutines, keyed by
-// issuer URL. Keying per issuer (rather than a single package-global) lets
-// multiple OIDC providers retry independently: configuring a second provider no
-// longer cancels or orphans the first provider's retry. Guarded by
-// oidcRetryCancelMu.
-//
-// A retry goroutine that finishes on its own (provider registered, or the retry
-// deadline elapsed) leaves its now-inert cancel func in the map; these spent
-// entries are reaped by the next cancelAllOIDCRetries (settings reload or
-// shutdown). The map is therefore bounded by the number of distinct configured
-// issuer URLs, not by retry attempts.
-var oidcRetryCancels = make(map[string]context.CancelFunc)
+	// oidcRetriesDisabled blocks new OIDC discovery retries once application
+	// shutdown has begun, so a late provider (re)initialization cannot spawn a
+	// retry goroutine that outlives the server. Reset for each new server
+	// instance via enableOIDCRetries. Guarded by oidcRetryCancelMu.
+	oidcRetriesDisabled bool
 
-// cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry.
-// Used on settings reload, where InitializeGoth rebuilds all providers from
-// scratch, and on application shutdown.
-func cancelAllOIDCRetries() {
-	oidcRetryCancelMu.Lock()
-	defer oidcRetryCancelMu.Unlock()
+	// oidcRetryCancels tracks in-flight OIDC discovery retry goroutines, keyed by
+	// issuer URL. Keying per issuer (rather than a single package-global) lets
+	// multiple OIDC providers retry independently: configuring a second provider
+	// no longer cancels or orphans the first provider's retry. Guarded by
+	// oidcRetryCancelMu.
+	//
+	// A retry goroutine that finishes on its own (provider registered, or the
+	// retry deadline elapsed) leaves its now-inert cancel func in the map; these
+	// spent entries are reaped by the next cancelAllOIDCRetries (settings reload
+	// or shutdown). The map is therefore bounded by the number of distinct
+	// configured issuer URLs, not by retry attempts.
+	oidcRetryCancels = make(map[string]context.CancelFunc)
+)
+
+// cancelAllOIDCRetriesLocked cancels and forgets every in-flight OIDC discovery
+// retry. The caller must hold oidcRetryCancelMu.
+func cancelAllOIDCRetriesLocked() {
 	for issuerURL, cancel := range oidcRetryCancels {
 		cancel()
 		delete(oidcRetryCancels, issuerURL)
 	}
 }
 
+// cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry.
+// Used on settings reload, where InitializeGoth rebuilds all providers from
+// scratch and any outstanding retries are superseded.
+func cancelAllOIDCRetries() {
+	oidcRetryCancelMu.Lock()
+	defer oidcRetryCancelMu.Unlock()
+	cancelAllOIDCRetriesLocked()
+}
+
+// shutdownOIDCRetries cancels every in-flight retry and blocks new ones for the
+// remaining lifetime of the current server instance. Called when the server's
+// context is cancelled (application shutdown), so a retry cannot be started
+// after shutdown has begun (e.g. by a late InitializeGoth/UpdateProviders).
+func shutdownOIDCRetries() {
+	oidcRetryCancelMu.Lock()
+	defer oidcRetryCancelMu.Unlock()
+	oidcRetriesDisabled = true
+	cancelAllOIDCRetriesLocked()
+}
+
+// enableOIDCRetries re-enables OIDC discovery retries for a fresh server
+// instance, clearing any disabled state left by a previous instance's shutdown
+// (relevant in tests that build servers sequentially).
+func enableOIDCRetries() {
+	oidcRetryCancelMu.Lock()
+	defer oidcRetryCancelMu.Unlock()
+	oidcRetriesDisabled = false
+}
+
 // setOIDCRetryCancel stores the cancel function for the retry goroutine of the
 // given issuer URL, cancelling and replacing any existing retry for that same
 // issuer first. Per-issuer keying prevents a second provider's init from
-// orphaning another provider's retry.
-func setOIDCRetryCancel(issuerURL string, cancel context.CancelFunc) {
+// orphaning another provider's retry. It returns false (after cancelling the
+// passed func) when retries are disabled because shutdown has begun, signalling
+// the caller not to start the goroutine.
+func setOIDCRetryCancel(issuerURL string, cancel context.CancelFunc) bool {
 	oidcRetryCancelMu.Lock()
 	defer oidcRetryCancelMu.Unlock()
+	if oidcRetriesDisabled {
+		cancel()
+		return false
+	}
 	if existing, ok := oidcRetryCancels[issuerURL]; ok {
 		existing()
 	}
 	oidcRetryCancels[issuerURL] = cancel
+	return true
 }
 
 // startOIDCRetry starts a background goroutine that retries OIDC discovery with exponential backoff.
@@ -90,12 +131,17 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 
 	go func() {
 		defer close(done)
+		// A single reusable timer (Reset per iteration) instead of time.After
+		// inside the loop, so an early ctx cancellation does not leave an
+		// unexpired timer per backoff round waiting to be garbage collected.
+		timer := time.NewTimer(backoff)
+		defer timer.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				secLog.Info("OIDC discovery retry canceled")
 				return
-			case <-time.After(backoff):
+			case <-timer.C:
 				if time.Now().After(deadline) {
 					secLog.Error("OIDC discovery retry exhausted; provider not available. Save settings to retry.",
 						logger.String("issuer_url", providerConfig.IssuerURL))
@@ -115,10 +161,11 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 					scopes...,
 				)
 				if err != nil {
+					backoff = min(backoff*OIDCRetryBackoffFactor, OIDCRetryMaxBackoff)
 					secLog.Warn("OIDC discovery retry failed",
 						logger.Error(err),
-						logger.Duration("next_backoff", min(backoff*OIDCRetryBackoffFactor, OIDCRetryMaxBackoff)))
-					backoff = min(backoff*OIDCRetryBackoffFactor, OIDCRetryMaxBackoff)
+						logger.Duration("next_backoff", backoff))
+					timer.Reset(backoff)
 					continue
 				}
 
@@ -198,6 +245,9 @@ var (
 // expired-token cleanup); cancelling it stops them, giving the cleanup goroutine
 // a proper shutdown path instead of running for the process lifetime.
 func NewOAuth2Server(ctx context.Context) *OAuth2Server {
+	// Re-enable OIDC discovery retries for this instance, clearing any disabled
+	// state a previous instance's shutdown left behind (sequential tests).
+	enableOIDCRetries()
 	// Use the security logger from the start
 	GetLogger().Info("Initializing OAuth2 server")
 	settings := conf.GetSettings()
@@ -221,14 +271,14 @@ func NewOAuth2Server(ctx context.Context) *OAuth2Server {
 	// goroutine on application shutdown.
 	server.StartAuthCleanup(ctx, time.Hour)
 
-	// Stop any in-flight OIDC discovery retries when the application shuts down.
-	// The retries are package-global (goth's provider registry is global), so a
-	// lightweight watcher on the lifecycle context cancels them, rather than
-	// threading a context field through the global provider-init path (which the
-	// fatcontext linter forbids).
+	// Stop in-flight OIDC discovery retries when the application shuts down and
+	// block any new ones. The retries are package-global (goth's provider
+	// registry is global), so a lightweight watcher on the lifecycle context
+	// drives shutdownOIDCRetries, rather than threading a context field through
+	// the global provider-init path (which the fatcontext linter forbids).
 	go func() {
 		<-ctx.Done()
-		cancelAllOIDCRetries()
+		shutdownOIDCRetries()
 	}()
 
 	GetLogger().Info("OAuth2 server initialization complete")
@@ -576,8 +626,12 @@ func initializeOIDCProvider(providerConfig *conf.OAuthProviderConfig, redirectUR
 		// Cancel any previous retry for this issuer and start a new one.
 		// Keying by issuer URL keeps multiple OIDC providers' retries independent;
 		// setOIDCRetryCancel cancels and replaces only this issuer's prior retry.
+		// If it reports that retries are disabled (shutdown has begun), it has
+		// already cancelled the context and we must not start the goroutine.
 		ctx, cancel := context.WithCancel(context.Background())
-		setOIDCRetryCancel(providerConfig.IssuerURL, cancel)
+		if !setOIDCRetryCancel(providerConfig.IssuerURL, cancel) {
+			return nil
+		}
 		startOIDCRetry(ctx, *providerConfig, redirectURI, scopes)
 		return nil
 	}

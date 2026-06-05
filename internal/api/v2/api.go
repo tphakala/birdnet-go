@@ -913,9 +913,12 @@ func (c *Controller) Shutdown() {
 		backupJobManager.Shutdown()
 	}
 
-	// Flush the API logger
-	if err := c.apiLogger.Flush(); err != nil {
-		GetLogger().Error("Error flushing API log", logger.Error(err))
+	// Flush all log writers (the main writer plus every module writer, including
+	// the security module added for auth events). A module logger's Flush is a
+	// no-op, so flush the central logger to actually persist buffered logs on
+	// shutdown.
+	if err := logger.Global().Flush(); err != nil {
+		GetLogger().Error("Error flushing logs", logger.Error(err))
 	}
 
 	// TODO: The go-cache library's janitor goroutine cannot be stopped.
