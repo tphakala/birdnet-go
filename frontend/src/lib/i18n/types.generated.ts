@@ -2135,6 +2135,7 @@ export type TranslationKey =
   | 'settings.security.baseUrlValidation'
   | 'settings.security.hostLabel'
   | 'settings.security.allowSubnetBypassLabel'
+  | 'settings.security.subnetBypassLocalNote'
   | 'settings.security.allowedSubnetsLabel'
   | 'settings.security.allowedSubnetsHelp'
   | 'settings.security.securityWarningTitle'
