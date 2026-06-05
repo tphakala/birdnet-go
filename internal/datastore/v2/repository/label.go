@@ -42,10 +42,6 @@ type LabelRepository interface {
 	// GetAllByLabelType retrieves all labels of a specific label type.
 	GetAllByLabelType(ctx context.Context, labelTypeID uint) ([]*entities.Label, error)
 
-	// Search finds labels matching the query string.
-	// Searches in scientific_name field.
-	Search(ctx context.Context, query string, limit int) ([]*entities.Label, error)
-
 	// Count returns the total number of labels.
 	Count(ctx context.Context) (int64, error)
 

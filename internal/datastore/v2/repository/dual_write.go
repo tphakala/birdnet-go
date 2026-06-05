@@ -19,8 +19,13 @@ import (
 
 // parseDetectionID converts a string ID to uint.
 // Returns 0 and error if the ID is invalid.
+//
+// Parses at strconv.IntSize (the width of uint on this platform) rather than a
+// fixed 64 bits, so on 32-bit targets (e.g. 32-bit Raspberry Pi OS) an ID that
+// overflows uint is rejected with an error instead of silently truncating the
+// uint64 down to 32 bits, which could collide with a different detection.
 func parseDetectionID(id string) (uint, error) {
-	parsed, err := strconv.ParseUint(id, 10, 64)
+	parsed, err := strconv.ParseUint(id, 10, strconv.IntSize)
 	if err != nil {
 		return 0, fmt.Errorf("invalid detection ID %q: %w", id, err)
 	}
@@ -145,16 +150,23 @@ func (dw *DualWriteRepository) Shutdown() {
 // synced to v2; if it was deleted from legacy, the v2 ghost is removed.
 func (dw *DualWriteRepository) StartReconciliation() {
 	dw.reconcileOnce.Do(func() {
+		dw.reconcileMu.Lock()
+		// Re-check shutdown under the same lock Shutdown takes (Shutdown closes
+		// shutdownCh before acquiring reconcileMu). This closes a race where a
+		// concurrent Shutdown reads a still-nil reconcileTicker and returns
+		// without waiting on the goroutine: either Shutdown observes the
+		// registered ticker and waits on done, or we observe the close here and
+		// never start the goroutine. Defer creating the ticker until after this
+		// check so no timer is registered with the runtime when already shutting down.
 		select {
 		case <-dw.shutdownCh:
+			dw.reconcileMu.Unlock()
 			return
 		default:
 		}
 
 		ticker := time.NewTicker(reconcileInterval)
 		done := make(chan struct{})
-
-		dw.reconcileMu.Lock()
 		dw.reconcileTicker = ticker
 		dw.reconcileDone = done
 		dw.reconcileMu.Unlock()
@@ -552,7 +564,10 @@ func (dw *DualWriteRepository) Search(ctx context.Context, filters *datastore.De
 	}
 
 	if readFromV2 {
-		v2Filters := dw.convertFilters(filters)
+		v2Filters, err := dw.convertFilters(filters)
+		if err != nil {
+			return nil, 0, err
+		}
 		dets, total, err := dw.v2.Search(ctx, v2Filters)
 		if err != nil {
 			return nil, 0, err
@@ -587,7 +602,10 @@ func (dw *DualWriteRepository) GetBySpecies(ctx context.Context, species string,
 		if filters == nil {
 			filters = &datastore.DetectionFilters{}
 		}
-		searchFilters := dw.convertFilters(filters)
+		searchFilters, err := dw.convertFilters(filters)
+		if err != nil {
+			return nil, 0, err
+		}
 		searchFilters.LabelIDs = labelIDs
 		if searchFilters.Limit == 0 {
 			searchFilters.Limit = 100
@@ -894,9 +912,28 @@ func (dw *DualWriteRepository) convertFromV2Detections(dets []*entities.Detectio
 }
 
 // convertFilters converts datastore filters to v2 SearchFilters.
-func (dw *DualWriteRepository) convertFilters(filters *datastore.DetectionFilters) *SearchFilters {
+//
+// Limitation: the dual-write read path cannot resolve common-name queries.
+// Unlike the live v2-only path (ConvertSearchFilters), this conversion has no
+// SciToCommon/SciToCommonFolded name-map source, so it cannot populate
+// SearchFilters.CommonLabelIDs. A free-text Query would therefore silently
+// degrade to scientific-name-only matching and return wrong results. Until a
+// name-map source is plumbed into DualWriteRepository and the dual-write read
+// path is reactivated, fail loud with ErrCommonNameSearchUnsupported on a
+// free-text query instead of degrading silently.
+func (dw *DualWriteRepository) convertFilters(filters *datastore.DetectionFilters) (*SearchFilters, error) {
+	// Tolerate nil filters like the sibling converters (ConvertSearchFilters,
+	// legacy Search): an absent filter set means "no constraints".
+	if filters == nil {
+		return &SearchFilters{}, nil
+	}
+	if filters.Query != "" {
+		return nil, ErrCommonNameSearchUnsupported
+	}
+
+	// Query intentionally omitted: a non-empty Query is rejected by the guard
+	// above, so it is always empty here and the field stays at its zero value.
 	sf := &SearchFilters{
-		Query:    filters.Query,
 		Limit:    filters.Limit,
 		Offset:   filters.Offset,
 		SortDesc: !filters.SortAscending,
@@ -949,7 +986,7 @@ func (dw *DualWriteRepository) convertFilters(filters *datastore.DetectionFilter
 		}
 	}
 
-	return sf
+	return sf, nil
 }
 
 // ============================================================================

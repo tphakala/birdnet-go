@@ -476,11 +476,6 @@ func (m *mockLabelRepository) GetAllByLabelType(_ context.Context, _ uint) ([]*e
 	return nil, nil //nolint:nilnil // mock implementation
 }
 
-// Search implements LabelRepository.
-func (m *mockLabelRepository) Search(_ context.Context, _ string, _ int) ([]*entities.Label, error) {
-	return nil, nil //nolint:nilnil // mock implementation
-}
-
 // Count implements LabelRepository.
 func (m *mockLabelRepository) Count(_ context.Context) (int64, error) { return 0, nil }
 
@@ -1027,23 +1022,12 @@ func TestConvertSearchFilters(t *testing.T) {
 // ResolveCommonNameToLabelIDs Tests
 // =============================================================================
 
-// Extended mock that also implements Search (kept for interface completeness; the
-// common-name resolver does not call Search, so searchResults is left unset here).
-type mockLabelRepositoryWithSearch struct {
-	mockLabelRepository
-	searchResults []*entities.Label
-}
-
-func (m *mockLabelRepositoryWithSearch) Search(_ context.Context, _ string, _ int) ([]*entities.Label, error) {
-	return m.searchResults, nil
-}
-
 func TestResolveCommonNameToLabelIDs(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("empty species returns nil", func(t *testing.T) {
 		deps := &FilterLookupDeps{
-			LabelRepo: &mockLabelRepositoryWithSearch{},
+			LabelRepo: &mockLabelRepository{},
 		}
 
 		result, err := ResolveCommonNameToLabelIDs(ctx, deps, "")
@@ -1059,11 +1043,9 @@ func TestResolveCommonNameToLabelIDs(t *testing.T) {
 
 	t.Run("no SciToCommon map returns nil", func(t *testing.T) {
 		deps := &FilterLookupDeps{
-			LabelRepo: &mockLabelRepositoryWithSearch{
-				mockLabelRepository: mockLabelRepository{
-					labels: map[string]*entities.Label{
-						"Erithacus rubecula": {ID: 1, ScientificName: "Erithacus rubecula"},
-					},
+			LabelRepo: &mockLabelRepository{
+				labels: map[string]*entities.Label{
+					"Erithacus rubecula": {ID: 1, ScientificName: "Erithacus rubecula"},
 				},
 			},
 		}
@@ -1075,11 +1057,9 @@ func TestResolveCommonNameToLabelIDs(t *testing.T) {
 
 	t.Run("no common-name match returns nil (not sentinel)", func(t *testing.T) {
 		deps := &FilterLookupDeps{
-			LabelRepo: &mockLabelRepositoryWithSearch{
-				mockLabelRepository: mockLabelRepository{
-					labels: map[string]*entities.Label{
-						"Parus major": {ID: 1, ScientificName: "Parus major"},
-					},
+			LabelRepo: &mockLabelRepository{
+				labels: map[string]*entities.Label{
+					"Parus major": {ID: 1, ScientificName: "Parus major"},
 				},
 			},
 			SciToCommon: map[string]string{
@@ -1094,14 +1074,11 @@ func TestResolveCommonNameToLabelIDs(t *testing.T) {
 
 	t.Run("partial common name match returns label IDs", func(t *testing.T) {
 		deps := &FilterLookupDeps{
-			LabelRepo: &mockLabelRepositoryWithSearch{
-				mockLabelRepository: mockLabelRepository{
-					labels: map[string]*entities.Label{
-						"Turdus pilaris": {ID: 10, ScientificName: "Turdus pilaris"},
-						"Turdus merula":  {ID: 11, ScientificName: "Turdus merula"},
-					},
+			LabelRepo: &mockLabelRepository{
+				labels: map[string]*entities.Label{
+					"Turdus pilaris": {ID: 10, ScientificName: "Turdus pilaris"},
+					"Turdus merula":  {ID: 11, ScientificName: "Turdus merula"},
 				},
-				searchResults: []*entities.Label{},
 			},
 			SciToCommon: map[string]string{
 				"Turdus pilaris": "räkättirastas",
@@ -1117,13 +1094,10 @@ func TestResolveCommonNameToLabelIDs(t *testing.T) {
 
 	t.Run("partial common name match is case-insensitive", func(t *testing.T) {
 		deps := &FilterLookupDeps{
-			LabelRepo: &mockLabelRepositoryWithSearch{
-				mockLabelRepository: mockLabelRepository{
-					labels: map[string]*entities.Label{
-						"Parus major": {ID: 20, ScientificName: "Parus major"},
-					},
+			LabelRepo: &mockLabelRepository{
+				labels: map[string]*entities.Label{
+					"Parus major": {ID: 20, ScientificName: "Parus major"},
 				},
-				searchResults: []*entities.Label{},
 			},
 			SciToCommon: map[string]string{
 				"Parus major": "Talitiainen",
@@ -1140,12 +1114,10 @@ func TestResolveCommonNameToLabelIDs(t *testing.T) {
 		// not here, so a label whose common name does not match is not returned even if its
 		// scientific name contains the query.
 		deps := &FilterLookupDeps{
-			LabelRepo: &mockLabelRepositoryWithSearch{
-				mockLabelRepository: mockLabelRepository{
-					labels: map[string]*entities.Label{
-						"Turdus migratorius": {ID: 30, ScientificName: "Turdus migratorius"},
-						"Erithacus rubecula": {ID: 5, ScientificName: "Erithacus rubecula"},
-					},
+			LabelRepo: &mockLabelRepository{
+				labels: map[string]*entities.Label{
+					"Turdus migratorius": {ID: 30, ScientificName: "Turdus migratorius"},
+					"Erithacus rubecula": {ID: 5, ScientificName: "Erithacus rubecula"},
 				},
 			},
 			SciToCommon: map[string]string{
@@ -1163,11 +1135,9 @@ func TestResolveCommonNameToLabelIDs(t *testing.T) {
 		// French-locale instance: displayed name "Corneille noire" for Corvus corone.
 		// Typing the partial "Corneille" must resolve to the label.
 		deps := &FilterLookupDeps{
-			LabelRepo: &mockLabelRepositoryWithSearch{
-				mockLabelRepository: mockLabelRepository{
-					labels: map[string]*entities.Label{
-						"Corvus corone": {ID: 7, ScientificName: "Corvus corone"},
-					},
+			LabelRepo: &mockLabelRepository{
+				labels: map[string]*entities.Label{
+					"Corvus corone": {ID: 7, ScientificName: "Corvus corone"},
 				},
 			},
 			SciToCommon: map[string]string{
@@ -1184,13 +1154,10 @@ func TestResolveCommonNameToLabelIDs(t *testing.T) {
 		// "ö" as combining sequence (NFD): o + U+0308
 		nfdQuery := "lehtopöllö"
 		deps := &FilterLookupDeps{
-			LabelRepo: &mockLabelRepositoryWithSearch{
-				mockLabelRepository: mockLabelRepository{
-					labels: map[string]*entities.Label{
-						"Strix aluco": {ID: 40, ScientificName: "Strix aluco"},
-					},
+			LabelRepo: &mockLabelRepository{
+				labels: map[string]*entities.Label{
+					"Strix aluco": {ID: 40, ScientificName: "Strix aluco"},
 				},
-				searchResults: []*entities.Label{},
 			},
 			SciToCommon: map[string]string{
 				"Strix aluco": "Lehtopöllö",
@@ -1204,11 +1171,9 @@ func TestResolveCommonNameToLabelIDs(t *testing.T) {
 
 	t.Run("prefers precomputed SciToCommonFolded map", func(t *testing.T) {
 		deps := &FilterLookupDeps{
-			LabelRepo: &mockLabelRepositoryWithSearch{
-				mockLabelRepository: mockLabelRepository{
-					labels: map[string]*entities.Label{
-						"Corvus corone": {ID: 7, ScientificName: "Corvus corone"},
-					},
+			LabelRepo: &mockLabelRepository{
+				labels: map[string]*entities.Label{
+					"Corvus corone": {ID: 7, ScientificName: "Corvus corone"},
 				},
 			},
 			// Only the folded (already lower-cased, NFC) map is supplied.
@@ -1234,7 +1199,7 @@ func TestResolveCommonNameToLabelIDs(t *testing.T) {
 			labels[sci] = &entities.Label{ID: uint(i) + 1, ScientificName: sci}
 		}
 		deps := &FilterLookupDeps{
-			LabelRepo:   &mockLabelRepositoryWithSearch{mockLabelRepository: mockLabelRepository{labels: labels}},
+			LabelRepo:   &mockLabelRepository{labels: labels},
 			SciToCommon: sciToCommon,
 		}
 
