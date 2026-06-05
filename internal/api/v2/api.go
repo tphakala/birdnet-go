@@ -753,6 +753,31 @@ func (c *Controller) initRoutes() {
 	}
 }
 
+// errDatastoreUnavailable is returned by DS-dependent handlers when the controller was
+// constructed without a datastore. NewWithOptions permits a nil datastore ("datastore
+// disabled" mode) and initRoutes skips registering the detection and media route groups
+// in that mode; requireDatastore is defense in depth for any such handler reached anyway.
+var errDatastoreUnavailable = errors.NewStd("datastore is not available")
+
+// requireDatastore writes a 503 Service Unavailable response and returns the non-nil
+// errDatastoreUnavailable when the controller has no datastore, so handlers can guard with:
+//
+//	if err := c.requireDatastore(ctx); err != nil {
+//	    return err
+//	}
+//
+// It returns the sentinel (not HandleError's nil) so the guard actually short-circuits the
+// caller; the 503 body is already written, so echo's error handler skips the committed
+// response. This honors the constructor's advertised "datastore disabled" mode instead of
+// letting a nil c.DS dereference panic.
+func (c *Controller) requireDatastore(ctx echo.Context) error {
+	if c.DS == nil {
+		_ = c.HandleError(ctx, errDatastoreUnavailable, "Datastore is not available", http.StatusServiceUnavailable)
+		return errDatastoreUnavailable
+	}
+	return nil
+}
+
 // HealthCheck handles the API health check endpoint
 func (c *Controller) HealthCheck(ctx echo.Context) error {
 	// Read version/build/debug from this controller's own snapshot (nil-safe for
@@ -780,13 +805,16 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 		response["environment"] = "production"
 	}
 
-	// Check database connectivity - simple check if we can access the datastore
+	// Check database connectivity - simple check if we can access the datastore.
+	// c.DS may be nil in the "datastore disabled" mode (see NewWithOptions); report
+	// that instead of dereferencing a nil datastore.
 	dbStatus := "connected"
 	var dbError string
 
-	// Try a simple database operation to check connectivity
-	_, dbErr := c.DS.GetLastDetections(1)
-	if dbErr != nil {
+	if c.DS == nil {
+		dbStatus = "unavailable"
+	} else if _, dbErr := c.DS.GetLastDetections(1); dbErr != nil {
+		// Try a simple database operation to check connectivity
 		dbStatus = "disconnected"
 		dbError = dbErr.Error()
 		// If database is critical, we might want to change the overall status

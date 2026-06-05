@@ -57,8 +57,10 @@ func (c *Controller) requireDebugMode(next echo.HandlerFunc) echo.HandlerFunc {
 
 // initDebugRoutes registers debug-related routes
 func (c *Controller) initDebugRoutes() {
-	// Only register debug routes if debug mode is enabled
-	if !c.Settings.Debug {
+	// Only register debug routes if debug mode is enabled. Read via controllerSettings()
+	// (nil-safe snapshot) to match requireDebugMode and avoid dereferencing a nil
+	// c.Settings on standalone/test controllers.
+	if s := c.controllerSettings(); s == nil || !s.Debug {
 		GetLogger().Debug("Debug mode not enabled, skipping debug routes")
 		return
 	}
@@ -247,15 +249,20 @@ func getTelemetryStatus(settings *conf.Settings) map[string]any {
 		if coord := getGlobalInitCoordinator(); coord != nil {
 			health := coord.HealthCheck()
 			status["healthy"] = health.Healthy
-			status["components"] = make(map[string]any)
 
+			// Build the components map in a local variable and assign it once, instead
+			// of re-asserting status["components"].(map[string]any) every iteration. The
+			// repeated unchecked assertion was robust only as long as the make() above it
+			// stayed adjacent; a local keeps the type concrete and the loop panic-free.
+			components := make(map[string]any)
 			for name, compHealth := range health.Components {
-				status["components"].(map[string]any)[name] = map[string]any{
+				components[name] = map[string]any{
 					"state":   compHealth.State.String(),
 					"healthy": compHealth.Healthy,
 					"error":   compHealth.Error,
 				}
 			}
+			status["components"] = components
 		}
 	}
 
