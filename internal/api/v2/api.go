@@ -84,6 +84,7 @@ type Controller struct {
 	startTime            *time.Time
 	SFS                  *securefs.SecureFS     // Add SecureFS instance
 	apiLogger            logger.Logger          // Structured logger for API operations
+	securityLogger       logger.Logger          // Logger scoped to the "security" module for authentication events
 	metrics              *observability.Metrics // Shared metrics instance
 	spectrogramGenerator *spectrogram.Generator // Shared spectrogram generator (initialized after SFS)
 
@@ -522,6 +523,11 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// Initialize structured logger for API requests
 	c.apiLogger = logger.Global().Module("api")
 
+	// Authentication events (form login/logout, OAuth callback) log to the
+	// "security" module so they are co-located with the OAuth and provider-init
+	// logging, where admins look when debugging auth.
+	c.securityLogger = logger.Global().Module("security")
+
 	// Load local taxonomy database for fast species lookups
 	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	if err != nil {
@@ -649,7 +655,7 @@ func (c *Controller) LoggingMiddleware() echo.MiddlewareFunc {
 					status = he.Code
 				} else if status < http.StatusBadRequest {
 					// Non-HTTP errors (e.g. database errors) won't have a
-					// status set yet — Echo's error handler runs after this
+					// status set yet; Echo's error handler runs after this
 					// middleware. Default to 500 to avoid logging failures
 					// as successes.
 					status = http.StatusInternalServerError
@@ -907,9 +913,12 @@ func (c *Controller) Shutdown() {
 		backupJobManager.Shutdown()
 	}
 
-	// Flush the API logger
-	if err := c.apiLogger.Flush(); err != nil {
-		GetLogger().Error("Error flushing API log", logger.Error(err))
+	// Flush all log writers (the main writer plus every module writer, including
+	// the security module added for auth events). A module logger's Flush is a
+	// no-op, so flush the central logger to actually persist buffered logs on
+	// shutdown.
+	if err := logger.Global().Flush(); err != nil {
+		GetLogger().Error("Error flushing logs", logger.Error(err))
 	}
 
 	// TODO: The go-cache library's janitor goroutine cannot be stopped.
@@ -1037,7 +1046,7 @@ func (c *Controller) handleErrorInternal(ctx echo.Context, err error, message st
 	c.logErrorIfEnabled("API Error", fields...)
 
 	// Report server-side errors (5xx) to Sentry telemetry.
-	// 4xx errors are client mistakes (bad input, not found) — not bugs — and are excluded.
+	// 4xx errors are client mistakes (bad input, not found), not bugs, and are excluded.
 	if code >= http.StatusInternalServerError {
 		c.reportErrorToTelemetry(ctx, err, message, code)
 	}

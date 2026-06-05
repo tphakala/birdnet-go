@@ -9,9 +9,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// GetLogger returns the auth package logger.
+// GetLogger returns the auth package logger. Authentication events (basic-auth
+// login attempts, failures, logout) are routed to the "security" log module so
+// they are co-located with the OAuth/OIDC and provider-init logging, where
+// admins look when debugging auth, instead of being split across the "api" and
+// "auth" modules (matching #3381/#3384).
 func GetLogger() logger.Logger {
-	return logger.Global().Module("auth")
+	return logger.Global().Module("security")
 }
 
 // Sentinel errors for authentication failures.
