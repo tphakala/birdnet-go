@@ -25,7 +25,7 @@ func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
 	settings := conf.NewTestSettings().Apply()
 	t.Cleanup(func() { conf.NewTestSettings().Apply() })
 
-	s := NewOAuth2Server()
+	s := NewOAuth2Server(t.Context())
 
 	// Initialize gothic exactly as in production
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
@@ -75,7 +75,7 @@ func TestIsUserAuthenticatedTableDriven(t *testing.T) {
 				},
 			}
 
-			s := NewOAuth2Server()
+			s := NewOAuth2Server(t.Context())
 
 			// Initialize gothic exactly as in production
 			gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
@@ -160,7 +160,7 @@ func TestOAuth2Server(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewOAuth2Server()
+			s := NewOAuth2Server(t.Context())
 			tt.test(t, s)
 		})
 	}
@@ -1434,7 +1434,10 @@ func TestInitializeProviders_OIDC_Success(t *testing.T) {
 func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
 	goth.ClearProviders()
 	t.Cleanup(goth.ClearProviders)
-	t.Cleanup(cancelOIDCRetry)
+	// A prior test's server shutdown may have disabled retries; re-enable so the
+	// discovery-failure path actually starts a background retry.
+	enableOIDCRetries()
+	t.Cleanup(cancelAllOIDCRetries)
 
 	settings := &conf.Settings{
 		Security: conf.Security{
@@ -1654,14 +1657,21 @@ func TestStartOIDCRetry_CanceledByContext(t *testing.T) {
 }
 
 func TestCancelOIDCRetry(t *testing.T) {
-	// Verify cancelOIDCRetry is safe to call when no retry is running
-	cancelOIDCRetry()
+	// The retry map and disabled flag are package-global shared state; start
+	// enabled (a prior test's server shutdown may have disabled retries) and
+	// clean up afterwards.
+	enableOIDCRetries()
+	t.Cleanup(cancelAllOIDCRetries)
 
-	// Set a cancel function and verify it gets called
+	// cancelAllOIDCRetries must be safe to call when no retry is running.
+	cancelAllOIDCRetries()
+
+	// Set a cancel function for an issuer and verify cancelAllOIDCRetries calls it.
+	const issuer = "https://issuer.example/single"
 	ctx, cancel := context.WithCancel(t.Context())
-	setOIDCRetryCancel(cancel)
+	require.True(t, setOIDCRetryCancel(issuer, cancel), "retry should register while enabled")
 
-	cancelOIDCRetry()
+	cancelAllOIDCRetries()
 
 	select {
 	case <-ctx.Done():
@@ -1669,4 +1679,77 @@ func TestCancelOIDCRetry(t *testing.T) {
 	default:
 		t.Error("expected context to be canceled")
 	}
+}
+
+// TestOIDCRetryCancel_PerIssuer is the regression test for the per-issuer OIDC
+// retry fix: with a single
+// package-global cancel func, initializing a second OIDC provider cancelled the
+// first provider's retry. Per-issuer keying must keep each provider's retry
+// independent, and cancelAllOIDCRetries must cancel every outstanding retry.
+func TestOIDCRetryCancel_PerIssuer(t *testing.T) {
+	// Start from a clean slate; earlier tests may have left entries behind or
+	// disabled retries via a server shutdown.
+	enableOIDCRetries()
+	t.Cleanup(cancelAllOIDCRetries)
+	cancelAllOIDCRetries()
+
+	const issuerA = "https://issuer-a.example"
+	const issuerB = "https://issuer-b.example"
+
+	ctxA, cancelA := context.WithCancel(t.Context())
+	ctxB, cancelB := context.WithCancel(t.Context())
+
+	// Register the first provider's retry, then the second's. Under the old
+	// single-global design, registering B cancelled A. It must not now.
+	require.True(t, setOIDCRetryCancel(issuerA, cancelA), "issuer A retry should register")
+	require.True(t, setOIDCRetryCancel(issuerB, cancelB), "issuer B retry should register")
+
+	require.NoError(t, ctxA.Err(), "issuer A retry must survive issuer B registration")
+	require.NoError(t, ctxB.Err(), "issuer B retry must be active")
+
+	// Re-registering the same issuer cancels and replaces only that issuer's
+	// prior retry, leaving the other issuer untouched.
+	ctxB2, cancelB2 := context.WithCancel(t.Context())
+	require.True(t, setOIDCRetryCancel(issuerB, cancelB2), "issuer B retry should re-register")
+	require.Error(t, ctxB.Err(), "prior issuer B retry must be cancelled when replaced")
+	require.NoError(t, ctxB2.Err(), "replacement issuer B retry must be active")
+	require.NoError(t, ctxA.Err(), "issuer A must remain active when issuer B is replaced")
+
+	// cancelAllOIDCRetries cancels every remaining retry.
+	cancelAllOIDCRetries()
+	require.Error(t, ctxA.Err(), "cancelAllOIDCRetries must cancel issuer A")
+	assert.Error(t, ctxB2.Err(), "cancelAllOIDCRetries must cancel the replacement retry")
+}
+
+// TestOIDCRetry_DisabledAfterShutdown verifies that once shutdown has begun no
+// new OIDC discovery retry can start, closing the race where a late provider
+// (re)initialization would spawn a goroutine that outlives the server.
+func TestOIDCRetry_DisabledAfterShutdown(t *testing.T) {
+	// Restore enabled state for any later tests sharing this package-global.
+	t.Cleanup(enableOIDCRetries)
+	t.Cleanup(cancelAllOIDCRetries)
+	enableOIDCRetries()
+
+	const issuer = "https://issuer.example/shutdown"
+
+	// While enabled, a retry registers and stays active.
+	ctx1, cancel1 := context.WithCancel(t.Context())
+	require.True(t, setOIDCRetryCancel(issuer, cancel1), "retry should register while enabled")
+	require.NoError(t, ctx1.Err(), "registered retry must stay active")
+
+	// Shutdown cancels in-flight retries and blocks new ones.
+	shutdownOIDCRetries()
+	require.Error(t, ctx1.Err(), "shutdown must cancel the in-flight retry")
+
+	// A registration after shutdown is refused and its context is cancelled,
+	// so initializeOIDCProvider will not start the goroutine.
+	ctx2, cancel2 := context.WithCancel(t.Context())
+	require.False(t, setOIDCRetryCancel(issuer, cancel2), "retry must be refused after shutdown")
+	require.Error(t, ctx2.Err(), "refused retry's context must be cancelled")
+
+	// A fresh server instance re-enables retries.
+	enableOIDCRetries()
+	_, cancel3 := context.WithCancel(t.Context())
+	t.Cleanup(cancel3)
+	require.True(t, setOIDCRetryCancel(issuer, cancel3), "retry should register again after re-enable")
 }

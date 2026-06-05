@@ -67,7 +67,7 @@ func TestGenerateSpectrogramFromRelIgnoresLiveExportPath(t *testing.T) {
 	conf.SetTestSettings(live)
 	controller.settingsAtomic.Store(live)
 
-	got, err := controller.generateSpectrogramFromRel(ctx, relAudioPath, "irrelevant/clip/path.wav", width, raw, "", "")
+	got, err := controller.generateSpectrogramFromRel(ctx, relAudioPath, "irrelevant/clip/path.wav", "", width, raw, "", "")
 	require.NoError(t, err)
 	assert.Equal(t, relSpectrogramPath, got,
 		"generateSpectrogramFromRel must derive the spectrogram path from the threaded relAudioPath, not the live Export.Path")

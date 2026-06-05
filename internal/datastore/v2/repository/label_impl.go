@@ -264,18 +264,6 @@ func (r *labelRepository) GetAllByLabelType(ctx context.Context, labelTypeID uin
 	return labels, err
 }
 
-// Search finds labels matching the query string.
-func (r *labelRepository) Search(ctx context.Context, query string, limit int) ([]*entities.Label, error) {
-	var labels []*entities.Label
-	searchPattern := "%" + query + "%"
-	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("scientific_name LIKE ?", searchPattern).
-		Limit(limit).
-		Order("scientific_name ASC").
-		Find(&labels).Error
-	return labels, err
-}
-
 // Count returns the total number of labels.
 func (r *labelRepository) Count(ctx context.Context) (int64, error) {
 	var count int64

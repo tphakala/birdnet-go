@@ -2261,6 +2261,7 @@ export type TranslationKey =
   | 'settings.security.hostLabel'
   | 'settings.security.hostHelp'
   | 'settings.security.allowSubnetBypassLabel'
+  | 'settings.security.subnetBypassLocalNote'
   | 'settings.security.allowedSubnetsLabel'
   | 'settings.security.allowedSubnetsHelp'
   | 'settings.security.securityWarningTitle'

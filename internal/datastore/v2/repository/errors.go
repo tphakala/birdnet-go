@@ -70,4 +70,11 @@ var (
 
 	// ErrAlertRuleNotFound indicates the requested alert rule does not exist.
 	ErrAlertRuleNotFound = errors.NewStd("alert rule not found")
+
+	// ErrCommonNameSearchUnsupported indicates a free-text query reached the
+	// dual-write read path, which has no name-map source to resolve common names
+	// to label IDs. Honoring the query would silently degrade to scientific-name-only
+	// matching and return wrong results, so the conversion fails loud instead.
+	// Remove once the dual-write read path is reactivated with a name-map source wired in.
+	ErrCommonNameSearchUnsupported = errors.NewStd("common-name search not supported on the dual-write read path")
 )

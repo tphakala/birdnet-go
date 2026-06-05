@@ -1329,6 +1329,10 @@
           onchange={updateSubnetBypassEnabled}
         />
 
+        <SettingsNote>
+          <p>{t('settings.security.subnetBypassLocalNote')}</p>
+        </SettingsNote>
+
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
         <fieldset
           disabled={!settings.allowSubnetBypass?.enabled || store.isLoading || store.isSaving}

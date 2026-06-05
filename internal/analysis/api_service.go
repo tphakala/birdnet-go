@@ -44,6 +44,10 @@ type APIServerService struct {
 	systemMonitor  *monitor.SystemMonitor
 	controlChan    chan string
 	audioLevelChan chan audiocore.AudioLevelData
+
+	// cancel stops background goroutines owned by subsystems (e.g. the OAuth2
+	// server's periodic token cleanup). Created in Start, invoked in Stop.
+	cancel context.CancelFunc
 }
 
 // NewAPIServerService creates a new APIServerService with the given dependencies.
@@ -67,7 +71,7 @@ func (s *APIServerService) Name() string {
 // It fails fast if required dependencies (DataStore, BirdNET) are not available.
 //
 //nolint:gocognit // Orchestration function that initializes multiple subsystems in sequence.
-func (s *APIServerService) Start(_ context.Context) error {
+func (s *APIServerService) Start(ctx context.Context) error {
 	// If Start fails after creating resources, clean up to prevent leaks.
 	// The App framework only calls Stop() on services that started successfully,
 	// so the failing service must clean up after itself.
@@ -75,6 +79,10 @@ func (s *APIServerService) Start(_ context.Context) error {
 	defer func() {
 		if !startSucceeded {
 			// Best-effort cleanup of partially initialized resources.
+			if s.cancel != nil {
+				s.cancel()
+				s.cancel = nil
+			}
 			if s.systemMonitor != nil {
 				s.systemMonitor.Stop()
 				s.systemMonitor = nil
@@ -122,7 +130,7 @@ func (s *APIServerService) Start(_ context.Context) error {
 	s.proc = processor.New(s.settings, dataStore, bn, s.metrics, s.birdImageCache, GetLogger())
 	s.proc.SetSunCalc(s.sunCalc)
 
-	// Initialize backup system (optional — failure is non-fatal).
+	// Initialize backup system (optional; failure is non-fatal).
 	backupLog := logger.Global().Module("backup")
 	backupManager, backupScheduler, err := initializeBackupSystem(s.settings, backupLog)
 	if err != nil {
@@ -136,7 +144,7 @@ func (s *APIServerService) Start(_ context.Context) error {
 	}
 
 	// Initialize async services (event bus, notification workers, telemetry workers).
-	// This is fatal — the system cannot operate without these.
+	// This is fatal: the system cannot operate without these.
 	if err := telemetry.InitializeAsyncSystems(); err != nil {
 		GetLogger().Error("failed to initialize critical async services",
 			logger.Error(err),
@@ -148,15 +156,22 @@ func (s *APIServerService) Start(_ context.Context) error {
 			Build()
 	}
 
-	// Initialize system monitor (optional — failure is non-fatal).
+	// Initialize system monitor (optional; failure is non-fatal).
 	s.systemMonitor = initializeSystemMonitor(s.settings)
 
 	// Create channels.
 	s.controlChan = make(chan string, 1)
 	s.audioLevelChan = make(chan audiocore.AudioLevelData, 100)
 
+	// Derive a service lifecycle context, cancelled when the service stops (or
+	// when the parent context is cancelled), so background goroutines owned by
+	// subsystems (the OAuth2 server's periodic token cleanup) terminate on
+	// shutdown instead of running for the process lifetime.
+	serviceCtx, cancel := context.WithCancel(ctx)
+	s.cancel = cancel
+
 	// Create OAuth2 server.
-	s.oauth2Server = security.NewOAuth2Server()
+	s.oauth2Server = security.NewOAuth2Server(serviceCtx)
 
 	// Create and start the HTTP API server.
 	GetLogger().Info("starting HTTP server")
@@ -207,6 +222,13 @@ func (s *APIServerService) Start(_ context.Context) error {
 // It is safe to call before Start() or multiple times.
 func (s *APIServerService) Stop(ctx context.Context) error {
 	log := GetLogger()
+
+	// Cancel the service lifecycle context first so background goroutines owned
+	// by subsystems (the OAuth2 server's periodic token cleanup) stop promptly.
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
+	}
 
 	// Stop system monitor.
 	if s.systemMonitor != nil {

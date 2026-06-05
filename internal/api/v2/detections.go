@@ -130,8 +130,16 @@ func (c *Controller) checkDetectionNotLocked(ctx echo.Context, idStr string, inM
 
 // initDetectionRoutes registers all detection-related API endpoints
 func (c *Controller) initDetectionRoutes() {
-	// Initialize the cache with a 5-minute default expiration and 10-minute cleanup interval
-	c.detectionCache = cache.New(detectionCacheExpiry, detectionCacheCleanup)
+	// Detection handlers dereference c.DS. Honor the constructor's "datastore disabled"
+	// mode (NewWithOptions permits a nil datastore) by not registering this route group
+	// when there is no datastore, instead of registering handlers that would panic.
+	if c.DS == nil {
+		c.logWarnIfEnabled("Skipping detection routes: datastore is not available")
+		return
+	}
+
+	// detectionCache is already initialized by the constructor (NewWithOptions); do not
+	// re-create it here, which would orphan the constructor's cache (and its janitor).
 
 	// Detection endpoints - publicly accessible
 	//

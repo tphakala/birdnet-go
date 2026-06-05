@@ -20,7 +20,6 @@ func TestConvertFilters_PreservesAllFields(t *testing.T) {
 	verified := true
 
 	filters := &datastore.DetectionFilters{
-		Query: "Turdus merula",
 		Confidence: &datastore.ConfidenceRange{
 			Operator: ">=",
 			Value:    minConf,
@@ -32,9 +31,9 @@ func TestConvertFilters_PreservesAllFields(t *testing.T) {
 	}
 
 	dw := &DualWriteRepository{}
-	sf := dw.convertFilters(filters)
+	sf, err := dw.convertFilters(filters)
+	require.NoError(t, err)
 
-	assert.Equal(t, "Turdus merula", sf.Query)
 	require.NotNil(t, sf.MinConfidence)
 	assert.InDelta(t, minConf, *sf.MinConfidence, 0.001)
 	require.NotNil(t, sf.IsLocked)
@@ -46,6 +45,40 @@ func TestConvertFilters_PreservesAllFields(t *testing.T) {
 	assert.True(t, sf.SortDesc)
 }
 
+// TestConvertFilters_FreeTextQueryFailsLoud pins the fail-loud guard: the
+// dual-write read path has no name-map source, so it cannot resolve a free-text
+// query to common-name label IDs. Rather than silently degrade to
+// scientific-name-only matching (returning wrong results), convertFilters must
+// reject a non-empty Query with ErrCommonNameSearchUnsupported.
+func TestConvertFilters_FreeTextQueryFailsLoud(t *testing.T) {
+	t.Parallel()
+
+	filters := &datastore.DetectionFilters{
+		Query: "robin",
+		Limit: 25,
+	}
+
+	dw := &DualWriteRepository{}
+	sf, err := dw.convertFilters(filters)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrCommonNameSearchUnsupported)
+	assert.Nil(t, sf)
+}
+
+// TestConvertFilters_NilFilters pins the defensive nil guard: like the sibling
+// converters, a nil filter set means "no constraints" and must not panic.
+func TestConvertFilters_NilFilters(t *testing.T) {
+	t.Parallel()
+
+	dw := &DualWriteRepository{}
+	sf, err := dw.convertFilters(nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, sf)
+	assert.Empty(t, sf.Query)
+}
+
 func TestConvertFilters_VerifiedFalse(t *testing.T) {
 	t.Parallel()
 
@@ -55,7 +88,8 @@ func TestConvertFilters_VerifiedFalse(t *testing.T) {
 	}
 
 	dw := &DualWriteRepository{}
-	sf := dw.convertFilters(filters)
+	sf, err := dw.convertFilters(filters)
+	require.NoError(t, err)
 
 	require.NotNil(t, sf.IsReviewed)
 	assert.False(t, *sf.IsReviewed)
@@ -70,7 +104,8 @@ func TestConvertFilters_DateRange(t *testing.T) {
 	}
 
 	dw := &DualWriteRepository{}
-	sf := dw.convertFilters(filters)
+	sf, err := dw.convertFilters(filters)
+	require.NoError(t, err)
 
 	require.NotNil(t, sf.StartTime)
 	require.NotNil(t, sf.EndTime)
@@ -90,7 +125,8 @@ func TestConvertFilters_SingleDate(t *testing.T) {
 	}
 
 	dw := &DualWriteRepository{}
-	sf := dw.convertFilters(filters)
+	sf, err := dw.convertFilters(filters)
+	require.NoError(t, err)
 
 	require.NotNil(t, sf.StartTime)
 	require.NotNil(t, sf.EndTime)
@@ -106,7 +142,8 @@ func TestConvertFilters_NoDates(t *testing.T) {
 	filters := &datastore.DetectionFilters{}
 
 	dw := &DualWriteRepository{}
-	sf := dw.convertFilters(filters)
+	sf, err := dw.convertFilters(filters)
+	require.NoError(t, err)
 
 	assert.Nil(t, sf.StartTime)
 	assert.Nil(t, sf.EndTime)
@@ -139,7 +176,8 @@ func TestConvertFilters_ConfidenceOperators(t *testing.T) {
 				},
 			}
 			dw := &DualWriteRepository{}
-			sf := dw.convertFilters(filters)
+			sf, err := dw.convertFilters(filters)
+			require.NoError(t, err)
 
 			if tt.wantMin {
 				require.NotNil(t, sf.MinConfidence)
