@@ -2152,12 +2152,15 @@
         },
         "githubRequired": {
           "title": "Erforderlich: GitHub-Issue für Support-Uploads",
-          "description": "<strong>Support-Uploads erfordern eine GitHub-Issue-Nummer.</strong> Bitte <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">erstellen Sie ein GitHub-Issue</a>, das Ihr Problem beschreibt, <strong>bevor</strong> Sie einen Support-Bericht erstellen. Ohne ein verknüpftes Issue können Entwickler Ihre Support-Daten nicht bearbeiten."
+          "description": "<strong>Support-Uploads erfordern eine GitHub-Issue-Nummer.</strong> Bitte {createIssueLink}, das Ihr Problem beschreibt, <strong>bevor</strong> Sie einen Support-Bericht erstellen. Ohne ein verknüpftes Issue können Entwickler Ihre Support-Daten nicht bearbeiten.",
+          "createGithubIssue": "erstellen Sie ein GitHub-Issue"
         },
         "githubIssue": {
           "label": "GitHub-Issue-Nummer",
           "placeholder": "z.B. 123 oder #123",
-          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Bestehende Issues anzeigen</a> oder <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">neues Issue erstellen</a>"
+          "helper": "{viewIssuesLink} oder {createIssueLink}",
+          "viewExistingIssues": "Bestehende Issues anzeigen",
+          "createNewIssue": "neues Issue erstellen"
         },
         "whatsIncluded": {
           "title": "Was im Bericht enthalten ist:",

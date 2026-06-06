@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -169,8 +170,12 @@ func TestConstants(t *testing.T) {
 	})
 
 	t.Run("user agent is set", func(t *testing.T) {
-		assert.NotEmpty(t, UserAgent)
-		assert.Contains(t, UserAgent, "BirdNET-Go")
+		ua := UserAgent()
+		assert.NotEmpty(t, ua)
+		// Assert against the resolved branding values rather than a hardcoded
+		// upstream literal, so the test holds for branded builds/overrides too.
+		assert.Contains(t, ua, branding.Name())
+		assert.Contains(t, ua, branding.RepoURL())
 	})
 }
 

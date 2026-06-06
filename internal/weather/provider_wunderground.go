@@ -319,7 +319,7 @@ func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundCo
 	if err != nil {
 		return nil, newWeatherError(err, errors.CategoryNetwork, "create_http_request", wundergroundProviderName)
 	}
-	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("User-Agent", UserAgent())
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := p.httpClient.Do(req)

@@ -83,7 +83,7 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 	if err != nil {
 		return nil, newWeatherError(err, errors.CategoryNetwork, "create_http_request", openWeatherProviderName)
 	}
-	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("User-Agent", UserAgent())
 
 	// Execute request with retry
 	body, err := executeOpenWeatherRequest(req, providerLogger)

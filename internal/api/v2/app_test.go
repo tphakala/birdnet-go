@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
+	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -179,6 +180,49 @@ func TestGetAppConfig_NoSecurity(t *testing.T) {
 	// All auth methods should be disabled
 	assert.False(t, response.Security.AuthConfig.BasicEnabled)
 	assert.Empty(t, response.Security.AuthConfig.EnabledProviders, "No OAuth providers should be enabled")
+}
+
+// TestGetAppConfig_ProjectLinks verifies the response always carries the
+// project identity/links (independent of telemetry), defaulting to the upstream
+// values with correctly derived issue URLs when nothing is overridden.
+func TestGetAppConfig_ProjectLinks(t *testing.T) {
+	// Branding resolution gives BIRDNET_GO_PROJECT_* env vars highest precedence;
+	// clear them so this default-links assertion is deterministic regardless of
+	// the caller's environment.
+	for _, key := range []string{
+		"BIRDNET_GO_PROJECT_NAME", "BIRDNET_GO_PROJECT_REPO_URL", "BIRDNET_GO_PROJECT_ISSUES_URL",
+		"BIRDNET_GO_PROJECT_NEW_ISSUE_URL", "BIRDNET_GO_PROJECT_SUPPORT_URL", "BIRDNET_GO_PROJECT_COMMUNITY_URL",
+	} {
+		t.Setenv(key, "")
+	}
+
+	e, controller := setupAppConfigTest(t, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// Assert the endpoint serves exactly what the branding package resolves
+	// (the exact default values are locked in branding's own TestDefaults). With
+	// the env cleared above and no ldflags baked into the test binary, these
+	// resolve to the upstream defaults; asserting against the getters also keeps
+	// the test correct for ldflags-built binaries, which t.Setenv cannot clear.
+	links := response.ProjectLinks
+	assert.Equal(t, branding.Name(), links.Name)
+	assert.Equal(t, branding.RepoURL(), links.RepoURL)
+	assert.Equal(t, branding.IssuesURL(), links.IssuesURL)
+	assert.Equal(t, branding.NewIssueURL(), links.NewIssueURL)
+	assert.Equal(t, branding.SupportURL(), links.SupportURL)
+	assert.Equal(t, branding.CommunityURL(), links.CommunityURL)
 }
 
 // TestGetAppConfig_BasicAuthEnabled tests the endpoint with BasicAuth enabled.
@@ -890,10 +934,32 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 		"liveSpectrogram": true,
 		"freshInstall":    true,
 		"newVersion":      true,
+		"projectLinks":    true,
 	}
 
 	for key := range rawResponse {
 		assert.True(t, expectedKeys[key], "Unexpected field in response: %s", key)
+	}
+
+	// Check projectLinks sub-object
+	projectLinksRaw, ok := rawResponse["projectLinks"]
+	require.True(t, ok, "projectLinks field should exist")
+	projectLinks, ok := projectLinksRaw.(map[string]any)
+	require.True(t, ok, "projectLinks should be a map")
+	expectedProjectLinkKeys := map[string]bool{
+		"name":         true,
+		"repoUrl":      true,
+		"issuesUrl":    true,
+		"newIssueUrl":  true,
+		"supportUrl":   true,
+		"communityUrl": true,
+	}
+
+	for key := range projectLinks {
+		assert.True(t, expectedProjectLinkKeys[key], "Unexpected field in projectLinks: %s", key)
+	}
+	for key := range expectedProjectLinkKeys {
+		assert.Contains(t, projectLinks, key, "Missing field in projectLinks: %s", key)
 	}
 
 	// Check security sub-object

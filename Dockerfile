@@ -62,6 +62,18 @@ ENV BUILD_VERSION=${BUILD_VERSION:-unknown}
 ARG SENTRY_DSN
 ENV SENTRY_DSN=${SENTRY_DSN:-}
 
+# Project identity baked into the binary at link time (consumed by the Taskfile
+# PROJECT_* vars). Empty by default so builds use the upstream defaults in
+# internal/branding; forks pass --build-arg PROJECT_NAME / PROJECT_REPO_URL /
+# PROJECT_COMMUNITY_URL to rebrand. Self-hosters can instead override at runtime
+# with the BIRDNET_GO_PROJECT_* environment variables.
+ARG PROJECT_NAME
+ENV PROJECT_NAME=${PROJECT_NAME:-}
+ARG PROJECT_REPO_URL
+ENV PROJECT_REPO_URL=${PROJECT_REPO_URL:-}
+ARG PROJECT_COMMUNITY_URL
+ENV PROJECT_COMMUNITY_URL=${PROJECT_COMMUNITY_URL:-}
+
 ARG TARGETPLATFORM
 ARG ONNXRUNTIME_VERSION
 
@@ -86,7 +98,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     task check-tensorflow && \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
     echo "Building non-embedded version with BUILD_VERSION=${BUILD_VERSION}" && \
-    BUILD_VERSION="${BUILD_VERSION}" SENTRY_DSN="${SENTRY_DSN}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET}
+    BUILD_VERSION="${BUILD_VERSION}" SENTRY_DSN="${SENTRY_DSN}" PROJECT_NAME="${PROJECT_NAME}" PROJECT_REPO_URL="${PROJECT_REPO_URL}" PROJECT_COMMUNITY_URL="${PROJECT_COMMUNITY_URL}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET}
 
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:trixie-slim
