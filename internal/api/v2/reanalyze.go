@@ -166,7 +166,7 @@ func (c *Controller) ReanalyzeDetection(ctx echo.Context) error {
 		bySR[m.spec.SampleRate] = append(bySR[m.spec.SampleRate], m)
 	}
 
-	ffmpegPath := c.Settings.Realtime.Audio.FfmpegPath
+	ffmpegPath := c.currentSettings().Realtime.Audio.FfmpegPath
 
 	// Accumulator: scientific-name labels (or raw label strings) -> per-model
 	// max confidence. The label-string form survives until aggregation so
@@ -245,7 +245,7 @@ func (c *Controller) ReanalyzeDetection(ctx echo.Context) error {
 			ByModel:        perModel,
 		})
 	}
-	applyLocalizedCommonNamesV2(bn, predictions, c.Settings.BirdNET.Locale)
+	applyLocalizedCommonNamesV2(bn, predictions, c.currentSettings().BirdNET.Locale)
 
 	sort.Slice(predictions, func(i, j int) bool {
 		return predictions[i].MaxConfidence() > predictions[j].MaxConfidence()

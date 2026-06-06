@@ -238,7 +238,7 @@ func (c *Controller) CorrectDetectionSpecies(ctx echo.Context) error {
 	// resolver chain on the orchestrator covers both BirdNET's labels and
 	// the v3 geomodel taxonomy CSV companion (PR #3042 upstream), so this
 	// works for any species in either model's vocabulary in 24+ locales.
-	common := bn.ResolveName(req.ScientificName, c.Settings.BirdNET.Locale)
+	common := bn.ResolveName(req.ScientificName, c.currentSettings().BirdNET.Locale)
 
 	// Invalidate the detection-list cache so dashboards/species pages reflect
 	// the new label immediately. Without this, the 5-minute species-detection
