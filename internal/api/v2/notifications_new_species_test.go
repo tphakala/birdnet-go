@@ -57,14 +57,14 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 
 	// Try to set up isolated service for testing
 	service := notification.NewService(config)
-	// Always stop the service we just created so its cleanupLoop goroutine does
-	// not leak past the test (caught by the goroutine-leak gate in TestMain).
-	// This covers both the global-singleton case and the discarded case when
-	// SetServiceForTesting rejects it because an instance already exists.
-	t.Cleanup(service.Stop)
-
 	if err := notification.SetServiceForTesting(service); err != nil {
-		// Service already exists, use it
+		// An instance already exists; stop the service we just created so its
+		// cleanupLoop goroutine does not leak (the gate in TestMain would flag
+		// it), then use the existing singleton. We deliberately do NOT stop the
+		// service on the success path: it becomes the global singleton, which is
+		// stopped once after the whole suite in TestMain. Stopping it here would
+		// leave later GetService() callers with a stopped instance.
+		service.Stop()
 		service = notification.GetService()
 		require.NotNil(t, service, "Expected notification service to be available")
 	}
