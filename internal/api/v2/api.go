@@ -301,46 +301,6 @@ func parseIPFromHeader(headerValue string) string {
 	return ""
 }
 
-// parseFirstIPFromXFF extracts the first valid IP from X-Forwarded-For header.
-func parseFirstIPFromXFF(xff string) string {
-	if xff == "" {
-		return ""
-	}
-	parts := strings.SplitSeq(xff, ",")
-	for part := range parts {
-		if ip := parseIPFromHeader(strings.TrimSpace(part)); ip != "" {
-			return ip
-		}
-	}
-	return ""
-}
-
-// Custom IP Extractor prioritizing CF-Connecting-IP
-func ipExtractorFromCloudflareHeader(req *http.Request) string {
-	// 1. Check CF-Connecting-IP
-	if ip := parseIPFromHeader(req.Header.Get("CF-Connecting-IP")); ip != "" {
-		return ip
-	}
-
-	// 2. Check X-Forwarded-For (taking the first valid IP)
-	if ip := parseFirstIPFromXFF(req.Header.Get(echo.HeaderXForwardedFor)); ip != "" {
-		return ip
-	}
-
-	// 3. Check X-Real-IP
-	if ip := parseIPFromHeader(req.Header.Get(echo.HeaderXRealIP)); ip != "" {
-		return ip
-	}
-
-	// 4. Fallback to Remote Address (might be proxy)
-	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
-	if ip := parseIPFromHeader(remoteAddr); ip != "" {
-		return ip
-	}
-
-	return remoteAddr
-}
-
 // TunnelDetectionMiddleware inspects headers to determine if the request is likely proxied
 // and sets context values for logging.
 func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
@@ -350,14 +310,21 @@ func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 			tunneled := false
 			provider := tunnelProviderUnknown
 
-			// Check Cloudflare header first
-			if req.Header.Get("CF-Connecting-IP") != "" {
-				tunneled = true
-				provider = "cloudflare"
-			} else if req.Header.Get(echo.HeaderXForwardedFor) != "" || req.Header.Get(echo.HeaderXRealIP) != "" {
-				// If other proxy headers exist, mark as tunneled but provider is generic
-				tunneled = true
-				provider = "generic"
+			// Only classify the request as tunneled when the IP extractor actually
+			// honored a forwarded header, i.e. the resolved client IP differs from
+			// the immediate connection peer. That happens only for a trusted proxy,
+			// so a directly-connected client cannot spoof a "tunneled" label by
+			// sending forwarded headers from an untrusted address.
+			if peerIP, _ := peerAddrFromRequest(req); peerIP != nil && peerIP.String() != ctx.RealIP() {
+				switch {
+				case req.Header.Get(headerCFConnectingIP) != "":
+					tunneled = true
+					provider = "cloudflare"
+				case req.Header.Get(echo.HeaderXForwardedFor) != "" || req.Header.Get(echo.HeaderXRealIP) != "":
+					// Other proxy headers present: tunneled, but provider is generic.
+					tunneled = true
+					provider = "generic"
+				}
 			}
 
 			ctx.Set("is_tunneled", tunneled)
@@ -449,10 +416,6 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	controlChan chan string,
 	metrics *observability.Metrics, initializeRoutes bool, opts ...Option) (*Controller, error) {
 
-	// Configure IP extractor for Cloudflare proxy support
-	e.IPExtractor = ipExtractorFromCloudflareHeader
-	GetLogger().Info("Configured custom IP extractor prioritizing CF-Connecting-IP")
-
 	// Validate and resolve media export path
 	mediaPath, err := resolveAndValidateMediaPath(settings.Realtime.Audio.Export.Path)
 	if err != nil {
@@ -495,6 +458,16 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// lock-free. Kept in sync with the c.Settings field on every save; see the
 	// settingsAtomic field doc and the settings update handlers.
 	c.settingsAtomic.Store(settings)
+
+	// Configure the trusted-proxy-gated IP extractor. Forwarded client-IP headers
+	// (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) are honored only when the
+	// connection peer is a trusted proxy (loopback/link-local/private by default,
+	// plus Security.TrustedProxies); otherwise the real peer address is used. It
+	// reads this controller's own settings snapshot per request (published above
+	// and on every save), so it honors the controller's TrustedProxies and
+	// hot-reloads without a restart.
+	e.IPExtractor = newTrustedProxyIPExtractor(c.controllerSettings)
+	GetLogger().Info("Configured trusted-proxy-gated IP extractor (forwarded client IP honored only from trusted proxies)")
 
 	// Propagate the derived FFprobe path from config validation to the
 	// ffmpeg package so executeFFprobe can find it without PATH lookup.
