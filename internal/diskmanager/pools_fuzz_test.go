@@ -69,24 +69,28 @@ func FuzzPooledSliceOperations(f *testing.F) {
 			assert.Equal(t, 95, (*got)[size-1].Confidence, "last element Confidence mismatch")
 		}
 
+		// Release decides keep-vs-skip from the backing slice's capacity
+		// (cap(*slice) > MaxPoolCapacity), not the data size. getPooledSlice()
+		// draws from a process-wide sync.Pool that other tests populate with
+		// larger-capacity slices, so the capacity after SetData can exceed
+		// size. Capture the real capacity to assert against the same value
+		// Release uses, which keeps the check deterministic regardless of
+		// pool history.
+		backingCap := cap(*got)
+
 		// Release should not panic
 		slice.Release()
 
-		// Validate metrics based on size
-		// Note: The pool uses cap(*slice) > MaxPoolCapacity, so slices at exactly
-		// the boundary may have different behavior depending on slice growth.
-		// We only validate clear cases: well under or well over the limit.
 		skipAfter := poolMetrics.SkipCount.Load()
 		putAfter := poolMetrics.PutCount.Load()
 
-		if size > maxPoolCap+10 {
-			// Clearly oversized slices should be skipped
-			assert.Greater(t, skipAfter, skipBefore, "oversized slice (size=%d) should increment SkipCount", size)
-		} else if size > 0 && size < maxPoolCap-10 {
-			// Clearly normal sized slices should be pooled (exclude size=0 as it may have special behavior)
-			assert.Greater(t, putAfter, putBefore, "normal slice (size=%d) should increment PutCount", size)
+		if backingCap > maxPoolCap {
+			// Capacity over the limit: slice is skipped, not pooled.
+			assert.Greater(t, skipAfter, skipBefore, "oversized backing (cap=%d) should increment SkipCount", backingCap)
+		} else {
+			// Capacity within the limit: slice is returned to the pool.
+			assert.Greater(t, putAfter, putBefore, "normal backing (cap=%d) should increment PutCount", backingCap)
 		}
-		// For sizes near the boundary or size=0, we don't assert - behavior may vary
 
 		// Double release should be safe and not change metrics
 		skipBeforeDouble := poolMetrics.SkipCount.Load()

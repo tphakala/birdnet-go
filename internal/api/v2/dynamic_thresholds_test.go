@@ -52,9 +52,9 @@ func TestGetMergedThresholdData_NoDuplicates(t *testing.T) {
 
 	controller := &Controller{
 		DS:        mockDS,
-		Settings:  proc.Settings,
 		Processor: proc,
 	}
+	controller.Settings.Store(proc.Settings)
 
 	result := controller.getMergedThresholdData()
 
@@ -104,9 +104,9 @@ func TestGetMergedThresholdData_MemoryOnlySpecies(t *testing.T) {
 
 	controller := &Controller{
 		DS:        mockDS,
-		Settings:  proc.Settings,
 		Processor: proc,
 	}
+	controller.Settings.Store(proc.Settings)
 
 	result := controller.getMergedThresholdData()
 
@@ -151,9 +151,9 @@ func TestGetMergedThresholdData_DatabaseOnlySpecies(t *testing.T) {
 
 	controller := &Controller{
 		DS:        mockDS,
-		Settings:  proc.Settings,
 		Processor: proc,
 	}
+	controller.Settings.Store(proc.Settings)
 
 	result := controller.getMergedThresholdData()
 

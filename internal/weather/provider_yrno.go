@@ -197,7 +197,7 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 	if err != nil {
 		return nil, newWeatherError(err, errors.CategoryNetwork, "create_http_request", yrNoProviderName)
 	}
-	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("User-Agent", UserAgent())
 	req.Header.Set("Accept-Encoding", "gzip")
 	p.mu.Lock()
 	if p.lastModified != "" {

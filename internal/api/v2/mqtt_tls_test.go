@@ -48,9 +48,7 @@ func TestGetMQTTTLSCertificate_WithManualPaths(t *testing.T) {
 	require.NoError(t, os.WriteFile(certFile, []byte(certPEM), 0o644))
 
 	// Point settings to this file
-	controller.settingsMutex.Lock()
-	controller.Settings.Realtime.MQTT.TLS.CACert = certFile
-	controller.settingsMutex.Unlock()
+	controller.Settings.Load().Realtime.MQTT.TLS.CACert = certFile
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/tls/certificate", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -310,11 +308,9 @@ func TestDeleteMQTTTLSCertificate(t *testing.T) {
 	require.NoError(t, err)
 
 	// Update settings paths
-	controller.settingsMutex.Lock()
-	controller.Settings.Realtime.MQTT.TLS.CACert = tlsMgr.GetCertificatePath(mqttTLSServiceName, conf.TLSCertTypeCA)
-	controller.Settings.Realtime.MQTT.TLS.ClientCert = tlsMgr.GetCertificatePath(mqttTLSServiceName, conf.TLSCertTypeClient)
-	controller.Settings.Realtime.MQTT.TLS.ClientKey = tlsMgr.GetCertificatePath(mqttTLSServiceName, conf.TLSCertTypeKey)
-	controller.settingsMutex.Unlock()
+	controller.Settings.Load().Realtime.MQTT.TLS.CACert = tlsMgr.GetCertificatePath(mqttTLSServiceName, conf.TLSCertTypeCA)
+	controller.Settings.Load().Realtime.MQTT.TLS.ClientCert = tlsMgr.GetCertificatePath(mqttTLSServiceName, conf.TLSCertTypeClient)
+	controller.Settings.Load().Realtime.MQTT.TLS.ClientKey = tlsMgr.GetCertificatePath(mqttTLSServiceName, conf.TLSCertTypeKey)
 
 	// DELETE
 	req := httptest.NewRequest(http.MethodDelete, "/api/v2/integrations/mqtt/tls/certificate", http.NoBody)
@@ -331,11 +327,9 @@ func TestDeleteMQTTTLSCertificate(t *testing.T) {
 	assert.False(t, tlsMgr.CertificateExists(mqttTLSServiceName, conf.TLSCertTypeKey), "client key should be removed")
 
 	// Verify settings paths cleared
-	controller.settingsMutex.RLock()
-	assert.Empty(t, controller.Settings.Realtime.MQTT.TLS.CACert)
-	assert.Empty(t, controller.Settings.Realtime.MQTT.TLS.ClientCert)
-	assert.Empty(t, controller.Settings.Realtime.MQTT.TLS.ClientKey)
-	controller.settingsMutex.RUnlock()
+	assert.Empty(t, controller.Settings.Load().Realtime.MQTT.TLS.CACert)
+	assert.Empty(t, controller.Settings.Load().Realtime.MQTT.TLS.ClientCert)
+	assert.Empty(t, controller.Settings.Load().Realtime.MQTT.TLS.ClientKey)
 
 	// GET should show nothing installed
 	req2 := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/tls/certificate", http.NoBody)
@@ -365,9 +359,7 @@ func TestDeleteMQTTTLSCertificate_ExternalPaths(t *testing.T) {
 	require.NoError(t, os.WriteFile(certFile, []byte(certPEM), 0o644))
 
 	// Point settings to this external file
-	controller.settingsMutex.Lock()
-	controller.Settings.Realtime.MQTT.TLS.CACert = certFile
-	controller.settingsMutex.Unlock()
+	controller.Settings.Load().Realtime.MQTT.TLS.CACert = certFile
 
 	// DELETE
 	req := httptest.NewRequest(http.MethodDelete, "/api/v2/integrations/mqtt/tls/certificate", http.NoBody)
@@ -383,9 +375,7 @@ func TestDeleteMQTTTLSCertificate_ExternalPaths(t *testing.T) {
 	require.NoError(t, statErr, "external cert file should not be deleted")
 
 	// Settings path should be cleared
-	controller.settingsMutex.RLock()
-	assert.Empty(t, controller.Settings.Realtime.MQTT.TLS.CACert, "settings path should be cleared")
-	controller.settingsMutex.RUnlock()
+	assert.Empty(t, controller.Settings.Load().Realtime.MQTT.TLS.CACert, "settings path should be cleared")
 }
 
 // TestMQTTTLSRouteRegistration verifies that all three MQTT TLS routes are registered

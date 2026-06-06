@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -57,8 +58,8 @@ func setupOAuth2ServerTest(t *testing.T, requestClientID, requestRedirectURI, ex
 	// Publish the settings as the global snapshot so currentSettings() (used by
 	// the basic-auth handlers after the issue #3370 fix) returns these values
 	// rather than a snapshot leaked by a sibling test.
-	conf.SetTestSettings(server.settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	conftest.SetTestSettings(server.settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	return server, c, rec
 }
@@ -152,8 +153,8 @@ func TestHandleBasicAuthTokenSuccess(t *testing.T) {
 
 	// Publish the settings as the global snapshot so currentSettings() (used by
 	// HandleBasicAuthToken after the issue #3370 fix) returns these values.
-	conf.SetTestSettings(s.settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	conftest.SetTestSettings(s.settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	// Pre-populate a valid auth code
 	s.authCodes["validCode"] = AuthCode{
@@ -196,8 +197,8 @@ func TestHandleBasicAuthTokenMissingFields(t *testing.T) {
 
 	// Publish the settings as the global snapshot so currentSettings() (used by
 	// HandleBasicAuthToken after the issue #3370 fix) returns these values.
-	conf.SetTestSettings(s.settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	conftest.SetTestSettings(s.settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	c.SetParamNames("grant_type", "code", "redirect_uri")
 	c.SetParamValues("", "", "")
@@ -252,8 +253,8 @@ func TestHandleBasicAuthTokenHotReloadAfterEnable(t *testing.T) {
 			Host: "example.com",
 		},
 	}
-	conf.SetTestSettings(updated)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	conftest.SetTestSettings(updated)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	s.authCodes["validCode"] = AuthCode{
 		Code:      "validCode",

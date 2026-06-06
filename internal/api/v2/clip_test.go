@@ -90,7 +90,7 @@ func TestExtractAudioClipByID(t *testing.T) {
 				if ffmpegErr != nil {
 					t.Skip("FFmpeg not available, skipping extraction test")
 				}
-				controller.Settings.Realtime.Audio.FfmpegPath = ffmpegPath
+				controller.Settings.Load().Realtime.Audio.FfmpegPath = ffmpegPath
 			}
 
 			path := "/api/v2/audio/" + tc.noteID + "/clip"

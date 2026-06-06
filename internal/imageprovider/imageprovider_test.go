@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -1036,7 +1036,7 @@ func (m *mockProviderWithContext) FetchWithContext(ctx context.Context, scientif
 
 // TestMain provides goleak verification to detect goroutine leaks
 func TestMain(m *testing.M) {
-	conf.NewTestSettings().Apply()
+	conftest.NewTestSettings().Apply()
 
 	goleak.VerifyTestMain(m,
 		goleak.IgnoreTopFunction("testing.(*T).Run"),

@@ -25,7 +25,7 @@ var ConfigPath string
 //
 // loadMu guards the on-demand Load() that Setting() performs when
 // settingsInstance is nil. A plain sync.Mutex is used rather than sync.Once
-// so that cleanup paths which call SetTestSettings(nil) can trigger a fresh
+// so that cleanup paths which call StoreSettings(nil) can trigger a fresh
 // Load on the next Setting() call; sync.Once cannot be reset safely from a
 // parallel test without racing on the Once value itself.
 var (

@@ -432,7 +432,7 @@ func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Controller, string) {
 
 	// Assign the tempDir to settings just in case any *other* part relies on it
 	// (though SecureFS should make this less necessary)
-	controller.Settings.Realtime.Audio.Export.Path = tempDir
+	controller.Settings.Load().Realtime.Audio.Export.Path = tempDir
 
 	// Inject passthrough auth middleware so authenticated routes (e.g. clip extraction)
 	// can be registered and tested without a real auth service

@@ -38,10 +38,10 @@ func setupAudioSourcesTestEnv(t *testing.T, sources []*audiocore.SourceConfig) (
 
 	e := echo.New()
 	controller := &Controller{
-		Echo:     e,
-		Group:    e.Group("/api/v2"),
-		Settings: &conf.Settings{},
+		Echo:  e,
+		Group: e.Group("/api/v2"),
 	}
+	controller.Settings.Store(&conf.Settings{})
 	controller.engine.Store(eng)
 	return e, controller
 }
@@ -55,10 +55,10 @@ func TestListAudioSources(t *testing.T) {
 	t.Run("No engine returns empty list", func(t *testing.T) {
 		e := echo.New()
 		controller := &Controller{
-			Echo:     e,
-			Group:    e.Group("/api/v2"),
-			Settings: &conf.Settings{},
+			Echo:  e,
+			Group: e.Group("/api/v2"),
 		}
+		controller.Settings.Store(&conf.Settings{})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/audio/sources", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -125,10 +125,10 @@ func TestListStreamSources(t *testing.T) {
 	t.Run("No engine returns empty list", func(t *testing.T) {
 		e := echo.New()
 		controller := &Controller{
-			Echo:     e,
-			Group:    e.Group("/api/v2"),
-			Settings: &conf.Settings{},
+			Echo:  e,
+			Group: e.Group("/api/v2"),
 		}
+		controller.Settings.Store(&conf.Settings{})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/streams/sources", http.NoBody)
 		rec := httptest.NewRecorder()

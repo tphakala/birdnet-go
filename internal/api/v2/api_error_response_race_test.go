@@ -4,8 +4,8 @@
 // newErrorResponse decides whether to expose raw err.Error() based on this
 // controller's own WebServer.Debug flag. That read must stay per-controller (the
 // shared global snapshot would couple otherwise-independent parallel tests) yet
-// must not race the c.Settings republish UpdateSettings performs on every save,
-// and it must not take c.settingsMutex (it is reached from HandleError while
+// must not race the Settings.Store UpdateSettings performs on every save, and it
+// must not take c.settingsMutex (it is reached from HandleError while
 // UpdateSettings already holds the write lock, so an RLock would deadlock).
 package api
 
@@ -19,17 +19,14 @@ import (
 
 // TestNewErrorResponseConcurrentSettingsPublishIsRaceFree hammers
 // newErrorResponse from multiple readers while writers republish the settings
-// snapshot the same way UpdateSettings does (c.Settings reassignment plus the
-// per-controller atomic mirror, under c.settingsMutex). Under `go test -race`,
-// the pre-fix bare c.Settings.WebServer.Debug read in newErrorResponse is
-// flagged as a data race against the c.Settings write.
+// snapshot the same way UpdateSettings does (Settings.Store under c.settingsMutex).
+// Under `go test -race`, a non-atomic read of the debug flag in newErrorResponse
+// would be flagged as a data race against the concurrent Settings.Store.
 func TestNewErrorResponseConcurrentSettingsPublishIsRaceFree(t *testing.T) {
 	withRestoredGlobalSettings(t)
 
-	controller := &Controller{Settings: newValidTestSettings()}
-	// Mirror production construction so the per-controller debug read resolves
-	// via the lock-free atomic snapshot rather than the bare c.Settings field.
-	controller.settingsAtomic.Store(controller.Settings)
+	controller := &Controller{}
+	controller.Settings.Store(newValidTestSettings())
 
 	testErr := echo.NewHTTPError(http.StatusInternalServerError, "raw internal detail")
 
@@ -46,11 +43,11 @@ func TestNewErrorResponseConcurrentSettingsPublishIsRaceFree(t *testing.T) {
 			for i := range itersPerWorker {
 				snap := newValidTestSettings()
 				snap.WebServer.Debug = (w+i)%2 == 0
-				// Republish through the production single write path so this test
-				// also guards against publishSettings updating only one of the two
-				// fields. publishSettings requires the settings mutex held.
+				// Republish the same way UpdateSettings does: Settings.Store while
+				// holding settingsMutex. The mutex serialises writers; the read side
+				// in newErrorResponse stays lock-free via the atomic Load.
 				controller.settingsMutex.Lock()
-				controller.publishSettings(snap)
+				controller.Settings.Store(snap)
 				controller.settingsMutex.Unlock()
 			}
 		})

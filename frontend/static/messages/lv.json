@@ -2174,12 +2174,15 @@
         },
         "githubRequired": {
           "title": "Nepieciešams: GitHub problēma atbalsta augšupielādēm",
-          "description": "<strong>Atbalsta augšupielādēm nepieciešams GitHub problēmas numurs.</strong> Lūdzu, <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">izveidojiet GitHub problēmu</a>, aprakstot savu problēmu, <strong>pirms</strong> ģenerējat atbalsta ziņojumu. Bez saistītās problēmas izstrādātāji nevar rīkoties ar jūsu atbalsta datiem."
+          "description": "<strong>Atbalsta augšupielādēm nepieciešams GitHub problēmas numurs.</strong> Lūdzu, {createIssueLink}, aprakstot savu problēmu, <strong>pirms</strong> ģenerējat atbalsta ziņojumu. Bez saistītās problēmas izstrādātāji nevar rīkoties ar jūsu atbalsta datiem.",
+          "createGithubIssue": "izveidojiet GitHub problēmu"
         },
         "githubIssue": {
           "label": "GitHub problēmas numurs",
           "placeholder": "piem., 123 vai #123",
-          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Skatīt esošās problēmas</a> vai <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">vispirms izveidojiet jaunu problēmu</a>"
+          "helper": "{viewIssuesLink} vai {createIssueLink}",
+          "viewExistingIssues": "Skatīt esošās problēmas",
+          "createNewIssue": "vispirms izveidojiet jaunu problēmu"
         },
         "whatsIncluded": {
           "title": "Kas ir iekļauts ziņojumā:",

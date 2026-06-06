@@ -77,9 +77,7 @@ func TestTLSGetCertificate_WithCert(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set TLS mode in settings
-	controller.settingsMutex.Lock()
-	controller.Settings.Security.TLSMode = conf.TLSModeSelfSigned
-	controller.settingsMutex.Unlock()
+	controller.Settings.Load().Security.TLSMode = conf.TLSModeSelfSigned
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/tls/certificate", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -129,9 +127,7 @@ func TestTLSUploadCertificate_ValidPEM(t *testing.T) {
 	assert.Equal(t, "CN=BirdNET-Go", info.Subject)
 
 	// Verify settings were updated
-	controller.settingsMutex.RLock()
-	assert.Equal(t, conf.TLSModeManual, controller.Settings.Security.TLSMode)
-	controller.settingsMutex.RUnlock()
+	assert.Equal(t, conf.TLSModeManual, controller.Settings.Load().Security.TLSMode)
 }
 
 func TestTLSUploadCertificate_InvalidPEM(t *testing.T) {
@@ -188,9 +184,7 @@ func TestTLSDeleteCertificate(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set TLS mode
-	controller.settingsMutex.Lock()
-	controller.Settings.Security.TLSMode = conf.TLSModeManual
-	controller.settingsMutex.Unlock()
+	controller.Settings.Load().Security.TLSMode = conf.TLSModeManual
 
 	// Delete the certificate
 	req := httptest.NewRequest(http.MethodDelete, "/api/v2/tls/certificate", http.NoBody)
@@ -206,9 +200,7 @@ func TestTLSDeleteCertificate(t *testing.T) {
 	assert.False(t, tlsMgr.CertificateExists(tlsServiceName, conf.TLSCertTypeServerKey))
 
 	// Verify TLS mode was reset
-	controller.settingsMutex.RLock()
-	assert.Equal(t, conf.TLSModeNone, controller.Settings.Security.TLSMode)
-	controller.settingsMutex.RUnlock()
+	assert.Equal(t, conf.TLSModeNone, controller.Settings.Load().Security.TLSMode)
 }
 
 func TestTLSGenerateSelfSignedCertificate(t *testing.T) {
@@ -237,9 +229,7 @@ func TestTLSGenerateSelfSignedCertificate(t *testing.T) {
 	assert.Positive(t, info.DaysUntilExpiry)
 
 	// Verify settings were updated
-	controller.settingsMutex.RLock()
-	assert.Equal(t, conf.TLSModeSelfSigned, controller.Settings.Security.TLSMode)
-	controller.settingsMutex.RUnlock()
+	assert.Equal(t, conf.TLSModeSelfSigned, controller.Settings.Load().Security.TLSMode)
 }
 
 func TestTLSGenerateSelfSignedCertificate_DefaultValidity(t *testing.T) {

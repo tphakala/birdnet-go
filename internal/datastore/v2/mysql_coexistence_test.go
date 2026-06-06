@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/testutil/containers"
@@ -263,7 +264,7 @@ func getRowCount(t *testing.T, db *gorm.DB, tableName string) int64 {
 
 // buildTestSettings creates a minimal conf.Settings for checkMySQLMigrationState.
 func buildTestSettings(host, port, database, username, password string) *conf.Settings {
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.Output.MySQL.Enabled = true
 	settings.Output.MySQL.Host = host
 	settings.Output.MySQL.Port = port

@@ -1558,9 +1558,7 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 
 // GetExcludedSpecies returns the list of excluded species
 func (c *Controller) GetExcludedSpecies(ctx echo.Context) error {
-	c.settingsMutex.RLock()
 	species := slices.Clone(c.getSettingsOrFallback().Realtime.Species.Exclude)
-	c.settingsMutex.RUnlock()
 
 	return ctx.JSON(http.StatusOK, ExcludedSpeciesResponse{
 		Species: species,
@@ -1584,14 +1582,14 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 		return "", false, nil
 	}
 
-	// Serialise against concurrent settings saves so that out-of-band
-	// StoreSettings calls (range filter rebuild, etc.) cannot desynchronise
-	// c.Settings from the live atomic pointer between read and publish.
+	// Serialise this read-modify-write against concurrent settings saves so an
+	// out-of-band StoreSettings (range filter rebuild, etc.) cannot interleave
+	// between reading current and publishing the update.
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
-	// Always read the live atomic snapshot; c.Settings may be stale after
-	// UpdateIncludedSpecies or other out-of-band StoreSettings calls.
+	// Read the latest snapshot; getSettingsOrFallback prefers the global when
+	// this controller owns it, so out-of-band StoreSettings calls are seen.
 	current := c.getSettingsOrFallback()
 
 	wasExcluded := slices.Contains(current.Realtime.Species.Exclude, species)
@@ -1770,8 +1768,8 @@ func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTime
 // Returns "imperial" for Fahrenheit or "metric" for Celsius to match frontend expectations.
 func (c *Controller) getWeatherUnits() string {
 	// Use dashboard temperature unit preference for display. Read the live
-	// snapshot (race-free, hot-reloading) rather than the bare c.Settings field,
-	// matching the rest of the Dashboard subtree reads.
+	// snapshot (race-free, hot-reloading) via currentSettings() so out-of-band
+	// global republishes are picked up, matching the rest of the Dashboard reads.
 	// All temperatures are now stored in Celsius internally.
 	switch c.currentSettings().Realtime.Dashboard.TemperatureUnit {
 	case conf.TemperatureUnitFahrenheit:

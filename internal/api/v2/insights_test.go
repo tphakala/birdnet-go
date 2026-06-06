@@ -53,19 +53,20 @@ func (m *mockInsightsRepo) GetDashboardKPIs(_ context.Context, _ int64, _ *uint)
 func setupInsightsTestController(t *testing.T, mock *mockInsightsRepo) (*echo.Echo, *Controller) {
 	t.Helper()
 	e := echo.New()
-	controller := &Controller{
-		Group: e.Group("/api/v2"),
-		Settings: &conf.Settings{
-			BirdNET: conf.BirdNETConfig{
-				Labels: []string{
-					"Turdus merula_Eurasian Blackbird",
-					"Parus major_Great Tit",
-				},
+	settingsVal := &conf.Settings{
+		BirdNET: conf.BirdNETConfig{
+			Labels: []string{
+				"Turdus merula_Eurasian Blackbird",
+				"Parus major_Great Tit",
 			},
 		},
+	}
+	controller := &Controller{
+		Group:        e.Group("/api/v2"),
 		insightsRepo: mock,
 	}
-	controller.UpdateCommonNameMap(controller.Settings.BirdNET.Labels)
+	controller.Settings.Store(settingsVal)
+	controller.UpdateCommonNameMap(controller.Settings.Load().BirdNET.Labels)
 	return e, controller
 }
 

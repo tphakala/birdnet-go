@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // TestBirdNET_UpdateSettings_SyncsBothFields verifies updateSettings keeps the
@@ -58,8 +59,8 @@ func TestBirdNET_CurrentSettings_PrefersAtomicOverDeprecatedField(t *testing.T) 
 	// Not parallel: temporarily clears the conf global snapshot, which is
 	// process-wide. Restored on cleanup.
 	saved := conf.GetSettings()
-	t.Cleanup(func() { conf.SetTestSettings(saved) })
-	conf.SetTestSettings(nil)
+	t.Cleanup(func() { conftest.SetTestSettings(saved) })
+	conftest.SetTestSettings(nil)
 
 	atomicSnapshot := &conf.Settings{}
 	bn := &BirdNET{}

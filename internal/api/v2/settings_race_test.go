@@ -19,15 +19,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // withRestoredGlobalSettings snapshots the package-global settings pointer and
 // restores it on cleanup so a test that publishes its own snapshot via
-// conf.SetTestSettings does not leak into sibling tests.
+// conftest.SetTestSettings does not leak into sibling tests.
 func withRestoredGlobalSettings(t *testing.T) {
 	t.Helper()
 	orig := conf.GetSettings()
-	t.Cleanup(func() { conf.SetTestSettings(orig) })
+	t.Cleanup(func() { conftest.SetTestSettings(orig) })
 }
 
 // TestGetAppConfigReadsLiveSnapshot proves GetAppConfig serves the latest
@@ -44,10 +45,10 @@ func TestGetAppConfigReadsLiveSnapshot(t *testing.T) {
 	// controller's own c.Settings still holds the construction-time snapshot
 	// (Version "1.0.0-test", empty ColorScheme), so a stale read and a live
 	// read return different values.
-	live := conf.CloneSettings(controller.Settings)
+	live := conf.CloneSettings(controller.Settings.Load())
 	live.Version = "9.9.9-live"
 	live.Realtime.Dashboard.ColorScheme = "live-scheme"
-	conf.SetTestSettings(live)
+	conftest.SetTestSettings(live)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -78,8 +79,8 @@ func TestGetAppConfigConcurrentSaveIsRaceFree(t *testing.T) {
 
 	// Ensure the global snapshot is never nil for the duration of the test so
 	// currentSettings() always resolves via the atomic pointer.
-	base := conf.CloneSettings(controller.Settings)
-	conf.SetTestSettings(base)
+	base := conf.CloneSettings(controller.Settings.Load())
+	conftest.SetTestSettings(base)
 
 	const (
 		writers        = 2
@@ -99,7 +100,7 @@ func TestGetAppConfigConcurrentSaveIsRaceFree(t *testing.T) {
 				// the controller-cached pointer in sync, both under the mutex.
 				controller.settingsMutex.Lock()
 				conf.StoreSettings(snap)
-				controller.Settings = snap
+				controller.Settings.Store(snap)
 				controller.settingsMutex.Unlock()
 			}
 		})

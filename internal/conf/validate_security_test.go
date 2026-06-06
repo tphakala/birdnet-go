@@ -437,6 +437,108 @@ func TestValidateSecuritySettings_SubnetBypass(t *testing.T) {
 	}
 }
 
+// TestValidateSecuritySettings_TrustedProxies tests trusted-proxy CIDR validation.
+func TestValidateSecuritySettings_TrustedProxies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		security Security
+		wantErr  bool
+		errType  string
+	}{
+		{
+			name: "Empty list - should pass",
+			security: Security{
+				TrustedProxies:  nil,
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Valid IPv4 and IPv6 CIDRs - should pass",
+			security: Security{
+				TrustedProxies:  []string{"10.0.0.0/8", "2001:db8::/32"},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Cloudflare preset token - should pass",
+			security: Security{
+				TrustedProxies:  []string{TrustedProxyCloudflarePreset},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Cloudflare preset is case-insensitive - should pass",
+			security: Security{
+				TrustedProxies:  []string{"CloudFlare"},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Blank entries are skipped - should pass",
+			security: Security{
+				TrustedProxies:  []string{"", "  ", "192.168.0.0/24"},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Invalid CIDR mask - should fail",
+			security: Security{
+				TrustedProxies:  []string{"192.168.1.0/33"},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: true,
+			errType: "security-trustedproxies-format",
+		},
+		{
+			name: "Bare IPv4 without CIDR notation - should pass",
+			security: Security{
+				TrustedProxies:  []string{"192.168.1.1"},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Bare IPv6 without CIDR notation - should pass",
+			security: Security{
+				TrustedProxies:  []string{"2001:db8::1"},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Garbage entry - should fail",
+			security: Security{
+				TrustedProxies:  []string{"not-an-ip-or-cidr"},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: true,
+			errType: "security-trustedproxies-format",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateSecuritySettings(&tt.security)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assertValidationError(t, err, tt.errType)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 // TestValidateSecuritySettings_SessionDuration tests session duration validation
 func TestValidateSecuritySettings_SessionDuration(t *testing.T) {
 	t.Parallel()

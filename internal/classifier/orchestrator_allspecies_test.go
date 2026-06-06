@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
@@ -71,7 +72,7 @@ func buildAllSpeciesOrchestrator(t *testing.T, settings *conf.Settings, rf *fake
 // the universal geomodel path in getProbableSpecies.
 func universalSettings(t *testing.T) *conf.Settings {
 	t.Helper()
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.BirdNET.Latitude = 60.0
 	settings.BirdNET.Longitude = 25.0
 	settings.BirdNET.LocationConfigured = true

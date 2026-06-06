@@ -79,9 +79,7 @@ func (c *Controller) getBirdNETInstance() (*classifier.Orchestrator, error) {
 
 // currentLocale returns the BirdNET locale from the current settings.
 func (c *Controller) currentLocale() string {
-	c.settingsMutex.RLock()
-	locale := conf.CurrentOrFallback(c.Settings).BirdNET.Locale
-	c.settingsMutex.RUnlock()
+	locale := c.currentSettings().BirdNET.Locale
 	return locale
 }
 
@@ -90,9 +88,7 @@ func (c *Controller) currentLocale() string {
 // current settings with only the test values overridden, so it can be passed
 // directly to GetProbableSpeciesWithSettings without modifying global state.
 func (c *Controller) buildTestSettings(lat, lon float64, threshold float32) *conf.Settings {
-	c.settingsMutex.RLock()
-	testSnapshot := conf.CloneSettings(conf.CurrentOrFallback(c.Settings))
-	c.settingsMutex.RUnlock()
+	testSnapshot := conf.CloneSettings(c.currentSettings())
 
 	testSnapshot.BirdNET.Latitude = lat
 	testSnapshot.BirdNET.Longitude = lon
@@ -273,12 +269,10 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 
 	// Read defaults from latest published settings snapshot so UI changes
 	// to coordinates take effect without restart.
-	c.settingsMutex.RLock()
-	settings := conf.CurrentOrFallback(c.Settings)
+	settings := c.currentSettings()
 	lat := settings.BirdNET.Latitude
 	lon := settings.BirdNET.Longitude
 	locale := settings.BirdNET.Locale
-	c.settingsMutex.RUnlock()
 
 	// Override with query params if provided
 	if latStr := ctx.QueryParam("lat"); latStr != "" {
@@ -353,9 +347,7 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/count [get]
 func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
-	c.settingsMutex.RLock()
-	settings := conf.CurrentOrFallback(c.Settings)
-	c.settingsMutex.RUnlock()
+	settings := c.currentSettings()
 	includedSpecies := settings.GetIncludedSpecies()
 
 	response := RangeFilterSpeciesCount{
@@ -380,9 +372,7 @@ func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/species/list [get]
 func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
-	c.settingsMutex.RLock()
-	settings := conf.CurrentOrFallback(c.Settings)
-	c.settingsMutex.RUnlock()
+	settings := c.currentSettings()
 	includedSpecies := settings.GetIncludedSpecies()
 
 	birdnetInstance, _ := c.getBirdNETInstance()
@@ -567,10 +557,8 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		// Parse custom parameters
 		var testReq RangeFilterTestRequest
 
-		// Read current settings under lock for defaults
-		c.settingsMutex.RLock()
-		defaults := conf.CurrentOrFallback(c.Settings)
-		c.settingsMutex.RUnlock()
+		// Read current settings from the lock-free atomic snapshot for defaults
+		defaults := c.currentSettings()
 		testReq.Latitude = defaults.BirdNET.Latitude
 		testReq.Longitude = defaults.BirdNET.Longitude
 		testReq.Threshold = defaults.BirdNET.RangeFilter.Threshold
@@ -616,9 +604,7 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 			return c.HandleError(ctx, err, "Failed to get species list", http.StatusInternalServerError)
 		}
 	} else {
-		c.settingsMutex.RLock()
-		settings := conf.CurrentOrFallback(c.Settings)
-		c.settingsMutex.RUnlock()
+		settings := c.currentSettings()
 
 		birdnetInstance, _ := c.getBirdNETInstance()
 		speciesList = convertLabels(settings.GetIncludedSpecies(), birdnetInstance, settings.BirdNET.Locale)
@@ -787,9 +773,7 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 
 	// Read from the latest published snapshot so the just-published rebuild
 	// result is reflected immediately.
-	c.settingsMutex.RLock()
-	settings := conf.CurrentOrFallback(c.Settings)
-	c.settingsMutex.RUnlock()
+	settings := c.currentSettings()
 	includedSpecies := settings.GetIncludedSpecies()
 	lastUpdated := settings.BirdNET.RangeFilter.LastUpdated
 

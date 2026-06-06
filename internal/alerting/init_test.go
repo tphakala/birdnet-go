@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -274,11 +274,11 @@ func validDetectionProps() map[string]any {
 }
 
 func TestRenderDetectionTemplates_WithConfiguredTemplates(t *testing.T) {
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.Notification.Templates.NewSpecies.Title = "New: {{.CommonName}}"
 	settings.Notification.Templates.NewSpecies.Message = "{{.CommonName}} ({{.ScientificName}}) at {{.ConfidencePercent}}%"
-	conf.SetTestSettings(settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	title, message := renderDetectionTemplates(validDetectionProps())
 	assert.Equal(t, "New: Eurasian Blue Tit", title)
@@ -288,9 +288,9 @@ func TestRenderDetectionTemplates_WithConfiguredTemplates(t *testing.T) {
 }
 
 func TestRenderDetectionTemplates_EmptyTemplates(t *testing.T) {
-	settings := conf.GetTestSettings()
-	conf.SetTestSettings(settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	settings := conftest.GetTestSettings()
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	title, message := renderDetectionTemplates(validDetectionProps())
 	assert.Empty(t, title)
@@ -298,8 +298,8 @@ func TestRenderDetectionTemplates_EmptyTemplates(t *testing.T) {
 }
 
 func TestRenderDetectionTemplates_NilSettings(t *testing.T) {
-	conf.SetTestSettings(nil)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	conftest.SetTestSettings(nil)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	title, message := renderDetectionTemplates(validDetectionProps())
 	assert.Empty(t, title)
@@ -307,10 +307,10 @@ func TestRenderDetectionTemplates_NilSettings(t *testing.T) {
 }
 
 func TestRenderDetectionTemplates_TitleOnlyTemplate(t *testing.T) {
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.Notification.Templates.NewSpecies.Title = "Spotted: {{.CommonName}}"
-	conf.SetTestSettings(settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	title, message := renderDetectionTemplates(validDetectionProps())
 	assert.Equal(t, "Spotted: Eurasian Blue Tit", title)
@@ -318,10 +318,10 @@ func TestRenderDetectionTemplates_TitleOnlyTemplate(t *testing.T) {
 }
 
 func TestApplyDetectionTemplates_NonDetectionUnchanged(t *testing.T) {
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.Notification.Templates.NewSpecies.Title = "Override: {{.CommonName}}"
-	conf.SetTestSettings(settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	title, message := applyDetectionTemplates(
 		notification.TypeWarning, "Original Title", "Original Message", validDetectionProps(),
@@ -331,10 +331,10 @@ func TestApplyDetectionTemplates_NonDetectionUnchanged(t *testing.T) {
 }
 
 func TestApplyDetectionTemplates_NonNewSpeciesUnchanged(t *testing.T) {
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.Notification.Templates.NewSpecies.Title = "New: {{.CommonName}}"
-	conf.SetTestSettings(settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	props := validDetectionProps()
 	props[PropertyIsNewSpecies] = false

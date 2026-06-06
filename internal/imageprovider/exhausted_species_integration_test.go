@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -93,18 +94,18 @@ func setupExhaustedCacheTest(t *testing.T) (primary *imageprovider.BirdImageCach
 	t.Helper()
 
 	// Capture and restore the global settings instance so tests in this
-	// package do not bleed into each other. conf.SetTestSettings replaces a
+	// package do not bleed into each other. conftest.SetTestSettings replaces a
 	// process-wide singleton, so an unrestored mutation can flip the
 	// fallback policy for any later test that calls conf.Setting().
 	previousSettings := conf.GetSettings()
 	t.Cleanup(func() {
-		conf.SetTestSettings(previousSettings)
+		conftest.SetTestSettings(previousSettings)
 	})
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.Realtime.Dashboard.Thumbnails.ImageProvider = providerAvicommons
 	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = fallbackPolicyAllValue
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	trackedStore = newCountingStore()
 	primaryProv = &countingNotFoundProvider{}
@@ -141,13 +142,13 @@ func setupTransientFallbackTest(t *testing.T) (
 
 	previousSettings := conf.GetSettings()
 	t.Cleanup(func() {
-		conf.SetTestSettings(previousSettings)
+		conftest.SetTestSettings(previousSettings)
 	})
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.Realtime.Dashboard.Thumbnails.ImageProvider = providerAvicommons
 	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = fallbackPolicyAllValue
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	store := newMockStore()
 	primaryProv = &countingNotFoundProvider{}

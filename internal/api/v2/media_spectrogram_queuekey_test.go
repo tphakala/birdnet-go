@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
@@ -56,13 +57,12 @@ func TestGetSpectrogramStatusFindsInFlightJobAfterExportPathChange(t *testing.T)
 	mockDS := mocks.NewMockInterface(t)
 
 	controller := &Controller{
-		Settings: settings,
-		SFS:      sfs,
-		ctx:      t.Context(),
-		DS:       mockDS,
+		SFS: sfs,
+		ctx: t.Context(),
+		DS:  mockDS,
 	}
-	controller.settingsAtomic.Store(settings)
-	conf.SetTestSettings(settings)
+	controller.Settings.Store(settings)
+	conftest.SetTestSettings(settings)
 
 	// Simulate an in-flight generation enqueued under the immutable queue key.
 	spec := settings.Realtime.Dashboard.Spectrogram
@@ -75,8 +75,8 @@ func TestGetSpectrogramStatusFindsInFlightJobAfterExportPathChange(t *testing.T)
 	// Change Export.Path mid-flight: after enqueue, before the status poll.
 	changed := conf.CloneSettings(settings)
 	changed.Realtime.Audio.Export.Path = filepath.Join(tmp, "changed")
-	conf.SetTestSettings(changed)
-	controller.settingsAtomic.Store(changed)
+	conftest.SetTestSettings(changed)
+	controller.Settings.Store(changed)
 
 	// Poll the status endpoint.
 	e := echo.New()
@@ -117,12 +117,11 @@ func TestGenerateSpectrogramFromRelRetainsFailedStatusForPolling(t *testing.T) {
 
 	settings := newValidTestSettings()
 	controller := &Controller{
-		Settings: settings,
-		SFS:      sfs,
-		ctx:      ctx,
+		SFS: sfs,
+		ctx: ctx,
 	}
-	controller.settingsAtomic.Store(settings)
-	conf.SetTestSettings(settings)
+	controller.Settings.Store(settings)
+	conftest.SetTestSettings(settings)
 
 	const queueKey = "queuekey-failtest:1026:true"
 	t.Cleanup(func() { spectrogramQueue.Delete(queueKey) })

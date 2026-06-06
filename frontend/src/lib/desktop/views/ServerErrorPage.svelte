@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import { t } from '$lib/i18n';
+  import { appState } from '$lib/stores/appState.svelte';
 
   interface SecuritySettings {
     enabled: boolean;
@@ -62,7 +63,7 @@
       </a>
       {#if showDetails}
         <a
-          href="https://github.com/tphakala/birdnet-go/issues"
+          href={appState.projectLinks.issuesUrl}
           class="btn btn-accent normal-case text-base font-semibold transition duration-300"
         >
           {t('common.reportIssue')}

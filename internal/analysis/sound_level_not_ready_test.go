@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // makeValidSoundLevelData returns a well-formed SoundLevelData value suitable
@@ -45,14 +46,14 @@ func makeValidSoundLevelData() soundlevel.SoundLevelData {
 //  2. Does NOT wrap the sentinel with CategorySoundLevel (which would hit
 //     Sentry via the errors package telemetry integration)
 func TestPublishSoundLevelToMQTT_ClientNotReady_Silent(t *testing.T) {
-	// Not parallel: conf.SetTestSettings mutates package-global state.
+	// Not parallel: conftest.SetTestSettings mutates package-global state.
 	prev := conf.GetSettings()
-	t.Cleanup(func() { conf.SetTestSettings(prev) })
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	settings := &conf.Settings{}
 	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = "birdnet/test"
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	// Build a processor whose MqttClient reference is nil (the exact startup
 	// failure condition reported by Sentry when the broker connect fails).
@@ -73,14 +74,14 @@ func TestPublishSoundLevelToMQTT_ClientNotReady_Silent(t *testing.T) {
 // caller. This is the scenario that generates high-volume telemetry floods
 // when the broker stays unreachable.
 func TestPublishSoundLevelToMQTT_ClientNotReady_Idempotent(t *testing.T) {
-	// Not parallel: conf.SetTestSettings mutates package-global state.
+	// Not parallel: conftest.SetTestSettings mutates package-global state.
 	prev := conf.GetSettings()
-	t.Cleanup(func() { conf.SetTestSettings(prev) })
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	settings := &conf.Settings{}
 	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = "birdnet/test"
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	proc := &processor.Processor{
 		Settings: settings,
@@ -97,13 +98,13 @@ func TestPublishSoundLevelToMQTT_ClientNotReady_Idempotent(t *testing.T) {
 // TestPublishSoundLevelToMQTT_MQTTDisabled_StillNoError verifies the
 // pre-existing "MQTT disabled" early return is not affected by the fix.
 func TestPublishSoundLevelToMQTT_MQTTDisabled_StillNoError(t *testing.T) {
-	// Not parallel: conf.SetTestSettings mutates package-global state.
+	// Not parallel: conftest.SetTestSettings mutates package-global state.
 	prev := conf.GetSettings()
-	t.Cleanup(func() { conf.SetTestSettings(prev) })
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	settings := &conf.Settings{}
 	settings.Realtime.MQTT.Enabled = false // disabled
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	proc := &processor.Processor{
 		Settings: settings,

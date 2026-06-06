@@ -189,6 +189,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             BUILD_VERSION=${{ inputs.version }}
+            SENTRY_DSN=${{ secrets.SENTRY_DSN }}
             BUILDKIT_INLINE_CACHE=1
           tags: ${{ steps.tags.outputs.tags }}
           cache-from: |

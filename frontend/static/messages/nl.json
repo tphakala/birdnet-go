@@ -2174,12 +2174,15 @@
         },
         "githubRequired": {
           "title": "Vereist: GitHub Issue voor Ondersteunings Uploads",
-          "description": "<strong>Ondersteunings uploads vereisen een GitHub issue nummer.</strong> <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">Maak een GitHub issue aan</a> waarin je jouw probleem beschrijft <strong>voordat</strong> je een ondersteunings rapport genereert. Zonder een gelinkt issue kunnen ontwikkelaars niets doen met jouw ondersteunings gegevens."
+          "description": "<strong>Ondersteunings uploads vereisen een GitHub issue nummer.</strong> {createIssueLink} waarin je jouw probleem beschrijft <strong>voordat</strong> je een ondersteunings rapport genereert. Zonder een gelinkt issue kunnen ontwikkelaars niets doen met jouw ondersteunings gegevens.",
+          "createGithubIssue": "Maak een GitHub issue aan"
         },
         "githubIssue": {
           "label": "GitHub Issue Nummer",
           "placeholder": "bijv., 123 of #123",
-          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Bekijk bestaande issues</a> of <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">maak eerst een nieuw issue aan</a>"
+          "helper": "{viewIssuesLink} of {createIssueLink}",
+          "viewExistingIssues": "Bekijk bestaande issues",
+          "createNewIssue": "maak eerst een nieuw issue aan"
         },
         "whatsIncluded": {
           "title": "Wat is opgenomen in het rapport:",

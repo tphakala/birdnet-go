@@ -127,9 +127,10 @@ func (c *Controller) GetAllSpecies(ctx echo.Context) error {
 		logger.String("path", path),
 	)
 
-	c.settingsMutex.RLock()
-	labels := c.Settings.BirdNET.Labels
-	c.settingsMutex.RUnlock()
+	var labels []string
+	if settings := c.controllerSettings(); settings != nil {
+		labels = settings.BirdNET.Labels
+	}
 	speciesList := make([]RangeFilterSpecies, 0, len(labels))
 
 	for _, label := range labels {

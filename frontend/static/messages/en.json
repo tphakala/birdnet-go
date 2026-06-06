@@ -2174,12 +2174,15 @@
         },
         "githubRequired": {
           "title": "Required: GitHub Issue for Support Uploads",
-          "description": "<strong>Support uploads require a GitHub issue number.</strong> Please <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">create a GitHub issue</a> describing your problem <strong>before</strong> generating a support report. Without a linked issue, developers cannot act on your support data."
+          "description": "<strong>Support uploads require a GitHub issue number.</strong> Please {createIssueLink} describing your problem <strong>before</strong> generating a support report. Without a linked issue, developers cannot act on your support data.",
+          "createGithubIssue": "create a GitHub issue"
         },
         "githubIssue": {
           "label": "GitHub Issue Number",
           "placeholder": "e.g., 123 or #123",
-          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">View existing issues</a> or <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">create a new issue</a> first"
+          "helper": "{viewIssuesLink} or {createIssueLink} first",
+          "viewExistingIssues": "View existing issues",
+          "createNewIssue": "create a new issue"
         },
         "whatsIncluded": {
           "title": "What's included in the report:",

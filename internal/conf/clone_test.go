@@ -134,6 +134,7 @@ func newPopulatedSettings() *Settings {
 	s.Security.OAuthProviders = []OAuthProviderConfig{
 		{Provider: "google", Scopes: []string{"openid", "email"}},
 	}
+	s.Security.TrustedProxies = []string{"cloudflare", "10.0.0.0/8"}
 
 	// Include nested slices and nested maps inside the Settings map[string]any
 	// so the clone test catches a regression if the deep copy ever degrades
@@ -250,6 +251,7 @@ func mutateCloneEverywhere(dst *Settings) {
 	dst.Realtime.SpeciesTracking.SeasonalTracking.Seasons[mutated] = Season{}
 
 	dst.Security.OAuthProviders[0].Scopes[0] = mutated
+	dst.Security.TrustedProxies[0] = mutated
 
 	dst.Backup.Targets[0].Settings["path"] = mutated
 	// Mutate nested slice and nested map inside the any-typed Settings so
@@ -385,6 +387,7 @@ func assertSourceUnchanged(t *testing.T, src *Settings) {
 
 	require.Len(t, src.Security.OAuthProviders, 1)
 	assert.Equal(t, []string{"openid", "email"}, src.Security.OAuthProviders[0].Scopes)
+	assert.Equal(t, []string{"cloudflare", "10.0.0.0/8"}, src.Security.TrustedProxies)
 
 	require.Len(t, src.Backup.Targets, 1)
 	assert.Equal(t, "/backups", src.Backup.Targets[0].Settings["path"])

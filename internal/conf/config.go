@@ -1301,6 +1301,11 @@ type AllowSubnetBypass struct {
 	Subnet  string `yaml:"subnet" json:"subnet"`   // disable OAuth2 in subnet
 }
 
+// TrustedProxyCloudflarePreset is the reserved Security.TrustedProxies entry
+// that expands to Cloudflare's published edge IP ranges, sparing operators from
+// pasting the full CIDR list when fronting BirdNET-Go with Cloudflare.
+const TrustedProxyCloudflarePreset = "cloudflare"
+
 // PublicAccess defines which features are accessible without authentication.
 // Each field corresponds to a feature that can be individually made public.
 type PublicAccess struct {
@@ -1373,7 +1378,18 @@ type Security struct {
 	TLSPort           string            `yaml:"tlsport" json:"tlsPort"`                     // port for HTTPS (default: 8443)
 	RedirectToHTTPS   bool              `yaml:"redirecttohttps" json:"redirectToHttps"`     // true to redirect to HTTPS
 	AllowSubnetBypass AllowSubnetBypass `yaml:"allowsubnetbypass" json:"allowSubnetBypass"` // subnet bypass configuration
-	PublicAccess      PublicAccess      `yaml:"publicaccess" json:"publicAccess"`           // features accessible without authentication
+
+	// TrustedProxies lists reverse proxies (CIDR ranges or bare IPs) whose
+	// forwarded client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP)
+	// may be trusted. Loopback, link-local, and private (RFC1918/ULA) peers are always
+	// trusted in addition to these, so a default port-forwarded install and the
+	// common local cloudflared topology work without configuration. When the
+	// immediate peer is not trusted, forwarded headers are ignored and the real
+	// connection address is used, preventing source-IP spoofing on a directly
+	// exposed instance. The reserved value "cloudflare" (TrustedProxyCloudflarePreset)
+	// expands to Cloudflare's published edge ranges. Hot-reloadable.
+	TrustedProxies []string     `yaml:"trustedproxies" json:"trustedProxies"`
+	PublicAccess   PublicAccess `yaml:"publicaccess" json:"publicAccess"` // features accessible without authentication
 	// PrivateMode, when true, requires the user to authenticate before any
 	// UI data is shown. Enforcement lives at the v2 API data layer, which
 	// returns 401 to unauthenticated requests; the public SPA shell is still

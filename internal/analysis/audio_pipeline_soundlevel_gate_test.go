@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // TestRegisterSoundLevelConsumers_DisabledIsNoOp confirms the guard added to
@@ -20,14 +21,14 @@ import (
 // return is taken: if the body executed it would panic on the first
 // p.engine.Registry() call.
 func TestRegisterSoundLevelConsumers_DisabledIsNoOp(t *testing.T) {
-	// Not parallel: conf.SetTestSettings mutates package-global state.
+	// Not parallel: conftest.SetTestSettings mutates package-global state.
 	prev := conf.GetSettings()
-	t.Cleanup(func() { conf.SetTestSettings(prev) })
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	settings := &conf.Settings{}
 	settings.Realtime.Audio.SoundLevel.Enabled = false
 	settings.Realtime.Audio.SoundLevel.Interval = 10
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	// engine is intentionally nil: the guard must return before dereferencing
 	// it. If this panics, the gate was not taken.
@@ -44,11 +45,11 @@ func TestRegisterSoundLevelConsumers_DisabledIsNoOp(t *testing.T) {
 // (idempotency regression).
 func TestRegisterSoundLevelConsumers_DisabledRepeatedCallsStayQuiet(t *testing.T) {
 	prev := conf.GetSettings()
-	t.Cleanup(func() { conf.SetTestSettings(prev) })
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	settings := &conf.Settings{}
 	settings.Realtime.Audio.SoundLevel.Enabled = false
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	p := &AudioPipelineService{}
 	for range 10 {
@@ -63,11 +64,11 @@ func TestRegisterSoundLevelConsumers_DisabledRepeatedCallsStayQuiet(t *testing.T
 // unit-test context.
 func TestReconfigureSoundLevel_DisableWithNoRoutes(t *testing.T) {
 	prev := conf.GetSettings()
-	t.Cleanup(func() { conf.SetTestSettings(prev) })
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	settings := &conf.Settings{}
 	settings.Realtime.Audio.SoundLevel.Enabled = false
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	p := &AudioPipelineService{}
 	// Nil engine is acceptable because the disable path with an empty

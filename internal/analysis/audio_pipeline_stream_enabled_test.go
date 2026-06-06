@@ -8,11 +8,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	enginepkg "github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 func TestBuildSourceConfigsWithModels_SkipsDisabledStreams(t *testing.T) {
 	prev := conf.GetSettings()
-	t.Cleanup(func() { conf.SetTestSettings(prev) })
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	settings := &conf.Settings{}
 	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
@@ -31,7 +32,7 @@ func TestBuildSourceConfigsWithModels_SkipsDisabledStreams(t *testing.T) {
 			Models:  []string{"birdnet"},
 		},
 	}
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	p := &AudioPipelineService{}
 	configs := p.buildSourceConfigsWithModels()
@@ -42,7 +43,7 @@ func TestBuildSourceConfigsWithModels_SkipsDisabledStreams(t *testing.T) {
 
 func TestReconfigureChangedSources_RemovesDisabledRunningStream(t *testing.T) {
 	prev := conf.GetSettings()
-	t.Cleanup(func() { conf.SetTestSettings(prev) })
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	const connection = "rtsp://cam1"
 
@@ -56,7 +57,7 @@ func TestReconfigureChangedSources_RemovesDisabledRunningStream(t *testing.T) {
 			Models:  []string{"birdnet"},
 		},
 	}
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	engine := enginepkg.New(t.Context(), &enginepkg.Config{}, nil)
 	_, err := engine.Registry().Register(&audiocore.SourceConfig{

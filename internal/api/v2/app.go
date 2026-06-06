@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/middleware"
+	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -42,6 +43,7 @@ type AppConfigResponse struct {
 	NewVersion      bool                  `json:"newVersion"`                // true when the app was upgraded since last dismiss
 	PreviousVersion string                `json:"previousVersion,omitempty"` // last version the user acknowledged
 	Sentry          *SentryFrontendConfig `json:"sentry,omitempty"`          // frontend telemetry config (only when enabled)
+	ProjectLinks    ProjectLinksConfig    `json:"projectLinks"`              // project identity/links served to the frontend
 }
 
 // SentryFrontendConfig exposes telemetry configuration to the frontend.
@@ -50,6 +52,18 @@ type SentryFrontendConfig struct {
 	Enabled  bool   `json:"enabled"`
 	DSN      string `json:"dsn"`
 	SystemID string `json:"systemId"`
+}
+
+// ProjectLinksConfig exposes the configurable project identity (name and links)
+// to the frontend so in-app links follow the branding package rather than
+// hardcoded upstream URLs. It is always populated (not gated on telemetry).
+type ProjectLinksConfig struct {
+	Name         string `json:"name"`
+	RepoURL      string `json:"repoUrl"`
+	IssuesURL    string `json:"issuesUrl"`
+	NewIssueURL  string `json:"newIssueUrl"`
+	SupportURL   string `json:"supportUrl"`
+	CommunityURL string `json:"communityUrl"`
 }
 
 // SecurityConfigDTO represents the security configuration for the frontend.
@@ -182,6 +196,16 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 		FreshInstall:    freshInstall,
 		NewVersion:      newVersion,
 		PreviousVersion: previousVersion,
+		// Project identity/links are always served (independent of telemetry) so
+		// in-app links follow the configured branding instead of hardcoded URLs.
+		ProjectLinks: ProjectLinksConfig{
+			Name:         branding.Name(),
+			RepoURL:      branding.RepoURL(),
+			IssuesURL:    branding.IssuesURL(),
+			NewIssueURL:  branding.NewIssueURL(),
+			SupportURL:   branding.SupportURL(),
+			CommunityURL: branding.CommunityURL(),
+		},
 	}
 
 	// Include dashboard layout for guest/pre-auth rendering if configured
@@ -189,12 +213,17 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 		response.Layout = &settings.Realtime.Dashboard.Layout
 	}
 
-	// Include Sentry frontend config when telemetry is enabled
+	// Include Sentry frontend config when telemetry is enabled AND a DSN is
+	// actually configured for this build. Builds without a DSN (plain `go build`
+	// or forks) must not hand the frontend an empty DSN, which would make the
+	// browser SDK fail to initialize.
 	if settings.Sentry.Enabled {
-		response.Sentry = &SentryFrontendConfig{
-			Enabled:  true,
-			DSN:      telemetry.GetFrontendDSN(),
-			SystemID: settings.SystemID,
+		if dsn := telemetry.GetFrontendDSN(); dsn != "" {
+			response.Sentry = &SentryFrontendConfig{
+				Enabled:  true,
+				DSN:      dsn,
+				SystemID: settings.SystemID,
+			}
 		}
 	}
 
@@ -250,7 +279,7 @@ func (c *Controller) determineWizardState(ctx context.Context, settings *conf.Se
 		return false, true, lastSeenVersion
 	}
 
-	// Version matches — no wizard needed
+	// Version matches; no wizard needed
 	return false, false, lastSeenVersion
 }
 

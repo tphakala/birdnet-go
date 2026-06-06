@@ -175,13 +175,10 @@ type streamInfo struct {
 
 // getStreamInfo looks up stream name and type from config by URL.
 // Returns empty values if stream is not found in config.
-// Uses c.Settings (injected via Controller constructor) which points to the
-// shared settings instance — mutations are visible immediately.
+// Reads the controller's lock-free settings snapshot, so a hot-reload that
+// republishes settings is visible on the next call.
 func (c *Controller) getStreamInfo(rawURL string) streamInfo {
-	c.settingsMutex.RLock()
-	settings := c.Settings
-	c.settingsMutex.RUnlock()
-
+	settings := c.controllerSettings()
 	if settings == nil {
 		return streamInfo{}
 	}

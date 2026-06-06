@@ -54,13 +54,13 @@ func setupRangeTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, 
 	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Set up mock settings with range filter data
-	controller.Settings.BirdNET.Latitude = 60.1699
-	controller.Settings.BirdNET.Longitude = 24.9384
-	controller.Settings.BirdNET.RangeFilter.Threshold = 0.01
-	controller.Settings.BirdNET.RangeFilter.LastUpdated = time.Now()
+	controller.Settings.Load().BirdNET.Latitude = 60.1699
+	controller.Settings.Load().BirdNET.Longitude = 24.9384
+	controller.Settings.Load().BirdNET.RangeFilter.Threshold = 0.01
+	controller.Settings.Load().BirdNET.RangeFilter.LastUpdated = time.Now()
 
 	// Set the included species list directly for test setup
-	controller.Settings.BirdNET.RangeFilter.Species = []string{
+	controller.Settings.Load().BirdNET.RangeFilter.Species = []string{
 		"Turdus merula_Eurasian Blackbird",
 		"Parus major_Great Tit",
 		"Corvus cornix_Hooded Crow",
@@ -373,9 +373,9 @@ func TestRebuildRangeFilterWithoutProcessor(t *testing.T) {
 func TestBuildTestSettingsDoesNotMutateGlobal(t *testing.T) {
 	_, _, controller := setupRangeTestEnvironment(t)
 
-	originalLat := controller.Settings.BirdNET.Latitude
-	originalLon := controller.Settings.BirdNET.Longitude
-	originalThreshold := controller.Settings.BirdNET.RangeFilter.Threshold
+	originalLat := controller.Settings.Load().BirdNET.Latitude
+	originalLon := controller.Settings.Load().BirdNET.Longitude
+	originalThreshold := controller.Settings.Load().BirdNET.RangeFilter.Threshold
 
 	testSettings := controller.buildTestSettings(40.7128, -74.0060, 0.05)
 
@@ -386,12 +386,12 @@ func TestBuildTestSettingsDoesNotMutateGlobal(t *testing.T) {
 	assert.True(t, testSettings.BirdNET.LocationConfigured)
 
 	// Controller's settings are unchanged
-	assert.InDelta(t, originalLat, controller.Settings.BirdNET.Latitude, 0.0001)
-	assert.InDelta(t, originalLon, controller.Settings.BirdNET.Longitude, 0.0001)
-	assert.InDelta(t, originalThreshold, controller.Settings.BirdNET.RangeFilter.Threshold, 0.001)
+	assert.InDelta(t, originalLat, controller.Settings.Load().BirdNET.Latitude, 0.0001)
+	assert.InDelta(t, originalLon, controller.Settings.Load().BirdNET.Longitude, 0.0001)
+	assert.InDelta(t, originalThreshold, controller.Settings.Load().BirdNET.RangeFilter.Threshold, 0.001)
 
 	// Published snapshot (what handlers read via CurrentOrFallback) is also unchanged
-	published := conf.CurrentOrFallback(controller.Settings)
+	published := conf.CurrentOrFallback(controller.Settings.Load())
 	assert.InDelta(t, originalLat, published.BirdNET.Latitude, 0.0001)
 	assert.InDelta(t, originalLon, published.BirdNET.Longitude, 0.0001)
 	assert.InDelta(t, originalThreshold, published.BirdNET.RangeFilter.Threshold, 0.001)
@@ -404,8 +404,8 @@ func TestBuildTestSettingsDoesNotMutateGlobal(t *testing.T) {
 func TestBuildTestSettingsConcurrentWithCountEndpoint(t *testing.T) {
 	e, _, controller := setupRangeTestEnvironment(t)
 
-	originalLat := controller.Settings.BirdNET.Latitude
-	originalLon := controller.Settings.BirdNET.Longitude
+	originalLat := controller.Settings.Load().BirdNET.Latitude
+	originalLon := controller.Settings.Load().BirdNET.Longitude
 
 	const iterations = 50
 	var wg sync.WaitGroup

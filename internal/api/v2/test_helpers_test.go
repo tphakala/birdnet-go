@@ -28,12 +28,13 @@ const (
 // Note: DisableHTTPKeepAlivesForTesting() is called in TestMain before any tests run
 func getTestController(t *testing.T, e *echo.Echo) *Controller {
 	t.Helper()
-	return &Controller{
+	c := &Controller{
 		Echo:                e,
-		Settings:            getTestSettings(t),
 		controlChan:         make(chan string, testControlChanBuffer),
 		DisableSaveSettings: true, // Disable saving to disk during tests
 	}
+	c.Settings.Store(getTestSettings(t))
+	return c
 }
 
 // getTestSettings returns a valid Settings instance for testing

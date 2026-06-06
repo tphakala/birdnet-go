@@ -67,8 +67,9 @@ func TestHealthCheck(t *testing.T) {
 	mockDS.On("GetLastDetections", 1).Return([]datastore.Note{}, nil)
 
 	// Add system metrics to the controller settings
-	controller.Settings.Version = "1.2.3"
-	controller.Settings.BuildDate = "2023-05-15"
+	settings := controller.Settings.Load()
+	settings.Version = "1.2.3"
+	settings.BuildDate = "2023-05-15"
 
 	// Create a request to the health check endpoint
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)
@@ -175,16 +176,17 @@ func TestNewErrorResponseDebugMode(t *testing.T) {
 	testErr := echo.NewHTTPError(http.StatusBadRequest, "Test error")
 
 	// Test 1: Non-debug mode — Error field should use sanitized message
-	c := &Controller{Settings: &conf.Settings{
+	c := &Controller{}
+	c.Settings.Store(&conf.Settings{
 		WebServer: conf.WebServerSettings{Debug: false},
-	}}
+	})
 
 	resp := c.newErrorResponse(testErr, "Safe message", http.StatusBadRequest)
 	assert.Equal(t, "Safe message", resp.Error, "Non-debug mode should use sanitized message")
 	assert.Equal(t, "Safe message", resp.Message)
 
 	// Test 2: Debug mode — Error field should expose raw err.Error()
-	c.Settings.WebServer.Debug = true
+	c.Settings.Load().WebServer.Debug = true
 
 	resp = c.newErrorResponse(testErr, "Safe message", http.StatusBadRequest)
 	assert.Equal(t, "code=400, message=Test error", resp.Error, "Debug mode should expose raw error")

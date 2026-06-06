@@ -31,9 +31,8 @@ func TestCreateTestNewSpeciesNotification_ServiceNotInitialized(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	controller := &Controller{
-		Settings: &conf.Settings{},
-	}
+	controller := &Controller{}
+	controller.Settings.Store(&conf.Settings{})
 
 	// Call through middleware to test the guard
 	handler := controller.requireNotificationService(controller.CreateTestNewSpeciesNotification)
@@ -57,9 +56,14 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 
 	// Try to set up isolated service for testing
 	service := notification.NewService(config)
-	err := notification.SetServiceForTesting(service)
-	if err != nil {
-		// Service already exists, use it
+	if err := notification.SetServiceForTesting(service); err != nil {
+		// An instance already exists; stop the service we just created so its
+		// cleanupLoop goroutine does not leak (the gate in TestMain would flag
+		// it), then use the existing singleton. We deliberately do NOT stop the
+		// service on the success path: it becomes the global singleton, which is
+		// stopped once after the whole suite in TestMain. Stopping it here would
+		// leave later GetService() callers with a stopped instance.
+		service.Stop()
 		service = notification.GetService()
 		require.NotNil(t, service, "Expected notification service to be available")
 	}
@@ -69,19 +73,22 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	controller := &Controller{Settings: newValidTestSettings()}
-	controller.Settings = &conf.Settings{}
-	controller.Settings.Security.Host = "localhost"
-	controller.Settings.WebServer.Port = "8080"
-	controller.Settings.Main.TimeAs24h = true
+	controller := &Controller{}
+	// Build a minimal settings snapshot with only the fields this test needs,
+	// then publish it once (the empty base matches the original test).
+	settings := &conf.Settings{}
+	settings.Security.Host = "localhost"
+	settings.WebServer.Port = "8080"
+	settings.Main.TimeAs24h = true
 	// Set default templates from config.yaml
-	controller.Settings.Notification.Templates.NewSpecies.Title = "New Species: {{.CommonName}}"
-	controller.Settings.Notification.Templates.NewSpecies.Message = "First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}. View: {{.DetectionURL}}"
+	settings.Notification.Templates.NewSpecies.Title = "New Species: {{.CommonName}}"
+	settings.Notification.Templates.NewSpecies.Message = "First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}. View: {{.DetectionURL}}"
+	controller.Settings.Store(settings)
 	// CreateTestNewSpeciesNotification reads the live snapshot via currentSettings();
 	// publish the controller's settings so the read resolves to them.
-	publishTestSettings(t, controller.Settings)
+	publishTestSettings(t, settings)
 
-	err = controller.CreateTestNewSpeciesNotification(c)
+	err := controller.CreateTestNewSpeciesNotification(c)
 	require.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, rec.Code)

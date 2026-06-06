@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // writeSharedGeomodel creates the shared geomodel ONNX and labels files under
@@ -135,7 +136,7 @@ func TestEnsureGeomodelConfig_OrphanSelfHeal(t *testing.T) {
 		modelsDir := t.TempDir()
 		onnxPath, labelsPath := writeSharedGeomodel(t, modelsDir)
 
-		settings := conf.GetTestSettings()
+		settings := conftest.GetTestSettings()
 		settings.Models.Directory = modelsDir
 		settings.BirdNET.RangeFilter.Model = ""
 		settings.BirdNET.RangeFilter.ModelPath = onnxPath
@@ -159,7 +160,7 @@ func TestEnsureGeomodelConfig_OrphanSelfHeal(t *testing.T) {
 		modelsDir := t.TempDir()
 		onnxPath, labelsPath := sharedGeomodelExpectedPaths(modelsDir)
 
-		settings := conf.GetTestSettings()
+		settings := conftest.GetTestSettings()
 		settings.Models.Directory = modelsDir
 		settings.BirdNET.RangeFilter.Model = "v3"
 		settings.BirdNET.RangeFilter.ModelPath = onnxPath
@@ -187,7 +188,7 @@ func TestEnsureGeomodelConfig_OrphanSelfHeal(t *testing.T) {
 		const customModel = "/custom/geo.onnx"
 		const customLabels = "/custom/labels.txt"
 
-		settings := conf.GetTestSettings()
+		settings := conftest.GetTestSettings()
 		settings.Models.Directory = modelsDir
 		settings.BirdNET.RangeFilter.Model = "v3"
 		settings.BirdNET.RangeFilter.ModelPath = customModel
@@ -210,7 +211,7 @@ func TestEnsureGeomodelConfig_OrphanSelfHeal(t *testing.T) {
 		modelsDir := t.TempDir()
 		onnxPath, labelsPath := writeSharedGeomodel(t, modelsDir)
 
-		settings := conf.GetTestSettings()
+		settings := conftest.GetTestSettings()
 		settings.Models.Directory = modelsDir
 		settings.BirdNET.RangeFilter.Model = "v3"
 		settings.BirdNET.RangeFilter.ModelPath = onnxPath
@@ -237,7 +238,7 @@ func TestEnsureGeomodelConfig_OrphanSelfHeal(t *testing.T) {
 
 		// Config stale (model empty) but a geomodel-capable model IS installed:
 		// existing promote behavior must set v3 via the loop, not the orphan path.
-		settings := conf.GetTestSettings()
+		settings := conftest.GetTestSettings()
 		settings.Models.Directory = modelsDir
 		settings.BirdNET.RangeFilter.Model = ""
 		settings.BirdNET.RangeFilter.ModelPath = onnxPath

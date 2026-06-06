@@ -67,7 +67,8 @@ func TestSendAudioLevelUpdateSetsWriteDeadline(t *testing.T) {
 		ctx.Response().Writer = mockWriter
 
 		// Create minimal controller
-		controller := &Controller{Settings: newValidTestSettings()}
+		controller := &Controller{}
+		controller.Settings.Store(newValidTestSettings())
 
 		// Create test audio level data
 		levels := map[string]audiocore.AudioLevelData{
@@ -107,7 +108,8 @@ func TestSendAudioLevelUpdateSetsWriteDeadline(t *testing.T) {
 		ctx := e.NewContext(req, rec)
 		ctx.Response().Writer = mockWriter
 
-		controller := &Controller{Settings: newValidTestSettings()}
+		controller := &Controller{}
+		controller.Settings.Store(newValidTestSettings())
 		levels := map[string]audiocore.AudioLevelData{
 			"test_source": {Level: 50, Name: "Test Source", Source: "test_source"},
 		}
@@ -139,7 +141,8 @@ func TestSendAudioLevelHeartbeatSetsWriteDeadline(t *testing.T) {
 		ctx.Response().Writer = mockWriter
 
 		// Create minimal controller
-		controller := &Controller{Settings: newValidTestSettings()}
+		controller := &Controller{}
+		controller.Settings.Store(newValidTestSettings())
 
 		// Call sendAudioLevelHeartbeat
 		err := controller.sendAudioLevelHeartbeat(ctx)
