@@ -211,16 +211,15 @@ func TestDetermineWizardState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := &Controller{
-				Settings: &conf.Settings{Version: tt.version},
-			}
+			c := &Controller{}
+			c.Settings.Store(&conf.Settings{Version: tt.version})
 			c.appMetadataRepo = tt.metadataRepo
 			if tt.v2Manager != nil {
 				c.V2Manager = tt.v2Manager(t)
 			}
 			// determineWizardState now takes the settings snapshot directly, so
 			// the subtest stays fully per-controller and parallel-safe.
-			freshInstall, newVersion, previousVersion := c.determineWizardState(t.Context(), c.Settings)
+			freshInstall, newVersion, previousVersion := c.determineWizardState(t.Context(), c.Settings.Load())
 
 			assert.Equal(t, tt.wantFresh, freshInstall, "freshInstall mismatch")
 			assert.Equal(t, tt.wantNew, newVersion, "newVersion mismatch")
@@ -238,10 +237,10 @@ func TestDismissWizard_Success(t *testing.T) {
 	mockRepo := newMockAppMetadataRepo()
 	e := echo.New()
 	c := &Controller{
-		Settings:        &conf.Settings{Version: "v0.9.0"},
 		appMetadataRepo: mockRepo,
 	}
-	publishTestSettings(t, c.Settings)
+	c.Settings.Store(&conf.Settings{Version: "v0.9.0"})
+	publishTestSettings(t, c.Settings.Load())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/app/wizard/dismiss", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -260,12 +259,12 @@ func TestDismissWizard_NilRepo(t *testing.T) {
 
 	e := echo.New()
 	c := &Controller{
-		Settings: &conf.Settings{
-			Version:   "v0.9.0",
-			WebServer: conf.WebServerSettings{Debug: true},
-		},
 		// appMetadataRepo intentionally nil
 	}
+	c.Settings.Store(&conf.Settings{
+		Version:   "v0.9.0",
+		WebServer: conf.WebServerSettings{Debug: true},
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/app/wizard/dismiss", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -286,12 +285,12 @@ func TestDismissWizard_SetError(t *testing.T) {
 
 	e := echo.New()
 	c := &Controller{
-		Settings: &conf.Settings{
-			Version:   "v0.9.0",
-			WebServer: conf.WebServerSettings{Debug: true},
-		},
 		appMetadataRepo: mockRepo,
 	}
+	c.Settings.Store(&conf.Settings{
+		Version:   "v0.9.0",
+		WebServer: conf.WebServerSettings{Debug: true},
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/app/wizard/dismiss", http.NoBody)
 	rec := httptest.NewRecorder()

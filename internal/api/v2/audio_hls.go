@@ -272,9 +272,9 @@ func (c *Controller) publicLiveAudioAuth(next echo.HandlerFunc) echo.HandlerFunc
 // restart.
 func (c *Controller) privateModeAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		// Read the live snapshot (race-free, hot-reloading) to match the sibling
-		// publicLiveAudioAuth middleware; the bare c.Settings field under RLock
-		// would not pick up out-of-band StoreSettings republishes.
+		// Read the live global snapshot (race-free, hot-reloading) via
+		// currentSettings() to match the sibling publicLiveAudioAuth middleware; the
+		// per-controller snapshot would miss out-of-band StoreSettings republishes.
 		privateMode := c.currentSettings().Security.PrivateMode
 
 		if !privateMode {

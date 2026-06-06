@@ -74,10 +74,10 @@ func TestConcurrentUpdates(t *testing.T) {
 			e := echo.New()
 			controller := &Controller{
 				Echo:                e,
-				Settings:            getTestSettings(t),
 				controlChan:         make(chan string, 100),
 				DisableSaveSettings: true,
 			}
+			controller.Settings.Store(getTestSettings(t))
 
 			var wg sync.WaitGroup
 			errorsChan := make(chan error, tt.concurrency)
@@ -107,7 +107,7 @@ func TestConcurrentUpdates(t *testing.T) {
 			assert.Empty(t, errors, "Concurrent operations should not produce errors")
 
 			// Verify final state is consistent
-			settings := controller.Settings
+			settings := controller.Settings.Load()
 			assert.NotNil(t, settings)
 
 			// For same-section updates, verify one of the values "won"
@@ -320,7 +320,7 @@ func TestRaceConditionScenarios(t *testing.T) {
 				wg.Wait()
 
 				// Verify both fields were updated
-				settings := controller.Settings
+				settings := controller.Settings.Load()
 				assert.NotNil(t, settings.Realtime.Dashboard.Thumbnails)
 			},
 		},
@@ -333,10 +333,10 @@ func TestRaceConditionScenarios(t *testing.T) {
 			e := echo.New()
 			controller := &Controller{
 				Echo:                e,
-				Settings:            getTestSettings(t),
 				controlChan:         make(chan string, 100),
 				DisableSaveSettings: true,
 			}
+			controller.Settings.Store(getTestSettings(t))
 
 			tt.scenario(t, controller)
 		})

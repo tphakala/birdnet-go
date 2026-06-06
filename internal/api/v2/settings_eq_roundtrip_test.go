@@ -56,10 +56,10 @@ func TestEQFilterRoundTrip_PUT(t *testing.T) {
 	e := echo.New()
 	controller := &Controller{
 		Echo:                e,
-		Settings:            initial,
 		controlChan:         make(chan string, testControlChanBuffer),
 		DisableSaveSettings: true,
 	}
+	controller.Settings.Store(initial)
 
 	eqConfig := map[string]any{
 		"enabled": true,
@@ -96,7 +96,7 @@ func TestEQFilterRoundTrip_PUT(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code, "PUT should succeed")
 
 	// Verify global EQ filters persisted
-	eq := controller.Settings.Realtime.Audio.Equalizer
+	eq := controller.Settings.Load().Realtime.Audio.Equalizer
 	assert.True(t, eq.Enabled, "Equalizer should be enabled")
 	require.Len(t, eq.Filters, 2, "Should have 2 filters")
 	assert.Equal(t, "HighPass", eq.Filters[0].Type)
@@ -166,10 +166,10 @@ func TestEQFilterRoundTrip_PUT_PerSource(t *testing.T) {
 	e := echo.New()
 	controller := &Controller{
 		Echo:                e,
-		Settings:            initial,
 		controlChan:         make(chan string, testControlChanBuffer),
 		DisableSaveSettings: true,
 	}
+	controller.Settings.Store(initial)
 
 	sourceEQ := map[string]any{
 		"enabled": true,
@@ -198,8 +198,8 @@ func TestEQFilterRoundTrip_PUT_PerSource(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code, "PUT should succeed")
 
 	// Verify per-source EQ
-	require.Len(t, controller.Settings.Realtime.Audio.Sources, 1)
-	srcEQ := controller.Settings.Realtime.Audio.Sources[0].Equalizer
+	require.Len(t, controller.Settings.Load().Realtime.Audio.Sources, 1)
+	srcEQ := controller.Settings.Load().Realtime.Audio.Sources[0].Equalizer
 	require.NotNil(t, srcEQ, "Per-source equalizer should not be nil")
 	assert.True(t, srcEQ.Enabled, "Per-source equalizer should be enabled")
 	require.Len(t, srcEQ.Filters, 1, "Per-source should have 1 filter")
@@ -208,7 +208,7 @@ func TestEQFilterRoundTrip_PUT_PerSource(t *testing.T) {
 	assert.Equal(t, 2, srcEQ.Filters[0].Passes)
 
 	// Global EQ should remain unchanged
-	assert.False(t, controller.Settings.Realtime.Audio.Equalizer.Enabled)
+	assert.False(t, controller.Settings.Load().Realtime.Audio.Equalizer.Enabled)
 }
 
 // TestEQFilterRoundTrip_PATCH verifies the PATCH path (section update) for
@@ -225,10 +225,10 @@ func TestEQFilterRoundTrip_PATCH(t *testing.T) {
 	e := echo.New()
 	controller := &Controller{
 		Echo:                e,
-		Settings:            initial,
 		controlChan:         make(chan string, testControlChanBuffer),
 		DisableSaveSettings: true,
 	}
+	controller.Settings.Store(initial)
 
 	payload := map[string]any{
 		"audio": map[string]any{
@@ -270,7 +270,7 @@ func TestEQFilterRoundTrip_PATCH(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code, "PATCH should succeed")
 
-	eq := controller.Settings.Realtime.Audio.Equalizer
+	eq := controller.Settings.Load().Realtime.Audio.Equalizer
 	assert.True(t, eq.Enabled, "Equalizer should be enabled")
 	require.Len(t, eq.Filters, 2, "Should have 2 filters")
 	assert.Equal(t, "HighPass", eq.Filters[0].Type)
@@ -307,10 +307,10 @@ func TestEQFilterRoundTrip_PUT_PerStream(t *testing.T) {
 	e := echo.New()
 	controller := &Controller{
 		Echo:                e,
-		Settings:            initial,
 		controlChan:         make(chan string, testControlChanBuffer),
 		DisableSaveSettings: true,
 	}
+	controller.Settings.Store(initial)
 
 	streamEQ := map[string]any{
 		"enabled": true,
@@ -339,8 +339,8 @@ func TestEQFilterRoundTrip_PUT_PerStream(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code, "PUT should succeed")
 
 	// Verify per-stream EQ survived the round-trip
-	require.Len(t, controller.Settings.Realtime.RTSP.Streams, 1)
-	stEQ := controller.Settings.Realtime.RTSP.Streams[0].Equalizer
+	require.Len(t, controller.Settings.Load().Realtime.RTSP.Streams, 1)
+	stEQ := controller.Settings.Load().Realtime.RTSP.Streams[0].Equalizer
 	require.NotNil(t, stEQ, "Per-stream equalizer should not be nil")
 	assert.True(t, stEQ.Enabled, "Per-stream equalizer should be enabled")
 	require.Len(t, stEQ.Filters, 1, "Per-stream should have 1 filter")
@@ -349,7 +349,7 @@ func TestEQFilterRoundTrip_PUT_PerStream(t *testing.T) {
 	assert.Equal(t, 2, stEQ.Filters[0].Passes)
 
 	// Global EQ should remain unchanged
-	assert.False(t, controller.Settings.Realtime.Audio.Equalizer.Enabled)
+	assert.False(t, controller.Settings.Load().Realtime.Audio.Equalizer.Enabled)
 }
 
 func TestEQFilterRoundTrip_PUT_WithFrontendIDField(t *testing.T) {
@@ -359,10 +359,10 @@ func TestEQFilterRoundTrip_PUT_WithFrontendIDField(t *testing.T) {
 	e := echo.New()
 	controller := &Controller{
 		Echo:                e,
-		Settings:            initial,
 		controlChan:         make(chan string, testControlChanBuffer),
 		DisableSaveSettings: true,
 	}
+	controller.Settings.Store(initial)
 
 	eqConfig := map[string]any{
 		"enabled": true,
@@ -390,7 +390,7 @@ func TestEQFilterRoundTrip_PUT_WithFrontendIDField(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	eq := controller.Settings.Realtime.Audio.Equalizer
+	eq := controller.Settings.Load().Realtime.Audio.Equalizer
 	assert.True(t, eq.Enabled)
 	require.Len(t, eq.Filters, 1)
 	assert.Equal(t, "HighPass", eq.Filters[0].Type)

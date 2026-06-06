@@ -32,10 +32,10 @@ func setupSystemTestEnvironment(t *testing.T) (*echo.Echo, *Controller) {
 	}
 
 	controller := &Controller{
-		Echo:     e,
-		Group:    e.Group("/api/v2"),
-		Settings: settings,
+		Echo:  e,
+		Group: e.Group("/api/v2"),
 	}
+	controller.Settings.Store(settings)
 
 	return e, controller
 }
@@ -584,10 +584,10 @@ func TestGetActiveAudioDevice(t *testing.T) {
 			},
 		}
 		controller := &Controller{
-			Echo:     e,
-			Group:    e.Group("/api/v2"),
-			Settings: settings,
+			Echo:  e,
+			Group: e.Group("/api/v2"),
 		}
+		controller.Settings.Store(settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/audio/active", http.NoBody)
 		rec := httptest.NewRecorder()

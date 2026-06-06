@@ -953,9 +953,9 @@ func FuzzGetAppConfig_Headers(f *testing.F) {
 
 		controller := &Controller{
 			DS:          mockDS,
-			Settings:    settings,
 			authService: nil,
 		}
+		controller.Settings.Store(settings)
 		publishTestSettings(t, settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
@@ -1016,9 +1016,9 @@ func FuzzGetAppConfig_QueryParams(f *testing.F) {
 
 		controller := &Controller{
 			DS:          mockDS,
-			Settings:    settings,
 			authService: nil,
 		}
+		controller.Settings.Store(settings)
 
 		// Build URL safely - query string must be URL-encoded
 		url := "/api/v2/app/config"
@@ -1081,9 +1081,9 @@ func FuzzGetAppConfig_CSRFToken(f *testing.F) {
 
 		controller := &Controller{
 			DS:          mockDS,
-			Settings:    settings,
 			authService: nil,
 		}
+		controller.Settings.Store(settings)
 		publishTestSettings(t, settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
@@ -1147,9 +1147,9 @@ func FuzzGetAppConfig_Version(f *testing.F) {
 
 		controller := &Controller{
 			DS:          mockDS,
-			Settings:    settings,
 			authService: nil,
 		}
+		controller.Settings.Store(settings)
 		publishTestSettings(t, settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
@@ -1301,9 +1301,9 @@ func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
 
 		controller := &Controller{
 			DS:          mockDS,
-			Settings:    settings,
 			authService: nil,
 		}
+		controller.Settings.Store(settings)
 		publishTestSettings(t, settings)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
@@ -1343,7 +1343,7 @@ func TestGetAppConfig_PublicAccessFlags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			controller.Settings.Security.PublicAccess.LiveAudio = tt.enabled
+			controller.Settings.Load().Security.PublicAccess.LiveAudio = tt.enabled
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 			rec := httptest.NewRecorder()
@@ -1389,7 +1389,7 @@ func TestGetAppConfig_LiveSpectrogramField(t *testing.T) {
 			e, controller := setupAppConfigTest(t, nil)
 
 			// Set the LiveSpectrogram value for this test case
-			controller.Settings.Realtime.Dashboard.LiveSpectrogram = tt.enabled
+			controller.Settings.Load().Realtime.Dashboard.LiveSpectrogram = tt.enabled
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
 			rec := httptest.NewRecorder()
@@ -1415,8 +1415,8 @@ func TestGetAppConfig_SentryConfigWhenEnabled(t *testing.T) {
 	_, controller := setupAppConfigTest(t, nil)
 
 	// Enable Sentry in settings
-	controller.Settings.Sentry.Enabled = true
-	controller.Settings.SystemID = "test-system-id-123"
+	controller.Settings.Load().Sentry.Enabled = true
+	controller.Settings.Load().SystemID = "test-system-id-123"
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
@@ -1444,7 +1444,7 @@ func TestGetAppConfig_SentryConfigWhenDisabled(t *testing.T) {
 	_, controller := setupAppConfigTest(t, nil)
 
 	// Sentry disabled (default)
-	controller.Settings.Sentry.Enabled = false
+	controller.Settings.Load().Sentry.Enabled = false
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)

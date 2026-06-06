@@ -52,19 +52,19 @@ const apiV2Prefix = "/api/v2"
 
 // Controller manages the API routes and handlers
 type Controller struct {
-	Echo     *echo.Echo
-	Group    *echo.Group
-	DS       datastore.Interface           // Deprecated: Use Repo for new detection operations
-	Repo     datastore.DetectionRepository // New: Preferred for detection CRUD operations
-	Settings *conf.Settings
-	// settingsAtomic mirrors Settings as a lock-free per-controller snapshot.
-	// The settings update handlers publish it alongside the Settings field on
-	// every save (under settingsMutex), so reads that must stay per-controller
-	// but cannot take the mutex (newErrorResponse is reached from HandleError
-	// while UpdateSettings holds the write lock, so an RLock would deadlock) read
-	// it via controllerSettings() instead of the bare Settings field, which would
-	// race the reassignment. See controllerSettings.
-	settingsAtomic    atomic.Pointer[conf.Settings]
+	Echo  *echo.Echo
+	Group *echo.Group
+	DS    datastore.Interface           // Deprecated: Use Repo for new detection operations
+	Repo  datastore.DetectionRepository // New: Preferred for detection CRUD operations
+	// Settings holds this controller's settings snapshot as a lock-free atomic
+	// pointer (copy-on-write). Update handlers publish a fresh *conf.Settings via
+	// Settings.Store under settingsMutex; every reader Loads it, directly or
+	// through the currentSettings()/controllerSettings() accessors. Storing it
+	// atomically (rather than as a plain *conf.Settings field) is what lets
+	// newErrorResponse read it from HandleError while UpdateSettings holds
+	// settingsMutex.Lock without deadlocking on a non-reentrant RLock. The sibling
+	// engine and audioWatchdog fields use the same atomic-pointer pattern.
+	Settings          atomic.Pointer[conf.Settings]
 	BirdImageCache    *imageprovider.BirdImageCache
 	SunCalc           *suncalc.SunCalc
 	Processor         *processor.Processor
@@ -79,7 +79,7 @@ type Controller struct {
 	// Thread-safe: should be set before controller initialization.
 	DisableSaveSettings  bool         // disables disk persistence of settings
 	isGlobalOwner        bool         // true when this controller owns the global settings singleton
-	settingsMutex        sync.RWMutex // Mutex for settings operations
+	settingsMutex        sync.RWMutex // Serializes the read-modify-write in settings update handlers; reads are lock-free via the atomic Settings pointer
 	detectionCache       *cache.Cache // Cache for detection queries
 	startTime            *time.Time
 	SFS                  *securefs.SecureFS     // Add SecureFS instance
@@ -176,54 +176,34 @@ type ShutdownRequester interface {
 // take effect in API responses without restarting the service.
 //
 // It resolves the lock-free global atomic snapshot first and only falls back
-// to c.Settings when no snapshot has been published (standalone unit-test
-// controllers). The fallback is read lazily, so in production (where a
-// snapshot is always published) c.Settings is never dereferenced here. That
-// keeps the accessor race-free against the c.Settings reassignment the
-// settings update handlers perform under c.settingsMutex: the equivalent
-// conf.CurrentOrFallback(c.Settings) would evaluate c.Settings eagerly and
-// race that write.
+// to this controller's own snapshot when no global snapshot has been published
+// (standalone unit-test controllers). Both reads are lock-free (the per-controller
+// fallback is an atomic Load), so the accessor is race-free against the
+// Settings.Store the update handlers perform under c.settingsMutex.
 func (c *Controller) currentSettings() *conf.Settings {
 	if latest := conf.GetSettings(); latest != nil {
 		return latest
 	}
-	return c.Settings
+	return c.Settings.Load()
 }
 
 // controllerSettings returns this controller's own settings snapshot, read
-// lock-free from the settingsAtomic mirror that the settings update handlers
-// publish alongside c.Settings on every save. Unlike currentSettings(), it
-// deliberately does NOT consult the process-global atomic snapshot: use it for
-// reads whose result is asserted per-controller (e.g. debug-gated response
-// verbosity), where the shared global snapshot would couple otherwise-independent
-// parallel tests.
+// lock-free from the atomic Settings pointer that the update handlers publish on
+// every save. Unlike currentSettings(), it deliberately does NOT consult the
+// process-global atomic snapshot: use it for reads whose result is asserted
+// per-controller (e.g. debug-gated response verbosity), where the shared global
+// snapshot would couple otherwise-independent parallel tests.
 //
-// Reading the atomic mirror (rather than the bare c.Settings field under
+// Loading the atomic pointer (rather than reading a plain field under
 // settingsMutex.RLock) is what makes this safe to call from newErrorResponse,
 // which is reached from HandleError while UpdateSettings already holds
-// settingsMutex.Lock: a non-reentrant RLock there would deadlock. The mirror is
-// published under that same write lock, so the read sees a consistent snapshot.
-//
-// The c.Settings fallback only runs for standalone test controllers that never
-// published the mirror; production always publishes it at construction, so the
-// fallback never races a concurrent write. The returned snapshot is immutable
-// (copy-on-write), so callers may dereference its fields freely.
+// settingsMutex.Lock: a non-reentrant RLock there would deadlock. The snapshot is
+// published under that same write lock, so the read sees a consistent value. The
+// returned snapshot is immutable (copy-on-write), so callers may dereference its
+// fields freely. Returns nil only on a controller that never stored settings
+// (standalone tests); callers that may hit that path nil-check or fall back.
 func (c *Controller) controllerSettings() *conf.Settings {
-	if s := c.settingsAtomic.Load(); s != nil {
-		return s
-	}
-	return c.Settings
-}
-
-// publishSettings repoints this controller's settings snapshot to s, updating
-// both the c.Settings field and the lock-free settingsAtomic mirror together so
-// per-controller readers (controllerSettings) never observe a mirror that has
-// drifted from the field. It is the single write path for the snapshot: routing
-// every save and rollback through it keeps the dual-write invariant in one place.
-// Callers must hold c.settingsMutex (the field write is not itself synchronized).
-func (c *Controller) publishSettings(s *conf.Settings) {
-	c.Settings = s
-	c.settingsAtomic.Store(s)
+	return c.Settings.Load()
 }
 
 // Option is a functional option for configuring the Controller.
@@ -441,7 +421,6 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		Echo:                 e,
 		DS:                   ds,
 		Repo:                 repo, // Bridge to new domain model (nil if datastore disabled)
-		Settings:             settings,
 		isGlobalOwner:        settings == conf.GetSettings(),
 		BirdImageCache:       birdImageCache,
 		SunCalc:              sunCalc,
@@ -454,10 +433,10 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()),
 		detectionRateCache:   datastore.NewDetectionRateCache(detectionRateCacheTTL),
 	}
-	// Publish the per-controller settings mirror so controllerSettings() reads it
-	// lock-free. Kept in sync with the c.Settings field on every save; see the
-	// settingsAtomic field doc and the settings update handlers.
-	c.settingsAtomic.Store(settings)
+	// Publish the initial settings snapshot so controllerSettings() reads it
+	// lock-free. Every save republishes via Settings.Store; see the Settings
+	// field doc and the settings update handlers.
+	c.Settings.Store(settings)
 
 	// Configure the trusted-proxy-gated IP extractor. Forwarded client-IP headers
 	// (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) are honored only when the
@@ -938,7 +917,7 @@ func (c *Controller) newErrorResponse(err error, message string, code int) *Erro
 	// paths, SQL errors, stack traces, etc. In production, use the
 	// sanitized message parameter instead.
 	var errorStr string
-	// Read the controller's own debug flag via the lock-free atomic mirror: this
+	// Read the controller's own debug flag via the lock-free atomic Settings pointer: this
 	// is reached from HandleError while UpdateSettings holds c.settingsMutex, so
 	// it must not acquire the lock (a non-reentrant RLock would deadlock), and the
 	// flag must remain per-controller (handlers assert debug-gated error verbosity
@@ -1088,19 +1067,16 @@ func (c *Controller) HandleErrorForTest(ctx echo.Context, err error, message str
 
 // Debug logs debug messages when debug mode is enabled.
 //
-// Reads the debug flag via conf.GetSettings() rather than c.Settings so the
-// check is race-free against concurrent c.Settings writes in the settings
-// handlers: c.Settings is a plain *conf.Settings field with no locking on
-// the Debug read path, while conf.GetSettings() is a lock-free atomic.Load.
-// Returns silently when the global snapshot has not been set (e.g. in unit
-// tests with a standalone Controller).
+// Reads the debug flag from the process-global snapshot via conf.GetSettings()
+// (a lock-free atomic.Load), so process-wide debug logging follows the latest
+// published global settings. Returns silently when the global snapshot has not
+// been set (e.g. in unit tests with a standalone Controller); the per-controller
+// c.Settings snapshot is deliberately not consulted here.
 func (c *Controller) Debug(format string, v ...any) {
 	settings := conf.GetSettings()
 	if settings == nil {
 		// Skip debug logging when the global snapshot hasn't been set
-		// (e.g. in unit tests with a standalone Controller). Reading
-		// c.Settings here would race with concurrent writes in the
-		// settings update handlers.
+		// (e.g. in unit tests with a standalone Controller).
 		return
 	}
 	if settings.WebServer.Debug {

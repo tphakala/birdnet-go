@@ -42,11 +42,10 @@ func TestGenerateSpectrogramFromRelIgnoresLiveExportPath(t *testing.T) {
 	ctx := t.Context()
 
 	controller := &Controller{
-		Settings: newValidTestSettings(),
-		SFS:      sfs,
-		ctx:      ctx,
+		SFS: sfs,
+		ctx: ctx,
 	}
-	controller.settingsAtomic.Store(controller.Settings)
+	controller.Settings.Store(newValidTestSettings())
 
 	const (
 		width = SpectrogramSizeLg
@@ -63,10 +62,10 @@ func TestGenerateSpectrogramFromRelIgnoresLiveExportPath(t *testing.T) {
 	// Publish a divergent live export path. A worker that re-read Export.Path to
 	// derive its path/key (the pre-fix behaviour) would normalize the clip path
 	// differently and miss the pre-created spectrogram.
-	live := conf.CloneSettings(controller.Settings)
+	live := conf.CloneSettings(controller.Settings.Load())
 	live.Realtime.Audio.Export.Path = filepath.Join(tmp, "changed-prefix")
 	conftest.SetTestSettings(live)
-	controller.settingsAtomic.Store(live)
+	controller.Settings.Store(live)
 
 	got, err := controller.generateSpectrogramFromRel(ctx, relAudioPath, "irrelevant/clip/path.wav", "", width, raw, "", "")
 	require.NoError(t, err)

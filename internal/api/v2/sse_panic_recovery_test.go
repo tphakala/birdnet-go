@@ -21,13 +21,13 @@ func TestSendSSEMessagePanicRecovery(t *testing.T) {
 	t.Parallel()
 
 	c := &Controller{
-		Settings: &conf.Settings{
-			WebServer: conf.WebServerSettings{
-				Debug: true,
-			},
-		},
 		apiLogger: nil, // Will skip logging in tests
 	}
+	c.Settings.Store(&conf.Settings{
+		WebServer: conf.WebServerSettings{
+			Debug: true,
+		},
+	})
 
 	// Create echo context with response recorder
 	e := echo.New()

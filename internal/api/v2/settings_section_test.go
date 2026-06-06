@@ -127,7 +127,7 @@ func TestPatchMissingSections(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusOK, rec.Code)
 
-			tt.verify(t, controller.Settings)
+			tt.verify(t, controller.Settings.Load())
 		})
 	}
 }
@@ -138,7 +138,7 @@ func TestPatchTaxonomySynonymsMerge(t *testing.T) {
 	e := echo.New()
 	controller := getTestController(t, e)
 
-	controller.Settings.TaxonomySynonyms = map[string]string{
+	controller.Settings.Load().TaxonomySynonyms = map[string]string{
 		"Corvus corax": "Common Raven",
 	}
 
@@ -158,9 +158,9 @@ func TestPatchTaxonomySynonymsMerge(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	assert.Equal(t, "Common Raven", controller.Settings.TaxonomySynonyms["Corvus corax"],
+	assert.Equal(t, "Common Raven", controller.Settings.Load().TaxonomySynonyms["Corvus corax"],
 		"existing entry must be preserved after PATCH")
-	assert.Equal(t, "Great Tit", controller.Settings.TaxonomySynonyms["Parus major"],
+	assert.Equal(t, "Great Tit", controller.Settings.Load().TaxonomySynonyms["Parus major"],
 		"new entry must be added by PATCH")
 }
 
@@ -170,7 +170,7 @@ func TestPatchAlertingValidation(t *testing.T) {
 	e := echo.New()
 	controller := getTestController(t, e)
 	// Enable debug so the raw validation error is exposed in the "error" field
-	controller.Settings.WebServer.Debug = true
+	controller.Settings.Load().WebServer.Debug = true
 
 	body, err := json.Marshal(map[string]any{
 		"historyRetentionDays": -1,
@@ -200,7 +200,7 @@ func TestPatchAlertingValidation(t *testing.T) {
 func TestPatchAlertingZeroRetention(t *testing.T) {
 	e := echo.New()
 	controller := getTestController(t, e)
-	controller.Settings.Alerting.HistoryRetentionDays = 30
+	controller.Settings.Load().Alerting.HistoryRetentionDays = 30
 
 	body, err := json.Marshal(map[string]any{
 		"historyRetentionDays": 0,
@@ -217,7 +217,7 @@ func TestPatchAlertingZeroRetention(t *testing.T) {
 	err = controller.UpdateSectionSettings(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, 0, controller.Settings.Alerting.HistoryRetentionDays)
+	assert.Equal(t, 0, controller.Settings.Load().Alerting.HistoryRetentionDays)
 }
 
 func TestPatchWebServerLiveStreamValidation(t *testing.T) {
@@ -284,7 +284,7 @@ func TestPatchWebServerLiveStreamValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			e := echo.New()
 			controller := getTestController(t, e)
-			controller.Settings.WebServer.Debug = true
+			controller.Settings.Load().WebServer.Debug = true
 
 			body, err := json.Marshal(tt.payload)
 			require.NoError(t, err)

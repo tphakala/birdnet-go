@@ -54,7 +54,8 @@ func TestCheckNtfyServer_RealContainer(t *testing.T) {
 	t.Run("handler_integration", func(t *testing.T) {
 		// Test the full CheckNtfyServer handler via Echo context
 		e := echo.New()
-		ctrl := &Controller{Settings: newValidTestSettings()}
+		ctrl := &Controller{}
+		ctrl.Settings.Store(newValidTestSettings())
 
 		req := httptest.NewRequest(http.MethodGet,
 			"/api/v2/notifications/check-ntfy-server?host="+host, http.NoBody)

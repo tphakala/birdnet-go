@@ -119,10 +119,10 @@ func setupWeatherTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface
 
 	// Create a controller with the test datastore
 	controller := &Controller{
-		Settings: newValidTestSettings(),
-		Group:    e.Group("/api/v2"),
-		DS:       mockDS,
+		Group: e.Group("/api/v2"),
+		DS:    mockDS,
 	}
+	controller.Settings.Store(newValidTestSettings())
 
 	// We don't need to initialize routes for unit tests
 	// But we could initialize the weather routes specifically if needed

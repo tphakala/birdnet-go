@@ -373,8 +373,8 @@ func (c *Controller) initInsightsRoutes() {
 	c.insightsRepo = repository.NewInsightsRepository(db, useV2Prefix, isMySQL)
 
 	// Build both name maps once and cache on Controller
-	if c.Settings != nil {
-		c.UpdateCommonNameMap(c.Settings.BirdNET.Labels)
+	if s := c.controllerSettings(); s != nil {
+		c.UpdateCommonNameMap(s.BirdNET.Labels)
 	}
 
 	insightsGroup := c.Group.Group("/insights")

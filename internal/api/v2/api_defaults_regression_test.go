@@ -362,15 +362,15 @@ func setupPostMigrationTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInt
 	e, mockDS, controller := setupTestEnvironment(t)
 
 	// Run migration — moves SummaryLimit into layout element, zeros deprecated field
-	migrated := controller.Settings.MigrateDashboardLayout()
+	migrated := controller.Settings.Load().MigrateDashboardLayout()
 	require.True(t, migrated, "migration should have occurred (no pre-existing layout)")
 
 	// Verify the deprecated field is actually zeroed
-	assert.Equal(t, 0, controller.Settings.Realtime.Dashboard.SummaryLimit,
+	assert.Equal(t, 0, controller.Settings.Load().Realtime.Dashboard.SummaryLimit,
 		"deprecated SummaryLimit should be zeroed after migration")
 
 	// Verify GetEffectiveSummaryLimit still returns a valid value
-	effectiveLimit := controller.Settings.GetEffectiveSummaryLimit()
+	effectiveLimit := controller.Settings.Load().GetEffectiveSummaryLimit()
 	assert.Positive(t, effectiveLimit,
 		"GetEffectiveSummaryLimit should return positive value after migration")
 

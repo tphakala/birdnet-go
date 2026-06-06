@@ -127,8 +127,9 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		c.logDebugIfEnabled("Set default options for support dump")
 	}
 
-	// Read the live snapshot (race-free, hot-reloading) rather than the bare
-	// c.Settings field, which races the c.Settings republish in UpdateSettings.
+	// Read the live global snapshot (race-free, hot-reloading) via
+	// currentSettings() so out-of-band republishes are seen and the read never
+	// races the Settings.Store in UpdateSettings.
 	settings := c.currentSettings()
 	if settings == nil {
 		return c.HandleError(ctx, nil, "Settings not available", http.StatusInternalServerError)
@@ -315,8 +316,9 @@ func (c *Controller) DownloadSupportDump(ctx echo.Context) error {
 
 // GetSupportStatus returns the current support/telemetry configuration status
 func (c *Controller) GetSupportStatus(ctx echo.Context) error {
-	// Read the live snapshot (race-free, hot-reloading) rather than the bare
-	// c.Settings field, which races the c.Settings republish in UpdateSettings.
+	// Read the live global snapshot (race-free, hot-reloading) via
+	// currentSettings() so out-of-band republishes are seen and the read never
+	// races the Settings.Store in UpdateSettings.
 	settings := c.currentSettings()
 	if settings == nil {
 		return c.HandleError(ctx, nil, "Settings not available", http.StatusInternalServerError)

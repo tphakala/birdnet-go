@@ -24,9 +24,8 @@ func TestDebugSkipsControllerFallbackWhenGlobalUnset(t *testing.T) {
 		conftest.SetTestSettings(previous)
 	})
 
-	controller := &Controller{
-		Settings: newValidTestSettings(),
-	}
+	controller := &Controller{}
+	controller.Settings.Store(newValidTestSettings())
 
 	stopWriter := make(chan struct{})
 	writerDone := make(chan struct{})
@@ -39,7 +38,7 @@ func TestDebugSkipsControllerFallbackWhenGlobalUnset(t *testing.T) {
 			default:
 				updated := newValidTestSettings()
 				updated.WebServer.Debug = true
-				controller.Settings = updated
+				controller.Settings.Store(updated)
 			}
 		}
 	}()

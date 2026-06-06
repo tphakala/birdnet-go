@@ -105,14 +105,15 @@ func TestInitDebugRoutesReadsSettingsNilSafely(t *testing.T) {
 	settings.Debug = false // debug mode off -> initDebugRoutes takes the skip path
 
 	controller := &Controller{
-		Echo:     e,
-		Group:    e.Group("/api/v2"),
-		Settings: nil, // raw field nil; controllerSettings() must be used instead
+		Echo:  e,
+		Group: e.Group("/api/v2"),
 	}
-	controller.settingsAtomic.Store(settings)
+	// initDebugRoutes must read settings through the nil-safe controllerSettings()
+	// accessor (an atomic Load), not assume a non-nil snapshot.
+	controller.Settings.Store(settings)
 
 	require.NotPanics(t, func() { controller.initDebugRoutes() },
-		"initDebugRoutes must not dereference a nil c.Settings")
+		"initDebugRoutes must not dereference a nil settings snapshot")
 	for _, r := range e.Routes() {
 		assert.NotContains(t, r.Path, "/debug",
 			"debug routes must not register when debug mode is off: %s %s", r.Method, r.Path)

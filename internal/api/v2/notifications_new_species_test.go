@@ -31,9 +31,8 @@ func TestCreateTestNewSpeciesNotification_ServiceNotInitialized(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	controller := &Controller{
-		Settings: &conf.Settings{},
-	}
+	controller := &Controller{}
+	controller.Settings.Store(&conf.Settings{})
 
 	// Call through middleware to test the guard
 	handler := controller.requireNotificationService(controller.CreateTestNewSpeciesNotification)
@@ -74,17 +73,20 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	controller := &Controller{Settings: newValidTestSettings()}
-	controller.Settings = &conf.Settings{}
-	controller.Settings.Security.Host = "localhost"
-	controller.Settings.WebServer.Port = "8080"
-	controller.Settings.Main.TimeAs24h = true
+	controller := &Controller{}
+	// Build a minimal settings snapshot with only the fields this test needs,
+	// then publish it once (the empty base matches the original test).
+	settings := &conf.Settings{}
+	settings.Security.Host = "localhost"
+	settings.WebServer.Port = "8080"
+	settings.Main.TimeAs24h = true
 	// Set default templates from config.yaml
-	controller.Settings.Notification.Templates.NewSpecies.Title = "New Species: {{.CommonName}}"
-	controller.Settings.Notification.Templates.NewSpecies.Message = "First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}. View: {{.DetectionURL}}"
+	settings.Notification.Templates.NewSpecies.Title = "New Species: {{.CommonName}}"
+	settings.Notification.Templates.NewSpecies.Message = "First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}. View: {{.DetectionURL}}"
+	controller.Settings.Store(settings)
 	// CreateTestNewSpeciesNotification reads the live snapshot via currentSettings();
 	// publish the controller's settings so the read resolves to them.
-	publishTestSettings(t, controller.Settings)
+	publishTestSettings(t, settings)
 
 	err := controller.CreateTestNewSpeciesNotification(c)
 	require.NoError(t, err)

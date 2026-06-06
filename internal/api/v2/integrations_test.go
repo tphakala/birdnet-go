@@ -46,7 +46,7 @@ func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Control
 			var req *http.Request
 			if strings.Contains(endpoint, "birdweather") {
 				// BirdWeather endpoint expects JSON body matching the controller settings
-				bwSettings := controller.Settings.Realtime.Birdweather
+				bwSettings := controller.Settings.Load().Realtime.Birdweather
 				bodyJSON := fmt.Sprintf(`{"enabled":%t,"id":%q,"threshold":%f,"locationAccuracy":%f}`,
 					bwSettings.Enabled, bwSettings.ID, bwSettings.Threshold, bwSettings.LocationAccuracy)
 				req = httptest.NewRequest(http.MethodPost, endpoint, strings.NewReader(bodyJSON))
@@ -245,10 +245,10 @@ func TestGetMQTTStatus(t *testing.T) {
 			e, _, controller := setupTestEnvironment(t)
 
 			// Configure settings
-			controller.Settings.Realtime.MQTT.Enabled = tc.mqttEnabled
-			controller.Settings.Realtime.MQTT.Broker = tc.mqttBroker
-			controller.Settings.Realtime.MQTT.Topic = tc.mqttTopic
-			controller.Settings.Main.Name = testBirdNetName
+			controller.Settings.Load().Realtime.MQTT.Enabled = tc.mqttEnabled
+			controller.Settings.Load().Realtime.MQTT.Broker = tc.mqttBroker
+			controller.Settings.Load().Realtime.MQTT.Topic = tc.mqttTopic
+			controller.Settings.Load().Main.Name = testBirdNetName
 
 			// Create request
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/status", http.NoBody)
@@ -323,10 +323,10 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 			e, _, controller := setupTestEnvironment(t)
 
 			// Configure settings for the test case
-			controller.Settings.Realtime.Birdweather.Enabled = tc.bwEnabled
-			controller.Settings.Realtime.Birdweather.ID = tc.bwID
-			controller.Settings.Realtime.Birdweather.Threshold = tc.bwThreshold
-			controller.Settings.Realtime.Birdweather.LocationAccuracy = tc.bwLocationAcc
+			controller.Settings.Load().Realtime.Birdweather.Enabled = tc.bwEnabled
+			controller.Settings.Load().Realtime.Birdweather.ID = tc.bwID
+			controller.Settings.Load().Realtime.Birdweather.Threshold = tc.bwThreshold
+			controller.Settings.Load().Realtime.Birdweather.LocationAccuracy = tc.bwLocationAcc
 
 			// Create request context
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/birdweather/status", http.NoBody)
@@ -363,8 +363,8 @@ func TestTestMQTTConnection(t *testing.T) {
 		{
 			name: "MQTT Not Enabled",
 			setupSettings: func(controller *Controller) {
-				controller.Settings.Realtime.MQTT.Enabled = false
-				controller.Settings.Realtime.MQTT.Broker = testMQTTBroker
+				controller.Settings.Load().Realtime.MQTT.Enabled = false
+				controller.Settings.Load().Realtime.MQTT.Broker = testMQTTBroker
 			},
 			expectedStatus: http.StatusOK,
 			expectedBody:   `{"success":false,"message":"MQTT is not enabled in settings"}`,
@@ -372,8 +372,8 @@ func TestTestMQTTConnection(t *testing.T) {
 		{
 			name: "Broker Not Configured",
 			setupSettings: func(controller *Controller) {
-				controller.Settings.Realtime.MQTT.Enabled = true
-				controller.Settings.Realtime.MQTT.Broker = ""
+				controller.Settings.Load().Realtime.MQTT.Enabled = true
+				controller.Settings.Load().Realtime.MQTT.Broker = ""
 			},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   `{"success":false,"message":"MQTT broker not configured"}`,
@@ -395,8 +395,8 @@ func TestTestBirdWeatherConnection(t *testing.T) {
 		{
 			name: "BirdWeather Not Enabled",
 			setupSettings: func(controller *Controller) {
-				controller.Settings.Realtime.Birdweather.Enabled = false
-				controller.Settings.Realtime.Birdweather.ID = "ABC123"
+				controller.Settings.Load().Realtime.Birdweather.Enabled = false
+				controller.Settings.Load().Realtime.Birdweather.ID = "ABC123"
 			},
 			expectedStatus: http.StatusOK,
 			expectedBody:   `{"success":false,"message":"BirdWeather integration is not enabled","state":"failed"}`,
@@ -404,8 +404,8 @@ func TestTestBirdWeatherConnection(t *testing.T) {
 		{
 			name: "Station ID Not Configured",
 			setupSettings: func(controller *Controller) {
-				controller.Settings.Realtime.Birdweather.Enabled = true
-				controller.Settings.Realtime.Birdweather.ID = ""
+				controller.Settings.Load().Realtime.Birdweather.Enabled = true
+				controller.Settings.Load().Realtime.Birdweather.ID = ""
 			},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   `{"success":false,"message":"BirdWeather station ID not configured","state":"failed"}`,
@@ -537,16 +537,16 @@ func TestWriteJSONResponse(t *testing.T) {
 // Advanced test for MQTT connection with client disconnection
 func TestMQTTConnectionWithClientDisconnection(t *testing.T) {
 	runIntegrationConnectionWithDisconnectionTest(t, (*Controller).TestMQTTConnection, "/api/v2/integrations/mqtt/test", func(controller *Controller) {
-		controller.Settings.Realtime.MQTT.Enabled = true
-		controller.Settings.Realtime.MQTT.Broker = testMQTTBroker
+		controller.Settings.Load().Realtime.MQTT.Enabled = true
+		controller.Settings.Load().Realtime.MQTT.Broker = testMQTTBroker
 	})
 }
 
 // Advanced test for BirdWeather connection with client disconnection
 func TestBirdWeatherConnectionWithClientDisconnection(t *testing.T) {
 	runIntegrationConnectionWithDisconnectionTest(t, (*Controller).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", func(controller *Controller) {
-		controller.Settings.Realtime.Birdweather.Enabled = true
-		controller.Settings.Realtime.Birdweather.ID = "ABC123"
+		controller.Settings.Load().Realtime.Birdweather.Enabled = true
+		controller.Settings.Load().Realtime.Birdweather.ID = "ABC123"
 	})
 }
 
@@ -556,10 +556,10 @@ func TestGetMQTTStatusWithControlChannel(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
 
 	// Configure settings
-	controller.Settings.Realtime.MQTT.Enabled = true
-	controller.Settings.Realtime.MQTT.Broker = testMQTTBroker
-	controller.Settings.Realtime.MQTT.Topic = "birdnet/detections"
-	controller.Settings.Main.Name = testBirdNetName
+	controller.Settings.Load().Realtime.MQTT.Enabled = true
+	controller.Settings.Load().Realtime.MQTT.Broker = testMQTTBroker
+	controller.Settings.Load().Realtime.MQTT.Topic = "birdnet/detections"
+	controller.Settings.Load().Main.Name = testBirdNetName
 
 	// Create a mock control channel
 	controlChan := make(chan string, 1)
@@ -599,8 +599,8 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
 
 		// Configure settings to enable MQTT
-		controller.Settings.Realtime.MQTT.Enabled = true
-		controller.Settings.Realtime.MQTT.Broker = "tcp://invalid-broker.example.com:1883"
+		controller.Settings.Load().Realtime.MQTT.Enabled = true
+		controller.Settings.Load().Realtime.MQTT.Broker = "tcp://invalid-broker.example.com:1883"
 
 		// Create a test HTTP request
 		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/test", http.NoBody)
@@ -622,8 +622,8 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
 
 		// Configure settings to enable BirdWeather but with invalid configuration
-		controller.Settings.Realtime.Birdweather.Enabled = true
-		controller.Settings.Realtime.Birdweather.ID = "INVALID_ID"
+		controller.Settings.Load().Realtime.Birdweather.Enabled = true
+		controller.Settings.Load().Realtime.Birdweather.ID = "INVALID_ID"
 
 		// Create JSON request body for BirdWeather test
 		requestBody := `{
@@ -653,8 +653,8 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
 
 		// Configure settings to enable MQTT
-		controller.Settings.Realtime.MQTT.Enabled = true
-		controller.Settings.Realtime.MQTT.Broker = testMQTTBroker
+		controller.Settings.Load().Realtime.MQTT.Enabled = true
+		controller.Settings.Load().Realtime.MQTT.Broker = testMQTTBroker
 
 		// Create a cancellable context
 		ctx, cancel := context.WithCancel(t.Context())
@@ -681,8 +681,8 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
 
 		// Configure settings to enable BirdWeather
-		controller.Settings.Realtime.Birdweather.Enabled = true
-		controller.Settings.Realtime.Birdweather.ID = "VALID_ID" // Use a valid-looking ID
+		controller.Settings.Load().Realtime.Birdweather.Enabled = true
+		controller.Settings.Load().Realtime.Birdweather.ID = "VALID_ID" // Use a valid-looking ID
 
 		// Create a cancellable context
 		ctx, cancel := context.WithCancel(t.Context())
@@ -717,10 +717,10 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
 
 		// Configure settings to enable MQTT with an invalid broker
-		controller.Settings.Realtime.MQTT.Enabled = true
-		controller.Settings.Realtime.MQTT.Broker = "tcp://nonexistent.broker:1883"
-		controller.Settings.Realtime.MQTT.Topic = "birdnet/detections"
-		controller.Settings.Main.Name = testBirdNetName
+		controller.Settings.Load().Realtime.MQTT.Enabled = true
+		controller.Settings.Load().Realtime.MQTT.Broker = "tcp://nonexistent.broker:1883"
+		controller.Settings.Load().Realtime.MQTT.Topic = "birdnet/detections"
+		controller.Settings.Load().Main.Name = testBirdNetName
 
 		// Create request
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/status", http.NoBody)

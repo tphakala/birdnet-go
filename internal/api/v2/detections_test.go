@@ -1372,7 +1372,7 @@ func TestIgnoreSpecies(t *testing.T) {
 	// Test cases for error scenarios
 	t.Run("Error cases", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
 
 		errorCases := []struct {
 			name           string
@@ -1425,7 +1425,7 @@ func TestIgnoreSpecies(t *testing.T) {
 	// Test toggle behavior: add then remove
 	t.Run("Toggle behavior - add species", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
 
 		// First request: add species (should not be in list initially)
 		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
@@ -1448,7 +1448,7 @@ func TestIgnoreSpecies(t *testing.T) {
 
 	t.Run("Toggle behavior - remove species", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
 
 		// First, add the species
 		req1 := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
@@ -1488,7 +1488,7 @@ func TestIgnoreSpecies(t *testing.T) {
 
 	t.Run("Multiple toggle operations", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
 		speciesName := "Northern Cardinal"
 
 		// Perform add-remove-add cycle
@@ -1513,7 +1513,7 @@ func TestIgnoreSpecies(t *testing.T) {
 
 	t.Run("Special characters in species name", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
 
 		// Test with special characters (properly JSON encoded)
 		// Note: Use proper JSON encoding for special chars
@@ -1541,7 +1541,7 @@ func TestIgnoreSpecies(t *testing.T) {
 
 	t.Run("Long species name", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
 
 		longName := strings.Repeat("Very Long Bird Name ", 50)
 		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
@@ -1565,7 +1565,7 @@ func TestIgnoreSpecies(t *testing.T) {
 func TestGetExcludedSpecies(t *testing.T) {
 	t.Run("Empty excluded list", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/ignored", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -1584,7 +1584,7 @@ func TestGetExcludedSpecies(t *testing.T) {
 
 	t.Run("Excluded list with species", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
 
 		// First add some species
 		speciesList := []string{"American Crow", "Red-bellied Woodpecker", "Blue Jay"}
@@ -1616,7 +1616,7 @@ func TestGetExcludedSpecies(t *testing.T) {
 
 	t.Run("Excluded list reflects toggle operations", func(t *testing.T) {
 		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings)
+		clearExcludedSpeciesList(t, controller.Settings.Load())
 
 		// Add two species
 		for _, s := range []string{"Species A", "Species B"} {
@@ -1659,7 +1659,7 @@ func TestGetExcludedSpecies(t *testing.T) {
 // TestIgnoreSpeciesConcurrency tests concurrent access to the IgnoreSpecies endpoint
 func TestIgnoreSpeciesConcurrency(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
-	clearExcludedSpeciesList(t, controller.Settings)
+	clearExcludedSpeciesList(t, controller.Settings.Load())
 
 	// Use WaitGroup.Go() for automatic Add/Done management (Go 1.25+)
 	var wg sync.WaitGroup
@@ -2345,7 +2345,8 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "source-info")
 
-	controller := &Controller{Settings: newValidTestSettings()}
+	controller := &Controller{}
+	controller.Settings.Store(newValidTestSettings())
 
 	tests := []struct {
 		name        string

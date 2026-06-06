@@ -45,7 +45,7 @@ func TestGetAppConfigReadsLiveSnapshot(t *testing.T) {
 	// controller's own c.Settings still holds the construction-time snapshot
 	// (Version "1.0.0-test", empty ColorScheme), so a stale read and a live
 	// read return different values.
-	live := conf.CloneSettings(controller.Settings)
+	live := conf.CloneSettings(controller.Settings.Load())
 	live.Version = "9.9.9-live"
 	live.Realtime.Dashboard.ColorScheme = "live-scheme"
 	conftest.SetTestSettings(live)
@@ -79,7 +79,7 @@ func TestGetAppConfigConcurrentSaveIsRaceFree(t *testing.T) {
 
 	// Ensure the global snapshot is never nil for the duration of the test so
 	// currentSettings() always resolves via the atomic pointer.
-	base := conf.CloneSettings(controller.Settings)
+	base := conf.CloneSettings(controller.Settings.Load())
 	conftest.SetTestSettings(base)
 
 	const (
@@ -100,7 +100,7 @@ func TestGetAppConfigConcurrentSaveIsRaceFree(t *testing.T) {
 				// the controller-cached pointer in sync, both under the mutex.
 				controller.settingsMutex.Lock()
 				conf.StoreSettings(snap)
-				controller.Settings = snap
+				controller.Settings.Store(snap)
 				controller.settingsMutex.Unlock()
 			}
 		})

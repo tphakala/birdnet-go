@@ -33,11 +33,12 @@ func createLegacyTestController(tb testing.TB, e *echo.Echo, settings *conf.Sett
 	// Handlers read the live snapshot via currentSettings(); publish the test's
 	// settings so the read resolves to them (restored on cleanup).
 	publishTestSettings(tb, settings)
-	return &Controller{
-		Settings:      settings,
+	c := &Controller{
 		Echo:          e,
 		cleanupStatus: NewCleanupStatus(),
 	}
+	c.Settings.Store(settings)
+	return c
 }
 
 // TestGetLegacyStatus_V2OnlyMode_NoLegacy tests status when in v2-only mode with no legacy DB.
