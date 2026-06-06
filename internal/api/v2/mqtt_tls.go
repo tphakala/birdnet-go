@@ -134,8 +134,9 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 
 	tlsMgr := conf.GetTLSManager()
 
-	// Serialise the entire cert-save-settings sequence. Cannot use defer
-	// because GetMQTTTLSCertificate on the success path acquires a read lock.
+	// Serialise the entire cert-save-settings sequence. Unlock explicitly at
+	// each exit (rather than defer) so the write lock is released as soon as the
+	// publish completes, before the success path builds its response.
 	c.settingsMutex.Lock()
 
 	// Stage 1: Save new cert files. On failure, clean up newly written files.
@@ -230,8 +231,8 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 		_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeKey)
 	}
 
-	// Release the write lock before calling GetMQTTTLSCertificate which
-	// acquires a read lock (sync.RWMutex is not reentrant).
+	// Release the write lock once the settings publish is done, before building
+	// the response via GetMQTTTLSCertificate (a lock-free read).
 	c.settingsMutex.Unlock()
 
 	return c.GetMQTTTLSCertificate(ctx)

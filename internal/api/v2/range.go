@@ -557,7 +557,7 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		// Parse custom parameters
 		var testReq RangeFilterTestRequest
 
-		// Read current settings under lock for defaults
+		// Read current settings from the lock-free atomic snapshot for defaults
 		defaults := c.currentSettings()
 		testReq.Latitude = defaults.BirdNET.Latitude
 		testReq.Longitude = defaults.BirdNET.Longitude
