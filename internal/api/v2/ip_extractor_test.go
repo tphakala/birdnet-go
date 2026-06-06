@@ -337,6 +337,44 @@ func TestTrustedProxyChecker_TrustForwardedHop(t *testing.T) {
 	assert.False(t, checker.trustForwardedHop(nil), "nil IP must never be a trusted hop")
 }
 
+// TestParseProxyCIDR verifies bare IPs become single-host networks, including
+// the IPv4-mapped IPv6 case that must not widen into a /32 over 128 bits.
+func TestParseProxyCIDR(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		entry    string
+		ok       bool
+		wantOnes int
+		wantBits int
+		contains string
+		excludes string
+	}{
+		{name: "IPv4 CIDR", entry: "203.0.113.0/24", ok: true, wantOnes: 24, wantBits: 32, contains: "203.0.113.9", excludes: "203.0.114.1"},
+		{name: "bare IPv4", entry: "203.0.113.5", ok: true, wantOnes: 32, wantBits: 32, contains: "203.0.113.5", excludes: "203.0.113.6"},
+		{name: "bare IPv6", entry: "2001:db8::1", ok: true, wantOnes: 128, wantBits: 128, contains: "2001:db8::1", excludes: "2001:db8::2"},
+		{name: "IPv4-mapped IPv6 stays single host", entry: "::ffff:198.51.100.7", ok: true, wantOnes: 32, wantBits: 32, contains: "198.51.100.7", excludes: "198.51.100.8"},
+		{name: "garbage", entry: "not-an-ip", ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			network, ok := parseProxyCIDR(tt.entry)
+			require.Equal(t, tt.ok, ok)
+			if !tt.ok {
+				return
+			}
+			ones, bits := network.Mask.Size()
+			assert.Equal(t, tt.wantOnes, ones, "mask ones")
+			assert.Equal(t, tt.wantBits, bits, "mask bits")
+			assert.True(t, network.Contains(mustParseIP(t, tt.contains)), "should contain %s", tt.contains)
+			assert.False(t, network.Contains(mustParseIP(t, tt.excludes)), "should not contain %s", tt.excludes)
+		})
+	}
+}
+
 // TestResolveTrustedProxyChecker_CacheReuse verifies the checker is reused while
 // the configuration is unchanged and rebuilt when it changes.
 func TestResolveTrustedProxyChecker_CacheReuse(t *testing.T) {

@@ -107,21 +107,24 @@ func (tc *trustedProxyChecker) appendCIDRs(entries []string) {
 }
 
 // parseProxyCIDR parses a trusted-proxy entry as either a CIDR or a bare IP
-// (treated as a single-host /32 for IPv4 or /128 for IPv6). Returns false if the
-// entry is neither. net.ParseCIDR normalizes the returned network for both forms.
+// (treated as a single host: /32 for IPv4, /128 for IPv6). Returns false if the
+// entry is neither.
+//
+// The single-host network is built directly from the parsed IP rather than by
+// appending a suffix and re-parsing: an IPv4-mapped IPv6 string (e.g.
+// "::ffff:192.0.2.1") has a non-nil To4(), so a naive "/32" suffix would make
+// net.ParseCIDR read it as a 128-bit address with a 32-bit mask, trusting a /32
+// IPv6 range (2^96 hosts) instead of one host. Using To4() yields a true /32.
 func parseProxyCIDR(entry string) (*net.IPNet, bool) {
 	entry = strings.TrimSpace(entry)
 	if _, network, err := net.ParseCIDR(entry); err == nil {
 		return network, true
 	}
 	if ip := net.ParseIP(entry); ip != nil {
-		suffix := "/32"
-		if ip.To4() == nil {
-			suffix = "/128"
+		if v4 := ip.To4(); v4 != nil {
+			return &net.IPNet{IP: v4, Mask: net.CIDRMask(32, 32)}, true
 		}
-		if _, network, err := net.ParseCIDR(entry + suffix); err == nil {
-			return network, true
-		}
+		return &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}, true
 	}
 	return nil, false
 }
