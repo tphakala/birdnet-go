@@ -381,6 +381,21 @@ func TestLogIgnoredForwardedHeader(t *testing.T) {
 	})
 }
 
+// TestHeaderNonEmpty_CanonicalKey verifies the direct-map header check uses the
+// canonical stored key. "CF-Connecting-IP" is not in canonical MIME form, so a
+// naive req.Header["CF-Connecting-IP"] lookup would miss the value http.Header
+// stores under "Cf-Connecting-Ip".
+func TestHeaderNonEmpty_CanonicalKey(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.Header.Set("CF-Connecting-IP", "1.2.3.4")
+
+	assert.True(t, headerNonEmpty(req.Header, canonicalCFConnectingIP), "CF-Connecting-IP must be detected via its canonical key")
+	assert.False(t, headerNonEmpty(req.Header, canonicalXForwardedFor), "absent X-Forwarded-For must be false")
+	assert.False(t, headerNonEmpty(req.Header, canonicalXRealIP), "absent X-Real-IP must be false")
+}
+
 func mustParseIP(t *testing.T, s string) net.IP {
 	t.Helper()
 	ip := net.ParseIP(s)

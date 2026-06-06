@@ -23,6 +23,16 @@ import (
 // for it (it only defines X-Forwarded-For and X-Real-IP), so it is named here.
 const headerCFConnectingIP = "CF-Connecting-IP"
 
+// Canonical map keys for the forwarded headers. http.Header stores keys in
+// canonical MIME form, so direct map lookups (used on the per-request untrusted
+// path) must use the canonical spelling. "CF-Connecting-IP" is not already
+// canonical, so precomputing it avoids re-canonicalizing on every request.
+var (
+	canonicalCFConnectingIP = http.CanonicalHeaderKey(headerCFConnectingIP)
+	canonicalXForwardedFor  = http.CanonicalHeaderKey(echo.HeaderXForwardedFor)
+	canonicalXRealIP        = http.CanonicalHeaderKey(echo.HeaderXRealIP)
+)
+
 // cloudflareEdgeCIDRs lists Cloudflare's published proxy IP ranges
 // (https://www.cloudflare.com/ips/). These ranges are stable and change rarely;
 // kept in sync manually. Expanded from the Security.TrustedProxies "cloudflare"
@@ -175,17 +185,22 @@ func (tc *trustedProxyChecker) clientIPFromXFF(xff string) string {
 	}
 	parts := strings.Split(xff, ",")
 	for i, part := range slices.Backward(parts) {
-		ipStr := parseIPFromHeader(strings.TrimSpace(part))
-		if ipStr == "" {
+		hop := strings.TrimSpace(part)
+		// Strip an IPv6 zone id (e.g. fe80::1%eth0) before parsing.
+		if before, _, found := strings.Cut(hop, "%"); found {
+			hop = before
+		}
+		ip := net.ParseIP(hop)
+		if ip == nil {
 			// Malformed hop: nothing further left can be trusted; fall back.
 			return ""
 		}
-		if !tc.trustForwardedHop(net.ParseIP(ipStr)) {
-			return ipStr // nearest non-proxy hop = real client
+		if !tc.trustForwardedHop(ip) {
+			return ip.String() // nearest non-proxy hop = real client
 		}
 		if i == 0 {
 			// All hops are configured proxies; the leftmost is the original client.
-			return ipStr
+			return ip.String()
 		}
 	}
 	return ""
@@ -273,21 +288,33 @@ func newTrustedProxyIPExtractor(getSettings func() *conf.Settings) echo.IPExtrac
 // only built when a forwarded header is actually present, keeping the
 // no-header untrusted path (ordinary direct clients) allocation-free.
 func logIgnoredForwardedHeader(req *http.Request, peerHost string) {
-	var present []string
-	if req.Header.Get(headerCFConnectingIP) != "" {
+	h := req.Header
+	cfPresent := headerNonEmpty(h, canonicalCFConnectingIP)
+	xffPresent := headerNonEmpty(h, canonicalXForwardedFor)
+	xriPresent := headerNonEmpty(h, canonicalXRealIP)
+	if !cfPresent && !xffPresent && !xriPresent {
+		return // fast path: no forwarded headers, zero allocation
+	}
+	present := make([]string, 0, 3)
+	if cfPresent {
 		present = append(present, headerCFConnectingIP)
 	}
-	if req.Header.Get(echo.HeaderXForwardedFor) != "" {
+	if xffPresent {
 		present = append(present, echo.HeaderXForwardedFor)
 	}
-	if req.Header.Get(echo.HeaderXRealIP) != "" {
+	if xriPresent {
 		present = append(present, echo.HeaderXRealIP)
-	}
-	if len(present) == 0 {
-		return
 	}
 	GetLogger().Debug("Ignoring forwarded client-IP header from untrusted peer; if this peer is your reverse proxy, add its CIDR (or \"cloudflare\") to security.trustedproxies",
 		logger.String("peer", peerHost),
 		logger.String("headers", strings.Join(present, ",")),
 	)
+}
+
+// headerNonEmpty reports whether a canonical header key has a non-empty first
+// value, via a direct map lookup that avoids the key canonicalization (and
+// allocation) http.Header.Get performs for a non-canonical key.
+func headerNonEmpty(h http.Header, canonicalKey string) bool {
+	values := h[canonicalKey]
+	return len(values) > 0 && values[0] != ""
 }
