@@ -74,4 +74,5 @@ jobs:
             type=registry,ref=ghcr.io/${{ env.REPO }}:buildcache,mode=max
           provenance: false
           build-args: |
+            SENTRY_DSN=${{ secrets.SENTRY_DSN }}
             BUILDKIT_INLINE_CACHE=1

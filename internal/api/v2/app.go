@@ -189,12 +189,17 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 		response.Layout = &settings.Realtime.Dashboard.Layout
 	}
 
-	// Include Sentry frontend config when telemetry is enabled
+	// Include Sentry frontend config when telemetry is enabled AND a DSN is
+	// actually configured for this build. Builds without a DSN (plain `go build`
+	// or forks) must not hand the frontend an empty DSN, which would make the
+	// browser SDK fail to initialize.
 	if settings.Sentry.Enabled {
-		response.Sentry = &SentryFrontendConfig{
-			Enabled:  true,
-			DSN:      telemetry.GetFrontendDSN(),
-			SystemID: settings.SystemID,
+		if dsn := telemetry.GetFrontendDSN(); dsn != "" {
+			response.Sentry = &SentryFrontendConfig{
+				Enabled:  true,
+				DSN:      dsn,
+				SystemID: settings.SystemID,
+			}
 		}
 	}
 
@@ -250,7 +255,7 @@ func (c *Controller) determineWizardState(ctx context.Context, settings *conf.Se
 		return false, true, lastSeenVersion
 	}
 
-	// Version matches — no wizard needed
+	// Version matches; no wizard needed
 	return false, false, lastSeenVersion
 }
 

@@ -1414,6 +1414,13 @@ func TestGetAppConfig_SentryConfigWhenEnabled(t *testing.T) {
 	// GetAppConfig reads via currentSettings.
 	_, controller := setupAppConfigTest(t, nil)
 
+	// The Sentry DSN is no longer hardcoded; it resolves from the
+	// BIRDNET_GO_SENTRY_DSN env var (or an ldflags-baked value). Inject one so
+	// the frontend config is populated, mirroring an official build with a
+	// baked-in DSN. Without it, from-source/test builds resolve an empty DSN
+	// and the Sentry block is intentionally omitted.
+	t.Setenv("BIRDNET_GO_SENTRY_DSN", "https://dummy@example.ingest.sentry.io/1")
+
 	// Enable Sentry in settings
 	controller.Settings.Load().Sentry.Enabled = true
 	controller.Settings.Load().SystemID = "test-system-id-123"

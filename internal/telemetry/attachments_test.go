@@ -67,20 +67,76 @@ func TestExtractTraceID_NoCollisionWithStringKeys(t *testing.T) {
 }
 
 func TestSentryDSN_ValidFormat(t *testing.T) {
-	t.Parallel()
+	// Not parallel: reads the package-level sentryDSN var, which
+	// TestResolveSentryDSN_Precedence mutates. Sequential tests run before the
+	// parallel phase, so this cannot overlap with parallel readers either.
 
-	// Verify the DSN constant exists and has valid format
-	assert.NotEmpty(t, sentryDSN, "sentryDSN should not be empty")
+	// The DSN is injected at build time via ldflags, or at runtime via
+	// BIRDNET_GO_SENTRY_DSN, so plain `go test` builds resolve to an empty DSN.
+	// Only assert the format when a DSN is actually configured.
+	dsn := resolveSentryDSN()
+	if dsn == "" {
+		t.Skip("no Sentry DSN configured for this build (expected for from-source/test builds)")
+	}
 
 	// Verify it's a valid Sentry DSN format (https://<key>@<host>/<project>)
-	assert.True(t, strings.HasPrefix(sentryDSN, "https://"), "sentryDSN should start with https://, got %s", sentryDSN)
-	assert.Contains(t, sentryDSN, "@", "sentryDSN should contain @ symbol")
+	assert.True(t, strings.HasPrefix(dsn, "https://"), "DSN should start with https://, got %s", dsn)
+	assert.Contains(t, dsn, "@", "DSN should contain @ symbol")
 
 	// Note: .sentry.io check assumes cloud Sentry; self-hosted endpoints
 	// would not have this domain. Log a warning instead of failing.
-	if !strings.Contains(sentryDSN, ".sentry.io") {
-		t.Log("Warning: sentryDSN does not contain .sentry.io - may be self-hosted")
+	if !strings.Contains(dsn, ".sentry.io") {
+		t.Log("Warning: DSN does not contain .sentry.io - may be self-hosted")
 	}
+}
+
+// TestResolveSentryDSN_Precedence verifies the resolver precedence:
+// BIRDNET_GO_SENTRY_DSN env var > ldflags-baked sentryDSN > empty.
+func TestResolveSentryDSN_Precedence(t *testing.T) {
+	// Not parallel: mutates the package-level sentryDSN var and the process env.
+	original := sentryDSN
+	t.Cleanup(func() { sentryDSN = original })
+
+	const (
+		baked    = "https://baked@example.ingest.sentry.io/1"
+		override = "https://override@example.ingest.sentry.io/2"
+	)
+
+	t.Run("env overrides baked-in value", func(t *testing.T) {
+		sentryDSN = baked
+		t.Setenv(sentryDSNEnvVar, override)
+		assert.Equal(t, override, resolveSentryDSN())
+	})
+
+	t.Run("falls back to baked-in value when env unset", func(t *testing.T) {
+		sentryDSN = baked
+		t.Setenv(sentryDSNEnvVar, "")
+		assert.Equal(t, baked, resolveSentryDSN())
+	})
+
+	t.Run("whitespace-only env value is ignored", func(t *testing.T) {
+		sentryDSN = baked
+		t.Setenv(sentryDSNEnvVar, "   ")
+		assert.Equal(t, baked, resolveSentryDSN())
+	})
+
+	t.Run("empty when neither is configured", func(t *testing.T) {
+		sentryDSN = ""
+		t.Setenv(sentryDSNEnvVar, "")
+		assert.Empty(t, resolveSentryDSN())
+	})
+
+	t.Run("env value is trimmed", func(t *testing.T) {
+		sentryDSN = ""
+		t.Setenv(sentryDSNEnvVar, "  "+override+"  ")
+		assert.Equal(t, override, resolveSentryDSN())
+	})
+
+	t.Run("baked value is trimmed", func(t *testing.T) {
+		sentryDSN = "  " + baked + "  "
+		t.Setenv(sentryDSNEnvVar, "")
+		assert.Equal(t, baked, resolveSentryDSN())
+	})
 }
 
 func TestIsTelemetryEnabled_InTestMode(t *testing.T) {

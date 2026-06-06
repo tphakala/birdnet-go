@@ -89,6 +89,9 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
           BUILD_VERSION: ${{ env.BUILD_VERSION }}
+          # Baked into the binary via ldflags. Empty if the secret is unset
+          # (e.g. fork PR builds), which leaves telemetry off by design.
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           PUPPETEER_SKIP_DOWNLOAD: true
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
 
