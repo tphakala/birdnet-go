@@ -185,7 +185,8 @@ var (
 )
 
 // shouldSkipTelemetry returns true if telemetry should be skipped.
-// It checks test mode and whether Sentry is enabled in settings.
+// It checks test mode, whether Sentry is enabled in settings, and whether the
+// Sentry SDK is actually initialized for this build.
 // This helper reduces code duplication across telemetry functions.
 func shouldSkipTelemetry() bool {
 	// In test mode, never skip (telemetry is always "enabled" for testing)
@@ -193,7 +194,13 @@ func shouldSkipTelemetry() bool {
 		return false
 	}
 	settings := conf.GetSettings()
-	return settings == nil || !settings.Sentry.Enabled
+	if settings == nil || !settings.Sentry.Enabled {
+		return true
+	}
+	// Even when opted in, skip when the SDK was never initialized for this build
+	// (no DSN configured). Otherwise the capture paths would run and log
+	// "event sent" while sentry-go silently no-ops because no client is bound.
+	return sentry.CurrentHub().Client() == nil
 }
 
 // PlatformInfo holds privacy-safe platform information for telemetry
@@ -1092,8 +1099,13 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 	deferredMutex.Lock()
 	defer deferredMutex.Unlock()
 
-	// If already initialized (either minimal or full), return
-	if sentryInitialized {
+	// If the Sentry SDK is already initialized (minimal or full), reuse it.
+	// NOTE: check the actual bound client, not sentryInitialized. When telemetry
+	// is opted out at startup, InitSentry sets sentryInitialized=true purely to
+	// drain deferred messages without initializing the SDK; relying on that flag
+	// here would make support-dump upload a silent no-op for users who keep
+	// telemetry disabled but request an upload.
+	if sentry.CurrentHub().Client() != nil {
 		return nil
 	}
 
