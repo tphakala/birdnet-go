@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
@@ -232,8 +233,8 @@ func TestIsAllowedOAuthUser(t *testing.T) {
 			// conf.GetSettings via currentSettings) resolves to it rather than
 			// depending on the global being nil. Restored on cleanup.
 			prev := conf.GetSettings()
-			conf.SetTestSettings(settings)
-			t.Cleanup(func() { conf.SetTestSettings(prev) })
+			conftest.SetTestSettings(settings)
+			t.Cleanup(func() { conftest.SetTestSettings(prev) })
 			got, reason := s.isAllowedOAuthUser(tt.gothProvider, tt.userID, tt.email)
 			assert.Equal(t, tt.want, got)
 			assert.Equal(t, tt.wantReason, reason, "deny reason should classify the cause for security.log diagnostics")
@@ -261,10 +262,10 @@ func TestIsAllowedOAuthUserHotReload(t *testing.T) {
 	// Save and restore the prior global snapshot so this test does not leave the
 	// process-global settings mutated for sibling tests, regardless of ordering.
 	prev := conf.GetSettings()
-	t.Cleanup(func() { conf.SetTestSettings(prev) })
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	// Sanity: with only the stale startup snapshot, the user is not allowed.
-	conf.SetTestSettings(startup)
+	conftest.SetTestSettings(startup)
 	allowed, _ := s.isAllowedOAuthUser(security.ProviderGoogle, "google-123", "user@gmail.com")
 	assert.False(t, allowed, "user should not be allowed under the startup snapshot")
 
@@ -277,7 +278,7 @@ func TestIsAllowedOAuthUserHotReload(t *testing.T) {
 			},
 		},
 	}
-	conf.SetTestSettings(updated)
+	conftest.SetTestSettings(updated)
 
 	allowedAfter, _ := s.isAllowedOAuthUser(security.ProviderGoogle, "google-123", "user@gmail.com")
 	assert.True(t, allowedAfter, "allowlist change made via UI must apply without a restart")

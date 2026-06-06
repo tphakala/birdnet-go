@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // TestOrchestrator_ConcurrentReloadAndReads_NoRace is the regression guard for
@@ -116,7 +117,7 @@ func TestOrchestrator_ConcurrentResolverRegistrationAndResolve_NoRace(t *testing
 	require.NoError(t, os.MkdirAll(sharedDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, "taxonomy.csv"), []byte(testTaxonomyCSV), 0o644))
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.BirdNET.Locale = "en-uk"
 
 	o := &Orchestrator{

@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -64,7 +65,7 @@ func TestGenerateSpectrogramFromRelIgnoresLiveExportPath(t *testing.T) {
 	// differently and miss the pre-created spectrogram.
 	live := conf.CloneSettings(controller.Settings)
 	live.Realtime.Audio.Export.Path = filepath.Join(tmp, "changed-prefix")
-	conf.SetTestSettings(live)
+	conftest.SetTestSettings(live)
 	controller.settingsAtomic.Store(live)
 
 	got, err := controller.generateSpectrogramFromRel(ctx, relAudioPath, "irrelevant/clip/path.wav", "", width, raw, "", "")

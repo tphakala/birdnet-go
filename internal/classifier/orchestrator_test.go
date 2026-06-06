@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -58,7 +59,7 @@ func newTestOrchestrator(t *testing.T, mocks ...*mockModelInstance) *Orchestrato
 func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
 	t.Parallel()
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
@@ -75,7 +76,7 @@ func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
 func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 	t.Parallel()
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
@@ -99,7 +100,7 @@ func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 func TestOrchestrator_ModelsMapPopulated(t *testing.T) {
 	t.Parallel()
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)

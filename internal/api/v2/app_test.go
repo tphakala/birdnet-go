@@ -27,7 +27,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
-	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/security/securitytest"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -131,7 +131,7 @@ func setupAppConfigTestWithAuth(t *testing.T, securityConfig *conf.Security) (*e
 	publishTestSettings(t, settings)
 
 	// Create OAuth2Server for auth
-	oauth2Server := security.NewOAuth2ServerForTesting(t, settings)
+	oauth2Server := securitytest.NewOAuth2ServerForTesting(t, settings)
 	authService := auth.NewSecurityAdapter(oauth2Server)
 	authMw := auth.NewMiddleware(authService)
 

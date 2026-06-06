@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -334,14 +334,14 @@ func TestGetDiskUsage(t *testing.T) {
 
 // TestCleanupReturnValues tests that cleanup functions return the expected values
 func TestCleanupReturnValues(t *testing.T) {
-	settings := conf.NewTestSettings().
+	settings := conftest.NewTestSettings().
 		WithAudioExport(t.TempDir(), "wav", "96k").
 		Apply()
 	settings.Realtime.Audio.Export.Retention.Policy = "age"
 	settings.Realtime.Audio.Export.Retention.MaxAge = "30d"
 	settings.Realtime.Audio.Export.Retention.MaxUsage = "80%"
 	settings.Realtime.Audio.Export.Retention.MinClips = 10
-	t.Cleanup(func() { conf.NewTestSettings().Apply() })
+	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 
 	// Create a mock DB
 	mockDB := &MockDB{}

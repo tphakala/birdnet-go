@@ -30,7 +30,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
-	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/security/securitytest"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -106,7 +106,7 @@ func newSettingsAuthTestEnv(t *testing.T) *echo.Echo {
 	mockMetrics, err := observability.NewMetrics()
 	require.NoError(t, err, "Failed to create test metrics")
 
-	oauth2Server := security.NewOAuth2ServerForTesting(t, settings)
+	oauth2Server := securitytest.NewOAuth2ServerForTesting(t, settings)
 	authService := auth.NewSecurityAdapter(oauth2Server)
 	authMw := auth.NewMiddleware(authService)
 

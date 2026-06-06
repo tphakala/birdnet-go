@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // writerStopTimeout bounds how long the test waits for the background writer
@@ -18,9 +19,9 @@ const writerStopTimeout = 2 * time.Second
 // again, the race detector should report a data race.
 func TestDebugSkipsControllerFallbackWhenGlobalUnset(t *testing.T) {
 	previous := conf.GetSettings()
-	conf.SetTestSettings(nil)
+	conftest.SetTestSettings(nil)
 	t.Cleanup(func() {
-		conf.SetTestSettings(previous)
+		conftest.SetTestSettings(previous)
 	})
 
 	controller := &Controller{

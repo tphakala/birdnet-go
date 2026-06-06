@@ -1,4 +1,4 @@
-package conf
+package conf_test
 
 import (
 	"os"
@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // writeSharedGeomodelFiles creates the shared geomodel ONNX and labels files
@@ -15,15 +17,15 @@ func writeSharedGeomodelFiles(t *testing.T, modelsDir string) {
 	t.Helper()
 	sharedDir := filepath.Join(modelsDir, "shared")
 	require.NoError(t, os.MkdirAll(sharedDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, GeomodelONNXLocalName), []byte("onnx"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, GeomodelLabelsLocalName), []byte("labels"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, conf.GeomodelONNXLocalName), []byte("onnx"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(sharedDir, conf.GeomodelLabelsLocalName), []byte("labels"), 0o644))
 }
 
 // sharedGeomodelPaths returns the gallery-managed shared ONNX and labels paths
 // under modelsDir.
 func sharedGeomodelPaths(modelsDir string) (onnxPath, labelsPath string) {
 	sharedDir := filepath.Join(modelsDir, "shared")
-	return filepath.Join(sharedDir, GeomodelONNXLocalName), filepath.Join(sharedDir, GeomodelLabelsLocalName)
+	return filepath.Join(sharedDir, conf.GeomodelONNXLocalName), filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 }
 
 func TestMigrateOrphanGeomodelRangeFilter(t *testing.T) {
@@ -35,7 +37,7 @@ func TestMigrateOrphanGeomodelRangeFilter(t *testing.T) {
 		writeSharedGeomodelFiles(t, modelsDir)
 		onnxPath, labelsPath := sharedGeomodelPaths(modelsDir)
 
-		s := GetTestSettings()
+		s := conftest.GetTestSettings()
 		s.Models.Directory = modelsDir
 		s.BirdNET.RangeFilter.Model = ""
 		s.BirdNET.RangeFilter.ModelPath = onnxPath
@@ -54,7 +56,7 @@ func TestMigrateOrphanGeomodelRangeFilter(t *testing.T) {
 		// Intentionally do NOT create the shared files.
 		onnxPath, labelsPath := sharedGeomodelPaths(modelsDir)
 
-		s := GetTestSettings()
+		s := conftest.GetTestSettings()
 		s.Models.Directory = modelsDir
 		s.BirdNET.RangeFilter.Model = "v3"
 		s.BirdNET.RangeFilter.ModelPath = onnxPath
@@ -77,7 +79,7 @@ func TestMigrateOrphanGeomodelRangeFilter(t *testing.T) {
 		const customModel = "/custom/geomodel.onnx"
 		const customLabels = "/custom/geomodel_labels.txt"
 
-		s := GetTestSettings()
+		s := conftest.GetTestSettings()
 		s.Models.Directory = modelsDir
 		s.BirdNET.RangeFilter.Model = "v3"
 		s.BirdNET.RangeFilter.ModelPath = customModel
@@ -98,7 +100,7 @@ func TestMigrateOrphanGeomodelRangeFilter(t *testing.T) {
 		writeSharedGeomodelFiles(t, modelsDir)
 		onnxPath, labelsPath := sharedGeomodelPaths(modelsDir)
 
-		s := GetTestSettings()
+		s := conftest.GetTestSettings()
 		s.Models.Directory = modelsDir
 		s.BirdNET.RangeFilter.Model = "v3"
 		s.BirdNET.RangeFilter.ModelPath = onnxPath
@@ -115,7 +117,7 @@ func TestMigrateOrphanGeomodelRangeFilter(t *testing.T) {
 	t.Run("already cleared with shared paths and files absent is a no-op", func(t *testing.T) {
 		modelsDir := t.TempDir()
 		// No shared files, config already empty for all geomodel fields.
-		s := GetTestSettings()
+		s := conftest.GetTestSettings()
 		s.Models.Directory = modelsDir
 		s.BirdNET.RangeFilter.Model = ""
 		s.BirdNET.RangeFilter.ModelPath = ""

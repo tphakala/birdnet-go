@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // fakeUniversalRangeFilter implements inference.RangeFilter and
@@ -107,15 +108,15 @@ func TestBuildRangeFilter_PassUnmappedSpecies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			settings := conf.GetTestSettings()
+			settings := conftest.GetTestSettings()
 			settings.BirdNET.Latitude = 60.0
 			settings.BirdNET.Longitude = 25.0
 			settings.BirdNET.LocationConfigured = true
 			settings.BirdNET.RangeFilter.Threshold = 0.01
 			settings.BirdNET.RangeFilter.PassUnmappedSpecies = tt.passUnmapped
 			settings.BirdNET.Labels = classifierLabels
-			conf.SetTestSettings(settings)
-			t.Cleanup(func() { conf.SetTestSettings(nil) })
+			conftest.SetTestSettings(settings)
+			t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 			rf := &fakeUniversalRangeFilter{
 				geoLabels: geoLabels,
@@ -152,7 +153,7 @@ func TestBuildRangeFilter_PassUnmappedSpecies_RespectsExcludeList(t *testing.T) 
 		{Score: 0.9, Label: "Turdus merula_Common Blackbird"},
 	}
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.BirdNET.Latitude = 60.0
 	settings.BirdNET.Longitude = 25.0
 	settings.BirdNET.LocationConfigured = true
@@ -160,8 +161,8 @@ func TestBuildRangeFilter_PassUnmappedSpecies_RespectsExcludeList(t *testing.T) 
 	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
 	settings.BirdNET.Labels = classifierLabels
 	settings.Realtime.Species.Exclude = []string{"Goldcrest"}
-	conf.SetTestSettings(settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	rf := &fakeUniversalRangeFilter{
 		geoLabels: geoLabels,
@@ -197,15 +198,15 @@ func TestBuildRangeFilter_UpdatesUnmappedScore(t *testing.T) {
 	require.InDelta(t, 0.0, float64(mrf.unmappedScore), 0.001,
 		"initial unmappedScore should be 0.0")
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.BirdNET.Latitude = 60.0
 	settings.BirdNET.Longitude = 25.0
 	settings.BirdNET.LocationConfigured = true
 	settings.BirdNET.RangeFilter.Threshold = 0.01
 	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
 	settings.BirdNET.Labels = classifierLabels
-	conf.SetTestSettings(settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	bn := &BirdNET{
 		Settings:     settings,
@@ -225,7 +226,7 @@ func TestBuildRangeFilter_UpdatesUnmappedScore(t *testing.T) {
 	// Toggle off and rebuild
 	settings2 := conf.CloneSettings(settings)
 	settings2.BirdNET.RangeFilter.PassUnmappedSpecies = false
-	conf.SetTestSettings(settings2)
+	conftest.SetTestSettings(settings2)
 
 	err = BuildRangeFilter(o)
 	require.NoError(t, err)
@@ -266,7 +267,7 @@ func TestGetProbableSpecies_PassUnmappedSpecies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			settings := conf.GetTestSettings()
+			settings := conftest.GetTestSettings()
 			settings.BirdNET.Latitude = 60.0
 			settings.BirdNET.Longitude = 25.0
 			settings.BirdNET.LocationConfigured = true
@@ -319,15 +320,15 @@ func TestBuildRangeFilter_UnmappedSpeciesInIsSpeciesIncluded(t *testing.T) {
 		{Score: 0.9, Label: "Turdus merula_Common Blackbird"},
 	}
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.BirdNET.Latitude = 60.0
 	settings.BirdNET.Longitude = 25.0
 	settings.BirdNET.LocationConfigured = true
 	settings.BirdNET.RangeFilter.Threshold = 0.01
 	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
 	settings.BirdNET.Labels = classifierLabels
-	conf.SetTestSettings(settings)
-	t.Cleanup(func() { conf.SetTestSettings(nil) })
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	rf := &fakeUniversalRangeFilter{
 		geoLabels: geoLabels,

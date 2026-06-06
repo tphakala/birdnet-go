@@ -17,13 +17,14 @@ import (
 
 	audioBuffer "github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 func TestSaveAudioActionExecute_DefersUntilCaptureReady(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	settings := conf.NewTestSettings().
+	settings := conftest.NewTestSettings().
 		WithAudioExport(tmpDir, "wav", "192k").
 		Build()
 
@@ -51,7 +52,7 @@ func TestSaveAudioActionExecute_ReadsDeferredCaptureWhenReady(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	settings := conf.NewTestSettings().
+	settings := conftest.NewTestSettings().
 		WithAudioExport(tmpDir, "wav", "192k").
 		Build()
 
@@ -93,7 +94,7 @@ func TestSaveAudioActionExecute_PropagatesBufferReadError(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	settings := conf.NewTestSettings().
+	settings := conftest.NewTestSettings().
 		WithAudioExport(tmpDir, "wav", "192k").
 		Build()
 

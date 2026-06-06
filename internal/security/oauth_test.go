@@ -17,13 +17,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // TestIsUserAuthenticatedValidAccessToken tests the IsUserAuthenticated function with a valid access token
 func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
-	settings := conf.NewTestSettings().Apply()
-	t.Cleanup(func() { conf.NewTestSettings().Apply() })
+	settings := conftest.NewTestSettings().Apply()
+	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 
 	s := NewOAuth2Server(t.Context())
 
@@ -104,7 +105,7 @@ func TestIsUserAuthenticatedTableDriven(t *testing.T) {
 }
 
 func TestOAuth2Server(t *testing.T) {
-	t.Cleanup(func() { conf.NewTestSettings().Apply() })
+	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 
 	tests := []struct {
 		name string
@@ -126,7 +127,7 @@ func TestOAuth2Server(t *testing.T) {
 						},
 					},
 				}
-				conf.SetTestSettings(s.settings)
+				conftest.SetTestSettings(s.settings)
 
 				// Generate and immediately use the auth code
 				code, err := s.GenerateAuthCode()
@@ -150,7 +151,7 @@ func TestOAuth2Server(t *testing.T) {
 					Enabled: true,
 					Subnet:  "192.168.1.0/24",
 				}
-				conf.SetTestSettings(s.settings)
+				conftest.SetTestSettings(s.settings)
 
 				assert.True(t, s.IsRequestFromAllowedSubnet("192.168.1.100"), "expected IP to be allowed")
 				assert.False(t, s.IsRequestFromAllowedSubnet("10.0.0.1"), "expected IP to be denied")
@@ -181,7 +182,7 @@ func TestNewOAuth2ServerForTesting(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(t, settings)
+	server := newOAuth2ServerForTesting(t, settings)
 
 	require.NotNil(t, server)
 	assert.Equal(t, settings, server.settings)
@@ -198,7 +199,7 @@ func TestIsUserAuthenticatedExpiredToken(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(t, settings)
+	server := newOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -228,7 +229,7 @@ func TestIsUserAuthenticatedNoToken(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(t, settings)
+	server := newOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -301,7 +302,7 @@ func TestIsUserAuthenticatedSubnetBypassDisabled(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(t, settings)
+	server := newOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -334,7 +335,7 @@ func TestIsUserAuthenticatedSubnetBypassEnabled(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(t, settings)
+	server := newOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -359,7 +360,7 @@ func TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled(t *testing.T)
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(t, settings)
+	server := newOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -509,8 +510,8 @@ func TestGenerateAuthCode(t *testing.T) {
 			},
 		},
 	}
-	conf.SetTestSettings(settings)
-	t.Cleanup(func() { conf.NewTestSettings().Apply() })
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 
 	server := &OAuth2Server{
 		settings:     settings,
@@ -704,7 +705,7 @@ func TestIsAuthenticationEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := NewOAuth2ServerForTesting(t, tt.settings)
+			server := newOAuth2ServerForTesting(t, tt.settings)
 			result := server.IsAuthenticationEnabled(tt.ip)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -827,7 +828,7 @@ func TestIsRequestFromAllowedSubnet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := NewOAuth2ServerForTesting(t, tt.settings)
+			server := newOAuth2ServerForTesting(t, tt.settings)
 			result := server.IsRequestFromAllowedSubnet(tt.ip)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -1226,8 +1227,8 @@ func TestCheckSocialAuthDirect(t *testing.T) {
 					OAuthProviders: tt.providers,
 				},
 			}
-			conf.SetTestSettings(settings)
-			t.Cleanup(func() { conf.NewTestSettings().Apply() })
+			conftest.SetTestSettings(settings)
+			t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 
 			server := &OAuth2Server{settings: settings}
 
@@ -1281,8 +1282,8 @@ func TestCheckSocialAuthFallback(t *testing.T) {
 					OAuthProviders: tt.providers,
 				},
 			}
-			conf.SetTestSettings(settings)
-			t.Cleanup(func() { conf.NewTestSettings().Apply() })
+			conftest.SetTestSettings(settings)
+			t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 
 			server := &OAuth2Server{settings: settings}
 
@@ -1308,8 +1309,8 @@ func TestCheckSocialAuthSessionsWithAuthProviderKey(t *testing.T) {
 			},
 		},
 	}
-	conf.SetTestSettings(settings)
-	t.Cleanup(func() { conf.NewTestSettings().Apply() })
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 
 	server := &OAuth2Server{settings: settings}
 
