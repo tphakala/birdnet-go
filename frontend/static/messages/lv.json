@@ -591,6 +591,21 @@
       "subtitle": "Reāllaikā identificētās sugas",
       "empty": "Viss kluss — pašlaik nav atklāts neviens putns"
     },
+    "recentHearing": {
+      "title": "Nesen dzirdēts",
+      "subtitle": "Pēdējās {hours} stundas",
+      "empty": "Nav nesenas sugu aktivitātes",
+      "loading": "Ielādē neseno sugu aktivitāti",
+      "justNow": "tikko",
+      "minutesAgo": "pirms {count} min",
+      "hoursAgo": "pirms {count} h",
+      "detections": "{count} noteikšanas",
+      "confidence": "{confidence}% pārliecība",
+      "confidenceTrend": "{species} pārliecības tendence",
+      "controls": {
+        "refresh": "Atsvaidzināt neseno sugu aktivitāti"
+      }
+    },
     "rejected": "Noraidīts",
     "dailySummary": {
       "title": "Dienas aktivitāte",
@@ -694,6 +709,8 @@
       "dailySummaryLoad": "Neizdevās ielādēt dienas kopsavilkumu",
       "recentDetectionsFetch": "Neizdevās ielādēt nesenās atklāšanas: {status}",
       "recentDetectionsLoad": "Neizdevās ielādēt nesenās atklāšanas",
+      "recentHearingFetch": "Neizdevās izgūt neseno sugu aktivitāti: {status}",
+      "recentHearingLoad": "Neizdevās ielādēt neseno sugu aktivitāti",
       "configFetch": "Neizdevās ielādēt informācijas paneļa konfigurāciju: {status}"
     },
     "banner": {
@@ -759,6 +776,7 @@
       "banner": "Informācijas paneļa baneris",
       "dailySummary": "Dienas kopsavilkums",
       "currentlyHearing": "Pašlaik dzirdams",
+      "recentHearing": "Nesen dzirdēts",
       "detectionsGrid": "Nesenās atklāšanas",
       "liveSpectrogram": "Tiešraides spektrogramma",
       "videoEmbed": "Video iegultne"

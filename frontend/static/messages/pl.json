@@ -591,6 +591,21 @@
       "subtitle": "Gatunki identyfikowane w czasie rzeczywistym",
       "empty": "Cisza — nie wykryto żadnych ptaków w tej chwili"
     },
+    "recentHearing": {
+      "title": "Ostatnio słyszane",
+      "subtitle": "Ostatnie {hours} godz.",
+      "empty": "Brak ostatniej aktywności gatunków",
+      "loading": "Ładowanie ostatniej aktywności gatunków",
+      "justNow": "przed chwilą",
+      "minutesAgo": "{count} min temu",
+      "hoursAgo": "{count} godz. temu",
+      "detections": "{count} wykryć",
+      "confidence": "{confidence}% pewności",
+      "confidenceTrend": "Trend pewności dla {species}",
+      "controls": {
+        "refresh": "Odśwież ostatnią aktywność gatunków"
+      }
+    },
     "rejected": "Odrzucone",
     "dailySummary": {
       "title": "Dzienna Aktywność",
@@ -694,6 +709,8 @@
       "dailySummaryLoad": "Nie udało się załadować podsumowania dziennego",
       "recentDetectionsFetch": "Nie udało się pobrać ostatnich detekcji: {status}",
       "recentDetectionsLoad": "Nie udało się załadować ostatnich detekcji",
+      "recentHearingFetch": "Nie udało się pobrać ostatniej aktywności gatunków: {status}",
+      "recentHearingLoad": "Nie udało się wczytać ostatniej aktywności gatunków",
       "configFetch": "Nie udało się pobrać konfiguracji panelu: {status}"
     },
     "banner": {
@@ -759,6 +776,7 @@
       "banner": "Baner pulpitu",
       "dailySummary": "Podsumowanie dnia",
       "currentlyHearing": "Aktualnie słyszane",
+      "recentHearing": "Ostatnio słyszane",
       "detectionsGrid": "Ostatnie detekcje",
       "liveSpectrogram": "Spektrogram na żywo",
       "videoEmbed": "Osadzenie wideo"

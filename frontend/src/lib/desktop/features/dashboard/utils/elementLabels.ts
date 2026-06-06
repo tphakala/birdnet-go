@@ -4,6 +4,7 @@ const elementLabelKeys = new Map<string, string>([
   ['banner', 'dashboard.elements.banner'],
   ['daily-summary', 'dashboard.elements.dailySummary'],
   ['currently-hearing', 'dashboard.elements.currentlyHearing'],
+  ['recent-hearing', 'dashboard.elements.recentHearing'],
   ['detections-grid', 'dashboard.elements.detectionsGrid'],
   ['live-spectrogram', 'dashboard.elements.liveSpectrogram'],
   ['video-embed', 'dashboard.elements.videoEmbed'],

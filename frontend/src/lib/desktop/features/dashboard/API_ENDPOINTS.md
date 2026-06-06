@@ -72,6 +72,40 @@ const response = await fetch('/api/v2/detections/recent?limit=10');
 const recentDetections = await response.json();
 ```
 
+## Recent Species Activity
+
+**Endpoint:** `GET /api/v2/analytics/species/recent`
+
+**Query Parameters:**
+
+- `hours` (optional): Rolling time window in hours, default: 4
+- `limit` (optional): Maximum number of species to return, default: 8
+- `buckets` (optional): Number of confidence sparkline buckets, default: 12
+- `min_confidence` (optional): Minimum confidence percentage, default: 0
+
+**Response:**
+
+```json
+[
+  {
+    "scientific_name": "Turdus migratorius",
+    "common_name": "American Robin",
+    "species_code": "amerob",
+    "count": 4,
+    "latest_heard_at": "2026-05-26T08:42:00-04:00",
+    "latest_confidence": 0.91,
+    "max_confidence": 0.94,
+    "avg_confidence": 0.83,
+    "confidence_trend": [0, 0.72, 0, 0.83, 0.91],
+    "trend_start": "2026-05-26T04:42:00-04:00",
+    "trend_hours": 4,
+    "score": 0.86,
+    "latest_detection_id": 15573,
+    "thumbnail_url": "/ui/assets/bird-placeholder.svg"
+  }
+]
+```
+
 ## Additional Endpoints
 
 ### Get Single Detection

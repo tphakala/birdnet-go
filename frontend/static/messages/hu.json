@@ -591,6 +591,21 @@
       "subtitle": "Valós idejű azonosított fajok",
       "empty": "Csend van — most nem észleltek madarakat"
     },
+    "recentHearing": {
+      "title": "Nemrég hallott",
+      "subtitle": "Az elmúlt {hours} óra",
+      "empty": "Nincs friss fajaktivitás",
+      "loading": "Friss fajaktivitás betöltése",
+      "justNow": "épp most",
+      "minutesAgo": "{count} perce",
+      "hoursAgo": "{count} órája",
+      "detections": "{count} észlelés",
+      "confidence": "{confidence}% megbízhatóság",
+      "confidenceTrend": "Megbízhatósági trend: {species}",
+      "controls": {
+        "refresh": "Friss fajaktivitás frissítése"
+      }
+    },
     "rejected": "Elutasítva",
     "dailySummary": {
       "title": "Napi aktivitás",
@@ -694,6 +709,8 @@
       "dailySummaryLoad": "A napi összefoglaló betöltése sikertelen",
       "recentDetectionsFetch": "A legutóbbi detektálások betöltése sikertelen: {status}",
       "recentDetectionsLoad": "A legutóbbi detektálások betöltése sikertelen",
+      "recentHearingFetch": "Nem sikerült lekérni a friss fajaktivitást: {status}",
+      "recentHearingLoad": "Nem sikerült betölteni a friss fajaktivitást",
       "configFetch": "Az irányítópult konfigurációjának betöltése sikertelen: {status}"
     },
     "banner": {
@@ -759,6 +776,7 @@
       "banner": "Irányítópult banner",
       "dailySummary": "Napi összefoglaló",
       "currentlyHearing": "Jelenleg hallható",
+      "recentHearing": "Nemrég hallott",
       "detectionsGrid": "Legutóbbi detektálások",
       "liveSpectrogram": "Élő spektrogram",
       "videoEmbed": "Videó beágyazás"

@@ -591,6 +591,21 @@
       "subtitle": "Espécies identificadas em tempo real",
       "empty": "Tudo calmo — nenhuma ave detectada no momento"
     },
+    "recentHearing": {
+      "title": "Ouvido recentemente",
+      "subtitle": "Últimas {hours} horas",
+      "empty": "Nenhuma atividade recente de espécies",
+      "loading": "Carregando atividade recente de espécies",
+      "justNow": "agora mesmo",
+      "minutesAgo": "há {count} min",
+      "hoursAgo": "há {count} h",
+      "detections": "{count} detecções",
+      "confidence": "{confidence}% de confiança",
+      "confidenceTrend": "Tendência de confiança para {species}",
+      "controls": {
+        "refresh": "Atualizar atividade recente de espécies"
+      }
+    },
     "rejected": "Rejeitado",
     "dailySummary": {
       "title": "Atividade Diária",
@@ -694,6 +709,8 @@
       "dailySummaryLoad": "Falha ao carregar resumo diário",
       "recentDetectionsFetch": "Falha ao buscar detecções recentes: {status}",
       "recentDetectionsLoad": "Falha ao carregar detecções recentes",
+      "recentHearingFetch": "Falha ao buscar atividade recente de espécies: {status}",
+      "recentHearingLoad": "Falha ao carregar atividade recente de espécies",
       "configFetch": "Falha ao buscar configuração do painel: {status}"
     },
     "banner": {
@@ -759,6 +776,7 @@
       "banner": "Banner do painel",
       "dailySummary": "Resumo diário",
       "currentlyHearing": "Ouvindo atualmente",
+      "recentHearing": "Ouvido recentemente",
       "detectionsGrid": "Detecções recentes",
       "liveSpectrogram": "Espectrograma ao vivo",
       "videoEmbed": "Vídeo incorporado"

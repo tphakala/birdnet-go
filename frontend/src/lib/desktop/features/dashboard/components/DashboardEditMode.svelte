@@ -65,6 +65,7 @@
     'banner',
     'daily-summary',
     'currently-hearing',
+    'recent-hearing',
     'live-spectrogram',
     'detections-grid',
     'video-embed',

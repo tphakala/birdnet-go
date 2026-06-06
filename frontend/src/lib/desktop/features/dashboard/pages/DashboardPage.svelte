@@ -41,10 +41,15 @@ Performance Optimizations:
   import { onMount, untrack } from 'svelte';
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import CurrentlyHearingCard from '$lib/desktop/features/dashboard/components/CurrentlyHearingCard.svelte';
+  import RecentHearingCard from '$lib/desktop/features/dashboard/components/RecentHearingCard.svelte';
   import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
   import DetectionCardGrid from '$lib/desktop/features/dashboard/components/DetectionCardGrid.svelte';
   import { t } from '$lib/i18n';
-  import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
+  import type {
+    DailySpeciesSummary,
+    Detection,
+    RecentSpeciesActivity,
+  } from '$lib/types/detection.types';
   import type { PendingDetection } from '$lib/types/pending.types';
   import {
     getLocalDateString,
@@ -98,6 +103,11 @@ Performance Optimizations:
   // Constants
   const ANIMATION_CLEANUP_DELAY = 2200; // Slightly longer than 2s animation duration
   const MIN_FETCH_LIMIT = 10; // Minimum number of detections to fetch for SSE processing
+  const RECENT_HEARING_HOURS = 4;
+  const RECENT_HEARING_LIMIT = 8;
+  const RECENT_HEARING_BUCKETS = RECENT_HEARING_HOURS * 4;
+  const RECENT_HEARING_REFRESH_MS = 60000;
+  const RECENT_HEARING_FETCH_THROTTLE_MS = 10000;
   // Species limit buffer constants for SSE updates
   // BUFFER_TRIGGER: When array exceeds limit + this, trigger cleanup
   // BUFFER_TARGET: After cleanup, keep limit + this many species to avoid frequent re-sorting
@@ -153,14 +163,40 @@ Performance Optimizations:
     );
   }
 
+  function isRecentSpeciesActivityArray(v: unknown): v is RecentSpeciesActivity[] {
+    if (!Array.isArray(v)) return false;
+    return v.every(item => {
+      if (!isPlainObject(item)) return false;
+      const o = item as Record<string, unknown>;
+      return (
+        typeof o.scientific_name === 'string' &&
+        typeof o.common_name === 'string' &&
+        typeof o.count === 'number' &&
+        typeof o.latest_heard_at === 'string' &&
+        typeof o.latest_confidence === 'number' &&
+        typeof o.max_confidence === 'number' &&
+        typeof o.avg_confidence === 'number' &&
+        Array.isArray(o.confidence_trend) &&
+        o.confidence_trend.every(value => typeof value === 'number') &&
+        typeof o.trend_start === 'string' &&
+        typeof o.trend_hours === 'number' &&
+        typeof o.score === 'number' &&
+        typeof o.latest_detection_id === 'number'
+      );
+    });
+  }
+
   // State management
   let dailySummary = $state<DailySpeciesSummary[]>([]);
   let recentDetections = $state<Detection[]>([]);
+  let recentHearing = $state<RecentSpeciesActivity[]>([]);
   let selectedDate = $state(getInitialDate());
   let isLoadingSummary = $state(true);
   let isLoadingDetections = $state(true);
+  let isLoadingRecentHearing = $state(true);
   let summaryError = $state<string | null>(null);
   let detectionsError = $state<string | null>(null);
+  let recentHearingError = $state<string | null>(null);
   let showThumbnails = $state(true); // Default to true for backward compatibility
   let summaryLimit = $state(30); // Default from backend (conf/defaults.go) - species count limit for daily summary
   let configLoaded = $state(false); // Gates reactive preloading until config is loaded
@@ -178,7 +214,8 @@ Performance Optimizations:
   // Dashboard layout: derive enabled elements from layout config with fallback
   const defaultElements: DashboardElement[] = [
     { id: 'daily-summary-0', type: 'daily-summary', enabled: true, summary: { summaryLimit: 30 } },
-    { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true },
+    { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true, width: 'half' },
+    { id: 'recent-hearing-0', type: 'recent-hearing', enabled: true, width: 'half' },
     { id: 'live-spectrogram-0', type: 'live-spectrogram', enabled: true },
     { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
   ];
@@ -204,6 +241,9 @@ Performance Optimizations:
           : { elements: defaultElements, source: 'hardcoded-defaults' as const }
   );
   let layoutElements = $derived(layoutResolution.elements);
+  let hasRecentHearingTile = $derived(
+    layoutElements.some(element => element.enabled && element.type === 'recent-hearing')
+  );
 
   // Current layout as a DashboardLayout object for DashboardEditMode
   let currentLayout = $derived<DashboardLayout>({ elements: layoutElements });
@@ -505,6 +545,54 @@ Performance Optimizations:
     }
   }
 
+  let lastRecentHearingFetch = 0;
+  let recentHearingRequestId = 0;
+
+  async function fetchRecentHearing(force = false) {
+    if (!hasRecentHearingTile || !connectionState.isOnline) {
+      recentHearingRequestId++;
+      isLoadingRecentHearing = false;
+      return;
+    }
+
+    const now = Date.now();
+    if (!force && now - lastRecentHearingFetch < RECENT_HEARING_FETCH_THROTTLE_MS) {
+      return;
+    }
+    lastRecentHearingFetch = now;
+
+    const requestId = ++recentHearingRequestId;
+    isLoadingRecentHearing = true;
+    recentHearingError = null;
+
+    try {
+      const response = await fetch(
+        buildAppUrl(
+          `/api/v2/analytics/species/recent?hours=${RECENT_HEARING_HOURS}&limit=${RECENT_HEARING_LIMIT}&buckets=${RECENT_HEARING_BUCKETS}`
+        )
+      );
+      if (!response.ok) {
+        throw new Error(
+          t('dashboard.errors.recentHearingFetch', {
+            status: response.statusText || `HTTP ${response.status}`,
+          })
+        );
+      }
+      const data = await response.json();
+      if (requestId !== recentHearingRequestId) return;
+      recentHearing = isRecentSpeciesActivityArray(data) ? data : [];
+    } catch (error) {
+      if (requestId !== recentHearingRequestId) return;
+      recentHearingError =
+        error instanceof Error ? error.message : t('dashboard.errors.recentHearingLoad');
+      logger.error('Error fetching recent hearing:', error);
+    } finally {
+      if (requestId === recentHearingRequestId) {
+        isLoadingRecentHearing = false;
+      }
+    }
+  }
+
   async function fetchDashboardConfig() {
     try {
       interface DashboardConfig {
@@ -542,10 +630,15 @@ Performance Optimizations:
     fetchRecentDetections();
   }
 
+  function handleRecentHearingRefresh() {
+    fetchRecentHearing(true);
+  }
+
   // Animation cleanup timers and RAF manager - use $state.raw() for performance
   let animationCleanupTimers = $state.raw(new Set<ReturnType<typeof setTimeout>>());
   let animationFrame: number | null = null;
   let pendingCleanups = $state.raw(new Map<string, { fn: () => void; timestamp: number }>());
+  let recentHearingRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
   // Clear animation states from daily summary
   function clearDailySummaryAnimations() {
@@ -798,6 +891,10 @@ Performance Optimizations:
       // Adjacent date preloading is handled by the $effect gated on configLoaded
     });
     fetchRecentDetections();
+    fetchRecentHearing();
+    recentHearingRefreshTimer = setInterval(() => {
+      fetchRecentHearing();
+    }, RECENT_HEARING_REFRESH_MS);
 
     // Setup SSE connection for real-time updates
     connectToDetectionStream();
@@ -839,6 +936,11 @@ Performance Optimizations:
       if (sseFetchTimer) {
         clearTimeout(sseFetchTimer);
         sseFetchTimer = null;
+      }
+
+      if (recentHearingRefreshTimer) {
+        clearInterval(recentHearingRefreshTimer);
+        recentHearingRefreshTimer = null;
       }
 
       // Clean up preload debounce timer
@@ -1301,6 +1403,7 @@ Performance Optimizations:
     if (online && !wasOnline) {
       fetchDailySummary();
       fetchRecentDetections();
+      fetchRecentHearing();
     }
     wasOnline = online;
   });
@@ -1333,6 +1436,7 @@ Performance Optimizations:
     if (!sseFetchTimer) {
       sseFetchTimer = setTimeout(() => {
         fetchRecentDetections(true);
+        fetchRecentHearing();
         sseFetchTimer = null;
       }, 150);
     }
@@ -1570,6 +1674,14 @@ Performance Optimizations:
         />
       {:else if element.type === 'currently-hearing'}
         <CurrentlyHearingCard detections={isViewingToday ? pendingDetections : []} />
+      {:else if element.type === 'recent-hearing'}
+        <RecentHearingCard
+          data={recentHearing}
+          loading={isLoadingRecentHearing}
+          error={recentHearingError}
+          hours={RECENT_HEARING_HOURS}
+          onRefresh={handleRecentHearingRefresh}
+        />
       {:else if element.type === 'live-spectrogram'}
         {#if isViewingToday}
           <MiniSpectrogram {pendingDetections} />

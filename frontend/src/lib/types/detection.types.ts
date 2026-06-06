@@ -194,3 +194,20 @@ export interface DailySpeciesSummary {
   hourlyUpdated?: number[]; // Which hours were just updated
   previousCount?: number; // For animated counter
 }
+
+export interface RecentSpeciesActivity {
+  scientific_name: string;
+  common_name: string;
+  species_code?: string;
+  count: number;
+  latest_heard_at: string;
+  latest_confidence: number;
+  max_confidence: number;
+  avg_confidence: number;
+  confidence_trend: number[];
+  trend_start: string;
+  trend_hours: number;
+  score: number;
+  latest_detection_id: number;
+  thumbnail_url?: string;
+}
