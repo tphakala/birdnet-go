@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -71,8 +72,9 @@ func newTestScheduler(t *testing.T, mock *mockManager) *QuietHoursScheduler {
 // setTestSettings sets conf.Settings for a test and restores on cleanup.
 func setTestSettings(t *testing.T, s *conf.Settings) {
 	t.Helper()
-	conf.SetTestSettings(s)
-	t.Cleanup(func() { conf.SetTestSettings(conf.GetTestSettings()) })
+	prev := conf.GetSettings()
+	conftest.SetTestSettings(s)
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 }
 
 // --- Signal constants ---
@@ -357,7 +359,7 @@ func TestQuietHours_Evaluate(t *testing.T) {
 			streamURLs:    map[string]string{sourceID: "rtsp://cam1"},
 		}
 
-		settings := conf.GetTestSettings()
+		settings := conftest.GetTestSettings()
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{
 				Name: "cam1", URL: "rtsp://cam1", Enabled: true, Transport: "tcp",
@@ -385,7 +387,7 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		mock := &mockManager{activeStreams: []string{}}
 
 		qhStart, qhEnd := inactiveQuietWindow()
-		settings := conf.GetTestSettings()
+		settings := conftest.GetTestSettings()
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{
 				Name: "cam1", URL: "rtsp://cam1", Enabled: true, Transport: "tcp",
@@ -417,7 +419,7 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		const sourceID = "rtsp_abc123"
 		mock := &mockManager{activeStreams: []string{}}
 
-		settings := conf.GetTestSettings()
+		settings := conftest.GetTestSettings()
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{
 				Name: "cam1", URL: "rtsp://cam1", Enabled: true, Transport: "tcp",
@@ -442,7 +444,7 @@ func TestQuietHours_Evaluate(t *testing.T) {
 			streamURLs:    map[string]string{sourceID: "rtsp://cam1"},
 		}
 
-		settings := conf.GetTestSettings()
+		settings := conftest.GetTestSettings()
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{
 				Name:      "cam1",
@@ -478,7 +480,7 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		}
 
 		qhStart, qhEnd := inactiveQuietWindow()
-		settings := conf.GetTestSettings()
+		settings := conftest.GetTestSettings()
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{
 				Name: "cam1", URL: "rtsp://cam1", Enabled: true, Transport: "tcp",
@@ -522,7 +524,7 @@ func TestQuietHours_Evaluate(t *testing.T) {
 func TestEvaluate_SoundCardQuietHours(t *testing.T) {
 	mock := &mockManager{activeStreams: []string{}}
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{{
 		Name:   "Test Sound Card",
 		Device: "default",
@@ -547,7 +549,7 @@ func TestEvaluate_SoundCardQuietHours(t *testing.T) {
 func TestEvaluate_SoundCardRestoredWhenDisabled(t *testing.T) {
 	mock := &mockManager{activeStreams: []string{}}
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{{
 		Name:       "Test Sound Card",
 		Device:     "default",

@@ -1,17 +1,24 @@
-package conf
+// Package conftest provides shared test-only helpers for constructing and
+// publishing *conf.Settings instances. It lives in its own package (rather than
+// in internal/conf) so that test helpers, which would otherwise be compiled
+// into the production binary, stay out of non-test builds while remaining
+// importable from other packages' tests.
+package conftest
+
+import "github.com/tphakala/birdnet-go/internal/conf"
 
 // SetTestSettings allows tests to inject their own settings instance.
-// Subsequent GetSettings()/Setting() calls observe the new snapshot
-// atomically. Passing nil clears the snapshot, causing the next
-// Setting() call to re-Load() from disk. Intended for testing only.
-func SetTestSettings(settings *Settings) {
-	settingsInstance.Store(settings)
+// Subsequent conf.GetSettings()/conf.Setting() calls observe the new snapshot
+// atomically. Passing nil clears the snapshot, causing the next Setting() call
+// to re-Load() from disk. Intended for testing only.
+func SetTestSettings(settings *conf.Settings) {
+	conf.StoreSettings(settings)
 }
 
 // GetTestSettings returns a copy of default settings suitable for testing.
 // This creates isolated settings that won't affect the global configuration.
-func GetTestSettings() *Settings {
-	settings := &Settings{}
+func GetTestSettings() *conf.Settings {
+	settings := &conf.Settings{}
 
 	// Initialize with defaults
 	settings.Debug = false
@@ -29,7 +36,7 @@ func GetTestSettings() *Settings {
 	settings.Realtime.Dashboard.Thumbnails.Summary = false
 	settings.Realtime.Dashboard.Thumbnails.Recent = true
 	settings.Realtime.Dashboard.Thumbnails.ImageProvider = "avicommons"
-	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = RetentionPolicyNone
+	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = conf.RetentionPolicyNone
 
 	// Other realtime settings
 	settings.Realtime.Interval = 15
@@ -38,16 +45,16 @@ func GetTestSettings() *Settings {
 	// Web server settings
 	settings.WebServer.Enabled = false
 	settings.WebServer.Port = "8080"
-	settings.WebServer.LiveStream.BitRate = DefaultLiveStreamBitRate
-	settings.WebServer.LiveStream.SegmentLength = DefaultLiveStreamSegmentLength
-	settings.WebServer.LiveStream.SampleRate = DefaultLiveStreamSampleRate
+	settings.WebServer.LiveStream.BitRate = conf.DefaultLiveStreamBitRate
+	settings.WebServer.LiveStream.SegmentLength = conf.DefaultLiveStreamSegmentLength
+	settings.WebServer.LiveStream.SampleRate = conf.DefaultLiveStreamSampleRate
 
 	// Security settings
 	settings.Security.SessionSecret = "test-secret-for-unit-tests"
-	settings.Security.SessionDuration = DefaultSessionDuration
+	settings.Security.SessionDuration = conf.DefaultSessionDuration
 
 	// Weather settings
-	settings.Realtime.Weather.PollInterval = DefaultWeatherPollInterval
+	settings.Realtime.Weather.PollInterval = conf.DefaultWeatherPollInterval
 
 	// Output settings
 	settings.Output.SQLite.Enabled = false
@@ -61,12 +68,12 @@ func GetTestSettings() *Settings {
 //
 // Example usage:
 //
-//	settings := conf.NewTestSettings().
+//	settings := conftest.NewTestSettings().
 //	    WithBirdNET(0.9, 45.0, -122.0).
 //	    WithMQTT("tcp://localhost:1883", "test").
 //	    Build()
 type SettingsBuilder struct {
-	settings *Settings
+	settings *conf.Settings
 }
 
 // NewTestSettings creates a new SettingsBuilder initialized with default test settings.
@@ -122,13 +129,6 @@ func (b *SettingsBuilder) WithImageProvider(provider, fallbackPolicy string) *Se
 	return b
 }
 
-// WithSecurity configures security settings.
-func (b *SettingsBuilder) WithSecurity(host string, autoTLS bool) *SettingsBuilder {
-	b.settings.Security.Host = host
-	b.settings.Security.AutoTLS = autoTLS
-	return b
-}
-
 // WithWebServer configures web server settings.
 func (b *SettingsBuilder) WithWebServer(port string, enabled bool) *SettingsBuilder {
 	b.settings.WebServer.Port = port
@@ -138,13 +138,13 @@ func (b *SettingsBuilder) WithWebServer(port string, enabled bool) *SettingsBuil
 
 // Build returns the constructed settings without modifying global state.
 // Use this when you need the settings object for manual manipulation.
-func (b *SettingsBuilder) Build() *Settings {
+func (b *SettingsBuilder) Build() *conf.Settings {
 	return b.settings
 }
 
 // Apply sets the built settings as the global test settings.
 // This is equivalent to calling SetTestSettings() with the built settings.
-func (b *SettingsBuilder) Apply() *Settings {
+func (b *SettingsBuilder) Apply() *conf.Settings {
 	SetTestSettings(b.settings)
 	return b.settings
 }

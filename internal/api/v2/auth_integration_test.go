@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/security/securitytest"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -105,7 +106,7 @@ func setupAuthIntegrationTest(t *testing.T) (*echo.Echo, *Controller, *conf.Sett
 // createTestOAuth2Server creates an OAuth2Server with the provided settings for testing.
 func createTestOAuth2Server(tb testing.TB, settings *conf.Settings) *security.OAuth2Server {
 	tb.Helper()
-	return security.NewOAuth2ServerForTesting(tb, settings)
+	return securitytest.NewOAuth2ServerForTesting(tb, settings)
 }
 
 // TestV2AuthFlow_CompleteLogin tests the complete V2 login flow end-to-end.

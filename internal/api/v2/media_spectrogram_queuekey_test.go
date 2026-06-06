@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
@@ -62,7 +63,7 @@ func TestGetSpectrogramStatusFindsInFlightJobAfterExportPathChange(t *testing.T)
 		DS:       mockDS,
 	}
 	controller.settingsAtomic.Store(settings)
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	// Simulate an in-flight generation enqueued under the immutable queue key.
 	spec := settings.Realtime.Dashboard.Spectrogram
@@ -75,7 +76,7 @@ func TestGetSpectrogramStatusFindsInFlightJobAfterExportPathChange(t *testing.T)
 	// Change Export.Path mid-flight: after enqueue, before the status poll.
 	changed := conf.CloneSettings(settings)
 	changed.Realtime.Audio.Export.Path = filepath.Join(tmp, "changed")
-	conf.SetTestSettings(changed)
+	conftest.SetTestSettings(changed)
 	controller.settingsAtomic.Store(changed)
 
 	// Poll the status endpoint.
@@ -122,7 +123,7 @@ func TestGenerateSpectrogramFromRelRetainsFailedStatusForPolling(t *testing.T) {
 		ctx:      ctx,
 	}
 	controller.settingsAtomic.Store(settings)
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	const queueKey = "queuekey-failtest:1026:true"
 	t.Cleanup(func() { spectrogramQueue.Delete(queueKey) })

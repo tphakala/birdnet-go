@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // Test URL paths used in httptest handlers.
@@ -1012,7 +1013,7 @@ func TestModelManager_Install_GeomodelConfigWiring(t *testing.T) {
 	t.Cleanup(func() { conf.StoreSettings(origSettings) })
 
 	modelsDir := t.TempDir()
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	conf.StoreSettings(settings)
 	mm := NewModelManager(modelsDir, nil, settings)
 
@@ -1069,7 +1070,7 @@ func TestModelManager_Uninstall_GeomodelConfigClearing(t *testing.T) {
 	t.Cleanup(func() { conf.StoreSettings(origSettings) })
 
 	modelsDir := t.TempDir()
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	conf.StoreSettings(settings)
 	mm := NewModelManager(modelsDir, nil, settings)
 
@@ -1291,7 +1292,7 @@ func TestModelManager_Install_GeomodelVersionWiring(t *testing.T) {
 	t.Cleanup(func() { conf.StoreSettings(origSettings) })
 
 	modelsDir := t.TempDir()
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	conf.StoreSettings(settings)
 	mm := NewModelManager(modelsDir, nil, settings)
 

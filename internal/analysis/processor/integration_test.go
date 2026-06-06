@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
+	"github.com/tphakala/birdnet-go/internal/analysis/species/speciestest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"gorm.io/driver/sqlite"
@@ -129,7 +130,7 @@ func TestIntegration_DatabaseToTracker(t *testing.T) {
 	}
 
 	tracker := species.NewTrackerFromSettings(adapter, settings)
-	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test data
+	speciestest.SetCurrentYearForTesting(t, tracker, 2024) // Set to 2024 for test data
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -252,7 +253,7 @@ func TestIntegration_YearTransition(t *testing.T) {
 	}
 
 	tracker := species.NewTrackerFromSettings(adapter, settings)
-	tracker.SetCurrentYearForTesting(2023)
+	speciestest.SetCurrentYearForTesting(t, tracker, 2023)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -332,7 +333,7 @@ func TestIntegration_SeasonalTransitions(t *testing.T) {
 	}
 
 	tracker := species.NewTrackerFromSettings(adapter, settings)
-	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test dates
+	speciestest.SetCurrentYearForTesting(t, tracker, 2024) // Set to 2024 for test dates
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 

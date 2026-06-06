@@ -4,10 +4,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 func TestMain(m *testing.M) {
-	conf.NewTestSettings().Apply()
+	conftest.NewTestSettings().Apply()
 	os.Exit(m.Run())
 }

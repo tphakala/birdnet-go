@@ -28,8 +28,14 @@ func setupNotificationTestService(t *testing.T) *notification.Service {
 	}
 
 	service := notification.NewService(config)
-	err := notification.SetServiceForTesting(service)
-	if err != nil {
+	// Always stop the service we just created. Its cleanupLoop goroutine runs
+	// until Stop() is called; without this the goroutine-leak gate in TestMain
+	// reports it as a leak. This covers both the case where the service becomes
+	// the global singleton and the case where SetServiceForTesting rejects it
+	// (instance already set) and the freshly created service is discarded.
+	t.Cleanup(service.Stop)
+
+	if err := notification.SetServiceForTesting(service); err != nil {
 		// Service already exists, use it
 		service = notification.GetService()
 		require.NotNil(t, service, "Expected notification service to be available")

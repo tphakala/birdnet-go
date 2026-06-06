@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
@@ -21,10 +21,10 @@ const (
 func TestProviderNameConsistency(t *testing.T) {
 	t.Parallel()
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.Realtime.Dashboard.Thumbnails.ImageProvider = providerWikimedia
 	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = "none"
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	// Create Wikipedia provider and verify it registers with the correct name
 	store := newMockStore()
@@ -77,10 +77,10 @@ func TestFallbackPolicyEnforcement(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Test isolation with new settings for each subtest
-			settings := conf.GetTestSettings()
+			settings := conftest.GetTestSettings()
 			settings.Realtime.Dashboard.Thumbnails.ImageProvider = providerAvicommons
 			settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = tt.fallbackPolicy
-			conf.SetTestSettings(settings)
+			conftest.SetTestSettings(settings)
 
 			store := newMockStore()
 
@@ -191,10 +191,10 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Set up test configuration
-			settings := conf.GetTestSettings()
+			settings := conftest.GetTestSettings()
 			settings.Realtime.Dashboard.Thumbnails.ImageProvider = providerAvicommons
 			settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = tc.fallbackPolicy
-			conf.SetTestSettings(settings)
+			conftest.SetTestSettings(settings)
 
 			// Create store and set up test data
 			store := newMockStoreWithTracking()
@@ -268,10 +268,10 @@ func (m *mockStoreWithTracking) WasProviderQueried(providerName string) bool {
 func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 	const species = "Acanthis flammea"
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.Realtime.Dashboard.Thumbnails.ImageProvider = providerAvicommons
 	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = "all"
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	store := newMockStore()
 
@@ -350,10 +350,10 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 func TestRefreshEntryFallbackPolicyNone(t *testing.T) {
 	const species = "Acanthis flammea"
 
-	settings := conf.GetTestSettings()
+	settings := conftest.GetTestSettings()
 	settings.Realtime.Dashboard.Thumbnails.ImageProvider = providerAvicommons
 	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = "none"
-	conf.SetTestSettings(settings)
+	conftest.SetTestSettings(settings)
 
 	store := newMockStore()
 

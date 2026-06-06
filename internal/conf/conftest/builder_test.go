@@ -1,10 +1,11 @@
-package conf
+package conftest
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // TestSettingsBuilder_NewTestSettings verifies that NewTestSettings creates a valid builder.
@@ -257,46 +258,6 @@ func TestSettingsBuilder_WithImageProvider(t *testing.T) {
 	}
 }
 
-// TestSettingsBuilder_WithSecurity verifies security configuration.
-//
-//nolint:dupl // Similar test structure but tests different builder methods
-func TestSettingsBuilder_WithSecurity(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name    string
-		host    string
-		autoTLS bool
-	}{
-		{
-			name:    "localhost no TLS",
-			host:    "localhost",
-			autoTLS: false,
-		},
-		{
-			name:    "domain with auto TLS",
-			host:    "birdnet.example.com",
-			autoTLS: true,
-		},
-		{
-			name:    "IP address no TLS",
-			host:    "192.168.1.100",
-			autoTLS: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			settings := NewTestSettings().
-				WithSecurity(tt.host, tt.autoTLS).
-				Build()
-
-			assert.Equal(t, tt.host, settings.Security.Host)
-			assert.Equal(t, tt.autoTLS, settings.Security.AutoTLS)
-		})
-	}
-}
-
 // TestSettingsBuilder_WithWebServer verifies web server configuration.
 //
 //nolint:dupl // Similar test structure but tests different builder methods
@@ -376,7 +337,7 @@ func TestSettingsBuilder_Build(t *testing.T) {
 // TestSettingsBuilder_Apply verifies that Apply sets global test settings.
 func TestSettingsBuilder_Apply(t *testing.T) {
 	// Store original settings
-	originalSettings := GetSettings()
+	originalSettings := conf.GetSettings()
 	t.Cleanup(func() {
 		SetTestSettings(originalSettings)
 	})
@@ -387,7 +348,7 @@ func TestSettingsBuilder_Apply(t *testing.T) {
 		Apply()
 
 	// Verify settings were applied globally
-	currentSettings := GetSettings()
+	currentSettings := conf.GetSettings()
 
 	assert.InDelta(t, 0.75, currentSettings.BirdNET.Threshold, 0.0001, "Expected global threshold to be applied")
 	assert.InDelta(t, 0.75, appliedSettings.BirdNET.Threshold, 0.0001, "Expected returned threshold to match")

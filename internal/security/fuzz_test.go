@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // =============================================================================
@@ -452,8 +453,8 @@ func FuzzIsRequestFromAllowedSubnet(f *testing.F) {
 				},
 			},
 		}
-		conf.SetTestSettings(settings)
-		t.Cleanup(func() { conf.SetTestSettings(nil) })
+		conftest.SetTestSettings(settings)
+		t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 		server := &OAuth2Server{settings: settings}
 

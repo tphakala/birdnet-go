@@ -229,7 +229,7 @@ tmpDir, _ := os.MkdirTemp("", "test_*")
 
 - Add `t.Parallel()` to **test functions** and **subtests** for speed
 - **NEVER parallelize tests that**:
-  - Mutate global state (e.g., `conf.SetTestSettings()`)
+  - Mutate global state (e.g., `conftest.SetTestSettings()`)
   - Share mutable data structures without synchronization
   - Use shared map references without cloning
 - **Always clone shared test data** in subtests:
@@ -250,9 +250,10 @@ tmpDir, _ := os.MkdirTemp("", "test_*")
 ### Test Helper File Naming
 
 - Name test-only helper files with `_test.go` suffix
-- **Wrong**: `internal/conf/test_helpers.go` (included in production builds)
-- **Correct**: `internal/conf/test_helpers_test.go` (test-only)
-- This ensures helpers with `*testing.T` parameters don't bloat binaries
+- **Wrong**: `internal/foo/test_helpers.go` (included in production builds)
+- **Correct (package-local helpers)**: `internal/foo/test_helpers_test.go` (test-only)
+- **Correct (helpers shared across packages' tests)**: a dedicated testing-support subpackage, e.g. `internal/conf/conftest` or `internal/api/v2/apitest`. A `_test.go` file cannot be imported by other packages, so cross-package helpers must live in their own importable package that production code never imports.
+- This ensures helpers with `*testing.T` parameters (and the `testing` import) don't bloat production binaries
 
 ### Benchmark Best Practices
 

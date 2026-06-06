@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
@@ -146,7 +146,7 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 			// embedded model. The explicit-settings range-filter call below uses this
 			// snapshot directly, so location/labels take effect regardless of any
 			// global test settings left by other tests.
-			settings := conf.GetTestSettings()
+			settings := conftest.GetTestSettings()
 			settings.BirdNET.Labels = labels
 			settings.BirdNET.LocationConfigured = true
 			settings.BirdNET.Latitude = 60.17

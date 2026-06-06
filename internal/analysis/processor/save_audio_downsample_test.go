@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // makeSilentPCM16 creates a zero-filled 16-bit PCM byte slice with the given
@@ -35,7 +36,7 @@ func TestSaveAudioAction_BirdDownsampledTo48kHz(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	settings := conf.NewTestSettings().
+	settings := conftest.NewTestSettings().
 		WithAudioExport(tmpDir, "wav", "192k").
 		Build()
 
@@ -65,7 +66,7 @@ func TestSaveAudioAction_BatPreservesNativeRate(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	settings := conf.NewTestSettings().
+	settings := conftest.NewTestSettings().
 		WithAudioExport(tmpDir, "wav", "192k").
 		Build()
 
@@ -95,7 +96,7 @@ func TestSaveAudioAction_BatMP3FallsBackToWAV(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	settings := conf.NewTestSettings().
+	settings := conftest.NewTestSettings().
 		WithAudioExport(tmpDir, "mp3", "192k").
 		Build()
 
@@ -131,7 +132,7 @@ func TestSaveAudioAction_BirdAt48kHzNoResample(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	settings := conf.NewTestSettings().
+	settings := conftest.NewTestSettings().
 		WithAudioExport(tmpDir, "wav", "192k").
 		Build()
 
@@ -161,7 +162,7 @@ func TestSaveAudioAction_BatOpusFallsBackToWAV(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	settings := conf.NewTestSettings().
+	settings := conftest.NewTestSettings().
 		WithAudioExport(tmpDir, "opus", "128k").
 		Build()
 

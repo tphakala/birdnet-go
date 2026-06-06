@@ -1,9 +1,8 @@
-// test_utils.go: Package api provides shared test utilities for API v2 tests.
+// Shared test utilities for API v2 tests.
 
 package api
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -50,36 +50,8 @@ func newMinimalController() *Controller {
 func publishTestSettings(tb testing.TB, settings *conf.Settings) {
 	tb.Helper()
 	prev := conf.GetSettings()
-	conf.SetTestSettings(settings)
-	tb.Cleanup(func() { conf.SetTestSettings(prev) })
-}
-
-// safeSlice is a helper for mock methods returning slices.
-// It safely handles nil arguments and performs type assertion.
-func safeSlice[T any](args mock.Arguments, index int) []T {
-	if arg := args.Get(index); arg != nil {
-		// Check if the argument is already of the target slice type
-		if slice, ok := arg.([]T); ok {
-			return slice
-		}
-		// Fail fast – most likely the test registered a value of the wrong type.
-		panic(fmt.Sprintf("safeSlice: expected []%T at index %d, got %T", *new(T), index, arg))
-	}
-	return nil // Return nil if the argument itself is nil
-}
-
-// safePointer is a helper for mock methods returning pointers.
-// It safely handles nil arguments and performs type assertion.
-func safePointer[T any](args mock.Arguments, index int) *T {
-	if arg := args.Get(index); arg != nil {
-		// Check if the argument is already of the target pointer type
-		if ptr, ok := arg.(T); ok {
-			return &ptr
-		}
-		// Fail fast – most likely the test registered a value of the wrong type.
-		panic(fmt.Sprintf("safePointer: expected *%T at index %d, got %T", *new(T), index, arg))
-	}
-	return nil // Return nil if the argument itself is nil
+	conftest.SetTestSettings(settings)
+	tb.Cleanup(func() { conftest.SetTestSettings(prev) })
 }
 
 // TestImageProvider implements the imageprovider.Provider interface for testing

@@ -395,7 +395,7 @@ realtime:
 	t.Cleanup(func() {
 		ConfigPath = oldPath
 		viper.Reset()
-		SetTestSettings(oldSettings)
+		StoreSettings(oldSettings)
 	})
 
 	ConfigPath = configPath

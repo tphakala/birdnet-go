@@ -57,8 +57,13 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 
 	// Try to set up isolated service for testing
 	service := notification.NewService(config)
-	err := notification.SetServiceForTesting(service)
-	if err != nil {
+	// Always stop the service we just created so its cleanupLoop goroutine does
+	// not leak past the test (caught by the goroutine-leak gate in TestMain).
+	// This covers both the global-singleton case and the discarded case when
+	// SetServiceForTesting rejects it because an instance already exists.
+	t.Cleanup(service.Stop)
+
+	if err := notification.SetServiceForTesting(service); err != nil {
 		// Service already exists, use it
 		service = notification.GetService()
 		require.NotNil(t, service, "Expected notification service to be available")
@@ -81,7 +86,7 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	// publish the controller's settings so the read resolves to them.
 	publishTestSettings(t, controller.Settings)
 
-	err = controller.CreateTestNewSpeciesNotification(c)
+	err := controller.CreateTestNewSpeciesNotification(c)
 	require.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, rec.Code)

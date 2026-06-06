@@ -1,4 +1,4 @@
-// testing.go - Testing utilities for species tracking
+// testing_test.go - Testing utilities for species tracking
 //
 // ⚠️  THIS FILE CONTAINS TEST-ONLY METHODS ⚠️
 //
@@ -6,8 +6,10 @@
 // guards that will panic if called outside of test execution. These methods
 // bypass normal validation and can corrupt internal state if misused.
 //
-// These methods are exported (rather than in _test.go files) because they are
-// used by integration tests in other packages (e.g., internal/analysis/processor).
+// These methods live in a _test.go file because they are only used by package
+// species's own tests. The cross-package year override helper lives in the
+// speciestest subpackage instead, so the production build of this package does
+// not import the testing package.
 
 package species
 
@@ -24,16 +26,16 @@ func panicIfNotTesting() {
 	}
 }
 
-// SetCurrentYearForTesting sets the current year for testing purposes only.
+// SetCurrentYearForTesting sets the current year for in-package tests only.
 // Panics if called outside of test execution.
 //
 // This method bypasses the normal year tracking logic and directly manipulates the internal
-// currentYear field, which can lead to inconsistent tracking data if misused.
+// currentYear field, which can lead to inconsistent tracking data if misused. Cross-package
+// tests should use speciestest.SetCurrentYearForTesting, which wraps the guard-free
+// SetCurrentYearOverride production method.
 func (t *SpeciesTracker) SetCurrentYearForTesting(year int) {
 	panicIfNotTesting()
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.currentYear = year
+	t.SetCurrentYearOverride(year)
 }
 
 // SetCurrentSeasonForTesting sets the current season for testing purposes only.
