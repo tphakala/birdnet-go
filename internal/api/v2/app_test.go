@@ -181,6 +181,34 @@ func TestGetAppConfig_NoSecurity(t *testing.T) {
 	assert.Empty(t, response.Security.AuthConfig.EnabledProviders, "No OAuth providers should be enabled")
 }
 
+// TestGetAppConfig_ProjectLinks verifies the response always carries the
+// project identity/links (independent of telemetry), defaulting to the upstream
+// values with correctly derived issue URLs when nothing is overridden.
+func TestGetAppConfig_ProjectLinks(t *testing.T) {
+	e, controller := setupAppConfigTest(t, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/app/config")
+
+	err := controller.GetAppConfig(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	links := response.ProjectLinks
+	assert.Equal(t, "BirdNET-Go", links.Name)
+	assert.Equal(t, "https://github.com/tphakala/birdnet-go", links.RepoURL)
+	assert.Equal(t, "https://github.com/tphakala/birdnet-go/issues", links.IssuesURL)
+	assert.Equal(t, "https://github.com/tphakala/birdnet-go/issues/new", links.NewIssueURL)
+	assert.Equal(t, "https://github.com/tphakala/birdnet-go", links.SupportURL)
+	assert.Equal(t, "https://discord.gg/gcSCFGUtsd", links.CommunityURL)
+}
+
 // TestGetAppConfig_BasicAuthEnabled tests the endpoint with BasicAuth enabled.
 func TestGetAppConfig_BasicAuthEnabled(t *testing.T) {
 	securityConfig := conf.Security{
@@ -890,10 +918,29 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 		"liveSpectrogram": true,
 		"freshInstall":    true,
 		"newVersion":      true,
+		"projectLinks":    true,
 	}
 
 	for key := range rawResponse {
 		assert.True(t, expectedKeys[key], "Unexpected field in response: %s", key)
+	}
+
+	// Check projectLinks sub-object
+	projectLinksRaw, ok := rawResponse["projectLinks"]
+	require.True(t, ok, "projectLinks field should exist")
+	projectLinks, ok := projectLinksRaw.(map[string]any)
+	require.True(t, ok, "projectLinks should be a map")
+	expectedProjectLinkKeys := map[string]bool{
+		"name":         true,
+		"repoUrl":      true,
+		"issuesUrl":    true,
+		"newIssueUrl":  true,
+		"supportUrl":   true,
+		"communityUrl": true,
+	}
+
+	for key := range projectLinks {
+		assert.True(t, expectedProjectLinkKeys[key], "Unexpected field in projectLinks: %s", key)
 	}
 
 	// Check security sub-object

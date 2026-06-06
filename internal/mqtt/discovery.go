@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -223,7 +224,7 @@ func (p *Publisher) publishBridgeDiscovery(ctx context.Context) error {
 		Device: DiscoveryDevice{
 			Identifiers:  []string{bridgeID},
 			Name:         p.config.DeviceName,
-			Manufacturer: "BirdNET-Go",
+			Manufacturer: branding.Name(),
 			Model:        "Bridge",
 			SWVersion:    p.config.Version,
 		},
@@ -254,7 +255,7 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 	device := DiscoveryDevice{
 		Identifiers:  []string{deviceID},
 		Name:         deviceName,
-		Manufacturer: "BirdNET-Go",
+		Manufacturer: branding.Name(),
 		Model:        "Audio Analyzer",
 		SWVersion:    p.config.Version,
 		ViaDevice:    bridgeID,
@@ -369,9 +370,9 @@ func (p *Publisher) getSensorTopic(nodeID, sourceID, sensorType string) string {
 // defaultOrigin returns the standard origin block for discovery payloads.
 func (p *Publisher) defaultOrigin() *DiscoveryOrigin {
 	return &DiscoveryOrigin{
-		Name:       "BirdNET-Go",
+		Name:       branding.Name(),
 		SWVersion:  p.config.Version,
-		SupportURL: "https://github.com/tphakala/birdnet-go",
+		SupportURL: branding.SupportURL(),
 	}
 }
 

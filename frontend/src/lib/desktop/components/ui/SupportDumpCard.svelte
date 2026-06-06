@@ -6,6 +6,7 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { api } from '$lib/utils/api';
+  import { appState } from '$lib/stores/appState.svelte';
 
   import type { HTMLAttributes } from 'svelte/elements';
 
@@ -26,6 +27,36 @@
   const instanceId = Math.random().toString(36).slice(2, 10);
   const githubIssueInputId = `githubIssueNumber-${instanceId}`;
   const userMessageInputId = `userMessage-${instanceId}`;
+
+  // Issue links rendered inside the translated helper/notice strings. The URLs
+  // come from the backend-resolved project branding (appState.projectLinks) and
+  // the link labels from i18n, so both follow configuration and locale. They are
+  // built as HTML and injected via {@html}, the same way these strings carried
+  // their anchors before the URLs were de-embedded from the locale files.
+  //
+  // The URLs are operator-controlled branding, but BirdNET-Go commonly runs over
+  // plain HTTP on home networks where the config response is not integrity
+  // protected, so harden the value before it reaches {@html}: require an http(s)
+  // scheme (blocks javascript:/data: payloads) and escape any attribute-breaking
+  // characters so a tampered value cannot break out of the href attribute.
+  function safeIssueHref(url: string): string {
+    if (!/^https?:\/\//i.test(url)) return '#';
+    return url
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  const viewIssuesLink = $derived(
+    `<a href="${safeIssueHref(appState.projectLinks.issuesUrl)}" target="_blank" rel="noopener noreferrer" class="link link-primary">${t('settings.support.supportReport.githubIssue.viewExistingIssues')}</a>`
+  );
+  const createNewIssueLink = $derived(
+    `<a href="${safeIssueHref(appState.projectLinks.newIssueUrl)}" target="_blank" rel="noopener noreferrer" class="link link-primary">${t('settings.support.supportReport.githubIssue.createNewIssue')}</a>`
+  );
+  const createGithubIssueLink = $derived(
+    `<a href="${safeIssueHref(appState.projectLinks.newIssueUrl)}" target="_blank" rel="noopener noreferrer" class="underline font-semibold">${t('settings.support.supportReport.githubRequired.createGithubIssue')}</a>`
+  );
 
   let timers: ReturnType<typeof setTimeout>[] = [];
 
@@ -243,7 +274,9 @@
                   {t('settings.support.supportReport.githubRequired.title')}
                 </span>
                 <div class="mt-1">
-                  {@html t('settings.support.supportReport.githubRequired.description')}
+                  {@html t('settings.support.supportReport.githubRequired.description', {
+                    createIssueLink: createGithubIssueLink,
+                  })}
                 </div>
               </div>
             {/snippet}
@@ -321,7 +354,10 @@
                 disabled={generating}
               />
               <span class="text-xs text-[var(--color-base-content)] opacity-60 mt-1 block">
-                {@html t('settings.support.supportReport.githubIssue.helper')}
+                {@html t('settings.support.supportReport.githubIssue.helper', {
+                  viewIssuesLink,
+                  createIssueLink: createNewIssueLink,
+                })}
               </span>
             </div>
           {/if}

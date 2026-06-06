@@ -2152,12 +2152,15 @@
         },
         "githubRequired": {
           "title": "Påkrævet: GitHub-issue til supportuploads",
-          "description": "<strong>Supportuploads kræver et GitHub-issuenummer.</strong> <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">Opret venligst et GitHub-issue</a>, der beskriver dit problem, <strong>før</strong> du genererer en supportrapport. Uden et tilknyttet issue kan udviklere ikke handle på dine supportdata."
+          "description": "<strong>Supportuploads kræver et GitHub-issuenummer.</strong> {createIssueLink}, der beskriver dit problem, <strong>før</strong> du genererer en supportrapport. Uden et tilknyttet issue kan udviklere ikke handle på dine supportdata.",
+          "createGithubIssue": "Opret venligst et GitHub-issue"
         },
         "githubIssue": {
           "label": "GitHub-issuenummer",
           "placeholder": "f.eks. 123 eller #123",
-          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Se eksisterende issues</a> eller <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">opret et nyt issue</a> først"
+          "helper": "{viewIssuesLink} eller {createIssueLink} først",
+          "viewExistingIssues": "Se eksisterende issues",
+          "createNewIssue": "opret et nyt issue"
         },
         "whatsIncluded": {
           "title": "Hvad er inkluderet i rapporten:",

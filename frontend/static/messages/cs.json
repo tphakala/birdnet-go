@@ -2152,12 +2152,15 @@
         },
         "githubRequired": {
           "title": "Vyžadováno: GitHub issue pro nahrání podpory",
-          "description": "<strong>Nahrání podpory vyžaduje číslo GitHub issue.</strong> Prosím <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">vytvořte GitHub issue</a> popisující váš problém <strong>před</strong> vygenerováním zprávy podpory. Bez propojené issue nemohou vývojáři s vašimi daty podpory pracovat."
+          "description": "<strong>Nahrání podpory vyžaduje číslo GitHub issue.</strong> Prosím {createIssueLink} popisující váš problém <strong>před</strong> vygenerováním zprávy podpory. Bez propojené issue nemohou vývojáři s vašimi daty podpory pracovat.",
+          "createGithubIssue": "vytvořte GitHub issue"
         },
         "githubIssue": {
           "label": "Číslo GitHub issue",
           "placeholder": "např. 123 nebo #123",
-          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Zobrazit existující issue</a> nebo nejprve <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">vytvořte novou issue</a>"
+          "helper": "{viewIssuesLink} nebo nejprve {createIssueLink}",
+          "viewExistingIssues": "Zobrazit existující issue",
+          "createNewIssue": "vytvořte novou issue"
         },
         "whatsIncluded": {
           "title": "Co je ve zprávě zahrnuto:",

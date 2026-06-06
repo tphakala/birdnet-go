@@ -2152,12 +2152,15 @@
         },
         "githubRequired": {
           "title": "Requerido: Issue de GitHub para cargas de soporte",
-          "description": "<strong>Las cargas de soporte requieren un número de issue de GitHub.</strong> Por favor <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">crea un issue de GitHub</a> describiendo tu problema <strong>antes</strong> de generar un informe de soporte. Sin un issue vinculado, los desarrolladores no pueden actuar sobre tus datos de soporte."
+          "description": "<strong>Las cargas de soporte requieren un número de issue de GitHub.</strong> Por favor {createIssueLink} describiendo tu problema <strong>antes</strong> de generar un informe de soporte. Sin un issue vinculado, los desarrolladores no pueden actuar sobre tus datos de soporte.",
+          "createGithubIssue": "crea un issue de GitHub"
         },
         "githubIssue": {
           "label": "Número de issue de GitHub",
           "placeholder": "p.ej., 123 o #123",
-          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Ver issues existentes</a> o <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">crear un nuevo issue</a> primero"
+          "helper": "{viewIssuesLink} o {createIssueLink} primero",
+          "viewExistingIssues": "Ver issues existentes",
+          "createNewIssue": "crear un nuevo issue"
         },
         "whatsIncluded": {
           "title": "Qué incluye el informe:",

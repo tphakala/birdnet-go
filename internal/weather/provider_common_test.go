@@ -169,8 +169,8 @@ func TestConstants(t *testing.T) {
 	})
 
 	t.Run("user agent is set", func(t *testing.T) {
-		assert.NotEmpty(t, UserAgent)
-		assert.Contains(t, UserAgent, "BirdNET-Go")
+		assert.NotEmpty(t, UserAgent())
+		assert.Contains(t, UserAgent(), "BirdNET-Go")
 	})
 }
 

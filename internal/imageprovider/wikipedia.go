@@ -19,6 +19,7 @@ import (
 	"github.com/antonholmquist/jason"
 	"github.com/google/uuid"
 	"github.com/k3a/html2text"
+	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -32,8 +33,9 @@ const (
 
 	// User-Agent constants following Wikimedia robot policy
 	// https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy
+	// The contact URL is resolved at runtime from the branding package (see
+	// buildUserAgent) so forks identify themselves rather than the upstream repo.
 	userAgentName    = "BirdNETGo"
-	userAgentContact = "https://github.com/tphakala/birdnet-go"
 	userAgentLibrary = "Go-HTTP-Client"
 
 	// Circuit breaker timeout durations
@@ -513,7 +515,7 @@ func buildUserAgent(appVersion string) string {
 
 	// Format: BirdNET-Go/1.0.0 (https://github.com/tphakala/birdnet-go) Go-HTTP-Client/go1.21.0
 	return fmt.Sprintf("%s/%s (%s) %s/%s",
-		userAgentName, appVersion, userAgentContact, userAgentLibrary, goVersion)
+		userAgentName, appVersion, branding.RepoURL(), userAgentLibrary, goVersion)
 }
 
 // logUserAgentValidation logs the constructed user-agent for debugging purposes
@@ -525,7 +527,7 @@ func logUserAgentValidation(appVersion string) {
 		logger.String("complies_with_policy", "https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy"),
 		logger.String("contains_app_name", userAgentName),
 		logger.String("contains_version", appVersion),
-		logger.String("contains_contact", userAgentContact),
+		logger.String("contains_contact", branding.RepoURL()),
 		logger.String("contains_library", userAgentLibrary),
 		logger.String("go_version", runtime.Version()))
 }

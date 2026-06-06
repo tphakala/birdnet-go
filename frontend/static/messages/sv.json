@@ -2152,12 +2152,15 @@
         },
         "githubRequired": {
           "title": "Krav: GitHub-ärende för supportuppladdningar",
-          "description": "<strong>Supportuppladdningar kräver ett GitHub-ärendenummer.</strong> Vänligen <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">skapa ett GitHub-ärende</a> som beskriver ditt problem <strong>innan</strong> du genererar en supportrapport. Utan ett länkat ärende kan utvecklare inte agera på din supportdata."
+          "description": "<strong>Supportuppladdningar kräver ett GitHub-ärendenummer.</strong> Vänligen {createIssueLink} som beskriver ditt problem <strong>innan</strong> du genererar en supportrapport. Utan ett länkat ärende kan utvecklare inte agera på din supportdata.",
+          "createGithubIssue": "skapa ett GitHub-ärende"
         },
         "githubIssue": {
           "label": "GitHub-ärendenummer",
           "placeholder": "t.ex. 123 eller #123",
-          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Visa befintliga ärenden</a> eller <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">skapa ett nytt ärende</a> först"
+          "helper": "{viewIssuesLink} eller {createIssueLink} först",
+          "viewExistingIssues": "Visa befintliga ärenden",
+          "createNewIssue": "skapa ett nytt ärende"
         },
         "whatsIncluded": {
           "title": "Vad som ingår i rapporten:",

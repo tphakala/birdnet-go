@@ -2152,12 +2152,15 @@
         },
         "githubRequired": {
           "title": "Requis : Problème GitHub pour les envois de support",
-          "description": "<strong>Les envois de support nécessitent un numéro de problème GitHub.</strong> Veuillez <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">créer un problème GitHub</a> décrivant votre problème <strong>avant</strong> de générer un rapport de support. Sans problème lié, les développeurs ne peuvent pas traiter vos données de support."
+          "description": "<strong>Les envois de support nécessitent un numéro de problème GitHub.</strong> Veuillez {createIssueLink} décrivant votre problème <strong>avant</strong> de générer un rapport de support. Sans problème lié, les développeurs ne peuvent pas traiter vos données de support.",
+          "createGithubIssue": "créer un problème GitHub"
         },
         "githubIssue": {
           "label": "Numéro du problème GitHub",
           "placeholder": "#123",
-          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Voir les problèmes existants</a> ou <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">créer un nouveau problème</a> d'abord"
+          "helper": "{viewIssuesLink} ou {createIssueLink} d'abord",
+          "viewExistingIssues": "Voir les problèmes existants",
+          "createNewIssue": "créer un nouveau problème"
         },
         "whatsIncluded": {
           "title": "Ce qui est inclus dans le rapport :",

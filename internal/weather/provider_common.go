@@ -4,15 +4,22 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
 	RequestTimeout = 10 * time.Second
-	UserAgent      = "BirdNET-Go https://github.com/tphakala/birdnet-go"
 	RetryDelay     = 2 * time.Second
 	MaxRetries     = 3
 )
+
+// UserAgent returns the HTTP User-Agent header value for outbound weather API
+// requests, built from the configured project identity so forks identify
+// themselves rather than the upstream project.
+func UserAgent() string {
+	return branding.Name() + " " + branding.RepoURL()
+}
 
 // Sentinel errors for weather API responses
 var (

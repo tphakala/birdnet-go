@@ -26,6 +26,7 @@
   import GithubIcon from '$lib/desktop/components/ui/GithubIcon.svelte';
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
+  import { appState } from '$lib/stores/appState.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   interface VersionSettings {
@@ -99,7 +100,7 @@
 
     <div class="mt-4 flex justify-center">
       <a
-        href="https://github.com/tphakala/birdnet-go"
+        href={appState.projectLinks.repoUrl}
         class="btn btn-outline-primary gap-2"
         target="_blank"
         rel="noopener noreferrer"
