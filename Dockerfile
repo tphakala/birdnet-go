@@ -55,6 +55,13 @@ FROM --platform=$BUILDPLATFORM buildenv AS build
 ARG BUILD_VERSION
 ENV BUILD_VERSION=${BUILD_VERSION:-unknown}
 
+# Sentry DSN baked into the binary at link time (consumed by the Taskfile
+# SENTRY_DSN var). Empty by default so unofficial builds ship telemetry off;
+# official CI passes it via --build-arg SENTRY_DSN. The final runtime image is a
+# separate stage, so this build-time value never lingers as a runtime ENV.
+ARG SENTRY_DSN
+ENV SENTRY_DSN=${SENTRY_DSN:-}
+
 ARG TARGETPLATFORM
 ARG ONNXRUNTIME_VERSION
 
@@ -79,7 +86,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     task check-tensorflow && \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
     echo "Building non-embedded version with BUILD_VERSION=${BUILD_VERSION}" && \
-    BUILD_VERSION="${BUILD_VERSION}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET}
+    BUILD_VERSION="${BUILD_VERSION}" SENTRY_DSN="${SENTRY_DSN}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET}
 
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:trixie-slim

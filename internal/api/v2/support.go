@@ -236,12 +236,16 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		if req.UploadToSentry {
 			uploader := telemetry.GetAttachmentUploader()
 			if err := uploader.UploadSupportDump(dumpCtx, archiveData, settings.SystemID, req.UserMessage, req.GitHubIssueNumber); err != nil {
-				// Log error but don't fail the request
+				// Log error but don't fail the request. Fall back to download so
+				// the user can still retrieve the dump: builds without a Sentry
+				// DSN (e.g. from-source) have a disabled uploader, and a
+				// transient upload failure should not strand the dump.
 				c.logErrorIfEnabled("Failed to upload support dump to Sentry",
 					logger.Error(err),
 					logger.String("dump_id", dump.ID),
 				)
 				response.Message = "Support dump generated successfully but upload failed"
+				req.UploadToSentry = false // fall back to download
 			} else {
 				response.UploadedAt = time.Now().UTC().Format(time.RFC3339)
 				response.Message = "Support dump generated and uploaded successfully"

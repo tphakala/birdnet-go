@@ -3,6 +3,7 @@ package telemetry
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -63,7 +64,7 @@ const (
 // Process start time, captured once via sync.Once so repeated InitSentry
 // calls (e.g. from tests) do not reset the effective uptime seen by BeforeSend.
 // Initialized from the package `init()` below so the baseline reflects
-// actual process start, not the moment telemetry is configured — any delay
+// actual process start, not the moment telemetry is configured; any delay
 // between binary start and InitSentry would otherwise under-report uptime
 // and misbucket early failures as `startup` (CodeRabbit review on #2762).
 var (
@@ -116,7 +117,7 @@ func enrichEventWithUptime(event *sentry.Event) {
 		event.Contexts = make(map[string]sentry.Context)
 	}
 	// Merge into any existing context under the same key rather than
-	// overwriting — another part of the system may already have added
+	// overwriting; another part of the system may already have added
 	// fields here. Truncate to integer seconds: fractional precision is
 	// not useful and would needlessly inflate cardinality.
 	if event.Contexts[uptimeContextKey] == nil {
@@ -125,18 +126,40 @@ func enrichEventWithUptime(event *sentry.Event) {
 	event.Contexts[uptimeContextKey][uptimeContextField] = int(uptime.Seconds())
 }
 
-// sentryDSN is the Sentry DSN for the BirdNET-Go project
-// Defined at package level to avoid duplication across initialization functions
-const sentryDSN = "https://b9269b6c0f8fae154df65be5a97e0435@o4509553065525248.ingest.de.sentry.io/4509553112186960"
+// sentryDSN is the Sentry DSN for the BirdNET-Go project. It is intentionally a
+// var (not a const) and empty by default, so plain `go build` / `task` builds
+// and forks do NOT inherit the upstream project's DSN. Official release and
+// nightly builds bake the real DSN in at link time via
+//
+//	-ldflags "-X 'github.com/tphakala/birdnet-go/internal/telemetry.sentryDSN=<dsn>'"
+//
+// fed from the SENTRY_DSN build secret. At runtime the BIRDNET_GO_SENTRY_DSN
+// environment variable takes precedence over the baked-in value (see
+// resolveSentryDSN), letting self-hosters and local builds point telemetry at
+// their own Sentry project without recompiling. When the resolved DSN is empty
+// telemetry stays off even if the user opts in.
+var sentryDSN string
 
-// sentryFrontendDSN is the Sentry DSN for the BirdNET-Go frontend.
-// Currently points to the same project as the backend. To separate,
-// create a new Sentry project and update this constant.
-const sentryFrontendDSN = sentryDSN
+// sentryDSNEnvVar is the runtime environment variable that overrides the
+// build-time Sentry DSN. An empty or unset value leaves the baked-in value
+// (if any) in effect.
+const sentryDSNEnvVar = "BIRDNET_GO_SENTRY_DSN"
 
-// GetFrontendDSN returns the Sentry DSN for frontend error tracking.
+// resolveSentryDSN returns the effective Sentry DSN using the precedence
+// BIRDNET_GO_SENTRY_DSN env var > ldflags-baked sentryDSN > empty (telemetry
+// off). Values are trimmed so a whitespace-only entry counts as unset.
+func resolveSentryDSN() string {
+	if v := strings.TrimSpace(os.Getenv(sentryDSNEnvVar)); v != "" {
+		return v
+	}
+	return strings.TrimSpace(sentryDSN)
+}
+
+// GetFrontendDSN returns the Sentry DSN for frontend error tracking. The
+// frontend shares the backend Sentry project, so it follows the same resolver
+// and therefore the same build-time/runtime precedence.
 func GetFrontendDSN() string {
-	return sentryFrontendDSN
+	return resolveSentryDSN()
 }
 
 // DeferredMessage represents a message that was captured before Sentry initialization
@@ -162,7 +185,8 @@ var (
 )
 
 // shouldSkipTelemetry returns true if telemetry should be skipped.
-// It checks test mode and whether Sentry is enabled in settings.
+// It checks test mode, whether Sentry is enabled in settings, and whether the
+// Sentry SDK is actually initialized for this build.
 // This helper reduces code duplication across telemetry functions.
 func shouldSkipTelemetry() bool {
 	// In test mode, never skip (telemetry is always "enabled" for testing)
@@ -170,7 +194,13 @@ func shouldSkipTelemetry() bool {
 		return false
 	}
 	settings := conf.GetSettings()
-	return settings == nil || !settings.Sentry.Enabled
+	if settings == nil || !settings.Sentry.Enabled {
+		return true
+	}
+	// Even when opted in, skip when the SDK was never initialized for this build
+	// (no DSN configured). Otherwise the capture paths would run and log
+	// "event sent" while sentry-go silently no-ops because no client is bound.
+	return sentry.CurrentHub().Client() == nil
 }
 
 // PlatformInfo holds privacy-safe platform information for telemetry
@@ -210,7 +240,7 @@ func InitSentry(settings *conf.Settings) error {
 	// Check if Sentry is explicitly enabled (opt-in)
 	if !settings.Sentry.Enabled {
 		GetLogger().Info("Sentry telemetry is disabled (opt-in required)")
-		// Drain deferred messages — Sentry will never initialize
+		// Drain deferred messages; Sentry will never initialize
 		deferredMutex.Lock()
 		deferredMessages = nil
 		sentryInitialized = true
@@ -221,6 +251,21 @@ func InitSentry(settings *conf.Settings) error {
 	// Enable debug logging if configured
 	if settings.Sentry.Debug {
 		enableDebugLogging()
+	}
+
+	// Resolve the DSN. From-source builds (and forks) ship without one unless
+	// BIRDNET_GO_SENTRY_DSN is set or a DSN was baked in via ldflags. With no
+	// DSN there is nowhere to send events, so skip initialization cleanly even
+	// though the user opted in, and tell them how to enable it.
+	if resolveSentryDSN() == "" {
+		GetLogger().Info("Sentry telemetry enabled but no DSN is configured for this build; skipping initialization",
+			logger.String("hint", "set "+sentryDSNEnvVar+" to point telemetry at a Sentry project"))
+		// Drain deferred messages; Sentry will never initialize for this build.
+		deferredMutex.Lock()
+		deferredMessages = nil
+		sentryInitialized = true
+		deferredMutex.Unlock()
+		return nil
 	}
 
 	// Initialize Sentry SDK
@@ -258,7 +303,7 @@ func enableDebugLogging() {
 func initializeSentrySDK(settings *conf.Settings) error {
 	// Initialize Sentry with privacy-compliant options
 	err := sentry.Init(sentry.ClientOptions{
-		Dsn:        sentryDSN,
+		Dsn:        resolveSentryDSN(),
 		SampleRate: 1.0,   // Capture all errors by default
 		Debug:      false, // Keep debug off for production
 
@@ -518,7 +563,7 @@ func removePrivacyExtraFields(extra map[string]any) int {
 		"source_id": true, // opaque source identifier (uuid-based)
 		"source":    true, // alias used by capture buffer
 		"device_id": true, // ALSA/WASAPI device identifier
-		// NOTE: device_name excluded — can contain user PII (e.g. "Jane's AirPods").
+		// NOTE: device_name excluded; can contain user PII (e.g. "Jane's AirPods").
 		// device_id (opaque ALSA/WASAPI identifier) provides sufficient diagnostic value.
 		"consumer_id":          true, // route consumer identifier
 		"active_streams":       true, // count of active streams
@@ -919,7 +964,7 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 		return
 	}
 
-	// Filter out info/debug-level messages — these are operational signals,
+	// Filter out info/debug-level messages; these are operational signals,
 	// not errors. They create noise issues in Sentry's issue list.
 	if level == sentry.LevelInfo || level == sentry.LevelDebug {
 		return
@@ -1054,14 +1099,27 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 	deferredMutex.Lock()
 	defer deferredMutex.Unlock()
 
-	// If already initialized (either minimal or full), return
-	if sentryInitialized {
+	// If the Sentry SDK is already initialized (minimal or full), reuse it.
+	// NOTE: check the actual bound client, not sentryInitialized. When telemetry
+	// is opted out at startup, InitSentry sets sentryInitialized=true purely to
+	// drain deferred messages without initializing the SDK; relying on that flag
+	// here would make support-dump upload a silent no-op for users who keep
+	// telemetry disabled but request an upload.
+	if sentry.CurrentHub().Client() != nil {
 		return nil
 	}
 
-	// Initialize with minimal configuration (uses package-level sentryDSN)
+	// Without a DSN there is no Sentry project to upload to. From-source builds
+	// hit this by design; the caller falls back to a local download.
+	dsn := resolveSentryDSN()
+	if dsn == "" {
+		GetLogger().Info("telemetry DSN not configured for this build; support dump upload unavailable")
+		return fmt.Errorf("telemetry DSN not configured for this build")
+	}
+
+	// Initialize with minimal configuration (uses the resolved DSN)
 	err := sentry.Init(sentry.ClientOptions{
-		Dsn:              sentryDSN,
+		Dsn:              dsn,
 		SampleRate:       0, // Don't capture any errors automatically
 		TracesSampleRate: 0, // No performance monitoring
 		Debug:            false,

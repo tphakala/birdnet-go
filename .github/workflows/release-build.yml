@@ -78,6 +78,9 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
           BUILD_VERSION: ${{ github.ref_name }}
+          # Baked into the binary via ldflags. Empty if the secret is unset
+          # (e.g. fork PR builds), which leaves telemetry off by design.
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
 
       - name: Setup Node.js for Sentry CLI
         if: matrix.goos == 'linux' && matrix.goarch == 'amd64'

@@ -25,6 +25,13 @@ vars:
   # Go version from go.mod (single source of truth)
   GO_VERSION:
     sh: awk '/^go /{print $2; found=1} END{if(!found) exit 1}' go.mod
+  # Sentry DSN baked into the binary at link time. Read from the SENTRY_DSN
+  # environment variable (mirrors how VERSION reads BUILD_VERSION). Defaults to
+  # empty: plain `task` builds and forks ship with telemetry off. Official CI
+  # builds inject the upstream DSN via this var; at runtime users can override it
+  # with BIRDNET_GO_SENTRY_DSN without rebuilding.
+  SENTRY_DSN:
+    sh: echo "${SENTRY_DSN:-}"
   # Common build flags
   CGO_FLAGS: CGO_ENABLED=1 CGO_CFLAGS="-I$HOME/src/tensorflow"
   EXTRA_BUILD_TAGS: '{{.EXTRA_BUILD_TAGS | default ""}}'
@@ -33,7 +40,7 @@ vars:
       if [ -n "{{.EXTRA_BUILD_TAGS}}" ]; then
         echo "-tags {{.EXTRA_BUILD_TAGS}}"
       fi
-  LDFLAGS: -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}'"
+  LDFLAGS: -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}' -X 'github.com/tphakala/birdnet-go/internal/telemetry.sentryDSN={{.SENTRY_DSN}}'"
   BUILD_FLAGS: '{{.BUILD_TAGS_FLAG}} {{.LDFLAGS}}'
   # System paths for native library installation (used by download/verify tasks)
   SYSTEM_LIB_DIR: /usr/lib
