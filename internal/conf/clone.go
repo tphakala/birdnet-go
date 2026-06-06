@@ -96,6 +96,7 @@ func CloneSettings(src *Settings) *Settings {
 
 	// Security.
 	dst.Security.OAuthProviders = cloneOAuthProviders(src.Security.OAuthProviders)
+	dst.Security.TrustedProxies = slices.Clone(src.Security.TrustedProxies)
 
 	// Backup.
 	dst.Backup.Targets = cloneBackupTargets(src.Backup.Targets)

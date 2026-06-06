@@ -408,6 +408,14 @@ security:
   allowsubnetbypass:
     enabled: false           # true to disable OAuth in subnet
     subnet: ""               # comma-separated list of CIDR ranges (e.g., "192.168.1.0/24,10.0.0.0/8")
+  # CIDR ranges of reverse proxies whose forwarded client-IP headers
+  # (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) may be trusted. Loopback,
+  # link-local, and private addresses are always trusted, so a local cloudflared
+  # or same-host reverse proxy needs no entry here. Add a proxy that connects
+  # from a PUBLIC IP (e.g. Cloudflare's edge in front of a directly-exposed
+  # instance, or an external load balancer) so its headers are honored. The
+  # special value "cloudflare" expands to Cloudflare's published edge ranges.
+  trustedproxies: []         # e.g. ["cloudflare"] or ["203.0.113.0/24"]
   basicauth:
     enabled: false           # true to enable basic auth
     password: ""             # password hash for the settings interface

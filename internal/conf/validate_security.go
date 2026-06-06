@@ -52,6 +52,23 @@ func validateSecuritySettings(settings *Security) error {
 		}
 	}
 
+	// Validate trusted-proxy entries. Each must be a valid CIDR or the reserved
+	// "cloudflare" preset token. Empty entries (blank list items) are skipped,
+	// matching the lenient parsing used by the subnet bypass check above.
+	for _, entry := range settings.TrustedProxies {
+		trimmed := strings.TrimSpace(entry)
+		if trimmed == "" || strings.EqualFold(trimmed, TrustedProxyCloudflarePreset) {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(trimmed); err != nil {
+			return errors.New(err).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "security-trustedproxies-format").
+				Context("entry", trimmed).
+				Build()
+		}
+	}
+
 	// Normalize session duration: viper nested defaults can be lost when the
 	// parent key exists in the config file but sessionduration is absent.
 	if settings.SessionDuration <= 0 {
