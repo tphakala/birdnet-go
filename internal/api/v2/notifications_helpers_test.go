@@ -44,14 +44,15 @@ func assertNoNilAction(t *testing.T, result, metadata map[string]any) {
 
 // mockController creates a controller with minimal setup for testing
 func mockController() *Controller {
-	return &Controller{
-		Settings: &conf.Settings{
-			WebServer: conf.WebServerSettings{
-				Debug: true,
-			},
-		},
+	c := &Controller{
 		apiLogger: nil, // Will skip logging in tests
 	}
+	c.Settings.Store(&conf.Settings{
+		WebServer: conf.WebServerSettings{
+			Debug: true,
+		},
+	})
+	return c
 }
 
 func TestController_createToastEventData(t *testing.T) {
@@ -318,16 +319,16 @@ func TestController_logNotificationConnection(t *testing.T) {
 
 	// Test with nil logger (should not panic)
 	c := &Controller{
-		Settings:  mockController().Settings,
 		apiLogger: nil,
 	}
+	c.Settings.Store(mockController().Settings.Load())
 
 	// These should not panic
 	c.logNotificationConnection("test-client", "192.168.1.1", "test-agent", true)
 	c.logNotificationConnection("test-client", "192.168.1.1", "", false)
 
 	// Test with different debug settings
-	c.Settings.WebServer.Debug = false
+	c.Settings.Load().WebServer.Debug = false
 	c.logNotificationConnection("test-client", "192.168.1.1", "test-agent", true)
 }
 
@@ -360,7 +361,7 @@ func TestController_logToastSent(t *testing.T) {
 	c.logToastSent("test-client", notif)
 
 	// Test with debug disabled
-	c.Settings.WebServer.Debug = false
+	c.Settings.Load().WebServer.Debug = false
 	c.logToastSent("test-client", notif)
 }
 
@@ -379,7 +380,7 @@ func TestController_logNotificationSent(t *testing.T) {
 	c.logNotificationSent("test-client", notif)
 
 	// Test with debug disabled
-	c.Settings.WebServer.Debug = false
+	c.Settings.Load().WebServer.Debug = false
 	c.logNotificationSent("test-client", notif)
 }
 

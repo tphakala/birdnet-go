@@ -22,7 +22,8 @@ func TestCheckNtfyServer_HTTPSuccess(t *testing.T) {
 	defer ts.Close()
 
 	e := echo.New()
-	ctrl := &Controller{Settings: newValidTestSettings()}
+	ctrl := &Controller{}
+	ctrl.Settings.Store(newValidTestSettings())
 	// ts.Listener.Addr().String() returns "127.0.0.1:PORT"
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server?host="+ts.Listener.Addr().String(), http.NoBody)
 	rec := httptest.NewRecorder()
@@ -41,7 +42,8 @@ func TestCheckNtfyServer_HTTPSuccess(t *testing.T) {
 
 func TestCheckNtfyServer_MissingHost(t *testing.T) {
 	e := echo.New()
-	ctrl := &Controller{Settings: newValidTestSettings()}
+	ctrl := &Controller{}
+	ctrl.Settings.Store(newValidTestSettings())
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server", http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
@@ -53,7 +55,8 @@ func TestCheckNtfyServer_MissingHost(t *testing.T) {
 
 func TestCheckNtfyServer_InvalidHost_Unreachable(t *testing.T) {
 	e := echo.New()
-	ctrl := &Controller{Settings: newValidTestSettings()}
+	ctrl := &Controller{}
+	ctrl.Settings.Store(newValidTestSettings())
 	// Use a reserved/invalid IP that will not respond (TEST-NET-1, RFC 5737)
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server?host=192.0.2.1", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -79,7 +82,8 @@ func TestCheckNtfyServer_NonNtfyServerNotFalsePositive(t *testing.T) {
 	defer ts.Close()
 
 	e := echo.New()
-	ctrl := &Controller{Settings: newValidTestSettings()}
+	ctrl := &Controller{}
+	ctrl.Settings.Store(newValidTestSettings())
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server?host="+ts.Listener.Addr().String(), http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
@@ -95,7 +99,8 @@ func TestCheckNtfyServer_NonNtfyServerNotFalsePositive(t *testing.T) {
 
 func TestCheckNtfyServer_InjectionRejected(t *testing.T) {
 	e := echo.New()
-	ctrl := &Controller{Settings: newValidTestSettings()}
+	ctrl := &Controller{}
+	ctrl.Settings.Store(newValidTestSettings())
 	// Slash injection attempt
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server?host=evil.com%2F%40good.com", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -108,7 +113,8 @@ func TestCheckNtfyServer_InjectionRejected(t *testing.T) {
 
 func TestCheckNtfyServer_CloudMetadataBlocked(t *testing.T) {
 	e := echo.New()
-	ctrl := &Controller{Settings: newValidTestSettings()}
+	ctrl := &Controller{}
+	ctrl.Settings.Store(newValidTestSettings())
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/notifications/check-ntfy-server?host=169.254.169.254", http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)

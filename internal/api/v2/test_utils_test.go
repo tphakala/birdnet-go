@@ -29,9 +29,9 @@ const (
 // Use this for tests that only need to call handler methods without database or full infrastructure.
 // Includes default settings to prevent nil pointer panics if a handler accesses c.Settings.
 func newMinimalController() *Controller {
-	return &Controller{
-		Settings: newValidTestSettings(),
-	}
+	c := &Controller{}
+	c.Settings.Store(newValidTestSettings())
+	return c
 }
 
 // publishTestSettings publishes settings as the global atomic snapshot so that
@@ -92,10 +92,10 @@ func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterfa
 	// Create a controller with the test datastore and default settings
 	// to prevent nil pointer panics if a handler accesses c.Settings.
 	controller := &Controller{
-		Group:    e.Group(apiV2Prefix),
-		DS:       mockDS,
-		Settings: newValidTestSettings(),
+		Group: e.Group(apiV2Prefix),
+		DS:    mockDS,
 	}
+	controller.Settings.Store(newValidTestSettings())
 
 	// Don't initialize routes as it causes nil pointer dereference in tests
 	// controller.initRoutes()

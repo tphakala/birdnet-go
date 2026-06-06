@@ -92,11 +92,8 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	// Acquire read lock to ensure settings aren't being modified during read
-	c.settingsMutex.RLock()
-	defer c.settingsMutex.RUnlock()
-
-	settings := c.Settings
+	// Read the controller's lock-free settings snapshot.
+	settings := c.controllerSettings()
 	if settings == nil {
 		// Fallback to global settings if controller settings not set
 		settings = conf.Setting()
@@ -134,11 +131,8 @@ const dashboardSectionName = "dashboard"
 func (c *Controller) GetDashboardSettings(ctx echo.Context) error {
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting public dashboard settings")
 
-	// Acquire read lock to ensure settings aren't being modified during read.
-	c.settingsMutex.RLock()
-	defer c.settingsMutex.RUnlock()
-
-	settings := c.Settings
+	// Read the controller's lock-free settings snapshot.
+	settings := c.controllerSettings()
 	if settings == nil {
 		// Fallback to global settings if controller settings not set.
 		settings = conf.Setting()
@@ -171,16 +165,13 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 	section := ctx.Param("section")
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting settings for section", logger.String("section", section))
 
-	// Acquire read lock to ensure settings aren't being modified during read
-	c.settingsMutex.RLock()
-	defer c.settingsMutex.RUnlock()
-
 	if section == "" {
 		c.logAPIRequest(ctx, logger.LogLevelError, "Missing section parameter")
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
 	}
 
-	settings := c.Settings
+	// Read the controller's lock-free settings snapshot.
+	settings := c.controllerSettings()
 	if settings == nil {
 		// Fallback to global settings if controller settings not set
 		settings = conf.Setting()
@@ -218,10 +209,10 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
-	// Read the controller-cached snapshot when set (tests inject this
+	// Read the controller's own snapshot when set (tests inject this
 	// directly); fall back to the global publisher. In production these are
 	// the same pointer at boot and stay in sync because every successful
-	// publish below updates both c.Settings and conf.settingsInstance.
+	// publish below updates both the atomic Settings pointer and conf.settingsInstance.
 	current := c.getSettingsOrFallback()
 	if current == nil {
 		c.logAPIRequest(ctx, logger.LogLevelError, "Settings not initialized during update attempt")
@@ -285,16 +276,15 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 
 	// Publish the new snapshot. conf.StoreSettings publishes atomically to
 	// the global (readers via conf.GetSettings immediately see this version;
-	// existing pointer holders stay on the old). c.Settings keeps the
-	// controller-cached pointer in sync so read handlers that still
-	// dereference c.Settings return the freshly published snapshot. The
-	// write is safe under c.settingsMutex which all c.Settings readers
-	// also acquire, except for c.Debug which deliberately reads via
-	// conf.GetSettings() to stay race-free without grabbing the lock.
+	// existing pointer holders stay on the old). c.Settings.Store republishes
+	// the controller's own atomic snapshot so per-controller readers
+	// (controllerSettings) return the freshly published value. Both stores are
+	// lock-free; settingsMutex here only serialises this read-modify-write
+	// against other update handlers, not against readers.
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}
-	c.publishSettings(updated)
+	c.Settings.Store(updated)
 
 	// Run cross-field side-effects (interval tracking, telemetry toggles, etc.)
 	// against the published pair. handleSettingsChanges is read-only on both.
@@ -304,20 +294,20 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		if publishGlobal {
 			conf.StoreSettings(current)
 		}
-		c.publishSettings(current)
+		c.Settings.Store(current)
 		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to apply settings changes, rolling back", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
 	// Persist to disk only when this controller owns the global snapshot
 	// (production path) AND DisableSaveSettings is not set. conf.SaveSettings
-	// reads conf.GetSettings internally; persisting from a test that injected
-	// a standalone c.Settings would save an unrelated snapshot.
+	// reads conf.GetSettings internally; persisting from a test that stored a
+	// standalone snapshot via c.Settings.Store would save an unrelated snapshot.
 	if publishGlobal && !c.DisableSaveSettings {
 		if err := conf.SaveSettings(); err != nil {
 			// Rollback in-memory; disk write never happened successfully.
 			conf.StoreSettings(current)
-			c.publishSettings(current)
+			c.Settings.Store(current)
 			c.logAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
@@ -569,18 +559,18 @@ func handlePrimitiveField(
 }
 
 // publishAndSaveSettings publishes updated settings and persists to disk.
-// Must be called while c.settingsMutex is held. On save failure, both the
-// atomic pointer and c.Settings are rolled back to current.
+// Must be called while c.settingsMutex is held. On save failure, the atomic
+// Settings snapshot is rolled back to current.
 func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) error {
 	if c.isGlobalOwner {
 		conf.StoreSettings(updated)
 	}
-	c.publishSettings(updated)
+	c.Settings.Store(updated)
 
 	if c.isGlobalOwner && !c.DisableSaveSettings {
 		if err := conf.SaveSettings(); err != nil {
 			conf.StoreSettings(current)
-			c.publishSettings(current)
+			c.Settings.Store(current)
 			return fmt.Errorf("failed to save settings: %w", err)
 		}
 	}
@@ -601,16 +591,16 @@ func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) err
 // When this controller owns the global singleton (production), it reads from
 // conf.GetSettings() so that out-of-band publishers (range filter rebuild,
 // ShouldUpdateRangeFilterToday, etc.) are not silently overwritten by a stale
-// c.Settings pointer. For test controllers that inject a standalone *Settings,
-// the cached c.Settings is returned as-is.
+// per-controller pointer. For test controllers that inject a standalone *Settings,
+// the controller's own atomic snapshot is returned as-is.
 func (c *Controller) getSettingsOrFallback() *conf.Settings {
 	if c.isGlobalOwner {
 		if s := conf.GetSettings(); s != nil {
 			return s
 		}
 	}
-	if c.Settings != nil {
-		return c.Settings
+	if s := c.Settings.Load(); s != nil {
+		return s
 	}
 	return conf.Setting()
 }
@@ -698,30 +688,31 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 			fmt.Sprintf("Invalid %s settings", section), http.StatusBadRequest)
 	}
 
-	// Publish the new snapshot atomically when we own the global; keep
-	// c.Settings in sync. See the matching comment in UpdateSettings for
-	// why c.Debug reads via conf.GetSettings() rather than c.Settings.
+	// Publish the new snapshot atomically when we own the global, then
+	// republish the controller's own atomic snapshot. See the matching comment
+	// in UpdateSettings for why Debug reads via conf.GetSettings() (the global)
+	// rather than the per-controller snapshot.
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}
-	c.publishSettings(updated)
+	c.Settings.Store(updated)
 
 	if err := c.handleSettingsChanges(current, updated); err != nil {
 		if publishGlobal {
 			conf.StoreSettings(current)
 		}
-		c.publishSettings(current)
+		c.Settings.Store(current)
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
 	// Persist to disk only when this controller owns the global snapshot
 	// AND the test did not disable save. conf.SaveSettings persists the
 	// conf.GetSettings value, which would be wrong under a standalone
-	// c.Settings injected by a test that bypassed the global publish.
+	// snapshot injected by a test that bypassed the global publish.
 	if publishGlobal && !c.DisableSaveSettings {
 		if err := conf.SaveSettings(); err != nil {
 			conf.StoreSettings(current)
-			c.publishSettings(current)
+			c.Settings.Store(current)
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
 		c.logAPIRequest(ctx, logger.LogLevelInfo, "Section settings saved successfully",
@@ -2180,7 +2171,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 
 	// Trigger reconfigurations asynchronously.
 	// Capture debug flag from the settings snapshot so the goroutine never
-	// reads c.Settings (which may be overwritten by a concurrent update).
+	// reloads settings (which may be republished by a concurrent update).
 	if len(reconfigActions) > 0 {
 		debugEnabled := currentSettings.WebServer.Debug
 		c.wg.Go(func() {
@@ -2621,11 +2612,8 @@ func (c *Controller) GetImageProviders(ctx echo.Context) error {
 func (c *Controller) GetSystemID(ctx echo.Context) error {
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting system ID")
 
-	// Acquire read lock to ensure settings aren't being modified during read
-	c.settingsMutex.RLock()
-	defer c.settingsMutex.RUnlock()
-
-	settings := c.Settings
+	// Read the controller's lock-free settings snapshot.
+	settings := c.controllerSettings()
 	if settings == nil {
 		// Fallback to global settings if controller settings not set
 		settings = conf.Setting()

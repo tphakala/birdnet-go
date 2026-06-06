@@ -25,12 +25,12 @@ func setupSearchTestController(t *testing.T, labels []string) *Controller {
 	e := echo.New()
 	c := &Controller{
 		Group: e.Group("/api/v2"),
-		Settings: &conf.Settings{
-			BirdNET: conf.BirdNETConfig{
-				Labels: labels,
-			},
-		},
 	}
+	c.Settings.Store(&conf.Settings{
+		BirdNET: conf.BirdNETConfig{
+			Labels: labels,
+		},
+	})
 	c.nameMaps.Store(buildNameMaps(labels))
 	return c
 }

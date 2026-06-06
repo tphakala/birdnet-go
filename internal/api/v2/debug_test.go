@@ -18,11 +18,9 @@ func TestDebugTriggerError(t *testing.T) {
 
 	e := echo.New()
 	c := &Controller{
-		Settings: &conf.Settings{
-			Debug: true,
-		},
 		apiLogger: nil,
 	}
+	c.Settings.Store(&conf.Settings{Debug: true})
 
 	tests := []struct {
 		name     string
@@ -69,11 +67,9 @@ func TestDebugEndpointsRequireDebugMode(t *testing.T) {
 	// Create controller with debug disabled
 	e := echo.New()
 	c := &Controller{
-		Settings: &conf.Settings{
-			Debug: false, // Debug mode disabled
-		},
 		apiLogger: nil,
 	}
+	c.Settings.Store(&conf.Settings{Debug: false})
 
 	// Table-driven tests for all debug endpoints returning 403 when debug mode is disabled
 	endpoints := []struct {

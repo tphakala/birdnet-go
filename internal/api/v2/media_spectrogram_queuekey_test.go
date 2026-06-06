@@ -57,12 +57,11 @@ func TestGetSpectrogramStatusFindsInFlightJobAfterExportPathChange(t *testing.T)
 	mockDS := mocks.NewMockInterface(t)
 
 	controller := &Controller{
-		Settings: settings,
-		SFS:      sfs,
-		ctx:      t.Context(),
-		DS:       mockDS,
+		SFS: sfs,
+		ctx: t.Context(),
+		DS:  mockDS,
 	}
-	controller.settingsAtomic.Store(settings)
+	controller.Settings.Store(settings)
 	conftest.SetTestSettings(settings)
 
 	// Simulate an in-flight generation enqueued under the immutable queue key.
@@ -77,7 +76,7 @@ func TestGetSpectrogramStatusFindsInFlightJobAfterExportPathChange(t *testing.T)
 	changed := conf.CloneSettings(settings)
 	changed.Realtime.Audio.Export.Path = filepath.Join(tmp, "changed")
 	conftest.SetTestSettings(changed)
-	controller.settingsAtomic.Store(changed)
+	controller.Settings.Store(changed)
 
 	// Poll the status endpoint.
 	e := echo.New()
@@ -118,11 +117,10 @@ func TestGenerateSpectrogramFromRelRetainsFailedStatusForPolling(t *testing.T) {
 
 	settings := newValidTestSettings()
 	controller := &Controller{
-		Settings: settings,
-		SFS:      sfs,
-		ctx:      ctx,
+		SFS: sfs,
+		ctx: ctx,
 	}
-	controller.settingsAtomic.Store(settings)
+	controller.Settings.Store(settings)
 	conftest.SetTestSettings(settings)
 
 	const queueKey = "queuekey-failtest:1026:true"

@@ -87,7 +87,8 @@ func TestTestStreamHandler_ValidationErrors(t *testing.T) {
 			rec := httptest.NewRecorder()
 			ctx := e.NewContext(req, rec)
 
-			ctrl := &Controller{Settings: &conf.Settings{}}
+			ctrl := &Controller{}
+			ctrl.Settings.Store(&conf.Settings{})
 			err := ctrl.TestStream(ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tt.status, rec.Code)

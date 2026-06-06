@@ -118,7 +118,7 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 
 			// Verify the settings were updated correctly
 			// Note: Keys are normalized to lowercase after API update
-			actualConfig := controller.Settings.Realtime.Species.Config[strings.ToLower(birdName)]
+			actualConfig := controller.Settings.Load().Realtime.Species.Config[strings.ToLower(birdName)]
 			assert.InDelta(t, tt.expectedConfig.Threshold, actualConfig.Threshold, 0.0001,
 				"%s: Threshold should match", tt.description)
 			assert.Equal(t, tt.expectedConfig.Interval, actualConfig.Interval,
@@ -163,9 +163,9 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 		},
 	}
 	controller := &Controller{
-		Settings:            settings,
 		DisableSaveSettings: true,
 	}
+	controller.Settings.Store(settings)
 
 	// Update with zero values
 	// Note: Keys can be any case in payload - they will be normalized to lowercase
@@ -195,13 +195,13 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 	// Verify zero values are preserved in the controller's settings
 	// Zero threshold and interval values should persist after update operations
 	// Note: Keys are normalized to lowercase after API update
-	initialBird := controller.Settings.Realtime.Species.Config["initial bird"]
+	initialBird := controller.Settings.Load().Realtime.Species.Config["initial bird"]
 	assert.InDelta(t, 0.0, initialBird.Threshold, 0.0001, "initial bird threshold should be zero")
 	assert.Equal(t, 0, initialBird.Interval, "initial bird interval should be zero")
 	assert.Empty(t, initialBird.Actions, "initial bird actions should be empty")
 	assert.NotNil(t, initialBird.Actions, "initial bird actions should be empty slice, not nil")
 
-	newBird := controller.Settings.Realtime.Species.Config["new bird"]
+	newBird := controller.Settings.Load().Realtime.Species.Config["new bird"]
 	assert.InDelta(t, 0.0, newBird.Threshold, 0.0001, "new bird threshold should be zero")
 	assert.Equal(t, 0, newBird.Interval, "new bird interval should be zero")
 	assert.Empty(t, newBird.Actions, "new bird actions should be empty")
@@ -248,9 +248,9 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 		},
 	}
 	controller := &Controller{
-		Settings:            settings,
 		DisableSaveSettings: true,
 	}
+	controller.Settings.Store(settings)
 
 	// Update only Bird A with zero values, Bird B should remain unchanged
 	// Note: Keys in payload can be any case - they will be normalized to lowercase
@@ -275,14 +275,14 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify Bird A was updated with zero values (keys normalized to lowercase)
-	birdA := controller.Settings.Realtime.Species.Config["bird a"]
+	birdA := controller.Settings.Load().Realtime.Species.Config["bird a"]
 	assert.InDelta(t, 0.0, birdA.Threshold, 0.0001, "bird a threshold should be zero")
 	assert.Equal(t, 0, birdA.Interval, "bird a interval should be zero")
 	assert.Empty(t, birdA.Actions, "bird a actions should be cleared")
 	assert.NotNil(t, birdA.Actions, "bird a actions should be empty slice, not nil")
 
 	// Verify Bird B remains unchanged
-	birdB := controller.Settings.Realtime.Species.Config["bird b"]
+	birdB := controller.Settings.Load().Realtime.Species.Config["bird b"]
 	assert.InDelta(t, 0.8, birdB.Threshold, 0.0001, "bird b threshold should be unchanged")
 	assert.Equal(t, 60, birdB.Interval, "bird b interval should be unchanged")
 	assert.NotNil(t, birdB.Actions, "bird b actions should be empty slice, not nil")
@@ -310,9 +310,9 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 		},
 	}
 	controller := &Controller{
-		Settings:            settings,
 		DisableSaveSettings: true,
 	}
+	controller.Settings.Store(settings)
 
 	// Step 1: PATCH update with zero values
 	// Note: Keys in payload can be any case - they will be normalized to lowercase
@@ -332,7 +332,7 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify controller settings were updated (keys normalized to lowercase)
-	testBird := controller.Settings.Realtime.Species.Config["test bird"]
+	testBird := controller.Settings.Load().Realtime.Species.Config["test bird"]
 	assert.InDelta(t, 0.0, testBird.Threshold, 0.0001, "Controller should have zero threshold")
 	assert.Equal(t, 0, testBird.Interval, "Controller should have zero interval")
 
@@ -433,9 +433,9 @@ func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body any) (e
 		Config:  map[string]conf.SpeciesConfig{},
 	}
 	controller := &Controller{
-		Settings:            settings,
 		DisableSaveSettings: true, // Disable file save for testing
 	}
+	controller.Settings.Store(settings)
 
 	// Use default values if method or path are empty
 	if method == "" {
@@ -507,9 +507,9 @@ func TestSpeciesConfigNormalizationOnAPIUpdate(t *testing.T) {
 		Config:  make(map[string]conf.SpeciesConfig),
 	}
 	controller := &Controller{
-		Settings:            settings,
 		DisableSaveSettings: true,
 	}
+	controller.Settings.Store(settings)
 
 	// Update with mixed-case species names (as UI would send)
 	updatePayload := map[string]any{
@@ -544,18 +544,18 @@ func TestSpeciesConfigNormalizationOnAPIUpdate(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify keys are normalized to lowercase in controller settings
-	_, hasLowercaseRobin := controller.Settings.Realtime.Species.Config["american robin"]
+	_, hasLowercaseRobin := controller.Settings.Load().Realtime.Species.Config["american robin"]
 	assert.True(t, hasLowercaseRobin, "should have lowercase 'american robin' key after API update")
 
-	_, hasLowercaseSparrow := controller.Settings.Realtime.Species.Config["house sparrow"]
+	_, hasLowercaseSparrow := controller.Settings.Load().Realtime.Species.Config["house sparrow"]
 	assert.True(t, hasLowercaseSparrow, "should have lowercase 'house sparrow' key after API update")
 
 	// Verify mixed-case keys don't exist
-	_, hasMixedCaseRobin := controller.Settings.Realtime.Species.Config["American Robin"]
+	_, hasMixedCaseRobin := controller.Settings.Load().Realtime.Species.Config["American Robin"]
 	assert.False(t, hasMixedCaseRobin, "should not have mixed-case 'American Robin' key")
 
 	// Verify config values are preserved
-	robin := controller.Settings.Realtime.Species.Config["american robin"]
+	robin := controller.Settings.Load().Realtime.Species.Config["american robin"]
 	assert.InDelta(t, 0.75, robin.Threshold, 0.0001)
 	assert.Equal(t, 30, robin.Interval)
 }
@@ -571,8 +571,9 @@ func createTestController(t *testing.T) *Controller {
 		Config:  map[string]conf.SpeciesConfig{},
 	}
 
-	return &Controller{
-		Settings:            settings,
+	c := &Controller{
 		DisableSaveSettings: true,
 	}
+	c.Settings.Store(settings)
+	return c
 }

@@ -42,7 +42,8 @@ func newTestContext(t *testing.T, method, path string) (echo.Context, *httptest.
 func TestHandleError_5xxReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{Settings: getTestSettings(t)}
+	c := &Controller{}
+	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/detections")
 
 	err := c.HandleError(ctx, fmt.Errorf("database failure"), "Internal server error", http.StatusInternalServerError)
@@ -63,7 +64,8 @@ func TestHandleError_5xxReportedToTelemetry(t *testing.T) {
 func TestHandleError_4xxNotReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{Settings: getTestSettings(t)}
+	c := &Controller{}
+	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodPost, "/api/v2/settings")
 
 	err := c.HandleError(ctx, fmt.Errorf("missing field"), "Bad request", http.StatusBadRequest)
@@ -78,7 +80,8 @@ func TestHandleError_4xxNotReportedToTelemetry(t *testing.T) {
 func TestHandleError_NilError_5xxReported(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{Settings: getTestSettings(t)}
+	c := &Controller{}
+	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/health")
 
 	err := c.HandleError(ctx, nil, "Service unavailable", http.StatusServiceUnavailable)
@@ -97,7 +100,8 @@ func TestHandleError_NilError_5xxReported(t *testing.T) {
 func TestHandleErrorWithKey_5xxReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{Settings: getTestSettings(t)}
+	c := &Controller{}
+	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodDelete, "/api/v2/detections/123")
 
 	err := c.HandleErrorWithKey(
@@ -129,7 +133,8 @@ func TestHandleError_AlreadyReportedSkipsDuplicate(t *testing.T) {
 	// Now install the hook (after pre-reporting, so the Build() call above is not counted).
 	captured := captureHook(t)
 
-	c := &Controller{Settings: getTestSettings(t)}
+	c := &Controller{}
+	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/detections")
 
 	err := c.HandleError(ctx, preReported, "Internal server error", http.StatusInternalServerError)
@@ -144,7 +149,8 @@ func TestHandleError_AlreadyReportedSkipsDuplicate(t *testing.T) {
 func TestHandleError_404NotReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{Settings: getTestSettings(t)}
+	c := &Controller{}
+	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/detections/99999")
 
 	err := c.HandleError(ctx, fmt.Errorf("record not found"), "Not found", http.StatusNotFound)
@@ -159,7 +165,8 @@ func TestHandleError_404NotReportedToTelemetry(t *testing.T) {
 func TestHandleError_502BadGatewayReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{Settings: getTestSettings(t)}
+	c := &Controller{}
+	c.Settings.Store(getTestSettings(t))
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/system")
 
 	err := c.HandleError(ctx, fmt.Errorf("upstream timeout"), "Bad gateway", http.StatusBadGateway)

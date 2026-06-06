@@ -455,10 +455,10 @@ func TestGetAllSpecies(t *testing.T) {
 			settings.BirdNET.Labels = tt.labels
 
 			controller := &Controller{
-				Echo:     e,
-				Group:    e.Group("/api/v2"),
-				Settings: settings,
+				Echo:  e,
+				Group: e.Group("/api/v2"),
 			}
+			controller.Settings.Store(settings)
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/species/all", http.NoBody)
 			rec := httptest.NewRecorder()

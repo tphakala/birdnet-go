@@ -527,10 +527,10 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 			t.Parallel()
 			controller := &Controller{
 				DS:             mockDS,
-				Settings:       appSettings,
 				BirdImageCache: mockImageCache,
 				// sunCalc and controlChan might be needed depending on handlers tested
 			}
+			controller.Settings.Store(appSettings)
 
 			e := echo.New()
 			// Register routes needed for this test run

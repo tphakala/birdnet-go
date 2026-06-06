@@ -302,7 +302,8 @@ func TestCheckMemoryAvailable(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "prerequisites")
 
-	controller := &Controller{Settings: newValidTestSettings()}
+	controller := &Controller{}
+	controller.Settings.Store(newValidTestSettings())
 
 	check := controller.checkMemoryAvailable()
 
@@ -379,7 +380,7 @@ func TestIsUsingMySQL_NilSettings(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "prerequisites")
 
-	controller := &Controller{Settings: nil}
+	controller := &Controller{}
 
 	result := controller.isUsingMySQL()
 
@@ -406,7 +407,7 @@ func TestGetDatabaseDirectoryResolved_NilSettings(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "prerequisites")
 
-	controller := &Controller{Settings: nil}
+	controller := &Controller{}
 	// Publish a nil global so currentSettings() falls back to the controller's
 	// nil c.Settings and exercises the "settings not available" path.
 	publishTestSettings(t, nil)
@@ -518,13 +519,13 @@ func setupPrerequisitesTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *
 	}
 
 	controller := &Controller{
-		Echo:     e,
-		Group:    e.Group("/api/v2"),
-		Settings: getTestSettings(t),
-		DS:       testDS,
-		Repo:     mockRepo,
+		Echo:  e,
+		Group: e.Group("/api/v2"),
+		DS:    testDS,
+		Repo:  mockRepo,
 	}
-	publishTestSettings(t, controller.Settings)
+	controller.Settings.Store(getTestSettings(t))
+	publishTestSettings(t, controller.Settings.Load())
 
 	return e, controller, sm
 }

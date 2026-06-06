@@ -699,7 +699,7 @@ func TestDDoSProtection(t *testing.T) {
 
 	// In production, we would expect some rate limiting to occur under high load
 	// This is a soft assertion since test environments may not have rate limiting enabled
-	if controller.Settings != nil && controller.Settings.WebServer.Debug {
+	if controller.Settings.Load() != nil && controller.Settings.Load().WebServer.Debug {
 		// In debug mode, we can log that rate limiting should be tested in production
 		t.Log("Note: Rate limiting should be verified in production environment")
 	}

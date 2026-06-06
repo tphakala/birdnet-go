@@ -385,9 +385,9 @@ func TestComplexNestedPreservation(t *testing.T) {
 
 	// Update controller settings with complex initial state
 	// Use lowercase keys since that's what a real config would have after normalization
-	controller.Settings.Realtime.Species.Include = []string{"Robin", "Eagle", "Owl"}
-	controller.Settings.Realtime.Species.Exclude = []string{"Crow", "Pigeon"}
-	controller.Settings.Realtime.Species.Config["robin"] = conf.SpeciesConfig{
+	controller.Settings.Load().Realtime.Species.Include = []string{"Robin", "Eagle", "Owl"}
+	controller.Settings.Load().Realtime.Species.Exclude = []string{"Crow", "Pigeon"}
+	controller.Settings.Load().Realtime.Species.Config["robin"] = conf.SpeciesConfig{
 		Threshold: 0.8,
 		Interval:  30,
 		Actions: []conf.SpeciesAction{{
@@ -395,16 +395,16 @@ func TestComplexNestedPreservation(t *testing.T) {
 			Command: "/usr/bin/notify",
 		}},
 	}
-	controller.Settings.Realtime.Species.Config["eagle"] = conf.SpeciesConfig{
+	controller.Settings.Load().Realtime.Species.Config["eagle"] = conf.SpeciesConfig{
 		Threshold: 0.9,
 		Interval:  60,
 	}
 
 	// Capture initial state
-	initialInclude := make([]string, len(controller.Settings.Realtime.Species.Include))
-	copy(initialInclude, controller.Settings.Realtime.Species.Include)
-	initialExclude := make([]string, len(controller.Settings.Realtime.Species.Exclude))
-	copy(initialExclude, controller.Settings.Realtime.Species.Exclude)
+	initialInclude := make([]string, len(controller.Settings.Load().Realtime.Species.Include))
+	copy(initialInclude, controller.Settings.Load().Realtime.Species.Include)
+	initialExclude := make([]string, len(controller.Settings.Load().Realtime.Species.Exclude))
+	copy(initialExclude, controller.Settings.Load().Realtime.Species.Exclude)
 
 	// Update only one deeply nested field
 	update := map[string]any{
@@ -430,7 +430,7 @@ func TestComplexNestedPreservation(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify preservation
-	settings := controller.Settings
+	settings := controller.Settings.Load()
 
 	// Include/Exclude lists preserved
 	assert.Equal(t, initialInclude, settings.Realtime.Species.Include)

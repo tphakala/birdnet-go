@@ -117,13 +117,13 @@ func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Controller, *data
 	}
 
 	controller := &Controller{
-		Echo:     e,
-		Group:    e.Group("/api/v2"),
-		Settings: getTestSettings(t),
-		DS:       testDS,
-		Repo:     mockRepo,
+		Echo:  e,
+		Group: e.Group("/api/v2"),
+		DS:    testDS,
+		Repo:  mockRepo,
 	}
-	publishTestSettings(t, controller.Settings)
+	controller.Settings.Store(getTestSettings(t))
+	publishTestSettings(t, controller.Settings.Load())
 
 	return e, controller, sm
 }
@@ -574,10 +574,10 @@ func TestGetMigrationStatus_NoStateManager(t *testing.T) {
 
 	e := echo.New()
 	controller := &Controller{
-		Echo:     e,
-		Group:    e.Group("/api/v2"),
-		Settings: getTestSettings(t),
+		Echo:  e,
+		Group: e.Group("/api/v2"),
 	}
+	controller.Settings.Store(getTestSettings(t))
 
 	// Save and clear the global state manager
 	prevSM := stateManager

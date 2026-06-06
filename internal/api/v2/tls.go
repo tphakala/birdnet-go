@@ -81,10 +81,11 @@ func (c *Controller) GetTLSCertificate(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse TLS certificate", http.StatusInternalServerError)
 	}
 
-	// Include current TLS mode from settings
-	c.settingsMutex.RLock()
-	info.Mode = string(c.Settings.Security.TLSMode)
-	c.settingsMutex.RUnlock()
+	// Include current TLS mode from settings (skip when no snapshot is stored,
+	// e.g. a standalone/test controller; controllerSettings() may then be nil).
+	if settings := c.controllerSettings(); settings != nil {
+		info.Mode = string(settings.Security.TLSMode)
+	}
 
 	return ctx.JSON(http.StatusOK, info)
 }
@@ -227,11 +228,9 @@ func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
 	}
 
 	// Collect SANs from settings
-	c.settingsMutex.RLock()
 	snap := c.getSettingsOrFallback()
 	host := snap.Security.Host
 	baseURL := snap.Security.BaseURL
-	c.settingsMutex.RUnlock()
 
 	sans := tlspkg.CollectSANs(host, baseURL)
 
