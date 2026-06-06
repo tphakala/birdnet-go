@@ -13,6 +13,7 @@
 package branding
 
 import (
+	"net/url"
 	"os"
 	"strings"
 )
@@ -85,35 +86,49 @@ func joinURL(base, suffix string) string {
 	return strings.TrimRight(base, "/") + "/" + suffix
 }
 
+// sanitizeURL strips any userinfo (the user:password@ component) from a URL so
+// that credentials an operator might accidentally embed in a configured
+// identity URL are never emitted in the public app-config response, outbound
+// User-Agent headers, or logs. URLs without userinfo (the normal case) and
+// values that do not parse as URLs are returned unchanged.
+func sanitizeURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.User == nil {
+		return raw
+	}
+	u.User = nil
+	return u.String()
+}
+
 // Name returns the configured project name.
 func Name() string {
 	return resolve(envName, projectName, defaultName)
 }
 
-// RepoURL returns the configured source repository URL.
+// RepoURL returns the configured source repository URL (credential-free).
 func RepoURL() string {
-	return resolve(envRepoURL, projectRepoURL, defaultRepoURL)
+	return sanitizeURL(resolve(envRepoURL, projectRepoURL, defaultRepoURL))
 }
 
 // IssuesURL returns the issue-tracker listing URL, derived from RepoURL when
 // not explicitly configured.
 func IssuesURL() string {
-	return resolve(envIssuesURL, projectIssuesURL, joinURL(RepoURL(), issuesPath))
+	return sanitizeURL(resolve(envIssuesURL, projectIssuesURL, joinURL(RepoURL(), issuesPath)))
 }
 
 // NewIssueURL returns the "create a new issue" URL, derived from RepoURL when
 // not explicitly configured.
 func NewIssueURL() string {
-	return resolve(envNewIssueURL, projectNewIssueURL, joinURL(RepoURL(), newIssuePath))
+	return sanitizeURL(resolve(envNewIssueURL, projectNewIssueURL, joinURL(RepoURL(), newIssuePath)))
 }
 
 // SupportURL returns the user-facing support URL, defaulting to RepoURL when
 // not explicitly configured.
 func SupportURL() string {
-	return resolve(envSupportURL, projectSupportURL, RepoURL())
+	return sanitizeURL(resolve(envSupportURL, projectSupportURL, RepoURL()))
 }
 
 // CommunityURL returns the community chat/forum URL.
 func CommunityURL() string {
-	return resolve(envCommunityURL, projectCommunityURL, defaultCommunityURL)
+	return sanitizeURL(resolve(envCommunityURL, projectCommunityURL, defaultCommunityURL))
 }

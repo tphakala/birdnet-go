@@ -285,7 +285,9 @@ func TestBuildUserAgent(t *testing.T) {
 			assert.Contains(t, got, tt.wantPrefix, "user-agent should contain app name and version")
 
 			// Check it contains required components per Wikimedia policy
-			assert.Contains(t, got, branding.RepoURL(), "user-agent should contain contact URL")
+			expectedContact := branding.RepoURL()
+			require.NotEmpty(t, expectedContact, "branding repo URL must not be empty")
+			assert.Contains(t, got, expectedContact, "user-agent should contain contact URL")
 			assert.Contains(t, got, userAgentLibrary, "user-agent should contain library name")
 			assert.Contains(t, got, "go", "user-agent should contain Go version")
 		})

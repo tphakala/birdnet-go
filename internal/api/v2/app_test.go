@@ -185,6 +185,16 @@ func TestGetAppConfig_NoSecurity(t *testing.T) {
 // project identity/links (independent of telemetry), defaulting to the upstream
 // values with correctly derived issue URLs when nothing is overridden.
 func TestGetAppConfig_ProjectLinks(t *testing.T) {
+	// Branding resolution gives BIRDNET_GO_PROJECT_* env vars highest precedence;
+	// clear them so this default-links assertion is deterministic regardless of
+	// the caller's environment.
+	for _, key := range []string{
+		"BIRDNET_GO_PROJECT_NAME", "BIRDNET_GO_PROJECT_REPO_URL", "BIRDNET_GO_PROJECT_ISSUES_URL",
+		"BIRDNET_GO_PROJECT_NEW_ISSUE_URL", "BIRDNET_GO_PROJECT_SUPPORT_URL", "BIRDNET_GO_PROJECT_COMMUNITY_URL",
+	} {
+		t.Setenv(key, "")
+	}
+
 	e, controller := setupAppConfigTest(t, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
@@ -941,6 +951,9 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 
 	for key := range projectLinks {
 		assert.True(t, expectedProjectLinkKeys[key], "Unexpected field in projectLinks: %s", key)
+	}
+	for key := range expectedProjectLinkKeys {
+		assert.Contains(t, projectLinks, key, "Missing field in projectLinks: %s", key)
 	}
 
 	// Check security sub-object

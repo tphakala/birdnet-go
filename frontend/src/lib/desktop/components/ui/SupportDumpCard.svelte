@@ -39,8 +39,10 @@
   // protected, so harden the value before it reaches {@html}: require an http(s)
   // scheme (blocks javascript:/data: payloads) and escape any attribute-breaking
   // characters so a tampered value cannot break out of the href attribute.
-  function safeIssueHref(url: string): string {
-    if (!/^https?:\/\//i.test(url)) return '#';
+  function safeIssueHref(url: string | undefined | null): string {
+    // projectLinks fields are typed as strings, but they arrive from a JSON
+    // config response, so a partial object could leave one missing at runtime.
+    if (!url || !/^https?:\/\//i.test(url)) return '#';
     return url
       .replace(/&/g, '&amp;')
       .replace(/"/g, '&quot;')

@@ -9,7 +9,34 @@ import (
 // Note: these tests mutate process-global state (environment variables and the
 // ldflags-target package vars), so they intentionally do NOT call t.Parallel().
 
+// resetBrandingState makes a test hermetic against the caller's environment: it
+// clears every BIRDNET_GO_PROJECT_* env var and the ldflags-target package vars
+// (restoring them after the test) so the getters resolve deterministically
+// regardless of any inherited env or baked-in build values.
+func resetBrandingState(t *testing.T) {
+	t.Helper()
+
+	for _, key := range []string{
+		envName, envRepoURL, envIssuesURL, envNewIssueURL, envSupportURL, envCommunityURL,
+	} {
+		t.Setenv(key, "")
+	}
+
+	origName, origRepo := projectName, projectRepoURL
+	origIssues, origNewIssue := projectIssuesURL, projectNewIssueURL
+	origSupport, origCommunity := projectSupportURL, projectCommunityURL
+	projectName, projectRepoURL = "", ""
+	projectIssuesURL, projectNewIssueURL = "", ""
+	projectSupportURL, projectCommunityURL = "", ""
+	t.Cleanup(func() {
+		projectName, projectRepoURL = origName, origRepo
+		projectIssuesURL, projectNewIssueURL = origIssues, origNewIssue
+		projectSupportURL, projectCommunityURL = origSupport, origCommunity
+	})
+}
+
 func TestDefaults(t *testing.T) {
+	resetBrandingState(t)
 	// With no environment overrides and empty (un-baked) ldflags vars, the
 	// getters fall back to the built-in upstream defaults.
 	assert.Equal(t, "BirdNET-Go", Name())
@@ -21,6 +48,7 @@ func TestDefaults(t *testing.T) {
 }
 
 func TestEnvOverride(t *testing.T) {
+	resetBrandingState(t)
 	t.Setenv(envName, "MyFork")
 	t.Setenv(envRepoURL, "https://example.com/me/fork")
 	t.Setenv(envCommunityURL, "https://chat.example.com")
@@ -35,6 +63,7 @@ func TestEnvOverride(t *testing.T) {
 }
 
 func TestExplicitDerivedOverride(t *testing.T) {
+	resetBrandingState(t)
 	// Explicit overrides win over derivation.
 	t.Setenv(envIssuesURL, "https://example.com/tracker")
 	t.Setenv(envNewIssueURL, "https://example.com/tracker/file")
@@ -46,6 +75,7 @@ func TestExplicitDerivedOverride(t *testing.T) {
 }
 
 func TestDerivationCollapsesTrailingSlash(t *testing.T) {
+	resetBrandingState(t)
 	t.Setenv(envRepoURL, "https://example.com/fork/")
 
 	// Derived sub-paths normalize the trailing slash so there is no double slash.
@@ -58,6 +88,7 @@ func TestDerivationCollapsesTrailingSlash(t *testing.T) {
 }
 
 func TestWhitespaceCountsAsUnset(t *testing.T) {
+	resetBrandingState(t)
 	t.Setenv(envRepoURL, "   ")
 	t.Setenv(envName, "\t")
 
@@ -66,9 +97,8 @@ func TestWhitespaceCountsAsUnset(t *testing.T) {
 }
 
 func TestLdflagsVarPrecedence(t *testing.T) {
+	resetBrandingState(t)
 	// Simulate a value baked in at link time via -ldflags -X.
-	orig := projectRepoURL
-	t.Cleanup(func() { projectRepoURL = orig })
 	projectRepoURL = "https://baked.example.com/repo"
 
 	assert.Equal(t, "https://baked.example.com/repo", RepoURL())
@@ -77,4 +107,17 @@ func TestLdflagsVarPrecedence(t *testing.T) {
 	// The environment variable still beats the baked-in value.
 	t.Setenv(envRepoURL, "https://env.example.com/repo")
 	assert.Equal(t, "https://env.example.com/repo", RepoURL())
+}
+
+func TestSanitizesCredentials(t *testing.T) {
+	resetBrandingState(t)
+	// Credentials an operator accidentally embeds in a configured URL must be
+	// stripped before any getter returns it, since the values feed the public
+	// app-config endpoint, outbound User-Agent headers, and logs.
+	t.Setenv(envRepoURL, "https://user:secret@example.com/fork")
+
+	assert.Equal(t, "https://example.com/fork", RepoURL())
+	assert.Equal(t, "https://example.com/fork/issues", IssuesURL())
+	assert.Equal(t, "https://example.com/fork/issues/new", NewIssueURL())
+	assert.Equal(t, "https://example.com/fork", SupportURL())
 }
