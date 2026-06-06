@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
+	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -210,13 +211,18 @@ func TestGetAppConfig_ProjectLinks(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 
+	// Assert the endpoint serves exactly what the branding package resolves
+	// (the exact default values are locked in branding's own TestDefaults). With
+	// the env cleared above and no ldflags baked into the test binary, these
+	// resolve to the upstream defaults; asserting against the getters also keeps
+	// the test correct for ldflags-built binaries, which t.Setenv cannot clear.
 	links := response.ProjectLinks
-	assert.Equal(t, "BirdNET-Go", links.Name)
-	assert.Equal(t, "https://github.com/tphakala/birdnet-go", links.RepoURL)
-	assert.Equal(t, "https://github.com/tphakala/birdnet-go/issues", links.IssuesURL)
-	assert.Equal(t, "https://github.com/tphakala/birdnet-go/issues/new", links.NewIssueURL)
-	assert.Equal(t, "https://github.com/tphakala/birdnet-go", links.SupportURL)
-	assert.Equal(t, "https://discord.gg/gcSCFGUtsd", links.CommunityURL)
+	assert.Equal(t, branding.Name(), links.Name)
+	assert.Equal(t, branding.RepoURL(), links.RepoURL)
+	assert.Equal(t, branding.IssuesURL(), links.IssuesURL)
+	assert.Equal(t, branding.NewIssueURL(), links.NewIssueURL)
+	assert.Equal(t, branding.SupportURL(), links.SupportURL)
+	assert.Equal(t, branding.CommunityURL(), links.CommunityURL)
 }
 
 // TestGetAppConfig_BasicAuthEnabled tests the endpoint with BasicAuth enabled.
