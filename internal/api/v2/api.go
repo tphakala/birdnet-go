@@ -416,14 +416,6 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	controlChan chan string,
 	metrics *observability.Metrics, initializeRoutes bool, opts ...Option) (*Controller, error) {
 
-	// Configure trusted-proxy-gated IP extractor. Forwarded client-IP headers
-	// (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) are honored only when the
-	// connection peer is a trusted proxy (loopback/link-local/private by default,
-	// plus Security.TrustedProxies); otherwise the real peer address is used.
-	// Reads the trusted set per request from the global settings, so it is hot-reloadable.
-	e.IPExtractor = newTrustedProxyIPExtractor(conf.GetSettings)
-	GetLogger().Info("Configured trusted-proxy-gated IP extractor (forwarded client IP honored only from trusted proxies)")
-
 	// Validate and resolve media export path
 	mediaPath, err := resolveAndValidateMediaPath(settings.Realtime.Audio.Export.Path)
 	if err != nil {
@@ -466,6 +458,16 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// lock-free. Kept in sync with the c.Settings field on every save; see the
 	// settingsAtomic field doc and the settings update handlers.
 	c.settingsAtomic.Store(settings)
+
+	// Configure the trusted-proxy-gated IP extractor. Forwarded client-IP headers
+	// (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) are honored only when the
+	// connection peer is a trusted proxy (loopback/link-local/private by default,
+	// plus Security.TrustedProxies); otherwise the real peer address is used. It
+	// reads this controller's own settings snapshot per request (published above
+	// and on every save), so it honors the controller's TrustedProxies and
+	// hot-reloads without a restart.
+	e.IPExtractor = newTrustedProxyIPExtractor(c.controllerSettings)
+	GetLogger().Info("Configured trusted-proxy-gated IP extractor (forwarded client IP honored only from trusted proxies)")
 
 	// Propagate the derived FFprobe path from config validation to the
 	// ffmpeg package so executeFFprobe can find it without PATH lookup.

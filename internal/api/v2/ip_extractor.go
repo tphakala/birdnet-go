@@ -86,13 +86,34 @@ func buildTrustedProxyChecker(trustedProxies []string) *trustedProxyChecker {
 	return tc
 }
 
-// appendCIDRs parses and appends valid CIDR ranges, skipping any that fail to parse.
-func (tc *trustedProxyChecker) appendCIDRs(cidrs []string) {
-	for _, cidr := range cidrs {
-		if _, network, err := net.ParseCIDR(strings.TrimSpace(cidr)); err == nil {
+// appendCIDRs parses and appends valid trusted-proxy entries, skipping any that
+// fail to parse. Each entry may be a CIDR or a bare IP (a single host).
+func (tc *trustedProxyChecker) appendCIDRs(entries []string) {
+	for _, entry := range entries {
+		if network, ok := parseProxyCIDR(entry); ok {
 			tc.ranges = append(tc.ranges, network)
 		}
 	}
+}
+
+// parseProxyCIDR parses a trusted-proxy entry as either a CIDR or a bare IP
+// (treated as a single-host /32 for IPv4 or /128 for IPv6). Returns false if the
+// entry is neither. net.ParseCIDR normalizes the returned network for both forms.
+func parseProxyCIDR(entry string) (*net.IPNet, bool) {
+	entry = strings.TrimSpace(entry)
+	if _, network, err := net.ParseCIDR(entry); err == nil {
+		return network, true
+	}
+	if ip := net.ParseIP(entry); ip != nil {
+		suffix := "/32"
+		if ip.To4() == nil {
+			suffix = "/128"
+		}
+		if _, network, err := net.ParseCIDR(entry + suffix); err == nil {
+			return network, true
+		}
+	}
+	return nil, false
 }
 
 // trust reports whether ip is a trusted proxy peer.
@@ -194,7 +215,10 @@ func resolveTrustedProxyChecker(cache *atomic.Pointer[trustedProxyChecker], getS
 func peerAddrFromRequest(req *http.Request) (peerIP net.IP, host string) {
 	var err error
 	if host, _, err = net.SplitHostPort(req.RemoteAddr); err != nil {
-		host = req.RemoteAddr
+		// No port (e.g. a bare "[::1]" or "127.0.0.1"). Strip IPv6 brackets so
+		// net.ParseIP can parse it, otherwise a bracketed loopback/private peer
+		// would fail to parse and be treated as untrusted.
+		host = strings.TrimSuffix(strings.TrimPrefix(req.RemoteAddr, "["), "]")
 	}
 	if before, _, found := strings.Cut(host, "%"); found {
 		host = before

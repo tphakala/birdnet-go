@@ -1379,9 +1379,9 @@ type Security struct {
 	RedirectToHTTPS   bool              `yaml:"redirecttohttps" json:"redirectToHttps"`     // true to redirect to HTTPS
 	AllowSubnetBypass AllowSubnetBypass `yaml:"allowsubnetbypass" json:"allowSubnetBypass"` // subnet bypass configuration
 
-	// TrustedProxies lists CIDR ranges of reverse proxies whose forwarded
-	// client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) may be
-	// trusted. Loopback, link-local, and private (RFC1918/ULA) peers are always
+	// TrustedProxies lists reverse proxies (CIDR ranges or bare IPs) whose
+	// forwarded client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP)
+	// may be trusted. Loopback, link-local, and private (RFC1918/ULA) peers are always
 	// trusted in addition to these, so a default port-forwarded install and the
 	// common local cloudflared topology work without configuration. When the
 	// immediate peer is not trusted, forwarded headers are ignored and the real

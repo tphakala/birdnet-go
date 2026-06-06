@@ -132,6 +132,33 @@ func TestTrustedProxyIPExtractor(t *testing.T) {
 			want:           "203.0.113.9",
 		},
 		{
+			name:           "configured bare IPv4 trusts that single host",
+			trustedProxies: []string{"198.51.100.7"},
+			remoteAddr:     "198.51.100.7:40000",
+			headers:        map[string]string{cfHeader: "203.0.113.9"},
+			want:           "203.0.113.9",
+		},
+		{
+			name:           "configured bare IPv4 does not trust a different host",
+			trustedProxies: []string{"198.51.100.7"},
+			remoteAddr:     "198.51.100.8:40000",
+			headers:        map[string]string{cfHeader: "1.2.3.4"},
+			want:           "198.51.100.8",
+		},
+		{
+			name:           "configured bare IPv6 trusts that single host",
+			trustedProxies: []string{"2001:db8::1"},
+			remoteAddr:     "[2001:db8::1]:40000",
+			headers:        map[string]string{cfHeader: "203.0.113.9"},
+			want:           "203.0.113.9",
+		},
+		{
+			name:       "IPv6 loopback peer bracketed without port honors header",
+			remoteAddr: "[::1]",
+			headers:    map[string]string{cfHeader: "203.0.113.5"},
+			want:       "203.0.113.5",
+		},
+		{
 			name:           "cloudflare preset trusts cloudflare edge range",
 			trustedProxies: []string{conf.TrustedProxyCloudflarePreset},
 			remoteAddr:     "173.245.48.10:40000", // within 173.245.48.0/20

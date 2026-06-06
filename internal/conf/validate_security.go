@@ -52,13 +52,17 @@ func validateSecuritySettings(settings *Security) error {
 		}
 	}
 
-	// Validate trusted-proxy entries. Each must be a valid CIDR or the reserved
-	// "cloudflare" preset token. Empty entries (blank list items) are skipped,
-	// matching the lenient parsing used by the subnet bypass check above.
+	// Validate trusted-proxy entries. Each must be a valid CIDR, a bare IP (a
+	// single host), or the reserved "cloudflare" preset token. Empty entries
+	// (blank list items) are skipped, matching the lenient parsing used by the
+	// subnet bypass check above.
 	for _, entry := range settings.TrustedProxies {
 		trimmed := strings.TrimSpace(entry)
 		if trimmed == "" || strings.EqualFold(trimmed, TrustedProxyCloudflarePreset) {
 			continue
+		}
+		if net.ParseIP(trimmed) != nil {
+			continue // bare IP, treated as a single-host /32 or /128
 		}
 		if _, _, err := net.ParseCIDR(trimmed); err != nil {
 			return errors.New(err).

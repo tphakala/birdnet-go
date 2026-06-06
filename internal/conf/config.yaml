@@ -415,7 +415,12 @@ security:
   # from a PUBLIC IP (e.g. Cloudflare's edge in front of a directly-exposed
   # instance, or an external load balancer) so its headers are honored. The
   # special value "cloudflare" expands to Cloudflare's published edge ranges.
-  trustedproxies: []         # e.g. ["cloudflare"] or ["203.0.113.0/24"]
+  # Multi-hop: for a chain such as an external load balancer in front of a local
+  # reverse proxy, list every intermediate proxy whose address appears in
+  # X-Forwarded-For (including private ones). Only explicitly listed hops are
+  # skipped when resolving the real client; otherwise the request is attributed
+  # to the nearest unlisted hop.
+  trustedproxies: []         # e.g. ["cloudflare"], ["203.0.113.0/24"] or a bare IP ["203.0.113.5"]
   basicauth:
     enabled: false           # true to enable basic auth
     password: ""             # password hash for the settings interface

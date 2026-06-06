@@ -497,9 +497,25 @@ func TestValidateSecuritySettings_TrustedProxies(t *testing.T) {
 			errType: "security-trustedproxies-format",
 		},
 		{
-			name: "Bare IP without CIDR notation - should fail",
+			name: "Bare IPv4 without CIDR notation - should pass",
 			security: Security{
 				TrustedProxies:  []string{"192.168.1.1"},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Bare IPv6 without CIDR notation - should pass",
+			security: Security{
+				TrustedProxies:  []string{"2001:db8::1"},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Garbage entry - should fail",
+			security: Security{
+				TrustedProxies:  []string{"not-an-ip-or-cidr"},
 				SessionDuration: 24 * time.Hour,
 			},
 			wantErr: true,
