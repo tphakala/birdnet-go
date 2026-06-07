@@ -362,3 +362,73 @@ func TestCloneDeepCopiesNestedMetadata(t *testing.T) {
 	assert.Equal(t, "timeout", originalErrors[0],
 		"Modifying nested slice in clone should not affect original")
 }
+
+// TestCreateConcurrentSubscriberCountRace reproduces a data race on
+// Service.subscribers. broadcast() writes s.subscribers under subscribersMu, but
+// Create() and CreateWithMetadata() read len(s.subscribers) OUTSIDE the lock in
+// their post-broadcast debug log. Two goroutines creating notifications
+// concurrently race: one broadcast() writes s.subscribers while the other's debug
+// log reads len(s.subscribers).
+//
+// The unguarded read lives inside an `if s.config.Debug` branch, so the race only
+// manifests with Debug logging enabled.
+//
+// Run with: go test -race -run TestCreateConcurrentSubscriberCountRace ./internal/notification/
+func TestCreateConcurrentSubscriberCountRace(t *testing.T) {
+	config := &ServiceConfig{
+		MaxNotifications:   1000,
+		CleanupInterval:    time.Minute,
+		RateLimitWindow:    time.Minute,
+		RateLimitMaxEvents: 10_000, // well above the goroutines*iterations creates below, no rate limiting
+		Debug:              true,   // REQUIRED: the unguarded read is gated behind Debug
+	}
+	service := NewService(config)
+	defer service.Stop()
+
+	// Subscribers make broadcast() rewrite s.subscribers on every call, widening
+	// the window between the guarded write and the unguarded read.
+	const numSubscribers = 3
+	subscribers := make([]<-chan *Notification, numSubscribers)
+	for i := range numSubscribers {
+		ch, _ := service.Subscribe()
+		subscribers[i] = ch
+	}
+	defer func() {
+		for _, ch := range subscribers {
+			service.Unsubscribe(ch)
+		}
+	}()
+
+	// Continuously drain subscriber channels so broadcast never sees a full channel.
+	stop := make(chan struct{})
+	var drainWg sync.WaitGroup
+	for _, ch := range subscribers {
+		drainWg.Go(func() {
+			for {
+				select {
+				case <-ch:
+				case <-stop:
+					return
+				}
+			}
+		})
+	}
+
+	const goroutines = 50
+	const iterations = 20
+	runConcurrent(t, goroutines, func(id int) {
+		for j := range iterations {
+			// Exercise both create paths that read len(s.subscribers) outside the
+			// lock after broadcast: Create (service.go) and CreateWithMetadata.
+			if (id+j)%2 == 0 {
+				notif := NewNotification(TypeInfo, PriorityMedium, "Race", "msg")
+				_ = service.CreateWithMetadata(notif)
+			} else {
+				_, _ = service.Create(TypeInfo, PriorityMedium, "Race", "msg")
+			}
+		}
+	})
+
+	close(stop)
+	drainWg.Wait()
+}

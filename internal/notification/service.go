@@ -151,13 +151,14 @@ func (s *Service) Create(notifType Type, priority Priority, title, message strin
 			Build()
 	}
 
-	// Broadcast to subscribers
-	s.broadcast(notification)
+	// Broadcast to subscribers. Use the count returned under the lock instead of
+	// reading len(s.subscribers) here, which would race with broadcast's write.
+	subscriberCount := s.broadcast(notification)
 
 	if s.config.Debug {
 		s.logger.Debug("notification created and broadcast",
 			logger.String("id", notification.ID),
-			logger.Int("subscriber_count", len(s.subscribers)))
+			logger.Int("subscriber_count", subscriberCount))
 	}
 
 	return notification, nil
@@ -440,7 +441,12 @@ type broadcastStats struct {
 // broadcast sends a notification to all subscribers.
 // Each subscriber receives a clone of the notification to prevent race conditions
 // if the original notification is modified after broadcast (e.g., adding metadata).
-func (s *Service) broadcast(notification *Notification) {
+//
+// It returns the number of active subscribers remaining after the broadcast. The
+// count is computed while holding subscribersMu so callers can log it without
+// re-reading s.subscribers outside the lock, which would data-race with the write
+// to s.subscribers below.
+func (s *Service) broadcast(notification *Notification) int {
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
 
@@ -463,6 +469,8 @@ func (s *Service) broadcast(notification *Notification) {
 			logger.Int("failed_count", stats.failed),
 			logger.Int("success_count", stats.success))
 	}
+
+	return len(activeSubscribers)
 }
 
 // logBroadcastStart logs the start of a broadcast operation.
