@@ -62,13 +62,7 @@ func checkSSERequired(t *testing.T, eventData map[string]any) {
 // TestToastIntegrationFlow tests the complete flow:
 // SendToast -> notification creation -> SSE event data creation
 func TestToastIntegrationFlow(t *testing.T) {
-	config := notification.DefaultServiceConfig()
-	if !notification.IsInitialized() {
-		notification.Initialize(config)
-	}
-
-	service := notification.GetService()
-	c := mockController()
+	t.Parallel()
 
 	testCases := []struct {
 		name              string
@@ -101,6 +95,10 @@ func TestToastIntegrationFlow(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// Each subtest gets its own isolated service so parallel subtests do
+			// not receive each other's broadcasts on a shared subscription.
+			c, service := newToastTestController(t)
 			notifCh, _ := service.Subscribe()
 			defer service.Unsubscribe(notifCh)
 
@@ -195,14 +193,7 @@ func TestToastToSSEEventConsistency(t *testing.T) {
 
 // BenchmarkCompleteToastFlow benchmarks the complete toast flow
 func BenchmarkCompleteToastFlow(b *testing.B) {
-	// Initialize notification service
-	config := notification.DefaultServiceConfig()
-	if !notification.IsInitialized() {
-		notification.Initialize(config)
-	}
-
-	service := notification.GetService()
-	c := mockController()
+	c, service := newToastTestController(b)
 
 	// Subscribe to notifications (needed for SendToast to work)
 	notifCh, _ := service.Subscribe()

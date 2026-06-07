@@ -67,30 +67,31 @@ func assertNotificationMapping(t *testing.T, toastType string, notif *notificati
 	assert.Equal(t, expectedPriority, notif.Priority, "Toast to notification priority mapping for %q mismatch", toastType)
 }
 
+// newToastTestController builds a controller wired to an isolated, per-test
+// notification service injected through the controller's DI seam. The service is
+// stopped via tb.Cleanup so its cleanupLoop goroutine does not leak (TestMain
+// runs a goleak gate). No process-global state is touched, so callers are safe to
+// run with t.Parallel().
+func newToastTestController(tb testing.TB) (*Controller, *notification.Service) {
+	tb.Helper()
+	service := notification.NewService(notification.DefaultServiceConfig())
+	tb.Cleanup(service.Stop)
+	c := mockController()
+	c.notificationService = service
+	return c, service
+}
+
 func TestController_SendToast(t *testing.T) {
-	// Remove t.Parallel() to prevent interference between tests
-	// Each test will use an isolated service instance
+	t.Parallel()
 
 	tests := getToastTestCases()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create isolated service for each test
-			config := notification.DefaultServiceConfig()
-			service := notification.NewService(config)
-			defer service.Stop()
-
-			c := mockController()
-			runSendToastTestIsolated(t, c, service, tt)
+			t.Parallel()
+			c, service := newToastTestController(t)
+			runSendToastTest(t, c, service, tt)
 		})
-	}
-}
-
-// setupTestNotificationService initializes the notification service for testing
-func setupTestNotificationService() {
-	config := notification.DefaultServiceConfig()
-	if !notification.IsInitialized() {
-		notification.Initialize(config)
 	}
 }
 
@@ -158,49 +159,30 @@ func getToastTestCases() []toastTestCase {
 	}
 }
 
-// runSendToastTestIsolated runs a single SendToast test case with an isolated service
-// This tests the notification service directly since Controller.SendToast uses global service
-func runSendToastTestIsolated(t *testing.T, c *Controller, service *notification.Service, tc toastTestCase) {
+// runSendToastTest runs a single SendToast test case against an isolated service
+// injected into the controller, exercising the real Controller.SendToast path
+// (string-to-ToastType mapping, component, duration, broadcast).
+func runSendToastTest(t *testing.T, c *Controller, service *notification.Service, tc toastTestCase) {
 	t.Helper()
-	// Subscribe to the isolated service
+	// Subscribe to the isolated service to observe the broadcast.
 	notifCh, _ := service.Subscribe()
 	defer service.Unsubscribe(notifCh)
 
-	// Map string toast type to notification.ToastType (same logic as Controller.SendToast)
-	var notifToastType notification.ToastType
-	switch tc.toastType {
-	case ToastTypeSuccess:
-		notifToastType = notification.ToastTypeSuccess
-	case ToastTypeError:
-		notifToastType = notification.ToastTypeError
-	case ToastTypeWarning:
-		notifToastType = notification.ToastTypeWarning
-	case ToastTypeInfo:
-		notifToastType = notification.ToastTypeInfo
-	default:
-		notifToastType = notification.ToastTypeInfo
-	}
-
-	// Create and send toast directly to the isolated service (bypassing global service)
-	toast := notification.NewToast(tc.message, notifToastType).
-		WithComponent("api").
-		WithDuration(tc.duration)
-
-	err := service.CreateWithMetadata(toast.ToNotification())
+	err := c.SendToast(tc.message, tc.toastType, tc.duration)
 
 	if tc.wantError {
-		assert.Error(t, err, "CreateWithMetadata() expected error but got none")
+		assert.Error(t, err, "SendToast() expected error but got none")
 		return
 	}
 
-	require.NoError(t, err, "CreateWithMetadata() unexpected error")
+	require.NoError(t, err, "SendToast() unexpected error")
 
 	// Verify notification was created and broadcast
 	select {
 	case notif := <-notifCh:
 		verifyToastNotification(t, notif, tc)
 	case <-time.After(100 * time.Millisecond):
-		require.Fail(t, "CreateWithMetadata() should have broadcast notification within timeout")
+		require.Fail(t, "SendToast() should have broadcast notification within timeout")
 	}
 }
 
@@ -300,58 +282,37 @@ func TestController_SendToast_TypeMapping(t *testing.T) {
 }
 
 func TestController_SendToast_ServiceNotInitialized(t *testing.T) {
-	// Note: Cannot use t.Parallel() because this test uses the global notification service
-	// which has a shared rate limiter. Running in parallel with other tests causes
-	// rate limit exhaustion and test failures.
+	t.Parallel()
 
-	// Create a controller without initializing the notification service
+	// The api/v2 test suite never initializes the process-global notification
+	// singleton (every test injects an isolated instance), so a controller with
+	// no injected service resolves to nil and SendToast must fail gracefully
+	// rather than panicking.
+	require.False(t, notification.IsInitialized(),
+		"no api/v2 test may initialize the global notification singleton; this test relies on it staying unset")
+
 	c := mockController()
+	require.Nil(t, c.notificationService, "controller must have no injected service for this test")
 
-	// This test is tricky because the notification service is global.
-	// In a real scenario where the service isn't initialized, SendToast should fail gracefully.
-	// However, since we've already initialized it in other tests, we can't easily test this
-	// without more complex mocking or service lifecycle management.
-
-	// For now, this test documents the expected behavior:
-	// If notification service is not initialized, SendToast should return an error
 	err := c.SendToast("test message", ToastTypeInfo, 1000)
-
-	// Since service is likely already initialized from other tests, this may pass
-	// In a real uninitialized scenario, this should return an error
-	if notification.IsInitialized() {
-		assert.NoError(t, err, "SendToast() with initialized service should not error")
-	}
+	require.Error(t, err, "SendToast() must return an error when no notification service is available")
 }
 
 func TestController_SendToast_Integration(t *testing.T) {
-	// Integration test that verifies the complete flow
-	config := notification.DefaultServiceConfig()
-
-	if !notification.IsInitialized() {
-		notification.Initialize(config)
-	}
-
-	c := mockController()
+	t.Parallel()
+	// Integration test that verifies the complete flow through an injected service.
+	c, _ := newToastTestController(t)
 
 	// Send a toast with all features
 	err := c.SendToast("Integration test message", ToastTypeWarning, 4000)
 	require.NoError(t, err, "SendToast() integration test error")
-
-	// Retrieve the notification from the service to verify it was stored
-	// Note: This requires access to the service's store, which might not be public
-	// For now, we'll just verify the method doesn't error
 }
 
 // Benchmark for SendToast performance
 func BenchmarkController_SendToast(b *testing.B) {
-	config := notification.DefaultServiceConfig()
+	c, _ := newToastTestController(b)
 
-	if !notification.IsInitialized() {
-		notification.Initialize(config)
-	}
-
-	c := mockController()
-
+	b.ReportAllocs()
 	b.ResetTimer()
 
 	// Use b.Loop() for benchmark iteration (Go 1.25)
