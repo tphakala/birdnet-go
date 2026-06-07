@@ -99,6 +99,7 @@
     "@typescript-eslint/parser": "^8.58.2",
     "@vitest/browser": "^4.0.18",
     "@vitest/browser-playwright": "^4.0.16",
+    "@vitest/coverage-v8": "^4.1.7",
     "@vitest/eslint-plugin": "^1.6.15",
     "@vitest/ui": "^4.0.16",
     "axe-core": "^4.11.3",
