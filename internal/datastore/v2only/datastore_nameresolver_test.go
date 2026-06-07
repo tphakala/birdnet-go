@@ -14,6 +14,11 @@ type fakeResolver struct{ m map[string]string }
 
 func (f fakeResolver) Resolve(sci, _ string) string { return f.m[sci] }
 
+func (f fakeResolver) ResolveLocal(sci string) (string, bool) {
+	v, ok := f.m[sci]
+	return v, ok
+}
+
 func TestResolveCommonName_ResolverOverridesLabelMap(t *testing.T) {
 	ds := &Datastore{log: logger.NewConsoleLogger("v2only_test", logger.LogLevelError)}
 	ds.names.Store(buildNameMaps([]string{"Turdus merula_LabelName"}, nil))

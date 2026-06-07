@@ -361,6 +361,10 @@ func (ds *DataStore) UpdateNameMaps(_ []string) {}
 // locale (settings.BirdNET.Locale), not a per-call locale.
 type SpeciesNameResolver interface {
 	Resolve(scientificName, locale string) string
+	// ResolveLocal returns a name only if it is already resident in memory (no
+	// O(dataset) on-demand lookup), reporting ok=false otherwise. Bulk callers use
+	// it to avoid driving the slow path for out-of-working-set species.
+	ResolveLocal(scientificName string) (name string, ok bool)
 }
 
 // IsNilResolver reports whether r is nil or a typed-nil pointer. Setters use it so

@@ -197,8 +197,11 @@ func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nam
 		if scientificName == "" {
 			continue
 		}
+		// In-memory-only resolve: buildNameMaps runs over the full model label set,
+		// so the slow-path Resolve would scan the dataset once per out-of-working-set
+		// species on each rebuild. Those species keep their label name here.
 		if resolver != nil {
-			if r := resolver.Resolve(scientificName, ""); r != "" {
+			if r, ok := resolver.ResolveLocal(scientificName); ok {
 				commonName = r
 			}
 		}

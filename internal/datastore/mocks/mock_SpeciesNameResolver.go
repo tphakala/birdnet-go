@@ -64,6 +64,62 @@ func (_c *MockSpeciesNameResolver_Resolve_Call) RunAndReturn(run func(string, st
 	return _c
 }
 
+// ResolveLocal provides a mock function with given fields: scientificName
+func (_m *MockSpeciesNameResolver) ResolveLocal(scientificName string) (string, bool) {
+	ret := _m.Called(scientificName)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ResolveLocal")
+	}
+
+	var r0 string
+	var r1 bool
+	if rf, ok := ret.Get(0).(func(string) (string, bool)); ok {
+		return rf(scientificName)
+	}
+	if rf, ok := ret.Get(0).(func(string) string); ok {
+		r0 = rf(scientificName)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(string) bool); ok {
+		r1 = rf(scientificName)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+
+	return r0, r1
+}
+
+// MockSpeciesNameResolver_ResolveLocal_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ResolveLocal'
+type MockSpeciesNameResolver_ResolveLocal_Call struct {
+	*mock.Call
+}
+
+// ResolveLocal is a helper method to define mock.On call
+//   - scientificName string
+func (_e *MockSpeciesNameResolver_Expecter) ResolveLocal(scientificName interface{}) *MockSpeciesNameResolver_ResolveLocal_Call {
+	return &MockSpeciesNameResolver_ResolveLocal_Call{Call: _e.mock.On("ResolveLocal", scientificName)}
+}
+
+func (_c *MockSpeciesNameResolver_ResolveLocal_Call) Run(run func(scientificName string)) *MockSpeciesNameResolver_ResolveLocal_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockSpeciesNameResolver_ResolveLocal_Call) Return(name string, ok bool) *MockSpeciesNameResolver_ResolveLocal_Call {
+	_c.Call.Return(name, ok)
+	return _c
+}
+
+func (_c *MockSpeciesNameResolver_ResolveLocal_Call) RunAndReturn(run func(string) (string, bool)) *MockSpeciesNameResolver_ResolveLocal_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockSpeciesNameResolver creates a new instance of MockSpeciesNameResolver. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockSpeciesNameResolver(t interface {

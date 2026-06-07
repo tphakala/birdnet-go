@@ -330,8 +330,14 @@ func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nam
 		if scientificName, commonName, found := strings.Cut(label, "_"); found {
 			scientificName = strings.TrimSpace(scientificName)
 			commonName = strings.TrimSpace(commonName)
+			// Use the in-memory-only resolve here: buildNameMaps runs over the full
+			// model label set, so calling the slow-path Resolve for every
+			// out-of-working-set species would drive thousands of dataset scans on
+			// each rebuild. Out-of-working-set species keep their label name in the
+			// (reverse search) maps; live resolveCommonName still resolves them
+			// on-demand for display.
 			if resolver != nil && scientificName != "" {
-				if r := resolver.Resolve(scientificName, ""); r != "" {
+				if r, ok := resolver.ResolveLocal(scientificName); ok {
 					commonName = r
 				}
 			}

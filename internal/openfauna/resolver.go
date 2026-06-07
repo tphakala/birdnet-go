@@ -209,6 +209,37 @@ func (r *Resolver) Resolve(scientificName, _ string) string {
 	return name
 }
 
+// ResolveLocal returns the localized common name for scientificName only if it is
+// already resident in memory (the working-set index or the pre-seeded/memoized
+// cache), reporting ok=false instead of falling back to the O(dataset) on-demand
+// Lookup. Bulk callers (e.g. rebuilding the full-model name maps) use it so that
+// out-of-working-set species do not each trigger a dataset scan. Matching is
+// case-insensitive.
+func (r *Resolver) ResolveLocal(scientificName string) (name string, ok bool) {
+	if r == nil {
+		return "", false
+	}
+	st := r.cur.Load()
+	if st == nil {
+		return "", false
+	}
+	key := normalizeName(scientificName)
+	if st.index != nil {
+		if n, found := st.index.names[key]; found && n != "" {
+			return n, true
+		}
+	}
+	// The cache holds pre-seeded English fallbacks for working-set species and
+	// memoized slow-path results; an empty entry is a known miss, so treat only a
+	// non-empty cached name as a usable local hit.
+	if v, found := st.cache.Load(key); found {
+		if n, isStr := v.(string); isStr && n != "" {
+			return n, true
+		}
+	}
+	return "", false
+}
+
 // Locale reports the effective openfauna locale code of the current index, or ""
 // before the first Rebuild. Intended for introspection and logging.
 func (r *Resolver) Locale() string {

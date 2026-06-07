@@ -11,6 +11,11 @@ type fakeResolver struct{ m map[string]string }
 
 func (f fakeResolver) Resolve(sci, _ string) string { return f.m[sci] }
 
+func (f fakeResolver) ResolveLocal(sci string) (string, bool) {
+	v, ok := f.m[sci]
+	return v, ok
+}
+
 func TestBuildNameMaps_ResolverLocalizes(t *testing.T) {
 	// The resolver overrides the label's common name in both the forward
 	// (sciToCommon) and reverse (commonToSci) maps, so insights display and

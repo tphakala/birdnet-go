@@ -267,3 +267,29 @@ func TestResolver_ConcurrentResolveDuringRebuild_NoRace(t *testing.T) {
 		require.NoError(t, err, "concurrent Rebuild must not fail")
 	}
 }
+
+// TestResolveLocal_NoSlowPath verifies ResolveLocal serves only in-memory state
+// (working-set index + cache) and never triggers the O(dataset) on-demand Lookup,
+// which is what makes it safe for bulk name-map rebuilds over the full label set.
+func TestResolveLocal_NoSlowPath(t *testing.T) {
+	r := NewResolver()
+	require.NoError(t, r.Rebuild([]string{"Turdus merula"}, "en"))
+
+	// Working-set species: present in the in-memory index.
+	name, ok := r.ResolveLocal("Turdus merula")
+	assert.True(t, ok, "working-set species should resolve from memory")
+	assert.NotEmpty(t, name)
+
+	// A species NOT in the working set must report a local miss WITHOUT consulting
+	// the dataset (Resolve would slow-path it; ResolveLocal must not). "Zzz zzz" is
+	// not a real species, so any non-miss would imply an unexpected lookup.
+	_, ok = r.ResolveLocal("Zzz zzz")
+	assert.False(t, ok, "out-of-working-set species must be a local miss")
+
+	// Nil and pre-Rebuild resolvers are safe.
+	var nilR *Resolver
+	_, ok = nilR.ResolveLocal("Turdus merula")
+	assert.False(t, ok)
+	_, ok = NewResolver().ResolveLocal("Turdus merula")
+	assert.False(t, ok)
+}
