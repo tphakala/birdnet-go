@@ -31,7 +31,7 @@ func setupSearchTestController(t *testing.T, labels []string) *Controller {
 			Labels: labels,
 		},
 	})
-	c.nameMaps.Store(buildNameMaps(labels))
+	c.nameMaps.Store(buildNameMaps(labels, nil))
 	return c
 }
 
@@ -197,7 +197,7 @@ func TestBuildNameMaps_AmbiguousCommonName(t *testing.T) {
 		"Strix aluco_Owl",
 		"Bubo bubo_Owl",
 		"Parus major_Great Tit",
-	})
+	}, nil)
 	require.NotNil(t, nm)
 
 	// sciToCommon keeps both species; scientific names are always unique.
@@ -214,7 +214,7 @@ func TestBuildNameMaps_AmbiguousCommonName(t *testing.T) {
 		"Strix aluco_Owl",
 		"Bubo bubo_Owl",
 		"Tyto alba_Owl",
-	})
+	}, nil)
 	_, ok = nm.commonToSci["owl"]
 	assert.False(t, ok)
 
@@ -223,7 +223,7 @@ func TestBuildNameMaps_AmbiguousCommonName(t *testing.T) {
 		"Strix aluco_Owl",
 		"Bubo bubo_Owl",
 		"Parus major_Great Tit",
-	})
+	}, nil)
 	assert.Equal(t, "Parus major", nm.commonToSci["great tit"])
 }
 
@@ -240,7 +240,7 @@ func TestBuildNameMaps_MalformedLabels(t *testing.T) {
 		"NoSeparatorAtAll",
 		"",
 		"   _   ",
-	})
+	}, nil)
 	require.NotNil(t, nm)
 	assert.Len(t, nm.sciToCommon, 1)
 	assert.Len(t, nm.commonToSci, 1)

@@ -797,8 +797,9 @@ func (s *testLegacyInterface) GetNotificationHistory(_, _ string) (*datastore.No
 func (s *testLegacyInterface) DeleteExpiredNotificationHistory(_ time.Time) (int64, error) {
 	return 0, nil
 }
-func (s *testLegacyInterface) SchemaVersion() string     { return datastore.SchemaVersionLegacy }
-func (s *testLegacyInterface) UpdateNameMaps(_ []string) {}
+func (s *testLegacyInterface) SchemaVersion() string                           { return datastore.SchemaVersionLegacy }
+func (s *testLegacyInterface) UpdateNameMaps(_ []string)                       {}
+func (s *testLegacyInterface) SetNameResolver(_ datastore.SpeciesNameResolver) {}
 func (s *testLegacyInterface) GetDatabaseStats(_ context.Context) (*datastore.DatabaseStats, error) {
 	return nil, nil //nolint:nilnil // stub
 }

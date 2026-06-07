@@ -44,11 +44,12 @@ func TestMain(m *testing.M) {
 	// Run tests
 	testResult := m.Run()
 
-	// Stop the process-global notification service if any test brought it up.
-	// Tests initialize it via notification.Initialize()/SetServiceForTesting()
-	// (singleton, guarded by sync.Once), so it cannot be reset and stopped from
-	// an individual test's cleanup; its cleanupLoop goroutine would otherwise
-	// outlive the suite and trip the leak gate below. m.Run() has returned, so
+	// Defensive safety net: stop the process-global notification service if
+	// anything brought it up. After the notification DI refactor, api/v2 tests
+	// inject isolated per-test services (each stopped via t.Cleanup) and never
+	// initialize the global singleton, so this is normally a no-op. It remains to
+	// stop a stray instance (and its cleanupLoop goroutine) before the leak gate
+	// below, should future code initialize the global. m.Run() has returned, so
 	// no test is using the service at this point.
 	if svc := notification.GetService(); svc != nil {
 		svc.Stop()

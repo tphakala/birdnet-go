@@ -178,6 +178,13 @@ func BuildRangeFilter(o *Orchestrator) error {
 	}
 
 	conf.UpdateIncludedSpecies(includedSpecies)
+	if err := o.RebuildNameResolver(includedSpecies); err != nil {
+		// Non-fatal: the resolver keeps its previous snapshot and on-demand Lookup
+		// still resolves names. Log and continue so a name-index hiccup never blocks
+		// the range-filter rebuild.
+		GetLogger().Warn("Failed to rebuild OpenFauna name resolver after range filter rebuild",
+			logger.Error(err))
+	}
 	o.notifyRangeFilterReload()
 	return nil
 }

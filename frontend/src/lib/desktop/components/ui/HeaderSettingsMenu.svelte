@@ -24,7 +24,7 @@
   } from '@lucide/svelte';
   import GithubIcon from '$lib/desktop/components/ui/GithubIcon.svelte';
   import { dropdown } from '$lib/utils/transitions';
-  import { GITHUB_REPO_URL, GITHUB_DISCUSSIONS_URL } from '$lib/utils/externalUrls';
+  import { appState } from '$lib/stores/appState.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
 
   const logger = getLogger('dashboard');
@@ -248,7 +248,7 @@
 
         <!-- Ask a Question -->
         <a
-          href={GITHUB_DISCUSSIONS_URL}
+          href={appState.projectLinks.discussionsUrl}
           target="_blank"
           rel="noopener noreferrer"
           class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
@@ -261,7 +261,7 @@
 
         <!-- GitHub link -->
         <a
-          href={GITHUB_REPO_URL}
+          href={appState.projectLinks.repoUrl}
           target="_blank"
           rel="noopener noreferrer"
           class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"

@@ -389,6 +389,16 @@ func (a *UpdateRangeFilterAction) Execute(ctx context.Context, data any) error {
 	// Update the species list (this also updates LastUpdated timestamp atomically)
 	conf.UpdateIncludedSpecies(includedSpecies)
 
+	// The daily rebuild bypasses classifier.BuildRangeFilter, so refresh the
+	// OpenFauna name-resolver working set here too. Non-fatal: on-demand Lookup
+	// still resolves names if this fails.
+	if a.Bn != nil {
+		if err := a.Bn.RebuildNameResolver(includedSpecies); err != nil {
+			GetLogger().Warn("Failed to rebuild OpenFauna name resolver after daily range filter update",
+				logger.Error(err))
+		}
+	}
+
 	events.Emit(ctx, "detection", "filter_reconfigured", "Range filter updated", map[string]any{
 		"species_count": len(includedSpecies),
 		"date":          today.Format(time.DateOnly),

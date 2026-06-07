@@ -289,7 +289,7 @@ func TestBuildCommonNameMap(t *testing.T) {
 		"_EmptyScientificName",
 	}
 
-	m := buildNameMaps(labels).sciToCommon
+	m := buildNameMaps(labels, nil).sciToCommon
 	assert.Equal(t, "Eurasian Blackbird", m["Turdus merula"])
 	assert.Equal(t, "Great Tit", m["Parus major"])
 	assert.Len(t, m, 2) // invalid entries excluded

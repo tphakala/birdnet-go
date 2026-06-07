@@ -5030,6 +5030,39 @@ func (_c *MockInterface_SetMetrics_Call) RunAndReturn(run func(*metrics.Datastor
 	return _c
 }
 
+// SetNameResolver provides a mock function with given fields: resolver
+func (_m *MockInterface) SetNameResolver(resolver datastore.SpeciesNameResolver) {
+	_m.Called(resolver)
+}
+
+// MockInterface_SetNameResolver_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetNameResolver'
+type MockInterface_SetNameResolver_Call struct {
+	*mock.Call
+}
+
+// SetNameResolver is a helper method to define mock.On call
+//   - resolver datastore.SpeciesNameResolver
+func (_e *MockInterface_Expecter) SetNameResolver(resolver interface{}) *MockInterface_SetNameResolver_Call {
+	return &MockInterface_SetNameResolver_Call{Call: _e.mock.On("SetNameResolver", resolver)}
+}
+
+func (_c *MockInterface_SetNameResolver_Call) Run(run func(resolver datastore.SpeciesNameResolver)) *MockInterface_SetNameResolver_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(datastore.SpeciesNameResolver))
+	})
+	return _c
+}
+
+func (_c *MockInterface_SetNameResolver_Call) Return() *MockInterface_SetNameResolver_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockInterface_SetNameResolver_Call) RunAndReturn(run func(datastore.SpeciesNameResolver)) *MockInterface_SetNameResolver_Call {
+	_c.Run(run)
+	return _c
+}
+
 // SetSunCalcMetrics provides a mock function with given fields: suncalcMetrics
 func (_m *MockInterface) SetSunCalcMetrics(suncalcMetrics interface{}) {
 	_m.Called(suncalcMetrics)

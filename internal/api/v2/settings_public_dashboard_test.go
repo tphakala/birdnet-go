@@ -29,6 +29,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security/securitytest"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -37,8 +38,20 @@ import (
 // newSettingsAuthTestEnv creates a controller with fully registered routes,
 // BasicAuth enabled, and a remote-IP rewrite middleware that forces requests
 // to look like they come from a non-LAN client (so the auth middleware does
-// NOT bypass auth for the test's loopback address).
+// NOT bypass auth for the test's loopback address). Callers that do not need the
+// notification service handle use this thin wrapper.
 func newSettingsAuthTestEnv(t *testing.T) *echo.Echo {
+	t.Helper()
+	e, _ := newSettingsAuthTestEnvWithNotifier(t)
+	return e
+}
+
+// newSettingsAuthTestEnvWithNotifier is newSettingsAuthTestEnv plus the isolated
+// per-test notification service injected into the controller. Tests that need to
+// seed notifications (e.g. the guest-filter tests) use the returned service so
+// the controller's handlers and the test operate on the same instance, without
+// ever touching the process-global singleton.
+func newSettingsAuthTestEnvWithNotifier(t *testing.T) (*echo.Echo, *notification.Service) {
 	t.Helper()
 
 	securityConfig := conf.Security{
@@ -117,11 +130,18 @@ func newSettingsAuthTestEnv(t *testing.T) *echo.Echo {
 		gothic.Store = prevGothicStore
 	})
 
+	// Inject an isolated per-test notification service so the controller never
+	// depends on the process-global singleton. Stopped via t.Cleanup so its
+	// cleanupLoop goroutine does not leak (TestMain runs a goleak gate).
+	notifService := notification.NewService(notification.DefaultServiceConfig())
+	t.Cleanup(notifService.Stop)
+
 	controller, err := NewWithOptions(
 		e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics,
 		true, // initializeRoutes - register full /api/v2 route tree
 		WithAuthMiddleware(authMw.Authenticate),
 		WithAuthService(authService),
+		WithNotificationService(notifService),
 	)
 	require.NoError(t, err, "Failed to create test API controller with auth")
 
@@ -130,7 +150,7 @@ func newSettingsAuthTestEnv(t *testing.T) *echo.Echo {
 		close(controlChan)
 	})
 
-	return e
+	return e, notifService
 }
 
 // TestGetDashboardSettings_PublicWithAuthEnabled verifies that GET

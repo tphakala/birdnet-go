@@ -14,9 +14,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
-// setupNotificationTestService initializes a notification service for testing
-// and returns a cleanup function.
-func setupNotificationTestService(t *testing.T) *notification.Service {
+// newNotificationTestController builds a controller wired to an isolated, per-test
+// notification service injected through the controller's DI seam. The service is
+// stopped via t.Cleanup so its cleanupLoop goroutine does not leak (TestMain runs
+// a goleak gate). Because no process-global state is touched, tests using this
+// helper are safe to run with t.Parallel().
+func newNotificationTestController(t *testing.T) (*Controller, *notification.Service) {
 	t.Helper()
 
 	config := &notification.ServiceConfig{
@@ -28,19 +31,12 @@ func setupNotificationTestService(t *testing.T) *notification.Service {
 	}
 
 	service := notification.NewService(config)
-	if err := notification.SetServiceForTesting(service); err != nil {
-		// An instance already exists; stop the service we just created so its
-		// cleanupLoop goroutine does not leak (the gate in TestMain would flag
-		// it), then use the existing singleton. We deliberately do NOT stop the
-		// service on the success path: it becomes the global singleton, which is
-		// stopped once after the whole suite in TestMain. Stopping it here would
-		// leave later GetService() callers with a stopped instance.
-		service.Stop()
-		service = notification.GetService()
-		require.NotNil(t, service, "Expected notification service to be available")
-	}
+	t.Cleanup(service.Stop)
 
-	return service
+	controller := &Controller{notificationService: service}
+	controller.Settings.Store(&conf.Settings{})
+
+	return controller, service
 }
 
 // runMarkNotificationNotFoundTest exercises a mark-state handler against a
@@ -50,8 +46,7 @@ func setupNotificationTestService(t *testing.T) *notification.Service {
 func runMarkNotificationNotFoundTest(t *testing.T, pathSuffix, expectedMessage string, handler func(*Controller, echo.Context) error) {
 	t.Helper()
 
-	service := setupNotificationTestService(t)
-	require.NotNil(t, service)
+	controller, _ := newNotificationTestController(t)
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPut, "/api/v2/notifications/non-existent-id/"+pathSuffix, http.NoBody)
@@ -59,9 +54,6 @@ func runMarkNotificationNotFoundTest(t *testing.T, pathSuffix, expectedMessage s
 	ctx := e.NewContext(req, rec)
 	ctx.SetParamNames("id")
 	ctx.SetParamValues("non-existent-id")
-
-	controller := &Controller{}
-	controller.Settings.Store(&conf.Settings{})
 
 	err := handler(controller, ctx)
 	require.NoError(t, err, "handler should return nil")
@@ -75,13 +67,14 @@ func runMarkNotificationNotFoundTest(t *testing.T, pathSuffix, expectedMessage s
 }
 
 func TestMarkNotificationRead_NotFound(t *testing.T) {
+	t.Parallel()
 	runMarkNotificationNotFoundTest(t, "read", "Notification marked as read",
 		(*Controller).MarkNotificationRead)
 }
 
 func TestMarkNotificationRead_EmptyID(t *testing.T) {
-	service := setupNotificationTestService(t)
-	require.NotNil(t, service)
+	t.Parallel()
+	controller, _ := newNotificationTestController(t)
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPut, "/api/v2/notifications//read", http.NoBody)
@@ -90,9 +83,6 @@ func TestMarkNotificationRead_EmptyID(t *testing.T) {
 	ctx.SetParamNames("id")
 	ctx.SetParamValues("")
 
-	controller := &Controller{}
-	controller.Settings.Store(&conf.Settings{})
-
 	err := controller.MarkNotificationRead(ctx)
 	require.NoError(t, err)
 
@@ -100,8 +90,8 @@ func TestMarkNotificationRead_EmptyID(t *testing.T) {
 }
 
 func TestMarkNotificationRead_Success(t *testing.T) {
-	service := setupNotificationTestService(t)
-	require.NotNil(t, service)
+	t.Parallel()
+	controller, service := newNotificationTestController(t)
 
 	// Create a notification first
 	notif := notification.NewNotification(notification.TypeInfo, notification.PriorityMedium, "Test", "Test message")
@@ -115,9 +105,6 @@ func TestMarkNotificationRead_Success(t *testing.T) {
 	ctx.SetParamNames("id")
 	ctx.SetParamValues(notif.ID)
 
-	controller := &Controller{}
-	controller.Settings.Store(&conf.Settings{})
-
 	err = controller.MarkNotificationRead(ctx)
 	require.NoError(t, err)
 
@@ -125,6 +112,7 @@ func TestMarkNotificationRead_Success(t *testing.T) {
 }
 
 func TestMarkNotificationAcknowledged_NotFound(t *testing.T) {
+	t.Parallel()
 	runMarkNotificationNotFoundTest(t, "acknowledge", "Notification marked as acknowledged",
 		(*Controller).MarkNotificationAcknowledged)
 }

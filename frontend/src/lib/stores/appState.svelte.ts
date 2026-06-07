@@ -101,6 +101,8 @@ interface ProjectLinks {
   issuesUrl: string;
   newIssueUrl: string;
   supportUrl: string;
+  discussionsUrl: string;
+  releasesUrl: string;
   communityUrl: string;
 }
 
@@ -156,6 +158,8 @@ const DEFAULT_PROJECT_LINKS: ProjectLinks = {
   issuesUrl: 'https://github.com/tphakala/birdnet-go/issues',
   newIssueUrl: 'https://github.com/tphakala/birdnet-go/issues/new',
   supportUrl: 'https://github.com/tphakala/birdnet-go',
+  discussionsUrl: 'https://github.com/tphakala/birdnet-go/discussions',
+  releasesUrl: 'https://github.com/tphakala/birdnet-go/releases',
   communityUrl: 'https://discord.gg/gcSCFGUtsd',
 };
 

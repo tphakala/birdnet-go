@@ -15,6 +15,7 @@ package datastore
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -238,6 +239,9 @@ type Interface interface {
 	// UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
 	// Called after locale or model changes. No-op for legacy datastores.
 	UpdateNameMaps(labels []string)
+	// SetNameResolver installs the authoritative localized species-name resolver
+	// shared with the classifier orchestrator. No-op for legacy datastores.
+	SetNameResolver(resolver SpeciesNameResolver)
 
 	// Application event log (v2 only; legacy stores return nil/empty)
 	SaveAppEvent(ctx context.Context, category, eventType, message string, metadata map[string]any) error
@@ -357,6 +361,34 @@ func (ds *DataStore) GetDBCounters() *dbstats.Counters {
 
 // UpdateNameMaps is a no-op for legacy DataStore (common names stored directly in DB).
 func (ds *DataStore) UpdateNameMaps(_ []string) {}
+
+// SpeciesNameResolver resolves a scientific name to a localized common name,
+// returning "" when unknown. Satisfied by *openfauna.Resolver. The locale argument
+// is accepted for interface symmetry; resolvers are built for the active species
+// locale (settings.BirdNET.Locale), not a per-call locale.
+type SpeciesNameResolver interface {
+	Resolve(scientificName, locale string) string
+	// ResolveLocal returns a name only if it is already resident in memory (no
+	// O(dataset) on-demand lookup), reporting ok=false otherwise. Bulk callers use
+	// it to avoid driving the slow path for out-of-working-set species.
+	ResolveLocal(scientificName string) (name string, ok bool)
+}
+
+// IsNilResolver reports whether r is nil or a typed-nil pointer. Setters use it so
+// they never store an interface that wraps a nil pointer (which would pass an
+// `!= nil` check yet panic on a non-defensive Resolve implementation).
+func IsNilResolver(r SpeciesNameResolver) bool {
+	if r == nil {
+		return true
+	}
+	if v := reflect.ValueOf(r); v.Kind() == reflect.Pointer && v.IsNil() {
+		return true
+	}
+	return false
+}
+
+// SetNameResolver is a no-op for legacy DataStore (common names stored in DB).
+func (ds *DataStore) SetNameResolver(_ SpeciesNameResolver) {}
 
 // SetSunCalcMetrics sets the metrics instance for the SunCalc service
 func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {

@@ -871,7 +871,7 @@ internal/notification/
 internal/birdweather/
 ├── birdweather_client.go  # BirdWeather API client and upload logic
 ├── audio.go               # Audio processing and normalization (LUFS)
-└── testing.go             # Test helpers and mock client
+└── connection_probe.go    # "Test Connection" feature: connectivity/auth/upload probing
 ```
 
 **Features:**

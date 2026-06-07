@@ -150,7 +150,7 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 	}
 
 	// Get notification service
-	notificationService := notification.GetService()
+	notificationService := c.getNotificationService()
 	if notificationService == nil {
 		return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
 	}
@@ -202,10 +202,12 @@ func (c *Controller) DebugSystemStatus(ctx echo.Context) error {
 		status.Telemetry = telemetryStatus
 	}
 
-	// Get notification status
-	if notificationService := notification.GetService(); notificationService != nil {
+	// Get notification status. The map is only populated when a service is
+	// available (the enclosing guard), so both fields are unconditionally true
+	// here; they report "a notification service is wired and active".
+	if notificationService := c.getNotificationService(); notificationService != nil {
 		status.Notifications = map[string]any{
-			"initialized": notification.IsInitialized(),
+			"initialized": true,
 			"enabled":     true,
 		}
 	}

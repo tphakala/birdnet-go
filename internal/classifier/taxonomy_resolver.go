@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/csvutil"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -66,7 +67,7 @@ func NewTaxonomyResolver(taxonomyPath, locale string) (*TaxonomyResolver, error)
 	reader := csv.NewReader(f)
 	reader.LazyQuotes = true
 
-	header, err := reader.Read()
+	headerRow, err := reader.Read()
 	if errors.Is(err, io.EOF) {
 		return &TaxonomyResolver{index: make(map[string]string)}, nil
 	}
@@ -74,7 +75,8 @@ func NewTaxonomyResolver(taxonomyPath, locale string) (*TaxonomyResolver, error)
 		return nil, fmt.Errorf("reading taxonomy header: %w", err)
 	}
 
-	sciCol := findColumn(header, "sci_name")
+	header := csvutil.NewHeader(headerRow)
+	sciCol := header.Col("sci_name")
 	if sciCol < 0 {
 		return nil, fmt.Errorf("taxonomy file missing required column 'sci_name'")
 	}
@@ -119,24 +121,14 @@ func (r *TaxonomyResolver) Resolve(scientificName, _ string) string {
 // resolveLocaleColumn finds the best column index for the given locale.
 // Falls back to the English "com_name" column if no locale-specific column
 // exists. Returns -1 if neither is found.
-func resolveLocaleColumn(header []string, locale string) int {
+func resolveLocaleColumn(header csvutil.Header, locale string) int {
 	locale = strings.ToLower(locale)
 
 	if colName, ok := taxonomyLocaleColumns[locale]; ok {
-		if idx := findColumn(header, colName); idx >= 0 {
+		if idx := header.Col(colName); idx >= 0 {
 			return idx
 		}
 	}
 
-	return findColumn(header, "com_name")
-}
-
-// findColumn returns the index of the named column in header, or -1.
-func findColumn(header []string, name string) int {
-	for i, h := range header {
-		if strings.EqualFold(strings.TrimSpace(h), name) {
-			return i
-		}
-	}
-	return -1
+	return header.Col("com_name")
 }

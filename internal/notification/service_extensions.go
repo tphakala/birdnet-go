@@ -63,13 +63,15 @@ func (s *Service) CreateWithMetadata(notification *Notification) error {
 		}
 	}
 
-	// Always broadcast so push dispatcher can receive push-targeted notifications
-	s.broadcast(notification)
+	// Always broadcast so push dispatcher can receive push-targeted notifications.
+	// Use the count returned under the lock instead of reading len(s.subscribers)
+	// here, which would race with broadcast's write.
+	subscriberCount := s.broadcast(notification)
 
 	if s.config.Debug {
 		s.logger.Debug("notification created and broadcast",
 			logger.String("id", notification.ID),
-			logger.Int("subscriber_count", len(s.subscribers)))
+			logger.Int("subscriber_count", subscriberCount))
 	}
 
 	return nil

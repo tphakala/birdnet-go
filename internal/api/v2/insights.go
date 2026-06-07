@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -176,20 +177,41 @@ func normalizeForLookup(s string) string {
 // them to an arbitrary species based on label order would silently hide
 // valid matches. sciToCommon is not affected because scientific names are
 // unique per label.
-func buildNameMaps(labels []string) *nameMaps {
+// When resolver is non-nil, each label's common name is overridden by the
+// resolver (authoritative/localized), so insights display (sciToCommon) and
+// search (commonToSci) both reflect the localized name. Labels the resolver does
+// not cover keep their embedded common name.
+func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nameMaps {
 	nm := &nameMaps{
 		sciToCommon: make(map[string]string, len(labels)),
 		commonToSci: make(map[string]string, len(labels)),
 	}
 	ambiguous := make(map[string]struct{})
+	// Hoist the (reflect-based) nil check out of the per-label loop. IsNilResolver
+	// also rejects typed-nil interfaces, consistent with SetNameResolver.
+	useResolver := !datastore.IsNilResolver(resolver)
 	for _, label := range labels {
+		// A scientific-only label (no separator, e.g. Perch v2 / bat labels) has no
+		// embedded common name; treat the whole label as the scientific name and let
+		// the resolver supply a searchable common name below.
 		scientificName, commonName, found := strings.Cut(label, "_")
 		if !found {
-			continue
+			scientificName, commonName = label, ""
 		}
 		scientificName = strings.TrimSpace(scientificName)
 		commonName = strings.TrimSpace(commonName)
-		if scientificName == "" || commonName == "" {
+		if scientificName == "" {
+			continue
+		}
+		// In-memory-only resolve: buildNameMaps runs over the full model label set,
+		// so the slow-path Resolve would scan the dataset once per out-of-working-set
+		// species on each rebuild. Those species keep their label name here.
+		if useResolver {
+			if r, ok := resolver.ResolveLocal(scientificName); ok {
+				commonName = r
+			}
+		}
+		if commonName == "" {
 			continue
 		}
 		nm.sciToCommon[scientificName] = commonName
@@ -234,7 +256,24 @@ func (c *Controller) loadCommonToScientificMap() map[string]string {
 // UpdateCommonNameMap rebuilds both cached name maps from updated BirdNET labels.
 // Called after locale or model changes to keep insights and search endpoints current.
 func (c *Controller) UpdateCommonNameMap(labels []string) {
-	c.nameMaps.Store(buildNameMaps(labels))
+	c.nameMaps.Store(buildNameMaps(labels, c.loadNameResolver()))
+}
+
+// SetNameResolver installs the authoritative localized name resolver, shared with
+// the classifier orchestrator. A nil resolver is ignored.
+func (c *Controller) SetNameResolver(r datastore.SpeciesNameResolver) {
+	if datastore.IsNilResolver(r) {
+		return
+	}
+	c.nameResolver.Store(&r)
+}
+
+// loadNameResolver returns the installed resolver, or nil if none has been set.
+func (c *Controller) loadNameResolver() datastore.SpeciesNameResolver {
+	if p := c.nameResolver.Load(); p != nil {
+		return *p
+	}
+	return nil
 }
 
 // loadCommonNameMap returns the current scientific-to-common lookup map.
@@ -243,8 +282,11 @@ func (c *Controller) loadCommonNameMap() map[string]string {
 	return c.loadNameMaps().sciToCommon
 }
 
-// resolveCommonName looks up the common name for a scientific name.
-// Returns the scientific name itself as fallback.
+// resolveCommonName looks up the common name for a scientific name in the cached
+// map. That map is already localized at build time (buildNameMaps applies the
+// OpenFauna resolver override), so this is a plain lookup that returns the
+// scientific name itself as fallback. This differs from the datastore's
+// resolveCommonName method, which consults the live resolver per call.
 func resolveCommonName(nameMap map[string]string, scientificName string) string {
 	if cn, ok := nameMap[scientificName]; ok {
 		return cn
