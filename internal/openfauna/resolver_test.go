@@ -35,16 +35,21 @@ func TestMapLocale_Table(t *testing.T) {
 		// Region expand: no bare zh/lv, but a single regional variant exists.
 		{"zh", "zh_cn"},
 		{"lv", "lv_lv"},
-		// Uncovered languages fall back to English.
-		{"af", "en"},
-		{"ar", "en"},
-		{"he", "en"},
-		{"ko", "en"},
-		{"th", "en"},
-		{"id", "en"},
-		{"ml", "en"},
-		{"hi-in", "en"},
-		{"vi-vn", "en"},
+		// Languages present in the dataset resolve to their own code (exact, or
+		// "-" -> "_"); coverage level is irrelevant to the mapping.
+		{"af", "af"},
+		{"ar", "ar"},
+		{"he", "he"},
+		{"ko", "ko"},
+		{"th", "th"},
+		{"id", "id"},
+		{"ml", "ml"},
+		{"hi-in", "hi_in"},
+		{"vi-vn", "vi_vn"},
+		// Only codes with no exact, base, or regional match fall back to English.
+		// Use reserved/unassigned codes so this stays correct as the dataset grows.
+		{"zz", "en"},
+		{"qaa-x", "en"},
 		// Trimming and casing.
 		{"  FI  ", "fi"},
 		{"EN-UK", "en_uk"},
@@ -139,6 +144,30 @@ func TestResolver_UntranslatedLocale_FallsBackToEnglish_Embedded(t *testing.T) {
 	}
 }
 
+func TestResolver_EnglishLocale_PreseedsUntranslatedAsMiss_Embedded(t *testing.T) {
+	t.Parallel()
+
+	// A few species (some bats) exist in the dataset with no English translation.
+	// When the active locale resolves to English, such working-set species are
+	// pre-seeded as known misses at Rebuild so they skip the slow path entirely.
+	const sci = "Eptesicus nilssonii"
+	_, hasEn := Lookup(sci, "en")
+	require.False(t, hasEn,
+		"test premise: %q must have no English translation; pick another English-missing species if upstream added one", sci)
+
+	r := NewResolver()
+	require.NoError(t, r.Rebuild([]string{sci}, "en")) // active locale resolves to English
+	assert.Equal(t, "en", r.Locale())
+
+	st := r.cur.Load()
+	require.NotNil(t, st)
+	cached, ok := st.cache.Load(normalizeName(sci))
+	assert.True(t, ok, "an English-missing working-set species must be pre-seeded as a known miss")
+	assert.Empty(t, cached)
+
+	assert.Empty(t, r.Resolve(sci, ""))
+}
+
 func TestResolver_NonexistentSpecies_ReturnsEmpty_Embedded(t *testing.T) {
 	t.Parallel()
 
@@ -215,9 +244,13 @@ func TestResolver_ConcurrentResolveDuringRebuild_NoRace(t *testing.T) {
 	set := []string{"Turdus merula", "Erithacus rubecula"}
 
 	var wg sync.WaitGroup
+	errCh := make(chan error, 1)
 	wg.Go(func() {
 		for i := range 10 {
-			_ = r.Rebuild(set, locales[i%len(locales)])
+			if err := r.Rebuild(set, locales[i%len(locales)]); err != nil {
+				errCh <- err
+				return
+			}
 		}
 	})
 	for range 4 {
@@ -229,4 +262,8 @@ func TestResolver_ConcurrentResolveDuringRebuild_NoRace(t *testing.T) {
 		})
 	}
 	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err, "concurrent Rebuild must not fail")
+	}
 }

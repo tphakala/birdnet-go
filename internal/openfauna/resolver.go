@@ -128,6 +128,16 @@ func (r *Resolver) Rebuild(scientificNames []string, bngLocale string) error {
 				preseeded++
 			}
 		}
+	} else {
+		// Active locale is English: a working-set species missing from the index has
+		// no English name at all, so pre-seed it as a known miss to keep it off the
+		// slow path as well.
+		for _, sci := range scientificNames {
+			if _, ok := idx.CommonName(sci); !ok {
+				cache.Store(normalizeName(sci), "")
+				preseeded++
+			}
+		}
 	}
 
 	r.cur.Store(&resolverState{index: idx, locale: eff, cache: cache})
@@ -152,15 +162,18 @@ func (r *Resolver) Resolve(scientificName, _ string) string {
 		return ""
 	}
 
-	// Fast path: the sparse working-set index.
+	// Normalize once and reuse the key for the index, cache lookup, and store.
+	key := normalizeName(scientificName)
+
+	// Fast path: the sparse working-set index. Read the (already normalized) map
+	// directly to avoid re-normalizing inside CommonName on every resolve.
 	if st.index != nil {
-		if name, ok := st.index.CommonName(scientificName); ok && name != "" {
+		if name, ok := st.index.names[key]; ok && name != "" {
 			return name
 		}
 	}
 
 	// Slow path: on-demand single-species lookup, memoized (including misses).
-	key := normalizeName(scientificName)
 	if v, ok := st.cache.Load(key); ok {
 		if name, ok := v.(string); ok {
 			return name
