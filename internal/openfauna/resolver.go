@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"golang.org/x/sync/singleflight"
 )
 
 // localeFallback is the ultimate locale used when a requested birdnet-go locale
@@ -60,12 +61,15 @@ func mapLocale(bngLocale string) string {
 
 // resolverState is a snapshot swapped atomically on Rebuild. The index and locale
 // are immutable once published; the cache is a concurrency-safe (sync.Map) memo for
-// the on-demand lookup fallback. Bundling all three behind a single pointer
-// guarantees a locale change replaces them together (and discards the stale cache).
+// the on-demand lookup fallback, and sf coalesces concurrent slow-path lookups for
+// the same species so only one dataset scan runs. Bundling them behind a single
+// pointer guarantees a locale change replaces them together (and discards the stale
+// cache and in-flight group).
 type resolverState struct {
 	index  *Index
-	locale string    // effective openfauna locale code
-	cache  *sync.Map // normalized scientific name -> resolved common name ("" = known miss)
+	locale string             // effective openfauna locale code
+	cache  *sync.Map          // normalized scientific name -> resolved common name ("" = known miss)
+	sf     singleflight.Group // dedupes concurrent slow-path lookups per scientific name
 }
 
 // Resolver resolves scientific names to localized common names from the embedded
@@ -165,8 +169,9 @@ func (r *Resolver) Resolve(scientificName, _ string) string {
 	// Normalize once and reuse the key for the index, cache lookup, and store.
 	key := normalizeName(scientificName)
 
-	// Fast path: the sparse working-set index. Read the (already normalized) map
-	// directly to avoid re-normalizing inside CommonName on every resolve.
+	// Fast path: the sparse working-set index. names is unexported but same-package,
+	// so read it directly with the pre-normalized key to avoid re-normalizing inside
+	// CommonName on every resolve.
 	if st.index != nil {
 		if name, ok := st.index.names[key]; ok && name != "" {
 			return name
@@ -180,15 +185,27 @@ func (r *Resolver) Resolve(scientificName, _ string) string {
 		}
 	}
 
-	name, ok := Lookup(scientificName, st.locale)
-	if !ok && st.locale != localeFallback {
-		// Per-species fallback to English for species untranslated in the active locale.
-		name, ok = Lookup(scientificName, localeFallback)
-	}
-	if !ok {
-		name = ""
-	}
-	st.cache.Store(key, name)
+	// Coalesce concurrent lookups for the same species: Lookup streams the whole
+	// dataset, so a stampede of identical misses would otherwise each scan it.
+	v, _, _ := st.sf.Do(key, func() (any, error) {
+		// Re-check the cache; a prior flight may have populated it while we waited.
+		if cached, ok := st.cache.Load(key); ok {
+			if name, ok := cached.(string); ok {
+				return name, nil
+			}
+		}
+		name, ok := Lookup(scientificName, st.locale)
+		if !ok && st.locale != localeFallback {
+			// Per-species fallback to English for species untranslated in the active locale.
+			name, ok = Lookup(scientificName, localeFallback)
+		}
+		if !ok {
+			name = ""
+		}
+		st.cache.Store(key, name)
+		return name, nil
+	})
+	name, _ := v.(string)
 	return name
 }
 
