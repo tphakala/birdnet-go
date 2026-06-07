@@ -15,6 +15,7 @@ package datastore
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -360,6 +361,19 @@ func (ds *DataStore) UpdateNameMaps(_ []string) {}
 // locale (settings.BirdNET.Locale), not a per-call locale.
 type SpeciesNameResolver interface {
 	Resolve(scientificName, locale string) string
+}
+
+// IsNilResolver reports whether r is nil or a typed-nil pointer. Setters use it so
+// they never store an interface that wraps a nil pointer (which would pass an
+// `!= nil` check yet panic on a non-defensive Resolve implementation).
+func IsNilResolver(r SpeciesNameResolver) bool {
+	if r == nil {
+		return true
+	}
+	if v := reflect.ValueOf(r); v.Kind() == reflect.Pointer && v.IsNil() {
+		return true
+	}
+	return false
 }
 
 // SetNameResolver is a no-op for legacy DataStore (common names stored in DB).

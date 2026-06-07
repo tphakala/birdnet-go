@@ -447,8 +447,15 @@ func (o *Orchestrator) RebuildNameResolver(includedSpecies []string) error {
 		return nil
 	}
 	sciNames := scientificNamesFromLabels(includedSpecies)
-	if len(sciNames) == 0 && o.primary != nil {
-		sciNames = scientificNamesFromLabels(o.Labels())
+	if len(sciNames) == 0 {
+		// Snapshot primary under the read lock so a concurrent Delete (which sets
+		// o.primary = nil) cannot race the Labels() read.
+		o.mu.RLock()
+		primary := o.primary
+		o.mu.RUnlock()
+		if primary != nil {
+			sciNames = scientificNamesFromLabels(primary.Labels())
+		}
 	}
 	locale := o.CurrentSettings().BirdNET.Locale
 	return o.openfauna.Rebuild(sciNames, locale)

@@ -253,7 +253,7 @@ func (c *Controller) UpdateCommonNameMap(labels []string) {
 // SetNameResolver installs the authoritative localized name resolver, shared with
 // the classifier orchestrator. A nil resolver is ignored.
 func (c *Controller) SetNameResolver(r datastore.SpeciesNameResolver) {
-	if r == nil {
+	if datastore.IsNilResolver(r) {
 		return
 	}
 	c.nameResolver.Store(&r)
@@ -273,8 +273,11 @@ func (c *Controller) loadCommonNameMap() map[string]string {
 	return c.loadNameMaps().sciToCommon
 }
 
-// resolveCommonName looks up the common name for a scientific name.
-// Returns the scientific name itself as fallback.
+// resolveCommonName looks up the common name for a scientific name in the cached
+// map. That map is already localized at build time (buildNameMaps applies the
+// OpenFauna resolver override), so this is a plain lookup that returns the
+// scientific name itself as fallback. This differs from the datastore's
+// resolveCommonName method, which consults the live resolver per call.
 func resolveCommonName(nameMap map[string]string, scientificName string) string {
 	if cn, ok := nameMap[scientificName]; ok {
 		return cn

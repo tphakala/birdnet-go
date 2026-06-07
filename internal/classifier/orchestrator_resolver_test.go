@@ -30,14 +30,15 @@ func TestRebuildNameResolver_OpenFaunaOverridesLabel(t *testing.T) {
 	// OpenFauna dataset. Do NOT assert the exact common name (the dataset is
 	// refreshed on main); assert only that OpenFauna's name wins over the label.
 	const sci = "Turdus merula"
-	o := newResolverTestOrchestrator(t, sci+"_WRONG-LABEL-NAME")
+	const wrongLabelName = "WRONG-LABEL-NAME" // single source for the poisoned label + assertion
+	o := newResolverTestOrchestrator(t, sci+"_"+wrongLabelName)
 
 	// Working set is a label string; RebuildNameResolver must extract the scientific part.
-	require.NoError(t, o.RebuildNameResolver([]string{sci + "_WRONG-LABEL-NAME"}))
+	require.NoError(t, o.RebuildNameResolver([]string{sci + "_" + wrongLabelName}))
 
 	got := o.ResolveName(sci, "")
 	assert.NotEmpty(t, got, "OpenFauna should resolve a known species")
-	assert.NotEqual(t, "WRONG-LABEL-NAME", got, "OpenFauna (chain[0]) must override the label resolver")
+	assert.NotEqual(t, wrongLabelName, got, "OpenFauna (chain[0]) must override the label resolver")
 }
 
 func TestRebuildNameResolver_EmptyWorkingSetDoesNotPanic(t *testing.T) {

@@ -374,7 +374,11 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		cm.notifySuccess("Range filter rebuilt successfully")
 	}
 
-	// Rebuild name maps with new locale labels (use fresh settings, not stale pointer)
+	// Rebuild name maps with new locale labels (use fresh settings, not stale pointer).
+	// Order matters: BuildRangeFilter above already rebuilt the OpenFauna resolver for
+	// the new locale, and the resolver was installed on Ds/apiController at startup
+	// (NewControlMonitor), so these calls re-localize the cached maps via the
+	// now-current resolver.
 	labels := cm.bn.Labels()
 	if cm.proc != nil && cm.proc.Ds != nil {
 		cm.proc.Ds.UpdateNameMaps(labels)

@@ -358,7 +358,7 @@ func (ds *Datastore) UpdateNameMaps(labels []string) {
 // the classifier orchestrator. Safe to call concurrently with reads; a nil
 // resolver is ignored.
 func (ds *Datastore) SetNameResolver(r datastore.SpeciesNameResolver) {
-	if r == nil {
+	if datastore.IsNilResolver(r) {
 		return
 	}
 	ds.nameResolver.Store(&r)
