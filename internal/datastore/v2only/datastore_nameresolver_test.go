@@ -4,7 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
 // fakeResolver is a minimal datastore.SpeciesNameResolver for tests.
@@ -25,6 +27,22 @@ func TestResolveCommonName_ResolverOverridesLabelMap(t *testing.T) {
 
 	// Resolver miss on a species not in labels: falls back to the scientific name.
 	assert.Equal(t, "Myotis myotis", ds.resolveCommonName("Myotis myotis"))
+}
+
+func TestResolveCommonName_RealOpenFaunaOverrides(t *testing.T) {
+	// End-to-end: a real OpenFauna resolver over a one-species working set must
+	// override a conflicting label map. Assert behavior (non-empty, != "WRONG"),
+	// not the exact dataset string, so a dataset refresh does not break the test.
+	r := openfauna.NewResolver()
+	require.NoError(t, r.Rebuild([]string{"Turdus merula"}, "en"))
+
+	ds := &Datastore{log: logger.NewConsoleLogger("v2only_test", logger.LogLevelError)}
+	ds.names.Store(buildNameMaps([]string{"Turdus merula_WRONG"}, nil))
+	ds.SetNameResolver(r)
+
+	got := ds.resolveCommonName("Turdus merula")
+	assert.NotEqual(t, "WRONG", got, "OpenFauna must override the label-derived name")
+	assert.NotEmpty(t, got)
 }
 
 func TestBuildNameMaps_ResolverLocalizesReverseMap(t *testing.T) {
