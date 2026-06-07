@@ -392,6 +392,7 @@ func init() {
 	// Core components
 	RegisterComponent("birdnet", "birdnet")
 	RegisterComponent("classifier", "birdnet") // package renamed from birdnet to classifier
+	RegisterComponent("openfauna", "openfauna")
 	RegisterComponent("myaudio", "myaudio")
 	RegisterComponent("ffmpeg-manager", "ffmpeg-manager")
 	RegisterComponent("ffmpeg-stream", "ffmpeg-stream")
