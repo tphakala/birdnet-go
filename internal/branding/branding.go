@@ -42,6 +42,12 @@ var (
 	// projectSupportURL is the user-facing support URL (shown e.g. on the Home
 	// Assistant device page); defaults to the repo URL when empty.
 	projectSupportURL string
+	// projectDiscussionsURL is the community discussions/forum URL; derived from
+	// the repo URL when empty.
+	projectDiscussionsURL string
+	// projectReleasesURL is the release-notes/downloads URL; derived from the
+	// repo URL when empty.
+	projectReleasesURL string
 	// projectCommunityURL is the community chat/forum URL.
 	projectCommunityURL string
 )
@@ -53,18 +59,22 @@ const (
 	defaultRepoURL      = "https://github.com/tphakala/birdnet-go"
 	defaultCommunityURL = "https://discord.gg/gcSCFGUtsd"
 
-	issuesPath   = "issues"
-	newIssuePath = "issues/new"
+	issuesPath      = "issues"
+	newIssuePath    = "issues/new"
+	discussionsPath = "discussions"
+	releasesPath    = "releases"
 )
 
 // Environment variables that override the build-time values at runtime.
 const (
-	envName         = "BIRDNET_GO_PROJECT_NAME"
-	envRepoURL      = "BIRDNET_GO_PROJECT_REPO_URL"
-	envIssuesURL    = "BIRDNET_GO_PROJECT_ISSUES_URL"
-	envNewIssueURL  = "BIRDNET_GO_PROJECT_NEW_ISSUE_URL"
-	envSupportURL   = "BIRDNET_GO_PROJECT_SUPPORT_URL"
-	envCommunityURL = "BIRDNET_GO_PROJECT_COMMUNITY_URL"
+	envName           = "BIRDNET_GO_PROJECT_NAME"
+	envRepoURL        = "BIRDNET_GO_PROJECT_REPO_URL"
+	envIssuesURL      = "BIRDNET_GO_PROJECT_ISSUES_URL"
+	envNewIssueURL    = "BIRDNET_GO_PROJECT_NEW_ISSUE_URL"
+	envSupportURL     = "BIRDNET_GO_PROJECT_SUPPORT_URL"
+	envDiscussionsURL = "BIRDNET_GO_PROJECT_DISCUSSIONS_URL"
+	envReleasesURL    = "BIRDNET_GO_PROJECT_RELEASES_URL"
+	envCommunityURL   = "BIRDNET_GO_PROJECT_COMMUNITY_URL"
 )
 
 // resolve returns the first non-empty candidate among the environment variable
@@ -126,6 +136,18 @@ func NewIssueURL() string {
 // not explicitly configured.
 func SupportURL() string {
 	return sanitizeURL(resolve(envSupportURL, projectSupportURL, RepoURL()))
+}
+
+// DiscussionsURL returns the community discussions URL, derived from RepoURL
+// when not explicitly configured.
+func DiscussionsURL() string {
+	return sanitizeURL(resolve(envDiscussionsURL, projectDiscussionsURL, joinURL(RepoURL(), discussionsPath)))
+}
+
+// ReleasesURL returns the release-notes/downloads URL, derived from RepoURL
+// when not explicitly configured.
+func ReleasesURL() string {
+	return sanitizeURL(resolve(envReleasesURL, projectReleasesURL, joinURL(RepoURL(), releasesPath)))
 }
 
 // CommunityURL returns the community chat/forum URL.

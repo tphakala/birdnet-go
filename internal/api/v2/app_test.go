@@ -191,7 +191,9 @@ func TestGetAppConfig_ProjectLinks(t *testing.T) {
 	// the caller's environment.
 	for _, key := range []string{
 		"BIRDNET_GO_PROJECT_NAME", "BIRDNET_GO_PROJECT_REPO_URL", "BIRDNET_GO_PROJECT_ISSUES_URL",
-		"BIRDNET_GO_PROJECT_NEW_ISSUE_URL", "BIRDNET_GO_PROJECT_SUPPORT_URL", "BIRDNET_GO_PROJECT_COMMUNITY_URL",
+		"BIRDNET_GO_PROJECT_NEW_ISSUE_URL", "BIRDNET_GO_PROJECT_SUPPORT_URL",
+		"BIRDNET_GO_PROJECT_DISCUSSIONS_URL", "BIRDNET_GO_PROJECT_RELEASES_URL",
+		"BIRDNET_GO_PROJECT_COMMUNITY_URL",
 	} {
 		t.Setenv(key, "")
 	}
@@ -222,6 +224,8 @@ func TestGetAppConfig_ProjectLinks(t *testing.T) {
 	assert.Equal(t, branding.IssuesURL(), links.IssuesURL)
 	assert.Equal(t, branding.NewIssueURL(), links.NewIssueURL)
 	assert.Equal(t, branding.SupportURL(), links.SupportURL)
+	assert.Equal(t, branding.DiscussionsURL(), links.DiscussionsURL)
+	assert.Equal(t, branding.ReleasesURL(), links.ReleasesURL)
 	assert.Equal(t, branding.CommunityURL(), links.CommunityURL)
 }
 
@@ -947,12 +951,14 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 	projectLinks, ok := projectLinksRaw.(map[string]any)
 	require.True(t, ok, "projectLinks should be a map")
 	expectedProjectLinkKeys := map[string]bool{
-		"name":         true,
-		"repoUrl":      true,
-		"issuesUrl":    true,
-		"newIssueUrl":  true,
-		"supportUrl":   true,
-		"communityUrl": true,
+		"name":           true,
+		"repoUrl":        true,
+		"issuesUrl":      true,
+		"newIssueUrl":    true,
+		"supportUrl":     true,
+		"discussionsUrl": true,
+		"releasesUrl":    true,
+		"communityUrl":   true,
 	}
 
 	for key := range projectLinks {

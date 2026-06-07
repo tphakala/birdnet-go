@@ -6,7 +6,7 @@
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
-  import { GITHUB_ISSUES_URL } from '$lib/utils/externalUrls';
+  import { appState } from '$lib/stores/appState.svelte';
 
   interface HealthResponse {
     version?: string;
@@ -244,7 +244,7 @@
     </p>
 
     <a
-      href={GITHUB_ISSUES_URL}
+      href={appState.projectLinks.newIssueUrl}
       target="_blank"
       rel="noopener noreferrer"
       class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:bg-[var(--color-primary-hover)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2"
