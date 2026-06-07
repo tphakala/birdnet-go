@@ -213,6 +213,15 @@ func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
 	}
 }
 
+// normalizeName canonicalizes a scientific name for case-insensitive matching.
+// The dataset stores canonical binomials, but callers (model labels, the
+// datastore, search input) may supply varying case or surrounding whitespace, so
+// index keys and lookup queries are trimmed and lowercased consistently. This
+// matches the convention of the project's other species name resolvers.
+func normalizeName(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
 // BuildIndex streams the embedded dataset once and returns a sparse Index holding
 // only the requested scientific names, with common names for the given locale and
 // metadata for those species. Names not present in the dataset are simply absent.
@@ -222,7 +231,7 @@ func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
 func BuildIndex(scientificNames []string, locale string) (*Index, error) {
 	want := make(map[string]struct{}, len(scientificNames))
 	for _, n := range scientificNames {
-		want[strings.TrimSpace(n)] = struct{}{}
+		want[normalizeName(n)] = struct{}{}
 	}
 	ix := &Index{
 		locale: locale,
@@ -237,8 +246,9 @@ func BuildIndex(scientificNames []string, locale string) (*Index, error) {
 		if loc != locale {
 			return nil
 		}
-		if _, ok := want[sci]; ok {
-			ix.names[sci] = common
+		key := normalizeName(sci)
+		if _, ok := want[key]; ok {
+			ix.names[key] = common
 		}
 		return nil
 	}); err != nil {
@@ -250,8 +260,9 @@ func BuildIndex(scientificNames []string, locale string) (*Index, error) {
 	}
 
 	if err := streamMetadata(func(sci string, m Meta) error {
-		if _, ok := want[sci]; ok {
-			ix.meta[sci] = m
+		key := normalizeName(sci)
+		if _, ok := want[key]; ok {
+			ix.meta[key] = m
 		}
 		return nil
 	}); err != nil {
@@ -279,7 +290,7 @@ func (ix *Index) CommonName(scientific string) (string, bool) {
 	if ix == nil {
 		return "", false
 	}
-	v, ok := ix.names[strings.TrimSpace(scientific)]
+	v, ok := ix.names[normalizeName(scientific)]
 	return v, ok
 }
 
@@ -289,7 +300,7 @@ func (ix *Index) Meta(scientific string) (Meta, bool) {
 	if ix == nil {
 		return Meta{}, false
 	}
-	v, ok := ix.meta[strings.TrimSpace(scientific)]
+	v, ok := ix.meta[normalizeName(scientific)]
 	return v, ok
 }
 
@@ -311,11 +322,11 @@ var errStop = errors.NewStd("openfauna: stop iteration")
 // occasional species outside a pre-built Index (for example a historic detection
 // of an out-of-range species); callers should cache the result.
 func Lookup(scientific, locale string) (string, bool) {
-	target := strings.TrimSpace(scientific)
+	target := normalizeName(scientific)
 	var found string
 	var ok bool
 	if err := streamTranslations(func(sci, loc, common string) error {
-		if loc == locale && sci == target {
+		if loc == locale && normalizeName(sci) == target {
 			found, ok = common, true
 			return errStop
 		}
@@ -339,11 +350,11 @@ func Lookup(scientific, locale string) (string, bool) {
 // LookupMeta returns taxonomy/link metadata for one scientific name by scanning
 // the embedded dataset. Same performance caveat as Lookup.
 func LookupMeta(scientific string) (Meta, bool) {
-	target := strings.TrimSpace(scientific)
+	target := normalizeName(scientific)
 	var found Meta
 	var ok bool
 	if err := streamMetadata(func(sci string, m Meta) error {
-		if sci == target {
+		if normalizeName(sci) == target {
 			found, ok = m, true
 			return errStop
 		}

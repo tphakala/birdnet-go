@@ -75,6 +75,34 @@ func TestBuildIndex_AttachesMetadata_Embedded(t *testing.T) {
 	assert.Contains(t, m.INaturalistURL, "inaturalist", "iNaturalist column must map to INaturalistURL")
 }
 
+func TestBuildIndex_CaseInsensitiveMatching_Embedded(t *testing.T) {
+	t.Parallel()
+
+	// Callers may supply varying case/whitespace; matching is case-insensitive.
+	ix, err := BuildIndex([]string{"  TURDUS MERULA  "}, "fi")
+	require.NoError(t, err)
+
+	name, ok := ix.CommonName("turdus merula")
+	require.True(t, ok, "a case/space-varying index entry and query must still resolve")
+	assert.NotEmpty(t, name)
+
+	m, ok := ix.Meta("Turdus Merula")
+	require.True(t, ok, "metadata lookup is case-insensitive too")
+	assert.NotEmpty(t, m.Family)
+}
+
+func TestLookup_CaseInsensitive_Embedded(t *testing.T) {
+	t.Parallel()
+
+	name, ok := Lookup("  turdus MERULA  ", "fi")
+	require.True(t, ok, "Lookup must match case-insensitively and trim whitespace")
+	assert.NotEmpty(t, name)
+
+	m, ok := LookupMeta("TURDUS MERULA")
+	require.True(t, ok, "LookupMeta must match case-insensitively")
+	assert.NotEmpty(t, m.Family)
+}
+
 func TestLookup_SingleSpecies_Embedded(t *testing.T) {
 	t.Parallel()
 
