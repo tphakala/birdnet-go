@@ -1,4 +1,7 @@
-// testing.go provides BirdWeather connection and functionality testing capabilities
+// connection_probe.go implements the BirdWeather "Test Connection" feature exposed in
+// the Settings UI: it probes API connectivity, authentication, soundscape upload, and
+// detection posting. This is production code, not Go test helpers (the file is
+// deliberately not named *_test.go so it is included in normal builds).
 package birdweather
 
 import (
