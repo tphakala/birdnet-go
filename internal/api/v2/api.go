@@ -138,6 +138,9 @@ type Controller struct {
 	// Insights fields (initialized lazily in initInsightsRoutes)
 	insightsRepo repository.InsightsRepository
 	nameMaps     atomic.Value // stores *nameMaps; see internal/api/v2/insights.go
+	// nameResolver is the authoritative localized name source shared with the
+	// classifier orchestrator. Overrides label-derived names in the cached maps.
+	nameResolver atomic.Pointer[datastore.SpeciesNameResolver]
 
 	// Model gallery fields
 	ModelManager *classifier.ModelManager
