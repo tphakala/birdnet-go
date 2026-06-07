@@ -30,3 +30,18 @@ func TestBuildNameMaps_NilResolverKeepsLabel(t *testing.T) {
 	nm := buildNameMaps([]string{"Turdus merula_LabelName"}, nil)
 	assert.Equal(t, "LabelName", nm.sciToCommon["Turdus merula"])
 }
+
+func TestBuildNameMaps_ScientificOnlyLabelSearchable(t *testing.T) {
+	// A scientific-only label (no "_", e.g. Perch v2 / bat labels) has no embedded
+	// common name; when the resolver provides one, the species must become
+	// searchable by it (forward + reverse maps populated).
+	nm := buildNameMaps([]string{"Myotis myotis"},
+		fakeResolver{m: map[string]string{"Myotis myotis": "Greater Mouse-eared Bat"}})
+	assert.Equal(t, "Greater Mouse-eared Bat", nm.sciToCommon["Myotis myotis"])
+	assert.Equal(t, "Myotis myotis", nm.commonToSci[normalizeForLookup("Greater Mouse-eared Bat")])
+
+	// Without a resolver, a scientific-only label has no common name and is skipped.
+	bare := buildNameMaps([]string{"Myotis myotis"}, nil)
+	_, ok := bare.sciToCommon["Myotis myotis"]
+	assert.False(t, ok)
+}

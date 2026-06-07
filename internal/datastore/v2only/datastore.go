@@ -330,26 +330,36 @@ func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nam
 	// also rejects typed-nil interfaces, consistent with SetNameResolver.
 	useResolver := !datastore.IsNilResolver(resolver)
 	for _, label := range labels {
-		if scientificName, commonName, found := strings.Cut(label, "_"); found {
-			scientificName = strings.TrimSpace(scientificName)
-			commonName = strings.TrimSpace(commonName)
-			// Use the in-memory-only resolve here: buildNameMaps runs over the full
-			// model label set, so calling the slow-path Resolve for every
-			// out-of-working-set species would drive thousands of dataset scans on
-			// each rebuild. Out-of-working-set species keep their label name in the
-			// (reverse search) maps; live resolveCommonName still resolves them
-			// on-demand for display.
-			if useResolver && scientificName != "" {
-				if r, ok := resolver.ResolveLocal(scientificName); ok {
-					commonName = r
-				}
-			}
-			if commonName != "" && scientificName != "" {
-				speciesMap[strings.ToLower(commonName)] = scientificName
-				commonMap[scientificName] = commonName
-				commonFoldedMap[scientificName] = strings.ToLower(norm.NFC.String(commonName))
+		// "Scientific_Common" splits into both names; a scientific-only label (no
+		// separator, e.g. Perch v2 / bat labels) has no embedded common name, so
+		// treat the whole label as the scientific name and rely on the resolver to
+		// make it searchable.
+		scientificName, commonName, found := strings.Cut(label, "_")
+		if !found {
+			scientificName, commonName = label, ""
+		}
+		scientificName = strings.TrimSpace(scientificName)
+		commonName = strings.TrimSpace(commonName)
+		if scientificName == "" {
+			continue
+		}
+		// Use the in-memory-only resolve here: buildNameMaps runs over the full
+		// model label set, so calling the slow-path Resolve for every
+		// out-of-working-set species would drive thousands of dataset scans on each
+		// rebuild. Out-of-working-set species keep their label name in the (reverse
+		// search) maps; live resolveCommonName still resolves them on-demand for
+		// display.
+		if useResolver {
+			if r, ok := resolver.ResolveLocal(scientificName); ok {
+				commonName = r
 			}
 		}
+		if commonName == "" {
+			continue
+		}
+		speciesMap[strings.ToLower(commonName)] = scientificName
+		commonMap[scientificName] = commonName
+		commonFoldedMap[scientificName] = strings.ToLower(norm.NFC.String(commonName))
 	}
 	return &nameMaps{common: commonMap, commonFolded: commonFoldedMap, species: speciesMap}
 }

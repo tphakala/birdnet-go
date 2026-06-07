@@ -191,9 +191,12 @@ func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nam
 	// also rejects typed-nil interfaces, consistent with SetNameResolver.
 	useResolver := !datastore.IsNilResolver(resolver)
 	for _, label := range labels {
+		// A scientific-only label (no separator, e.g. Perch v2 / bat labels) has no
+		// embedded common name; treat the whole label as the scientific name and let
+		// the resolver supply a searchable common name below.
 		scientificName, commonName, found := strings.Cut(label, "_")
 		if !found {
-			continue
+			scientificName, commonName = label, ""
 		}
 		scientificName = strings.TrimSpace(scientificName)
 		commonName = strings.TrimSpace(commonName)
