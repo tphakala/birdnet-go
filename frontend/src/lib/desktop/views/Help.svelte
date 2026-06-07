@@ -11,12 +11,8 @@
   import GithubIcon from '$lib/desktop/components/ui/GithubIcon.svelte';
   import { t } from '$lib/i18n';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import {
-    GITHUB_REPO_URL,
-    GITHUB_DISCUSSIONS_URL,
-    GITHUB_RELEASES_URL,
-    LICENSE_URL,
-  } from '$lib/utils/externalUrls';
+  import { appState } from '$lib/stores/appState.svelte';
+  import { LICENSE_URL } from '$lib/utils/externalUrls';
 </script>
 
 <div class="col-span-12 space-y-4">
@@ -62,7 +58,7 @@
 
     <div class="mt-4">
       <a
-        href={GITHUB_DISCUSSIONS_URL}
+        href={appState.projectLinks.discussionsUrl}
         target="_blank"
         rel="noopener noreferrer"
         class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:bg-[var(--color-primary-hover)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2"
@@ -79,7 +75,7 @@
   <Card title={t('help.quickLinks.title')} className="bg-[var(--color-base-100)] shadow-sm">
     <div class="space-y-3">
       <a
-        href={GITHUB_REPO_URL}
+        href={appState.projectLinks.repoUrl}
         target="_blank"
         rel="noopener noreferrer"
         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 hover:bg-[var(--color-base-200)]"
@@ -90,7 +86,7 @@
         <ExternalLink class="size-3.5 text-[var(--color-base-content)]/40" />
       </a>
       <a
-        href={GITHUB_RELEASES_URL}
+        href={appState.projectLinks.releasesUrl}
         target="_blank"
         rel="noopener noreferrer"
         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 hover:bg-[var(--color-base-200)]"

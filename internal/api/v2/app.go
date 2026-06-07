@@ -58,12 +58,14 @@ type SentryFrontendConfig struct {
 // to the frontend so in-app links follow the branding package rather than
 // hardcoded upstream URLs. It is always populated (not gated on telemetry).
 type ProjectLinksConfig struct {
-	Name         string `json:"name"`
-	RepoURL      string `json:"repoUrl"`
-	IssuesURL    string `json:"issuesUrl"`
-	NewIssueURL  string `json:"newIssueUrl"`
-	SupportURL   string `json:"supportUrl"`
-	CommunityURL string `json:"communityUrl"`
+	Name           string `json:"name"`
+	RepoURL        string `json:"repoUrl"`
+	IssuesURL      string `json:"issuesUrl"`
+	NewIssueURL    string `json:"newIssueUrl"`
+	SupportURL     string `json:"supportUrl"`
+	DiscussionsURL string `json:"discussionsUrl"`
+	ReleasesURL    string `json:"releasesUrl"`
+	CommunityURL   string `json:"communityUrl"`
 }
 
 // SecurityConfigDTO represents the security configuration for the frontend.
@@ -199,12 +201,14 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 		// Project identity/links are always served (independent of telemetry) so
 		// in-app links follow the configured branding instead of hardcoded URLs.
 		ProjectLinks: ProjectLinksConfig{
-			Name:         branding.Name(),
-			RepoURL:      branding.RepoURL(),
-			IssuesURL:    branding.IssuesURL(),
-			NewIssueURL:  branding.NewIssueURL(),
-			SupportURL:   branding.SupportURL(),
-			CommunityURL: branding.CommunityURL(),
+			Name:           branding.Name(),
+			RepoURL:        branding.RepoURL(),
+			IssuesURL:      branding.IssuesURL(),
+			NewIssueURL:    branding.NewIssueURL(),
+			SupportURL:     branding.SupportURL(),
+			DiscussionsURL: branding.DiscussionsURL(),
+			ReleasesURL:    branding.ReleasesURL(),
+			CommunityURL:   branding.CommunityURL(),
 		},
 	}
 

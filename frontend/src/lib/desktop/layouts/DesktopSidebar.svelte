@@ -80,8 +80,7 @@ Performance Optimizations:
   import { t } from '$lib/i18n';
   import CollapsibleNavSection from './CollapsibleNavSection.svelte';
   import type { NavItem } from './CollapsibleNavSection.svelte';
-  import { GITHUB_REPO_URL, GITHUB_DISCUSSIONS_URL } from '$lib/utils/externalUrls';
-  import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
+  import { appState, hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { resetDateToToday } from '$lib/utils/datePersistence';
   import { getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
   import LoginModal from '../components/modals/LoginModal.svelte';
@@ -307,7 +306,7 @@ Performance Optimizations:
       type: 'link',
       icon: MessageCircleQuestion,
       label: t('navigation.askQuestion'),
-      href: GITHUB_DISCUSSIONS_URL,
+      href: appState.projectLinks.discussionsUrl,
       ariaLabel: t('navigation.askQuestionAriaLabel'),
       trailingIcon: ExternalLink,
     },
@@ -724,7 +723,7 @@ Performance Optimizations:
       {#if !isCollapsed}
         <div class="mt-3 text-center">
           <a
-            href={GITHUB_REPO_URL}
+            href={appState.projectLinks.repoUrl}
             target="_blank"
             rel="noopener noreferrer"
             class="text-xs text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)]/80 transition-colors duration-150"
