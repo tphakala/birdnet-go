@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -50,6 +51,11 @@ type Orchestrator struct {
 
 	// Name resolution chain. Resolvers are tried in order; first non-empty wins.
 	nameResolvers []NameResolver
+
+	// openfauna is the authoritative species-name resolver (chain[0]). Held as a
+	// typed handle so refresh triggers can Rebuild its sparse index on
+	// range-filter/model/locale change. Always also present in nameResolvers.
+	openfauna *openfauna.Resolver
 
 	// Model management.
 	// NOTE: models map is keyed by ModelInfo.ID at construction time. If ReloadModel
@@ -109,6 +115,7 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	}
 
 	resolver := NewBirdNETLabelResolver(bn.Labels())
+	ofResolver := openfauna.NewResolver()
 
 	o := &Orchestrator{
 		Settings:        settings,
@@ -116,7 +123,10 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		TaxonomyMap:     bn.TaxonomyMap,
 		TaxonomyPath:    bn.TaxonomyPath,
 		ScientificIndex: bn.ScientificIndex,
-		nameResolvers:   []NameResolver{resolver},
+		// OpenFauna first so it overrides label/taxonomy names everywhere
+		// ResolveName is consulted (display + inference).
+		nameResolvers: []NameResolver{ofResolver, resolver},
+		openfauna:     ofResolver,
 		models: map[string]*modelEntry{
 			bn.ModelInfo.ID: {instance: bn},
 		},
@@ -418,6 +428,45 @@ func (o *Orchestrator) ResolveName(scientificName, locale string) string {
 	return ""
 }
 
+// OpenFaunaResolver returns the orchestrator's authoritative name resolver so
+// display surfaces that cannot import the classifier package (the datastore) and
+// the api/v2 controller can share the same instance. Never nil after construction.
+func (o *Orchestrator) OpenFaunaResolver() *openfauna.Resolver {
+	return o.openfauna
+}
+
+// RebuildNameResolver rebuilds the OpenFauna sparse index for the given working
+// set (range-filtered label strings) at the active BirdNET.Locale. Label strings
+// in "Scientific_Common" form are reduced to their scientific name; an empty
+// working set falls back to all model labels so a disabled range filter still
+// pre-indexes the current model's species. Out-of-working-set (historic) species
+// still resolve via the resolver's on-demand Lookup, so the working set is a
+// performance optimization, not a correctness boundary.
+func (o *Orchestrator) RebuildNameResolver(includedSpecies []string) error {
+	if o == nil || o.openfauna == nil {
+		return nil
+	}
+	sciNames := scientificNamesFromLabels(includedSpecies)
+	if len(sciNames) == 0 && o.primary != nil {
+		sciNames = scientificNamesFromLabels(o.Labels())
+	}
+	locale := o.CurrentSettings().BirdNET.Locale
+	return o.openfauna.Rebuild(sciNames, locale)
+}
+
+// scientificNamesFromLabels extracts the scientific-name portion of each
+// "Scientific_Common" label (Perch labels are scientific-only and pass through).
+func scientificNamesFromLabels(labels []string) []string {
+	out := make([]string, 0, len(labels))
+	for _, label := range labels {
+		sci, _ := SplitSpeciesName(label)
+		if sci != "" {
+			out = append(out, sci)
+		}
+	}
+	return out
+}
+
 // GetProbableSpecies returns species scores from the range filter.
 func (o *Orchestrator) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
 	return o.primary.GetProbableSpecies(date, week)
@@ -599,20 +648,27 @@ func (o *Orchestrator) GetSpeciesNameFromCode(code string) (string, bool) {
 }
 
 // GetSpeciesWithScientificAndCommonName returns the scientific and common name for a label.
+// OpenFauna (chain[0]) is authoritative: its localized name overrides the
+// primary's label-derived common name whenever the resolver chain has one.
 func (o *Orchestrator) GetSpeciesWithScientificAndCommonName(label string) (scientific, common string) {
-	return o.primary.GetSpeciesWithScientificAndCommonName(label)
+	scientific, common = o.primary.GetSpeciesWithScientificAndCommonName(label)
+	if scientific != "" {
+		if resolved := o.ResolveName(scientific, ""); resolved != "" {
+			common = resolved
+		}
+	}
+	return scientific, common
 }
 
 // EnrichResultWithTaxonomy adds taxonomy information to a detection result.
-// If the primary model cannot resolve a common name (e.g., Perch labels
-// contain only scientific names), the name resolver chain is consulted
-// to find a common name (BirdNET labels, then taxonomy.csv).
+// OpenFauna (chain[0]) is authoritative: the resolver chain overrides the
+// label-derived common name whenever it has a name, even if the primary already
+// produced one. This localizes names and fixes scientific-only/bat labels. Only
+// the primary's name is kept when the chain returns nothing.
 func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific, common, code string) {
 	scientific, common, code = o.primary.EnrichResultWithTaxonomy(speciesLabel)
 
-	// Perch v2 labels are scientific-name-only. Try the resolver chain
-	// to look up a common name.
-	if common == "" && scientific != "" {
+	if scientific != "" {
 		if resolved := o.ResolveName(scientific, ""); resolved != "" {
 			common = resolved
 		}
