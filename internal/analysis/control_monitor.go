@@ -113,6 +113,25 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 		reconfigureMonitoringFn: reconfigureMonitoringFn,
 	}
 
+	// Share the orchestrator's authoritative OpenFauna name resolver with the
+	// display surfaces, then re-localize the cached name maps now that the resolver
+	// has been built (startup BuildRangeFilter already ran). Forward display reads
+	// the live resolver regardless of map state; only the reverse (search) maps
+	// depend on this re-localize. Locale changes later re-localize via
+	// handleReloadBirdnet (BuildRangeFilter runs before UpdateNameMaps there).
+	if cm.bn != nil {
+		resolver := cm.bn.OpenFaunaResolver()
+		labels := cm.bn.Labels()
+		if cm.proc != nil && cm.proc.Ds != nil {
+			cm.proc.Ds.SetNameResolver(resolver)
+			cm.proc.Ds.UpdateNameMaps(labels)
+		}
+		if cm.apiController != nil {
+			cm.apiController.SetNameResolver(resolver)
+			cm.apiController.UpdateCommonNameMap(labels)
+		}
+	}
+
 	// Initialize the sound level manager but don't start it yet
 	// It will be started by handleReconfigureSoundLevel based on settings
 	return cm
