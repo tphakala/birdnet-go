@@ -2152,13 +2152,13 @@
         },
         "githubRequired": {
           "title": "Påkrevd: GitHub-sak for supportopplastinger",
-          "description": "<strong>Supportopplastinger krever et GitHub-saksnummer.</strong> Vennligst <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">opprett en GitHub-sak</a> som beskriver problemet ditt <strong>før</strong> du genererer en supportrapport. Uten en koblet sak kan ikke utviklere handle på supportdataene dine.",
+          "description": "<strong>Supportopplastinger krever et GitHub-saksnummer.</strong> Vennligst {createIssueLink} som beskriver problemet ditt <strong>før</strong> du genererer en supportrapport. Uten en koblet sak kan ikke utviklere handle på supportdataene dine.",
           "createGithubIssue": "opprett en GitHub-sak"
         },
         "githubIssue": {
           "label": "GitHub-saksnummer",
           "placeholder": "f.eks. 123 eller #123",
-          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Se eksisterende saker</a> eller <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">opprett en ny sak</a> først",
+          "helper": "{viewIssuesLink} eller {createIssueLink} først",
           "viewExistingIssues": "Vis eksisterende saker",
           "createNewIssue": "opprett en ny sak"
         },
