@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -176,7 +177,11 @@ func normalizeForLookup(s string) string {
 // them to an arbitrary species based on label order would silently hide
 // valid matches. sciToCommon is not affected because scientific names are
 // unique per label.
-func buildNameMaps(labels []string) *nameMaps {
+// When resolver is non-nil, each label's common name is overridden by the
+// resolver (authoritative/localized), so insights display (sciToCommon) and
+// search (commonToSci) both reflect the localized name. Labels the resolver does
+// not cover keep their embedded common name.
+func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nameMaps {
 	nm := &nameMaps{
 		sciToCommon: make(map[string]string, len(labels)),
 		commonToSci: make(map[string]string, len(labels)),
@@ -189,7 +194,15 @@ func buildNameMaps(labels []string) *nameMaps {
 		}
 		scientificName = strings.TrimSpace(scientificName)
 		commonName = strings.TrimSpace(commonName)
-		if scientificName == "" || commonName == "" {
+		if scientificName == "" {
+			continue
+		}
+		if resolver != nil {
+			if r := resolver.Resolve(scientificName, ""); r != "" {
+				commonName = r
+			}
+		}
+		if commonName == "" {
 			continue
 		}
 		nm.sciToCommon[scientificName] = commonName
@@ -234,7 +247,24 @@ func (c *Controller) loadCommonToScientificMap() map[string]string {
 // UpdateCommonNameMap rebuilds both cached name maps from updated BirdNET labels.
 // Called after locale or model changes to keep insights and search endpoints current.
 func (c *Controller) UpdateCommonNameMap(labels []string) {
-	c.nameMaps.Store(buildNameMaps(labels))
+	c.nameMaps.Store(buildNameMaps(labels, c.loadNameResolver()))
+}
+
+// SetNameResolver installs the authoritative localized name resolver, shared with
+// the classifier orchestrator. A nil resolver is ignored.
+func (c *Controller) SetNameResolver(r datastore.SpeciesNameResolver) {
+	if r == nil {
+		return
+	}
+	c.nameResolver.Store(&r)
+}
+
+// loadNameResolver returns the installed resolver, or nil if none has been set.
+func (c *Controller) loadNameResolver() datastore.SpeciesNameResolver {
+	if p := c.nameResolver.Load(); p != nil {
+		return *p
+	}
+	return nil
 }
 
 // loadCommonNameMap returns the current scientific-to-common lookup map.
