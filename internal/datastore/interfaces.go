@@ -231,6 +231,9 @@ type Interface interface {
 	// UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
 	// Called after locale or model changes. No-op for legacy datastores.
 	UpdateNameMaps(labels []string)
+	// SetNameResolver installs the authoritative localized species-name resolver
+	// shared with the classifier orchestrator. No-op for legacy datastores.
+	SetNameResolver(resolver SpeciesNameResolver)
 
 	// Application event log (v2 only; legacy stores return nil/empty)
 	SaveAppEvent(ctx context.Context, category, eventType, message string, metadata map[string]any) error
@@ -350,6 +353,17 @@ func (ds *DataStore) GetDBCounters() *dbstats.Counters {
 
 // UpdateNameMaps is a no-op for legacy DataStore (common names stored directly in DB).
 func (ds *DataStore) UpdateNameMaps(_ []string) {}
+
+// SpeciesNameResolver resolves a scientific name to a localized common name,
+// returning "" when unknown. Satisfied by *openfauna.Resolver. The locale argument
+// is accepted for interface symmetry; resolvers are built for the active species
+// locale (settings.BirdNET.Locale), not a per-call locale.
+type SpeciesNameResolver interface {
+	Resolve(scientificName, locale string) string
+}
+
+// SetNameResolver is a no-op for legacy DataStore (common names stored in DB).
+func (ds *DataStore) SetNameResolver(_ SpeciesNameResolver) {}
 
 // SetSunCalcMetrics sets the metrics instance for the SunCalc service
 func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {

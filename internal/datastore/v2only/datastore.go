@@ -145,6 +145,11 @@ type Datastore struct {
 	// for lock-free reads and atomic swaps when locale changes.
 	names atomic.Pointer[nameMaps]
 
+	// nameResolver, when set, is the authoritative localized name source shared
+	// with the classifier orchestrator. It overrides the label-derived maps and
+	// resolves historic out-of-working-set species via on-demand lookup.
+	nameResolver atomic.Pointer[datastore.SpeciesNameResolver]
+
 	// speciesCodeMap provides O(1) lookup from scientific name to eBird species code.
 	// Populated from the eBird taxonomy data passed via Config.SpeciesCodeMap.
 	speciesCodeMap map[string]string
@@ -267,8 +272,10 @@ func New(cfg *Config) (*Datastore, error) {
 		tz = time.Local
 	}
 
-	// Build species name maps from labels.
-	nm := buildNameMaps(cfg.Labels)
+	// Build species name maps from labels. The OpenFauna resolver is injected
+	// later via SetNameResolver (it is owned by the orchestrator, constructed
+	// separately), so the maps are localized on the first post-wiring rebuild.
+	nm := buildNameMaps(cfg.Labels, nil)
 
 	// Use species code map from taxonomy data (injected via config).
 	speciesCodeMap := cfg.SpeciesCodeMap
@@ -311,7 +318,11 @@ func New(cfg *Config) (*Datastore, error) {
 // buildNameMaps parses BirdNET labels ("ScientificName_CommonName" format)
 // into lookup maps for common name resolution.
 // See issue #1907 for context on species map usage.
-func buildNameMaps(labels []string) *nameMaps {
+// When resolver is non-nil, each label's common name is overridden by the
+// resolver (authoritative/localized); labels the resolver does not cover keep
+// their embedded common name. This keeps the reverse (search) maps consistent
+// with what resolveCommonName displays.
+func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nameMaps {
 	speciesMap := make(map[string]string, len(labels))
 	commonMap := make(map[string]string, len(labels))
 	commonFoldedMap := make(map[string]string, len(labels))
@@ -319,6 +330,11 @@ func buildNameMaps(labels []string) *nameMaps {
 		if scientificName, commonName, found := strings.Cut(label, "_"); found {
 			scientificName = strings.TrimSpace(scientificName)
 			commonName = strings.TrimSpace(commonName)
+			if resolver != nil && scientificName != "" {
+				if r := resolver.Resolve(scientificName, ""); r != "" {
+					commonName = r
+				}
+			}
 			if commonName != "" && scientificName != "" {
 				speciesMap[strings.ToLower(commonName)] = scientificName
 				commonMap[scientificName] = commonName
@@ -334,8 +350,26 @@ func buildNameMaps(labels []string) *nameMaps {
 // The new maps are built first, then atomically swapped in — readers are never blocked.
 // Also resets the missing-name warning deduplication so new mismatches are logged.
 func (ds *Datastore) UpdateNameMaps(labels []string) {
-	ds.names.Store(buildNameMaps(labels))
+	ds.names.Store(buildNameMaps(labels, ds.loadNameResolver()))
 	ds.loggedMissingNames.Clear()
+}
+
+// SetNameResolver installs the authoritative localized name resolver, shared with
+// the classifier orchestrator. Safe to call concurrently with reads; a nil
+// resolver is ignored.
+func (ds *Datastore) SetNameResolver(r datastore.SpeciesNameResolver) {
+	if r == nil {
+		return
+	}
+	ds.nameResolver.Store(&r)
+}
+
+// loadNameResolver returns the installed resolver, or nil if none has been set.
+func (ds *Datastore) loadNameResolver() datastore.SpeciesNameResolver {
+	if p := ds.nameResolver.Load(); p != nil {
+		return *p
+	}
+	return nil
 }
 
 // Open is a no-op since the manager is already open.
@@ -2804,6 +2838,13 @@ func thresholdModelName(t *entities.DynamicThreshold) string {
 // the benign fallback on the diagnostics health check.
 func (ds *Datastore) resolveCommonName(scientificName string) string {
 	sciName := detection.ExtractScientificName(scientificName)
+	// OpenFauna is authoritative: override label-derived names, serve localized
+	// names, and resolve historic out-of-working-set species via on-demand lookup.
+	if r := ds.loadNameResolver(); r != nil {
+		if name := r.Resolve(sciName, ""); name != "" {
+			return name
+		}
+	}
 	nm := ds.loadNameMaps()
 	if cn, ok := nm.common[sciName]; ok {
 		return cn
