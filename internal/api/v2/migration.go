@@ -452,7 +452,7 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 	}
 
 	// Send notification that migration has started
-	if notifService := notification.GetService(); notifService != nil {
+	if notifService := c.getNotificationService(); notifService != nil {
 		// Build notification fully before broadcast to ensure SSE subscribers see translation keys
 		notif := notification.NewNotification(
 			notification.TypeSystem,
@@ -643,7 +643,7 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 	}
 
 	// Send notification that migration was cancelled
-	if notifService := notification.GetService(); notifService != nil {
+	if notifService := c.getNotificationService(); notifService != nil {
 		// Build notification fully before broadcast to ensure SSE subscribers see translation keys
 		notif := notification.NewNotification(
 			notification.TypeSystem,
@@ -772,7 +772,7 @@ func (c *Controller) executeMigrationAction(ctx echo.Context, params *migrationA
 
 	// Send notification if configured
 	if params.notificationTitle != "" {
-		if notifService := notification.GetService(); notifService != nil {
+		if notifService := c.getNotificationService(); notifService != nil {
 			// Build notification fully before broadcast to ensure SSE subscribers see translation keys
 			notif := notification.NewNotification(
 				notification.TypeSystem,

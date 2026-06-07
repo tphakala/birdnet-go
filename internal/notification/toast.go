@@ -149,6 +149,34 @@ func (t *Toast) ToNotification() *Notification {
 	return notif
 }
 
+// SendToast builds a toast notification and persists/broadcasts it through this
+// service instance. It is the instance-bound equivalent of the package-level
+// SendToast helper, usable with an explicitly injected service (e.g. in tests
+// or via dependency injection) instead of the process-global singleton.
+func (s *Service) SendToast(message string, toastType ToastType, component string) error {
+	toast := NewToast(message, toastType).WithComponent(component)
+	return s.CreateWithMetadata(toast.ToNotification())
+}
+
+// SendToastWithDuration builds a toast with a specific display duration and
+// persists/broadcasts it through this service instance.
+func (s *Service) SendToastWithDuration(message string, toastType ToastType, component string, duration int) error {
+	toast := NewToast(message, toastType).
+		WithComponent(component).
+		WithDuration(duration)
+	return s.CreateWithMetadata(toast.ToNotification())
+}
+
+// SendToastWithDurationAndKey builds a toast with a specific display duration and
+// translation key and persists/broadcasts it through this service instance.
+func (s *Service) SendToastWithDurationAndKey(message string, toastType ToastType, component string, duration int, messageKey string, messageParams map[string]any) error {
+	toast := NewToast(message, toastType).
+		WithComponent(component).
+		WithDuration(duration).
+		WithMessageKey(messageKey, messageParams)
+	return s.CreateWithMetadata(toast.ToNotification())
+}
+
 // SendToast is a convenience function to send a toast through the notification service
 func SendToast(message string, toastType ToastType, component string) error {
 	if !IsInitialized() {
@@ -160,11 +188,7 @@ func SendToast(message string, toastType ToastType, component string) error {
 		return errors.Newf("notification service is nil").Component("notification").Category(errors.CategoryState).Build()
 	}
 
-	toast := NewToast(message, toastType).WithComponent(component)
-	notification := toast.ToNotification()
-
-	// Use CreateWithMetadata to preserve all toast metadata
-	return service.CreateWithMetadata(notification)
+	return service.SendToast(message, toastType, component)
 }
 
 // SendToastWithDuration sends a toast with a specific display duration
@@ -178,13 +202,7 @@ func SendToastWithDuration(message string, toastType ToastType, component string
 		return errors.Newf("notification service is nil").Component("notification").Category(errors.CategoryState).Build()
 	}
 
-	toast := NewToast(message, toastType).
-		WithComponent(component).
-		WithDuration(duration)
-	notification := toast.ToNotification()
-
-	// Use CreateWithMetadata to preserve all toast metadata
-	return service.CreateWithMetadata(notification)
+	return service.SendToastWithDuration(message, toastType, component, duration)
 }
 
 // SendToastWithDurationAndKey sends a toast with a specific display duration and translation key
@@ -198,12 +216,5 @@ func SendToastWithDurationAndKey(message string, toastType ToastType, component 
 		return errors.Newf("notification service is nil").Component("notification").Category(errors.CategoryState).Build()
 	}
 
-	toast := NewToast(message, toastType).
-		WithComponent(component).
-		WithDuration(duration).
-		WithMessageKey(messageKey, messageParams)
-	notification := toast.ToNotification()
-
-	// Use CreateWithMetadata to preserve all toast metadata
-	return service.CreateWithMetadata(notification)
+	return service.SendToastWithDurationAndKey(message, toastType, component, duration, messageKey, messageParams)
 }

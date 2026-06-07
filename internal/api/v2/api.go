@@ -35,6 +35,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
@@ -91,6 +92,13 @@ type Controller struct {
 	// Auth related fields (injected from server via functional options)
 	authService    auth.Service        // Authentication service (injected from server)
 	authMiddleware echo.MiddlewareFunc // Authentication middleware function (injected from server)
+
+	// notificationService is the notification service this controller uses. It is
+	// nil in production, where getNotificationService() falls back to the
+	// process-global singleton (notification.GetService()). Tests inject an
+	// isolated per-test instance via WithNotificationService so each test gets its
+	// own config and store without touching the global singleton.
+	notificationService *notification.Service
 
 	// Metrics history store for sparkline data
 	metricsStore observability.MetricsStore
@@ -220,6 +228,16 @@ func WithAuthMiddleware(mw echo.MiddlewareFunc) Option {
 func WithAuthService(svc auth.Service) Option {
 	return func(c *Controller) {
 		c.authService = svc
+	}
+}
+
+// WithNotificationService injects the notification service the controller should
+// use, overriding the process-global singleton. Production leaves this unset and
+// falls back to notification.GetService(); tests use it to give each test an
+// isolated service instance.
+func WithNotificationService(svc *notification.Service) Option {
+	return func(c *Controller) {
+		c.notificationService = svc
 	}
 }
 

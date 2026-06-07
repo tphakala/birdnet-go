@@ -20,11 +20,14 @@ func parseJSONResponse(body []byte, target any) error {
 }
 
 func TestCreateTestNewSpeciesNotification_ServiceNotInitialized(t *testing.T) {
-	// Skip this test if notification service is already initialized
-	// This test specifically validates the uninitialized service error path
-	if notification.IsInitialized() {
-		t.Skip("notification service already initialized; skipping service-not-initialized path")
-	}
+	t.Parallel()
+
+	// This validates the requireNotificationService guard when no service is
+	// available. The api/v2 test suite never initializes the process-global
+	// singleton (every test injects an isolated instance), so a controller with
+	// no injected service resolves to nil and the middleware must return 503.
+	require.False(t, notification.IsInitialized(),
+		"no api/v2 test may initialize the global notification singleton; this test relies on it staying unset")
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/notifications/test/new-species", http.NoBody)
@@ -45,7 +48,11 @@ func TestCreateTestNewSpeciesNotification_ServiceNotInitialized(t *testing.T) {
 }
 
 func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
-	// Initialize notification service for testing using correct API
+	// No t.Parallel(): this test publishes to the process-global settings
+	// singleton via publishTestSettings (CreateTestNewSpeciesNotification reads
+	// the live snapshot through currentSettings(), which consults
+	// conf.GetSettings() first). The notification service is fully isolated
+	// per test via dependency injection.
 	config := &notification.ServiceConfig{
 		Debug:              true,
 		MaxNotifications:   100,
@@ -54,26 +61,15 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 		RateLimitMaxEvents: 10,
 	}
 
-	// Try to set up isolated service for testing
 	service := notification.NewService(config)
-	if err := notification.SetServiceForTesting(service); err != nil {
-		// An instance already exists; stop the service we just created so its
-		// cleanupLoop goroutine does not leak (the gate in TestMain would flag
-		// it), then use the existing singleton. We deliberately do NOT stop the
-		// service on the success path: it becomes the global singleton, which is
-		// stopped once after the whole suite in TestMain. Stopping it here would
-		// leave later GetService() callers with a stopped instance.
-		service.Stop()
-		service = notification.GetService()
-		require.NotNil(t, service, "Expected notification service to be available")
-	}
+	t.Cleanup(service.Stop)
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/notifications/test/new-species", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	controller := &Controller{}
+	controller := &Controller{notificationService: service}
 	// Build a minimal settings snapshot with only the fields this test needs,
 	// then publish it once (the empty base matches the original test).
 	settings := &conf.Settings{}

@@ -568,7 +568,7 @@ func (c *Controller) getMySQLLegacySize() int64 {
 
 // sendCleanupNotification sends a notification about cleanup status.
 func (c *Controller) sendCleanupNotification(success bool, spaceReclaimed int64, errMsg string) {
-	notifService := notification.GetService()
+	notifService := c.getNotificationService()
 	if notifService == nil {
 		return
 	}

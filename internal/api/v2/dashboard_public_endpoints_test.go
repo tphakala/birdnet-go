@@ -76,20 +76,6 @@ func guestGet(t *testing.T, e *echo.Echo, path string) *httptest.ResponseRecorde
 
 // ---- notifications -----------------------------------------------------
 
-// ensureNotificationServiceInitialized brings up a notification service for
-// tests that need to drive the notification path end-to-end. Callers get the
-// active service back and are responsible for cleanup of any fixtures they
-// add (the service itself is process-global and persists across tests).
-func ensureNotificationServiceInitialized(t *testing.T) *notification.Service {
-	t.Helper()
-	if !notification.IsInitialized() {
-		notification.Initialize(notification.DefaultServiceConfig())
-	}
-	svc := notification.GetService()
-	require.NotNil(t, svc, "notification service must be initialized for guest-filter tests")
-	return svc
-}
-
 // TestNotifications_PublicReadsAllowed verifies that the dashboard-facing
 // read endpoints are reachable without auth. Including the SSE endpoint is
 // important: NotificationBell opens a persistent /notifications/stream
@@ -151,7 +137,7 @@ func TestNotifications_MutationsRequireAuth(t *testing.T) {
 // against the toast-metadata leak path (a TypeDetection notification with
 // MetadataKeyIsToast=true must not reach unauthenticated callers).
 func TestNotifications_GuestListFiltersNonDetectionAndToasts(t *testing.T) {
-	svc := ensureNotificationServiceInitialized(t)
+	e, svc := newSettingsAuthTestEnvWithNotifier(t)
 
 	detection, err := svc.Create(notification.TypeDetection, notification.PriorityHigh,
 		"Detection: Test Bird", "guest-visible detection body")
@@ -166,9 +152,7 @@ func TestNotifications_GuestListFiltersNonDetectionAndToasts(t *testing.T) {
 		WithMetadata(notification.MetadataKeyIsToast, true)
 	require.NoError(t, svc.CreateWithMetadata(detectionToast))
 
-	// Best-effort cleanup so repeated runs do not accumulate fixtures in
-	// the process-global service. Ignore not-found errors (Delete may
-	// already have been issued by a parallel test).
+	// Clean up the fixtures created in this test's isolated service.
 	t.Cleanup(func() {
 		for _, n := range []*notification.Notification{detection, adminErr, detectionToast} {
 			if n == nil {
@@ -177,8 +161,6 @@ func TestNotifications_GuestListFiltersNonDetectionAndToasts(t *testing.T) {
 			_ = svc.Delete(n.ID)
 		}
 	})
-
-	e := newSettingsAuthTestEnv(t)
 
 	rec := guestGet(t, e, "/api/v2/notifications?limit=50")
 	require.Equal(t, http.StatusOK, rec.Code,
@@ -213,7 +195,7 @@ func TestNotifications_GuestListFiltersNonDetectionAndToasts(t *testing.T) {
 // TestNotifications_GuestUnreadCountIgnoresNonDetectionAndToasts verifies
 // that the guest /unread/count matches what the guest list actually shows.
 func TestNotifications_GuestUnreadCountIgnoresNonDetectionAndToasts(t *testing.T) {
-	svc := ensureNotificationServiceInitialized(t)
+	e, svc := newSettingsAuthTestEnvWithNotifier(t)
 
 	det, err := svc.Create(notification.TypeDetection, notification.PriorityHigh,
 		"Detection A", "body")
@@ -234,8 +216,6 @@ func TestNotifications_GuestUnreadCountIgnoresNonDetectionAndToasts(t *testing.T
 			_ = svc.Delete(n.ID)
 		}
 	})
-
-	e := newSettingsAuthTestEnv(t)
 
 	rec := guestGet(t, e, "/api/v2/notifications/unread/count")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
@@ -302,9 +282,7 @@ func readSSEEvent(r *bufio.Reader) (sseEvent, error) {
 // in the guard condition (notif.Type != TypeDetection || isToast) is caught
 // before it reaches the dashboard.
 func TestNotifications_GuestSSEFiltersNonDetectionAndToasts(t *testing.T) {
-	svc := ensureNotificationServiceInitialized(t)
-
-	e := newSettingsAuthTestEnv(t)
+	e, svc := newSettingsAuthTestEnvWithNotifier(t)
 	srv := httptest.NewServer(e)
 	t.Cleanup(func() {
 		// Force-close active connections before srv.Close blocks waiting

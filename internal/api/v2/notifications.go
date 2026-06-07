@@ -107,10 +107,23 @@ type notificationAction struct {
 	successRespMsg string
 }
 
+// getNotificationService returns the notification service this controller uses:
+// the injected instance when set (tests inject via WithNotificationService),
+// otherwise the process-global singleton (notification.GetService()). Routing all
+// handlers through this accessor lets a controller be fully isolated from global
+// state while keeping production behavior unchanged (the field is nil in
+// production, so it falls back to the singleton exactly as before).
+func (c *Controller) getNotificationService() *notification.Service {
+	if c.notificationService != nil {
+		return c.notificationService
+	}
+	return notification.GetService()
+}
+
 // requireNotificationService is middleware that returns 503 if the notification service is not initialized.
 func (c *Controller) requireNotificationService(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		if !notification.IsInitialized() {
+		if c.getNotificationService() == nil {
 			return c.HandleErrorWithKey(ctx, nil, "Notification service not available", http.StatusServiceUnavailable, notification.MsgErrNotifServiceUnavailable, nil)
 		}
 		return next(ctx)
@@ -126,7 +139,7 @@ func (c *Controller) executeNotificationAction(ctx echo.Context, action notifica
 		return c.HandleErrorWithKey(ctx, nil, "Notification ID is required", http.StatusBadRequest, notification.MsgErrNotifIDRequired, nil)
 	}
 
-	service := notification.GetService()
+	service := c.getNotificationService()
 	if err := action.operation(service, id); err != nil {
 		if errors.Is(err, notification.ErrNotificationNotFound) || errors.IsNotFound(err) {
 			return c.HandleErrorWithKey(ctx, err, "Notification not found", http.StatusNotFound, notification.MsgErrNotifNotFound, nil)
@@ -430,7 +443,7 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 	clientID := uuid.New().String()
 
 	// Subscribe to notifications
-	service := notification.GetService()
+	service := c.getNotificationService()
 	notificationCh, notificationCtx := service.Subscribe()
 
 	// Create notification client. Record whether the caller is a guest so
@@ -700,7 +713,7 @@ func (c *Controller) isGuestNotificationRequest(ctx echo.Context) bool {
 
 // GetNotifications returns a list of notifications with optional filtering
 func (c *Controller) GetNotifications(ctx echo.Context) error {
-	service := notification.GetService()
+	service := c.getNotificationService()
 
 	// Build filter options from query parameters
 	filter := &notification.FilterOptions{}
@@ -805,7 +818,7 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 		return c.HandleErrorWithKey(ctx, nil, "Notification ID is required", http.StatusBadRequest, notification.MsgErrNotifIDRequired, nil)
 	}
 
-	service := notification.GetService()
+	service := c.getNotificationService()
 	notif, err := service.Get(id)
 	if err != nil {
 		if errors.Is(err, notification.ErrNotificationNotFound) || errors.IsNotFound(err) {
@@ -822,7 +835,7 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 
 // MarkAllNotificationsRead marks every unread notification as read in one call.
 func (c *Controller) MarkAllNotificationsRead(ctx echo.Context) error {
-	service := notification.GetService()
+	service := c.getNotificationService()
 
 	count, err := service.MarkAllAsRead()
 	if err != nil {
@@ -870,7 +883,7 @@ func (c *Controller) DeleteNotification(ctx echo.Context) error {
 // unauthenticated dashboard requests, only unread detection notifications are
 // counted so the NotificationBell badge matches the filtered guest list.
 func (c *Controller) GetUnreadCount(ctx echo.Context) error {
-	service := notification.GetService()
+	service := c.getNotificationService()
 
 	if c.isGuestNotificationRequest(ctx) {
 		// Count unread detection non-toast notifications only. The store's
@@ -908,7 +921,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Settings not initialized", http.StatusServiceUnavailable)
 	}
 
-	service := notification.GetService()
+	service := c.getNotificationService()
 
 	// Build base URL for links
 	baseURL := settings.Security.GetBaseURL(settings.WebServer.Port)
