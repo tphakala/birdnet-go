@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/csvutil"
 )
 
 // LoadLabels reads species labels from a file. Supports .csv (auto-detects
@@ -88,15 +90,13 @@ func loadLabelsCSV(data []byte) ([]string, error) {
 }
 
 func findLabelColumn(header []string) (int, error) {
-	priorities := []string{"sci_name", "com_name", "name", "label"}
-	for _, name := range priorities {
-		for i, h := range header {
-			if strings.EqualFold(strings.TrimSpace(h), name) {
-				return i, nil
-			}
+	h := csvutil.NewHeader(header)
+	for _, name := range []string{"sci_name", "com_name", "name", "label"} {
+		if idx := h.Col(name); idx >= 0 {
+			return idx, nil
 		}
 	}
-	// No known label column found — return error instead of guessing
+	// No known label column found; return error instead of guessing.
 	return -1, fmt.Errorf("CSV has no recognized label column (expected one of: sci_name, com_name, name, label); found headers: %v", header)
 }
 

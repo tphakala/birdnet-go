@@ -19,6 +19,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/csvutil"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -166,7 +167,7 @@ func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
 	// count from the header and enforces it for every row, validating the schema
 	// width without hardcoding it (the metadata schema grows over time).
 
-	header, err := r.Read()
+	headerRow, err := r.Read()
 	if err != nil {
 		return errors.New(err).
 			Component(loggerModule).
@@ -174,25 +175,14 @@ func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
 			Context("operation", "read_metadata_header").
 			Build()
 	}
-	col := make(map[string]int, len(header))
-	for i, name := range header {
-		col[strings.TrimSpace(name)] = i
-	}
-	sciIdx, ok := col[metaColScientific]
-	if !ok {
+	header := csvutil.NewHeader(headerRow)
+	sciIdx := header.Col(metaColScientific)
+	if sciIdx < 0 {
 		return errors.Newf("openfauna: metadata header missing %q column", metaColScientific).
 			Component(loggerModule).
 			Category(errors.CategoryFileParsing).
 			Context("operation", "validate_metadata_header").
 			Build()
-	}
-	// get returns the value for a named column, or "" if the column is absent or
-	// the row is short. Copying the string out of the (reused) record is safe.
-	get := func(rec []string, name string) string {
-		if i, ok := col[name]; ok && i < len(rec) {
-			return rec[i]
-		}
-		return ""
 	}
 	for {
 		rec, err := r.Read()
@@ -210,12 +200,12 @@ func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
 			continue
 		}
 		m := Meta{
-			Class:          get(rec, metaColClass),
-			Order:          get(rec, metaColOrder),
-			Family:         get(rec, metaColFamily),
-			FamilyCommon:   get(rec, metaColFamilyCommon),
-			WikipediaURL:   get(rec, metaColWikipedia),
-			INaturalistURL: get(rec, metaColINaturalist),
+			Class:          header.Field(rec, metaColClass),
+			Order:          header.Field(rec, metaColOrder),
+			Family:         header.Field(rec, metaColFamily),
+			FamilyCommon:   header.Field(rec, metaColFamilyCommon),
+			WikipediaURL:   header.Field(rec, metaColWikipedia),
+			INaturalistURL: header.Field(rec, metaColINaturalist),
 		}
 		if cbErr := fn(rec[sciIdx], m); cbErr != nil {
 			return cbErr
