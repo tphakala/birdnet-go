@@ -658,7 +658,14 @@ func (o *Orchestrator) GetSpeciesNameFromCode(code string) (string, bool) {
 // OpenFauna (chain[0]) is authoritative: its localized name overrides the
 // primary's label-derived common name whenever the resolver chain has one.
 func (o *Orchestrator) GetSpeciesWithScientificAndCommonName(label string) (scientific, common string) {
-	scientific, common = o.primary.GetSpeciesWithScientificAndCommonName(label)
+	// Snapshot primary under read lock to avoid racing with Delete().
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return "", ""
+	}
+	scientific, common = primary.GetSpeciesWithScientificAndCommonName(label)
 	if scientific != "" {
 		if resolved := o.ResolveName(scientific, ""); resolved != "" {
 			common = resolved
@@ -673,7 +680,14 @@ func (o *Orchestrator) GetSpeciesWithScientificAndCommonName(label string) (scie
 // produced one. This localizes names and fixes scientific-only/bat labels. Only
 // the primary's name is kept when the chain returns nothing.
 func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific, common, code string) {
-	scientific, common, code = o.primary.EnrichResultWithTaxonomy(speciesLabel)
+	// Snapshot primary under read lock to avoid racing with Delete().
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return "", "", ""
+	}
+	scientific, common, code = primary.EnrichResultWithTaxonomy(speciesLabel)
 
 	if scientific != "" {
 		if resolved := o.ResolveName(scientific, ""); resolved != "" {

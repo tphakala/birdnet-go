@@ -326,6 +326,9 @@ func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nam
 	speciesMap := make(map[string]string, len(labels))
 	commonMap := make(map[string]string, len(labels))
 	commonFoldedMap := make(map[string]string, len(labels))
+	// Hoist the (reflect-based) nil check out of the per-label loop. IsNilResolver
+	// also rejects typed-nil interfaces, consistent with SetNameResolver.
+	useResolver := !datastore.IsNilResolver(resolver)
 	for _, label := range labels {
 		if scientificName, commonName, found := strings.Cut(label, "_"); found {
 			scientificName = strings.TrimSpace(scientificName)
@@ -336,7 +339,7 @@ func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nam
 			// each rebuild. Out-of-working-set species keep their label name in the
 			// (reverse search) maps; live resolveCommonName still resolves them
 			// on-demand for display.
-			if resolver != nil && scientificName != "" {
+			if useResolver && scientificName != "" {
 				if r, ok := resolver.ResolveLocal(scientificName); ok {
 					commonName = r
 				}

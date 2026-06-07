@@ -272,6 +272,7 @@ func TestResolver_ConcurrentResolveDuringRebuild_NoRace(t *testing.T) {
 // (working-set index + cache) and never triggers the O(dataset) on-demand Lookup,
 // which is what makes it safe for bulk name-map rebuilds over the full label set.
 func TestResolveLocal_NoSlowPath(t *testing.T) {
+	t.Parallel()
 	r := NewResolver()
 	require.NoError(t, r.Rebuild([]string{"Turdus merula"}, "en"))
 
