@@ -345,17 +345,23 @@ func (s *Service) Unsubscribe(ch <-chan *Notification) {
 	defer s.subscribersMu.Unlock()
 
 	for i, subscriber := range s.subscribers {
-		if subscriber.ch == ch {
-			subscriber.cancel()
-			s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
-
-			if s.config.Debug {
-				s.logger.Debug("subscriber removed",
-					logger.Int("remaining_subscribers", len(s.subscribers)))
-			}
-
-			break
+		if subscriber.ch != ch {
+			continue
 		}
+
+		subscriber.cancel()
+		// Compact and zero the freed tail slot so the removed *Subscriber is
+		// not retained by the backing array until the next broadcast.
+		copy(s.subscribers[i:], s.subscribers[i+1:])
+		s.subscribers[len(s.subscribers)-1] = nil
+		s.subscribers = s.subscribers[:len(s.subscribers)-1]
+
+		if s.config.Debug {
+			s.logger.Debug("subscriber removed",
+				logger.Int("remaining_subscribers", len(s.subscribers)))
+		}
+
+		break
 	}
 }
 
@@ -450,8 +456,11 @@ func (s *Service) broadcast(notification *Notification) int {
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
 
-	if len(s.subscribers) == 0 {
-		s.logger.Info("broadcast has no subscribers (push dispatcher may not be running)",
+	// Having no subscribers is normal when no SSE client is connected and no push
+	// dispatcher is running, so log it at Debug to avoid one Info line per
+	// notification (matches the Debug gating on the other broadcast logs below).
+	if s.config.Debug && len(s.subscribers) == 0 {
+		s.logger.Debug("broadcast has no subscribers (push dispatcher may not be running)",
 			logger.String("operation", "broadcast"),
 			logger.String("notification_id", notification.ID),
 			logger.String("type", string(notification.Type)))
