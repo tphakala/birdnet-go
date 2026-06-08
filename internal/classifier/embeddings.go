@@ -154,6 +154,7 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 		err = errors.New(err).
 			Category(errors.CategoryValidation).
 			Context("label_count", len(settings.BirdNET.Labels)).
+			Context("confidence_count", len(predictions)).
 			Timing("prediction-total", time.Since(start)).
 			Build()
 

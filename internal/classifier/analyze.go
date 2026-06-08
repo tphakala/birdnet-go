@@ -99,6 +99,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		err = errors.New(err).
 			Category(errors.CategoryValidation).
 			Context("label_count", len(settings.BirdNET.Labels)).
+			Context("confidence_count", len(predictions)).
 			Timing("prediction-total", time.Since(start)).
 			Build()
 
@@ -132,20 +133,17 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 // aliases bn.resultsBuffer, so it is safe to hand to the ResultsQueue (fixes a
 // results-buffer aliasing data race across the queue boundary).
 //
+// On label/confidence length mismatch the raw error from pairLabelsAndConfidenceReuse
+// is returned unwrapped so callers (Predict, PredictWithEmbeddings) can wrap it
+// once with BOTH confidence_count and label_count in a single top-level error.
+//
 // The caller must hold bn.mu: finalizeResults reads and writes the shared
 // bn.confidenceBuffer and bn.resultsBuffer without locking itself.
 func (bn *BirdNET) finalizeResults(predictions []float32, settings *conf.Settings) ([]datastore.Results, error) {
 	confidence := applySigmoidToPredictionsReuse(predictions, settings.BirdNET.Sensitivity, bn.confidenceBuffer)
 	results, err := pairLabelsAndConfidenceReuse(settings.BirdNET.Labels, confidence, bn.resultsBuffer)
 	if err != nil {
-		// confidence_count is the other side of a label/confidence length
-		// mismatch (len(confidence) == len(predictions) since sigmoid
-		// preserves length); the outer Predict wrapper adds label_count, so
-		// the final error carries both counts for diagnosis.
-		return nil, errors.New(err).
-			Category(errors.CategoryValidation).
-			Context("confidence_count", len(predictions)).
-			Build()
+		return nil, err
 	}
 	topResults := getTopKResults(results, defaultTopKResults)
 	out := make([]datastore.Results, len(topResults))
