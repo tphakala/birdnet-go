@@ -343,7 +343,7 @@ func BenchmarkTopKResultsOptimized(b *testing.B) {
 			testResults := make([]datastore.Results, len(results))
 			copy(testResults, results)
 
-			topResults := getTopKResults(testResults, 10)
+			topResults := getTopKResults(testResults, defaultTopKResults)
 
 			if len(topResults) != 10 {
 				b.Errorf("Expected 10 results, got %d", len(topResults))
@@ -406,7 +406,7 @@ func BenchmarkFullPipelineOptimized(b *testing.B) {
 			}
 
 			// Step 3: Get top 10 using optimized algorithm
-			finalResults := getTopKResults(results, 10)
+			finalResults := getTopKResults(results, defaultTopKResults)
 
 			// Prevent compiler optimization
 			if len(finalResults) != 10 {
@@ -451,7 +451,7 @@ func BenchmarkMemoryUsageComparison(b *testing.B) {
 			// This simulates the optimized pipeline with buffer reuse
 			confidence := applySigmoidToPredictionsReuse(predictions, sensitivity, confidenceBuffer)
 			results, _ := pairLabelsAndConfidenceReuse(labels, confidence, resultsBuffer)
-			getTopKResults(results, 10)
+			getTopKResults(results, defaultTopKResults)
 		}
 	})
 }

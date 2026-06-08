@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -790,4 +791,28 @@ func generateLargeTestResults(count int) []datastore.Results {
 		}
 	}
 	return results
+}
+
+func TestFinalizeResults_ReturnsCallerOwnedCopy(t *testing.T) {
+	labels := []string{"a_A", "b_B", "c_C"}
+	bn := &BirdNET{
+		confidenceBuffer: make([]float32, len(labels)),
+		resultsBuffer:    make([]datastore.Results, len(labels)),
+	}
+	settings := &conf.Settings{}
+	settings.BirdNET.Labels = labels
+	settings.BirdNET.Sensitivity = 1.0
+
+	out, err := bn.finalizeResults([]float32{0.1, 0.9, 0.5}, settings)
+	require.NoError(t, err)
+	require.NotEmpty(t, out)
+
+	// Snapshot, then clobber the shared buffer (as the next inference window would).
+	snapshot := make([]datastore.Results, len(out))
+	copy(snapshot, out)
+	for i := range bn.resultsBuffer {
+		bn.resultsBuffer[i] = datastore.Results{Species: "MUT", Confidence: -1}
+	}
+
+	assert.Equal(t, snapshot, out, "returned slice must not alias bn.resultsBuffer")
 }

@@ -7,9 +7,13 @@ import (
 	"sort"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// defaultTopKResults is the number of top predictions returned per inference window.
+const defaultTopKResults = 10
 
 // Filter structure is used for filtering predictions based on certain criteria.
 type Filter struct {
@@ -89,16 +93,12 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		m.RecordModelInvoke(bn.ModelInfo.ID, invokeDuration.Seconds())
 	}
 
-	// Use optimized sigmoid function with buffer reuse
-	confidence := applySigmoidToPredictionsReuse(predictions, settings.BirdNET.Sensitivity, bn.confidenceBuffer)
-
-	// Use the pre-allocated buffer to reduce memory allocations
-	results, err := pairLabelsAndConfidenceReuse(settings.BirdNET.Labels, confidence, bn.resultsBuffer)
+	// Use shared post-processing: sigmoid -> labels -> top-K -> caller-owned copy.
+	results, err := bn.finalizeResults(predictions, settings)
 	if err != nil {
 		err = errors.New(err).
 			Category(errors.CategoryValidation).
 			Context("label_count", len(settings.BirdNET.Labels)).
-			Context("confidence_count", len(confidence)).
 			Timing("prediction-total", time.Since(start)).
 			Build()
 
@@ -113,22 +113,33 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		return nil, err
 	}
 
-	// Use optimized top-k algorithm instead of full sort + trim
-	topResults := getTopKResults(results, 10)
-
 	// Log prediction timing for performance monitoring
 	duration := time.Since(start)
-	bn.Debug("Prediction completed in %v with %d results", duration, len(topResults))
+	bn.Debug("Prediction completed in %v with %d results", duration, len(results))
 
 	// Record metrics
 	span.SetData("total_duration_ms", duration.Milliseconds())
-	span.SetData("result_count", len(topResults))
+	span.SetData("result_count", len(results))
 	span.SetTag("error", "false")
 
 	// The span.Finish() will automatically record the prediction metrics
 
-	// Return the top 10 results
-	return topResults, nil
+	return results, nil
+}
+
+// finalizeResults applies sigmoid to raw predictions, pairs them with labels,
+// selects the top-K, and returns a caller-owned copy. The returned slice never
+// aliases bn.resultsBuffer, so it is safe to hand to the ResultsQueue (issue #949).
+func (bn *BirdNET) finalizeResults(predictions []float32, settings *conf.Settings) ([]datastore.Results, error) {
+	confidence := applySigmoidToPredictionsReuse(predictions, settings.BirdNET.Sensitivity, bn.confidenceBuffer)
+	results, err := pairLabelsAndConfidenceReuse(settings.BirdNET.Labels, confidence, bn.resultsBuffer)
+	if err != nil {
+		return nil, err
+	}
+	topResults := getTopKResults(results, defaultTopKResults)
+	out := make([]datastore.Results, len(topResults))
+	copy(out, topResults)
+	return out, nil
 }
 
 // customSigmoid applies a sigmoid function with sensitivity adjustment to a value.

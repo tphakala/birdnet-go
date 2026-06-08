@@ -136,8 +136,8 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 		return nil, err
 	}
 
-	// Return top 10 results
-	return getTopKResults(results, 10), nil
+	// Return top results
+	return getTopKResults(results, defaultTopKResults), nil
 }
 
 // Spec returns the audio requirements for Perch v2.
