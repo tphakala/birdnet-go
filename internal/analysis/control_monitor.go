@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -120,21 +121,50 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 	// depend on this re-localize. Locale changes later re-localize via
 	// handleReloadBirdnet (BuildRangeFilter runs before UpdateNameMaps there).
 	if cm.bn != nil {
-		resolver := cm.bn.OpenFaunaResolver()
-		labels := cm.bn.Labels()
+		var ds datastore.Interface
 		if cm.proc != nil && cm.proc.Ds != nil {
-			cm.proc.Ds.SetNameResolver(resolver)
-			cm.proc.Ds.UpdateNameMaps(labels)
+			ds = cm.proc.Ds
 		}
+		var api commonNameController
 		if cm.apiController != nil {
-			cm.apiController.SetNameResolver(resolver)
-			cm.apiController.UpdateCommonNameMap(labels)
+			api = cm.apiController
 		}
+		installNameResolver(cm.bn.OpenFaunaResolver(), cm.bn.Labels(), ds, api)
 	}
 
 	// Initialize the sound level manager but don't start it yet
 	// It will be started by handleReconfigureSoundLevel based on settings
 	return cm
+}
+
+// commonNameController is the minimal api-controller surface installNameResolver
+// needs to share the resolver and refresh the cached name maps. *apiv2.Controller
+// satisfies it; tests substitute a spy.
+type commonNameController interface {
+	SetNameResolver(resolver datastore.SpeciesNameResolver)
+	UpdateCommonNameMap(labels []string)
+}
+
+// installNameResolver shares the orchestrator's authoritative OpenFauna resolver
+// with the display surfaces, then re-localizes their cached name maps. Order is
+// load-bearing: SetNameResolver must precede the map rebuild so the reverse
+// (search) maps pick up localized names; forward display reads the live resolver
+// regardless.
+//
+// There is intentionally no nil-resolver short-circuit: the maps must be rebuilt
+// from labels even when no resolver is available, otherwise search and insights
+// would start with empty maps. SetNameResolver already no-ops on a nil/typed-nil
+// resolver (datastore.IsNilResolver guard inside it), so a missing resolver simply
+// leaves the live forward path on the label maps.
+func installNameResolver(resolver datastore.SpeciesNameResolver, labels []string, ds datastore.Interface, api commonNameController) {
+	if ds != nil {
+		ds.SetNameResolver(resolver)
+		ds.UpdateNameMaps(labels)
+	}
+	if api != nil {
+		api.SetNameResolver(resolver)
+		api.UpdateCommonNameMap(labels)
+	}
 }
 
 // Start begins monitoring control signals.
