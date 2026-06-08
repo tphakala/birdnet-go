@@ -26,6 +26,10 @@ type EmbeddingExtractor interface {
 	// and the embedding vector. Returns nil embeddings if the model does not
 	// produce embeddings.
 	PredictWithEmbeddings(samples []float32) (logits []float32, embeddings []float32, err error)
+
+	// EmbeddingDim returns the embedding vector length, or 0 if the model does
+	// not produce embeddings (capability gate).
+	EmbeddingDim() int
 }
 
 // CustomClassifier runs secondary classification on embedding vectors.
