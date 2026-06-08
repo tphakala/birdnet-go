@@ -1278,7 +1278,7 @@ type ModelsConfig struct {
 
 // EmbeddingsConfig gates generic embedding extraction.
 // Capability-gated: extraction only happens when the active model is an ONNX
-// model that exposes embeddings (issue #948).
+// model that exposes embeddings.
 type EmbeddingsConfig struct {
 	Enabled bool `yaml:"enabled" json:"enabled"` // extract embeddings on the live path (hot-reloadable)
 }

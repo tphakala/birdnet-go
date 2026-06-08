@@ -129,7 +129,8 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 
 // finalizeResults applies sigmoid to raw predictions, pairs them with labels,
 // selects the top-K, and returns a caller-owned copy. The returned slice never
-// aliases bn.resultsBuffer, so it is safe to hand to the ResultsQueue (issue #949).
+// aliases bn.resultsBuffer, so it is safe to hand to the ResultsQueue (fixes a
+// results-buffer aliasing data race across the queue boundary).
 //
 // The caller must hold bn.mu: finalizeResults reads and writes the shared
 // bn.confidenceBuffer and bn.resultsBuffer without locking itself.

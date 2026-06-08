@@ -1,4 +1,4 @@
-// Package classifier embedding-extraction capability (substrate M1, issue #948).
+// Package classifier embedding-extraction capability (substrate M1).
 package classifier
 
 import (
