@@ -29,6 +29,7 @@ type TracingSpan struct {
 	sentrySpan     *sentry.Span
 	metricsEnabled bool
 	model          string // For metrics labeling
+	errored        bool   // set when SetTag("error","true"); suppresses the success-path RecordPrediction in Finish
 }
 
 // Global metrics instance (set by observability package)
@@ -102,6 +103,13 @@ func (s *TracingSpan) SetTag(key, value string) {
 		s.model = value
 	}
 
+	// Mark the span as errored so Finish skips the success-path RecordPrediction.
+	// Error branches that record their own prediction (with the non-nil error)
+	// set this tag, preventing a double-count (#950).
+	if key == "error" && value == "true" {
+		s.errored = true
+	}
+
 	// Only allocate tags map if Sentry is enabled
 	if s.sentrySpan != nil {
 		if s.tags == nil {
@@ -145,12 +153,15 @@ func (s *TracingSpan) Finish() {
 		}
 
 		if m := getMetrics(); m != nil {
-			// Record appropriate metric based on operation
+			// Record appropriate metric based on operation.
+			// The success-path prediction is recorded here only when the span is
+			// not errored; error branches record their own prediction with the
+			// non-nil error, so recording here too would double-count (#950).
 			switch s.operation {
-			case "birdnet.predict":
-				m.RecordPrediction(model, durationSeconds, nil)
-			case "birdnet.predict_embeddings":
-				m.RecordPrediction(model, durationSeconds, nil)
+			case "birdnet.predict", "birdnet.predict_embeddings":
+				if !s.errored {
+					m.RecordPrediction(model, durationSeconds, nil)
+				}
 			case "birdnet.process_chunk":
 				m.RecordChunkProcess(model, durationSeconds)
 			case "birdnet.model_invoke":

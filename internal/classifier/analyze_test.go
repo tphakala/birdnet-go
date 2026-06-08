@@ -5,10 +5,13 @@ import (
 	"math"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // TestPairLabelsAndConfidence tests the pairLabelsAndConfidence function
@@ -858,4 +861,35 @@ func TestFinalizeResults_ReturnsCallerOwnedCopy(t *testing.T) {
 			assert.Equal(t, snapshot, out, "returned slice must not alias bn.resultsBuffer (%s branch)", tt.topBranch)
 		})
 	}
+}
+
+// TestPredict_RecordsExactlyOnePredictionPerOutcome verifies that each Predict
+// outcome records exactly one prediction with the correct status. It guards
+// against the telemetry double-count (#950) where Finish() recorded a spurious
+// success even on error spans, and against error branches that recorded nothing.
+// It mutates the package-global metrics holder, so it must NOT run in parallel.
+func TestPredict_RecordsExactlyOnePredictionPerOutcome(t *testing.T) {
+	// Mutates the package-global metrics; must not run in parallel.
+	reg := prometheus.NewRegistry()
+	m, err := metrics.NewBirdNETMetrics(reg)
+	require.NoError(t, err)
+	globalMetrics.Store(m)
+	t.Cleanup(func() { globalMetrics.Store(nil) })
+
+	countFor := func(status string) float64 {
+		return testutil.ToFloat64(m.PredictionTotal.WithLabelValues("test-model", status))
+	}
+
+	// Success path: exactly one success, zero error.
+	bn := newEmbTestBirdNET(&fakePlainClassifier{logits: []float32{0.1, 0.9, 0.5}}, []string{"a_A", "b_B", "c_C"})
+	_, err = bn.Predict(t.Context(), [][]float32{{0.0}})
+	require.NoError(t, err)
+	assert.InDelta(t, 1, countFor("success"), 0.0001, "success path records one success")
+	assert.InDelta(t, 0, countFor("error"), 0.0001, "success path records no error")
+
+	// Empty-sample error: exactly one error, still zero new success.
+	_, err = bn.Predict(t.Context(), [][]float32{})
+	require.Error(t, err)
+	assert.InDelta(t, 1, countFor("success"), 0.0001, "empty-sample error must NOT record a spurious success")
+	assert.InDelta(t, 1, countFor("error"), 0.0001, "empty-sample error records one error")
 }

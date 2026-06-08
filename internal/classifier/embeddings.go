@@ -103,6 +103,9 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 			Build()
 		span.SetTag("error", "true")
 		span.SetData("error_type", "empty_sample")
+		if m := getMetrics(); m != nil {
+			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
 		return nil, nil, err
 	}
 
@@ -118,6 +121,9 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 			Build()
 		span.SetTag("error", "true")
 		span.SetData("error_type", "classifier_nil")
+		if m := getMetrics(); m != nil {
+			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
 		return nil, nil, err
 	}
 
