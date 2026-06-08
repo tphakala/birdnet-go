@@ -826,7 +826,7 @@ func TestFinalizeResults_ReturnsCallerOwnedCopy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.Greater(t, tt.labelN, 0, "label count must be positive")
+			require.Positive(t, tt.labelN, "label count must be positive")
 
 			labels := make([]string, tt.labelN)
 			predictions := make([]float32, tt.labelN)
