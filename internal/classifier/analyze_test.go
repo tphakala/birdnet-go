@@ -5,10 +5,13 @@ import (
 	"math"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // TestPairLabelsAndConfidence tests the pairLabelsAndConfidence function
@@ -858,4 +861,65 @@ func TestFinalizeResults_ReturnsCallerOwnedCopy(t *testing.T) {
 			assert.Equal(t, snapshot, out, "returned slice must not alias bn.resultsBuffer (%s branch)", tt.topBranch)
 		})
 	}
+}
+
+// TestPredict_RecordsExactlyOnePredictionPerOutcome verifies that each Predict
+// outcome records exactly one prediction with the correct status. It guards
+// against the telemetry double-count where Finish() recorded a spurious
+// success even on error spans, and against error branches that recorded nothing.
+// It mutates the package-global metrics holder, so it must NOT run in parallel.
+func TestPredict_RecordsExactlyOnePredictionPerOutcome(t *testing.T) {
+	// Mutates the package-global metrics; must not run in parallel.
+	reg := prometheus.NewRegistry()
+	m, err := metrics.NewBirdNETMetrics(reg)
+	require.NoError(t, err)
+	globalMetrics.Store(m)
+	t.Cleanup(func() { globalMetrics.Store(nil) })
+
+	countFor := func(status string) float64 {
+		return testutil.ToFloat64(m.PredictionTotal.WithLabelValues("test-model", status))
+	}
+
+	labels := []string{"a_A", "b_B", "c_C"}
+
+	// Success path: exactly one success, zero error.
+	bn := newEmbTestBirdNET(&fakePlainClassifier{logits: []float32{0.1, 0.9, 0.5}}, labels)
+	_, err = bn.Predict(t.Context(), [][]float32{{0.0}})
+	require.NoError(t, err)
+	assert.InDelta(t, 1, countFor("success"), 0.0001, "success path records one success")
+	assert.InDelta(t, 0, countFor("error"), 0.0001, "success path records no error")
+
+	// Every error outcome must record exactly one error and add NO spurious success.
+	// The counters are cumulative on the shared {test-model,*} series, so success
+	// stays at 1 throughout and error increments by exactly one per outcome. Each
+	// error branch sets span.SetTag("error","true") before the deferred Finish, so
+	// the errored flag suppresses Finish's success record (the exactly-once fix).
+
+	// empty_sample: empty outer slice.
+	_, err = bn.Predict(t.Context(), [][]float32{})
+	require.Error(t, err)
+	assert.InDelta(t, 1, countFor("success"), 0.0001, "empty_sample must NOT record a spurious success")
+	assert.InDelta(t, 1, countFor("error"), 0.0001, "empty_sample records one error")
+
+	// classifier_nil: backend niled out (e.g. after a concurrent Delete).
+	bnNil := newEmbTestBirdNET(&fakePlainClassifier{logits: []float32{0.1}}, []string{"a_A"})
+	bnNil.classifier = nil
+	_, err = bnNil.Predict(t.Context(), [][]float32{{0.0}})
+	require.Error(t, err)
+	assert.InDelta(t, 1, countFor("success"), 0.0001, "classifier_nil must NOT record a spurious success")
+	assert.InDelta(t, 2, countFor("error"), 0.0001, "classifier_nil records one error")
+
+	// invoke_failed: backend Predict returns an error.
+	bnErr := newEmbTestBirdNET(&fakeErrPlainClassifier{err: assert.AnError}, labels)
+	_, err = bnErr.Predict(t.Context(), [][]float32{{0.0}})
+	require.Error(t, err)
+	assert.InDelta(t, 1, countFor("success"), 0.0001, "invoke_failed must NOT record a spurious success")
+	assert.InDelta(t, 3, countFor("error"), 0.0001, "invoke_failed records one error")
+
+	// label_mismatch: prediction length differs from the configured label count.
+	bnMismatch := newEmbTestBirdNET(&fakePlainClassifier{logits: []float32{0.1, 0.2}}, labels)
+	_, err = bnMismatch.Predict(t.Context(), [][]float32{{0.0}})
+	require.Error(t, err)
+	assert.InDelta(t, 1, countFor("success"), 0.0001, "label_mismatch must NOT record a spurious success")
+	assert.InDelta(t, 4, countFor("error"), 0.0001, "label_mismatch records one error")
 }

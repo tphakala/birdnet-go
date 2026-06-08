@@ -24,6 +24,9 @@ type Perch struct {
 	mu         sync.Mutex
 }
 
+// Perch implements EmbeddingCapable: its ONNX backend can expose embeddings.
+var _ EmbeddingCapable = (*Perch)(nil)
+
 // PerchConfig holds configuration for creating a Perch model instance.
 type PerchConfig struct {
 	ModelPath       string // Path to the Perch v2 ONNX model file
@@ -125,19 +128,83 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 			Build()
 	}
 
-	// Apply softmax to normalize raw logits into probabilities (0.0-1.0).
-	// The inference.Classifier interface returns pre-activation logits;
-	// BirdNET applies sigmoid in its own Predict path, Perch needs softmax.
+	return p.finalizeResults(rawLogits)
+}
+
+// finalizeResults applies softmax to the raw logits, pairs them with labels,
+// selects the top-K, and returns a caller-owned copy. The copy is deliberate:
+// getTopKResults returns a sub-slice that aliases the full per-label backing array
+// (Perch has thousands of species), so returning it directly would pin that whole
+// array for as long as the caller retains the top-K. Mirrors BirdNET.finalizeResults.
+// The caller must hold p.mu (this reads p.labels).
+func (p *Perch) finalizeResults(rawLogits []float32) ([]datastore.Results, error) {
+	// The inference.Classifier interface returns pre-activation logits; BirdNET
+	// applies sigmoid in its own Predict path, Perch needs softmax to normalize
+	// raw logits into probabilities (0.0-1.0).
 	predictions := perchSoftmax(rawLogits)
 
-	// Pair labels with predictions
 	results, err := pairLabelsAndConfidence(p.labels, predictions)
 	if err != nil {
 		return nil, err
 	}
 
-	// Return top results
-	return getTopKResults(results, defaultTopKResults), nil
+	top := getTopKResults(results, defaultTopKResults)
+	out := make([]datastore.Results, len(top))
+	copy(out, top)
+	return out, nil
+}
+
+// PredictWithEmbeddings runs inference and returns detection results plus the
+// model's embedding vector. The embedding is nil when the underlying classifier
+// cannot produce one; callers treat nil as "unavailable". The method mirrors
+// Perch.Predict's lock discipline (holds p.mu for the full native call) and
+// post-processing (softmax), threading the embedding through. The ctx parameter
+// mirrors Perch.Predict's signature; like Predict, Perch does not use it.
+// Implements EmbeddingCapable.
+func (p *Perch) PredictWithEmbeddings(ctx context.Context, samples [][]float32) ([]datastore.Results, []float32, error) {
+	_ = ctx // ctx is part of the EmbeddingCapable contract; Perch does not use it (mirrors Predict).
+
+	if len(samples) == 0 || len(samples[0]) == 0 {
+		return nil, nil, errors.Newf("empty audio sample").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.classifier == nil {
+		return nil, nil, errors.Newf("Perch classifier is not initialized").
+			Category(errors.CategoryModelInit).
+			Build()
+	}
+
+	// Run the capability-gated forward pass under p.mu. extractRawWithEmbeddings
+	// performs the EmbeddingExtractor type assertion plus the EmbeddingDim() > 0
+	// gate inline; incapable backends yield a nil embedding (not an error).
+	rawLogits, embedding, err := extractRawWithEmbeddings(p.classifier, samples[0])
+	if err != nil {
+		return nil, nil, errors.New(err).
+			Category(errors.CategoryAudio).
+			Context("model", "Perch_V2").
+			Build()
+	}
+
+	results, err := p.finalizeResults(rawLogits)
+	if err != nil {
+		return nil, nil, err
+	}
+	return results, embedding, nil
+}
+
+// EmbeddingDim returns the embedding vector length of the Perch backend, or 0
+// when it does not expose embeddings. The result is read under p.mu to avoid a
+// race with a concurrent Close.
+// Implements EmbeddingCapable.
+func (p *Perch) EmbeddingDim() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return embeddingDimOf(p.classifier)
 }
 
 // Spec returns the audio requirements for Perch v2.

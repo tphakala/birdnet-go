@@ -26,3 +26,18 @@ func TestBirdNETMetrics_RecordEmbeddingExtraction(t *testing.T) {
 	m.SetEmbeddingDim("test-model", 1024)
 	assert.InDelta(t, float64(1024), testutil.ToFloat64(m.EmbeddingDimGauge.WithLabelValues("test-model")), 0.0001)
 }
+
+func TestBirdNETMetrics_ClearEmbeddingDim(t *testing.T) {
+	t.Parallel()
+
+	reg := prometheus.NewRegistry()
+	m, err := NewBirdNETMetrics(reg)
+	require.NoError(t, err)
+
+	m.SetEmbeddingDim("test-model", 1024)
+	assert.InDelta(t, float64(1024), testutil.ToFloat64(m.EmbeddingDimGauge.WithLabelValues("test-model")), 0.0001)
+
+	m.ClearEmbeddingDim("test-model")
+	// After deletion the series no longer exists, so the gauge has zero metrics for that label set.
+	assert.Equal(t, 0, testutil.CollectAndCount(m.EmbeddingDimGauge))
+}

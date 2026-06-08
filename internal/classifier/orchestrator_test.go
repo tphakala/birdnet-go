@@ -6,11 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // mockModelInstance implements ModelInstance for testing.
@@ -374,4 +377,94 @@ func TestOrchestrator_PredictModelWithEmbeddings_ClosedInstance(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, results)
 	assert.Nil(t, emb)
+}
+
+func TestOrchestrator_EmbeddingDimGaugeSetAndCleared(t *testing.T) {
+	// Mutates package-global metrics; not parallel.
+	reg := prometheus.NewRegistry()
+	m, err := metrics.NewBirdNETMetrics(reg)
+	require.NoError(t, err)
+	globalMetrics.Store(m)
+	t.Cleanup(func() { globalMetrics.Store(nil) })
+
+	ec := &embCapableMock{mockModelInstance: &mockModelInstance{id: "m1"}, emb: []float32{1, 2, 3}, dim: 3}
+	o := &Orchestrator{models: map[string]*modelEntry{}}
+
+	o.setEmbeddingDimGauge("m1", ec)
+	assert.InDelta(t, float64(3), testutil.ToFloat64(m.EmbeddingDimGauge.WithLabelValues("m1")), 0.0001)
+
+	o.clearEmbeddingDimGauge("m1")
+	assert.Equal(t, 0, testutil.CollectAndCount(m.EmbeddingDimGauge))
+}
+
+func TestOrchestrator_Delete_ClearsEmbeddingDimGauge(t *testing.T) {
+	// Mutates package-global metrics; not parallel.
+	reg := prometheus.NewRegistry()
+	m, err := metrics.NewBirdNETMetrics(reg)
+	require.NoError(t, err)
+	globalMetrics.Store(m)
+	t.Cleanup(func() { globalMetrics.Store(nil) })
+
+	ec := &embCapableMock{mockModelInstance: &mockModelInstance{id: "m1"}, emb: []float32{1, 2, 3}, dim: 3}
+	o := &Orchestrator{models: map[string]*modelEntry{"m1": {instance: ec}}}
+	o.setEmbeddingDimGauge("m1", ec)
+	require.Equal(t, 1, testutil.CollectAndCount(m.EmbeddingDimGauge), "gauge series present before Delete")
+
+	// Full teardown must drop the per-model gauge series, not leave it stale.
+	o.Delete()
+	assert.Equal(t, 0, testutil.CollectAndCount(m.EmbeddingDimGauge), "Delete clears the embedding-dim gauge series")
+}
+
+func TestOrchestrator_PredictModelWithEmbeddings_RecordsErrorStatus(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m, err := metrics.NewBirdNETMetrics(reg)
+	require.NoError(t, err)
+	globalMetrics.Store(m)
+	t.Cleanup(func() { globalMetrics.Store(nil) })
+
+	inner := &mockModelInstance{
+		id: "m2",
+		predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			return nil, assert.AnError
+		},
+	}
+	ec := &embCapableMock{mockModelInstance: inner, emb: nil, dim: 3}
+	o := &Orchestrator{models: map[string]*modelEntry{"m2": {instance: ec}}}
+
+	_, _, err = o.PredictModelWithEmbeddings(t.Context(), "m2", [][]float32{{0.1}})
+	require.Error(t, err)
+	assert.InDelta(t, float64(1), testutil.ToFloat64(m.EmbeddingExtractionTotal.WithLabelValues("m2", "error")), 0.0001)
+}
+
+// TestOrchestrator_MultipleModelsEachExtractOwnEmbedding proves that per-model
+// dispatch routes each request to the loaded model's own
+// PredictModelWithEmbeddings, so two capable models return their own
+// (different-dimension) embeddings rather than a single shared vector.
+func TestOrchestrator_MultipleModelsEachExtractOwnEmbedding(t *testing.T) {
+	t.Parallel()
+	const (
+		birdnetEmbDim = 4
+		perchEmbDim   = 3
+	)
+	m1 := &embCapableMock{
+		mockModelInstance: &mockModelInstance{id: "birdnet", predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			return []datastore.Results{{Species: "Parus major", Confidence: 0.9}}, nil
+		}},
+		emb: []float32{1, 2, 3, 4}, dim: birdnetEmbDim,
+	}
+	m2 := &embCapableMock{
+		mockModelInstance: &mockModelInstance{id: "perch", predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			return []datastore.Results{{Species: "Turdus merula", Confidence: 0.8}}, nil
+		}},
+		emb: []float32{5, 6, 7}, dim: perchEmbDim,
+	}
+	o := &Orchestrator{models: map[string]*modelEntry{"birdnet": {instance: m1}, "perch": {instance: m2}}}
+
+	_, e1, err := o.PredictModelWithEmbeddings(t.Context(), "birdnet", [][]float32{{0.1}})
+	require.NoError(t, err)
+	_, e2, err := o.PredictModelWithEmbeddings(t.Context(), "perch", [][]float32{{0.1}})
+	require.NoError(t, err)
+
+	assert.Len(t, e1, birdnetEmbDim, "birdnet model yields its own 4-dim embedding")
+	assert.Len(t, e2, perchEmbDim, "perch model yields its own 3-dim embedding")
 }

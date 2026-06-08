@@ -49,6 +49,14 @@ func (f *fakePlainClassifier) Predict(_ []float32) ([]float32, error) { return f
 func (f *fakePlainClassifier) NumSpecies() int                        { return len(f.logits) }
 func (f *fakePlainClassifier) Close()                                 {}
 
+// fakeErrPlainClassifier implements inference.Classifier and returns an error from
+// Predict, to exercise the invoke_failed branch of BirdNET.Predict.
+type fakeErrPlainClassifier struct{ err error }
+
+func (f *fakeErrPlainClassifier) Predict(_ []float32) ([]float32, error) { return nil, f.err }
+func (f *fakeErrPlainClassifier) NumSpecies() int                        { return 0 }
+func (f *fakeErrPlainClassifier) Close()                                 {}
+
 // newEmbTestBirdNET builds a minimal *BirdNET backed by the given classifier,
 // with pre-allocated buffers and settings matching the provided labels.
 // The classifier parameter uses the structural interface that both fakes satisfy.
@@ -71,6 +79,30 @@ func newEmbTestBirdNET(c interface {
 	s.BirdNET.Sensitivity = 1.0
 	bn.settingsAtomic.Store(s)
 	return bn
+}
+
+func TestExtractRawWithEmbeddings_Capable(t *testing.T) {
+	t.Parallel()
+	f := &fakeEmbExtractor{logits: []float32{0.1, 0.2}, emb: []float32{1, 2, 3, 4}, dim: 4}
+	logits, emb, err := extractRawWithEmbeddings(f, []float32{0.0})
+	require.NoError(t, err)
+	require.Equal(t, []float32{0.1, 0.2}, logits)
+	require.Equal(t, []float32{1, 2, 3, 4}, emb)
+}
+
+func TestExtractRawWithEmbeddings_Incapable(t *testing.T) {
+	t.Parallel()
+	f := &fakePlainClassifier{logits: []float32{0.1, 0.2}}
+	logits, emb, err := extractRawWithEmbeddings(f, []float32{0.0})
+	require.NoError(t, err)
+	require.Equal(t, []float32{0.1, 0.2}, logits)
+	assert.Nil(t, emb)
+}
+
+func TestEmbeddingDimOf(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 1024, embeddingDimOf(&fakeEmbExtractor{logits: []float32{0}, dim: 1024}))
+	assert.Equal(t, 0, embeddingDimOf(&fakePlainClassifier{logits: []float32{0}}))
 }
 
 func TestBirdNET_PredictWithEmbeddings_Capable(t *testing.T) {

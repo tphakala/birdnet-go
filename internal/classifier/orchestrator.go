@@ -134,6 +134,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	}
 	o.settingsAtomic.Store(settings)
 
+	// Publish the primary model's embedding dimension on the gauge. The
+	// orchestrator is not yet shared, so no lock is held; the gauge is set to 0
+	// when the primary model cannot produce embeddings.
+	o.setEmbeddingDimGauge(bn.ModelInfo.ID, bn)
+
 	// Pre-compute thread allocation so model constructors receive their share.
 	// BirdNET already uses settings.BirdNET.Threads at construction; additional
 	// models get their allocated count passed to their constructor.
@@ -474,8 +479,9 @@ func (o *Orchestrator) PredictModelWithEmbeddings(ctx context.Context, modelID s
 	duration := time.Since(start)
 
 	if err != nil {
-		// NOTE: embedding_extraction_total{status="error"} is intentionally not
-		// incremented here in M1; the error status is reserved for a later milestone.
+		if m := getMetrics(); m != nil {
+			m.RecordEmbeddingExtraction(modelID, "error")
+		}
 		log.Error("PredictModelWithEmbeddings inference failed",
 			logger.String("model_id", modelID),
 			logger.Error(err),
@@ -504,6 +510,35 @@ func recordEmbeddingStatus(modelID string, dim int) {
 		m.RecordEmbeddingExtraction(modelID, "success")
 	} else {
 		m.RecordEmbeddingExtraction(modelID, "unavailable")
+	}
+}
+
+// setEmbeddingDimGauge records a model's embedding dimension on the gauge, using
+// the instance's capability (0 for non-capable models). Safe no-op when
+// getMetrics() returns nil (test paths).
+//
+// Lock-safety: this touches only the metrics layer and the instance's own
+// EmbeddingDim() (which locks the model's mu, never o's lock), so it is safe to
+// call while holding o.mu at the load chokepoints.
+func (o *Orchestrator) setEmbeddingDimGauge(modelID string, instance ModelInstance) {
+	m := getMetrics()
+	if m == nil {
+		return
+	}
+	dim := 0
+	if ec, ok := instance.(EmbeddingCapable); ok {
+		dim = ec.EmbeddingDim()
+	}
+	m.SetEmbeddingDim(modelID, dim)
+}
+
+// clearEmbeddingDimGauge deletes a model's embedding-dim gauge series on unload
+// so stale {model} series do not accumulate over the process lifetime. Safe
+// no-op when getMetrics() returns nil. Touches only the metrics layer, so it is
+// safe to call while holding o.mu.
+func (o *Orchestrator) clearEmbeddingDimGauge(modelID string) {
+	if m := getMetrics(); m != nil {
+		m.ClearEmbeddingDim(modelID)
 	}
 }
 
@@ -1020,13 +1055,21 @@ func (o *Orchestrator) ReloadModel() error {
 	o.TaxonomyPath = taxPath
 	o.ScientificIndex = sciIndex
 
-	// Re-key the models map in case the model ID changed after reload (Forgejo #270).
+	// Re-key the models map in case the model ID changed after reload.
+	// Keep the embedding-dim gauge in step with the re-key: if a model's ID changed,
+	// drop the stale series under the old key, then re-publish each model's dimension
+	// under its current key so a changed embedding size is reflected after reload.
 	newModels := make(map[string]*modelEntry, len(o.models))
-	for _, e := range o.models {
+	for oldID, e := range o.models {
 		if e.instance == nil {
 			continue // skip entries closed by concurrent Delete
 		}
-		newModels[e.instance.ModelID()] = e
+		newID := e.instance.ModelID()
+		if newID != oldID {
+			o.clearEmbeddingDimGauge(oldID)
+		}
+		newModels[newID] = e
+		o.setEmbeddingDimGauge(newID, e.instance)
 	}
 	o.models = newModels
 
@@ -1045,12 +1088,16 @@ func (o *Orchestrator) Delete() {
 	for _, entry := range o.models {
 		entry.mu.Lock()
 		if entry.instance != nil {
+			modelID := entry.instance.ModelID()
 			if err := entry.instance.Close(); err != nil {
 				GetLogger().Warn("failed to close model instance",
-					logger.String("model_id", entry.instance.ModelID()),
+					logger.String("model_id", modelID),
 					logger.Error(err))
 			}
 			entry.instance = nil // nil out to signal closed state to PredictModel
+			// Drop the embedding-dim gauge series so a discarded orchestrator (e.g.
+			// a failed construction that calls Delete) leaves no stale {model} series.
+			o.clearEmbeddingDimGauge(modelID)
 		}
 		entry.mu.Unlock()
 	}
@@ -1207,8 +1254,12 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	}
 
 	// Remove from map while holding the write lock so no new PredictModel
-	// calls can obtain this entry.
+	// calls can obtain this entry. The embedding-dim gauge series is keyed by
+	// the same ID (ModelID() == registryID for gallery models), so clearing it
+	// here drops the stale series. clearEmbeddingDimGauge only touches the
+	// metrics layer, so calling it under o.mu is deadlock-free.
 	delete(o.models, registryID)
+	o.clearEmbeddingDimGauge(registryID)
 	if registryID == RegistryIDBat {
 		if s := o.scheduler.Load(); s != nil {
 			s.stop()

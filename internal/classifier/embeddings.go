@@ -29,16 +29,38 @@ type EmbeddingCapable interface {
 // Verify that *BirdNET satisfies EmbeddingCapable at compile time.
 var _ EmbeddingCapable = (*BirdNET)(nil)
 
+// extractRawWithEmbeddings runs the capability-gated forward pass on an inference
+// backend. If the backend implements EmbeddingExtractor with a positive dim it
+// returns raw logits plus the embedding; otherwise it returns logits with a nil
+// embedding (not an error). The caller must hold the model's lock and applies its
+// own post-processing (sigmoid/softmax -> labels -> top-K) to the returned logits.
+// The embedding from PredictWithEmbeddings is already a fresh allocation at the
+// onnx layer, so callers do not copy it again.
+func extractRawWithEmbeddings(c inference.Classifier, sample []float32) (logits, embedding []float32, err error) {
+	if ee, ok := c.(inference.EmbeddingExtractor); ok && ee.EmbeddingDim() > 0 {
+		return ee.PredictWithEmbeddings(sample)
+	}
+	logits, err = c.Predict(sample)
+	return logits, nil, err
+}
+
+// embeddingDimOf reports the embedding dimension of an inference backend, or 0 if
+// the backend does not expose embeddings. Callers that hold a per-model lock use
+// this for their EmbeddingDim accessor.
+func embeddingDimOf(c inference.Classifier) int {
+	if ee, ok := c.(inference.EmbeddingExtractor); ok {
+		return ee.EmbeddingDim()
+	}
+	return 0
+}
+
 // EmbeddingDim returns the embedding vector length of the underlying classifier,
 // or 0 when the active model cannot produce embeddings.
 // The result is read under bn.mu to avoid a race with concurrent model reloads.
 func (bn *BirdNET) EmbeddingDim() int {
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
-	if ee, ok := bn.classifier.(inference.EmbeddingExtractor); ok {
-		return ee.EmbeddingDim()
-	}
-	return 0
+	return embeddingDimOf(bn.classifier)
 }
 
 // PredictWithEmbeddings runs inference and returns detection results plus the
@@ -81,6 +103,9 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 			Build()
 		span.SetTag("error", "true")
 		span.SetData("error_type", "empty_sample")
+		if m := getMetrics(); m != nil {
+			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
 		return nil, nil, err
 	}
 
@@ -96,32 +121,19 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 			Build()
 		span.SetTag("error", "true")
 		span.SetData("error_type", "classifier_nil")
+		if m := getMetrics(); m != nil {
+			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
 		return nil, nil, err
 	}
 
-	// Capability check: type-assert once here (under bn.mu) so both branches
-	// share a single invokeStart/invokeDuration timing block below.
-	ee, capable := bn.classifier.(inference.EmbeddingExtractor)
-	capable = capable && ee.EmbeddingDim() > 0
-
-	// Run inference via the appropriate branch. Both branches produce
-	// (predictions, embedding, err); the incapable branch always yields nil embedding.
-	var (
-		predictions []float32
-		embedding   []float32
-		invokeErr   error
-	)
+	// Run the capability-gated forward pass under bn.mu. extractRawWithEmbeddings
+	// performs the EmbeddingExtractor type assertion plus the EmbeddingDim() > 0
+	// gate inline (reading a plain int field on the ONNX backend, not
+	// bn.EmbeddingDim(), which would deadlock on bn.mu); incapable backends yield
+	// a nil embedding.
 	invokeStart := time.Now()
-	if capable {
-		// Model supports embedding extraction: run the combined forward pass.
-		// ee.EmbeddingDim() was called above while bn.mu is held; that reads a plain
-		// int field on the ONNX backend, not bn.EmbeddingDim() (which would deadlock).
-		predictions, embedding, invokeErr = ee.PredictWithEmbeddings(sample[0])
-	} else {
-		// Model cannot extract embeddings: fall back to plain prediction.
-		predictions, invokeErr = bn.classifier.Predict(sample[0])
-		// embedding stays nil
-	}
+	predictions, embedding, invokeErr := extractRawWithEmbeddings(bn.classifier, sample[0])
 	invokeDuration := time.Since(invokeStart)
 
 	if invokeErr != nil {

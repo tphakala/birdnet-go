@@ -3,7 +3,6 @@ package classifier
 
 import (
 	"context"
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,6 +28,7 @@ type TracingSpan struct {
 	sentrySpan     *sentry.Span
 	metricsEnabled bool
 	model          string // For metrics labeling
+	errored        bool   // set when SetTag("error","true"); suppresses the success-path RecordPrediction in Finish
 }
 
 // Global metrics instance (set by observability package)
@@ -102,6 +102,13 @@ func (s *TracingSpan) SetTag(key, value string) {
 		s.model = value
 	}
 
+	// Mark the span as errored so Finish skips the success-path RecordPrediction.
+	// Error branches that record their own prediction (with the non-nil error)
+	// set this tag, preventing a double-count.
+	if key == "error" && value == "true" {
+		s.errored = true
+	}
+
 	// Only allocate tags map if Sentry is enabled
 	if s.sentrySpan != nil {
 		if s.tags == nil {
@@ -145,12 +152,15 @@ func (s *TracingSpan) Finish() {
 		}
 
 		if m := getMetrics(); m != nil {
-			// Record appropriate metric based on operation
+			// Record appropriate metric based on operation.
+			// The success-path prediction is recorded here only when the span is
+			// not errored; error branches record their own prediction with the
+			// non-nil error, so recording here too would double-count.
 			switch s.operation {
-			case "birdnet.predict":
-				m.RecordPrediction(model, durationSeconds, nil)
-			case "birdnet.predict_embeddings":
-				m.RecordPrediction(model, durationSeconds, nil)
+			case "birdnet.predict", "birdnet.predict_embeddings":
+				if !s.errored {
+					m.RecordPrediction(model, durationSeconds, nil)
+				}
 			case "birdnet.process_chunk":
 				m.RecordChunkProcess(model, durationSeconds)
 			case "birdnet.model_invoke":
@@ -170,50 +180,6 @@ func (s *TracingSpan) Finish() {
 		s.SetData("duration_ms", duration.Milliseconds())
 		s.sentrySpan.Finish()
 	}
-}
-
-// TraceAnalysis traces audio analysis operations
-func TraceAnalysis(ctx context.Context, operation string, fn func() error) error {
-	span, _ := StartSpan(ctx, "birdnet."+operation, operation)
-	defer span.Finish()
-
-	err := fn()
-	if err != nil {
-		span.SetTag("error", "true")
-		span.SetData("error_message", err.Error())
-	}
-
-	return err
-}
-
-// TracePrediction traces prediction operations with additional metrics
-func TracePrediction(ctx context.Context, sampleSize int, fn func() (any, error)) (any, error) {
-	span, _ := StartSpan(ctx, "birdnet.predict", "Audio prediction")
-	defer span.Finish()
-
-	span.SetData("sample_size", sampleSize)
-
-	start := time.Now()
-	result, err := fn()
-	duration := time.Since(start)
-
-	span.SetData("prediction_duration_ms", duration.Milliseconds())
-
-	if err != nil {
-		span.SetTag("error", "true")
-		span.SetData("error_message", err.Error())
-	} else {
-		span.SetTag("error", "false")
-		// Add result metrics if available using reflection
-		if result != nil {
-			resultValue := reflect.ValueOf(result)
-			if resultValue.Kind() == reflect.Slice {
-				span.SetData("result_count", resultValue.Len())
-			}
-		}
-	}
-
-	return result, err
 }
 
 // RecordMetric records a performance metric

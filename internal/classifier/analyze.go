@@ -46,6 +46,9 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 			Build()
 		span.SetTag("error", "true")
 		span.SetData("error_type", "empty_sample")
+		if m := getMetrics(); m != nil {
+			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
 		return nil, err
 	}
 
@@ -61,6 +64,9 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 			Build()
 		span.SetTag("error", "true")
 		span.SetData("error_type", "classifier_nil")
+		if m := getMetrics(); m != nil {
+			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
 		return nil, err
 	}
 
