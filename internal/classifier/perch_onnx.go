@@ -128,19 +128,30 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 			Build()
 	}
 
-	// Apply softmax to normalize raw logits into probabilities (0.0-1.0).
-	// The inference.Classifier interface returns pre-activation logits;
-	// BirdNET applies sigmoid in its own Predict path, Perch needs softmax.
+	return p.finalizeResults(rawLogits)
+}
+
+// finalizeResults applies softmax to the raw logits, pairs them with labels,
+// selects the top-K, and returns a caller-owned copy. The copy is deliberate:
+// getTopKResults returns a sub-slice that aliases the full per-label backing array
+// (Perch has thousands of species), so returning it directly would pin that whole
+// array for as long as the caller retains the top-K. Mirrors BirdNET.finalizeResults.
+// The caller must hold p.mu (this reads p.labels).
+func (p *Perch) finalizeResults(rawLogits []float32) ([]datastore.Results, error) {
+	// The inference.Classifier interface returns pre-activation logits; BirdNET
+	// applies sigmoid in its own Predict path, Perch needs softmax to normalize
+	// raw logits into probabilities (0.0-1.0).
 	predictions := perchSoftmax(rawLogits)
 
-	// Pair labels with predictions
 	results, err := pairLabelsAndConfidence(p.labels, predictions)
 	if err != nil {
 		return nil, err
 	}
 
-	// Return top results
-	return getTopKResults(results, defaultTopKResults), nil
+	top := getTopKResults(results, defaultTopKResults)
+	out := make([]datastore.Results, len(top))
+	copy(out, top)
+	return out, nil
 }
 
 // PredictWithEmbeddings runs inference and returns detection results plus the
@@ -179,18 +190,11 @@ func (p *Perch) PredictWithEmbeddings(ctx context.Context, samples [][]float32) 
 			Build()
 	}
 
-	// Apply softmax to normalize raw logits into probabilities (0.0-1.0),
-	// matching Perch.Predict's post-processing.
-	predictions := perchSoftmax(rawLogits)
-
-	// Pair labels with predictions
-	results, err := pairLabelsAndConfidence(p.labels, predictions)
+	results, err := p.finalizeResults(rawLogits)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	// Return top results plus the embedding
-	return getTopKResults(results, defaultTopKResults), embedding, nil
+	return results, embedding, nil
 }
 
 // EmbeddingDim returns the embedding vector length of the Perch backend, or 0
