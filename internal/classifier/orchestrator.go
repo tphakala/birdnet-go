@@ -410,6 +410,68 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 	return results, err
 }
 
+// PredictModelWithEmbeddings mirrors PredictModel but also returns the model's
+// embedding vector when the resolved model implements EmbeddingCapable. The
+// embedding is nil when the model cannot produce one; that is not an error.
+// It does not pre-check EmbeddingDim() (which would double-lock); capability is
+// routed once inside the instance's PredictWithEmbeddings.
+//
+// Locking sequence is identical to PredictModel: o.mu.RLock (map lookup),
+// o.inferenceMu.Lock (inference serialization), entry.mu.Lock (instance lifecycle).
+func (o *Orchestrator) PredictModelWithEmbeddings(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, []float32, error) {
+	o.mu.RLock()
+	entry, ok := o.models[modelID]
+	o.mu.RUnlock()
+
+	if !ok {
+		return nil, nil, errors.Newf("unknown model: %s", modelID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Context("model_id", modelID).
+			Build()
+	}
+
+	o.inferenceMu.Lock()
+	defer o.inferenceMu.Unlock()
+
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.instance == nil {
+		return nil, nil, errors.Newf("model %s has been closed", modelID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Context("model_id", modelID).
+			Build()
+	}
+
+	if ec, ok := entry.instance.(EmbeddingCapable); ok {
+		return ec.PredictWithEmbeddings(ctx, sample)
+	}
+	results, err := entry.instance.Predict(ctx, sample)
+	return results, nil, err
+}
+
+// ModelEmbeddingDim returns the embedding dimension for a model (0 = not
+// capable, unknown, or closed), for cheap out-of-band capability checks
+// without running inference.
+func (o *Orchestrator) ModelEmbeddingDim(modelID string) int {
+	o.mu.RLock()
+	entry, ok := o.models[modelID]
+	o.mu.RUnlock()
+	if !ok {
+		return 0
+	}
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.instance == nil {
+		return 0
+	}
+	if ec, ok := entry.instance.(EmbeddingCapable); ok {
+		return ec.EmbeddingDim()
+	}
+	return 0
+}
+
 // ResolveName walks the resolver chain and returns the first non-empty
 // common name for the given scientific name and locale.
 func (o *Orchestrator) ResolveName(scientificName, locale string) string {
