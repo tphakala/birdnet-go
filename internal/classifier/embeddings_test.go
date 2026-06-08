@@ -86,7 +86,8 @@ func TestBirdNET_PredictWithEmbeddings_Capable(t *testing.T) {
 	results, emb, err := bn.PredictWithEmbeddings(t.Context(), [][]float32{{0.0}})
 	require.NoError(t, err)
 	require.Len(t, emb, 4)
-	assert.NotEmpty(t, results)
+	assert.Equal(t, []float32{1, 2, 3, 4}, emb)
+	require.Len(t, results, 3)
 }
 
 func TestBirdNET_PredictWithEmbeddings_Incapable(t *testing.T) {
@@ -98,7 +99,7 @@ func TestBirdNET_PredictWithEmbeddings_Incapable(t *testing.T) {
 	results, emb, err := bn.PredictWithEmbeddings(t.Context(), [][]float32{{0.0}})
 	require.NoError(t, err)
 	assert.Nil(t, emb)
-	assert.NotEmpty(t, results)
+	require.Len(t, results, 3)
 }
 
 func TestBirdNET_EmbeddingDim(t *testing.T) {

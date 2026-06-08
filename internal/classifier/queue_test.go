@@ -8,6 +8,7 @@ import (
 )
 
 func TestResults_CopyDeepCopiesEmbeddings(t *testing.T) {
+	t.Parallel()
 	orig := Results{Embeddings: []float32{1, 2, 3}}
 	cp := orig.Copy()
 	require.Equal(t, []float32{1, 2, 3}, cp.Embeddings)

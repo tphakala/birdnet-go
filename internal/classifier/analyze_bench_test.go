@@ -345,8 +345,8 @@ func BenchmarkTopKResultsOptimized(b *testing.B) {
 
 			topResults := getTopKResults(testResults, defaultTopKResults)
 
-			if len(topResults) != 10 {
-				b.Errorf("Expected 10 results, got %d", len(topResults))
+			if len(topResults) != defaultTopKResults {
+				b.Errorf("Expected %d results, got %d", defaultTopKResults, len(topResults))
 			}
 		}
 	})
@@ -405,12 +405,12 @@ func BenchmarkFullPipelineOptimized(b *testing.B) {
 				b.Errorf("pairLabelsAndConfidenceReuse failed: %v", err)
 			}
 
-			// Step 3: Get top 10 using optimized algorithm
+			// Step 3: Get top k using optimized algorithm
 			finalResults := getTopKResults(results, defaultTopKResults)
 
 			// Prevent compiler optimization
-			if len(finalResults) != 10 {
-				b.Errorf("Expected 10 final results, got %d", len(finalResults))
+			if len(finalResults) != defaultTopKResults {
+				b.Errorf("Expected %d final results, got %d", defaultTopKResults, len(finalResults))
 			}
 		}
 	})
