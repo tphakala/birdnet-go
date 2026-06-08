@@ -3,6 +3,7 @@ package classifier
 
 import (
 	"context"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -54,8 +55,10 @@ func (bn *BirdNET) EmbeddingDim() int {
 // ee.EmbeddingDim()) is performed on the ee interface value, never via
 // bn.EmbeddingDim(), to avoid a self-deadlock on bn.mu.
 //
-// Metric recording is intentionally absent here; it is wired at the
-// orchestrator chokepoint in a later task (Task 8).
+// Telemetry mirrors BirdNET.Predict exactly: same span data keys, same
+// RecordModelInvoke/RecordPrediction call sites. The success-path
+// RecordPrediction fires via span.Finish() (tracing.go switch case
+// "birdnet.predict_embeddings"); error-path RecordPrediction is explicit.
 //
 // Implements EmbeddingCapable.
 func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32) ([]datastore.Results, []float32, error) {
@@ -64,65 +67,118 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 	span.SetTag("model", bn.ModelInfo.ID)
 
 	settings := bn.currentSettings()
+	start := time.Now()
+	span.SetData("sample_count", len(sample))
+	if len(sample) > 0 {
+		span.SetData("sample_size", len(sample[0]))
+	}
 
+	// Guard against empty sample slice
 	if len(sample) == 0 || len(sample[0]) == 0 {
-		return nil, nil, errors.Newf("empty audio sample").
+		err := errors.Newf("empty audio sample").
 			Category(errors.CategoryValidation).
 			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Build()
+		span.SetTag("error", "true")
+		span.SetData("error_type", "empty_sample")
+		return nil, nil, err
 	}
 
+	// Lock to prevent concurrent access to the classifier backend and shared buffers
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
 
+	// Guard against nil classifier (e.g., after Delete() is called concurrently)
 	if bn.classifier == nil {
-		return nil, nil, errors.Newf("classifier backend is not initialized").
+		err := errors.Newf("classifier backend is not initialized").
 			Category(errors.CategoryModelInit).
 			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Build()
+		span.SetTag("error", "true")
+		span.SetData("error_type", "classifier_nil")
+		return nil, nil, err
 	}
 
-	ee, ok := bn.classifier.(inference.EmbeddingExtractor)
-	if !ok || ee.EmbeddingDim() == 0 {
+	// Capability check: type-assert once here (under bn.mu) so both branches
+	// share a single invokeStart/invokeDuration timing block below.
+	ee, capable := bn.classifier.(inference.EmbeddingExtractor)
+	capable = capable && ee.EmbeddingDim() > 0
+
+	// Run inference via the appropriate branch. Both branches produce
+	// (predictions, embedding, err); the incapable branch always yields nil embedding.
+	var (
+		predictions []float32
+		embedding   []float32
+		invokeErr   error
+	)
+	invokeStart := time.Now()
+	if capable {
+		// Model supports embedding extraction: run the combined forward pass.
+		// ee.EmbeddingDim() was called above while bn.mu is held; that reads a plain
+		// int field on the ONNX backend, not bn.EmbeddingDim() (which would deadlock).
+		predictions, embedding, invokeErr = ee.PredictWithEmbeddings(sample[0])
+	} else {
 		// Model cannot extract embeddings: fall back to plain prediction.
-		predictions, err := bn.classifier.Predict(sample[0])
-		if err != nil {
-			return nil, nil, errors.New(err).
-				Category(errors.CategoryAudio).
-				ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
-				Build()
-		}
-		results, err := bn.finalizeResults(predictions, settings)
-		if err != nil {
-			// finalizeResults already adds confidence_count; wrap with label_count
-			// to carry both counts, matching BirdNET.Predict's diagnostic.
-			return nil, nil, errors.New(err).
-				Category(errors.CategoryValidation).
-				Context("label_count", len(settings.BirdNET.Labels)).
-				Build()
-		}
-		return results, nil, nil
+		predictions, invokeErr = bn.classifier.Predict(sample[0])
+		// embedding stays nil
 	}
+	invokeDuration := time.Since(invokeStart)
 
-	// Model supports embedding extraction: run the combined forward pass.
-	// ee.EmbeddingDim() was called above while bn.mu is held; that reads a plain
-	// int field on the ONNX backend, not bn.EmbeddingDim() (which would deadlock).
-	predictions, embedding, err := ee.PredictWithEmbeddings(sample[0])
-	if err != nil {
-		return nil, nil, errors.New(err).
+	if invokeErr != nil {
+		err := errors.New(invokeErr).
 			Category(errors.CategoryAudio).
 			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Context("sample_length", len(sample[0])).
+			Timing("prediction-invoke", time.Since(start)).
 			Build()
+
+		span.SetTag("error", "true")
+		span.SetData("error_type", "invoke_failed")
+
+		if m := getMetrics(); m != nil {
+			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
+
+		return nil, nil, err
+	}
+
+	span.SetData("invoke_duration_ms", invokeDuration.Milliseconds())
+
+	// Record model invoke timing separately
+	if m := getMetrics(); m != nil {
+		m.RecordModelInvoke(bn.ModelInfo.ID, invokeDuration.Seconds())
 	}
 
 	results, err := bn.finalizeResults(predictions, settings)
 	if err != nil {
-		// finalizeResults already adds confidence_count; wrap with label_count
-		// to carry both counts, matching BirdNET.Predict's diagnostic.
-		return nil, nil, errors.New(err).
+		err = errors.New(err).
 			Category(errors.CategoryValidation).
 			Context("label_count", len(settings.BirdNET.Labels)).
+			Timing("prediction-total", time.Since(start)).
 			Build()
+
+		span.SetTag("error", "true")
+		span.SetData("error_type", "label_mismatch")
+
+		// Record error in metrics
+		if m := getMetrics(); m != nil {
+			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
+		}
+
+		return nil, nil, err
 	}
+
+	// Log prediction timing for performance monitoring
+	duration := time.Since(start)
+	bn.Debug("Prediction with embeddings completed in %v with %d results", duration, len(results))
+
+	// Record metrics
+	span.SetData("total_duration_ms", duration.Milliseconds())
+	span.SetData("result_count", len(results))
+	span.SetTag("error", "false")
+
+	// The span.Finish() will automatically record the prediction metrics via the
+	// "birdnet.predict_embeddings" case in tracing.go Finish().
+
 	return results, embedding, nil
 }

@@ -481,6 +481,7 @@ func (o *Orchestrator) PredictModelWithEmbeddings(ctx context.Context, modelID s
 			logger.Error(err),
 			logger.Duration("duration", duration))
 	} else {
+		globalInferenceCounters.RecordInvoke(modelID, duration.Microseconds())
 		recordEmbeddingStatus(modelID, len(emb))
 		log.Debug("PredictModelWithEmbeddings complete",
 			logger.String("model_id", modelID),

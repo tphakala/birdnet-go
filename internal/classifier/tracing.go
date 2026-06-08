@@ -149,6 +149,8 @@ func (s *TracingSpan) Finish() {
 			switch s.operation {
 			case "birdnet.predict":
 				m.RecordPrediction(model, durationSeconds, nil)
+			case "birdnet.predict_embeddings":
+				m.RecordPrediction(model, durationSeconds, nil)
 			case "birdnet.process_chunk":
 				m.RecordChunkProcess(model, durationSeconds)
 			case "birdnet.model_invoke":
