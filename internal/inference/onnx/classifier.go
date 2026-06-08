@@ -256,14 +256,11 @@ func (c *Classifier) EmbeddingDim() int {
 
 // PredictRaw runs inference and returns raw logits (pre-activation) for a single segment.
 // This is used by adapters that handle their own post-processing (e.g., sensitivity-adjusted sigmoid).
-// PredictRaw runs inference and returns raw logits (pre-activation) for a single segment.
 func (c *Classifier) PredictRaw(audio []float32) ([]float32, error) {
 	logits, _, err := c.predict(audio, false)
 	return logits, err
 }
 
-// PredictRawWithEmbeddings runs inference and returns both raw logits and embedding vector.
-// Returns nil embeddings if the model does not produce embeddings.
 // PredictRawWithEmbeddings runs inference and returns both raw logits and the
 // embedding vector. Returns nil embeddings if the model does not produce embeddings.
 func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddings []float32, err error) {
