@@ -14,6 +14,12 @@ Shows up to 12 species, ordered by novelty category then detection count.
   import { buildSpeciesDetectionUrl } from '$lib/utils/detectionUrls';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { speciesTrackingSettings } from '$lib/stores/settings';
+  import { confidenceColorClasses } from '$lib/desktop/features/dashboard/utils/confidenceColors';
+  import {
+    resolveNoveltyCategory,
+    noveltyCategoryColorVar,
+    type NoveltyCategory,
+  } from '$lib/desktop/features/dashboard/utils/noveltyCategory';
   import { AudioLines, CalendarDays, Leaf, Star } from '@lucide/svelte';
 
   interface Props {
@@ -36,21 +42,12 @@ Shows up to 12 species, ordered by novelty category then detection count.
   // The widget relies on the species tracker; warn when it is turned off.
   const trackingDisabled = $derived($speciesTrackingSettings?.enabled === false);
 
-  type HighlightCategory = 'lifetime' | 'year' | 'season';
-
   interface Highlight {
     species: DailySpeciesSummary;
-    category: HighlightCategory;
+    category: NoveltyCategory;
   }
 
-  function resolveCategory(item: DailySpeciesSummary): HighlightCategory | null {
-    if (item.is_new_species) return 'lifetime';
-    if (item.is_new_this_year) return 'year';
-    if (item.is_new_this_season) return 'season';
-    return null;
-  }
-
-  const categoryRank: Record<HighlightCategory, number> = { lifetime: 0, year: 1, season: 2 };
+  const categoryRank: Record<NoveltyCategory, number> = { lifetime: 0, year: 1, season: 2 };
 
   const highlights = $derived.by<Highlight[]>(() => {
     const result: Highlight[] = [];
@@ -58,7 +55,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
     // and the daily-summary endpoint can return a null body.
     if (!data) return result;
     for (const species of data) {
-      const category = resolveCategory(species);
+      const category = resolveNoveltyCategory(species);
       if (category !== null) result.push({ species, category });
     }
     result.sort((a, b) => {
@@ -70,7 +67,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
 
   const visibleHighlights = $derived(highlights.slice(0, MAX_VISIBLE));
 
-  function categoryLabel(category: HighlightCategory, season?: string): string {
+  function categoryLabel(category: NoveltyCategory, season?: string): string {
     switch (category) {
       case 'lifetime':
         return t('dashboard.newSpeciesHighlights.categoryLifetime');
@@ -81,29 +78,6 @@ Shows up to 12 species, ordered by novelty category then detection count.
           ? t('dashboard.newSpeciesHighlights.categorySeasonNamed', { season })
           : t('dashboard.newSpeciesHighlights.categorySeason');
     }
-  }
-
-  // Left-border accent color per novelty category (matches daily summary indicators).
-  function categoryColorVar(category: HighlightCategory): string {
-    switch (category) {
-      case 'lifetime':
-        return 'var(--color-warning)';
-      case 'year':
-        return 'var(--color-info)';
-      case 'season':
-        return 'var(--color-success)';
-    }
-  }
-
-  // Confidence pill colors, mirroring ConfidenceBadge thresholds for consistency.
-  function confidenceClasses(percent: number): string {
-    if (percent >= 90) return 'bg-[var(--color-success)] text-[var(--color-success-content)]';
-    if (percent >= 70)
-      return 'bg-[color-mix(in_srgb,var(--color-success)_80%,var(--color-warning))] text-white';
-    if (percent >= 50) return 'bg-[var(--color-warning)] text-[var(--color-warning-content)]';
-    if (percent >= 30)
-      return 'bg-[color-mix(in_srgb,var(--color-warning)_60%,var(--color-error))] text-white';
-    return 'bg-[var(--color-error)] text-[var(--color-error-content)]';
   }
 
   function confidencePercent(item: DailySpeciesSummary): number | undefined {
@@ -122,10 +96,10 @@ Shows up to 12 species, ordered by novelty category then detection count.
   }
 </script>
 
-{#snippet categoryIcon(category: HighlightCategory, season: string | undefined)}
+{#snippet categoryIcon(category: NoveltyCategory, season: string | undefined)}
   <span
     class="shrink-0"
-    style:color={categoryColorVar(category)}
+    style:color={noveltyCategoryColorVar(category)}
     title={categoryLabel(category, season)}
     aria-label={categoryLabel(category, season)}
   >
@@ -163,7 +137,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
           href={speciesUrl(species)}
           class="group flex items-center gap-2.5 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-2.5 shadow-sm transition-shadow hover:shadow-md"
           style:border-left-width="3px"
-          style:border-left-color={categoryColorVar(category)}
+          style:border-left-color={noveltyCategoryColorVar(category)}
           title={categoryLabel(category, species.current_season)}
         >
           {#if showThumbnails}
@@ -189,7 +163,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
               </span>
               {#if percent !== undefined}
                 <span
-                  class="shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold {confidenceClasses(
+                  class="shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold {confidenceColorClasses(
                     percent
                   )}"
                 >

@@ -17,6 +17,7 @@
 -->
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
+  import { confidenceColorClasses } from '$lib/desktop/features/dashboard/utils/confidenceColors';
 
   interface Props {
     confidence: number;
@@ -34,19 +35,7 @@
   }
 
   const confidencePercent = $derived(normalizeConfidence(confidence));
-
-  // Get color classes based on confidence level
-  function getColorClasses(percent: number): string {
-    if (percent >= 90) return 'bg-[var(--color-success)] text-[var(--color-success-content)]';
-    if (percent >= 70)
-      return 'bg-[color-mix(in_srgb,var(--color-success)_80%,var(--color-warning))] text-white';
-    if (percent >= 50) return 'bg-[var(--color-warning)] text-[var(--color-warning-content)]';
-    if (percent >= 30)
-      return 'bg-[color-mix(in_srgb,var(--color-warning)_60%,var(--color-error))] text-white';
-    return 'bg-[var(--color-error)] text-[var(--color-error-content)]';
-  }
-
-  const colorClasses = $derived(getColorClasses(confidencePercent));
+  const colorClasses = $derived(confidenceColorClasses(confidencePercent));
 </script>
 
 <div

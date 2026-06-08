@@ -757,6 +757,9 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 			HighConfidence:      true, // Based on 0.8 >= 0.8
 			ThumbnailURLContain: "/api/v2/media/image/Melanerpes%20carolinus",
 		})
+		// RBWO's max (0.8) is NOT its last note (0.75), so this pins the
+		// max() aggregation rather than a "last-note-wins" implementation.
+		assert.InDelta(t, 0.8, rbwo.MaxConfidence, 0.001, "Red-bellied Woodpecker max confidence should be the max across notes, not the last")
 	}
 
 	// Assert that all expectations were met
