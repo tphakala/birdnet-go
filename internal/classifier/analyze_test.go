@@ -794,25 +794,68 @@ func generateLargeTestResults(count int) []datastore.Results {
 }
 
 func TestFinalizeResults_ReturnsCallerOwnedCopy(t *testing.T) {
-	labels := []string{"a_A", "b_B", "c_C"}
-	bn := &BirdNET{
-		confidenceBuffer: make([]float32, len(labels)),
-		resultsBuffer:    make([]datastore.Results, len(labels)),
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		labelN    int
+		wantLen   int
+		topBranch string
+	}{
+		{
+			// Fewer labels than defaultTopKResults: getTopKResults takes the
+			// k>=len branch and returns the whole (sorted) buffer.
+			name:      "fewer labels than top-K (whole-buffer branch)",
+			labelN:    3,
+			wantLen:   3,
+			topBranch: "k>=len",
+		},
+		{
+			// More labels than defaultTopKResults: getTopKResults takes the
+			// partial-sort results[:k] sub-slice branch, mirroring the real
+			// production path with ~6000 labels. The make+copy must still sever
+			// the alias on this sub-slice.
+			name:      "more labels than top-K (sub-slice branch)",
+			labelN:    15,
+			wantLen:   defaultTopKResults,
+			topBranch: "results[:k]",
+		},
 	}
-	settings := &conf.Settings{}
-	settings.BirdNET.Labels = labels
-	settings.BirdNET.Sensitivity = 1.0
 
-	out, err := bn.finalizeResults([]float32{0.1, 0.9, 0.5}, settings)
-	require.NoError(t, err)
-	require.NotEmpty(t, out)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	// Snapshot, then clobber the shared buffer (as the next inference window would).
-	snapshot := make([]datastore.Results, len(out))
-	copy(snapshot, out)
-	for i := range bn.resultsBuffer {
-		bn.resultsBuffer[i] = datastore.Results{Species: "MUT", Confidence: -1}
+			require.Greater(t, tt.labelN, 0, "label count must be positive")
+
+			labels := make([]string, tt.labelN)
+			predictions := make([]float32, tt.labelN)
+			for i := range labels {
+				labels[i] = fmt.Sprintf("species_%02d_Species %02d", i, i)
+				// Decreasing raw predictions so the top-K ordering is deterministic.
+				predictions[i] = float32(tt.labelN-i) / float32(tt.labelN)
+			}
+
+			bn := &BirdNET{
+				confidenceBuffer: make([]float32, tt.labelN),
+				resultsBuffer:    make([]datastore.Results, tt.labelN),
+			}
+			settings := &conf.Settings{}
+			settings.BirdNET.Labels = labels
+			settings.BirdNET.Sensitivity = 1.0
+
+			out, err := bn.finalizeResults(predictions, settings)
+			require.NoError(t, err)
+			require.Len(t, out, tt.wantLen, "unexpected top-K length for %s branch", tt.topBranch)
+
+			// Snapshot, then clobber the shared buffer (as the next inference window would).
+			snapshot := make([]datastore.Results, len(out))
+			copy(snapshot, out)
+			for i := range bn.resultsBuffer {
+				bn.resultsBuffer[i] = datastore.Results{Species: "MUT", Confidence: -1}
+			}
+
+			assert.Equal(t, snapshot, out, "returned slice must not alias bn.resultsBuffer (%s branch)", tt.topBranch)
+		})
 	}
-
-	assert.Equal(t, snapshot, out, "returned slice must not alias bn.resultsBuffer")
 }

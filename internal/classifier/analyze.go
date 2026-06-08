@@ -130,11 +130,21 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 // finalizeResults applies sigmoid to raw predictions, pairs them with labels,
 // selects the top-K, and returns a caller-owned copy. The returned slice never
 // aliases bn.resultsBuffer, so it is safe to hand to the ResultsQueue (issue #949).
+//
+// The caller must hold bn.mu: finalizeResults reads and writes the shared
+// bn.confidenceBuffer and bn.resultsBuffer without locking itself.
 func (bn *BirdNET) finalizeResults(predictions []float32, settings *conf.Settings) ([]datastore.Results, error) {
 	confidence := applySigmoidToPredictionsReuse(predictions, settings.BirdNET.Sensitivity, bn.confidenceBuffer)
 	results, err := pairLabelsAndConfidenceReuse(settings.BirdNET.Labels, confidence, bn.resultsBuffer)
 	if err != nil {
-		return nil, err
+		// confidence_count is the other side of a label/confidence length
+		// mismatch (len(confidence) == len(predictions) since sigmoid
+		// preserves length); the outer Predict wrapper adds label_count, so
+		// the final error carries both counts for diagnosis.
+		return nil, errors.New(err).
+			Category(errors.CategoryValidation).
+			Context("confidence_count", len(predictions)).
+			Build()
 	}
 	topResults := getTopKResults(results, defaultTopKResults)
 	out := make([]datastore.Results, len(topResults))
