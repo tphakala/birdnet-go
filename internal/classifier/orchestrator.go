@@ -474,6 +474,8 @@ func (o *Orchestrator) PredictModelWithEmbeddings(ctx context.Context, modelID s
 	duration := time.Since(start)
 
 	if err != nil {
+		// NOTE: embedding_extraction_total{status="error"} is intentionally not
+		// incremented here in M1; the error status is reserved for a later milestone.
 		log.Error("PredictModelWithEmbeddings inference failed",
 			logger.String("model_id", modelID),
 			logger.Error(err),

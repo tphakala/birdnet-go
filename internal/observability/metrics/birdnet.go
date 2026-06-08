@@ -157,14 +157,14 @@ func (m *BirdNETMetrics) initMetrics() error {
 	m.EmbeddingExtractionTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "birdnet_embedding_extraction_total",
-			Help: "Total embedding extraction attempts partitioned by model and status (success, unavailable, error).",
+			Help: "Total embedding extraction attempts partitioned by model and status (success, unavailable, error)",
 		},
 		[]string{"model", "status"},
 	)
 	m.EmbeddingDimGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "birdnet_embedding_dim",
-			Help: "Embedding vector length for the active model (0 when the model cannot produce embeddings).",
+			Help: "Embedding vector length for the active model (0 when the model cannot produce embeddings)",
 		},
 		[]string{"model"},
 	)
@@ -201,6 +201,8 @@ func (m *BirdNETMetrics) RecordEmbeddingExtraction(model, status string) {
 }
 
 // SetEmbeddingDim records the embedding dimension exposed by a model.
+// Wired from the analysis path in a later task; defined here so the gauge is
+// registered now.
 func (m *BirdNETMetrics) SetEmbeddingDim(model string, dim int) {
 	m.EmbeddingDimGauge.WithLabelValues(model).Set(float64(dim))
 }
