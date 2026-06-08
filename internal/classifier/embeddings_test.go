@@ -73,6 +73,30 @@ func newEmbTestBirdNET(c interface {
 	return bn
 }
 
+func TestExtractRawWithEmbeddings_Capable(t *testing.T) {
+	t.Parallel()
+	f := &fakeEmbExtractor{logits: []float32{0.1, 0.2}, emb: []float32{1, 2, 3, 4}, dim: 4}
+	logits, emb, err := extractRawWithEmbeddings(f, []float32{0.0})
+	require.NoError(t, err)
+	require.Equal(t, []float32{0.1, 0.2}, logits)
+	require.Equal(t, []float32{1, 2, 3, 4}, emb)
+}
+
+func TestExtractRawWithEmbeddings_Incapable(t *testing.T) {
+	t.Parallel()
+	f := &fakePlainClassifier{logits: []float32{0.1, 0.2}}
+	logits, emb, err := extractRawWithEmbeddings(f, []float32{0.0})
+	require.NoError(t, err)
+	require.Equal(t, []float32{0.1, 0.2}, logits)
+	assert.Nil(t, emb)
+}
+
+func TestEmbeddingDimOf(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 1024, embeddingDimOf(&fakeEmbExtractor{logits: []float32{0}, dim: 1024}))
+	assert.Equal(t, 0, embeddingDimOf(&fakePlainClassifier{logits: []float32{0}}))
+}
+
 func TestBirdNET_PredictWithEmbeddings_Capable(t *testing.T) {
 	t.Parallel()
 
