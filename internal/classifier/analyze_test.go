@@ -865,7 +865,7 @@ func TestFinalizeResults_ReturnsCallerOwnedCopy(t *testing.T) {
 
 // TestPredict_RecordsExactlyOnePredictionPerOutcome verifies that each Predict
 // outcome records exactly one prediction with the correct status. It guards
-// against the telemetry double-count (#950) where Finish() recorded a spurious
+// against the telemetry double-count where Finish() recorded a spurious
 // success even on error spans, and against error branches that recorded nothing.
 // It mutates the package-global metrics holder, so it must NOT run in parallel.
 func TestPredict_RecordsExactlyOnePredictionPerOutcome(t *testing.T) {
@@ -893,7 +893,7 @@ func TestPredict_RecordsExactlyOnePredictionPerOutcome(t *testing.T) {
 	// The counters are cumulative on the shared {test-model,*} series, so success
 	// stays at 1 throughout and error increments by exactly one per outcome. Each
 	// error branch sets span.SetTag("error","true") before the deferred Finish, so
-	// the errored flag suppresses Finish's success record (the #950 fix).
+	// the errored flag suppresses Finish's success record (the exactly-once fix).
 
 	// empty_sample: empty outer slice.
 	_, err = bn.Predict(t.Context(), [][]float32{})

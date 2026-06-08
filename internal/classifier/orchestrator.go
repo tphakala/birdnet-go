@@ -1055,7 +1055,7 @@ func (o *Orchestrator) ReloadModel() error {
 	o.TaxonomyPath = taxPath
 	o.ScientificIndex = sciIndex
 
-	// Re-key the models map in case the model ID changed after reload (Forgejo #270).
+	// Re-key the models map in case the model ID changed after reload.
 	// Keep the embedding-dim gauge in step with the re-key: if a model's ID changed,
 	// drop the stale series under the old key, then re-publish each model's dimension
 	// under its current key so a changed embedding size is reflected after reload.

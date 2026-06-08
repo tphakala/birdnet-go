@@ -104,7 +104,7 @@ func (s *TracingSpan) SetTag(key, value string) {
 
 	// Mark the span as errored so Finish skips the success-path RecordPrediction.
 	// Error branches that record their own prediction (with the non-nil error)
-	// set this tag, preventing a double-count (#950).
+	// set this tag, preventing a double-count.
 	if key == "error" && value == "true" {
 		s.errored = true
 	}
@@ -155,7 +155,7 @@ func (s *TracingSpan) Finish() {
 			// Record appropriate metric based on operation.
 			// The success-path prediction is recorded here only when the span is
 			// not errored; error branches record their own prediction with the
-			// non-nil error, so recording here too would double-count (#950).
+			// non-nil error, so recording here too would double-count.
 			switch s.operation {
 			case "birdnet.predict", "birdnet.predict_embeddings":
 				if !s.errored {
