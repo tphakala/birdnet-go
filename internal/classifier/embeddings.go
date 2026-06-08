@@ -61,6 +61,7 @@ func (bn *BirdNET) EmbeddingDim() int {
 func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32) ([]datastore.Results, []float32, error) {
 	span, _ := StartSpan(ctx, "birdnet.predict_embeddings", "Species prediction with embeddings")
 	defer span.Finish()
+	span.SetTag("model", bn.ModelInfo.ID)
 
 	settings := bn.currentSettings()
 
@@ -81,8 +82,8 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 			Build()
 	}
 
-	ee, capable := bn.classifier.(inference.EmbeddingExtractor)
-	if !capable || ee.EmbeddingDim() == 0 {
+	ee, ok := bn.classifier.(inference.EmbeddingExtractor)
+	if !ok || ee.EmbeddingDim() == 0 {
 		// Model cannot extract embeddings: fall back to plain prediction.
 		predictions, err := bn.classifier.Predict(sample[0])
 		if err != nil {
@@ -92,7 +93,15 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 				Build()
 		}
 		results, err := bn.finalizeResults(predictions, settings)
-		return results, nil, err
+		if err != nil {
+			// finalizeResults already adds confidence_count; wrap with label_count
+			// to carry both counts, matching BirdNET.Predict's diagnostic.
+			return nil, nil, errors.New(err).
+				Category(errors.CategoryValidation).
+				Context("label_count", len(settings.BirdNET.Labels)).
+				Build()
+		}
+		return results, nil, nil
 	}
 
 	// Model supports embedding extraction: run the combined forward pass.
@@ -108,7 +117,12 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 
 	results, err := bn.finalizeResults(predictions, settings)
 	if err != nil {
-		return nil, nil, err
+		// finalizeResults already adds confidence_count; wrap with label_count
+		// to carry both counts, matching BirdNET.Predict's diagnostic.
+		return nil, nil, errors.New(err).
+			Category(errors.CategoryValidation).
+			Context("label_count", len(settings.BirdNET.Labels)).
+			Build()
 	}
 	return results, embedding, nil
 }
