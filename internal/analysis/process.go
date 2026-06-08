@@ -26,20 +26,30 @@ import (
 var processMetrics atomic.Pointer[metrics.MyAudioMetrics]
 
 // embUnavailableLogged throttles the "embeddings enabled but model can't extract"
-// warning to once per enable-session. Assumes a single active model (M1 scope): a
-// capable window resets the guard globally, so with multiple models active at once a
-// capable model would suppress the warning for a concurrent incapable one. It is also
-// reset on the disabled path so toggling enabled->disabled->enabled logs once more.
-var embUnavailableLogged atomic.Bool
+// warning to once per enable-session, PER MODEL. Keyed by model ID so a capable
+// model does not suppress the warning for a concurrent incapable model. The flag
+// for a model is cleared when that model produces an embedding or runs with
+// embeddings disabled, so re-enabling logs once more.
+var embUnavailableLogged sync.Map // modelID(string) -> *atomic.Bool
 
 // shouldLogEmbeddingUnavailable reports whether to emit the unavailable warning
-// now. dim == 0 means the active model cannot extract embeddings.
-func shouldLogEmbeddingUnavailable(dim int) bool {
+// now for the given model. dim == 0 means the active model cannot extract embeddings.
+func shouldLogEmbeddingUnavailable(modelID string, dim int) bool {
+	v, _ := embUnavailableLogged.LoadOrStore(modelID, &atomic.Bool{})
+	flag := v.(*atomic.Bool)
 	if dim == 0 {
-		return embUnavailableLogged.CompareAndSwap(false, true)
+		return flag.CompareAndSwap(false, true)
 	}
-	embUnavailableLogged.Store(false)
+	flag.Store(false)
 	return false
+}
+
+// resetEmbeddingUnavailableLog clears the per-model throttle so re-enabling
+// embeddings logs the unavailable warning once more if the model still cannot extract.
+func resetEmbeddingUnavailableLog(modelID string) {
+	if v, ok := embUnavailableLogged.Load(modelID); ok {
+		v.(*atomic.Bool).Store(false)
+	}
 }
 
 const (
@@ -262,8 +272,8 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 		results, embedding, err = bn.PredictModelWithEmbeddings(ctx, modelID, sampleData)
 	} else {
 		results, err = bn.PredictModel(ctx, modelID, sampleData)
-		// Reset the throttle so re-enabling logs once more if the model is still incapable.
-		embUnavailableLogged.Store(false)
+		// Reset the per-model throttle so re-enabling logs once more if the model is still incapable.
+		resetEmbeddingUnavailableLog(modelID)
 	}
 	inferenceDuration := time.Since(inferenceStart)
 
@@ -289,7 +299,7 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 		logger.Int("sample_bytes", len(data)))
 
 	if embEnabled {
-		if shouldLogEmbeddingUnavailable(len(embedding)) {
+		if shouldLogEmbeddingUnavailable(modelID, len(embedding)) {
 			log.Warn("embeddings enabled but active model cannot extract them; needs an ONNX embeddings model",
 				logger.String("model_id", modelID))
 		} else if len(embedding) > 0 && settings.BirdNET.Debug {
