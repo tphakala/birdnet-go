@@ -3,7 +3,6 @@ package classifier
 
 import (
 	"context"
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -181,50 +180,6 @@ func (s *TracingSpan) Finish() {
 		s.SetData("duration_ms", duration.Milliseconds())
 		s.sentrySpan.Finish()
 	}
-}
-
-// TraceAnalysis traces audio analysis operations
-func TraceAnalysis(ctx context.Context, operation string, fn func() error) error {
-	span, _ := StartSpan(ctx, "birdnet."+operation, operation)
-	defer span.Finish()
-
-	err := fn()
-	if err != nil {
-		span.SetTag("error", "true")
-		span.SetData("error_message", err.Error())
-	}
-
-	return err
-}
-
-// TracePrediction traces prediction operations with additional metrics
-func TracePrediction(ctx context.Context, sampleSize int, fn func() (any, error)) (any, error) {
-	span, _ := StartSpan(ctx, "birdnet.predict", "Audio prediction")
-	defer span.Finish()
-
-	span.SetData("sample_size", sampleSize)
-
-	start := time.Now()
-	result, err := fn()
-	duration := time.Since(start)
-
-	span.SetData("prediction_duration_ms", duration.Milliseconds())
-
-	if err != nil {
-		span.SetTag("error", "true")
-		span.SetData("error_message", err.Error())
-	} else {
-		span.SetTag("error", "false")
-		// Add result metrics if available using reflection
-		if result != nil {
-			resultValue := reflect.ValueOf(result)
-			if resultValue.Kind() == reflect.Slice {
-				span.SetData("result_count", resultValue.Len())
-			}
-		}
-	}
-
-	return result, err
 }
 
 // RecordMetric records a performance metric
