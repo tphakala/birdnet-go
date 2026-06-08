@@ -69,6 +69,7 @@
     | 'fr'
     | 'es'
     | 'fi'
+    | 'nb'
     | 'nl'
     | 'pl'
     | 'pt'
@@ -125,6 +126,7 @@
     fr: FrFlag,
     es: EsFlag,
     fi: FiFlag,
+    nb: NoFlag, // Norwegian Bokmål -> Norway
     nl: NlFlag,
     pl: PlFlag,
     pt: PtFlag,
