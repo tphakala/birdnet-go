@@ -3215,7 +3215,7 @@
         "maxAgeHelp": "Törölje a megadott korú hang klipeket. Formátum: szám + egység (h=óra, d=nap, h=hét, m=hónap). Példák: '7d' 7 nap, '4w' 4 hét.",
         "maxUsageLabel": "Maximális lemez használat",
         "maxUsageHelp": "Törölje a legrégibb klipeket, ha a hang könyvtár a rendelkezésre álló lemezterület nagyobb százalékát használja.",
-        "minClipsLabel": "Minmális mintaszám fajonként",
+        "minClipsLabel": "Minimális mintaszám fajonként",
         "minClipsHelp": "Mindig tartson meg legalább ennyi mintát minden madár fajhoz, a kor vagy lemez használattól függetlenül. Segít megőrizni a ritka felvételeket.",
         "keepSpectrograms": "Spektrogram képek megtartása",
         "keepSpectrogramsHelp": "Tartsa meg a spektrogram képeket, még ha a hang klipek törlésre is kerülnek. A spektrogramok kevesebb helyet használnak és vizuális referenciát biztosítanak.",
