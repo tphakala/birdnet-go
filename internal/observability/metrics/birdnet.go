@@ -200,9 +200,9 @@ func (m *BirdNETMetrics) RecordEmbeddingExtraction(model, status string) {
 	m.EmbeddingExtractionTotal.WithLabelValues(model, status).Inc()
 }
 
-// SetEmbeddingDim records the embedding dimension exposed by a model.
-// Wired from the analysis path in a later task; defined here so the gauge is
-// registered now.
+// SetEmbeddingDim records the embedding dimension exposed by a model. Called from
+// the orchestrator load path when a model instance is registered, so the gauge
+// reflects each loaded model's embedding size (0 for non-capable models).
 func (m *BirdNETMetrics) SetEmbeddingDim(model string, dim int) {
 	m.EmbeddingDimGauge.WithLabelValues(model).Set(float64(dim))
 }
