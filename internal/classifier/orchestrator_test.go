@@ -417,3 +417,36 @@ func TestOrchestrator_PredictModelWithEmbeddings_RecordsErrorStatus(t *testing.T
 	require.Error(t, err)
 	assert.InDelta(t, float64(1), testutil.ToFloat64(m.EmbeddingExtractionTotal.WithLabelValues("m2", "error")), 0.0001)
 }
+
+// TestOrchestrator_MultipleModelsEachExtractOwnEmbedding proves that per-model
+// dispatch routes each request to the loaded model's own
+// PredictModelWithEmbeddings, so two capable models return their own
+// (different-dimension) embeddings rather than a single shared vector.
+func TestOrchestrator_MultipleModelsEachExtractOwnEmbedding(t *testing.T) {
+	t.Parallel()
+	const (
+		birdnetEmbDim = 4
+		perchEmbDim   = 3
+	)
+	m1 := &embCapableMock{
+		mockModelInstance: &mockModelInstance{id: "birdnet", predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			return []datastore.Results{{Species: "Parus major", Confidence: 0.9}}, nil
+		}},
+		emb: []float32{1, 2, 3, 4}, dim: birdnetEmbDim,
+	}
+	m2 := &embCapableMock{
+		mockModelInstance: &mockModelInstance{id: "perch", predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			return []datastore.Results{{Species: "Turdus merula", Confidence: 0.8}}, nil
+		}},
+		emb: []float32{5, 6, 7}, dim: perchEmbDim,
+	}
+	o := &Orchestrator{models: map[string]*modelEntry{"birdnet": {instance: m1}, "perch": {instance: m2}}}
+
+	_, e1, err := o.PredictModelWithEmbeddings(t.Context(), "birdnet", [][]float32{{0.1}})
+	require.NoError(t, err)
+	_, e2, err := o.PredictModelWithEmbeddings(t.Context(), "perch", [][]float32{{0.1}})
+	require.NoError(t, err)
+
+	assert.Len(t, e1, birdnetEmbDim, "birdnet model yields its own 4-dim embedding")
+	assert.Len(t, e2, perchEmbDim, "perch model yields its own 3-dim embedding")
+}
