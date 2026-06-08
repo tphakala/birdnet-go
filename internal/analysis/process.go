@@ -48,7 +48,11 @@ func shouldLogEmbeddingUnavailable(modelID string, dim int) bool {
 // embeddings logs the unavailable warning once more if the model still cannot extract.
 func resetEmbeddingUnavailableLog(modelID string) {
 	if v, ok := embUnavailableLogged.Load(modelID); ok {
-		v.(*atomic.Bool).Store(false)
+		// Load before Store so the disabled path avoids a cache-line invalidation
+		// on every window once the flag is already cleared (the common case).
+		if flag := v.(*atomic.Bool); flag.Load() {
+			flag.Store(false)
+		}
 	}
 }
 
