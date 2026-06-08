@@ -74,6 +74,9 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// --- BSG ---
 	"BSG": {categories: []hotReloadCategory{hotReloadRestart}},
 
+	// --- Embeddings ---
+	"Embeddings": {categories: []hotReloadCategory{hotReloadFresh}},
+
 	// --- Models ---
 	"Models": {categories: []hotReloadCategory{hotReloadRestart}},
 
