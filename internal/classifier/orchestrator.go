@@ -479,6 +479,7 @@ func (o *Orchestrator) PredictModelWithEmbeddings(ctx context.Context, modelID s
 			logger.Error(err),
 			logger.Duration("duration", duration))
 	} else {
+		recordEmbeddingStatus(modelID, len(emb))
 		log.Debug("PredictModelWithEmbeddings complete",
 			logger.String("model_id", modelID),
 			logger.Int("result_count", len(results)),
@@ -486,6 +487,21 @@ func (o *Orchestrator) PredictModelWithEmbeddings(ctx context.Context, modelID s
 	}
 
 	return results, emb, err
+}
+
+// recordEmbeddingStatus records the embedding extraction outcome for a window.
+// dim > 0 means an embedding was produced; dim == 0 means the active model
+// could not extract one. Safe no-op when getMetrics() returns nil (test paths).
+func recordEmbeddingStatus(modelID string, dim int) {
+	m := getMetrics()
+	if m == nil {
+		return
+	}
+	if dim > 0 {
+		m.RecordEmbeddingExtraction(modelID, "success")
+	} else {
+		m.RecordEmbeddingExtraction(modelID, "unavailable")
+	}
 }
 
 // ModelEmbeddingDim returns the embedding dimension for a model (0 = not
