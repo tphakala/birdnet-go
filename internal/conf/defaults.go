@@ -96,6 +96,9 @@ func setDefaultConfig() {
 	// Global model enablement (BirdNET only by default)
 	viper.SetDefault("models.enabled", []string{"birdnet"})
 
+	// Embedding extraction (default off, hot-reloadable)
+	viper.SetDefault("embeddings.enabled", false)
+
 	// Realtime configuration
 	viper.SetDefault("realtime.interval", 15)
 	viper.SetDefault("realtime.processingtime", false)

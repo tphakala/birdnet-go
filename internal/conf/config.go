@@ -1276,6 +1276,13 @@ type ModelsConfig struct {
 	Installed []string `yaml:"installed,omitempty" json:"installed,omitempty"` // list of installed model IDs managed by the model gallery
 }
 
+// EmbeddingsConfig gates generic embedding extraction.
+// Capability-gated: extraction only happens when the active model is an ONNX
+// model that exposes embeddings (issue #948).
+type EmbeddingsConfig struct {
+	Enabled bool `yaml:"enabled" json:"enabled"` // extract embeddings on the live path (hot-reloadable)
+}
+
 // BasicAuth holds settings for the password authentication
 type BasicAuth struct {
 	Enabled        bool          `yaml:"enabled" json:"enabled"`               // true to enable password authentication
@@ -1615,11 +1622,12 @@ type Settings struct {
 		TimeAs24h bool   `yaml:"timeas24h" json:"timeAs24h"` // true 24-hour time format, false 12-hour time format
 	} `yaml:"main" json:"main"`
 
-	BirdNET BirdNETConfig `yaml:"birdnet" json:"birdnet"` // BirdNET configuration
-	Perch   PerchConfig   `yaml:"perch" json:"perch"`     // Perch v2 model configuration
-	Bat     BatConfig     `yaml:"bat" json:"bat"`         // Bat detection configuration
-	BSG     BSGConfig     `yaml:"bsg" json:"bsg"`         // BSG regional bird model configuration
-	Models  ModelsConfig  `yaml:"models" json:"models"`   // Global model enablement and management
+	BirdNET    BirdNETConfig    `yaml:"birdnet" json:"birdnet"`       // BirdNET configuration
+	Perch      PerchConfig      `yaml:"perch" json:"perch"`           // Perch v2 model configuration
+	Bat        BatConfig        `yaml:"bat" json:"bat"`               // Bat detection configuration
+	BSG        BSGConfig        `yaml:"bsg" json:"bsg"`               // BSG regional bird model configuration
+	Models     ModelsConfig     `yaml:"models" json:"models"`         // Global model enablement and management
+	Embeddings EmbeddingsConfig `yaml:"embeddings" json:"embeddings"` // Embedding extraction configuration
 
 	TaxonomySynonyms map[string]string `yaml:"taxonomySynonyms" json:"taxonomySynonyms" mapstructure:"taxonomySynonyms"` // Optional scientific-name synonym overrides merged with built-ins
 
