@@ -26,8 +26,10 @@ import (
 var processMetrics atomic.Pointer[metrics.MyAudioMetrics]
 
 // embUnavailableLogged throttles the "embeddings enabled but model can't extract"
-// warning to once per enable-session (reset when extraction is disabled or a
-// capable model is seen).
+// warning to once per enable-session. Assumes a single active model (M1 scope): a
+// capable window resets the guard globally, so with multiple models active at once a
+// capable model would suppress the warning for a concurrent incapable one. It is also
+// reset on the disabled path so toggling enabled->disabled->enabled logs once more.
 var embUnavailableLogged atomic.Bool
 
 // shouldLogEmbeddingUnavailable reports whether to emit the unavailable warning
@@ -246,8 +248,10 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 	}
 
 	// Run inference on the specified model via the Orchestrator.
-	// Read the flag live on every call so hot-reload takes effect immediately.
-	embEnabled := conf.Setting().Embeddings.Enabled
+	// Snapshot settings once per call (read live every window for hot-reload,
+	// but consistently within the window) and reuse the snapshot below.
+	settings := conf.Setting()
+	embEnabled := settings.Embeddings.Enabled
 
 	var (
 		results   []datastore.Results
@@ -288,7 +292,7 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 		if shouldLogEmbeddingUnavailable(len(embedding)) {
 			log.Warn("embeddings enabled but active model cannot extract them; needs an ONNX embeddings model",
 				logger.String("model_id", modelID))
-		} else if len(embedding) > 0 && conf.Setting().BirdNET.Debug {
+		} else if len(embedding) > 0 && settings.BirdNET.Debug {
 			log.Debug("embedding extracted",
 				logger.String("model_id", modelID),
 				logger.Int("dim", len(embedding)))
@@ -304,7 +308,7 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 	}
 
 	// DEBUG print all BirdNET results
-	if conf.Setting().BirdNET.Debug {
+	if settings.BirdNET.Debug {
 		debugThreshold := float32(0) // set to 0 for now, maybe add a config option later
 		hasHighConfidenceResults := false
 		for _, result := range results {
