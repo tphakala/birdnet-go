@@ -207,6 +207,13 @@ func (m *BirdNETMetrics) SetEmbeddingDim(model string, dim int) {
 	m.EmbeddingDimGauge.WithLabelValues(model).Set(float64(dim))
 }
 
+// ClearEmbeddingDim removes the embedding-dim gauge series for a model. Called on
+// model unload/reload so stale {model} series do not accumulate over the process
+// lifetime when model IDs change.
+func (m *BirdNETMetrics) ClearEmbeddingDim(model string) {
+	m.EmbeddingDimGauge.DeleteLabelValues(model)
+}
+
 // RecordChunkProcess records metrics for chunk processing
 func (m *BirdNETMetrics) RecordChunkProcess(model string, durationSeconds float64) {
 	m.ChunkProcessDuration.WithLabelValues(model).Observe(durationSeconds)
