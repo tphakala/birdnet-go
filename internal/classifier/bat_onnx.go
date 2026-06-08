@@ -193,7 +193,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 			logger.Duration("total_duration", embDuration+classDuration))
 	}
 
-	return getTopKResults(results, 10), nil
+	return getTopKResults(results, defaultTopKResults), nil
 }
 
 // Spec returns the audio requirements for the bat model.

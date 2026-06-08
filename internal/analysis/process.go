@@ -25,6 +25,37 @@ import (
 
 var processMetrics atomic.Pointer[metrics.MyAudioMetrics]
 
+// embUnavailableLogged throttles the "embeddings enabled but model can't extract"
+// warning to once per enable-session, PER MODEL. Keyed by model ID so a capable
+// model does not suppress the warning for a concurrent incapable model. The flag
+// for a model is cleared when that model produces an embedding or runs with
+// embeddings disabled, so re-enabling logs once more.
+var embUnavailableLogged sync.Map // modelID(string) -> *atomic.Bool
+
+// shouldLogEmbeddingUnavailable reports whether to emit the unavailable warning
+// now for the given model. dim == 0 means the active model cannot extract embeddings.
+func shouldLogEmbeddingUnavailable(modelID string, dim int) bool {
+	v, _ := embUnavailableLogged.LoadOrStore(modelID, &atomic.Bool{})
+	flag := v.(*atomic.Bool)
+	if dim == 0 {
+		return flag.CompareAndSwap(false, true)
+	}
+	flag.Store(false)
+	return false
+}
+
+// resetEmbeddingUnavailableLog clears the per-model throttle so re-enabling
+// embeddings logs the unavailable warning once more if the model still cannot extract.
+func resetEmbeddingUnavailableLog(modelID string) {
+	if v, ok := embUnavailableLogged.Load(modelID); ok {
+		// Load before Store so the disabled path avoids a cache-line invalidation
+		// on every window once the flag is already cleared (the common case).
+		if flag := v.(*atomic.Bool); flag.Load() {
+			flag.Store(false)
+		}
+	}
+}
+
 const (
 	// Float32BufferSize is the number of float32 samples in a standard buffer.
 	// For 16-bit audio: conf.BufferSize / 2 (bytes per sample) = 144384 samples.
@@ -231,8 +262,23 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 	}
 
 	// Run inference on the specified model via the Orchestrator.
+	// Snapshot settings once per call (read live every window for hot-reload,
+	// but consistently within the window) and reuse the snapshot below.
+	settings := conf.Setting()
+	embEnabled := settings.Embeddings.Enabled
+
+	var (
+		results   []datastore.Results
+		embedding []float32
+	)
 	inferenceStart := time.Now()
-	results, err := bn.PredictModel(ctx, modelID, sampleData)
+	if embEnabled {
+		results, embedding, err = bn.PredictModelWithEmbeddings(ctx, modelID, sampleData)
+	} else {
+		results, err = bn.PredictModel(ctx, modelID, sampleData)
+		// Reset the per-model throttle so re-enabling logs once more if the model is still incapable.
+		resetEmbeddingUnavailableLog(modelID)
+	}
 	inferenceDuration := time.Since(inferenceStart)
 
 	// Record inference duration metric (always, even on error)
@@ -256,6 +302,17 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 		logger.Duration("inference_duration", inferenceDuration),
 		logger.Int("sample_bytes", len(data)))
 
+	if embEnabled {
+		if shouldLogEmbeddingUnavailable(modelID, len(embedding)) {
+			log.Warn("embeddings enabled but active model cannot extract them; needs an ONNX embeddings model",
+				logger.String("model_id", modelID))
+		} else if len(embedding) > 0 && settings.BirdNET.Debug {
+			log.Debug("embedding extracted",
+				logger.String("model_id", modelID),
+				logger.Int("dim", len(embedding)))
+		}
+	}
+
 	// get elapsed time (includes conversion + inference for overrun check)
 	elapsedTime := time.Since(predictStart)
 
@@ -265,7 +322,7 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 	}
 
 	// DEBUG print all BirdNET results
-	if conf.Setting().BirdNET.Debug {
+	if settings.BirdNET.Debug {
 		debugThreshold := float32(0) // set to 0 for now, maybe add a config option later
 		hasHighConfidenceResults := false
 		for _, result := range results {
@@ -337,6 +394,7 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 		Results:         results,
 		Source:          audioSource,
 		ModelID:         modelID,
+		Embeddings:      embedding, // nil when disabled or unavailable
 	}
 
 	// Send the results to the queue. PCMdata is the independently owned copy

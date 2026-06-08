@@ -41,6 +41,9 @@ type onnxClassifier struct {
 	numSpecies int
 }
 
+// onnxClassifier must satisfy EmbeddingExtractor.
+var _ EmbeddingExtractor = (*onnxClassifier)(nil)
+
 // NewONNXClassifier creates a Classifier backed by an ONNX Runtime model.
 // The ONNX Runtime must be initialized via InitONNXRuntime before calling this.
 func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier, error) {
@@ -98,6 +101,15 @@ func (c *onnxClassifier) PredictWithEmbeddings(samples []float32) (logits, embed
 		return nil, nil, ort.ErrSessionClosed
 	}
 	return c.classifier.PredictRawWithEmbeddings(samples)
+}
+
+// EmbeddingDim returns the embedding dimension of the underlying ONNX model,
+// or 0 if the model does not expose embeddings.
+func (c *onnxClassifier) EmbeddingDim() int {
+	if c.classifier == nil {
+		return 0
+	}
+	return c.classifier.EmbeddingDim()
 }
 
 // NumSpecies returns the number of species in the model output.

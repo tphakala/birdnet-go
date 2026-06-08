@@ -410,6 +410,124 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 	return results, err
 }
 
+// PredictModelWithEmbeddings mirrors PredictModel but also returns the model's
+// embedding vector when the resolved model implements EmbeddingCapable. The
+// embedding is nil when the model cannot produce one; that is not an error.
+// It does not pre-check EmbeddingDim() (which would double-lock); capability is
+// routed once inside the instance's PredictWithEmbeddings.
+//
+// Locking sequence is identical to PredictModel: o.mu.RLock (map lookup),
+// o.inferenceMu.Lock (inference serialization), entry.mu.Lock (instance lifecycle).
+func (o *Orchestrator) PredictModelWithEmbeddings(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, []float32, error) {
+	log := GetLogger()
+
+	o.mu.RLock()
+	entry, ok := o.models[modelID]
+	o.mu.RUnlock()
+
+	if !ok {
+		log.Error("PredictModelWithEmbeddings unknown model",
+			logger.String("model_id", modelID))
+		return nil, nil, errors.Newf("unknown model: %s", modelID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Context("model_id", modelID).
+			Build()
+	}
+
+	o.inferenceMu.Lock()
+	defer o.inferenceMu.Unlock()
+
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.instance == nil {
+		return nil, nil, errors.Newf("model %s has been closed", modelID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Context("model_id", modelID).
+			Build()
+	}
+
+	chunkLen := 0
+	if len(sample) > 0 {
+		chunkLen = len(sample[0])
+	}
+	log.Debug("PredictModelWithEmbeddings dispatching",
+		logger.String("model_id", modelID),
+		logger.Int("sample_chunks", len(sample)),
+		logger.Int("chunk_len", chunkLen))
+
+	// Capture the dispatch result into locals so the same complete/error
+	// logging PredictModel emits runs before returning. The embedding is nil
+	// when the instance is not EmbeddingCapable; that is not an error.
+	var (
+		results []datastore.Results
+		emb     []float32
+		err     error
+	)
+	start := time.Now()
+	if ec, ok := entry.instance.(EmbeddingCapable); ok {
+		results, emb, err = ec.PredictWithEmbeddings(ctx, sample)
+	} else {
+		results, err = entry.instance.Predict(ctx, sample)
+	}
+	duration := time.Since(start)
+
+	if err != nil {
+		// NOTE: embedding_extraction_total{status="error"} is intentionally not
+		// incremented here in M1; the error status is reserved for a later milestone.
+		log.Error("PredictModelWithEmbeddings inference failed",
+			logger.String("model_id", modelID),
+			logger.Error(err),
+			logger.Duration("duration", duration))
+	} else {
+		globalInferenceCounters.RecordInvoke(modelID, duration.Microseconds())
+		recordEmbeddingStatus(modelID, len(emb))
+		log.Debug("PredictModelWithEmbeddings complete",
+			logger.String("model_id", modelID),
+			logger.Int("result_count", len(results)),
+			logger.Duration("duration", duration))
+	}
+
+	return results, emb, err
+}
+
+// recordEmbeddingStatus records the embedding extraction outcome for a window.
+// dim > 0 means an embedding was produced; dim == 0 means the active model
+// could not extract one. Safe no-op when getMetrics() returns nil (test paths).
+func recordEmbeddingStatus(modelID string, dim int) {
+	m := getMetrics()
+	if m == nil {
+		return
+	}
+	if dim > 0 {
+		m.RecordEmbeddingExtraction(modelID, "success")
+	} else {
+		m.RecordEmbeddingExtraction(modelID, "unavailable")
+	}
+}
+
+// ModelEmbeddingDim returns the embedding dimension for a model (0 = not
+// capable, unknown, or closed), for cheap out-of-band capability checks
+// without running inference.
+func (o *Orchestrator) ModelEmbeddingDim(modelID string) int {
+	o.mu.RLock()
+	entry, ok := o.models[modelID]
+	o.mu.RUnlock()
+	if !ok {
+		return 0
+	}
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.instance == nil {
+		return 0
+	}
+	if ec, ok := entry.instance.(EmbeddingCapable); ok {
+		return ec.EmbeddingDim()
+	}
+	return 0
+}
+
 // ResolveName walks the resolver chain and returns the first non-empty
 // common name for the given scientific name and locale.
 func (o *Orchestrator) ResolveName(scientificName, locale string) string {

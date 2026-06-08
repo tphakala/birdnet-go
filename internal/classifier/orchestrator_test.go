@@ -312,3 +312,66 @@ func TestOrchestrator_ModelInfos_SkipsNilInstances(t *testing.T) {
 	assert.Len(t, infos, 1)
 	assert.Equal(t, "BirdNET_V2.4", infos[0].ID)
 }
+
+// embCapableMock embeds mockModelInstance and adds EmbeddingCapable.
+type embCapableMock struct {
+	*mockModelInstance
+	emb []float32
+	dim int
+}
+
+func (m *embCapableMock) PredictWithEmbeddings(ctx context.Context, samples [][]float32) ([]datastore.Results, []float32, error) {
+	r, err := m.Predict(ctx, samples)
+	return r, m.emb, err
+}
+
+func (m *embCapableMock) EmbeddingDim() int { return m.dim }
+
+func TestOrchestrator_PredictModelWithEmbeddings_Capable(t *testing.T) {
+	t.Parallel()
+	inner := &mockModelInstance{
+		id: "m1",
+		predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			return []datastore.Results{{Species: "Parus major", Confidence: 0.9}}, nil
+		},
+	}
+	ec := &embCapableMock{mockModelInstance: inner, emb: []float32{1, 2, 3}, dim: 3}
+	o := &Orchestrator{models: map[string]*modelEntry{"m1": {instance: ec}}}
+
+	results, emb, err := o.PredictModelWithEmbeddings(t.Context(), "m1", [][]float32{{0.1}})
+	require.NoError(t, err)
+	assert.Len(t, emb, 3)
+	require.Len(t, results, 1)
+	assert.Equal(t, "Parus major", results[0].Species)
+	assert.Equal(t, 3, o.ModelEmbeddingDim("m1"))
+}
+
+func TestOrchestrator_PredictModelWithEmbeddings_Incapable(t *testing.T) {
+	t.Parallel()
+	mock := &mockModelInstance{id: "m2"}
+	o := newTestOrchestrator(t, mock)
+
+	// Default mock returns 1 result: {Species: "Turdus merula", Confidence: 0.95}
+	results, emb, err := o.PredictModelWithEmbeddings(t.Context(), "m2", [][]float32{{0.1}})
+	require.NoError(t, err)
+	assert.Nil(t, emb)
+	assert.Len(t, results, 1)
+	assert.Equal(t, 0, o.ModelEmbeddingDim("m2"))
+}
+
+func TestOrchestrator_PredictModelWithEmbeddings_UnknownModel(t *testing.T) {
+	t.Parallel()
+	o := &Orchestrator{models: map[string]*modelEntry{}}
+	_, _, err := o.PredictModelWithEmbeddings(t.Context(), "nope", [][]float32{{0.1}})
+	require.Error(t, err)
+}
+
+func TestOrchestrator_PredictModelWithEmbeddings_ClosedInstance(t *testing.T) {
+	t.Parallel()
+	// A model entry whose instance was niled out by Delete/UnloadModel.
+	o := &Orchestrator{models: map[string]*modelEntry{"m1": {instance: nil}}}
+	results, emb, err := o.PredictModelWithEmbeddings(t.Context(), "m1", [][]float32{{0.1}})
+	require.Error(t, err)
+	assert.Nil(t, results)
+	assert.Nil(t, emb)
+}

@@ -248,16 +248,28 @@ func (c *Classifier) Labels() []string {
 	return cp
 }
 
+// EmbeddingDim returns the model's embedding vector length, or 0 if the model
+// does not produce embeddings.
+func (c *Classifier) EmbeddingDim() int {
+	return c.config.EmbeddingSize
+}
+
 // PredictRaw runs inference and returns raw logits (pre-activation) for a single segment.
 // This is used by adapters that handle their own post-processing (e.g., sensitivity-adjusted sigmoid).
 func (c *Classifier) PredictRaw(audio []float32) ([]float32, error) {
-	logits, _, err := c.PredictRawWithEmbeddings(audio)
+	logits, _, err := c.predict(audio, false)
 	return logits, err
 }
 
-// PredictRawWithEmbeddings runs inference and returns both raw logits and embedding vector.
-// Returns nil embeddings if the model does not produce embeddings.
+// PredictRawWithEmbeddings runs inference and returns both raw logits and the
+// embedding vector. Returns nil embeddings if the model does not produce embeddings.
 func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddings []float32, err error) {
+	return c.predict(audio, true)
+}
+
+// predict runs inference. When extractEmbeddings is false the embedding tensor
+// is not materialized, avoiding a per-window allocation for capable models.
+func (c *Classifier) predict(audio []float32, extractEmbeddings bool) (logits, embeddings []float32, err error) {
 	if c.session == nil {
 		return nil, nil, ErrSessionClosed
 	}
@@ -298,7 +310,10 @@ func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddin
 	logits = make([]float32, logitsSize)
 	copy(logits, allLogits[:logitsSize])
 
-	if c.config.EmbeddingIndex >= 0 {
+	// Gate on both signals: EmbeddingSize>0 matches the EmbeddingDim() capability
+	// signal used downstream, while EmbeddingIndex>=0 guards the tensor index access
+	// below so outputs[EmbeddingIndex] can never index with a negative value.
+	if extractEmbeddings && c.config.EmbeddingSize > 0 && c.config.EmbeddingIndex >= 0 {
 		embTensor, ok := outputs[c.config.EmbeddingIndex].(*ort.Tensor[float32])
 		if !ok {
 			return nil, nil, fmt.Errorf("birdnet: embedding tensor has unexpected type")

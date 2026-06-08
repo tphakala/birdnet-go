@@ -16,6 +16,7 @@ type Results struct {
 	ClipName        string                // Name of the audio clip
 	Source          datastore.AudioSource // Audio source with ID, SafeString, and DisplayName
 	ModelID         string                // identifies which model produced these results
+	Embeddings      []float32             // primary model embedding for this window; nil when extraction disabled or unavailable
 }
 
 // Default buffer size for the results queue
@@ -54,6 +55,12 @@ func (r Results) Copy() Results { //nolint:gocritic // This is a copy function, 
 		for i, result := range r.Results {
 			newCopy.Results[i] = result.Copy()
 		}
+	}
+
+	// Deep copy Embeddings
+	if r.Embeddings != nil {
+		newCopy.Embeddings = make([]float32, len(r.Embeddings))
+		copy(newCopy.Embeddings, r.Embeddings)
 	}
 
 	return newCopy
