@@ -755,13 +755,26 @@
       "resetConfirm": "Visszaállítja az irányítópultot az alapértelmezett elrendezésre? Ez eltávolítja az összes testreszabást.",
       "resetting": "Visszaállítás..."
     },
+    "newSpeciesHighlights": {
+      "title": "Új és visszatérő fajok",
+      "subtitle": "Első alkalommal és nemrég visszatért észlelések",
+      "trackingDisabled": "Kérjük, aktiválja az \"Fajkövetés engedélyezése\" funkciót ennek a funkciónak a használatához.",
+      "categoryLifetime": "Új fajok",
+      "categoryYear": "Idén új",
+      "categorySeason": "Ebben az évszakban új",
+      "categorySeasonNamed": "Ebben a(z) {season} évszakban új",
+      "maxConfidenceShort": "Max {confidence}%",
+      "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
+      "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}"
+    },
     "elements": {
       "banner": "Irányítópult banner",
       "dailySummary": "Napi összefoglaló",
       "currentlyHearing": "Jelenleg hallható",
       "detectionsGrid": "Legutóbbi észlelések",
       "liveSpectrogram": "Élő spektrogram",
-      "videoEmbed": "Videó beágyazás"
+      "videoEmbed": "Videó beágyazás",
+      "newSpeciesHighlights": "Új fajok kiemelése"
     }
   },
   "detections": {
@@ -1577,8 +1590,12 @@
       "nameZA": "Név (Z-A)",
       "recentlyFirstSeen": "Legfrissebb első észlelés",
       "earliestFirstSeen": "Legrégebbi első észlelés",
-      "recentlyLastSeen": "Legfrissebb észlelés",
-      "highestConfidence": "Legmagasabb megbízhatóság"
+      "recentlyLastSeen": "Legfrissebb utolsó észlelés",
+      "earliestLastSeen": "Legrégebbi utolsó észlelés",
+      "highestConfidence": "Legmagasabb megbízhatóság",
+      "lowestConfidence": "Legalacsonyabb megbízhatóság",
+      "highestMaxConfidence": "Legmagasabb maximális megbízhatóság",
+      "lowestMaxConfidence": "Legalacsonyabb maximális megbízhatóság"
     },
     "charts": {
       "top10Species": "10 leggyakoribb faj",
@@ -2148,12 +2165,15 @@
         },
         "githubRequired": {
           "title": "Szükséges: GitHub issue a támogatási feltöltésekhez",
-          "description": "<strong>A támogatási feltöltésekhez GitHub issue szám szükséges.</strong> Kérjük, <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">hozzon létre egy GitHub issue-t</a>, amely leírja a problémáját a támogatási jelentés generálása <strong>előtt</strong>. A kapcsolódó issue nélkül a fejlesztők nem tudnak reagálni a támogatási adatokra."
+          "description": "<strong>A támogatási feltöltésekhez GitHub issue szám szükséges.</strong> Kérjük, <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">hozzon létre egy GitHub issue-t</a>, amely leírja a problémáját a támogatási jelentés generálása <strong>előtt</strong>. A kapcsolódó issue nélkül a fejlesztők nem tudnak reagálni a támogatási adatokra.",
+          "createGithubIssue": "GitHub issue létrehozása"
         },
         "githubIssue": {
           "label": "GitHub issue szám",
           "placeholder": "pl., 123 vagy #123",
-          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Meglévő issue-k megtekintése</a> vagy <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">új issue létrehozása</a> először"
+          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Meglévő issue-k megtekintése</a> vagy <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">új issue létrehozása</a> először",
+          "viewExistingIssues": "Meglévő issue-k megtekintése",
+          "createNewIssue": "új issue létrehozása"
         },
         "whatsIncluded": {
           "title": "A jelentés tartalma:",
@@ -3069,9 +3089,18 @@
           "energyRight": "Jobb csatorna",
           "label": "Csatornamód",
           "left": "Csak bal csatorna",
+          "monoNoSelection": "Egycsatornás forrás. Az összes csatornamód azonos hangot produkál, ezért nincs szükség kiválasztásra.",
           "recommended": "Ajánlott: {channel}",
           "right": "Csak jobb csatorna",
           "singleChannelGood": "Egycsatornás kiválasztva, optimális az érzékelési pontossághoz."
+        },
+        "format": {
+          "label": "Hangformátum",
+          "mono": "Mono (1 csatorna)",
+          "multi": "{count} csatorna",
+          "stereo": "Sztereó (2 csatorna)",
+          "untested": "Tesztelje a streamet a hangformátum meghatározásához",
+          "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
           "message": "Sztereó stream észlelve. A több csatorna keverése csökkentheti az érzékelési pontosságot a csatornák közötti fáziskülönbségek miatt. Válasszon konkrét csatornát (bal/jobb) vagy használja a csatornadetektort a legjobb eredményekhez.",
@@ -3266,6 +3295,7 @@
       "hostLabel": "Host cím",
       "hostHelp": "A szerver nyilvános hosztnevei vagy IP-címe (pl. birdnet.example.com). Az OAuth bejelentkezéshez és a TLS tanúsítványokhoz szükséges. Ha fordított proxy mögött van, használja helyette a Base URL-t.",
       "allowSubnetBypassLabel": "Alhálózatból származó hozzáférés engedélyezése a hitelesítés megkerüléséhez",
+      "subnetBypassLocalNote": "Ha engedélyezve van, az ezzel a szerverrel azonos helyi hálózaton lévő kliensek automatikusan megbízhatónak minősülnek és kihagyják a bejelentkezést. Az alábbi mezőt csak akkor töltse ki, ha ezt a bizalmat további hálózatokra (pl. külön VLAN vagy irányított alhálózat) szeretné kiterjeszteni.",
       "allowedSubnetsLabel": "Engedélyezett alhálózatok",
       "allowedSubnetsHelp": "Engedélyezett hálózati tartományok a bejelentkezés megkerüléséhez (CIDR jelölés, vesszővel elválasztott lista)",
       "securityWarningTitle": "Biztonsági figyelmeztetés:",
@@ -3317,6 +3347,8 @@
         "redirectUriNotConfigured": "Nincs konfigurálva - állítsa be a hosztcímet vagy a Base URL-t a Szerverkonfiguráció fülön",
         "noProviders": "Nincs OAuth szolgáltató konfigurálva",
         "noProvidersDescription": "Adjon hozzá egy szolgáltatót a bejelentkezés engedélyezéséhez Google, GitHub, Microsoft, LINE, Kakao vagy egyedi OIDC szolgáltatóval.",
+        "allowedUsersEmptyWarning": "Ennek a szolgáltatónak nincsenek engedélyezett felhasználói, ezért minden bejelentkezési kísérlet el lesz utasítva. Adjon hozzá legalább egy e-mail-t vagy felhasználói azonosítót a hozzáférés engedélyezéséhez.",
+        "allowedUsersMissingBadge": "Nincs engedélyezett felhasználó beállítva – a bejelentkezés sikertelen lesz",
         "enableProviderLabel": "Engedélyezze ezt a szolgáltatót",
         "getCredentialsLabel": "Szerezze be a hitelesítési adatait a {provider}-tól",
         "redirectUriTitle": "Átirányítási URI:",
@@ -3408,6 +3440,10 @@
       },
       "exceptions": {
         "title": "Kivételek"
+      },
+      "privateMode": {
+        "label": "Bejelentkezés megkövetelése az összes felhasználói felület oldalhoz (privát mód)",
+        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül \u2013 bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
       },
       "publicAccess": {
         "title": "Nyilvános hozzáférés",
