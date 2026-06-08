@@ -3167,7 +3167,7 @@
       },
       "extendedCapture": {
         "title": "Kiterjesztett rögzítés",
-        "description": "Hosszabb hangminták kerülnek rögzítése a faj ismételt észlelésekor, egyetlen kombinált felvételben sok rövid helyett.",
+        "description": "Hosszabb hangminták kerülnek rögzítésre a faj ismételt észlelésekor, egyetlen kombinált felvételben sok rövid helyett.",
         "ramWarning": "A kiterjesztett rögzítés további RAM-ot igényel a hang pufferekhez. Nem ajánlott 512 MB RAM vagy kevesebb RAM-mal rendelkező eszközökhöz (pl. Raspberry Pi Zero).",
         "enable": "Kiterjesztett rögzítés engedélyezése",
         "enableHelp": "Ha engedélyezve van, a konfigurált fajok ismételt detektálásai egyetlen hosszabb felvételben egyesülnek.",
