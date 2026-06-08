@@ -103,6 +103,9 @@ type SpeciesStatus struct {
 	DaysSinceFirst  int
 	LastUpdatedTime time.Time // For cache management
 
+	// Absence-return tracking
+	DaysSinceLastSeen int // Days since the previous detection before a return episode; -1 if first-ever / unknown
+
 	// Multi-period tracking
 	FirstThisYear   *time.Time // First detection this calendar year
 	FirstThisSeason *time.Time // First detection this season

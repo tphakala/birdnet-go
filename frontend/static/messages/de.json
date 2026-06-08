@@ -592,6 +592,18 @@
       "empty": "Alles ruhig — derzeit keine Vögel erkannt"
     },
     "rejected": "Abgelehnt",
+    "newSpeciesHighlights": {
+      "title": "Neue & zurückkehrende Arten",
+      "subtitle": "Erstnachweise und kürzlich zurückgekehrte Arten",
+      "trackingDisabled": "Bitte aktivieren Sie „Artenverfolgung aktivieren“, um diese Funktion zu nutzen.",
+      "categoryLifetime": "Neue Art",
+      "categoryYear": "Neu dieses Jahr",
+      "categorySeason": "Neu diese Saison",
+      "categorySeasonNamed": "Neu diesen {season}",
+      "maxConfidenceShort": "Max. {confidence} %",
+      "detections": "{count, plural, one {# Erkennung} other {# Erkennungen}}",
+      "lastSeen": "Zuletzt: {days, plural, =0 {heute} one {vor # Tag} other {vor # Tagen}}"
+    },
     "dailySummary": {
       "title": "Tagesaktivität",
       "subtitle": "Artnachweise pro Stunde",
@@ -758,6 +770,7 @@
     "elements": {
       "banner": "Dashboard-Banner",
       "dailySummary": "Tageszusammenfassung",
+      "newSpeciesHighlights": "Neue Artenentdeckungen",
       "currentlyHearing": "Aktuell erkannt",
       "detectionsGrid": "Aktuelle Erkennungen",
       "liveSpectrogram": "Live-Spektrogramm",

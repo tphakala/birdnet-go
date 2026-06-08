@@ -42,6 +42,7 @@ Performance Optimizations:
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import CurrentlyHearingCard from '$lib/desktop/features/dashboard/components/CurrentlyHearingCard.svelte';
   import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
+  import NewSpeciesHighlightsCard from '$lib/desktop/features/dashboard/components/NewSpeciesHighlightsCard.svelte';
   import DetectionCardGrid from '$lib/desktop/features/dashboard/components/DetectionCardGrid.svelte';
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
@@ -1567,6 +1568,13 @@ Performance Optimizations:
           onServerTimezone={tz => {
             serverTimezone = tz;
           }}
+        />
+      {:else if element.type === 'new-species-highlights'}
+        <NewSpeciesHighlightsCard
+          data={dailySummary}
+          {selectedDate}
+          {showThumbnails}
+          isToday={isViewingToday}
         />
       {:else if element.type === 'currently-hearing'}
         <CurrentlyHearingCard detections={isViewingToday ? pendingDetections : []} />

@@ -592,6 +592,18 @@
       "empty": "Allt är tyst — inga fåglar detekterade just nu"
     },
     "rejected": "Avvisad",
+    "newSpeciesHighlights": {
+      "title": "Nya & återvändande arter",
+      "subtitle": "Förstagångsobservationer och nyligen återvända",
+      "trackingDisabled": "Aktivera \"Aktivera artspårning\" för att använda den här funktionen.",
+      "categoryLifetime": "Ny art",
+      "categoryYear": "Ny i år",
+      "categorySeason": "Ny denna säsong",
+      "categorySeasonNamed": "Ny detta {season}",
+      "maxConfidenceShort": "Max {confidence} %",
+      "detections": "{count, plural, one {# upptäckt} other {# upptäckter}}",
+      "lastSeen": "Senast: {days, plural, =0 {idag} one {för # dag sedan} other {för # dagar sedan}}"
+    },
     "dailySummary": {
       "title": "Daglig aktivitet",
       "subtitle": "Artdetekteringar per timme",
@@ -758,6 +770,7 @@
     "elements": {
       "banner": "Instrumentpanelens banner",
       "dailySummary": "Daglig sammanfattning",
+      "newSpeciesHighlights": "Nya artsrekord",
       "currentlyHearing": "Hörs just nu",
       "detectionsGrid": "Senaste detekteringar",
       "liveSpectrogram": "Live spektrogram",

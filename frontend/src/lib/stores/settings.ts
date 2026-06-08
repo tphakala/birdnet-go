@@ -590,6 +590,7 @@ export interface DashboardLayout {
 export type DashboardElementType =
   | 'banner'
   | 'daily-summary'
+  | 'new-species-highlights'
   | 'currently-hearing'
   | 'detections-grid'
   | 'live-spectrogram'

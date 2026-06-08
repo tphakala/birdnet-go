@@ -592,6 +592,18 @@
       "empty": "Cisza — nie wykryto żadnych ptaków w tej chwili"
     },
     "rejected": "Odrzucone",
+    "newSpeciesHighlights": {
+      "title": "Nowe i powracające gatunki",
+      "subtitle": "Pierwsze obserwacje i niedawne powroty",
+      "trackingDisabled": "Aby korzystać z tej funkcji, włącz „Włącz śledzenie gatunków”.",
+      "categoryLifetime": "Nowy gatunek",
+      "categoryYear": "Nowy w tym roku",
+      "categorySeason": "Nowy w tym sezonie",
+      "categorySeasonNamed": "Nowy w tym {season}",
+      "maxConfidenceShort": "Maks {confidence}%",
+      "detections": "{count, plural, one {# wykrycie} few {# wykrycia} many {# wykryć} other {# wykrycia}}",
+      "lastSeen": "Ostatnio: {days, plural, =0 {dzisiaj} one {# dzień temu} few {# dni temu} many {# dni temu} other {# dnia temu}}"
+    },
     "dailySummary": {
       "title": "Dzienna Aktywność",
       "subtitle": "Wykrycia według godziny",
@@ -758,6 +770,7 @@
     "elements": {
       "banner": "Baner pulpitu",
       "dailySummary": "Podsumowanie dnia",
+      "newSpeciesHighlights": "Nowe gatunki – przegląd",
       "currentlyHearing": "Aktualnie słyszane",
       "detectionsGrid": "Ostatnie detekcje",
       "liveSpectrogram": "Spektrogram na żywo",

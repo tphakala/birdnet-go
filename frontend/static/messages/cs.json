@@ -592,6 +592,18 @@
       "empty": "Vše je v klidu — momentálně nejsou detekováni žádní ptáci"
     },
     "rejected": "Zamítnuto",
+    "newSpeciesHighlights": {
+      "title": "Nové a vracející se druhy",
+      "subtitle": "První pozorování a nedávné návraty",
+      "trackingDisabled": "Chcete-li tuto funkci používat, aktivujte „Povolit sledování druhů“.",
+      "categoryLifetime": "Nový druh",
+      "categoryYear": "Nový letos",
+      "categorySeason": "Nový tuto sezónu",
+      "categorySeasonNamed": "Nový toto {season}",
+      "maxConfidenceShort": "Max {confidence} %",
+      "detections": "{count, plural, one {# detekce} few {# detekce} other {# detekcí}}",
+      "lastSeen": "Naposledy: {days, plural, =0 {dnes} one {před # dnem} few {před # dny} other {před # dny}}"
+    },
     "dailySummary": {
       "title": "Denní aktivita",
       "subtitle": "Detekce druhů podle hodin",
@@ -758,6 +770,7 @@
     "elements": {
       "banner": "Banner Dashboardu",
       "dailySummary": "Denní souhrn",
+      "newSpeciesHighlights": "Nové druhy – přehled",
       "currentlyHearing": "Právě slyšíme",
       "detectionsGrid": "Nedávné detekce",
       "liveSpectrogram": "Živý spektrogram",

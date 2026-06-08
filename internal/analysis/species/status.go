@@ -148,20 +148,31 @@ func (t *SpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, cur
 	// Reuse the pre-allocated status buffer
 	status := &t.statusBuffer
 	*status = SpeciesStatus{
-		LastUpdatedTime: currentTime,
-		FirstThisYear:   firstThisYear,
-		FirstThisSeason: firstThisSeason,
-		CurrentSeason:   currentSeason,
-		DaysSinceFirst:  -1,
-		DaysThisYear:    -1,
-		DaysThisSeason:  -1,
+		LastUpdatedTime:   currentTime,
+		FirstThisYear:     firstThisYear,
+		FirstThisSeason:   firstThisSeason,
+		CurrentSeason:     currentSeason,
+		DaysSinceFirst:    -1,
+		DaysSinceLastSeen: -1,
+		DaysThisYear:      -1,
+		DaysThisSeason:    -1,
 	}
 
 	t.applyLifetimeStatus(status, firstSeen, exists, currentTime)
 	t.applyYearlyStatus(status, firstThisYear, currentTime)
 	t.applySeasonalStatus(status, firstThisSeason, currentTime)
+	t.applyNoveltyStatus(status, scientificName)
 
 	return *status
+}
+
+// applyNoveltyStatus sets the absence-gap field from the active novelty episode.
+// DaysSinceLastSeen is the number of days since the species was previously
+// detected before the current return; it stays -1 for first-ever detections.
+func (t *SpeciesTracker) applyNoveltyStatus(status *SpeciesStatus, scientificName string) {
+	if episode, exists := t.noveltyEpisodes[scientificName]; exists {
+		status.DaysSinceLastSeen = episode.DaysSinceLastSeen
+	}
 }
 
 // cleanupExpiredCache removes expired entries and enforces size limits with LRU eviction
@@ -271,18 +282,20 @@ func (t *SpeciesTracker) buildSpeciesStatusLocked(scientificName string, current
 
 	// Build status struct (cannot reuse statusBuffer in batch operations)
 	status := SpeciesStatus{
-		LastUpdatedTime: currentTime,
-		FirstThisYear:   firstThisYear,
-		FirstThisSeason: firstThisSeason,
-		CurrentSeason:   currentSeason,
-		DaysSinceFirst:  -1,
-		DaysThisYear:    -1,
-		DaysThisSeason:  -1,
+		LastUpdatedTime:   currentTime,
+		FirstThisYear:     firstThisYear,
+		FirstThisSeason:   firstThisSeason,
+		CurrentSeason:     currentSeason,
+		DaysSinceFirst:    -1,
+		DaysSinceLastSeen: -1,
+		DaysThisYear:      -1,
+		DaysThisSeason:    -1,
 	}
 
 	t.applyLifetimeStatus(&status, firstSeen, exists, currentTime)
 	t.applyYearlyStatus(&status, firstThisYear, currentTime)
 	t.applySeasonalStatus(&status, firstThisSeason, currentTime)
+	t.applyNoveltyStatus(&status, scientificName)
 
 	return status
 }

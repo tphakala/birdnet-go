@@ -73,6 +73,10 @@ Responsive Breakpoints:
     type TemperatureUnit,
   } from '$lib/utils/formatters';
   import { dashboardSettings } from '$lib/stores/settings';
+  import {
+    resolveNoveltyCategory,
+    noveltyCategoryColorVar,
+  } from '$lib/desktop/features/dashboard/utils/noveltyCategory';
   import { ChevronLeft, ChevronRight, Star, Sunrise, Sunset, XCircle } from '@lucide/svelte';
   import { untrack } from 'svelte';
   import AnimatedCounter from './AnimatedCounter.svelte';
@@ -1087,25 +1091,26 @@ Responsive Breakpoints:
                     title={item.common_name}
                   >
                     <span class="truncate flex-1">{item.common_name}</span>
-                    {#if item.is_new_species}
+                    {#if resolveNoveltyCategory(item) === 'lifetime'}
                       <span
-                        class="text-[var(--color-warning)] inline-block shrink-0"
+                        class="inline-block shrink-0"
+                        style:color={noveltyCategoryColorVar('lifetime')}
                         title={`New species (first seen ${item.days_since_first_seen ?? 0} day${(item.days_since_first_seen ?? 0) === 1 ? '' : 's'} ago)`}
                       >
                         <Star class="size-3 fill-current" />
                       </span>
-                    {/if}
-                    {#if item.is_new_this_year && !item.is_new_species}
+                    {:else if resolveNoveltyCategory(item) === 'year'}
                       <span
-                        class="text-[var(--color-info)] shrink-0"
+                        class="shrink-0"
+                        style:color={noveltyCategoryColorVar('year')}
                         title={`First time this year (${item.days_this_year ?? 0} day${(item.days_this_year ?? 0) === 1 ? '' : 's'} ago)`}
                       >
                         📅
                       </span>
-                    {/if}
-                    {#if item.is_new_this_season && !item.is_new_species && !item.is_new_this_year}
+                    {:else if resolveNoveltyCategory(item) === 'season'}
                       <span
-                        class="text-[var(--color-success)] shrink-0"
+                        class="shrink-0"
+                        style:color={noveltyCategoryColorVar('season')}
                         title={`First time this ${item.current_season || 'season'} (${item.days_this_season ?? 0} day${(item.days_this_season ?? 0) === 1 ? '' : 's'} ago)`}
                       >
                         🌿

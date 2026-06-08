@@ -3,6 +3,7 @@ import { t } from '$lib/i18n';
 const elementLabelKeys = new Map<string, string>([
   ['banner', 'dashboard.elements.banner'],
   ['daily-summary', 'dashboard.elements.dailySummary'],
+  ['new-species-highlights', 'dashboard.elements.newSpeciesHighlights'],
   ['currently-hearing', 'dashboard.elements.currentlyHearing'],
   ['detections-grid', 'dashboard.elements.detectionsGrid'],
   ['live-spectrogram', 'dashboard.elements.liveSpectrogram'],

@@ -592,6 +592,18 @@
       "empty": "Csend van — most nem észleltek madarakat"
     },
     "rejected": "Elutasítva",
+    "newSpeciesHighlights": {
+      "title": "Új és visszatérő fajok",
+      "subtitle": "Első észlelések és nemrégi visszatérők",
+      "trackingDisabled": "A funkció használatához kapcsolja be a „Fajkövetés engedélyezése” lehetőséget.",
+      "categoryLifetime": "Új faj",
+      "categoryYear": "Új ebben az évben",
+      "categorySeason": "Új ebben a szezonban",
+      "categorySeasonNamed": "Új ezen a szezonon: {season}",
+      "maxConfidenceShort": "Max {confidence}%",
+      "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
+      "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}"
+    },
     "dailySummary": {
       "title": "Napi aktivitás",
       "subtitle": "Faj detektálások óránként",
@@ -758,6 +770,7 @@
     "elements": {
       "banner": "Irányítópult banner",
       "dailySummary": "Napi összefoglaló",
+      "newSpeciesHighlights": "Új fajok – kiemeltek",
       "currentlyHearing": "Jelenleg hallható",
       "detectionsGrid": "Legutóbbi detektálások",
       "liveSpectrogram": "Élő spektrogram",

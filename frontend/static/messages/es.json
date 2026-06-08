@@ -592,6 +592,18 @@
       "empty": "Todo tranquilo — no se detectan aves en este momento"
     },
     "rejected": "Rechazado",
+    "newSpeciesHighlights": {
+      "title": "Especies nuevas y de regreso",
+      "subtitle": "Primeras observaciones y regresos recientes",
+      "trackingDisabled": "Active \"Habilitar seguimiento de especies\" para usar esta función.",
+      "categoryLifetime": "Especie nueva",
+      "categoryYear": "Nueva este año",
+      "categorySeason": "Nueva esta temporada",
+      "categorySeasonNamed": "Nueva esta {season}",
+      "maxConfidenceShort": "Máx {confidence} %",
+      "detections": "{count, plural, one {# detección} other {# detecciones}}",
+      "lastSeen": "Último: {days, plural, =0 {hoy} one {hace # día} other {hace # días}}"
+    },
     "dailySummary": {
       "title": "Actividad Diaria",
       "subtitle": "Detecciones por hora",
@@ -758,6 +770,7 @@
     "elements": {
       "banner": "Banner del panel",
       "dailySummary": "Resumen diario",
+      "newSpeciesHighlights": "Nuevas especies destacadas",
       "currentlyHearing": "Escuchando actualmente",
       "detectionsGrid": "Detecciones recientes",
       "liveSpectrogram": "Espectrograma en vivo",

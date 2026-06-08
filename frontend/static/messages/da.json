@@ -592,6 +592,18 @@
       "empty": "Alt er stille — ingen fugle registreret lige nu"
     },
     "rejected": "Afvist",
+    "newSpeciesHighlights": {
+      "title": "Nye & tilbagevendende arter",
+      "subtitle": "Førstegangsobservationer og nyligt tilbagevendte",
+      "trackingDisabled": "Aktivér \"Aktivér artssporing\" for at bruge denne funktion.",
+      "categoryLifetime": "Ny art",
+      "categoryYear": "Ny i år",
+      "categorySeason": "Ny denne sæson",
+      "categorySeasonNamed": "Ny denne {season}",
+      "maxConfidenceShort": "Maks {confidence} %",
+      "detections": "{count, plural, one {# registrering} other {# registreringer}}",
+      "lastSeen": "Senest: {days, plural, =0 {i dag} one {for # dag siden} other {for # dage siden}}"
+    },
     "dailySummary": {
       "title": "Daglig aktivitet",
       "subtitle": "Artsregistreringer pr. time",
@@ -758,6 +770,7 @@
     "elements": {
       "banner": "Instrumentpanelbanner",
       "dailySummary": "Daglig oversigt",
+      "newSpeciesHighlights": "Nye artsrekorder",
       "currentlyHearing": "Hører lige nu",
       "detectionsGrid": "Seneste registreringer",
       "liveSpectrogram": "Live spektrogram",
