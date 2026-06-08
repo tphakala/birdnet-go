@@ -49,6 +49,14 @@ func (f *fakePlainClassifier) Predict(_ []float32) ([]float32, error) { return f
 func (f *fakePlainClassifier) NumSpecies() int                        { return len(f.logits) }
 func (f *fakePlainClassifier) Close()                                 {}
 
+// fakeErrPlainClassifier implements inference.Classifier and returns an error from
+// Predict, to exercise the invoke_failed branch of BirdNET.Predict.
+type fakeErrPlainClassifier struct{ err error }
+
+func (f *fakeErrPlainClassifier) Predict(_ []float32) ([]float32, error) { return nil, f.err }
+func (f *fakeErrPlainClassifier) NumSpecies() int                        { return 0 }
+func (f *fakeErrPlainClassifier) Close()                                 {}
+
 // newEmbTestBirdNET builds a minimal *BirdNET backed by the given classifier,
 // with pre-allocated buffers and settings matching the provided labels.
 // The classifier parameter uses the structural interface that both fakes satisfy.
