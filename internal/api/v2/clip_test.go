@@ -111,3 +111,92 @@ func TestExtractAudioClipByID(t *testing.T) {
 		})
 	}
 }
+
+func TestExportAudioByID(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	testFilename := "test_export.wav"
+	audioFilePath := filepath.Join(tempDir, testFilename)
+	err := createTestAudioFile(t, audioFilePath)
+	require.NoError(t, err)
+
+	ffmpegPath, ffmpegErr := exec.LookPath("ffmpeg")
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteClipPath", "123").Return(testFilename, nil)
+	mockDS.On("GetNoteClipPath", "999").Return("", gorm.ErrRecordNotFound)
+	controller.DS = mockDS
+
+	testCases := []struct {
+		name           string
+		noteID         string
+		body           string
+		expectedStatus int
+		requiresFFmpeg bool
+		expectedType   string
+		expectedExt    string
+	}{
+		{
+			name:           "valid export WAV",
+			noteID:         "123",
+			body:           `{"format": "wav"}`,
+			expectedStatus: http.StatusOK,
+			requiresFFmpeg: true,
+			expectedType:   MimeTypeWAV,
+			expectedExt:    ".wav",
+		},
+		{
+			name:           "valid export MP3",
+			noteID:         "123",
+			body:           `{"format": "mp3"}`,
+			expectedStatus: http.StatusOK,
+			requiresFFmpeg: true,
+			expectedType:   MimeTypeMP3,
+			expectedExt:    ".mp3",
+		},
+		{
+			name:           "unsupported format",
+			noteID:         "123",
+			body:           `{"format": "invalid"}`,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "malformed JSON",
+			noteID:         "123",
+			body:           `{bad json}`,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "nonexistent note",
+			noteID:         "999",
+			body:           `{"format": "wav"}`,
+			expectedStatus: http.StatusNotFound,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.requiresFFmpeg {
+				if ffmpegErr != nil {
+					t.Skip("FFmpeg not available, skipping export test")
+				}
+				controller.Settings.Realtime.Audio.FfmpegPath = ffmpegPath
+			}
+
+			path := "/api/v2/audio/" + tc.noteID + "/export"
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+
+			assert.Equal(t, tc.expectedStatus, rec.Code)
+
+			if tc.expectedStatus == http.StatusOK {
+				assert.Equal(t, tc.expectedType, rec.Header().Get("Content-Type"))
+				assert.Contains(t, rec.Header().Get("Content-Disposition"), "attachment")
+				assert.Contains(t, rec.Header().Get("Content-Disposition"), tc.expectedExt)
+				assert.Positive(t, rec.Body.Len())
+			}
+		})
+	}
+}
