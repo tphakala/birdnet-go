@@ -634,7 +634,7 @@
     },
     "recentDetections": {
       "title": "Legutóbbi észlelések",
-      "subtitle": "Legfrisebb észlelések",
+      "subtitle": "Legfrissebb észlelések",
       "controls": {
         "show": "Megjelenítés:",
         "refresh": "Detektálások frissítése",
