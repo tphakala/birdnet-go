@@ -51,6 +51,7 @@ func (o *Orchestrator) loadPerch(threads int) error {
 	}
 
 	o.models[perch.ModelID()] = &modelEntry{instance: perch}
+	o.setEmbeddingDimGauge(perch.ModelID(), perch)
 
 	// No separate Perch label resolver needed. Perch returns scientific names,
 	// and the BirdNETLabelResolver (already registered) maps scientific -> common

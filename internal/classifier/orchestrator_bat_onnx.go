@@ -57,6 +57,7 @@ func (o *Orchestrator) loadBat(threads int) error {
 	}
 
 	o.models[bat.ModelID()] = &modelEntry{instance: bat}
+	o.setEmbeddingDimGauge(bat.ModelID(), bat)
 
 	log.Info("Bat model loaded into Orchestrator",
 		logger.String("model_id", bat.ModelID()),
