@@ -1056,12 +1056,20 @@ func (o *Orchestrator) ReloadModel() error {
 	o.ScientificIndex = sciIndex
 
 	// Re-key the models map in case the model ID changed after reload (Forgejo #270).
+	// Keep the embedding-dim gauge in step with the re-key: if a model's ID changed,
+	// drop the stale series under the old key, then re-publish each model's dimension
+	// under its current key so a changed embedding size is reflected after reload.
 	newModels := make(map[string]*modelEntry, len(o.models))
-	for _, e := range o.models {
+	for oldID, e := range o.models {
 		if e.instance == nil {
 			continue // skip entries closed by concurrent Delete
 		}
-		newModels[e.instance.ModelID()] = e
+		newID := e.instance.ModelID()
+		if newID != oldID {
+			o.clearEmbeddingDimGauge(oldID)
+		}
+		newModels[newID] = e
+		o.setEmbeddingDimGauge(newID, e.instance)
 	}
 	o.models = newModels
 
@@ -1080,12 +1088,16 @@ func (o *Orchestrator) Delete() {
 	for _, entry := range o.models {
 		entry.mu.Lock()
 		if entry.instance != nil {
+			modelID := entry.instance.ModelID()
 			if err := entry.instance.Close(); err != nil {
 				GetLogger().Warn("failed to close model instance",
-					logger.String("model_id", entry.instance.ModelID()),
+					logger.String("model_id", modelID),
 					logger.Error(err))
 			}
 			entry.instance = nil // nil out to signal closed state to PredictModel
+			// Drop the embedding-dim gauge series so a discarded orchestrator (e.g.
+			// a failed construction that calls Delete) leaves no stale {model} series.
+			o.clearEmbeddingDimGauge(modelID)
 		}
 		entry.mu.Unlock()
 	}

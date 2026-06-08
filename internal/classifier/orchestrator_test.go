@@ -397,6 +397,24 @@ func TestOrchestrator_EmbeddingDimGaugeSetAndCleared(t *testing.T) {
 	assert.Equal(t, 0, testutil.CollectAndCount(m.EmbeddingDimGauge))
 }
 
+func TestOrchestrator_Delete_ClearsEmbeddingDimGauge(t *testing.T) {
+	// Mutates package-global metrics; not parallel.
+	reg := prometheus.NewRegistry()
+	m, err := metrics.NewBirdNETMetrics(reg)
+	require.NoError(t, err)
+	globalMetrics.Store(m)
+	t.Cleanup(func() { globalMetrics.Store(nil) })
+
+	ec := &embCapableMock{mockModelInstance: &mockModelInstance{id: "m1"}, emb: []float32{1, 2, 3}, dim: 3}
+	o := &Orchestrator{models: map[string]*modelEntry{"m1": {instance: ec}}}
+	o.setEmbeddingDimGauge("m1", ec)
+	require.Equal(t, 1, testutil.CollectAndCount(m.EmbeddingDimGauge), "gauge series present before Delete")
+
+	// Full teardown must drop the per-model gauge series, not leave it stale.
+	o.Delete()
+	assert.Equal(t, 0, testutil.CollectAndCount(m.EmbeddingDimGauge), "Delete clears the embedding-dim gauge series")
+}
+
 func TestOrchestrator_PredictModelWithEmbeddings_RecordsErrorStatus(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m, err := metrics.NewBirdNETMetrics(reg)
