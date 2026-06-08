@@ -419,11 +419,15 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 // Locking sequence is identical to PredictModel: o.mu.RLock (map lookup),
 // o.inferenceMu.Lock (inference serialization), entry.mu.Lock (instance lifecycle).
 func (o *Orchestrator) PredictModelWithEmbeddings(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, []float32, error) {
+	log := GetLogger()
+
 	o.mu.RLock()
 	entry, ok := o.models[modelID]
 	o.mu.RUnlock()
 
 	if !ok {
+		log.Error("PredictModelWithEmbeddings unknown model",
+			logger.String("model_id", modelID))
 		return nil, nil, errors.Newf("unknown model: %s", modelID).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
@@ -444,11 +448,44 @@ func (o *Orchestrator) PredictModelWithEmbeddings(ctx context.Context, modelID s
 			Build()
 	}
 
-	if ec, ok := entry.instance.(EmbeddingCapable); ok {
-		return ec.PredictWithEmbeddings(ctx, sample)
+	chunkLen := 0
+	if len(sample) > 0 {
+		chunkLen = len(sample[0])
 	}
-	results, err := entry.instance.Predict(ctx, sample)
-	return results, nil, err
+	log.Debug("PredictModelWithEmbeddings dispatching",
+		logger.String("model_id", modelID),
+		logger.Int("sample_chunks", len(sample)),
+		logger.Int("chunk_len", chunkLen))
+
+	// Capture the dispatch result into locals so the same complete/error
+	// logging PredictModel emits runs before returning. The embedding is nil
+	// when the instance is not EmbeddingCapable; that is not an error.
+	var (
+		results []datastore.Results
+		emb     []float32
+		err     error
+	)
+	start := time.Now()
+	if ec, ok := entry.instance.(EmbeddingCapable); ok {
+		results, emb, err = ec.PredictWithEmbeddings(ctx, sample)
+	} else {
+		results, err = entry.instance.Predict(ctx, sample)
+	}
+	duration := time.Since(start)
+
+	if err != nil {
+		log.Error("PredictModelWithEmbeddings inference failed",
+			logger.String("model_id", modelID),
+			logger.Error(err),
+			logger.Duration("duration", duration))
+	} else {
+		log.Debug("PredictModelWithEmbeddings complete",
+			logger.String("model_id", modelID),
+			logger.Int("result_count", len(results)),
+			logger.Duration("duration", duration))
+	}
+
+	return results, emb, err
 }
 
 // ModelEmbeddingDim returns the embedding dimension for a model (0 = not

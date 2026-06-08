@@ -365,3 +365,13 @@ func TestOrchestrator_PredictModelWithEmbeddings_UnknownModel(t *testing.T) {
 	_, _, err := o.PredictModelWithEmbeddings(t.Context(), "nope", [][]float32{{0.1}})
 	require.Error(t, err)
 }
+
+func TestOrchestrator_PredictModelWithEmbeddings_ClosedInstance(t *testing.T) {
+	t.Parallel()
+	// A model entry whose instance was niled out by Delete/UnloadModel.
+	o := &Orchestrator{models: map[string]*modelEntry{"m1": {instance: nil}}}
+	results, emb, err := o.PredictModelWithEmbeddings(t.Context(), "m1", [][]float32{{0.1}})
+	require.Error(t, err)
+	assert.Nil(t, results)
+	assert.Nil(t, emb)
+}
