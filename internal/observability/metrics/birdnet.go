@@ -34,6 +34,10 @@ type BirdNETMetrics struct {
 	EmbeddingExtractionTotal *prometheus.CounterVec
 	EmbeddingDimGauge        *prometheus.GaugeVec
 
+	// Embedding capture/persistence (substrate M2)
+	EmbeddingCaptureTotal *prometheus.CounterVec
+	EmbeddingPruneTotal   prometheus.Counter
+
 	registry *prometheus.Registry
 }
 
@@ -169,6 +173,20 @@ func (m *BirdNETMetrics) initMetrics() error {
 		[]string{"model"},
 	)
 
+	m.EmbeddingCaptureTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "birdnet_embedding_capture_total",
+			Help: "Total embedding capture attempts partitioned by status (persisted, dropped_queue_full, error_open, error_put).",
+		},
+		[]string{"status"},
+	)
+	m.EmbeddingPruneTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "birdnet_embedding_prune_total",
+			Help: "Total number of embedding rows removed by the rolling row-count cap.",
+		},
+	)
+
 	return nil
 }
 
@@ -198,6 +216,20 @@ func (m *BirdNETMetrics) RecordPrediction(model string, durationSeconds float64,
 // (success, unavailable, error).
 func (m *BirdNETMetrics) RecordEmbeddingExtraction(model, status string) {
 	m.EmbeddingExtractionTotal.WithLabelValues(model, status).Inc()
+}
+
+// RecordEmbeddingCapture records an embedding capture outcome. status must be
+// one of a small, static set: "persisted", "dropped_queue_full", "error_open",
+// "error_put" (keep the cardinality bounded).
+func (m *BirdNETMetrics) RecordEmbeddingCapture(status string) {
+	m.EmbeddingCaptureTotal.WithLabelValues(status).Inc()
+}
+
+// RecordEmbeddingPrune records how many embedding rows were pruned by the cap.
+func (m *BirdNETMetrics) RecordEmbeddingPrune(pruned int) {
+	if pruned > 0 {
+		m.EmbeddingPruneTotal.Add(float64(pruned))
+	}
 }
 
 // SetEmbeddingDim records the embedding dimension exposed by a model. Called from
@@ -311,6 +343,8 @@ func (m *BirdNETMetrics) Describe(ch chan<- *prometheus.Desc) {
 	// Embedding extraction
 	m.EmbeddingExtractionTotal.Describe(ch)
 	m.EmbeddingDimGauge.Describe(ch)
+	m.EmbeddingCaptureTotal.Describe(ch)
+	m.EmbeddingPruneTotal.Describe(ch)
 }
 
 // Collect implements the prometheus.Collector interface.
@@ -337,6 +371,8 @@ func (m *BirdNETMetrics) Collect(ch chan<- prometheus.Metric) {
 	// Embedding extraction
 	m.EmbeddingExtractionTotal.Collect(ch)
 	m.EmbeddingDimGauge.Collect(ch)
+	m.EmbeddingCaptureTotal.Collect(ch)
+	m.EmbeddingPruneTotal.Collect(ch)
 }
 
 // RecordOperation implements the Recorder interface.
