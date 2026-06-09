@@ -2165,13 +2165,13 @@
         },
         "githubRequired": {
           "title": "Szükséges: GitHub issue a támogatási feltöltésekhez",
-          "description": "<strong>A támogatási feltöltésekhez GitHub issue szám szükséges.</strong> Kérjük, <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">hozzon létre egy GitHub issue-t</a>, amely leírja a problémáját a támogatási jelentés generálása <strong>előtt</strong>. A kapcsolódó issue nélkül a fejlesztők nem tudnak reagálni a támogatási adatokra.",
-          "createGithubIssue": "GitHub issue létrehozása"
+          "description": "<strong>A támogatási feltöltésekhez GitHub issue szám szükséges.</strong> Kérjük, {createIssueLink}, amely leírja a problémáját a támogatási jelentés generálása <strong>előtt</strong>. A kapcsolódó issue nélkül a fejlesztők nem tudnak reagálni a támogatási adatokra.",
+          "createGithubIssue": "hozzon létre egy GitHub issue-t"
         },
         "githubIssue": {
           "label": "GitHub issue szám",
           "placeholder": "pl., 123 vagy #123",
-          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Meglévő issue-k megtekintése</a> vagy <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">új issue létrehozása</a> először",
+          "helper": "{viewIssuesLink} vagy {createIssueLink} először",
           "viewExistingIssues": "Meglévő issue-k megtekintése",
           "createNewIssue": "új issue létrehozása"
         },
