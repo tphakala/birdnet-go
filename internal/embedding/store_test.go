@@ -154,6 +154,27 @@ func TestStoreQuerySkipsCorruptRow(t *testing.T) {
 	assert.Equal(t, "good", got[0].DetectionID)
 }
 
+// TestStoreQueryHalfOpenInterval verifies the [from, to) contract: a row exactly
+// at `from` is included and a row exactly at `to` is excluded.
+func TestStoreQueryHalfOpenInterval(t *testing.T) {
+	t.Parallel()
+
+	s := newTestStore(t)
+	base := time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, s.Put(t.Context(), makeRecord(t, func(r *Record) {
+		r.DetectionID, r.CapturedAt = "at-from", base
+	})))
+	require.NoError(t, s.Put(t.Context(), makeRecord(t, func(r *Record) {
+		r.DetectionID, r.CapturedAt = "at-to", base.Add(time.Hour)
+	})))
+
+	got, err := s.Query(t.Context(), "birdnet_v3", base, base.Add(time.Hour))
+	require.NoError(t, err)
+	require.Len(t, got, 1, "from inclusive, to exclusive")
+	assert.Equal(t, "at-from", got[0].DetectionID)
+}
+
 // TestStorePruneEnforcesRowCap verifies that Prune deletes the oldest rows so
 // at most maxRows remain, and reports how many it removed.
 func TestStorePruneEnforcesRowCap(t *testing.T) {

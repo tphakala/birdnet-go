@@ -70,7 +70,7 @@ type embeddingRow struct {
 	DetectionID string    `gorm:"column:detection_id;uniqueIndex;not null"`
 	Model       string    `gorm:"column:model;index:idx_model_captured;not null"`
 	Source      string    `gorm:"column:source;not null"`
-	CapturedAt  time.Time `gorm:"column:captured_at;index:idx_model_captured;not null"`
+	CapturedAt  time.Time `gorm:"column:captured_at;index:idx_captured_at;index:idx_model_captured;not null"`
 	Format      string    `gorm:"column:format;not null"`
 	Dim         int       `gorm:"column:dim;not null"`
 	Version     string    `gorm:"column:version;not null"`
@@ -133,6 +133,12 @@ func NewStore(path string, opts ...Option) (*Store, error) {
 	// The DSN appends pragmas after "?"; a path containing a DSN delimiter
 	// would corrupt the query string and silently drop the pragmas (WAL,
 	// busy_timeout), so reject such paths before touching the filesystem.
+	if path == "" {
+		return nil, errors.Newf("embedding: database path must not be empty").
+			Component("embedding").
+			Category(errors.CategoryValidation).
+			Build()
+	}
 	if strings.ContainsAny(path, "?#") {
 		return nil, errors.Newf("embedding: database path must not contain '?' or '#': %q", path).
 			Component("embedding").
@@ -201,10 +207,10 @@ func NewStore(path string, opts ...Option) (*Store, error) {
 // same detection id replaces the existing row (upsert) so a re-emitted
 // detection cannot double-store.
 func (s *Store) Put(ctx context.Context, rec *Record) error {
-	if rec.DetectionID == "" {
+	if rec == nil || rec.DetectionID == "" {
 		return ErrInvalidRecord
 	}
-	if rec.Dim != len(rec.Vector) {
+	if rec.Dim <= 0 || rec.Dim != len(rec.Vector) {
 		return ErrInvalidRecord
 	}
 	format := rec.Format
@@ -221,7 +227,7 @@ func (s *Store) Put(ctx context.Context, rec *Record) error {
 		DetectionID: rec.DetectionID,
 		Model:       rec.Model,
 		Source:      rec.Source,
-		CapturedAt:  rec.CapturedAt,
+		CapturedAt:  rec.CapturedAt.UTC(),
 		Format:      string(format),
 		Dim:         rec.Dim,
 		Version:     rec.Version,
@@ -262,12 +268,12 @@ func (s *Store) Get(ctx context.Context, detectionID string) (Record, error) {
 	return rowToRecord(&row)
 }
 
-// Query returns embeddings for a model whose capture time falls within
-// [from, to], ordered by capture time ascending.
+// Query returns embeddings for a model whose capture time falls within the
+// half-open interval [from, to), ordered by capture time ascending.
 func (s *Store) Query(ctx context.Context, model string, from, to time.Time) ([]Record, error) {
 	var rows []embeddingRow
 	if err := s.db.WithContext(ctx).
-		Where("model = ? AND captured_at BETWEEN ? AND ?", model, from, to).
+		Where("model = ? AND captured_at >= ? AND captured_at < ?", model, from.UTC(), to.UTC()).
 		Order("captured_at ASC, id ASC").
 		Find(&rows).Error; err != nil {
 		return nil, errors.New(err).
