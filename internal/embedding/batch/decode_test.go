@@ -96,6 +96,23 @@ func TestDecodeWindowsMissingFile(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestWindowOffsetNoOverflow(t *testing.T) {
+	t.Parallel()
+
+	// (a) parity with the old expression: window 2, 144000 samples, 48000 Hz => 6s
+	assert.Equal(t, 6*time.Second, windowOffset(2, 144000, 48000),
+		"window 2 at 3s stride must start at 6s")
+
+	// (b) overflow case: window 100000, 144000 samples, 48000 Hz => 300000s (83+ hours).
+	// Old expression: 100000 * 144000 * 1e9 = 1.44e19 > 9.22e18 (int64 max) overflows.
+	assert.Equal(t, 300000*time.Second, windowOffset(100000, 144000, 48000),
+		"large window index must not overflow")
+
+	// (c) sub-second precision: window 1, 72000 samples, 48000 Hz => 1.5s
+	assert.Equal(t, 1500*time.Millisecond, windowOffset(1, 72000, 48000),
+		"non-whole-second offset must preserve sub-second precision")
+}
+
 func TestDecodeWindowsCallbackErrorAborts(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

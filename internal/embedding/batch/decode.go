@@ -25,6 +25,16 @@ import (
 // be emitted. A tail below this fraction is silently dropped.
 const minTailFraction = 0.25
 
+// windowOffset returns the start offset of window windowIdx without
+// overflowing int64 nanoseconds on very long recordings: whole seconds and
+// the sub-second remainder are scaled separately.
+func windowOffset(windowIdx, windowSamples, sampleRate int) time.Duration {
+	total := int64(windowIdx) * int64(windowSamples)
+	rate := int64(sampleRate)
+	return time.Duration(total/rate)*time.Second +
+		time.Duration(total%rate)*time.Second/time.Duration(rate)
+}
+
 // pcm16Divisor scales int16 PCM samples to float32 so that -32768 maps
 // exactly to -1.0. This matches the live analysis path (see
 // internal/analysis/process.go and internal/audiocore/convert/pcm.go) so
@@ -104,7 +114,7 @@ func decodeWindows(ctx context.Context, ffmpegPath, filePath string, sampleRate,
 	// flushWindow delivers the current full window to fn and resets the fill
 	// position for the next one.
 	flushWindow := func() error {
-		offset := time.Duration(windowIdx) * time.Duration(windowSamples) * time.Second / time.Duration(sampleRate)
+		offset := windowOffset(windowIdx, windowSamples, sampleRate)
 		if err := fn(window, offset); err != nil {
 			return err
 		}
