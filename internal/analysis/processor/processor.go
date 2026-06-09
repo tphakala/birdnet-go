@@ -190,6 +190,8 @@ type Detections struct {
 	pcmData3s     []byte                       // 3s PCM data containing the detection
 	Result        detection.Result             // Detection result containing highest match
 	Results       []detection.AdditionalResult // Additional BirdNET prediction results
+	Embeddings    []float32                    // Window embedding (nil when disabled/unavailable); persisted keyed by note ID
+	ModelID       string                       // Registry model id that produced the embedding (provenance)
 }
 
 // PendingDetection struct represents a single detection held in memory,
@@ -1101,6 +1103,8 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 		pcmData3s:     item.PCMdata,
 		Result:        detectionResult,
 		Results:       additionalResults,
+		Embeddings:    item.Embeddings,
+		ModelID:       item.ModelID,
 	}
 }
 
@@ -1944,6 +1948,8 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 			Ds:                p.Ds,         // Legacy - kept for backward compatibility
 			Repo:              p.Repo,       // New - preferred path for database operations
 			CorrelationID:     det.CorrelationID,
+			Embeddings:        det.Embeddings,
+			ModelID:           det.ModelID,
 		}
 	}
 
