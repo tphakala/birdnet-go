@@ -1,0 +1,58 @@
+package batch
+
+import (
+	"context"
+	"io/fs"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+// audioExtensions are the corpus file types the batch path accepts. FFmpeg
+// handles the actual decode, so this is a walk filter, not a format gate.
+var audioExtensions = map[string]bool{
+	".wav": true, ".flac": true, ".mp3": true,
+	".m4a": true, ".aac": true, ".opus": true, ".ogg": true,
+}
+
+// DirectoryItems walks root and returns one Item per audio file, keyed by
+// the path relative to root. Hidden subdirectories (names beginning with ".")
+// are skipped, but a hidden root directory is still walked. Directory
+// symlinks are not followed (filepath.WalkDir semantics). Order is
+// deterministic (sorted by key) so limits and reruns behave predictably.
+// ctx is checked on every entry so a large tree walk can be cancelled promptly.
+func DirectoryItems(ctx context.Context, root string) ([]Item, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+	var items []Item
+	err = filepath.WalkDir(absRoot, func(path string, d fs.DirEntry, err error) error {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if strings.HasPrefix(d.Name(), ".") && path != absRoot {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !audioExtensions[strings.ToLower(filepath.Ext(path))] {
+			return nil
+		}
+		rel, err := filepath.Rel(absRoot, path)
+		if err != nil {
+			return err
+		}
+		items = append(items, Item{Path: path, Key: rel})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Key < items[j].Key })
+	return items, nil
+}

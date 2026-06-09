@@ -140,6 +140,20 @@ func GetAudioDuration(ctx context.Context, audioPath string) (float64, error) {
 			Build()
 	}
 
+	// Resolve to an absolute path before handing it to sox: absolute paths
+	// cannot start with "-", so a crafted relative path can never be parsed
+	// as a sox option.
+	absPath, err := filepath.Abs(audioPath)
+	if err != nil {
+		return 0, errors.Newf("failed to resolve absolute path for %s: %w", audioPath, err).
+			Component("audiocore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_audio_duration").
+			Context("path", audioPath).
+			Build()
+	}
+	audioPath = absPath
+
 	// Track the actual timeout/deadline for accurate error messages.
 	var timeoutDuration time.Duration
 
@@ -233,4 +247,13 @@ func GetAudioDuration(ctx context.Context, audioPath string) (float64, error) {
 	}
 
 	return duration, nil
+}
+
+// ResolveBinary returns the path to the ffmpeg executable via PATH lookup
+// only. Callers with access to settings should prefer
+// settings.Realtime.Audio.FfmpegPath and use this function only as a
+// fallback when that field is empty. Exported for offline consumers (batch
+// embedding extraction) that decode files outside the streaming pipeline.
+func ResolveBinary() (string, error) {
+	return resolveFFmpegBinary()
 }
