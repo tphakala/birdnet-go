@@ -61,6 +61,8 @@ type Options struct {
 	Overwrite bool          // re-embed even when the key already exists
 	DryRun    bool          // decode + predict but never write
 	Progress  func(stats Stats, item Item)
+	// OnError is invoked for each item that fails; the run continues.
+	OnError func(item Item, err error)
 }
 
 // Stats summarize a run.
@@ -119,6 +121,9 @@ func (e *Extractor) Run(ctx context.Context, items []Item) (Stats, error) {
 			return stats, err
 		case err != nil:
 			stats.Errors++
+			if e.opts.OnError != nil {
+				e.opts.OnError(item, err)
+			}
 		case skipped:
 			stats.Skipped++
 		default:

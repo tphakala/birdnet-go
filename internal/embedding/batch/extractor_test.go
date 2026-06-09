@@ -11,6 +11,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/embedding"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // fakePredict returns a fixed embedding whose first component encodes the
@@ -36,6 +37,9 @@ func newTestStore(t *testing.T) *embedding.Store {
 	return s
 }
 
+// stubFFmpegPath is a placeholder; decodeStub never invokes ffmpeg.
+const stubFFmpegPath = "unused"
+
 // decodeStub bypasses ffmpeg: emits n windows of silence.
 func decodeStub(n int) decodeFunc {
 	return func(ctx context.Context, ffmpegPath, filePath string, sampleRate, windowSamples int, fn windowFunc) error {
@@ -54,7 +58,7 @@ func newTestExtractor(t *testing.T, fp *fakePredict, store *embedding.Store, win
 	e := New(fp.predict, store, Tags{Model: "BirdNET_V2.4", Version: "2.4", Format: embedding.FormatFP16},
 		Spec{SampleRate: 48000, WindowSamples: 48000 * 3}, opts)
 	e.decode = decodeStub(windows)
-	e.ffmpegPath = "unused"
+	e.ffmpegPath = stubFFmpegPath
 	return e
 }
 
@@ -181,7 +185,7 @@ func TestRunBackfillCloneSurvivesBufferReuse(t *testing.T) {
 	e := New(fp.predict, store, Tags{Model: "BirdNET_V2.4", Version: "2.4", Format: embedding.FormatFP16},
 		Spec{SampleRate: 48000, WindowSamples: 48000 * 3}, Options{})
 	e.decode = decodeStub(3)
-	e.ffmpegPath = "unused"
+	e.ffmpegPath = stubFFmpegPath
 
 	_, err := e.Run(t.Context(), []Item{{
 		Path: "/x/clip.wav", Key: "clip.wav",
@@ -208,4 +212,45 @@ func TestRunContextCancelStops(t *testing.T) {
 	cancel()
 	_, err := e.Run(ctx, []Item{{Path: "/x/e.wav", Key: "e.wav"}})
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestRunOnErrorFiresAndRunContinues(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	errBoom := errors.NewStd("predict boom")
+
+	// Fail only the very first predict call so item one errors and item two
+	// completes, proving the run continues past a failure.
+	failed := false
+	predict := func(ctx context.Context, window []float32) ([]datastore.Results, []float32, error) {
+		if !failed {
+			failed = true
+			return nil, nil, errBoom
+		}
+		return []datastore.Results{{Species: "S_C", Confidence: 0.5}}, []float32{1, 2, 3, 4}, nil
+	}
+
+	var gotItems []Item
+	var gotErrs []error
+	e := New(predict, store, Tags{Model: "M", Version: "1", Format: embedding.FormatFP16},
+		Spec{SampleRate: 48000, WindowSamples: 48000 * 3}, Options{
+			OnError: func(item Item, err error) {
+				gotItems = append(gotItems, item)
+				gotErrs = append(gotErrs, err)
+			},
+		})
+	e.decode = decodeStub(1)
+	e.ffmpegPath = stubFFmpegPath
+
+	stats, err := e.Run(t.Context(), []Item{
+		{Path: "/x/bad.wav", Key: "bad.wav"},
+		{Path: "/x/good.wav", Key: "good.wav"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, stats.Errors)
+	assert.Equal(t, 1, stats.Files, "run must continue to the next item")
+
+	require.Len(t, gotItems, 1, "OnError must fire exactly once")
+	assert.Equal(t, "bad.wav", gotItems[0].Key)
+	require.ErrorIs(t, gotErrs[0], errBoom)
 }

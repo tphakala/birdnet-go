@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/cmd/authors"
 	"github.com/tphakala/birdnet-go/cmd/benchmark"
+	embedcmd "github.com/tphakala/birdnet-go/cmd/embed"
 	"github.com/tphakala/birdnet-go/cmd/license"
 	"github.com/tphakala/birdnet-go/cmd/notify"
 	"github.com/tphakala/birdnet-go/cmd/rangefilter"
@@ -39,6 +40,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 	supportCmd := support.Command(settings)
 	benchmarkCmd := benchmark.Command(settings)
 	notifyCmd := notify.Command(settings)
+	embedCmd := embedcmd.Command(settings)
 
 	subcommands := []*cobra.Command{
 		serveCmd,
@@ -48,6 +50,7 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 		supportCmd,
 		benchmarkCmd,
 		notifyCmd,
+		embedCmd,
 	}
 
 	rootCmd.AddCommand(subcommands...)
