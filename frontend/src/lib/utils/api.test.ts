@@ -169,6 +169,25 @@ describe('API utilities', () => {
       await expect(fetchWithCSRF('/api/test')).rejects.toThrow('errors.api.serverError');
     });
 
+    it('shows the backend message for stream probe failures with a specific root cause', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        statusText: 'Unprocessable Entity',
+        headers: new Headers(),
+        json: () =>
+          Promise.resolve({
+            error_key: 'errors.streams.test.connectionFailed',
+            message: 'stream has no audio track',
+          }),
+      });
+
+      await expect(fetchWithCSRF('/api/test')).rejects.toMatchObject({
+        message: 'stream has no audio track',
+        status: 422,
+      });
+    });
+
     it('returns null for empty responses', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

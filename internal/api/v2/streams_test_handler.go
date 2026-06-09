@@ -1,6 +1,7 @@
 package api
 
 import (
+	stderrors "errors"
 	"fmt"
 	"maps"
 	"net"
@@ -54,6 +55,10 @@ var blockedHosts = map[string]bool{
 	"localhost":                true,
 }
 
+// probeStreamInfo is assigned to ffmpeg.ProbeStreamInfo by default and kept as
+// a package variable so tests can stub stream probing without invoking ffprobe.
+var probeStreamInfo = ffmpeg.ProbeStreamInfo
+
 // initStreamTestRoutes registers stream testing endpoints.
 func (c *Controller) initStreamTestRoutes() {
 	c.Group.POST("/streams/test", c.TestStream, c.authMiddleware)
@@ -75,10 +80,18 @@ func (c *Controller) TestStream(ctx echo.Context) error {
 			vErr.status, vErr.errorKey, vErr.params)
 	}
 
-	info, err := ffmpeg.ProbeStreamInfo(ctx.Request().Context(), req.URL)
+	info, err := probeStreamInfo(ctx.Request().Context(), req.URL)
 	if err != nil {
-		return c.HandleErrorWithKey(ctx, err, "stream connection failed",
-			http.StatusBadGateway, "errors.streams.test.connectionFailed", nil)
+		message := "stream connection failed"
+		errorKey := "errors.streams.test.connectionFailed"
+		status := http.StatusBadGateway
+
+		if stderrors.Is(err, ffmpeg.ErrNoAudioStreamsFound) {
+			message = "stream has no audio track"
+			status = http.StatusUnprocessableEntity
+		}
+
+		return c.HandleErrorWithKey(ctx, err, message, status, errorKey, nil)
 	}
 
 	lossy := ffmpeg.IsLossyCodec(info.Codec)

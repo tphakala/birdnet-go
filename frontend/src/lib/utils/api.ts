@@ -230,7 +230,9 @@ async function handleResponse<T = unknown>(response: Response): Promise<T> {
 
       // SECURITY: Only extract safe error fields - never expose raw server errors
       if (errorData && typeof errorData === 'object') {
-        // Try i18n translation via error_key first
+        // Try i18n translation via error_key first.
+        // For stream probe failures, the backend message is already sanitized
+        // and more specific than the generic connection-failed translation.
         if (errorData.error_key && typeof errorData.error_key === 'string') {
           const params =
             errorData.error_params &&
@@ -238,9 +240,17 @@ async function handleResponse<T = unknown>(response: Response): Promise<T> {
             !Array.isArray(errorData.error_params)
               ? (errorData.error_params as Record<string, unknown>)
               : {};
-          const translated = t(errorData.error_key, params);
-          if (translated !== errorData.error_key) {
-            serverMessage = translated;
+          if (
+            errorData.error_key === 'errors.streams.test.connectionFailed' &&
+            typeof errorData.message === 'string' &&
+            errorData.message.trim().length > 0
+          ) {
+            serverMessage = errorData.message;
+          } else {
+            const translated = t(errorData.error_key, params);
+            if (translated !== errorData.error_key) {
+              serverMessage = translated;
+            }
           }
         }
 
