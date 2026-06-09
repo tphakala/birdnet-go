@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	stdlog "log"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -318,6 +319,12 @@ func (s *Store) Prune(ctx context.Context) (int, error) {
 	}
 
 	toDelete := count - s.maxRows
+	// Limit takes an int; clamp so the int64->int conversion cannot truncate
+	// to a wrong value on 32-bit builds (unreachable on our 64-bit targets,
+	// but defensive).
+	if toDelete > math.MaxInt32 {
+		toDelete = math.MaxInt32
+	}
 	// Delete the oldest rows via a subquery so the candidate IDs never
 	// round-trip through the application. An explicit "id IN (?, ?, ...)"
 	// list would allocate an unbounded slice and can exceed SQLite's
@@ -366,7 +373,7 @@ func rowToRecord(row *embeddingRow) (Record, error) {
 		DetectionID: row.DetectionID,
 		Model:       row.Model,
 		Source:      row.Source,
-		CapturedAt:  row.CapturedAt,
+		CapturedAt:  row.CapturedAt.UTC(),
 		Format:      format,
 		Dim:         row.Dim,
 		Version:     row.Version,
