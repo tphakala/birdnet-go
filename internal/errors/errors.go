@@ -397,6 +397,9 @@ func init() {
 	RegisterComponent("ffmpeg-manager", "ffmpeg-manager")
 	RegisterComponent("ffmpeg-stream", "ffmpeg-stream")
 	RegisterComponent("datastore", "datastore")
+	// Path-qualified so it does not also match substrings like
+	// classifier.embeddingDimOf, which must stay component "birdnet".
+	RegisterComponent("/embedding", "embedding")
 	RegisterComponent("imageprovider", "imageprovider")
 	RegisterComponent("diskmanager", "diskmanager")
 	RegisterComponent("ebird", "ebird")
