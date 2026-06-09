@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/embedding"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 )
@@ -77,6 +78,13 @@ type LogAction struct {
 	mu            sync.Mutex // Protect concurrent access to Result
 }
 
+// embeddingCapturer is the minimal sink DatabaseAction uses to persist the
+// window embedding after a detection saves. *embedding.Capture implements it.
+// It is kept tiny so DatabaseAction stays unit-testable without the Processor.
+type embeddingCapturer interface {
+	Capture(rec embedding.Record)
+}
+
 type DatabaseAction struct {
 	Settings          *conf.Settings
 	Ds                datastore.Interface           // Legacy - to be removed after migration
@@ -87,6 +95,9 @@ type DatabaseAction struct {
 	NewSpeciesTracker *species.SpeciesTracker // Add reference to new species tracker
 	processor         *Processor              // Add reference to processor for source name resolution
 	DetectionCtx      *DetectionContext       // Shared context for downstream actions (MQTT, SSE, SaveAudio)
+	Embeddings        []float32                // Window embedding carried from Detections (nil when off)
+	ModelID           string                   // Registry model id, for embedding provenance
+	EmbeddingCapture  embeddingCapturer        // Async sink; nil => capture is a no-op
 	Description       string
 	CorrelationID     string     // Detection correlation ID for log tracking
 	mu                sync.Mutex // Protect concurrent access to Result and Results

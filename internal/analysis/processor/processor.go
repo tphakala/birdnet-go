@@ -26,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/embedding"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
@@ -78,6 +79,7 @@ type Processor struct {
 	LastDogDetection     map[string]time.Time    // keep track of dog barks per audio source
 	LastHumanDetection   map[string]time.Time    // keep track of human vocal per audio source
 	Metrics              *observability.Metrics
+	embeddingCapture     *embedding.Capture // async embedding persistence (lazy-opened, owned here)
 	DynamicThresholds    map[string]*DynamicThreshold
 	thresholdsMutex      sync.RWMutex        // Mutex to protect access to DynamicThresholds
 	pendingResets        map[string]struct{} // Species names pending reset, protected by thresholdsMutex
@@ -185,11 +187,29 @@ func (p *Processor) currentSettings() *conf.Settings {
 	return conf.CurrentOrFallback(p.Settings)
 }
 
+// resolveEmbeddingStore reads the embedding store path and row cap from live
+// settings. Called once when the capture service lazily opens its store. An
+// empty configured path derives a file next to the main SQLite database.
+func (p *Processor) resolveEmbeddingStore() (path string, maxRows int) {
+	s := p.currentSettings()
+	path = s.Embeddings.Storage.Path
+	if path == "" {
+		path = filepath.Join(filepath.Dir(s.Output.SQLite.Path), "embeddings.db")
+	}
+	maxRows = s.Embeddings.Storage.MaxRows
+	if maxRows <= 0 {
+		maxRows = int(embedding.DefaultMaxRows)
+	}
+	return path, maxRows
+}
+
 type Detections struct {
 	CorrelationID string                       // Unique detection identifier for log correlation
 	pcmData3s     []byte                       // 3s PCM data containing the detection
 	Result        detection.Result             // Detection result containing highest match
 	Results       []detection.AdditionalResult // Additional BirdNET prediction results
+	Embeddings    []float32                    // Window embedding (nil when disabled/unavailable); persisted keyed by note ID
+	ModelID       string                       // Registry model id that produced the embedding (provenance)
 }
 
 // PendingDetection struct represents a single detection held in memory,
@@ -604,6 +624,15 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 	if settings.Realtime.Dashboard.Spectrogram.IsPreRenderEnabled() {
 		p.initPreRenderer()
 	}
+
+	// Own the embedding capture service. Constructed cheaply: it opens no store
+	// and starts no goroutine until the first embedding-bearing detection saves
+	// while the feature is enabled (zero cost when never used).
+	var capMetrics embedding.CaptureMetrics
+	if metrics != nil && metrics.BirdNET != nil {
+		capMetrics = metrics.BirdNET
+	}
+	p.embeddingCapture = embedding.NewCapture(p.resolveEmbeddingStore, embedding.WithCaptureMetrics(capMetrics))
 
 	return p
 }
@@ -1101,6 +1130,8 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 		pcmData3s:     item.PCMdata,
 		Result:        detectionResult,
 		Results:       additionalResults,
+		Embeddings:    item.Embeddings,
+		ModelID:       item.ModelID,
 	}
 }
 
@@ -1944,6 +1975,9 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 			Ds:                p.Ds,         // Legacy - kept for backward compatibility
 			Repo:              p.Repo,       // New - preferred path for database operations
 			CorrelationID:     det.CorrelationID,
+			Embeddings:        det.Embeddings,
+			ModelID:           det.ModelID,
+			EmbeddingCapture:  p.embeddingCapture,
 		}
 	}
 
@@ -2484,6 +2518,17 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 		GetLogger().Warn("Job queue shutdown timed out",
 			logger.Error(err),
 			logger.String("operation", "job_queue_shutdown"))
+	}
+
+	// Flush and close the embedding capture store. Placed after the job queue
+	// stops so all DatabaseAction enqueues have happened. Close honors ctx and
+	// force-closes if the deadline passes, so teardown never hangs.
+	if p.embeddingCapture != nil {
+		if err := p.embeddingCapture.Close(ctx); err != nil {
+			GetLogger().Warn("embedding capture close did not finish within deadline",
+				logger.Error(err),
+				logger.String("operation", "embedding_capture_shutdown"))
+		}
 	}
 
 	// Skip remaining cleanup if context is already expired — these are
