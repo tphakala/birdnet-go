@@ -51,4 +51,6 @@ func TestProcessor_EmbeddingCaptureLifecycle(t *testing.T) {
 	rec, err := store.Get(t.Context(), "7")
 	require.NoError(t, err)
 	assert.Equal(t, "7", rec.DetectionID)
+	assert.Equal(t, 3, rec.Dim)
+	assert.Equal(t, []float32{1, 2, 3}, rec.Vector, "flushed vector must round-trip")
 }

@@ -19,10 +19,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// defaultMaxRows bounds the rolling window of retained embeddings when the
+// DefaultMaxRows bounds the rolling window of retained embeddings when the
 // caller does not specify a cap. Sizing math: a 1536-dim fp16 vector is ~3 KB,
 // so 50k rows is on the order of 150 MB of vector data plus row overhead.
-const defaultMaxRows int64 = 50_000
+// It is the single source of truth for the row-cap default; callers that
+// resolve a non-positive configured cap should fall back to this value.
+const DefaultMaxRows int64 = 50_000
 
 // sqlitePragmas are applied to every pooled connection via the DSN so they are
 // not lost on connections opened after the first. WAL plus a generous
@@ -126,7 +128,7 @@ type Store struct {
 // NewStore opens (creating if necessary) the embeddings database at path and
 // migrates its schema. The parent directory is created if it does not exist.
 func NewStore(path string, opts ...Option) (*Store, error) {
-	cfg := storeConfig{maxRows: defaultMaxRows}
+	cfg := storeConfig{maxRows: DefaultMaxRows}
 	for _, opt := range opts {
 		opt(&cfg)
 	}

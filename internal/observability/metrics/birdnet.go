@@ -176,14 +176,14 @@ func (m *BirdNETMetrics) initMetrics() error {
 	m.EmbeddingCaptureTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "birdnet_embedding_capture_total",
-			Help: "Total embedding capture attempts partitioned by status (persisted, dropped_queue_full, error_open, error_put).",
+			Help: "Total embedding capture attempts partitioned by status (persisted, dropped_queue_full, error_open, error_put)",
 		},
 		[]string{"status"},
 	)
 	m.EmbeddingPruneTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "birdnet_embedding_prune_total",
-			Help: "Total number of embedding rows removed by the rolling row-count cap.",
+			Help: "Total number of embedding rows removed by the rolling row-count cap",
 		},
 	)
 

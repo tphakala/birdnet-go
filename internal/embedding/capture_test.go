@@ -48,23 +48,30 @@ func TestCapture_PersistsRecord(t *testing.T) {
 	path := filepath.Join(dir, "embeddings.db")
 	spy := newSpyMetrics()
 
+	want := testRecord("42", 8)
 	c := NewCapture(func() (string, int) { return path, 50000 }, WithCaptureMetrics(spy))
-	c.Capture(testRecord("42", 8))
+	c.Capture(want)
 	require.NoError(t, c.Close(t.Context()))
 
 	assert.Equal(t, 1, spy.capture["persisted"])
 
-	// Reopen the store and verify the vector round-tripped. Close it with a
-	// defer registered after goleak's (LIFO => closes first) so the database/sql
-	// background goroutines are gone before the leak check runs.
+	// Reopen the store and verify the full record round-tripped (not just the
+	// length: a codec regression that zeroed the floats would pass a length-only
+	// check). Close it with a defer registered after goleak's (LIFO => closes
+	// first) so the database/sql background goroutines are gone before the leak
+	// check runs.
 	store, err := NewStore(path)
 	require.NoError(t, err)
 	defer func() { _ = store.Close() }()
 	rec, err := store.Get(t.Context(), "42")
 	require.NoError(t, err)
-	assert.Equal(t, "42", rec.DetectionID)
-	assert.Equal(t, 8, rec.Dim)
-	assert.Len(t, rec.Vector, 8)
+	assert.Equal(t, want.DetectionID, rec.DetectionID)
+	assert.Equal(t, want.Model, rec.Model)
+	assert.Equal(t, want.Source, rec.Source)
+	assert.Equal(t, want.Version, rec.Version)
+	assert.Equal(t, want.Format, rec.Format)
+	assert.Equal(t, want.Dim, rec.Dim)
+	assert.Equal(t, want.Vector, rec.Vector, "fp16-exact vector must round-trip")
 }
 
 func TestCapture_NoOpOnEmptyVector(t *testing.T) {
@@ -110,8 +117,9 @@ func TestCapture_PruneEnforcesCap(t *testing.T) {
 	to := time.Unix(2_000_000_000, 0).UTC()
 	rows, err := store.Query(t.Context(), "birdnet", from, to)
 	require.NoError(t, err)
-	assert.LessOrEqual(t, len(rows), 2, "rolling cap must bound stored rows")
-	assert.Positive(t, spy.pruned, "prune count metric should fire")
+	// 5 inserts into a cap of 2 leaves exactly 2 rows and prunes at least 3.
+	assert.Len(t, rows, 2, "rolling cap must leave exactly maxRows rows")
+	assert.GreaterOrEqual(t, spy.pruned, 3, "pruning 5 inserts down to a cap of 2 removes >=3 rows")
 }
 
 // White-box: a full buffer drops rather than blocking.
@@ -125,6 +133,8 @@ func TestCapture_DropsWhenBufferFull(t *testing.T) {
 
 	// Construct a started Capture with a size-1 buffer and NO running writer,
 	// so the channel cannot drain. The first enqueue fills it; the second drops.
+	// stop/done are intentionally left nil: this fixture must NOT call Close()
+	// (close(nil) would panic). Capture() never touches stop/done.
 	c := NewCapture(func() (string, int) { return path, 50000 }, WithCaptureMetrics(spy))
 	c.store = store
 	c.ch = make(chan Record, 1)

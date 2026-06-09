@@ -198,7 +198,7 @@ func (p *Processor) resolveEmbeddingStore() (path string, maxRows int) {
 	}
 	maxRows = s.Embeddings.Storage.MaxRows
 	if maxRows <= 0 {
-		maxRows = 50000
+		maxRows = int(embedding.DefaultMaxRows)
 	}
 	return path, maxRows
 }
