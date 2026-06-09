@@ -130,6 +130,9 @@ func run(ctx context.Context, settings *conf.Settings, cfg *runConfig) error {
 			return fmt.Errorf("ffmpeg required for batch decode: %w", resolveErr)
 		}
 	}
+	if err := ffmpeg.ValidateFFmpegPath(ffmpegPath); err != nil {
+		return fmt.Errorf("invalid ffmpeg path: %w", err)
+	}
 
 	// --store overrides the settings-derived path entirely, letting large
 	// corpus runs write to a separate file instead of the live rolling store.

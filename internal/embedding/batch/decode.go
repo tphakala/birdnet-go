@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -53,6 +54,12 @@ func decodeWindows(ctx context.Context, ffmpegPath, filePath string, sampleRate,
 	if sampleRate <= 0 || windowSamples <= 0 {
 		return fmt.Errorf("decodeWindows: sampleRate (%d) and windowSamples (%d) must be positive", sampleRate, windowSamples)
 	}
+
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		return fmt.Errorf("resolve absolute path for %s: %w", filePath, err)
+	}
+	filePath = absPath
 
 	var stderrBuf bytes.Buffer
 	cmd := exec.CommandContext(ctx, ffmpegPath,
@@ -127,7 +134,7 @@ func decodeWindows(ctx context.Context, ffmpegPath, filePath string, sampleRate,
 		// byte) with data[0] (high byte) into a little-endian int16.
 		start := 0
 		if hasCarry && len(data) > 0 {
-			sample := int16(carryByte[0]) | int16(data[0])<<8
+			sample := int16(uint16(carryByte[0]) | uint16(data[0])<<8)
 			start = 1
 			hasCarry = false
 			if err := pushSample(sample); err != nil {
