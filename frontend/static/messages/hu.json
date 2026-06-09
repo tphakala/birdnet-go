@@ -219,7 +219,7 @@
     "notifications": "Értesítések",
     "system": "Rendszer",
     "settings": "Beállítások",
-    "about": "Névjény",
+    "about": "Névjegy",
     "toggleSidebar": "Oldalsáv menü kapcsolása",
     "mainNavigation": "Fő navigáció",
     "closeSidebar": "Oldalsáv bezárása",
@@ -237,7 +237,7 @@
     "reportBugAriaLabel": "Hiba bejelentése a GitHubon (új ablakban nyílik meg)",
     "askQuestionAriaLabel": "Kérdés feltevése a GitHub Discussions oldalon (új ablakban nyílik meg)",
     "viewOnGithubAriaLabel": "BirdNET-Go megtekintése a GitHubon (új ablakban nyílik meg)",
-    "health": "Health"
+    "health": "Rendszerállapot"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -588,22 +588,10 @@
     "approved": "Jóváhagyva",
     "currentlyHearing": {
       "title": "Jelenleg hallható",
-      "subtitle": "Valós idejű azonosított fajok",
-      "empty": "Csend van — most nem észleltek madarakat"
+      "subtitle": "Valós időben azonosított fajok",
+      "empty": "Csend van — most nincs észlelhető madárhang"
     },
     "rejected": "Elutasítva",
-    "newSpeciesHighlights": {
-      "title": "Új és visszatérő fajok",
-      "subtitle": "Első észlelések és nemrégi visszatérők",
-      "trackingDisabled": "A funkció használatához kapcsolja be a „Fajkövetés engedélyezése” lehetőséget.",
-      "categoryLifetime": "Új faj",
-      "categoryYear": "Új ebben az évben",
-      "categorySeason": "Új ebben a szezonban",
-      "categorySeasonNamed": "Új ezen a szezonon: {season}",
-      "maxConfidenceShort": "Max {confidence}%",
-      "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
-      "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}"
-    },
     "dailySummary": {
       "title": "Napi aktivitás",
       "subtitle": "Faj detektálások óránként",
@@ -645,8 +633,8 @@
       "noSpecies": "Ezen a napon nem észleltek fajokat"
     },
     "recentDetections": {
-      "title": "Legutóbbi detektálások",
-      "subtitle": "Legújabb azonosított fajok",
+      "title": "Legutóbbi észlelések",
+      "subtitle": "Legfrissebb észlelések",
       "controls": {
         "show": "Megjelenítés:",
         "refresh": "Detektálások frissítése",
@@ -767,14 +755,26 @@
       "resetConfirm": "Visszaállítja az irányítópultot az alapértelmezett elrendezésre? Ez eltávolítja az összes testreszabást.",
       "resetting": "Visszaállítás..."
     },
+    "newSpeciesHighlights": {
+      "title": "Új és visszatérő fajok",
+      "subtitle": "Első alkalommal és nemrég visszatért észlelések",
+      "trackingDisabled": "Kérjük, aktiválja az \"Fajkövetés engedélyezése\" funkciót ennek a funkciónak a használatához.",
+      "categoryLifetime": "Új fajok",
+      "categoryYear": "Idén új",
+      "categorySeason": "Ebben az évszakban új",
+      "categorySeasonNamed": "Ebben a(z) {season} évszakban új",
+      "maxConfidenceShort": "Max {confidence}%",
+      "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
+      "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}"
+    },
     "elements": {
       "banner": "Irányítópult banner",
       "dailySummary": "Napi összefoglaló",
-      "newSpeciesHighlights": "Új fajok – kiemeltek",
       "currentlyHearing": "Jelenleg hallható",
-      "detectionsGrid": "Legutóbbi detektálások",
+      "detectionsGrid": "Legutóbbi észlelések",
       "liveSpectrogram": "Élő spektrogram",
-      "videoEmbed": "Videó beágyazás"
+      "videoEmbed": "Videó beágyazás",
+      "newSpeciesHighlights": "Új fajok kiemelése"
     }
   },
   "detections": {
@@ -1019,7 +1019,7 @@
       "colorMap": "Színtérkép",
       "gain": "Erősítés",
       "gainTooltip": "Spektrogram megjelenítési erősítés",
-      "mute": "Némítás",
+      "mute": "Audiokimenet némítása",
       "unmute": "Némítás feloldása",
       "frequencyRangeMin": "Minimum frekvencia",
       "frequencyRangeMax": "Maximum frekvencia",
@@ -1588,17 +1588,17 @@
       "fewestDetections": "Legkevesebb detektálás",
       "nameAZ": "Név (A-Z)",
       "nameZA": "Név (Z-A)",
-      "recentlyFirstSeen": "Legutóbb először látva",
-      "earliestFirstSeen": "Legrégebben először látva",
-      "recentlyLastSeen": "Legutóbb utoljára látva",
-      "earliestLastSeen": "Legrégebben utoljára látva",
+      "recentlyFirstSeen": "Legfrissebb első észlelés",
+      "earliestFirstSeen": "Legrégebbi első észlelés",
+      "recentlyLastSeen": "Legfrissebb utolsó észlelés",
+      "earliestLastSeen": "Legrégebbi utolsó észlelés",
       "highestConfidence": "Legmagasabb megbízhatóság",
       "lowestConfidence": "Legalacsonyabb megbízhatóság",
       "highestMaxConfidence": "Legmagasabb maximális megbízhatóság",
       "lowestMaxConfidence": "Legalacsonyabb maximális megbízhatóság"
     },
     "charts": {
-      "top10Species": "Top 10 faj",
+      "top10Species": "10 leggyakoribb faj",
       "detectionsByTimeOfDay": "Detektálások napszak szerint",
       "detectionTrends": "Detektálási trendek",
       "newSpeciesDetected": "Új fajok észlelve",
@@ -1610,11 +1610,11 @@
       "dailyDetections": "Napi detektálások",
       "date": "Dátum",
       "firstHeardOn": "Először hallva",
-      "firstHeardDate": "Első hallás dátuma",
+      "firstHeardDate": "Első észlelés dátuma",
       "firstHeard": "Első hallás"
     },
     "recentDetections": {
-      "title": "Legutóbbi detektálások",
+      "title": "Legutóbbi észlelések",
       "headers": {
         "dateTime": "Dátum és idő",
         "species": "Faj",
@@ -1671,7 +1671,7 @@
       "charts": {
         "timeOfDay": {
           "title": "Detektálási minták napszak szerint",
-          "description": "A kiválasztott fajok detektálási átlaga mutatja a nap folyamán",
+          "description": "A kiválasztott fajok detektálási átlagát mutatja a nap folyamán",
           "noData": "Nincs elérhető napszak adat",
           "noDataHint": "Válasszon fajokat és dátumtartományt a minták megtekintéséhez",
           "axisTime": "Napszak",
@@ -1870,7 +1870,7 @@
           },
           "threshold": {
             "label": "Küszöbérték",
-            "helpText": "Szabályozza, hogy mely fajok kerülnek be a helyszíne és az évszak alapján. Az alapértelmezett (0.01) a legtöbb felhasználónak ajánlott. A magasabb értékek (0.05-0.3) kevesebb fajt tartalmaznak magasabb előfordulási valószínűséggel. A nagyon magas értékek (0.5+) csak a leggyakoribb fajokat tartalmazzák."
+            "helpText": "Szabályozza, hogy mely fajok kerülnek be a helyszín és az évszak alapján. Az alapértelmezett (0.01) a legtöbb felhasználónak ajánlott. A magasabb értékek (0.05-0.3) kevesebb fajt tartalmaznak magasabb előfordulási valószínűséggel. A nagyon magas értékek (0.5+) csak a leggyakoribb fajokat tartalmazzák."
           },
           "speciesCount": {
             "label": "Jelenlegi faj szám",
@@ -2165,7 +2165,7 @@
         },
         "githubRequired": {
           "title": "Szükséges: GitHub issue a támogatási feltöltésekhez",
-          "description": "<strong>A támogatási feltöltésekhez GitHub issue szám szükséges.</strong> Kérjük, {createIssueLink}, amely leírja a problémáját <strong>megelőzőleg</strong> a támogatási jelentés generálását. A kapcsolódó issue nélkül a fejlesztők nem tudnak reagálni a támogatási adatokra.",
+          "description": "<strong>A támogatási feltöltésekhez GitHub issue szám szükséges.</strong> Kérjük, {createIssueLink}, amely leírja a problémáját a támogatási jelentés generálása <strong>előtt</strong>. A kapcsolódó issue nélkül a fejlesztők nem tudnak reagálni a támogatási adatokra.",
           "createGithubIssue": "hozzon létre egy GitHub issue-t"
         },
         "githubIssue": {
@@ -2588,7 +2588,7 @@
       "title": "Szűrők",
       "privacyFiltering": {
         "title": "Adatvédelmi szűrés",
-        "description": "Az adatvédelmi szűrés elkerüli a hang klipek mentését, amikor emberi hangokat érzékel",
+        "description": "Az adatvédelmi szűrés elkerüli a hangminták mentését, amikor emberi hangokat érzékel",
         "enable": "Adatvédelmi szűrés engedélyezése",
         "disabled": "Az adatvédelmi szűrés le van tiltva",
         "confidenceLabel": "Megbízhatósági küszöbérték az emberi detektáláshoz",
@@ -2855,7 +2855,7 @@
     "audio": {
       "loading": "Hang eszközök betöltése...",
       "tabs": {
-        "soundCard": "Hangszűrő kártya",
+        "soundCard": "Hangkártya",
         "streams": "Streamek",
         "processing": "Feldolgozás",
         "recording": "Rögzítés",
@@ -2863,7 +2863,7 @@
       },
       "emptyStates": {
         "soundCard": {
-          "title": "Nem észlelhető hangszűrő kártya",
+          "title": "Nem észlelhető hangkártya",
           "description": "Nem találtunk helyi hang bemeneti eszközöket ezen a rendszeren. Ez normális tároló vagy terminál nélküli szerver telepítéseknél.",
           "errorTitle": "Eszközök betöltése sikertelen",
           "hintsTitle": "A következőket teheti:",
@@ -2887,13 +2887,13 @@
         }
       },
       "soundCard": {
-        "title": "Hangszűrő kártya",
+        "title": "Hangkártya",
         "description": "Helyi hang bemeneti eszköz konfigurálása",
         "audioSourceLabel": "Hang forrás (alkalmazás újraindítást igényel a érvénybe lépéshez)",
         "audioSourceHelp": "Válassza ki a madárhang detektáláshoz használandó hang bemeneti eszközt. A változtatásokhoz alkalmazás újraindítás szükséges.",
-        "noSoundCardCapture": "Nincs hangszűrő kártya rögzítés",
+        "noSoundCardCapture": "Nincs hangkártya rögzítés",
         "empty": {
-          "title": "Nem észlelhető hangszűrő kártya",
+          "title": "Nem észlelhető hangkártya",
           "description": "Nem találtunk helyi hang bemeneti eszközöket ezen a rendszeren. Ez normális tároló vagy terminál nélküli szerver telepítéseknél.",
           "hintsTitle": "A következőket teheti:",
           "hintStream": "A Streamek lapon konfiguráljon hálózati streameket",
@@ -2904,7 +2904,7 @@
       },
       "noSources": {
         "warning": "Nincs hang forrás konfigurálva",
-        "description": "A BirdNET-Go-nak hang bemenetre van szüksége a madarak érzékeléséhez. Kérjük, konfiguráljon legalább egy forrást a Hangszűrő kártya vagy Streamek lapon."
+        "description": "A BirdNET-Go-nak hang bemenetre van szüksége a madarak érzékeléséhez. Kérjük, konfiguráljon legalább egy forrást a Hangkártya vagy Streamek lapon."
       },
       "soundCards": {
         "summary": "{count} hangkártya forrás(ok)",
@@ -2952,12 +2952,12 @@
         }
       },
       "audioCapture": {
-        "title": "Hangszűrő kártya konfiguráció",
+        "title": "Hangkártya konfiguráció",
         "description": "Válassza ki a madárhang detektáláshoz használandó hang bemeneti eszközt. A változtatásokhoz alkalmazás újraindítás szükséges.",
-        "soundCardSource": "Hangszűrő kártya forrás",
+        "soundCardSource": "Hangkártya forrás",
         "audioSourceLabel": "Hang forrás (alkalmazás újraindítást igényel a érvénybe lépéshez)",
         "audioSourceHelp": "Válassza ki a madárhang detektáláshoz használandó hang bemeneti eszközt. A változtatásokhoz alkalmazás újraindítás szükséges.",
-        "noSoundCardCapture": "Nincs hangszűrő kártya rögzítés",
+        "noSoundCardCapture": "Nincs hangkártya rögzítés",
         "noDeviceSelected": "Nincs hang eszköz kiválasztva",
         "refreshDevices": "Frissítés",
         "rtspSource": "RTSP forrás",
@@ -2965,7 +2965,7 @@
         "rtspTransportHelp": "A TCP megbízhatóbb, de magasabb késleltetésű lehet. Az UDP gyorsabb, de rossz hálózatokon csomagvesztés lehet.",
         "rtspUrlsLabel": "RTSP stream URL-ek",
         "rtspUrlsHelp": "Adjon meg egy vagy több RTSP stream URL-t hálózati hang forrásokhoz. Formátum: rtsp://ip:port/stream. Megjegyzés: A hitelesítési adatokat külön kell konfigurálni az RTSP szerver beállításaiban a biztonság érdekében.",
-        "deviceSelected": "Hangszűrő kártya kiválasztva és készen a rögzítésre",
+        "deviceSelected": "Hangkártya kiválasztva és készen a rögzítésre",
         "availableDevices": "Elérhető hang eszközök",
         "active": "Aktív",
         "streamsConfigured": "{count} stream konfigurálva"
@@ -3089,7 +3089,7 @@
           "energyRight": "Jobb csatorna",
           "label": "Csatornamód",
           "left": "Csak bal csatorna",
-          "monoNoSelection": "Egycsatornás forrás. Minden csatornamód azonos hangot ad, ezért nincs szükség választásra.",
+          "monoNoSelection": "Egycsatornás forrás. Az összes csatornamód azonos hangot produkál, ezért nincs szükség kiválasztásra.",
           "recommended": "Ajánlott: {channel}",
           "right": "Csak jobb csatorna",
           "singleChannelGood": "Egycsatornás kiválasztva, optimális az érzékelési pontossághoz."
@@ -3099,7 +3099,7 @@
           "mono": "Mono (1 csatorna)",
           "multi": "{count} csatorna",
           "stereo": "Sztereó (2 csatorna)",
-          "untested": "Tesztelje a streamet a hangformátum felismeréséhez",
+          "untested": "Tesztelje a streamet a hangformátum meghatározásához",
           "withSampleRate": "{rate} kHz, {channels}"
         },
         "stereoWarning": {
@@ -3110,7 +3110,7 @@
       },
       "audioFilters": {
         "title": "Hang szűrők",
-        "description": "Hang feldolgozási szűrők konfigurálása",
+        "description": "Minden forrásra alkalmazott alapértelmezett hangszűrők konfigurálása. Forrásonkénti EQ felülbírálások az egyes hangkártyák beállításaiban érhetők el.",
         "enableEqualizer": "Hang equalizer engedélyezése",
         "enableEqualizerHelp": "Frekvencia szűrést alkalmaz a madárhang detektálás javításához a nem kívánt zaj és frekvenciák csökkentésével.",
         "filterType": "Szűrő típus",
@@ -3160,10 +3160,10 @@
         "description": "Az azonosított madárhangok hang kliprögzítésének és feldolgozásának konfigurálása"
       },
       "clipRecording": {
-        "title": "Klips rögzítés",
-        "description": "Konfigurálja, hogy és hogyan rögzülnek a hang klipek az észlelt madárhangokhoz.",
-        "enable": "Klips rögzítés engedélyezése",
-        "enableHelp": "Mentse a észlelt madárhangok hang klipeit áttekintéshez, megosztáshoz vagy egyedi adatkészletek építéséhez.",
+        "title": "Minta rögzítés",
+        "description": "Adja meg, hogy a hangminták milyen módon rögzüljenek az észlelés során.",
+        "enable": "Hangminta rögzítés engedélyezése",
+        "enableHelp": "Mentse a észlelt madárhangok mintáit áttekintéshez, megosztáshoz vagy egyedi adatkészletek építéséhez.",
         "disabled": "A klips rögzítés le van tiltva",
         "captureSettings": "Rögzítési beállítások",
         "lengthLabel": "Rögzítési hossz",
@@ -3171,7 +3171,7 @@
         "preCaptureLabel": "Detektálás előtti puffer",
         "preCaptureHelp": "A madár észlelése előtti hang másodpercek száma (0-{max} másodperc). Biztosítja, hogy a teljes madárhang rögzítésre kerüljön a kezdetétől.",
         "gainLabel": "Hang erősítés",
-        "gainHelp": "Hang erősítés decibelben a mentett klipekhez (0-20 dB). Hangosabbá teszi a mentett audio klipeket a könnyebb hallgatáshoz. Nem affectálja a detektálást. 0 dB azt jelenti, nincs erősítés.",
+        "gainHelp": "Hang erősítés decibelben a mentett klipekhez (0-20 dB). Hangosabbá teszi a mentett audio klipeket a könnyebb hallgatáshoz. Nem befolyásolja az észlelést. 0 dB azt jelenti, nincs erősítés.",
         "normalization": "Hang normalizáció",
         "normalizationEnable": "Hangosság normalizáció engedélyezése",
         "normalizationHelp": "Automatikusan állítja a hang szinteket EBU R128 broadcast szabványra a konzisztens lejátszási hangerőhöz az összes klips között.",
@@ -3179,13 +3179,13 @@
         "targetLUFSLabel": "Cél hangosság (LUFS)",
         "targetLUFSHelp": "Integrált hangosság cél értéke LUFS-ben (Loudness Units relative to Full Scale). A -23 LUFS az EBU R128 broadcast szabvány. Tartomány: -40 és -10 LUFS között.",
         "loudnessRangeLabel": "Hangosság tartomány (LU)",
-        "loudnessRangeHelp": "Maximális hangerő variáció a klipsben (0-20 LU). Az alacsonyabb értékek konzisztensebb hangerőt hoznak létre, de csökkenthetik a dinamikát.",
+        "loudnessRangeHelp": "Maximális hangerő variáció a mintában (0-20 LU). Az alacsonyabb értékek konzisztensebb hangerőt hoznak létre, de csökkenthetik a dinamikát.",
         "truePeakLabel": "True Peak limit (dBTP)",
         "truePeakHelp": "Maximális true peak szint a digitális clipping megelőzéséhez (-10 és 0 dBTP között). A -2 dBTP biztonságos tartalékot biztosít a legtöbb lejátszó rendszerhez.",
         "normalizationNote": "EBU R128 szabvány",
-        "normalizationNoteDescription": "A hang normalizáció az EBU R128 broadcast szabványt követi, biztosítva a konzisztens lejátszási szinteket a különböző eszközökön és megelőzve a clippinget.",
+        "normalizationNoteDescription": "A hang normalizáció az EBU R128 broadcast szabványt követi, biztosítva a konzisztens lejátszási szinteket a különböző eszközökön és megelőzve a vágást.",
         "fileSettings": "Fájl beállítások",
-        "pathLabel": "Klipek mappa",
+        "pathLabel": "Minták mappája",
         "pathHelp": "A könyvtár, ahová a hang klipek mentésre kerülnek. A relatív útvonalak az alkalmazás könyvtárból számítódnak. Példa: 'clips/' vagy '/var/audio/birds/'",
         "typeLabel": "Hang formátum",
         "typeHelp": "Hang formátum a mentett klipekhez. A WAV és FLAC veszteségmentes (legjobb minőség, nagyobb fájlok). Az MP3, AAC és Opus veszteséges (kisebb fájlok, enyhe minőségvesztés).",
@@ -3196,13 +3196,13 @@
       },
       "extendedCapture": {
         "title": "Kiterjesztett rögzítés",
-        "description": "Hosszabb hang klipek rögzítése, amikor egy faj ismételten hív, egyetlen kombinált felvételt eredményezve sok rövid klips helyett.",
+        "description": "Hosszabb hangminták kerülnek rögzítésre a faj ismételt észlelésekor, egyetlen kombinált felvételben sok rövid helyett.",
         "ramWarning": "A kiterjesztett rögzítés további RAM-ot igényel a hang pufferekhez. Nem ajánlott 512 MB RAM vagy kevesebb RAM-mal rendelkező eszközökhöz (pl. Raspberry Pi Zero).",
         "enable": "Kiterjesztett rögzítés engedélyezése",
-        "enableHelp": "Ha engedélyezve van, a konfigurált fajok ismételt detektálásai egyetlen hosszabb felvételbe egyesülnek.",
+        "enableHelp": "Ha engedélyezve van, a konfigurált fajok ismételt detektálásai egyetlen hosszabb felvételben egyesülnek.",
         "maxDurationLabel": "Max időtartam",
-        "maxDurationHelp": "A kiterjesztett rögzítés klips maximális hossza. A felvétel növekszik, ahogy a detektálások folytatódnak, eddig a limitig.",
-        "speciesListLabel": "Kiterjesztett rögzítés fajok",
+        "maxDurationHelp": "A kiterjesztett rögzítés maximális hossza. A felvétel növekszik, ahogy az észlelések folytatódnak eddig a határig.",
+        "speciesListLabel": "Kiterjesztetten rögzítendő fajok",
         "addSpeciesLabel": "Faj hozzáadása",
         "addSpeciesHelp": "Fajok, amelyek kiterjesztett rögzítést váltanak ki. Támogatja a közhasználatú neveket, tudományos neveket és nemzetség szintű egyeztetést (pl. \"Strix\" egyeztet minden Strix bagollyal).",
         "addSpeciesButton": "Hozzáadás",
@@ -3210,8 +3210,8 @@
       },
       "fileSettings": {
         "title": "Fájl beállítások",
-        "description": "Tárolási hely és hang formátum konfigurálása a mentett klipekhez.",
-        "pathLabel": "Klipek mappa",
+        "description": "Tárolási hely és hang formátum konfigurálása a mentett mintákhoz.",
+        "pathLabel": "Minták mappája",
         "pathHelp": "A könyvtár, ahová a hang klipek mentésre kerülnek. A relatív útvonalak az alkalmazás könyvtárból számítódnak. Példa: 'clips/' vagy '/var/audio/birds/'",
         "typeLabel": "Hang formátum",
         "typeHelp": "Hang formátum a mentett klipekhez. A WAV és FLAC veszteségmentes (legjobb minőség, nagyobb fájlok). Az MP3, AAC és Opus veszteséges (kisebb fájlok, enyhe minőségvesztés).",
@@ -3221,7 +3221,7 @@
       },
       "audioNormalization": {
         "title": "Hang normalizáció",
-        "description": "Hangszint beállítás a konzisztens lejátszási hangerőhöz az összes klips között.",
+        "description": "Hangszint beállítás a konzisztens lejátszási hangerőhöz az összes minta között.",
         "enable": "Hangosság normalizáció engedélyezése",
         "enableHelp": "Automatikusan állítja a hang szinteket EBU R128 broadcast szabványra a konzisztens lejátszási hangerőhöz az összes klips között.",
         "disabled": "A hang normalizáció le van tiltva",
@@ -3229,23 +3229,23 @@
         "targetLUFSLabel": "Cél hangosság (LUFS)",
         "targetLUFSHelp": "Integrált hangosság cél értéke LUFS-ben (Loudness Units relative to Full Scale). A -23 LUFS az EBU R128 broadcast szabvány. Tartomány: -40 és -10 LUFS között.",
         "loudnessRangeLabel": "Hangosság tartomány (LU)",
-        "loudnessRangeHelp": "Maximális hangerő variáció a klipsben (0-20 LU). Az alacsonyabb értékek konzisztensebb hangerőt hoznak létre, de csökkenthetik a dinamikát.",
+        "loudnessRangeHelp": "Maximális hangerő variáció a mintában (0-20 LU). Az alacsonyabb értékek konzisztensebb hangerőt hoznak létre, de csökkenthetik a dinamikát.",
         "truePeakLabel": "True Peak limit (dBTP)",
         "truePeakHelp": "Maximális true peak szint a digitális clipping megelőzéséhez (-10 és 0 dBTP között). A -2 dBTP biztonságos tartalékot biztosít a legtöbb lejátszó rendszerhez.",
         "noteTitle": "EBU R128 szabvány",
-        "noteDescription": "A hang normalizáció az EBU R128 broadcast szabványt követi, biztosítva a konzisztens lejátszási szinteket a különböző eszközökön és megelőzve a clippinget."
+        "noteDescription": "A hang normalizáció az EBU R128 broadcast szabványt követi, biztosítva a konzisztens lejátszási szinteket a különböző eszközökön és megelőzve a vágást."
       },
       "audioClipRetention": {
-        "title": "Hang klips megőrzés",
-        "description": "Mentett hang klipek automatikus karbantartásának konfigurálása",
-        "policyLabel": "Megőrzési szabályzat",
-        "policyHelp": "Válassza ki, hogyan törlődnek automatikusan a hang klipek. Nincs: minden klips megtartása. Kor: régi klipek törlése. Használat: legrégibb klipek törlése, ha a lemez használat meghaladja a limitet.",
+        "title": "Hangminták megőrzése",
+        "description": "Mentett hangminták automatikus karbantartásának konfigurálása",
+        "policyLabel": "Megőrzési szabály",
+        "policyHelp": "Válassza ki, hogyan törlődnek automatikusan a hangminták. Nincs: minden minta megtartása. Kor: régi minták törlése. Használat: legrégebbi minták törlése, ha a lemez használat meghaladja a korlátot.",
         "maxAgeLabel": "Maximális kor",
         "maxAgeHelp": "Törölje a megadott korú hang klipeket. Formátum: szám + egység (h=óra, d=nap, h=hét, m=hónap). Példák: '7d' 7 nap, '4w' 4 hét.",
         "maxUsageLabel": "Maximális lemez használat",
         "maxUsageHelp": "Törölje a legrégibb klipeket, ha a hang könyvtár a rendelkezésre álló lemezterület nagyobb százalékát használja.",
-        "minClipsLabel": "Minimum klipek fajonként",
-        "minClipsHelp": "Mindig tartson meg legalább ennyi klipet minden madár fajhoz, a kor vagy lemez használattól függetlenül. Segít megőrizni a ritka felvételeket.",
+        "minClipsLabel": "Minimális mintaszám fajonként",
+        "minClipsHelp": "Mindig tartson meg legalább ennyi mintát minden madár fajhoz, a kor vagy lemez használattól függetlenül. Segít megőrizni a ritka felvételeket.",
         "keepSpectrograms": "Spektrogram képek megtartása",
         "keepSpectrogramsHelp": "Tartsa meg a spektrogram képeket, még ha a hang klipek törlésre is kerülnek. A spektrogramok kevesebb helyet használnak és vizuális referenciát biztosítanak.",
         "policies": {
@@ -3256,7 +3256,7 @@
         "noRetentionTitle": "Összes klips megtartva",
         "noRetentionDescription": "A hang klipek határozatlan ideig meg lesznek tartva. Monitorozza a lemez használatot a tárolási problémák megelőzéséhez.",
         "ageRetentionTitle": "Kor alapú karbantartás",
-        "ageRetentionDescription": "A megadott kornál régebbi klipek automatikusan törlésre kerülnek, miközben a fajonkénti minimum szám megőrzésre kerül.",
+        "ageRetentionDescription": "A megadott időnél régebbi minták automatikusan törlődnek, miközben a fajonkénti minimum szám megőrzésre kerül.",
         "usageRetentionTitle": "Használat alapú karbantartás",
         "usageRetentionDescription": "Amikor a lemez használat meghaladja a küszöbértéket, a legrégibb klipek törlésre kerülnek, amíg a használat a limiteken belül nem lesz."
       },
@@ -3295,11 +3295,11 @@
       "hostLabel": "Host cím",
       "hostHelp": "A szerver nyilvános hosztnevei vagy IP-címe (pl. birdnet.example.com). Az OAuth bejelentkezéshez és a TLS tanúsítványokhoz szükséges. Ha fordított proxy mögött van, használja helyette a Base URL-t.",
       "allowSubnetBypassLabel": "Alhálózatból származó hozzáférés engedélyezése a hitelesítés megkerüléséhez",
-      "subnetBypassLocalNote": "Ha engedélyezve van, a kiszolgálóval azonos helyi hálózaton lévő kliensek automatikusan megbízhatónak minősülnek, és kihagyják a bejelentkezést. Az alábbi mezőt csak arra használja, hogy ezt a bizalmat további hálózatokra is kiterjessze (például egy külön VLAN-ra vagy egy útválasztott alhálózatra).",
+      "subnetBypassLocalNote": "Ha engedélyezve van, az ezzel a szerverrel azonos helyi hálózaton lévő kliensek automatikusan megbízhatónak minősülnek és kihagyják a bejelentkezést. Az alábbi mezőt csak akkor töltse ki, ha ezt a bizalmat további hálózatokra (pl. külön VLAN vagy irányított alhálózat) szeretné kiterjeszteni.",
       "allowedSubnetsLabel": "Engedélyezett alhálózatok",
-      "allowedSubnetsHelp": "További hálózati tartományok, amelyek megkerülhetik a bejelentkezést, a kiszolgáló saját helyi hálózatán felül. CIDR jelölés, vesszővel elválasztva.",
+      "allowedSubnetsHelp": "Engedélyezett hálózati tartományok a bejelentkezés megkerüléséhez (CIDR jelölés, vesszővel elválasztott lista)",
       "securityWarningTitle": "Biztonsági figyelmeztetés:",
-      "subnetWarningText": "A kiszolgáló helyi hálózata és az itt felsorolt alhálózatok teljes hozzáférést kapnak bejelentkezés nélkül. Csak olyan hálózatokat adjon meg, amelyekben teljesen megbízik.",
+      "subnetWarningText": "Ezen alhálózatokból származó eszközök korlátozás nélküli hozzáférést kapnak. Csak megbízható belső hálózatokat adjon meg.",
       "httpsSettingsTitle": "HTTPS beállítások",
       "httpsSettingsDescription": "Biztonságos hozzáférés SSL/TLS titkosítással",
       "basicAuthTitle": "Alapvető hitelesítés",
@@ -3347,6 +3347,8 @@
         "redirectUriNotConfigured": "Nincs konfigurálva - állítsa be a hosztcímet vagy a Base URL-t a Szerverkonfiguráció fülön",
         "noProviders": "Nincs OAuth szolgáltató konfigurálva",
         "noProvidersDescription": "Adjon hozzá egy szolgáltatót a bejelentkezés engedélyezéséhez Google, GitHub, Microsoft, LINE, Kakao vagy egyedi OIDC szolgáltatóval.",
+        "allowedUsersEmptyWarning": "Ennek a szolgáltatónak nincsenek engedélyezett felhasználói, ezért minden bejelentkezési kísérlet el lesz utasítva. Adjon hozzá legalább egy e-mail-t vagy felhasználói azonosítót a hozzáférés engedélyezéséhez.",
+        "allowedUsersMissingBadge": "Nincs engedélyezett felhasználó beállítva – a bejelentkezés sikertelen lesz",
         "enableProviderLabel": "Engedélyezze ezt a szolgáltatót",
         "getCredentialsLabel": "Szerezze be a hitelesítési adatait a {provider}-tól",
         "redirectUriTitle": "Átirányítási URI:",
@@ -3354,10 +3356,8 @@
         "clientIdHelpText": "Az OAuth 2.0 Client ID a szolgáltató fejlesztői konzoljáról",
         "clientSecretLabel": "Kliens titok",
         "clientSecretHelpText": "Az OAuth 2.0 Client Secret a szolgáltató fejlesztői konzoljáról",
-        "userIdLabel": "Engedélyezett felhasználók",
-        "userIdHelpText": "Vesszővel elválasztott e-mailek vagy felhasználói azonosítók, akik bejelentkezhetnek ezzel a szolgáltatóval. Ha üres, senki sem tud bejelentkezni.",
-        "allowedUsersEmptyWarning": "Ennek a szolgáltatónak nincsenek engedélyezett felhasználói, ezért minden bejelentkezési kísérlet elutasításra kerül. Adjon meg legalább egy e-mailt vagy felhasználói azonosítót a hozzáférés engedélyezéséhez.",
-        "allowedUsersMissingBadge": "Nincsenek engedélyezett felhasználók - a bejelentkezés sikertelen lesz",
+        "userIdLabel": "Felhasználói ID (opcionális)",
+        "userIdHelpText": "Korlátozza a hozzáférést egy adott felhasználói fiókhoz e-mail vagy ID szerint",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Google OAuth2 bejelentkezés engedélyezése",
@@ -3441,16 +3441,16 @@
       "exceptions": {
         "title": "Kivételek"
       },
+      "privateMode": {
+        "label": "Bejelentkezés megkövetelése az összes felhasználói felület oldalhoz (privát mód)",
+        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül \u2013 bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
+      },
       "publicAccess": {
         "title": "Nyilvános hozzáférés",
         "description": "Specifikus funkciók hozzáférhetőségének engedélyezése hitelesítés nélkül.",
         "liveAudioLabel": "Élő hang lejátszás engedélyezése",
         "liveAudioHelp": "Ha engedélyezve van, bárki hallgathatja az élő hang streameket bejelentkezés nélkül. A beállítások és törlés továbbra is hitelesítést igényel.",
         "warningText": "A nyilvános hozzáférési funkciók engedélyezése kiteszi azokat bárkinek, aki elérheti ezt a szervert. Csak akkor engedélyezze, ha megbízik a hálózati környezetében."
-      },
-      "privateMode": {
-        "label": "Require login for all UI pages (private mode)",
-        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
@@ -4029,8 +4029,8 @@
           "less_or_equal": "kisebb vagy egyenlő"
         }
       },
-      "v2Required": "A riasztási szabályokhoz a bővített adatbázis séma szükséges. Az adatbázist a Rendszer alatti Adatbázis oldalról migrálhatja.",
-      "v2RequiredLink": "Rendszer adatbázis oldal.",
+      "v2Required": "A riasztási szabályokhoz frissített adatbázis-séma szükséges. Az adatbázist frissítheti a",
+      "v2RequiredLink": "Rendszer Adatbázis oldalán.",
       "builtInRules": {
         "newSpecies": {
           "name": "Új faj detektálva",
@@ -4091,7 +4091,7 @@
     "userInterface": {
       "tabs": {
         "appearance": "Megjelenés",
-        "language": "Nyelv és regionális",
+        "language": "Nyelv és terület",
         "visualContent": "Vizuális tartalom",
         "audioPlayback": "Hang lejátszás"
       },
@@ -4100,7 +4100,7 @@
         "description": "A BirdNET-Go felület megjelenésének és hangulatának testreszabása"
       },
       "language": {
-        "title": "Nyelv és regionális",
+        "title": "Nyelv és terület",
         "description": "Nyelv, hőmérsékleti egységek és regionális megjelenítési beállítások"
       },
       "visualContent": {
@@ -4688,8 +4688,8 @@
       "title": "Detektálási beállítások",
       "description": "Megbízhatósági küszöbértékek és nyelv beállítása a fajok osztályozásához.",
       "confidenceThreshold": {
-        "label": "Confidence Threshold",
-        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+        "label": "Megbízhatósági küszöb",
+        "helpText": "A detektálás rögzítéséhez szükséges minimális megbízhatósági pontszám (0.0 - 1.0)."
       },
       "batThreshold": {
         "label": "Denevér-észlelési küszöb",
@@ -4901,20 +4901,20 @@
     }
   },
   "health": {
-    "title": "System Health",
-    "running": "Running diagnostics...",
-    "lastRun": "Last run",
+    "title": "Rendszerállapot",
+    "running": "Diagnosztika futtatása...",
+    "lastRun": "Utolsó futtatás",
     "refresh": "Frissítés",
-    "exportText": "Copy Report",
-    "exportJSON": "Download JSON",
-    "copied": "Report copied to clipboard",
-    "duration": "Duration",
+    "exportText": "Jelentés másolása",
+    "exportJSON": "JSON letöltése",
+    "copied": "Jelentés a vágólapra másolva",
+    "duration": "Időtartam",
     "summary": {
-      "healthy": "Healthy",
-      "warnings": "Warnings",
-      "critical": "Critical",
-      "skipped": "Skipped",
-      "total": "Total checks"
+      "healthy": "Egészséges",
+      "warnings": "Figyelmeztetések",
+      "critical": "Kritikus",
+      "skipped": "Kihagyva",
+      "total": "Összes ellenőrzés"
     },
     "metricFooter": {
       "allPassing": "Minden rendben",
@@ -4926,33 +4926,33 @@
     },
     "diagnostics": "Diagnosztika",
     "categories": {
-      "system": "System",
-      "audio": "Audio Pipeline",
-      "analysis": "Analysis",
-      "streams": "Audio Streams",
-      "database": "Database",
-      "network": "Network",
-      "config": "Configuration",
-      "logs": "Logs"
+      "system": "Rendszer",
+      "audio": "Audiocsatorna",
+      "analysis": "Elemzés",
+      "streams": "Hangfolyamok",
+      "database": "Adatbázis",
+      "network": "Hálózat",
+      "config": "Konfiguráció",
+      "logs": "Naplók"
     },
     "status": {
-      "healthy": "Healthy",
-      "warning": "Warning",
-      "critical": "Critical",
-      "unknown": "Unknown",
-      "skipped": "Skipped"
+      "healthy": "Egészséges",
+      "warning": "Figyelmeztetés",
+      "critical": "Kritikus",
+      "unknown": "Ismeretlen",
+      "skipped": "Kihagyva"
     },
     "errors": {
-      "title": "Recent Errors",
-      "noErrors": "No recent errors",
-      "fetchFailed": "Failed to load diagnostics"
+      "title": "Legutóbbi hibák",
+      "noErrors": "Nincsenek legutóbbi hibák",
+      "fetchFailed": "Diagnosztika betöltése sikertelen"
     },
     "export": {
-      "reportTitle": "BirdNET-Go System Health Report",
-      "statusLabel": "Status",
-      "timeLabel": "Time",
-      "durationLabel": "Duration",
-      "checksLabel": "Checks"
+      "reportTitle": "BirdNET-Go Rendszerállapot Jelentés",
+      "statusLabel": "Állapot",
+      "timeLabel": "Idő",
+      "durationLabel": "Időtartam",
+      "checksLabel": "Ellenőrzések"
     },
     "logs": {
       "topErrors": "Leggyakoribb hibák",
@@ -4963,12 +4963,12 @@
     },
     "window": {
       "label": "Kiértékelési időablak",
-      "15m": "15m",
-      "30m": "30m",
-      "1h": "1h",
-      "6h": "6h",
-      "24h": "24h",
-      "7d": "7d"
+      "15m": "15p",
+      "30m": "30p",
+      "1h": "1ó",
+      "6h": "6ó",
+      "24h": "24ó",
+      "7d": "7n"
     },
     "detail": {
       "lastEvent": "Utolsó esemény",
