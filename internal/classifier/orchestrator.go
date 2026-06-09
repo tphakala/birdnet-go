@@ -984,7 +984,10 @@ func (o *Orchestrator) Delete() {
 	// teardown. UnloadModel uses the same drop-lock-before-close shape.
 	o.mu.Lock()
 	models := o.models
-	if s := o.scheduler.Load(); s != nil {
+	// Swap(nil) both retrieves the scheduler to stop and clears the pointer, so a
+	// re-used orchestrator does not see a stale stopped scheduler (SetSunCalc skips
+	// creating a new one when o.scheduler is already non-nil).
+	if s := o.scheduler.Swap(nil); s != nil {
 		s.stop()
 	}
 	o.primary = nil

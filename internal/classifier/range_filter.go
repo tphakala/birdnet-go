@@ -44,14 +44,6 @@ type UniversalSpeciesPredictor interface {
 // multi-user filename collisions on a fixed name; it falls back to the OS temp dir
 // only when no per-user cache dir is available.
 func writeIncludedSpeciesDebug(includedSpecies []string) {
-	debugFile := filepath.Join(os.TempDir(), "debug_included_species.txt")
-	if cacheDir, err := os.UserCacheDir(); err == nil {
-		birdnetCacheDir := filepath.Join(cacheDir, "birdnet-go")
-		if mkErr := os.MkdirAll(birdnetCacheDir, 0o700); mkErr == nil {
-			debugFile = filepath.Join(birdnetCacheDir, "debug_included_species.txt")
-		}
-	}
-
 	var content strings.Builder
 	fmt.Fprintf(&content, "Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
 		time.Now().Format(time.DateTime),
@@ -60,10 +52,38 @@ func writeIncludedSpeciesDebug(includedSpecies []string) {
 		content.WriteString(species)
 		content.WriteByte('\n')
 	}
-	if err := os.WriteFile(debugFile, []byte(content.String()), 0o600); err != nil {
+	data := []byte(content.String())
+
+	// A user-private cache directory (0700) is not world-writable, so a fixed
+	// filename there is not exposed to symlink clobbering.
+	var path string
+	var err error
+	if cacheDir, cdErr := os.UserCacheDir(); cdErr == nil {
+		birdnetCacheDir := filepath.Join(cacheDir, "birdnet-go")
+		if mkErr := os.MkdirAll(birdnetCacheDir, 0o700); mkErr == nil {
+			path = filepath.Join(birdnetCacheDir, "debug_included_species.txt")
+			err = os.WriteFile(path, data, 0o600)
+		}
+	}
+
+	// No per-user cache dir: fall back to the world-writable temp dir, but use
+	// os.CreateTemp so the file is created O_EXCL with a random name and cannot
+	// follow a pre-planted symlink (CWE-377/CWE-59).
+	if path == "" {
+		f, ctErr := os.CreateTemp("", "debug_included_species_*.txt")
+		if ctErr != nil {
+			GetLogger().Warn("Failed to create included species debug file", logger.Error(ctErr))
+			return
+		}
+		path = f.Name()
+		_, err = f.Write(data)
+		_ = f.Close()
+	}
+
+	if err != nil {
 		GetLogger().Warn("Failed to write included species debug file",
 			logger.Error(err),
-			logger.String("debug_file", debugFile),
+			logger.String("debug_file", path),
 			logger.Int("species_count", len(includedSpecies)))
 	}
 }
