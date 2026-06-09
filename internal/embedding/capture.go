@@ -196,15 +196,34 @@ func (c *Capture) record(status string) {
 	}
 }
 
+// awaitWriter blocks until the writer goroutine has fully drained and closed
+// the store (done is signalled) or ctx expires, whichever comes first.
+func awaitWriter(ctx context.Context, done <-chan struct{}) error {
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // Close stops intake, flushes buffered writes, and closes the store. It honors
 // ctx: if the deadline passes before the writer finishes draining, Close
 // returns ctx.Err() while the writer completes its drain in the background.
-// Close is idempotent and is a no-op when the store was never opened.
+// Close is a no-op when the store was never opened, and is idempotent: a repeat
+// call (e.g. a retry after the first timed out) still waits on the writer rather
+// than returning early, so the caller never proceeds while the writer is live.
 func (c *Capture) Close(ctx context.Context) error {
 	c.mu.Lock()
 	if c.closed {
+		// Already closing: the channel was closed by the first call. Wait on the
+		// writer again so a retry observes the real completion, not a premature nil.
+		done := c.done
 		c.mu.Unlock()
-		return nil
+		if done == nil {
+			return nil // never started
+		}
+		return awaitWriter(ctx, done)
 	}
 	c.closed = true
 	if !c.started {
@@ -219,10 +238,5 @@ func (c *Capture) Close(ctx context.Context) error {
 	close(c.ch)
 	c.mu.Unlock()
 
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return awaitWriter(ctx, done)
 }

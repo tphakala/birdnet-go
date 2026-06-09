@@ -97,6 +97,18 @@ func TestCapture_CloseNeverOpenedIsNoOp(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
+func TestCapture_CloseIdempotentAfterStart(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "embeddings.db")
+	c := NewCapture(func() (string, int) { return path, 50000 })
+
+	c.Capture(testRecord("1", 4)) // lazily opens + starts the writer
+	require.NoError(t, c.Close(t.Context()))
+	// A second Close must still wait on the (already-finished) writer and return
+	// nil, not panic on a double channel close.
+	require.NoError(t, c.Close(t.Context()))
+}
+
 func TestCapture_PruneEnforcesCap(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "embeddings.db")
