@@ -77,36 +77,30 @@ func (bn *BirdNET) EmbeddingDim() int {
 // ee.EmbeddingDim()) is performed on the ee interface value, never via
 // bn.EmbeddingDim(), to avoid a self-deadlock on bn.mu.
 //
-// Telemetry mirrors BirdNET.Predict exactly: same span data keys, same
-// RecordModelInvoke/RecordPrediction call sites. The success-path
-// RecordPrediction fires via span.Finish() (tracing.go switch case
-// "birdnet.predict_embeddings"); error-path RecordPrediction is explicit.
+// Telemetry mirrors BirdNET.Predict via the shared helpers: pre-inference
+// guards use markErrored (tagged but not counted as a prediction),
+// post-inference failures use recordPredictionFailure (exactly one error), and
+// the success path uses recordPredictionSuccess. The single success metric is
+// recorded by span.Finish() because the birdnet.predict_embeddings operation
+// shares the prediction metric with the plain predict path. RecordModelInvoke
+// records the separate invoke timing, matching BirdNET.Predict.
 //
 // Implements EmbeddingCapable.
 func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32) ([]datastore.Results, []float32, error) {
-	span, _ := StartSpan(ctx, "birdnet.predict_embeddings", "Species prediction with embeddings")
+	span, _ := startPredictEmbeddingsSpan(ctx, bn.ModelInfo.ID, sample)
 	defer span.Finish()
-	span.SetTag("model", bn.ModelInfo.ID)
 
 	settings := bn.currentSettings()
 	start := time.Now()
-	span.SetData("sample_count", len(sample))
-	if len(sample) > 0 {
-		span.SetData("sample_size", len(sample[0]))
-	}
 
-	// Guard against empty sample slice
+	// Guard against empty sample slice. Pre-inference rejections are tagged but
+	// not counted as predictions, mirroring BirdNET.Predict.
 	if len(sample) == 0 || len(sample[0]) == 0 {
-		err := errors.Newf("empty audio sample").
+		span.markErrored(errTypeEmptySample)
+		return nil, nil, errors.Newf("empty audio sample").
 			Category(errors.CategoryValidation).
 			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Build()
-		span.SetTag("error", "true")
-		span.SetData("error_type", "empty_sample")
-		if m := getMetrics(); m != nil {
-			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
-		}
-		return nil, nil, err
 	}
 
 	// Lock to prevent concurrent access to the classifier backend and shared buffers
@@ -115,16 +109,11 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 
 	// Guard against nil classifier (e.g., after Delete() is called concurrently)
 	if bn.classifier == nil {
-		err := errors.Newf("classifier backend is not initialized").
+		span.markErrored(errTypeClassifierNil)
+		return nil, nil, errors.Newf("classifier backend is not initialized").
 			Category(errors.CategoryModelInit).
 			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Build()
-		span.SetTag("error", "true")
-		span.SetData("error_type", "classifier_nil")
-		if m := getMetrics(); m != nil {
-			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
-		}
-		return nil, nil, err
 	}
 
 	// Run the capability-gated forward pass under bn.mu. extractRawWithEmbeddings
@@ -135,7 +124,6 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 	invokeStart := time.Now()
 	predictions, embedding, invokeErr := extractRawWithEmbeddings(bn.classifier, sample[0])
 	invokeDuration := time.Since(invokeStart)
-
 	if invokeErr != nil {
 		err := errors.New(invokeErr).
 			Category(errors.CategoryAudio).
@@ -143,18 +131,11 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 			Context("sample_length", len(sample[0])).
 			Timing("prediction-invoke", time.Since(start)).
 			Build()
-
-		span.SetTag("error", "true")
-		span.SetData("error_type", "invoke_failed")
-
-		if m := getMetrics(); m != nil {
-			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
-		}
-
+		recordPredictionFailure(span, bn.ModelInfo.ID, errTypeInvokeFailed, start, err)
 		return nil, nil, err
 	}
 
-	span.SetData("invoke_duration_ms", invokeDuration.Milliseconds())
+	span.SetData(dataKeyInvokeDurationMs, invokeDuration.Milliseconds())
 
 	// Record model invoke timing separately
 	if m := getMetrics(); m != nil {
@@ -169,15 +150,7 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 			Context("confidence_count", len(predictions)).
 			Timing("prediction-total", time.Since(start)).
 			Build()
-
-		span.SetTag("error", "true")
-		span.SetData("error_type", "label_mismatch")
-
-		// Record error in metrics
-		if m := getMetrics(); m != nil {
-			m.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
-		}
-
+		recordPredictionFailure(span, bn.ModelInfo.ID, errTypeLabelMismatch, start, err)
 		return nil, nil, err
 	}
 
@@ -185,13 +158,9 @@ func (bn *BirdNET) PredictWithEmbeddings(ctx context.Context, sample [][]float32
 	duration := time.Since(start)
 	bn.Debug("Prediction with embeddings completed in %v with %d results", duration, len(results))
 
-	// Record metrics
-	span.SetData("total_duration_ms", duration.Milliseconds())
-	span.SetData("result_count", len(results))
-	span.SetTag("error", "false")
-
-	// The span.Finish() will automatically record the prediction metrics via the
-	// "birdnet.predict_embeddings" case in tracing.go Finish().
+	// Record metrics. Finish() records the single success because the span is not
+	// errored (birdnet.predict_embeddings shares the predict success metric).
+	recordPredictionSuccess(span, len(results), start)
 
 	return results, embedding, nil
 }

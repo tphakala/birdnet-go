@@ -30,6 +30,13 @@ type modelEntry struct {
 	mu       sync.Mutex // per-model lock; prevents inference on one model from blocking another
 }
 
+// entryRef pairs a registry ID with its model entry for the snapshot-then-iterate
+// pattern used when walking o.models outside the o.mu critical section.
+type entryRef struct {
+	id    string
+	entry *modelEntry
+}
+
 // Orchestrator manages classifier model instances and provides the primary
 // inference API. It replaces direct *BirdNET usage at all call sites.
 // Supports multiple models with per-model locking and name resolution.
@@ -161,9 +168,19 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 // geomodel auto-selection, and registers the taxonomy resolver if
 // taxonomy.csv is available on disk.
 func (o *Orchestrator) SetModelsDir(dir string) {
+	// Guard the o.modelsDir write and the o.primary read under o.mu: o.modelsDir
+	// is read by resolveInstalledPaths (always under o.mu via the model loaders),
+	// and o.primary is cleared by Delete() under o.mu.Lock(). Release before the
+	// downstream calls, which take their own locks. registerTaxonomyResolver in
+	// particular acquires o.mu.RLock() internally, so holding o.mu here would
+	// self-deadlock (the RWMutex is not reentrant).
+	o.mu.Lock()
 	o.modelsDir = dir
-	if o.primary != nil {
-		o.primary.SetModelsDir(dir)
+	primary := o.primary
+	o.mu.Unlock()
+
+	if primary != nil {
+		primary.SetModelsDir(dir)
 	}
 	o.registerTaxonomyResolver(dir)
 }
@@ -629,14 +646,26 @@ func scientificNamesFromLabels(labels []string) []string {
 
 // GetProbableSpecies returns species scores from the range filter.
 func (o *Orchestrator) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
-	return o.primary.GetProbableSpecies(date, week)
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return nil, nil
+	}
+	return primary.GetProbableSpecies(date, week)
 }
 
 // GetProbableSpeciesWithSettings filters species using the supplied settings
 // snapshot, allowing callers to test arbitrary coordinates and thresholds
 // without modifying global state.
 func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
-	return o.primary.GetProbableSpeciesWithSettings(date, week, settings)
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return nil, nil
+	}
+	return primary.GetProbableSpeciesWithSettings(date, week, settings)
 }
 
 // GetAllProbableSpeciesWithSettings returns species from all active classifiers.
@@ -695,11 +724,6 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	geoCovered := make(map[string]bool, len(geoLabels))
 	for _, label := range geoLabels {
 		geoCovered[strings.ToLower(detection.ExtractScientificName(label))] = true
-	}
-
-	type entryRef struct {
-		id    string
-		entry *modelEntry
 	}
 
 	o.mu.RLock()
@@ -775,27 +799,57 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 
 // GetSpeciesOccurrence returns the occurrence probability for a species at the current time.
 func (o *Orchestrator) GetSpeciesOccurrence(species string) float64 {
-	return o.primary.GetSpeciesOccurrence(species)
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return 0
+	}
+	return primary.GetSpeciesOccurrence(species)
 }
 
 // GetSpeciesOccurrenceAtTime returns the occurrence probability for a species at a specific time.
 func (o *Orchestrator) GetSpeciesOccurrenceAtTime(species string, detectionTime time.Time) float64 {
-	return o.primary.GetSpeciesOccurrenceAtTime(species, detectionTime)
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return 0
+	}
+	return primary.GetSpeciesOccurrenceAtTime(species, detectionTime)
 }
 
 // NumSpecies returns the number of species labels of the primary model.
 func (o *Orchestrator) NumSpecies() int {
-	return o.primary.NumSpecies()
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return 0
+	}
+	return primary.NumSpecies()
 }
 
 // Labels returns a copy of the species labels of the primary model.
 func (o *Orchestrator) Labels() []string {
-	return o.primary.Labels()
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return nil
+	}
+	return primary.Labels()
 }
 
 // GetSpeciesCode returns the eBird species code for a given label.
 func (o *Orchestrator) GetSpeciesCode(label string) (string, bool) {
-	return o.primary.GetSpeciesCode(label)
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return "", false
+	}
+	return primary.GetSpeciesCode(label)
 }
 
 // GetSpeciesNameFromCode returns the species name for a given eBird species code.
@@ -888,11 +942,6 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		id     string
 		name   string
 		labels []string
-	}
-
-	type entryRef struct {
-		id    string
-		entry *modelEntry
 	}
 
 	var refs []entryRef
@@ -996,7 +1045,13 @@ func (o *Orchestrator) notifyRangeFilterReload() {
 
 // RunFilterProcess executes the filter process on demand and prints results.
 func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
-	o.primary.RunFilterProcess(dateStr, week)
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return
+	}
+	primary.RunFilterProcess(dateStr, week)
 }
 
 // ReloadModel reloads the primary model and re-syncs shared state.
@@ -1082,10 +1137,25 @@ func (o *Orchestrator) ReloadModel() error {
 // Delete releases all resources held by the Orchestrator and its models.
 // After calling Delete, the Orchestrator must not be used.
 func (o *Orchestrator) Delete() {
+	// Snapshot the models, stop the scheduler, and clear o.primary/o.models under
+	// o.mu so the accessors (which snapshot o.primary under o.mu) observe the
+	// deleted state immediately and fail fast. Then release o.mu before the
+	// per-model Close() calls: Close does native teardown that can be slow, and
+	// holding o.mu across it would block every accessor for the duration of
+	// teardown. UnloadModel uses the same drop-lock-before-close shape.
 	o.mu.Lock()
-	defer o.mu.Unlock()
+	models := o.models
+	// Swap(nil) both retrieves the scheduler to stop and clears the pointer, so a
+	// re-used orchestrator does not see a stale stopped scheduler (SetSunCalc skips
+	// creating a new one when o.scheduler is already non-nil).
+	if s := o.scheduler.Swap(nil); s != nil {
+		s.stop()
+	}
+	o.primary = nil
+	o.models = nil
+	o.mu.Unlock()
 
-	for _, entry := range o.models {
+	for id, entry := range models {
 		entry.mu.Lock()
 		if entry.instance != nil {
 			modelID := entry.instance.ModelID()
@@ -1099,17 +1169,15 @@ func (o *Orchestrator) Delete() {
 			// a failed construction that calls Delete) leaves no stale {model} series.
 			o.clearEmbeddingDimGauge(modelID)
 		}
+		// Drop the model's global inference counters while still holding entry.mu,
+		// mirroring UnloadModel: this prevents an in-flight RecordInvoke from
+		// re-creating the entry after deletion, and stops a teardown-then-recreate
+		// cycle from leaking counter entries.
+		globalInferenceCounters.Delete(id)
 		entry.mu.Unlock()
-	}
-	if s := o.scheduler.Load(); s != nil {
-		s.stop()
 	}
 
 	CloseHeatmapService()
-
-	// Nil out references to fail fast on use-after-delete.
-	o.primary = nil
-	o.models = nil
 }
 
 // IsModelLoaded returns true if a model with the given registry ID is
@@ -1347,7 +1415,14 @@ func (o *Orchestrator) BatchRangeFilterInference(inputs []float32, batchSize int
 			Category(errors.CategoryValidation).
 			Build()
 	}
-	if len(inputs) != batchSize*inputWidth {
+	// Check batchSize against len(inputs)/inputWidth before computing
+	// batchSize*inputWidth: a near-math.MaxInt batchSize would otherwise overflow
+	// the multiplication to a small positive value that could spuriously equal
+	// len(inputs), bypass validation, and push an oversized batch into the ONNX
+	// backend (out-of-bounds read). inputWidth is a positive constant, so the
+	// division is safe; batchSize > 0 is guaranteed above, so len(inputs)==0 is
+	// rejected cleanly.
+	if batchSize > len(inputs)/inputWidth || len(inputs) != batchSize*inputWidth {
 		return nil, errors.Newf("inputs length %d does not match batchSize %d * %d", len(inputs), batchSize, inputWidth).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
@@ -1392,17 +1467,18 @@ func (o *Orchestrator) GeomodelSpeciesInfo(label string) (speciesIdx, numGeoSpec
 
 // Debug prints debug messages if debug mode is enabled.
 func (o *Orchestrator) Debug(format string, v ...any) {
-	o.primary.Debug(format, v...)
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return
+	}
+	primary.Debug(format, v...)
 }
 
 // ModelInfos returns ModelInfo for all registered models. Thread-safe.
 // Used by the pipeline to build ModelTarget lists for buffer fan-out.
 func (o *Orchestrator) ModelInfos() []ModelInfo {
-	type entryRef struct {
-		id    string
-		entry *modelEntry
-	}
-
 	o.mu.RLock()
 	if o.models == nil {
 		o.mu.RUnlock()

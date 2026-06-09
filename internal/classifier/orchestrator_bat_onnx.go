@@ -30,11 +30,11 @@ func (o *Orchestrator) loadBat(threads int) error {
 		return errors.Newf("bat model files not installed or configured").
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).
-			Context("model", "Bat").
+			Context("model", RegistryIDBat).
 			Build()
 	}
 
-	if err := checkORTOrFail(o.Settings.BirdNET.ONNXRuntimePath, "Bat model", "Bat", "classifier.orchestrator"); err != nil {
+	if err := checkORTOrFail(o.Settings.BirdNET.ONNXRuntimePath, "Bat model", RegistryIDBat, "classifier.orchestrator"); err != nil {
 		return err
 	}
 
@@ -52,7 +52,7 @@ func (o *Orchestrator) loadBat(threads int) error {
 		return errors.New(err).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).
-			Context("model", "Bat").
+			Context("model", RegistryIDBat).
 			Build()
 	}
 
