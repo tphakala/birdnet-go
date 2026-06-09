@@ -126,36 +126,12 @@ func Load() (*Settings, error) {
 		return nil, err
 	}
 
-	// Validate settings
-	if err := ValidateSettings(settings); err != nil {
-		// Check if it's just a validation warning (contains fallback info)
-		var validationErr ValidationError
-		if errors.As(err, &validationErr) {
-			// Report configuration issues to telemetry for debugging
-			for _, errMsg := range validationErr.Errors {
-				if strings.Contains(errMsg, "fallback") || strings.Contains(errMsg, "not supported") ||
-					strings.Contains(errMsg, "OAuth authentication warning") {
-					// This is a warning - report to telemetry but don't fail
-					GetLogger().Warn("Configuration warning", logger.String("message", errMsg))
-					// Store the warning for later telemetry reporting
-					settings.ValidationWarnings = append(settings.ValidationWarnings, errMsg)
-					// Note: Telemetry reporting will happen later in birdnet package when Sentry is initialized
-				} else {
-					// This is a real validation error - fail the config load
-					return nil, errors.New(err).
-						Category(errors.CategoryValidation).
-						Context("component", "settings").
-						Context("error_msg", errMsg).
-						Build()
-				}
-			}
-		} else {
-			// Other validation errors should fail the config load
-			return nil, errors.New(err).
-				Category(errors.CategoryValidation).
-				Context("component", "settings").
-				Build()
-		}
+	// Validate settings. Any error ValidateSettings returns is a fatal
+	// misconfiguration that must block startup; non-fatal findings live on the
+	// separate settings.ValidationWarnings channel (recorded during config
+	// migration), never demoted from a fatal error by matching its message text.
+	if err := finalizeValidation(ValidateSettings(settings)); err != nil {
+		return nil, err
 	}
 
 	// Adjust seasonal tracking for the user's hemisphere so the settings
@@ -174,6 +150,28 @@ func Load() (*Settings, error) {
 	// immediately after this point see this snapshot.
 	settingsInstance.Store(settings)
 	return settings, nil
+}
+
+// finalizeValidation converts the outcome of ValidateSettings into a fatal
+// configuration error, or nil when the settings are acceptable.
+//
+// Severity is structural: every error a validator returns (collected into
+// ValidationError.Errors) is fatal and blocks startup. Non-fatal configuration
+// findings use a separate channel, Settings.ValidationWarnings, recorded during
+// config migration (see applyModelValidation), not by the ValidateSettings
+// validators. Severity is never inferred from the error message text;
+// an earlier heuristic that demoted errors whose message contained substrings
+// like "fallback" or "not supported" to warnings could silently start the app
+// with invalid config, so it was removed.
+func finalizeValidation(err error) error {
+	if err == nil {
+		return nil
+	}
+	return errors.New(err).
+		Component("conf").
+		Category(errors.CategoryValidation).
+		Context("component", "settings").
+		Build()
 }
 
 // initViper initializes viper with default values and reads the configuration file.
