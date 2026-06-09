@@ -290,3 +290,20 @@ func TestRunBackfillDryRunWritesNothing(t *testing.T) {
 	_, getErr := store.Get(t.Context(), "99")
 	assert.ErrorIs(t, getErr, embedding.ErrNotFound, "store must remain empty after dry-run")
 }
+
+func TestRunRejectsFractionalSecondWindows(t *testing.T) {
+	t.Parallel()
+	fp := &fakePredict{species: "S_C"}
+	store := newTestStore(t)
+
+	// 48000 * 2.5 = 120000 samples: not a whole multiple of 48000.
+	e := New(fp.predict, store, Tags{Model: "M", Version: "1", Format: embedding.FormatFP16},
+		Spec{SampleRate: 48000, WindowSamples: 120000}, Options{})
+	e.decode = decodeStub(1)
+	e.ffmpegPath = stubFFmpegPath
+
+	_, err := e.Run(t.Context(), []Item{{Path: "/x/a.wav", Key: "a.wav"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "whole number of seconds")
+	assert.Equal(t, 0, fp.calls, "predict must not be called when spec is invalid")
+}

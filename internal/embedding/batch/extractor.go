@@ -48,6 +48,11 @@ type Tags struct {
 }
 
 // Spec is the per-model audio geometry.
+//
+// WindowSamples must be a positive whole multiple of SampleRate (i.e. a whole
+// number of seconds). This is required because the directory-mode window key
+// format "<key>@<offsetSeconds>" has second precision: a sub-second window step
+// would produce duplicate keys and silently overwrite records.
 type Spec struct {
 	SampleRate    int
 	WindowSamples int
@@ -113,6 +118,10 @@ func (e *Extractor) SetFFmpegPath(path string) { e.ffmpegPath = path }
 func (e *Extractor) Run(ctx context.Context, items []Item) (Stats, error) {
 	if e.ffmpegPath == "" {
 		return Stats{}, errors.NewStd("batch: ffmpeg path not set; call SetFFmpegPath before Run")
+	}
+	if e.spec.SampleRate <= 0 || e.spec.WindowSamples <= 0 || e.spec.WindowSamples%e.spec.SampleRate != 0 {
+		return Stats{}, fmt.Errorf("batch: window length must be a positive whole number of seconds (WindowSamples %d, SampleRate %d): the window key format has second precision",
+			e.spec.WindowSamples, e.spec.SampleRate)
 	}
 	var stats Stats
 	for _, item := range items {
