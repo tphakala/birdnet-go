@@ -1,6 +1,7 @@
 package batch
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -45,6 +46,9 @@ type BackfillFilter struct {
 func BackfillItems(ds NoteSearcher, clipDir string, filter BackfillFilter) ([]Item, error) {
 	var items []Item
 	offset := 0
+	// Accepted tradeoff: offset pagination over date_desc can skip or duplicate
+	// notes if detections are inserted mid-run; fine for backfill because the
+	// next run catches skips and duplicates re-embed harmlessly (Put is an upsert).
 	for {
 		f := &datastore.AdvancedSearchFilters{
 			SortBy: "date_desc",
@@ -65,10 +69,7 @@ func BackfillItems(ds NoteSearcher, clipDir string, filter BackfillFilter) ([]It
 		}
 		notes, _, err := ds.SearchNotesAdvanced(f)
 		if err != nil {
-			return nil, err
-		}
-		if len(notes) == 0 {
-			return items, nil
+			return nil, fmt.Errorf("backfill: search notes page offset %d: %w", offset, err)
 		}
 		for i := range notes {
 			n := &notes[i]
@@ -89,6 +90,11 @@ func BackfillItems(ds NoteSearcher, clipDir string, filter BackfillFilter) ([]It
 			if filter.Limit > 0 && len(items) >= filter.Limit {
 				return items, nil
 			}
+		}
+		// A short page means the result set is exhausted; returning here skips
+		// the terminal zero-row query and its count/preload cost.
+		if len(notes) < backfillPageSize {
+			return items, nil
 		}
 		offset += backfillPageSize
 	}

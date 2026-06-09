@@ -34,7 +34,7 @@ func TestBackfillItems(t *testing.T) {
 	begin := time.Date(2026, 6, 1, 5, 0, 0, 0, time.UTC)
 	notes := []datastore.Note{
 		{ID: 1, ScientificName: "Turdus merula", ClipName: "clips/n1.wav", BeginTime: begin},
-		{ID: 2, ScientificName: "Erithacus rubecula", ClipName: ""},                // no clip recorded
+		{ID: 2, ScientificName: "Erithacus rubecula", ClipName: ""}, // no clip recorded
 		{ID: 3, ScientificName: "Parus major", ClipName: "clips/n3.wav", BeginTime: begin},
 		{ID: 4, ScientificName: "Sitta europaea", ClipName: "clips/gone.wav"}, // purged from disk
 	}
@@ -81,7 +81,9 @@ func TestBackfillItemsSpeciesAndSinceForwarded(t *testing.T) {
 	assert.Equal(t, "date_desc", rec.got.SortBy)
 }
 
-type recordingSearcher struct{ got *datastore.AdvancedSearchFilters }
+type recordingSearcher struct {
+	got *datastore.AdvancedSearchFilters
+}
 
 func (r *recordingSearcher) SearchNotesAdvanced(f *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
 	r.got = f
