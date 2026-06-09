@@ -299,6 +299,111 @@ func TestPerchPredictWithEmbeddings_LabelMismatchRecordsErrorOnce(t *testing.T) 
 		"a label/score mismatch must not record a success")
 }
 
+// TestBirdNETPredictWithEmbeddings_SuccessRecordsExactlyOnce verifies the BirdNET
+// embedding predict path records exactly one success under the BirdNET model
+// label, at telemetry parity with BirdNET.Predict and Perch.PredictWithEmbeddings.
+func TestBirdNETPredictWithEmbeddings_SuccessRecordsExactlyOnce(t *testing.T) {
+	resetGlobalMetrics(t)
+	t.Cleanup(func() { resetGlobalMetrics(t) })
+	m := newTestMetrics(t)
+	SetMetrics(m)
+
+	// Clear global settings so currentSettings falls back to the per-instance
+	// settings (with this test's labels), independent of test ordering.
+	conftest.SetTestSettings(nil)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	labels := []string{"a_A", "b_B", "c_C"}
+	bn := newEmbTestBirdNET(&fakePlainClassifier{logits: []float32{0.1, 0.9, 0.5}}, labels)
+
+	results, embedding, err := bn.PredictWithEmbeddings(t.Context(), [][]float32{{0.0}})
+	require.NoError(t, err)
+	require.NotEmpty(t, results)
+	// A plain (non-embedding) backend yields a nil embedding, not an error.
+	assert.Nil(t, embedding, "a non-embedding backend must yield a nil embedding")
+
+	assert.InDelta(t, 1.0, predictionCount(t, m, bn.ModelInfo.ID, "success"), 0,
+		"a successful BirdNET embedding prediction must be recorded exactly once")
+	assert.InDelta(t, 0.0, predictionCount(t, m, bn.ModelInfo.ID, "error"), 0,
+		"a successful BirdNET embedding prediction must not record an error")
+}
+
+// TestBirdNETPredictWithEmbeddings_EmptySampleRecordsNothing verifies the
+// empty-sample guard on the BirdNET embedding path is tagged but not counted,
+// matching the unified pre-inference guard semantics (this is the behaviour the
+// migration to the shared helpers introduced; the old inline path counted it).
+func TestBirdNETPredictWithEmbeddings_EmptySampleRecordsNothing(t *testing.T) {
+	resetGlobalMetrics(t)
+	t.Cleanup(func() { resetGlobalMetrics(t) })
+	m := newTestMetrics(t)
+	SetMetrics(m)
+
+	// Clear global settings so currentSettings falls back to the per-instance
+	// settings (with this test's labels), independent of test ordering.
+	conftest.SetTestSettings(nil)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	bn := newEmbTestBirdNET(&fakePlainClassifier{logits: []float32{0.1}}, []string{"a_A"})
+
+	_, _, err := bn.PredictWithEmbeddings(t.Context(), [][]float32{})
+	require.Error(t, err)
+
+	assert.InDelta(t, 0.0, predictionCount(t, m, bn.ModelInfo.ID, "error"), 0,
+		"an empty-sample rejection must not be counted as a prediction error")
+	assert.InDelta(t, 0.0, predictionCount(t, m, bn.ModelInfo.ID, "success"), 0,
+		"an empty-sample rejection must not record a success")
+}
+
+// TestBirdNETPredictWithEmbeddings_InvokeErrorRecordsErrorOnce verifies a backend
+// inference failure (after inference begins) records exactly one error.
+func TestBirdNETPredictWithEmbeddings_InvokeErrorRecordsErrorOnce(t *testing.T) {
+	resetGlobalMetrics(t)
+	t.Cleanup(func() { resetGlobalMetrics(t) })
+	m := newTestMetrics(t)
+	SetMetrics(m)
+
+	// Clear global settings so currentSettings falls back to the per-instance
+	// settings (with this test's labels), independent of test ordering.
+	conftest.SetTestSettings(nil)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	bn := newEmbTestBirdNET(&fakeErrPlainClassifier{err: assert.AnError}, []string{"a_A"})
+
+	_, _, err := bn.PredictWithEmbeddings(t.Context(), [][]float32{{0.0}})
+	require.Error(t, err)
+
+	assert.InDelta(t, 1.0, predictionCount(t, m, bn.ModelInfo.ID, "error"), 0,
+		"a failed BirdNET embedding inference must be recorded exactly once as an error")
+	assert.InDelta(t, 0.0, predictionCount(t, m, bn.ModelInfo.ID, "success"), 0,
+		"a failed BirdNET embedding inference must not record a spurious success")
+}
+
+// TestBirdNETPredictWithEmbeddings_LabelMismatchRecordsErrorOnce verifies a
+// label/prediction count mismatch (a failure after inference begins) records
+// exactly one error.
+func TestBirdNETPredictWithEmbeddings_LabelMismatchRecordsErrorOnce(t *testing.T) {
+	resetGlobalMetrics(t)
+	t.Cleanup(func() { resetGlobalMetrics(t) })
+	m := newTestMetrics(t)
+	SetMetrics(m)
+
+	// Clear global settings so currentSettings falls back to the per-instance
+	// settings (with this test's labels), independent of test ordering.
+	conftest.SetTestSettings(nil)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	// Three labels but only two logits: finalizeResults returns a mismatch error.
+	bn := newEmbTestBirdNET(&fakePlainClassifier{logits: []float32{0.1, 0.2}}, []string{"a_A", "b_B", "c_C"})
+
+	_, _, err := bn.PredictWithEmbeddings(t.Context(), [][]float32{{0.0}})
+	require.Error(t, err)
+
+	assert.InDelta(t, 1.0, predictionCount(t, m, bn.ModelInfo.ID, "error"), 0,
+		"a label/prediction mismatch must be recorded exactly once as an error")
+	assert.InDelta(t, 0.0, predictionCount(t, m, bn.ModelInfo.ID, "success"), 0,
+		"a label/prediction mismatch must not record a success")
+}
+
 // batEmbeddingExtractor is a fake inference.EmbeddingExtractor for the Bat tests.
 type batEmbeddingExtractor struct {
 	embeddings []float32

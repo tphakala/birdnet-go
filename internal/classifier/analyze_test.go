@@ -879,6 +879,11 @@ func TestPredict_RecordsExactlyOnePredictionPerOutcome(t *testing.T) {
 	globalMetrics.Store(m)
 	t.Cleanup(func() { globalMetrics.Store(nil) })
 
+	// Clear global settings so BirdNET.Predict's currentSettings falls back to the
+	// per-instance settings (with this test's labels), independent of test order.
+	conf.StoreSettings(nil)
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+
 	countFor := func(status string) float64 {
 		return testutil.ToFloat64(m.PredictionTotal.WithLabelValues("test-model", status))
 	}
