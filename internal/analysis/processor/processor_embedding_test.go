@@ -47,7 +47,7 @@ func TestProcessor_EmbeddingCaptureLifecycle(t *testing.T) {
 
 	store, err := embedding.NewStore(dbPath)
 	require.NoError(t, err)
-	defer func() { _ = store.Close() }()
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	rec, err := store.Get(t.Context(), "7")
 	require.NoError(t, err)
 	assert.Equal(t, "7", rec.DetectionID)

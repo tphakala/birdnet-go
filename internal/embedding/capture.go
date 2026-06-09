@@ -43,7 +43,6 @@ type Capture struct {
 	mu         sync.Mutex
 	ch         chan Record
 	store      *Store
-	stop       chan struct{}
 	done       chan struct{}
 	started    bool
 	openFailed bool
@@ -98,30 +97,34 @@ func NewCapture(resolve func() (path string, maxRows int), opts ...CaptureOption
 // under context.Background() in the writer, so a request-scoped deadline (e.g.
 // the CompositeAction timeout in DatabaseAction) can never cancel a buffered
 // write.
+//
+// The non-blocking send happens under c.mu. Because the send never blocks (it
+// drops on a full buffer), holding the lock is cheap, and it makes the closed
+// check and the channel send atomic with respect to Close's close(c.ch). That
+// is what guarantees a record is never sent to a closed channel (no panic) and
+// never stranded in the buffer after shutdown begins (no lost write).
+//
 //nolint:gocritic // hugeParam: Record is intentionally passed by value to match the embeddingCapturer interface and take an immutable ownership snapshot; the ~136B header (not the vector backing array) is copied once per saved detection, not in a hot loop.
 func (c *Capture) Capture(rec Record) {
 	if len(rec.Vector) == 0 {
 		return
 	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.closed || c.openFailed {
-		c.mu.Unlock()
 		return
 	}
 	if !c.started {
 		if err := c.openLocked(); err != nil {
 			c.openFailed = true
-			c.mu.Unlock()
 			c.log.Error("failed to open embedding store; capture disabled", logger.Error(err))
 			c.record(captureStatusErrorOpen)
 			return
 		}
 	}
-	ch := c.ch
-	c.mu.Unlock()
 
 	select {
-	case ch <- rec:
+	case c.ch <- rec:
 	default:
 		c.record(captureStatusDroppedFull)
 	}
@@ -138,45 +141,29 @@ func (c *Capture) openLocked() error {
 	}
 	c.store = store
 	c.ch = make(chan Record, c.bufSize)
-	c.stop = make(chan struct{})
 	c.done = make(chan struct{})
 	c.started = true
 	go c.writer()
 	return nil
 }
 
-// writer is the single consumer. All store access happens here.
+// writer is the single consumer. All store access happens here. It drains c.ch
+// until Close closes the channel, then runs a final prune and closes the store.
+// Ranging over the channel guarantees every buffered record is persisted before
+// the store closes, so no in-flight write is ever abandoned during shutdown.
 func (c *Capture) writer() {
 	defer close(c.done)
 	writes := 0
-	for {
-		select {
-		case <-c.stop:
-			c.drain()
-			return
-		case rec := <-c.ch:
-			c.put(&rec)
-			writes++
-			if writes%c.pruneN == 0 {
-				c.prune()
-			}
+	for rec := range c.ch {
+		c.put(&rec)
+		writes++
+		if writes%c.pruneN == 0 {
+			c.prune()
 		}
 	}
-}
-
-// drain flushes any buffered records, runs a final prune, and closes the store.
-func (c *Capture) drain() {
-	for {
-		select {
-		case rec := <-c.ch:
-			c.put(&rec)
-		default:
-			c.prune()
-			if err := c.store.Close(); err != nil {
-				c.log.Warn("failed to close embedding store", logger.Error(err))
-			}
-			return
-		}
+	c.prune()
+	if err := c.store.Close(); err != nil {
+		c.log.Warn("failed to close embedding store", logger.Error(err))
 	}
 }
 
@@ -224,10 +211,14 @@ func (c *Capture) Close(ctx context.Context) error {
 		c.mu.Unlock()
 		return nil
 	}
-	stop, done := c.stop, c.done
+	done := c.done
+	// Close the channel under the lock so it is mutually exclusive with the
+	// non-blocking send in Capture: no record can be sent to a closed channel
+	// (no panic), and any record already buffered is drained by the writer's
+	// range loop before the store closes (no lost write).
+	close(c.ch)
 	c.mu.Unlock()
 
-	close(stop)
 	select {
 	case <-done:
 		return nil

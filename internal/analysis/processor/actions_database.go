@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -159,15 +160,18 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	// non-blocking: this never affects the save path. Capture itself no-ops on
 	// an empty vector and drops on a full buffer.
 	if a.EmbeddingCapture != nil && a.Result.ID != 0 && len(a.Embeddings) > 0 {
+		// Hand the async writer its own copy of the vector. The writer goroutine
+		// outlives this call, so it must not alias a.Embeddings' backing array.
+		vector := slices.Clone(a.Embeddings)
 		a.EmbeddingCapture.Capture(embedding.Record{
 			DetectionID: strconv.FormatUint(uint64(a.Result.ID), 10),
 			Model:       a.ModelID,
 			Source:      a.Result.AudioSource.ID,
 			CapturedAt:  a.Result.BeginTime,
 			Format:      embedding.Format(a.Settings.Embeddings.Storage.Format),
-			Dim:         len(a.Embeddings),
+			Dim:         len(vector),
 			Version:     a.Result.Model.Version,
-			Vector:      a.Embeddings,
+			Vector:      vector,
 		})
 	}
 

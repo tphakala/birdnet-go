@@ -133,8 +133,8 @@ func TestCapture_DropsWhenBufferFull(t *testing.T) {
 
 	// Construct a started Capture with a size-1 buffer and NO running writer,
 	// so the channel cannot drain. The first enqueue fills it; the second drops.
-	// stop/done are intentionally left nil: this fixture must NOT call Close()
-	// (close(nil) would panic). Capture() never touches stop/done.
+	// done is intentionally left nil: this fixture must NOT call Close()
+	// (it would close a channel no writer is draining). Capture() never reads done.
 	c := NewCapture(func() (string, int) { return path, 50000 }, WithCaptureMetrics(spy))
 	c.store = store
 	c.ch = make(chan Record, 1)
