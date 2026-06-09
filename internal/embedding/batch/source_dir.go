@@ -1,6 +1,7 @@
 package batch
 
 import (
+	"context"
 	"io/fs"
 	"path/filepath"
 	"sort"
@@ -19,13 +20,17 @@ var audioExtensions = map[string]bool{
 // are skipped, but a hidden root directory is still walked. Directory
 // symlinks are not followed (filepath.WalkDir semantics). Order is
 // deterministic (sorted by key) so limits and reruns behave predictably.
-func DirectoryItems(root string) ([]Item, error) {
+// ctx is checked on every entry so a large tree walk can be cancelled promptly.
+func DirectoryItems(ctx context.Context, root string) ([]Item, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}
 	var items []Item
 	err = filepath.WalkDir(absRoot, func(path string, d fs.DirEntry, err error) error {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		if err != nil {
 			return err
 		}

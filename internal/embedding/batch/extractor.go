@@ -111,6 +111,9 @@ func (e *Extractor) SetFFmpegPath(path string) { e.ffmpegPath = path }
 // exhausted. Per-item failures are counted; they do not abort the run.
 // Context cancellation returns promptly with the context error.
 func (e *Extractor) Run(ctx context.Context, items []Item) (Stats, error) {
+	if e.ffmpegPath == "" {
+		return Stats{}, errors.NewStd("batch: ffmpeg path not set; call SetFFmpegPath before Run")
+	}
 	var stats Stats
 	for _, item := range items {
 		if err := ctx.Err(); err != nil {

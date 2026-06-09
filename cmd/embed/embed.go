@@ -77,7 +77,7 @@ func Command(settings *conf.Settings) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&dir, "dir", "", "embed every audio file under this directory; large corpora share the live embedding store and can evict live history via the rolling cap; use --store to write to a separate file")
-	cmd.Flags().BoolVar(&backfill, "backfill", false, "embed stored detections that still have a clip on disk")
+	cmd.Flags().BoolVar(&backfill, "backfill", false, "embed stored detections that still have a clip on disk; opens the main database, run with the same binary version as the live server")
 	cmd.Flags().IntVar(&limit, "limit", 0, "max files this run (backfill default 1000; 0 = unlimited)")
 	cmd.Flags().StringVar(&since, "since", "", "backfill only detections on/after this date (YYYY-MM-DD)")
 	cmd.Flags().StringVar(&species, "species", "", "backfill only this scientific name")
@@ -175,7 +175,7 @@ func run(ctx context.Context, settings *conf.Settings, cfg *runConfig) error {
 			return batch.BackfillItems(ctx, ds, settings.Realtime.Audio.Export.Path, filter)
 		}()
 	} else {
-		items, err = batch.DirectoryItems(cfg.dir)
+		items, err = batch.DirectoryItems(ctx, cfg.dir)
 	}
 	if err != nil {
 		return err
@@ -211,6 +211,9 @@ func run(ctx context.Context, settings *conf.Settings, cfg *runConfig) error {
 		stats.Files, stats.Records, stats.Skipped, stats.Errors, stats.Windows)
 	if err != nil {
 		return err
+	}
+	if stats.Errors > 0 && stats.Files == 0 && stats.Skipped == 0 {
+		return fmt.Errorf("all %d items failed; see per-item errors above", stats.Errors)
 	}
 	// A dry run writes nothing and must not prune either: the live store
 	// legitimately sits slightly over cap between live prunes, and deleting

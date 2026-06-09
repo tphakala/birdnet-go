@@ -24,7 +24,7 @@ func TestDirectoryItems(t *testing.T) {
 	touch(t, filepath.Join(dir, "robin", "notes.txt")) // ignored
 	touch(t, filepath.Join(dir, ".hidden", "d.wav"))   // ignored (hidden dir)
 
-	items, err := DirectoryItems(dir)
+	items, err := DirectoryItems(t.Context(), dir)
 	require.NoError(t, err)
 	require.Len(t, items, 3)
 
@@ -43,6 +43,6 @@ func TestDirectoryItems(t *testing.T) {
 
 func TestDirectoryItemsMissingDir(t *testing.T) {
 	t.Parallel()
-	_, err := DirectoryItems("/nonexistent-dir-xyz")
+	_, err := DirectoryItems(t.Context(), "/nonexistent-dir-xyz")
 	require.Error(t, err)
 }
