@@ -78,7 +78,9 @@ func encodeVector(vec []float32, format Format) ([]byte, error) {
 func decodeVector(blob []byte, format Format, dim int) ([]float32, error) {
 	switch format {
 	case FormatFP16:
-		if len(blob) != dim*fp16Bytes {
+		// Validate via division rather than dim*fp16Bytes to avoid integer
+		// overflow when dim comes from a corrupt stored row.
+		if dim < 0 || len(blob)%fp16Bytes != 0 || len(blob)/fp16Bytes != dim {
 			return nil, ErrCorruptBlob
 		}
 		vec := make([]float32, dim)

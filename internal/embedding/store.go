@@ -6,6 +6,7 @@ import (
 	stdlog "log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gorm.io/driver/sqlite"
@@ -25,7 +26,8 @@ const defaultMaxRows int64 = 50_000
 // sqlitePragmas are applied to every pooled connection via the DSN so they are
 // not lost on connections opened after the first. WAL plus a generous
 // busy_timeout keeps the separate embeddings database from blocking under
-// concurrent capture, and isolates it from the main birdnet.db journal.
+// concurrent capture, and isolates it from the main birdnet.db journal. The
+// cache is intentionally small (-2000 = ~2 MB) for this auxiliary store.
 const sqlitePragmas = "_journal_mode=WAL&_busy_timeout=30000&_synchronous=NORMAL&_foreign_keys=ON&_cache_size=-2000"
 
 // Sentinel errors returned by the Store.
@@ -126,6 +128,16 @@ func NewStore(path string, opts ...Option) (*Store, error) {
 	cfg := storeConfig{maxRows: defaultMaxRows}
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+
+	// The DSN appends pragmas after "?"; a path containing a DSN delimiter
+	// would corrupt the query string and silently drop the pragmas (WAL,
+	// busy_timeout), so reject such paths before touching the filesystem.
+	if strings.ContainsAny(path, "?#") {
+		return nil, errors.Newf("embedding: database path must not contain '?' or '#': %q", path).
+			Component("embedding").
+			Category(errors.CategoryValidation).
+			Build()
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
@@ -270,7 +282,12 @@ func (s *Store) Query(ctx context.Context, model string, from, to time.Time) ([]
 	for i := range rows {
 		rec, err := rowToRecord(&rows[i])
 		if err != nil {
-			return nil, err
+			// A single undecodable blob must not hide the rest of the
+			// timeline from consumers; log and skip it.
+			s.log.Warn("Skipping undecodable embedding row",
+				logger.String("detection_id", rows[i].DetectionID),
+				logger.Error(err))
+			continue
 		}
 		records = append(records, rec)
 	}
@@ -295,19 +312,18 @@ func (s *Store) Prune(ctx context.Context) (int, error) {
 	}
 
 	toDelete := count - s.maxRows
-	var ids []int64
-	if err := db.Model(&embeddingRow{}).
+	// Delete the oldest rows via a subquery so the candidate IDs never
+	// round-trip through the application. An explicit "id IN (?, ?, ...)"
+	// list would allocate an unbounded slice and can exceed SQLite's
+	// bound-variable limit when the overflow is large.
+	oldest := s.db.WithContext(ctx).
+		Model(&embeddingRow{}).
+		Select("id").
 		Order("captured_at ASC, id ASC").
-		Limit(int(toDelete)).
-		Pluck("id", &ids).Error; err != nil {
-		return 0, errors.New(err).
-			Component("embedding").
-			Category(errors.CategoryDatabase).
-			Context("operation", "select_prune_candidates").
-			Build()
-	}
-
-	res := db.Where("id IN ?", ids).Delete(&embeddingRow{})
+		Limit(int(toDelete))
+	res := s.db.WithContext(ctx).
+		Where("id IN (?)", oldest).
+		Delete(&embeddingRow{})
 	if res.Error != nil {
 		return 0, errors.New(res.Error).
 			Component("embedding").

@@ -82,6 +82,19 @@ func TestStorePutValidatesDimension(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidRecord)
 }
 
+// TestStorePutValidatesDetectionID verifies that a record with an empty
+// detection id is rejected; an empty key must never be stored.
+func TestStorePutValidatesDetectionID(t *testing.T) {
+	t.Parallel()
+
+	s := newTestStore(t)
+	rec := makeRecord(t, func(r *Record) { r.DetectionID = "" })
+
+	err := s.Put(t.Context(), rec)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidRecord)
+}
+
 // TestStoreQueryFiltersByModelAndTime verifies that Query returns only rows for
 // the requested model within the requested time window, ordered by capture
 // time.
@@ -109,6 +122,38 @@ func TestStoreQueryFiltersByModelAndTime(t *testing.T) {
 	assert.Equal(t, "b2", got[1].DetectionID)
 }
 
+// TestStoreQuerySkipsCorruptRow verifies that a single undecodable row does not
+// abort the whole query; the remaining rows are still returned. The corrupt row
+// is inserted directly, bypassing Put's validation, to simulate on-disk
+// corruption.
+func TestStoreQuerySkipsCorruptRow(t *testing.T) {
+	t.Parallel()
+
+	s := newTestStore(t)
+	base := time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, s.Put(t.Context(), makeRecord(t, func(r *Record) {
+		r.DetectionID, r.CapturedAt = "good", base
+	})))
+
+	// Blob length (2 bytes) is inconsistent with the declared dim (4).
+	require.NoError(t, s.db.Create(&embeddingRow{
+		DetectionID: "corrupt",
+		Model:       "birdnet_v3",
+		Source:      "rtsp://camera",
+		CapturedAt:  base.Add(time.Minute),
+		Format:      string(FormatFP16),
+		Dim:         4,
+		Version:     "3.0",
+		Vector:      []byte{0x00, 0x00},
+	}).Error)
+
+	got, err := s.Query(t.Context(), "birdnet_v3", base, base.Add(time.Hour))
+	require.NoError(t, err)
+	require.Len(t, got, 1, "corrupt row skipped, good row returned")
+	assert.Equal(t, "good", got[0].DetectionID)
+}
+
 // TestStorePruneEnforcesRowCap verifies that Prune deletes the oldest rows so
 // at most maxRows remain, and reports how many it removed.
 func TestStorePruneEnforcesRowCap(t *testing.T) {
@@ -129,8 +174,10 @@ func TestStorePruneEnforcesRowCap(t *testing.T) {
 	assert.Equal(t, 2, deleted, "two oldest rows pruned")
 
 	// The two oldest (det-a, det-b) must be gone; the three newest remain.
-	_, err = s.Get(t.Context(), "det-a")
-	require.ErrorIs(t, err, ErrNotFound)
+	for _, id := range []string{"det-a", "det-b"} {
+		_, err := s.Get(t.Context(), id)
+		require.ErrorIs(t, err, ErrNotFound, "oldest row pruned: %s", id)
+	}
 	for _, id := range []string{"det-c", "det-d", "det-e"} {
 		_, err := s.Get(t.Context(), id)
 		assert.NoError(t, err, "newest rows retained: %s", id)
