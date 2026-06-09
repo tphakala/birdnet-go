@@ -330,3 +330,23 @@ func TestBatPredict_EmptySampleRecordsNothing(t *testing.T) {
 	assert.InDelta(t, 0.0, predictionCount(t, m, RegistryIDBat, "success"), 0,
 		"an empty-sample rejection must not record a success")
 }
+
+// TestBatPredict_NilClassifierRecordsNothing verifies the nil-classifier guard
+// (e.g. after Close()) tags the span errored but records no prediction, mirroring
+// the Perch and BirdNET early-guard contract.
+func TestBatPredict_NilClassifierRecordsNothing(t *testing.T) {
+	resetGlobalMetrics(t)
+	t.Cleanup(func() { resetGlobalMetrics(t) })
+	m := newTestMetrics(t)
+	SetMetrics(m)
+
+	b := &Bat{} // embeddingExtractor and batClassifier are nil interfaces
+
+	_, err := b.Predict(t.Context(), [][]float32{{0.1, 0.2}})
+	require.Error(t, err)
+
+	assert.InDelta(t, 0.0, predictionCount(t, m, RegistryIDBat, "error"), 0,
+		"a nil-classifier rejection must not be counted as a prediction error")
+	assert.InDelta(t, 0.0, predictionCount(t, m, RegistryIDBat, "success"), 0,
+		"a nil-classifier rejection must not record a success")
+}
