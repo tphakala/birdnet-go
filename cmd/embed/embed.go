@@ -24,7 +24,9 @@ import (
 
 // defaultBackfillLimit bounds one backfill run unless the operator overrides
 // it. Large clip libraries (100 GB+) must never be swept in a single
-// invocation; reruns continue incrementally because existing note ids skip.
+// invocation; reruns continue incrementally because already-embedded
+// detections are excluded from enumeration (unless --overwrite) and do not
+// count toward the limit.
 const defaultBackfillLimit = 1000
 
 // defaultPace is the sleep between inference calls so a concurrently running
@@ -45,6 +47,7 @@ func Command(settings *conf.Settings) *cobra.Command {
 		pace      time.Duration
 		overwrite bool
 		dryRun    bool
+		storePath string
 	)
 	cmd := &cobra.Command{
 		Use:    "embed",
@@ -69,18 +72,19 @@ func Command(settings *conf.Settings) *cobra.Command {
 			return run(cmd.Context(), settings, &runConfig{
 				dir: dir, backfill: backfill, limit: limit,
 				since: sinceTime, species: species, pace: pace,
-				overwrite: overwrite, dryRun: dryRun,
+				overwrite: overwrite, dryRun: dryRun, storePath: storePath,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&dir, "dir", "", "embed every audio file under this directory")
+	cmd.Flags().StringVar(&dir, "dir", "", "embed every audio file under this directory; large corpora share the live embedding store and can evict live history via the rolling cap; use --store to write to a separate file")
 	cmd.Flags().BoolVar(&backfill, "backfill", false, "embed stored detections that still have a clip on disk")
 	cmd.Flags().IntVar(&limit, "limit", 0, "max files this run (backfill default 1000; 0 = unlimited)")
 	cmd.Flags().StringVar(&since, "since", "", "backfill only detections on/after this date (YYYY-MM-DD)")
 	cmd.Flags().StringVar(&species, "species", "", "backfill only this scientific name")
 	cmd.Flags().DurationVar(&pace, "pace", defaultPace, "sleep between inference calls")
-	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "re-embed entries that already exist in the store")
+	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "re-embed entries that already exist in the store; replaces live-captured records, including their Source provenance")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "decode and infer but write nothing")
+	cmd.Flags().StringVar(&storePath, "store", "", "embedding store path; overrides the settings-derived path")
 	return cmd
 }
 
@@ -94,6 +98,7 @@ type runConfig struct {
 	pace      time.Duration
 	overwrite bool
 	dryRun    bool
+	storePath string
 }
 
 func run(ctx context.Context, settings *conf.Settings, cfg *runConfig) error {
@@ -126,7 +131,12 @@ func run(ctx context.Context, settings *conf.Settings, cfg *runConfig) error {
 		}
 	}
 
-	storePath := settings.Embeddings.Storage.Path
+	// --store overrides the settings-derived path entirely, letting large
+	// corpus runs write to a separate file instead of the live rolling store.
+	storePath := cfg.storePath
+	if storePath == "" {
+		storePath = settings.Embeddings.Storage.Path
+	}
 	if storePath == "" {
 		storePath = filepath.Join(filepath.Dir(settings.Output.SQLite.Path), "embeddings.db")
 	}
@@ -142,14 +152,28 @@ func run(ctx context.Context, settings *conf.Settings, cfg *runConfig) error {
 
 	var items []batch.Item
 	if cfg.backfill {
-		ds := datastore.New(settings)
-		if err := ds.Open(); err != nil {
-			return fmt.Errorf("open datastore: %w", err)
-		}
-		defer func() { _ = ds.Close() }()
-		items, err = batch.BackfillItems(ctx, ds, settings.Realtime.Audio.Export.Path, batch.BackfillFilter{
-			Species: cfg.species, Since: cfg.since, Limit: cfg.limit,
-		})
+		// Scope the datastore connection to enumeration only; extraction can
+		// run for hours and must not hold the DB handle the whole time.
+		items, err = func() ([]batch.Item, error) {
+			ds := datastore.New(settings)
+			if err := ds.Open(); err != nil {
+				return nil, fmt.Errorf("open datastore: %w", err)
+			}
+			defer func() { _ = ds.Close() }()
+			filter := batch.BackfillFilter{
+				Species: cfg.species, Since: cfg.since, Limit: cfg.limit,
+			}
+			if !cfg.overwrite {
+				// Skip already-embedded detections during enumeration so reruns
+				// advance into older history instead of stalling on the newest
+				// window that live capture has already covered.
+				filter.AlreadyEmbedded = func(id string) bool {
+					_, err := store.Get(ctx, id)
+					return err == nil
+				}
+			}
+			return batch.BackfillItems(ctx, ds, settings.Realtime.Audio.Export.Path, filter)
+		}()
 	} else {
 		items, err = batch.DirectoryItems(cfg.dir)
 	}
@@ -188,8 +212,13 @@ func run(ctx context.Context, settings *conf.Settings, cfg *runConfig) error {
 	if err != nil {
 		return err
 	}
-	if _, err := store.Prune(ctx); err != nil {
-		return fmt.Errorf("prune: %w", err)
+	// A dry run writes nothing and must not prune either: the live store
+	// legitimately sits slightly over cap between live prunes, and deleting
+	// rows here would mutate state the operator asked to leave untouched.
+	if !cfg.dryRun {
+		if _, err := store.Prune(ctx); err != nil {
+			return fmt.Errorf("prune: %w", err)
+		}
 	}
 	return nil
 }

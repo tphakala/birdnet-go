@@ -39,6 +39,11 @@ type BackfillFilter struct {
 	Since time.Time
 	// Limit is the max items returned; 0 means unbounded.
 	Limit int
+	// AlreadyEmbedded, when non-nil, excludes notes for which it returns true
+	// during enumeration. Excluded notes do NOT count toward Limit, so reruns
+	// advance past already-embedded history instead of re-enumerating the
+	// same newest window every time.
+	AlreadyEmbedded func(detectionID string) bool
 }
 
 // BackfillItems enumerates detections that still have a clip on disk,
@@ -89,10 +94,14 @@ func BackfillItems(ctx context.Context, ds NoteSearcher, clipDir string, filter 
 				}
 				return nil, fmt.Errorf("backfill: stat %s: %w", path, statErr)
 			}
+			id := strconv.FormatUint(uint64(n.ID), 10)
+			if filter.AlreadyEmbedded != nil && filter.AlreadyEmbedded(id) {
+				continue
+			}
 			items = append(items, Item{
 				Path:        path,
 				Key:         n.ClipName,
-				DetectionID: strconv.FormatUint(uint64(n.ID), 10),
+				DetectionID: id,
 				Species:     n.ScientificName,
 				CapturedAt:  n.BeginTime,
 			})

@@ -64,6 +64,27 @@ func TestBackfillItemsLimit(t *testing.T) {
 	assert.Equal(t, "1", items[0].DetectionID, "first note in fixture order must survive the limit cut")
 }
 
+func TestBackfillItemsSkipsAlreadyEmbedded(t *testing.T) {
+	t.Parallel()
+	clipDir := t.TempDir()
+	notes := make([]datastore.Note, 10)
+	for i := range notes {
+		name := "c" + strconv.Itoa(i) + ".wav"
+		touch(t, filepath.Join(clipDir, name))
+		notes[i] = datastore.Note{ID: uint(i + 1), ClipName: name}
+	}
+	embedded := map[string]bool{"1": true, "2": true, "3": true, "4": true}
+	items, err := BackfillItems(t.Context(), &fakeSearcher{notes: notes}, clipDir, BackfillFilter{
+		Limit:           3,
+		AlreadyEmbedded: func(id string) bool { return embedded[id] },
+	})
+	require.NoError(t, err)
+	require.Len(t, items, 3, "already-embedded notes must not count toward Limit")
+	assert.Equal(t, "5", items[0].DetectionID)
+	assert.Equal(t, "6", items[1].DetectionID)
+	assert.Equal(t, "7", items[2].DetectionID)
+}
+
 func TestBackfillItemsSpeciesAndSinceForwarded(t *testing.T) {
 	t.Parallel()
 	clipDir := t.TempDir()
