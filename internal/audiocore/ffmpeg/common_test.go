@@ -291,3 +291,13 @@ func TestGetAudioDuration_CanceledContext(t *testing.T) {
 	_, err := ffmpeg.GetAudioDuration(ctx, dummyPath)
 	assert.Error(t, err, "canceled context should return an error")
 }
+
+// TestResolveBinary verifies that ResolveBinary returns a non-empty path to the ffmpeg executable.
+func TestResolveBinary(t *testing.T) {
+	t.Parallel()
+	path, err := ffmpeg.ResolveBinary()
+	if err != nil {
+		t.Skip("ffmpeg not installed on this host")
+	}
+	require.NotEmpty(t, path)
+}
