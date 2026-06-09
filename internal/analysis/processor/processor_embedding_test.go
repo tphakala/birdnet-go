@@ -1,7 +1,6 @@
 package processor
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 
@@ -44,12 +43,12 @@ func TestProcessor_EmbeddingCaptureLifecycle(t *testing.T) {
 		DetectionID: "7", Model: "birdnet", Dim: 3, Format: embedding.FormatFP16,
 		Vector: []float32{1, 2, 3},
 	})
-	require.NoError(t, p.embeddingCapture.Close(context.Background()))
+	require.NoError(t, p.embeddingCapture.Close(t.Context()))
 
 	store, err := embedding.NewStore(dbPath)
 	require.NoError(t, err)
 	defer func() { _ = store.Close() }()
-	rec, err := store.Get(context.Background(), "7")
+	rec, err := store.Get(t.Context(), "7")
 	require.NoError(t, err)
 	assert.Equal(t, "7", rec.DetectionID)
 }

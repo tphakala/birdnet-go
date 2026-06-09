@@ -1,7 +1,6 @@
 package embedding
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,7 +50,7 @@ func TestCapture_PersistsRecord(t *testing.T) {
 
 	c := NewCapture(func() (string, int) { return path, 50000 }, WithCaptureMetrics(spy))
 	c.Capture(testRecord("42", 8))
-	require.NoError(t, c.Close(context.Background()))
+	require.NoError(t, c.Close(t.Context()))
 
 	assert.Equal(t, 1, spy.capture["persisted"])
 
@@ -61,7 +60,7 @@ func TestCapture_PersistsRecord(t *testing.T) {
 	store, err := NewStore(path)
 	require.NoError(t, err)
 	defer func() { _ = store.Close() }()
-	rec, err := store.Get(context.Background(), "42")
+	rec, err := store.Get(t.Context(), "42")
 	require.NoError(t, err)
 	assert.Equal(t, "42", rec.DetectionID)
 	assert.Equal(t, 8, rec.Dim)
@@ -74,7 +73,7 @@ func TestCapture_NoOpOnEmptyVector(t *testing.T) {
 	c := NewCapture(func() (string, int) { return path, 50000 })
 
 	c.Capture(Record{DetectionID: "1", Dim: 0}) // empty vector
-	require.NoError(t, c.Close(context.Background()))
+	require.NoError(t, c.Close(t.Context()))
 
 	_, err := os.Stat(path)
 	assert.True(t, os.IsNotExist(err), "store must not be created for an empty-vector capture")
@@ -85,8 +84,8 @@ func TestCapture_CloseNeverOpenedIsNoOp(t *testing.T) {
 	path := filepath.Join(dir, "embeddings.db")
 	c := NewCapture(func() (string, int) { return path, 50000 })
 
-	require.NoError(t, c.Close(context.Background()))
-	require.NoError(t, c.Close(context.Background())) // idempotent
+	require.NoError(t, c.Close(t.Context()))
+	require.NoError(t, c.Close(t.Context())) // idempotent
 	_, err := os.Stat(path)
 	assert.True(t, os.IsNotExist(err))
 }
@@ -102,14 +101,14 @@ func TestCapture_PruneEnforcesCap(t *testing.T) {
 	for i := range 5 {
 		c.Capture(testRecord(string(rune('a'+i)), 4))
 	}
-	require.NoError(t, c.Close(context.Background()))
+	require.NoError(t, c.Close(t.Context()))
 
 	store, err := NewStore(path)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
 	from := time.Unix(0, 0).UTC()
 	to := time.Unix(2_000_000_000, 0).UTC()
-	rows, err := store.Query(context.Background(), "birdnet", from, to)
+	rows, err := store.Query(t.Context(), "birdnet", from, to)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(rows), 2, "rolling cap must bound stored rows")
 	assert.Positive(t, spy.pruned, "prune count metric should fire")

@@ -98,6 +98,7 @@ func NewCapture(resolve func() (path string, maxRows int), opts ...CaptureOption
 // under context.Background() in the writer, so a request-scoped deadline (e.g.
 // the CompositeAction timeout in DatabaseAction) can never cancel a buffered
 // write.
+//nolint:gocritic // hugeParam: Record is intentionally passed by value to match the embeddingCapturer interface and take an immutable ownership snapshot; the ~136B header (not the vector backing array) is copied once per saved detection, not in a hot loop.
 func (c *Capture) Capture(rec Record) {
 	if len(rec.Vector) == 0 {
 		return
@@ -154,7 +155,7 @@ func (c *Capture) writer() {
 			c.drain()
 			return
 		case rec := <-c.ch:
-			c.put(rec)
+			c.put(&rec)
 			writes++
 			if writes%c.pruneN == 0 {
 				c.prune()
@@ -168,7 +169,7 @@ func (c *Capture) drain() {
 	for {
 		select {
 		case rec := <-c.ch:
-			c.put(rec)
+			c.put(&rec)
 		default:
 			c.prune()
 			if err := c.store.Close(); err != nil {
@@ -181,8 +182,8 @@ func (c *Capture) drain() {
 
 // put persists a single record under a background context so no caller deadline
 // can cancel it.
-func (c *Capture) put(rec Record) {
-	if err := c.store.Put(context.Background(), &rec); err != nil {
+func (c *Capture) put(rec *Record) {
+	if err := c.store.Put(context.Background(), rec); err != nil {
 		c.log.Warn("failed to persist embedding", logger.Error(err))
 		c.record(captureStatusErrorPut)
 		return

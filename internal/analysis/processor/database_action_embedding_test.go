@@ -16,6 +16,7 @@ type spyCapturer struct {
 	calls []embedding.Record
 }
 
+//nolint:gocritic // hugeParam: signature must match the embeddingCapturer interface (value receiver of Record); this is a test spy, not a hot path.
 func (s *spyCapturer) Capture(rec embedding.Record) { s.calls = append(s.calls, rec) }
 
 func newEmbeddingTestAction(t *testing.T, capturer embeddingCapturer, embeddings []float32) (*DatabaseAction, *MockDetectionRepository) {
