@@ -5,6 +5,7 @@ package classifier
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -51,8 +52,21 @@ func BuildRangeFilter(o *Orchestrator) error {
 
 	var includedSpecies []string
 
-	o.primary.mu.Lock()
-	rf := o.primary.rangeFilter
+	// Snapshot primary under read lock to avoid racing with Delete(), which sets
+	// o.primary = nil under o.mu.Lock(). All callers reach BuildRangeFilter
+	// without holding o.mu, so taking RLock here cannot self-deadlock.
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return errors.Newf("orchestrator has no primary model").
+			Component("classifier.orchestrator").
+			Category(errors.CategorySystem).
+			Build()
+	}
+
+	primary.mu.Lock()
+	rf := primary.rangeFilter
 	up, isUniversal := rf.(UniversalSpeciesPredictor)
 
 	if isUniversal && settings.BirdNET.LocationConfigured {
@@ -69,7 +83,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 			threshold,
 		)
 		if err != nil {
-			o.primary.mu.Unlock()
+			primary.mu.Unlock()
 			return errors.New(err).
 				Category(errors.CategoryValidation).
 				Context("date", today.Format(time.DateOnly)).
@@ -95,7 +109,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 			mrf.unmappedScore = score
 			cachedMapping = mrf.classifierToGeo
 		}
-		o.primary.mu.Unlock()
+		primary.mu.Unlock()
 
 		includedSpecies = make([]string, 0, len(scores))
 		for _, ss := range scores {
@@ -138,7 +152,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 			logger.Float64("threshold", float64(threshold)),
 			logger.String("duration", time.Since(start).String()))
 	} else {
-		o.primary.mu.Unlock()
+		primary.mu.Unlock()
 		speciesScores, err := o.GetProbableSpecies(today, 0.0)
 		if err != nil {
 			return errors.New(err).
@@ -160,7 +174,9 @@ func BuildRangeFilter(o *Orchestrator) error {
 	}
 
 	if settings.BirdNET.RangeFilter.Debug {
-		debugFile := "debug_included_species.txt"
+		// Write under the OS temp dir rather than the process CWD so the debug dump
+		// does not pollute the working directory and works in read-only-root containers.
+		debugFile := filepath.Join(os.TempDir(), "debug_included_species.txt")
 		var content strings.Builder
 		fmt.Fprintf(&content, "Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
 			time.Now().Format(time.DateTime),
