@@ -34,3 +34,20 @@ func TestValidateEmbeddingsSettings(t *testing.T) {
 		})
 	}
 }
+
+// ParseSettings (storage.go) demotes validation errors whose message contains
+// certain substrings to non-fatal warnings. An unsupported embeddings format
+// must fail startup, so its error must not collide with those warning markers
+// (otherwise the app starts with a config that drops every embedding at encode
+// time). This guards the regression directly.
+func TestValidateEmbeddingsSettings_UnsupportedFormatIsFatal(t *testing.T) {
+	t.Parallel()
+	err := validateEmbeddingsSettings(&EmbeddingsConfig{
+		Storage: EmbeddingsStorageConfig{Format: "int8"},
+	})
+	require.Error(t, err)
+	for _, marker := range []string{"not supported", "fallback", "OAuth authentication warning"} {
+		assert.NotContains(t, err.Error(), marker,
+			"unsupported-format error must stay fatal, not be demoted to a warning by ParseSettings")
+	}
+}
