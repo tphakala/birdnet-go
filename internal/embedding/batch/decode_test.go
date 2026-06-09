@@ -27,6 +27,15 @@ func genWAV(t *testing.T, dir, name string, seconds float64) string {
 	return out
 }
 
+func TestPCM16ToFloat32(t *testing.T) {
+	t.Parallel()
+	// -32768 must map exactly to -1.0 so batch scaling matches the live
+	// analysis path (divisor 32768, not 32767).
+	assert.InDelta(t, -1.0, float64(pcm16ToFloat32(-32768)), 0)
+	assert.InDelta(t, float64(32767)/32768, float64(pcm16ToFloat32(32767)), 0)
+	assert.InDelta(t, 0.0, float64(pcm16ToFloat32(0)), 0)
+}
+
 func TestDecodeWindows(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

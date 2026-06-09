@@ -9,14 +9,29 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"math"
+	"io"
 	"os/exec"
+	"strconv"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // minTailFraction is the minimum fill ratio for a trailing partial window to
 // be emitted. A tail below this fraction is silently dropped.
 const minTailFraction = 0.25
+
+// pcm16Divisor scales int16 PCM samples to float32 so that -32768 maps
+// exactly to -1.0. This matches the live analysis path (see
+// internal/analysis/process.go and internal/audiocore/convert/pcm.go) so
+// batch embeddings see identically scaled input.
+const pcm16Divisor = float32(32768.0)
+
+// pcm16ToFloat32 converts a single little-endian-decoded int16 PCM sample to
+// a float32 in [-1, 1].
+func pcm16ToFloat32(s int16) float32 {
+	return float32(s) / pcm16Divisor
+}
 
 // windowFunc is called once per analysis window. window is a slice of exactly
 // windowSamples float32 values in the range [-1, 1]. The slice is owned by
@@ -32,6 +47,10 @@ type windowFunc func(window []float32, offset time.Duration) error
 // is silently dropped. The function returns the first error from fn, any ffmpeg
 // exit error (with stderr included), or a context error if ctx is cancelled.
 func decodeWindows(ctx context.Context, ffmpegPath, filePath string, sampleRate, windowSamples int, fn windowFunc) error {
+	if sampleRate <= 0 || windowSamples <= 0 {
+		return fmt.Errorf("decodeWindows: sampleRate (%d) and windowSamples (%d) must be positive", sampleRate, windowSamples)
+	}
+
 	var stderrBuf bytes.Buffer
 	cmd := exec.CommandContext(ctx, ffmpegPath,
 		"-hide_banner", "-loglevel", "error",
@@ -39,7 +58,7 @@ func decodeWindows(ctx context.Context, ffmpegPath, filePath string, sampleRate,
 		"-f", "s16le",
 		"-acodec", "pcm_s16le",
 		"-ac", "1",
-		"-ar", fmt.Sprintf("%d", sampleRate),
+		"-ar", strconv.Itoa(sampleRate),
 		"-",
 	)
 	cmd.Stderr = &stderrBuf
@@ -72,7 +91,27 @@ func decodeWindows(ctx context.Context, ffmpegPath, filePath string, sampleRate,
 		_ = cmd.Wait()
 	}
 
-	var callbackErr error
+	// flushWindow delivers the current full window to fn and resets the fill
+	// position for the next one.
+	flushWindow := func() error {
+		offset := time.Duration(windowIdx) * time.Duration(windowSamples) * time.Second / time.Duration(sampleRate)
+		if err := fn(window, offset); err != nil {
+			return err
+		}
+		windowIdx++
+		windowPos = 0
+		return nil
+	}
+
+	// pushSample appends one sample to the current window, flushing when full.
+	pushSample := func(s int16) error {
+		window[windowPos] = pcm16ToFloat32(s)
+		windowPos++
+		if windowPos == windowSamples {
+			return flushWindow()
+		}
+		return nil
+	}
 
 	for {
 		// Read a chunk from ffmpeg stdout.
@@ -81,27 +120,16 @@ func decodeWindows(ctx context.Context, ffmpegPath, filePath string, sampleRate,
 		// Process whatever bytes arrived, including on a partial/final read.
 		data := buf[:n]
 
-		// If we have a leftover byte from the previous read, prepend it by
-		// handling it as the low byte of the next sample.
+		// If we have a leftover byte from the previous read, combine it (low
+		// byte) with data[0] (high byte) into a little-endian int16.
 		start := 0
 		if hasCarry && len(data) > 0 {
-			// Combine the carry byte (low byte) with data[0] (high byte) to
-			// form a little-endian int16: low byte first, then high byte.
 			sample := int16(carryByte[0]) | int16(data[0])<<8
-			window[windowPos] = float32(sample) / math.MaxInt16
-			windowPos++
 			start = 1
 			hasCarry = false
-
-			if windowPos == windowSamples {
-				offset := time.Duration(windowIdx) * time.Duration(windowSamples) * time.Second / time.Duration(sampleRate)
-				if err := fn(window, offset); err != nil {
-					callbackErr = err
-					killAndWait()
-					return callbackErr
-				}
-				windowIdx++
-				windowPos = 0
+			if err := pushSample(sample); err != nil {
+				killAndWait()
+				return err
 			}
 		}
 
@@ -111,18 +139,9 @@ func decodeWindows(ctx context.Context, ffmpegPath, filePath string, sampleRate,
 		for i := range pairs {
 			b := remaining[i*2 : i*2+2]
 			sample := int16(binary.LittleEndian.Uint16(b))
-			window[windowPos] = float32(sample) / math.MaxInt16
-			windowPos++
-
-			if windowPos == windowSamples {
-				offset := time.Duration(windowIdx) * time.Duration(windowSamples) * time.Second / time.Duration(sampleRate)
-				if err := fn(window, offset); err != nil {
-					callbackErr = err
-					killAndWait()
-					return callbackErr
-				}
-				windowIdx++
-				windowPos = 0
+			if err := pushSample(sample); err != nil {
+				killAndWait()
+				return err
 			}
 		}
 
@@ -133,8 +152,18 @@ func decodeWindows(ctx context.Context, ffmpegPath, filePath string, sampleRate,
 		}
 
 		if readErr != nil {
-			// Any error here (including io.EOF) means the stream is done.
-			break
+			if errors.Is(readErr, io.EOF) {
+				// Normal end of stream.
+				break
+			}
+			// A non-EOF read error: kill ffmpeg so it cannot block writing
+			// into a full pipe, then surface the read error (or the context
+			// error if the read failed because ctx was cancelled).
+			killAndWait()
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("ffmpeg stdout read: %w", readErr)
 		}
 	}
 
@@ -163,8 +192,7 @@ func decodeWindows(ctx context.Context, ffmpegPath, filePath string, sampleRate,
 			for i := windowPos; i < windowSamples; i++ {
 				window[i] = 0
 			}
-			offset := time.Duration(windowIdx) * time.Duration(windowSamples) * time.Second / time.Duration(sampleRate)
-			if err := fn(window, offset); err != nil {
+			if err := flushWindow(); err != nil {
 				return err
 			}
 		}
