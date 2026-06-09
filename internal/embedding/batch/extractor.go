@@ -56,7 +56,9 @@ type Spec struct {
 // Options bound and shape a run. Zero values mean: no limit, no pacing,
 // skip existing, write records.
 type Options struct {
-	Limit     int           // max files processed this run; 0 = unlimited
+	// Limit is the max files processed this run; 0 = unlimited. Errored items
+	// count toward the limit; skipped items (already embedded) do not.
+	Limit     int
 	Pace      time.Duration // sleep between inference calls
 	Overwrite bool          // re-embed even when the key already exists
 	DryRun    bool          // decode + predict but never write
@@ -67,7 +69,9 @@ type Options struct {
 
 // Stats summarize a run.
 type Stats struct {
-	Files   int // files fully processed (excludes skipped)
+	// Files counts items fully processed (excludes skipped). Dry-run items
+	// are counted here: they are processed (decoded and inferred) but not written.
+	Files   int
 	Windows int // inference calls made
 	Records int // records written
 	Skipped int // items skipped because already embedded
@@ -86,8 +90,8 @@ type Extractor struct {
 	now        func() time.Time
 }
 
-// New builds an Extractor. Callers must call SetFFmpegPath before Run when
-// using the real decoder.
+// New builds an Extractor. predict and store must be non-nil. Callers must
+// call SetFFmpegPath before Run when using the real decoder.
 func New(predict PredictFunc, store StoreAPI, tags Tags, spec Spec, opts Options) *Extractor {
 	return &Extractor{
 		predict: predict,
@@ -256,14 +260,21 @@ func (e *Extractor) processItem(ctx context.Context, item *Item, stats *Stats) (
 // embedding vector; this indicates the model lacks an embedding path.
 var errEmbeddingUnavailable = errors.NewStd("model returned no embedding; needs an ONNX embeddings model")
 
+// windowKey builds the stable per-window record key. The format "<key>@<offsetSeconds>"
+// is a stable contract: external tooling and store lookups depend on it.
 func windowKey(key string, offsetSeconds int) string {
 	return fmt.Sprintf("%s@%d", key, offsetSeconds)
 }
 
 // bestConfidenceFor returns the highest confidence among results whose label
-// matches the scientific name (labels are "Scientific_Common"). Falls back
-// to the overall top confidence when no label matches, so clips whose
-// re-analysis disagrees with the stored detection still embed something.
+// matches the scientific name. Labels may use either of two shapes:
+//   - "Scientific_Common" (BirdNET style): the part before the first "_" is
+//     compared case-insensitively against scientific.
+//   - bare scientific name (Perch style): the whole label is compared
+//     case-insensitively against scientific after trimming whitespace.
+//
+// Falls back to the overall top confidence when no label matches, so clips
+// whose re-analysis disagrees with the stored detection still embed something.
 func bestConfidenceFor(results []datastore.Results, scientific string) float32 {
 	var matched, top float32
 	matchedFound := false
@@ -273,7 +284,14 @@ func bestConfidenceFor(results []datastore.Results, scientific string) float32 {
 			top = c
 		}
 		label := results[i].Species
-		if sci, _, ok := strings.Cut(label, "_"); ok && strings.EqualFold(sci, scientific) {
+		if sci, _, ok := strings.Cut(label, "_"); ok {
+			if strings.EqualFold(strings.TrimSpace(sci), scientific) {
+				if c > matched {
+					matched = c
+				}
+				matchedFound = true
+			}
+		} else if strings.EqualFold(strings.TrimSpace(label), scientific) {
 			if c > matched {
 				matched = c
 			}

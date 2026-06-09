@@ -15,7 +15,9 @@ var audioExtensions = map[string]bool{
 }
 
 // DirectoryItems walks root and returns one Item per audio file, keyed by
-// the path relative to root. Hidden directories are skipped. Order is
+// the path relative to root. Hidden subdirectories (names beginning with ".")
+// are skipped, but a hidden root directory is still walked. Directory
+// symlinks are not followed (filepath.WalkDir semantics). Order is
 // deterministic (sorted by key) so limits and reruns behave predictably.
 func DirectoryItems(root string) ([]Item, error) {
 	absRoot, err := filepath.Abs(root)
@@ -28,7 +30,7 @@ func DirectoryItems(root string) ([]Item, error) {
 			return err
 		}
 		if d.IsDir() {
-			if name := d.Name(); name != "." && strings.HasPrefix(name, ".") && path != absRoot {
+			if strings.HasPrefix(d.Name(), ".") && path != absRoot {
 				return filepath.SkipDir
 			}
 			return nil

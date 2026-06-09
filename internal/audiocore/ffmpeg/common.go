@@ -235,10 +235,11 @@ func GetAudioDuration(ctx context.Context, audioPath string) (float64, error) {
 	return duration, nil
 }
 
-// ResolveBinary returns the path to the ffmpeg executable, honoring the
-// configured override before falling back to PATH lookup. Exported for
-// offline consumers (batch embedding extraction) that decode files outside
-// the streaming pipeline.
+// ResolveBinary returns the path to the ffmpeg executable via PATH lookup
+// only. Callers with access to settings should prefer
+// settings.Realtime.Audio.FfmpegPath and use this function only as a
+// fallback when that field is empty. Exported for offline consumers (batch
+// embedding extraction) that decode files outside the streaming pipeline.
 func ResolveBinary() (string, error) {
 	return resolveFFmpegBinary()
 }

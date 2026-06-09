@@ -2,6 +2,9 @@
 // decode files to model-rate windows, run the embedding-capable model, and
 // persist tagged vectors through the embedding store. It is the offline
 // counterpart of the live capture path and shares its store contract.
+// This decoder exists alongside internal/audiocore/readfile because readfile
+// handles only WAV and FLAC, while batch processing needs arbitrary formats
+// (MP3, Opus, etc.) with on-the-fly resampling, both provided by FFmpeg.
 package batch
 
 import (

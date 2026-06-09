@@ -34,11 +34,11 @@ func TestDirectoryItems(t *testing.T) {
 		assert.Empty(t, it.DetectionID)
 		assert.True(t, filepath.IsAbs(it.Path))
 	}
-	assert.ElementsMatch(t, []string{
+	assert.Equal(t, []string{
 		filepath.Join("blackbird", "a.wav"),
 		filepath.Join("blackbird", "b.flac"),
 		filepath.Join("robin", "c.mp3"),
-	}, keys)
+	}, keys, "keys must be sorted lexicographically")
 }
 
 func TestDirectoryItemsMissingDir(t *testing.T) {

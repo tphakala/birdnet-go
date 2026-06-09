@@ -39,7 +39,7 @@ func TestBackfillItems(t *testing.T) {
 		{ID: 4, ScientificName: "Sitta europaea", ClipName: "clips/gone.wav"}, // purged from disk
 	}
 
-	items, err := BackfillItems(&fakeSearcher{notes: notes}, clipDir, BackfillFilter{})
+	items, err := BackfillItems(t.Context(), &fakeSearcher{notes: notes}, clipDir, BackfillFilter{})
 	require.NoError(t, err)
 	require.Len(t, items, 2)
 	assert.Equal(t, "1", items[0].DetectionID)
@@ -58,9 +58,10 @@ func TestBackfillItemsLimit(t *testing.T) {
 		touch(t, filepath.Join(clipDir, name))
 		notes[i] = datastore.Note{ID: uint(i + 1), ClipName: name}
 	}
-	items, err := BackfillItems(&fakeSearcher{notes: notes}, clipDir, BackfillFilter{Limit: 3})
+	items, err := BackfillItems(t.Context(), &fakeSearcher{notes: notes}, clipDir, BackfillFilter{Limit: 3})
 	require.NoError(t, err)
 	assert.Len(t, items, 3)
+	assert.Equal(t, "1", items[0].DetectionID, "first note in fixture order must survive the limit cut")
 }
 
 func TestBackfillItemsSpeciesAndSinceForwarded(t *testing.T) {
@@ -68,7 +69,7 @@ func TestBackfillItemsSpeciesAndSinceForwarded(t *testing.T) {
 	clipDir := t.TempDir()
 	rec := &recordingSearcher{}
 	since := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
-	_, err := BackfillItems(rec, clipDir, BackfillFilter{Species: "Turdus merula", Since: since})
+	_, err := BackfillItems(t.Context(), rec, clipDir, BackfillFilter{Species: "Turdus merula", Since: since})
 	require.NoError(t, err)
 	require.NotNil(t, rec.got)
 	assert.Equal(t, []string{"Turdus merula"}, rec.got.Species)

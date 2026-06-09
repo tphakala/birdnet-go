@@ -73,13 +73,13 @@ func TestRunDirectoryModePutsPerWindow(t *testing.T) {
 	assert.Equal(t, 1, stats.Files)
 	assert.Equal(t, 3, stats.Records)
 
-	rec, err := store.Get(t.Context(), "a.wav@0")
+	rec, err := store.Get(t.Context(), windowKey("a.wav", 0))
 	require.NoError(t, err)
 	assert.Equal(t, "BirdNET_V2.4", rec.Model)
 	assert.Equal(t, "2.4", rec.Version)
 	assert.Equal(t, "file:a.wav", rec.Source)
 	assert.Equal(t, 4, rec.Dim)
-	_, err = store.Get(t.Context(), "a.wav@6")
+	_, err = store.Get(t.Context(), windowKey("a.wav", 6))
 	require.NoError(t, err)
 }
 
@@ -156,7 +156,7 @@ func TestRunDryRunWritesNothing(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, stats.Records)
 	assert.Equal(t, 1, stats.Files)
-	_, err = store.Get(t.Context(), "d.wav@0")
+	_, err = store.Get(t.Context(), windowKey("d.wav", 0))
 	assert.ErrorIs(t, err, embedding.ErrNotFound)
 }
 
@@ -253,4 +253,40 @@ func TestRunOnErrorFiresAndRunContinues(t *testing.T) {
 	require.Len(t, gotItems, 1, "OnError must fire exactly once")
 	assert.Equal(t, "bad.wav", gotItems[0].Key)
 	require.ErrorIs(t, gotErrs[0], errBoom)
+}
+
+func TestRunDirectoryModeSkipsExisting(t *testing.T) {
+	t.Parallel()
+	fp := &fakePredict{species: "S_C"}
+	store := newTestStore(t)
+	e := newTestExtractor(t, fp, store, 2, Options{})
+
+	item := Item{Path: "/x/skip.wav", Key: "skip.wav"}
+	_, err := e.Run(t.Context(), []Item{item})
+	require.NoError(t, err)
+	callsAfterFirst := fp.calls
+
+	// Second run without Overwrite: window 0 already exists, should skip.
+	stats, err := e.Run(t.Context(), []Item{item})
+	require.NoError(t, err)
+	assert.Equal(t, 1, stats.Skipped, "second run must skip the already-embedded item")
+	assert.Equal(t, callsAfterFirst, fp.calls, "skip must not run inference")
+}
+
+func TestRunBackfillDryRunWritesNothing(t *testing.T) {
+	t.Parallel()
+	fp := &fakePredict{species: "Turdus merula_Eurasian Blackbird"}
+	store := newTestStore(t)
+	e := newTestExtractor(t, fp, store, 2, Options{DryRun: true})
+
+	item := Item{
+		Path: "/x/dryrun.wav", Key: "dryrun.wav",
+		DetectionID: "99", Species: "Turdus merula",
+	}
+	stats, err := e.Run(t.Context(), []Item{item})
+	require.NoError(t, err)
+	assert.Equal(t, 0, stats.Records, "dry-run must write zero records")
+	assert.Equal(t, 1, stats.Files, "dry-run item must still count as processed")
+	_, getErr := store.Get(t.Context(), "99")
+	assert.ErrorIs(t, getErr, embedding.ErrNotFound, "store must remain empty after dry-run")
 }

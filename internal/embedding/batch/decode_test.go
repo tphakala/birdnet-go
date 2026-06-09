@@ -1,6 +1,7 @@
 package batch
 
 import (
+	"context"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -20,10 +21,13 @@ func genWAV(t *testing.T, dir, name string, seconds float64) string {
 		t.Skip("ffmpeg not installed")
 	}
 	out := filepath.Join(dir, name)
-	cmd := exec.Command(ffmpeg, "-f", "lavfi", "-i",
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ffmpeg, "-f", "lavfi", "-i",
 		"sine=frequency=1000:duration="+strconv.FormatFloat(seconds, 'f', -1, 64),
 		"-ar", "48000", "-ac", "1", "-y", out)
-	require.NoError(t, cmd.Run(), "ffmpeg fixture generation failed")
+	combined, err := cmd.CombinedOutput()
+	require.NoError(t, err, "ffmpeg fixture generation failed: %s", combined)
 	return out
 }
 

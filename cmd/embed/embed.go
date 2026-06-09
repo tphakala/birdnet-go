@@ -51,6 +51,7 @@ func Command(settings *conf.Settings) *cobra.Command {
 		Short:  "Batch embedding extraction for stored audio (hidden)",
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// true when both flags are missing or both are set; exactly one mode is required.
 			if (dir == "") == !backfill {
 				return errors.NewStd("exactly one of --dir or --backfill is required")
 			}
@@ -116,9 +117,13 @@ func run(ctx context.Context, settings *conf.Settings, cfg *runConfig) error {
 		return fmt.Errorf("no model spec for %s", modelID)
 	}
 
-	ffmpegPath, err := ffmpeg.ResolveBinary()
-	if err != nil {
-		return fmt.Errorf("ffmpeg required for batch decode: %w", err)
+	ffmpegPath := settings.Realtime.Audio.FfmpegPath
+	if ffmpegPath == "" {
+		var resolveErr error
+		ffmpegPath, resolveErr = ffmpeg.ResolveBinary()
+		if resolveErr != nil {
+			return fmt.Errorf("ffmpeg required for batch decode: %w", resolveErr)
+		}
 	}
 
 	storePath := settings.Embeddings.Storage.Path
@@ -142,7 +147,7 @@ func run(ctx context.Context, settings *conf.Settings, cfg *runConfig) error {
 			return fmt.Errorf("open datastore: %w", err)
 		}
 		defer func() { _ = ds.Close() }()
-		items, err = batch.BackfillItems(ds, settings.Realtime.Audio.Export.Path, batch.BackfillFilter{
+		items, err = batch.BackfillItems(ctx, ds, settings.Realtime.Audio.Export.Path, batch.BackfillFilter{
 			Species: cfg.species, Since: cfg.since, Limit: cfg.limit,
 		})
 	} else {
@@ -161,7 +166,7 @@ func run(ctx context.Context, settings *conf.Settings, cfg *runConfig) error {
 		batch.Tags{Model: modelID, Version: bn.ModelInfo.DetectionVersion,
 			Format: embedding.Format(settings.Embeddings.Storage.Format)},
 		batch.Spec{SampleRate: spec.SampleRate,
-			WindowSamples: spec.SampleRate * int(spec.ClipLength.Seconds())},
+			WindowSamples: int(int64(spec.SampleRate) * int64(spec.ClipLength) / int64(time.Second))},
 		batch.Options{
 			Limit: cfg.limit, Pace: cfg.pace,
 			Overwrite: cfg.overwrite, DryRun: cfg.dryRun,
