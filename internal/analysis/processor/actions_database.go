@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/embedding"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -152,6 +153,22 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	// Share the database ID with downstream actions (MQTT, SSE) immediately.
 	if a.DetectionCtx != nil {
 		a.DetectionCtx.NoteID.Store(uint64(a.Result.ID))
+	}
+
+	// Persist the window embedding keyed by the saved detection id. Async and
+	// non-blocking: this never affects the save path. Capture itself no-ops on
+	// an empty vector and drops on a full buffer.
+	if a.EmbeddingCapture != nil && a.Result.ID != 0 && len(a.Embeddings) > 0 {
+		a.EmbeddingCapture.Capture(embedding.Record{
+			DetectionID: strconv.FormatUint(uint64(a.Result.ID), 10),
+			Model:       a.ModelID,
+			Source:      a.Result.AudioSource.ID,
+			CapturedAt:  a.Result.BeginTime,
+			Format:      embedding.Format(a.Settings.Embeddings.Storage.Format),
+			Dim:         len(a.Embeddings),
+			Version:     a.Result.Model.Version,
+			Vector:      a.Embeddings,
+		})
 	}
 
 	// Add an explanatory comment when the ultrasonic validation filter tagged this detection as unlikely.
