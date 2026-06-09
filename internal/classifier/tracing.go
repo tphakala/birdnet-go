@@ -27,6 +27,39 @@ const (
 	tagValueFalse = "false"
 )
 
+// opPredict is the span operation name for a model prediction. It is the only
+// operation currently instrumented via StartSpan; the constant keeps the
+// producers (BirdNET/Perch/Bat Predict) and the Finish consumer in sync.
+const opPredict = "birdnet.predict"
+
+// Span data keys recorded on prediction spans. Centralised so the telemetry
+// schema is documented in one place and stays consistent across models.
+const (
+	dataKeyErrorType        = "error_type"
+	dataKeySampleCount      = "sample_count"
+	dataKeySampleSize       = "sample_size"
+	dataKeyResultCount      = "result_count"
+	dataKeyTotalDurationMs  = "total_duration_ms"
+	dataKeyInvokeDurationMs = "invoke_duration_ms"
+	dataKeyDurationMs       = "duration_ms"
+)
+
+// error_type values recorded on failed predictions. Shared by every
+// ModelInstance.Predict implementation so the telemetry vocabulary stays
+// consistent across models.
+const (
+	errTypeEmptySample         = "empty_sample"
+	errTypeClassifierNil       = "classifier_nil"
+	errTypeInvokeFailed        = "invoke_failed"
+	errTypeLabelMismatch       = "label_mismatch"
+	errTypeEmbeddingExtraction = "embedding_extraction"
+	errTypeNilEmbeddings       = "nil_embeddings"
+	errTypeBatClassification   = "bat_classification"
+)
+
+// defaultTopKResults is the number of top predictions every model returns.
+const defaultTopKResults = 10
+
 // TracingSpan represents a traced operation with minimal overhead.
 // A TracingSpan must not be used from multiple goroutines concurrently.
 type TracingSpan struct {
@@ -173,22 +206,13 @@ func (s *TracingSpan) Finish() {
 				model = "unknown"
 			}
 
-			// Record appropriate metric based on operation
-			switch s.operation {
-			case "birdnet.predict":
-				// Skip the success record on error spans. Callers record the
-				// error outcome explicitly, so recording here would either
-				// double-count (when the caller already recorded an error) or
-				// log a spurious success (on early-guard error paths).
-				if !s.errored {
-					m.RecordPrediction(model, durationSeconds, nil)
-				}
-			case "birdnet.process_chunk":
-				m.RecordChunkProcess(model, durationSeconds)
-			case "birdnet.model_invoke":
-				m.RecordModelInvoke(model, durationSeconds)
-			case "birdnet.range_filter":
-				m.RecordRangeFilter(model, durationSeconds)
+			// Only predict spans are recorded here. Skip the success record on
+			// error spans: callers record the error outcome explicitly, so
+			// recording here would either double-count (when the caller already
+			// recorded an error) or log a spurious success (on early-guard error
+			// paths).
+			if s.operation == opPredict && !s.errored {
+				m.RecordPrediction(model, durationSeconds, nil)
 			}
 
 			m.SetActiveProcessing(float64(count))
@@ -197,9 +221,51 @@ func (s *TracingSpan) Finish() {
 
 	// Record in Sentry if enabled
 	if s.sentrySpan != nil {
-		s.SetData("duration_ms", duration.Milliseconds())
+		s.SetData(dataKeyDurationMs, duration.Milliseconds())
 		s.sentrySpan.Finish()
 	}
+}
+
+// startPredictSpan opens a birdnet.predict span and records the standard
+// prediction preamble (model tag and sample dimensions). It is the shared entry
+// point for every ModelInstance.Predict implementation so the operation name,
+// description, and data keys stay consistent across models.
+func startPredictSpan(ctx context.Context, model string, samples [][]float32) (*TracingSpan, context.Context) {
+	span, ctx := StartSpan(ctx, opPredict, "Species prediction")
+	span.SetTag(tagKeyModel, model)
+	span.SetData(dataKeySampleCount, len(samples))
+	if len(samples) > 0 {
+		span.SetData(dataKeySampleSize, len(samples[0]))
+	}
+	return span, ctx
+}
+
+// markErrored tags the span as failed with the given error_type. SetTag latches
+// the errored flag so Finish skips the success metric. Pre-inference guard
+// rejections (empty sample, uninitialised classifier) use this directly because
+// they are not counted as predictions; failures after inference begins use
+// recordPredictionFailure, which also records the error outcome.
+func (s *TracingSpan) markErrored(errorType string) {
+	s.SetTag(tagKeyError, tagValueTrue)
+	s.SetData(dataKeyErrorType, errorType)
+}
+
+// recordPredictionFailure marks the span errored and records the failed
+// prediction exactly once for the given model. Finish then skips its success
+// record because the span is errored.
+func recordPredictionFailure(span *TracingSpan, model, errorType string, start time.Time, err error) {
+	span.markErrored(errorType)
+	if m := getMetrics(); m != nil {
+		m.RecordPrediction(model, time.Since(start).Seconds(), err)
+	}
+}
+
+// recordPredictionSuccess records span data for a successful prediction and tags
+// it not-errored. The single success metric is recorded by Finish.
+func recordPredictionSuccess(span *TracingSpan, resultCount int, start time.Time) {
+	span.SetData(dataKeyResultCount, resultCount)
+	span.SetData(dataKeyTotalDurationMs, time.Since(start).Milliseconds())
+	span.SetTag(tagKeyError, tagValueFalse)
 }
 
 // RecordMetric records a performance metric

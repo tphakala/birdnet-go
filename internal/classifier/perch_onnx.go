@@ -102,7 +102,15 @@ func NewPerch(cfg PerchConfig) (*Perch, error) {
 // Predict runs inference on the given audio samples.
 // Implements ModelInstance.
 func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.Results, error) {
+	span, _ := startPredictSpan(ctx, RegistryIDPerchV2, samples)
+	defer span.Finish()
+
+	start := time.Now()
+
+	// Guard against empty sample slice. Pre-inference rejections are tagged but
+	// not counted as predictions, mirroring BirdNET.Predict.
 	if len(samples) == 0 || len(samples[0]) == 0 {
+		span.markErrored(errTypeEmptySample)
 		return nil, errors.Newf("empty audio sample").
 			Category(errors.CategoryValidation).
 			Build()
@@ -111,7 +119,9 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	// Guard against nil classifier (e.g., after Close() is called concurrently)
 	if p.classifier == nil {
+		span.markErrored(errTypeClassifierNil)
 		return nil, errors.Newf("Perch classifier is not initialized").
 			Category(errors.CategoryModelInit).
 			Build()
@@ -119,10 +129,12 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 
 	rawLogits, err := p.classifier.Predict(samples[0])
 	if err != nil {
-		return nil, errors.New(err).
+		err = errors.New(err).
 			Category(errors.CategoryAudio).
-			Context("model", "Perch_V2").
+			Context("model", RegistryIDPerchV2).
 			Build()
+		recordPredictionFailure(span, RegistryIDPerchV2, errTypeInvokeFailed, start, err)
+		return nil, err
 	}
 
 	// Apply softmax to normalize raw logits into probabilities (0.0-1.0).
@@ -133,11 +145,15 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 	// Pair labels with predictions
 	results, err := pairLabelsAndConfidence(p.labels, predictions)
 	if err != nil {
+		recordPredictionFailure(span, RegistryIDPerchV2, errTypeLabelMismatch, start, err)
 		return nil, err
 	}
 
-	// Return top 10 results
-	return getTopKResults(results, 10), nil
+	// Success: Finish records the single prediction because the span is not errored.
+	topResults := getTopKResults(results, defaultTopKResults)
+	recordPredictionSuccess(span, len(topResults), start)
+
+	return topResults, nil
 }
 
 // Spec returns the audio requirements for Perch v2.
