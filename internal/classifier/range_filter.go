@@ -37,6 +37,37 @@ type UniversalSpeciesPredictor interface {
 	GeomodelLabels() []string
 }
 
+// writeIncludedSpeciesDebug dumps the included-species list to a debug file when
+// RangeFilter.Debug is enabled. It prefers a user-private cache directory over the
+// process CWD (pollution, read-only-root containers) and over a world-writable
+// shared temp dir, which is open to symlink clobbering (CWE-377/CWE-59) and
+// multi-user filename collisions on a fixed name; it falls back to the OS temp dir
+// only when no per-user cache dir is available.
+func writeIncludedSpeciesDebug(includedSpecies []string) {
+	debugFile := filepath.Join(os.TempDir(), "debug_included_species.txt")
+	if cacheDir, err := os.UserCacheDir(); err == nil {
+		birdnetCacheDir := filepath.Join(cacheDir, "birdnet-go")
+		if mkErr := os.MkdirAll(birdnetCacheDir, 0o700); mkErr == nil {
+			debugFile = filepath.Join(birdnetCacheDir, "debug_included_species.txt")
+		}
+	}
+
+	var content strings.Builder
+	fmt.Fprintf(&content, "Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
+		time.Now().Format(time.DateTime),
+		len(includedSpecies))
+	for _, species := range includedSpecies {
+		content.WriteString(species)
+		content.WriteByte('\n')
+	}
+	if err := os.WriteFile(debugFile, []byte(content.String()), 0o600); err != nil {
+		GetLogger().Warn("Failed to write included species debug file",
+			logger.Error(err),
+			logger.String("debug_file", debugFile),
+			logger.Int("species_count", len(includedSpecies)))
+	}
+}
+
 // BuildRangeFilter updates the range filter with current probable species.
 // If the active range filter implements UniversalSpeciesPredictor, the
 // species list is derived directly from the geomodel's own labels
@@ -174,23 +205,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 	}
 
 	if settings.BirdNET.RangeFilter.Debug {
-		// Write under the OS temp dir rather than the process CWD so the debug dump
-		// does not pollute the working directory and works in read-only-root containers.
-		debugFile := filepath.Join(os.TempDir(), "debug_included_species.txt")
-		var content strings.Builder
-		fmt.Fprintf(&content, "Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
-			time.Now().Format(time.DateTime),
-			len(includedSpecies))
-		for _, species := range includedSpecies {
-			content.WriteString(species)
-			content.WriteByte('\n')
-		}
-		if err := os.WriteFile(debugFile, []byte(content.String()), 0o600); err != nil {
-			GetLogger().Warn("Failed to write included species debug file",
-				logger.Error(err),
-				logger.String("debug_file", debugFile),
-				logger.Int("species_count", len(includedSpecies)))
-		}
+		writeIncludedSpeciesDebug(includedSpecies)
 	}
 
 	conf.UpdateIncludedSpecies(includedSpecies)

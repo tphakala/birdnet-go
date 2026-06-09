@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"fmt"
 	"math"
 	"runtime"
 	"sync"
@@ -123,6 +124,47 @@ func TestOrchestrator_AccessorsConcurrentWithPrimaryClear_NoRace(t *testing.T) {
 	readerWg.Wait()
 	readersDone.Store(true)
 	<-writerDone
+}
+
+// TestBirdNET_SetModelsDirConcurrentWithCoverage_NoRace is the regression guard
+// for the bn.modelsDir data race: SetModelsDir wrote bn.modelsDir with no lock
+// while PrimaryRangeFilterCoverage read it after releasing bn.mu. The write is
+// now guarded and the read is snapshotted under bn.mu. Must be run with -race.
+//
+// Not parallel: PrimaryRangeFilterCoverage resolves its settings through
+// conf.CurrentOrFallback, which prefers the global settings instance, so the
+// test sets a global v3 range-filter config (the branch that reads modelsDir)
+// and restores a clean default on cleanup.
+func TestBirdNET_SetModelsDirConcurrentWithCoverage_NoRace(t *testing.T) {
+	v3 := conftest.GetTestSettings()
+	v3.BirdNET.RangeFilter.Model = "v3"
+	v3.BirdNET.Labels = []string{"Turdus merula_Common Blackbird"}
+	conftest.SetTestSettings(v3)
+	t.Cleanup(func() { conftest.SetTestSettings(conftest.GetTestSettings()) })
+
+	bn := &BirdNET{
+		Settings:     v3,
+		speciesCache: make(map[string]*speciesCacheEntry),
+	}
+	bn.ModelInfo = ModelInfo{ID: "BirdNET_V3", Name: "BirdNET v3.0"}
+
+	const iterations = 300
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		<-start
+		for i := range iterations {
+			bn.SetModelsDir(fmt.Sprintf("/models/%d", i))
+		}
+	})
+	wg.Go(func() {
+		<-start
+		for range iterations {
+			_, _, _, _ = bn.PrimaryRangeFilterCoverage()
+		}
+	})
+	close(start)
+	wg.Wait()
 }
 
 // TestBatchRangeFilterInference_SizeValidation covers the input-size guards,
