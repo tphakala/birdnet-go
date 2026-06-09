@@ -98,7 +98,15 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Results, error) {
 	log := GetLogger()
 
+	span, _ := startPredictSpan(ctx, RegistryIDBat, samples)
+	defer span.Finish()
+
+	start := time.Now()
+
+	// Guard against empty sample slice. Pre-inference rejections are tagged but
+	// not counted as predictions, mirroring BirdNET.Predict.
 	if len(samples) == 0 || len(samples[0]) == 0 {
+		span.markErrored(errTypeEmptySample)
 		return nil, errors.Newf("empty audio sample").
 			Category(errors.CategoryValidation).
 			Build()
@@ -108,6 +116,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 	defer b.mu.Unlock()
 
 	if b.embeddingExtractor == nil || b.batClassifier == nil {
+		span.markErrored(errTypeClassifierNil)
 		return nil, errors.Newf("bat classifier is not initialized").
 			Category(errors.CategoryModelInit).
 			Build()
@@ -124,19 +133,23 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 		log.Error("bat embedding extraction failed",
 			logger.Error(err),
 			logger.Duration("duration", embDuration))
-		return nil, errors.New(err).
+		err = errors.New(err).
 			Category(errors.CategoryAudio).
-			Context("model", "Bat").
+			Context("model", RegistryIDBat).
 			Context("stage", "embedding_extraction").
 			Build()
+		recordPredictionFailure(span, RegistryIDBat, errTypeEmbeddingExtraction, start, err)
+		return nil, err
 	}
 
 	if embeddings == nil {
 		log.Error("bat embedding model produced nil embeddings")
-		return nil, errors.Newf("embedding model did not produce embeddings").
+		err = errors.Newf("embedding model did not produce embeddings").
 			Category(errors.CategoryModelInit).
-			Context("model", "Bat").
+			Context("model", RegistryIDBat).
 			Build()
+		recordPredictionFailure(span, RegistryIDBat, errTypeNilEmbeddings, start, err)
+		return nil, err
 	}
 
 	log.Debug("bat embeddings extracted",
@@ -150,11 +163,13 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 		log.Error("bat classification failed",
 			logger.Error(err),
 			logger.Duration("duration", classDuration))
-		return nil, errors.New(err).
+		err = errors.New(err).
 			Category(errors.CategoryAudio).
-			Context("model", "Bat").
+			Context("model", RegistryIDBat).
 			Context("stage", "bat_classification").
 			Build()
+		recordPredictionFailure(span, RegistryIDBat, errTypeBatClassification, start, err)
+		return nil, err
 	}
 
 	log.Debug("bat classification complete",
@@ -163,6 +178,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 
 	results, err := pairLabelsAndConfidence(b.batClassifier.Labels(), scores)
 	if err != nil {
+		recordPredictionFailure(span, RegistryIDBat, errTypeLabelMismatch, start, err)
 		return nil, err
 	}
 
@@ -178,13 +194,17 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 		results = filtered
 	}
 
-	if len(results) > 0 {
+	// Sort and trim before logging so top_species reflects the highest-confidence
+	// detection rather than the first label that cleared the threshold (results is
+	// in label order, not confidence order).
+	topResults := getTopKResults(results, defaultTopKResults)
+	if len(topResults) > 0 {
 		log.Debug("bat detections after threshold",
 			logger.Int("pre_filter", preFilterCount),
 			logger.Int("post_filter", len(results)),
 			logger.Float64("threshold", threshold),
-			logger.String("top_species", results[0].Species),
-			logger.Float64("top_confidence", float64(results[0].Confidence)),
+			logger.String("top_species", topResults[0].Species),
+			logger.Float64("top_confidence", float64(topResults[0].Confidence)),
 			logger.Duration("total_duration", embDuration+classDuration))
 	} else {
 		log.Debug("bat no detections above threshold",
@@ -193,7 +213,10 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 			logger.Duration("total_duration", embDuration+classDuration))
 	}
 
-	return getTopKResults(results, 10), nil
+	// Success: Finish records the single prediction because the span is not errored.
+	recordPredictionSuccess(span, len(topResults), start)
+
+	return topResults, nil
 }
 
 // Spec returns the audio requirements for the bat model.
