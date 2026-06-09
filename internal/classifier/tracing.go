@@ -39,6 +39,7 @@ type TracingSpan struct {
 	metricsEnabled bool
 	model          string // For metrics labeling
 	errored        bool   // True once an error tag is set; gates the success metric in Finish
+	finished       bool   // True once Finish has run; makes Finish idempotent
 }
 
 // Global metrics instance (set by observability package)
@@ -147,9 +148,13 @@ func (s *TracingSpan) SetData(key string, value any) {
 
 // Finish completes the span and records timing
 func (s *TracingSpan) Finish() {
-	if s == nil {
+	if s == nil || s.finished {
 		return
 	}
+	// Make Finish idempotent: a span represents one operation, so a second call
+	// (e.g. a manual Finish plus a deferred one) must not decrement
+	// activeOperations again or record the prediction twice.
+	s.finished = true
 
 	duration := time.Since(s.startTime)
 	durationSeconds := duration.Seconds()

@@ -97,3 +97,22 @@ func TestTracingSpan_ErroredEarlyGuardRecordsNothing(t *testing.T) {
 	assert.InDelta(t, 0.0, predictionCount(t, m, predTelemetryModel, "error"), 0,
 		"an early-guard error without an explicit record must not be counted")
 }
+
+// TestTracingSpan_FinishIsIdempotent verifies that calling Finish more than once
+// (e.g. a manual call plus a deferred one) records the prediction only once and
+// does not decrement the active-operations counter twice.
+func TestTracingSpan_FinishIsIdempotent(t *testing.T) {
+	resetGlobalMetrics(t)
+	t.Cleanup(func() { resetGlobalMetrics(t) })
+	m := newTestMetrics(t)
+	SetMetrics(m)
+
+	span := newPredictSpan(t)
+	span.SetTag(tagKeyModel, predTelemetryModel)
+
+	span.Finish()
+	span.Finish() // second call must be a no-op
+
+	assert.InDelta(t, 1.0, predictionCount(t, m, predTelemetryModel, "success"), 0,
+		"a span finished twice must record exactly one success")
+}
