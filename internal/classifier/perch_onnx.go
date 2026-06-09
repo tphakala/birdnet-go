@@ -105,7 +105,15 @@ func NewPerch(cfg PerchConfig) (*Perch, error) {
 // Predict runs inference on the given audio samples.
 // Implements ModelInstance.
 func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.Results, error) {
+	span, _ := startPredictSpan(ctx, RegistryIDPerchV2, samples)
+	defer span.Finish()
+
+	start := time.Now()
+
+	// Guard against empty sample slice. Pre-inference rejections are tagged but
+	// not counted as predictions, mirroring BirdNET.Predict.
 	if len(samples) == 0 || len(samples[0]) == 0 {
+		span.markErrored(errTypeEmptySample)
 		return nil, errors.Newf("empty audio sample").
 			Category(errors.CategoryValidation).
 			Build()
@@ -114,7 +122,9 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	// Guard against nil classifier (e.g., after Close() is called concurrently)
 	if p.classifier == nil {
+		span.markErrored(errTypeClassifierNil)
 		return nil, errors.Newf("Perch classifier is not initialized").
 			Category(errors.CategoryModelInit).
 			Build()
@@ -122,13 +132,23 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 
 	rawLogits, err := p.classifier.Predict(samples[0])
 	if err != nil {
-		return nil, errors.New(err).
+		err = errors.New(err).
 			Category(errors.CategoryAudio).
-			Context("model", "Perch_V2").
+			Context("model", RegistryIDPerchV2).
 			Build()
+		recordPredictionFailure(span, RegistryIDPerchV2, errTypeInvokeFailed, start, err)
+		return nil, err
 	}
 
-	return p.finalizeResults(rawLogits)
+	results, err := p.finalizeResults(rawLogits)
+	if err != nil {
+		recordPredictionFailure(span, RegistryIDPerchV2, errTypeLabelMismatch, start, err)
+		return nil, err
+	}
+
+	// Success: Finish records the single prediction because the span is not errored.
+	recordPredictionSuccess(span, len(results), start)
+	return results, nil
 }
 
 // finalizeResults applies softmax to the raw logits, pairs them with labels,
@@ -158,13 +178,20 @@ func (p *Perch) finalizeResults(rawLogits []float32) ([]datastore.Results, error
 // model's embedding vector. The embedding is nil when the underlying classifier
 // cannot produce one; callers treat nil as "unavailable". The method mirrors
 // Perch.Predict's lock discipline (holds p.mu for the full native call) and
-// post-processing (softmax), threading the embedding through. The ctx parameter
-// mirrors Perch.Predict's signature; like Predict, Perch does not use it.
+// post-processing (softmax), threading the embedding through. It opens its own
+// birdnet.predict_embeddings span so embedding-prediction telemetry stays at
+// parity with the plain Predict path.
 // Implements EmbeddingCapable.
 func (p *Perch) PredictWithEmbeddings(ctx context.Context, samples [][]float32) ([]datastore.Results, []float32, error) {
-	_ = ctx // ctx is part of the EmbeddingCapable contract; Perch does not use it (mirrors Predict).
+	span, _ := startPredictEmbeddingsSpan(ctx, RegistryIDPerchV2, samples)
+	defer span.Finish()
 
+	start := time.Now()
+
+	// Guard against empty sample slice. Pre-inference rejections are tagged but
+	// not counted as predictions, mirroring Perch.Predict.
 	if len(samples) == 0 || len(samples[0]) == 0 {
+		span.markErrored(errTypeEmptySample)
 		return nil, nil, errors.Newf("empty audio sample").
 			Category(errors.CategoryValidation).
 			Build()
@@ -173,7 +200,9 @@ func (p *Perch) PredictWithEmbeddings(ctx context.Context, samples [][]float32) 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	// Guard against nil classifier (e.g., after Close() is called concurrently)
 	if p.classifier == nil {
+		span.markErrored(errTypeClassifierNil)
 		return nil, nil, errors.Newf("Perch classifier is not initialized").
 			Category(errors.CategoryModelInit).
 			Build()
@@ -184,16 +213,22 @@ func (p *Perch) PredictWithEmbeddings(ctx context.Context, samples [][]float32) 
 	// gate inline; incapable backends yield a nil embedding (not an error).
 	rawLogits, embedding, err := extractRawWithEmbeddings(p.classifier, samples[0])
 	if err != nil {
-		return nil, nil, errors.New(err).
+		err = errors.New(err).
 			Category(errors.CategoryAudio).
-			Context("model", "Perch_V2").
+			Context("model", RegistryIDPerchV2).
 			Build()
+		recordPredictionFailure(span, RegistryIDPerchV2, errTypeEmbeddingExtraction, start, err)
+		return nil, nil, err
 	}
 
 	results, err := p.finalizeResults(rawLogits)
 	if err != nil {
+		recordPredictionFailure(span, RegistryIDPerchV2, errTypeLabelMismatch, start, err)
 		return nil, nil, err
 	}
+
+	// Success: Finish records the single prediction because the span is not errored.
+	recordPredictionSuccess(span, len(results), start)
 	return results, embedding, nil
 }
 

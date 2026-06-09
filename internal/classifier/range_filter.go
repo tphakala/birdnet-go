@@ -5,6 +5,7 @@ package classifier
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -36,6 +37,57 @@ type UniversalSpeciesPredictor interface {
 	GeomodelLabels() []string
 }
 
+// writeIncludedSpeciesDebug dumps the included-species list to a debug file when
+// RangeFilter.Debug is enabled. It prefers a user-private cache directory over the
+// process CWD (pollution, read-only-root containers) and over a world-writable
+// shared temp dir, which is open to symlink clobbering (CWE-377/CWE-59) and
+// multi-user filename collisions on a fixed name; it falls back to the OS temp dir
+// only when no per-user cache dir is available.
+func writeIncludedSpeciesDebug(includedSpecies []string) {
+	var content strings.Builder
+	fmt.Fprintf(&content, "Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
+		time.Now().Format(time.DateTime),
+		len(includedSpecies))
+	for _, species := range includedSpecies {
+		content.WriteString(species)
+		content.WriteByte('\n')
+	}
+	data := []byte(content.String())
+
+	// A user-private cache directory (0700) is not world-writable, so a fixed
+	// filename there is not exposed to symlink clobbering.
+	var path string
+	var err error
+	if cacheDir, cdErr := os.UserCacheDir(); cdErr == nil {
+		birdnetCacheDir := filepath.Join(cacheDir, "birdnet-go")
+		if mkErr := os.MkdirAll(birdnetCacheDir, 0o700); mkErr == nil {
+			path = filepath.Join(birdnetCacheDir, "debug_included_species.txt")
+			err = os.WriteFile(path, data, 0o600)
+		}
+	}
+
+	// No per-user cache dir: fall back to the world-writable temp dir, but use
+	// os.CreateTemp so the file is created O_EXCL with a random name and cannot
+	// follow a pre-planted symlink (CWE-377/CWE-59).
+	if path == "" {
+		f, ctErr := os.CreateTemp("", "debug_included_species_*.txt")
+		if ctErr != nil {
+			GetLogger().Warn("Failed to create included species debug file", logger.Error(ctErr))
+			return
+		}
+		path = f.Name()
+		_, err = f.Write(data)
+		_ = f.Close()
+	}
+
+	if err != nil {
+		GetLogger().Warn("Failed to write included species debug file",
+			logger.Error(err),
+			logger.String("debug_file", path),
+			logger.Int("species_count", len(includedSpecies)))
+	}
+}
+
 // BuildRangeFilter updates the range filter with current probable species.
 // If the active range filter implements UniversalSpeciesPredictor, the
 // species list is derived directly from the geomodel's own labels
@@ -51,8 +103,21 @@ func BuildRangeFilter(o *Orchestrator) error {
 
 	var includedSpecies []string
 
-	o.primary.mu.Lock()
-	rf := o.primary.rangeFilter
+	// Snapshot primary under read lock to avoid racing with Delete(), which sets
+	// o.primary = nil under o.mu.Lock(). All callers reach BuildRangeFilter
+	// without holding o.mu, so taking RLock here cannot self-deadlock.
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return errors.Newf("orchestrator has no primary model").
+			Component("classifier.orchestrator").
+			Category(errors.CategorySystem).
+			Build()
+	}
+
+	primary.mu.Lock()
+	rf := primary.rangeFilter
 	up, isUniversal := rf.(UniversalSpeciesPredictor)
 
 	if isUniversal && settings.BirdNET.LocationConfigured {
@@ -69,7 +134,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 			threshold,
 		)
 		if err != nil {
-			o.primary.mu.Unlock()
+			primary.mu.Unlock()
 			return errors.New(err).
 				Category(errors.CategoryValidation).
 				Context("date", today.Format(time.DateOnly)).
@@ -95,7 +160,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 			mrf.unmappedScore = score
 			cachedMapping = mrf.classifierToGeo
 		}
-		o.primary.mu.Unlock()
+		primary.mu.Unlock()
 
 		includedSpecies = make([]string, 0, len(scores))
 		for _, ss := range scores {
@@ -138,7 +203,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 			logger.Float64("threshold", float64(threshold)),
 			logger.String("duration", time.Since(start).String()))
 	} else {
-		o.primary.mu.Unlock()
+		primary.mu.Unlock()
 		speciesScores, err := o.GetProbableSpecies(today, 0.0)
 		if err != nil {
 			return errors.New(err).
@@ -160,21 +225,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 	}
 
 	if settings.BirdNET.RangeFilter.Debug {
-		debugFile := "debug_included_species.txt"
-		var content strings.Builder
-		fmt.Fprintf(&content, "Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
-			time.Now().Format(time.DateTime),
-			len(includedSpecies))
-		for _, species := range includedSpecies {
-			content.WriteString(species)
-			content.WriteByte('\n')
-		}
-		if err := os.WriteFile(debugFile, []byte(content.String()), 0o600); err != nil {
-			GetLogger().Warn("Failed to write included species debug file",
-				logger.Error(err),
-				logger.String("debug_file", debugFile),
-				logger.Int("species_count", len(includedSpecies)))
-		}
+		writeIncludedSpeciesDebug(includedSpecies)
 	}
 
 	conf.UpdateIncludedSpecies(includedSpecies)

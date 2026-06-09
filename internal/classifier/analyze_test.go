@@ -864,9 +864,12 @@ func TestFinalizeResults_ReturnsCallerOwnedCopy(t *testing.T) {
 }
 
 // TestPredict_RecordsExactlyOnePredictionPerOutcome verifies that each Predict
-// outcome records exactly one prediction with the correct status. It guards
-// against the telemetry double-count where Finish() recorded a spurious
-// success even on error spans, and against error branches that recorded nothing.
+// outcome records the correct telemetry. Pre-inference guard rejections
+// (empty_sample, classifier_nil) are tagged errored but not counted in either
+// series; post-inference failures (invoke_failed, label_mismatch) record exactly
+// one error; the success path records exactly one success. It guards against the
+// telemetry double-count where Finish() recorded a spurious success on error
+// spans, and against post-inference error branches that recorded nothing.
 // It mutates the package-global metrics holder, so it must NOT run in parallel.
 func TestPredict_RecordsExactlyOnePredictionPerOutcome(t *testing.T) {
 	// Mutates the package-global metrics; must not run in parallel.
@@ -889,37 +892,39 @@ func TestPredict_RecordsExactlyOnePredictionPerOutcome(t *testing.T) {
 	assert.InDelta(t, 1, countFor("success"), 0.0001, "success path records one success")
 	assert.InDelta(t, 0, countFor("error"), 0.0001, "success path records no error")
 
-	// Every error outcome must record exactly one error and add NO spurious success.
+	// Pre-inference guard rejections (empty_sample, classifier_nil) are tagged
+	// errored but NOT recorded as predictions: they never reached the model, so
+	// they inflate neither the success nor the error series (mirrors
+	// TestTracingSpan_ErroredEarlyGuardRecordsNothing). Only failures after
+	// inference begins (invoke_failed, label_mismatch) record exactly one error.
 	// The counters are cumulative on the shared {test-model,*} series, so success
-	// stays at 1 throughout and error increments by exactly one per outcome. Each
-	// error branch sets span.SetTag("error","true") before the deferred Finish, so
-	// the errored flag suppresses Finish's success record (the exactly-once fix).
+	// stays at 1 throughout.
 
-	// empty_sample: empty outer slice.
+	// empty_sample: empty outer slice. Pre-inference guard, not counted.
 	_, err = bn.Predict(t.Context(), [][]float32{})
 	require.Error(t, err)
 	assert.InDelta(t, 1, countFor("success"), 0.0001, "empty_sample must NOT record a spurious success")
-	assert.InDelta(t, 1, countFor("error"), 0.0001, "empty_sample records one error")
+	assert.InDelta(t, 0, countFor("error"), 0.0001, "empty_sample is a pre-inference guard and must not be counted")
 
-	// classifier_nil: backend niled out (e.g. after a concurrent Delete).
+	// classifier_nil: backend niled out (e.g. after a concurrent Delete). Pre-inference guard, not counted.
 	bnNil := newEmbTestBirdNET(&fakePlainClassifier{logits: []float32{0.1}}, []string{"a_A"})
 	bnNil.classifier = nil
 	_, err = bnNil.Predict(t.Context(), [][]float32{{0.0}})
 	require.Error(t, err)
 	assert.InDelta(t, 1, countFor("success"), 0.0001, "classifier_nil must NOT record a spurious success")
-	assert.InDelta(t, 2, countFor("error"), 0.0001, "classifier_nil records one error")
+	assert.InDelta(t, 0, countFor("error"), 0.0001, "classifier_nil is a pre-inference guard and must not be counted")
 
-	// invoke_failed: backend Predict returns an error.
+	// invoke_failed: backend Predict returns an error after inference begins. Recorded as one error.
 	bnErr := newEmbTestBirdNET(&fakeErrPlainClassifier{err: assert.AnError}, labels)
 	_, err = bnErr.Predict(t.Context(), [][]float32{{0.0}})
 	require.Error(t, err)
 	assert.InDelta(t, 1, countFor("success"), 0.0001, "invoke_failed must NOT record a spurious success")
-	assert.InDelta(t, 3, countFor("error"), 0.0001, "invoke_failed records one error")
+	assert.InDelta(t, 1, countFor("error"), 0.0001, "invoke_failed records one error")
 
-	// label_mismatch: prediction length differs from the configured label count.
+	// label_mismatch: prediction length differs from the configured label count. Recorded as one error.
 	bnMismatch := newEmbTestBirdNET(&fakePlainClassifier{logits: []float32{0.1, 0.2}}, labels)
 	_, err = bnMismatch.Predict(t.Context(), [][]float32{{0.0}})
 	require.Error(t, err)
 	assert.InDelta(t, 1, countFor("success"), 0.0001, "label_mismatch must NOT record a spurious success")
-	assert.InDelta(t, 4, countFor("error"), 0.0001, "label_mismatch records one error")
+	assert.InDelta(t, 2, countFor("error"), 0.0001, "label_mismatch records one error")
 }

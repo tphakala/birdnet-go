@@ -1466,6 +1466,9 @@ func (bn *BirdNET) PrimaryRangeFilterCoverage() (geomodel *GeomodelStatus, prima
 		Name:         bn.ModelInfo.Name,
 		TotalSpecies: len(bn.Settings.BirdNET.Labels),
 	}
+	// Snapshot modelsDir under bn.mu; the auto-select check below runs after the
+	// unlock and would otherwise race a concurrent SetModelsDir write.
+	modelsDir := bn.modelsDir
 
 	mrf, isMapped := bn.rangeFilter.(*mappedRangeFilter)
 	if isMapped {
@@ -1486,8 +1489,8 @@ func (bn *BirdNET) PrimaryRangeFilterCoverage() (geomodel *GeomodelStatus, prima
 	// No geomodel active: leave WithRangeData and WithoutRangeData at zero.
 	bn.mu.Unlock()
 
-	if rf.Model == "v3" && bn.modelsDir != "" {
-		sharedDir := filepath.Join(bn.modelsDir, "shared")
+	if rf.Model == "v3" && modelsDir != "" {
+		sharedDir := filepath.Join(modelsDir, "shared")
 		expectedONNX := filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
 		expectedLabels := filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 		autoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
@@ -1513,6 +1516,12 @@ func (bn *BirdNET) rangeFilterRuntimeState() (active, fellBack bool) {
 // Called by the Orchestrator after creation so auto-selection can
 // resolve geomodel paths from the installed models directory.
 func (bn *BirdNET) SetModelsDir(dir string) {
+	// Guard the write under bn.mu: bn.modelsDir is read under bn.mu by
+	// initializeMetaModel (via NewBirdNET / ReloadRangeFilter / reloadModelInternal)
+	// and snapshotted under bn.mu by PrimaryRangeFilterCoverage. No caller of this
+	// method holds bn.mu, so locking here cannot self-deadlock.
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
 	bn.modelsDir = dir
 }
 
