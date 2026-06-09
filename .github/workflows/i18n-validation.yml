@@ -14,10 +14,6 @@ on:
       - 'frontend/static/messages/*.json'
       - 'frontend/src/lib/i18n/**'
 
-permissions:
-  pull-requests: write
-  contents: read
-
 jobs:
   validate-translations:
     runs-on: ubuntu-24.04
