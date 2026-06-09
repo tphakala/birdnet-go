@@ -98,6 +98,9 @@ func setDefaultConfig() {
 
 	// Embedding extraction (default off, hot-reloadable)
 	viper.SetDefault("embeddings.enabled", false)
+	viper.SetDefault("embeddings.storage.path", "")
+	viper.SetDefault("embeddings.storage.maxrows", 50000)
+	viper.SetDefault("embeddings.storage.format", "fp16")
 
 	// Realtime configuration
 	viper.SetDefault("realtime.interval", 15)

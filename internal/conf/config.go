@@ -1276,11 +1276,21 @@ type ModelsConfig struct {
 	Installed []string `yaml:"installed,omitempty" json:"installed,omitempty"` // list of installed model IDs managed by the model gallery
 }
 
-// EmbeddingsConfig gates generic embedding extraction.
+// EmbeddingsConfig gates generic embedding extraction and persistence.
 // Capability-gated: extraction only happens when the active model is an ONNX
 // model that exposes embeddings.
 type EmbeddingsConfig struct {
-	Enabled bool `yaml:"enabled" json:"enabled"` // extract embeddings on the live path (hot-reloadable)
+	Enabled bool                    `yaml:"enabled" json:"enabled"` // extract embeddings on the live path (hot-reloadable, read per-window)
+	Storage EmbeddingsStorageConfig `yaml:"storage" json:"storage"` // where/how captured embeddings persist
+}
+
+// EmbeddingsStorageConfig controls persistence of captured embeddings. Path and
+// MaxRows are resolved when the capture store lazily opens (apply on next start
+// or first-enable); Format is read when each record is written.
+type EmbeddingsStorageConfig struct {
+	Path    string `yaml:"path" json:"path"`       // db file path; empty => dir(output.sqlite.path)/embeddings.db
+	MaxRows int    `yaml:"maxrows" json:"maxRows"` // rolling row-count cap; <=0 => default (50000)
+	Format  string `yaml:"format" json:"format"`   // vector encoding; "fp16" is the only implemented value (int8 reserved)
 }
 
 // BasicAuth holds settings for the password authentication
