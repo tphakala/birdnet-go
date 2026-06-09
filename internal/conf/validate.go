@@ -73,7 +73,12 @@ var ValidAudioModels = map[string]bool{
 	ModelIDBSG:     true,
 }
 
-// ValidationError represents a collection of validation errors
+// ValidationError is the set of fatal validation findings produced by
+// ValidateSettings. Every entry in Errors blocks startup: severity is decided
+// structurally by whether a validator returned an error, never by inspecting
+// the message text. Non-fatal configuration findings use a separate channel,
+// Settings.ValidationWarnings, recorded during config migration (see
+// applyModelValidation), not derived from the text of a fatal error.
 type ValidationError struct {
 	Errors []string
 }
