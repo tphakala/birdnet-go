@@ -10,6 +10,14 @@ updates:
     commit-message:
       prefix: "build(deps)"
     open-pull-requests-limit: 5
+    ignore:
+      # onnxruntime_go v1.31.0+ bundles the ORT API 26 header and requires a
+      # native ONNX Runtime 1.26.x library. The toolchain pins native ONNX
+      # Runtime 1.25.1 (Dockerfile, Taskfile.yml, setup-onnxruntime action),
+      # so newer bindings fail InitializeEnvironment at runtime. Keep the
+      # binding at v1.30.x until the native runtime is upgraded in lockstep.
+      - dependency-name: "github.com/yalue/onnxruntime_go"
+        versions: [">=1.31.0"]
     groups:
       go-minor-patch:
         patterns:
