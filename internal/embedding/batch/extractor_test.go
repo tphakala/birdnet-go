@@ -156,6 +156,48 @@ func TestRunDryRunWritesNothing(t *testing.T) {
 	assert.ErrorIs(t, err, embedding.ErrNotFound)
 }
 
+// reusePredict simulates a model whose returned embedding aliases ONE reused
+// backing slice across calls. Confidence is highest on the first window and
+// strictly decreases after, so the first window must win best-window
+// selection while the buffer keeps being overwritten by later calls.
+type reusePredict struct {
+	calls int
+	buf   []float32
+}
+
+func (f *reusePredict) predict(ctx context.Context, window []float32) ([]datastore.Results, []float32, error) {
+	f.calls++
+	for i := range f.buf {
+		f.buf[i] = float32(f.calls * 10)
+	}
+	conf := 1.0 / float32(f.calls)
+	return []datastore.Results{{Species: "S_C", Confidence: conf}}, f.buf, nil
+}
+
+func TestRunBackfillCloneSurvivesBufferReuse(t *testing.T) {
+	t.Parallel()
+	fp := &reusePredict{buf: make([]float32, 4)}
+	store := newTestStore(t)
+	e := New(fp.predict, store, Tags{Model: "BirdNET_V2.4", Version: "2.4", Format: embedding.FormatFP16},
+		Spec{SampleRate: 48000, WindowSamples: 48000 * 3}, Options{})
+	e.decode = decodeStub(3)
+	e.ffmpegPath = "unused"
+
+	_, err := e.Run(t.Context(), []Item{{
+		Path: "/x/clip.wav", Key: "clip.wav",
+		DetectionID: "9", Species: "S",
+	}})
+	require.NoError(t, err)
+
+	rec, err := store.Get(t.Context(), "9")
+	require.NoError(t, err)
+	// The first window won (confidence 1.0), so the stored vector must hold
+	// that window's values (10s), not the buffer's final contents (30s).
+	for i, v := range rec.Vector {
+		assert.InDelta(t, 10.0, float64(v), 1e-6, "component %d aliased the reused buffer", i)
+	}
+}
+
 func TestRunContextCancelStops(t *testing.T) {
 	t.Parallel()
 	fp := &fakePredict{species: "S_C"}

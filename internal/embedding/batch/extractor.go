@@ -141,8 +141,9 @@ func (e *Extractor) processItem(ctx context.Context, item *Item, stats *Stats) (
 			return false, err
 		}
 	}
-	// Directory mode skip: probe the first window key only; a partially
-	// embedded file is re-run (Put is an idempotent upsert).
+	// Directory mode skip: probe the first window key only. Window 0 is
+	// written first, so a partially embedded file already has "@0" and is
+	// skipped on re-run; use Overwrite to recover a partial file.
 	if !backfill && !e.opts.Overwrite {
 		if _, err := e.store.Get(ctx, windowKey(item.Key, 0)); err == nil {
 			return true, nil
