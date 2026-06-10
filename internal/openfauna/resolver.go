@@ -170,10 +170,18 @@ func (r *Resolver) Rebuild(scientificNames []string, bngLocale string) error {
 
 // missingFromIndex returns the working-set species absent from idx, preserving input
 // order. A species is "missing" when the active-locale index holds no common name for
-// it, so it needs an English fallback or is unresolved.
+// it, so it needs an English fallback or is unresolved. Names that normalize to the
+// same key are returned at most once, so a working set with duplicates or casing
+// variants does not inflate the unresolved count or repeat names in the rebuild log.
 func missingFromIndex(scientificNames []string, idx *Index) []string {
 	var missing []string
+	seen := make(map[string]struct{}, len(scientificNames))
 	for _, sci := range scientificNames {
+		key := normalizeName(sci)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
 		if _, ok := idx.CommonName(sci); !ok {
 			missing = append(missing, sci)
 		}

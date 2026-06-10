@@ -300,12 +300,15 @@ func TestResolveLocal_NoSlowPath(t *testing.T) {
 }
 
 // TestMissingFromIndex checks that only species absent from the active-locale index
-// are reported missing, in input order.
+// are reported missing, in input order, and that names normalizing to the same key
+// (duplicates, casing variants) are returned at most once so the unresolved count and
+// rebuild WARN log are not inflated.
 func TestMissingFromIndex(t *testing.T) {
 	t.Parallel()
 	// Index keys are stored normalized (lowercased/trimmed) by BuildIndex.
 	active := &Index{locale: "fi", names: map[string]string{"parus major": "talitiainen"}}
-	missing := missingFromIndex([]string{"Parus major", "Corvus corax", "Apus apus"}, active)
+	missing := missingFromIndex(
+		[]string{"Parus major", "Corvus corax", "Apus apus", "Corvus corax", "corvus corax"}, active)
 	assert.Equal(t, []string{"Corvus corax", "Apus apus"}, missing)
 }
 
