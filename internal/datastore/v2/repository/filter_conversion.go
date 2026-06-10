@@ -458,7 +458,9 @@ func ResolveSpeciesToLabelIDsWithCommonName(ctx context.Context, deps *FilterLoo
 }
 
 // ResolveDeviceToSourceIDs converts a device name to audio source IDs.
-// Uses LIKE matching on NodeName to support partial matches.
+// Matches case-insensitively against NodeName, DisplayName, and SourceURI,
+// preferring exact matches and falling back to substring matches so that
+// selecting "Camera 1" from the UI does not also match "Camera 10".
 // Returns nil if device is empty (no filtering).
 // Returns sentinel []uint{0} if device is non-empty but no sources are found.
 func ResolveDeviceToSourceIDs(ctx context.Context, deps *FilterLookupDeps, device string) ([]uint, error) {
@@ -469,7 +471,7 @@ func ResolveDeviceToSourceIDs(ctx context.Context, deps *FilterLookupDeps, devic
 		return nil, nil
 	}
 
-	// Get all sources and filter by device name (LIKE match)
+	// Get all sources and filter by device name
 	// This is not ideal for large source counts, but source tables are typically small
 	allSources, err := deps.SourceRepo.GetAll(ctx)
 	if err != nil {
@@ -477,19 +479,29 @@ func ResolveDeviceToSourceIDs(ctx context.Context, deps *FilterLookupDeps, devic
 	}
 
 	device = strings.ToLower(device)
-	var sourceIDs []uint
+	var exactIDs, partialIDs []uint
 	for _, src := range allSources {
-		// Match against NodeName, DisplayName, and SourceURI for flexible filtering
+		nodeName := strings.ToLower(src.NodeName)
+		displayName := ""
+		if src.DisplayName != nil {
+			displayName = strings.ToLower(*src.DisplayName)
+		}
+		sourceURI := strings.ToLower(src.SourceURI)
+
 		switch {
-		case strings.Contains(strings.ToLower(src.NodeName), device):
-			sourceIDs = append(sourceIDs, src.ID)
-		case src.DisplayName != nil && strings.Contains(strings.ToLower(*src.DisplayName), device):
-			sourceIDs = append(sourceIDs, src.ID)
-		case strings.Contains(strings.ToLower(src.SourceURI), device):
-			sourceIDs = append(sourceIDs, src.ID)
+		case device == nodeName || (displayName != "" && device == displayName) || device == sourceURI:
+			exactIDs = append(exactIDs, src.ID)
+		case strings.Contains(nodeName, device) ||
+			(displayName != "" && strings.Contains(displayName, device)) ||
+			strings.Contains(sourceURI, device):
+			partialIDs = append(partialIDs, src.ID)
 		}
 	}
 
+	sourceIDs := exactIDs
+	if len(sourceIDs) == 0 {
+		sourceIDs = partialIDs
+	}
 	if len(sourceIDs) == 0 {
 		return sentinelNoMatchIDs, nil
 	}

@@ -26,6 +26,7 @@
     XCircle,
   } from '@lucide/svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { untrack } from 'svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { loggers } from '$lib/utils/logger';
@@ -64,7 +65,7 @@
     verified: string;
     locked: boolean;
     hasAudio: boolean;
-    source: string;
+    source?: string;
   }
 
   interface AudioSourceOption {
@@ -182,16 +183,31 @@
   let hasConfidenceError = $state(false);
   let showTooltip = $state<string | null>(null);
 
-  // Fetch available audio sources for the source filter dropdown
+  // Fetch available audio sources for the source filter dropdown.
+  // The endpoint requires authentication, so skip the request for guests
+  // instead of letting it fail with a 401 on every page visit.
   $effect(() => {
-    api
-      .get<{ sources: AudioSourceOption[] }>('/api/v2/system/audio/sources')
-      .then(data => {
-        availableSources = data.sources ?? [];
-      })
-      .catch(() => {
-        availableSources = [];
-      });
+    if (!$isAuthenticated) {
+      availableSources = [];
+      return;
+    }
+    const controller = new AbortController();
+    untrack(() => {
+      api
+        .get<{ sources: AudioSourceOption[] }>('/api/v2/system/audio/sources', {
+          signal: controller.signal,
+        })
+        .then(data => {
+          availableSources = data.sources ?? [];
+        })
+        .catch(error => {
+          if (!controller.signal.aborted) {
+            logger.warn('Failed to load audio sources for source filter:', error);
+            availableSources = [];
+          }
+        });
+    });
+    return () => controller.abort();
   });
 
   // Localized pluralized results count using i18n keys
@@ -1192,16 +1208,14 @@
                   </div>
 
                   <!-- Source -->
-                  <div class="mt-1">
-                    <SourceBadge
-                      detection={{
-                        source: result.source
-                          ? { id: result.source, displayName: result.source }
-                          : null,
-                      }}
-                      variant="inline"
-                    />
-                  </div>
+                  {#if result.source}
+                    <div class="mt-1">
+                      <SourceBadge
+                        detection={{ source: { id: result.source, displayName: result.source } }}
+                        variant="inline"
+                      />
+                    </div>
+                  {/if}
 
                   <!-- Actions -->
                   <div class="mt-2 flex items-center gap-2 flex-wrap">

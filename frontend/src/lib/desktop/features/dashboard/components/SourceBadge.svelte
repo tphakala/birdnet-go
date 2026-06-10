@@ -40,7 +40,7 @@
     class={cn(variant === 'overlay' ? 'source-badge-overlay' : 'source-badge-inline', className)}
     title={sourceLabel}
     role="img"
-    aria-label="{t('analytics.recentDetections.headers.source')}: {sourceLabel}"
+    aria-label="{t('detections.metadata.source')}: {sourceLabel}"
   >
     <Mic class="size-3" />
     <span class="source-label">{sourceLabel}</span>
@@ -48,7 +48,7 @@
 {/if}
 
 <style>
-  /* Overlay variant — for spectrogram card overlays (dark background) */
+  /* Overlay variant: for spectrogram card overlays (dark background) */
   .source-badge-overlay {
     display: flex;
     align-items: center;
@@ -62,7 +62,7 @@
     color: white;
   }
 
-  /* Inline variant — for text contexts (light/themed background) */
+  /* Inline variant: for text contexts (light/themed background) */
   .source-badge-inline {
     display: inline-flex;
     align-items: center;
@@ -73,6 +73,7 @@
     color: var(--color-primary-content);
     font-size: 0.75rem;
     font-weight: 500;
+    max-width: 10rem;
   }
 
   .source-label {

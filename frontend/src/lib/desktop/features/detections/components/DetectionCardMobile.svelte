@@ -65,9 +65,11 @@
           {detection.date}
           {detection.time}
         </div>
-        <div class="mt-1">
-          <SourceBadge {detection} variant="inline" />
-        </div>
+        {#if detection.source}
+          <div class="mt-1">
+            <SourceBadge {detection} variant="inline" />
+          </div>
+        {/if}
       </div>
       <div class="shrink-0">
         <ConfidenceCircle confidence={detection.confidence} size="sm" />

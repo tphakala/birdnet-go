@@ -124,11 +124,13 @@ Props:
     return elapsedTexts[key] ?? '';
   }
 
-  // Show source when the instance has multiple audio sources configured
+  // Show source when the instance has multiple audio sources configured.
+  // Fall back to the sources seen in the live detections when settings are
+  // not available (guests never load settings, so the configured counts are 0).
   let hasMultipleSources = $derived(
     ($settingsStore?.formData?.realtime?.audio?.sources?.length ?? 0) +
-      ($settingsStore?.formData?.realtime?.rtsp?.streams?.length ?? 0) >=
-      2
+      ($settingsStore?.formData?.realtime?.rtsp?.streams?.filter(s => s.enabled).length ?? 0) >=
+      2 || new Set(displayDetections.map(d => d.source)).size > 1
   );
 
   // Clean up pending timers on component destroy
@@ -192,9 +194,9 @@ Props:
             </span>
             <span class="text-xs text-[var(--color-base-content)]/60">
               {elapsedText}
-              {#if hasMultipleSources}
+              {#if hasMultipleSources && detection.source}
                 <span class="inline-flex items-center gap-0.5">
-                  · <Mic class="h-3 w-3 inline" />{detection.source}
+                  · <Mic class="size-3 inline" />{detection.source}
                 </span>
               {/if}
             </span>

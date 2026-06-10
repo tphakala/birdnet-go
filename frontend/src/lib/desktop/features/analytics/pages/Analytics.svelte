@@ -831,7 +831,7 @@
                   <td>
                     <SourceBadge {detection} variant="inline" />
                     {#if !detection.source}
-                      <span class="text-xs opacity-40">—</span>
+                      <span class="text-xs opacity-40">-</span>
                     {/if}
                   </td>
                   <td>{detection.timeOfDay || t('analytics.recentDetections.unknown')}</td>

@@ -32,7 +32,7 @@
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
 
-  // Configuration constants — use helper to read current default gain at call time
+  // Configuration constants - use helper to read current default gain at call time
   // (cards are recycled via keyed {#each}, so a one-time const would go stale)
   const getDefaultAudioGain = () => get(dashboardSettings)?.defaultAudioGain ?? 0;
   const DEFAULT_AUDIO_FILTER_FREQ = 20;
