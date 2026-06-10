@@ -240,6 +240,16 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		}
 	}
 
+	// Filter out audio capture buffer validation errors that are expected during
+	// normal operation (e.g., after service start when buffer hasn't filled yet,
+	// or Extended Capture requesting audio from before the buffer window).
+	if ee.Category == CategoryValidation && ee.GetComponent() == "audiocore" {
+		if strings.Contains(errorMsg, "requested time range is empty after clamping") ||
+			strings.Contains(errorMsg, "requested segment exceeds") {
+			return false
+		}
+	}
+
 	// Filter out expected not-found conditions that are not code bugs:
 	// - "note not found": transient race between write commit and read, or retention cleanup
 	// - "not found in ebird taxonomy": non-bird species (e.g., Canis latrans) detected by BirdNET

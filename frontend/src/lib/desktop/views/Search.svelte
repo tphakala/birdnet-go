@@ -1,5 +1,6 @@
 <script lang="ts">
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
+  import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
@@ -25,6 +26,7 @@
     XCircle,
   } from '@lucide/svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { untrack } from 'svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { loggers } from '$lib/utils/logger';
@@ -63,6 +65,12 @@
     verified: string;
     locked: boolean;
     hasAudio: boolean;
+    source?: string;
+  }
+
+  interface AudioSourceOption {
+    id: string;
+    name: string;
   }
 
   type VerifiedStatus = 'any' | 'correct' | 'unverified' | 'false_positive';
@@ -165,6 +173,8 @@
   let results = $state<SearchResult[]>([]);
   let totalResults = $state(0);
   let sortBy = $state<SortBy>('date_desc');
+  let sourceFilter = $state('');
+  let availableSources = $state<AudioSourceOption[]>([]);
   let errorMessage = $state('');
   // PERFORMANCE OPTIMIZATION: Use Set instead of object for expandedItems
   // Set operations (has/add/delete) are faster than object property access
@@ -172,6 +182,33 @@
   let expandedItems = $state(new Set<string>());
   let hasConfidenceError = $state(false);
   let showTooltip = $state<string | null>(null);
+
+  // Fetch available audio sources for the source filter dropdown.
+  // The endpoint requires authentication, so skip the request for guests
+  // instead of letting it fail with a 401 on every page visit.
+  $effect(() => {
+    if (!$isAuthenticated) {
+      availableSources = [];
+      return;
+    }
+    const controller = new AbortController();
+    untrack(() => {
+      api
+        .get<{ sources: AudioSourceOption[] }>('/api/v2/system/audio/sources', {
+          signal: controller.signal,
+        })
+        .then(data => {
+          availableSources = data.sources ?? [];
+        })
+        .catch(error => {
+          if (!controller.signal.aborted) {
+            logger.warn('Failed to load audio sources for source filter:', error);
+            availableSources = [];
+          }
+        });
+    });
+    return () => controller.abort();
+  });
 
   // Localized pluralized results count using i18n keys
   function formatResultsCount(count: number) {
@@ -234,6 +271,7 @@
         confidenceMax: confidenceRange.max / 100,
         verifiedStatus: verifiedStatus,
         lockedStatus: lockedStatus,
+        deviceFilter: sourceFilter,
         timeOfDay: timeOfDayFilter,
         page: currentPage,
         sortBy: sortBy,
@@ -271,6 +309,7 @@
     confidenceRange.max = 100;
     verifiedStatus = 'any';
     lockedStatus = 'any';
+    sourceFilter = '';
     timeOfDayFilter = 'any';
     formSubmitted = false;
     results = [];
@@ -603,6 +642,21 @@
                   <option value="sunset">{t('search.timeOfDayOptions.sunset')}</option>
                 </select>
               </div>
+
+              <!-- Audio Source -->
+              {#if availableSources.length > 1}
+                <div class="form-control">
+                  <label class="label" for="sourceFilter">
+                    <span class="label-text">{t('search.fields.source')}</span>
+                  </label>
+                  <select id="sourceFilter" bind:value={sourceFilter} class="select w-full">
+                    <option value="">{t('search.sourceOptions.any')}</option>
+                    {#each availableSources as source (source.id)}
+                      <option value={source.name}>{source.name}</option>
+                    {/each}
+                  </select>
+                </div>
+              {/if}
             </div>
           </div>
         {/if}
@@ -764,6 +818,7 @@
                 <th scope="col">{t('search.tableHeaders.timeOfDay')}</th>
                 <th scope="col">{t('search.tableHeaders.species')}</th>
                 <th scope="col">{t('search.tableHeaders.confidence')}</th>
+                <th scope="col">{t('search.tableHeaders.source')}</th>
                 <th scope="col">{t('search.tableHeaders.status')}</th>
                 <th scope="col">{t('search.tableHeaders.actions')}</th>
               </tr>
@@ -860,6 +915,16 @@
                         >
                       </div>
                     </div>
+                  </td>
+                  <td>
+                    <SourceBadge
+                      detection={{
+                        source: result.source
+                          ? { id: result.source, displayName: result.source }
+                          : null,
+                      }}
+                      variant="inline"
+                    />
                   </td>
                   <td>
                     <div class="flex gap-1 flex-wrap">
@@ -987,7 +1052,7 @@
                 <!-- Expanded row -->
                 {#if isExpanded(result.id)}
                   <tr class="expanded-row" id="expanded-row-{result.id}">
-                    <td colspan="6" class="p-0 border-t-0">
+                    <td colspan="7" class="p-0 border-t-0">
                       <div
                         class="p-4 {index % 2 === 0
                           ? 'bg-[var(--color-base-100)]'
@@ -1141,6 +1206,16 @@
                       </div>
                     </div>
                   </div>
+
+                  <!-- Source -->
+                  {#if result.source}
+                    <div class="mt-1">
+                      <SourceBadge
+                        detection={{ source: { id: result.source, displayName: result.source } }}
+                        variant="inline"
+                      />
+                    </div>
+                  {/if}
 
                   <!-- Actions -->
                   <div class="mt-2 flex items-center gap-2 flex-wrap">
@@ -1369,7 +1444,7 @@
 
   @media (min-width: 768px) {
     .search-filters-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
   }
 

@@ -366,7 +366,7 @@ func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nam
 
 // UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
 // Called after locale or model changes to keep common name resolution current.
-// The new maps are built first, then atomically swapped in — readers are never blocked.
+// The new maps are built first, then atomically swapped in - readers are never blocked.
 // Also resets the missing-name warning deduplication so new mismatches are logged.
 func (ds *Datastore) UpdateNameMaps(labels []string) {
 	ds.names.Store(buildNameMaps(labels, ds.loadNameResolver()))
@@ -994,7 +994,13 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 	source := ""
 	if det.Source != nil {
 		device = det.Source.NodeName
-		source = string(det.Source.SourceType)
+		// Prefer DisplayName for human-readable source identification;
+		// fall back to SourceType if no display name is configured.
+		if det.Source.DisplayName != nil && *det.Source.DisplayName != "" {
+			source = *det.Source.DisplayName
+		} else {
+			source = string(det.Source.SourceType)
+		}
 	}
 
 	// TimeOfDay calculation

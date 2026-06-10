@@ -12,12 +12,13 @@ Props:
 - className?: string - Additional CSS classes (default: '')
 -->
 <script lang="ts">
-  import { Check, X } from '@lucide/svelte';
+  import { Check, Mic, X } from '@lucide/svelte';
   import { fade } from 'svelte/transition';
   import { untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import type { PendingDetection } from '$lib/types/pending.types';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { settingsStore } from '$lib/stores/settings';
 
   interface Props {
     detections: PendingDetection[];
@@ -123,8 +124,15 @@ Props:
     return elapsedTexts[key] ?? '';
   }
 
-  // Show source column only when multiple sources are present
-  let hasMultipleSources = $derived(new Set(displayDetections.map(d => d.source)).size > 1);
+  // Show source when the instance has multiple audio sources configured.
+  // Source names are private data, so this must stay settings-driven: guests
+  // never load settings, which keeps the counts at 0 and the labels hidden
+  // for unauthenticated viewers.
+  let hasMultipleSources = $derived(
+    ($settingsStore?.formData?.realtime?.audio?.sources?.length ?? 0) +
+      ($settingsStore?.formData?.realtime?.rtsp?.streams?.filter(s => s.enabled).length ?? 0) >=
+      2
+  );
 
   // Clean up pending timers on component destroy
   $effect(() => {
@@ -187,8 +195,10 @@ Props:
             </span>
             <span class="text-xs text-[var(--color-base-content)]/60">
               {elapsedText}
-              {#if hasMultipleSources}
-                · {detection.source}
+              {#if hasMultipleSources && detection.source}
+                <span class="inline-flex items-center gap-0.5">
+                  · <Mic class="size-3 inline" />{detection.source}
+                </span>
               {/if}
             </span>
           </div>

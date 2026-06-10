@@ -98,6 +98,16 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Search failed", http.StatusInternalServerError)
 	}
 
+	// Source display names can embed internal host details for stream sources
+	// without a user-configured name. This endpoint is public, so hide the
+	// source from unauthenticated clients, matching the anonymization done by
+	// the audio source listing endpoints.
+	if !c.isClientAuthenticated(ctx) {
+		for i := range results {
+			results[i].Source = ""
+		}
+	}
+
 	// Build and return response
 	resp := c.buildSearchResponse(&req, results, total, filters.PerPage)
 	c.logInfoIfEnabled("Search completed successfully",

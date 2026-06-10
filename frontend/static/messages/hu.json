@@ -486,7 +486,8 @@
       "confidenceMax": "Maximum megbízhatósági százalék",
       "verifiedStatus": "Ellenőrzött állapot",
       "lockedStatus": "Zárolt állapot",
-      "timeOfDay": "Napszak"
+      "timeOfDay": "Napszak",
+      "source": "Hangforrás"
     },
     "advancedFilters": "Speciális szűrők",
     "showAdvancedFilters": "Speciális szűrők megjelenítése",
@@ -508,6 +509,9 @@
       "sunrise": "Napkelte +/- 30 perc",
       "sunset": "Napnyugta +/- 30 perc"
     },
+    "sourceOptions": {
+      "any": "Összes forrás"
+    },
     "sortOptions": {
       "dateDesc": "Dátum (Legújabb elöl)",
       "dateAsc": "Dátum (Legrégebbi elöl)",
@@ -519,6 +523,7 @@
       "timeOfDay": "Napszak",
       "species": "Faj",
       "confidence": "Megbízhatóság",
+      "source": "Forrás",
       "status": "Állapot",
       "actions": "Műveletek"
     },
@@ -1619,6 +1624,7 @@
         "dateTime": "Dátum és idő",
         "species": "Faj",
         "confidence": "Megbízhatóság",
+        "source": "Forrás",
         "timeOfDay": "Napszak"
       },
       "noRecentDetections": "Nem található legutóbbi detektálás",

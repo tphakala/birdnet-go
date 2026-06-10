@@ -486,7 +486,8 @@
       "confidenceMax": "Maximaler Konfidenzprozentsatz",
       "verifiedStatus": "Verifizierungsstatus",
       "lockedStatus": "Sperrstatus",
-      "timeOfDay": "Tageszeit"
+      "timeOfDay": "Tageszeit",
+      "source": "Audioquelle"
     },
     "advancedFilters": "Erweiterte Filter",
     "showAdvancedFilters": "Erweiterte Filter anzeigen",
@@ -508,6 +509,9 @@
       "sunrise": "Sonnenaufgang +/- 30min",
       "sunset": "Sonnenuntergang +/- 30min"
     },
+    "sourceOptions": {
+      "any": "Alle Quellen"
+    },
     "sortOptions": {
       "dateDesc": "Datum (Neueste zuerst)",
       "dateAsc": "Datum (Älteste zuerst)",
@@ -519,6 +523,7 @@
       "timeOfDay": "Tageszeit",
       "species": "Art",
       "confidence": "Konfidenz",
+      "source": "Quelle",
       "status": "Status",
       "actions": "Aktionen"
     },
@@ -1619,6 +1624,7 @@
         "dateTime": "Datum & Zeit",
         "species": "Art",
         "confidence": "Konfidenz",
+        "source": "Quelle",
         "timeOfDay": "Tageszeit"
       },
       "noRecentDetections": "Keine aktuellen Erkennungen gefunden",

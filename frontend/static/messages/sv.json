@@ -486,7 +486,8 @@
       "confidenceMax": "Högsta konfidensprocent",
       "verifiedStatus": "Verifieringsstatus",
       "lockedStatus": "Låsstatus",
-      "timeOfDay": "Tid på dygnet"
+      "timeOfDay": "Tid på dygnet",
+      "source": "Ljudkälla"
     },
     "advancedFilters": "Avancerade filter",
     "showAdvancedFilters": "Visa avancerade filter",
@@ -508,6 +509,9 @@
       "sunrise": "Soluppgång +/- 30min",
       "sunset": "Solnedgång +/- 30min"
     },
+    "sourceOptions": {
+      "any": "Alla källor"
+    },
     "sortOptions": {
       "dateDesc": "Datum (nyast först)",
       "dateAsc": "Datum (äldst först)",
@@ -519,6 +523,7 @@
       "timeOfDay": "Tid på dygnet",
       "species": "Art",
       "confidence": "Konfidens",
+      "source": "Källa",
       "status": "Status",
       "actions": "Åtgärder"
     },
@@ -1619,6 +1624,7 @@
         "dateTime": "Datum & tid",
         "species": "Art",
         "confidence": "Konfidens",
+        "source": "Källa",
         "timeOfDay": "Tid på dygnet"
       },
       "noRecentDetections": "Inga senaste detektioner hittades",

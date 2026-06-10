@@ -20,6 +20,8 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import type { SourceInfo } from '$lib/types/detection.types';
+  import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
 
   const logger = getLogger('app');
 
@@ -49,6 +51,7 @@
     scientificName: string;
     confidence: number;
     timeOfDay: string;
+    source?: SourceInfo | null;
   }
 
   // API response type (may have date/time instead of timestamp)
@@ -61,6 +64,7 @@
     scientificName: string;
     confidence: number;
     timeOfDay?: string;
+    source?: SourceInfo | null;
   }
 
   interface SpeciesData {
@@ -395,6 +399,7 @@
           confidence: detection.confidence,
           timeOfDay:
             detection.timeOfDay || (computedTimestamp ? calculateTimeOfDay(computedTimestamp) : ''),
+          source: detection.source ?? null,
         };
       });
     } catch (err) {
@@ -772,6 +777,7 @@
                 <th>{t('analytics.recentDetections.headers.dateTime')}</th>
                 <th>{t('analytics.recentDetections.headers.species')}</th>
                 <th>{t('analytics.recentDetections.headers.confidence')}</th>
+                <th>{t('analytics.recentDetections.headers.source')}</th>
                 <th>{t('analytics.recentDetections.headers.timeOfDay')}</th>
               </tr>
             </thead>
@@ -822,12 +828,18 @@
                       <span class="text-sm">{formatPercentage(detection.confidence)}</span>
                     </div>
                   </td>
+                  <td>
+                    <SourceBadge {detection} variant="inline" />
+                    {#if !detection.source}
+                      <span class="text-xs opacity-40">-</span>
+                    {/if}
+                  </td>
                   <td>{detection.timeOfDay || t('analytics.recentDetections.unknown')}</td>
                 </tr>
               {:else}
                 <tr>
                   <td
-                    colspan="4"
+                    colspan="5"
                     class="text-center py-4 text-[var(--color-base-content)] opacity-50"
                     >{t('analytics.recentDetections.noRecentDetections')}</td
                   >
@@ -878,6 +890,7 @@
                     >
                       {formatPercentage(detection.confidence)}
                     </span>
+                    <SourceBadge {detection} variant="inline" />
                     <span class="text-xs opacity-70"
                       >{detection.timeOfDay || t('analytics.recentDetections.unknown')}</span
                     >

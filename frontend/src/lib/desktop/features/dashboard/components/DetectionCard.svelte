@@ -20,6 +20,7 @@
   import ConfidenceBadge from './ConfidenceBadge.svelte';
   import WeatherBadge from './WeatherBadge.svelte';
   import MoonBadge from './MoonBadge.svelte';
+  import SourceBadge from './SourceBadge.svelte';
   import PlayOverlay from './PlayOverlay.svelte';
   import SpeciesInfoBar from './SpeciesInfoBar.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
@@ -31,7 +32,7 @@
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
 
-  // Configuration constants — use helper to read current default gain at call time
+  // Configuration constants - use helper to read current default gain at call time
   // (cards are recycled via keyed {#each}, so a one-time const would go stale)
   const getDefaultAudioGain = () => get(dashboardSettings)?.defaultAudioGain ?? 0;
   const DEFAULT_AUDIO_FILTER_FREQ = 20;
@@ -226,6 +227,7 @@
       {#if detection.weather?.moonPhaseName && detection.timeOfDay === 'night'}
         <MoonBadge moonPhaseName={detection.weather.moonPhaseName} />
       {/if}
+      <SourceBadge {detection} variant="overlay" />
     </div>
 
     <!-- Center Play Button -->

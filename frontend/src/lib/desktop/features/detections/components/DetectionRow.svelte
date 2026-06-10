@@ -31,6 +31,7 @@
   import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
+  import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import { Volume2 } from '@lucide/svelte';
   import SpectrogramPlayer from '$lib/desktop/components/media/SpectrogramPlayer.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
@@ -38,10 +39,8 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
-  import { settingsStore } from '$lib/stores/settings';
   import { toastActions } from '$lib/stores/toast';
   import { fetchWithCSRF } from '$lib/utils/api';
-  import { getFriendlyAudioSourceName } from '$lib/utils/audioSourceLabel';
   import { setDetectionVerification } from '$lib/utils/reviewDetection';
   import { useImageDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
   import { loggers } from '$lib/utils/logger';
@@ -75,22 +74,6 @@
     selected = false,
     onToggleSelect,
   }: Props = $props();
-
-  // Resolve the audio source label, falling back to the current settings when
-  // the API payload lacks a displayName (e.g. v1 legacy reads) or when the
-  // recorded id has since been renamed in the configuration.
-  let sourceLabel = $derived(
-    getFriendlyAudioSourceName(
-      detection.source,
-      $settingsStore.formData.realtime?.audio?.sources,
-      $settingsStore.formData.realtime?.rtsp?.streams
-    )
-  );
-  // Dim the label when we had to fall back to the raw id (no friendly name
-  // resolved from settings and the server did not send a distinct displayName).
-  let sourceIsRawId = $derived(
-    sourceLabel !== null && sourceLabel === (detection.source?.id ?? '')
-  );
 
   // Modal states
   let showConfirmModal = $state(false);
@@ -321,15 +304,7 @@
 
 <!-- Source -->
 <td class="text-sm hidden lg:table-cell">
-  {#if sourceLabel}
-    <span
-      class="truncate max-w-32 inline-block"
-      class:opacity-50={sourceIsRawId}
-      title={sourceLabel}
-    >
-      {sourceLabel}
-    </span>
-  {/if}
+  <SourceBadge {detection} variant="inline" />
 </td>
 
 <!-- Bird species (with thumbnail) -->

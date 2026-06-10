@@ -2,12 +2,11 @@
   // Use prop callback instead of legacy event dispatcher
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
+  import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import { Volume2 } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import { settingsStore } from '$lib/stores/settings';
-  import { getFriendlyAudioSourceName } from '$lib/utils/audioSourceLabel';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   interface Props {
@@ -23,20 +22,8 @@
 
   let { detection, onDetailsClick, onPlayMobileAudio, className = '' }: Props = $props();
 
-  // Legacy dispatcher removed
-
   let spectrogramError = $state(false);
   let spectrogramUrl = $derived(buildAppUrl(`/api/v2/spectrogram/${detection.id}?size=md`));
-
-  // Resolve the audio source label, falling back to settings when the server
-  // payload lacks a displayName or carries a stale (renamed) source id.
-  let sourceLabel = $derived(
-    getFriendlyAudioSourceName(
-      detection.source,
-      $settingsStore.formData.realtime?.audio?.sources,
-      $settingsStore.formData.realtime?.rtsp?.streams
-    )
-  );
 
   function handlePlay() {
     const audioUrl = buildAppUrl(`/api/v2/audio/${detection.id}`);
@@ -77,10 +64,12 @@
         <div class="mt-1 text-xs opacity-70">
           {detection.date}
           {detection.time}
-          {#if sourceLabel}
-            <span class="ml-1">· {sourceLabel}</span>
-          {/if}
         </div>
+        {#if detection.source}
+          <div class="mt-1">
+            <SourceBadge {detection} variant="inline" />
+          </div>
+        {/if}
       </div>
       <div class="shrink-0">
         <ConfidenceCircle confidence={detection.confidence} size="sm" />

@@ -486,7 +486,8 @@
       "confidenceMax": "Maksimum sikkerhedsprocent",
       "verifiedStatus": "Bekræftelsesstatus",
       "lockedStatus": "Låsestatus",
-      "timeOfDay": "Tidspunkt på dagen"
+      "timeOfDay": "Tidspunkt på dagen",
+      "source": "Lydkilde"
     },
     "advancedFilters": "Avancerede filtre",
     "showAdvancedFilters": "Vis avancerede filtre",
@@ -508,6 +509,9 @@
       "sunrise": "Solopgang +/- 30 min",
       "sunset": "Solnedgang +/- 30 min"
     },
+    "sourceOptions": {
+      "any": "Alle kilder"
+    },
     "sortOptions": {
       "dateDesc": "Dato (nyeste først)",
       "dateAsc": "Dato (ældste først)",
@@ -519,6 +523,7 @@
       "timeOfDay": "Tidspunkt på dagen",
       "species": "Art",
       "confidence": "Sikkerhed",
+      "source": "Kilde",
       "status": "Status",
       "actions": "Handlinger"
     },
@@ -1619,6 +1624,7 @@
         "dateTime": "Dato & tid",
         "species": "Art",
         "confidence": "Sikkerhed",
+        "source": "Kilde",
         "timeOfDay": "Tid på dagen"
       },
       "noRecentDetections": "Ingen seneste registreringer fundet",

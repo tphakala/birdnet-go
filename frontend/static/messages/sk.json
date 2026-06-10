@@ -486,7 +486,8 @@
       "confidenceMax": "Maximálne percento istoty",
       "verifiedStatus": "Stav overenia",
       "lockedStatus": "Stav uzamknutia",
-      "timeOfDay": "Denná doba"
+      "timeOfDay": "Denná doba",
+      "source": "Zvukový zdroj"
     },
     "advancedFilters": "Rozšírené filtre",
     "showAdvancedFilters": "Zobraziť rozšírené filtre",
@@ -508,6 +509,9 @@
       "sunrise": "Východ slnka +/- 30min",
       "sunset": "Západ slnka +/- 30min"
     },
+    "sourceOptions": {
+      "any": "Všetky zdroje"
+    },
     "sortOptions": {
       "dateDesc": "Dátum (od najnovšieho)",
       "dateAsc": "Dátum (od najstaršieho)",
@@ -519,6 +523,7 @@
       "timeOfDay": "Denná doba",
       "species": "Druh",
       "confidence": "Istota",
+      "source": "Zdroj",
       "status": "Stav",
       "actions": "Akcie"
     },
@@ -1619,6 +1624,7 @@
         "dateTime": "Dátum a čas",
         "species": "Druh",
         "confidence": "Istota",
+        "source": "Zdroj",
         "timeOfDay": "Denná doba"
       },
       "noRecentDetections": "Nenašli sa žiadne nedávne detekcie",

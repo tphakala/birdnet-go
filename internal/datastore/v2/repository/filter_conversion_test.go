@@ -1256,8 +1256,45 @@ func TestResolveDeviceToSourceIDs(t *testing.T) {
 
 		result, err := ResolveDeviceToSourceIDs(ctx, deps, "node1")
 		require.NoError(t, err)
-		// Should match "node1" and "mynode1" (contains "node1")
-		assert.ElementsMatch(t, []uint{1, 3}, result)
+		// Exact match on "node1" wins; "mynode1" (substring match) is not
+		// included so that picking a specific source never selects siblings
+		// whose name merely contains the query.
+		assert.ElementsMatch(t, []uint{1}, result)
+	})
+
+	t.Run("substring fallback when no exact match", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			SourceRepo: &mockAudioSourceRepositoryWithGetAll{
+				allSources: []*entities.AudioSource{
+					{ID: 1, NodeName: "node1"},
+					{ID: 2, NodeName: "node2"},
+					{ID: 3, NodeName: "mynode1"},
+				},
+			},
+		}
+
+		result, err := ResolveDeviceToSourceIDs(ctx, deps, "node")
+		require.NoError(t, err)
+		// No source is named exactly "node", so all substring matches apply
+		assert.ElementsMatch(t, []uint{1, 2, 3}, result)
+	})
+
+	t.Run("exact match on display name preferred", func(t *testing.T) {
+		camera1 := "Camera 1"
+		camera10 := "Camera 10"
+		deps := &FilterLookupDeps{
+			SourceRepo: &mockAudioSourceRepositoryWithGetAll{
+				allSources: []*entities.AudioSource{
+					{ID: 1, NodeName: "node1", DisplayName: &camera1},
+					{ID: 2, NodeName: "node1", DisplayName: &camera10},
+				},
+			},
+		}
+
+		result, err := ResolveDeviceToSourceIDs(ctx, deps, "camera 1")
+		require.NoError(t, err)
+		// "Camera 1" matches exactly; "Camera 10" only as substring
+		assert.ElementsMatch(t, []uint{1}, result)
 	})
 
 	t.Run("case insensitive matching", func(t *testing.T) {
