@@ -349,9 +349,10 @@ func TestCapJoinSpecies(t *testing.T) {
 // TestRebuild_LogsUnresolvedSpecies locks the diagnostic wiring (not just the helpers):
 // Rebuild must emit the INFO summary and a WARN naming each working-set species
 // OpenFauna cannot localize, so an INFO-level support dump can pinpoint a "wrong name"
-// report. Uses the embedded dataset: "Turdus merula" resolves in fi, while
-// "Accipiter gentilis" is carried only under its reclassified name (Astur gentilis),
-// so it misses both fi and the English fallback. Not parallel: mutates the global logger.
+// report. Uses the embedded dataset: "Turdus merula" resolves in fi, while the synthetic
+// binomial "Gibberish nonexistus" is absent from every locale including the English
+// fallback, so it stays unresolved regardless of dataset refreshes (a real species can be
+// backfilled upstream and resolve later). Not parallel: mutates the global logger.
 func TestRebuild_LogsUnresolvedSpecies(t *testing.T) {
 	var buf bytes.Buffer
 	capture := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
@@ -371,12 +372,12 @@ func TestRebuild_LogsUnresolvedSpecies(t *testing.T) {
 	t.Cleanup(func() { logger.SetGlobal(prev) })
 
 	r := NewResolver()
-	require.NoError(t, r.Rebuild([]string{"Turdus merula", "Accipiter gentilis"}, "fi"))
+	require.NoError(t, r.Rebuild([]string{"Turdus merula", "Gibberish nonexistus"}, "fi"))
 
 	out := buf.String()
 	assert.Contains(t, out, "openfauna name resolver rebuilt", "INFO rebuild summary must be logged")
 	assert.Contains(t, out, "unresolved=1", "INFO summary must count the unresolvable species")
 	assert.Contains(t, out, "openfauna could not localize", "WARN diagnostic must fire for unresolved species")
-	assert.Contains(t, out, "Accipiter gentilis", "WARN must name the unresolvable species")
+	assert.Contains(t, out, "Gibberish nonexistus", "WARN must name the unresolvable species")
 	assert.NotContains(t, out, "Turdus merula", "a species resolved in the active locale must not be flagged")
 }
