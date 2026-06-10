@@ -4542,7 +4542,8 @@
         "invalidUrl": "Virheellinen URL-muoto. Syötä täydellinen URL, esim. rtsp://host:portti/polku",
         "unsupportedScheme": "URL-skeemaa \"{scheme}\" ei tueta. Käytä rtsp, rtsps, http, https, rtmp tai udp",
         "blockedDestination": "Tämä kohde on estetty turvallisuussyistä",
-        "connectionFailed": "Striimiin ei saatu yhteyttä. Tarkista, että URL on oikein ja striimi on saavutettavissa"
+        "connectionFailed": "Striimiin ei saatu yhteyttä. Tarkista, että URL on oikein ja striimi on saavutettavissa",
+        "noAudioTrack": "Striimissä ei ole ääniraitaa. Vain ääntä sisältäviä striimejä voidaan käyttää"
       }
     },
     "debug": {

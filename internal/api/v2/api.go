@@ -149,6 +149,11 @@ type Controller struct {
 	processingCache     *processingCache
 	processingSemaphore chan struct{}
 
+	// probeStreamInfo probes a live stream's audio characteristics for the
+	// stream-test endpoint. Nil in production, where TestStream falls back to
+	// ffmpeg.ProbeStreamInfo; tests set it to stub probing without ffprobe.
+	probeStreamInfo probeStreamInfoFunc
+
 	// Legacy cleanup state tracker
 	cleanupStatus *CleanupStatus
 

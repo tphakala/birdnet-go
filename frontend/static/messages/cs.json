@@ -4542,7 +4542,8 @@
         "invalidUrl": "Neplatný formát URL. Zadejte úplnou URL, např. rtsp://host:port/cesta",
         "unsupportedScheme": "Nepodporované schéma URL \"{scheme}\". Použijte rtsp, rtsps, http, https, rtmp nebo udp",
         "blockedDestination": "Tento cíl je z bezpečnostních důvodů blokován",
-        "connectionFailed": "Nelze se připojit ke streamu. Zkontrolujte, zda je URL správná a stream je dostupný"
+        "connectionFailed": "Nelze se připojit ke streamu. Zkontrolujte, zda je URL správná a stream je dostupný",
+        "noAudioTrack": "Stream neobsahuje žádnou zvukovou stopu. Lze použít pouze streamy obsahující zvuk"
       }
     },
     "debug": {

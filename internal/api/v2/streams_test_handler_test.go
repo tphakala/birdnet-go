@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -98,4 +100,32 @@ func TestTestStreamHandler_ValidationErrors(t *testing.T) {
 			assert.Equal(t, tt.errorKey, resp.ErrorKey)
 		})
 	}
+}
+
+func TestTestStreamHandler_NoAudioStreamError(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/streams/test",
+		strings.NewReader(`{"url":"rtsp://example.test/stream"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	ctrl := &Controller{
+		probeStreamInfo: func(_ context.Context, _ string) (*ffmpeg.StreamInfo, error) {
+			return nil, ffmpeg.ErrNoAudioStreamsFound
+		},
+	}
+	ctrl.Settings.Store(&conf.Settings{})
+	err := ctrl.TestStream(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	assert.Equal(t, "errors.streams.test.noAudioTrack", resp.ErrorKey)
+	assert.Equal(t, "stream has no audio track", resp.Message)
 }

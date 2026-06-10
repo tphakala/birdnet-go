@@ -761,7 +761,20 @@
       "currentlyHearing": "Hører nå",
       "detectionsGrid": "Siste registreringer",
       "liveSpectrogram": "Direkte spektrogram",
-      "videoEmbed": "Videoinnbygging"
+      "videoEmbed": "Videoinnbygging",
+      "newSpeciesHighlights": "Høydepunkter for nye arter"
+    },
+    "newSpeciesHighlights": {
+      "title": "Nye og tilbakevendende arter",
+      "subtitle": "Førstegangsdeteksjoner og nylig gjenfunne arter",
+      "trackingDisabled": "Aktiver \"Aktiver artssporing\" for å bruke denne funksjonen.",
+      "categoryLifetime": "Nye arter",
+      "categoryYear": "Nye i år",
+      "categorySeason": "Nye denne sesongen",
+      "categorySeasonNamed": "Nye i {season}",
+      "maxConfidenceShort": "Maks {confidence}%",
+      "detections": "{count, plural, one {# deteksjon} other {# deteksjoner}}",
+      "lastSeen": "Sist: {days, plural, =0 {i dag} one {# dag siden} other {# dager siden}}"
     }
   },
   "detections": {
@@ -4505,7 +4518,8 @@
         "invalidUrl": "Ugyldig URL-format. Skriv inn en full URL som rtsp://vert:port/sti",
         "unsupportedScheme": "Ikke-støttet URL-skjema «{scheme}». Bruk rtsp, rtsps, http, https, rtmp eller udp",
         "blockedDestination": "Dette målet er blokkert av sikkerhetsgrunner",
-        "connectionFailed": "Kan ikke koble til strømmen. Sjekk at URL-en er korrekt og at strømmen er tilgjengelig"
+        "connectionFailed": "Kan ikke koble til strømmen. Sjekk at URL-en er korrekt og at strømmen er tilgjengelig",
+        "noAudioTrack": "Strømmen har ikke noe lydspor. Bare strømmer som inneholder lyd, kan brukes"
       }
     },
     "debug": {

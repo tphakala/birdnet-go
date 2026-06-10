@@ -4542,7 +4542,8 @@
         "invalidUrl": "Nederīgs URL formāts. Ievadiet pilnu URL, piem., rtsp://resursdators:ports/ceļš",
         "unsupportedScheme": "Neatbalstīta URL shēma \"{scheme}\". Izmantojiet rtsp, rtsps, http, https, rtmp vai udp",
         "blockedDestination": "Šis galamērķis ir bloķēts drošības apsvērumu dēļ",
-        "connectionFailed": "Nevarēja izveidot savienojumu ar straumi. Pārbaudiet, vai URL ir pareizs un straume ir pieejama"
+        "connectionFailed": "Nevarēja izveidot savienojumu ar straumi. Pārbaudiet, vai URL ir pareizs un straume ir pieejama",
+        "noAudioTrack": "Straumē nav audio celiņa. Var izmantot tikai straumes, kas satur audio"
       }
     },
     "debug": {
