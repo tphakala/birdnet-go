@@ -648,7 +648,12 @@
       {#if !isLoading && viewMode === 'grid' && filteredSpecies.length > 0}
         <div class="sm:hidden space-y-2">
           {#each filteredSpecies as species, index (`${species.scientific_name}_${index}`)}
-            <SpeciesCardMobile {species} variant="compact" onClick={handleSpeciesClick} />
+            <SpeciesCardMobile
+              {species}
+              variant="compact"
+              ebirdUrl={ebirdUrlFor(species)}
+              onClick={handleSpeciesClick}
+            />
           {/each}
         </div>
       {/if}
@@ -756,7 +761,12 @@
           <!-- Mobile list view -->
           <div class="sm:hidden space-y-2">
             {#each filteredSpecies as species, index (`${species.scientific_name}_${index}`)}
-              <SpeciesCardMobile {species} variant="list" onClick={handleSpeciesClick} />
+              <SpeciesCardMobile
+                {species}
+                variant="list"
+                ebirdUrl={ebirdUrlFor(species)}
+                onClick={handleSpeciesClick}
+              />
             {/each}
           </div>
         </div>
