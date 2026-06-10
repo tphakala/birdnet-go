@@ -343,10 +343,12 @@ type BirdweatherSettings struct {
 
 // EBirdSettings contains settings for eBird API integration.
 type EBirdSettings struct {
-	Enabled  bool   `yaml:"enabled" json:"enabled"`   // true to enable eBird integration
-	APIKey   string `yaml:"apikey" json:"apiKey"`     // eBird API key
-	CacheTTL int    `yaml:"cachettl" json:"cacheTTL"` // cache time-to-live in hours (default: 24)
-	Locale   string `yaml:"locale" json:"locale"`     // locale for eBird data (e.g., "en", "es")
+	Enabled              bool   `yaml:"enabled" json:"enabled"`                           // true to enable eBird integration
+	APIKey               string `yaml:"apikey" json:"apiKey"`                             // eBird API key
+	CacheTTL             int    `yaml:"cachettl" json:"cacheTTL"`                         // cache time-to-live in hours (default: 24)
+	Locale               string `yaml:"locale" json:"locale"`                             // locale for eBird data (e.g., "en", "es")
+	ShowSpeciesPageLinks bool   `yaml:"showspeciespagelinks" json:"showSpeciesPageLinks"` // true to show direct links to eBird species pages in the UI
+	SpeciesPageRegion    string `yaml:"speciespageregion" json:"speciesPageRegion"`       // optional eBird region code for species links (e.g., "BE-WAL"); empty = global page
 }
 
 // WeatherSettings contains all weather-related settings

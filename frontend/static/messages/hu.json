@@ -916,7 +916,9 @@
     "row": {
       "viewDetails": "{species} részleteinek megtekintése",
       "play": "Lejátszás",
-      "playAudio": "Hang lejátszása"
+      "playAudio": "Hang lejátszása",
+      "viewOnEbird": "View species page on eBird",
+      "viewOnEbirdAria": "View {species} species page on eBird (opens in a new tab)"
     },
     "media": {
       "title": "Felvétel és spektrogram",
@@ -2842,6 +2844,16 @@
         },
         "note": "Az eBird taxonómiai adatokat biztosít a faj osztályozáshoz és betekintésekhez. Az API kulcs ingyenesen beszerezhető a Cornell Lab of Ornithology-tól.",
         "apiKeyInfo": "Személyes eBird API kulcs szükséges ehhez az integrációhoz. Ingyenes kulcsot kérhet a <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a> oldalon.",
+        "speciesLinks": {
+          "enable": "Show eBird species page links",
+          "helpText": "Add an icon next to detections that opens the species page on eBird.org in a new tab. No API key is required.",
+          "region": {
+            "label": "eBird Region (optional)",
+            "placeholder": "e.g. BE-WAL",
+            "helpText": "Optional. Leave empty for the global species page. To find a region code, open ebird.org/explore, select a region, and copy the code shown in the page URL (e.g. BE-WAL).",
+            "invalid": "Enter a valid eBird region code such as BE or BE-WAL, or leave empty."
+          }
+        },
         "test": {
           "button": "eBird kapcsolat tesztelése",
           "loading": "Tesztelés...",

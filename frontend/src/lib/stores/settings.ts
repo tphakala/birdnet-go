@@ -343,6 +343,8 @@ export interface EBirdSettings {
   apiKey: string;
   cacheTTL: number; // cache time-to-live in hours (default: 24)
   locale: string; // locale for eBird data (e.g., "en", "es")
+  showSpeciesPageLinks: boolean; // show direct links to eBird species pages in the UI
+  speciesPageRegion: string; // optional eBird region code for species links (e.g., "BE-WAL"); empty = global
 }
 
 export interface IntegrationSettings {
@@ -985,6 +987,8 @@ function createEmptySettings(): SettingsFormData {
         apiKey: '',
         cacheTTL: 24,
         locale: 'en',
+        showSpeciesPageLinks: false,
+        speciesPageRegion: '',
       },
       species: {
         include: [],
@@ -1184,6 +1188,8 @@ export const integrationSettings = derived(settingsStore, $store => ({
     apiKey: '',
     cacheTTL: 24,
     locale: 'en',
+    showSpeciesPageLinks: false,
+    speciesPageRegion: '',
   },
 }));
 

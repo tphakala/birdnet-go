@@ -31,12 +31,13 @@
   import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
-  import { Volume2 } from '@lucide/svelte';
+  import { Volume2, ExternalLink } from '@lucide/svelte';
   import SpectrogramPlayer from '$lib/desktop/components/media/SpectrogramPlayer.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
-  import { t } from '$lib/i18n';
+  import { t, getLocale } from '$lib/i18n';
+  import { buildEbirdSpeciesUrl } from '$lib/utils/ebird';
   import type { Detection } from '$lib/types/detection.types';
   import { settingsStore } from '$lib/stores/settings';
   import { toastActions } from '$lib/stores/toast';
@@ -90,6 +91,20 @@
   // resolved from settings and the server did not send a distinct displayName).
   let sourceIsRawId = $derived(
     sourceLabel !== null && sourceLabel === (detection.source?.id ?? '')
+  );
+
+  // eBird species page link, built client-side from the detection's species code.
+  // Only present when the integration and the species-link option are both enabled
+  // and the detection carries a valid (non-placeholder) eBird species code.
+  let ebirdSettings = $derived($settingsStore.formData.realtime?.ebird);
+  let ebirdSpeciesUrl = $derived(
+    ebirdSettings?.enabled && ebirdSettings?.showSpeciesPageLinks
+      ? buildEbirdSpeciesUrl({
+          speciesCode: detection.speciesCode,
+          region: ebirdSettings.speciesPageRegion,
+          locale: getLocale(),
+        })
+      : null
   );
 
   // Modal states
@@ -398,12 +413,27 @@
     <!-- Species Names -->
     <div class="sp-species-info-wrapper">
       <div class="sp-species-names">
-        <button
-          onclick={handleDetailsClick}
-          class="sp-species-common-name hover:text-primary transition-colors cursor-pointer text-left"
-        >
-          {detection.commonName}
-        </button>
+        <div class="flex items-center gap-1">
+          <button
+            onclick={handleDetailsClick}
+            class="sp-species-common-name hover:text-primary transition-colors cursor-pointer text-left"
+          >
+            {detection.commonName}
+          </button>
+          {#if ebirdSpeciesUrl}
+            <a
+              href={ebirdSpeciesUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="shrink-0 text-[var(--color-base-content)]/50 hover:text-[var(--color-primary)] transition-colors"
+              title={t('detections.row.viewOnEbird')}
+              aria-label={t('detections.row.viewOnEbirdAria', { species: detection.commonName })}
+              onclick={e => e.stopPropagation()}
+            >
+              <ExternalLink class="h-3.5 w-3.5" />
+            </a>
+          {/if}
+        </div>
         <div class="sp-species-scientific-name">{detection.scientificName}</div>
       </div>
       <!-- Mobile-only quick play button -->

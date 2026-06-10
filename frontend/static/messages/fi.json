@@ -916,7 +916,9 @@
     "row": {
       "viewDetails": "Näytä {species} tiedot",
       "play": "Toista",
-      "playAudio": "Toista ääni"
+      "playAudio": "Toista ääni",
+      "viewOnEbird": "View species page on eBird",
+      "viewOnEbirdAria": "View {species} species page on eBird (opens in a new tab)"
     },
     "media": {
       "title": "Tallenne ja spektrogrammi",
@@ -2842,6 +2844,16 @@
         },
         "note": "eBird tarjoaa taksonomiatietoja lajien luokitteluun ja analyyseihin. API-avain on saatavilla ilmaiseksi Cornellin ornitologian laboratoriosta.",
         "apiKeyInfo": "Henkilökohtainen eBird API -avain vaaditaan tämän integraation käyttöön. Voit pyytää ilmaisen avaimen osoitteesta <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
+        "speciesLinks": {
+          "enable": "Show eBird species page links",
+          "helpText": "Add an icon next to detections that opens the species page on eBird.org in a new tab. No API key is required.",
+          "region": {
+            "label": "eBird Region (optional)",
+            "placeholder": "e.g. BE-WAL",
+            "helpText": "Optional. Leave empty for the global species page. To find a region code, open ebird.org/explore, select a region, and copy the code shown in the page URL (e.g. BE-WAL).",
+            "invalid": "Enter a valid eBird region code such as BE or BE-WAL, or leave empty."
+          }
+        },
         "test": {
           "button": "Testaa eBird-yhteys",
           "loading": "Testataan...",

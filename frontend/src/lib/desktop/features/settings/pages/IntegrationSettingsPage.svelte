@@ -57,6 +57,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { isValidEbirdRegionCode } from '$lib/utils/ebird';
   import CertificateField from '$lib/desktop/components/forms/CertificateField.svelte';
   import CertificateInfoCard from '$lib/desktop/components/ui/CertificateInfoCard.svelte';
   import { settingsAPI, type MQTTTLSCertificateInfo } from '$lib/utils/settingsApi';
@@ -125,6 +126,8 @@
         apiKey: '',
         cacheTTL: 24,
         locale: 'en',
+        showSpeciesPageLinks: false,
+        speciesPageRegion: '',
       },
     }
   );
@@ -503,6 +506,22 @@
       ebird: { ...settings.ebird!, cacheTTL },
     });
   }
+
+  function updateEBirdShowSpeciesPageLinks(showSpeciesPageLinks: boolean) {
+    settingsActions.updateSection('realtime', {
+      ebird: { ...settings.ebird!, showSpeciesPageLinks },
+    });
+  }
+
+  function updateEBirdSpeciesPageRegion(speciesPageRegion: string) {
+    settingsActions.updateSection('realtime', {
+      ebird: { ...settings.ebird!, speciesPageRegion: speciesPageRegion.trim() },
+    });
+  }
+
+  // eBird species page links only require an enabled integration, not an API key,
+  // since the link is built client-side from the detection's species code.
+  let ebirdRegionInvalid = $derived(!isValidEbirdRegionCode(settings.ebird?.speciesPageRegion));
 
   // eBird locale options
   const ebirdLocaleOptions = [
@@ -1691,6 +1710,34 @@
                 helpText={t('settings.integration.ebird.cacheTTL.helpText')}
                 disabled={!settings.ebird?.enabled || store.isLoading || store.isSaving}
               />
+            </div>
+
+            <!-- Species page links -->
+            <div class="mt-4 space-y-4">
+              <Checkbox
+                checked={settings.ebird!.showSpeciesPageLinks}
+                label={t('settings.integration.ebird.speciesLinks.enable')}
+                helpText={t('settings.integration.ebird.speciesLinks.helpText')}
+                disabled={!settings.ebird?.enabled || store.isLoading || store.isSaving}
+                onchange={updateEBirdShowSpeciesPageLinks}
+              />
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <TextInput
+                  label={t('settings.integration.ebird.speciesLinks.region.label')}
+                  value={settings.ebird!.speciesPageRegion}
+                  onchange={updateEBirdSpeciesPageRegion}
+                  placeholder={t('settings.integration.ebird.speciesLinks.region.placeholder')}
+                  helpText={t('settings.integration.ebird.speciesLinks.region.helpText')}
+                  validationMessage={ebirdRegionInvalid
+                    ? t('settings.integration.ebird.speciesLinks.region.invalid')
+                    : ''}
+                  disabled={!settings.ebird?.enabled ||
+                    !settings.ebird?.showSpeciesPageLinks ||
+                    store.isLoading ||
+                    store.isSaving}
+                />
+              </div>
             </div>
 
             <!-- Test Connection -->

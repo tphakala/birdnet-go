@@ -222,6 +222,8 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.ebird.apikey", "")
 	viper.SetDefault("realtime.ebird.cachettl", 24) // 24 hours default
 	viper.SetDefault("realtime.ebird.locale", "en")
+	viper.SetDefault("realtime.ebird.showspeciespagelinks", false)
+	viper.SetDefault("realtime.ebird.speciespageregion", "")
 
 	// OpenWeather configuration
 	/*

@@ -916,7 +916,9 @@
     "row": {
       "viewDetails": "Visa detaljer för {species}",
       "play": "Spela upp",
-      "playAudio": "Spela upp ljud"
+      "playAudio": "Spela upp ljud",
+      "viewOnEbird": "View species page on eBird",
+      "viewOnEbirdAria": "View {species} species page on eBird (opens in a new tab)"
     },
     "media": {
       "title": "Inspelning och spektrogram",
@@ -2842,6 +2844,16 @@
         },
         "note": "eBird tillhandahåller taxonomidata som används för artklassificering och insikter. API-nyckeln är gratis att erhålla från Cornell Lab of Ornithology.",
         "apiKeyInfo": "En personlig eBird API-nyckel krävs för att använda denna integration. Du kan begära en gratis nyckel från <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
+        "speciesLinks": {
+          "enable": "Show eBird species page links",
+          "helpText": "Add an icon next to detections that opens the species page on eBird.org in a new tab. No API key is required.",
+          "region": {
+            "label": "eBird Region (optional)",
+            "placeholder": "e.g. BE-WAL",
+            "helpText": "Optional. Leave empty for the global species page. To find a region code, open ebird.org/explore, select a region, and copy the code shown in the page URL (e.g. BE-WAL).",
+            "invalid": "Enter a valid eBird region code such as BE or BE-WAL, or leave empty."
+          }
+        },
         "test": {
           "button": "Testa eBird-anslutning",
           "loading": "Testar...",
