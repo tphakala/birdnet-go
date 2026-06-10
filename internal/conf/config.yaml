@@ -280,6 +280,8 @@ realtime:
     apikey: ""            # eBird API key (get from https://ebird.org/api/keygen)
     cachettl: 24          # cache time-to-live in hours (default: 24)
     locale: "en"          # locale for eBird data (e.g., "en", "es", "fr")
+    showspeciespagelinks: false  # true to show eBird species-page links in the analytics UI (no API key required)
+    speciespageregion: ""        # optional eBird region code for species links (e.g., "BE-WAL"); empty = global page
 
   weather:
     provider: yrno

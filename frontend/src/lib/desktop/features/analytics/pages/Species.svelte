@@ -2,7 +2,6 @@
   import { t, getLocale, type TranslationKey } from '$lib/i18n';
   import { settingsStore } from '$lib/stores/settings';
   import { buildEbirdSpeciesUrl } from '$lib/utils/ebird';
-  import { Binoculars } from '@lucide/svelte';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { downloadBlob } from '$lib/utils/fileHelpers';
   import { formatNumber, formatDateTime } from '$lib/utils/formatters';
@@ -125,7 +124,7 @@
   // Optional eBird species-page links, built client-side from each species' code.
   let ebirdSettings = $derived($settingsStore.formData.realtime?.ebird);
   let ebirdLinksEnabled = $derived(
-    Boolean(ebirdSettings?.enabled) && Boolean(ebirdSettings?.showSpeciesPageLinks)
+    !!(ebirdSettings?.enabled && ebirdSettings?.showSpeciesPageLinks)
   );
   function ebirdUrlFor(species: SpeciesData): string | null {
     if (!ebirdLinksEnabled) return null;
@@ -722,13 +721,13 @@
                               href={ebirdUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              class="ebird-link inline-flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-base-content)] opacity-50 transition-colors hover:bg-[var(--color-base-300)] hover:text-[var(--color-primary)] hover:opacity-100"
+                              class="inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-xs font-bold tracking-wide text-[var(--color-primary)] opacity-60 transition-opacity hover:opacity-100"
                               title={t('analytics.species.viewOnEbird')}
                               aria-label={t('analytics.species.viewOnEbirdAria', {
                                 species: species.common_name,
                               })}
                             >
-                              <Binoculars class="h-4 w-4" />
+                              eBird&nbsp;↗
                             </a>
                           {/if}
                         </div>
