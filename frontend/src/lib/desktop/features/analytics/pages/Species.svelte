@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { t, type TranslationKey } from '$lib/i18n';
+  import { t, getLocale, type TranslationKey } from '$lib/i18n';
+  import { settingsStore } from '$lib/stores/settings';
+  import { buildEbirdSpeciesUrl } from '$lib/utils/ebird';
+  import { Binoculars } from '@lucide/svelte';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { downloadBlob } from '$lib/utils/fileHelpers';
   import { formatNumber, formatDateTime } from '$lib/utils/formatters';
@@ -42,6 +45,7 @@
   interface SpeciesData {
     common_name: string;
     scientific_name: string;
+    species_code?: string;
     count: number;
     avg_confidence: number;
     max_confidence: number;
@@ -117,6 +121,20 @@
   let viewMode = $state<ViewMode>('grid');
   let selectedSpecies = $state<SpeciesData | null>(null);
   let showDetailModal = $state(false);
+
+  // Optional eBird species-page links, built client-side from each species' code.
+  let ebirdSettings = $derived($settingsStore.formData.realtime?.ebird);
+  let ebirdLinksEnabled = $derived(
+    Boolean(ebirdSettings?.enabled) && Boolean(ebirdSettings?.showSpeciesPageLinks)
+  );
+  function ebirdUrlFor(species: SpeciesData): string | null {
+    if (!ebirdLinksEnabled) return null;
+    return buildEbirdSpeciesUrl({
+      speciesCode: species.species_code,
+      region: ebirdSettings?.speciesPageRegion,
+      locale: getLocale(),
+    });
+  }
 
   // Read once so both filters and the applied-sort indicator start at the same persisted value.
   const restoredSortOrder = getStoredValue<SortOrder>(
@@ -639,7 +657,7 @@
       {#if !isLoading && viewMode === 'grid' && filteredSpecies.length > 0}
         <div class="species-grid hidden sm:grid">
           {#each filteredSpecies as species, index (`${species.scientific_name}_${index}`)}
-            <SpeciesCard {species} />
+            <SpeciesCard {species} ebirdUrl={ebirdUrlFor(species)} />
           {/each}
         </div>
       {/if}
@@ -663,6 +681,7 @@
             </thead>
             <tbody>
               {#each filteredSpecies as species, index (`${species.scientific_name}_${index}`)}
+                {@const ebirdUrl = ebirdUrlFor(species)}
                 <tr
                   class={index % 2 === 0
                     ? 'bg-[var(--color-base-100)]'
@@ -691,7 +710,23 @@
                         </div>
                       </div>
                       <div>
-                        <div class="font-bold">{species.common_name}</div>
+                        <div class="flex items-center gap-1.5">
+                          <span class="font-bold">{species.common_name}</span>
+                          {#if ebirdUrl}
+                            <a
+                              href={ebirdUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="ebird-link inline-flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-base-content)] opacity-50 transition-colors hover:bg-[var(--color-base-300)] hover:text-[var(--color-primary)] hover:opacity-100"
+                              title={t('analytics.species.viewOnEbird')}
+                              aria-label={t('analytics.species.viewOnEbirdAria', {
+                                species: species.common_name,
+                              })}
+                            >
+                              <Binoculars class="h-4 w-4" />
+                            </a>
+                          {/if}
+                        </div>
                         <div class="text-sm opacity-50 italic">{species.scientific_name}</div>
                       </div>
                     </div>

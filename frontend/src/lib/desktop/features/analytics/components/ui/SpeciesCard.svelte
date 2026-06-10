@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
+  import { Binoculars } from '@lucide/svelte';
 
   interface SpeciesData {
     common_name: string;
@@ -17,9 +18,11 @@
   interface Props {
     species: SpeciesData;
     className?: string;
+    /** eBird species-page URL; when set, a link icon is shown next to the name. */
+    ebirdUrl?: string | null;
   }
 
-  let { species, className = '' }: Props = $props();
+  let { species, className = '', ebirdUrl = null }: Props = $props();
 
   function formatPercentage(value: number): string {
     return (value * 100).toFixed(1) + '%';
@@ -46,7 +49,21 @@
     </div>
   </figure>
   <div class="card-body p-4">
-    <h3 class="card-title text-base">{species.common_name}</h3>
+    <div class="flex items-center gap-1.5">
+      <h3 class="card-title text-base">{species.common_name}</h3>
+      {#if ebirdUrl}
+        <a
+          href={ebirdUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-base-content)] opacity-50 transition-colors hover:bg-[var(--color-base-300)] hover:text-[var(--color-primary)] hover:opacity-100"
+          title={t('analytics.species.viewOnEbird')}
+          aria-label={t('analytics.species.viewOnEbirdAria', { species: species.common_name })}
+        >
+          <Binoculars class="h-4 w-4" />
+        </a>
+      {/if}
+    </div>
     <p class="text-sm text-[var(--color-base-content)] opacity-60 italic">
       {species.scientific_name}
     </p>

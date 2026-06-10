@@ -916,9 +916,7 @@
     "row": {
       "viewDetails": "View details for {species}",
       "play": "Play",
-      "playAudio": "Play audio",
-      "viewOnEbird": "View species page on eBird",
-      "viewOnEbirdAria": "View {species} species page on eBird (opens in a new tab)"
+      "playAudio": "Play audio"
     },
     "media": {
       "title": "Recording & Spectrogram",
@@ -1646,7 +1644,9 @@
         "detections": "Detections:",
         "confidence": "Confidence:",
         "first": "First:"
-      }
+      },
+      "viewOnEbird": "View species page on eBird",
+      "viewOnEbirdAria": "View {species} species page on eBird (opens in a new tab)"
     },
     "advanced": {
       "title": "Advanced Analytics",
@@ -2850,7 +2850,8 @@
           "region": {
             "label": "eBird Region (optional)",
             "placeholder": "e.g. BE-WAL",
-            "helpText": "Optional. Leave empty for the global species page. To find a region code, open ebird.org/explore, select a region, and copy the code shown in the page URL (e.g. BE-WAL).",
+            "helpText": "Optional. Leave empty for the global species page.",
+            "hint": "To find a region code, open <a href=\"https://ebird.org/explore\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"link link-primary\">ebird.org/explore</a>, select a region, and copy the code shown in the page URL (e.g. BE-WAL).",
             "invalid": "Enter a valid eBird region code such as BE or BE-WAL, or leave empty."
           }
         },

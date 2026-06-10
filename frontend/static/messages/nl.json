@@ -916,9 +916,7 @@
     "row": {
       "viewDetails": "Bekijk details voor {species}",
       "play": "Afspelen",
-      "playAudio": "Geluid afspelen",
-      "viewOnEbird": "View species page on eBird",
-      "viewOnEbirdAria": "View {species} species page on eBird (opens in a new tab)"
+      "playAudio": "Geluid afspelen"
     },
     "media": {
       "title": "Geluid opname & Spectrogram",
@@ -1646,7 +1644,9 @@
         "detections": "Aantal herkend:",
         "confidence": "Betrouwbaarheid:",
         "first": "Eerst:"
-      }
+      },
+      "viewOnEbird": "Soortpagina op eBird bekijken",
+      "viewOnEbirdAria": "Soortpagina van {species} op eBird bekijken (opent in een nieuw tabblad)"
     },
     "advanced": {
       "title": "Geavanceerde analyse",
@@ -2845,13 +2845,14 @@
         "note": "eBird levert taxonomische gegevens voor soortclassificatie en inzichten. De API-sleutel is gratis verkrijgbaar bij het Cornell Lab of Ornithology.",
         "apiKeyInfo": "Een persoonlijke eBird API-sleutel is vereist voor deze integratie. Je kunt een gratis sleutel aanvragen op <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
         "speciesLinks": {
-          "enable": "Show eBird species page links",
-          "helpText": "Add an icon next to detections that opens the species page on eBird.org in a new tab. No API key is required.",
+          "enable": "Links naar eBird-soortpagina’s tonen",
+          "helpText": "Voegt naast detecties een pictogram toe dat de soortpagina op eBird.org in een nieuw tabblad opent. Er is geen API-sleutel nodig.",
           "region": {
-            "label": "eBird Region (optional)",
-            "placeholder": "e.g. BE-WAL",
-            "helpText": "Optional. Leave empty for the global species page. To find a region code, open ebird.org/explore, select a region, and copy the code shown in the page URL (e.g. BE-WAL).",
-            "invalid": "Enter a valid eBird region code such as BE or BE-WAL, or leave empty."
+            "label": "eBird-regio (optioneel)",
+            "placeholder": "bijv. BE-WAL",
+            "helpText": "Optioneel. Laat leeg voor de wereldwijde soortpagina.",
+            "hint": "Open <a href=\"https://ebird.org/explore\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"link link-primary\">ebird.org/explore</a> om een regiocode te vinden, selecteer een regio en kopieer de code die in de URL van de pagina wordt weergegeven (bijv. BE-WAL).",
+            "invalid": "Voer een geldige eBird-regiocode in, zoals BE of BE-WAL, of laat leeg."
           }
         },
         "test": {

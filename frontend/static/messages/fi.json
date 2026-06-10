@@ -916,9 +916,7 @@
     "row": {
       "viewDetails": "Näytä {species} tiedot",
       "play": "Toista",
-      "playAudio": "Toista ääni",
-      "viewOnEbird": "View species page on eBird",
-      "viewOnEbirdAria": "View {species} species page on eBird (opens in a new tab)"
+      "playAudio": "Toista ääni"
     },
     "media": {
       "title": "Tallenne ja spektrogrammi",
@@ -1646,7 +1644,9 @@
         "detections": "Havainnot:",
         "confidence": "Luottamus:",
         "first": "Ensimmäinen:"
-      }
+      },
+      "viewOnEbird": "Näytä lajin sivu eBirdissä",
+      "viewOnEbirdAria": "Näytä lajin {species} sivu eBirdissä (avautuu uuteen välilehteen)"
     },
     "advanced": {
       "title": "Edistynyt analytiikka",
@@ -2845,13 +2845,14 @@
         "note": "eBird tarjoaa taksonomiatietoja lajien luokitteluun ja analyyseihin. API-avain on saatavilla ilmaiseksi Cornellin ornitologian laboratoriosta.",
         "apiKeyInfo": "Henkilökohtainen eBird API -avain vaaditaan tämän integraation käyttöön. Voit pyytää ilmaisen avaimen osoitteesta <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
         "speciesLinks": {
-          "enable": "Show eBird species page links",
-          "helpText": "Add an icon next to detections that opens the species page on eBird.org in a new tab. No API key is required.",
+          "enable": "Näytä linkit eBird-lajisivuille",
+          "helpText": "Lisää havaintojen viereen kuvakkeen, joka avaa lajin sivun eBird.org-palvelussa uuteen välilehteen. Ei vaadi API-avainta.",
           "region": {
-            "label": "eBird Region (optional)",
-            "placeholder": "e.g. BE-WAL",
-            "helpText": "Optional. Leave empty for the global species page. To find a region code, open ebird.org/explore, select a region, and copy the code shown in the page URL (e.g. BE-WAL).",
-            "invalid": "Enter a valid eBird region code such as BE or BE-WAL, or leave empty."
+            "label": "eBird-alue (valinnainen)",
+            "placeholder": "esim. BE-WAL",
+            "helpText": "Valinnainen. Jätä tyhjäksi, niin käytetään lajin maailmanlaajuista sivua.",
+            "hint": "Löydät aluekoodin avaamalla sivun <a href=\"https://ebird.org/explore\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"link link-primary\">ebird.org/explore</a>, valitsemalla alueen ja kopioimalla sivun URL-osoitteessa näkyvän koodin (esim. BE-WAL).",
+            "invalid": "Anna kelvollinen eBird-aluekoodi, kuten BE tai BE-WAL, tai jätä tyhjäksi."
           }
         },
         "test": {

@@ -45,13 +45,16 @@ export function isValidEbirdRegionCode(region: string | null | undefined): boole
   return EBIRD_REGION_CODE_PATTERN.test(trimmed);
 }
 
+/** Separates a locale into language and region parts (e.g. "fr-BE", "pt_BR"). */
+const LOCALE_SEPARATOR_PATTERN = /[-_]/;
+
 /**
  * Reduces a BirdNET-Go UI locale to the base language code eBird expects for
  * its siteLanguage parameter (e.g. "fr-BE" -> "fr", "pt_BR" -> "pt").
  */
 export function toEbirdSiteLanguage(locale: string | null | undefined): string {
   if (!locale) return '';
-  const base = locale.trim().split(/[-_]/)[0] ?? '';
+  const base = locale.trim().split(LOCALE_SEPARATOR_PATTERN)[0] ?? '';
   return base.toLowerCase();
 }
 
@@ -83,10 +86,10 @@ export function buildEbirdSpeciesUrl({
     ? `${EBIRD_SPECIES_BASE_URL}/${encodeURIComponent(code)}/${encodeURIComponent(trimmedRegion)}`
     : `${EBIRD_SPECIES_BASE_URL}/${encodeURIComponent(code)}`;
 
-  const url = new URL(path);
+  // Plain string concatenation rather than the URL API: this runs once per
+  // detection row, and the only query parameter is a short language code.
   const siteLanguage = toEbirdSiteLanguage(locale);
-  if (siteLanguage) {
-    url.searchParams.set(EBIRD_SITE_LANGUAGE_PARAM, siteLanguage);
-  }
-  return url.toString();
+  return siteLanguage
+    ? `${path}?${EBIRD_SITE_LANGUAGE_PARAM}=${encodeURIComponent(siteLanguage)}`
+    : path;
 }

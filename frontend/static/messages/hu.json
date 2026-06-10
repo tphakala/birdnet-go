@@ -916,9 +916,7 @@
     "row": {
       "viewDetails": "{species} részleteinek megtekintése",
       "play": "Lejátszás",
-      "playAudio": "Hang lejátszása",
-      "viewOnEbird": "View species page on eBird",
-      "viewOnEbirdAria": "View {species} species page on eBird (opens in a new tab)"
+      "playAudio": "Hang lejátszása"
     },
     "media": {
       "title": "Felvétel és spektrogram",
@@ -1646,7 +1644,9 @@
         "detections": "Detektálások:",
         "confidence": "Megbízhatóság:",
         "first": "Első:"
-      }
+      },
+      "viewOnEbird": "Faj oldalának megtekintése az eBirden",
+      "viewOnEbirdAria": "{species} faj oldalának megtekintése az eBirden (új lapon nyílik meg)"
     },
     "advanced": {
       "title": "Speciális analitika",
@@ -2845,13 +2845,14 @@
         "note": "Az eBird taxonómiai adatokat biztosít a faj osztályozáshoz és betekintésekhez. Az API kulcs ingyenesen beszerezhető a Cornell Lab of Ornithology-tól.",
         "apiKeyInfo": "Személyes eBird API kulcs szükséges ehhez az integrációhoz. Ingyenes kulcsot kérhet a <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a> oldalon.",
         "speciesLinks": {
-          "enable": "Show eBird species page links",
-          "helpText": "Add an icon next to detections that opens the species page on eBird.org in a new tab. No API key is required.",
+          "enable": "eBird fajoldal-hivatkozások megjelenítése",
+          "helpText": "Ikont helyez el az észlelések mellé, amely új lapon megnyitja a faj oldalát az eBird.org webhelyen. Nem igényel API-kulcsot.",
           "region": {
-            "label": "eBird Region (optional)",
-            "placeholder": "e.g. BE-WAL",
-            "helpText": "Optional. Leave empty for the global species page. To find a region code, open ebird.org/explore, select a region, and copy the code shown in the page URL (e.g. BE-WAL).",
-            "invalid": "Enter a valid eBird region code such as BE or BE-WAL, or leave empty."
+            "label": "eBird régió (nem kötelező)",
+            "placeholder": "pl. BE-WAL",
+            "helpText": "Nem kötelező. Hagyja üresen a globális fajoldalhoz.",
+            "hint": "A régiókód megkereséséhez nyissa meg az <a href=\"https://ebird.org/explore\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"link link-primary\">ebird.org/explore</a> oldalt, válasszon ki egy régiót, és másolja ki az oldal URL-címében megjelenő kódot (pl. BE-WAL).",
+            "invalid": "Adjon meg egy érvényes eBird régiókódot, például BE vagy BE-WAL, vagy hagyja üresen."
           }
         },
         "test": {
@@ -3455,7 +3456,7 @@
       },
       "privateMode": {
         "label": "Bejelentkezés megkövetelése az összes felhasználói felület oldalhoz (privát mód)",
-        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül \u2013 bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
+        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül – bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
       },
       "publicAccess": {
         "title": "Nyilvános hozzáférés",

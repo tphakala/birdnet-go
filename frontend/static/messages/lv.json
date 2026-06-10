@@ -916,9 +916,7 @@
     "row": {
       "viewDetails": "Skatīt informāciju par sugu {species}",
       "play": "Atskaņot",
-      "playAudio": "Atskaņot audio",
-      "viewOnEbird": "View species page on eBird",
-      "viewOnEbirdAria": "View {species} species page on eBird (opens in a new tab)"
+      "playAudio": "Atskaņot audio"
     },
     "media": {
       "title": "Ieraksts un spektrogramma",
@@ -1646,7 +1644,9 @@
         "detections": "Atpazīšanas:",
         "confidence": "Ticamība:",
         "first": "Pirmā:"
-      }
+      },
+      "viewOnEbird": "Skatīt sugas lapu vietnē eBird",
+      "viewOnEbirdAria": "Skatīt sugas {species} lapu vietnē eBird (atveras jaunā cilnē)"
     },
     "advanced": {
       "title": "Paplašinātā analītika",
@@ -2845,13 +2845,14 @@
         "note": "eBird nodrošina taksonomijas datus, ko izmanto sugu klasifikācijai un ieskatu iegūšanai. API atslēga ir bezmaksas, un to var iegūt no Cornell Lab of Ornithology.",
         "apiKeyInfo": "Šīs integrācijas izmantošanai nepieciešama personīga eBird API atslēga. Bezmaksas atslēgu var pieprasīt no <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
         "speciesLinks": {
-          "enable": "Show eBird species page links",
-          "helpText": "Add an icon next to detections that opens the species page on eBird.org in a new tab. No API key is required.",
+          "enable": "Rādīt saites uz eBird sugu lapām",
+          "helpText": "Pievieno blakus konstatējumiem ikonu, kas atver sugas lapu vietnē eBird.org jaunā cilnē. API atslēga nav nepieciešama.",
           "region": {
-            "label": "eBird Region (optional)",
-            "placeholder": "e.g. BE-WAL",
-            "helpText": "Optional. Leave empty for the global species page. To find a region code, open ebird.org/explore, select a region, and copy the code shown in the page URL (e.g. BE-WAL).",
-            "invalid": "Enter a valid eBird region code such as BE or BE-WAL, or leave empty."
+            "label": "eBird reģions (neobligāti)",
+            "placeholder": "piem., BE-WAL",
+            "helpText": "Neobligāti. Atstājiet tukšu, lai izmantotu globālo sugas lapu.",
+            "hint": "Lai atrastu reģiona kodu, atveriet <a href=\"https://ebird.org/explore\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"link link-primary\">ebird.org/explore</a>, atlasiet reģionu un nokopējiet kodu, kas redzams lapas URL adresē (piem., BE-WAL).",
+            "invalid": "Ievadiet derīgu eBird reģiona kodu, piemēram, BE vai BE-WAL, vai atstājiet tukšu."
           }
         },
         "test": {

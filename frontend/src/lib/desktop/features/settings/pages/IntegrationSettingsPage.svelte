@@ -1723,20 +1723,26 @@
               />
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <TextInput
-                  label={t('settings.integration.ebird.speciesLinks.region.label')}
-                  value={settings.ebird!.speciesPageRegion}
-                  onchange={updateEBirdSpeciesPageRegion}
-                  placeholder={t('settings.integration.ebird.speciesLinks.region.placeholder')}
-                  helpText={t('settings.integration.ebird.speciesLinks.region.helpText')}
-                  validationMessage={ebirdRegionInvalid
-                    ? t('settings.integration.ebird.speciesLinks.region.invalid')
-                    : ''}
-                  disabled={!settings.ebird?.enabled ||
-                    !settings.ebird?.showSpeciesPageLinks ||
-                    store.isLoading ||
-                    store.isSaving}
-                />
+                <div>
+                  <TextInput
+                    label={t('settings.integration.ebird.speciesLinks.region.label')}
+                    value={settings.ebird!.speciesPageRegion}
+                    onchange={updateEBirdSpeciesPageRegion}
+                    placeholder={t('settings.integration.ebird.speciesLinks.region.placeholder')}
+                    helpText={t('settings.integration.ebird.speciesLinks.region.helpText')}
+                    validationMessage={ebirdRegionInvalid
+                      ? t('settings.integration.ebird.speciesLinks.region.invalid')
+                      : ''}
+                    disabled={!settings.ebird?.enabled ||
+                      !settings.ebird?.showSpeciesPageLinks ||
+                      store.isLoading ||
+                      store.isSaving}
+                  />
+                  <!-- Region codes come from eBird; link out so users can look theirs up. -->
+                  <p class="mt-1 text-xs text-[var(--color-base-content)] opacity-60">
+                    {@html t('settings.integration.ebird.speciesLinks.region.hint')}
+                  </p>
+                </div>
               </div>
             </div>
 

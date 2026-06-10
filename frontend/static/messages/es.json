@@ -916,9 +916,7 @@
     "row": {
       "viewDetails": "Ver detalles para {species}",
       "play": "Reproducir",
-      "playAudio": "Reproducir audio",
-      "viewOnEbird": "View species page on eBird",
-      "viewOnEbirdAria": "View {species} species page on eBird (opens in a new tab)"
+      "playAudio": "Reproducir audio"
     },
     "media": {
       "title": "Grabación y espectrograma",
@@ -1646,7 +1644,9 @@
         "detections": "Detecciones:",
         "confidence": "Confianza:",
         "first": "Primera:"
-      }
+      },
+      "viewOnEbird": "Ver la página de la especie en eBird",
+      "viewOnEbirdAria": "Ver la página de la especie {species} en eBird (se abre en una pestaña nueva)"
     },
     "advanced": {
       "title": "Análisis avanzado",
@@ -2845,13 +2845,14 @@
         "note": "eBird proporciona datos taxonómicos utilizados para la clasificación de especies y análisis. La clave API se obtiene gratuitamente del Laboratorio de Ornitología de Cornell.",
         "apiKeyInfo": "Se requiere una clave personal de la API de eBird para usar esta integración. Puedes solicitar una clave gratuita en <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
         "speciesLinks": {
-          "enable": "Show eBird species page links",
-          "helpText": "Add an icon next to detections that opens the species page on eBird.org in a new tab. No API key is required.",
+          "enable": "Mostrar enlaces a las páginas de especies de eBird",
+          "helpText": "Añade un icono junto a las detecciones que abre la página de la especie en eBird.org en una pestaña nueva. No requiere clave de API.",
           "region": {
-            "label": "eBird Region (optional)",
-            "placeholder": "e.g. BE-WAL",
-            "helpText": "Optional. Leave empty for the global species page. To find a region code, open ebird.org/explore, select a region, and copy the code shown in the page URL (e.g. BE-WAL).",
-            "invalid": "Enter a valid eBird region code such as BE or BE-WAL, or leave empty."
+            "label": "Región de eBird (opcional)",
+            "placeholder": "p. ej. BE-WAL",
+            "helpText": "Opcional. Déjalo vacío para la página global de la especie.",
+            "hint": "Para encontrar un código de región, abre <a href=\"https://ebird.org/explore\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"link link-primary\">ebird.org/explore</a>, selecciona una región y copia el código que aparece en la URL de la página (p. ej. BE-WAL).",
+            "invalid": "Introduce un código de región de eBird válido como BE o BE-WAL, o déjalo vacío."
           }
         },
         "test": {

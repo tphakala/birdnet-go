@@ -916,9 +916,7 @@
     "row": {
       "viewDetails": "Vis detaljer for {species}",
       "play": "Afspil",
-      "playAudio": "Afspil lyd",
-      "viewOnEbird": "View species page on eBird",
-      "viewOnEbirdAria": "View {species} species page on eBird (opens in a new tab)"
+      "playAudio": "Afspil lyd"
     },
     "media": {
       "title": "Optagelse og spektrogram",
@@ -1646,7 +1644,9 @@
         "detections": "Registreringer:",
         "confidence": "Sikkerhed:",
         "first": "Første:"
-      }
+      },
+      "viewOnEbird": "Se artssiden på eBird",
+      "viewOnEbirdAria": "Se artssiden for {species} på eBird (åbnes i en ny fane)"
     },
     "advanced": {
       "title": "Avancerede analyser",
@@ -2845,13 +2845,14 @@
         "note": "eBird leverer taksonomiske data, der bruges til artsklassifikation og indsigt. API-nøglen er gratis at hente fra Cornell Lab of Ornithology.",
         "apiKeyInfo": "En personlig eBird API-nøgle er påkrævet for at bruge denne integration. Du kan anmode om en gratis nøgle fra <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
         "speciesLinks": {
-          "enable": "Show eBird species page links",
-          "helpText": "Add an icon next to detections that opens the species page on eBird.org in a new tab. No API key is required.",
+          "enable": "Vis links til eBird-artssider",
+          "helpText": "Tilføjer et ikon ved registreringer, der åbner artssiden på eBird.org i en ny fane. Kræver ingen API-nøgle.",
           "region": {
-            "label": "eBird Region (optional)",
-            "placeholder": "e.g. BE-WAL",
-            "helpText": "Optional. Leave empty for the global species page. To find a region code, open ebird.org/explore, select a region, and copy the code shown in the page URL (e.g. BE-WAL).",
-            "invalid": "Enter a valid eBird region code such as BE or BE-WAL, or leave empty."
+            "label": "eBird-region (valgfrit)",
+            "placeholder": "f.eks. BE-WAL",
+            "helpText": "Valgfrit. Lad feltet stå tomt for den globale artsside.",
+            "hint": "For at finde en regionskode skal du åbne <a href=\"https://ebird.org/explore\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"link link-primary\">ebird.org/explore</a>, vælge en region og kopiere koden, der vises i sidens URL (f.eks. BE-WAL).",
+            "invalid": "Indtast en gyldig eBird-regionskode som BE eller BE-WAL, eller lad feltet stå tomt."
           }
         },
         "test": {

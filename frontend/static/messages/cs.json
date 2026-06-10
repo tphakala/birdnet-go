@@ -916,9 +916,7 @@
     "row": {
       "viewDetails": "Zobrazit podrobnosti pro {species}",
       "play": "Přehrát",
-      "playAudio": "Přehrát zvuk",
-      "viewOnEbird": "View species page on eBird",
-      "viewOnEbirdAria": "View {species} species page on eBird (opens in a new tab)"
+      "playAudio": "Přehrát zvuk"
     },
     "media": {
       "title": "Nahrávka a spektrogram",
@@ -1646,7 +1644,9 @@
         "detections": "Detekce:",
         "confidence": "Spolehlivost:",
         "first": "Poprvé:"
-      }
+      },
+      "viewOnEbird": "Zobrazit stránku druhu na eBird",
+      "viewOnEbirdAria": "Zobrazit stránku druhu {species} na eBird (otevře se v nové kartě)"
     },
     "advanced": {
       "title": "Pokročilá analytika",
@@ -2845,13 +2845,14 @@
         "note": "eBird poskytuje taxonomická data používaná pro klasifikaci druhů a analýzy. API klíč je zdarma a dostupný z Cornell Lab of Ornithology.",
         "apiKeyInfo": "Pro použití této integrace je potřeba osobní API klíč eBird. Bezplatný klíč si můžete vyžádat na <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
         "speciesLinks": {
-          "enable": "Show eBird species page links",
-          "helpText": "Add an icon next to detections that opens the species page on eBird.org in a new tab. No API key is required.",
+          "enable": "Zobrazit odkazy na stránky druhů eBird",
+          "helpText": "Přidá k detekcím ikonu, která otevře stránku druhu na eBird.org v nové kartě. Nevyžaduje klíč API.",
           "region": {
-            "label": "eBird Region (optional)",
-            "placeholder": "e.g. BE-WAL",
-            "helpText": "Optional. Leave empty for the global species page. To find a region code, open ebird.org/explore, select a region, and copy the code shown in the page URL (e.g. BE-WAL).",
-            "invalid": "Enter a valid eBird region code such as BE or BE-WAL, or leave empty."
+            "label": "Region eBird (volitelné)",
+            "placeholder": "např. BE-WAL",
+            "helpText": "Volitelné. Ponechte prázdné pro globální stránku druhu.",
+            "hint": "Kód regionu zjistíte tak, že otevřete <a href=\"https://ebird.org/explore\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"link link-primary\">ebird.org/explore</a>, vyberete region a zkopírujete kód zobrazený v adrese URL stránky (např. BE-WAL).",
+            "invalid": "Zadejte platný kód regionu eBird, například BE nebo BE-WAL, nebo ponechte prázdné."
           }
         },
         "test": {
