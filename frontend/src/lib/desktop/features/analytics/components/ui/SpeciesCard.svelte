@@ -2,7 +2,6 @@
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
-  import { Binoculars } from '@lucide/svelte';
 
   interface SpeciesData {
     common_name: string;
@@ -56,11 +55,11 @@
           href={ebirdUrl}
           target="_blank"
           rel="noopener noreferrer"
-          class="inline-flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-base-content)] opacity-50 transition-colors hover:bg-[var(--color-base-300)] hover:text-[var(--color-primary)] hover:opacity-100"
+          class="inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-xs font-bold tracking-wide text-[var(--color-primary)] opacity-60 transition-opacity hover:opacity-100"
           title={t('analytics.species.viewOnEbird')}
           aria-label={t('analytics.species.viewOnEbirdAria', { species: species.common_name })}
         >
-          <Binoculars class="h-4 w-4" />
+          eBird&nbsp;↗
         </a>
       {/if}
     </div>

@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
-  import { ChevronRight, Binoculars } from '@lucide/svelte';
+  import { ChevronRight, ExternalLink } from '@lucide/svelte';
 
   interface SpeciesData {
     common_name: string;
@@ -55,7 +55,7 @@
       title={t('analytics.species.viewOnEbird')}
       aria-label={t('analytics.species.viewOnEbirdAria', { species: species.common_name })}
     >
-      <Binoculars class="h-4 w-4" />
+      <ExternalLink class="h-4 w-4" />
     </a>
   {/if}
 {/snippet}
