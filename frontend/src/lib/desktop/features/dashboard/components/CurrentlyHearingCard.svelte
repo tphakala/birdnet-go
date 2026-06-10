@@ -125,12 +125,13 @@ Props:
   }
 
   // Show source when the instance has multiple audio sources configured.
-  // Fall back to the sources seen in the live detections when settings are
-  // not available (guests never load settings, so the configured counts are 0).
+  // Source names are private data, so this must stay settings-driven: guests
+  // never load settings, which keeps the counts at 0 and the labels hidden
+  // for unauthenticated viewers.
   let hasMultipleSources = $derived(
     ($settingsStore?.formData?.realtime?.audio?.sources?.length ?? 0) +
       ($settingsStore?.formData?.realtime?.rtsp?.streams?.filter(s => s.enabled).length ?? 0) >=
-      2 || new Set(displayDetections.map(d => d.source)).size > 1
+      2
   );
 
   // Clean up pending timers on component destroy

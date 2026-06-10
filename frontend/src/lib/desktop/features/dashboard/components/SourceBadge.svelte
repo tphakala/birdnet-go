@@ -14,6 +14,7 @@
   import type { Detection, SourceInfo } from '$lib/types/detection.types';
   import { settingsStore } from '$lib/stores/settings';
   import { getFriendlyAudioSourceName } from '$lib/utils/audioSourceLabel';
+  import { isAuthenticated } from '$lib/utils/auth';
   import { cn } from '$lib/utils/cn';
   import { Mic } from '@lucide/svelte';
   import { t } from '$lib/i18n';
@@ -26,12 +27,17 @@
 
   let { detection, variant = 'overlay', className = '' }: Props = $props();
 
+  // Source labels are private data: user-named streams and URL-derived
+  // display names can reveal internal hostnames, IPs, and stream paths.
+  // Never render them for unauthenticated viewers.
   let sourceLabel = $derived(
-    getFriendlyAudioSourceName(
-      detection.source,
-      $settingsStore?.formData?.realtime?.audio?.sources,
-      $settingsStore?.formData?.realtime?.rtsp?.streams
-    )
+    $isAuthenticated
+      ? getFriendlyAudioSourceName(
+          detection.source,
+          $settingsStore?.formData?.realtime?.audio?.sources,
+          $settingsStore?.formData?.realtime?.rtsp?.streams
+        )
+      : null
   );
 </script>
 
