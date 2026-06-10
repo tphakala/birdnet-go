@@ -182,7 +182,14 @@ func missingFromIndex(scientificNames []string, idx *Index) []string {
 			continue
 		}
 		seen[key] = struct{}{}
-		if _, ok := idx.CommonName(sci); !ok {
+		// key is already normalized, so read idx.names directly rather than calling
+		// CommonName (which would re-normalize), mirroring the fast path in Resolve.
+		// A nil index resolves nothing, so every species counts as missing.
+		if idx == nil {
+			missing = append(missing, sci)
+			continue
+		}
+		if _, ok := idx.names[key]; !ok {
 			missing = append(missing, sci)
 		}
 	}
