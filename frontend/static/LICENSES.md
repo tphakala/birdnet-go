@@ -144,7 +144,7 @@ Source: BSD-3-Clause
 
 ### github.com/googleapis/enterprise-certificate-proxy/client
 
-License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.15/LICENSE
+License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.16/LICENSE
 Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
@@ -172,16 +172,6 @@ Source: BSD-3-Clause
 License: https://github.com/gorilla/websocket/blob/v1.5.3/LICENSE
 Source: BSD-2-Clause
 
-### github.com/hashicorp/errwrap
-
-License: https://github.com/hashicorp/errwrap/blob/v1.1.0/LICENSE
-Source: MPL-2.0
-
-### github.com/hashicorp/go-multierror
-
-License: https://github.com/hashicorp/go-multierror/blob/v1.1.1/LICENSE
-Source: MPL-2.0
-
 ### github.com/jinzhu/inflection
 
 License: https://github.com/jinzhu/inflection/blob/v1.0.0/LICENSE
@@ -194,7 +184,7 @@ Source: MIT
 
 ### github.com/jlaffaye/ftp
 
-License: https://github.com/jlaffaye/ftp/blob/v0.2.0/LICENSE
+License: https://github.com/jlaffaye/ftp/blob/v0.2.1/LICENSE
 Source: ISC
 
 ### github.com/k3a/html2text
@@ -234,7 +224,7 @@ Source: MIT
 
 ### github.com/mattn/go-colorable
 
-License: https://github.com/mattn/go-colorable/blob/v0.1.14/LICENSE
+License: https://github.com/mattn/go-colorable/blob/v0.1.15/LICENSE
 Source: MIT
 
 ### github.com/mattn/go-isatty
@@ -244,7 +234,7 @@ Source: MIT
 
 ### github.com/mattn/go-sqlite3
 
-License: https://github.com/mattn/go-sqlite3/blob/v1.14.44/LICENSE
+License: https://github.com/mattn/go-sqlite3/blob/v1.14.45/LICENSE
 Source: MIT
 
 ### github.com/munnerz/goautoneg
@@ -254,12 +244,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.15.0/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.16.0/LICENSE.md
 Source: MIT
 
 ### github.com/nicholas-fedor/shoutrrr/pkg/color
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.15.0/pkg/color/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.16.0/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -487,11 +477,6 @@ Source: Apache-2.0
 License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.43.0/trace/LICENSE
 Source: Apache-2.0
 
-### go.uber.org/goleak
-
-License: https://github.com/uber-go/goleak/blob/v1.3.0/LICENSE
-Source: MIT
-
 ### go.yaml.in/yaml/v2
 
 License: https://github.com/yaml/go-yaml/blob/v2.4.4/LICENSE
@@ -504,7 +489,7 @@ Source: MIT
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.52.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.53.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
@@ -519,22 +504,22 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sync
 
-License: https://cs.opensource.google/go/x/sync/+/v0.20.0:LICENSE
+License: https://cs.opensource.google/go/x/sync/+/v0.21.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.45.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.46.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.43.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.44.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.37.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.38.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
@@ -544,12 +529,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.280.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.283.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/3700d4141b60/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/0a33c5d7ca68/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
