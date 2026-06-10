@@ -4542,7 +4542,8 @@
         "invalidUrl": "Ugyldigt URL-format. Indtast en fuld URL som rtsp://host:port/sti",
         "unsupportedScheme": "Ikke-understøttet URL-skema \"{scheme}\". Brug rtsp, rtsps, http, https, rtmp eller udp",
         "blockedDestination": "Denne destination er blokeret af sikkerhedsmæssige årsager",
-        "connectionFailed": "Kunne ikke oprette forbindelse til streamen. Kontrollér, at URL'en er korrekt, og at streamen er tilgængelig"
+        "connectionFailed": "Kunne ikke oprette forbindelse til streamen. Kontrollér, at URL'en er korrekt, og at streamen er tilgængelig",
+        "noAudioTrack": "Streamen har ikke noget lydspor. Kun streams, der indeholder lyd, kan bruges"
       }
     },
     "debug": {

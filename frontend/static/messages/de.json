@@ -4542,7 +4542,8 @@
         "invalidUrl": "Ungültiges URL-Format. Geben Sie eine vollständige URL ein, z. B. rtsp://host:port/pfad",
         "unsupportedScheme": "Nicht unterstütztes URL-Schema \"{scheme}\". Verwenden Sie rtsp, rtsps, http, https, rtmp oder udp",
         "blockedDestination": "Dieses Ziel ist aus Sicherheitsgründen gesperrt",
-        "connectionFailed": "Verbindung zum Stream konnte nicht hergestellt werden. Überprüfen Sie, ob die URL korrekt ist und der Stream erreichbar ist"
+        "connectionFailed": "Verbindung zum Stream konnte nicht hergestellt werden. Überprüfen Sie, ob die URL korrekt ist und der Stream erreichbar ist",
+        "noAudioTrack": "Der Stream enthält keine Audiospur. Es können nur Streams mit Audio verwendet werden"
       }
     },
     "debug": {

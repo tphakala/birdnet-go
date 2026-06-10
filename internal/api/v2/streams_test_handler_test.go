@@ -103,15 +103,9 @@ func TestTestStreamHandler_ValidationErrors(t *testing.T) {
 }
 
 func TestTestStreamHandler_NoAudioStreamError(t *testing.T) {
-	e := echo.New()
+	t.Parallel()
 
-	originalProbeStreamInfo := probeStreamInfo
-	probeStreamInfo = func(_ context.Context, _ string) (*ffmpeg.StreamInfo, error) {
-		return nil, ffmpeg.ErrNoAudioStreamsFound
-	}
-	t.Cleanup(func() {
-		probeStreamInfo = originalProbeStreamInfo
-	})
+	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/streams/test",
 		strings.NewReader(`{"url":"rtsp://example.test/stream"}`))
@@ -119,7 +113,11 @@ func TestTestStreamHandler_NoAudioStreamError(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
-	ctrl := &Controller{}
+	ctrl := &Controller{
+		probeStreamInfo: func(_ context.Context, _ string) (*ffmpeg.StreamInfo, error) {
+			return nil, ffmpeg.ErrNoAudioStreamsFound
+		},
+	}
 	ctrl.Settings.Store(&conf.Settings{})
 	err := ctrl.TestStream(ctx)
 	require.NoError(t, err)
@@ -128,6 +126,6 @@ func TestTestStreamHandler_NoAudioStreamError(t *testing.T) {
 
 	var resp ErrorResponse
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, "errors.streams.test.connectionFailed", resp.ErrorKey)
+	assert.Equal(t, "errors.streams.test.noAudioTrack", resp.ErrorKey)
 	assert.Equal(t, "stream has no audio track", resp.Message)
 }

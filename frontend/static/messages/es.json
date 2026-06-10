@@ -4542,7 +4542,8 @@
         "invalidUrl": "Formato de URL no válido. Introduzca una URL completa como rtsp://host:puerto/ruta",
         "unsupportedScheme": "Esquema de URL no compatible \"{scheme}\". Use rtsp, rtsps, http, https, rtmp o udp",
         "blockedDestination": "Este destino está bloqueado por razones de seguridad",
-        "connectionFailed": "No se pudo conectar al stream. Compruebe que la URL es correcta y que el stream es accesible"
+        "connectionFailed": "No se pudo conectar al stream. Compruebe que la URL es correcta y que el stream es accesible",
+        "noAudioTrack": "El stream no tiene pista de audio. Solo se pueden usar streams que contengan audio"
       }
     },
     "debug": {

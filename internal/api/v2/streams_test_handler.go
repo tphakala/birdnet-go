@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	stderrors "errors"
 	"fmt"
 	"maps"
@@ -55,9 +56,10 @@ var blockedHosts = map[string]bool{
 	"localhost":                true,
 }
 
-// probeStreamInfo is assigned to ffmpeg.ProbeStreamInfo by default and kept as
-// a package variable so tests can stub stream probing without invoking ffprobe.
-var probeStreamInfo = ffmpeg.ProbeStreamInfo
+// probeStreamInfoFunc probes a live stream for its audio characteristics.
+// Controller.probeStreamInfo defaults to ffmpeg.ProbeStreamInfo (used when the
+// field is nil) and is overridden in tests to stub probing without ffprobe.
+type probeStreamInfoFunc func(ctx context.Context, url string) (*ffmpeg.StreamInfo, error)
 
 // initStreamTestRoutes registers stream testing endpoints.
 func (c *Controller) initStreamTestRoutes() {
@@ -80,7 +82,12 @@ func (c *Controller) TestStream(ctx echo.Context) error {
 			vErr.status, vErr.errorKey, vErr.params)
 	}
 
-	info, err := probeStreamInfo(ctx.Request().Context(), req.URL)
+	probe := c.probeStreamInfo
+	if probe == nil {
+		probe = ffmpeg.ProbeStreamInfo
+	}
+
+	info, err := probe(ctx.Request().Context(), req.URL)
 	if err != nil {
 		message := "stream connection failed"
 		errorKey := "errors.streams.test.connectionFailed"
@@ -88,6 +95,7 @@ func (c *Controller) TestStream(ctx echo.Context) error {
 
 		if stderrors.Is(err, ffmpeg.ErrNoAudioStreamsFound) {
 			message = "stream has no audio track"
+			errorKey = "errors.streams.test.noAudioTrack"
 			status = http.StatusUnprocessableEntity
 		}
 

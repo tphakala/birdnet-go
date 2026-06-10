@@ -4542,7 +4542,8 @@
         "invalidUrl": "Format d'URL invalide. Saisissez une URL complète, par ex. rtsp://hôte:port/chemin",
         "unsupportedScheme": "Schéma d'URL non pris en charge \"{scheme}\". Utilisez rtsp, rtsps, http, https, rtmp ou udp",
         "blockedDestination": "Cette destination est bloquée pour des raisons de sécurité",
-        "connectionFailed": "Impossible de se connecter au flux. Vérifiez que l'URL est correcte et que le flux est accessible"
+        "connectionFailed": "Impossible de se connecter au flux. Vérifiez que l'URL est correcte et que le flux est accessible",
+        "noAudioTrack": "Le flux ne contient aucune piste audio. Seuls les flux contenant de l'audio peuvent être utilisés"
       }
     },
     "debug": {

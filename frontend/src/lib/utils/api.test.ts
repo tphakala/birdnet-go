@@ -169,7 +169,7 @@ describe('API utilities', () => {
       await expect(fetchWithCSRF('/api/test')).rejects.toThrow('errors.api.serverError');
     });
 
-    it('shows the backend message for stream probe failures with a specific root cause', async () => {
+    it('localizes no-audio stream probe failures via error_key without leaking the backend message', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 422,
@@ -177,14 +177,34 @@ describe('API utilities', () => {
         headers: new Headers(),
         json: () =>
           Promise.resolve({
-            error_key: 'errors.streams.test.connectionFailed',
+            error_key: 'errors.streams.test.noAudioTrack',
             message: 'stream has no audio track',
           }),
       });
 
       await expect(fetchWithCSRF('/api/test')).rejects.toMatchObject({
-        message: 'stream has no audio track',
+        message: 'The stream has no audio track. Only streams that contain audio can be used',
         status: 422,
+      });
+    });
+
+    it('keeps the localized translation for generic stream connection failures', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+        headers: new Headers(),
+        json: () =>
+          Promise.resolve({
+            error_key: 'errors.streams.test.connectionFailed',
+            message: 'stream connection failed',
+          }),
+      });
+
+      await expect(fetchWithCSRF('/api/test')).rejects.toMatchObject({
+        message:
+          'Could not connect to the stream. Check that the URL is correct and the stream is accessible',
+        status: 502,
       });
     });
 

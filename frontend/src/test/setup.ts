@@ -119,6 +119,11 @@ vi.mock('$lib/stores/toast', () => ({
 
 // Mock internationalization - map common keys to actual text for tests
 const translations: Record<string, string> = {
+  // Stream test error keys (used by api.test.ts error handling)
+  'errors.streams.test.connectionFailed':
+    'Could not connect to the stream. Check that the URL is correct and the stream is accessible',
+  'errors.streams.test.noAudioTrack':
+    'The stream has no audio track. Only streams that contain audio can be used',
   // SelectDropdown and SpeciesInput form components
   'common.ui.search': 'Search...',
   'components.forms.select.searchOptions': 'Search options',

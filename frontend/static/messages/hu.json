@@ -4542,7 +4542,8 @@
         "invalidUrl": "Érvénytelen URL-formátum. Adjon meg egy teljes URL-t, pl. rtsp://host:port/útvonal",
         "unsupportedScheme": "Nem támogatott URL-séma: \"{scheme}\". Használjon rtsp, rtsps, http, https, rtmp vagy udp sémát",
         "blockedDestination": "Ez a cél biztonsági okokból le van tiltva",
-        "connectionFailed": "Nem sikerült csatlakozni a streamhez. Ellenőrizze, hogy az URL helyes-e és a stream elérhető-e"
+        "connectionFailed": "Nem sikerült csatlakozni a streamhez. Ellenőrizze, hogy az URL helyes-e és a stream elérhető-e",
+        "noAudioTrack": "A stream nem tartalmaz hangsávot. Csak hangot tartalmazó streamek használhatók"
       }
     },
     "debug": {
