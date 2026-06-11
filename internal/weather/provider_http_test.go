@@ -2,8 +2,12 @@ package weather
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -122,4 +126,49 @@ func TestFetchWeather_ContextCancelAbortsRequest(t *testing.T) {
 	assert.Nil(t, data)
 	require.ErrorIs(t, err, context.Canceled, "a cancelled context must surface as context.Canceled")
 	assert.Less(t, elapsed, RequestTimeout, "cancel must abort the fetch promptly, not wait out the timeout or retries")
+}
+
+// reqRecordingTransport records every request it receives and fails the first
+// failFirst attempts at the transport layer to force a retry.
+type reqRecordingTransport struct {
+	mu        sync.Mutex
+	seen      []*http.Request
+	failFirst int
+	body      string
+}
+
+func (rt *reqRecordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	rt.mu.Lock()
+	rt.seen = append(rt.seen, req)
+	n := len(rt.seen)
+	rt.mu.Unlock()
+	if n <= rt.failFirst {
+		return nil, fmt.Errorf("simulated transport failure")
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(rt.body)),
+		Header:     make(http.Header),
+	}, nil
+}
+
+// TestExecuteWeatherRequest_ClonesRequestPerAttempt guards against reusing a
+// single *http.Request across retries. A reused request can retain cancelled
+// state from a prior attempt whose client.Timeout fired and fail the retry with
+// a spurious http.ErrRequestCanceled, so the executor must send a fresh (cloned)
+// request each attempt. The transport fails the first attempt and then succeeds,
+// and the two recorded requests must be distinct instances.
+func TestExecuteWeatherRequest_ClonesRequestPerAttempt(t *testing.T) {
+	rt := &reqRecordingTransport{failFirst: 1, body: openWeatherSuccessResponse()}
+	client := &http.Client{Transport: rt, Timeout: RequestTimeout}
+
+	provider := NewOpenWeatherProvider(client)
+	settings := createTestSettings(t, "openweather")
+
+	data, err := provider.FetchWeather(t.Context(), settings)
+
+	require.NoError(t, err, "the retry after a transport failure must succeed")
+	require.NotNil(t, data)
+	require.Len(t, rt.seen, 2, "expected one failed attempt followed by one successful retry")
+	assert.NotSame(t, rt.seen[0], rt.seen[1], "each attempt must use a freshly cloned request, not the reused instance")
 }

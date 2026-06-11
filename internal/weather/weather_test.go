@@ -1137,12 +1137,13 @@ func TestFetchAndSave_AuthFailure(t *testing.T) {
 	assert.Equal(t, prevCount, callCount, "Provider should NOT be called after auth disabled")
 }
 
-// TestFetchAndSave_CancelledContextIsBenign verifies that a provider returning
-// context.Canceled (a service shutdown or an aborted on-demand request) is
-// treated as benign: fetchAndSave returns nil and does not trip the failure
-// backoff. Only genuine failures should back off; a shutdown should not log an
-// error or degrade the service state.
-func TestFetchAndSave_CancelledContextIsBenign(t *testing.T) {
+// TestFetchAndSave_CancelledContextPropagatesWithoutBackoff verifies that a
+// provider returning context.Canceled (a service shutdown or an aborted
+// on-demand request) propagates the cancellation to the caller so an on-demand
+// Poll(ctx) observes it, while still skipping the failure backoff. The
+// StartPolling loop ignores fetchAndSave's return value, so a background
+// shutdown stays benign; only the on-demand path sees the error.
+func TestFetchAndSave_CancelledContextPropagatesWithoutBackoff(t *testing.T) {
 	settings := createTestSettings(t, "yrno")
 
 	provider := &mockProvider{
@@ -1158,7 +1159,7 @@ func TestFetchAndSave_CancelledContextIsBenign(t *testing.T) {
 	}
 
 	err := service.fetchAndSave(t.Context())
-	require.NoError(t, err, "a cancelled fetch must be treated as benign, not a failure")
+	require.ErrorIs(t, err, context.Canceled, "cancellation must propagate so on-demand Poll(ctx) callers observe it")
 
 	authDisabled, failures, inBackoff := service.backoff.snapshot()
 	assert.False(t, authDisabled, "cancellation must not disable auth")

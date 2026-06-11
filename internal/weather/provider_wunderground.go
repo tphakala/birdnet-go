@@ -295,7 +295,7 @@ func (p *WundergroundProvider) FetchWeather(ctx context.Context, settings *conf.
 		return nil, err
 	}
 
-	providerLogger := getLogger().With(logger.String("provider", wundergroundProviderName))
+	providerLogger := getLogger().WithContext(ctx).With(logger.String("provider", wundergroundProviderName))
 	providerLogger.Info("Fetching weather data", logger.String("url", maskURLForLog(apiURL)))
 
 	// Execute request

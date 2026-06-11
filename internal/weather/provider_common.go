@@ -184,7 +184,11 @@ func executeWeatherRequest(ctx context.Context, client *http.Client, req *http.R
 			logger.Int("attempt", i+1),
 			logger.Int("max_attempts", MaxRetries))
 
-		resp, err := client.Do(req) //nolint:bodyclose // resp.Body is closed by the handle callback on every path; bodyclose cannot trace the close through the function pointer.
+		// Clone the request per attempt. A reused *http.Request can retain cancelled
+		// state from a prior attempt whose client.Timeout fired, which would fail the
+		// retry with a spurious http.ErrRequestCanceled. client.Do mutates only the
+		// clone, so the original stays pristine for the next attempt.
+		resp, err := client.Do(req.Clone(ctx)) //nolint:bodyclose // resp.Body is closed by the handle callback on every path; bodyclose cannot trace the close through the function pointer.
 		if err != nil {
 			// A cancelled context means shutdown (or an aborted on-demand
 			// request), not a provider failure: surface it directly so callers

@@ -205,7 +205,7 @@ func (p *YrNoProvider) FetchWeather(ctx context.Context, settings *conf.Settings
 	}
 	apiURL := YrNoBaseURL + "?" + query.Encode()
 
-	providerLogger := getLogger().With(logger.String("provider", yrNoProviderName))
+	providerLogger := getLogger().WithContext(ctx).With(logger.String("provider", yrNoProviderName))
 	// Mask the URL before logging: its query carries the user's lat/lon, which
 	// are PII (yr.no needs no API key, so coordinates are the sensitive part).
 	providerLogger.Info("Fetching weather data", logger.String("url", maskURLForLog(apiURL)))

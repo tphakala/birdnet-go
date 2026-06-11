@@ -115,7 +115,7 @@ func (p *OpenWeatherProvider) FetchWeather(ctx context.Context, settings *conf.S
 		return nil, err
 	}
 
-	providerLogger := getLogger().With(logger.String("provider", openWeatherProviderName))
+	providerLogger := getLogger().WithContext(ctx).With(logger.String("provider", openWeatherProviderName))
 	providerLogger.Info("Fetching weather data", logger.String("url", maskURLForLog(apiURL)))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)

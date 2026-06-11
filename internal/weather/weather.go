@@ -713,9 +713,14 @@ func (s *Service) fetchAndSave(ctx context.Context) error {
 		// an error nor trips the failure backoff. context.DeadlineExceeded is
 		// intentionally excluded; that is a real request timeout worth a backoff.
 		if errors.Is(err, context.Canceled) {
+			// Cancellation is a shutdown or an aborted on-demand request, not a
+			// provider failure, so skip the failure/backoff bookkeeping below. Return
+			// the error rather than swallowing it so an on-demand Poll(ctx) caller
+			// still observes the cancellation; the StartPolling loop ignores
+			// fetchAndSave's return value, so a background shutdown stays benign.
 			getLogger().Debug("Weather fetch cancelled",
 				logger.String("provider", s.providerName))
-			return nil
+			return err
 		}
 
 		// Handle "not modified" as a success case: no new data to save.
