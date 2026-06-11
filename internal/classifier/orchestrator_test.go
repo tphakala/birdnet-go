@@ -312,3 +312,25 @@ func TestOrchestrator_ModelInfos_SkipsNilInstances(t *testing.T) {
 	assert.Len(t, infos, 1)
 	assert.Equal(t, "BirdNET_V2.4", infos[0].ID)
 }
+
+func TestUnionLabels_DedupesAcrossModelsPreservingOrder(t *testing.T) {
+	t.Parallel()
+
+	primary := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	bat := []string{"Barbastella barbastellus", "Turdus merula_Common Blackbird"}
+
+	got := unionLabels(primary, bat)
+
+	assert.Equal(t, []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Barbastella barbastellus",
+	}, got)
+}
+
+func TestUnionLabels_SkipsEmptyEntries(t *testing.T) {
+	t.Parallel()
+
+	got := unionLabels([]string{"", "Parus major_Great Tit", ""})
+	assert.Equal(t, []string{"Parus major_Great Tit"}, got)
+}
