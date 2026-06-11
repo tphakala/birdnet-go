@@ -739,6 +739,11 @@ func (o *Orchestrator) AllLabels() []string {
 	}
 	o.mu.RUnlock()
 
+	// Sort secondary models by ID so the union (and the reverse maps built from it) is
+	// stable across rebuilds; Go's randomized map iteration would otherwise pick a
+	// different winner for duplicate scientific names, matching GetAllProbableSpeciesWithSettings.
+	slices.SortFunc(refs, func(a, b entryRef) int { return strings.Compare(a.id, b.id) })
+
 	// Include the primary explicitly. primary.Labels() is safe without entry.mu because
 	// BirdNET.Labels takes the model's own lock internally, matching Labels() and
 	// GetAllProbableSpeciesWithSettings; only secondary entries are read under entry.mu.

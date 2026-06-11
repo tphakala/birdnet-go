@@ -3099,8 +3099,9 @@ func (ds *Datastore) GetThresholdEvents(speciesName string, limit int) ([]datast
 
 	// Query 2: If we can resolve to scientific name, also query with that
 	// This finds correctly saved events (after #1907 fix)
-	normalizedCommon := strings.ToLower(strings.TrimSpace(speciesName))
-	if scientificName, ok := ds.loadNameMaps().species[normalizedCommon]; ok && scientificName != speciesName {
+	// Resolve through resolveToScientificName so this shares the reverse map's NFC-folded
+	// normalization; a decomposed (NFD) localized name must match the NFC-folded keys.
+	if scientificName := ds.resolveToScientificName(speciesName); scientificName != speciesName {
 		sciEvents, err := ds.threshold.GetThresholdEvents(ctx, scientificName, limit)
 		if err == nil && len(sciEvents) > 0 {
 			v2Events = append(v2Events, sciEvents...)
