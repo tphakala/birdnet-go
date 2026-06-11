@@ -113,6 +113,7 @@ func TestGetWeatherIcon_Identity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			own := string(GetWeatherIcon(tt.code, Day))
 			assert.Contains(t, own, tt.marker,
 				"icon for %s must contain its identifying marker", tt.code)
