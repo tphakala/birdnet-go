@@ -78,6 +78,15 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 			logger.String("path", path),
 			logger.String("ip", ip),
 		)
+	} else if originalSpecies != "" {
+		// The species term did not map to a known scientific name; the query falls
+		// back to substring/LIKE. Log it so "unresolvable name" is distinguishable
+		// from "resolved but no detections" when triaging an empty result.
+		c.logDebugIfEnabled("Species query did not resolve to a scientific name, using substring search",
+			logger.String("input", originalSpecies),
+			logger.String("path", path),
+			logger.String("ip", ip),
+		)
 	}
 
 	// Log validated request parameters
