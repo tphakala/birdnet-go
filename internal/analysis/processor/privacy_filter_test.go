@@ -27,52 +27,64 @@ func newPrivacyFilterDetection(source string, firstDetected time.Time) *PendingD
 	}
 }
 
-// TestShouldDiscardDetection_PrivacyFilter_SameChunkHumanVoice covers the
-// equal-timestamp edge: when a human voice and a bird are detected in the exact
-// same audio chunk, both carry the same StartTime, so the privacy filter's strict
-// "human after bird" comparison let the bird through. A simultaneous human voice
-// must still discard the detection.
-func TestShouldDiscardDetection_PrivacyFilter_SameChunkHumanVoice(t *testing.T) {
+// TestShouldDiscardDetection_PrivacyFilterBoundary exercises the privacy filter
+// across the human-voice-vs-bird timestamp boundary. The key case is equal
+// timestamps: a human voice and a bird detected in the exact same audio chunk
+// share the same back-dated start time, and that must still discard the bird
+// (the prior strict "human after bird" comparison leaked it). A human voice from
+// an earlier chunk (strictly before) must not discard a later bird.
+func TestShouldDiscardDetection_PrivacyFilterBoundary(t *testing.T) {
 	t.Parallel()
 
 	const source = "src1"
-	chunkTime := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
+	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	settings := &conf.Settings{}
-	settings.Realtime.PrivacyFilter.Enabled = true
-
-	p := &Processor{
-		LastHumanDetection: map[string]time.Time{source: chunkTime},
+	tests := []struct {
+		name        string
+		humanTime   time.Time
+		birdTime    time.Time
+		wantDiscard bool
+		wantReason  string
+	}{
+		{
+			name:        "same chunk: human and bird share the timestamp",
+			humanTime:   base,
+			birdTime:    base,
+			wantDiscard: true,
+			wantReason:  "privacy filter",
+		},
+		{
+			name:        "human voice after the bird started",
+			humanTime:   base.Add(time.Second),
+			birdTime:    base,
+			wantDiscard: true,
+			wantReason:  "privacy filter",
+		},
+		{
+			name:        "human voice from an earlier chunk is kept",
+			humanTime:   base,
+			birdTime:    base.Add(time.Second),
+			wantDiscard: false,
+			wantReason:  "",
+		},
 	}
-	item := newPrivacyFilterDetection(source, chunkTime)
 
-	discard, reason := p.shouldDiscardDetection(item, settings, 1)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	assert.True(t, discard,
-		"a bird sharing an audio chunk with a human voice must be discarded by the privacy filter")
-	assert.Equal(t, "privacy filter", reason)
-}
+			settings := &conf.Settings{}
+			settings.Realtime.PrivacyFilter.Enabled = true
 
-// TestShouldDiscardDetection_PrivacyFilter_EarlierHumanVoiceKept locks the
-// non-regression boundary: a human voice heard strictly before the bird detection
-// started belongs to an earlier capture window and must not discard the bird.
-func TestShouldDiscardDetection_PrivacyFilter_EarlierHumanVoiceKept(t *testing.T) {
-	t.Parallel()
+			p := &Processor{
+				LastHumanDetection: map[string]time.Time{source: tt.humanTime},
+			}
+			item := newPrivacyFilterDetection(source, tt.birdTime)
 
-	const source = "src1"
-	humanTime := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
-	birdTime := humanTime.Add(time.Second) // bird started after the human voice
+			discard, reason := p.shouldDiscardDetection(item, settings, 1)
 
-	settings := &conf.Settings{}
-	settings.Realtime.PrivacyFilter.Enabled = true
-
-	p := &Processor{
-		LastHumanDetection: map[string]time.Time{source: humanTime},
+			assert.Equal(t, tt.wantDiscard, discard)
+			assert.Equal(t, tt.wantReason, reason)
+		})
 	}
-	item := newPrivacyFilterDetection(source, birdTime)
-
-	discard, _ := p.shouldDiscardDetection(item, settings, 1)
-
-	assert.False(t, discard,
-		"a human voice from an earlier chunk must not discard a later bird detection")
 }
