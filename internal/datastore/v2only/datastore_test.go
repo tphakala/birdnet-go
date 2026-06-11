@@ -1415,7 +1415,7 @@ func TestGetSpeciesSummaryData_NoDateFilter(t *testing.T) {
 	}
 	require.NoError(t, ds.Save(note, nil))
 
-	// Query with no date filter — this was returning empty before the fix
+	// Query with no date filter; this was returning empty before the fix
 	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
 	require.NoError(t, err)
 	require.NotEmpty(t, summaries, "summary should return data when no date filter is provided")

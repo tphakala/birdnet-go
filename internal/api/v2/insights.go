@@ -497,7 +497,7 @@ func (c *Controller) getExpectedTodayRegionalImpl(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to query eBird observations", http.StatusInternalServerError)
 	}
 
-	// Get local species to deduplicate against (best-effort — if this fails, show all eBird results)
+	// Get local species to deduplicate against (best-effort; if this fails, show all eBird results)
 	yearRanges := buildYearRanges(time.Now(), expectedTodayWindowDays)
 	localSpecies, localErr := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, nil)
 	if localErr != nil {
