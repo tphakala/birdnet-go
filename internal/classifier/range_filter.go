@@ -4,8 +4,10 @@ package classifier
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
 // SpeciesScore holds a species label and its associated score.
@@ -271,77 +274,87 @@ func canonicalOverrideLabels(speciesName string, geoLabels, classifierLabels []s
 	return matchingLabels(classifierLabels, speciesName)
 }
 
+// overrideSpeciesNames returns the user's force-include overrides: the
+// realtime.species.include entries followed by the realtime.species.config keys.
+func overrideSpeciesNames(settings *conf.Settings) []string {
+	names := make([]string, 0, len(settings.Realtime.Species.Include)+len(settings.Realtime.Species.Config))
+	names = append(names, settings.Realtime.Species.Include...)
+	names = slices.AppendSeq(names, maps.Keys(settings.Realtime.Species.Config))
+	return names
+}
+
+// resolveOverrideLabels canonicalizes the user's force-include overrides (the
+// realtime.species.include entries and .config keys) into concrete model labels,
+// shared by both inclusion-set appenders. Each entry resolves, in order, to its
+// matching geomodel labels, the active classifier's localized labels, or - for a
+// species a non-primary model emits as a scientific-only label, named by its
+// localized common name (e.g. the Finnish bat/mammal "kettu"/"ilves") - the
+// scientific name(s) reverse-resolved from OpenFauna. The forward,
+// scientific-keyed label matching cannot reverse those, since the localized name
+// lives only in OpenFauna. Entries that resolve to nothing are kept verbatim, so the
+// name resolver legitimately reports a genuinely unresolvable entry. Reverse
+// resolution for every otherwise-unresolved entry is batched into one dataset scan,
+// keeping the cost off the per-entry path on the (cold) range-filter rebuild.
+func resolveOverrideLabels(settings *conf.Settings, geoLabels []string) []string {
+	names := overrideSpeciesNames(settings)
+	out := make([]string, 0, len(names))
+	var unresolved []string
+	for _, name := range names {
+		if labels := canonicalOverrideLabels(name, geoLabels, settings.BirdNET.Labels); len(labels) > 0 {
+			out = append(out, labels...)
+		} else {
+			unresolved = append(unresolved, name)
+		}
+	}
+	if len(unresolved) > 0 {
+		reverse := openfauna.LookupScientificNames(unresolved, settings.BirdNET.Locale)
+		for _, name := range unresolved {
+			if sci := reverse[name]; len(sci) > 0 {
+				out = append(out, sci...)
+			} else {
+				out = append(out, name)
+			}
+		}
+	}
+	return out
+}
+
 // addUserOverrideSpeciesScores appends species from the explicit include list
 // and species with configured actions to a SpeciesScore slice with score 1.0.
 // Used by the universal geomodel path in getProbableSpecies. Each entry is
-// canonicalized via canonicalOverrideLabels so localized common names enter the
-// set as "Scientific_Common" labels rather than the raw user string.
+// canonicalized via resolveOverrideLabels so localized common names enter the
+// set as their canonical model labels rather than the raw user string.
 func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, settings *conf.Settings, geoLabels []string) {
 	seen := make(map[string]bool, len(*speciesScores))
 	for _, ss := range *speciesScores {
 		seen[ss.Label] = true
 	}
-
-	addOverride := func(speciesName string) {
-		labels := canonicalOverrideLabels(speciesName, geoLabels, settings.BirdNET.Labels)
-		if len(labels) == 0 {
-			if !seen[speciesName] {
-				*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: speciesName})
-				seen[speciesName] = true
-			}
-			return
+	for _, label := range resolveOverrideLabels(settings, geoLabels) {
+		if !seen[label] {
+			bn.Debug("Adding override species with max score: %s", label)
+			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
+			seen[label] = true
 		}
-		for _, label := range labels {
-			if !seen[label] {
-				bn.Debug("Adding override species with max score: %s (matched with: %s)", label, speciesName)
-				*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
-				seen[label] = true
-			}
-		}
-	}
-
-	for _, species := range settings.Realtime.Species.Include {
-		addOverride(species)
-	}
-	for species := range settings.Realtime.Species.Config {
-		addOverride(species)
 	}
 }
 
 // addUserOverrideSpecies appends species from the explicit include list and
 // species with configured actions to the inclusion set. Each entry is
-// canonicalized via canonicalOverrideLabels (geomodel labels first, then the
-// active classifier's localized labels). A matched entry is appended in its
-// canonical "Scientific_Common" form so the scientific name map keys it
-// correctly; an unmatched entry (e.g. a non-bird class) is appended verbatim.
+// canonicalized via resolveOverrideLabels (geomodel labels, then the active
+// classifier's localized labels, then an OpenFauna reverse lookup for
+// scientific-only non-primary-model species). A resolved entry is appended in its
+// canonical label form so the scientific name map keys it correctly; an entry that
+// resolves to nothing (e.g. a non-fauna class) is appended verbatim.
 func addUserOverrideSpecies(includedSpecies *[]string, settings *conf.Settings, geoLabels []string) {
 	seen := make(map[string]bool, len(*includedSpecies))
 	for _, s := range *includedSpecies {
 		seen[s] = true
 	}
-
-	addOverride := func(speciesName string) {
-		labels := canonicalOverrideLabels(speciesName, geoLabels, settings.BirdNET.Labels)
-		if len(labels) == 0 {
-			if !seen[speciesName] {
-				*includedSpecies = append(*includedSpecies, speciesName)
-				seen[speciesName] = true
-			}
-			return
+	for _, label := range resolveOverrideLabels(settings, geoLabels) {
+		if !seen[label] {
+			*includedSpecies = append(*includedSpecies, label)
+			seen[label] = true
 		}
-		for _, label := range labels {
-			if !seen[label] {
-				*includedSpecies = append(*includedSpecies, label)
-				seen[label] = true
-			}
-		}
-	}
-
-	for _, species := range settings.Realtime.Species.Include {
-		addOverride(species)
-	}
-	for species := range settings.Realtime.Species.Config {
-		addOverride(species)
 	}
 }
 

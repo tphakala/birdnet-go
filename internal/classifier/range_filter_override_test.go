@@ -133,3 +133,107 @@ func TestGetProbableSpecies_BareLocalizedCommonNameOverride_CanonicalizesLabel(t
 	assert.NotContains(t, labels, "Talitiainen",
 		"the bare common name must not survive as a species score label")
 }
+
+// TestBuildRangeFilter_NonPrimaryLocalizedCommonOverride_ReverseResolvesToScientific
+// covers the non-primary-model case: a species detected only by a non-primary model
+// emits a scientific-only label, so its localized common name matches no primary
+// geomodel or classifier label. The override must reverse-resolve through OpenFauna to
+// the scientific name so the inclusion gate keys on it (force-include works) and the
+// name resolver can localize it. The Finnish fox "Kettu" -> "Vulpes vulpes" is the
+// reverse mapping; none of the (bird) labels carry it, so only OpenFauna can.
+func TestBuildRangeFilter_NonPrimaryLocalizedCommonOverride_ReverseResolvesToScientific(t *testing.T) {
+	settings, rf := overrideTestSettings(t, "fi")
+	settings.Realtime.Species.Include = []string{"Kettu"}
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	o := buildTestOrchestrator(t, settings, rf)
+	require.NoError(t, BuildRangeFilter(o))
+
+	included := conf.GetSettings().GetIncludedSpecies()
+	assert.Contains(t, included, "Vulpes vulpes",
+		"a non-primary localized common-name override must reverse-resolve to the scientific name")
+	assert.NotContains(t, included, "Kettu",
+		"the bare localized common name must not survive in the inclusion working set")
+	assert.True(t, conf.GetSettings().IsSpeciesIncluded("Vulpes vulpes"),
+		"force-include must work: a real Vulpes vulpes detection passes the inclusion gate")
+}
+
+// TestGetProbableSpecies_NonPrimaryLocalizedCommonOverride_ReverseResolvesToScientific
+// proves the sibling appender addUserOverrideSpeciesScores (the daily
+// UpdateRangeFilterAction / species-list endpoints) gets the same reverse
+// resolution, so the daily refresh does not revert the canonicalization a day later.
+func TestGetProbableSpecies_NonPrimaryLocalizedCommonOverride_ReverseResolvesToScientific(t *testing.T) {
+	settings, rf := overrideTestSettings(t, "fi")
+	settings.Realtime.Species.Include = []string{"Kettu"}
+
+	bn := &BirdNET{
+		Settings:     settings,
+		rangeFilter:  rf,
+		speciesCache: make(map[string]*speciesCacheEntry),
+	}
+
+	scores, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	require.NoError(t, err)
+
+	labels := make([]string, 0, len(scores))
+	for _, ss := range scores {
+		labels = append(labels, ss.Label)
+	}
+	assert.Contains(t, labels, "Vulpes vulpes",
+		"the daily path must also reverse-resolve a non-primary localized common name")
+	assert.NotContains(t, labels, "Kettu",
+		"the bare localized common name must not survive as a species score label")
+}
+
+// TestBuildRangeFilter_NonPrimaryLocalizedCommonOverride_DoesNotPolluteNameResolver
+// proves the cosmetic half: once "Kettu" is canonicalized to "Vulpes vulpes"
+// (resolvable in fi), the working set no longer feeds a bare common name to the
+// resolver, so the "could not localize" WARN does not fire. Not parallel: global logger.
+func TestBuildRangeFilter_NonPrimaryLocalizedCommonOverride_DoesNotPolluteNameResolver(t *testing.T) {
+	settings, rf := overrideTestSettings(t, "fi")
+	settings.Realtime.Species.Include = []string{"Kettu"}
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	var buf bytes.Buffer
+	capture := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	cl, err := logger.NewCentralLogger(
+		&logger.LoggingConfig{
+			Console:      &logger.ConsoleOutput{Enabled: false},
+			FileOutput:   &logger.FileOutput{Enabled: false},
+			DefaultLevel: "debug",
+		},
+		capture,
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cl.Close() })
+	prev := logger.Global()
+	logger.SetGlobal(cl)
+	t.Cleanup(func() { logger.SetGlobal(prev) })
+
+	o := buildTestOrchestrator(t, settings, rf)
+	o.openfauna = openfauna.NewResolver()
+	require.NoError(t, BuildRangeFilter(o))
+
+	assert.NotContains(t, buf.String(), "could not localize",
+		"a reverse-resolved override must not leave an unresolvable working-set entry")
+}
+
+// TestBuildRangeFilter_UnresolvableOverride_StaysVerbatim guards against the reverse
+// lookup over-matching: a string that is neither a label match nor a real localized
+// fauna name must still be appended verbatim, so the fix does not start force-mapping
+// arbitrary user strings.
+func TestBuildRangeFilter_UnresolvableOverride_StaysVerbatim(t *testing.T) {
+	settings, rf := overrideTestSettings(t, "fi")
+	settings.Realtime.Species.Include = []string{"drone"}
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	o := buildTestOrchestrator(t, settings, rf)
+	require.NoError(t, BuildRangeFilter(o))
+
+	included := conf.GetSettings().GetIncludedSpecies()
+	assert.Contains(t, included, "drone",
+		"a non-fauna override must still be appended verbatim (no spurious reverse match)")
+}
