@@ -6,16 +6,28 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 const (
 	openWeatherBaseURL      = "https://api.openweathermap.org/data/2.5/weather"
 	openWeatherProviderName = "openweather"
+
+	// openWeatherCoordPrecision is the number of decimal places used when
+	// formatting latitude/longitude into the request URL (~110 m resolution).
+	openWeatherCoordPrecision = 3
+
+	// maskedURLOnError is returned by maskAPIKey when the URL cannot be parsed.
+	// The raw URL embeds the API key as a query parameter, so it is never
+	// returned on a parse failure; this fully redacted placeholder is returned
+	// instead (fail closed).
+	maskedURLOnError = "[unparseable-url-redacted]"
 )
 
 // OpenWeatherResponse represents the structure of weather data returned by the OpenWeather API
@@ -56,6 +68,30 @@ type OpenWeatherResponse struct {
 	Name string `json:"name"`
 }
 
+// buildOpenWeatherURL constructs the OpenWeather API request URL using
+// url.Values so the API key and other parameters are properly escaped. Building
+// the query with fmt.Sprintf risked producing a malformed URL when a value
+// required escaping; http.NewRequest would then reject it and return a
+// *url.Error carrying the raw key. Escaping at build time avoids that leak path
+// and mirrors buildWundergroundURL.
+func buildOpenWeatherURL(settings *conf.Settings, apiKey string) (string, error) {
+	u, err := url.Parse(settings.Realtime.Weather.OpenWeather.Endpoint)
+	if err != nil {
+		return "", newWeatherError(
+			fmt.Errorf("invalid openweather endpoint: %w", err),
+			errors.CategoryConfiguration, "parse_endpoint", openWeatherProviderName,
+		)
+	}
+	q := u.Query()
+	q.Set("lat", strconv.FormatFloat(settings.BirdNET.Latitude, 'f', openWeatherCoordPrecision, 64))
+	q.Set("lon", strconv.FormatFloat(settings.BirdNET.Longitude, 'f', openWeatherCoordPrecision, 64))
+	q.Set("appid", apiKey)
+	q.Set("units", settings.Realtime.Weather.OpenWeather.Units)
+	q.Set("lang", "en")
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
 // FetchWeather implements the Provider interface for OpenWeatherProvider
 func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
 	apiKey := settings.Realtime.Weather.OpenWeather.APIKey
@@ -68,13 +104,10 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		)
 	}
 
-	apiURL := fmt.Sprintf("%s?lat=%.3f&lon=%.3f&appid=%s&units=%s&lang=en",
-		settings.Realtime.Weather.OpenWeather.Endpoint,
-		settings.BirdNET.Latitude,
-		settings.BirdNET.Longitude,
-		apiKey,
-		settings.Realtime.Weather.OpenWeather.Units,
-	)
+	apiURL, err := buildOpenWeatherURL(settings, apiKey)
+	if err != nil {
+		return nil, err
+	}
 
 	providerLogger := getLogger().With(logger.String("provider", openWeatherProviderName))
 	providerLogger.Info("Fetching weather data", logger.String("url", maskAPIKey(apiURL, "appid")))
@@ -126,9 +159,11 @@ func executeOpenWeatherRequest(req *http.Request, log logger.Logger) ([]byte, er
 
 		resp, err := client.Do(req)
 		if err != nil {
-			attemptLogger.Warn("HTTP request failed", logger.Error(err))
+			// Scrub before logging and wrapping: the *url.Error embeds the
+			// request URL, including the appid API key query parameter.
+			attemptLogger.Warn("HTTP request failed", logger.SanitizedError(err))
 			if isLastAttempt {
-				return nil, newWeatherErrorWithRetries(err, errors.CategoryNetwork, "weather_api_request", openWeatherProviderName)
+				return nil, newWeatherErrorWithRetries(privacy.WrapError(err), errors.CategoryNetwork, "weather_api_request", openWeatherProviderName)
 			}
 			time.Sleep(RetryDelay)
 			continue
@@ -243,7 +278,9 @@ func convertOpenWeatherTemps(temp, feelsLike, tempMin, tempMax float64, units st
 func maskAPIKey(rawURL, keyParamName string) string {
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return rawURL
+		// Fail closed: the raw URL embeds the API key, so returning it on a
+		// parse failure would leak the key into logs.
+		return maskedURLOnError
 	}
 	queryParams := parsedURL.Query()
 	if queryParams.Has(keyParamName) {
