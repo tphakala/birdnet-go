@@ -273,3 +273,46 @@ func TestDecodeTranslationRows_FiltersSynthetic(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"Turdus merula": "mustarastas", "Erithacus rubecula": "punarinta"}, got)
 }
+
+// TestLookupScientificNames_ReverseResolvesLocalizedCommon_Embedded covers the reverse
+// direction (localized common name -> scientific name) the openfauna package gained
+// for the non-primary-model case: a user adding a species (a bat or mammal whose
+// model label is scientific-only) by its localized common name must resolve back to
+// the scientific name. All three entries are unique in the embedded fi data, and all
+// three resolve from a single batched call.
+func TestLookupScientificNames_ReverseResolvesLocalizedCommon_Embedded(t *testing.T) {
+	t.Parallel()
+
+	got := LookupScientificNames([]string{"Kettu", "Ilves", "mopsilepakko"}, "fi")
+	assert.Contains(t, got["Kettu"], "Vulpes vulpes", "fox")
+	assert.Contains(t, got["Ilves"], "Lynx lynx", "lynx")
+	assert.Contains(t, got["mopsilepakko"], "Barbastella barbastellus", "bat")
+}
+
+func TestLookupScientificNames_CaseInsensitiveAndTrimmed_Embedded(t *testing.T) {
+	t.Parallel()
+
+	// Users supply varying case/whitespace; matching mirrors the forward Lookup. The
+	// result is keyed by the caller's exact input string.
+	got := LookupScientificNames([]string{"  kETTu  "}, "fi")
+	assert.Contains(t, got["  kETTu  "], "Vulpes vulpes", "reverse lookup must trim and match case-insensitively")
+}
+
+func TestLookupScientificNames_Miss_OmitsName_Embedded(t *testing.T) {
+	t.Parallel()
+
+	got := LookupScientificNames([]string{"drone", "", "   "}, "fi")
+	assert.Empty(t, got["drone"], "a non-fauna string must not reverse-resolve")
+	assert.Empty(t, got[""], "empty input must not resolve")
+	assert.NotContains(t, got, "drone", "an unmatched name must be absent from the result, not an empty entry")
+}
+
+func TestLookupScientificNames_HonorsLocale_Embedded(t *testing.T) {
+	t.Parallel()
+
+	// "Kettu" is the Finnish word for fox; it is meaningless as a German common name,
+	// so a de lookup (with English fallback) must not resolve it to Vulpes vulpes.
+	assert.Contains(t, LookupScientificNames([]string{"Kettu"}, "fi")["Kettu"], "Vulpes vulpes")
+	assert.NotContains(t, LookupScientificNames([]string{"Kettu"}, "de")["Kettu"], "Vulpes vulpes",
+		"the reverse lookup must honor the active locale")
+}
