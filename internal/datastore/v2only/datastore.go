@@ -1228,6 +1228,11 @@ func (ds *Datastore) GetHourlyOccurrences(date, commonName string, minConfidence
 }
 
 // GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
+// The species parameter holds scientific names. Scientific names map directly to
+// label IDs for every model via GetLabelIDsByScientificName, so no localized
+// common-name round-trip is performed (that round-trip dropped non-primary-model
+// species such as bats from the daily summary). The returned map
+// is keyed by the same scientific names that were passed in.
 func (ds *Datastore) GetBatchHourlyOccurrences(date string, species []string, minConfidence float64) (map[string][24]int, error) {
 	if len(species) == 0 {
 		return make(map[string][24]int), nil
@@ -1246,46 +1251,43 @@ func (ds *Datastore) GetBatchHourlyOccurrences(date string, species []string, mi
 	startOfDay := targetDate.Unix()
 	endOfDay := targetDate.AddDate(0, 0, 1).Unix()
 
-	// Convert species common names to scientific names and collect label IDs
-	allLabelIDs := make(map[string][]uint) // map[commonName][]labelID
-	for _, commonName := range species {
-		normalized := strings.ToLower(strings.TrimSpace(commonName))
-		scientificName := commonName
-		if sci, ok := ds.loadNameMaps().species[normalized]; ok {
-			scientificName = sci
-		}
-
+	// Collect label IDs per scientific name across all models
+	allLabelIDs := make(map[string][]uint) // map[scientificName][]labelID
+	for _, scientificName := range species {
 		// Get label IDs for this species across all models
 		labelIDs, err := ds.label.GetLabelIDsByScientificName(ctx, scientificName)
 		if err != nil {
-			// Log error with context and continue with other species
-			ds.log.Warn("failed to get label IDs for species in batch query",
-				logger.String("common_name", commonName),
-				logger.String("scientific_name", scientificName),
-				logger.Error(err))
+			// Log error with context and continue with other species. ds.log may be
+			// nil when the datastore is constructed without a logger, so guard it
+			// like the other logging sites in this file.
+			if ds.log != nil {
+				ds.log.Warn("failed to get label IDs for species in batch query",
+					logger.String("scientific_name", scientificName),
+					logger.Error(err))
+			}
 			continue
 		}
 		if len(labelIDs) > 0 {
-			allLabelIDs[commonName] = labelIDs
+			allLabelIDs[scientificName] = labelIDs
 		}
 	}
 
 	if len(allLabelIDs) == 0 {
-		// No matching species found in map
+		// No matching species found
 		result := make(map[string][24]int)
-		for _, commonName := range species {
-			result[commonName] = [24]int{}
+		for _, scientificName := range species {
+			result[scientificName] = [24]int{}
 		}
 		return result, nil
 	}
 
 	// Flatten all label IDs for batch query
 	var flatLabelIDs []uint
-	labelToCommonName := make(map[uint]string) // reverse map for results
-	for commonName, labelIDs := range allLabelIDs {
+	labelToScientificName := make(map[uint]string) // reverse map for results
+	for scientificName, labelIDs := range allLabelIDs {
 		for _, labelID := range labelIDs {
 			flatLabelIDs = append(flatLabelIDs, labelID)
-			labelToCommonName[labelID] = commonName
+			labelToScientificName[labelID] = scientificName
 		}
 	}
 
@@ -1324,21 +1326,21 @@ func (ds *Datastore) GetBatchHourlyOccurrences(date string, species []string, mi
 		return nil, fmt.Errorf("failed to fetch batch hourly occurrences: %w", err)
 	}
 
-	// Build result map with common names
+	// Build result map keyed by scientific name
 	resultMap := make(map[string][24]int)
 
 	// Initialize all requested species with zero counts
-	for _, commonName := range species {
-		resultMap[commonName] = [24]int{}
+	for _, scientificName := range species {
+		resultMap[scientificName] = [24]int{}
 	}
 
-	// Fill in actual counts, aggregating by common name
+	// Fill in actual counts, aggregating by scientific name
 	for _, r := range results {
-		if commonName, ok := labelToCommonName[r.LabelID]; ok {
+		if scientificName, ok := labelToScientificName[r.LabelID]; ok {
 			if r.Hour >= 0 && r.Hour < 24 {
-				hourlyData := resultMap[commonName]
+				hourlyData := resultMap[scientificName]
 				hourlyData[r.Hour] += r.Count // Accumulate counts from multiple label IDs
-				resultMap[commonName] = hourlyData
+				resultMap[scientificName] = hourlyData
 			}
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -25,6 +26,17 @@ import (
 
 // Test date constant used across multiple test cases
 const testDate = "2023-01-01"
+
+// Scientific names reused as hourly-batch map keys across the daily-summary tests.
+// The daily summary keys hourly aggregation on scientific name.
+const (
+	sciAmericanCrow         = "Corvus brachyrhynchos"
+	sciRedBelliedWoodpecker = "Melanerpes carolinus"
+	sciBarbastelleBat       = "Barbastella barbastellus"
+	sciEurasianBlackbird    = "Turdus merula"
+	sciAmericanRobin        = "Turdus migratorius"
+	sciBlueJay              = "Cyanocitta cristata"
+)
 
 // assertAnalyticsErrorResponse validates analytics error responses.
 func assertAnalyticsErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, expectedStatus int, expectedBody string) {
@@ -632,11 +644,11 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	// Now using batch query instead of individual calls
 	mockDS.On("GetBatchHourlyOccurrences", testDate, mock.MatchedBy(func(species []string) bool {
 		return len(species) == 2 &&
-			((species[0] == "American Crow" && species[1] == "Red-bellied Woodpecker") ||
-				(species[0] == "Red-bellied Woodpecker" && species[1] == "American Crow"))
+			((species[0] == sciAmericanCrow && species[1] == sciRedBelliedWoodpecker) ||
+				(species[0] == sciRedBelliedWoodpecker && species[1] == sciAmericanCrow))
 	}), minConfidence).Return(map[string][24]int{
-		"American Crow":          expectedAmcroHourlyCounts,
-		"Red-bellied Woodpecker": expectedRbwoHourlyCounts,
+		sciAmericanCrow:         expectedAmcroHourlyCounts,
+		sciRedBelliedWoodpecker: expectedRbwoHourlyCounts,
 	}, nil)
 
 	// Mock for image cache initialization
@@ -766,6 +778,103 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
+// TestGetDailySpeciesSummary_LocalizedNonPrimarySpecies is a regression test:
+// a non-primary-model species (a bat from BattyBirdNET) whose common
+// name is localized by OpenFauna to a value different from its scientific name
+// must still appear in the daily summary. The pre-fix pipeline keyed the hourly
+// aggregation on the localized common name and reverse-mapped it through a
+// label-only map that has no bat entry, so the hourly counts came back zero and
+// the species was dropped. The fix keys the aggregation on scientific name end to
+// end.
+func TestGetDailySpeciesSummary_LocalizedNonPrimarySpecies(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("type", "regression")
+	t.Attr("feature", "species-summary")
+
+	e := echo.New()
+	mockDS := mocks.NewMockInterface(t)
+
+	const testDate = "2025-03-07"
+	const minConfidence = 0.0
+
+	// A bat localized by OpenFauna to a Finnish common name that differs from its
+	// scientific name, plus a regular bird as a control.
+	mockNotes := []datastore.Note{
+		{
+			ID:             1,
+			ScientificName: sciBarbastelleBat,
+			CommonName:     "mopsilepakko",
+			Confidence:     0.9,
+			Date:           testDate,
+			Time:           "23:15:00",
+		},
+		{
+			ID:             2,
+			ScientificName: sciEurasianBlackbird,
+			CommonName:     "Common Blackbird",
+			Confidence:     0.8,
+			Date:           testDate,
+			Time:           "08:20:00",
+		},
+	}
+
+	var batHourly [24]int
+	batHourly[23] = 5
+	var blackbirdHourly [24]int
+	blackbirdHourly[8] = 2
+
+	mockDS.On("GetTopBirdsData", testDate, minConfidence, 0).Return(mockNotes, nil)
+
+	// Post-fix contract: the controller keys the hourly aggregation on scientific
+	// name end to end, so GetBatchHourlyOccurrences receives scientific names and
+	// returns a map keyed by scientific name.
+	var passedSpecies []string
+	mockDS.On("GetBatchHourlyOccurrences", testDate, mock.Anything, minConfidence).
+		Run(func(args mock.Arguments) {
+			arg, ok := args.Get(1).([]string)
+			require.True(t, ok, "species argument should be []string")
+			passedSpecies = slices.Clone(arg)
+		}).
+		Return(map[string][24]int{
+			sciBarbastelleBat:    batHourly,
+			sciEurasianBlackbird: blackbirdHourly,
+		}, nil)
+
+	controller := &Controller{DS: mockDS}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date="+testDate, http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetDailySpeciesSummary(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response []SpeciesDailySummary
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+	// The controller must pass scientific names (not localized common names) to
+	// the hourly batch fetch.
+	assert.ElementsMatch(t, []string{sciBarbastelleBat, sciEurasianBlackbird}, passedSpecies,
+		"hourly batch should be keyed on scientific name, not localized common name")
+
+	bySci := make(map[string]SpeciesDailySummary, len(response))
+	for i := range response {
+		bySci[response[i].ScientificName] = response[i]
+	}
+
+	bat, ok := bySci[sciBarbastelleBat]
+	require.True(t, ok, "bat species must appear in the daily summary (regression)")
+	assert.Equal(t, 5, bat.Count, "bat hourly counts must be aggregated by scientific name")
+	assert.Equal(t, "mopsilepakko", bat.CommonName, "bat keeps its localized common name for display")
+
+	blackbird, ok := bySci[sciEurasianBlackbird]
+	require.True(t, ok, "control bird must appear in the daily summary")
+	assert.Equal(t, 2, blackbird.Count)
+
+	mockDS.AssertExpectations(t)
+}
+
 // TestGetDailySpeciesSummary_SingleDetection tests that the GetDailySpeciesSummary function
 // correctly handles the case where each species has only one detection
 func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
@@ -809,8 +918,8 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	// Setup mock expectations using m.On()
 	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 0).Return(mockNotesSingle, nil)
 	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
-		"American Crow":          expectedAmcroSingleHourly,
-		"Red-bellied Woodpecker": expectedRbwoSingleHourly,
+		sciAmericanCrow:         expectedAmcroSingleHourly,
+		sciRedBelliedWoodpecker: expectedRbwoSingleHourly,
 	}, nil)
 
 	// Mock for image cache initialization
@@ -982,7 +1091,7 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 	// Setup mock expectations using m.On()
 	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 0).Return(mockNotesTime, nil)
 	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
-		"American Crow": expectedAmcroTimeHourly,
+		sciAmericanCrow: expectedAmcroTimeHourly,
 	}, nil)
 
 	// Create a controller with our mock
@@ -1065,8 +1174,8 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	mockDS.On("GetTopBirdsData", "2025-03-07", expectedMinConfidence, 0).Return(mockNotesConfidence, nil)
 	// GetBatchHourlyOccurrences is called for all species returned by GetTopBirdsData
 	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, expectedMinConfidence).Return(map[string][24]int{
-		"American Crow":          expectedAmcroConfidenceHourly,
-		"Red-bellied Woodpecker": [24]int{}, // Filtered out later
+		sciAmericanCrow:         expectedAmcroConfidenceHourly,
+		sciRedBelliedWoodpecker: {}, // Filtered out later
 	}, nil)
 
 	// Create a controller with our mock
@@ -1151,8 +1260,8 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 2).Return(mockNotesLimit, nil)
 	// Expect GetBatchHourlyOccurrences to be called for the 2 species returned
 	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
-		"American Crow":          expectedAmcroLimitHourly,
-		"Red-bellied Woodpecker": expectedRbwoLimitHourly,
+		sciAmericanCrow:         expectedAmcroLimitHourly,
+		sciRedBelliedWoodpecker: expectedRbwoLimitHourly,
 	}, nil)
 
 	// Create a controller with our mock
