@@ -240,30 +240,63 @@ func BuildRangeFilter(o *Orchestrator) error {
 	return nil
 }
 
+// matchingLabels returns every label that matches speciesName by its common or
+// scientific name, in canonical "Scientific_Common" form so callers can append
+// the label instead of the user's bare entry.
+func matchingLabels(labels []string, speciesName string) []string {
+	var matched []string
+	for _, label := range labels {
+		if matchesSpecies(label, speciesName) {
+			matched = append(matched, label)
+		}
+	}
+	return matched
+}
+
+// canonicalOverrideLabels resolves a user override entry to canonical labels,
+// preferring the geomodel's own labels and falling back to the active
+// classifier's localized labels. The geomodel labels are "Scientific_English",
+// so a localized common name (e.g. the Finnish "sinitiainen") matches none of
+// them; the active classifier's labels carry "Scientific_LocalizedCommon"
+// (e.g. "Cyanistes caeruleus_sinitiainen") and do match. Resolving against both
+// keeps a localized override from being appended verbatim and then mis-keyed as
+// a scientific name by the inclusion gate and the OpenFauna name resolver
+// (issue #982). Returns nil when the entry matches no biological label (e.g.
+// non-bird classes like "drone"/"heatpump"), so callers append the raw entry
+// and the name resolver legitimately reports it as unresolved.
+func canonicalOverrideLabels(speciesName string, geoLabels, classifierLabels []string) []string {
+	if matched := matchingLabels(geoLabels, speciesName); len(matched) > 0 {
+		return matched
+	}
+	return matchingLabels(classifierLabels, speciesName)
+}
+
 // addUserOverrideSpeciesScores appends species from the explicit include list
 // and species with configured actions to a SpeciesScore slice with score 1.0.
-// Used by the universal geomodel path in getProbableSpecies.
-func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, settings *conf.Settings, availableLabels []string) {
+// Used by the universal geomodel path in getProbableSpecies. Each entry is
+// canonicalized via canonicalOverrideLabels so localized common names enter the
+// set as "Scientific_Common" labels rather than the raw user string.
+func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, settings *conf.Settings, geoLabels []string) {
 	seen := make(map[string]bool, len(*speciesScores))
 	for _, ss := range *speciesScores {
 		seen[ss.Label] = true
 	}
 
 	addOverride := func(speciesName string) {
-		matched := false
-		for _, label := range availableLabels {
-			if matchesSpecies(label, speciesName) {
-				matched = true
-				if !seen[label] {
-					bn.Debug("Adding override species with max score: %s (matched with: %s)", label, speciesName)
-					*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
-					seen[label] = true
-				}
+		labels := canonicalOverrideLabels(speciesName, geoLabels, settings.BirdNET.Labels)
+		if len(labels) == 0 {
+			if !seen[speciesName] {
+				*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: speciesName})
+				seen[speciesName] = true
 			}
+			return
 		}
-		if !matched && !seen[speciesName] {
-			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: speciesName})
-			seen[speciesName] = true
+		for _, label := range labels {
+			if !seen[label] {
+				bn.Debug("Adding override species with max score: %s (matched with: %s)", label, speciesName)
+				*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
+				seen[label] = true
+			}
 		}
 	}
 
@@ -275,30 +308,32 @@ func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, se
 	}
 }
 
-// addUserOverrideSpecies appends species from the explicit include list
-// and species with configured actions to the inclusion set. Each entry is
-// matched against availableLabels by common or scientific name; if no match
-// is found the raw entry is appended so the scientific name map picks it up.
-func addUserOverrideSpecies(includedSpecies *[]string, settings *conf.Settings, availableLabels []string) {
+// addUserOverrideSpecies appends species from the explicit include list and
+// species with configured actions to the inclusion set. Each entry is
+// canonicalized via canonicalOverrideLabels (geomodel labels first, then the
+// active classifier's localized labels). A matched entry is appended in its
+// canonical "Scientific_Common" form so the scientific name map keys it
+// correctly; an unmatched entry (e.g. a non-bird class) is appended verbatim.
+func addUserOverrideSpecies(includedSpecies *[]string, settings *conf.Settings, geoLabels []string) {
 	seen := make(map[string]bool, len(*includedSpecies))
 	for _, s := range *includedSpecies {
 		seen[s] = true
 	}
 
 	addOverride := func(speciesName string) {
-		matched := false
-		for _, label := range availableLabels {
-			if matchesSpecies(label, speciesName) {
-				matched = true
-				if !seen[label] {
-					*includedSpecies = append(*includedSpecies, label)
-					seen[label] = true
-				}
+		labels := canonicalOverrideLabels(speciesName, geoLabels, settings.BirdNET.Labels)
+		if len(labels) == 0 {
+			if !seen[speciesName] {
+				*includedSpecies = append(*includedSpecies, speciesName)
+				seen[speciesName] = true
 			}
+			return
 		}
-		if !matched && !seen[speciesName] {
-			*includedSpecies = append(*includedSpecies, speciesName)
-			seen[speciesName] = true
+		for _, label := range labels {
+			if !seen[label] {
+				*includedSpecies = append(*includedSpecies, label)
+				seen[label] = true
+			}
 		}
 	}
 

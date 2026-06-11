@@ -1381,7 +1381,11 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 		p.detectionMutex.RLock()
 		lastHumanDetection, exists := p.LastHumanDetection[item.Source]
 		p.detectionMutex.RUnlock()
-		if exists && lastHumanDetection.After(item.FirstDetected) {
+		// Discard when a human voice was detected at or after the bird detection
+		// started. Using !Before (>=) rather than After (>) so a human and a bird
+		// sharing the exact same audio chunk (equal timestamps) still trips the
+		// privacy filter instead of leaking the detection.
+		if exists && !lastHumanDetection.Before(item.FirstDetected) {
 			// Add structured logging for privacy filter
 			GetLogger().Debug("Detection discarded by privacy filter",
 				logger.String("species", item.Detection.Result.Species.CommonName),

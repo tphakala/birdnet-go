@@ -101,12 +101,20 @@ func GeneratePlaceholderCode(speciesName string) string {
 		scientific := parts[0]
 		words := strings.Fields(scientific)
 		if len(words) >= 2 {
-			// Get first letter of genus and species (typically first two words)
-			prefix = strings.ToUpper(string(words[0][0]) + string(words[1][0]))
+			// First rune of the genus and species (typically the first two
+			// words). Decode runes (not bytes) so a multibyte name is not
+			// mangled into the wrong characters.
+			genus, _ := utf8.DecodeRuneInString(words[0])
+			species, _ := utf8.DecodeRuneInString(words[1])
+			prefix = strings.ToUpper(string(genus) + string(species))
 		} else if len(words) == 1 {
-			// Just use first two letters of the single word
-			if len(words[0]) >= 2 {
-				prefix = strings.ToUpper(words[0][:2])
+			// Use the first two runes of the single word. Slicing by runes (not
+			// bytes) keeps multibyte names intact; a byte slice can cut a rune
+			// mid-sequence and corrupt the prefix into U+FFFD replacement
+			// characters.
+			runes := []rune(words[0])
+			if len(runes) >= 2 {
+				prefix = strings.ToUpper(string(runes[:2]))
 			} else {
 				prefix = strings.ToUpper(words[0])
 			}
