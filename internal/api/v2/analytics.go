@@ -770,8 +770,17 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
 	defer cancel()
 
+	// Resolve a localized common name (e.g. a Finnish bat name) to its scientific
+	// name so analytics matches the detections/search path. A scientific name or an
+	// unresolved term passes through unchanged. Only the datastore query uses the
+	// resolved value; logs and the response keep the user-facing species string.
+	querySpecies := speciesParam
+	if resolved, hit := c.resolveSpeciesToScientific(speciesParam); hit {
+		querySpecies = resolved
+	}
+
 	// Get hourly analytics data from the datastore
-	hourlyData, err := c.DS.GetHourlyAnalyticsData(ctxWithTimeout, date, speciesParam)
+	hourlyData, err := c.DS.GetHourlyAnalyticsData(ctxWithTimeout, date, querySpecies)
 	if err != nil {
 		// Check if error was due to timeout
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -872,8 +881,16 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
 	defer cancel()
 
+	// Resolve a localized common name to its scientific name so analytics matches the
+	// detections/search path; a scientific name or unresolved term passes through.
+	// Only the datastore query uses the resolved value.
+	querySpecies := speciesParam
+	if resolved, hit := c.resolveSpeciesToScientific(speciesParam); hit {
+		querySpecies = resolved
+	}
+
 	// Get daily analytics data from the datastore
-	dailyData, err := c.DS.GetDailyAnalyticsData(ctxWithTimeout, startDate, endDate, speciesParam)
+	dailyData, err := c.DS.GetDailyAnalyticsData(ctxWithTimeout, startDate, endDate, querySpecies)
 	if err != nil {
 		// Check if error was due to timeout
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -1393,7 +1410,14 @@ func (c *Controller) processHourlyBatchSpecies(ctx echo.Context, speciesParams [
 		}
 		seen[speciesItem] = true
 
-		hourlyData, err := c.DS.GetHourlyAnalyticsData(ctx.Request().Context(), date, speciesItem)
+		// Resolve a localized common name for the datastore query only; results stay
+		// keyed by the user-facing species string.
+		queryItem := speciesItem
+		if resolved, hit := c.resolveSpeciesToScientific(speciesItem); hit {
+			queryItem = resolved
+		}
+
+		hourlyData, err := c.DS.GetHourlyAnalyticsData(ctx.Request().Context(), date, queryItem)
 		if err != nil {
 			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get hourly data for species %s: %v", speciesItem, err))
 			c.logErrorIfEnabled("Error getting hourly data for species in batch request",
@@ -1498,7 +1522,14 @@ func (c *Controller) processDailyBatchSpecies(ctx echo.Context, uniqueSpecies []
 	processingErrors = make([]string, 0)
 
 	for _, speciesItem := range uniqueSpecies {
-		dailyData, err := c.DS.GetDailyAnalyticsData(ctx.Request().Context(), startDate, endDate, speciesItem)
+		// Resolve a localized common name for the datastore query only; the response
+		// stays keyed by and labeled with the user-facing species string.
+		queryItem := speciesItem
+		if resolved, hit := c.resolveSpeciesToScientific(speciesItem); hit {
+			queryItem = resolved
+		}
+
+		dailyData, err := c.DS.GetDailyAnalyticsData(ctx.Request().Context(), startDate, endDate, queryItem)
 		if err != nil {
 			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get daily data for species %s: %v", speciesItem, err))
 			c.logErrorIfEnabled("Error getting daily data for species in batch request",
