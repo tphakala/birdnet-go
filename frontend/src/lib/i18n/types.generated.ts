@@ -495,8 +495,8 @@ export type TranslationKey =
   | 'dashboard.newSpeciesHighlights.categorySeason'
   | 'dashboard.newSpeciesHighlights.categorySeasonNamed' // params: season
   | 'dashboard.newSpeciesHighlights.maxConfidenceShort' // params: confidence
-  | 'dashboard.newSpeciesHighlights.detections'
-  | 'dashboard.newSpeciesHighlights.lastSeen' // params: today
+  | 'dashboard.newSpeciesHighlights.detections' // params: count
+  | 'dashboard.newSpeciesHighlights.lastSeen' // params: days
   | 'dashboard.dailySummary.title'
   | 'dashboard.dailySummary.subtitle'
   | 'dashboard.dailySummary.columns.species'
@@ -3665,7 +3665,8 @@ export type TranslationParams = {
   'search.pagination.page': { current: string | number; total: string | number };
   'dashboard.newSpeciesHighlights.categorySeasonNamed': { season: string | number };
   'dashboard.newSpeciesHighlights.maxConfidenceShort': { confidence: string | number };
-  'dashboard.newSpeciesHighlights.lastSeen': { today: string | number };
+  'dashboard.newSpeciesHighlights.detections': { count: string | number };
+  'dashboard.newSpeciesHighlights.lastSeen': { days: string | number };
   'dashboard.dailySummary.daylight.sunrise': { time: string | number };
   'dashboard.dailySummary.daylight.sunset': { time: string | number };
   'dashboard.dailySummary.tooltips.viewHourly': { hour: string | number };

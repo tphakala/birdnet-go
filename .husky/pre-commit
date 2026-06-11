@@ -72,9 +72,11 @@ if [ -n "$I18N_FILES" ]; then
   echo "✅ i18n keys in sync"
 fi
 
-# Check generated i18n types when en.json, the generator, or the generated file changes
+# Check generated i18n types when en.json, the generator, or the generated file changes.
+# The frontend/ prefix is optional so the match still works under git diff.relative=true
+# (paths come out relative to the frontend/ cwd set above).
 I18N_TYPES_TRIGGER=$(git diff --cached --name-only --diff-filter=ACMR | \
-  grep -E 'frontend/static/messages/en\.json$|frontend/src/lib/i18n/generateTypes\.ts$|frontend/src/lib/i18n/types\.generated\.ts$' || true)
+  grep -E '(frontend/)?static/messages/en\.json$|(frontend/)?src/lib/i18n/generateTypes\.ts$|(frontend/)?src/lib/i18n/types\.generated\.ts$' || true)
 
 if [ -n "$I18N_TYPES_TRIGGER" ]; then
   echo "🌍 Checking generated i18n types..."

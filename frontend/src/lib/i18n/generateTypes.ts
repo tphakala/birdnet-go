@@ -17,6 +17,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import prettier from 'prettier';
+import { parse as parseICU } from '@formatjs/icu-messageformat-parser';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -76,28 +77,56 @@ function generateTypeFromObject(obj: TranslationObject, prefix = ''): string {
 }
 
 /**
- * Extracts parameter names from a translation string
+ * Extracts parameter names from a translation string, in order of appearance.
  * e.g., "Hello {name}, you have {count} messages" -> ['name', 'count']
+ *
+ * Uses the ICU message parser (like validateTranslations.ts) so plural/select
+ * parameters such as "{count, plural, ...}" are captured, which the previous
+ * simple-brace regex missed. Falls back to that regex for strings the ICU
+ * parser rejects. Order is preserved (Set iteration is insertion order) rather
+ * than sorted, so the generated `// params:` annotations stay stable.
  */
 function extractParameters(str: string): string[] {
-  const regex = /\{(\w+)\}/g;
-  const params: string[] = [];
-  let match;
-  let lastIndex = -1;
+  const params = new Set<string>();
 
-  while ((match = regex.exec(str)) !== null) {
-    // Safety check: ensure lastIndex advances to prevent infinite loop
-    if (regex.lastIndex <= lastIndex) {
-      break;
-    }
-    lastIndex = regex.lastIndex;
-
-    if (!params.includes(match[1])) {
-      params.push(match[1]);
+  try {
+    extractParamsFromAST(parseICU(str), params);
+  } catch {
+    const regex = /\{(\w+)\}/g;
+    let match;
+    while ((match = regex.exec(str)) !== null) {
+      params.add(match[1]);
     }
   }
 
-  return params;
+  return [...params];
+}
+
+/**
+ * Walks an ICU AST collecting parameter names, recursing into plural/select
+ * option branches. Type 1 is a simple argument ({name}); type 6 is a
+ * plural/select node ({count, plural, ...}); both carry the parameter name in
+ * `value`. Mirrors extractParamsFromAST in validateTranslations.ts.
+ */
+function extractParamsFromAST(elements: ReturnType<typeof parseICU>, params: Set<string>): void {
+  for (const element of elements) {
+    const node = element as unknown as Record<string, unknown>;
+
+    if ('type' in node && (node.type === 1 || node.type === 6) && typeof node.value === 'string') {
+      params.add(node.value);
+    }
+
+    if ('options' in node && typeof node.options === 'object' && node.options !== null) {
+      for (const option of Object.values(node.options as Record<string, unknown>)) {
+        if (option && typeof option === 'object' && 'value' in option) {
+          const optionValue = (option as Record<string, unknown>).value;
+          if (Array.isArray(optionValue)) {
+            extractParamsFromAST(optionValue as ReturnType<typeof parseICU>, params);
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -230,8 +259,12 @@ async function checkTypes(): Promise<void> {
 }
 
 // Run only when invoked directly (not when imported, e.g. by tests).
-// pathToFileURL handles Windows path/URL differences (backslashes, drive letters).
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+// pathToFileURL handles Windows path/URL differences (backslashes, drive letters);
+// the typeof guard avoids throwing when argv[1] is undefined (e.g. some embeds).
+if (
+  typeof process.argv[1] === 'string' &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   const isCheck = process.argv.includes('--check');
   (isCheck ? checkTypes() : writeTypes()).catch(error => {
     console.error('❌ Error generating i18n types:', error);
