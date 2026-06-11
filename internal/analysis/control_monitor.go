@@ -129,7 +129,7 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 		if cm.apiController != nil {
 			api = cm.apiController
 		}
-		installNameResolver(cm.bn.OpenFaunaResolver(), cm.bn.Labels(), ds, api)
+		installNameResolver(cm.bn.OpenFaunaResolver(), cm.bn.AllLabels(), ds, api)
 	}
 
 	// Initialize the sound level manager but don't start it yet
@@ -409,7 +409,9 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 	// the new locale, and the resolver was installed on Ds/apiController at startup
 	// (NewControlMonitor), so these calls re-localize the cached maps via the
 	// now-current resolver.
-	labels := cm.bn.Labels()
+	// Use the full multi-model label set so secondary-model species (bats,
+	// Perch-unique) stay searchable after a locale/model reload, not just the primary.
+	labels := cm.bn.AllLabels()
 	if cm.proc != nil && cm.proc.Ds != nil {
 		cm.proc.Ds.UpdateNameMaps(labels)
 		GetLogger().Info("Datastore name maps updated with new labels")

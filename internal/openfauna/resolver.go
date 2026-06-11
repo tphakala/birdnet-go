@@ -312,6 +312,24 @@ func (r *Resolver) ResolveLocal(scientificName string) (name string, ok bool) {
 	return "", false
 }
 
+// ResolveLocalizedBatch resolves localized common names for many scientific names in
+// a single dataset pass at the resolver's current (already mapped) locale, with the
+// English fallback, returning sci -> common keyed by the caller's exact inputs. It is
+// the cold-path companion to ResolveLocal: scientific-only secondary-model labels
+// that ResolveLocal misses (because they are outside the working-set index) are
+// batched here when rebuilding the reverse search maps. Names with no translation are
+// absent from the result. Must not be called on a hot path.
+func (r *Resolver) ResolveLocalizedBatch(scientificNames []string) map[string]string {
+	if r == nil {
+		return map[string]string{}
+	}
+	st := r.cur.Load()
+	if st == nil {
+		return map[string]string{}
+	}
+	return lookupCommonNamesEffective(scientificNames, st.locale)
+}
+
 // Locale reports the effective openfauna locale code of the current index, or ""
 // before the first Rebuild. Intended for introspection and logging.
 func (r *Resolver) Locale() string {

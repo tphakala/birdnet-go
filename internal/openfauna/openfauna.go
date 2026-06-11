@@ -445,6 +445,94 @@ func LookupScientificNames(commonNames []string, bngLocale string) map[string][]
 	return out
 }
 
+// LookupCommonNames is the forward, batched companion to LookupScientificNames:
+// for each requested scientific name it returns the localized common name in the
+// locale mapped from bngLocale, resolving every request in a single pass over the
+// embedded dataset. The result is keyed by the caller's exact input strings
+// (matching is case-insensitive and whitespace-trimmed); a requested name with no
+// translation in either the active locale or English is absent from the result.
+//
+// It exists for the cold-path need to give the reverse search maps a localized
+// common name for every model label, including the scientific-only labels emitted
+// by non-primary models (bats, Perch-unique species) that the forward,
+// scientific-keyed working-set resolver (ResolveLocal) does not cover. The scan is
+// O(dataset) once regardless of how many names are requested, so callers batch all
+// of a name-map rebuild's unresolved labels into one call; it must not be used on a
+// hot path.
+//
+// Resolution mirrors Resolver.Resolve: bngLocale is mapped via mapLocale and matches
+// there take precedence; the English fallback is consulted only for names the active
+// locale did not resolve.
+func LookupCommonNames(scientificNames []string, bngLocale string) map[string]string {
+	return lookupCommonNamesEffective(scientificNames, mapLocale(bngLocale))
+}
+
+// lookupCommonNamesEffective is the locale-already-mapped core of LookupCommonNames,
+// shared with (*Resolver).ResolveLocalizedBatch which holds an effective locale.
+func lookupCommonNamesEffective(scientificNames []string, eff string) map[string]string {
+	inputs := make(map[string][]string) // normalized sci -> original inputs
+	for _, in := range scientificNames {
+		norm := normalizeName(in)
+		if norm == "" {
+			continue
+		}
+		inputs[norm] = append(inputs[norm], in)
+	}
+	if len(inputs) == 0 {
+		return map[string]string{}
+	}
+
+	inLocale := make(map[string]string)  // normalized sci -> common (active locale)
+	inEnglish := make(map[string]string) // normalized sci -> common (English fallback)
+	if err := streamTranslations(func(sci, loc, common string) error {
+		norm := normalizeName(sci)
+		if _, want := inputs[norm]; !want {
+			return nil
+		}
+		if common == "" {
+			return nil // an empty translation cannot satisfy a lookup; skip so it cannot block a real name
+		}
+		switch {
+		case loc == eff:
+			if _, exists := inLocale[norm]; !exists {
+				inLocale[norm] = common
+			}
+		case eff != localeFallback && loc == localeFallback:
+			if _, exists := inEnglish[norm]; !exists {
+				inEnglish[norm] = common
+			}
+		}
+		return nil
+	}); err != nil {
+		GetLogger().Error("openfauna forward common-name batch lookup failed",
+			logger.String("locale", eff),
+			logger.Int("requested", len(inputs)),
+			logger.Error(err),
+		)
+		return map[string]string{}
+	}
+
+	out := make(map[string]string, len(inputs))
+	for norm, origins := range inputs {
+		name := inLocale[norm]
+		if name == "" {
+			name = inEnglish[norm]
+		}
+		if name == "" {
+			continue
+		}
+		for _, in := range origins {
+			out[in] = name
+		}
+	}
+	GetLogger().Debug("openfauna forward common-name batch lookup",
+		logger.String("locale", eff),
+		logger.Int("requested", len(inputs)),
+		logger.Int("resolved", len(out)),
+	)
+	return out
+}
+
 // LookupMeta returns taxonomy/link metadata for one scientific name by scanning
 // the embedded dataset. Same performance caveat as Lookup.
 func LookupMeta(scientific string) (Meta, bool) {

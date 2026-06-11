@@ -691,6 +691,78 @@ func (o *Orchestrator) Labels() []string {
 	return primary.Labels()
 }
 
+// unionLabels returns the deduplicated concatenation of the given label sets,
+// preserving first-seen order and skipping empty strings.
+func unionLabels(sets ...[]string) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, set := range sets {
+		for _, label := range set {
+			if label == "" {
+				continue
+			}
+			if _, dup := seen[label]; dup {
+				continue
+			}
+			seen[label] = struct{}{}
+			out = append(out, label)
+		}
+	}
+	return out
+}
+
+// AllLabels returns the deduplicated union of every loaded model's labels: the
+// primary model plus all secondary models, INCLUDING the bat model. Unlike Labels(),
+// which returns the primary model's labels only, and unlike
+// GetAllProbableSpeciesWithSettings, which range-filters and skips the bat model,
+// AllLabels is the unfiltered superset. It is the label source for the reverse
+// name-search maps so localized common names of secondary-model species (bats,
+// Perch-unique species) are searchable, matching how the forward display path
+// already resolves them.
+func (o *Orchestrator) AllLabels() []string {
+	if o == nil {
+		return nil
+	}
+	o.mu.RLock()
+	primary := o.primary
+	primaryID := o.ModelInfo.ID
+	refs := make([]entryRef, 0, len(o.models))
+	for id, entry := range o.models {
+		// When a primary is set, skip its map entry: its labels are unioned explicitly
+		// below via the *BirdNET pointer, so including it here would snapshot them twice.
+		// When primary is nil, do not skip, so the primary model's labels are still
+		// covered via the map entry. unionLabels dedupes regardless.
+		if primary != nil && id == primaryID {
+			continue
+		}
+		refs = append(refs, entryRef{id: id, entry: entry})
+	}
+	o.mu.RUnlock()
+
+	// Sort secondary models by ID so the union (and the reverse maps built from it) is
+	// stable across rebuilds; Go's randomized map iteration would otherwise pick a
+	// different winner for duplicate scientific names, matching GetAllProbableSpeciesWithSettings.
+	slices.SortFunc(refs, func(a, b entryRef) int { return strings.Compare(a.id, b.id) })
+
+	// Include the primary explicitly. primary.Labels() is safe without entry.mu because
+	// BirdNET.Labels takes the model's own lock internally, matching Labels() and
+	// GetAllProbableSpeciesWithSettings; only secondary entries are read under entry.mu.
+	sets := make([][]string, 0, len(refs)+1)
+	if primary != nil {
+		sets = append(sets, primary.Labels())
+	}
+	for _, ref := range refs {
+		ref.entry.mu.Lock()
+		var labels []string
+		if ref.entry.instance != nil {
+			labels = ref.entry.instance.Labels()
+		}
+		ref.entry.mu.Unlock()
+		sets = append(sets, labels)
+	}
+	return unionLabels(sets...)
+}
+
 // GetSpeciesCode returns the eBird species code for a given label.
 func (o *Orchestrator) GetSpeciesCode(label string) (string, bool) {
 	o.mu.RLock()

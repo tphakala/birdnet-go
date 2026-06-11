@@ -3,6 +3,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1331,7 +1332,7 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	assert.Contains(t, errorResponse, "message")
 	assert.Contains(t, errorResponse, "code")
 
-	// Check the error message — in non-debug mode, Error field uses sanitized message
+	// Check the error message: in non-debug mode, Error field uses sanitized message
 	assert.Equal(t, "Failed to get daily species data", errorResponse["error"])
 	assert.Equal(t, "Failed to get daily species data", errorResponse["message"])
 	assert.InDelta(t, http.StatusInternalServerError, errorResponse["code"], 0.01)
@@ -1377,6 +1378,202 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 	assert.Equal(t, "Failed to process daily species data", errorResponse["error"])
 
 	// Assert that all expectations were met
+	mockDS.AssertExpectations(t)
+}
+
+// analyticsBatchFakeResolver is a test resolver that satisfies SpeciesNameResolver
+// and the optional batchLocalizer interface. This is distinct from the fakeResolver
+// in insights_nameresolver_test.go, which covers the forward (sci->common) path only.
+// Here we need the batch capability so that scientific-only bat labels (no embedded
+// common name) reach the commonToSci reverse map and become resolvable.
+type analyticsBatchFakeResolver struct{ batch map[string]string }
+
+func (a *analyticsBatchFakeResolver) Resolve(string, string) string      { return "" }
+func (a *analyticsBatchFakeResolver) ResolveLocal(string) (string, bool) { return "", false }
+func (a *analyticsBatchFakeResolver) ResolveLocalizedBatch(names []string) map[string]string {
+	out := make(map[string]string, len(names))
+	for _, n := range names {
+		if v, ok := a.batch[n]; ok {
+			out[n] = v
+		}
+	}
+	return out
+}
+
+// TestAnalytics_ResolvesLocalizedCommonNameToScientific verifies that after wiring a
+// batch-capable resolver and calling UpdateCommonNameMap, the reverse lookup for a
+// localized bat name (which has no embedded common name in the label) returns the
+// correct scientific name. This guards the map-builder wiring for the analytics path.
+func TestAnalytics_ResolvesLocalizedCommonNameToScientific(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("feature", "localized-name-resolution")
+
+	e := echo.New()
+	c := &Controller{Group: e.Group("/api/v2")}
+	c.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+		"Barbastella barbastellus": "mopsilepakko",
+	}})
+	// "Barbastella barbastellus" is a scientific-only label (no underscore separator),
+	// which triggers the batchLocalizer path in ResolveLabelNames.
+	c.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+	got, hit := c.resolveSpeciesToScientific("mopsilepakko")
+	require.True(t, hit, "expected a reverse-map hit for the Finnish bat name")
+	assert.Equal(t, "Barbastella barbastellus", got)
+}
+
+// TestAnalytics_HourlyHandlerPassesResolvedSpeciesToDatastore verifies that when
+// GetHourlyAnalytics receives a localized common name, the resolved scientific name
+// is what actually reaches the datastore. The API response keeps the user-facing
+// string; only the datastore call uses the resolved value.
+func TestAnalytics_HourlyHandlerPassesResolvedSpeciesToDatastore(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("feature", "localized-name-resolution")
+
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	// Wire the resolver so "mopsilepakko" reverse-maps to the scientific name.
+	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+		"Barbastella barbastellus": "mopsilepakko",
+	}})
+	controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+	const (
+		localizedName  = "mopsilepakko"
+		scientificName = "Barbastella barbastellus"
+		date           = testDate
+	)
+
+	// Capture the species argument that actually reaches the datastore.
+	var capturedSpecies string
+	mockDS.EXPECT().
+		GetHourlyAnalyticsData(mock.Anything, date, mock.AnythingOfType("string")).
+		RunAndReturn(func(_ context.Context, _ string, species string) ([]datastore.HourlyAnalyticsData, error) {
+			capturedSpecies = species
+			return []datastore.HourlyAnalyticsData{}, nil
+		}).Once()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/hourly", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/analytics/time/hourly")
+	ctx.QueryParams().Set("date", date)
+	ctx.QueryParams().Set("species", localizedName)
+
+	err := controller.GetHourlyAnalytics(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	// The resolved scientific name must reach the datastore, not the localized name.
+	assert.Equal(t, scientificName, capturedSpecies,
+		"datastore must receive the scientific name, not the localized common name")
+
+	mockDS.AssertExpectations(t)
+}
+
+// TestAnalytics_TimeOfDayDistributionResolvesLocalizedSpecies verifies that
+// GetTimeOfDayDistribution passes the scientific name to the datastore when given
+// a localized common name (Finnish bat name "mopsilepakko"). Before the fix the
+// resolver was not wired and the localized string reached the datastore unchanged.
+func TestAnalytics_TimeOfDayDistributionResolvesLocalizedSpecies(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("feature", "localized-name-resolution")
+
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+		"Barbastella barbastellus": "mopsilepakko",
+	}})
+	controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+	const (
+		startDate      = "2023-01-01"
+		endDate        = "2023-01-31"
+		localizedName  = "mopsilepakko"
+		scientificName = "Barbastella barbastellus"
+	)
+
+	var capturedSpecies string
+	mockDS.EXPECT().
+		GetHourlyDistribution(mock.Anything, startDate, endDate, mock.AnythingOfType("string")).
+		RunAndReturn(func(_ context.Context, _, _ string, species string) ([]datastore.HourlyDistributionData, error) {
+			capturedSpecies = species
+			return []datastore.HourlyDistributionData{}, nil
+		}).Once()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/distribution/hourly", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/analytics/time/distribution/hourly")
+	ctx.QueryParams().Set("start_date", startDate)
+	ctx.QueryParams().Set("end_date", endDate)
+	ctx.QueryParams().Set("species", localizedName)
+
+	err := controller.GetTimeOfDayDistribution(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, scientificName, capturedSpecies,
+		"datastore must receive the scientific name, not the localized common name")
+
+	mockDS.AssertExpectations(t)
+}
+
+// TestAnalytics_BatchDailySpeciesResolvesLocalizedSpecies verifies that
+// GetBatchDailySpeciesData resolves a localized common name to its scientific name
+// before querying the datastore, while keeping the user-facing name as the response key.
+func TestAnalytics_BatchDailySpeciesResolvesLocalizedSpecies(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("feature", "localized-name-resolution")
+
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+		"Barbastella barbastellus": "mopsilepakko",
+	}})
+	controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+
+	const (
+		startDate      = "2023-01-01"
+		endDate        = "2023-01-31"
+		localizedName  = "mopsilepakko"
+		scientificName = "Barbastella barbastellus"
+	)
+
+	var capturedSpecies string
+	mockDS.EXPECT().
+		GetDailyAnalyticsData(mock.Anything, startDate, endDate, mock.AnythingOfType("string")).
+		RunAndReturn(func(_ context.Context, _, _, species string) ([]datastore.DailyAnalyticsData, error) {
+			capturedSpecies = species
+			return []datastore.DailyAnalyticsData{}, nil
+		}).Once()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/daily/batch", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/analytics/time/daily/batch")
+	ctx.QueryParams().Set("start_date", startDate)
+	ctx.QueryParams().Set("end_date", endDate)
+	ctx.QueryParams()["species"] = []string{localizedName}
+
+	err := controller.GetBatchDailySpeciesData(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// The datastore must have received the scientific name, not the localized name.
+	assert.Equal(t, scientificName, capturedSpecies,
+		"datastore must receive the scientific name, not the localized common name")
+
+	// The response is a map[string]SpeciesDailyData keyed by user-facing species name.
+	// The localized name must be the key, not the scientific name.
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	_, hasLocalizedKey := resp[localizedName]
+	assert.True(t, hasLocalizedKey,
+		"response must be keyed by the user-facing localized name %q, not the scientific name", localizedName)
+
 	mockDS.AssertExpectations(t)
 }
 

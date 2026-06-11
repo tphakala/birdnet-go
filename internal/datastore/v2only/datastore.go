@@ -326,40 +326,24 @@ func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nam
 	speciesMap := make(map[string]string, len(labels))
 	commonMap := make(map[string]string, len(labels))
 	commonFoldedMap := make(map[string]string, len(labels))
-	// Hoist the (reflect-based) nil check out of the per-label loop. IsNilResolver
-	// also rejects typed-nil interfaces, consistent with SetNameResolver.
-	useResolver := !datastore.IsNilResolver(resolver)
-	for _, label := range labels {
-		// "Scientific_Common" splits into both names; a scientific-only label (no
-		// separator, e.g. Perch v2 / bat labels) has no embedded common name, so
-		// treat the whole label as the scientific name and rely on the resolver to
-		// make it searchable.
-		scientificName, commonName, found := strings.Cut(label, "_")
-		if !found {
-			scientificName, commonName = label, ""
-		}
-		scientificName = strings.TrimSpace(scientificName)
-		commonName = strings.TrimSpace(commonName)
-		if scientificName == "" {
+	// Ambiguous reverse keys are deleted, not last-writer-wins: an ambiguous common
+	// name must fall through to substring search (which returns all matches) rather
+	// than route to an arbitrary species.
+	ambiguous := make(map[string]struct{})
+	for _, sn := range datastore.ResolveLabelNames(labels, resolver) {
+		commonMap[sn.Scientific] = sn.Common
+		folded := strings.ToLower(norm.NFC.String(sn.Common))
+		commonFoldedMap[sn.Scientific] = folded
+
+		if _, seen := ambiguous[folded]; seen {
 			continue
 		}
-		// Use the in-memory-only resolve here: buildNameMaps runs over the full
-		// model label set, so calling the slow-path Resolve for every
-		// out-of-working-set species would drive thousands of dataset scans on each
-		// rebuild. Out-of-working-set species keep their label name in the (reverse
-		// search) maps; live resolveCommonName still resolves them on-demand for
-		// display.
-		if useResolver {
-			if r, ok := resolver.ResolveLocal(scientificName); ok {
-				commonName = r
-			}
-		}
-		if commonName == "" {
+		if existing, exists := speciesMap[folded]; exists && existing != sn.Scientific {
+			ambiguous[folded] = struct{}{}
+			delete(speciesMap, folded)
 			continue
 		}
-		speciesMap[strings.ToLower(commonName)] = scientificName
-		commonMap[scientificName] = commonName
-		commonFoldedMap[scientificName] = strings.ToLower(norm.NFC.String(commonName))
+		speciesMap[folded] = sn.Scientific
 	}
 	return &nameMaps{common: commonMap, commonFolded: commonFoldedMap, species: speciesMap}
 }
@@ -2839,9 +2823,17 @@ func (ds *Datastore) resolveCommonName(scientificName string) string {
 // Uses the pre-built species name map (lowercase common name → scientific name).
 // Falls back to the input unchanged if no mapping is found.
 func (ds *Datastore) resolveToScientificName(name string) string {
-	normalized := strings.ToLower(strings.TrimSpace(name))
-	if sci, ok := ds.loadNameMaps().species[normalized]; ok {
+	normalized := strings.ToLower(norm.NFC.String(strings.TrimSpace(name)))
+	species := ds.loadNameMaps().species
+	if sci, ok := species[normalized]; ok {
 		return sci
+	}
+	// Reverse miss: the input did not map to a known scientific name, so callers fall
+	// back to substring/LIKE. Log once so an unresolvable name is distinguishable from
+	// a name with no detections. Guard ds.log (may be nil; matches resolveCommonName).
+	if ds.log != nil && len(species) > 0 {
+		ds.log.Debug("species name did not resolve to a scientific name, using input verbatim",
+			logger.String("input", name))
 	}
 	return name
 }
@@ -3107,8 +3099,9 @@ func (ds *Datastore) GetThresholdEvents(speciesName string, limit int) ([]datast
 
 	// Query 2: If we can resolve to scientific name, also query with that
 	// This finds correctly saved events (after #1907 fix)
-	normalizedCommon := strings.ToLower(strings.TrimSpace(speciesName))
-	if scientificName, ok := ds.loadNameMaps().species[normalizedCommon]; ok && scientificName != speciesName {
+	// Resolve through resolveToScientificName so this shares the reverse map's NFC-folded
+	// normalization; a decomposed (NFD) localized name must match the NFC-folded keys.
+	if scientificName := ds.resolveToScientificName(speciesName); scientificName != speciesName {
 		sciEvents, err := ds.threshold.GetThresholdEvents(ctx, scientificName, limit)
 		if err == nil && len(sciEvents) > 0 {
 			v2Events = append(v2Events, sciEvents...)
