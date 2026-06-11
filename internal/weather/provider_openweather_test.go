@@ -9,7 +9,41 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// TestBuildOpenWeatherURL_RejectsSchemelessEndpoint guards against a
+// misconfigured custom endpoint that omits the scheme (e.g. "api.custom.org").
+// url.Parse accepts such a value as a relative path (empty Scheme and Host), so
+// without an explicit check the builder returns a relative URL and the request
+// later fails with an opaque "unsupported protocol scheme". The builder must
+// reject it up front with a configuration error instead.
+func TestBuildOpenWeatherURL_RejectsSchemelessEndpoint(t *testing.T) {
+	tests := []struct {
+		name     string
+		endpoint string
+	}{
+		{"no_scheme", "api.custom-openweather.org"},
+		{"no_scheme_with_path", "api.custom-openweather.org/data/2.5/weather"},
+		{"scheme_without_host", "https://"},
+		{"non_http_scheme", "ftp://api.custom-openweather.org"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := createTestSettings(t, "openweather", func(s *conf.Settings) {
+				s.Realtime.Weather.OpenWeather.Endpoint = tt.endpoint
+			})
+
+			_, err := buildOpenWeatherURL(settings, "test-key")
+
+			require.Error(t, err)
+			var ee *errors.EnhancedError
+			require.ErrorAs(t, err, &ee)
+			assert.Equal(t, string(errors.CategoryConfiguration), ee.GetCategory(),
+				"a malformed endpoint must classify as a configuration error")
+		})
+	}
+}
 
 func TestOpenWeatherProvider_FetchWeather_Success(t *testing.T) {
 	setupHTTPMock(t)

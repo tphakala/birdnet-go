@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/jarcoal/httpmock"
@@ -99,6 +100,52 @@ func TestWundergroundProvider_TransportError_DoesNotLeakAPIKey(t *testing.T) {
 	assert.Nil(t, data)
 	assert.NotContains(t, err.Error(), sentinelAPIKey, "returned error must not embed the API key")
 	assert.NotContains(t, logs.String(), sentinelAPIKey, "logs must not embed the API key")
+}
+
+// TestYrNoProvider_TransportError_DoesNotLeakCoordinates is a regression guard
+// for the coordinate-leak / scrub-pattern divergence in the yr.no provider. The
+// request URL embeds the user's lat/lon (formatted with %.3f), and net/http
+// wraps a transport failure in a *url.Error whose Error() embeds that URL. The
+// provider must scrub the error before returning it, or the coordinates ride the
+// wrapped error up to weather.go where a plain logger.Error writes them to logs
+// and uploaded support dumps. yr.no (api.met.no) is keyless, so the sensitive
+// payload here is the coordinates rather than an API key.
+func TestYrNoProvider_TransportError_DoesNotLeakCoordinates(t *testing.T) {
+	setupHTTPMock(t)
+	logs := captureWeatherLogs(t)
+
+	// Force every attempt's client.Do to fail at the transport layer so the
+	// provider exercises its failure-log and error-wrap paths.
+	httpmock.RegisterResponder("GET", `=~^https://api\.met\.no/weatherapi/locationforecast/2\.0/complete`,
+		httpmock.NewErrorResponder(errors.NewStd("simulated transport failure")))
+
+	provider := NewYrNoProvider()
+	settings := createTestSettings(t, "yrno") // Helsinki: 60.1699, 24.9384
+
+	data, err := provider.FetchWeather(settings)
+
+	require.Error(t, err)
+	assert.Nil(t, data)
+	// The %.3f-formatted coordinates from createTestSettings must not survive in
+	// the error that propagates to weather.go's plain logger.Error.
+	assert.NotContains(t, err.Error(), "60.170", "returned error must not embed latitude")
+	assert.NotContains(t, err.Error(), "24.938", "returned error must not embed longitude")
+
+	// The transport-failure WARN log must be scrubbed too. The Info "Fetching
+	// weather data" log intentionally shows the request URL (with coordinates),
+	// consistent across all providers, so assert specifically on the
+	// "HTTP request failed" lines rather than the whole captured buffer. Track
+	// that at least one such line was seen so a future log-message rename fails
+	// loudly here instead of silently skipping the assertion.
+	var sawTransportLog bool
+	for line := range strings.Lines(logs.String()) {
+		if strings.Contains(line, "HTTP request failed") {
+			sawTransportLog = true
+			assert.NotContains(t, line, "60.170", "transport-failure log must not embed latitude")
+			assert.NotContains(t, line, "24.938", "transport-failure log must not embed longitude")
+		}
+	}
+	assert.True(t, sawTransportLog, "expected at least one transport-failure log line to assert against")
 }
 
 // TestMaskAPIKey_FailsClosedOnParseError verifies that maskAPIKey never returns

@@ -90,6 +90,9 @@ func buildOpenWeatherURL(settings *conf.Settings, apiKey string) (string, error)
 			errors.CategoryConfiguration, "parse_endpoint", openWeatherProviderName,
 		)
 	}
+	if err := validateEndpointScheme(u, openWeatherProviderName); err != nil {
+		return "", err
+	}
 	q := u.Query()
 	q.Set("lat", strconv.FormatFloat(settings.BirdNET.Latitude, 'f', openWeatherCoordPrecision, 64))
 	q.Set("lon", strconv.FormatFloat(settings.BirdNET.Longitude, 'f', openWeatherCoordPrecision, 64))
@@ -122,7 +125,9 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 
 	req, err := http.NewRequest("GET", apiURL, http.NoBody)
 	if err != nil {
-		return nil, newWeatherError(err, errors.CategoryNetwork, "create_http_request", openWeatherProviderName)
+		// Scrub before wrapping: http.NewRequest can return a *url.Error that
+		// embeds apiURL, which carries the appid API key query parameter.
+		return nil, newWeatherError(privacy.WrapError(err), errors.CategoryNetwork, "create_http_request", openWeatherProviderName)
 	}
 	req.Header.Set("User-Agent", UserAgent())
 

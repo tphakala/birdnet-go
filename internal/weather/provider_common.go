@@ -2,6 +2,7 @@ package weather
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/branding"
@@ -80,6 +81,28 @@ func newWeatherErrorWithRetries(err error, category errors.ErrorCategory, operat
 		Context("provider", provider).
 		Context("max_retries", fmt.Sprintf("%d", MaxRetries)).
 		Build()
+}
+
+// validateEndpointScheme ensures a user-configured custom weather endpoint is an
+// absolute http(s) URL. url.Parse accepts a scheme-less value such as
+// "api.example.com" as a relative path (empty Scheme and Host); the request
+// would then fail later with an opaque "unsupported protocol scheme", so reject
+// it here with a clear configuration error instead. The endpoint value is left
+// out of the message so a misconfigured URL is not echoed into logs.
+func validateEndpointScheme(u *url.URL, provider string) error {
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return newWeatherError(
+			fmt.Errorf("weather endpoint must be an absolute http(s) URL with a scheme (e.g. https://...)"),
+			errors.CategoryConfiguration, "validate_endpoint_scheme", provider,
+		)
+	}
+	if u.Host == "" {
+		return newWeatherError(
+			fmt.Errorf("weather endpoint must include a host"),
+			errors.CategoryConfiguration, "validate_endpoint_host", provider,
+		)
+	}
+	return nil
 }
 
 // Temperature conversion constants
