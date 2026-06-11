@@ -1257,10 +1257,14 @@ func (ds *Datastore) GetBatchHourlyOccurrences(date string, species []string, mi
 		// Get label IDs for this species across all models
 		labelIDs, err := ds.label.GetLabelIDsByScientificName(ctx, scientificName)
 		if err != nil {
-			// Log error with context and continue with other species
-			ds.log.Warn("failed to get label IDs for species in batch query",
-				logger.String("scientific_name", scientificName),
-				logger.Error(err))
+			// Log error with context and continue with other species. ds.log may be
+			// nil when the datastore is constructed without a logger, so guard it
+			// like the other logging sites in this file.
+			if ds.log != nil {
+				ds.log.Warn("failed to get label IDs for species in batch query",
+					logger.String("scientific_name", scientificName),
+					logger.Error(err))
+			}
 			continue
 		}
 		if len(labelIDs) > 0 {

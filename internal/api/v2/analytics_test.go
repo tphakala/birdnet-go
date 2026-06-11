@@ -34,6 +34,8 @@ const (
 	sciRedBelliedWoodpecker = "Melanerpes carolinus"
 	sciBarbastelleBat       = "Barbastella barbastellus"
 	sciEurasianBlackbird    = "Turdus merula"
+	sciAmericanRobin        = "Turdus migratorius"
+	sciBlueJay              = "Cyanocitta cristata"
 )
 
 // assertAnalyticsErrorResponse validates analytics error responses.
