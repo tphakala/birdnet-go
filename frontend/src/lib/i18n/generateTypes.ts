@@ -1,19 +1,50 @@
 /* eslint-disable no-console */
 /// <reference types="node" />
 /**
- * Script to generate TypeScript types from the English translation file
- * This ensures compile-time validation of translation keys
+ * Script to generate TypeScript types from the English translation file.
+ * This ensures compile-time validation of translation keys.
+ *
+ * Usage:
+ *   npx tsx src/lib/i18n/generateTypes.ts            Regenerate types.generated.ts
+ *   npx tsx src/lib/i18n/generateTypes.ts --check    Verify the file is in sync (exit 1 on drift)
+ *
+ * The generated file is committed and verified in CI (i18n-validation.yml); after
+ * editing en.json you must regenerate it (npm run generate:i18n-types) and commit
+ * the result, or the drift check will fail.
  */
 
 import { readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
+import prettier from 'prettier';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const OUTPUT_PATH = join(__dirname, 'types.generated.ts');
+const MESSAGES_PATH = join(__dirname, '../../../static/messages/en.json');
+
+/** Normalizes CRLF to LF so a Windows checkout (core.autocrlf) does not read as drift against Prettier's LF output. */
+const normalizeEol = (s: string): string => s.replace(/\r\n/g, '\n');
+
 type TranslationValue = string | Record<string, unknown>;
 type TranslationObject = Record<string, TranslationValue>;
+
+interface GeneratedTypes {
+  content: string;
+  keyCount: number;
+  paramCount: number;
+}
+
+/**
+ * Returns true only for plain nested objects (not null, not arrays). These are
+ * the only values the generator recurses into; everything else is a leaf key.
+ * Mirrors the guards in syncTranslations.ts and validateTranslations.ts so the
+ * three scripts agree on what counts as a key path.
+ */
+function isNestedObject(value: unknown): value is TranslationObject {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
 /**
  * Recursively generates TypeScript type definitions from a translation object
@@ -24,20 +55,20 @@ function generateTypeFromObject(obj: TranslationObject, prefix = ''): string {
   for (const [key, value] of Object.entries(obj)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;
 
-    if (typeof value === 'string') {
-      // Extract parameters from the translation string
-      const params = extractParameters(value);
+    if (isNestedObject(value)) {
+      // Recursively process nested objects
+      const nestedTypes = generateTypeFromObject(value, fullKey);
+      const nestedLines = nestedTypes.split('\n');
+      const filteredLines = nestedLines.filter(l => l.trim());
+      lines.push(...filteredLines);
+    } else {
+      // Leaf key. Parameters can only be extracted from string values.
+      const params = typeof value === 'string' ? extractParameters(value) : [];
       if (params.length > 0) {
         lines.push(`  | '${fullKey}' // params: ${params.join(', ')}`);
       } else {
         lines.push(`  | '${fullKey}'`);
       }
-    } else if (typeof value === 'object') {
-      // Recursively process nested objects
-      const nestedTypes = generateTypeFromObject(value as TranslationObject, fullKey);
-      const nestedLines = nestedTypes.split('\n');
-      const filteredLines = nestedLines.filter(l => l.trim());
-      lines.push(...filteredLines);
     }
   }
 
@@ -78,14 +109,14 @@ function generateParamTypes(obj: TranslationObject, prefix = ''): string[] {
   for (const [key, value] of Object.entries(obj)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;
 
-    if (typeof value === 'string') {
+    if (isNestedObject(value)) {
+      paramTypes.push(...generateParamTypes(value, fullKey));
+    } else if (typeof value === 'string') {
       const params = extractParameters(value);
       if (params.length > 0) {
         const paramType = params.map(p => `${p}: string | number`).join('; ');
         paramTypes.push(`  '${fullKey}': { ${paramType} };`);
       }
-    } else if (typeof value === 'object') {
-      paramTypes.push(...generateParamTypes(value as TranslationObject, fullKey));
     }
   }
 
@@ -93,29 +124,29 @@ function generateParamTypes(obj: TranslationObject, prefix = ''): string[] {
 }
 
 /**
- * Main function to generate types from the English translation file
- * Reads the en.json file and creates a TypeScript file with:
+ * Builds the contents of types.generated.ts from the English translation file:
  * - Union type of all available translation keys
  * - Parameter types for translations that require interpolation
  * - Type-safe translation function signature
+ *
+ * The output is formatted with the project Prettier config so it matches the
+ * committed file byte-for-byte (the in-sync check relies on this). The key and
+ * parameter counts are returned alongside it for the regeneration log.
  */
-function generateTypes() {
-  try {
-    // Read the English translation file
-    const messagesPath = join(__dirname, '../../../static/messages/en.json');
-    const enMessages = JSON.parse(readFileSync(messagesPath, 'utf-8'));
+async function buildTypes(): Promise<GeneratedTypes> {
+  const parsed: unknown = JSON.parse(readFileSync(MESSAGES_PATH, 'utf-8'));
+  if (!isNestedObject(parsed)) {
+    throw new Error(`${MESSAGES_PATH} did not parse to a JSON object`);
+  }
+  const enMessages = parsed;
 
-    // Generate translation key type
-    const translationKeys = generateTypeFromObject(enMessages);
+  const translationKeys = generateTypeFromObject(enMessages);
+  const paramTypes = generateParamTypes(enMessages);
 
-    // Generate parameter types
-    const paramTypes = generateParamTypes(enMessages);
-
-    // Create the TypeScript content
-    const tsContent = `/**
+  const tsContent = `/**
  * Auto-generated TypeScript types for i18n translation keys
  * Generated from: static/messages/en.json
- * 
+ *
  * DO NOT EDIT THIS FILE MANUALLY
  * Run 'npm run generate:i18n-types' to regenerate
  */
@@ -151,18 +182,61 @@ export interface TranslateFunction {
 }
 `;
 
-    // Write the TypeScript file
-    const outputPath = join(__dirname, 'types.generated.ts');
-    writeFileSync(outputPath, tsContent, 'utf-8');
+  const prettierConfig = await prettier.resolveConfig(OUTPUT_PATH);
+  const content = await prettier.format(tsContent, { ...prettierConfig, parser: 'typescript' });
 
-    console.log(`✅ Generated TypeScript types at: ${outputPath}`);
-    console.log(`📊 Total translation keys: ${translationKeys.split('\n').length - 1}`);
-    console.log(`📊 Keys with parameters: ${paramTypes.length}`);
-  } catch (error) {
-    console.error('❌ Error generating types:', error);
-    process.exit(1);
-  }
+  return {
+    content,
+    keyCount: translationKeys.split('\n').filter(Boolean).length,
+    paramCount: paramTypes.length,
+  };
 }
 
-// Run the generator
-generateTypes();
+/**
+ * Regenerates types.generated.ts from the English translation file.
+ */
+async function writeTypes(): Promise<void> {
+  const { content, keyCount, paramCount } = await buildTypes();
+  writeFileSync(OUTPUT_PATH, content, 'utf-8');
+
+  console.log(`✅ Generated TypeScript types at: ${OUTPUT_PATH}`);
+  console.log(`📊 Total translation keys: ${keyCount}`);
+  console.log(`📊 Keys with parameters: ${paramCount}`);
+}
+
+/**
+ * Verifies types.generated.ts is in sync with en.json without writing it.
+ * Exits with code 1 on drift so it can gate CI and the pre-commit hook,
+ * matching the syncTranslations.ts --check pattern.
+ */
+async function checkTypes(): Promise<void> {
+  const { content: expected } = await buildTypes();
+
+  let actual: string;
+  try {
+    actual = readFileSync(OUTPUT_PATH, 'utf-8');
+  } catch {
+    console.error(`❌ ${OUTPUT_PATH} not found. Run 'npm run generate:i18n-types'.`);
+    process.exit(1);
+  }
+
+  if (normalizeEol(expected) !== normalizeEol(actual)) {
+    console.error('❌ types.generated.ts is out of sync with en.json.');
+    console.error("   Run 'npm run generate:i18n-types' and commit the result.");
+    process.exit(1);
+  }
+
+  console.log('✅ types.generated.ts is in sync with en.json');
+}
+
+// Run only when invoked directly (not when imported, e.g. by tests).
+// pathToFileURL handles Windows path/URL differences (backslashes, drive letters).
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const isCheck = process.argv.includes('--check');
+  (isCheck ? checkTypes() : writeTypes()).catch(error => {
+    console.error('❌ Error generating i18n types:', error);
+    process.exit(1);
+  });
+}
+
+export { buildTypes, extractParameters, generateTypeFromObject, generateParamTypes };

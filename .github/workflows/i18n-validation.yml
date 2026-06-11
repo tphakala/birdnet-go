@@ -33,6 +33,19 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Check generated i18n types are in sync
+        working-directory: frontend
+        run: |
+          if npm run generate:i18n-types:check; then
+            echo "### ✅ Generated i18n Types In Sync" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Generated i18n Types Out Of Sync" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`types.generated.ts\` does not match \`en.json\`." >> $GITHUB_STEP_SUMMARY
+            echo "Run \`npm run generate:i18n-types\` in \`frontend/\` and commit the result." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
       - name: Validate translation files
         id: validate-files
         working-directory: frontend
