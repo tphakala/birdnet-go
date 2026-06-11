@@ -594,7 +594,10 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	slices.SortFunc(refs, func(a, b entryRef) int { return strings.Compare(a.id, b.id) })
 
 	passUnmapped := settings.BirdNET.RangeFilter.PassUnmappedSpecies
-	excludeList := settings.Realtime.Species.Exclude
+	// Build the exclude matcher once for this pass: it reverse-resolves localized
+	// common-name exclude entries through OpenFauna a single time so the per-label
+	// matches() below stays off the dataset scan.
+	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
 
 	for _, ref := range refs {
 		ref.entry.mu.Lock()
@@ -627,13 +630,13 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 					// Legacy path: no geomodel to consult. Preserve prior
 					// behavior and include the species, deduped by scientific
 					// name, without gating on PassUnmappedSpecies.
-					if !isSpeciesExcluded(label, excludeList) {
+					if !excluder.matches(label) {
 						scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
 						seenSci[sci] = true
 					}
 					continue
 				}
-				if passUnmapped && !isSpeciesExcluded(label, excludeList) {
+				if passUnmapped && !excluder.matches(label) {
 					scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
 					seenSci[sci] = true
 				}

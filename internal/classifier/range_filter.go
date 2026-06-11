@@ -165,9 +165,14 @@ func BuildRangeFilter(o *Orchestrator) error {
 		}
 		primary.mu.Unlock()
 
+		// Build the exclude matcher once per rebuild: it reverse-resolves localized
+		// common-name exclude entries through OpenFauna a single time so the per-score
+		// matches() below stays off the dataset scan.
+		excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
+
 		includedSpecies = make([]string, 0, len(scores))
 		for _, ss := range scores {
-			if !isSpeciesExcluded(ss.Label, settings.Realtime.Species.Exclude) {
+			if !excluder.matches(ss.Label) {
 				includedSpecies = append(includedSpecies, ss.Label)
 			}
 		}
@@ -187,10 +192,14 @@ func BuildRangeFilter(o *Orchestrator) error {
 			if mapping == nil {
 				mapping = buildSpeciesMapping(settings.BirdNET.Labels, allGeoLabels)
 			}
+			// cachedMapping (mappedRangeFilter.classifierToGeo) is sized from the
+			// model's labels at load time and can be longer than the live settings
+			// snapshot during a concurrent model/settings reload, so bounds-check the
+			// snapshot index before reading it.
 			for i, geoIdx := range mapping {
-				if geoIdx == -1 {
+				if geoIdx == -1 && i < len(settings.BirdNET.Labels) {
 					label := settings.BirdNET.Labels[i]
-					if !seen[label] && !isSpeciesExcluded(label, settings.Realtime.Species.Exclude) {
+					if !seen[label] && !excluder.matches(label) {
 						includedSpecies = append(includedSpecies, label)
 						seen[label] = true
 						unmappedCount++
@@ -398,6 +407,11 @@ func (bn *BirdNET) GetProbableSpeciesWithSettings(date time.Time, week float32, 
 func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, []string, error) {
 	bn.Debug("Applying range filter")
 
+	// Build the exclude matcher once: it reverse-resolves localized common-name exclude
+	// entries through OpenFauna a single time so the per-score matches() below (and
+	// zeroScoresForAllLabels) stay off the dataset scan.
+	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
+
 	// Skip filtering if range filter backend is not initialized.
 	// Read under lock to avoid data race with Delete().
 	bn.mu.Lock()
@@ -405,13 +419,13 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 	bn.mu.Unlock()
 	if !hasRangeFilter {
 		bn.Debug("Range filter model not loaded, returning zero scores for all labels")
-		return zeroScoresForAllLabels(settings.BirdNET.Labels, settings.Realtime.Species.Exclude), nil, nil
+		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, nil
 	}
 
 	// Skip filtering if location is not configured
 	if !settings.BirdNET.LocationConfigured {
 		bn.Debug("Location not configured, not using location based prediction filter")
-		return zeroScoresForAllLabels(settings.BirdNET.Labels, settings.Realtime.Species.Exclude), nil, nil
+		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, nil
 	}
 
 	threshold := settings.BirdNET.RangeFilter.Threshold
@@ -455,7 +469,7 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 
 		speciesScores := make([]SpeciesScore, 0, len(scores))
 		for _, ss := range scores {
-			if !isSpeciesExcluded(ss.Label, settings.Realtime.Species.Exclude) {
+			if !excluder.matches(ss.Label) {
 				speciesScores = append(speciesScores, ss)
 			}
 		}
@@ -471,10 +485,14 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 			if mapping == nil {
 				mapping = buildSpeciesMapping(settings.BirdNET.Labels, allGeoLabels)
 			}
+			// cachedMapping (mappedRangeFilter.classifierToGeo) is sized from the
+			// model's labels at load time and can be longer than the live settings
+			// snapshot during a concurrent model/settings reload, so bounds-check the
+			// snapshot index before reading it.
 			for i, geoIdx := range mapping {
-				if geoIdx == -1 {
+				if geoIdx == -1 && i < len(settings.BirdNET.Labels) {
 					label := settings.BirdNET.Labels[i]
-					if !seen[label] && !isSpeciesExcluded(label, settings.Realtime.Species.Exclude) {
+					if !seen[label] && !excluder.matches(label) {
 						speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
 						seen[label] = true
 					}
@@ -500,7 +518,7 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 
 	var speciesScores []SpeciesScore
 	for _, filter := range filters {
-		if !isSpeciesExcluded(filter.Label, settings.Realtime.Species.Exclude) {
+		if !excluder.matches(filter.Label) {
 			speciesScores = append(speciesScores, SpeciesScore{Score: float64(filter.Score), Label: filter.Label})
 		} else {
 			bn.Debug("Excluding species from range filter: %s", filter.Label)
@@ -519,22 +537,65 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 }
 
 // zeroScoresForAllLabels creates a slice of SpeciesScore with zero scores for all provided labels,
-// excluding any species that appear in the exclude list. This ensures that excluded species are
+// excluding any species the matcher rejects. This ensures that excluded species are
 // filtered even when the range filter model is not active or location is not configured.
-func zeroScoresForAllLabels(labels, excludeList []string) []SpeciesScore {
+func zeroScoresForAllLabels(labels []string, excl excludeMatcher) []SpeciesScore {
 	speciesScores := make([]SpeciesScore, 0, len(labels))
 	for _, label := range labels {
-		if !isSpeciesExcluded(label, excludeList) {
+		if !excl.matches(label) {
 			speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
 		}
 	}
 	return speciesScores
 }
 
-// isSpeciesExcluded checks if a species should be excluded based on its label
-func isSpeciesExcluded(label string, excludeList []string) bool {
-	for _, excludedSpecies := range excludeList {
-		if matchesSpecies(label, excludedSpecies) {
+// excludeMatcher matches model labels against the user's realtime.species.exclude
+// list for one rebuild/prediction pass. It forward-matches each label's scientific and
+// common name against the raw entries (like the include side), plus carries a set of
+// scientific names reverse-resolved from localized common-name entries via OpenFauna. A
+// non-primary model emits scientific-only labels (e.g. "Vulpes vulpes"), whose parsed
+// common name falls back to the scientific name, so a localized exclude entry (the
+// Finnish "Kettu") would never forward-match; that localized name lives only in
+// OpenFauna. The reverse resolution is batched once at construction (one dataset scan),
+// keeping the per-label match off OpenFauna so it stays safe on the hot paths the
+// matcher runs on (per geomodel score during rebuild, zeroScoresForAllLabels). This
+// mirrors the include-side reverse lookup in resolveOverrideLabels.
+type excludeMatcher struct {
+	entries    []string            // raw exclude entries, forward-matched per label
+	reverseSci map[string]struct{} // lower-cased scientific names of localized entries
+}
+
+// newExcludeMatcher precomputes the reverse-resolution set for excludeList at the
+// BirdNET locale. An empty exclude list yields a zero-value matcher whose matches() is
+// a cheap no-op and skips the OpenFauna scan entirely.
+func newExcludeMatcher(excludeList []string, locale string) excludeMatcher {
+	m := excludeMatcher{entries: excludeList}
+	if len(excludeList) == 0 {
+		return m
+	}
+	for _, sciNames := range openfauna.LookupScientificNames(excludeList, locale) {
+		for _, sci := range sciNames {
+			if m.reverseSci == nil {
+				m.reverseSci = make(map[string]struct{}, len(excludeList))
+			}
+			m.reverseSci[strings.ToLower(sci)] = struct{}{}
+		}
+	}
+	return m
+}
+
+// matches reports whether label is excluded: a forward scientific/common-name match
+// against an entry, or a reverse match of the label's scientific name to a localized
+// common-name entry resolved through OpenFauna.
+func (m excludeMatcher) matches(label string) bool {
+	sp := detection.ParseSpeciesString(label)
+	for _, entry := range m.entries {
+		if strings.EqualFold(sp.ScientificName, entry) || strings.EqualFold(sp.CommonName, entry) {
+			return true
+		}
+	}
+	if m.reverseSci != nil {
+		if _, ok := m.reverseSci[strings.ToLower(sp.ScientificName)]; ok {
 			return true
 		}
 	}
