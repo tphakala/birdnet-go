@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 const (
@@ -357,7 +358,10 @@ func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundCo
 	return io.ReadAll(resp.Body)
 }
 
-// handleWundergroundRequestError categorizes HTTP request errors
+// handleWundergroundRequestError categorizes HTTP request errors. The raw
+// transport error is a *url.Error that embeds the request URL, including the
+// apiKey query parameter, so it is scrubbed before wrapping to prevent an
+// upstream logger.Error in weather.go from leaking the key.
 func handleWundergroundRequestError(ctx context.Context, err error) error {
 	var category errors.ErrorCategory
 	switch ctx.Err() {
@@ -368,7 +372,7 @@ func handleWundergroundRequestError(ctx context.Context, err error) error {
 	default:
 		category = errors.CategoryNetwork
 	}
-	return newWeatherError(err, category, "weather_api_request", wundergroundProviderName)
+	return newWeatherError(privacy.WrapError(err), category, "weather_api_request", wundergroundProviderName)
 }
 
 // parseWundergroundResponse parses and validates the JSON response
