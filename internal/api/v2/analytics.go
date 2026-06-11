@@ -1089,8 +1089,16 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 		return err
 	}
 
+	// Resolve a localized common name to its scientific name so this endpoint matches
+	// the detections/search path; a scientific name or unresolved term passes through.
+	// Only the datastore query uses the resolved value.
+	querySpecies := speciesParam
+	if resolved, hit := c.resolveSpeciesToScientific(speciesParam); hit {
+		querySpecies = resolved
+	}
+
 	// Get hourly distribution data from the datastore
-	hourlyData, err := c.DS.GetHourlyDistribution(ctx.Request().Context(), startDate, endDate, speciesParam)
+	hourlyData, err := c.DS.GetHourlyDistribution(ctx.Request().Context(), startDate, endDate, querySpecies)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get hourly distribution data", http.StatusInternalServerError)
 	}
