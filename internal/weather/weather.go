@@ -195,9 +195,10 @@ type Service struct {
 	// sunCalcLat/sunCalcLon record the coordinates sunCalc was last built with.
 	sunCalcLat float64
 	sunCalcLon float64
-	// authConfigKey is the auth-relevant config fingerprint captured when auth
-	// was disabled; a change re-enables fetching (hot-reload of the API key).
-	authConfigKey string
+	// authConfigKey is the auth-relevant config fingerprint (SHA-256 digest)
+	// captured when auth was disabled; a change re-enables fetching (hot-reload
+	// of the API key).
+	authConfigKey [32]byte
 }
 
 // weatherAuthConfigKey builds a fingerprint of the auth-relevant weather config
@@ -205,16 +206,26 @@ type Service struct {
 // cycles signals the user updated credentials in the UI, which re-enables
 // fetching after an auth lockout. It returns a SHA-256 digest rather than the
 // raw values so the API keys are not retained verbatim in the Service struct
-// (s.authConfigKey); the digest is only ever compared, never logged.
-func weatherAuthConfigKey(settings *conf.Settings) string {
+// (s.authConfigKey); the digest is only ever compared, never logged. [32]byte
+// arrays are directly comparable, so no string conversion is needed.
+func weatherAuthConfigKey(settings *conf.Settings) [32]byte {
 	w := &settings.Realtime.Weather
-	joined := strings.Join([]string{
-		w.Provider,
-		w.OpenWeather.APIKey, w.OpenWeather.Endpoint,
-		w.Wunderground.APIKey, w.Wunderground.StationID, w.Wunderground.Endpoint,
-	}, "\x00")
-	sum := sha256.Sum256([]byte(joined))
-	return string(sum[:])
+	// Only the active provider's auth fields matter. Including the inactive
+	// provider's credentials would let an unrelated edit (e.g. changing the
+	// Wunderground key while OpenWeather is locked out) clear the lockout and
+	// trigger a fresh round of 401s against the still-broken active provider.
+	var fields []string
+	switch w.Provider {
+	case openWeatherProviderName:
+		fields = []string{w.Provider, w.OpenWeather.APIKey, w.OpenWeather.Endpoint}
+	case wundergroundProviderName:
+		fields = []string{w.Provider, w.Wunderground.APIKey, w.Wunderground.StationID, w.Wunderground.Endpoint}
+	default:
+		// yr.no (and "none"/unset) have no API key, so the provider name alone
+		// is the whole auth-relevant config.
+		fields = []string{w.Provider}
+	}
+	return sha256.Sum256([]byte(strings.Join(fields, "\x00")))
 }
 
 // currentSettings returns the latest settings snapshot so the service picks
@@ -519,14 +530,12 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 	if s.startupDelay > 0 {
 		getLogger().Info("Delaying initial weather fetch to reduce startup DB contention",
 			logger.String("delay", s.startupDelay.String()))
-		// time.NewTimer + Stop so the timer is released if stopChan fires first
-		// (time.After would leak the timer until startupDelay elapses).
-		timer := time.NewTimer(s.startupDelay)
+		// time.After is leak-free here: on Go 1.23+ an unreferenced timer is
+		// garbage collected even if it has not fired or been stopped.
 		select {
-		case <-timer.C:
+		case <-time.After(s.startupDelay):
 			// Delay elapsed, proceed with fetch
 		case <-stopChan:
-			timer.Stop()
 			return
 		}
 	}
@@ -557,9 +566,17 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 func (s *Service) safeFetchAndSave() {
 	defer func() {
 		if r := recover(); r != nil {
-			getLogger().Error("Weather poll cycle panicked, continuing",
+			// Record a failure so a repeatedly panicking fetch surfaces as
+			// degraded via Status()/GetStatus() and backs off, instead of being
+			// silently recovered while diagnostics keep reporting healthy.
+			// fetchAndSave's deferred unlock has already released fetchMu during
+			// the panic unwind, so recordFailure only takes backoff.mu here.
+			backoff, failures := s.backoff.recordFailure()
+			getLogger().Error("Weather poll cycle panicked, recovering and backing off",
 				logger.String("provider", s.providerName),
 				logger.Any("panic", r),
+				logger.String("backoff", backoff.String()),
+				logger.Int("consecutive_failures", failures),
 				logger.String("stack", string(debug.Stack())))
 		}
 	}()
@@ -575,10 +592,19 @@ func (s *Service) safeFetchAndSave() {
 // Unlike the StartPolling loop, Poll does not wrap the fetch in panic recovery:
 // it is a synchronous on-demand call, so a panic propagates to the caller.
 func (s *Service) Poll() error {
+	// Run a fetch cycle. fetchAndSave reconciles hot-reloaded config first, so a
+	// lockout cleared by a config change recovers even on a manual Poll; the
+	// auth check therefore happens after reconciliation, not before it. While
+	// auth is disabled and unchanged, fetchAndSave skips without a network call.
+	if err := s.fetchAndSave(); err != nil {
+		return err
+	}
+	// fetchAndSave returns nil when it skipped because auth is still disabled;
+	// surface that to the on-demand caller.
 	if s.backoff.isAuthDisabled() {
 		return ErrWeatherAuthFailed
 	}
-	return s.fetchAndSave()
+	return nil
 }
 
 // reconcileConfig applies hot-reloadable settings changes detected between poll

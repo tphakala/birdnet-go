@@ -1694,3 +1694,108 @@ func TestFetchAndSave_SerializedByMutex(t *testing.T) {
 	assert.Equal(t, goroutines, unsafeCounter,
 		"every serialized fetch should have incremented the counter exactly once")
 }
+
+// TestWeatherAuthConfigKey_ScopedToActiveProvider verifies the auth fingerprint
+// only reflects the active provider's credentials, so editing the inactive
+// provider's key does not spuriously clear an active-provider auth lockout.
+func TestWeatherAuthConfigKey_ScopedToActiveProvider(t *testing.T) {
+	t.Parallel()
+
+	base := createTestSettings(t, "openweather")
+	baseKey := weatherAuthConfigKey(base)
+
+	// Editing the inactive provider's credentials must NOT change the fingerprint.
+	inactiveEdit := createTestSettings(t, "openweather", func(s *conf.Settings) {
+		s.Realtime.Weather.Wunderground.APIKey = "different-wunderground-key"
+	})
+	assert.Equal(t, baseKey, weatherAuthConfigKey(inactiveEdit),
+		"changing the inactive provider's credentials must not change the fingerprint")
+
+	// Editing the active provider's credentials MUST change the fingerprint.
+	activeEdit := createTestSettings(t, "openweather", func(s *conf.Settings) {
+		s.Realtime.Weather.OpenWeather.APIKey = "different-openweather-key"
+	})
+	assert.NotEqual(t, baseKey, weatherAuthConfigKey(activeEdit),
+		"changing the active provider's credentials must change the fingerprint")
+}
+
+// TestSafeFetchAndSave_PanicRecordsFailure verifies that a panic in the fetch
+// cycle is recovered (not propagated) and recorded as a failure, so it surfaces
+// as degraded via Status() instead of leaving the service reporting healthy.
+func TestSafeFetchAndSave_PanicRecordsFailure(t *testing.T) {
+	t.Parallel()
+
+	settings := createTestSettings(t, "wunderground")
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			panic("provider boom")
+		},
+	}
+	service := &Service{
+		provider:     provider,
+		providerName: wundergroundProviderName,
+		db:           nil,
+		settings:     settings,
+		metrics:      nil,
+	}
+
+	require.NotPanics(t, func() { service.safeFetchAndSave() },
+		"a provider panic must be recovered, not propagated")
+
+	ok, msg := service.Status()
+	assert.False(t, ok, "a panicking fetch should report unhealthy, got: %s", msg)
+	assert.Positive(t, service.backoff.consecutiveFailures,
+		"recovered panic should record a failure")
+}
+
+// TestPoll_RecoversAfterConfigChange verifies that an on-demand Poll() recovers
+// from an auth lockout once the API key is fixed, instead of returning the
+// lockout error until the background ticker reconciles.
+//
+// Intentionally NOT t.Parallel(): mutates the package-global settings snapshot.
+func TestPoll_RecoversAfterConfigChange(t *testing.T) {
+	prevSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(prevSettings) })
+
+	settings := createTestSettings(t, "wunderground", func(s *conf.Settings) {
+		s.Realtime.Weather.Wunderground.APIKey = "bad-key"
+	})
+	conf.StoreSettings(settings)
+
+	authBad := true
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			if authBad {
+				return nil, ErrWeatherAuthFailed
+			}
+			return nil, ErrWeatherNoData // recovered; no data to persist (no DB needed)
+		},
+	}
+	service := &Service{
+		provider:     provider,
+		providerName: wundergroundProviderName,
+		db:           nil,
+		settings:     settings,
+		metrics:      nil,
+	}
+
+	// Drive the lockout via Poll.
+	for range maxConsecutiveAuthFailures {
+		_ = service.Poll()
+	}
+	require.True(t, service.backoff.isAuthDisabled(), "should be locked out after threshold")
+
+	// Still locked out with unchanged config: Poll surfaces the auth failure.
+	require.ErrorIs(t, service.Poll(), ErrWeatherAuthFailed)
+
+	// Fix the key; a manual Poll must now recover without waiting for the ticker.
+	authBad = false
+	updated := createTestSettings(t, "wunderground", func(s *conf.Settings) {
+		s.Realtime.Weather.Wunderground.APIKey = "good-key"
+	})
+	conf.StoreSettings(updated)
+
+	require.NoError(t, service.Poll(), "manual Poll should recover after the key is fixed")
+	assert.False(t, service.backoff.isAuthDisabled(),
+		"auth lockout should clear on the recovering Poll")
+}
