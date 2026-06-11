@@ -312,7 +312,6 @@ func TestHandleSearch_LocalizedCommonName_SecondaryModelSpecies(t *testing.T) {
 	// Drive a POST /search request with the localized Finnish bat name.
 	body := strings.NewReader(`{"species":"mopsilepakko"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/search", body)
-	req.Header.Set(echo.MIMEApplicationJSON, "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)

@@ -24,14 +24,30 @@ func TestLookupCommonNames_EmptyInputReturnsEmptyMap(t *testing.T) {
 	assert.Empty(t, got)
 }
 
+func TestLookupCommonNames_FinnishTranslationForKnownSpecies(t *testing.T) {
+	t.Parallel()
+
+	// Turdus merula has a genuine Finnish translation; this test pins the exact value.
+	got := LookupCommonNames([]string{"Turdus merula"}, "fi")
+	require.Contains(t, got, "Turdus merula")
+	assert.Equal(t, "mustarastas", got["Turdus merula"])
+}
+
 func TestLookupCommonNames_EnglishFallbackForUntranslatedLocale(t *testing.T) {
 	t.Parallel()
 
-	// A species translated in English but not in the target locale must still
-	// resolve via the English fallback, mirroring Resolver.Resolve.
-	got := LookupCommonNames([]string{"Turdus merula"}, "fi")
-	require.Contains(t, got, "Turdus merula")
-	assert.NotEmpty(t, got["Turdus merula"])
+	// Puffinus newelli has an English common name but no Finnish translation.
+	// The function must fall back to the English name rather than returning empty.
+	// This exercises the eff != localeFallback && loc == localeFallback branch in
+	// lookupCommonNamesEffective.
+	en := LookupCommonNames([]string{"Puffinus newelli"}, "en")
+	require.Contains(t, en, "Puffinus newelli", "English name must exist for this species")
+	require.NotEmpty(t, en["Puffinus newelli"], "English name must be non-empty")
+
+	got := LookupCommonNames([]string{"Puffinus newelli"}, "fi")
+	require.Contains(t, got, "Puffinus newelli")
+	assert.Equal(t, en["Puffinus newelli"], got["Puffinus newelli"],
+		"species with no Finnish translation must resolve to its English common name")
 }
 
 func TestResolver_ResolveLocalizedBatch_UsesBuiltLocale(t *testing.T) {

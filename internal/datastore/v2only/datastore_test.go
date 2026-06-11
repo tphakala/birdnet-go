@@ -1586,4 +1586,10 @@ func TestBuildNameMaps_AmbiguousCommonNameDeletedNotLastWriterWins(t *testing.T)
 	nm := buildNameMaps([]string{"Strix aluco_Owl", "Bubo bubo_Owl"}, nil)
 	_, ok := nm.species["owl"]
 	assert.False(t, ok, "ambiguous common name must be deleted from the exact reverse map")
+
+	// The forward display maps must still contain both species so their common names
+	// are shown correctly in the UI. Ambiguity handling must only drop the reverse
+	// lookup key, not the forward display names.
+	assert.Equal(t, "Owl", nm.common["Strix aluco"], "forward map must retain common name for Strix aluco")
+	assert.Equal(t, "Owl", nm.common["Bubo bubo"], "forward map must retain common name for Bubo bubo")
 }

@@ -334,3 +334,33 @@ func TestUnionLabels_SkipsEmptyEntries(t *testing.T) {
 	got := unionLabels([]string{"", "Parus major_Great Tit", ""})
 	assert.Equal(t, []string{"Parus major_Great Tit"}, got)
 }
+
+// TestAllLabels_IncludesSecondaryModelLabels verifies that AllLabels returns the
+// union of primary and secondary model labels, including scientific-only bat labels.
+// This is the label source used by the reverse name-search maps, so a secondary
+// model label must appear for localized search to find it.
+// When o.primary is nil (as in unit tests that avoid real model files), AllLabels
+// iterates o.models only; unionLabels deduplicates, so the result is still correct.
+func TestAllLabels_IncludesSecondaryModelLabels(t *testing.T) {
+	t.Parallel()
+
+	bird := &mockModelInstance{
+		id:     "BirdNET_V2.4",
+		labels: []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"},
+	}
+	bat := &mockModelInstance{
+		id:     "BattyBirdNET_V1.0",
+		labels: []string{"Barbastella barbastellus", "Myotis daubentonii"},
+	}
+
+	// newTestOrchestrator builds o.models but leaves o.primary nil, which is fine:
+	// AllLabels handles nil primary by iterating all entries in o.models.
+	o := newTestOrchestrator(t, bird, bat)
+
+	got := o.AllLabels()
+
+	assert.Contains(t, got, "Turdus merula_Common Blackbird", "bird model label must be included")
+	assert.Contains(t, got, "Parus major_Great Tit", "bird model label must be included")
+	assert.Contains(t, got, "Barbastella barbastellus", "bat model scientific-only label must be included")
+	assert.Contains(t, got, "Myotis daubentonii", "bat model scientific-only label must be included")
+}
