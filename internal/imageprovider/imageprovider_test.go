@@ -166,10 +166,7 @@ func (m *mockStore) GetAllNotes() ([]datastore.Note, error)                     
 func (m *mockStore) GetTopBirdsData(date string, minConf float64, limit int) ([]datastore.Note, error) {
 	return []datastore.Note{}, nil
 }
-func (m *mockStore) GetHourlyOccurrences(date, name string, minConf float64) ([24]int, error) {
-	return [24]int{}, nil
-}
-func (m *mockStore) GetBatchHourlyOccurrences(date string, species []string, minConf float64) (map[string][24]int, error) {
+func (m *mockStore) GetBatchHourlyOccurrences(_ context.Context, date string, species []string, minConf float64) (map[string][24]int, error) {
 	return make(map[string][24]int), nil
 }
 func (m *mockStore) SpeciesDetections(species, date, hour string, duration int, asc bool, limit, offset int) ([]datastore.Note, error) {

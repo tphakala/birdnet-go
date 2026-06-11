@@ -829,47 +829,64 @@ func (r *detectionRepository) GetTopSpecies(ctx context.Context, start, end int6
 	return results, err
 }
 
-// GetHourlyOccurrences returns detection counts by hour (0-23) for the given labels.
-// Aggregates across all provided label IDs in a single query (multi-model support).
-// minConfidence filters detections by minimum confidence threshold.
-func (r *detectionRepository) GetHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) ([24]int, error) {
-	var counts [24]int
+// GetBatchHourlyOccurrences returns per-label-ID hourly detection counts (0-23) for the
+// given label IDs. It groups by (label_id, hour) so a single query (per chunk) covers many
+// labels at once; callers that map one species to multiple model label IDs sum the per-label
+// arrays themselves. False positives are excluded and minConfidence filters by confidence.
+//
+// Large label sets are chunked by batchQuerySize to stay within SQL host-parameter limits;
+// per-chunk results are merged before returning. Each label ID appears in exactly one chunk,
+// so no cross-chunk aggregation is needed.
+func (r *detectionRepository) GetBatchHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) (map[uint][24]int, error) {
+	result := make(map[uint][24]int, len(labelIDs))
 
-	// Return zero array for empty input
+	// Return empty map for empty input (no query)
 	if len(labelIDs) == 0 {
-		return counts, nil
+		return result, nil
 	}
 
-	type hourCount struct {
-		Hour  int
-		Count int
+	type labelHourCount struct {
+		LabelID uint
+		Hour    int
+		Count   int
 	}
-	var results []hourCount
 
-	// Extract hour from Unix timestamp in local timezone
-	// Exclude detections marked as false_positive
+	// Extract hour from Unix timestamp in local timezone; exclude false positives.
 	hourExpr := r.hourFromUnixExpr("d.detected_at")
 	detTable := r.tableName()
 	revTable := r.reviewsTable()
-	err := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
-		Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
-		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
-		Where("d.label_id IN ? AND d.detected_at >= ? AND d.detected_at < ? AND d.confidence >= ?", labelIDs, start, end, minConfidence).
-		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
-		Group("hour").
-		Scan(&results).Error
 
-	if err != nil {
-		return counts, err
-	}
+	// Chunk label IDs to avoid exceeding SQL host-parameter limits on the IN clause.
+	for i := 0; i < len(labelIDs); i += batchQuerySize {
+		// Fail fast between chunks if the caller's context was cancelled.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		chunkEnd := min(i+batchQuerySize, len(labelIDs))
+		chunk := labelIDs[i:chunkEnd]
 
-	for _, r := range results {
-		if r.Hour >= 0 && r.Hour < 24 {
-			counts[r.Hour] = r.Count
+		var rows []labelHourCount
+		err := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
+			Joins(fmt.Sprintf("LEFT JOIN %s dr ON d.id = dr.detection_id", revTable)).
+			Select(fmt.Sprintf("d.label_id as label_id, %s as hour, COUNT(*) as count", hourExpr)).
+			Where("d.label_id IN ? AND d.detected_at >= ? AND d.detected_at < ? AND d.confidence >= ?", chunk, start, end, minConfidence).
+			Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive)).
+			Group(fmt.Sprintf("d.label_id, %s", hourExpr)).
+			Scan(&rows).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch hourly occurrences: %w", err)
+		}
+
+		for _, row := range rows {
+			if row.Hour >= 0 && row.Hour < 24 {
+				counts := result[row.LabelID]
+				counts[row.Hour] = row.Count
+				result[row.LabelID] = counts
+			}
 		}
 	}
 
-	return counts, nil
+	return result, nil
 }
 
 // GetDailyOccurrences returns daily detection counts for a label.

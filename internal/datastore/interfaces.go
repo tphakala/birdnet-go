@@ -104,13 +104,11 @@ type Interface interface {
 	// GetTopBirdsData returns daily detection summaries, ordered by detection count descending.
 	// The limit parameter (if > 0) restricts the number of unique species returned.
 	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64, limit int) ([]Note, error)
-	GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
 	// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
 	// The species slice holds scientific names; the returned map is keyed by scientific name.
 	// Keying on scientific name keeps the result robust across models and locales.
-	// This batches the per-species hourly lookups into a single query for performance. Note it keys
-	// on scientific name, unlike the singular GetHourlyOccurrences which still accepts a common name.
-	GetBatchHourlyOccurrences(date string, species []string, minConfidence float64) (map[string][24]int, error)
+	// This batches the per-species hourly lookups into a single query for performance.
+	GetBatchHourlyOccurrences(ctx context.Context, date string, species []string, minConfidence float64) (map[string][24]int, error)
 	SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetLastDetections(numDetections int) ([]Note, error)
 	GetAllDetectedSpecies() ([]Note, error)
@@ -706,7 +704,7 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		notes = append(notes, note)
 
 		// For the web UI, we only need one note per species
-		// The hourly counts will be retrieved separately via GetHourlyOccurrences
+		// The hourly counts will be retrieved separately via GetBatchHourlyOccurrences
 	}
 
 	return notes, nil
@@ -812,49 +810,11 @@ func (ds *DataStore) GetDateFormat(columnName string) string {
 	}
 }
 
-// GetHourlyOccurrences retrieves hourly occurrences of a specified bird species.
-func (ds *DataStore) GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
-	var hourlyCounts [24]int
-	var results []struct {
-		Hour  int
-		Count int
-	}
-
-	hourFormat := ds.GetHourFormat()
-
-	// Exclude detections marked as false_positive
-	err := ds.DB.Model(&Note{}).
-		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
-		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourFormat)).
-		Where("notes.date = ? AND notes.common_name = ? AND notes.confidence >= ?", date, commonName, minConfidenceNormalized).
-		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
-		Group(hourFormat).
-		Scan(&results).Error
-
-	if err != nil {
-		return hourlyCounts, errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "get_hourly_occurrences").
-			Context("date", date).
-			Context("species", commonName).
-			Build()
-	}
-
-	for _, result := range results {
-		if result.Hour >= 0 && result.Hour < 24 {
-			hourlyCounts[result.Hour] = result.Count
-		}
-	}
-
-	return hourlyCounts, nil
-}
-
 // GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
 // The species parameter holds scientific names, and the returned map is keyed by
 // scientific name. Keying on scientific name (rather than the localized common
 // name) keeps the daily summary robust across models and locales.
-func (ds *DataStore) GetBatchHourlyOccurrences(date string, species []string, minConfidence float64) (map[string][24]int, error) {
+func (ds *DataStore) GetBatchHourlyOccurrences(ctx context.Context, date string, species []string, minConfidence float64) (map[string][24]int, error) {
 	if len(species) == 0 {
 		return make(map[string][24]int), nil
 	}
@@ -868,7 +828,7 @@ func (ds *DataStore) GetBatchHourlyOccurrences(date string, species []string, mi
 	}
 
 	// Exclude detections marked as false_positive
-	err := ds.DB.Model(&Note{}).
+	err := ds.DB.WithContext(ctx).Model(&Note{}).
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
 		Select(fmt.Sprintf("notes.scientific_name, %s as hour, COUNT(*) as count", hourFormat)).
 		Where("notes.scientific_name IN ? AND notes.date = ? AND notes.confidence >= ?", species, date, minConfidence).

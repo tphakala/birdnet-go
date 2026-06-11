@@ -642,7 +642,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	// Setup mock expectations using m.On()
 	mockDS.On("GetTopBirdsData", testDate, minConfidence, 0).Return(mockNotes, nil)
 	// Now using batch query instead of individual calls
-	mockDS.On("GetBatchHourlyOccurrences", testDate, mock.MatchedBy(func(species []string) bool {
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, testDate, mock.MatchedBy(func(species []string) bool {
 		return len(species) == 2 &&
 			((species[0] == sciAmericanCrow && species[1] == sciRedBelliedWoodpecker) ||
 				(species[0] == sciRedBelliedWoodpecker && species[1] == sciAmericanCrow))
@@ -830,9 +830,10 @@ func TestGetDailySpeciesSummary_LocalizedNonPrimarySpecies(t *testing.T) {
 	// name end to end, so GetBatchHourlyOccurrences receives scientific names and
 	// returns a map keyed by scientific name.
 	var passedSpecies []string
-	mockDS.On("GetBatchHourlyOccurrences", testDate, mock.Anything, minConfidence).
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, testDate, mock.Anything, minConfidence).
 		Run(func(args mock.Arguments) {
-			arg, ok := args.Get(1).([]string)
+			// Args are (ctx, date, species, minConfidence); species is index 2.
+			arg, ok := args.Get(2).([]string)
 			require.True(t, ok, "species argument should be []string")
 			passedSpecies = slices.Clone(arg)
 		}).
@@ -917,7 +918,7 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 
 	// Setup mock expectations using m.On()
 	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 0).Return(mockNotesSingle, nil)
-	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
 		sciAmericanCrow:         expectedAmcroSingleHourly,
 		sciRedBelliedWoodpecker: expectedRbwoSingleHourly,
 	}, nil)
@@ -1090,7 +1091,7 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 
 	// Setup mock expectations using m.On()
 	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 0).Return(mockNotesTime, nil)
-	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
 		sciAmericanCrow: expectedAmcroTimeHourly,
 	}, nil)
 
@@ -1173,7 +1174,7 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	// GetTopBirdsData is called with the normalized confidence
 	mockDS.On("GetTopBirdsData", "2025-03-07", expectedMinConfidence, 0).Return(mockNotesConfidence, nil)
 	// GetBatchHourlyOccurrences is called for all species returned by GetTopBirdsData
-	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, expectedMinConfidence).Return(map[string][24]int{
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2025-03-07", mock.Anything, expectedMinConfidence).Return(map[string][24]int{
 		sciAmericanCrow:         expectedAmcroConfidenceHourly,
 		sciRedBelliedWoodpecker: {}, // Filtered out later
 	}, nil)
@@ -1259,7 +1260,7 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	// Setup mock expectations
 	mockDS.On("GetTopBirdsData", "2025-03-07", 0.0, 2).Return(mockNotesLimit, nil)
 	// Expect GetBatchHourlyOccurrences to be called for the 2 species returned
-	mockDS.On("GetBatchHourlyOccurrences", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
 		sciAmericanCrow:         expectedAmcroLimitHourly,
 		sciRedBelliedWoodpecker: expectedRbwoLimitHourly,
 	}, nil)
@@ -1351,7 +1352,7 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 	mockDS.On("GetTopBirdsData", testDate, 0.0, 0).Return(mockNotes, nil)
 
 	// Mock GetBatchHourlyOccurrences to return an error
-	mockDS.On("GetBatchHourlyOccurrences", testDate, mock.Anything, 0.0).Return(
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, testDate, mock.Anything, 0.0).Return(
 		map[string][24]int{}, errors.New("batch query failed: connection timeout"))
 
 	// Create a request
