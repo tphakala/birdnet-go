@@ -92,6 +92,43 @@ func TestGetWeatherIcon_Fallback(t *testing.T) {
 	})
 }
 
+// TestGetWeatherIcon_Identity guards against a mapping error where a weather code
+// points at the wrong SVG asset (e.g. a rain<->snow swap). TestGetWeatherIcon only
+// checks the <svg>...</svg> wrapper, so such a swap would still pass there because
+// both values are valid SVG markup. Each marker below is a stable fragment unique
+// to that condition's icon; the test asserts the marker appears in its own icon and
+// in none of the others, so a swapped or mis-keyed entry trips an assertion.
+func TestGetWeatherIcon_Identity(t *testing.T) {
+	tests := []struct {
+		name   string
+		code   IconCode
+		marker string // SVG fragment unique to this condition's icon
+	}{
+		{"clear_sky_sun_disc", IconClearSky, `cx="12" cy="12" r="5"`},
+		{"rain_drops", IconRain, `x1="12" y1="15" x2="12" y2="23"`},
+		{"snow_flakes", IconSnow, `x2="8.01"`},
+		{"thunderstorm_bolt", IconThunderstorm, `points="13 11 9 17 15 17 11 23"`},
+		{"fog_lines", IconFog, `x1="3" y1="7" x2="21" y2="7"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			own := string(GetWeatherIcon(tt.code, Day))
+			assert.Contains(t, own, tt.marker,
+				"icon for %s must contain its identifying marker", tt.code)
+			for _, other := range tests {
+				if other.code == tt.code {
+					continue
+				}
+				otherSVG := string(GetWeatherIcon(other.code, Day))
+				assert.NotContains(t, otherSVG, tt.marker,
+					"marker for %s leaked into the %s icon (mapping swap?)", tt.code, other.code)
+			}
+		})
+	}
+}
+
 func TestGetIconDescription(t *testing.T) {
 	tests := []struct {
 		name     string

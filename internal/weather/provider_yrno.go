@@ -104,15 +104,20 @@ func readYrNoResponseBody(resp *http.Response, log logger.Logger) ([]byte, error
 	return body, nil
 }
 
-// handleYrNoResponse processes a single HTTP response and returns the result
+// handleYrNoResponse processes a single HTTP response and returns the result.
+// It owns closing resp.Body (per the executeWeatherRequest handler contract); a
+// single deferred close covers every return path instead of one per branch.
 func handleYrNoResponse(resp *http.Response, log logger.Logger, isLastAttempt bool) (*yrNoRequestResult, error) {
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Debug("Failed to close response body", logger.Error(closeErr))
+		}
+	}()
+
 	result := &yrNoRequestResult{}
 
 	// Handle Not Modified
 	if resp.StatusCode == http.StatusNotModified {
-		if err := resp.Body.Close(); err != nil {
-			log.Debug("Failed to close response body", logger.Error(err))
-		}
 		result.notModified = true
 		return result, nil
 	}
@@ -120,9 +125,6 @@ func handleYrNoResponse(resp *http.Response, log logger.Logger, isLastAttempt bo
 	// Handle non-OK status
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		if err := resp.Body.Close(); err != nil {
-			log.Debug("Failed to close response body", logger.Error(err))
-		}
 		responseBodyStr := truncateBodyPreview(string(bodyBytes))
 		log.Warn("Received non-OK status code",
 			logger.Int("status_code", resp.StatusCode),
@@ -145,9 +147,6 @@ func handleYrNoResponse(resp *http.Response, log logger.Logger, isLastAttempt bo
 	// Status is OK - read body
 	result.lastMod = resp.Header.Get("Last-Modified")
 	body, err := readYrNoResponseBody(resp, log)
-	if closeErr := resp.Body.Close(); closeErr != nil {
-		log.Debug("Failed to close response body", logger.Error(closeErr))
-	}
 	if err != nil {
 		return nil, err
 	}
