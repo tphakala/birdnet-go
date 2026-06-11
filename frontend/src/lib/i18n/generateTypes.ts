@@ -104,15 +104,21 @@ function extractParameters(str: string): string[] {
 
 /**
  * Walks an ICU AST collecting parameter names, recursing into plural/select
- * option branches. Type 1 is a simple argument ({name}); type 6 is a
- * plural/select node ({count, plural, ...}); both carry the parameter name in
- * `value`. Mirrors extractParamsFromAST in validateTranslations.ts.
+ * option branches. Types 1-6 are the parameter-bearing argument nodes
+ * (argument, number, date, time, select, plural); each carries the parameter
+ * name in `value`. Literal (0), pound (7), and tag (8) carry no parameter name.
  */
 function extractParamsFromAST(elements: ReturnType<typeof parseICU>, params: Set<string>): void {
   for (const element of elements) {
     const node = element as unknown as Record<string, unknown>;
 
-    if ('type' in node && (node.type === 1 || node.type === 6) && typeof node.value === 'string') {
+    if (
+      'type' in node &&
+      typeof node.type === 'number' &&
+      node.type >= 1 &&
+      node.type <= 6 &&
+      typeof node.value === 'string'
+    ) {
       params.add(node.value);
     }
 
@@ -212,7 +218,10 @@ export interface TranslateFunction {
 `;
 
   const prettierConfig = await prettier.resolveConfig(OUTPUT_PATH);
-  const content = await prettier.format(tsContent, { ...prettierConfig, parser: 'typescript' });
+  const content = await prettier.format(tsContent, {
+    ...(prettierConfig ?? {}),
+    parser: 'typescript',
+  });
 
   return {
     content,
