@@ -80,6 +80,11 @@ frontend/static/messages/
 1. Add the key to `en.json` first (English is the source of truth)
 2. Run `npm run i18n:sync` to propagate new keys to all locale files
 3. Translate the new keys in each locale file (sync fills English as fallback)
+4. Run `npm run generate:i18n-types` to regenerate `src/lib/i18n/types.generated.ts` and commit it
+
+> The generated TypeScript types (`types.generated.ts`) are committed and verified in CI.
+> If you edit `en.json` without regenerating them, the `generate:i18n-types:check` step
+> (run in CI and in the pre-commit hook) fails. `npm run i18n:validate:full` runs the same check locally.
 
 ```bash
 # Quick check for missing keys
