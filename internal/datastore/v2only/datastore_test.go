@@ -1315,6 +1315,63 @@ func TestGetTopBirdsData_SpeciesCode(t *testing.T) {
 	assert.Empty(t, codeByScientific["Passer domesticus"], "species not in taxonomy should have empty code")
 }
 
+// TestV2OnlyDatastore_GetBatchHourlyOccurrences_ScientificName is a regression
+// test: the batch hourly query is keyed strictly on scientific
+// name. One label carries an embedded common name that differs from the
+// scientific name (Turdus merula -> "Common Blackbird"); the other is
+// scientific-only like a BattyBirdNET bat label. Before the fix, the query
+// reverse-mapped the localized common name to a scientific name and keyed the
+// result by the input string, so querying by the common name returned the count
+// and scientific-only labels were dropped. The negative assertion (querying by
+// the localized common name now returns zero) is the discriminator that fails on
+// the pre-fix code.
+func TestV2OnlyDatastore_GetBatchHourlyOccurrences_ScientificName(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{
+		"Turdus merula_Common Blackbird",
+		"Barbastella barbastellus", // scientific-only, like a BattyBirdNET label
+	})
+	defer cleanup()
+
+	const date = "2024-01-15"
+	saveTestNote(t, ds, date, "08:20:00", "Turdus merula", 0.8)
+	saveTestNote(t, ds, date, "23:15:00", "Barbastella barbastellus", 0.9)
+
+	// Querying by scientific name returns the counts keyed by scientific name,
+	// including the scientific-only bat label. Assert the daily total per species
+	// rather than a specific hour index: the query buckets hours using SQLite's
+	// OS-local timezone, which may differ from the test datastore's configured UTC.
+	counts, err := ds.GetBatchHourlyOccurrences(date,
+		[]string{"Turdus merula", "Barbastella barbastellus"}, 0.0)
+	require.NoError(t, err)
+
+	blackbird, ok := counts["Turdus merula"]
+	require.True(t, ok, "result must be keyed by scientific name")
+	assert.Equal(t, 1, hourlyTotal(&blackbird), "blackbird must be counted under its scientific name")
+
+	bat, ok := counts["Barbastella barbastellus"]
+	require.True(t, ok, "result must be keyed by scientific name")
+	assert.Equal(t, 1, hourlyTotal(&bat), "scientific-only bat label must be counted under its scientific name")
+
+	// The localized common name is no longer an accepted key. Pre-fix, the batch
+	// query reverse-mapped "Common Blackbird" -> "Turdus merula" and returned the
+	// blackbird's count under the common-name key; the fixed query returns zero.
+	byCommon, err := ds.GetBatchHourlyOccurrences(date, []string{"Common Blackbird"}, 0.0)
+	require.NoError(t, err)
+	common, ok := byCommon["Common Blackbird"]
+	require.True(t, ok)
+	assert.Equal(t, 0, hourlyTotal(&common),
+		"localized common name must not resolve to detections")
+}
+
+// hourlyTotal sums a 24-hour occurrence array.
+func hourlyTotal(hours *[24]int) int {
+	total := 0
+	for _, c := range hours {
+		total += c
+	}
+	return total
+}
+
 // TestGetSpeciesSummaryData_NoDateFilter verifies that species summary returns
 // data when no date filter is provided. Regression test for issue #2191.
 func TestGetSpeciesSummaryData_NoDateFilter(t *testing.T) {

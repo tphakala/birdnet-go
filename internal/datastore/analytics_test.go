@@ -547,6 +547,35 @@ func TestGetNewSpeciesDetections(t *testing.T) {
 	})
 }
 
+// TestGetBatchHourlyOccurrences_ScientificNameKey is a regression test:
+// the batch hourly query keys on scientific name, not the (possibly
+// localized) common name. A note whose common name differs from its scientific
+// name must still be counted when queried by scientific name.
+func TestGetBatchHourlyOccurrences_ScientificNameKey(t *testing.T) {
+	t.Parallel()
+	ds := setupTestDB(t)
+
+	notes := []Note{
+		{Date: "2024-01-15", Time: "23:15:00", ScientificName: "Barbastella barbastellus", CommonName: "mopsilepakko", Confidence: 0.9},
+		{Date: "2024-01-15", Time: "08:20:00", ScientificName: "Turdus merula", CommonName: "Common Blackbird", Confidence: 0.8},
+	}
+	for i := range notes {
+		require.NoError(t, ds.DB.Create(&notes[i]).Error)
+	}
+
+	counts, err := ds.GetBatchHourlyOccurrences("2024-01-15",
+		[]string{"Barbastella barbastellus", "Turdus merula"}, 0.0)
+	require.NoError(t, err)
+
+	bat, ok := counts["Barbastella barbastellus"]
+	require.True(t, ok, "result must be keyed by scientific name")
+	assert.Equal(t, 1, bat[23], "bat detection at 23:00 must be counted by scientific name")
+
+	blackbird, ok := counts["Turdus merula"]
+	require.True(t, ok, "result must be keyed by scientific name")
+	assert.Equal(t, 1, blackbird[8], "blackbird detection at 08:00 must be counted by scientific name")
+}
+
 // TestGetHourlyDistribution tests the GetHourlyDistribution function
 func TestGetHourlyDistribution(t *testing.T) {
 	t.Parallel()

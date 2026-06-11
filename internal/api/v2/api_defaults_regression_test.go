@@ -88,8 +88,8 @@ func TestDailySpeciesSummary_DefaultParams(t *testing.T) {
 	// aggregateDailySpeciesData calls GetBatchHourlyOccurrences for hourly counts
 	mockDS.On("GetBatchHourlyOccurrences", today, mock.Anything, 0.0).
 		Return(map[string][24]int{
-			"American Robin": {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			"Blue Jay":       {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			"Turdus migratorius":  {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			"Cyanocitta cristata": {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		}, nil).Once()
 
 	rec := executeRequest(t, e, http.MethodGet, "/api/v2/analytics/species/daily", controller.GetDailySpeciesSummary)
@@ -393,8 +393,8 @@ func TestDailySpeciesSummary_DefaultParams_AfterMigration(t *testing.T) {
 	mockDS.On("GetTopBirdsData", today, 0.0, 0).Return(notes, nil).Once()
 	mockDS.On("GetBatchHourlyOccurrences", today, mock.Anything, 0.0).
 		Return(map[string][24]int{
-			"American Robin": {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			"Blue Jay":       {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			"Turdus migratorius":  {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			"Cyanocitta cristata": {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		}, nil).Once()
 
 	rec := executeRequest(t, e, http.MethodGet, "/api/v2/analytics/species/daily", controller.GetDailySpeciesSummary)

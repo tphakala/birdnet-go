@@ -348,11 +348,17 @@ func (c *Controller) aggregateDailySpeciesData(notes []datastore.Note, selectedD
 		return aggregatedData, nil
 	}
 
-	// Collect all unique species names that meet confidence threshold
+	// Collect all unique species that meet the confidence threshold, keyed by
+	// scientific name. Keying on scientific name (not the localized common name)
+	// keeps the hourly aggregation robust across models and locales: a localized
+	// common name has no reliable reverse mapping back to a scientific name for
+	// non-primary-model species (e.g. bats), which silently dropped them from the
+	// summary. Scientific names resolve directly to label IDs for
+	// every model, so no lossy round-trip is needed.
 	uniqueSpecies := make(map[string]struct{})
 	for i := range notes {
 		if notes[i].Confidence >= minConfidence {
-			uniqueSpecies[notes[i].CommonName] = struct{}{}
+			uniqueSpecies[notes[i].ScientificName] = struct{}{}
 		}
 	}
 
@@ -371,7 +377,7 @@ func (c *Controller) aggregateDailySpeciesData(notes []datastore.Note, selectedD
 			continue
 		}
 
-		counts, ok := hourlyCounts[note.CommonName]
+		counts, ok := hourlyCounts[note.ScientificName]
 		if !ok {
 			// Species not in batch result, skip
 			continue

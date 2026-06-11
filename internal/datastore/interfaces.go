@@ -106,8 +106,10 @@ type Interface interface {
 	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64, limit int) ([]Note, error)
 	GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
 	// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
-	// Returns a map of species CommonName to [24]int hourly counts.
-	// This batches multiple GetHourlyOccurrences calls into a single query for performance.
+	// The species slice holds scientific names; the returned map is keyed by scientific name.
+	// Keying on scientific name keeps the result robust across models and locales.
+	// This batches the per-species hourly lookups into a single query for performance. Note it keys
+	// on scientific name, unlike the singular GetHourlyOccurrences which still accepts a common name.
 	GetBatchHourlyOccurrences(date string, species []string, minConfidence float64) (map[string][24]int, error)
 	SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetLastDetections(numDetections int) ([]Note, error)
@@ -849,6 +851,9 @@ func (ds *DataStore) GetHourlyOccurrences(date, commonName string, minConfidence
 }
 
 // GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
+// The species parameter holds scientific names, and the returned map is keyed by
+// scientific name. Keying on scientific name (rather than the localized common
+// name) keeps the daily summary robust across models and locales.
 func (ds *DataStore) GetBatchHourlyOccurrences(date string, species []string, minConfidence float64) (map[string][24]int, error) {
 	if len(species) == 0 {
 		return make(map[string][24]int), nil
@@ -857,19 +862,19 @@ func (ds *DataStore) GetBatchHourlyOccurrences(date string, species []string, mi
 	hourFormat := ds.GetHourFormat()
 
 	var results []struct {
-		CommonName string
-		Hour       int
-		Count      int
+		ScientificName string
+		Hour           int
+		Count          int
 	}
 
 	// Exclude detections marked as false_positive
 	err := ds.DB.Model(&Note{}).
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
-		Select(fmt.Sprintf("notes.common_name, %s as hour, COUNT(*) as count", hourFormat)).
-		Where("notes.common_name IN ? AND notes.date = ? AND notes.confidence >= ?", species, date, minConfidence).
+		Select(fmt.Sprintf("notes.scientific_name, %s as hour, COUNT(*) as count", hourFormat)).
+		Where("notes.scientific_name IN ? AND notes.date = ? AND notes.confidence >= ?", species, date, minConfidence).
 		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
-		Group(fmt.Sprintf("notes.common_name, %s", hourFormat)).
-		Order("notes.common_name, hour").
+		Group(fmt.Sprintf("notes.scientific_name, %s", hourFormat)).
+		Order("notes.scientific_name, hour").
 		Scan(&results).Error
 
 	if err != nil {
@@ -891,9 +896,9 @@ func (ds *DataStore) GetBatchHourlyOccurrences(date string, species []string, mi
 
 	for _, r := range results {
 		if r.Hour >= 0 && r.Hour < 24 {
-			hourlyData := result[r.CommonName]
+			hourlyData := result[r.ScientificName]
 			hourlyData[r.Hour] = r.Count
-			result[r.CommonName] = hourlyData
+			result[r.ScientificName] = hourlyData
 		}
 	}
 
