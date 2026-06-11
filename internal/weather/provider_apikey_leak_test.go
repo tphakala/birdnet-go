@@ -65,12 +65,12 @@ func TestOpenWeatherProvider_TransportError_DoesNotLeakAPIKey(t *testing.T) {
 	httpmock.RegisterResponder("GET", `=~^https://api\.openweathermap\.org/data/2\.5/weather`,
 		httpmock.NewErrorResponder(errors.NewStd("simulated transport failure")))
 
-	provider := NewOpenWeatherProvider()
+	provider := NewOpenWeatherProvider(nil)
 	settings := createTestSettings(t, "openweather", func(s *conf.Settings) {
 		s.Realtime.Weather.OpenWeather.APIKey = sentinelAPIKey
 	})
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -94,7 +94,7 @@ func TestWundergroundProvider_TransportError_DoesNotLeakAPIKey(t *testing.T) {
 		s.Realtime.Weather.Wunderground.APIKey = sentinelAPIKey
 	})
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -119,10 +119,10 @@ func TestYrNoProvider_TransportError_DoesNotLeakCoordinates(t *testing.T) {
 	httpmock.RegisterResponder("GET", `=~^https://api\.met\.no/weatherapi/locationforecast/2\.0/complete`,
 		httpmock.NewErrorResponder(errors.NewStd("simulated transport failure")))
 
-	provider := NewYrNoProvider()
+	provider := NewYrNoProvider(nil)
 	settings := createTestSettings(t, "yrno") // Helsinki: 60.1699, 24.9384
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -131,34 +131,36 @@ func TestYrNoProvider_TransportError_DoesNotLeakCoordinates(t *testing.T) {
 	assert.NotContains(t, err.Error(), "60.170", "returned error must not embed latitude")
 	assert.NotContains(t, err.Error(), "24.938", "returned error must not embed longitude")
 
-	// The transport-failure WARN log must be scrubbed too. The Info "Fetching
-	// weather data" log intentionally shows the request URL (with coordinates),
-	// consistent across all providers, so assert specifically on the
-	// "HTTP request failed" lines rather than the whole captured buffer. Track
-	// that at least one such line was seen so a future log-message rename fails
-	// loudly here instead of silently skipping the assertion.
+	// No log line may embed the coordinates. The Info "Fetching weather data" log
+	// now masks them via maskURLForLog (the URL query's lat/lon are PII), and the
+	// transport-failure WARN log is scrubbed, so the whole captured buffer must be
+	// free of the raw coordinates. Track that at least one transport-failure line
+	// was seen so a future log-message rename fails loudly here instead of
+	// silently weakening the guard.
+	assert.NotContains(t, logs.String(), "60.170", "no log line may embed latitude")
+	assert.NotContains(t, logs.String(), "24.938", "no log line may embed longitude")
+
 	var sawTransportLog bool
 	for line := range strings.Lines(logs.String()) {
 		if strings.Contains(line, "HTTP request failed") {
 			sawTransportLog = true
-			assert.NotContains(t, line, "60.170", "transport-failure log must not embed latitude")
-			assert.NotContains(t, line, "24.938", "transport-failure log must not embed longitude")
 		}
 	}
 	assert.True(t, sawTransportLog, "expected at least one transport-failure log line to assert against")
 }
 
-// TestMaskAPIKey_FailsClosedOnParseError verifies that maskAPIKey never returns
-// the raw URL when url.Parse fails. The raw URL embeds the API key, so the
-// previous behavior of returning it on a parse error leaked the key at the Info
+// TestMaskURLForLog_FailsClosedOnParseError verifies that maskURLForLog never
+// returns the raw URL when url.Parse fails. The raw URL embeds the API key and
+// the coordinates, so returning it on a parse error would leak both at the Info
 // log that masks the fetch URL.
-func TestMaskAPIKey_FailsClosedOnParseError(t *testing.T) {
+func TestMaskURLForLog_FailsClosedOnParseError(t *testing.T) {
 	// A raw DEL control character (0x7f) makes url.Parse fail.
-	rawURL := "https://api.example.com/path\x7f?appid=" + sentinelAPIKey
+	rawURL := "https://api.example.com/path\x7f?appid=" + sentinelAPIKey + "&lat=60.170&lon=24.938"
 
-	got := maskAPIKey(rawURL, "appid")
+	got := maskURLForLog(rawURL)
 
 	assert.NotContains(t, got, sentinelAPIKey, "a parse failure must not return the raw URL with the key")
+	assert.NotContains(t, got, "60.170", "a parse failure must not return the raw URL with coordinates")
 	assert.Equal(t, maskedURLOnError, got, "a parse failure must return the fail-closed placeholder")
 }
 
@@ -183,9 +185,9 @@ func TestBuildOpenWeatherURL_EscapesAPIKey(t *testing.T) {
 	// Round-trip: decoding the query yields the original key, and only one appid.
 	assert.Equal(t, keyWithSpecials, parsed.Query().Get("appid"), "appid must round-trip through escaping")
 
-	// maskAPIKey must mask the (now valid) URL rather than falling back to the
+	// maskURLForLog must mask the (now valid) URL rather than falling back to the
 	// parse-failure placeholder.
-	masked := maskAPIKey(rawURL, "appid")
+	masked := maskURLForLog(rawURL)
 	assert.NotEqual(t, maskedURLOnError, masked, "a well-formed URL must not hit the fail-closed path")
 	assert.NotContains(t, masked, "key with spaces", "the masked URL must not reveal the key")
 }
@@ -228,10 +230,10 @@ func TestOpenWeatherProvider_HTTP401_AuthFailed(t *testing.T) {
 
 	registerOpenWeatherResponder(t, http.StatusUnauthorized, `{"cod": 401, "message": "Invalid API key"}`)
 
-	provider := NewOpenWeatherProvider()
+	provider := NewOpenWeatherProvider(nil)
 	settings := createTestSettings(t, "openweather")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)

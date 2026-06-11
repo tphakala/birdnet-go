@@ -50,10 +50,10 @@ func TestOpenWeatherProvider_FetchWeather_Success(t *testing.T) {
 
 	registerOpenWeatherResponder(t, http.StatusOK, openWeatherSuccessResponse())
 
-	provider := NewOpenWeatherProvider()
+	provider := NewOpenWeatherProvider(nil)
 	settings := createTestSettings(t, "openweather")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.NoError(t, err)
 	assertWeatherDataBasics(t, data)
@@ -83,12 +83,12 @@ func TestOpenWeatherProvider_FetchWeather_Success(t *testing.T) {
 }
 
 func TestOpenWeatherProvider_FetchWeather_NoAPIKey(t *testing.T) {
-	provider := NewOpenWeatherProvider()
+	provider := NewOpenWeatherProvider(nil)
 	settings := createTestSettings(t, "openweather", func(s *conf.Settings) {
 		s.Realtime.Weather.OpenWeather.APIKey = ""
 	})
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -115,10 +115,10 @@ func TestOpenWeatherProvider_FetchWeather_HTTPError(t *testing.T) {
 			httpmock.Reset()
 			registerOpenWeatherResponder(t, tt.statusCode, `{"cod": "401", "message": "Invalid API key"}`)
 
-			provider := NewOpenWeatherProvider()
+			provider := NewOpenWeatherProvider(nil)
 			settings := createTestSettings(t, "openweather")
 
-			data, err := provider.FetchWeather(settings)
+			data, err := provider.FetchWeather(t.Context(), settings)
 
 			require.Error(t, err)
 			assert.Nil(t, data)
@@ -126,15 +126,40 @@ func TestOpenWeatherProvider_FetchWeather_HTTPError(t *testing.T) {
 	}
 }
 
+// TestOpenWeatherProvider_FetchWeather_Unauthorized_ReturnsSentinel guards the
+// 401 classification: an HTTP 401 must map to the ErrWeatherAuthFailed sentinel
+// (so the polling service can pause retries) and must NOT be retried. This
+// protects the sentinel-classification path through the shared retry helper.
+func TestOpenWeatherProvider_FetchWeather_Unauthorized_ReturnsSentinel(t *testing.T) {
+	setupHTTPMock(t)
+
+	callCount := 0
+	httpmock.RegisterResponder("GET", `=~^https://api\.openweathermap\.org/data/2\.5/weather`,
+		func(_ *http.Request) (*http.Response, error) {
+			callCount++
+			return httpmock.NewStringResponse(http.StatusUnauthorized, `{"cod":401,"message":"Invalid API key"}`), nil
+		})
+
+	provider := NewOpenWeatherProvider(nil)
+	settings := createTestSettings(t, "openweather")
+
+	data, err := provider.FetchWeather(t.Context(), settings)
+
+	require.Error(t, err)
+	assert.Nil(t, data)
+	require.ErrorIs(t, err, ErrWeatherAuthFailed, "401 must map to the auth-failed sentinel")
+	assert.Equal(t, 1, callCount, "a 401 must not be retried")
+}
+
 func TestOpenWeatherProvider_FetchWeather_InvalidJSON(t *testing.T) {
 	setupHTTPMock(t)
 
 	registerOpenWeatherResponder(t, http.StatusOK, `{invalid json`)
 
-	provider := NewOpenWeatherProvider()
+	provider := NewOpenWeatherProvider(nil)
 	settings := createTestSettings(t, "openweather")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -158,10 +183,10 @@ func TestOpenWeatherProvider_FetchWeather_EmptyWeatherArray(t *testing.T) {
 }`
 	registerOpenWeatherResponder(t, http.StatusOK, emptyWeatherResponse)
 
-	provider := NewOpenWeatherProvider()
+	provider := NewOpenWeatherProvider(nil)
 	settings := createTestSettings(t, "openweather")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -198,49 +223,8 @@ func TestConvertOpenWeatherTemps_Standard(t *testing.T) {
 	assert.InDelta(t, 25.0, tempMax, 0.001)   // 298.15K = 25°C
 }
 
-func TestMaskAPIKey(t *testing.T) {
-	tests := []struct {
-		name     string
-		url      string
-		keyParam string
-		expected string
-	}{
-		{
-			name:     "masks_appid",
-			url:      "https://api.example.com?lat=60&appid=secret123&units=metric",
-			keyParam: "appid",
-			expected: "https://api.example.com?appid=%2A%2A%2AMASKED%2A%2A%2A&lat=60&units=metric",
-		},
-		{
-			name:     "no_key_present",
-			url:      "https://api.example.com?lat=60&units=metric",
-			keyParam: "appid",
-			expected: "https://api.example.com?lat=60&units=metric",
-		},
-		{
-			name:     "url_without_query",
-			url:      "https://api.example.com/path",
-			keyParam: "appid",
-			expected: "https://api.example.com/path",
-		},
-		{
-			name:     "different_key_param",
-			url:      "https://api.example.com?apiKey=secret&lat=60",
-			keyParam: "apiKey",
-			expected: "https://api.example.com?apiKey=%2A%2A%2AMASKED%2A%2A%2A&lat=60",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := maskAPIKey(tt.url, tt.keyParam)
-			assert.Equal(t, tt.expected, got)
-		})
-	}
-}
-
 func TestNewOpenWeatherProvider(t *testing.T) {
-	provider := NewOpenWeatherProvider()
+	provider := NewOpenWeatherProvider(nil)
 	require.NotNil(t, provider)
 
 	// Verify it implements Provider interface

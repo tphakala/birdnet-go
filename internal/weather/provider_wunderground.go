@@ -284,7 +284,7 @@ func buildWundergroundURL(cfg *wundergroundConfig) (string, error) {
 	return u.String(), nil
 }
 
-func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
+func (p *WundergroundProvider) FetchWeather(ctx context.Context, settings *conf.Settings) (*WeatherData, error) {
 	cfg, err := validateWundergroundConfig(settings)
 	if err != nil {
 		return nil, err
@@ -295,11 +295,11 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		return nil, err
 	}
 
-	providerLogger := getLogger().With(logger.String("provider", wundergroundProviderName))
-	providerLogger.Info("Fetching weather data", logger.String("url", maskAPIKey(apiURL, "apiKey")))
+	providerLogger := getLogger().WithContext(ctx).With(logger.String("provider", wundergroundProviderName))
+	providerLogger.Info("Fetching weather data", logger.String("url", maskURLForLog(apiURL)))
 
 	// Execute request
-	body, err := p.executeRequest(apiURL, cfg, providerLogger)
+	body, err := p.executeRequest(ctx, apiURL, cfg, providerLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -314,9 +314,18 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	return mapWundergroundResponse(wuResp, providerLogger), nil
 }
 
-// executeRequest performs the HTTP request with context timeout
-func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundConfig, log logger.Logger) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+// executeRequest performs the HTTP request with a context timeout derived from
+// the caller's context, so both the per-request timeout and a shutdown
+// cancellation abort the in-flight call.
+//
+// Wunderground deliberately keeps its own one-shot request path rather than
+// using the shared executeWeatherRequest: it does not retry, and it maps each
+// non-OK status to a provider-specific, user-facing message via
+// parseWundergroundError (including HTTP 204 -> ErrWeatherNoData). Routing that
+// through the shared retry/handler callback would add more complexity than the
+// duplication it removes.
+func (p *WundergroundProvider) executeRequest(ctx context.Context, apiURL string, cfg *wundergroundConfig, log logger.Logger) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, RequestTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
@@ -368,14 +377,16 @@ func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundCo
 // apiKey query parameter, so it is scrubbed before wrapping to prevent an
 // upstream logger.Error in weather.go from leaking the key.
 func handleWundergroundRequestError(ctx context.Context, err error) error {
-	var category errors.ErrorCategory
-	switch ctx.Err() {
-	case context.Canceled:
+	// Surface a parent cancellation directly (unwrapped) so fetchAndSave treats a
+	// shutdown as benign, matching the shared executeWeatherRequest. The
+	// per-request RequestTimeout deadline is a real timeout worth a backoff, so it
+	// stays a categorized weather error.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return ctx.Err()
+	}
+	category := errors.CategoryNetwork
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		category = errors.CategoryTimeout
-	case context.DeadlineExceeded:
-		category = errors.CategoryTimeout
-	default:
-		category = errors.CategoryNetwork
 	}
 	return newWeatherError(privacy.WrapError(err), category, "weather_api_request", wundergroundProviderName)
 }
