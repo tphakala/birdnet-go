@@ -271,6 +271,9 @@ func buildWundergroundURL(cfg *wundergroundConfig) (string, error) {
 			errors.CategoryConfiguration, "parse_endpoint", wundergroundProviderName,
 		)
 	}
+	if err := validateEndpointScheme(u, wundergroundProviderName); err != nil {
+		return "", err
+	}
 	q := u.Query()
 	q.Set("stationId", cfg.stationID)
 	q.Set("format", "json")
@@ -318,7 +321,9 @@ func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundCo
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
 	if err != nil {
-		return nil, newWeatherError(err, errors.CategoryNetwork, "create_http_request", wundergroundProviderName)
+		// Scrub before wrapping: http.NewRequest can return a *url.Error that
+		// embeds apiURL, which carries the apiKey query parameter.
+		return nil, newWeatherError(privacy.WrapError(err), errors.CategoryNetwork, "create_http_request", wundergroundProviderName)
 	}
 	req.Header.Set("User-Agent", UserAgent())
 	req.Header.Set("Accept", "application/json")

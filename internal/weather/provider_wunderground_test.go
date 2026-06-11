@@ -9,7 +9,41 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// TestBuildWundergroundURL_RejectsSchemelessEndpoint mirrors the OpenWeather
+// guard: a custom endpoint without a scheme parses as a relative path and would
+// produce a request http.NewRequest rejects with "unsupported protocol scheme".
+// buildWundergroundURL must reject it with a configuration error instead.
+func TestBuildWundergroundURL_RejectsSchemelessEndpoint(t *testing.T) {
+	tests := []struct {
+		name     string
+		endpoint string
+	}{
+		{"no_scheme", "api.custom-wunderground.com"},
+		{"no_scheme_with_path", "api.custom-wunderground.com/v2/pws/observations/current"},
+		{"scheme_without_host", "https://"},
+		{"non_http_scheme", "ftp://api.custom-wunderground.com"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &wundergroundConfig{
+				apiKey:    "test-api-key",
+				stationID: "KTEST123",
+				endpoint:  tt.endpoint,
+			}
+
+			_, err := buildWundergroundURL(cfg)
+
+			require.Error(t, err)
+			var ee *errors.EnhancedError
+			require.ErrorAs(t, err, &ee)
+			assert.Equal(t, string(errors.CategoryConfiguration), ee.GetCategory(),
+				"a malformed endpoint must classify as a configuration error")
+		})
+	}
+}
 
 func TestWundergroundProvider_FetchWeather_Success(t *testing.T) {
 	setupHTTPMock(t)

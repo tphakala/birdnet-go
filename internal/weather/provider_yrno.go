@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 const (
@@ -195,7 +196,9 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 
 	req, err := http.NewRequest("GET", apiURL, http.NoBody)
 	if err != nil {
-		return nil, newWeatherError(err, errors.CategoryNetwork, "create_http_request", yrNoProviderName)
+		// Scrub before wrapping: http.NewRequest can return a *url.Error that
+		// embeds apiURL, which carries the user's lat/lon coordinates.
+		return nil, newWeatherError(privacy.WrapError(err), errors.CategoryNetwork, "create_http_request", yrNoProviderName)
 	}
 	req.Header.Set("User-Agent", UserAgent())
 	req.Header.Set("Accept-Encoding", "gzip")
@@ -246,9 +249,13 @@ func (p *YrNoProvider) executeWithRetry(req *http.Request, log logger.Logger) ([
 
 		resp, err := client.Do(req)
 		if err != nil {
-			attemptLogger.Warn("HTTP request failed", logger.Error(err))
+			// Scrub before logging and wrapping: net/http wraps transport
+			// failures in a *url.Error whose Error() embeds the request URL,
+			// which carries the user's lat/lon coordinates. The wrapped error
+			// also propagates to weather.go's plain logger.Error.
+			attemptLogger.Warn("HTTP request failed", logger.SanitizedError(err))
 			if isLastAttempt {
-				return nil, newWeatherErrorWithRetries(err, errors.CategoryNetwork, "weather_api_request", yrNoProviderName)
+				return nil, newWeatherErrorWithRetries(privacy.WrapError(err), errors.CategoryNetwork, "weather_api_request", yrNoProviderName)
 			}
 			time.Sleep(RetryDelay)
 			continue
