@@ -34,9 +34,9 @@ const (
 	NightSolarRadiationThreshold = 5.0
 	// Daytime solar radiation above this indicates clear sky.
 	DayClearSRThreshold = 600.0
-	// Daytime solar radiation range for partly cloudy (inclusive).
+	// Daytime solar radiation at or above this (up to DayClearSRThreshold)
+	// indicates partly cloudy; below it is treated as cloudy.
 	DayPartlyCloudyLowerSR = 200.0
-	DayPartlyCloudyUpperSR = 600.0
 
 	// Temperature thresholds for weather conditions
 	FreezingPointC     = 0.0  // Celsius freezing point for snow/rain determination
@@ -420,7 +420,9 @@ func mapWundergroundResponse(wuResp *wundergroundResponse, log logger.Logger) *W
 
 	measurements := extractMeasurements(&obs)
 	feelsLike := calculateFeelsLike(measurements)
-	precipMMH := getPrecipitationRate(&obs)
+	// PrecipRate is the metric precipitation rate in mm/h; clamp a negative
+	// value to zero (the JSON decoder never yields NaN here).
+	precipMMH := max(0, obs.Metric.PrecipRate)
 
 	iconCode := InferWundergroundIcon(
 		measurements.temp, precipMMH, float64(obs.Humidity), obs.SolarRadiation, measurements.windGust,
@@ -447,17 +449,9 @@ func mapWundergroundResponse(wuResp *wundergroundResponse, log logger.Logger) *W
 		},
 		Pressure:    int(math.Round(measurements.pressure)),
 		Humidity:    int(math.Round(obs.Humidity)),
-		Description: IconDescription[iconCode],
+		Description: GetIconDescription(iconCode),
 		Icon:        string(iconCode),
 	}
-}
-
-// getPrecipitationRate extracts precipitation rate in mm/h from metric data.
-func getPrecipitationRate(obs *wundergroundObservation) float64 {
-	if obs.Metric.PrecipRate > 0 {
-		return obs.Metric.PrecipRate
-	}
-	return 0.0
 }
 
 // isInvalid checks if a float64 value is NaN (invalid for HeatIndex/WindChill logic)

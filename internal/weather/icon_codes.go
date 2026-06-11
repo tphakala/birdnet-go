@@ -226,14 +226,16 @@ var IconDescription = map[IconCode]string{
 	IconUnknown:      "Unknown", // Added description for unknown
 }
 
-// GetStandardIconCode converts provider-specific weather codes to our standard icon codes
+// GetStandardIconCode converts provider-specific weather codes to our standard icon codes.
+// Wunderground is intentionally absent: it has no provider symbol table and derives its
+// icon from measurements via InferWundergroundIcon, so it never calls this function.
 func GetStandardIconCode(code, provider string) IconCode {
 	switch provider {
-	case "yrno":
+	case yrNoProviderName:
 		if iconCode, ok := YrNoSymbolToIcon[code]; ok {
 			return iconCode
 		}
-	case "openweather":
+	case openWeatherProviderName:
 		if iconCode, ok := OpenWeatherToIcon[code]; ok {
 			return iconCode
 		}
