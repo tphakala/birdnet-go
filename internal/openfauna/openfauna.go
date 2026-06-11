@@ -489,6 +489,9 @@ func lookupCommonNamesEffective(scientificNames []string, eff string) map[string
 		if _, want := inputs[norm]; !want {
 			return nil
 		}
+		if common == "" {
+			return nil // an empty translation cannot satisfy a lookup; skip so it cannot block a real name
+		}
 		switch {
 		case loc == eff:
 			if _, exists := inLocale[norm]; !exists {

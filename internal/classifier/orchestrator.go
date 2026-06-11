@@ -725,14 +725,23 @@ func (o *Orchestrator) AllLabels() []string {
 	}
 	o.mu.RLock()
 	primary := o.primary
+	primaryID := o.ModelInfo.ID
 	refs := make([]entryRef, 0, len(o.models))
 	for id, entry := range o.models {
+		// When a primary is set, skip its map entry: its labels are unioned explicitly
+		// below via the *BirdNET pointer, so including it here would snapshot them twice.
+		// When primary is nil, do not skip, so the primary model's labels are still
+		// covered via the map entry. unionLabels dedupes regardless.
+		if primary != nil && id == primaryID {
+			continue
+		}
 		refs = append(refs, entryRef{id: id, entry: entry})
 	}
 	o.mu.RUnlock()
 
-	// primary is also keyed in o.models, but include it explicitly so a future path
-	// that leaves it out of the map cannot drop the primary labels; unionLabels dedupes.
+	// Include the primary explicitly. primary.Labels() is safe without entry.mu because
+	// BirdNET.Labels takes the model's own lock internally, matching Labels() and
+	// GetAllProbableSpeciesWithSettings; only secondary entries are read under entry.mu.
 	sets := make([][]string, 0, len(refs)+1)
 	if primary != nil {
 		sets = append(sets, primary.Labels())
