@@ -187,45 +187,19 @@ func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nam
 		commonToSci: make(map[string]string, len(labels)),
 	}
 	ambiguous := make(map[string]struct{})
-	// Hoist the (reflect-based) nil check out of the per-label loop. IsNilResolver
-	// also rejects typed-nil interfaces, consistent with SetNameResolver.
-	useResolver := !datastore.IsNilResolver(resolver)
-	for _, label := range labels {
-		// A scientific-only label (no separator, e.g. Perch v2 / bat labels) has no
-		// embedded common name; treat the whole label as the scientific name and let
-		// the resolver supply a searchable common name below.
-		scientificName, commonName, found := strings.Cut(label, "_")
-		if !found {
-			scientificName, commonName = label, ""
-		}
-		scientificName = strings.TrimSpace(scientificName)
-		commonName = strings.TrimSpace(commonName)
-		if scientificName == "" {
-			continue
-		}
-		// In-memory-only resolve: buildNameMaps runs over the full model label set,
-		// so the slow-path Resolve would scan the dataset once per out-of-working-set
-		// species on each rebuild. Those species keep their label name here.
-		if useResolver {
-			if r, ok := resolver.ResolveLocal(scientificName); ok {
-				commonName = r
-			}
-		}
-		if commonName == "" {
-			continue
-		}
-		nm.sciToCommon[scientificName] = commonName
+	for _, sn := range datastore.ResolveLabelNames(labels, resolver) {
+		nm.sciToCommon[sn.Scientific] = sn.Common
 
-		key := normalizeForLookup(commonName)
+		key := normalizeForLookup(sn.Common)
 		if _, seen := ambiguous[key]; seen {
 			continue
 		}
-		if existing, exists := nm.commonToSci[key]; exists && existing != scientificName {
+		if existing, exists := nm.commonToSci[key]; exists && existing != sn.Scientific {
 			ambiguous[key] = struct{}{}
 			delete(nm.commonToSci, key)
 			continue
 		}
-		nm.commonToSci[key] = scientificName
+		nm.commonToSci[key] = sn.Scientific
 	}
 	return nm
 }
