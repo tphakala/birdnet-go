@@ -237,3 +237,55 @@ func TestBuildRangeFilter_UnresolvableOverride_StaysVerbatim(t *testing.T) {
 	assert.Contains(t, included, "drone",
 		"a non-fauna override must still be appended verbatim (no spurious reverse match)")
 }
+
+// TestGetProbableSpecies_LegacyPath_NonPrimaryLocalizedCommonOverride_ReverseResolves
+// covers the legacy (non-UniversalSpeciesPredictor) range-filter path, which builds
+// the working set via getProbableSpecies' legacy branch. A non-universal range filter
+// (fakeRangeFilter implements only the base inference.RangeFilter interface) forces
+// that branch, and the localized non-primary override must reverse-resolve there too,
+// matching the universal path.
+func TestGetProbableSpecies_LegacyPath_NonPrimaryLocalizedCommonOverride_ReverseResolves(t *testing.T) {
+	settings, _ := overrideTestSettings(t, "fi")
+	settings.Realtime.Species.Include = []string{"Kettu"}
+
+	bn := &BirdNET{
+		Settings: settings,
+		// Non-universal range filter: forces the legacy getProbableSpecies branch.
+		// Two scores aligned with the two classifier labels; only the first clears
+		// the threshold, so the legacy filter contributes Turdus merula.
+		rangeFilter:  &fakeRangeFilter{scores: []float32{0.9, 0.0}},
+		speciesCache: make(map[string]*speciesCacheEntry),
+	}
+
+	scores, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	require.NoError(t, err)
+
+	labels := make([]string, 0, len(scores))
+	for _, ss := range scores {
+		labels = append(labels, ss.Label)
+	}
+	assert.Contains(t, labels, "Vulpes vulpes",
+		"the legacy (non-universal) path must also reverse-resolve a localized non-primary override")
+	assert.NotContains(t, labels, "Kettu",
+		"the bare localized common name must not survive as a species score label")
+}
+
+// TestOverrideSpeciesNames_SortsConfigKeysDeterministically guards the deterministic
+// override order: include entries keep the user's order, and the config map keys
+// (whose Go iteration order is random) follow in sorted order, so the inclusion
+// working set, debug logs, and species-list API stay stable across runs.
+func TestOverrideSpeciesNames_SortsConfigKeysDeterministically(t *testing.T) {
+	t.Parallel()
+
+	settings := conftest.GetTestSettings()
+	settings.Realtime.Species.Include = []string{"UserOrderTwo", "UserOrderOne"}
+	settings.Realtime.Species.Config = map[string]conf.SpeciesConfig{
+		"zzz species": {}, "aaa species": {}, "mmm species": {},
+	}
+
+	got := overrideSpeciesNames(settings)
+	assert.Equal(t,
+		[]string{"UserOrderTwo", "UserOrderOne", "aaa species", "mmm species", "zzz species"},
+		got,
+		"include entries keep user order; config keys follow in sorted order")
+}
