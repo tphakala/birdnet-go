@@ -1340,7 +1340,7 @@ func TestV2OnlyDatastore_GetBatchHourlyOccurrences_ScientificName(t *testing.T) 
 	// including the scientific-only bat label. Assert the daily total per species
 	// rather than a specific hour index: the query buckets hours using SQLite's
 	// OS-local timezone, which may differ from the test datastore's configured UTC.
-	counts, err := ds.GetBatchHourlyOccurrences(date,
+	counts, err := ds.GetBatchHourlyOccurrences(t.Context(), date,
 		[]string{"Turdus merula", "Barbastella barbastellus"}, 0.0)
 	require.NoError(t, err)
 
@@ -1355,12 +1355,28 @@ func TestV2OnlyDatastore_GetBatchHourlyOccurrences_ScientificName(t *testing.T) 
 	// The localized common name is no longer an accepted key. Pre-fix, the batch
 	// query reverse-mapped "Common Blackbird" -> "Turdus merula" and returned the
 	// blackbird's count under the common-name key; the fixed query returns zero.
-	byCommon, err := ds.GetBatchHourlyOccurrences(date, []string{"Common Blackbird"}, 0.0)
+	byCommon, err := ds.GetBatchHourlyOccurrences(t.Context(), date, []string{"Common Blackbird"}, 0.0)
 	require.NoError(t, err)
 	common, ok := byCommon["Common Blackbird"]
 	require.True(t, ok)
 	assert.Equal(t, 0, hourlyTotal(&common),
 		"localized common name must not resolve to detections")
+}
+
+// TestV2OnlyDatastore_GetBatchHourlyOccurrences_CancelledContext verifies that a cancelled
+// request context surfaces as an error rather than silently returning zeroed counts. Before
+// the #984 fix the per-species label lookup logged a warning and continued on error, so a
+// cancelled context produced an all-zero result with a nil error (HTTP 200 with wrong data).
+func TestV2OnlyDatastore_GetBatchHourlyOccurrences_CancelledContext(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Turdus merula_Common Blackbird"})
+	defer cleanup()
+	saveTestNote(t, ds, "2024-01-15", "08:20:00", "Turdus merula", 0.8)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := ds.GetBatchHourlyOccurrences(ctx, "2024-01-15", []string{"Turdus merula"}, 0.0)
+	require.Error(t, err, "cancelled context must surface as an error, not silently zeroed counts")
 }
 
 // hourlyTotal sums a 24-hour occurrence array.

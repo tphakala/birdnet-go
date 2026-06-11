@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -234,6 +235,65 @@ func TestDeleteBatch_ChunksRemainderCorrectly(t *testing.T) {
 	require.NoError(t, db.Table(tableDetections).Find(&remaining).Error)
 	require.Len(t, remaining, 1)
 	assert.Equal(t, dets[len(dets)-1].ID, remaining[0].ID)
+}
+
+// ============================================================================
+// Batch Hourly Occurrence Tests
+// ============================================================================
+
+// TestGetBatchHourlyOccurrences verifies the batch hourly query returns per-label-ID
+// counts, omits labels with no detections, honors the confidence filter, handles empty
+// input, and propagates context cancellation (rather than silently returning zeros).
+func TestGetBatchHourlyOccurrences(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	repo := &detectionRepository{db: db}
+
+	// Fixed epoch so the test does not depend on the wall clock. Per-label daily totals
+	// (sum across hours) are asserted to stay independent of the OS-local hour bucketing.
+	const base = int64(1_700_000_000)
+	createDetectionForLabel(t, db, 10, base)
+	createDetectionForLabel(t, db, 10, base+3600)
+	createDetectionForLabel(t, db, 20, base+7200)
+	// Low-confidence detection on label 30 must be filtered out by minConfidence below.
+	require.NoError(t, db.Table(tableDetections).Create(
+		&entities.Detection{LabelID: 30, ModelID: 1, Confidence: 0.2, DetectedAt: base}).Error)
+
+	t.Run("per-label counts with confidence filter", func(t *testing.T) {
+		got, err := repo.GetBatchHourlyOccurrences(t.Context(), []uint{10, 20, 30, 99}, base-1, base+10_000, 0.5)
+		require.NoError(t, err)
+
+		require.Contains(t, got, uint(10))
+		require.Contains(t, got, uint(20))
+		assert.NotContains(t, got, uint(30), "below-confidence detection must be filtered out")
+		assert.NotContains(t, got, uint(99), "label with no detections must be absent from the map")
+		assert.Equal(t, 2, totalBatchHourly(got, 10), "label 10 has two qualifying detections")
+		assert.Equal(t, 1, totalBatchHourly(got, 20), "label 20 has one qualifying detection")
+	})
+
+	t.Run("empty input returns empty map", func(t *testing.T) {
+		got, err := repo.GetBatchHourlyOccurrences(t.Context(), nil, base-1, base+10_000, 0.0)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("cancelled context surfaces an error", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err := repo.GetBatchHourlyOccurrences(ctx, []uint{10}, base-1, base+10_000, 0.0)
+		require.Error(t, err, "a cancelled context must abort the query, not return zeros")
+	})
+}
+
+// totalBatchHourly returns the total detections for a label across its 24-hour occurrence
+// array. It takes the map and key (rather than the [24]int by value) to avoid copying the
+// 192-byte array, and returns 0 for a label that is absent from the map.
+func totalBatchHourly(byLabel map[uint][24]int, labelID uint) int {
+	total := 0
+	hours := byLabel[labelID]
+	for _, c := range hours {
+		total += c
+	}
+	return total
 }
 
 // ============================================================================

@@ -106,10 +106,12 @@ type DetectionRepository interface {
 	// modelID is optional; pass nil to include all models.
 	GetTopSpecies(ctx context.Context, start, end int64, minConfidence float64, modelID *uint, limit int) ([]SpeciesCount, error)
 
-	// GetHourlyOccurrences returns detection counts by hour (0-23) for the given labels.
-	// Aggregates across all provided label IDs (multi-model support).
-	// minConfidence filters detections by minimum confidence threshold.
-	GetHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) ([24]int, error)
+	// GetBatchHourlyOccurrences returns per-label-ID hourly detection counts (0-23)
+	// for the given label IDs in a single grouped query (per chunk). The result maps
+	// each label ID to its [24]int hourly counts; callers that span one species across
+	// multiple model label IDs sum the per-label arrays themselves. False positives are
+	// excluded and minConfidence filters by minimum confidence threshold.
+	GetBatchHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) (map[uint][24]int, error)
 
 	// GetDailyOccurrences returns daily detection counts for a label.
 	GetDailyOccurrences(ctx context.Context, labelID uint, start, end int64) ([]DailyCount, error)
