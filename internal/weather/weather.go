@@ -1,6 +1,7 @@
 package weather
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"runtime/debug"
@@ -60,7 +61,10 @@ func getLogger() logger.Logger {
 
 // Provider represents a weather data provider interface
 type Provider interface {
-	FetchWeather(settings *conf.Settings) (*WeatherData, error)
+	// FetchWeather retrieves current weather. The context lets a shutdown or an
+	// aborted on-demand request cancel an in-flight HTTP call and its retry
+	// backoff instead of blocking until the request finishes.
+	FetchWeather(ctx context.Context, settings *conf.Settings) (*WeatherData, error)
 }
 
 // backoffState tracks consecutive failures and backoff timing for the polling loop.
@@ -284,20 +288,25 @@ func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics 
 		providerName string
 	)
 
+	// One HTTP client is shared across every fetch cycle and retry attempt for
+	// the service's lifetime, replacing the per-request clients the providers
+	// used to allocate. It is injected into whichever provider is selected.
+	weatherClient := newDefaultHTTPClient()
+
 	// Select weather provider based on configuration
 	switch settings.Realtime.Weather.Provider {
 	case "yrno":
-		provider = NewYrNoProvider()
+		provider = NewYrNoProvider(weatherClient)
 		providerName = yrNoProviderName
 	case "openweather":
-		provider = NewOpenWeatherProvider()
+		provider = NewOpenWeatherProvider(weatherClient)
 		providerName = openWeatherProviderName
 	case "wunderground":
-		provider = NewWundergroundProvider(nil)
+		provider = NewWundergroundProvider(weatherClient)
 		providerName = wundergroundProviderName
 	case "":
 		// Not configured - default to yr.no
-		provider = NewYrNoProvider()
+		provider = NewYrNoProvider(weatherClient)
 		providerName = yrNoProviderName
 	case "none":
 		// Explicitly disabled
@@ -521,6 +530,22 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 		interval = time.Duration(conf.DefaultWeatherPollInterval) * time.Minute
 	}
 
+	// Derive a context that is cancelled when stopChan closes (or when this
+	// method returns), and thread it through each fetch so a shutdown cancels an
+	// in-flight provider HTTP call and its retry backoff. StartPolling keeps its
+	// channel-based signature (the sole caller has no context to pass); the
+	// bridge goroutine exits via ctx.Done() once the deferred cancel fires, so
+	// it cannot leak.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-stopChan:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
 	// Use the dedicated weather logger
 	getLogger().Info("Starting weather polling service",
 		logger.String("provider", s.providerName),
@@ -544,14 +569,14 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 	defer ticker.Stop()
 
 	// Initial fetch (errors logged within fetchAndSave)
-	s.safeFetchAndSave()
+	s.safeFetchAndSave(ctx)
 
 	for {
 		select {
 		case <-ticker.C:
 			getLogger().Debug("Polling weather data...")
 			// Errors logged within fetchAndSave
-			s.safeFetchAndSave()
+			s.safeFetchAndSave(ctx)
 		case <-stopChan:
 			getLogger().Info("Stopping weather polling service")
 			return
@@ -563,7 +588,7 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 // provider, the response mapping, or the persistence path degrades only the
 // weather service instead of crashing the whole process. Errors are already
 // logged inside fetchAndSave, so the return value is intentionally discarded.
-func (s *Service) safeFetchAndSave() {
+func (s *Service) safeFetchAndSave(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
 			// Record a failure so a repeatedly panicking fetch surfaces as
@@ -580,7 +605,7 @@ func (s *Service) safeFetchAndSave() {
 				logger.String("stack", string(debug.Stack())))
 		}
 	}()
-	_ = s.fetchAndSave()
+	_ = s.fetchAndSave(ctx)
 }
 
 // Poll fetches weather data once and saves it to the database.
@@ -591,12 +616,12 @@ func (s *Service) safeFetchAndSave() {
 //
 // Unlike the StartPolling loop, Poll does not wrap the fetch in panic recovery:
 // it is a synchronous on-demand call, so a panic propagates to the caller.
-func (s *Service) Poll() error {
+func (s *Service) Poll(ctx context.Context) error {
 	// Run a fetch cycle. fetchAndSave reconciles hot-reloaded config first, so a
 	// lockout cleared by a config change recovers even on a manual Poll; the
 	// auth check therefore happens after reconciliation, not before it. While
 	// auth is disabled and unchanged, fetchAndSave skips without a network call.
-	if err := s.fetchAndSave(); err != nil {
+	if err := s.fetchAndSave(ctx); err != nil {
 		return err
 	}
 	// fetchAndSave returns nil when it skipped because auth is still disabled;
@@ -641,7 +666,7 @@ func (s *Service) reconcileConfig(settings *conf.Settings) {
 // errors. For repeated authentication failures (HTTP 401), it pauses retrying
 // after maxConsecutiveAuthFailures until the auth-relevant config changes
 // (handled by reconcileConfig), at which point it resumes automatically.
-func (s *Service) fetchAndSave() error {
+func (s *Service) fetchAndSave(ctx context.Context) error {
 	// Serialize fetch cycles. Both the exported Poll() and the StartPolling
 	// ticker call this; the lock keeps the skip -> fetch -> reset sequence and
 	// the SQLite writes atomic, and guards the per-cycle hot-reload state
@@ -680,9 +705,19 @@ func (s *Service) fetchAndSave() error {
 	fetchStart := time.Now()
 
 	// FetchWeather should now internally log its start/end/errors
-	data, err := s.provider.FetchWeather(currentSettings)
+	data, err := s.provider.FetchWeather(ctx, currentSettings)
 
 	if err != nil {
+		// A cancelled context means the service is shutting down (or an
+		// on-demand caller aborted): treat it as benign so shutdown neither logs
+		// an error nor trips the failure backoff. context.DeadlineExceeded is
+		// intentionally excluded; that is a real request timeout worth a backoff.
+		if errors.Is(err, context.Canceled) {
+			getLogger().Debug("Weather fetch cancelled",
+				logger.String("provider", s.providerName))
+			return nil
+		}
+
 		// Handle "not modified" as a success case: no new data to save.
 		// Check before recording metrics so these expected conditions are
 		// not counted as errors.

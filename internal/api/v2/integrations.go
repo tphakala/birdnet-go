@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
 
@@ -677,13 +678,16 @@ func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *co
 		client := &http.Client{Timeout: integrationShortTimeout * time.Second}
 		req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
 		if err != nil {
-			return "", fmt.Errorf("failed to create authentication request: %w", err)
+			// Scrub before wrapping: the *url.Error embeds testURL, which carries
+			// the appid API key, and this error is returned to the API client and logs.
+			return "", fmt.Errorf("failed to create authentication request: %w", privacy.WrapError(err))
 		}
 
 		req.Header.Set("User-Agent", "BirdNET-Go Weather Test")
 		resp, err := client.Do(req)
 		if err != nil {
-			return "", fmt.Errorf("failed to authenticate with OpenWeather API: %w", err)
+			// Scrub before wrapping: the transport *url.Error embeds the appid API key.
+			return "", fmt.Errorf("failed to authenticate with OpenWeather API: %w", privacy.WrapError(err))
 		}
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -712,16 +716,16 @@ func (c *Controller) testWeatherDataFetch(ctx context.Context, settings *conf.Se
 	var provider weather.Provider
 	switch settings.Realtime.Weather.Provider {
 	case WeatherProviderYrno:
-		provider = weather.NewYrNoProvider()
+		provider = weather.NewYrNoProvider(nil)
 	case WeatherProviderOpenWeather:
-		provider = weather.NewOpenWeatherProvider()
+		provider = weather.NewOpenWeatherProvider(nil)
 	case WeatherProviderWunderground:
 		provider = weather.NewWundergroundProvider(nil)
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", settings.Realtime.Weather.Provider)
 	}
 
-	weatherData, err := provider.FetchWeather(settings)
+	weatherData, err := provider.FetchWeather(ctx, settings)
 	if err != nil {
 		// Extract the actual error message instead of wrapping it
 		// The provider already returns detailed error messages

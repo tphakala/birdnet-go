@@ -1,6 +1,8 @@
 package weather
 
 import (
+	"bytes"
+	"compress/gzip"
 	"net/http"
 	"testing"
 	"time"
@@ -15,10 +17,10 @@ func TestYrNoProvider_FetchWeather_Success(t *testing.T) {
 
 	registerYrNoResponder(t, http.StatusOK, yrNoSuccessResponse(), nil)
 
-	provider := NewYrNoProvider()
+	provider := NewYrNoProvider(nil)
 	settings := createTestSettings(t, "yrno")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.NoError(t, err)
 	assertWeatherDataBasics(t, data)
@@ -56,16 +58,16 @@ func TestYrNoProvider_FetchWeather_NotModified(t *testing.T) {
 			return resp, nil
 		})
 
-	provider := NewYrNoProvider()
+	provider := NewYrNoProvider(nil)
 	settings := createTestSettings(t, "yrno")
 
 	// First fetch should succeed
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 	require.NoError(t, err)
 	require.NotNil(t, data)
 
 	// Second fetch should return ErrWeatherDataNotModified
-	data2, err := provider.FetchWeather(settings)
+	data2, err := provider.FetchWeather(t.Context(), settings)
 	require.Error(t, err)
 	assert.Nil(t, data2)
 	assert.ErrorIs(t, err, ErrWeatherDataNotModified)
@@ -91,10 +93,10 @@ func TestYrNoProvider_FetchWeather_HTTPError(t *testing.T) {
 			httpmock.Reset()
 			registerYrNoResponder(t, tt.statusCode, `{"error": "test error"}`, nil)
 
-			provider := NewYrNoProvider()
+			provider := NewYrNoProvider(nil)
 			settings := createTestSettings(t, "yrno")
 
-			data, err := provider.FetchWeather(settings)
+			data, err := provider.FetchWeather(t.Context(), settings)
 
 			require.Error(t, err)
 			assert.Nil(t, data)
@@ -108,10 +110,10 @@ func TestYrNoProvider_FetchWeather_InvalidJSON(t *testing.T) {
 
 	registerYrNoResponder(t, http.StatusOK, `{invalid json`, nil)
 
-	provider := NewYrNoProvider()
+	provider := NewYrNoProvider(nil)
 	settings := createTestSettings(t, "yrno")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -128,10 +130,10 @@ func TestYrNoProvider_FetchWeather_EmptyTimeseries(t *testing.T) {
 }`
 	registerYrNoResponder(t, http.StatusOK, emptyResponse, nil)
 
-	provider := NewYrNoProvider()
+	provider := NewYrNoProvider(nil)
 	settings := createTestSettings(t, "yrno")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -146,13 +148,49 @@ func TestYrNoProvider_FetchWeather_GzipResponse(t *testing.T) {
 		"Content-Type": "application/json",
 	})
 
-	provider := NewYrNoProvider()
+	provider := NewYrNoProvider(nil)
 	settings := createTestSettings(t, "yrno")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.NoError(t, err)
 	require.NotNil(t, data)
+}
+
+// TestYrNoProvider_FetchWeather_RealGzip guards the gzip decode path in
+// readYrNoResponseBody by serving an actually gzip-compressed body with
+// Content-Encoding: gzip. The provider sets Accept-Encoding: gzip itself, which
+// disables the transport's automatic decompression, so the provider must
+// decode the body by hand. The existing GzipResponse test only sends plaintext,
+// so this is the test that exercises gzip.NewReader.
+func TestYrNoProvider_FetchWeather_RealGzip(t *testing.T) {
+	setupHTTPMock(t)
+
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	_, err := gz.Write([]byte(yrNoSuccessResponse()))
+	require.NoError(t, err)
+	require.NoError(t, gz.Close())
+	gzippedBody := buf.Bytes()
+
+	httpmock.RegisterResponder("GET", `=~^https://api\.met\.no/weatherapi/locationforecast/2\.0/complete`,
+		func(_ *http.Request) (*http.Response, error) {
+			resp := httpmock.NewBytesResponse(http.StatusOK, gzippedBody)
+			resp.Header.Set("Content-Encoding", "gzip")
+			resp.Header.Set("Content-Type", "application/json")
+			return resp, nil
+		})
+
+	provider := NewYrNoProvider(nil)
+	settings := createTestSettings(t, "yrno")
+
+	data, err := provider.FetchWeather(t.Context(), settings)
+
+	require.NoError(t, err)
+	require.NotNil(t, data)
+	// Confirm the gzip body decoded and parsed into real values.
+	assert.InDelta(t, 15.4, data.Temperature.Current, 0.01)
+	assert.Equal(t, 62, data.Humidity)
 }
 
 func TestMapYrResponseToWeatherData(t *testing.T) {
@@ -251,7 +289,7 @@ func TestTruncateBodyPreview(t *testing.T) {
 }
 
 func TestNewYrNoProvider(t *testing.T) {
-	provider := NewYrNoProvider()
+	provider := NewYrNoProvider(nil)
 	require.NotNil(t, provider)
 
 	// Verify it implements Provider interface

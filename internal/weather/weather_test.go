@@ -1,6 +1,7 @@
 package weather
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"sync"
@@ -22,7 +23,7 @@ type mockProvider struct {
 	fetchFunc func(settings *conf.Settings) (*WeatherData, error)
 }
 
-func (m *mockProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
+func (m *mockProvider) FetchWeather(_ context.Context, settings *conf.Settings) (*WeatherData, error) {
 	return m.fetchFunc(settings)
 }
 
@@ -373,7 +374,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 		// Create service with mock DB
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -411,7 +412,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -455,7 +456,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -499,7 +500,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -534,7 +535,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -578,7 +579,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -607,7 +608,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -641,7 +642,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -698,7 +699,7 @@ func TestService_Poll(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
@@ -711,7 +712,7 @@ func TestService_Poll(t *testing.T) {
 		}).Return(nil).Once()
 		mockDB.On("SaveHourlyWeather", mock.Anything).Return(nil).Once()
 
-		err := service.Poll()
+		err := service.Poll(t.Context())
 
 		require.NoError(t, err)
 		mockDB.AssertExpectations(t)
@@ -726,13 +727,13 @@ func TestService_Poll(t *testing.T) {
 
 		settings := createTestSettings(t, "yrno")
 		service := &Service{
-			provider: NewYrNoProvider(),
+			provider: NewYrNoProvider(nil),
 			db:       mockDB,
 			settings: settings,
 			metrics:  nil,
 		}
 
-		err := service.Poll()
+		err := service.Poll(t.Context())
 
 		require.Error(t, err)
 		// DB should not be called when fetch fails
@@ -756,7 +757,7 @@ func TestService_Poll(t *testing.T) {
 			})
 
 		settings := createTestSettings(t, "yrno")
-		provider := NewYrNoProvider()
+		provider := NewYrNoProvider(nil)
 		service := &Service{
 			provider: provider,
 			db:       mockDB,
@@ -771,11 +772,11 @@ func TestService_Poll(t *testing.T) {
 		}).Return(nil).Once()
 		mockDB.On("SaveHourlyWeather", mock.Anything).Return(nil).Once()
 
-		err := service.Poll()
+		err := service.Poll(t.Context())
 		require.NoError(t, err)
 
 		// Second poll should return "not modified" - no DB calls
-		err = service.Poll()
+		err = service.Poll(t.Context())
 		require.NoError(t, err, "Not modified should return nil, not error")
 
 		// Only the first poll should have called DB
@@ -797,7 +798,7 @@ func TestService_StartPolling(t *testing.T) {
 			s.Realtime.Weather.PollInterval = 60
 		})
 		service := &Service{
-			provider:     NewYrNoProvider(),
+			provider:     NewYrNoProvider(nil),
 			db:           mockDB,
 			settings:     settings,
 			metrics:      nil,
@@ -864,7 +865,7 @@ func TestService_StartPolling_StartupDelay(t *testing.T) {
 
 		delay := 200 * time.Millisecond
 		service := &Service{
-			provider:     NewYrNoProvider(),
+			provider:     NewYrNoProvider(nil),
 			db:           mockDB,
 			settings:     settings,
 			metrics:      nil,
@@ -919,7 +920,7 @@ func TestService_StartPolling_StartupDelay(t *testing.T) {
 		})
 
 		service := &Service{
-			provider:     NewYrNoProvider(),
+			provider:     NewYrNoProvider(nil),
 			db:           mockDB,
 			settings:     settings,
 			metrics:      nil,
@@ -970,7 +971,7 @@ func TestService_StartPolling_StartupDelay(t *testing.T) {
 
 		// Use a long delay that we will interrupt
 		service := &Service{
-			provider:     NewYrNoProvider(),
+			provider:     NewYrNoProvider(nil),
 			db:           nil,
 			settings:     settings,
 			metrics:      nil,
@@ -1123,7 +1124,7 @@ func TestFetchAndSave_AuthFailure(t *testing.T) {
 
 	// First few calls should attempt fetches and return auth error
 	for range maxConsecutiveAuthFailures {
-		err := service.fetchAndSave()
+		err := service.fetchAndSave(t.Context())
 		require.ErrorIs(t, err, ErrWeatherAuthFailed)
 	}
 	assert.Equal(t, maxConsecutiveAuthFailures, callCount,
@@ -1131,9 +1132,38 @@ func TestFetchAndSave_AuthFailure(t *testing.T) {
 
 	// After threshold, fetchAndSave should skip without calling provider
 	prevCount := callCount
-	err := service.fetchAndSave()
+	err := service.fetchAndSave(t.Context())
 	require.NoError(t, err, "Should return nil when skipping due to auth disabled")
 	assert.Equal(t, prevCount, callCount, "Provider should NOT be called after auth disabled")
+}
+
+// TestFetchAndSave_CancelledContextIsBenign verifies that a provider returning
+// context.Canceled (a service shutdown or an aborted on-demand request) is
+// treated as benign: fetchAndSave returns nil and does not trip the failure
+// backoff. Only genuine failures should back off; a shutdown should not log an
+// error or degrade the service state.
+func TestFetchAndSave_CancelledContextIsBenign(t *testing.T) {
+	settings := createTestSettings(t, "yrno")
+
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			return nil, context.Canceled
+		},
+	}
+	service := &Service{
+		provider: provider,
+		db:       nil,
+		settings: settings,
+		metrics:  nil,
+	}
+
+	err := service.fetchAndSave(t.Context())
+	require.NoError(t, err, "a cancelled fetch must be treated as benign, not a failure")
+
+	authDisabled, failures, inBackoff := service.backoff.snapshot()
+	assert.False(t, authDisabled, "cancellation must not disable auth")
+	assert.Zero(t, failures, "cancellation must not increment the failure counter")
+	assert.False(t, inBackoff, "cancellation must not start a backoff window")
 }
 
 // TestFetchAndSave_NoData tests that HTTP 204 is handled gracefully without backoff.
@@ -1156,12 +1186,12 @@ func TestFetchAndSave_NoData(t *testing.T) {
 	}
 
 	// Should return nil and not trigger backoff
-	err := service.fetchAndSave()
+	err := service.fetchAndSave(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 1, callCount)
 
 	// Next call should still attempt (no backoff)
-	err = service.fetchAndSave()
+	err = service.fetchAndSave(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 2, callCount, "No backoff should be applied for no-data responses")
 }
@@ -1186,12 +1216,12 @@ func TestFetchAndSave_GeneralFailureBackoff(t *testing.T) {
 	}
 
 	// First call should fail and apply backoff
-	err := service.fetchAndSave()
+	err := service.fetchAndSave(t.Context())
 	require.Error(t, err)
 	assert.Equal(t, 1, callCount)
 
 	// Second call should be skipped due to backoff (nextAllowedFetchTime is 1 minute away)
-	err = service.fetchAndSave()
+	err = service.fetchAndSave(t.Context())
 	require.NoError(t, err, "Should return nil when skipping due to backoff")
 	assert.Equal(t, 1, callCount, "Provider should NOT be called during backoff")
 }
@@ -1228,7 +1258,7 @@ func TestFetchAndSave_SuccessResetsBackoff(t *testing.T) {
 	}
 
 	// First call fails: sets backoff
-	err := service.fetchAndSave()
+	err := service.fetchAndSave(t.Context())
 	require.Error(t, err)
 	assert.True(t, service.backoff.shouldSkip(), "Should be in backoff after failure")
 
@@ -1239,7 +1269,7 @@ func TestFetchAndSave_SuccessResetsBackoff(t *testing.T) {
 	service.backoff.mu.Unlock()
 
 	// Second call succeeds: should reset backoff
-	err = service.fetchAndSave()
+	err = service.fetchAndSave(t.Context())
 	require.NoError(t, err)
 	assert.False(t, service.backoff.shouldSkip(), "Backoff should be cleared after success")
 
@@ -1289,7 +1319,7 @@ func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
 		metrics:      nil,
 	}
 
-	_ = service.fetchAndSave()
+	_ = service.fetchAndSave(t.Context())
 	assert.InDelta(t, 0.0, observedLat, 1e-9, "initial fetch should use the captured coords")
 	assert.InDelta(t, 0.0, observedLon, 1e-9, "initial fetch should use the captured coords")
 
@@ -1305,7 +1335,7 @@ func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
 	})
 	conf.StoreSettings(updated)
 
-	_ = service.fetchAndSave()
+	_ = service.fetchAndSave(t.Context())
 	assert.InDelta(t, 60.1699, observedLat, 1e-9,
 		"fetch should pick up updated latitude from global settings")
 	assert.InDelta(t, 24.9384, observedLon, 1e-9,
@@ -1350,7 +1380,7 @@ func TestWundergroundProvider_HTTP204_NoContent(t *testing.T) {
 	provider := NewWundergroundProvider(nil)
 	settings := createTestSettings(t, "wunderground")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -1369,7 +1399,7 @@ func TestWundergroundProvider_HTTP401_AuthFailed(t *testing.T) {
 	provider := NewWundergroundProvider(nil)
 	settings := createTestSettings(t, "wunderground")
 
-	data, err := provider.FetchWeather(settings)
+	data, err := provider.FetchWeather(t.Context(), settings)
 
 	require.Error(t, err)
 	assert.Nil(t, data)
@@ -1488,7 +1518,7 @@ func TestFetchAndSave_NoDataResetsTransientBackoff(t *testing.T) {
 	ok, _ := service.Status()
 	require.False(t, ok, "precondition: service should report degraded before the 204")
 
-	err := service.fetchAndSave()
+	err := service.fetchAndSave(t.Context())
 	require.NoError(t, err, "204 is a successful round-trip, not an error")
 
 	ok, msg := service.Status()
@@ -1533,14 +1563,14 @@ func TestFetchAndSave_AuthRecoveryOnConfigChange(t *testing.T) {
 
 	// Drive the lockout.
 	for range maxConsecutiveAuthFailures {
-		err := service.fetchAndSave()
+		err := service.fetchAndSave(t.Context())
 		require.ErrorIs(t, err, ErrWeatherAuthFailed)
 	}
 	require.True(t, service.backoff.isAuthDisabled(), "should be locked out after threshold")
 	require.Equal(t, maxConsecutiveAuthFailures, callCount)
 
 	// A cycle with unchanged config must keep skipping (no recovery yet).
-	require.NoError(t, service.fetchAndSave())
+	require.NoError(t, service.fetchAndSave(t.Context()))
 	require.Equal(t, maxConsecutiveAuthFailures, callCount,
 		"provider must not be called while locked out and config unchanged")
 
@@ -1551,7 +1581,7 @@ func TestFetchAndSave_AuthRecoveryOnConfigChange(t *testing.T) {
 	})
 	conf.StoreSettings(updated)
 
-	require.NoError(t, service.fetchAndSave(), "should recover and fetch after config change")
+	require.NoError(t, service.fetchAndSave(t.Context()), "should recover and fetch after config change")
 	assert.Equal(t, maxConsecutiveAuthFailures+1, callCount,
 		"provider should be called again after the key changed")
 	assert.False(t, service.backoff.isAuthDisabled(),
@@ -1600,7 +1630,7 @@ func TestFetchAndSave_SunCalcRebuiltOnLocationChange(t *testing.T) {
 		metrics:      nil,
 	}
 
-	require.NoError(t, service.fetchAndSave())
+	require.NoError(t, service.fetchAndSave(t.Context()))
 
 	// Move to Sydney: a very different latitude/longitude yields different sun
 	// times for the same instant.
@@ -1610,7 +1640,7 @@ func TestFetchAndSave_SunCalcRebuiltOnLocationChange(t *testing.T) {
 	})
 	conf.StoreSettings(sydney)
 
-	require.NoError(t, service.fetchAndSave())
+	require.NoError(t, service.fetchAndSave(t.Context()))
 
 	require.Len(t, capturedSunrise, 2)
 	assert.NotEqual(t, capturedSunrise[0], capturedSunrise[1],
@@ -1686,7 +1716,7 @@ func TestFetchAndSave_SerializedByMutex(t *testing.T) {
 	var wg sync.WaitGroup
 	for range goroutines {
 		wg.Go(func() {
-			_ = service.fetchAndSave()
+			_ = service.fetchAndSave(t.Context())
 		})
 	}
 	wg.Wait()
@@ -1739,7 +1769,7 @@ func TestSafeFetchAndSave_PanicRecordsFailure(t *testing.T) {
 		metrics:      nil,
 	}
 
-	require.NotPanics(t, func() { service.safeFetchAndSave() },
+	require.NotPanics(t, func() { service.safeFetchAndSave(t.Context()) },
 		"a provider panic must be recovered, not propagated")
 
 	ok, msg := service.Status()
@@ -1781,12 +1811,12 @@ func TestPoll_RecoversAfterConfigChange(t *testing.T) {
 
 	// Drive the lockout via Poll.
 	for range maxConsecutiveAuthFailures {
-		_ = service.Poll()
+		_ = service.Poll(t.Context())
 	}
 	require.True(t, service.backoff.isAuthDisabled(), "should be locked out after threshold")
 
 	// Still locked out with unchanged config: Poll surfaces the auth failure.
-	require.ErrorIs(t, service.Poll(), ErrWeatherAuthFailed)
+	require.ErrorIs(t, service.Poll(t.Context()), ErrWeatherAuthFailed)
 
 	// Fix the key; a manual Poll must now recover without waiting for the ticker.
 	authBad = false
@@ -1795,7 +1825,7 @@ func TestPoll_RecoversAfterConfigChange(t *testing.T) {
 	})
 	conf.StoreSettings(updated)
 
-	require.NoError(t, service.Poll(), "manual Poll should recover after the key is fixed")
+	require.NoError(t, service.Poll(t.Context()), "manual Poll should recover after the key is fixed")
 	assert.False(t, service.backoff.isAuthDisabled(),
 		"auth lockout should clear on the recovering Poll")
 }
