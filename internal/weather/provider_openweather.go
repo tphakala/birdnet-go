@@ -160,17 +160,20 @@ func (p *OpenWeatherProvider) FetchWeather(ctx context.Context, settings *conf.S
 // retry executor. A 401 maps to the auth-failed sentinel without retrying; any
 // other non-200 retries until the final attempt; a 200 returns the body.
 func (p *OpenWeatherProvider) handleResponse(resp *http.Response, attemptLog logger.Logger, isLastAttempt bool) (body []byte, retry bool, err error) {
+	// Close the body on every return path; the error-status branches still drain
+	// it first so the shared keep-alive connection can be reused. This also keeps
+	// the body closed if a read panics, matching WundergroundProvider.executeRequest.
+	defer func() { _ = resp.Body.Close() }()
+
 	// HTTP 401: authentication failed — don't retry, return sentinel.
 	if resp.StatusCode == http.StatusUnauthorized {
 		_, _ = io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
 		attemptLog.Error("Weather API authentication failed — check your API key")
 		return nil, false, ErrWeatherAuthFailed
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
 		attemptLog.Warn("Received non-OK status code", logger.Int("status_code", resp.StatusCode))
 		if isLastAttempt {
 			return nil, false, newWeatherErrorWithRetries(
@@ -184,7 +187,6 @@ func (p *OpenWeatherProvider) handleResponse(resp *http.Response, attemptLog log
 	}
 
 	body, err = io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
 	if err != nil {
 		return nil, false, newWeatherError(err, errors.CategoryNetwork, "read_response_body", openWeatherProviderName)
 	}
