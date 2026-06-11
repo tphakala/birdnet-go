@@ -143,6 +143,36 @@ func TestBuildOpenWeatherURL_EscapesAPIKey(t *testing.T) {
 	assert.NotContains(t, masked, "key with spaces", "the masked URL must not reveal the key")
 }
 
+// TestBuildOpenWeatherURL_EmptyEndpointFallsBackToDefault verifies that an empty
+// or whitespace-only configured endpoint falls back to the default base URL,
+// mirroring validateWundergroundConfig. Without the fallback, url.Parse("")
+// succeeds and the builder returns a relative URL (starting with "?") that
+// http.NewRequest cannot use.
+func TestBuildOpenWeatherURL_EmptyEndpointFallsBackToDefault(t *testing.T) {
+	tests := []struct {
+		name     string
+		endpoint string
+	}{
+		{"empty", ""},
+		{"whitespace_only", "   "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := createTestSettings(t, "openweather", func(s *conf.Settings) {
+				s.Realtime.Weather.OpenWeather.Endpoint = tt.endpoint
+			})
+
+			rawURL, err := buildOpenWeatherURL(settings, "test-key")
+			require.NoError(t, err)
+
+			parsed, parseErr := url.Parse(rawURL)
+			require.NoError(t, parseErr)
+			assert.Equal(t, "https", parsed.Scheme, "must produce an absolute URL, not a relative one")
+			assert.Equal(t, "api.openweathermap.org", parsed.Host)
+		})
+	}
+}
+
 // TestOpenWeatherProvider_HTTP401_AuthFailed guards the sentinel classification
 // that drives the auth-disable and backoff logic: a 401 from OpenWeather must
 // map to ErrWeatherAuthFailed, mirroring the Wunderground 401 guard.

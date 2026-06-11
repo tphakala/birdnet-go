@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -75,7 +76,14 @@ type OpenWeatherResponse struct {
 // *url.Error carrying the raw key. Escaping at build time avoids that leak path
 // and mirrors buildWundergroundURL.
 func buildOpenWeatherURL(settings *conf.Settings, apiKey string) (string, error) {
-	u, err := url.Parse(settings.Realtime.Weather.OpenWeather.Endpoint)
+	// Fall back to the default base URL when the configured endpoint is empty or
+	// whitespace-only; otherwise url.Parse succeeds with a relative URL and the
+	// request later fails. Mirrors validateWundergroundConfig.
+	endpoint := strings.TrimSpace(settings.Realtime.Weather.OpenWeather.Endpoint)
+	if endpoint == "" {
+		endpoint = openWeatherBaseURL
+	}
+	u, err := url.Parse(endpoint)
 	if err != nil {
 		return "", newWeatherError(
 			fmt.Errorf("invalid openweather endpoint: %w", err),
