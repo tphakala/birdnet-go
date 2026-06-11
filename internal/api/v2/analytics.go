@@ -261,6 +261,12 @@ func (c *Controller) processBatchDates(ctx context.Context, dates []string, minC
 	processingErrors = make([]string, 0)
 
 	for _, selectedDate := range dates {
+		// Abort early if the request was cancelled or timed out: the remaining
+		// per-date queries would only fail fast against the cancelled context.
+		if err := ctx.Err(); err != nil {
+			processingErrors = append(processingErrors, fmt.Sprintf("request cancelled before processing %s: %v", selectedDate, err))
+			break
+		}
 		result, err := c.processSingleDateForBatch(ctx, selectedDate, minConfidence, limit, ip, path)
 		if err != nil {
 			errorMsg := fmt.Sprintf("Failed to process date %s: %v", selectedDate, err)

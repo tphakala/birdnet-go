@@ -1376,7 +1376,7 @@ func TestV2OnlyDatastore_GetBatchHourlyOccurrences_CancelledContext(t *testing.T
 	cancel()
 
 	_, err := ds.GetBatchHourlyOccurrences(ctx, "2024-01-15", []string{"Turdus merula"}, 0.0)
-	require.Error(t, err, "cancelled context must surface as an error, not silently zeroed counts")
+	require.ErrorIs(t, err, context.Canceled, "cancelled context must surface as context.Canceled, not silently zeroed counts")
 }
 
 // hourlyTotal sums a 24-hour occurrence array.

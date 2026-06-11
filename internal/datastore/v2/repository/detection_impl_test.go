@@ -280,7 +280,7 @@ func TestGetBatchHourlyOccurrences(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		_, err := repo.GetBatchHourlyOccurrences(ctx, []uint{10}, base-1, base+10_000, 0.0)
-		require.Error(t, err, "a cancelled context must abort the query, not return zeros")
+		require.ErrorIs(t, err, context.Canceled, "a cancelled context must abort the query with context.Canceled, not return zeros")
 	})
 }
 

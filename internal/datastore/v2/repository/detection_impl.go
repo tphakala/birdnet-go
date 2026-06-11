@@ -858,6 +858,10 @@ func (r *detectionRepository) GetBatchHourlyOccurrences(ctx context.Context, lab
 
 	// Chunk label IDs to avoid exceeding SQL host-parameter limits on the IN clause.
 	for i := 0; i < len(labelIDs); i += batchQuerySize {
+		// Fail fast between chunks if the caller's context was cancelled.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		chunkEnd := min(i+batchQuerySize, len(labelIDs))
 		chunk := labelIDs[i:chunkEnd]
 
