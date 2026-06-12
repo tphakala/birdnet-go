@@ -32,6 +32,14 @@
   import { t } from '$lib/i18n';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
   import { resolveSpeciesDisplayNames, type SpeciesNameMaps } from '$lib/utils/speciesNames';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
+  import {
+    toLocalizedPredictions,
+    filterLocalizedPredictions,
+    matchTypedToCanonical,
+    type SpeciesPrediction,
+  } from '$lib/utils/speciesPredictions';
 
   interface Props {
     title: string;
@@ -46,6 +54,12 @@
     inputPlaceholder: string;
     emptyMessage: string;
     disabled?: boolean;
+    /**
+     * Resolve a canonical prediction/list value to its visitor-locale label.
+     * When omitted, labels fall back to the canonical value. The value emitted by
+     * onAdd is always canonical regardless of the label shown.
+     */
+    localizeLabel?: (_value: string) => string;
     onAdd: (_species: string) => void;
     onRemove: (_species: string) => void;
     onInput: (_input: string) => void;
@@ -64,6 +78,7 @@
     inputPlaceholder,
     emptyMessage,
     disabled = false,
+    localizeLabel,
     onAdd,
     onRemove,
     onInput,
@@ -108,11 +123,29 @@
     allNames: [],
   });
 
+  // Resolve a stored value to its display pair, with the common name localized to
+  // the visitor's UI locale (layered on top of the server-locale resolution).
+  // Reads the dictionary store via localizeSpeciesName, so callers must invoke it
+  // inside a reactive context to re-run on locale change.
+  function localizedDisplay(storedValue: string): {
+    displayCommonName: string;
+    displayScientificName: string;
+  } {
+    const resolved = resolveSpeciesDisplayNames(storedValue, nameMaps);
+    return {
+      displayCommonName: localizeSpeciesName(
+        resolved.displayScientificName || undefined,
+        resolved.displayCommonName
+      ),
+      displayScientificName: resolved.displayScientificName,
+    };
+  }
+
   let filteredSpecies = $derived.by(() => {
     const query = searchQuery.trim().toLowerCase();
     let result = query
       ? species.filter(s => {
-          const resolved = resolveSpeciesDisplayNames(s, nameMaps);
+          const resolved = localizedDisplay(s);
           return (
             resolved.displayCommonName.toLowerCase().includes(query) ||
             resolved.displayScientificName.toLowerCase().includes(query)
@@ -122,7 +155,7 @@
     if (sortColumn) {
       const withResolved = result.map(s => ({
         raw: s,
-        resolved: resolveSpeciesDisplayNames(s, nameMaps),
+        resolved: localizedDisplay(s),
       }));
       withResolved.sort((a, b) => {
         const cmp =
@@ -149,11 +182,18 @@
   let showPredictions = $state(false);
   let selectedPredictionIndex = $state(-1);
 
-  let filteredPredictions = $derived.by(() => {
-    if (inputValue.length < 2 || predictions.length === 0) return [];
-    return predictions
-      .filter(p => p.toLowerCase().includes(inputValue.toLowerCase()) && p !== inputValue)
-      .slice(0, 8);
+  // Pair canonical predictions with localized labels. Reactive to the dictionary
+  // store, so labels refresh on locale switch.
+  let localizedPredictions = $derived(toLocalizedPredictions(predictions, localizeLabel));
+
+  let filteredPredictions = $derived.by((): SpeciesPrediction[] => {
+    if (inputValue.length < 2 || localizedPredictions.length === 0) return [];
+    // Match against the localized label or the canonical value; exclude the exact
+    // current input so it does not echo itself.
+    return filterLocalizedPredictions(localizedPredictions, inputValue, {
+      max: 8,
+      excludeValue: inputValue,
+    });
   });
 
   function handleInputChange(e: Event) {
@@ -164,20 +204,36 @@
     onInput(target.value);
   }
 
-  function handleAdd() {
-    if (!inputValue.trim() || disabled) return;
-    onAdd(inputValue.trim());
+  // Emit a canonical value (never the localized label) and reset the input.
+  function addValue(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed || disabled) return;
+    onAdd(trimmed);
     inputValue = '';
     showPredictions = false;
     selectedPredictionIndex = -1;
   }
 
-  function selectPrediction(prediction: string) {
-    inputValue = prediction;
+  function handleAdd() {
+    // Free-typed input: map a typed label/value to its canonical value when it
+    // matches a prediction. If the parent's debounced predictions are still stale
+    // (e.g. the user typed a localized name and hit Add within the debounce window),
+    // fall back to the always-current visitor dictionary to resolve an unambiguous
+    // localized common name to its scientific name. Both include and exclude match
+    // scientific names server-side, so this stays canonical. Only when nothing
+    // resolves do we keep the typed text as-is (today's advanced-entry behavior).
+    const canonical =
+      matchTypedToCanonical(inputValue, localizedPredictions) ??
+      resolveCommonToScientificUnique(inputValue.trim()) ??
+      inputValue;
+    addValue(canonical);
+  }
+
+  function selectPrediction(prediction: SpeciesPrediction) {
     showPredictions = false;
     selectedPredictionIndex = -1;
-    // Auto-add after selecting
-    setTimeout(() => handleAdd(), 0);
+    // Emit the canonical value directly; the displayed label is never persisted.
+    addValue(prediction.value);
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -321,7 +377,7 @@
         </thead>
         <tbody>
           {#each filteredSpecies as item, index (`${item}_${index}`)}
-            {@const resolved = resolveSpeciesDisplayNames(item, nameMaps)}
+            {@const resolved = localizedDisplay(item)}
             <tr
               class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
             >
@@ -414,7 +470,7 @@
           role="listbox"
           aria-label={t('settings.species.suggestions') || 'Species suggestions'}
         >
-          {#each filteredPredictions as prediction, idx (`${prediction}_${idx}`)}
+          {#each filteredPredictions as prediction, idx (`${prediction.value}_${idx}`)}
             <button
               type="button"
               role="option"
@@ -425,7 +481,7 @@
                 : ''}"
               onmousedown={() => selectPrediction(prediction)}
             >
-              {prediction}
+              {prediction.label}
             </button>
           {/each}
         </div>

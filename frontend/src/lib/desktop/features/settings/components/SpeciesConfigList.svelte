@@ -11,9 +11,16 @@
   import { Pencil, Trash2, Clock, Settings2 } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { SpeciesConfig } from '$lib/stores/settings';
+  import { normalizeForLookup } from '$lib/utils/speciesNames';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   interface Props {
     configs: Record<string, SpeciesConfig>;
+    /**
+     * Normalized common name -> scientific name map (the parent's
+     * speciesNameMaps.commonToScientific). Used to resolve the scientific name
+     * for the localized display label and the scientific-name subtitle.
+     */
     scientificNameMap: Map<string, string>;
     editingSpecies: string | null;
     disabled?: boolean;
@@ -49,7 +56,8 @@
   <div class="rounded-xl bg-[var(--color-base-100)] shadow-xs overflow-hidden">
     {#each entries as [species, config] (species)}
       {@const isEditing = editingSpecies === species}
-      {@const scientificName = scientificNameMap.get(species.toLowerCase()) ?? ''}
+      {@const scientificName = scientificNameMap.get(normalizeForLookup(species)) ?? ''}
+      {@const displayName = localizeSpeciesName(scientificName || undefined, species)}
       <div
         class="px-4 py-3 flex items-start gap-3 border-b border-[var(--color-base-200)] last:border-b-0 transition-colors {isEditing
           ? 'bg-[var(--color-primary)]/5 ring-1 ring-inset ring-[var(--color-primary)]/30'
@@ -59,7 +67,7 @@
         <div class="flex-1 min-w-0">
           <!-- Primary line: species name + action badge -->
           <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-sm font-medium text-[var(--color-base-content)]">{species}</span>
+            <span class="text-sm font-medium text-[var(--color-base-content)]">{displayName}</span>
             {#if config.actions?.length > 0}
               <span
                 class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-teal-500/10 text-teal-600 dark:text-teal-400"

@@ -42,10 +42,12 @@
 
   // API response interfaces
   interface SpeciesListResponse {
-    species?: Array<{ label: string }>;
+    species?: Array<{ label: string; commonName?: string; scientificName?: string }>;
   }
   import { Filter } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
+  import { normalizeForLookup } from '$lib/utils/speciesNames';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   const logger = loggers.settings;
 
@@ -145,6 +147,16 @@
     data: [],
   });
 
+  // Normalized stored value -> scientific name, used to localize the displayed
+  // labels while the stored filter values stay canonical (server-locale names).
+  let speciesScientificMap = $state(new Map<string, string>());
+
+  // Resolve a stored filter value to its visitor-locale label. Reactive to the
+  // dictionary store; the stored value itself is never localized.
+  function localizeSpeciesLabel(value: string): string {
+    return localizeSpeciesName(speciesScientificMap.get(normalizeForLookup(value)), value);
+  }
+
   // PERFORMANCE OPTIMIZATION: Load species list with proper state management
   $effect(() => {
     loadSpeciesList();
@@ -157,11 +169,18 @@
     try {
       const data = await api.get<SpeciesListResponse>('/api/v2/range/species/list');
       if (data?.species && Array.isArray(data.species)) {
-        speciesListState.data = data.species.map(
-          (species: { label: string; commonName?: string }) => species.commonName || species.label
-        );
+        const sciMap = new Map<string, string>();
+        speciesListState.data = data.species.map(species => {
+          const value = species.commonName || species.label;
+          if (species.scientificName) {
+            sciMap.set(normalizeForLookup(value), species.scientificName);
+          }
+          return value;
+        });
+        speciesScientificMap = sciMap;
       } else {
         speciesListState.data = [];
+        speciesScientificMap = new Map();
       }
     } catch (error) {
       // Species list loading failure affects form functionality but isn't critical
@@ -175,6 +194,7 @@
       speciesListState.error = t('settings.filters.errors.speciesLoadFailed');
       // Set empty array so form still works, just without suggestions
       speciesListState.data = [];
+      speciesScientificMap = new Map();
     } finally {
       speciesListState.loading = false;
     }
@@ -358,6 +378,7 @@
               disabled={!settings.dogBark.enabled || store.isLoading || store.isSaving}
               predictions={speciesListState.data}
               predictionsLoading={speciesListState.loading}
+              localizeLabel={localizeSpeciesLabel}
               listLabel={t('settings.filters.dogBarkSpeciesList')}
               addLabel={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesLabel')}
               addPlaceholder={t('settings.filters.typeSpeciesName')}
@@ -423,6 +444,7 @@
               disabled={!settings.daylight.enabled || store.isLoading || store.isSaving}
               predictions={speciesListState.data}
               predictionsLoading={speciesListState.loading}
+              localizeLabel={localizeSpeciesLabel}
               listLabel={t('settings.filters.daylightFilter.speciesListLabel')}
               addLabel={t('settings.filters.daylightFilter.addSpeciesLabel')}
               addPlaceholder={t('settings.filters.typeSpeciesName')}
