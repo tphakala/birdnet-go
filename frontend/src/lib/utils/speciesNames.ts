@@ -15,9 +15,9 @@ export interface SpeciesApiEntry {
 
 /** Bidirectional species name lookup maps */
 export interface SpeciesNameMaps {
-  /** commonName (lowercase) → scientificName */
+  /** commonName (lowercase) -> scientificName */
   commonToScientific: Map<string, string>;
-  /** scientificName (lowercase) → commonName */
+  /** scientificName (lowercase) -> commonName */
   scientificToCommon: Map<string, string>;
   /** All searchable names (both common and scientific, deduplicated) */
   allNames: string[];
@@ -30,13 +30,28 @@ export interface ResolvedDisplayNames {
 }
 
 /**
+ * Normalize a name for case- and Unicode-form-insensitive lookup. Mirrors the
+ * backend normalizeForLookup (strings.ToLower(norm.NFC.String(s))): labels ship
+ * as NFC, but composing keyboards (macOS) submit NFD bytes for diacritics, so both
+ * sides are normalized to NFC before lowercasing to prevent silent misses.
+ */
+export function normalizeForLookup(s: string): string {
+  return s.normalize('NFC').toLowerCase();
+}
+
+/**
  * Build bidirectional species name lookup maps from API response.
  * Skips entries missing a scientific name.
+ * Mirrors the backend delete-on-conflict: when two distinct scientific names
+ * share a normalized common name, that key is removed from commonToScientific
+ * so an ambiguous common name passes through unresolved instead of resolving
+ * to an arbitrary species.
  */
 export function buildSpeciesNameMaps(species: SpeciesApiEntry[]): SpeciesNameMaps {
   const commonToScientific = new Map<string, string>();
   const scientificToCommon = new Map<string, string>();
   const namesSet = new Set<string>();
+  const ambiguousCommon = new Set<string>();
 
   for (const s of species) {
     const commonName = s.commonName ?? s.label;
@@ -50,8 +65,22 @@ export function buildSpeciesNameMaps(species: SpeciesApiEntry[]): SpeciesNameMap
     // Only build bidirectional maps when both names are present
     if (!scientificName || !commonName) continue;
 
-    commonToScientific.set(commonName.toLowerCase(), scientificName);
-    scientificToCommon.set(scientificName.toLowerCase(), commonName);
+    const commonKey = normalizeForLookup(commonName);
+    // Mirror the backend delete-on-conflict: when two distinct scientific names
+    // share a normalized common name, drop that key so an ambiguous common name
+    // passes through unresolved instead of resolving to an arbitrary species.
+    if (!ambiguousCommon.has(commonKey)) {
+      const existing = commonToScientific.get(commonKey);
+      if (existing !== undefined && existing !== scientificName) {
+        ambiguousCommon.add(commonKey);
+        commonToScientific.delete(commonKey);
+      } else {
+        commonToScientific.set(commonKey, scientificName);
+      }
+    }
+
+    // scientificToCommon keeps every species (scientific names are unique).
+    scientificToCommon.set(normalizeForLookup(scientificName), commonName);
     namesSet.add(scientificName);
   }
 
@@ -79,7 +108,7 @@ export function resolveSpeciesDisplayNames(
     return { displayCommonName: '', displayScientificName: '' };
   }
 
-  const lower = storedValue.toLowerCase();
+  const lower = normalizeForLookup(storedValue);
 
   // Check if it's a scientific name
   const resolvedCommon = maps.scientificToCommon.get(lower);
@@ -99,7 +128,7 @@ export function resolveSpeciesDisplayNames(
     };
   }
 
-  // Unknown — show as common name with empty scientific
+  // Unknown: show as common name with empty scientific
   return {
     displayCommonName: storedValue,
     displayScientificName: '',
@@ -111,19 +140,23 @@ export function resolveSpeciesDisplayNames(
  * Prevents adding "Strix aluco" when "Tawny Owl" is already present (and vice versa).
  */
 export function isSpeciesInList(candidate: string, list: string[], maps: SpeciesNameMaps): boolean {
-  const candidateLower = candidate.toLowerCase();
-  const listLowerSet = new Set(list.map(s => s.toLowerCase()));
+  const candidateLower = normalizeForLookup(candidate);
+  const listLowerSet = new Set(list.map(s => normalizeForLookup(s)));
 
   // Direct match
   if (listLowerSet.has(candidateLower)) return true;
 
   // Check if candidate's alias is in the list
   const aliasFromScientific = maps.scientificToCommon.get(candidateLower);
-  if (aliasFromScientific !== undefined && listLowerSet.has(aliasFromScientific.toLowerCase()))
+  if (
+    aliasFromScientific !== undefined &&
+    listLowerSet.has(normalizeForLookup(aliasFromScientific))
+  )
     return true;
 
   const aliasFromCommon = maps.commonToScientific.get(candidateLower);
-  if (aliasFromCommon !== undefined && listLowerSet.has(aliasFromCommon.toLowerCase())) return true;
+  if (aliasFromCommon !== undefined && listLowerSet.has(normalizeForLookup(aliasFromCommon)))
+    return true;
 
   return false;
 }

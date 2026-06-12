@@ -59,6 +59,7 @@
   import {
     buildSpeciesNameMaps,
     isSpeciesInList,
+    normalizeForLookup,
     type SpeciesNameMaps,
   } from '$lib/utils/speciesNames';
   import {
@@ -653,10 +654,11 @@
         commonName: string,
         scientificName: string
       ): boolean =>
-        nameSet.has(commonName.toLowerCase()) || nameSet.has(scientificName.toLowerCase());
+        nameSet.has(normalizeForLookup(commonName)) ||
+        nameSet.has(normalizeForLookup(scientificName));
 
-      const includeSet = new Set((currentInclude ?? []).map(s => s.toLowerCase()));
-      const configKeys = new Set(Object.keys(currentConfig ?? {}).map(s => s.toLowerCase()));
+      const includeSet = new Set((currentInclude ?? []).map(s => normalizeForLookup(s)));
+      const configKeys = new Set(Object.keys(currentConfig ?? {}).map(s => normalizeForLookup(s)));
 
       // Filter species that pass the threshold OR are manually included
       const mappedSpecies: ActiveSpecies[] = response.species
