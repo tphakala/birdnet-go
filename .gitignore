@@ -50,4 +50,6 @@ frontend/playwright-report*.zip
 REFACTOR_CHANGELOG.md
 .worktrees/
 .leann/
-.serena/
+# Track the shared Serena project config; ignore caches, logs, memories, and local overrides
+.serena/*
+!.serena/project.yml
