@@ -9,6 +9,7 @@
   import type { ZoomTransform } from 'd3-zoom';
 
   import { t } from '$lib/i18n';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import BaseChart from './BaseChart.svelte';
   import { getLocalDateString } from '$lib/utils/date';
   import { createTimeScale, createLinearScale } from './utils/scales';
@@ -78,6 +79,10 @@
       color: species.color || colors[index],
       visible: selectedSpecies.length === 0 || selectedSpecies.includes(species.species),
       id: species.id || species.species, // Use species name as fallback ID
+      // Visitor-locale display label. Computed inside the $derived so the repaint
+      // $effect (which reads processedData) re-runs on dictionary load / locale
+      // switch. Keys, colors, and legend ids below stay on species.species/id.
+      displayName: localizeSpeciesName(species.species, species.commonName),
     }));
   });
 
@@ -293,7 +298,7 @@
     // Draw lines for each species
     const linesGroup = chartArea.append('g').attr('class', 'lines');
 
-    processed.forEach((species: SpeciesTrendData) => {
+    processed.forEach(species => {
       // Add area (subtle background fill)
       linesGroup
         .append('path')
@@ -339,7 +344,7 @@
 
           // Show tooltip
           const tooltipData = {
-            title: species.commonName,
+            title: species.displayName,
             items: [
               {
                 label: t('analytics.advanced.charts.tooltips.date'),
@@ -429,9 +434,9 @@
 
     // Create legend
     const processedForLegend = processedData;
-    const legendItems = processedForLegend.map((species: SpeciesTrendData) => ({
+    const legendItems = processedForLegend.map(species => ({
       id: species.id || species.species,
-      label: species.commonName,
+      label: species.displayName,
       color: species.color ?? '#999999',
       visible: species.visible,
     }));
