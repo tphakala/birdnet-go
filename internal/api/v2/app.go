@@ -34,18 +34,18 @@ type AppConfigResponse struct {
 	CSRFToken          string                `json:"csrfToken"`
 	Security           SecurityConfigDTO     `json:"security"`
 	Version            string                `json:"version"`
-	SpeciesDictVersion string                `json:"speciesDictVersion"` // dataset version for content-addressed dictionary URL construction
-	BasePath           string                `json:"basePath"`           // reverse proxy prefix for frontend URL construction
-	ColorScheme     string                `json:"colorScheme,omitempty"`     // admin-configured color scheme for all visitors
-	CustomColors    *conf.CustomColors    `json:"customColors,omitempty"`    // custom scheme hex colors (when colorScheme is "custom")
-	LogoStyle       string                `json:"logoStyle,omitempty"`       // admin-configured logo style: "gradient" or "solid"
-	LiveSpectrogram bool                  `json:"liveSpectrogram"`           // auto-start live spectrogram on dashboard
-	Layout          *conf.DashboardLayout `json:"layout,omitempty"`          // dashboard element layout for guest/pre-auth rendering
-	FreshInstall    bool                  `json:"freshInstall"`              // true when this is a brand-new installation
-	NewVersion      bool                  `json:"newVersion"`                // true when the app was upgraded since last dismiss
-	PreviousVersion string                `json:"previousVersion,omitempty"` // last version the user acknowledged
-	Sentry          *SentryFrontendConfig `json:"sentry,omitempty"`          // frontend telemetry config (only when enabled)
-	ProjectLinks    ProjectLinksConfig    `json:"projectLinks"`              // project identity/links served to the frontend
+	SpeciesDictVersion string                `json:"speciesDictVersion"`        // dataset version for content-addressed dictionary URL construction
+	BasePath           string                `json:"basePath"`                  // reverse proxy prefix for frontend URL construction
+	ColorScheme        string                `json:"colorScheme,omitempty"`     // admin-configured color scheme for all visitors
+	CustomColors       *conf.CustomColors    `json:"customColors,omitempty"`    // custom scheme hex colors (when colorScheme is "custom")
+	LogoStyle          string                `json:"logoStyle,omitempty"`       // admin-configured logo style: "gradient" or "solid"
+	LiveSpectrogram    bool                  `json:"liveSpectrogram"`           // auto-start live spectrogram on dashboard
+	Layout             *conf.DashboardLayout `json:"layout,omitempty"`          // dashboard element layout for guest/pre-auth rendering
+	FreshInstall       bool                  `json:"freshInstall"`              // true when this is a brand-new installation
+	NewVersion         bool                  `json:"newVersion"`                // true when the app was upgraded since last dismiss
+	PreviousVersion    string                `json:"previousVersion,omitempty"` // last version the user acknowledged
+	Sentry             *SentryFrontendConfig `json:"sentry,omitempty"`          // frontend telemetry config (only when enabled)
+	ProjectLinks       ProjectLinksConfig    `json:"projectLinks"`              // project identity/links served to the frontend
 }
 
 // SentryFrontendConfig exposes telemetry configuration to the frontend.
@@ -194,13 +194,13 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 		Version:            settings.Version,
 		SpeciesDictVersion: speciesdict.Version(),
 		BasePath:           basePath,
-		ColorScheme:     settings.Realtime.Dashboard.ColorScheme,
-		CustomColors:    settings.Realtime.Dashboard.CustomColors,
-		LogoStyle:       settings.Realtime.Dashboard.LogoStyle,
-		LiveSpectrogram: settings.Realtime.Dashboard.LiveSpectrogram,
-		FreshInstall:    freshInstall,
-		NewVersion:      newVersion,
-		PreviousVersion: previousVersion,
+		ColorScheme:        settings.Realtime.Dashboard.ColorScheme,
+		CustomColors:       settings.Realtime.Dashboard.CustomColors,
+		LogoStyle:          settings.Realtime.Dashboard.LogoStyle,
+		LiveSpectrogram:    settings.Realtime.Dashboard.LiveSpectrogram,
+		FreshInstall:       freshInstall,
+		NewVersion:         newVersion,
+		PreviousVersion:    previousVersion,
 		// Project identity/links are always served (independent of telemetry) so
 		// in-app links follow the configured branding instead of hardcoded URLs.
 		ProjectLinks: ProjectLinksConfig{

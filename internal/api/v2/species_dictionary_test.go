@@ -85,6 +85,9 @@ func TestSpeciesDictionary_BodyIsValidGzipJSON(t *testing.T) {
 	err = json.NewDecoder(gr).Decode(&dict)
 	require.NoError(t, err, "decompressed body must be valid JSON object")
 	assert.NotEmpty(t, dict, "dictionary must contain at least one entry")
+	// Spot-check a known entry so a structurally-valid-but-garbage body is caught.
+	assert.Equal(t, "mopsilepakko", dict["Barbastella barbastellus"],
+		"fi dictionary must localize the canonical bat example")
 }
 
 // TestSpeciesDictionary_UnknownLocale checks that an unknown locale returns 404.

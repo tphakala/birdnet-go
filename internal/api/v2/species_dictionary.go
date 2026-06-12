@@ -76,18 +76,19 @@ func (c *Controller) ServeSpeciesDictionary(ctx echo.Context) error {
 
 	// Build the quoted ETag from the dataset version, e.g. `"daec15c"`.
 	etag := fmt.Sprintf("%q", speciesdict.Version())
+	hdr := ctx.Response().Header()
+	hdr.Set("ETag", etag)
 
-	// Respond with 304 if the client already has the current version.
+	// Respond with 304 if the client already has the current version. The ETag is
+	// set above so the 304 echoes it, per RFC 7232.
 	if ctx.Request().Header.Get("If-None-Match") == etag {
 		return ctx.NoContent(http.StatusNotModified)
 	}
 
 	// Set response headers BEFORE writing the body so the framework cannot
 	// sniff the gzip magic bytes and override Content-Type.
-	hdr := ctx.Response().Header()
 	hdr.Set("Content-Encoding", dictContentEncoding)
 	hdr.Set("X-Content-Type-Options", dictNoSniff)
-	hdr.Set("ETag", etag)
 
 	// Choose cache lifetime based on whether the caller provided a content-
 	// addressed version query param.

@@ -668,6 +668,20 @@ func TestConvertSearchFilters_SpeciesScientific(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "Barbastella", sf.Query)
 	})
+
+	t.Run("free-text and scientific names coexist (scientific OR-ed, not replaced)", func(t *testing.T) {
+		t.Parallel()
+		sf, err := ConvertSearchFilters(t.Context(), &datastore.SearchFilters{
+			Species:           "Strix",
+			SpeciesScientific: []string{"Myotis daubentonii"},
+		}, deps, time.UTC)
+		require.NoError(t, err)
+		// The free-text term stays as the scientific_name LIKE branch...
+		assert.Equal(t, "Strix", sf.Query)
+		// ...and the resolved scientific name is appended to the label-ID branch
+		// (buildSearchJoins OR-s Query with CommonLabelIDs), not dropped.
+		assert.Contains(t, sf.CommonLabelIDs, uint(22))
+	})
 }
 
 // =============================================================================
