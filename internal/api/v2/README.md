@@ -225,10 +225,11 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 
 | Method | Route                      | Handler               | Auth | Description                                                       |
 | ------ | -------------------------- | --------------------- | ---- | ----------------------------------------------------------------- |
-| GET    | `/species`                 | `GetSpeciesInfo`      | ❌   | Get extended species information including rarity status          |
-| GET    | `/species/all`             | `GetAllSpecies`       | ❌   | Get all BirdNET species labels (not filtered by location)         |
-| GET    | `/species/taxonomy`        | `GetSpeciesTaxonomy`  | ❌   | Get detailed taxonomy data with subspecies and hierarchy          |
-| GET    | `/species/:code/thumbnail` | `GetSpeciesThumbnail` | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
+| GET    | `/species`                          | `GetSpeciesInfo`          | ❌   | Get extended species information including rarity status          |
+| GET    | `/species/all`                      | `GetAllSpecies`           | ❌   | Get all BirdNET species labels (not filtered by location)         |
+| GET    | `/species/taxonomy`                 | `GetSpeciesTaxonomy`      | ❌   | Get detailed taxonomy data with subspecies and hierarchy          |
+| GET    | `/species/:code/thumbnail`          | `GetSpeciesThumbnail`     | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
+| GET    | `/species/dictionary/:locale`       | `ServeSpeciesDictionary`  | ❌   | Precompressed per-locale species name dictionary (gzip JSON)      |
 
 ### Server-Sent Events (`sse.go`)
 

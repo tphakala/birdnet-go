@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/speciesdict"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -928,17 +929,18 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 
 	// Only these top-level keys should exist
 	expectedKeys := map[string]bool{
-		"csrfToken":       true,
-		"security":        true,
-		"version":         true,
-		"basePath":        true,
-		"colorScheme":     true,
-		"customColors":    true,
-		"logoStyle":       true,
-		"liveSpectrogram": true,
-		"freshInstall":    true,
-		"newVersion":      true,
-		"projectLinks":    true,
+		"csrfToken":          true,
+		"security":           true,
+		"version":            true,
+		"speciesDictVersion": true,
+		"basePath":           true,
+		"colorScheme":        true,
+		"customColors":       true,
+		"logoStyle":          true,
+		"liveSpectrogram":    true,
+		"freshInstall":       true,
+		"newVersion":         true,
+		"projectLinks":       true,
 	}
 
 	for key := range rawResponse {
@@ -1539,4 +1541,27 @@ func TestGetAppConfig_SentryConfigWhenDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Nil(t, response.Sentry, "Sentry config should be nil when disabled")
+}
+
+// TestGetAppConfig_SpeciesDictVersion verifies the response JSON carries
+// speciesDictVersion equal to speciesdict.Version() and that it is non-empty.
+func TestGetAppConfig_SpeciesDictVersion(t *testing.T) {
+	e, controller := setupAppConfigTest(t, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/app/config")
+
+	err := controller.GetAppConfig(ctx)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	expectedVersion := speciesdict.Version()
+	assert.NotEmpty(t, response.SpeciesDictVersion, "speciesDictVersion must not be empty")
+	assert.Equal(t, expectedVersion, response.SpeciesDictVersion, "speciesDictVersion must match speciesdict.Version()")
 }
