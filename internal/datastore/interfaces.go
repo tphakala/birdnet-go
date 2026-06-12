@@ -103,7 +103,7 @@ type Interface interface {
 	GetAllNotes() ([]Note, error)
 	// GetTopBirdsData returns daily detection summaries, ordered by detection count descending.
 	// The limit parameter (if > 0) restricts the number of unique species returned.
-	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64, limit int) ([]Note, error)
+	GetTopBirdsData(ctx context.Context, selectedDate string, minConfidenceNormalized float64, limit int) ([]Note, error)
 	// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
 	// The species slice holds scientific names; the returned map is keyed by scientific name.
 	// Keying on scientific name keeps the result robust across models and locales.
@@ -646,7 +646,7 @@ func (ds *DataStore) GetAllNotes() ([]Note, error) {
 }
 
 // GetTopBirdsData retrieves the top bird sightings based on a selected date and minimum confidence threshold.
-func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64, limit int) ([]Note, error) {
+func (ds *DataStore) GetTopBirdsData(ctx context.Context, selectedDate string, minConfidenceNormalized float64, limit int) ([]Note, error) {
 	// Define a temporary struct to hold the query results including the count
 	type SpeciesCount struct {
 		CommonName     string
@@ -668,7 +668,7 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 
 	// First, get the count and common names
 	// Exclude detections marked as false_positive
-	query := ds.DB.Table("notes").
+	query := ds.DB.WithContext(ctx).Table("notes").
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
 		Select("notes.common_name, notes.scientific_name, notes.species_code, COUNT(*) as count, MAX(notes.confidence) as confidence, notes.date, MAX(notes.time) as time").
 		Where("notes.date = ? AND notes.confidence >= ?", selectedDate, minConfidenceNormalized).

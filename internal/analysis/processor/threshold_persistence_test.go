@@ -53,7 +53,7 @@ func (m *MockDatastore) Optimize(context.Context) error                    { ret
 func (m *MockDatastore) GetAllNotes() ([]datastore.Note, error) {
 	return make([]datastore.Note, 0), nil
 }
-func (m *MockDatastore) GetTopBirdsData(string, float64, int) ([]datastore.Note, error) {
+func (m *MockDatastore) GetTopBirdsData(context.Context, string, float64, int) ([]datastore.Note, error) {
 	return make([]datastore.Note, 0), nil
 }
 func (m *MockDatastore) GetBatchHourlyOccurrences(context.Context, string, []string, float64) (map[string][24]int, error) {
