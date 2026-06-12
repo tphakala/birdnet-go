@@ -6,7 +6,7 @@
  * localized label. These tests guard that invariant.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { CirclePlus } from '@lucide/svelte';
 import SpeciesListCard from './SpeciesListCard.svelte';
@@ -41,6 +41,10 @@ function renderCard(overrides: Record<string, unknown> = {}) {
 }
 
 describe('SpeciesListCard value/display split', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('renders the localized label in the dropdown but emits the canonical value', async () => {
     const { onAdd } = renderCard();
 

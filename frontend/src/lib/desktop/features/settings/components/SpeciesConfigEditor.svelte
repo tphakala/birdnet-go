@@ -85,6 +85,17 @@
   // Predictions paired with localized labels for save-time resolution.
   let localizedPredictions = $derived(toLocalizedPredictions(predictions ?? [], localizeLabel));
 
+  // Keep the displayed label in sync with the active locale (and the current
+  // selection) until the user edits the field. This refreshes the field if the UI
+  // locale changes while the editor is open. It tracks canonicalSpecies (not the
+  // species prop) so that after picking a different prediction the field keeps the
+  // picked label instead of reverting to the originally-opened species.
+  $effect(() => {
+    if (!speciesEdited && canonicalSpecies) {
+      speciesName = localizeLabel?.(canonicalSpecies) ?? canonicalSpecies;
+    }
+  });
+
   // Validation
   let isValid = $derived(speciesName.trim() !== '' && threshold >= 0 && threshold <= 1);
 

@@ -1,10 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import SpeciesInput from './SpeciesInput.svelte';
 
 const defaultPredictions = ['American Robin', 'Blue Jay', 'Northern Cardinal', 'House Sparrow'];
 
 describe('SpeciesInput', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('renders with basic props', () => {
     render(SpeciesInput, {
       props: {

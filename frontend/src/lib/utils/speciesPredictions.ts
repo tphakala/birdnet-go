@@ -21,6 +21,15 @@ export interface SpeciesPrediction {
   value: string;
   /** Visitor-locale display label. Never persisted. */
   label: string;
+  /**
+   * Pre-normalized value for filtering, computed once by toLocalizedPredictions to
+   * keep NFC normalization out of the per-keystroke filter loop. Optional so
+   * hand-built predictions still work (the filter/match helpers fall back to
+   * normalizing on demand).
+   */
+  normalizedValue?: string;
+  /** Pre-normalized label for filtering. See normalizedValue. */
+  normalizedLabel?: string;
 }
 
 /**
@@ -38,7 +47,18 @@ export function toLocalizedPredictions(
   values: string[],
   localizeLabel?: (value: string) => string
 ): SpeciesPrediction[] {
-  return values.map(value => ({ value, label: localizeLabel?.(value) ?? value }));
+  return values.map(value => {
+    // Treat an empty/whitespace localized label as missing so the label always
+    // falls back to the canonical value (a blank label would render nothing).
+    const localized = localizeLabel?.(value);
+    const label = localized && localized.trim().length > 0 ? localized : value;
+    return {
+      value,
+      label,
+      normalizedValue: normalizeForLookup(value),
+      normalizedLabel: normalizeForLookup(label),
+    };
+  });
 }
 
 /** Options for {@link filterLocalizedPredictions}. */
@@ -60,20 +80,23 @@ export function filterLocalizedPredictions(
   query: string,
   options: FilterOptions = {}
 ): SpeciesPrediction[] {
-  const needle = normalizeForLookup(query);
+  const needle = normalizeForLookup(query.trim());
   const exclude =
-    options.excludeValue !== undefined ? normalizeForLookup(options.excludeValue) : undefined;
-  const max = options.max ?? Number.POSITIVE_INFINITY;
+    options.excludeValue !== undefined
+      ? normalizeForLookup(options.excludeValue.trim())
+      : undefined;
+  // Clamp max to a non-negative integer and short-circuit on 0, so a zero/invalid
+  // bound returns nothing instead of leaking one item past the post-push check.
+  const maxRaw = options.max ?? Number.POSITIVE_INFINITY;
+  const max = Number.isFinite(maxRaw) ? Math.max(0, Math.floor(maxRaw)) : Number.POSITIVE_INFINITY;
+  if (max === 0) return [];
 
   const out: SpeciesPrediction[] = [];
   for (const prediction of predictions) {
-    const valueKey = normalizeForLookup(prediction.value);
+    const valueKey = prediction.normalizedValue ?? normalizeForLookup(prediction.value);
     if (exclude !== undefined && valueKey === exclude) continue;
-    if (
-      needle.length === 0 ||
-      normalizeForLookup(prediction.label).includes(needle) ||
-      valueKey.includes(needle)
-    ) {
+    const labelKey = prediction.normalizedLabel ?? normalizeForLookup(prediction.label);
+    if (needle.length === 0 || labelKey.includes(needle) || valueKey.includes(needle)) {
       out.push(prediction);
       if (out.length >= max) break;
     }
@@ -95,13 +118,15 @@ export function matchTypedToCanonical(
   typed: string,
   predictions: SpeciesPrediction[]
 ): string | undefined {
-  const needle = normalizeForLookup(typed);
+  // Trim before normalizing so a name typed with surrounding spaces still matches
+  // a prediction; otherwise the caller's fallback would persist the trimmed label
+  // instead of the canonical value.
+  const needle = normalizeForLookup(typed.trim());
   if (needle.length === 0) return undefined;
   for (const prediction of predictions) {
-    if (
-      normalizeForLookup(prediction.label) === needle ||
-      normalizeForLookup(prediction.value) === needle
-    ) {
+    const labelKey = prediction.normalizedLabel ?? normalizeForLookup(prediction.label);
+    const valueKey = prediction.normalizedValue ?? normalizeForLookup(prediction.value);
+    if (labelKey === needle || valueKey === needle) {
       return prediction.value;
     }
   }
