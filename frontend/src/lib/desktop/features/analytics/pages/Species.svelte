@@ -456,6 +456,9 @@
         );
         if (response.ok) {
           const thumbnails = await response.json();
+          // Re-check after the await: a newer fetch may have replaced speciesData
+          // while this batch was in flight, so don't apply stale thumbnails to it.
+          if (fetchSeq !== thumbnailFetchSeq) return;
 
           // Update species data with fetched thumbnails. Backend URLs are
           // relative; buildAppUrl prepends the configured base path so the
