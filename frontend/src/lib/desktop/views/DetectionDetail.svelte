@@ -27,6 +27,7 @@
   import { formatLocalDateTime } from '$lib/utils/date';
   import { buildAppUrl, getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import {
     Download,
@@ -432,6 +433,7 @@
 <!-- Snippets for better organization -->
 
 {#snippet heroSection(det: Detection)}
+  {@const displayName = localizeSpeciesName(det.scientificName, det.commonName)}
   <section class="detection-hero-grid" aria-labelledby="species-heading">
     <!-- Identity Card -->
     <div class="hero-card hero-identity-card">
@@ -443,7 +445,7 @@
             src={buildAppUrl(
               `/api/v2/media/species-image?name=${encodeURIComponent(det.scientificName)}`
             )}
-            alt={det.commonName}
+            alt={displayName}
             class="w-full h-full object-contain"
             onerror={handleBirdImageError}
             loading="eager"
@@ -472,7 +474,7 @@
         <!-- Species identity -->
         <div class="hero-species">
           <h1 id="species-heading" class="species-display-name">
-            {det.commonName}
+            {displayName}
             <span class="sr-only">detection details</span>
           </h1>
           <p class="species-scientific-name" aria-label="Scientific name">
@@ -533,7 +535,12 @@
                   <div class="taxonomy-subspecies-item">
                     <span class="italic">{subspecies.scientific_name}</span>
                     {#if subspecies.common_name}
-                      <span class="taxonomy-subspecies-common">{subspecies.common_name}</span>
+                      <span class="taxonomy-subspecies-common"
+                        >{localizeSpeciesName(
+                          subspecies.scientific_name,
+                          subspecies.common_name
+                        )}</span
+                      >
                     {/if}
                   </div>
                 {/each}
@@ -601,7 +608,7 @@
             href={buildAppUrl(`/api/v2/media/audio/${det.clipName}`)}
             download
             class="meta-download"
-            aria-label="Download audio clip for {det.commonName} detection"
+            aria-label="Download audio clip for {displayName} detection"
           >
             <Download class="w-4 h-4" />
             <span>{t('media.audio.download')}</span>
@@ -721,7 +728,9 @@
     {#if isLoadingDetection}
       {t('detections.aria.loading')}
     {:else if detection}
-      {t('detections.aria.loaded', { species: detection.commonName })}
+      {t('detections.aria.loaded', {
+        species: localizeSpeciesName(detection.scientificName, detection.commonName),
+      })}
     {:else if detectionError}
       {t('detections.aria.error', { error: detectionError })}
     {/if}
@@ -804,7 +813,13 @@
         {:else}
           <div class="mb-3"></div>
         {/if}
-        <div role="region" aria-label="Audio recording and spectrogram for {detection.commonName}">
+        <div
+          role="region"
+          aria-label="Audio recording and spectrogram for {localizeSpeciesName(
+            detection.scientificName,
+            detection.commonName
+          )}"
+        >
           <div class="detail-audio-container">
             <AudioPlayer
               audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}

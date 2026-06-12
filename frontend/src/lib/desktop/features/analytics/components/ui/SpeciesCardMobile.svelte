@@ -3,6 +3,7 @@
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
   import { ChevronRight } from '@lucide/svelte';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   interface SpeciesData {
     common_name: string;
@@ -29,6 +30,7 @@
   }
 
   let imageLoadFailed = $state(false);
+  let displayName = $derived(localizeSpeciesName(species.scientific_name, species.common_name));
 
   function handleImageError() {
     imageLoadFailed = true;
@@ -55,7 +57,7 @@
         {#if species.thumbnail_url && !imageLoadFailed}
           <img
             src={species.thumbnail_url}
-            alt={species.common_name}
+            alt={displayName}
             class="h-full w-full object-cover"
             onerror={handleImageError}
           />
@@ -63,7 +65,7 @@
       </div>
     </figure>
     <div class="card-body p-4">
-      <h3 class="card-title text-base">{species.common_name}</h3>
+      <h3 class="card-title text-base">{displayName}</h3>
       <p class="text-sm text-[var(--color-base-content)] opacity-60 italic">
         {species.scientific_name}
       </p>
@@ -106,7 +108,7 @@
           {#if species.thumbnail_url}
             <img
               src={species.thumbnail_url}
-              alt={species.common_name}
+              alt={displayName}
               class="object-cover"
               onerror={handleImageError}
             />
@@ -115,7 +117,7 @@
       </div>
     </div>
     <div class="flex-1 min-w-0">
-      <h3 class="font-bold text-sm truncate">{species.common_name}</h3>
+      <h3 class="font-bold text-sm truncate">{displayName}</h3>
       <p class="text-xs text-[var(--color-base-content)] opacity-60 italic truncate">
         {species.scientific_name}
       </p>
@@ -153,7 +155,7 @@
         {#if species.thumbnail_url}
           <img
             src={species.thumbnail_url}
-            alt={species.common_name}
+            alt={displayName}
             class="object-cover"
             onerror={handleImageError}
           />
@@ -161,7 +163,7 @@
       </div>
     </div>
     <div class="flex-1 min-w-0">
-      <h4 class="font-bold text-sm truncate">{species.common_name}</h4>
+      <h4 class="font-bold text-sm truncate">{displayName}</h4>
       <p class="text-xs text-[var(--color-base-content)] opacity-60 truncate">
         {species.scientific_name}
       </p>
