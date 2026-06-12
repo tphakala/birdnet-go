@@ -131,6 +131,19 @@ tasks:
     status:
       - '[ -f "{{.AVICOMMONS_JSON_FILE}}" ]'
 
+  generate-species-dict:
+    desc: Regenerate per-locale species dictionaries from the OpenFauna dataset
+    cmds:
+      - go generate ./internal/speciesdict
+    sources:
+      - internal/openfauna/data/translations.csv.gz
+      - internal/openfauna/data/SOURCE.txt
+      - internal/openfauna/dictionary.go
+      - internal/openfauna/resolver.go
+      - internal/speciesdict/gen/main.go
+    generates:
+      - internal/speciesdict/data/*.json.gz
+
   native-target:
     cmds:
       - |
