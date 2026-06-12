@@ -243,3 +243,66 @@ describe('getFilterSuggestions', () => {
     expect(result).toContain('source:');
   });
 });
+
+describe('parseSearchQuery multi-word species filter', () => {
+  it('captures an unquoted multi-word species value', () => {
+    const result = parseSearchQuery('species:Great Tit');
+    expect(result.errors).toHaveLength(0);
+    expect(result.filters).toHaveLength(1);
+    expect(result.filters[0].type).toBe('species');
+    expect(result.filters[0].value).toBe('Great Tit');
+  });
+
+  it('captures a quoted multi-word species value and strips the quotes', () => {
+    const result = parseSearchQuery('species:"Great Tit"');
+    expect(result.filters).toHaveLength(1);
+    expect(result.filters[0].value).toBe('Great Tit');
+  });
+
+  it('stops a multi-word value at the next recognized filter key', () => {
+    const result = parseSearchQuery('species:Great Tit confidence:>90');
+    expect(result.errors).toHaveLength(0);
+    const species = result.filters.find(f => f.type === 'species');
+    const confidence = result.filters.find(f => f.type === 'confidence');
+    expect(species?.value).toBe('Great Tit');
+    expect(confidence?.value).toBe(90);
+    expect(confidence?.operator).toBe('>');
+  });
+
+  it('preserves free text before a multi-word filter', () => {
+    const result = parseSearchQuery('flying species:Great Tit');
+    expect(result.textQuery).toBe('flying');
+    expect(result.filters.find(f => f.type === 'species')?.value).toBe('Great Tit');
+  });
+
+  it('captures trailing free text after a quoted value', () => {
+    const result = parseSearchQuery('species:"Great Tit" flying');
+    expect(result.filters.find(f => f.type === 'species')?.value).toBe('Great Tit');
+    expect(result.textQuery).toBe('flying');
+  });
+
+  it('greedily swallows trailing free text after an unquoted multi-word value (documented limitation)', () => {
+    const result = parseSearchQuery('species:Great Tit flying');
+    expect(result.filters).toHaveLength(1);
+    expect(result.filters[0].value).toBe('Great Tit flying');
+    expect(result.textQuery).toBe('');
+  });
+
+  it('handles an unmatched trailing quote without throwing', () => {
+    const result = parseSearchQuery('species:"Great Tit');
+    expect(result.filters).toHaveLength(1);
+    expect(result.filters[0].value).toBe('Great Tit');
+  });
+
+  it('captures a multi-word location value', () => {
+    const result = parseSearchQuery('location:Back Yard');
+    expect(result.filters.find(f => f.type === 'location')?.value).toBe('Back Yard');
+  });
+
+  it('pushes an error for a single-token filter with no value', () => {
+    const result = parseSearchQuery('confidence:');
+    expect(result.filters).toHaveLength(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.textQuery).toBe('');
+  });
+});

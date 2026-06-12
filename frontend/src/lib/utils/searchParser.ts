@@ -9,17 +9,24 @@
 
 export type FilterOperator = '>' | '<' | '>=' | '<=' | '=' | ':';
 
-export type FilterType =
-  | 'confidence'
-  | 'time'
-  | 'date'
-  | 'hour'
-  | 'daterange'
-  | 'verified'
-  | 'species'
-  | 'location'
-  | 'source'
-  | 'locked';
+// Single source of truth for recognized filter keys: both the FilterType union
+// and the runtime FILTER_KEY_SET derive from this array, so they cannot drift
+// apart. Adding a key here updates the type and the parser's recognition set
+// together, preventing a new key that type-checks but is silently never parsed.
+const FILTER_KEYS = [
+  'confidence',
+  'time',
+  'date',
+  'hour',
+  'daterange',
+  'verified',
+  'species',
+  'location',
+  'source',
+  'locked',
+] as const;
+
+export type FilterType = (typeof FILTER_KEYS)[number];
 
 export interface SearchFilter {
   type: FilterType;
@@ -41,8 +48,64 @@ const TIME_OF_DAY_VALUES = ['dawn', 'day', 'dusk', 'night'];
 // Date shortcuts
 const DATE_SHORTCUTS = ['today', 'yesterday', 'week', 'month'];
 
+// Recognized filter keys (derived from FILTER_KEYS); bounds greedy multi-word value capture.
+const FILTER_KEY_SET = new Set<string>(FILTER_KEYS);
+
+// Free-text filters accept quoted or multi-word values; all others are single-token.
+const FREE_TEXT_FILTERS = new Set<string>(['species', 'location', 'source']);
+
+interface KeyToken {
+  key: string;
+  keyStart: number;
+  valueStart: number;
+}
+
+// Find recognized "key:" tokens at word boundaries, in order of appearance.
+function findFilterKeyTokens(query: string): KeyToken[] {
+  const tokens: KeyToken[] = [];
+  const re = /(?:^|\s)([A-Za-z]+):/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(query)) !== null) {
+    const key = m[1].toLowerCase();
+    if (!FILTER_KEY_SET.has(key)) continue;
+    // Skip any leading whitespace the boundary group captured.
+    const keyStart = m.index + m[0].length - (m[1].length + 1);
+    tokens.push({ key, keyStart, valueStart: keyStart + m[1].length + 1 });
+  }
+  return tokens;
+}
+
+// Capture the value for a filter token: quoted or greedy for free-text filters,
+// single whitespace-delimited token otherwise. `boundary` is the start index of
+// the next recognized key token (or query.length) and bounds the greedy case.
+function captureValue(
+  query: string,
+  tok: KeyToken,
+  boundary: number
+): { value: string; nextCursor: number } {
+  const isFreeText = FREE_TEXT_FILTERS.has(tok.key);
+
+  if (isFreeText && query[tok.valueStart] === '"') {
+    const closing = query.indexOf('"', tok.valueStart + 1);
+    if (closing >= 0) {
+      return { value: query.slice(tok.valueStart + 1, closing), nextCursor: closing + 1 };
+    }
+    // Unmatched quote: consume to end of string.
+    return { value: query.slice(tok.valueStart + 1).trim(), nextCursor: query.length };
+  }
+
+  if (isFreeText) {
+    return { value: query.slice(tok.valueStart, boundary).trim(), nextCursor: boundary };
+  }
+
+  // Single-token filters: value is the next whitespace-delimited token.
+  const wsMatch = /^\S+/.exec(query.slice(tok.valueStart));
+  const token = wsMatch ? wsMatch[0] : '';
+  return { value: token, nextCursor: tok.valueStart + token.length };
+}
+
 /**
- * Parse a search query string into text and filters
+ * Parse a search query string into text and filters.
  */
 export function parseSearchQuery(query: string): ParsedSearch {
   const result: ParsedSearch = {
@@ -55,42 +118,56 @@ export function parseSearchQuery(query: string): ParsedSearch {
     return result;
   }
 
-  // Regular expression to match filter patterns like "filter:value" or "filter:>value"
-  // Made safer by limiting operator repetition to prevent ReDoS
-  const filterRegex = /(\w+):([><=]{0,3}[^\s]+)/g;
+  const tokens = findFilterKeyTokens(query);
+  if (tokens.length === 0) {
+    result.textQuery = query.trim();
+    return result;
+  }
+
   const textParts: string[] = [];
-  let lastIndex = 0;
+  let cursor = 0;
 
-  let match;
-  while ((match = filterRegex.exec(query)) !== null) {
-    // Add text before this filter
-    const beforeFilter = query.slice(lastIndex, match.index).trim();
-    if (beforeFilter) {
-      textParts.push(beforeFilter);
+  for (let idx = 0; idx < tokens.length; idx++) {
+    // eslint-disable-next-line security/detect-object-injection -- idx is a bounded loop counter over KeyToken[]
+    const tok = tokens[idx];
+    // A key token swallowed by an earlier quoted/greedy value is skipped.
+    if (tok.keyStart < cursor) continue;
+
+    const before = query.slice(cursor, tok.keyStart).trim();
+    if (before) textParts.push(before);
+
+    // Boundary = the next recognized key token at or after this value start.
+    let boundary = query.length;
+    for (let j = idx + 1; j < tokens.length; j++) {
+      // Safety guard: regex anchoring means a later token cannot start inside a
+      // prior token's key span, so this is effectively the first j past idx.
+      // eslint-disable-next-line security/detect-object-injection -- j is a bounded loop counter over KeyToken[]
+      if (tokens[j].keyStart >= tok.valueStart) {
+        // eslint-disable-next-line security/detect-object-injection -- j is a bounded loop counter over KeyToken[]
+        boundary = tokens[j].keyStart;
+        break;
+      }
     }
 
-    const [fullMatch, filterType, filterValue] = match;
+    const { value, nextCursor } = captureValue(query, tok, boundary);
+    const raw = query.slice(tok.keyStart, nextCursor).trim();
 
-    // Parse the filter
-    const parsedFilter = parseFilter(filterType as FilterType, filterValue, fullMatch);
-    if (parsedFilter.error) {
-      result.errors.push(parsedFilter.error);
-    } else if (parsedFilter.filter) {
-      result.filters.push(parsedFilter.filter);
+    const parsed = parseFilter(tok.key as FilterType, value, raw);
+    if (parsed.error) {
+      result.errors.push(parsed.error);
+    } else if (parsed.filter) {
+      result.filters.push(parsed.filter);
     }
 
-    lastIndex = match.index + fullMatch.length;
+    cursor = nextCursor;
   }
 
-  // Add any remaining text after the last filter
-  const remainingText = query.slice(lastIndex).trim();
-  if (remainingText) {
-    textParts.push(remainingText);
+  const tail = query.slice(cursor).trim();
+  if (tail) {
+    textParts.push(tail);
   }
 
-  // Join all text parts
   result.textQuery = textParts.join(' ').trim();
-
   return result;
 }
 
