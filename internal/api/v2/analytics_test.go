@@ -180,46 +180,57 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// TestAnalyticsEndpointQueryTimeout verifies that analytics endpoints which were
-// previously passing the raw request context now bound their datastore query with
-// analyticsQueryTimeout and map a deadline to HTTP 408 (not 500). Regression guard
-// for the query-timeout consistency fix.
-func TestAnalyticsEndpointQueryTimeout(t *testing.T) {
+// TestAnalyticsEndpointContextErrors verifies that analytics endpoints which were
+// previously passing the raw request context now bound their datastore query and map
+// context errors to the right HTTP status: a deadline to 408 (not 500), and a client
+// cancellation to 499 (client closed request). Regression guard for the query-timeout
+// consistency fix.
+func TestAnalyticsEndpointContextErrors(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "analytics")
 	t.Attr("type", "error-handling")
 	t.Attr("feature", "query-timeout")
 
-	tests := []struct {
+	errorCases := []struct {
+		name       string
+		queryErr   error
+		wantStatus int
+		wantMsg    string
+	}{
+		{"deadline exceeded", context.DeadlineExceeded, http.StatusRequestTimeout, "Query timeout"},
+		{"client canceled", context.Canceled, StatusClientClosedRequest, "Request canceled by client"},
+	}
+
+	endpoints := []struct {
 		name      string
 		path      string
-		setupMock func(*mocks.MockInterface)
+		setupMock func(*mocks.MockInterface, error)
 		invoke    func(*Controller, echo.Context) error
 	}{
 		{
 			name: "species summary",
 			path: "/api/v2/analytics/species/summary",
-			setupMock: func(m *mocks.MockInterface) {
+			setupMock: func(m *mocks.MockInterface, queryErr error) {
 				m.On("GetSpeciesSummaryData", mock.Anything, "", "").
-					Return([]datastore.SpeciesSummaryData{}, context.DeadlineExceeded)
+					Return([]datastore.SpeciesSummaryData{}, queryErr)
 			},
 			invoke: func(c *Controller, ctx echo.Context) error { return c.GetSpeciesSummary(ctx) },
 		},
 		{
 			name: "time of day distribution",
 			path: "/api/v2/analytics/time/distribution/hourly",
-			setupMock: func(m *mocks.MockInterface) {
+			setupMock: func(m *mocks.MockInterface, queryErr error) {
 				m.On("GetHourlyDistribution", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.HourlyDistributionData{}, context.DeadlineExceeded)
+					Return([]datastore.HourlyDistributionData{}, queryErr)
 			},
 			invoke: func(c *Controller, ctx echo.Context) error { return c.GetTimeOfDayDistribution(ctx) },
 		},
 		{
 			name: "new species detections",
 			path: "/api/v2/analytics/species/detections/new",
-			setupMock: func(m *mocks.MockInterface) {
+			setupMock: func(m *mocks.MockInterface, queryErr error) {
 				m.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, context.DeadlineExceeded)
+					Return([]datastore.NewSpeciesData{}, queryErr)
 			},
 			invoke: func(c *Controller, ctx echo.Context) error { return c.GetNewSpeciesDetections(ctx) },
 		},
@@ -227,34 +238,36 @@ func TestAnalyticsEndpointQueryTimeout(t *testing.T) {
 			// Exercises the now-context-bounded GetTopBirdsData query.
 			name: "daily species summary",
 			path: "/api/v2/analytics/species/daily",
-			setupMock: func(m *mocks.MockInterface) {
+			setupMock: func(m *mocks.MockInterface, queryErr error) {
 				m.On("GetTopBirdsData", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.Note{}, context.DeadlineExceeded)
+					Return([]datastore.Note{}, queryErr)
 			},
 			invoke: func(c *Controller, ctx echo.Context) error { return c.GetDailySpeciesSummary(ctx) },
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			e, mockDS, controller := setupAnalyticsTestEnvironment(t)
-			tt.setupMock(mockDS)
+	for _, ep := range endpoints {
+		for _, ec := range errorCases {
+			t.Run(ep.name+"/"+ec.name, func(t *testing.T) {
+				t.Parallel()
+				e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+				ep.setupMock(mockDS, ec.queryErr)
 
-			req := httptest.NewRequest(http.MethodGet, tt.path, http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetPath(tt.path)
+				req := httptest.NewRequest(http.MethodGet, ep.path, http.NoBody)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+				c.SetPath(ep.path)
 
-			require.NoError(t, tt.invoke(controller, c))
-			assert.Equal(t, http.StatusRequestTimeout, rec.Code)
+				require.NoError(t, ep.invoke(controller, c))
+				assert.Equal(t, ec.wantStatus, rec.Code)
 
-			var errorResponse map[string]any
-			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errorResponse))
-			assert.Contains(t, errorResponse["message"], "Query timeout")
+				var errorResponse map[string]any
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errorResponse))
+				assert.Contains(t, errorResponse["message"], ec.wantMsg)
 
-			mockDS.AssertExpectations(t)
-		})
+				mockDS.AssertExpectations(t)
+			})
+		}
 	}
 }
 

@@ -53,12 +53,34 @@ func withAnalyticsTimeout(ctx echo.Context) (context.Context, context.CancelFunc
 // alongside the supplied fields. The returned error is what the handler returns.
 func (c *Controller) handleAnalyticsQueryError(ctx echo.Context, err error, opLabel, genericMsg string, fields ...logger.Field) error {
 	fields = append(fields, logger.Error(err))
-	if errors.Is(err, context.DeadlineExceeded) {
+	switch {
+	case errors.Is(err, context.Canceled):
+		// Client disconnected (navigated away / closed the tab). An expected lifecycle
+		// event, not a server error: log at info and return the non-standard
+		// client-closed status, matching the convention in media.go.
+		c.logInfoIfEnabled(opLabel+" query canceled by client", fields...)
+		return c.HandleError(ctx, err, "Request canceled by client", StatusClientClosedRequest)
+	case errors.Is(err, context.DeadlineExceeded):
 		c.logErrorIfEnabled(opLabel+" query timeout", fields...)
 		return c.HandleError(ctx, err, msgQueryTimeout, http.StatusRequestTimeout)
+	default:
+		c.logErrorIfEnabled(opLabel+" query failed", fields...)
+		return c.HandleError(ctx, err, genericMsg, http.StatusInternalServerError)
 	}
-	c.logErrorIfEnabled(opLabel+" query failed", fields...)
-	return c.HandleError(ctx, err, genericMsg, http.StatusInternalServerError)
+}
+
+// logBatchQueryError logs a per-item failure inside a batch analytics request at the
+// right level: a client cancellation (context.Canceled) is an expected disconnect
+// logged at debug, any other error is a real failure logged at error. It returns
+// true for a cancellation so the caller can stop the batch instead of continuing.
+func (c *Controller) logBatchQueryError(msg string, err error, fields ...logger.Field) (canceled bool) {
+	fields = append(fields, logger.Error(err))
+	if errors.Is(err, context.Canceled) {
+		c.logDebugIfEnabled(msg+": client canceled request", fields...)
+		return true
+	}
+	c.logErrorIfEnabled(msg, fields...)
+	return false
 }
 
 // SpeciesDailySummary represents a bird in the daily species summary API response
@@ -316,9 +338,8 @@ func (c *Controller) processSingleDateForBatch(ctx context.Context, selectedDate
 	// Get data for the date (limit applied at database level)
 	notes, err := c.DS.GetTopBirdsData(ctx, selectedDate, minConfidence, limit)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get data for date in batch request",
+		c.logBatchQueryError("Failed to get data for date in batch request", err,
 			logger.String("date", selectedDate),
-			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
@@ -328,9 +349,8 @@ func (c *Controller) processSingleDateForBatch(ctx context.Context, selectedDate
 	// Aggregate data
 	aggregatedData, err := c.aggregateDailySpeciesData(ctx, notes, selectedDate, minConfidence)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to aggregate data for date in batch request",
+		c.logBatchQueryError("Failed to aggregate data for date in batch request", err,
 			logger.String("date", selectedDate),
-			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
@@ -1437,14 +1457,15 @@ func (c *Controller) processHourlyBatchSpecies(ctx echo.Context, speciesParams [
 		hourlyData, err := c.DS.GetHourlyAnalyticsData(queryCtx, date, queryItem)
 		cancel()
 		if err != nil {
-			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get hourly data for species %s: %v", speciesItem, err))
-			c.logErrorIfEnabled("Error getting hourly data for species in batch request",
+			if c.logBatchQueryError("Error getting hourly data for species in batch request", err,
 				logger.String("species", speciesItem),
 				logger.String("date", date),
-				logger.Error(err),
 				logger.String("ip", ip),
 				logger.String("path", path),
-			)
+			) {
+				break // client disconnected; stop the batch
+			}
+			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get hourly data for species %s: %v", speciesItem, err))
 			continue
 		}
 
@@ -1561,15 +1582,16 @@ func (c *Controller) processDailyBatchSpecies(ctx echo.Context, uniqueSpecies []
 		dailyData, err := c.DS.GetDailyAnalyticsData(queryCtx, startDate, endDate, queryItem)
 		cancel()
 		if err != nil {
-			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get daily data for species %s: %v", speciesItem, err))
-			c.logErrorIfEnabled("Error getting daily data for species in batch request",
+			if c.logBatchQueryError("Error getting daily data for species in batch request", err,
 				logger.String("species", speciesItem),
 				logger.String("start_date", startDate),
 				logger.String("end_date", endDate),
-				logger.Error(err),
 				logger.String("ip", ip),
 				logger.String("path", path),
-			)
+			) {
+				break // client disconnected; stop the batch
+			}
+			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get daily data for species %s: %v", speciesItem, err))
 			continue
 		}
 
