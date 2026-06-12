@@ -125,6 +125,21 @@ func (r nilInjectingLabelRepository) GetByIDs(ctx context.Context, ids []uint) (
 	return labels, nil
 }
 
+// errInjectingThresholdRepository wraps a DynamicThresholdRepository and forces
+// GetThresholdEvents to fail for one species, used to prove the second
+// (scientific-name) query error is propagated rather than swallowed.
+type errInjectingThresholdRepository struct {
+	repository.DynamicThresholdRepository
+	failOnSpecies string
+}
+
+func (r errInjectingThresholdRepository) GetThresholdEvents(ctx context.Context, speciesName string, limit int) ([]entities.ThresholdEvent, error) {
+	if speciesName == r.failOnSpecies {
+		return nil, fmt.Errorf("injected DB failure for %q", speciesName)
+	}
+	return r.DynamicThresholdRepository.GetThresholdEvents(ctx, speciesName, limit)
+}
+
 func TestV2OnlyDatastore_Open(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
@@ -695,7 +710,7 @@ func TestV2OnlyDatastore_ThresholdEvent(t *testing.T) {
 	// Get events
 	events, err := ds.GetThresholdEvents("house sparrow", 10)
 	require.NoError(t, err)
-	assert.Len(t, events, 1)
+	require.Len(t, events, 1)
 	assert.Equal(t, "house sparrow", events[0].SpeciesName)
 	assert.Equal(t, "high_confidence", events[0].ChangeReason)
 
@@ -703,6 +718,102 @@ func TestV2OnlyDatastore_ThresholdEvent(t *testing.T) {
 	recent, err := ds.GetRecentThresholdEvents(10)
 	require.NoError(t, err)
 	assert.Len(t, recent, 1)
+}
+
+// TestV2OnlyDatastore_GetThresholdEvents_ResolvesScientificName covers the
+// second (scientific-name) query path: a common-name input resolves to a
+// different scientific name, so the merge query runs and finds events stored
+// under the scientific name.
+func TestV2OnlyDatastore_GetThresholdEvents_ResolvesScientificName(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+	defer cleanup()
+
+	// Save an event under the scientific name (the correctly-saved, post-#1907 shape).
+	event := &datastore.ThresholdEvent{
+		SpeciesName:   "Parus major",
+		PreviousLevel: 0,
+		NewLevel:      1,
+		PreviousValue: 0.6,
+		NewValue:      0.7,
+		ChangeReason:  "high_confidence",
+		Confidence:    0.95,
+		CreatedAt:     time.Now(),
+	}
+	require.NoError(t, ds.SaveThresholdEvent(event))
+
+	// Query by the common name. resolveToScientificName("Great Tit") -> "Parus major",
+	// so the second query runs and finds the event stored under the scientific name.
+	events, err := ds.GetThresholdEvents("Great Tit", 10)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "Parus major", events[0].SpeciesName)
+}
+
+// TestV2OnlyDatastore_GetThresholdEvents_SecondQueryError pins the #1010 fix:
+// a DB failure on the second (scientific-name) query must surface, not be
+// swallowed and returned as an empty/partial success.
+func TestV2OnlyDatastore_GetThresholdEvents_SecondQueryError(t *testing.T) {
+	cfg, cfgCleanup := buildTestConfig(t, []string{"Parus major_Great Tit"})
+	defer cfgCleanup()
+
+	// Fail only the scientific-name (second) query; the common-name (first)
+	// query still succeeds, isolating the previously-swallowed error path.
+	cfg.Threshold = errInjectingThresholdRepository{
+		DynamicThresholdRepository: cfg.Threshold,
+		failOnSpecies:              "Parus major",
+	}
+
+	ds, err := New(cfg)
+	require.NoError(t, err)
+	defer func() { _ = ds.Close() }()
+
+	// resolveToScientificName("Great Tit") -> "Parus major", so the second query
+	// runs and the injected error must propagate. Assert on the injected message so
+	// the test pins the second (scientific-name) query as the failing one, not just
+	// any error.
+	_, err = ds.GetThresholdEvents("Great Tit", 10)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "injected DB failure")
+}
+
+// TestV2OnlyDatastore_GetThresholdEvents_SameTimestampTieBreak pins the
+// CreatedAt/ID sort tie-break. The per-query LIMIT is applied in SQL, so a
+// single query cannot exercise the Go-side sort; the tie-break only governs how
+// the MERGED result of the two queries (common-name + scientific-name) is
+// truncated. We store one event found by Query 1 (a legacy common-name label)
+// and one found by Query 2 (the resolved scientific name) sharing a timestamp,
+// then assert the higher-ID event wins truncation to one row.
+func TestV2OnlyDatastore_GetThresholdEvents_SameTimestampTieBreak(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+	defer cleanup()
+
+	ts := time.Now()
+	// Query 1 finds this event (label scientific_name == the common-name input).
+	require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
+		SpeciesName: "Great Tit", NewLevel: 1, NewValue: 0.7, ChangeReason: "legacy", Confidence: 0.95, CreatedAt: ts,
+	}))
+	// Query 2 finds this event (label scientific_name == resolved scientific name).
+	require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
+		SpeciesName: "Parus major", NewLevel: 1, NewValue: 0.7, ChangeReason: "correct", Confidence: 0.95, CreatedAt: ts,
+	}))
+
+	// Both events come back from the merge; learn the higher ID (saved second).
+	all, err := ds.GetThresholdEvents("Great Tit", 10)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+	maxID := all[0].ID
+	for _, e := range all[1:] {
+		if e.ID > maxID {
+			maxID = e.ID
+		}
+	}
+
+	// Truncating the same-timestamp merge to one row must deterministically keep
+	// the higher ID via the tie-break.
+	top, err := ds.GetThresholdEvents("Great Tit", 1)
+	require.NoError(t, err)
+	require.Len(t, top, 1)
+	assert.Equal(t, maxID, top[0].ID)
 }
 
 func TestV2OnlyDatastore_SearchNotes(t *testing.T) {
