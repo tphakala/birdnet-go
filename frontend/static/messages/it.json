@@ -797,7 +797,19 @@
       "observation": "Osservazione",
       "aria": {
         "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Nome scientifico",
+        "classificationBadges": "Badge di classificazione della specie",
+        "confidence": "Confidenza del rilevamento {confidence}%",
+        "metadata": "Metadati del rilevamento",
+        "weatherConditions": "Condizioni meteo al momento del rilevamento",
+        "comments": "Commenti del rilevamento",
+        "commentText": "Testo del commento",
+        "commentTimestamp": "Data e ora del commento",
+        "mainRegion": "Dettagli del rilevamento",
+        "tabsHeading": "Schede informazioni rilevamento",
+        "tabList": "Schede dettagli rilevamento",
+        "speciesHeadingSuffix": "dettagli del rilevamento"
       }
     },
     "headers": {

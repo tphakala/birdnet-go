@@ -640,6 +640,18 @@ export type TranslationKey =
   | 'detections.detail.observation'
   | 'detections.detail.aria.downloadAudioClip' // params: name
   | 'detections.detail.aria.audioRecordingFor' // params: name
+  | 'detections.detail.aria.scientificName'
+  | 'detections.detail.aria.classificationBadges'
+  | 'detections.detail.aria.confidence' // params: confidence
+  | 'detections.detail.aria.metadata'
+  | 'detections.detail.aria.weatherConditions'
+  | 'detections.detail.aria.comments'
+  | 'detections.detail.aria.commentText'
+  | 'detections.detail.aria.commentTimestamp'
+  | 'detections.detail.aria.mainRegion'
+  | 'detections.detail.aria.tabsHeading'
+  | 'detections.detail.aria.tabList'
+  | 'detections.detail.aria.speciesHeadingSuffix'
   | 'detections.headers.dateTime'
   | 'detections.headers.weather'
   | 'detections.headers.source'
@@ -3729,6 +3741,7 @@ export type TranslationParams = {
   'detections.titles.allDetections': { date: string | number };
   'detections.detail.aria.downloadAudioClip': { name: string | number };
   'detections.detail.aria.audioRecordingFor': { name: string | number };
+  'detections.detail.aria.confidence': { confidence: string | number };
   'detections.pagination.showing': {
     from: string | number;
     to: string | number;

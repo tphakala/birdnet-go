@@ -797,7 +797,19 @@
       "observation": "Havainto",
       "aria": {
         "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Tieteellinen nimi",
+        "classificationBadges": "Lajin luokitusmerkit",
+        "confidence": "Havainnon luottamus {confidence}%",
+        "metadata": "Havainnon metatiedot",
+        "weatherConditions": "Sääolosuhteet havaintohetkellä",
+        "comments": "Havainnon kommentit",
+        "commentText": "Kommentin teksti",
+        "commentTimestamp": "Kommentin aikaleima",
+        "mainRegion": "Havainnon tiedot",
+        "tabsHeading": "Havaintotietojen välilehdet",
+        "tabList": "Havainnon tietojen välilehdet",
+        "speciesHeadingSuffix": "havainnon tiedot"
       }
     },
     "headers": {

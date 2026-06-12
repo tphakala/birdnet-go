@@ -797,7 +797,19 @@
       "observation": "Observation",
       "aria": {
         "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Scientific name",
+        "classificationBadges": "Species classification badges",
+        "confidence": "Detection confidence {confidence}%",
+        "metadata": "Detection metadata",
+        "weatherConditions": "Weather conditions at time of detection",
+        "comments": "Detection comments",
+        "commentText": "Comment text",
+        "commentTimestamp": "Comment timestamp",
+        "mainRegion": "Detection details",
+        "tabsHeading": "Detection information tabs",
+        "tabList": "Detection details tabs",
+        "speciesHeadingSuffix": "detection details"
       }
     },
     "headers": {

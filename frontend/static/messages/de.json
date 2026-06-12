@@ -797,7 +797,19 @@
       "observation": "Beobachtung",
       "aria": {
         "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Wissenschaftlicher Name",
+        "classificationBadges": "Badges zur Artklassifizierung",
+        "confidence": "Erkennungskonfidenz {confidence}%",
+        "metadata": "Erkennungsmetadaten",
+        "weatherConditions": "Wetterbedingungen zum Zeitpunkt der Erkennung",
+        "comments": "Kommentare zur Erkennung",
+        "commentText": "Kommentartext",
+        "commentTimestamp": "Zeitstempel des Kommentars",
+        "mainRegion": "Erkennungsdetails",
+        "tabsHeading": "Registerkarten mit Erkennungsinformationen",
+        "tabList": "Registerkarten der Erkennungsdetails",
+        "speciesHeadingSuffix": "Erkennungsdetails"
       }
     },
     "headers": {

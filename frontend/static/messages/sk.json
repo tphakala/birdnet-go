@@ -797,7 +797,19 @@
       "observation": "Pozorovanie",
       "aria": {
         "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Vedecký názov",
+        "classificationBadges": "Odznaky klasifikácie druhu",
+        "confidence": "Istota detekcie {confidence}%",
+        "metadata": "Metadáta detekcie",
+        "weatherConditions": "Poveternostné podmienky v čase detekcie",
+        "comments": "Komentáre k detekcii",
+        "commentText": "Text komentára",
+        "commentTimestamp": "Časová značka komentára",
+        "mainRegion": "Podrobnosti detekcie",
+        "tabsHeading": "Karty s informáciami o detekcii",
+        "tabList": "Karty podrobností detekcie",
+        "speciesHeadingSuffix": "podrobnosti detekcie"
       }
     },
     "headers": {

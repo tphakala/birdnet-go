@@ -478,18 +478,25 @@
         <div class="hero-species">
           <h1 id="species-heading" class="species-display-name">
             {displayName}
-            <span class="sr-only">detection details</span>
+            <span class="sr-only">{t('detections.detail.aria.speciesHeadingSuffix')}</span>
           </h1>
-          <p class="species-scientific-name" aria-label="Scientific name">
-            {det.scientificName}
+          <p class="species-scientific-name">
+            <span class="sr-only"
+              >{t('detections.detail.aria.scientificName')}:
+            </span>{det.scientificName}
           </p>
-          <div class="mt-3" aria-label="Species classification badges">
+          <div class="mt-3" aria-label={t('detections.detail.aria.classificationBadges')}>
             <VerificationBadges detection={det} size="sm" />
           </div>
         </div>
 
         <!-- Confidence -->
-        <div class="hero-confidence" aria-label="Detection confidence {det.confidence}%">
+        <div
+          class="hero-confidence"
+          aria-label={t('detections.detail.aria.confidence', {
+            confidence: Math.round((det.confidence ?? 0) * 100),
+          })}
+        >
           <ConfidenceCircle confidence={det.confidence} size="xl" />
         </div>
       </div>
@@ -555,7 +562,11 @@
     {/if}
 
     <!-- Metadata Card -->
-    <div class="hero-card hero-metadata-card" role="region" aria-label="Detection metadata">
+    <div
+      class="hero-card hero-metadata-card"
+      role="region"
+      aria-label={t('detections.detail.aria.metadata')}
+    >
       <h3 class="section-heading">{t('detections.detail.observation')}</h3>
       <!-- Date & Time -->
       <div class="meta-section">
@@ -590,7 +601,10 @@
 
       <!-- Weather -->
       {#if det.weather}
-        <div class="meta-section hero-weather" aria-label="Weather conditions at time of detection">
+        <div
+          class="meta-section hero-weather"
+          aria-label={t('detections.detail.aria.weatherConditions')}
+        >
           <WeatherDetails
             weatherIcon={det.weather.weatherIcon}
             weatherDescription={det.weather.description}
@@ -700,15 +714,18 @@
   <section aria-labelledby="notes-heading">
     <h3 id="notes-heading" class="section-heading">{t('detections.notes.title')}</h3>
     {#if det.comments && det.comments.length > 0}
-      <div class="space-y-3" role="list" aria-label="Detection comments">
+      <div class="space-y-3" role="list" aria-label={t('detections.detail.aria.comments')}>
         {#each det.comments as comment (comment.id ?? comment.createdAt)}
           <article class="content-panel" role="listitem">
-            <p class="text-sm leading-relaxed" aria-label="Comment text">{comment.entry}</p>
-            <p
-              class="text-xs text-[var(--color-base-content)]/40 mt-2"
-              aria-label="Comment timestamp"
-            >
-              {formatLocalDateTime(new Date(comment.createdAt))}
+            <p class="text-sm leading-relaxed">
+              <span class="sr-only"
+                >{t('detections.detail.aria.commentText')}:
+              </span>{comment.entry}
+            </p>
+            <p class="text-xs text-[var(--color-base-content)]/40 mt-2">
+              <span class="sr-only"
+                >{t('detections.detail.aria.commentTimestamp')}:
+              </span>{formatLocalDateTime(new Date(comment.createdAt))}
             </p>
           </article>
         {/each}
@@ -725,7 +742,7 @@
 {/snippet}
 
 <!-- Main component -->
-<main class="col-span-12 detection-detail" aria-label="Detection details">
+<main class="col-span-12 detection-detail" aria-label={t('detections.detail.aria.mainRegion')}>
   <!-- Loading state with live region -->
   <div role="status" aria-live="polite" class="sr-only">
     {#if isLoadingDetection}
@@ -842,10 +859,10 @@
     <!-- Tabbed Content -->
     <section class="surface-card" aria-labelledby="tabs-heading">
       <div class="p-5 md:p-6">
-        <h2 id="tabs-heading" class="sr-only">Detection information tabs</h2>
+        <h2 id="tabs-heading" class="sr-only">{t('detections.detail.aria.tabsHeading')}</h2>
 
         <!-- Tab Navigation -->
-        <div class="tab-nav" role="tablist" aria-label="Detection details tabs">
+        <div class="tab-nav" role="tablist" aria-label={t('detections.detail.aria.tabList')}>
           {#each ['overview', 'history', 'notes'] as tab (tab)}
             <button
               id="tab-{tab}"
