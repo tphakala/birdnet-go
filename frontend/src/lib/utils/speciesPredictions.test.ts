@@ -109,6 +109,12 @@ describe('filterLocalizedPredictions', () => {
     expect(result.map(p => p.value)).not.toContain('Barn Owl');
     expect(result).toHaveLength(2);
   });
+
+  it('excludes by localized label too (no self-echo of a fully-typed name)', () => {
+    const result = filterLocalizedPredictions(predictions, '', { excludeValue: 'Tornipöllö' });
+    expect(result.map(p => p.value)).not.toContain('Barn Owl');
+    expect(result).toHaveLength(2);
+  });
 });
 
 describe('matchTypedToCanonical', () => {

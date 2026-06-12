@@ -33,6 +33,7 @@
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
   import { resolveSpeciesDisplayNames, type SpeciesNameMaps } from '$lib/utils/speciesNames';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
   import {
     toLocalizedPredictions,
     filterLocalizedPredictions,
@@ -215,8 +216,16 @@
 
   function handleAdd() {
     // Free-typed input: map a typed label/value to its canonical value when it
-    // matches a prediction; otherwise keep the typed text as-is (today's behavior).
-    const canonical = matchTypedToCanonical(inputValue, localizedPredictions) ?? inputValue;
+    // matches a prediction. If the parent's debounced predictions are still stale
+    // (e.g. the user typed a localized name and hit Add within the debounce window),
+    // fall back to the always-current visitor dictionary to resolve an unambiguous
+    // localized common name to its scientific name. Both include and exclude match
+    // scientific names server-side, so this stays canonical. Only when nothing
+    // resolves do we keep the typed text as-is (today's advanced-entry behavior).
+    const canonical =
+      matchTypedToCanonical(inputValue, localizedPredictions) ??
+      resolveCommonToScientificUnique(inputValue.trim()) ??
+      inputValue;
     addValue(canonical);
   }
 

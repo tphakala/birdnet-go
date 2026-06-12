@@ -94,8 +94,10 @@ export function filterLocalizedPredictions(
   const out: SpeciesPrediction[] = [];
   for (const prediction of predictions) {
     const valueKey = prediction.normalizedValue ?? normalizeForLookup(prediction.value);
-    if (exclude !== undefined && valueKey === exclude) continue;
     const labelKey = prediction.normalizedLabel ?? normalizeForLookup(prediction.label);
+    // Exclude the entry the input already holds, matching either the canonical
+    // value or the localized label so a fully-typed localized name does not echo.
+    if (exclude !== undefined && (valueKey === exclude || labelKey === exclude)) continue;
     if (needle.length === 0 || labelKey.includes(needle) || valueKey.includes(needle)) {
       out.push(prediction);
       if (out.length >= max) break;

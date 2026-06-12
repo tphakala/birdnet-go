@@ -10,6 +10,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { CirclePlus } from '@lucide/svelte';
 import SpeciesListCard from './SpeciesListCard.svelte';
+import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
+
+// Stub the visitor dictionary store. localizeScientific feeds localizeSpeciesName
+// (list-row display); resolveCommonToScientificUnique is the stale-predictions
+// fallback exercised by the race test below.
+vi.mock('$lib/stores/speciesDictionary.svelte', () => ({
+  localizeScientific: vi.fn(() => undefined),
+  resolveCommonToScientificUnique: vi.fn(() => undefined),
+}));
 
 // Finnish labels for canonical English/scientific values.
 const FI = new Map<string, string>([
@@ -80,5 +89,20 @@ describe('SpeciesListCard value/display split', () => {
     await fireEvent.click(addButton);
 
     expect(onAdd).toHaveBeenCalledWith('Unlisted Bird');
+  });
+
+  it('resolves a typed localized name via the dictionary when predictions are stale', async () => {
+    // Simulate the debounce race: the parent has not yet populated predictions, so
+    // the typed localized name cannot match a prediction. The always-current
+    // dictionary resolves it to a canonical scientific name (safe for include/exclude).
+    vi.mocked(resolveCommonToScientificUnique).mockReturnValueOnce('Turdus migratorius');
+    const { onAdd } = renderCard({ predictions: [], inputValue: 'Punarinta' });
+
+    const addButton = screen.getByRole('button', { name: 'Add species' });
+    await fireEvent.click(addButton);
+
+    expect(resolveCommonToScientificUnique).toHaveBeenCalledWith('Punarinta');
+    expect(onAdd).toHaveBeenCalledWith('Turdus migratorius');
+    expect(onAdd).not.toHaveBeenCalledWith('Punarinta');
   });
 });
