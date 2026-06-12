@@ -62,6 +62,7 @@
     normalizeForLookup,
     type SpeciesNameMaps,
   } from '$lib/utils/speciesNames';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import {
     ArrowLeftRight,
     ChevronRight,
@@ -814,6 +815,28 @@
     clearTimeout(debounceTimeouts.config);
   });
 
+  // Resolve a canonical species value (server-locale common name or scientific
+  // name from allNames) to its visitor-locale display label. Reads speciesNameMaps
+  // and the dictionary store, so callers must invoke it in a reactive context to
+  // re-run on locale change. Passed to the pickers as localizeLabel; the predictions
+  // and stored values stay canonical.
+  function localizeSpeciesLabel(value: string): string {
+    const lower = normalizeForLookup(value);
+    const scientific = speciesNameMaps.scientificToCommon.has(lower)
+      ? value
+      : speciesNameMaps.commonToScientific.get(lower);
+    return localizeSpeciesName(scientific, value);
+  }
+
+  // Match a candidate against the typed input by its canonical value OR its
+  // localized label, so a visitor can find a species by typing the name they see.
+  function predictionMatchesInput(species: string, needle: string): boolean {
+    return (
+      normalizeForLookup(species).includes(needle) ||
+      normalizeForLookup(localizeSpeciesLabel(species)).includes(needle)
+    );
+  }
+
   function updateIncludePredictions(input: string) {
     clearTimeout(debounceTimeouts.include);
     debounceTimeouts.include = window.setTimeout(() => {
@@ -822,11 +845,11 @@
         return;
       }
 
-      const inputLower = input.toLowerCase();
+      const needle = normalizeForLookup(input);
       includePredictions = allSpecies
         .filter(
           species =>
-            species.toLowerCase().includes(inputLower) &&
+            predictionMatchesInput(species, needle) &&
             !isSpeciesInList(species, settings.include, speciesNameMaps)
         )
         .slice(0, 10);
@@ -841,11 +864,11 @@
         return;
       }
 
-      const inputLower = input.toLowerCase();
+      const needle = normalizeForLookup(input);
       excludePredictions = allSpecies
         .filter(
           species =>
-            species.toLowerCase().includes(inputLower) &&
+            predictionMatchesInput(species, needle) &&
             !isSpeciesInList(species, settings.exclude, speciesNameMaps)
         )
         .slice(0, 10);
@@ -860,14 +883,14 @@
         return;
       }
 
-      const inputLower = input.toLowerCase();
+      const needle = normalizeForLookup(input);
       // Exclude the currently-editing species from the collision check so its
       // own alias remains selectable during rename operations.
       const existingConfigKeys = Object.keys(settings.config).filter(key => key !== editingSpecies);
       configPredictions = allSpecies
         .filter(
           species =>
-            species.toLowerCase().includes(inputLower) &&
+            predictionMatchesInput(species, needle) &&
             !isSpeciesInList(species, existingConfigKeys, speciesNameMaps)
         )
         .slice(0, 10);
@@ -1294,6 +1317,7 @@
     scientificNameMap={speciesNameMaps.commonToScientific}
     scientificToCommonMap={speciesNameMaps.scientificToCommon}
     predictions={includePredictions}
+    localizeLabel={localizeSpeciesLabel}
     bind:inputValue={includeInputValue}
     inputLabel={t('settings.species.addSpeciesToIncludeLabel')}
     inputPlaceholder={t('settings.species.addSpeciesToInclude')}
@@ -1315,6 +1339,7 @@
     scientificNameMap={speciesNameMaps.commonToScientific}
     scientificToCommonMap={speciesNameMaps.scientificToCommon}
     predictions={excludePredictions}
+    localizeLabel={localizeSpeciesLabel}
     bind:inputValue={excludeInputValue}
     inputLabel={t('settings.species.addSpeciesToExcludeLabel')}
     inputPlaceholder={t('settings.species.addSpeciesToExclude')}
@@ -1370,6 +1395,7 @@
             species={editingSpecies}
             config={editingSpecies ? (safeGet(settings.config, editingSpecies) ?? null) : null}
             predictions={configPredictions}
+            localizeLabel={localizeSpeciesLabel}
             disabled={store.isLoading}
             saving={store.isSaving}
             onSave={handleEditorSave}

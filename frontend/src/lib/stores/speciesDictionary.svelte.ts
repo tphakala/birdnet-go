@@ -221,6 +221,24 @@ export function resolveCommonToScientific(text: string): string[] {
   return current.reverse.get(normalizeForLookup(text)) ?? [];
 }
 
+/**
+ * Resolve a localized common name to its scientific name ONLY when the match is
+ * unambiguous (exactly one scientific name shares that normalized common name in
+ * the current locale).
+ *
+ * The reverse map intentionally keeps every candidate for an ambiguous common
+ * name; this helper exists so a settings picker never silently writes reverse[0]
+ * (an arbitrary pick) into server-wide config. Returns undefined when there are
+ * zero matches or more than one, so the caller can fall back to the typed text.
+ *
+ * @param text - The common name to resolve. Normalized via NFC + lowercase.
+ * @returns The single matching scientific name, or undefined when not unique.
+ */
+export function resolveCommonToScientificUnique(text: string): string | undefined {
+  const matches = current.reverse.get(normalizeForLookup(text));
+  return matches?.length === 1 ? matches[0] : undefined;
+}
+
 /** Minimum query length for substring search (avoids matching everything on 1 char). */
 const MIN_SEARCH_LENGTH = 2;
 

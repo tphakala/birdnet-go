@@ -38,6 +38,12 @@
     addButtonText: string;
     hasChanges: boolean;
     caseInsensitive?: boolean;
+    /**
+     * Resolve a stored (canonical) species value to its visitor-locale label for
+     * display. The stored value is never localized: add/edit persist canonical
+     * strings, and the inline edit field operates on the raw stored value.
+     */
+    localizeLabel?: (_value: string) => string;
     onSpeciesChange: (_updatedSpecies: string[]) => void;
   }
 
@@ -53,6 +59,7 @@
     addButtonText,
     hasChanges,
     caseInsensitive = true,
+    localizeLabel,
     onSpeciesChange,
   }: Props = $props();
 
@@ -171,7 +178,7 @@
               <X class="size-4" />
             </button>
           {:else}
-            <span class="flex-1 text-sm">{entry}</span>
+            <span class="flex-1 text-sm">{localizeLabel?.(entry) ?? entry}</span>
             <button
               type="button"
               class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -204,6 +211,7 @@
     helpText={addHelpText}
     disabled={disabled || predictionsLoading}
     {predictions}
+    {localizeLabel}
     size="sm"
     buttonText={addButtonText}
     buttonIcon={true}

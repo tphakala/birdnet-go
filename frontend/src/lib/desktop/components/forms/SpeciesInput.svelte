@@ -27,6 +27,12 @@
   import { safeGet } from '$lib/utils/security';
   import { Z_INDEX } from '$lib/utils/z-index';
   import { t } from '$lib/i18n';
+  import {
+    toLocalizedPredictions,
+    filterLocalizedPredictions,
+    matchTypedToCanonical,
+    type SpeciesPrediction,
+  } from '$lib/utils/speciesPredictions';
 
   interface Props {
     value?: string;
@@ -53,6 +59,13 @@
      * the synonym BirdNET name field, which is submitted via a separate button).
      */
     addOnSelect?: boolean;
+    /**
+     * Resolve a canonical prediction value to its visitor-locale label. When
+     * omitted, the label is the canonical value itself. The dropdown shows the
+     * label; selecting a prediction or adding free text always emits the canonical
+     * value, so server-wide config never stores a localized name.
+     */
+    localizeLabel?: (_value: string) => string;
     onInput?: (_value: string) => void;
     onAdd?: (_value: string) => void;
     onPredictionSelect?: (_prediction: string) => void;
@@ -77,6 +90,7 @@
     minCharsForPredictions = 2,
     className = '',
     addOnSelect = true,
+    localizeLabel,
     onInput,
     onAdd,
     onPredictionSelect,
@@ -127,15 +141,18 @@
     lg: 'btn-lg',
   };
 
-  // Filter predictions based on current value
-  let filteredPredictions = $derived(
-    value.length >= minCharsForPredictions && predictions.length > 0
-      ? predictions
-          .filter(
-            prediction =>
-              prediction.toLowerCase().includes(value.toLowerCase()) && prediction !== value
-          )
-          .slice(0, maxPredictions)
+  // Pair canonical predictions with localized labels. Reactive to the dictionary
+  // store via localizeLabel, so the dropdown re-renders on locale switch.
+  let localizedPredictions = $derived(toLocalizedPredictions(predictions, localizeLabel));
+
+  // Filter predictions based on current value (matches the localized label or the
+  // canonical value). Each entry keeps its canonical value for emission.
+  let filteredPredictions = $derived<SpeciesPrediction[]>(
+    value.length >= minCharsForPredictions && localizedPredictions.length > 0
+      ? filterLocalizedPredictions(localizedPredictions, value, {
+          max: maxPredictions,
+          excludeValue: value,
+        })
       : []
   );
 
@@ -208,14 +225,16 @@
     const predictionsCount = filteredPredictions.length;
     const existingCount = existingButtons.length;
 
-    // Update existing buttons
+    // Update existing buttons. The visible text is the localized label; the
+    // canonical value travels in data-prediction so selection never emits a
+    // localized name.
     for (let i = 0; i < Math.min(predictionsCount, existingCount); i++) {
       // eslint-disable-next-line security/detect-object-injection
       const button = existingButtons[i] as HTMLButtonElement;
       // eslint-disable-next-line security/detect-object-injection
-      button.textContent = filteredPredictions[i];
-      // eslint-disable-next-line security/detect-object-injection
-      button.setAttribute('data-prediction', filteredPredictions[i]);
+      const prediction = filteredPredictions[i];
+      button.textContent = prediction.label;
+      button.setAttribute('data-prediction', prediction.value);
       button.setAttribute('data-index', i.toString());
       button.style.display = 'block';
     }
@@ -223,17 +242,17 @@
     // Add new buttons if needed
     if (predictionsCount > existingCount) {
       for (let i = existingCount; i < predictionsCount; i++) {
+        // eslint-disable-next-line security/detect-object-injection
+        const prediction = filteredPredictions[i];
         const button = document.createElement('button');
         button.type = 'button';
         button.className =
           'species-prediction-item w-full text-left px-4 py-2 hover:bg-[var(--color-base-200)] focus:bg-[var(--color-base-200)] focus:outline-hidden border-none bg-transparent text-sm';
-        // eslint-disable-next-line security/detect-object-injection
-        button.textContent = filteredPredictions[i];
+        button.textContent = prediction.label;
         button.setAttribute('role', 'option');
         button.setAttribute('aria-selected', 'false');
         button.setAttribute('tabindex', '-1');
-        // eslint-disable-next-line security/detect-object-injection
-        button.setAttribute('data-prediction', filteredPredictions[i]);
+        button.setAttribute('data-prediction', prediction.value);
         button.setAttribute('data-index', i.toString());
         portalDropdown.appendChild(button);
       }
@@ -352,8 +371,11 @@
   function handleAdd() {
     if (!value.trim() || disabled) return;
 
-    const trimmedValue = value.trim();
-    onAdd?.(trimmedValue);
+    // Map the typed text to a prediction's canonical value when it matches a
+    // label or value (so a typed localized name persists canonically); otherwise
+    // keep the typed text as-is (today's behavior for advanced raw entries).
+    const canonical = matchTypedToCanonical(value, localizedPredictions) ?? value.trim();
+    onAdd?.(canonical);
 
     // Clear input after successful add
     value = '';

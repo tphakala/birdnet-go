@@ -839,4 +839,81 @@ describe('SpeciesInput', () => {
 
     expect(onAdd).toHaveBeenCalledWith('test species');
   });
+
+  describe('localized predictions (value/display split)', () => {
+    // Finnish labels for canonical English predictions.
+    const FI = new Map<string, string>([
+      ['American Robin', 'Punarinta'],
+      ['Blue Jay', 'Sinitöyhtönärhi'],
+    ]);
+    const localizeLabel = (value: string): string => FI.get(value) ?? value;
+
+    it('shows the localized label but emits the canonical value on select', async () => {
+      const onAdd = vi.fn();
+      const onPredictionSelect = vi.fn();
+
+      render(SpeciesInput, {
+        props: {
+          // Typing the localized name filters by label.
+          value: 'puna',
+          predictions: ['American Robin', 'Blue Jay'],
+          localizeLabel,
+          onAdd,
+          onPredictionSelect,
+        },
+      });
+
+      // The dropdown renders the localized label, not the canonical value.
+      const option = screen.getByText('Punarinta');
+      expect(option).toBeInTheDocument();
+      expect(screen.queryByText('American Robin')).not.toBeInTheDocument();
+
+      await fireEvent.click(option);
+
+      // The persisted value is canonical, never the localized label.
+      expect(onPredictionSelect).toHaveBeenCalledWith('American Robin');
+      await waitFor(() => {
+        expect(onAdd).toHaveBeenCalledWith('American Robin');
+      });
+      expect(onAdd).not.toHaveBeenCalledWith('Punarinta');
+    });
+
+    it('maps a typed localized name to the canonical value on Add', async () => {
+      const onAdd = vi.fn();
+
+      render(SpeciesInput, {
+        props: {
+          // User typed the full localized name without picking from the dropdown.
+          value: 'Punarinta',
+          predictions: ['American Robin', 'Blue Jay'],
+          localizeLabel,
+          onAdd,
+        },
+      });
+
+      const addButton = screen.getByRole('button', { name: 'Add species' });
+      await fireEvent.click(addButton);
+
+      expect(onAdd).toHaveBeenCalledWith('American Robin');
+      expect(onAdd).not.toHaveBeenCalledWith('Punarinta');
+    });
+
+    it('keeps unmatched free text as-is (advanced raw entry)', async () => {
+      const onAdd = vi.fn();
+
+      render(SpeciesInput, {
+        props: {
+          value: 'Some Unlisted Name',
+          predictions: ['American Robin', 'Blue Jay'],
+          localizeLabel,
+          onAdd,
+        },
+      });
+
+      const addButton = screen.getByRole('button', { name: 'Add species' });
+      await fireEvent.click(addButton);
+
+      expect(onAdd).toHaveBeenCalledWith('Some Unlisted Name');
+    });
+  });
 });

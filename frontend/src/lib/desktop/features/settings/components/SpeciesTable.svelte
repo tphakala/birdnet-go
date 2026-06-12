@@ -19,6 +19,7 @@
   import { t } from '$lib/i18n';
   import { ChevronUp, ChevronDown, ChevronsUpDown, Search, Download, Bird } from '@lucide/svelte';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   interface ActiveSpeciesItem {
     commonName: string;
@@ -27,6 +28,9 @@
     isManuallyIncluded: boolean;
     hasCustomConfig: boolean;
   }
+
+  /** A species row paired with the visitor-locale display name. */
+  type LocalizedSpeciesItem = ActiveSpeciesItem & { displayName: string };
 
   interface Props {
     species: ActiveSpeciesItem[];
@@ -52,12 +56,25 @@
   let sortDirection = $state<'asc' | 'desc'>('desc');
   let searchQuery = $state('');
 
+  // Pair each row with its visitor-locale display name. localizeSpeciesName reads
+  // the dictionary store, so this re-runs on dictionary load and locale switch.
+  let localizedSpecies = $derived.by((): LocalizedSpeciesItem[] =>
+    species.map(s => ({
+      ...s,
+      displayName: localizeSpeciesName(s.scientificName, s.commonName),
+    }))
+  );
+
   let filteredSpecies = $derived.by(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return species;
-    return species.filter(
+    if (!query) return localizedSpecies;
+    // Match the localized name the visitor sees, plus the server common name and
+    // scientific name so search keeps working regardless of locale.
+    return localizedSpecies.filter(
       s =>
-        s.commonName.toLowerCase().includes(query) || s.scientificName.toLowerCase().includes(query)
+        s.displayName.toLowerCase().includes(query) ||
+        s.commonName.toLowerCase().includes(query) ||
+        s.scientificName.toLowerCase().includes(query)
     );
   });
 
@@ -66,7 +83,8 @@
       let cmp = 0;
       switch (sortColumn) {
         case 'commonName':
-          cmp = a.commonName.localeCompare(b.commonName);
+          // Sort by the localized name shown in the column.
+          cmp = a.displayName.localeCompare(b.displayName);
           break;
         case 'scientificName':
           cmp = a.scientificName.localeCompare(b.scientificName);
@@ -213,7 +231,7 @@
               class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
             >
               <td class="py-2 px-3">
-                <span class="font-medium text-sm">{item.commonName}</span>
+                <span class="font-medium text-sm">{item.displayName}</span>
               </td>
               <td class="py-2 px-3">
                 <span class="text-xs text-muted italic">{item.scientificName}</span>

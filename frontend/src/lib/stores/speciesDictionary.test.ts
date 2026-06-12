@@ -34,6 +34,7 @@ vi.mock('$lib/utils/api', () => ({
 // Import after mocks are declared
 import {
   loadDictionary,
+  resolveCommonToScientificUnique,
   localizeScientific,
   resolveCommonToScientific,
   searchScientificByCommon,
@@ -254,6 +255,39 @@ describe('speciesDictionary store', () => {
     // Lookup with NFC 'ä' (U+00E4) should still find the entry
     const result = resolveCommonToScientific('Tälltiainen');
     expect(result).toContain('Parus major');
+  });
+
+  // --- Unique reverse resolution ---
+
+  describe('resolveCommonToScientificUnique', () => {
+    it('returns the single scientific name for an unambiguous common name', async () => {
+      mockApiGet(MOCK_FI_DICT);
+      await loadDictionary('fi');
+
+      expect(resolveCommonToScientificUnique('Mustarastas')).toBe('Turdus merula');
+    });
+
+    it('returns undefined for an ambiguous common name (more than one match)', async () => {
+      mockApiGet(MOCK_AMBIGUOUS_DICT);
+      await loadDictionary('fi');
+
+      // Two scientific names share this common name; a unique resolution is impossible.
+      expect(resolveCommonToScientificUnique('Raven')).toBeUndefined();
+    });
+
+    it('returns undefined for an unknown common name (no match)', async () => {
+      mockApiGet(MOCK_FI_DICT);
+      await loadDictionary('fi');
+
+      expect(resolveCommonToScientificUnique('Tuntematon Lintu')).toBeUndefined();
+    });
+
+    it('normalizes the query (NFC + case-insensitive) before resolving', async () => {
+      mockApiGet(MOCK_FI_DICT);
+      await loadDictionary('fi');
+
+      expect(resolveCommonToScientificUnique('mustarastas')).toBe('Turdus merula');
+    });
   });
 
   // --- Version in URL ---
