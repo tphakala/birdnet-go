@@ -7,6 +7,7 @@
   import type { Selection, AxisDomain } from 'd3';
 
   import { t } from '$lib/i18n';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import BaseChart from './BaseChart.svelte';
   import { createLinearScale } from './utils/scales';
   import { createAxis, styleAxis, addAxisLabel, createHourAxisFormatter } from './utils/axes';
@@ -51,6 +52,10 @@
       // eslint-disable-next-line security/detect-object-injection -- Safe: internal array access with controlled index
       color: species.color || colors[index],
       visible: selectedSpecies.length === 0 || selectedSpecies.includes(species.species),
+      // Visitor-locale display label. Computed here (inside the $derived) so the
+      // repaint $effect that reads visibleData re-runs when the dictionary loads
+      // or the UI locale switches. Keys/colors below stay on species.species.
+      displayName: localizeSpeciesName(species.species, species.commonName),
     }));
   });
 
@@ -237,7 +242,7 @@
 
           // Show tooltip
           const tooltipData = {
-            title: `${species.commonName}`,
+            title: species.displayName,
             items: [
               { label: t('analytics.advanced.charts.tooltips.time'), value: `${d.hour}:00` },
               { label: t('analytics.advanced.charts.tooltips.detections'), value: d.count },
@@ -276,7 +281,7 @@
               const hourPoint = species.data.find(d => d.hour === hour);
               return hourPoint
                 ? {
-                    species: species.commonName,
+                    species: species.displayName,
                     count: hourPoint.count,
                     color: species.color ?? '#999999',
                   }
@@ -308,7 +313,7 @@
     // Create legend
     const legendItems = visibleData.map(species => ({
       id: species.species,
-      label: species.commonName,
+      label: species.displayName,
       color: species.color ?? '#999999',
       visible: species.visible,
     }));
