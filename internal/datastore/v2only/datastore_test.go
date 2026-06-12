@@ -776,6 +776,46 @@ func TestV2OnlyDatastore_GetThresholdEvents_SecondQueryError(t *testing.T) {
 	assert.ErrorContains(t, err, "injected DB failure")
 }
 
+// TestV2OnlyDatastore_GetThresholdEvents_SameTimestampTieBreak pins the
+// CreatedAt/ID sort tie-break. The per-query LIMIT is applied in SQL, so a
+// single query cannot exercise the Go-side sort; the tie-break only governs how
+// the MERGED result of the two queries (common-name + scientific-name) is
+// truncated. We store one event found by Query 1 (a legacy common-name label)
+// and one found by Query 2 (the resolved scientific name) sharing a timestamp,
+// then assert the higher-ID event wins truncation to one row.
+func TestV2OnlyDatastore_GetThresholdEvents_SameTimestampTieBreak(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+	defer cleanup()
+
+	ts := time.Now()
+	// Query 1 finds this event (label scientific_name == the common-name input).
+	require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
+		SpeciesName: "Great Tit", NewLevel: 1, NewValue: 0.7, ChangeReason: "legacy", Confidence: 0.95, CreatedAt: ts,
+	}))
+	// Query 2 finds this event (label scientific_name == resolved scientific name).
+	require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
+		SpeciesName: "Parus major", NewLevel: 1, NewValue: 0.7, ChangeReason: "correct", Confidence: 0.95, CreatedAt: ts,
+	}))
+
+	// Both events come back from the merge; learn the higher ID (saved second).
+	all, err := ds.GetThresholdEvents("Great Tit", 10)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+	maxID := all[0].ID
+	for _, e := range all[1:] {
+		if e.ID > maxID {
+			maxID = e.ID
+		}
+	}
+
+	// Truncating the same-timestamp merge to one row must deterministically keep
+	// the higher ID via the tie-break.
+	top, err := ds.GetThresholdEvents("Great Tit", 1)
+	require.NoError(t, err)
+	require.Len(t, top, 1)
+	assert.Equal(t, maxID, top[0].ID)
+}
+
 func TestV2OnlyDatastore_SearchNotes(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
