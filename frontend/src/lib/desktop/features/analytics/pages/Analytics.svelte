@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from '$lib/i18n';
+  import { t, type TranslationKey } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { formatNumber, formatDateTime } from '$lib/utils/formatters';
@@ -145,8 +145,27 @@
       .map(s => ({ label: localizeSpeciesName(s.scientific_name, s.common_name), value: s.count }))
   );
 
-  // Time of day: hourly counts bucketed into the six fixed periods.
-  const timeOfDayBars = $derived(bucketHourlyByPeriod(chartData.timeOfDay));
+  // Time of day: hourly counts bucketed into the six fixed periods. The period
+  // display labels are localized at render time so the pure transform stays
+  // i18n-free. The map is keyed on the transform's stable English labels, so the
+  // localization is robust to bucket order or length; an unmapped label falls
+  // back to its English text. The two Night labels (0-4 and 20-23) must remain
+  // distinct in every locale: the BarChart uses the label as its d3 band-scale
+  // domain key, so identical strings would collapse the two buckets into one bar.
+  const TIME_OF_DAY_PERIOD_LABEL_KEYS = new Map<string, TranslationKey>([
+    ['Night (0-4)', 'analytics.timeOfDayPeriods.night0to4'],
+    ['Dawn (5-8)', 'analytics.timeOfDayPeriods.dawn5to8'],
+    ['Morning (9-11)', 'analytics.timeOfDayPeriods.morning9to11'],
+    ['Afternoon (12-16)', 'analytics.timeOfDayPeriods.afternoon12to16'],
+    ['Evening (17-19)', 'analytics.timeOfDayPeriods.evening17to19'],
+    ['Night (20-23)', 'analytics.timeOfDayPeriods.night20to23'],
+  ]);
+  const timeOfDayBars = $derived.by(() =>
+    bucketHourlyByPeriod(chartData.timeOfDay).map(bucket => {
+      const key = TIME_OF_DAY_PERIOD_LABEL_KEYS.get(bucket.label);
+      return { label: key ? t(key) : bucket.label, value: bucket.value };
+    })
+  );
 
   // Detection trend: aggregated/sorted daily points, wrapped as a single series.
   const trendSeries = $derived([

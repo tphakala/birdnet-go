@@ -133,7 +133,8 @@
       "downloadCsv": "Pobierz listę gatunków jako CSV",
       "visitEbirdLink": "Otwórz eBird.org w nowej karcie",
       "learnEbirdTaxonomyLink": "Otwórz Taksonomię eBird w nowej karcie",
-      "resizeHandle": "Przeciągnij, aby zmienić rozmiar"
+      "resizeHandle": "Przeciągnij, aby zmienić rozmiar",
+      "imageCredit": "Image credit: {name}"
     },
     "labels": {
       "confidence": "Pewność",
@@ -793,7 +794,11 @@
     },
     "detail": {
       "species": "Gatunek",
-      "observation": "Obserwacja"
+      "observation": "Obserwacja",
+      "aria": {
+        "downloadAudioClip": "Download audio clip for {name} detection",
+        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+      }
     },
     "headers": {
       "dateTime": "Data i Czas",
@@ -1725,6 +1730,14 @@
     },
     "errors": {
       "loadFailed": "Nie udało się załadować danych analitycznych. Spróbuj ponownie."
+    },
+    "timeOfDayPeriods": {
+      "night0to4": "Night (0-4)",
+      "dawn5to8": "Dawn (5-8)",
+      "morning9to11": "Morning (9-11)",
+      "afternoon12to16": "Afternoon (12-16)",
+      "evening17to19": "Evening (17-19)",
+      "night20to23": "Night (20-23)"
     }
   },
   "settings": {
@@ -4445,6 +4458,11 @@
       "removeCertificate": "Usuń certyfikat",
       "fileReadError": "Nie udało się odczytać pliku",
       "loading": "Ładowanie informacji o certyfikacie..."
+    },
+    "birdThumbnail": {
+      "viewDetections": "View {name} detections",
+      "largeView": "Large view of {name}",
+      "clickToView": "Click to view detections"
     }
   },
   "connectivity": {

@@ -29,6 +29,7 @@
   import type { ImageAttribution } from '$lib/types/detection.types';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { t } from '$lib/i18n';
   import { portal } from '$lib/utils/portal';
   import { dropdown } from '$lib/utils/transitions';
   import { Image } from '@lucide/svelte';
@@ -200,7 +201,7 @@
     onmousemove={handleMouseMove}
     onfocus={handleFocus}
     onblur={handleBlur}
-    aria-label="View {displayName} detections"
+    aria-label={t('components.birdThumbnail.viewDetections', { name: displayName })}
     aria-describedby={showPopup ? 'bird-popup' : undefined}
   >
     <!-- Thumbnail placeholder -->
@@ -262,13 +263,13 @@
               style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
             >
               <Image class="size-8 mb-2" />
-              <p class="text-xs text-center">Image not available</p>
+              <p class="text-xs text-center">{t('common.ui.imageNotAvailable')}</p>
             </div>
           {:else}
             <!-- Large image -->
             <img
               src={thumbnailUrl}
-              alt={`Large view of ${displayName}`}
+              alt={t('components.birdThumbnail.largeView', { name: displayName })}
               class="w-full h-full object-contain transition-opacity duration-200"
               class:opacity-0={!imageLoaded}
               class:opacity-100={imageLoaded}
@@ -279,7 +280,10 @@
 
           <!-- Photo credit overlay -->
           {#if imageAttribution?.authorName && imageLoaded}
-            <div class="thumbnail-credit" aria-label="Image credit: {imageAttribution.authorName}">
+            <div
+              class="thumbnail-credit"
+              aria-label={t('common.aria.imageCredit', { name: imageAttribution.authorName })}
+            >
               <span class="credit-text">{imageAttribution.authorName}</span>
               {#if imageAttribution.licenseName}
                 <span class="credit-separator">·</span>
@@ -304,7 +308,7 @@
             class="text-xs"
             style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
           >
-            Click to view detections
+            {t('components.birdThumbnail.clickToView')}
           </p>
         </div>
       </div>

@@ -133,7 +133,8 @@
       "downloadCsv": "Last ned artsliste som CSV",
       "visitEbirdLink": "Åpne eBird.org i ny fane",
       "learnEbirdTaxonomyLink": "Åpne eBird-taksonomi i ny fane",
-      "resizeHandle": "Dra for å endre størrelse"
+      "resizeHandle": "Dra for å endre størrelse",
+      "imageCredit": "Image credit: {name}"
     },
     "labels": {
       "confidence": "Sikkerhet",
@@ -486,7 +487,8 @@
       "confidenceMax": "Maksimum sikkerhetsprosentandel",
       "verifiedStatus": "Verifiseringsstatus",
       "lockedStatus": "Låsestatus",
-      "timeOfDay": "Tidspunkt på døgnet"
+      "timeOfDay": "Tidspunkt på døgnet",
+      "source": "Audio Source"
     },
     "advancedFilters": "Avanserte filtre",
     "showAdvancedFilters": "Vis avanserte filtre",
@@ -520,7 +522,8 @@
       "species": "Art",
       "confidence": "Sikkerhet",
       "status": "Status",
-      "actions": "Handlinger"
+      "actions": "Handlinger",
+      "source": "Source"
     },
     "statusBadges": {
       "verified": "Verifisert",
@@ -556,6 +559,9 @@
       "page": "Side {current} av {total}",
       "goToPrevious": "Gå til forrige side",
       "goToNext": "Gå til neste side"
+    },
+    "sourceOptions": {
+      "any": "All Sources"
     }
   },
   "error": {
@@ -788,7 +794,11 @@
     },
     "detail": {
       "species": "Art",
-      "observation": "Observasjon"
+      "observation": "Observasjon",
+      "aria": {
+        "downloadAudioClip": "Download audio clip for {name} detection",
+        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+      }
     },
     "headers": {
       "dateTime": "Dato og tid",
@@ -1619,7 +1629,8 @@
         "dateTime": "Dato og tid",
         "species": "Art",
         "confidence": "Sikkerhet",
-        "timeOfDay": "Tidspunkt"
+        "timeOfDay": "Tidspunkt",
+        "source": "Source"
       },
       "noRecentDetections": "Ingen siste registreringer funnet",
       "unknownSpecies": "Ukjent",
@@ -1719,6 +1730,14 @@
     },
     "errors": {
       "loadFailed": "Innlasting av analysedata mislyktes. Prøv igjen."
+    },
+    "timeOfDayPeriods": {
+      "night0to4": "Night (0-4)",
+      "dawn5to8": "Dawn (5-8)",
+      "morning9to11": "Morning (9-11)",
+      "afternoon12to16": "Afternoon (12-16)",
+      "evening17to19": "Evening (17-19)",
+      "night20to23": "Night (20-23)"
     }
   },
   "settings": {
@@ -4896,6 +4915,11 @@
       "removeCertificate": "Fjern sertifikat",
       "fileReadError": "Lesing av fil mislyktes",
       "loading": "Laster sertifikatinformasjon..."
+    },
+    "birdThumbnail": {
+      "viewDetections": "View {name} detections",
+      "largeView": "Large view of {name}",
+      "clickToView": "Click to view detections"
     }
   },
   "wizard": {

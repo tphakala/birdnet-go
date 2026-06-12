@@ -133,7 +133,8 @@
       "downloadCsv": "Lejupielādēt sugu sarakstu kā CSV",
       "visitEbirdLink": "Atvērt eBird.org jaunā cilnē",
       "learnEbirdTaxonomyLink": "Atvērt eBird taksonomiju jaunā cilnē",
-      "resizeHandle": "Velciet, lai mainītu izmēru"
+      "resizeHandle": "Velciet, lai mainītu izmēru",
+      "imageCredit": "Image credit: {name}"
     },
     "labels": {
       "confidence": "Ticamība",
@@ -793,7 +794,11 @@
     },
     "detail": {
       "species": "Suga",
-      "observation": "Novērojums"
+      "observation": "Novērojums",
+      "aria": {
+        "downloadAudioClip": "Download audio clip for {name} detection",
+        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+      }
     },
     "headers": {
       "dateTime": "Datums un laiks",
@@ -1725,6 +1730,14 @@
     },
     "errors": {
       "loadFailed": "Neizdevās ielādēt analītikas datus. Lūdzu, mēģiniet vēlreiz."
+    },
+    "timeOfDayPeriods": {
+      "night0to4": "Night (0-4)",
+      "dawn5to8": "Dawn (5-8)",
+      "morning9to11": "Morning (9-11)",
+      "afternoon12to16": "Afternoon (12-16)",
+      "evening17to19": "Evening (17-19)",
+      "night20to23": "Night (20-23)"
     }
   },
   "settings": {
@@ -4445,6 +4458,11 @@
       "removeCertificate": "Noņemt sertifikātu",
       "fileReadError": "Neizdevās nolasīt failu",
       "loading": "Ielādē sertifikāta informāciju..."
+    },
+    "birdThumbnail": {
+      "viewDetections": "View {name} detections",
+      "largeView": "Large view of {name}",
+      "clickToView": "Click to view detections"
     }
   },
   "connectivity": {
