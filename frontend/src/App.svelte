@@ -9,8 +9,14 @@
   import { getLogger } from './lib/utils/logger';
   import { createSafeMap } from './lib/utils/security';
   import { sseNotifications } from './lib/stores/sseNotifications'; // Initialize SSE toast handler
-  import { t } from './lib/i18n';
-  import { appState, initApp, MAX_RETRIES } from './lib/stores/appState.svelte';
+  import { t, getLocale } from './lib/i18n';
+  import { loadDictionary } from './lib/stores/speciesDictionary.svelte';
+  import {
+    appState,
+    initApp,
+    MAX_RETRIES,
+    getSpeciesDictVersion,
+  } from './lib/stores/appState.svelte';
   import { navigation } from './lib/stores/navigation.svelte';
   import { settingsActions } from './lib/stores/settings.js';
   import { activateWatchdog } from './lib/stores/connectionState.svelte';
@@ -558,6 +564,20 @@
         wizardState.dismissOnly(appState.version);
       }
     }
+  });
+
+  // Load the per-visitor species-name display dictionary on first paint and
+  // refetch whenever the UI locale changes. getLocale() reads reactive state, so
+  // reading it here re-runs the effect on locale switch. Fire-and-forget: the
+  // dashboard falls back to server-provided common names until this resolves.
+  $effect(() => {
+    const locale = getLocale();
+    // Read the version so the effect re-runs once app config populates it, fetching
+    // the content-addressed URL instead of staying on the unversioned (short-cache) one.
+    getSpeciesDictVersion();
+    loadDictionary(locale).catch(err => {
+      logger.error('Failed to load species dictionary', err, { locale });
+    });
   });
 
   // Use $effect for browser back/forward navigation with automatic cleanup

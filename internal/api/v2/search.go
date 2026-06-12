@@ -17,6 +17,12 @@ import (
 const defaultSearchTimeout = 60 * time.Second
 const defaultPerPage = 20
 
+// maxSearchSpeciesScientific caps how many client-resolved scientific names a
+// single search may carry. The endpoint is public and each name triggers a label
+// lookup, so this bounds the work an anonymous caller can request. A reverse
+// dictionary match for an ambiguous or substring name stays well under this.
+const maxSearchSpeciesScientific = 100
+
 // initSearchRoutes registers the search-related routes
 func (c *Controller) initSearchRoutes() {
 	c.logInfoIfEnabled("Initializing search routes")
@@ -29,17 +35,22 @@ func (c *Controller) initSearchRoutes() {
 
 // SearchRequest defines the structure of the search API request
 type SearchRequest struct {
-	Species        string  `json:"species"`
-	DateStart      string  `json:"dateStart"`
-	DateEnd        string  `json:"dateEnd"`
-	ConfidenceMin  float64 `json:"confidenceMin"`
-	ConfidenceMax  float64 `json:"confidenceMax"`
-	VerifiedStatus string  `json:"verifiedStatus"`
-	LockedStatus   string  `json:"lockedStatus"`
-	DeviceFilter   string  `json:"deviceFilter"`
-	TimeOfDay      string  `json:"timeOfDay"`
-	Page           int     `json:"page"`
-	SortBy         string  `json:"sortBy"`
+	Species string `json:"species"`
+	// SpeciesScientific carries exact scientific names the client resolved in the
+	// browser from the per-visitor name dictionary (e.g. an ambiguous localized
+	// common name resolving to several species). When set, these are matched in
+	// addition to the free-text Species term. The list is capped server-side.
+	SpeciesScientific []string `json:"speciesScientific,omitempty"`
+	DateStart         string   `json:"dateStart"`
+	DateEnd           string   `json:"dateEnd"`
+	ConfidenceMin     float64  `json:"confidenceMin"`
+	ConfidenceMax     float64  `json:"confidenceMax"`
+	VerifiedStatus    string   `json:"verifiedStatus"`
+	LockedStatus      string   `json:"lockedStatus"`
+	DeviceFilter      string   `json:"deviceFilter"`
+	TimeOfDay         string   `json:"timeOfDay"`
+	Page              int      `json:"page"`
+	SortBy            string   `json:"sortBy"`
 }
 
 // SearchResponse defines the structure of the search API response
@@ -67,6 +78,10 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 	if err := c.validateAndNormalizeSearchRequest(ctx, &req); err != nil {
 		return c.HandleError(ctx, err, "Invalid search parameters", http.StatusBadRequest)
 	}
+
+	// Bound and clean the client-resolved scientific name list before it reaches
+	// the datastore (public endpoint; each name is a label lookup).
+	req.SpeciesScientific = sanitizeSpeciesScientific(req.SpeciesScientific)
 
 	originalSpecies := req.Species
 	resolved, hit := c.resolveSpeciesToScientific(req.Species)
@@ -157,6 +172,7 @@ func (c *Controller) logValidatedRequest(path, ip string, req *SearchRequest) {
 func (c *Controller) buildSearchFilters(req *SearchRequest, ctxTimeout context.Context) datastore.SearchFilters {
 	return datastore.SearchFilters{
 		Species:           req.Species,
+		SpeciesScientific: req.SpeciesScientific,
 		DateStart:         req.DateStart,
 		DateEnd:           req.DateEnd,
 		ConfidenceMin:     req.ConfidenceMin,
@@ -173,6 +189,35 @@ func (c *Controller) buildSearchFilters(req *SearchRequest, ctxTimeout context.C
 		SortBy:            req.SortBy,
 		Ctx:               ctxTimeout,
 	}
+}
+
+// sanitizeSpeciesScientific trims, drops empties, de-duplicates, and caps the
+// client-supplied scientific name list. The search endpoint is public and each
+// name triggers a label lookup, so the cap bounds the work an anonymous caller
+// can request. Insertion order of the kept entries is preserved.
+func sanitizeSpeciesScientific(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	// Both the seen-set and the output are bounded by the cap, so size them to it
+	// rather than to the (untrusted, body-limited but possibly large) input length.
+	seen := make(map[string]struct{}, min(len(in), maxSearchSpeciesScientific))
+	out := make([]string, 0, min(len(in), maxSearchSpeciesScientific))
+	for _, s := range in {
+		name := strings.TrimSpace(s)
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+		if len(out) >= maxSearchSpeciesScientific {
+			break
+		}
+	}
+	return out
 }
 
 // buildSearchResponse constructs the API response from search results.

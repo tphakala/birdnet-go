@@ -95,6 +95,7 @@ func (c *Controller) initSpeciesRoutes() {
 	c.Group.GET("/species", c.GetSpeciesInfo)
 	c.Group.GET("/species/all", c.GetAllSpecies)
 	c.Group.GET("/species/taxonomy", c.GetSpeciesTaxonomy)
+	c.Group.GET("/species/dictionary/:locale", c.ServeSpeciesDictionary)
 
 	// RESTful thumbnail endpoint - uses species code from path
 	c.Group.GET("/species/:code/thumbnail", c.GetSpeciesThumbnail)

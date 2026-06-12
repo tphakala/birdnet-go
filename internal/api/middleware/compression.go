@@ -50,6 +50,15 @@ var binaryMediaRoutes = map[string]struct{}{
 	"/api/v2/media/bird-image/:scientific_name": {},
 }
 
+// precompressedRoutes serve responses the handler has already gzip-compressed
+// (it sets Content-Encoding: gzip and writes precompressed bytes). Echo's gzip
+// middleware does not check for a pre-existing Content-Encoding before compressing,
+// so without skipping it would double-compress the body (gzip(gzip(json))) and the
+// browser would fail to parse it. Matched on the route template like binaryMediaRoutes.
+var precompressedRoutes = map[string]struct{}{
+	"/api/v2/species/dictionary/:locale": {},
+}
+
 // hlsContentRoutePrefix matches token-based HLS playlist and segment routes.
 // The registered route template is /api/v2/streams/hls/t/:streamToken/* where
 // the trailing * is an Echo wildcard. We cannot lookup wildcard templates in
@@ -86,6 +95,7 @@ func NewGzipWithSkipper(level int, skipper middleware.Skipper) echo.MiddlewareFu
 // It skips compression for responses that must not be gzipped:
 //   - Server-Sent Events endpoints (see SSESkipper).
 //   - Binary media routes serving audio, images, or HLS content (see MediaPathSkipper).
+//   - Routes that serve already-compressed responses (see precompressedRoutes).
 //   - Any request carrying a Range header, since gzip is incompatible with
 //     byte-range responses served via http.ServeContent.
 func DefaultGzipSkipper(c echo.Context) bool {
@@ -93,6 +103,9 @@ func DefaultGzipSkipper(c echo.Context) bool {
 		return true
 	}
 	if MediaPathSkipper(c) {
+		return true
+	}
+	if _, ok := precompressedRoutes[c.Path()]; ok {
 		return true
 	}
 	return c.Request().Header.Get(headerRange) != ""

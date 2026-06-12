@@ -2042,7 +2042,12 @@ func (ds *DataStore) CountHourlyDetections(date, hour string, duration int) (int
 
 // SearchFilters defines parameters for filtering detection records
 type SearchFilters struct {
-	Species           string
+	Species string
+	// SpeciesScientific holds exact scientific names the client already resolved
+	// (e.g. in the browser from a per-visitor name dictionary). They are resolved
+	// to label IDs and OR-ed into the species match, so an ambiguous localized
+	// common name can match multiple species without server-locale resolution.
+	SpeciesScientific []string
 	DateStart         string
 	DateEnd           string
 	ConfidenceMin     float64
@@ -2117,18 +2122,41 @@ func (f *SearchFilters) sanitise() error {
 	return nil
 }
 
-// applySpeciesFilter applies the species filter to a GORM query
-func applySpeciesFilter(query *gorm.DB, species string) *gorm.DB {
-	if species != "" {
-		likeParam := "%" + species + "%"
-		return query.Where("notes.scientific_name LIKE ? OR notes.common_name LIKE ?", likeParam, likeParam)
+// applySpeciesFilter applies the species filter to a GORM query.
+//
+// filters.Species is a free-text substring match on the scientific or common name.
+// filters.SpeciesScientific is an exact match on any of the listed scientific names,
+// used when the client already resolved the term (e.g. in the browser from the
+// per-visitor name dictionary, which sends scientific names with an empty Species).
+// When both are present they are OR-ed so the result is their union, mirroring the
+// v2 search path. Without the SpeciesScientific branch a dictionary-resolved search
+// (empty Species) would match every species on the legacy datastore.
+func applySpeciesFilter(query *gorm.DB, filters *SearchFilters) *gorm.DB {
+	hasText := filters.Species != ""
+	hasScientific := len(filters.SpeciesScientific) > 0
+	likeParam := "%" + filters.Species + "%"
+
+	// The OR groups are parenthesized explicitly. GORM already wraps each chained
+	// Where clause in parentheses, but making the grouping explicit keeps the species
+	// match correctly isolated from the AND-ed date/confidence filters even if the
+	// query construction changes.
+	switch {
+	case hasText && hasScientific:
+		return query.Where(
+			"(notes.scientific_name LIKE ? OR notes.common_name LIKE ? OR notes.scientific_name IN ?)",
+			likeParam, likeParam, filters.SpeciesScientific)
+	case hasText:
+		return query.Where("(notes.scientific_name LIKE ? OR notes.common_name LIKE ?)", likeParam, likeParam)
+	case hasScientific:
+		return query.Where("notes.scientific_name IN ?", filters.SpeciesScientific)
+	default:
+		return query
 	}
-	return query
 }
 
 // applyCommonFilters applies common search filters to a GORM query
 func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *gorm.DB {
-	query = applySpeciesFilter(query, filters.Species)
+	query = applySpeciesFilter(query, filters)
 
 	if filters.DateStart != "" {
 		query = query.Where("notes.date >= ?", filters.DateStart)

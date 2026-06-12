@@ -691,7 +691,9 @@
                         </div>
                       </div>
                       <div>
-                        <div class="font-bold">{species.common_name}</div>
+                        <div class="font-bold">
+                          {species.common_name}
+                        </div>
                         <div class="text-sm opacity-50 italic">{species.scientific_name}</div>
                       </div>
                     </div>

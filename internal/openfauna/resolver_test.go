@@ -39,6 +39,12 @@ func TestMapLocale_Table(t *testing.T) {
 		// Region expand: no bare zh/lv, but a single regional variant exists.
 		{"zh", "zh_cn"},
 		{"lv", "lv_lv"},
+		// Code-convention alias: the UI uses ISO 639-1 "nb"/"nn" for Norwegian, but
+		// OpenFauna ships it under the macrolanguage code "no". Without the alias these
+		// would fall through to English.
+		{"nb", "no"},
+		{"nn", "no"},
+		{"no", "no"}, // dataset code passes through unchanged
 		// Languages present in the dataset resolve to their own code (exact, or
 		// "-" -> "_"); coverage level is irrelevant to the mapping.
 		{"af", "af"},

@@ -20,6 +20,7 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import type { SourceInfo } from '$lib/types/detection.types';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
 
@@ -807,7 +808,8 @@
                       </div>
                       <div>
                         <div class="font-medium">
-                          {detection.commonName || t('analytics.recentDetections.unknownSpecies')}
+                          {localizeSpeciesName(detection.scientificName, detection.commonName) ||
+                            t('analytics.recentDetections.unknownSpecies')}
                         </div>
                         <div class="text-xs opacity-50">{detection.scientificName || ''}</div>
                       </div>
@@ -876,7 +878,8 @@
                     {detection.timestamp ? formatDateTime(detection.timestamp) : '-'}
                   </div>
                   <div class="font-medium leading-tight truncate">
-                    {detection.commonName || t('analytics.recentDetections.unknownSpecies')}
+                    {localizeSpeciesName(detection.scientificName, detection.commonName) ||
+                      t('analytics.recentDetections.unknownSpecies')}
                   </div>
                   <div class="text-xs opacity-60 truncate">{detection.scientificName || ''}</div>
                   <div class="mt-2 flex items-center justify-between">

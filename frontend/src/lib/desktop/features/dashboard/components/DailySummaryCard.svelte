@@ -58,6 +58,7 @@ Responsive Breakpoints:
     buildSpeciesHourUrl,
   } from '$lib/utils/detectionUrls';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { loggers } from '$lib/utils/logger';
   import { LRUCache } from '$lib/utils/LRUCache';
   import { safeArrayAccess, safeGet } from '$lib/utils/security';
@@ -1058,6 +1059,7 @@ Responsive Breakpoints:
           <!-- Species rows -->
           <div class="flex flex-col" style:gap="var(--grid-gap)">
             {#each sortedData as item, index (`${item.scientific_name}_${index}`)}
+              {@const displayName = localizeSpeciesName(item.scientific_name, item.common_name)}
               <div
                 class="flex items-center species-row"
                 class:new-species={item.isNew && !prefersReducedMotion}
@@ -1079,18 +1081,18 @@ Responsive Breakpoints:
                     <a
                       href={urlBuilders.species(item)}
                       class="species-badge shrink-0"
-                      style:background-color={getSpeciesBadgeColor(item.common_name)}
+                      style:background-color={getSpeciesBadgeColor(item.scientific_name)}
                       title={item.scientific_name}
                     >
-                      {getSpeciesInitials(item.common_name)}
+                      {getSpeciesInitials(displayName)}
                     </a>
                   {/if}
                   <a
                     href={urlBuilders.species(item)}
                     class="text-sm hover:text-[var(--color-primary)] cursor-pointer font-medium leading-tight flex items-center gap-1 overflow-hidden"
-                    title={item.common_name}
+                    title={displayName}
                   >
-                    <span class="truncate flex-1">{item.common_name}</span>
+                    <span class="truncate flex-1">{displayName}</span>
                     {#if resolveNoveltyCategory(item) === 'lifetime'}
                       <span
                         class="inline-block shrink-0"
