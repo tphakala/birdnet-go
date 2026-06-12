@@ -147,26 +147,25 @@
 
   // Time of day: hourly counts bucketed into the six fixed periods. The period
   // display labels are localized at render time so the pure transform stays
-  // i18n-free; the key order matches bucketHourlyByPeriod's fixed output order.
-  // The two Night labels (0-4 and 20-23) must remain distinct in every locale:
-  // the BarChart uses the label as its d3 band-scale domain key, so identical
-  // strings would collapse the two buckets into a single bar.
-  const TIME_OF_DAY_PERIOD_LABEL_KEYS = [
-    'analytics.timeOfDayPeriods.night0to4',
-    'analytics.timeOfDayPeriods.dawn5to8',
-    'analytics.timeOfDayPeriods.morning9to11',
-    'analytics.timeOfDayPeriods.afternoon12to16',
-    'analytics.timeOfDayPeriods.evening17to19',
-    'analytics.timeOfDayPeriods.night20to23',
-  ] as const satisfies readonly TranslationKey[];
-  const timeOfDayBars = $derived.by(() => {
-    const buckets = bucketHourlyByPeriod(chartData.timeOfDay);
-    return TIME_OF_DAY_PERIOD_LABEL_KEYS.map((key, i) => ({
-      label: t(key),
-      // eslint-disable-next-line security/detect-object-injection -- i iterates a fixed-length const array; bucketHourlyByPeriod always returns six entries in this order
-      value: buckets[i]?.value ?? 0,
-    }));
-  });
+  // i18n-free. The map is keyed on the transform's stable English labels, so the
+  // localization is robust to bucket order or length; an unmapped label falls
+  // back to its English text. The two Night labels (0-4 and 20-23) must remain
+  // distinct in every locale: the BarChart uses the label as its d3 band-scale
+  // domain key, so identical strings would collapse the two buckets into one bar.
+  const TIME_OF_DAY_PERIOD_LABEL_KEYS = new Map<string, TranslationKey>([
+    ['Night (0-4)', 'analytics.timeOfDayPeriods.night0to4'],
+    ['Dawn (5-8)', 'analytics.timeOfDayPeriods.dawn5to8'],
+    ['Morning (9-11)', 'analytics.timeOfDayPeriods.morning9to11'],
+    ['Afternoon (12-16)', 'analytics.timeOfDayPeriods.afternoon12to16'],
+    ['Evening (17-19)', 'analytics.timeOfDayPeriods.evening17to19'],
+    ['Night (20-23)', 'analytics.timeOfDayPeriods.night20to23'],
+  ]);
+  const timeOfDayBars = $derived.by(() =>
+    bucketHourlyByPeriod(chartData.timeOfDay).map(bucket => {
+      const key = TIME_OF_DAY_PERIOD_LABEL_KEYS.get(bucket.label);
+      return { label: key ? t(key) : bucket.label, value: bucket.value };
+    })
+  );
 
   // Detection trend: aggregated/sorted daily points, wrapped as a single series.
   const trendSeries = $derived([
