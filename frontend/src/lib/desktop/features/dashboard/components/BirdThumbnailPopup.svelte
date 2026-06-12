@@ -28,6 +28,7 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import type { ImageAttribution } from '$lib/types/detection.types';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { portal } from '$lib/utils/portal';
   import { dropdown } from '$lib/utils/transitions';
   import { Image } from '@lucide/svelte';
@@ -41,6 +42,10 @@
   }
 
   let { thumbnailUrl, commonName, scientificName, detectionUrl, className = '' }: Props = $props();
+
+  // Localized common name for display in the visitor's UI locale. Falls back to
+  // the server-provided common name, then the scientific name.
+  const displayName = $derived(localizeSpeciesName(scientificName, commonName));
 
   // State for popup visibility and positioning
   let showPopup = $state(false);
@@ -195,14 +200,14 @@
     onmousemove={handleMouseMove}
     onfocus={handleFocus}
     onblur={handleBlur}
-    aria-label="View {commonName} detections"
+    aria-label="View {displayName} detections"
     aria-describedby={showPopup ? 'bird-popup' : undefined}
   >
     <!-- Thumbnail placeholder -->
     <div class="thumbnail-placeholder w-8 h-6 rounded-sm bg-[var(--color-base-200)]"></div>
     <img
       src={thumbnailUrl}
-      alt={commonName}
+      alt={displayName}
       class="thumbnail-image w-8 h-6 rounded-sm object-cover cursor-pointer hover:opacity-80 transition-opacity"
       onerror={handleImageError}
       loading="lazy"
@@ -229,7 +234,7 @@
         <!-- Species information header -->
         <div class="text-center space-y-1">
           <h3 class="font-semibold text-[var(--color-base-content)] text-sm leading-tight">
-            {commonName}
+            {displayName}
           </h3>
           <p
             class="text-xs italic"
@@ -263,7 +268,7 @@
             <!-- Large image -->
             <img
               src={thumbnailUrl}
-              alt={`Large view of ${commonName}`}
+              alt={`Large view of ${displayName}`}
               class="w-full h-full object-contain transition-opacity duration-200"
               class:opacity-0={!imageLoaded}
               class:opacity-100={imageLoaded}

@@ -16,6 +16,7 @@
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   interface Props {
     detection: Detection;
@@ -46,6 +47,10 @@
   const thumbnailUrl = $derived(
     buildAppUrl(`/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName)}`)
   );
+
+  // Localized common name for display in the visitor's UI locale. Falls back to
+  // the server-provided common name, then the scientific name.
+  const displayName = $derived(localizeSpeciesName(detection.scientificName, detection.commonName));
 </script>
 
 <div class={cn('species-info-bar', className)}>
@@ -53,7 +58,7 @@
   <div class="species-thumbnail">
     <img
       src={thumbnailUrl}
-      alt={detection.commonName}
+      alt={displayName}
       class="thumbnail-image"
       loading="lazy"
       onerror={handleBirdImageError}
@@ -64,7 +69,7 @@
   <div class="species-details">
     <!-- Name row with verification badge -->
     <div class="species-name-row">
-      <span class="species-name">{detection.commonName}</span>
+      <span class="species-name">{displayName}</span>
       {#if isVerified}
         <span
           class="verified-badge"

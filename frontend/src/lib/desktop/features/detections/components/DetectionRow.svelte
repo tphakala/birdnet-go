@@ -46,6 +46,7 @@
   import { loggers } from '$lib/utils/logger';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   const logger = loggers.ui;
 
@@ -74,6 +75,10 @@
     selected = false,
     onToggleSelect,
   }: Props = $props();
+
+  // Localized common name for display in the visitor's UI locale. Falls back to
+  // the server-provided common name, then the scientific name.
+  const displayName = $derived(localizeSpeciesName(detection.scientificName, detection.commonName));
 
   // Modal states
   let showConfirmModal = $state(false);
@@ -316,8 +321,8 @@
         <!-- Screen reader announcement for loading state -->
         <span class="sr-only" role="status" aria-live="polite">
           {thumbnailLoader.loading
-            ? t('detections.aria.thumbnailLoading', { species: detection.commonName })
-            : t('detections.aria.thumbnailLoaded', { species: detection.commonName })}
+            ? t('detections.aria.thumbnailLoading', { species: displayName })
+            : t('detections.aria.thumbnailLoaded', { species: displayName })}
         </span>
 
         <!-- Loading spinner overlay -->
@@ -357,7 +362,7 @@
             decoding="async"
             fetchpriority="low"
             src={getThumbnailUrl(detection.scientificName)}
-            alt={detection.commonName}
+            alt={displayName}
             class="sp-thumbnail-image"
             class:opacity-0={thumbnailLoader.loading}
             onload={handleThumbnailLoad}
@@ -377,7 +382,7 @@
           onclick={handleDetailsClick}
           class="sp-species-common-name hover:text-primary transition-colors cursor-pointer text-left"
         >
-          {detection.commonName}
+          {displayName}
         </button>
         <div class="sp-species-scientific-name">{detection.scientificName}</div>
       </div>
