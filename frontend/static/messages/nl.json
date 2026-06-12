@@ -133,7 +133,8 @@
       "downloadCsv": "Soorten lijst als CSV ophalen",
       "visitEbirdLink": "Open eBird.org in een nieuwe tab",
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in een nieuwe tab",
-      "resizeHandle": "Sleep om te vergroten/verkleinen"
+      "resizeHandle": "Sleep om te vergroten/verkleinen",
+      "imageCredit": "Image credit: {name}"
     },
     "labels": {
       "confidence": "Betrouwbaarheid",
@@ -793,7 +794,11 @@
     },
     "detail": {
       "species": "Soort",
-      "observation": "Waarneming"
+      "observation": "Waarneming",
+      "aria": {
+        "downloadAudioClip": "Download audio clip for {name} detection",
+        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+      }
     },
     "headers": {
       "dateTime": "Datum/Tijd",
@@ -1725,6 +1730,14 @@
     },
     "errors": {
       "loadFailed": "Analysegegevens konden niet worden geladen. Probeer het opnieuw."
+    },
+    "timeOfDayPeriods": {
+      "night0to4": "Night (0-4)",
+      "dawn5to8": "Dawn (5-8)",
+      "morning9to11": "Morning (9-11)",
+      "afternoon12to16": "Afternoon (12-16)",
+      "evening17to19": "Evening (17-19)",
+      "night20to23": "Night (20-23)"
     }
   },
   "settings": {
@@ -4445,6 +4458,11 @@
       "removeCertificate": "Certificaat verwijderen",
       "fileReadError": "Kan bestand niet lezen",
       "loading": "Certificaatinformatie laden..."
+    },
+    "birdThumbnail": {
+      "viewDetections": "View {name} detections",
+      "largeView": "Large view of {name}",
+      "clickToView": "Click to view detections"
     }
   },
   "connectivity": {

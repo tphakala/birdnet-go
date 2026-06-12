@@ -133,7 +133,8 @@
       "downloadCsv": "Stáhnout seznam druhů jako CSV",
       "visitEbirdLink": "Otevřít eBird.org v nové kartě",
       "learnEbirdTaxonomyLink": "Otevřít taxonomii eBird v nové kartě",
-      "resizeHandle": "Tažením změníte velikost"
+      "resizeHandle": "Tažením změníte velikost",
+      "imageCredit": "Image credit: {name}"
     },
     "labels": {
       "confidence": "Spolehlivost",
@@ -793,7 +794,11 @@
     },
     "detail": {
       "species": "Druh",
-      "observation": "Pozorování"
+      "observation": "Pozorování",
+      "aria": {
+        "downloadAudioClip": "Download audio clip for {name} detection",
+        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+      }
     },
     "headers": {
       "dateTime": "Datum a čas",
@@ -1725,6 +1730,14 @@
     },
     "errors": {
       "loadFailed": "Nepodařilo se načíst analytická data. Zkuste to prosím znovu."
+    },
+    "timeOfDayPeriods": {
+      "night0to4": "Night (0-4)",
+      "dawn5to8": "Dawn (5-8)",
+      "morning9to11": "Morning (9-11)",
+      "afternoon12to16": "Afternoon (12-16)",
+      "evening17to19": "Evening (17-19)",
+      "night20to23": "Night (20-23)"
     }
   },
   "settings": {
@@ -4445,6 +4458,11 @@
       "removeCertificate": "Odstranit certifikát",
       "fileReadError": "Soubor se nepodařilo přečíst",
       "loading": "Načítání informací o certifikátu…"
+    },
+    "birdThumbnail": {
+      "viewDetections": "View {name} detections",
+      "largeView": "Large view of {name}",
+      "clickToView": "Click to view detections"
     }
   },
   "connectivity": {

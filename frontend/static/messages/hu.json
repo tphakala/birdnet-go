@@ -133,7 +133,8 @@
       "downloadCsv": "Fajlista letöltése CSV formátumban",
       "visitEbirdLink": "eBird.org megnyitása új lapon",
       "learnEbirdTaxonomyLink": "eBird taxonómia megnyitása új lapon",
-      "resizeHandle": "Húzza az átméretezéshez"
+      "resizeHandle": "Húzza az átméretezéshez",
+      "imageCredit": "Image credit: {name}"
     },
     "labels": {
       "confidence": "Megbízhatóság",
@@ -793,7 +794,11 @@
     },
     "detail": {
       "species": "Faj",
-      "observation": "Megfigyelés"
+      "observation": "Megfigyelés",
+      "aria": {
+        "downloadAudioClip": "Download audio clip for {name} detection",
+        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+      }
     },
     "headers": {
       "dateTime": "Dátum és idő",
@@ -1725,6 +1730,14 @@
     },
     "errors": {
       "loadFailed": "Az analitikai adatok betöltése sikertelen. Próbálja újra."
+    },
+    "timeOfDayPeriods": {
+      "night0to4": "Night (0-4)",
+      "dawn5to8": "Dawn (5-8)",
+      "morning9to11": "Morning (9-11)",
+      "afternoon12to16": "Afternoon (12-16)",
+      "evening17to19": "Evening (17-19)",
+      "night20to23": "Night (20-23)"
     }
   },
   "settings": {
@@ -4445,6 +4458,11 @@
       "removeCertificate": "Tanúsítvány eltávolítása",
       "fileReadError": "A fájl olvasása sikertelen",
       "loading": "Tanúsítvány információ betöltése..."
+    },
+    "birdThumbnail": {
+      "viewDetections": "View {name} detections",
+      "largeView": "Large view of {name}",
+      "clickToView": "Click to view detections"
     }
   },
   "connectivity": {

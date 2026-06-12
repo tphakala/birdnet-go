@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from '$lib/i18n';
+  import { t, type TranslationKey } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { formatNumber, formatDateTime } from '$lib/utils/formatters';
@@ -145,8 +145,28 @@
       .map(s => ({ label: localizeSpeciesName(s.scientific_name, s.common_name), value: s.count }))
   );
 
-  // Time of day: hourly counts bucketed into the six fixed periods.
-  const timeOfDayBars = $derived(bucketHourlyByPeriod(chartData.timeOfDay));
+  // Time of day: hourly counts bucketed into the six fixed periods. The period
+  // display labels are localized at render time so the pure transform stays
+  // i18n-free; the key order matches bucketHourlyByPeriod's fixed output order.
+  // The two Night labels (0-4 and 20-23) must remain distinct in every locale:
+  // the BarChart uses the label as its d3 band-scale domain key, so identical
+  // strings would collapse the two buckets into a single bar.
+  const TIME_OF_DAY_PERIOD_LABEL_KEYS = [
+    'analytics.timeOfDayPeriods.night0to4',
+    'analytics.timeOfDayPeriods.dawn5to8',
+    'analytics.timeOfDayPeriods.morning9to11',
+    'analytics.timeOfDayPeriods.afternoon12to16',
+    'analytics.timeOfDayPeriods.evening17to19',
+    'analytics.timeOfDayPeriods.night20to23',
+  ] as const satisfies readonly TranslationKey[];
+  const timeOfDayBars = $derived.by(() => {
+    const buckets = bucketHourlyByPeriod(chartData.timeOfDay);
+    return TIME_OF_DAY_PERIOD_LABEL_KEYS.map((key, i) => ({
+      label: t(key),
+      // eslint-disable-next-line security/detect-object-injection -- i iterates a fixed-length const array; bucketHourlyByPeriod always returns six entries in this order
+      value: buckets[i]?.value ?? 0,
+    }));
+  });
 
   // Detection trend: aggregated/sorted daily points, wrapped as a single series.
   const trendSeries = $derived([
