@@ -1,12 +1,13 @@
 <script lang="ts">
-  import { t, type TranslationKey } from '$lib/i18n';
+  import { t, getLocale, type TranslationKey } from '$lib/i18n';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { downloadBlob } from '$lib/utils/fileHelpers';
   import { formatNumber, formatDateTime } from '$lib/utils/formatters';
   import { loggers } from '$lib/utils/logger';
   import { getStoredValue, setStoredValue } from '$lib/utils/storage';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import { onMount } from 'svelte';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { onMount, onDestroy } from 'svelte';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesDetailModal from '../components/modals/SpeciesDetailModal.svelte';
@@ -51,6 +52,13 @@
   }
 
   type ViewMode = 'grid' | 'list';
+
+  // A species row paired with the visitor-localized common name, used inside
+  // filteredSpecies for search + name-sort so they match what the user sees.
+  interface LocalizedRow {
+    species: SpeciesData;
+    displayName: string;
+  }
 
   // Species name defaults to ascending (A→Z); every other column defaults to
   // descending (most/highest/most recent first) on first click.
@@ -113,7 +121,9 @@
 
   let isLoading = $state<boolean>(true);
   let speciesData = $state<SpeciesData[]>([]);
-  let filteredSpecies = $state<SpeciesData[]>([]);
+  // Debounced copy of filters.searchTerm that actually drives filtering; the raw
+  // filters.searchTerm stays live for the input box and the "filtered" badge.
+  let debouncedSearchTerm = $state<string>('');
   let viewMode = $state<ViewMode>('grid');
   let selectedSpecies = $state<SpeciesData | null>(null);
   let showDetailModal = $state(false);
@@ -135,9 +145,9 @@
 
   // Tracks the sort order that is actually applied to the table. Only the
   // explicit commit points (header click in handleSort, Apply Filters/mount/reset
-  // via fetchData) update it; applyFilters() renders from it without mutating it.
-  // This keeps a pending dropdown change from being committed by an unrelated
-  // applyFilters() call (e.g. a background thumbnail batch or a search rerender).
+  // via fetchData) update it; the filteredSpecies $derived sorts from it. This
+  // keeps a pending dropdown change (filters.sortOrder) from reordering the table
+  // until the user commits it, so an unrelated rerender never applies it early.
   let appliedSortOrder = $state<SortOrder>(restoredSortOrder);
 
   // Active column + direction for the header indicators, derived from the
@@ -168,7 +178,7 @@
     filters.sortOrder = next;
     appliedSortOrder = next;
     setStoredValue<SortOrder>(SORT_STORAGE_KEY, next);
-    applyFilters();
+    // filteredSpecies is $derived and re-sorts automatically on appliedSortOrder.
   }
 
   // Set default dates on mount
@@ -192,11 +202,20 @@
     return (value * 100).toFixed(1) + '%';
   }
 
+  // Increments on every fetchData so an in-flight thumbnail loop from a previous
+  // fetch can detect it has been superseded and stop mutating speciesData.
+  let thumbnailFetchSeq = 0;
+
   async function fetchData() {
     isLoading = true;
+    const fetchSeq = ++thumbnailFetchSeq;
     // Apply Filters (and mount/reset) commit the pending dropdown selection.
     appliedSortOrder = filters.sortOrder;
     setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
+    // Commit the search term immediately too, cancelling any pending debounce so
+    // a just-typed term is not re-applied a moment later.
+    clearTimeout(searchDebounce);
+    debouncedSearchTerm = filters.searchTerm;
 
     try {
       // Determine date range based on time period
@@ -258,25 +277,23 @@
           ? { ...species, thumbnail_url: buildAppUrl(species.thumbnail_url) }
           : species
       );
-      applyFilters();
 
       // Load thumbnails asynchronously after main data is displayed
-      loadThumbnailsAsync();
+      loadThumbnailsAsync(fetchSeq);
     } catch (error) {
       logger.error('Error fetching species data:', error);
       speciesData = [];
-      filteredSpecies = [];
     } finally {
       isLoading = false;
     }
   }
 
   function makeDateComparator(field: 'first_heard' | 'last_heard', ascending: boolean) {
-    return (a: SpeciesData, b: SpeciesData) => {
+    return (a: LocalizedRow, b: LocalizedRow) => {
       // eslint-disable-next-line security/detect-object-injection
-      const da = parseLocalDateString(a[field]);
+      const da = parseLocalDateString(a.species[field]);
       // eslint-disable-next-line security/detect-object-injection
-      const db = parseLocalDateString(b[field]);
+      const db = parseLocalDateString(b.species[field]);
       // Sort invalid/missing dates consistently to the end so the comparator
       // stays transitive (returning 0 for any null pair would break sort order).
       if (!da && !db) return 0;
@@ -286,32 +303,47 @@
     };
   }
 
-  function applyFilters() {
-    let filtered = [...speciesData];
+  // Filtered + sorted rows for display. Search and name-sort operate on the
+  // visitor-localized common name (displayName) so they match what the user
+  // sees, while scientific name and the server common name stay searchable too.
+  // Because localizeSpeciesName reads the species-dictionary $state, this
+  // $derived re-runs when the dictionary loads or the locale changes - so the
+  // page no longer needs an imperative applyFilters(). Sorting uses the
+  // committed appliedSortOrder, never the pending filters.sortOrder dropdown.
+  let filteredSpecies = $derived.by<SpeciesData[]>(() => {
+    // Read the locale once for the name comparators below (avoids an O(n log n)
+    // getLocale() per comparison). The locale/dictionary dependency is already
+    // tracked via localizeSpeciesName, so this still re-runs on a locale switch.
+    const locale = getLocale();
+    // localize once per row; reused for search + sort below (small dataset: one
+    // row per detected species, so a per-row Map lookup is negligible).
+    const rows: LocalizedRow[] = speciesData.map(species => ({
+      species,
+      displayName: localizeSpeciesName(species.scientific_name, species.common_name),
+    }));
 
-    // Apply search filter
-    if (filters.searchTerm) {
-      const searchLower = filters.searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        species =>
-          species.common_name.toLowerCase().includes(searchLower) ||
-          species.scientific_name.toLowerCase().includes(searchLower)
-      );
-    }
+    const searchLower = debouncedSearchTerm.trim().toLowerCase();
+    const filtered = searchLower
+      ? rows.filter(
+          ({ species, displayName }) =>
+            displayName.toLowerCase().includes(searchLower) ||
+            species.common_name.toLowerCase().includes(searchLower) ||
+            species.scientific_name.toLowerCase().includes(searchLower)
+        )
+      : rows;
 
-    // Apply sorting from the committed sort, not the pending dropdown selection.
     switch (appliedSortOrder) {
       case 'count_desc':
-        filtered.sort((a, b) => b.count - a.count);
+        filtered.sort((a, b) => b.species.count - a.species.count);
         break;
       case 'count_asc':
-        filtered.sort((a, b) => a.count - b.count);
+        filtered.sort((a, b) => a.species.count - b.species.count);
         break;
       case 'name_asc':
-        filtered.sort((a, b) => a.common_name.localeCompare(b.common_name));
+        filtered.sort((a, b) => a.displayName.localeCompare(b.displayName, locale));
         break;
       case 'name_desc':
-        filtered.sort((a, b) => b.common_name.localeCompare(a.common_name));
+        filtered.sort((a, b) => b.displayName.localeCompare(a.displayName, locale));
         break;
       case 'first_seen_desc':
         filtered.sort(makeDateComparator('first_heard', false));
@@ -326,16 +358,16 @@
         filtered.sort(makeDateComparator('last_heard', true));
         break;
       case 'confidence_desc':
-        filtered.sort((a, b) => b.avg_confidence - a.avg_confidence);
+        filtered.sort((a, b) => b.species.avg_confidence - a.species.avg_confidence);
         break;
       case 'confidence_asc':
-        filtered.sort((a, b) => a.avg_confidence - b.avg_confidence);
+        filtered.sort((a, b) => a.species.avg_confidence - b.species.avg_confidence);
         break;
       case 'max_confidence_desc':
-        filtered.sort((a, b) => b.max_confidence - a.max_confidence);
+        filtered.sort((a, b) => b.species.max_confidence - a.species.max_confidence);
         break;
       case 'max_confidence_asc':
-        filtered.sort((a, b) => a.max_confidence - b.max_confidence);
+        filtered.sort((a, b) => a.species.max_confidence - b.species.max_confidence);
         break;
       default: {
         // Exhaustiveness guard: adding a SortOrder value without a case is a compile error.
@@ -344,8 +376,8 @@
       }
     }
 
-    filteredSpecies = filtered;
-  }
+    return filtered.map(row => row.species);
+  });
 
   function getFilteredCount(): number {
     return filteredSpecies.length;
@@ -391,7 +423,7 @@
     fetchData();
   }
 
-  async function loadThumbnailsAsync() {
+  async function loadThumbnailsAsync(fetchSeq: number) {
     // Skip if we don't have species data
     if (!speciesData || speciesData.length === 0) {
       return;
@@ -410,6 +442,8 @@
       // Fetch thumbnails in batches to avoid overwhelming the server
       const batchSize = 20;
       for (let i = 0; i < scientificNames.length; i += batchSize) {
+        // A newer fetchData superseded this run; stop fetching and mutating stale state.
+        if (fetchSeq !== thumbnailFetchSeq) return;
         const batch = scientificNames.slice(i, i + batchSize);
 
         // Create query parameters for this batch
@@ -422,6 +456,9 @@
         );
         if (response.ok) {
           const thumbnails = await response.json();
+          // Re-check after the await: a newer fetch may have replaced speciesData
+          // while this batch was in flight, so don't apply stale thumbnails to it.
+          if (fetchSeq !== thumbnailFetchSeq) return;
 
           // Update species data with fetched thumbnails. Backend URLs are
           // relative; buildAppUrl prepends the configured base path so the
@@ -433,9 +470,7 @@
             }
             return species;
           });
-
-          // Re-apply filters to update the view
-          applyFilters();
+          // filteredSpecies is $derived; reassigning speciesData re-renders it.
         }
 
         // Small delay between batches
@@ -460,6 +495,8 @@
       'First Detected',
       'Last Detected',
     ];
+    // Export stays canonical (server-locale common name + scientific name) so the
+    // CSV is locale-stable and re-importable; do not substitute the localized name.
     const rows = filteredSpecies.map(species => [
       species.common_name,
       species.scientific_name,
@@ -483,13 +520,18 @@
 
   let searchDebounce: ReturnType<typeof setTimeout> | undefined;
 
+  // Cancel a pending debounce timer when the page unmounts so it can't fire
+  // (and write state) after the component is gone.
+  onDestroy(() => clearTimeout(searchDebounce));
+
   function handleSearchInput(e: Event): void {
     const target = e.target as HTMLInputElement;
+    // Keep filters.searchTerm live (input box + "filtered" badge), but debounce
+    // committing it to debouncedSearchTerm, which the filteredSpecies $derived reads.
     filters.searchTerm = target.value;
-    // Debounce the filter application
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(() => {
-      applyFilters();
+      debouncedSearchTerm = filters.searchTerm;
     }, 300);
   }
 
@@ -663,6 +705,10 @@
             </thead>
             <tbody>
               {#each filteredSpecies as species, index (`${species.scientific_name}_${index}`)}
+                {@const displayName = localizeSpeciesName(
+                  species.scientific_name,
+                  species.common_name
+                )}
                 <tr
                   class={index % 2 === 0
                     ? 'bg-[var(--color-base-100)]'
@@ -678,7 +724,7 @@
                           {#if species.thumbnail_url}
                             <img
                               src={species.thumbnail_url}
-                              alt={species.common_name}
+                              alt={displayName}
                               onerror={e => {
                                 const img = e.target as HTMLImageElement;
                                 if (img) {
@@ -692,7 +738,7 @@
                       </div>
                       <div>
                         <div class="font-bold">
-                          {species.common_name}
+                          {displayName}
                         </div>
                         <div class="text-sm opacity-50 italic">{species.scientific_name}</div>
                       </div>
