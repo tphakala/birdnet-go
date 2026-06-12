@@ -1,8 +1,12 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup } from '@testing-library/svelte';
 import NewSpeciesTimelineChart from './NewSpeciesTimelineChart.svelte';
 
 // jsdom has no layout engine; assert on element counts/attributes only.
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 afterEach(() => {
   cleanup();
