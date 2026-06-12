@@ -665,6 +665,19 @@ func ConvertSearchFilters(
 			return nil, err
 		}
 
+		// Exact scientific names the client already resolved (per-visitor dictionary)
+		// are resolved to label IDs and OR-ed into the same label-ID branch as
+		// common-name matches, so an ambiguous localized name can match multiple
+		// species. ResolveSpeciesToLabelIDs returns the no-match sentinel when none
+		// resolve, yielding zero results rather than silently dropping the filter.
+		if len(filters.SpeciesScientific) > 0 {
+			sciLabelIDs, sciErr := ResolveSpeciesToLabelIDs(ctx, deps, filters.SpeciesScientific)
+			if sciErr != nil {
+				return nil, sciErr
+			}
+			sf.CommonLabelIDs = append(sf.CommonLabelIDs, sciLabelIDs...)
+		}
+
 		// Convert device string to audio source IDs
 		sf.AudioSourceIDs, err = ResolveDeviceToSourceIDs(ctx, deps, filters.Device)
 		if err != nil {

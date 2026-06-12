@@ -624,6 +624,52 @@ func TestResolveSpeciesToLabelIDs(t *testing.T) {
 	})
 }
 
+// TestConvertSearchFilters_SpeciesScientific verifies that explicit scientific
+// names supplied by the client (resolved in the browser from the per-visitor
+// dictionary) are resolved to label IDs and OR-ed into the same label-ID branch
+// as common-name matches, so an ambiguous localized name can match multiple
+// species without a server-locale round trip.
+func TestConvertSearchFilters_SpeciesScientific(t *testing.T) {
+	t.Parallel()
+
+	deps := &FilterLookupDeps{
+		LabelRepo: &mockLabelRepository{
+			labels: map[string]*entities.Label{
+				"Barbastella barbastellus": {ID: 11},
+				"Myotis daubentonii":       {ID: 22},
+			},
+		},
+	}
+
+	t.Run("multiple scientific names resolve into the label-ID branch", func(t *testing.T) {
+		t.Parallel()
+		sf, err := ConvertSearchFilters(t.Context(), &datastore.SearchFilters{
+			SpeciesScientific: []string{"Barbastella barbastellus", "Myotis daubentonii"},
+		}, deps, time.UTC)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{11, 22}, sf.CommonLabelIDs)
+		assert.Empty(t, sf.Query, "explicit scientific names are resolved to label IDs, not a LIKE query")
+	})
+
+	t.Run("unknown scientific names yield the no-match sentinel", func(t *testing.T) {
+		t.Parallel()
+		sf, err := ConvertSearchFilters(t.Context(), &datastore.SearchFilters{
+			SpeciesScientific: []string{"Nonexistent species"},
+		}, deps, time.UTC)
+		require.NoError(t, err)
+		assert.Equal(t, sentinelNoMatchIDs, sf.CommonLabelIDs)
+	})
+
+	t.Run("empty scientific list leaves the free-text species filter intact", func(t *testing.T) {
+		t.Parallel()
+		sf, err := ConvertSearchFilters(t.Context(), &datastore.SearchFilters{
+			Species: "Barbastella",
+		}, deps, time.UTC)
+		require.NoError(t, err)
+		assert.Equal(t, "Barbastella", sf.Query)
+	})
+}
+
 // =============================================================================
 // ResolveLocationsToSourceIDs Tests
 // =============================================================================

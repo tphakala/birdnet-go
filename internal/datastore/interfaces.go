@@ -2042,7 +2042,12 @@ func (ds *DataStore) CountHourlyDetections(date, hour string, duration int) (int
 
 // SearchFilters defines parameters for filtering detection records
 type SearchFilters struct {
-	Species           string
+	Species string
+	// SpeciesScientific holds exact scientific names the client already resolved
+	// (e.g. in the browser from a per-visitor name dictionary). They are resolved
+	// to label IDs and OR-ed into the species match, so an ambiguous localized
+	// common name can match multiple species without server-locale resolution.
+	SpeciesScientific []string
 	DateStart         string
 	DateEnd           string
 	ConfidenceMin     float64
