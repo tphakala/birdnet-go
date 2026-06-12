@@ -202,8 +202,13 @@
     return (value * 100).toFixed(1) + '%';
   }
 
+  // Increments on every fetchData so an in-flight thumbnail loop from a previous
+  // fetch can detect it has been superseded and stop mutating speciesData.
+  let thumbnailFetchSeq = 0;
+
   async function fetchData() {
     isLoading = true;
+    const fetchSeq = ++thumbnailFetchSeq;
     // Apply Filters (and mount/reset) commit the pending dropdown selection.
     appliedSortOrder = filters.sortOrder;
     setStoredValue<SortOrder>(SORT_STORAGE_KEY, filters.sortOrder);
@@ -274,7 +279,7 @@
       );
 
       // Load thumbnails asynchronously after main data is displayed
-      loadThumbnailsAsync();
+      loadThumbnailsAsync(fetchSeq);
     } catch (error) {
       logger.error('Error fetching species data:', error);
       speciesData = [];
@@ -306,6 +311,10 @@
   // page no longer needs an imperative applyFilters(). Sorting uses the
   // committed appliedSortOrder, never the pending filters.sortOrder dropdown.
   let filteredSpecies = $derived.by<SpeciesData[]>(() => {
+    // Read the locale once for the name comparators below (avoids an O(n log n)
+    // getLocale() per comparison). The locale/dictionary dependency is already
+    // tracked via localizeSpeciesName, so this still re-runs on a locale switch.
+    const locale = getLocale();
     // localize once per row; reused for search + sort below (small dataset: one
     // row per detected species, so a per-row Map lookup is negligible).
     const rows: LocalizedRow[] = speciesData.map(species => ({
@@ -331,10 +340,10 @@
         filtered.sort((a, b) => a.species.count - b.species.count);
         break;
       case 'name_asc':
-        filtered.sort((a, b) => a.displayName.localeCompare(b.displayName, getLocale()));
+        filtered.sort((a, b) => a.displayName.localeCompare(b.displayName, locale));
         break;
       case 'name_desc':
-        filtered.sort((a, b) => b.displayName.localeCompare(a.displayName, getLocale()));
+        filtered.sort((a, b) => b.displayName.localeCompare(a.displayName, locale));
         break;
       case 'first_seen_desc':
         filtered.sort(makeDateComparator('first_heard', false));
@@ -414,7 +423,7 @@
     fetchData();
   }
 
-  async function loadThumbnailsAsync() {
+  async function loadThumbnailsAsync(fetchSeq: number) {
     // Skip if we don't have species data
     if (!speciesData || speciesData.length === 0) {
       return;
@@ -433,6 +442,8 @@
       // Fetch thumbnails in batches to avoid overwhelming the server
       const batchSize = 20;
       for (let i = 0; i < scientificNames.length; i += batchSize) {
+        // A newer fetchData superseded this run; stop fetching and mutating stale state.
+        if (fetchSeq !== thumbnailFetchSeq) return;
         const batch = scientificNames.slice(i, i + batchSize);
 
         // Create query parameters for this batch
