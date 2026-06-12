@@ -80,8 +80,9 @@ func (c *Controller) ServeSpeciesDictionary(ctx echo.Context) error {
 	hdr.Set("ETag", etag)
 
 	// Respond with 304 if the client already has the current version. The ETag is
-	// set above so the 304 echoes it, per RFC 7232.
-	if ctx.Request().Header.Get("If-None-Match") == etag {
+	// set above so the 304 echoes it, per RFC 7232. Accept the weak form too, since
+	// reverse proxies and CDNs often weaken a strong ETag to W/"...".
+	if clientETag := ctx.Request().Header.Get("If-None-Match"); clientETag == etag || clientETag == "W/"+etag {
 		return ctx.NoContent(http.StatusNotModified)
 	}
 

@@ -64,11 +64,17 @@ func TestRead_UnknownLocale(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrUnknownLocale))
 }
 
-func TestVersion_MatchesDataset(t *testing.T) {
+func TestVersion_IsStableContentHash(t *testing.T) {
 	t.Parallel()
 	v := Version()
 	assert.NotEmpty(t, v)
-	assert.Equal(t, openfauna.DataVersion(), v)
+	assert.Len(t, v, 12, "version is a truncated content hash")
+	assert.Regexp(t, "^[0-9a-f]{12}$", v, "version must be lowercase hex")
+	// Deterministic: recomputing over the same embedded content yields the same value.
+	assert.Equal(t, v, computeVersion())
+	// It is derived from, but not equal to, the bare dataset provenance, so it also
+	// changes when only the generator or locale-mapping logic changes the bytes.
+	assert.NotEqual(t, openfauna.DataVersion(), v)
 }
 
 // Every embedded locale must be a valid, decodable, non-trivial dictionary, so a

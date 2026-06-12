@@ -199,7 +199,9 @@ func sanitizeSpeciesScientific(in []string) []string {
 	if len(in) == 0 {
 		return nil
 	}
-	seen := make(map[string]struct{}, len(in))
+	// Both the seen-set and the output are bounded by the cap, so size them to it
+	// rather than to the (untrusted, body-limited but possibly large) input length.
+	seen := make(map[string]struct{}, min(len(in), maxSearchSpeciesScientific))
 	out := make([]string, 0, min(len(in), maxSearchSpeciesScientific))
 	for _, s := range in {
 		name := strings.TrimSpace(s)

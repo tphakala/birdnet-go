@@ -139,6 +139,24 @@ describe('speciesDictionary store', () => {
     expect(localizeScientific('Turdus merula')).toBe('Merle noir');
   });
 
+  it('clears stale maps when the latest locale fetch fails', async () => {
+    // Load locale A (fi) successfully so current holds the Finnish maps.
+    mockApiGet(MOCK_FI_DICT);
+    await loadDictionary('fi');
+    expect(localizeScientific('Barbastella barbastellus')).toBe('Länsilepakko');
+
+    // Switch to locale B (fr) whose fetch rejects. The catch block must reset
+    // current to empty maps for the requested locale so display falls back
+    // through the chain instead of serving locale A's stale names.
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('network error'));
+    await loadDictionary('fr');
+
+    // An A (Finnish) scientific name must no longer resolve: the maps were
+    // cleared, not left pointing at the previous locale. Without the catch-block
+    // reset this would still return 'Länsilepakko'.
+    expect(localizeScientific('Barbastella barbastellus')).toBeUndefined();
+  });
+
   // --- Abort / race condition ---
 
   it('does not overwrite current maps when a stale locale fetch resolves later', async () => {

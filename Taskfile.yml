@@ -138,6 +138,7 @@ tasks:
     sources:
       - internal/openfauna/data/translations.csv.gz
       - internal/openfauna/data/SOURCE.txt
+      - internal/openfauna/data/locales.txt
       - internal/openfauna/dictionary.go
       - internal/openfauna/resolver.go
       - internal/speciesdict/gen/main.go

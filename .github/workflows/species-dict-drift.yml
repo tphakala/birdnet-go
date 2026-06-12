@@ -21,6 +21,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          # This job only reads, regenerates, and diffs; it never pushes, so the
+          # checkout token does not need to persist for later steps.
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v6

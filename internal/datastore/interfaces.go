@@ -2136,13 +2136,17 @@ func applySpeciesFilter(query *gorm.DB, filters *SearchFilters) *gorm.DB {
 	hasScientific := len(filters.SpeciesScientific) > 0
 	likeParam := "%" + filters.Species + "%"
 
+	// The OR groups are parenthesized explicitly. GORM already wraps each chained
+	// Where clause in parentheses, but making the grouping explicit keeps the species
+	// match correctly isolated from the AND-ed date/confidence filters even if the
+	// query construction changes.
 	switch {
 	case hasText && hasScientific:
 		return query.Where(
-			"notes.scientific_name LIKE ? OR notes.common_name LIKE ? OR notes.scientific_name IN ?",
+			"(notes.scientific_name LIKE ? OR notes.common_name LIKE ? OR notes.scientific_name IN ?)",
 			likeParam, likeParam, filters.SpeciesScientific)
 	case hasText:
-		return query.Where("notes.scientific_name LIKE ? OR notes.common_name LIKE ?", likeParam, likeParam)
+		return query.Where("(notes.scientific_name LIKE ? OR notes.common_name LIKE ?)", likeParam, likeParam)
 	case hasScientific:
 		return query.Where("notes.scientific_name IN ?", filters.SpeciesScientific)
 	default:

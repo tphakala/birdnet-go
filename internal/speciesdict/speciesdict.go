@@ -11,7 +11,9 @@
 package speciesdict
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"io/fs"
 	"maps"
 	"slices"
@@ -82,9 +84,36 @@ func Read(locale string) ([]byte, error) {
 	return dictFS.ReadFile(dataDir + "/" + locale + fileExt)
 }
 
-// Version returns the embedded dataset's provenance/version. Clients use it to build a
-// content-addressed (cache-busting) dictionary URL, so a dataset update changes the URL
-// and invalidates immutable-cached responses.
+// version is a content hash of the embedded dictionaries, computed once. It changes
+// whenever the produced bytes change, whether from a dataset update OR from a change to
+// the generator or locale-mapping logic, so the content-addressed (immutable-cached)
+// dictionary URL invalidates correctly on any of those, not only on a dataset version
+// bump. Using openfauna.DataVersion() alone would strand immutable-cached clients on
+// stale content after a generator/mapping change.
+var version = computeVersion()
+
+func computeVersion() string {
+	h := sha256.New()
+	// Seed with the dataset provenance so the version still tracks dataset updates even
+	// if two datasets happened to produce identical embedded bytes.
+	_, _ = h.Write([]byte(openfauna.DataVersion()))
+	// fs.ReadDir returns entries sorted by name, so the hash is deterministic.
+	entries, err := fs.ReadDir(dictFS, dataDir)
+	if err == nil {
+		for _, e := range entries {
+			b, readErr := dictFS.ReadFile(dataDir + "/" + e.Name())
+			if readErr != nil {
+				continue
+			}
+			_, _ = h.Write(b)
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))[:12]
+}
+
+// Version returns a stable content hash of the embedded dictionaries. Clients use it to
+// build a content-addressed (cache-busting) dictionary URL, so any change to the served
+// bytes changes the URL and invalidates immutable-cached responses.
 func Version() string {
-	return openfauna.DataVersion()
+	return version
 }

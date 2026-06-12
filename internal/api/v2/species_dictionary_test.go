@@ -15,13 +15,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/speciesdict"
 )
 
-// newDictController creates a minimal Echo + Controller wired with the
-// ServeSpeciesDictionary route for testing. No auth middleware is added.
+// newDictController creates an Echo + Controller and registers the species routes
+// through the production initSpeciesRoutes path, so these tests exercise the real
+// route registration (public mount, no auth middleware) rather than a hand-mounted
+// route. No auth middleware is injected, matching the public endpoint's contract.
 func newDictController(t *testing.T) (*echo.Echo, *Controller) {
 	t.Helper()
 	e := echo.New()
 	controller := &Controller{Echo: e, Group: e.Group("/api/v2")}
-	controller.Group.GET("/species/dictionary/:locale", controller.ServeSpeciesDictionary)
+	controller.initSpeciesRoutes()
 	return e, controller
 }
 
@@ -103,6 +105,14 @@ func TestSpeciesDictionary_UnknownLocale(t *testing.T) {
 	e.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	// Assert the standardized error payload contract, not just the status code.
+	var body ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, http.StatusNotFound, body.Code)
+	assert.NotEmpty(t, body.Error)
+	assert.NotEmpty(t, body.Message)
+	assert.NotEmpty(t, body.CorrelationID)
 }
 
 // TestSpeciesDictionary_CacheControlVersioned checks that a request with the ?v=
@@ -169,6 +179,25 @@ func TestSpeciesDictionary_NotModified(t *testing.T) {
 	etag := fmt.Sprintf("%q", speciesdict.Version())
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/dictionary/fi", http.NoBody)
 	req.Header.Set("If-None-Match", etag)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusNotModified, rec.Code)
+	assert.Equal(t, 0, rec.Body.Len(), "304 response must have no body")
+}
+
+// TestSpeciesDictionary_NotModified_WeakETag checks that a weakened ETag (as a CDN or
+// reverse proxy may rewrite it) still yields a 304, so caching is not defeated.
+func TestSpeciesDictionary_NotModified_WeakETag(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "species-dictionary")
+	t.Attr("type", "integration")
+
+	e, _ := newDictController(t)
+
+	weakETag := "W/" + fmt.Sprintf("%q", speciesdict.Version())
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/dictionary/fi", http.NoBody)
+	req.Header.Set("If-None-Match", weakETag)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 

@@ -184,9 +184,15 @@ export async function loadDictionary(locale: Locale = getLocale()): Promise<void
 
     logger.debug(`speciesDictionary: loaded ${locale}, ${maps.forward.size} entries (seq=${seq})`);
   } catch (err) {
-    // Only log if this fetch is still current (suppress noise from superseded fetches).
+    // Only act if this fetch is still the latest one (suppress superseded fetches).
     if (seq === fetchSeq) {
       logger.error(`speciesDictionary: failed to load ${locale}`, err);
+      // Clear the maps so display falls back through the chain (dictionary miss ->
+      // server common name -> scientific) instead of serving the PREVIOUS locale's
+      // names. Without this reset, a failed locale switch would leave `current`
+      // pointing at the old locale's maps, so localizeScientific would return
+      // stale wrong-locale names. Reflect the requested locale with empty maps.
+      current = { locale, forward: EMPTY_MAPS.forward, reverse: EMPTY_MAPS.reverse };
     }
   }
 }
