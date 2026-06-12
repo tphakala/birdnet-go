@@ -36,6 +36,7 @@ import {
   loadDictionary,
   localizeScientific,
   resolveCommonToScientific,
+  searchScientificByCommon,
   resetDictionaryForTest,
 } from './speciesDictionary.svelte';
 import { api } from '$lib/utils/api';
@@ -60,6 +61,16 @@ const MOCK_AMBIGUOUS_DICT: Record<string, string> = {
 const MOCK_FR_DICT: Record<string, string> = {
   'Barbastella barbastellus': 'Barbastelle commune',
   'Turdus merula': 'Merle noir',
+};
+
+/**
+ * Finnish bat dictionary: several common names share the substring "lepakko"
+ * (Finnish for "bat"), so a substring query should match multiple species.
+ */
+const MOCK_FI_BAT_DICT: Record<string, string> = {
+  'Barbastella barbastellus': 'mopsilepakko',
+  'Myotis daubentonii': 'vesilepakko',
+  'Turdus merula': 'mustarastas',
 };
 
 function mockApiGet(dict: Record<string, string>): void {
@@ -213,5 +224,68 @@ describe('speciesDictionary store', () => {
 
     const url = vi.mocked(api.get).mock.calls[0][0] as string;
     expect(url).not.toContain('?v=');
+  });
+
+  // --- Substring search (searchScientificByCommon) ---
+
+  describe('searchScientificByCommon', () => {
+    it('returns the scientific name for an exact localized common name', async () => {
+      mockApiGet(MOCK_FI_BAT_DICT);
+      await loadDictionary('fi');
+
+      expect(searchScientificByCommon('mopsilepakko')).toEqual(['Barbastella barbastellus']);
+    });
+
+    it('returns multiple scientific names for a shared substring', async () => {
+      mockApiGet(MOCK_FI_BAT_DICT);
+      await loadDictionary('fi');
+
+      const result = searchScientificByCommon('lepakko');
+      expect(result).toHaveLength(2);
+      expect(result).toContain('Barbastella barbastellus');
+      expect(result).toContain('Myotis daubentonii');
+      // The non-bat species must not be matched.
+      expect(result).not.toContain('Turdus merula');
+    });
+
+    it('matches an NFD-encoded query against NFC-stored keys', async () => {
+      // Precomposed NFC umlaut (U+00E4) stored in the dictionary common name.
+      const NFC_A_UMLAUT = 'ä';
+      const dict: Record<string, string> = {
+        'Parus major': `Talliti${NFC_A_UMLAUT}inen`,
+      };
+      mockApiGet(dict);
+      await loadDictionary('fi');
+
+      // Query uses decomposed (NFD) umlaut = 'a' + combining diaeresis (U+0308).
+      // Both sides normalize to NFC, so the substring still matches.
+      const NFD_A_UMLAUT = 'ä';
+      const nfdQuery = `talliti${NFD_A_UMLAUT}inen`;
+      expect(searchScientificByCommon(nfdQuery)).toContain('Parus major');
+    });
+
+    it('returns an empty array for a single-character query', async () => {
+      mockApiGet(MOCK_FI_BAT_DICT);
+      await loadDictionary('fi');
+
+      expect(searchScientificByCommon('m')).toEqual([]);
+    });
+
+    it('returns an empty array when nothing matches', async () => {
+      mockApiGet(MOCK_FI_BAT_DICT);
+      await loadDictionary('fi');
+
+      expect(searchScientificByCommon('zzzz')).toEqual([]);
+    });
+
+    it('de-duplicates scientific names that share a normalized common name', async () => {
+      mockApiGet(MOCK_AMBIGUOUS_DICT);
+      await loadDictionary('fi');
+
+      const result = searchScientificByCommon('raven');
+      expect(result).toHaveLength(2);
+      expect(result).toContain('Corvus corax');
+      expect(result).toContain('Corvus corax subsp');
+    });
   });
 });

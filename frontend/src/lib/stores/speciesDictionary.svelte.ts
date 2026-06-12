@@ -18,7 +18,7 @@
  *   an ambiguous common name yields multiple candidate species for search.
  *
  * Usage:
- *   import { loadDictionary, localizeScientific, resolveCommonToScientific } from './speciesDictionary.svelte';
+ *   import { loadDictionary, localizeScientific, resolveCommonToScientific, searchScientificByCommon } from './speciesDictionary.svelte';
  */
 
 import { api } from '$lib/utils/api';
@@ -208,6 +208,49 @@ export function localizeScientific(scientificName: string): string | undefined {
  */
 export function resolveCommonToScientific(text: string): string[] {
   return current.reverse.get(normalizeForLookup(text)) ?? [];
+}
+
+/** Minimum query length for substring search (avoids matching everything on 1 char). */
+const MIN_SEARCH_LENGTH = 2;
+
+/** Maximum number of scientific names returned (mirrors the backend cap). */
+const MAX_SEARCH_RESULTS = 100;
+
+/**
+ * Find all scientific names whose NFC-normalized localized common name CONTAINS
+ * the given text (substring match, which naturally includes exact matches).
+ *
+ * Used by the search box so a visitor can type a partial species name in their
+ * own UI locale and have it resolved to scientific names the backend accepts.
+ *
+ * - The query and the stored keys are both NFC-normalized + lowercased via
+ *   normalizeForLookup, so composing-keyboard (NFD) input still matches.
+ * - Queries shorter than MIN_SEARCH_LENGTH return [] to avoid matching the
+ *   entire dictionary on a single character.
+ * - Results are de-duplicated and capped at MAX_SEARCH_RESULTS.
+ *
+ * @param text - The (possibly partial) common name to search for.
+ * @returns Array of matching scientific names (empty when no match).
+ */
+export function searchScientificByCommon(text: string): string[] {
+  const needle = normalizeForLookup(text);
+  if (needle.length < MIN_SEARCH_LENGTH) return [];
+
+  const seen = new Set<string>();
+  const matches: string[] = [];
+
+  for (const [commonKey, scientificNames] of current.reverse) {
+    if (!commonKey.includes(needle)) continue;
+
+    for (const scientific of scientificNames) {
+      if (seen.has(scientific)) continue;
+      seen.add(scientific);
+      matches.push(scientific);
+      if (matches.length >= MAX_SEARCH_RESULTS) return matches;
+    }
+  }
+
+  return matches;
 }
 
 /**

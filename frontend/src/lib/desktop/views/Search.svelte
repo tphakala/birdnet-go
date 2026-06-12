@@ -31,6 +31,8 @@
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { loggers } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { searchScientificByCommon } from '$lib/stores/speciesDictionary.svelte';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -226,7 +228,7 @@
   function openMobilePlayer(result: SearchResult) {
     if (!result?.id) return;
     selectedAudioUrl = buildAppUrl(`/api/v2/audio/${result.id}`);
-    selectedSpeciesName = result.commonName || '';
+    selectedSpeciesName = localizeSpeciesName(result.scientificName, result.commonName);
     selectedDetectionId = result.id;
     showMobilePlayer = true;
   }
@@ -262,9 +264,17 @@
     expandedItems.clear(); // Reset expanded state when loading new results
 
     try {
+      // Resolve the typed text to scientific names via the visitor's per-locale
+      // dictionary. When the dictionary yields matches (exact or substring), send
+      // them in speciesScientific and clear the free-text species term. When it
+      // yields nothing (scientific name, server-locale name, or no match), fall
+      // back to the free-text term and let the backend resolve it as before.
+      const resolvedScientific = searchScientificByCommon(speciesSearchTerm);
+
       // Build request body
       const requestBody = {
-        species: speciesSearchTerm,
+        species: resolvedScientific.length > 0 ? '' : speciesSearchTerm,
+        speciesScientific: resolvedScientific,
         dateStart: dateRange.start,
         dateEnd: dateRange.end,
         confidenceMin: confidenceRange.min / 100,
@@ -884,7 +894,8 @@
                       </div>
                       <div>
                         <div class="font-bold">
-                          {result.commonName || t('search.detailsPanel.unknownSpecies')}
+                          {localizeSpeciesName(result.scientificName, result.commonName) ||
+                            t('search.detailsPanel.unknownSpecies')}
                         </div>
                         <div class="text-xs opacity-50">{result.scientificName || ''}</div>
                       </div>
@@ -1168,7 +1179,8 @@
                     </div>
                     <div class="min-w-0">
                       <div class="font-semibold leading-tight truncate">
-                        {result.commonName || t('search.detailsPanel.unknownSpecies')}
+                        {localizeSpeciesName(result.scientificName, result.commonName) ||
+                          t('search.detailsPanel.unknownSpecies')}
                       </div>
                       <div class="text-xs opacity-60 truncate">{result.scientificName || ''}</div>
                     </div>
