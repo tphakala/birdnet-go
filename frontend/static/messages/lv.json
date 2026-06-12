@@ -797,7 +797,19 @@
       "observation": "Novērojums",
       "aria": {
         "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Zinātniskais nosaukums",
+        "classificationBadges": "Sugas klasifikācijas nozīmītes",
+        "confidence": "Atklāšanas ticamība {confidence}%",
+        "metadata": "Atklāšanas metadati",
+        "weatherConditions": "Laikapstākļi atklāšanas brīdī",
+        "comments": "Atklāšanas komentāri",
+        "commentText": "Komentāra teksts",
+        "commentTimestamp": "Komentāra laika zīmogs",
+        "mainRegion": "Atklāšanas informācija",
+        "tabsHeading": "Atklāšanas informācijas cilnes",
+        "tabList": "Atklāšanas detaļu cilnes",
+        "speciesHeadingSuffix": "atklāšanas informācija"
       }
     },
     "headers": {

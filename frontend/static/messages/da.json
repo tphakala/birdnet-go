@@ -797,7 +797,19 @@
       "observation": "Observation",
       "aria": {
         "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Videnskabeligt navn",
+        "classificationBadges": "Mærker for artsklassifikation",
+        "confidence": "Registreringssikkerhed {confidence}%",
+        "metadata": "Registreringsmetadata",
+        "weatherConditions": "Vejrforhold på registreringstidspunktet",
+        "comments": "Kommentarer til registreringen",
+        "commentText": "Kommentartekst",
+        "commentTimestamp": "Tidsstempel for kommentar",
+        "mainRegion": "Registreringsdetaljer",
+        "tabsHeading": "Faner med registreringsoplysninger",
+        "tabList": "Faner for registreringsdetaljer",
+        "speciesHeadingSuffix": "registreringsdetaljer"
       }
     },
     "headers": {

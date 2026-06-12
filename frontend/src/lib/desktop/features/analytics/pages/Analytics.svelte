@@ -826,7 +826,8 @@
                           src={buildAppUrl(
                             `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName ?? '')}`
                           )}
-                          alt={detection.commonName || 'Unknown species'}
+                          alt={detection.commonName ||
+                            t('analytics.recentDetections.unknownSpecies')}
                           class="w-full h-full object-cover"
                           onerror={handleBirdImageError}
                           loading="lazy"
@@ -892,7 +893,7 @@
                     src={buildAppUrl(
                       `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName ?? '')}`
                     )}
-                    alt={detection.commonName || 'Unknown species'}
+                    alt={detection.commonName || t('analytics.recentDetections.unknownSpecies')}
                     class="w-full h-full object-cover"
                     onerror={handleBirdImageError}
                     loading="lazy"

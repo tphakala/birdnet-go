@@ -797,7 +797,19 @@
       "observation": "Observation",
       "aria": {
         "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Vetenskapligt namn",
+        "classificationBadges": "Märken för artklassificering",
+        "confidence": "Detekteringskonfidens {confidence}%",
+        "metadata": "Detekteringsmetadata",
+        "weatherConditions": "Väderförhållanden vid detekteringstillfället",
+        "comments": "Kommentarer till detekteringen",
+        "commentText": "Kommentarstext",
+        "commentTimestamp": "Tidsstämpel för kommentar",
+        "mainRegion": "Detekteringsinformation",
+        "tabsHeading": "Flikar med detekteringsinformation",
+        "tabList": "Flikar med detekteringsdetaljer",
+        "speciesHeadingSuffix": "detekteringsinformation"
       }
     },
     "headers": {

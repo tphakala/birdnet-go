@@ -797,7 +797,19 @@
       "observation": "Waarneming",
       "aria": {
         "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Wetenschappelijke naam",
+        "classificationBadges": "Soortclassificatie-badges",
+        "confidence": "Betrouwbaarheid herkenning {confidence}%",
+        "metadata": "Meta informatie herkenning",
+        "weatherConditions": "Weersomstandigheden op het moment van herkenning",
+        "comments": "Notities bij herkenning",
+        "commentText": "Notitietekst",
+        "commentTimestamp": "Tijdstempel van notitie",
+        "mainRegion": "Herkenningsdetails",
+        "tabsHeading": "Tabbladen met herkenningsinformatie",
+        "tabList": "Tabbladen met herkenningsdetails",
+        "speciesHeadingSuffix": "herkenningsdetails"
       }
     },
     "headers": {

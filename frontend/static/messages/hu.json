@@ -797,7 +797,19 @@
       "observation": "Megfigyelés",
       "aria": {
         "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}"
+        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "scientificName": "Tudományos név",
+        "classificationBadges": "Faj besorolási jelvények",
+        "confidence": "Detektálás megbízhatósága {confidence}%",
+        "metadata": "Detektálás metaadatok",
+        "weatherConditions": "Időjárási viszonyok a detektálás idején",
+        "comments": "Detektálás megjegyzései",
+        "commentText": "Megjegyzés szövege",
+        "commentTimestamp": "Megjegyzés időbélyege",
+        "mainRegion": "Detektálás részletei",
+        "tabsHeading": "Detektálási információk lapjai",
+        "tabList": "Detektálás részleteinek lapjai",
+        "speciesHeadingSuffix": "detektálás részletei"
       }
     },
     "headers": {
