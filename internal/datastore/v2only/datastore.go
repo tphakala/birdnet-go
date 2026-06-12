@@ -1097,7 +1097,7 @@ func (ds *Datastore) GetAllNotes() ([]datastore.Note, error) {
 }
 
 // GetTopBirdsData retrieves top birds data for a date.
-func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64, limit int) ([]datastore.Note, error) {
+func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, minConfidenceNormalized float64, limit int) ([]datastore.Note, error) {
 	t, err := time.ParseInLocation("2006-01-02", selectedDate, ds.timezone)
 	if err != nil {
 		return nil, err
@@ -1128,7 +1128,7 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	// Excludes detections marked as false_positive.
 	prefix := ds.manager.TablePrefix()
 	db := ds.manager.DB()
-	err = db.Table(prefix+"detections d").
+	err = db.WithContext(ctx).Table(prefix+"detections d").
 		Select(`
 			l.scientific_name,
 			COUNT(d.id) as count,

@@ -32,6 +32,35 @@ const (
 	analyticsQueryTimeout      = 30 * time.Second // Timeout for analytics database queries
 )
 
+// msgQueryTimeout is the user-facing message returned when an analytics query
+// exceeds analyticsQueryTimeout (HTTP 408).
+const msgQueryTimeout = "Query timeout - please try a smaller date range"
+
+// withAnalyticsTimeout derives a deadline-bounded context for analytics datastore
+// queries from the incoming request, using analyticsQueryTimeout. Callers MUST
+// defer the returned cancel function (or call it before the next iteration in a
+// loop). Centralizing the wrap keeps every analytics endpoint consistent: a query
+// that exceeds the deadline surfaces as context.DeadlineExceeded, which handlers
+// map to HTTP 408 rather than leaving the query unbounded.
+func withAnalyticsTimeout(ctx echo.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
+}
+
+// handleAnalyticsQueryError maps a single-query analytics datastore error to an
+// HTTP response: a context deadline becomes 408 (msgQueryTimeout), any other error
+// becomes 500 with genericMsg. opLabel names the operation in the structured log
+// (" query timeout" / " query failed" is appended); the query error is logged
+// alongside the supplied fields. The returned error is what the handler returns.
+func (c *Controller) handleAnalyticsQueryError(ctx echo.Context, err error, opLabel, genericMsg string, fields ...logger.Field) error {
+	fields = append(fields, logger.Error(err))
+	if errors.Is(err, context.DeadlineExceeded) {
+		c.logErrorIfEnabled(opLabel+" query timeout", fields...)
+		return c.HandleError(ctx, err, msgQueryTimeout, http.StatusRequestTimeout)
+	}
+	c.logErrorIfEnabled(opLabel+" query failed", fields...)
+	return c.HandleError(ctx, err, genericMsg, http.StatusInternalServerError)
+}
+
 // SpeciesDailySummary represents a bird in the daily species summary API response
 type SpeciesDailySummary struct {
 	ScientificName     string  `json:"scientific_name"`
@@ -154,32 +183,31 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		logger.String("path", path),
 	)
 
+	// Bound the per-request datastore work with a single deadline shared by the
+	// initial query and the hourly aggregation below.
+	queryCtx, cancel := withAnalyticsTimeout(ctx)
+	defer cancel()
+
 	// 2. Get Initial Data (limit applied at database level)
-	notes, err := c.DS.GetTopBirdsData(selectedDate, minConfidence, limit)
+	notes, err := c.DS.GetTopBirdsData(queryCtx, selectedDate, minConfidence, limit)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get initial daily species data",
+		return c.handleAnalyticsQueryError(ctx, err, "Daily species summary", "Failed to get daily species data",
 			logger.String("date", selectedDate),
 			logger.Float64("min_confidence", minConfidence),
-			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
-		return c.HandleError(ctx, err, "Failed to get daily species data", http.StatusInternalServerError)
 	}
 
 	// 3. Aggregate Data (including fetching hourly counts)
-	aggregatedData, err := c.aggregateDailySpeciesData(ctx.Request().Context(), notes, selectedDate, minConfidence)
+	aggregatedData, err := c.aggregateDailySpeciesData(queryCtx, notes, selectedDate, minConfidence)
 	if err != nil {
-		// Errors during hourly fetch are logged within the helper, but we need to handle the overall failure
-		c.logErrorIfEnabled("Failed to aggregate daily species data",
+		// Errors during hourly fetch are logged within the helper; map the overall failure.
+		return c.handleAnalyticsQueryError(ctx, err, "Daily species aggregation", "Failed to process daily species data",
 			logger.String("date", selectedDate),
-			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
-		// Decide if this is a user error (bad data?) or server error
-		// For now, assume server error if aggregation fails overall
-		return c.HandleError(ctx, err, "Failed to process daily species data", http.StatusInternalServerError)
 	}
 
 	// 4. Build Response (including fetching thumbnails)
@@ -229,7 +257,8 @@ func (c *Controller) GetBatchDailySpeciesSummary(ctx echo.Context) error {
 		logger.String("path", path),
 	)
 
-	// Process each date and collect results
+	// Process each date under a per-date query deadline (applied inside
+	// processBatchDates); the request context still aborts the batch on disconnect.
 	batchResults, processingErrors := c.processBatchDates(ctx.Request().Context(), dates, minConfidence, limit, ip, path)
 
 	// Handle results and errors
@@ -261,13 +290,16 @@ func (c *Controller) processBatchDates(ctx context.Context, dates []string, minC
 	processingErrors = make([]string, 0)
 
 	for _, selectedDate := range dates {
-		// Abort early if the request was cancelled or timed out: the remaining
-		// per-date queries would only fail fast against the cancelled context.
+		// Abort early if the request was cancelled (client disconnect / shutdown):
+		// the remaining per-date queries would only fail fast against a dead context.
 		if err := ctx.Err(); err != nil {
 			processingErrors = append(processingErrors, fmt.Sprintf("request cancelled before processing %s: %v", selectedDate, err))
 			break
 		}
-		result, err := c.processSingleDateForBatch(ctx, selectedDate, minConfidence, limit, ip, path)
+		// Bound each date's queries individually so one slow date cannot hang the batch.
+		dateCtx, cancel := context.WithTimeout(ctx, analyticsQueryTimeout)
+		result, err := c.processSingleDateForBatch(dateCtx, selectedDate, minConfidence, limit, ip, path)
+		cancel()
 		if err != nil {
 			errorMsg := fmt.Sprintf("Failed to process date %s: %v", selectedDate, err)
 			processingErrors = append(processingErrors, errorMsg)
@@ -282,7 +314,7 @@ func (c *Controller) processBatchDates(ctx context.Context, dates []string, minC
 // processSingleDateForBatch processes a single date using the same logic as the regular endpoint
 func (c *Controller) processSingleDateForBatch(ctx context.Context, selectedDate string, minConfidence float64, limit int, ip, path string) ([]SpeciesDailySummary, error) {
 	// Get data for the date (limit applied at database level)
-	notes, err := c.DS.GetTopBirdsData(selectedDate, minConfidence, limit)
+	notes, err := c.DS.GetTopBirdsData(ctx, selectedDate, minConfidence, limit)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get data for date in batch request",
 			logger.String("date", selectedDate),
@@ -601,14 +633,12 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	)
 
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get species summary data",
+		return c.handleAnalyticsQueryError(ctx, err, "Species summary", "Failed to get species summary data",
 			logger.String("start_date", startDate),
 			logger.String("end_date", endDate),
-			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
-		return c.HandleError(ctx, err, "Failed to get species summary data", http.StatusInternalServerError)
 	}
 
 	// Build response with thumbnails
@@ -634,7 +664,9 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 // fetchSpeciesSummaryData fetches species summary data with timing
 func (c *Controller) fetchSpeciesSummaryData(ctx echo.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, time.Duration, error) {
 	dbStart := time.Now()
-	summaryData, err := c.DS.GetSpeciesSummaryData(ctx.Request().Context(), startDate, endDate)
+	queryCtx, cancel := withAnalyticsTimeout(ctx)
+	defer cancel()
+	summaryData, err := c.DS.GetSpeciesSummaryData(queryCtx, startDate, endDate)
 	return summaryData, time.Since(dbStart), err
 }
 
@@ -767,7 +799,7 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	)
 
 	// Add timeout to prevent resource exhaustion
-	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
+	ctxWithTimeout, cancel := withAnalyticsTimeout(ctx)
 	defer cancel()
 
 	// Resolve a localized common name (e.g. a Finnish bat name) to its scientific
@@ -782,25 +814,12 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	// Get hourly analytics data from the datastore
 	hourlyData, err := c.DS.GetHourlyAnalyticsData(ctxWithTimeout, date, querySpecies)
 	if err != nil {
-		// Check if error was due to timeout
-		if errors.Is(err, context.DeadlineExceeded) {
-			c.logErrorIfEnabled("Hourly analytics query timeout",
-				logger.String("date", date),
-				logger.String("species", speciesParam),
-				logger.Error(err),
-				logger.String("ip", ctx.RealIP()),
-			)
-			return c.HandleError(ctx, err, "Query timeout - please try a smaller date range", http.StatusRequestTimeout)
-		}
-
-		c.logErrorIfEnabled("Failed to get hourly analytics data",
+		return c.handleAnalyticsQueryError(ctx, err, "Hourly analytics", "Failed to get hourly analytics data",
 			logger.String("date", date),
 			logger.String("species", speciesParam),
-			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
 			logger.String("path", ctx.Request().URL.Path),
 		)
-		return c.HandleError(ctx, err, "Failed to get hourly analytics data", http.StatusInternalServerError)
 	}
 
 	// Create a 24-hour array filled with zeros
@@ -878,7 +897,7 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	)
 
 	// Add timeout to prevent resource exhaustion
-	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
+	ctxWithTimeout, cancel := withAnalyticsTimeout(ctx)
 	defer cancel()
 
 	// Resolve a localized common name to its scientific name so analytics matches the
@@ -892,27 +911,13 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	// Get daily analytics data from the datastore
 	dailyData, err := c.DS.GetDailyAnalyticsData(ctxWithTimeout, startDate, endDate, querySpecies)
 	if err != nil {
-		// Check if error was due to timeout
-		if errors.Is(err, context.DeadlineExceeded) {
-			c.logErrorIfEnabled("Daily analytics query timeout",
-				logger.String("start_date", startDate),
-				logger.String("end_date", endDate),
-				logger.String("species", speciesParam),
-				logger.Error(err),
-				logger.String("ip", ctx.RealIP()),
-			)
-			return c.HandleError(ctx, err, "Query timeout - please try a smaller date range", http.StatusRequestTimeout)
-		}
-
-		c.logErrorIfEnabled("Failed to get daily analytics data",
+		return c.handleAnalyticsQueryError(ctx, err, "Daily analytics", "Failed to get daily analytics data",
 			logger.String("start_date", startDate),
 			logger.String("end_date", endDate),
 			logger.String("species", speciesParam),
-			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
 			logger.String("path", ctx.Request().URL.Path),
 		)
-		return c.HandleError(ctx, err, "Failed to get daily analytics data", http.StatusInternalServerError)
 	}
 
 	// Build the response
@@ -999,30 +1004,17 @@ func (c *Controller) GetSpeciesDiversity(ctx echo.Context) error {
 	)
 
 	// Add timeout to prevent resource exhaustion
-	ctxWithTimeout, cancel := context.WithTimeout(ctx.Request().Context(), analyticsQueryTimeout)
+	ctxWithTimeout, cancel := withAnalyticsTimeout(ctx)
 	defer cancel()
 
 	diversityData, err := c.DS.GetSpeciesDiversityData(ctxWithTimeout, startDate, endDate)
 	if err != nil {
-		// Check if error was due to timeout
-		if errors.Is(err, context.DeadlineExceeded) {
-			c.logErrorIfEnabled("Species diversity query timeout",
-				logger.String("start_date", startDate),
-				logger.String("end_date", endDate),
-				logger.Error(err),
-				logger.String("ip", ctx.RealIP()),
-			)
-			return c.HandleError(ctx, err, "Query timeout - please try a smaller date range", http.StatusRequestTimeout)
-		}
-
-		c.logErrorIfEnabled("Failed to get species diversity data",
+		return c.handleAnalyticsQueryError(ctx, err, "Species diversity", "Failed to get species diversity data",
 			logger.String("start_date", startDate),
 			logger.String("end_date", endDate),
-			logger.Error(err),
 			logger.String("ip", ctx.RealIP()),
 			logger.String("path", ctx.Request().URL.Path),
 		)
-		return c.HandleError(ctx, err, "Failed to get species diversity data", http.StatusInternalServerError)
 	}
 
 	// Build the response
@@ -1098,9 +1090,15 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 	}
 
 	// Get hourly distribution data from the datastore
-	hourlyData, err := c.DS.GetHourlyDistribution(ctx.Request().Context(), startDate, endDate, querySpecies)
+	queryCtx, cancel := withAnalyticsTimeout(ctx)
+	defer cancel()
+	hourlyData, err := c.DS.GetHourlyDistribution(queryCtx, startDate, endDate, querySpecies)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to get hourly distribution data", http.StatusInternalServerError)
+		return c.handleAnalyticsQueryError(ctx, err, "Time of day distribution", "Failed to get hourly distribution data",
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.String("ip", ctx.RealIP()),
+		)
 	}
 
 	// Return empty data if nothing available
@@ -1143,18 +1141,18 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 	}
 
 	// Fetch data from datastore
-	newSpeciesData, err := c.DS.GetNewSpeciesDetections(ctx.Request().Context(), startDate, endDate, limit, offset)
+	queryCtx, cancel := withAnalyticsTimeout(ctx)
+	defer cancel()
+	newSpeciesData, err := c.DS.GetNewSpeciesDetections(queryCtx, startDate, endDate, limit, offset)
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get new species detections",
+		return c.handleAnalyticsQueryError(ctx, err, "New species detections", "Failed to get new species detections",
 			logger.String("start_date", startDate),
 			logger.String("end_date", endDate),
 			logger.Int("limit", limit),
 			logger.Int("offset", offset),
-			logger.Error(err),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
-		return c.HandleError(ctx, err, "Failed to get new species detections", http.StatusInternalServerError)
 	}
 
 	// Build response with thumbnails
@@ -1411,7 +1409,17 @@ func (c *Controller) processHourlyBatchSpecies(ctx echo.Context, speciesParams [
 	processingErrors = make([]string, 0)
 	seen := make(map[string]bool)
 
+	// Stop the batch when the client disconnects or the server shuts down. Each
+	// per-species query is bounded individually by analyticsQueryTimeout (below) so
+	// one slow query cannot hang the batch, without capping the total time a
+	// legitimately large batch may take on slower hardware.
+	reqCtx := ctx.Request().Context()
+
 	for _, speciesItem := range speciesParams {
+		if err := reqCtx.Err(); err != nil {
+			processingErrors = append(processingErrors, fmt.Sprintf("request cancelled before processing %s: %v", speciesItem, err))
+			break
+		}
 		speciesItem = strings.TrimSpace(speciesItem)
 		if speciesItem == "" || seen[speciesItem] {
 			continue
@@ -1425,7 +1433,9 @@ func (c *Controller) processHourlyBatchSpecies(ctx echo.Context, speciesParams [
 			queryItem = resolved
 		}
 
-		hourlyData, err := c.DS.GetHourlyAnalyticsData(ctx.Request().Context(), date, queryItem)
+		queryCtx, cancel := withAnalyticsTimeout(ctx)
+		hourlyData, err := c.DS.GetHourlyAnalyticsData(queryCtx, date, queryItem)
+		cancel()
 		if err != nil {
 			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get hourly data for species %s: %v", speciesItem, err))
 			c.logErrorIfEnabled("Error getting hourly data for species in batch request",
@@ -1529,7 +1539,17 @@ func (c *Controller) processDailyBatchSpecies(ctx echo.Context, uniqueSpecies []
 	results = make(map[string]SpeciesDailyData)
 	processingErrors = make([]string, 0)
 
+	// Stop the batch when the client disconnects or the server shuts down. Each
+	// per-species query is bounded individually by analyticsQueryTimeout (below) so
+	// one slow query cannot hang the batch, without capping the total time a
+	// legitimately large batch may take on slower hardware.
+	reqCtx := ctx.Request().Context()
+
 	for _, speciesItem := range uniqueSpecies {
+		if err := reqCtx.Err(); err != nil {
+			processingErrors = append(processingErrors, fmt.Sprintf("request cancelled before processing %s: %v", speciesItem, err))
+			break
+		}
 		// Resolve a localized common name for the datastore query only; the response
 		// stays keyed by and labeled with the user-facing species string.
 		queryItem := speciesItem
@@ -1537,7 +1557,9 @@ func (c *Controller) processDailyBatchSpecies(ctx echo.Context, uniqueSpecies []
 			queryItem = resolved
 		}
 
-		dailyData, err := c.DS.GetDailyAnalyticsData(ctx.Request().Context(), startDate, endDate, queryItem)
+		queryCtx, cancel := withAnalyticsTimeout(ctx)
+		dailyData, err := c.DS.GetDailyAnalyticsData(queryCtx, startDate, endDate, queryItem)
+		cancel()
 		if err != nil {
 			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get daily data for species %s: %v", speciesItem, err))
 			c.logErrorIfEnabled("Error getting daily data for species in batch request",

@@ -670,7 +670,7 @@ func (s *testLegacyInterface) SetMetrics(_ *datastore.Metrics)                  
 func (s *testLegacyInterface) SetSunCalcMetrics(_ any)                             {}
 func (s *testLegacyInterface) Optimize(_ context.Context) error                    { return nil }
 func (s *testLegacyInterface) GetAllNotes() ([]datastore.Note, error)              { return nil, nil }
-func (s *testLegacyInterface) GetTopBirdsData(_ string, _ float64, _ int) ([]datastore.Note, error) {
+func (s *testLegacyInterface) GetTopBirdsData(_ context.Context, _ string, _ float64, _ int) ([]datastore.Note, error) {
 	return nil, nil
 }
 func (s *testLegacyInterface) GetBatchHourlyOccurrences(_ context.Context, _ string, _ []string, _ float64) (map[string][24]int, error) {

@@ -1359,7 +1359,7 @@ func TestV2OnlyDatastore_ConcatenatedLabelExtraction(t *testing.T) {
 
 	t.Run("GetTopBirdsData extracts scientific name from concatenated label", func(t *testing.T) {
 		dateStr := now.Format(time.DateOnly)
-		topBirds, err := ds.GetTopBirdsData(dateStr, 0.0, 10)
+		topBirds, err := ds.GetTopBirdsData(t.Context(), dateStr, 0.0, 10)
 		require.NoError(t, err)
 		require.Len(t, topBirds, 1)
 
@@ -1463,7 +1463,7 @@ func TestGetTopBirdsData_SpeciesCode(t *testing.T) {
 		require.NoError(t, ds.Save(note, nil))
 	}
 
-	topBirds, err := ds.GetTopBirdsData(dateStr, 0.0, 10)
+	topBirds, err := ds.GetTopBirdsData(t.Context(), dateStr, 0.0, 10)
 	require.NoError(t, err)
 	require.Len(t, topBirds, 3)
 

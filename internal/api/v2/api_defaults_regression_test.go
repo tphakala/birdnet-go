@@ -83,7 +83,7 @@ func TestDailySpeciesSummary_DefaultParams(t *testing.T) {
 	notes := testNotes()
 
 	// Key assertion: GetTopBirdsData must be called with today's date and the raw limit (0 = no limit)
-	mockDS.On("GetTopBirdsData", today, 0.0, 0).Return(notes, nil).Once()
+	mockDS.On("GetTopBirdsData", mock.Anything, today, 0.0, 0).Return(notes, nil).Once()
 
 	// aggregateDailySpeciesData calls GetBatchHourlyOccurrences for hourly counts
 	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, today, mock.Anything, 0.0).
@@ -390,7 +390,7 @@ func TestDailySpeciesSummary_DefaultParams_AfterMigration(t *testing.T) {
 	notes := testNotes()
 
 	// After migration, the API handler still passes limit=0 (its default for "no limit param").
-	mockDS.On("GetTopBirdsData", today, 0.0, 0).Return(notes, nil).Once()
+	mockDS.On("GetTopBirdsData", mock.Anything, today, 0.0, 0).Return(notes, nil).Once()
 	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, today, mock.Anything, 0.0).
 		Return(map[string][24]int{
 			sciAmericanRobin: {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
