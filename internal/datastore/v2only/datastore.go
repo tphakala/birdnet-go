@@ -3094,7 +3094,12 @@ func (ds *Datastore) GetThresholdEvents(speciesName string, limit int) ([]datast
 	// Query 1: Try with the provided name (common name) - finds legacy/incorrectly saved events
 	v2Events, err := ds.threshold.GetThresholdEvents(ctx, speciesName, limit)
 	if err != nil {
-		return nil, err
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_threshold_events").
+			Context("query_type", "common_name").
+			Build()
 	}
 
 	// Query 2: If we can resolve to scientific name, also query with that
@@ -3103,17 +3108,27 @@ func (ds *Datastore) GetThresholdEvents(speciesName string, limit int) ([]datast
 	// normalization; a decomposed (NFD) localized name must match the NFC-folded keys.
 	if scientificName := ds.resolveToScientificName(speciesName); scientificName != speciesName {
 		sciEvents, err := ds.threshold.GetThresholdEvents(ctx, scientificName, limit)
-		if err == nil && len(sciEvents) > 0 {
-			v2Events = append(v2Events, sciEvents...)
+		if err != nil {
+			return nil, errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_threshold_events").
+				Context("query_type", "scientific_name").
+				Build()
 		}
+		v2Events = append(v2Events, sciEvents...)
 	}
 
 	// Note: Deduplication not needed - each event has exactly one LabelID,
 	// so queries for different labels return disjoint result sets.
 	uniqueEvents := v2Events
 
-	// Sort by CreatedAt DESC (most recent first)
+	// Sort by CreatedAt DESC (most recent first). Tie-break on ID so events sharing a
+	// timestamp truncate deterministically when the limit is applied below.
 	sort.Slice(uniqueEvents, func(i, j int) bool {
+		if uniqueEvents[i].CreatedAt.Equal(uniqueEvents[j].CreatedAt) {
+			return uniqueEvents[i].ID > uniqueEvents[j].ID
+		}
 		return uniqueEvents[i].CreatedAt.After(uniqueEvents[j].CreatedAt)
 	})
 
