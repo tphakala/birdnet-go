@@ -166,6 +166,38 @@ describe('speciesDictionary store', () => {
     expect(localizeScientific('Turdus merula')).toBe('Merle noir race');
   });
 
+  it('discards an in-flight fetch when a cached locale wins the race', async () => {
+    // Pre-populate the cache for locale 'fr' (the locale that should win).
+    const FR_DICT_CACHED: Record<string, string> = { 'Turdus merula': 'Merle noir cache' };
+    mockApiGet(FR_DICT_CACHED);
+    await loadDictionary('fr');
+    expect(api.get).toHaveBeenCalledOnce();
+
+    // Start an uncached 'es' fetch and hold it in flight.
+    const ES_DICT: Record<string, string> = { 'Turdus merula': 'Mirlo comun' };
+    let resolveEs!: (value: unknown) => void;
+    const esPromise = new Promise(resolve => {
+      resolveEs = resolve;
+    });
+    vi.mocked(api.get).mockImplementationOnce(() => esPromise as Promise<unknown>);
+    const esLoad = loadDictionary('es');
+
+    // Load the already-cached 'fr'. The cache-hit path must bump the sequence
+    // counter so the pending 'es' fetch is superseded; current becomes 'fr'.
+    await loadDictionary('fr');
+    expect(localizeScientific('Turdus merula')).toBe('Merle noir cache');
+    // No additional fetch for the cached locale.
+    expect(api.get).toHaveBeenCalledTimes(2);
+
+    // Resolve the stale 'es' fetch. Without the race guard on the cache-hit path,
+    // this would clobber current with the 'es' result.
+    resolveEs(ES_DICT);
+    await esLoad;
+
+    // current must still reflect the cached 'fr' locale, not the late 'es'.
+    expect(localizeScientific('Turdus merula')).toBe('Merle noir cache');
+  });
+
   // --- Reverse map / ambiguity ---
 
   it('builds the reverse map so resolveCommonToScientific returns matches', async () => {

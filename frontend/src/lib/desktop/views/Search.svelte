@@ -265,15 +265,17 @@
 
     try {
       // Resolve the typed text to scientific names via the visitor's per-locale
-      // dictionary. When the dictionary yields matches (exact or substring), send
-      // them in speciesScientific and clear the free-text species term. When it
-      // yields nothing (scientific name, server-locale name, or no match), fall
-      // back to the free-text term and let the backend resolve it as before.
+      // dictionary. Always send the raw term as the free-text species filter too:
+      // the backend OR-s the free-text species (scientific_name LIKE) with the
+      // resolved speciesScientific label IDs, so sending both makes the resolved
+      // path a strict superset and avoids dropping scientific-substring matches
+      // when the typed text is both a resolvable common name and a substring of a
+      // scientific name.
       const resolvedScientific = searchScientificByCommon(speciesSearchTerm);
 
       // Build request body
       const requestBody = {
-        species: resolvedScientific.length > 0 ? '' : speciesSearchTerm,
+        species: speciesSearchTerm,
         speciesScientific: resolvedScientific,
         dateStart: dateRange.start,
         dateEnd: dateRange.end,

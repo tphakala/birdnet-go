@@ -6,6 +6,7 @@
   import { loggers } from '$lib/utils/logger';
   import { getStoredValue, setStoredValue } from '$lib/utils/storage';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { onMount } from 'svelte';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
@@ -691,7 +692,9 @@
                         </div>
                       </div>
                       <div>
-                        <div class="font-bold">{species.common_name}</div>
+                        <div class="font-bold">
+                          {localizeSpeciesName(species.scientific_name, species.common_name)}
+                        </div>
                         <div class="text-sm opacity-50 italic">{species.scientific_name}</div>
                       </div>
                     </div>

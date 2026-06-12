@@ -150,8 +150,13 @@ export async function loadDictionary(locale: Locale = getLocale()): Promise<void
   const version = getSpeciesDictVersion();
   const cached = cache.get(locale);
 
-  // Cache hit: same (locale, version). Nothing to do.
+  // Cache hit: same (locale, version). Nothing to fetch.
   if (cached?.version === version) {
+    // Bump the sequence counter BEFORE assigning current so any in-flight fetch
+    // for a different locale sees seq !== fetchSeq and discards its result. Without
+    // this, a pending fetch could resolve afterward and clobber current with a
+    // stale locale.
+    fetchSeq++;
     // Ensure current reflects this locale if it is still the active one.
     if (current.locale !== locale || current.forward !== cached.maps.forward) {
       current = { locale, forward: cached.maps.forward, reverse: cached.maps.reverse };
@@ -251,17 +256,6 @@ export function searchScientificByCommon(text: string): string[] {
   }
 
   return matches;
-}
-
-/**
- * Reactive accessor for the current dictionary state.
- * Exposes { locale, forward, reverse } for consumers that need raw map access.
- *
- * Because `current` is a $state variable, reading this function inside a
- * $derived or $effect will automatically re-run when the maps update.
- */
-export function getDictionaryState(): DictionaryState {
-  return current;
 }
 
 // ---------------------------------------------------------------------------

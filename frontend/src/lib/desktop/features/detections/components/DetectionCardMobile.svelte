@@ -8,6 +8,7 @@
   import type { Detection } from '$lib/types/detection.types';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   interface Props {
     detection: Detection;
@@ -22,13 +23,17 @@
 
   let { detection, onDetailsClick, onPlayMobileAudio, className = '' }: Props = $props();
 
+  // Localize the common name for the visitor's UI locale, falling back to the
+  // server-provided common name then the scientific name (mirrors DetectionRow).
+  const displayName = $derived(localizeSpeciesName(detection.scientificName, detection.commonName));
+
   let spectrogramError = $state(false);
   let spectrogramUrl = $derived(buildAppUrl(`/api/v2/spectrogram/${detection.id}?size=md`));
 
   function handlePlay() {
     const audioUrl = buildAppUrl(`/api/v2/audio/${detection.id}`);
     if (onPlayMobileAudio) {
-      onPlayMobileAudio({ audioUrl, speciesName: detection.commonName, detectionId: detection.id });
+      onPlayMobileAudio({ audioUrl, speciesName: displayName, detectionId: detection.id });
     }
   }
 
@@ -56,7 +61,7 @@
     <div class="flex items-start gap-3">
       <div class="flex-1 min-w-0">
         <div class="text-base font-semibold leading-tight truncate">
-          {detection.commonName}
+          {displayName}
         </div>
         <div class="text-xs opacity-70 truncate">
           {detection.scientificName}
@@ -86,7 +91,7 @@
       <button
         class="btn btn-primary btn-sm"
         onclick={handlePlay}
-        aria-label={t('search.detailsPanel.playAudio', { species: detection.commonName })}
+        aria-label={t('search.detailsPanel.playAudio', { species: displayName })}
       >
         <Volume2 class="h-4 w-4" />
         {t('common.actions.play')}
@@ -94,7 +99,7 @@
       <button
         class="btn btn-outline btn-sm"
         onclick={goToDetails}
-        aria-label={t('search.detailsPanel.viewDetails', { species: detection.commonName })}
+        aria-label={t('search.detailsPanel.viewDetails', { species: displayName })}
       >
         {t('common.actions.view')}
       </button>
