@@ -263,7 +263,7 @@
   // Cleanup is handled automatically by useImageDelayedLoading
   function playMobileAudio() {
     const audioUrl = buildAppUrl(`/api/v2/audio/${detection.id}`);
-    onPlayMobileAudio?.({ audioUrl, speciesName: detection.commonName, detectionId: detection.id });
+    onPlayMobileAudio?.({ audioUrl, speciesName: displayName, detectionId: detection.id });
   }
 </script>
 

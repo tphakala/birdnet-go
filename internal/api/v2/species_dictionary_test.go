@@ -184,6 +184,10 @@ func TestSpeciesDictionary_NotModified(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotModified, rec.Code)
 	assert.Equal(t, 0, rec.Body.Len(), "304 response must have no body")
+	// A 304 must carry the cache directives so the client knows how long its cached
+	// representation stays fresh (RFC 7232).
+	assert.NotEmpty(t, rec.Header().Get("Cache-Control"), "304 must include Cache-Control")
+	assert.Equal(t, etag, rec.Header().Get("ETag"))
 }
 
 // TestSpeciesDictionary_NotModified_WeakETag checks that a weakened ETag (as a CDN or

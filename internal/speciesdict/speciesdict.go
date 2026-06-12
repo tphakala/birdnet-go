@@ -13,6 +13,7 @@ package speciesdict
 import (
 	"crypto/sha256"
 	"embed"
+	"encoding/binary"
 	"encoding/hex"
 	"io/fs"
 	"maps"
@@ -34,6 +35,8 @@ var dictFS embed.FS
 const (
 	dataDir = "data"
 	fileExt = ".json.gz"
+	// versionHexLen is how many hex chars of the content hash form the version string.
+	versionHexLen = 12
 )
 
 // ErrUnknownLocale is returned for any locale without an embedded dictionary so callers
@@ -101,14 +104,22 @@ func computeVersion() string {
 	entries, err := fs.ReadDir(dictFS, dataDir)
 	if err == nil {
 		for _, e := range entries {
-			b, readErr := dictFS.ReadFile(dataDir + "/" + e.Name())
+			name := e.Name()
+			b, readErr := dictFS.ReadFile(dataDir + "/" + name)
 			if readErr != nil {
 				continue
 			}
+			// Frame each file with its name and length so the version tracks the actual
+			// asset set: a rename or repartition changes the hash even when the raw
+			// concatenated byte stream would not.
+			var size [8]byte
+			binary.BigEndian.PutUint64(size[:], uint64(len(b)))
+			_, _ = h.Write([]byte(name))
+			_, _ = h.Write(size[:])
 			_, _ = h.Write(b)
 		}
 	}
-	return hex.EncodeToString(h.Sum(nil))[:12]
+	return hex.EncodeToString(h.Sum(nil))[:versionHexLen]
 }
 
 // Version returns a stable content hash of the embedded dictionaries. Clients use it to

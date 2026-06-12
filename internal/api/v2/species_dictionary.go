@@ -79,25 +79,26 @@ func (c *Controller) ServeSpeciesDictionary(ctx echo.Context) error {
 	hdr := ctx.Response().Header()
 	hdr.Set("ETag", etag)
 
-	// Respond with 304 if the client already has the current version. The ETag is
-	// set above so the 304 echoes it, per RFC 7232. Accept the weak form too, since
-	// reverse proxies and CDNs often weaken a strong ETag to W/"...".
-	if clientETag := ctx.Request().Header.Get("If-None-Match"); clientETag == etag || clientETag == "W/"+etag {
-		return ctx.NoContent(http.StatusNotModified)
-	}
-
-	// Set response headers BEFORE writing the body so the framework cannot
-	// sniff the gzip magic bytes and override Content-Type.
-	hdr.Set("Content-Encoding", dictContentEncoding)
-	hdr.Set("X-Content-Type-Options", dictNoSniff)
-
-	// Choose cache lifetime based on whether the caller provided a content-
-	// addressed version query param.
+	// Set Cache-Control before any early return so the 304 response carries the same
+	// caching directives as the 200, per RFC 7232 (the cache must know how long the
+	// stored representation stays fresh). The lifetime depends on whether the caller
+	// used the content-addressed version query param.
 	if ctx.QueryParam("v") != "" {
 		hdr.Set("Cache-Control", dictCacheImmutable)
 	} else {
 		hdr.Set("Cache-Control", dictCacheShort)
 	}
+
+	// Respond with 304 if the client already has the current version. Accept the weak
+	// form too, since reverse proxies and CDNs often weaken a strong ETag to W/"...".
+	if clientETag := ctx.Request().Header.Get("If-None-Match"); clientETag == etag || clientETag == "W/"+etag {
+		return ctx.NoContent(http.StatusNotModified)
+	}
+
+	// Set the remaining response headers BEFORE writing the body so the framework
+	// cannot sniff the gzip magic bytes and override Content-Type.
+	hdr.Set("Content-Encoding", dictContentEncoding)
+	hdr.Set("X-Content-Type-Options", dictNoSniff)
 
 	// ctx.Blob writes the given content type directly without sniffing, so the
 	// Content-Encoding header set above survives intact.

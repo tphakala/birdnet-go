@@ -25,10 +25,10 @@ import { api } from '$lib/utils/api';
 import { getLocale } from '$lib/i18n/store.svelte';
 import { getSpeciesDictVersion } from '$lib/stores/appState.svelte';
 import { normalizeForLookup } from '$lib/utils/speciesNames';
-import { loggers } from '$lib/utils/logger';
+import { getLogger } from '$lib/utils/logger';
 import type { Locale } from '$lib/i18n/config';
 
-const logger = loggers.ui;
+const logger = getLogger('speciesDictionary');
 
 // ---------------------------------------------------------------------------
 // Types

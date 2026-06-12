@@ -278,7 +278,7 @@
       // silently fall back to the raw term (which the backend cannot resolve for a
       // foreign-locale name). loadDictionary is cached, so awaiting it when already
       // loaded is effectively instant.
-      await loadDictionary(getLocale());
+      await loadDictionary();
       const resolvedScientific = searchScientificByCommon(speciesSearchTerm);
 
       // Build request body
