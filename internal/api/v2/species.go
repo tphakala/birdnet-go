@@ -4,11 +4,13 @@ package api
 import (
 	"context"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -127,20 +129,7 @@ func (c *Controller) GetAllSpecies(ctx echo.Context) error {
 		logger.String("path", path),
 	)
 
-	var labels []string
-	if settings := c.controllerSettings(); settings != nil {
-		labels = settings.BirdNET.Labels
-	}
-	speciesList := make([]RangeFilterSpecies, 0, len(labels))
-
-	for _, label := range labels {
-		sp := detection.ParseSpeciesString(label)
-		speciesList = append(speciesList, RangeFilterSpecies{
-			Label:          label,
-			ScientificName: sp.ScientificName,
-			CommonName:     sp.CommonName,
-		})
-	}
+	speciesList := buildAllSpeciesList(c.loadCommonNameMap(), c.controllerSettings())
 
 	c.logInfoIfEnabled("All species labels retrieved successfully",
 		logger.Int("count", len(speciesList)),
@@ -152,6 +141,50 @@ func (c *Controller) GetAllSpecies(ctx echo.Context) error {
 		Species: speciesList,
 		Count:   len(speciesList),
 	})
+}
+
+// buildAllSpeciesList builds the /api/v2/species/all payload from the cached,
+// resolver-localized scientific-to-common map (sciToCommon), which control_monitor
+// populates from the orchestrator's multi-model AllLabels union at startup and on
+// hot-reload. Serving from that map yields every loaded model's species (including
+// secondary-model bats/Perch), localized to the configured BirdNET.Locale and
+// deduplicated (scientific keys are unique). Output is sorted by scientific name for
+// a deterministic response.
+//
+// When sciToCommon is empty (the brief startup window before control_monitor seeds
+// the maps), it falls back to parsing the primary BirdNET.Labels so the endpoint
+// never returns an empty list mid-startup. The fallback reproduces the legacy
+// behavior exactly (original label string, input order preserved).
+func buildAllSpeciesList(sciToCommon map[string]string, settings *conf.Settings) []RangeFilterSpecies {
+	if len(sciToCommon) > 0 {
+		speciesList := make([]RangeFilterSpecies, 0, len(sciToCommon))
+		for sci, common := range sciToCommon {
+			speciesList = append(speciesList, RangeFilterSpecies{
+				Label:          sci + "_" + common,
+				ScientificName: sci,
+				CommonName:     common,
+			})
+		}
+		sort.Slice(speciesList, func(i, j int) bool {
+			return speciesList[i].ScientificName < speciesList[j].ScientificName
+		})
+		return speciesList
+	}
+
+	var labels []string
+	if settings != nil {
+		labels = settings.BirdNET.Labels
+	}
+	speciesList := make([]RangeFilterSpecies, 0, len(labels))
+	for _, label := range labels {
+		sp := detection.ParseSpeciesString(label)
+		speciesList = append(speciesList, RangeFilterSpecies{
+			Label:          label,
+			ScientificName: sp.ScientificName,
+			CommonName:     sp.CommonName,
+		})
+	}
+	return speciesList
 }
 
 // GetSpeciesInfo retrieves extended information about a bird species
