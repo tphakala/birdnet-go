@@ -3185,16 +3185,42 @@ func (ds *Datastore) GetRecentThresholdEvents(limit int) ([]datastore.ThresholdE
 }
 
 // DeleteThresholdEvents deletes threshold events for a species.
-// NOTE: This only deletes events by the resolved scientific name. GetThresholdEvents
-// queries both common-name and scientific-name labels (WORKAROUND #1907). Legacy events
-// saved with common-name labels may survive this delete. Full dual-delete cleanup
-// should be added when the #1907 workaround is removed.
+// WORKAROUND(#1907): mirrors GetThresholdEvents' dual lookup. It deletes events saved
+// under BOTH the provided name (legacy common-name labels) AND the resolved scientific
+// name (post-#1907 labels). Without the common-name pass, legacy events survive the
+// delete and GetThresholdEvents resurfaces them on the next read.
+// TODO: Collapse to a single scientific-name delete when the #1907 workaround is removed
+// (after legacy common-name labels have been migrated).
 func (ds *Datastore) DeleteThresholdEvents(speciesName string) error {
 	if ds.threshold == nil {
 		return nil
 	}
 	ctx := context.Background()
-	return ds.threshold.DeleteThresholdEvents(ctx, ds.resolveToScientificName(speciesName))
+
+	// Delete by the provided name first - matches legacy/incorrectly saved events
+	// whose label scientific_name actually holds the common name.
+	if err := ds.threshold.DeleteThresholdEvents(ctx, speciesName); err != nil {
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "delete_threshold_events").
+			Context("query_type", "common_name").
+			Build()
+	}
+
+	// Also delete by the resolved scientific name when it differs - matches
+	// correctly saved events (after the #1907 fix).
+	if scientificName := ds.resolveToScientificName(speciesName); scientificName != speciesName {
+		if err := ds.threshold.DeleteThresholdEvents(ctx, scientificName); err != nil {
+			return errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "delete_threshold_events").
+				Context("query_type", "scientific_name").
+				Build()
+		}
+	}
+	return nil
 }
 
 // DeleteAllThresholdEvents deletes all threshold events.

@@ -601,6 +601,58 @@ func TestV2OnlyDatastore_DynamicThreshold_DeleteEventsByCommonName(t *testing.T)
 	assert.Empty(t, events, "events should be deleted when using common name")
 }
 
+// TestV2OnlyDatastore_DeleteThresholdEvents_LegacyCommonNameLabel pins the read/delete
+// symmetry: an event saved under a legacy common-name-shaped label (its scientific_name
+// column actually holds the common name, mimicking pre-#1907 mis-saved data) must
+// be deleted, not just the post-#1907 scientific-name-shaped event. On the pre-fix
+// code DeleteThresholdEvents resolved only to the scientific name, so the legacy
+// event survived and GetThresholdEvents resurfaced it on the next read.
+func TestV2OnlyDatastore_DeleteThresholdEvents_LegacyCommonNameLabel(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+	defer cleanup()
+
+	// Legacy mis-saved event: an empty ScientificName forces SaveThresholdEvent's
+	// fallback to use the common name, creating a label whose scientific_name = "great tit".
+	legacy := &datastore.ThresholdEvent{
+		SpeciesName:   "great tit",
+		PreviousLevel: 0,
+		NewLevel:      1,
+		PreviousValue: 0.8,
+		NewValue:      0.6,
+		ChangeReason:  "high_confidence",
+		Confidence:    0.95,
+		CreatedAt:     time.Now(),
+	}
+	require.NoError(t, ds.SaveThresholdEvent(legacy))
+
+	// Correctly-shaped event (post-#1907): label scientific_name = "Parus major".
+	correct := &datastore.ThresholdEvent{
+		SpeciesName:    "great tit",
+		ScientificName: "Parus major",
+		PreviousLevel:  1,
+		NewLevel:       2,
+		PreviousValue:  0.6,
+		NewValue:       0.5,
+		ChangeReason:   "high_confidence",
+		Confidence:     0.97,
+		CreatedAt:      time.Now().Add(time.Second),
+	}
+	require.NoError(t, ds.SaveThresholdEvent(correct))
+
+	// The dual-read by common name surfaces both label shapes before delete.
+	events, err := ds.GetThresholdEvents("great tit", 10)
+	require.NoError(t, err)
+	require.Len(t, events, 2, "both legacy and correct events should be visible before delete")
+
+	// Delete by common name must remove BOTH shapes (the read/delete symmetry fix).
+	require.NoError(t, ds.DeleteThresholdEvents("great tit"))
+
+	// Nothing should reappear on the next read.
+	events, err = ds.GetThresholdEvents("great tit", 10)
+	require.NoError(t, err)
+	assert.Empty(t, events, "legacy common-name event must not survive the delete")
+}
+
 func TestV2OnlyDatastore_ImageCache(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
