@@ -312,10 +312,15 @@ func (c *Controller) processBatchDates(ctx context.Context, dates []string, minC
 	processingErrors = make([]string, 0)
 
 	for _, selectedDate := range dates {
-		// Abort early if the request was cancelled (client disconnect / shutdown):
-		// the remaining per-date queries would only fail fast against a dead context.
+		// Stop cleanly if the client disconnected (request canceled): an expected
+		// lifecycle event, not a processing failure worth recording.
 		if err := ctx.Err(); err != nil {
-			processingErrors = append(processingErrors, fmt.Sprintf("request cancelled before processing %s: %v", selectedDate, err))
+			c.logDebugIfEnabled("Batch daily species summary: client canceled request",
+				logger.String("date", selectedDate),
+				logger.Error(err),
+				logger.String("ip", ip),
+				logger.String("path", path),
+			)
 			break
 		}
 		// Bound each date's queries individually so one slow date cannot hang the batch.
@@ -323,6 +328,9 @@ func (c *Controller) processBatchDates(ctx context.Context, dates []string, minC
 		result, err := c.processSingleDateForBatch(dateCtx, selectedDate, minConfidence, limit, ip, path)
 		cancel()
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				break // client disconnected; stop the batch without recording a failure
+			}
 			errorMsg := fmt.Sprintf("Failed to process date %s: %v", selectedDate, err)
 			processingErrors = append(processingErrors, errorMsg)
 			continue
@@ -1437,7 +1445,12 @@ func (c *Controller) processHourlyBatchSpecies(ctx echo.Context, speciesParams [
 
 	for _, speciesItem := range speciesParams {
 		if err := reqCtx.Err(); err != nil {
-			processingErrors = append(processingErrors, fmt.Sprintf("request cancelled before processing %s: %v", speciesItem, err))
+			c.logDebugIfEnabled("Batch hourly species data: client canceled request",
+				logger.String("species", speciesItem),
+				logger.Error(err),
+				logger.String("ip", ip),
+				logger.String("path", path),
+			)
 			break
 		}
 		speciesItem = strings.TrimSpace(speciesItem)
@@ -1568,7 +1581,12 @@ func (c *Controller) processDailyBatchSpecies(ctx echo.Context, uniqueSpecies []
 
 	for _, speciesItem := range uniqueSpecies {
 		if err := reqCtx.Err(); err != nil {
-			processingErrors = append(processingErrors, fmt.Sprintf("request cancelled before processing %s: %v", speciesItem, err))
+			c.logDebugIfEnabled("Batch daily species data: client canceled request",
+				logger.String("species", speciesItem),
+				logger.Error(err),
+				logger.String("ip", ip),
+				logger.String("path", path),
+			)
 			break
 		}
 		// Resolve a localized common name for the datastore query only; the response
