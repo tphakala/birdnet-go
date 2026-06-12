@@ -480,11 +480,10 @@
             {displayName}
             <span class="sr-only">{t('detections.detail.aria.speciesHeadingSuffix')}</span>
           </h1>
-          <p
-            class="species-scientific-name"
-            aria-label={t('detections.detail.aria.scientificName')}
-          >
-            {det.scientificName}
+          <p class="species-scientific-name">
+            <span class="sr-only"
+              >{t('detections.detail.aria.scientificName')}:
+            </span>{det.scientificName}
           </p>
           <div class="mt-3" aria-label={t('detections.detail.aria.classificationBadges')}>
             <VerificationBadges detection={det} size="sm" />
@@ -495,7 +494,7 @@
         <div
           class="hero-confidence"
           aria-label={t('detections.detail.aria.confidence', {
-            confidence: Math.round(det.confidence * 100),
+            confidence: Math.round((det.confidence ?? 0) * 100),
           })}
         >
           <ConfidenceCircle confidence={det.confidence} size="xl" />
@@ -718,14 +717,15 @@
       <div class="space-y-3" role="list" aria-label={t('detections.detail.aria.comments')}>
         {#each det.comments as comment (comment.id ?? comment.createdAt)}
           <article class="content-panel" role="listitem">
-            <p class="text-sm leading-relaxed" aria-label={t('detections.detail.aria.commentText')}>
-              {comment.entry}
+            <p class="text-sm leading-relaxed">
+              <span class="sr-only"
+                >{t('detections.detail.aria.commentText')}:
+              </span>{comment.entry}
             </p>
-            <p
-              class="text-xs text-[var(--color-base-content)]/40 mt-2"
-              aria-label={t('detections.detail.aria.commentTimestamp')}
-            >
-              {formatLocalDateTime(new Date(comment.createdAt))}
+            <p class="text-xs text-[var(--color-base-content)]/40 mt-2">
+              <span class="sr-only"
+                >{t('detections.detail.aria.commentTimestamp')}:
+              </span>{formatLocalDateTime(new Date(comment.createdAt))}
             </p>
           </article>
         {/each}
