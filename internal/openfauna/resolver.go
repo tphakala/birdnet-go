@@ -20,6 +20,17 @@ const maxLoggedUnresolvedSpecies = 50
 // maps to no available openfauna locale. English has the widest coverage.
 const localeFallback = "en"
 
+// localeAliases maps birdnet-go/UI locale codes to the OpenFauna dataset code when
+// the two use different conventions for the same language. Kept deliberately minimal:
+// only genuine code-convention mismatches that base/regional resolution cannot bridge.
+// "nb" (Norwegian Bokmål) and "nn" (Nynorsk) are individual ISO 639-1 codes under the
+// "no" macrolanguage, which is how OpenFauna labels Norwegian; without this alias they
+// would fall through to English.
+var localeAliases = map[string]string{
+	"nb": "no",
+	"nn": "no",
+}
+
 // mapLocale translates a birdnet-go locale code (e.g. "en-uk", "pt-br", "zh") to
 // an available openfauna locale code (e.g. "en_uk", "pt", "zh_cn"). The result is
 // always either localeFallback or a code present in Locales(); no hardcoded
@@ -50,6 +61,13 @@ func mapLocale(bngLocale string) string {
 		if slices.Contains(available, base) {
 			return base
 		}
+	}
+
+	// 2b. Code-convention aliases for languages OpenFauna ships under a different code
+	// than the UI uses (UI "nb"/"nn" -> dataset macrolanguage "no"). Guarded by
+	// Locales() containment so the mapping self-heals if the dataset code ever changes.
+	if alias, ok := localeAliases[base]; ok && slices.Contains(available, alias) {
+		return alias
 	}
 
 	// 3. First available regional variant of the base (zh -> zh_cn, lv -> lv_lv).
