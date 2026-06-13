@@ -13,7 +13,9 @@ import (
 
 const (
 	// tempExt is appended to the output path while encoding; the file is renamed
-	// to the final path on success. Matches the ffmpeg exporter's TempExt.
+	// to the final path on success. Intentionally duplicated from ffmpeg.TempExt
+	// (same value ".temp") rather than imported, to keep this package free of any
+	// dependency on the ffmpeg package it is meant to replace.
 	tempExt = ".temp"
 
 	// defaultCompressionLevel matches FFmpeg's default FLAC compression level and
@@ -32,7 +34,10 @@ const (
 
 // encoderPool reuses go-flac encoders (and their multi-MB workspaces) across
 // exports. Encoder.Reset is safe on a zero-value encoder, so the pool seeds with
-// new(goflac.Encoder).
+// new(goflac.Encoder). Reset also fully reinitializes an un-Closed encoder, so
+// the defer Put below safely returns an encoder even when an error path skips
+// Close; the next Get/Reset cleans up its leftover state (do not "fix" this into
+// a Close-before-Put, which would double-write the stream headers).
 var encoderPool = sync.Pool{New: func() any { return new(goflac.Encoder) }}
 
 // gainScratchPool reuses gain scratch chunks. Pooling a pointer avoids the

@@ -15,7 +15,7 @@ func TestNativeEncoderEnabled(t *testing.T) {
 		want bool
 	}{
 		{"empty selects ffmpeg", "", false},
-		{"native selects native", "native", true},
+		{"native selects native", nativeEncoderValue, true},
 		{"ffmpeg selects ffmpeg", "ffmpeg", false},
 		{"wrong case selects ffmpeg", "Native", false},
 		{"truthy string selects ffmpeg", "1", false},

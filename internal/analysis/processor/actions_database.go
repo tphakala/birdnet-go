@@ -30,6 +30,14 @@ import (
 // action after a backoff delay until the buffer has caught up.
 var errAudioExportDeferred = errors.NewStd("audio export deferred until capture tail is available")
 
+// Encoder tags recorded in the audio-export success log so the active encoder is
+// visible per clip while the native FLAC path is gated.
+const (
+	encoderFFmpeg     = "ffmpeg"
+	encoderNativeWAV  = "native-wav"
+	encoderNativeFLAC = "native-flac"
+)
+
 // Execute logs the note to the log file.
 // Note: File logging errors are logged but not returned. This is intentional because:
 // 1. File logging is a non-critical supplementary feature
@@ -418,66 +426,9 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 
 	exportRate, exportFormat, outputPath := a.resolveExportParams(outputPath)
 
-	exportSettings := &a.Settings.Realtime.Audio.Export
-
-	// Encoder dispatch:
-	//   wav                              -> native Go WAV writer
-	//   flac + native gate + no loudnorm -> native go-flac encoder
-	//   everything else                  -> FFmpeg (incl. flac with normalization)
-	// Gain alone does not force FFmpeg; the native encoder applies it in Go.
-	// EBU R128 normalization is the only feature that requires FFmpeg's loudnorm.
-	encoderUsed := "ffmpeg"
-	switch {
-	case exportFormat == "wav":
-		encoderUsed = "native-wav"
-		if err := convert.SavePCMDataToWAV(outputPath, a.pcmData, exportRate, conf.BitDepth); err != nil {
-			return err
-		}
-
-	case exportFormat == ffmpeg.FormatFLAC &&
-		flac.NativeEncoderEnabled() &&
-		!exportSettings.Normalization.Enabled &&
-		flac.SupportedBitDepth(conf.BitDepth):
-		encoderUsed = "native-flac"
-		if err := flac.EncodePCM(ctx, &flac.Options{
-			PCMData:    a.pcmData,
-			OutputPath: outputPath,
-			SampleRate: exportRate,
-			Channels:   conf.NumChannels,
-			BitDepth:   conf.BitDepth,
-			GainDB:     exportSettings.Gain,
-		}); err != nil {
-			return err
-		}
-
-	default:
-		if exportFormat == ffmpeg.FormatFLAC && flac.NativeEncoderEnabled() {
-			GetLogger().Debug("Native FLAC encoder requested but falling back to FFmpeg",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.String("reason", "normalization_enabled"),
-				logger.String("operation", "audio_export_flac_fallback"))
-		}
-		opts := &ffmpeg.ExportOptions{
-			PCMData:    a.pcmData,
-			OutputPath: outputPath,
-			Format:     exportFormat,
-			Bitrate:    exportSettings.Bitrate,
-			SampleRate: exportRate,
-			Channels:   conf.NumChannels,
-			BitDepth:   conf.BitDepth,
-			FFmpegPath: a.Settings.Realtime.Audio.FfmpegPath,
-			GainDB:     exportSettings.Gain,
-			Normalization: ffmpeg.ExportNormalization{
-				Enabled:       exportSettings.Normalization.Enabled,
-				TargetLUFS:    exportSettings.Normalization.TargetLUFS,
-				TruePeak:      exportSettings.Normalization.TruePeak,
-				LoudnessRange: exportSettings.Normalization.LoudnessRange,
-			},
-		}
-		if err := ffmpeg.ExportAudio(ctx, opts); err != nil {
-			return err
-		}
+	encoderUsed, err := a.encodeClip(ctx, exportRate, exportFormat, outputPath)
+	if err != nil {
+		return err
 	}
 
 	// Get file size for logging
@@ -538,6 +489,74 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	}
 
 	return nil
+}
+
+// encodeClip writes the captured PCM to outputPath in the resolved format,
+// dispatching to the native WAV writer, the native go-flac encoder (when the
+// BIRDNET_FLAC_ENCODER gate is on and no EBU R128 normalization is configured),
+// or the FFmpeg exporter. It returns the encoder tag for the success log.
+//
+// Gain alone does not force FFmpeg; the native encoder applies it in Go.
+// Normalization is the only feature that requires FFmpeg's loudnorm.
+func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, exportFormat, outputPath string) (string, error) {
+	exportSettings := &a.Settings.Realtime.Audio.Export
+
+	switch {
+	case exportFormat == ffmpeg.FormatWAV:
+		if err := convert.SavePCMDataToWAV(outputPath, a.pcmData, exportRate, conf.BitDepth); err != nil {
+			return "", err
+		}
+		return encoderNativeWAV, nil
+
+	case exportFormat == ffmpeg.FormatFLAC &&
+		flac.NativeEncoderEnabled() &&
+		!exportSettings.Normalization.Enabled &&
+		flac.SupportedBitDepth(conf.BitDepth):
+		if err := flac.EncodePCM(ctx, &flac.Options{
+			PCMData:    a.pcmData,
+			OutputPath: outputPath,
+			SampleRate: exportRate,
+			Channels:   conf.NumChannels,
+			BitDepth:   conf.BitDepth,
+			GainDB:     exportSettings.Gain,
+		}); err != nil {
+			return "", err
+		}
+		return encoderNativeFLAC, nil
+
+	default:
+		// Native FLAC was requested but EBU R128 normalization forces the FFmpeg
+		// path (loudnorm has no native equivalent). Logged so the fallback is
+		// visible while the gate exists.
+		if exportFormat == ffmpeg.FormatFLAC && flac.NativeEncoderEnabled() && exportSettings.Normalization.Enabled {
+			GetLogger().Debug("Native FLAC encoder requested but falling back to FFmpeg",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.String("reason", "normalization_enabled"),
+				logger.String("operation", "audio_export_flac_fallback"))
+		}
+		opts := &ffmpeg.ExportOptions{
+			PCMData:    a.pcmData,
+			OutputPath: outputPath,
+			Format:     exportFormat,
+			Bitrate:    exportSettings.Bitrate,
+			SampleRate: exportRate,
+			Channels:   conf.NumChannels,
+			BitDepth:   conf.BitDepth,
+			FFmpegPath: a.Settings.Realtime.Audio.FfmpegPath,
+			GainDB:     exportSettings.Gain,
+			Normalization: ffmpeg.ExportNormalization{
+				Enabled:       exportSettings.Normalization.Enabled,
+				TargetLUFS:    exportSettings.Normalization.TargetLUFS,
+				TruePeak:      exportSettings.Normalization.TruePeak,
+				LoudnessRange: exportSettings.Normalization.LoudnessRange,
+			},
+		}
+		if err := ffmpeg.ExportAudio(ctx, opts); err != nil {
+			return "", err
+		}
+		return encoderFFmpeg, nil
+	}
 }
 
 // resolveExportParams determines the export sample rate, format, and output

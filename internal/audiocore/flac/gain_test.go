@@ -87,7 +87,9 @@ func TestApplyGainInt16_CopiesOddTrailingByte(t *testing.T) {
 
 func TestApplyGainInt16_ZeroAlloc(t *testing.T) {
 	// No t.Parallel(): testing.AllocsPerRun panics if called from a parallel test.
-	src := pcm16(make([]int16, 4096)...)
+	// 4096 samples (8192 bytes) of arbitrary content: a realistic span for the
+	// loop; the byte values are irrelevant to allocation behavior.
+	src := make([]byte, 4096*2)
 	for i := range src {
 		src[i] = byte(i)
 	}
