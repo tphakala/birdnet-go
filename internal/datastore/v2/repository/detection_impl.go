@@ -590,7 +590,9 @@ func (r *detectionRepository) listByHalfOpenRange(ctx context.Context, start, en
 	query := r.db.WithContext(ctx).Table(r.tableName()).
 		Where("detected_at >= ? AND detected_at < ?", start, end)
 
-	if err := query.Count(&total).Error; err != nil {
+	// Count on a cloned session so the Count finisher does not mutate the query that is
+	// reused for the paginated Find below (mirrors the Search method's pattern).
+	if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 

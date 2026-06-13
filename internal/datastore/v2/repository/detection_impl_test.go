@@ -683,3 +683,22 @@ func TestGetByHour_HalfOpenBoundary(t *testing.T) {
 			"boundary second must belong to the next hour exactly once: expected 1, got %d", n)
 	})
 }
+
+// TestGetByHour_PaginationHonored verifies that LIMIT is applied by GetByHour even
+// though the query is used for a Count first. If the GORM query object's state leaked
+// across the Count/Find boundary, LIMIT would be ignored and all rows returned.
+func TestGetByHour_PaginationHonored(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	const hourStart = int64(1_700_000_000)
+	for i := int64(0); i < 5; i++ {
+		createTestDetection(t, db, hourStart+i*60)
+	}
+
+	dets, total, err := repo.GetByHour(ctx, hourStart, 2, 0)
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), total, "total must count all rows in the hour")
+	assert.Len(t, dets, 2, "LIMIT must be honored; query reuse after Count would return all 5")
+}
