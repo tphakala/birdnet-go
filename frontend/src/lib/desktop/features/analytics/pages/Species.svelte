@@ -743,18 +743,33 @@
     return `${stat.verified} / ${stat.rejected}`;
   }
 
+  // Returns the exact list entry matching this species by common OR scientific
+  // name (case-insensitive), or undefined when absent. The settings picker treats
+  // the two names as aliases, so a list may store either form.
+  function listEntryFor(set: SvelteSet<string>, species: SpeciesData): string | undefined {
+    const common = species.common_name.toLowerCase();
+    const scientific = species.scientific_name.toLowerCase();
+    for (const entry of set) {
+      const e = entry.toLowerCase();
+      if (e === common || e === scientific) return entry;
+    }
+    return undefined;
+  }
+
   async function toggleMembership(
     list: 'excluded' | 'included' | 'confirmed',
     species: SpeciesData
   ) {
-    const name = species.common_name;
     const inflight =
       list === 'excluded'
         ? togglingExcluded
         : list === 'included'
           ? togglingIncluded
           : togglingConfirmed;
-    if (inflight.has(name)) return;
+    // Track in-flight by scientific name (stable) so the guard holds regardless
+    // of which alias the list stores.
+    const inflightKey = species.scientific_name;
+    if (inflight.has(inflightKey)) return;
     const set =
       list === 'excluded' ? excludedSet : list === 'included' ? includedSet : confirmedSet;
     const path =
@@ -764,18 +779,21 @@
           ? '/api/v2/detections/include'
           : '/api/v2/detections/confirm';
 
-    inflight.add(name);
+    // Remove the alias actually stored in the list; add under the common name.
+    const payloadName = listEntryFor(set, species) ?? species.common_name;
+
+    inflight.add(inflightKey);
     try {
-      const resp = await api.post<{ action: string }>(path, { common_name: name });
+      const resp = await api.post<{ action: string }>(path, { common_name: payloadName });
       if (resp.action === 'removed') {
-        set.delete(name);
+        set.delete(payloadName);
       } else {
-        set.add(name);
+        set.add(payloadName);
       }
     } catch (error) {
       logger.error(`Error toggling ${list} membership:`, error);
     } finally {
-      inflight.delete(name);
+      inflight.delete(inflightKey);
     }
   }
 
@@ -1140,15 +1158,15 @@
                   <td class="text-sm">{formatDateOnly(species.last_heard)}</td>
                   <td>
                     <Checkbox
-                      checked={excludedSet.has(species.common_name)}
-                      disabled={togglingExcluded.has(species.common_name)}
+                      checked={listEntryFor(excludedSet, species) !== undefined}
+                      disabled={togglingExcluded.has(species.scientific_name)}
                       onchange={() => toggleMembership('excluded', species)}
                     />
                   </td>
                   <td>
                     <Checkbox
-                      checked={includedSet.has(species.common_name)}
-                      disabled={togglingIncluded.has(species.common_name)}
+                      checked={listEntryFor(includedSet, species) !== undefined}
+                      disabled={togglingIncluded.has(species.scientific_name)}
                       onchange={() => toggleMembership('included', species)}
                     />
                   </td>
@@ -1167,8 +1185,8 @@
                   </td>
                   <td>
                     <Checkbox
-                      checked={confirmedSet.has(species.common_name)}
-                      disabled={togglingConfirmed.has(species.common_name)}
+                      checked={listEntryFor(confirmedSet, species) !== undefined}
+                      disabled={togglingConfirmed.has(species.scientific_name)}
                       onchange={() => toggleMembership('confirmed', species)}
                     />
                   </td>

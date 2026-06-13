@@ -386,4 +386,26 @@ describe('Species (analytics page) — Manage view', () => {
     // Sorting by a Manage-only column must not change the grid/list persisted sort.
     expect(window.localStorage.getItem(SORT_STORAGE_KEY)).toBe(persistedBefore);
   });
+
+  it('checks the included toggle when the list stores the scientific-name alias', async () => {
+    // The included list holds the scientific name; the row is American Robin /
+    // Turdus migratorius, so the alias match must render the checkbox checked.
+    globalThis.fetch = mockFetchSequence({
+      '/api/v2/analytics/species/review-stats': () => [
+        { scientificName: 'Turdus migratorius', total: 10, verified: 7, rejected: 3 },
+      ],
+      '/api/v2/analytics/species/summary': () => summary,
+      '/api/v2/analytics/species/thumbnails': () => ({}),
+      '/api/v2/detections/included': () => ({ species: ['Turdus migratorius'] }),
+      '/api/v2/detections/confirmed': () => ({ species: [] }),
+      '/api/v2/detections/ignored': () => ({ species: [] }),
+    });
+    const INCLUDED_CELL_INDEX = 5;
+    const { container } = await renderManageView();
+    await waitFor(() => {
+      const cell = container.querySelectorAll('table tbody tr td')[INCLUDED_CELL_INDEX];
+      const checkbox = cell.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      expect(checkbox?.checked).toBe(true);
+    });
+  });
 });
