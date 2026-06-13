@@ -2381,6 +2381,23 @@ func (ds *Datastore) zoneOffsetSeconds(epoch int64) int {
 	return repository.GetTimezoneOffsetAt(ds.timezone, ref)
 }
 
+// dateRangeOffsetAnchor returns the epoch to anchor the timezone offset to for a date-bucketed
+// query over [start, end) (epochs from parseDateRange: start==0 means open-start, end==MaxInt64
+// means open-end). It prefers the start boundary, falls back to the end boundary for a left-open
+// range, and only as a last resort returns 0 (which zoneOffsetSeconds maps to the current offset)
+// for a fully open range. Anchoring to a query boundary rather than "now" keeps an end-only
+// historical query bucketing the same way regardless of when it runs.
+func dateRangeOffsetAnchor(start, end int64) int64 {
+	switch {
+	case start > 0:
+		return start
+	case end > 0 && end != math.MaxInt64:
+		return end
+	default:
+		return 0
+	}
+}
+
 // detectionDateExpr returns a SQL expression for the wall-clock calendar date (YYYY-MM-DD) of
 // d.detected_at in the configured timezone. offsetSeconds is added to the epoch before the date
 // is taken, so the result buckets by date in ds.timezone and is independent of the database
@@ -2499,8 +2516,9 @@ func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	// Bucket dates by the configured timezone, anchored to the range start.
-	v2Data, err := ds.detection.GetDailyAnalytics(ctx, start, end, ds.zoneOffsetSeconds(start), labelID, nil)
+	// Bucket dates by the configured timezone, anchored to a query boundary (start, or end for a
+	// left-open range) so an end-only historical query buckets stably regardless of run time.
+	v2Data, err := ds.detection.GetDailyAnalytics(ctx, start, end, ds.zoneOffsetSeconds(dateRangeOffsetAnchor(start, end)), labelID, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2668,8 +2686,9 @@ func (ds *Datastore) GetSpeciesDetectionDatesInPeriod(ctx context.Context, start
 		limit = 10000
 	}
 
-	// Bucket dates by the configured timezone, anchored to the range start.
-	dateExpr := ds.detectionDateExpr(ds.zoneOffsetSeconds(start))
+	// Bucket dates by the configured timezone, anchored to a query boundary (start, or end for a
+	// left-open range) so an end-only historical query buckets stably regardless of run time.
+	dateExpr := ds.detectionDateExpr(ds.zoneOffsetSeconds(dateRangeOffsetAnchor(start, end)))
 
 	type result struct {
 		ScientificName string `gorm:"column:scientific_name"`
@@ -2767,13 +2786,20 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 
 	var results []datastore.DailyAnalyticsData
 
-	// Bucket dates by the configured timezone, anchored to the start of the requested window
-	// (or the current offset for an open-ended range). The SELECT, GROUP BY, and BETWEEN filter
-	// all reuse this single expression so they stay internally consistent; the user's date
-	// strings are interpreted in the same zone the dates are bucketed in.
+	// Bucket dates by the configured timezone, anchored to a query boundary: the start of the
+	// window, falling back to the end for a left-open range (and only then to the current offset
+	// for a fully open range), so an end-only historical query buckets stably regardless of run
+	// time. The SELECT, GROUP BY, and BETWEEN filter all reuse this single expression so they stay
+	// internally consistent; the user's date strings are interpreted in the same zone the dates
+	// are bucketed in.
 	var refEpoch int64
 	if startDate != "" {
 		if t, perr := time.ParseInLocation(time.DateOnly, startDate, ds.timezone); perr == nil {
+			refEpoch = t.Unix()
+		}
+	}
+	if refEpoch == 0 && endDate != "" {
+		if t, perr := time.ParseInLocation(time.DateOnly, endDate, ds.timezone); perr == nil {
 			refEpoch = t.Unix()
 		}
 	}

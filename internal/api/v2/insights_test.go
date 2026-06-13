@@ -25,6 +25,11 @@ type mockInsightsRepo struct {
 	goneQuiet       []repository.GoneQuietSpecies
 	dashboardKPIs   *repository.DashboardKPIs
 	err             error
+
+	// lastTzOffsetSeconds records the most recent timezone offset forwarded by a handler, so
+	// tests can assert the handler actually threads analyticsTZOffset into the repository rather
+	// than passing 0 or a stale reference time.
+	lastTzOffsetSeconds int
 }
 
 func (m *mockInsightsRepo) GetExpectedSpeciesToday(_ context.Context, _ []repository.TimeRange, _ int, _ *uint) ([]repository.ExpectedSpecies, error) {
@@ -47,7 +52,8 @@ func (m *mockInsightsRepo) GetGoneQuiet(_ context.Context, _ int64, _ int, _ *ui
 	return m.goneQuiet, m.err
 }
 
-func (m *mockInsightsRepo) GetDashboardKPIs(_ context.Context, _ int64, _ int, _ *uint) (*repository.DashboardKPIs, error) {
+func (m *mockInsightsRepo) GetDashboardKPIs(_ context.Context, _ int64, tzOffsetSeconds int, _ *uint) (*repository.DashboardKPIs, error) {
+	m.lastTzOffsetSeconds = tzOffsetSeconds
 	return m.dashboardKPIs, m.err
 }
 
@@ -126,6 +132,12 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 	assert.Equal(t, int64(87), resp.LifetimeSpecies)
 	assert.Equal(t, int64(42), resp.TodayDetections)
 	assert.Equal(t, 2, resp.DetectionStreak.Days)
+
+	// The handler must forward the configured-timezone offset (not 0) so the repository buckets
+	// "today" in the same zone the handler computed the day boundary in. analyticsTZOffset uses
+	// time.Local at the request instant; recompute it here within the same DST window.
+	assert.Equal(t, repository.GetTimezoneOffsetAt(time.Local, time.Now()), mockRepo.lastTzOffsetSeconds,
+		"handler must thread analyticsTZOffset into GetDashboardKPIs")
 }
 
 func TestGetMigration_Handler(t *testing.T) {
