@@ -123,8 +123,13 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
+	// Bracket the handler's internal time.Now() so the offset assertion holds even if a DST
+	// transition lands mid-test: the handler's offset must equal the local offset at some instant
+	// during the call (before or after are the only possible values, even across a boundary).
+	beforeOffset := repository.GetTimezoneOffsetAt(time.Local, time.Now())
 	err := controller.getDashboardKPIsImpl(ctx)
 	require.NoError(t, err)
+	afterOffset := repository.GetTimezoneOffsetAt(time.Local, time.Now())
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var resp DashboardKPIsResponse
@@ -134,9 +139,8 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 	assert.Equal(t, 2, resp.DetectionStreak.Days)
 
 	// The handler must forward the configured-timezone offset (not 0) so the repository buckets
-	// "today" in the same zone the handler computed the day boundary in. analyticsTZOffset uses
-	// time.Local at the request instant; recompute it here within the same DST window.
-	assert.Equal(t, repository.GetTimezoneOffsetAt(time.Local, time.Now()), mockRepo.lastTzOffsetSeconds,
+	// "today" in the same zone the handler computed the day boundary in.
+	assert.Contains(t, []int{beforeOffset, afterOffset}, mockRepo.lastTzOffsetSeconds,
 		"handler must thread analyticsTZOffset into GetDashboardKPIs")
 }
 
