@@ -196,20 +196,27 @@ func MergeHourFilters(timeOfDay []string, hour *datastore.HourFilter) []int {
 	return intersection
 }
 
-// GetTimezoneOffset returns the timezone offset in seconds for the given location.
-// Uses the current time to determine the offset (handles DST).
-//
-// LIMITATION: This applies the current DST state to all data. When filtering
-// historical data that spans DST transitions, hour boundaries may be off by
-// up to 1 hour for data recorded in a different DST state than the current one.
-// For most use cases (recent data, non-DST timezones), this is acceptable.
-// For precise historical hour filtering across DST boundaries, consider using
-// database-native timezone conversion functions.
+// GetTimezoneOffset returns the timezone offset in seconds for the given location at the
+// current time (handles DST for "now"). See GetTimezoneOffsetAt for the DST limitation.
 func GetTimezoneOffset(tz *time.Location) int {
+	return GetTimezoneOffsetAt(tz, time.Now())
+}
+
+// GetTimezoneOffsetAt returns the timezone offset in seconds for the given location at the
+// instant t (handles DST for that instant). Prefer this over GetTimezoneOffset when the
+// query has a known reference time (e.g. the start of the queried day), so the offset
+// reflects the data's DST state rather than the current one.
+//
+// LIMITATION: a single offset is applied to a whole query. When bucketing or filtering data
+// that spans a DST transition, hours may be off by up to 1 hour for rows recorded in a
+// different DST state than t. For most use cases (recent data, single-day windows, non-DST
+// timezones) this is acceptable; for precise historical conversion across DST boundaries,
+// use database-native timezone conversion functions.
+func GetTimezoneOffsetAt(tz *time.Location, t time.Time) int {
 	if tz == nil {
 		tz = time.Local
 	}
-	_, offset := time.Now().In(tz).Zone()
+	_, offset := t.In(tz).Zone()
 	return offset
 }
 

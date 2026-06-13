@@ -1756,3 +1756,47 @@ func TestBuildNameMaps_AmbiguousCommonNameDeletedNotLastWriterWins(t *testing.T)
 	assert.Equal(t, "Owl", nm.common["Strix aluco"], "forward map must retain common name for Strix aluco")
 	assert.Equal(t, "Owl", nm.common["Bubo bubo"], "forward map must retain common name for Bubo bubo")
 }
+
+// TestUnixTimeOrZero verifies that a non-positive epoch yields the zero time (so the
+// API renders an empty timestamp) instead of the 1970 epoch origin, while a positive
+// epoch converts in the supplied location.
+func TestUnixTimeOrZero(t *testing.T) {
+	t.Parallel()
+
+	t.Run("positive epoch converts in location", func(t *testing.T) {
+		t.Parallel()
+		got := unixTimeOrZero(1718000000, time.UTC)
+		require.False(t, got.IsZero())
+		assert.Equal(t, int64(1718000000), got.Unix())
+		assert.Equal(t, time.UTC, got.Location())
+	})
+
+	t.Run("zero epoch returns zero time", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, unixTimeOrZero(0, time.UTC).IsZero())
+	})
+
+	t.Run("negative epoch returns zero time", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, unixTimeOrZero(-1, time.UTC).IsZero())
+	})
+}
+
+// TestConvertToNewSpeciesData_ZeroEpoch verifies the new-species path emits an empty
+// date for a zero/negative FirstDetected epoch rather than formatting 1970-01-01.
+func TestConvertToNewSpeciesData_ZeroEpoch(t *testing.T) {
+	t.Parallel()
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	got := ds.convertToNewSpeciesData(t.Context(), []speciesFirstSeenInfo{
+		{ScientificName: "Parus major", FirstDetected: 0, LastDetected: 0},
+		{ScientificName: "Turdus merula", FirstDetected: 1718000000, LastDetected: 1718600000},
+	})
+
+	require.Len(t, got, 2)
+	assert.Empty(t, got[0].FirstSeenDate, "zero epoch must not render the 1970 origin")
+	assert.Empty(t, got[0].LastSeenDate)
+	assert.NotEmpty(t, got[1].FirstSeenDate)
+	assert.NotEmpty(t, got[1].LastSeenDate)
+}
