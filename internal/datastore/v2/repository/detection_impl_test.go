@@ -335,7 +335,7 @@ func TestGetBatchHourlyOccurrences(t *testing.T) {
 		&entities.Detection{LabelID: 30, ModelID: 1, Confidence: 0.2, DetectedAt: base}).Error)
 
 	t.Run("per-label counts with confidence filter", func(t *testing.T) {
-		got, err := repo.GetBatchHourlyOccurrences(t.Context(), []uint{10, 20, 30, 99}, base-1, base+10_000, 0.5)
+		got, err := repo.GetBatchHourlyOccurrences(t.Context(), []uint{10, 20, 30, 99}, base-1, base+10_000, 0, 0.5)
 		require.NoError(t, err)
 
 		require.Contains(t, got, uint(10))
@@ -347,7 +347,7 @@ func TestGetBatchHourlyOccurrences(t *testing.T) {
 	})
 
 	t.Run("empty input returns empty map", func(t *testing.T) {
-		got, err := repo.GetBatchHourlyOccurrences(t.Context(), nil, base-1, base+10_000, 0.0)
+		got, err := repo.GetBatchHourlyOccurrences(t.Context(), nil, base-1, base+10_000, 0, 0.0)
 		require.NoError(t, err)
 		assert.Empty(t, got)
 	})
@@ -355,7 +355,7 @@ func TestGetBatchHourlyOccurrences(t *testing.T) {
 	t.Run("cancelled context surfaces an error", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		_, err := repo.GetBatchHourlyOccurrences(ctx, []uint{10}, base-1, base+10_000, 0.0)
+		_, err := repo.GetBatchHourlyOccurrences(ctx, []uint{10}, base-1, base+10_000, 0, 0.0)
 		require.ErrorIs(t, err, context.Canceled, "a cancelled context must abort the query with context.Canceled, not return zeros")
 	})
 }
@@ -370,6 +370,40 @@ func totalBatchHourly(byLabel map[uint][24]int, labelID uint) int {
 		total += c
 	}
 	return total
+}
+
+// TestGetBatchHourlyOccurrences_TimezoneOffset verifies that a detection buckets into the
+// hour given by the supplied timezone offset, not the database/OS-local zone. A single
+// detection at UTC midnight must land in hour 0 at UTC, hour 2 at UTC+2, and hour 23
+// (previous day) at UTC-1. Guards against bucketing in the engine's local timezone.
+func TestGetBatchHourlyOccurrences_TimezoneOffset(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	repo := &detectionRepository{db: db}
+
+	// 2024-06-15T00:00:00Z.
+	const utcMidnight = int64(1718409600)
+	createDetectionForLabel(t, db, 10, utcMidnight)
+
+	cases := []struct {
+		name       string
+		offsetSecs int
+		wantHour   int
+	}{
+		{"utc", 0, 0},
+		{"plus two hours", 2 * 3600, 2},
+		{"minus one hour wraps to previous day", -3600, 23},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := repo.GetBatchHourlyOccurrences(
+				t.Context(), []uint{10}, utcMidnight-86_400, utcMidnight+86_400, tc.offsetSecs, 0.0)
+			require.NoError(t, err)
+			require.Equal(t, 1, totalBatchHourly(got, 10), "exactly one detection regardless of offset")
+			counts := got[10]
+			assert.Equal(t, 1, counts[tc.wantHour],
+				"detection must bucket into the offset-adjusted hour %d", tc.wantHour)
+		})
+	}
 }
 
 // ============================================================================

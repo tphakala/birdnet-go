@@ -39,6 +39,7 @@ import {
   resolveCommonToScientific,
   searchScientificByCommon,
   resetDictionaryForTest,
+  PER_VISITOR_SPECIES_LOCALE_ENABLED,
 } from './speciesDictionary.svelte';
 import { api } from '$lib/utils/api';
 import { getLocale } from '$lib/i18n/store.svelte';
@@ -77,6 +78,16 @@ const MOCK_FI_BAT_DICT: Record<string, string> = {
 function mockApiGet(dict: Record<string, string>): void {
   vi.mocked(api.get).mockResolvedValue(dict as unknown);
 }
+
+describe('per-visitor species locale gate', () => {
+  // The per-visitor client-side localization overlay is PARKED: it overrode the
+  // admin's server-side species language (settings.BirdNET.Locale) with the
+  // visitor's UI locale. This pins the release-blocking default so the gate is not
+  // flipped back on without the proper per-visitor species-language preference.
+  it('stays disabled until a species-language preference separate from the UI locale exists', () => {
+    expect(PER_VISITOR_SPECIES_LOCALE_ENABLED).toBe(false);
+  });
+});
 
 describe('speciesDictionary store', () => {
   beforeEach(() => {
