@@ -147,3 +147,35 @@ export function nextYSlot(counter: number, maxSlots: number): { slot: number; ne
   const slot = counter % maxSlots;
   return { slot, next: counter + 1 };
 }
+
+/**
+ * Build a queued overlay label for one pending detection.
+ *
+ * Centralizes the lead-in back-dating and the display-text choice so the
+ * dashboard MiniSpectrogram and the full-page LiveStreamPage stay in lockstep.
+ * The localizer (localizeSpeciesName) is injected so this module stays pure (no
+ * dependency on the visitor-dictionary store) and the text choice is unit
+ * testable. The label follows the same per-visitor localization as the rest of
+ * the dashboard; with that feature gated off, localize falls back to the
+ * server-locale common name.
+ *
+ * Note: text is fixed at queue time and does not react to a later UI-locale
+ * switch. Overlay labels are ephemeral (pruned within ~60s), so a label left
+ * stale by a mid-session locale change clears on its own.
+ */
+export function buildQueuedLabel(
+  det: {
+    species: string;
+    firstDetected: number;
+    audioCapturedAt?: number;
+    scientificName?: string;
+  },
+  ySlot: number,
+  localize: (scientificName: string | undefined, fallbackCommonName: string) => string
+): QueuedLabel {
+  return {
+    text: localize(det.scientificName, det.species),
+    firstDetected: (det.audioCapturedAt ?? det.firstDetected) - LABEL_LEAD_IN_SECONDS,
+    ySlot,
+  };
+}
