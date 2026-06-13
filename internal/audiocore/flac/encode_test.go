@@ -193,6 +193,49 @@ func TestEncodePCM_CancelledDuringEncode(t *testing.T) {
 	assert.NoFileExists(t, opts.OutputPath+".temp")
 }
 
+// TestEncoderReuseAfterAbortedWrite verifies the pooling safety contract that
+// EncodePCM relies on: an encoder abandoned mid-stream WITHOUT Close (the state
+// it is in when an aborted EncodePCM returns it to the pool) produces a correct,
+// lossless file on its next use, because Reset fully clears the leftover stream
+// state. This guards against a go-flac regression that would otherwise leak
+// partial-write state into the next pooled encode (raised by Sentry on #3483).
+func TestEncoderReuseAfterAbortedWrite(t *testing.T) {
+	t.Parallel()
+	cfg := goflac.Config{
+		SampleRate:        testSampleRate,
+		Channels:          testChannels,
+		BitDepth:          testBitDepth,
+		CompressionLevel:  defaultCompressionLevel,
+		SeekTableInterval: testSampleRate,
+	}
+	dir := t.TempDir()
+
+	// First stream: write a partial block, then abandon WITHOUT enc.Close(),
+	// leaving the encoder "dirty" exactly as an aborted EncodePCM would.
+	enc := new(goflac.Encoder)
+	f1, err := os.Create(filepath.Join(dir, "aborted.flac")) //nolint:gosec // test-controlled path
+	require.NoError(t, err)
+	require.NoError(t, enc.Reset(f1, cfg))
+	_, err = enc.Write(makeTestPCM(1000))
+	require.NoError(t, err)
+	require.NoError(t, f1.Close()) // file closed; encoder deliberately not closed
+
+	// Reuse the same encoder for a full stream: Reset must discard the leftover
+	// state from the aborted stream and yield a byte-for-byte lossless result.
+	pcm := makeTestPCM(12000)
+	path := filepath.Join(dir, "ok.flac")
+	f2, err := os.Create(path) //nolint:gosec // test-controlled path
+	require.NoError(t, err)
+	require.NoError(t, enc.Reset(f2, cfg))
+	_, err = enc.Write(pcm)
+	require.NoError(t, err)
+	require.NoError(t, enc.Close())
+	require.NoError(t, f2.Close())
+
+	assert.Equal(t, pcm, decodeFLAC(t, path),
+		"encoder reused after an aborted write must produce a lossless file")
+}
+
 func TestEncodePCM_NoTempFileLeftOnSuccess(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "clip.flac")
