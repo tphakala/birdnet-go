@@ -458,8 +458,7 @@ func (p *Processor) initDynamicThresholds(settings *conf.Settings) {
 			logger.String("operation", "load_dynamic_thresholds"))
 	}
 
-	p.startThresholdPersistence()
-	p.startThresholdCleanup()
+	p.startThresholdGoroutines()
 }
 
 // New creates a new Processor with the given dependencies.
@@ -2425,9 +2424,14 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	}
 	p.discoveryDebounceMu.Unlock()
 
-	// Stop threshold persistence and cleanup goroutines first
-	if p.thresholdsCancel != nil {
-		p.thresholdsCancel()
+	// Stop threshold persistence and cleanup goroutines first. Snapshot the cancel func
+	// under thresholdsMutex so this never races with StopDynamicThresholds rewriting the
+	// field when the feature is toggled off at runtime (see #1025). cancel() is idempotent.
+	p.thresholdsMutex.RLock()
+	thresholdsCancel := p.thresholdsCancel
+	p.thresholdsMutex.RUnlock()
+	if thresholdsCancel != nil {
+		thresholdsCancel()
 	}
 
 	// Cancel flusher goroutine

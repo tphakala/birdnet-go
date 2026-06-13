@@ -316,6 +316,7 @@ func (r *dynamicThresholdRepository) GetThresholdEvents(ctx context.Context, spe
 
 	var events []entities.ThresholdEvent
 	query := r.db.WithContext(ctx).Table(r.eventTable()).
+		Preload("Label.Model").
 		Preload("Label").
 		Where("label_id IN ?", labelIDs).
 		Order("created_at DESC")
@@ -330,6 +331,7 @@ func (r *dynamicThresholdRepository) GetThresholdEvents(ctx context.Context, spe
 func (r *dynamicThresholdRepository) GetRecentThresholdEvents(ctx context.Context, limit int) ([]entities.ThresholdEvent, error) {
 	var events []entities.ThresholdEvent
 	query := r.db.WithContext(ctx).Table(r.eventTable()).
+		Preload("Label.Model").
 		Preload("Label").
 		Order("created_at DESC")
 	if limit > 0 {

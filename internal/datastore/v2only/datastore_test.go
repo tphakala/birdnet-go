@@ -13,6 +13,7 @@ import (
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -770,6 +771,90 @@ func TestV2OnlyDatastore_ThresholdEvent(t *testing.T) {
 	recent, err := ds.GetRecentThresholdEvents(10)
 	require.NoError(t, err)
 	assert.Len(t, recent, 1)
+}
+
+// TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry pins #1019: the v2only threshold
+// read methods must wrap genuine DB errors with datastore Component/Category telemetry,
+// while a benign not-found (ErrDynamicThresholdNotFound) must propagate UNWRAPPED so it
+// does not reach Sentry as a database error.
+func TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry(t *testing.T) {
+	t.Run("NotFoundPassesThroughUnwrapped", func(t *testing.T) {
+		ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+		defer cleanup()
+
+		// Label exists but no threshold was saved, so the repository returns the
+		// ErrDynamicThresholdNotFound sentinel. This is a benign not-found, not a DB fault.
+		_, err := ds.GetDynamicThreshold("Parus major", "")
+		require.Error(t, err)
+		require.ErrorIs(t, err, repository.ErrDynamicThresholdNotFound,
+			"not-found sentinel must propagate so callers can distinguish a benign miss from a genuine DB fault")
+		var ee *errors.EnhancedError
+		assert.False(t, errors.As(err, &ee),
+			"not-found must NOT be wrapped with datastore telemetry (would be Sentry noise)")
+	})
+
+	t.Run("GenuineDBErrorIsWrapped", func(t *testing.T) {
+		ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+		defer cleanup()
+
+		// Close the underlying DB so every query on the read paths fails for real.
+		require.NoError(t, ds.Close())
+
+		assertDatastoreWrapped := func(t *testing.T, err error, op string) {
+			t.Helper()
+			require.Error(t, err, "%s should surface the DB error", op)
+			var ee *errors.EnhancedError
+			require.True(t, errors.As(err, &ee), "%s error must be an EnhancedError", op)
+			assert.Equal(t, "datastore", ee.GetComponent(), "%s must tag datastore component", op)
+			assert.Equal(t, string(errors.CategoryDatabase), ee.GetCategory(), "%s must tag database category", op)
+		}
+
+		_, errGet := ds.GetDynamicThreshold("Parus major", "")
+		assertDatastoreWrapped(t, errGet, "GetDynamicThreshold")
+
+		_, errAll := ds.GetAllDynamicThresholds()
+		assertDatastoreWrapped(t, errAll, "GetAllDynamicThresholds")
+
+		_, errRecent := ds.GetRecentThresholdEvents(10)
+		assertDatastoreWrapped(t, errRecent, "GetRecentThresholdEvents")
+
+		_, _, _, _, errStats := ds.GetDynamicThresholdStats()
+		assertDatastoreWrapped(t, errStats, "GetDynamicThresholdStats")
+	})
+}
+
+// TestV2OnlyDatastore_ThresholdEvent_ModelName verifies that GetThresholdEvents and
+// GetRecentThresholdEvents return ModelName constructed from the event Label's AIModel
+// (e.g., "BirdNET_V2.4"), the event-side parallel of the GitHub #2902 record fix.
+// Regression test for #1025: events previously returned an empty ModelName because the
+// repository only preloaded Label (not Label.Model) and the converter never set it.
+func TestV2OnlyDatastore_ThresholdEvent_ModelName(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+	defer cleanup()
+
+	event := &datastore.ThresholdEvent{
+		SpeciesName:   "Parus major",
+		PreviousLevel: 0,
+		NewLevel:      1,
+		PreviousValue: 0.6,
+		NewValue:      0.7,
+		ChangeReason:  "high_confidence",
+		Confidence:    0.95,
+		CreatedAt:     time.Now(),
+	}
+	require.NoError(t, ds.SaveThresholdEvent(event))
+
+	events, err := ds.GetThresholdEvents("Parus major", 10)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "BirdNET_V2.4", events[0].ModelName,
+		"event ModelName must be constructed from the Label's Model (Name_VVersion)")
+
+	recent, err := ds.GetRecentThresholdEvents(10)
+	require.NoError(t, err)
+	require.Len(t, recent, 1)
+	assert.Equal(t, "BirdNET_V2.4", recent[0].ModelName,
+		"recent event ModelName must be constructed from the Label's Model")
 }
 
 // TestV2OnlyDatastore_GetThresholdEvents_ResolvesScientificName covers the

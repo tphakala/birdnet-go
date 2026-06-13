@@ -177,7 +177,13 @@ func (p *Processor) cleanupExpiredThresholds(expiredSpecies []string) {
 }
 
 // saveThresholdsWithRetry attempts to save thresholds with exponential backoff.
-func (p *Processor) saveThresholdsWithRetry(dbThresholds []datastore.DynamicThreshold) error {
+// The caller passes the threshold-lifecycle context so the retry loop aborts on
+// cancellation without reading the shared p.thresholdsCtx field (which would race
+// with StartDynamicThresholds/StopDynamicThresholds toggling the feature at runtime).
+func (p *Processor) saveThresholdsWithRetry(ctx context.Context, dbThresholds []datastore.DynamicThreshold) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	const maxRetries = 3
 	baseDelay := 100 * time.Millisecond
 
@@ -205,20 +211,26 @@ func (p *Processor) saveThresholdsWithRetry(dbThresholds []datastore.DynamicThre
 			logger.Int64("backoff_ms", backoffDuration.Milliseconds()),
 			logger.String("operation", "persist_dynamic_thresholds"))
 
+		// Use an explicit timer (not time.After) so the timer is released promptly
+		// when ctx is cancelled mid-backoff, instead of lingering until it fires.
+		timer := time.NewTimer(backoffDuration)
 		select {
-		case <-time.After(backoffDuration):
-		case <-p.thresholdsCtx.Done():
+		case <-timer.C:
+		case <-ctx.Done():
+			timer.Stop()
 			GetLogger().Info("Retry aborted due to shutdown",
 				logger.String("operation", "persist_dynamic_thresholds"))
-			return p.thresholdsCtx.Err()
+			return ctx.Err()
 		}
 	}
 	return err
 }
 
 // persistDynamicThresholds saves all current dynamic thresholds to the database
-// This is called periodically by the persistence goroutine
-func (p *Processor) persistDynamicThresholds() error {
+// This is called periodically by the persistence goroutine. The ctx governs the
+// retry-backoff abort and is supplied by the caller (the persistence goroutine's
+// lifecycle context, or a snapshot taken under thresholdsMutex by Stop/Flush).
+func (p *Processor) persistDynamicThresholds(ctx context.Context) error {
 	settings := p.currentSettings()
 	dbThresholds, expiredSpecies := p.convertThresholdsForPersistence(settings)
 
@@ -231,7 +243,7 @@ func (p *Processor) persistDynamicThresholds() error {
 		return nil
 	}
 
-	if err := p.saveThresholdsWithRetry(dbThresholds); err != nil {
+	if err := p.saveThresholdsWithRetry(ctx, dbThresholds); err != nil {
 		return err
 	}
 
@@ -343,10 +355,10 @@ func (p *Processor) drainPendingResets() {
 // startThresholdPersistence starts a goroutine that periodically persists dynamic thresholds
 // This ensures that learned thresholds are saved to the database and survive application restarts
 // The goroutine uses a dedicated context for clean cancellation on shutdown
-func (p *Processor) startThresholdPersistence() {
-	// Create dedicated context for threshold goroutines
-	// Both persistence and cleanup will share this context
-	p.thresholdsCtx, p.thresholdsCancel = context.WithCancel(context.Background())
+func (p *Processor) startThresholdPersistence(ctx context.Context) {
+	// The lifecycle context is created and stored by StartDynamicThresholds under
+	// thresholdsMutex; the goroutine captures the local ctx and never reads the
+	// shared p.thresholdsCtx field, so a concurrent Stop/Start cannot race it.
 
 	// Start periodic persistence
 	go func() {
@@ -360,12 +372,12 @@ func (p *Processor) startThresholdPersistence() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := p.persistDynamicThresholds(); err != nil {
+				if err := p.persistDynamicThresholds(ctx); err != nil {
 					GetLogger().Error("Failed to persist dynamic thresholds",
 						logger.Error(err),
 						logger.String("operation", "persist_dynamic_thresholds"))
 				}
-			case <-p.thresholdsCtx.Done():
+			case <-ctx.Done():
 				// Shutdown signal received via context cancellation
 				GetLogger().Info("Dynamic threshold persistence stopped",
 					logger.String("operation", "threshold_persistence_shutdown"))
@@ -378,9 +390,9 @@ func (p *Processor) startThresholdPersistence() {
 // startThresholdCleanup starts a goroutine that periodically cleans up expired thresholds
 // This prevents the database from accumulating stale threshold data
 // The goroutine uses the same context as persistence for clean cancellation on shutdown
-func (p *Processor) startThresholdCleanup() {
-	// Use the same context created in startThresholdPersistence
-	// This ensures both goroutines stop together when thresholdsCancel() is called
+func (p *Processor) startThresholdCleanup(ctx context.Context) {
+	// Shares the same lifecycle context as persistence (passed by StartDynamicThresholds),
+	// so both goroutines stop together when thresholdsCancel() is called.
 	go func() {
 		ticker := time.NewTicker(DefaultCleanupInterval)
 		defer ticker.Stop()
@@ -402,7 +414,7 @@ func (p *Processor) startThresholdCleanup() {
 						logger.Int64("count", deleted),
 						logger.String("operation", "cleanup_dynamic_thresholds"))
 				}
-			case <-p.thresholdsCtx.Done():
+			case <-ctx.Done():
 				// Shutdown signal received via context cancellation
 				GetLogger().Info("Dynamic threshold cleanup stopped",
 					logger.String("operation", "threshold_cleanup_shutdown"))
@@ -412,18 +424,44 @@ func (p *Processor) startThresholdCleanup() {
 	}()
 }
 
-// StartDynamicThresholds loads thresholds from the database and starts the persistence
-// and cleanup goroutines. This is called when dynamic thresholds are enabled at runtime
-// via the settings UI. It is safe to call multiple times; if goroutines are already
-// running (thresholdsCancel is non-nil), the call is a no-op.
-func (p *Processor) StartDynamicThresholds() {
-	// Guard against double-start under lock to prevent race between concurrent callers.
+// snapshotThresholdsCtx returns the current threshold-lifecycle context, read under
+// thresholdsMutex so it never races with StartDynamicThresholds/StopDynamicThresholds
+// rewriting the field. The returned context may be nil if the goroutines are not running.
+func (p *Processor) snapshotThresholdsCtx() context.Context {
+	p.thresholdsMutex.RLock()
+	defer p.thresholdsMutex.RUnlock()
+	return p.thresholdsCtx
+}
+
+// startThresholdGoroutines creates the shared lifecycle context and launches the
+// persistence and cleanup goroutines. It is a no-op if they are already running. The
+// "already running" check and the context creation happen atomically under
+// thresholdsMutex so concurrent callers cannot double-start or leak a context.
+func (p *Processor) startThresholdGoroutines() {
 	p.thresholdsMutex.Lock()
 	if p.thresholdsCancel != nil {
 		p.thresholdsMutex.Unlock()
 		return
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	p.thresholdsCtx = ctx
+	p.thresholdsCancel = cancel
 	p.thresholdsMutex.Unlock()
+
+	p.startThresholdPersistence(ctx)
+	p.startThresholdCleanup(ctx)
+}
+
+// StartDynamicThresholds loads thresholds from the database and starts the persistence
+// and cleanup goroutines. This is called when dynamic thresholds are enabled at runtime
+// via the settings UI. It is safe to call multiple times; if goroutines are already
+// running (thresholdsCancel is non-nil), the call is a no-op.
+func (p *Processor) StartDynamicThresholds() {
+	// Fast-path skip if already running, to avoid a redundant DB reload on repeated
+	// enable toggles. startThresholdGoroutines re-checks atomically under the lock.
+	if p.snapshotThresholdsCtx() != nil {
+		return
+	}
 
 	if err := p.loadDynamicThresholdsFromDB(); err != nil {
 		GetLogger().Debug("Starting with fresh dynamic thresholds",
@@ -431,8 +469,7 @@ func (p *Processor) StartDynamicThresholds() {
 			logger.String("operation", "start_dynamic_thresholds"))
 	}
 
-	p.startThresholdPersistence()
-	p.startThresholdCleanup()
+	p.startThresholdGoroutines()
 
 	GetLogger().Info("Dynamic threshold goroutines started",
 		logger.String("operation", "start_dynamic_thresholds"))
@@ -443,13 +480,15 @@ func (p *Processor) StartDynamicThresholds() {
 // This is called when dynamic thresholds are disabled at runtime via the settings UI.
 // It is safe to call when goroutines are not running.
 func (p *Processor) StopDynamicThresholds() {
-	// Flush thresholds to DB BEFORE cancelling the context, because
-	// persistDynamicThresholds → saveThresholdsWithRetry reads p.thresholdsCtx.
-	// Guard against nil thresholdsCtx: if goroutines were never started (e.g.,
-	// feature toggled off before it was ever on), thresholdsCtx is nil and
-	// saveThresholdsWithRetry would panic on thresholdsCtx.Done().
-	if p.Ds != nil && p.thresholdsCtx != nil {
-		if err := p.persistDynamicThresholds(); err != nil {
+	// Snapshot the lifecycle context under the lock (never read the field unlocked).
+	// If goroutines were never started, ctx is nil and we skip the flush; the retry
+	// path inside saveThresholdsWithRetry also defends against a nil ctx.
+	ctx := p.snapshotThresholdsCtx()
+
+	// Flush thresholds to DB BEFORE cancelling the context, using the snapshotted ctx
+	// so the retry-backoff abort tracks the session we are stopping.
+	if p.Ds != nil && ctx != nil {
+		if err := p.persistDynamicThresholds(ctx); err != nil {
 			GetLogger().Warn("Failed to flush dynamic thresholds during disable",
 				logger.Error(err),
 				logger.String("operation", "stop_dynamic_thresholds"))
@@ -459,13 +498,19 @@ func (p *Processor) StopDynamicThresholds() {
 	// Cancel persistence and cleanup goroutines after flush completes.
 	// Protected by thresholdsMutex to prevent races with StartDynamicThresholds.
 	p.thresholdsMutex.Lock()
-	if p.thresholdsCancel != nil {
-		p.thresholdsCancel()
-		p.thresholdsCancel = nil
+	// Only tear down if the session is still the one we snapshotted. The flush above
+	// runs without the lock and can block on DB-retry backoff; if the feature was
+	// toggled back on in the meantime, StartDynamicThresholds installed a fresh ctx
+	// and goroutines, and we must not cancel/clear those (see #1025).
+	if p.thresholdsCtx == ctx {
+		if p.thresholdsCancel != nil {
+			p.thresholdsCancel()
+			p.thresholdsCancel = nil
+		}
 		p.thresholdsCtx = nil
+		// Clear in-memory thresholds while still holding the lock.
+		p.DynamicThresholds = make(map[string]*DynamicThreshold)
 	}
-	// Clear in-memory thresholds while still holding the lock
-	p.DynamicThresholds = make(map[string]*DynamicThreshold)
 	p.thresholdsMutex.Unlock()
 
 	GetLogger().Info("Dynamic threshold goroutines stopped and thresholds cleared",
@@ -478,7 +523,13 @@ func (p *Processor) FlushDynamicThresholds() error {
 	GetLogger().Info("Flushing dynamic thresholds to database",
 		logger.String("operation", "flush_dynamic_thresholds"))
 
-	if err := p.persistDynamicThresholds(); err != nil {
+	// Use the lifecycle context if running; otherwise fall back to Background so a
+	// flush during shutdown (or before Start) still completes. Read under the lock.
+	ctx := p.snapshotThresholdsCtx()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := p.persistDynamicThresholds(ctx); err != nil {
 		GetLogger().Error("Failed to flush dynamic thresholds",
 			logger.Error(err),
 			logger.String("operation", "flush_dynamic_thresholds"))

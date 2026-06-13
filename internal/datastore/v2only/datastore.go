@@ -2852,10 +2852,13 @@ func thresholdScientificName(t *entities.DynamicThreshold) string {
 	return ""
 }
 
-// thresholdModelName constructs the classifier-style model ID from a threshold's label.
-func thresholdModelName(t *entities.DynamicThreshold) string {
-	if t.Label != nil && t.Label.Model != nil && t.Label.Model.Name != "" {
-		return t.Label.Model.Name + "_V" + t.Label.Model.Version
+// labelModelName constructs the classifier-style model ID ("Name_VVersion") from a
+// label's associated AIModel, used for both threshold records and threshold events.
+// Requires the caller's query to preload Label.Model; falls back to the default
+// BirdNET model identifier when the label or model is absent.
+func labelModelName(l *entities.Label) string {
+	if l != nil && l.Model != nil && l.Model.Name != "" {
+		return l.Model.Name + "_V" + l.Model.Version
 	}
 	return detection.DefaultModelName + "_V" + detection.DefaultModelVersion
 }
@@ -2957,14 +2960,24 @@ func (ds *Datastore) GetDynamicThreshold(speciesName, _ string) (*datastore.Dyna
 	// Resolve to scientific name in case caller passes a common name
 	t, err := ds.threshold.GetDynamicThreshold(ctx, ds.resolveToScientificName(speciesName))
 	if err != nil {
-		return nil, err
+		// Pass not-found through unwrapped: it is a benign result, not a DB fault, and
+		// wrapping it with the datastore builder would surface it to Sentry as a
+		// database error (#1019). Only genuine failures get the telemetry tags.
+		if errors.Is(err, repository.ErrDynamicThresholdNotFound) {
+			return nil, err
+		}
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_dynamic_threshold").
+			Build()
 	}
 	scientificName := thresholdScientificName(t)
 	return &datastore.DynamicThreshold{
 		ID:             t.ID,
 		SpeciesName:    strings.ToLower(ds.resolveCommonName(scientificName)),
 		ScientificName: scientificName,
-		ModelName:      thresholdModelName(t),
+		ModelName:      labelModelName(t.Label),
 		Level:          t.Level,
 		CurrentValue:   t.CurrentValue,
 		BaseThreshold:  t.BaseThreshold,
@@ -2986,7 +2999,11 @@ func (ds *Datastore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicT
 	ctx := context.Background()
 	v2Thresholds, err := ds.threshold.GetAllDynamicThresholds(ctx, limit...)
 	if err != nil {
-		return nil, err
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_all_dynamic_thresholds").
+			Build()
 	}
 	result := make([]datastore.DynamicThreshold, 0, len(v2Thresholds))
 	for i := range v2Thresholds {
@@ -2996,7 +3013,7 @@ func (ds *Datastore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicT
 			ID:             t.ID,
 			SpeciesName:    strings.ToLower(ds.resolveCommonName(scientificName)),
 			ScientificName: scientificName,
-			ModelName:      thresholdModelName(t),
+			ModelName:      labelModelName(t.Label),
 			Level:          t.Level,
 			CurrentValue:   t.CurrentValue,
 			BaseThreshold:  t.BaseThreshold,
@@ -3104,7 +3121,15 @@ func (ds *Datastore) GetDynamicThresholdStats() (totalCount, activeCount, atMini
 		return 0, 0, 0, make(map[int]int64), nil
 	}
 	ctx := context.Background()
-	return ds.threshold.GetDynamicThresholdStats(ctx)
+	totalCount, activeCount, atMinimumCount, levelDistribution, err = ds.threshold.GetDynamicThresholdStats(ctx)
+	if err != nil {
+		return 0, 0, 0, nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_dynamic_threshold_stats").
+			Build()
+	}
+	return totalCount, activeCount, atMinimumCount, levelDistribution, nil
 }
 
 // ============================================================
@@ -3223,6 +3248,7 @@ func (ds *Datastore) GetThresholdEvents(speciesName string, limit int) ([]datast
 		result = append(result, datastore.ThresholdEvent{
 			ID:            e.ID,
 			SpeciesName:   eventSpeciesName(e),
+			ModelName:     labelModelName(e.Label),
 			PreviousLevel: e.PreviousLevel,
 			NewLevel:      e.NewLevel,
 			PreviousValue: e.PreviousValue,
@@ -3243,7 +3269,11 @@ func (ds *Datastore) GetRecentThresholdEvents(limit int) ([]datastore.ThresholdE
 	ctx := context.Background()
 	v2Events, err := ds.threshold.GetRecentThresholdEvents(ctx, limit)
 	if err != nil {
-		return nil, err
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_recent_threshold_events").
+			Build()
 	}
 	result := make([]datastore.ThresholdEvent, 0, len(v2Events))
 	for i := range v2Events {
@@ -3251,6 +3281,7 @@ func (ds *Datastore) GetRecentThresholdEvents(limit int) ([]datastore.ThresholdE
 		result = append(result, datastore.ThresholdEvent{
 			ID:            e.ID,
 			SpeciesName:   eventSpeciesName(e),
+			ModelName:     labelModelName(e.Label),
 			PreviousLevel: e.PreviousLevel,
 			NewLevel:      e.NewLevel,
 			PreviousValue: e.PreviousValue,
