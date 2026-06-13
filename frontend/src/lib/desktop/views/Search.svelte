@@ -31,7 +31,11 @@
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { loggers } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import { loadDictionary, searchScientificByCommon } from '$lib/stores/speciesDictionary.svelte';
+  import {
+    loadDictionary,
+    searchScientificByCommon,
+    PER_VISITOR_SPECIES_LOCALE_ENABLED,
+  } from '$lib/stores/speciesDictionary.svelte';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
@@ -278,8 +282,15 @@
       // silently fall back to the raw term (which the backend cannot resolve for a
       // foreign-locale name). loadDictionary is cached, so awaiting it when already
       // loaded is effectively instant.
-      await loadDictionary();
-      const resolvedScientific = searchScientificByCommon(speciesSearchTerm);
+      //
+      // PARKED behind PER_VISITOR_SPECIES_LOCALE_ENABLED: while off, we skip the
+      // per-visitor dictionary entirely and send only the raw term, so search
+      // resolves in the server-side species language (settings.BirdNET.Locale).
+      let resolvedScientific: string[] = [];
+      if (PER_VISITOR_SPECIES_LOCALE_ENABLED) {
+        await loadDictionary();
+        resolvedScientific = searchScientificByCommon(speciesSearchTerm);
+      }
 
       // Build request body
       const requestBody = {

@@ -10,7 +10,10 @@
   import { createSafeMap } from './lib/utils/security';
   import { sseNotifications } from './lib/stores/sseNotifications'; // Initialize SSE toast handler
   import { t, getLocale } from './lib/i18n';
-  import { loadDictionary } from './lib/stores/speciesDictionary.svelte';
+  import {
+    loadDictionary,
+    PER_VISITOR_SPECIES_LOCALE_ENABLED,
+  } from './lib/stores/speciesDictionary.svelte';
   import {
     appState,
     initApp,
@@ -570,7 +573,12 @@
   // refetch whenever the UI locale changes. getLocale() reads reactive state, so
   // reading it here re-runs the effect on locale switch. Fire-and-forget: the
   // dashboard falls back to server-provided common names until this resolves.
+  //
+  // PARKED behind PER_VISITOR_SPECIES_LOCALE_ENABLED: while off, we never fetch
+  // the dictionary, so species names follow the server-side species language
+  // (settings.BirdNET.Locale) instead of the visitor's UI locale.
   $effect(() => {
+    if (!PER_VISITOR_SPECIES_LOCALE_ENABLED) return;
     const locale = getLocale();
     // Read the version so the effect re-runs once app config populates it, fetching
     // the content-addressed URL instead of staying on the unversioned (short-cache) one.
