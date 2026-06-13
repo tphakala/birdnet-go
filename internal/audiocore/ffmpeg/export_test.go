@@ -177,7 +177,9 @@ func TestExportAudio_ErrorsAreEnhanced(t *testing.T) {
 
 	outDir := t.TempDir()
 	pcm := makePCMSilence(t, 1)
-	const validPath = "/usr/bin/ffmpeg" // absolute + uncontaminated; never executed in validation cases
+	// Absolute on every platform (t.TempDir is absolute) and uncontaminated, so
+	// ValidateFFmpegPath passes; never executed in the validation cases.
+	validPath := filepath.Join(outDir, "ffmpeg-never-executed")
 
 	// A plain file used as an output parent directory so os.MkdirAll fails.
 	parentIsFile := filepath.Join(outDir, "not-a-dir")
