@@ -575,10 +575,27 @@ func (r *detectionRepository) GetByDateRange(ctx context.Context, start, end int
 	return dets, total, err
 }
 
-// GetByHour retrieves detections starting at a specific Unix timestamp hour.
+// GetByHour retrieves detections in the half-open interval [hourStart, hourStart+3600).
+// The exclusive upper bound prevents the first second of the next hour from being
+// counted in both adjacent hours.
 func (r *detectionRepository) GetByHour(ctx context.Context, hourStart int64, limit, offset int) ([]*entities.Detection, int64, error) {
-	hourEnd := hourStart + 3600 // 1 hour in seconds
-	return r.GetByDateRange(ctx, hourStart, hourEnd, limit, offset)
+	return r.listByHalfOpenRange(ctx, hourStart, hourStart+3600, limit, offset)
+}
+
+// listByHalfOpenRange retrieves detections in [start, end) and returns the total count.
+func (r *detectionRepository) listByHalfOpenRange(ctx context.Context, start, end int64, limit, offset int) ([]*entities.Detection, int64, error) {
+	var dets []*entities.Detection
+	var total int64
+
+	query := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("detected_at >= ? AND detected_at < ?", start, end)
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := query.Order("detected_at DESC").Limit(limit).Offset(offset).Find(&dets).Error
+	return dets, total, err
 }
 
 // GetByAudioSource retrieves detections for a specific audio source.
@@ -812,9 +829,20 @@ func (r *detectionRepository) CountByDateRange(ctx context.Context, start, end i
 	return count, err
 }
 
-// CountByHour returns the count of detections in a specific hour.
+// CountByHour returns the count of detections in the half-open interval
+// [hourStart, hourStart+3600). The exclusive upper bound prevents the first
+// second of the next hour from being counted in both adjacent hours.
 func (r *detectionRepository) CountByHour(ctx context.Context, hourStart int64) (int64, error) {
-	return r.CountByDateRange(ctx, hourStart, hourStart+3600)
+	return r.countByHalfOpenRange(ctx, hourStart, hourStart+3600)
+}
+
+// countByHalfOpenRange counts detections in [start, end).
+func (r *detectionRepository) countByHalfOpenRange(ctx context.Context, start, end int64) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("detected_at >= ? AND detected_at < ?", start, end).
+		Count(&count).Error
+	return count, err
 }
 
 // ============================================================================

@@ -627,3 +627,59 @@ func TestSaveReview_ConcurrentUpsertNoDuplicates(t *testing.T) {
 	require.NoError(t, db.Table(tableDetectionReviews).Where("detection_id = ?", det.ID).Count(&count).Error)
 	assert.Equal(t, int64(1), count)
 }
+
+// ============================================================================
+// GetByHour / CountByHour boundary tests
+// ============================================================================
+
+// TestGetByHour_HalfOpenBoundary verifies that GetByHour and CountByHour use
+// a half-open interval [hourStart, hourStart+3600) so a detection whose
+// detected_at equals the next hour's start is not double-counted.
+//
+// Three detections are seeded:
+//   - t+10    (inside the hour, clearly included)
+//   - t+3599  (last second of the hour, included)
+//   - t+3600  (next hour's first second, must be EXCLUDED from the current hour)
+//
+// The current hour must return exactly 2. The next hour must return exactly 1.
+func TestGetByHour_HalfOpenBoundary(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	const hourStart = int64(1_700_000_000)
+
+	createTestDetection(t, db, hourStart+10)
+	createTestDetection(t, db, hourStart+3599)
+	createTestDetection(t, db, hourStart+3600) // boundary: next hour's first second
+
+	t.Run("GetByHour current hour excludes boundary second", func(t *testing.T) {
+		dets, total, err := repo.GetByHour(ctx, hourStart, 100, 0)
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), total,
+			"GetByHour must use half-open [hourStart, hourStart+3600): expected 2, got %d", total)
+		assert.Len(t, dets, 2)
+	})
+
+	t.Run("CountByHour current hour excludes boundary second", func(t *testing.T) {
+		n, err := repo.CountByHour(ctx, hourStart)
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), n,
+			"CountByHour must use half-open [hourStart, hourStart+3600): expected 2, got %d", n)
+	})
+
+	t.Run("GetByHour next hour includes boundary second exactly once", func(t *testing.T) {
+		dets, total, err := repo.GetByHour(ctx, hourStart+3600, 100, 0)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), total,
+			"boundary second must belong to the next hour exactly once: expected 1, got %d", total)
+		assert.Len(t, dets, 1)
+	})
+
+	t.Run("CountByHour next hour includes boundary second exactly once", func(t *testing.T) {
+		n, err := repo.CountByHour(ctx, hourStart+3600)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), n,
+			"boundary second must belong to the next hour exactly once: expected 1, got %d", n)
+	})
+}
