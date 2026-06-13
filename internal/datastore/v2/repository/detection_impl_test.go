@@ -330,6 +330,41 @@ func TestGetBatchHourlyOccurrences_TimezoneOffset(t *testing.T) {
 	}
 }
 
+// TestGetDailyAnalytics_TimezoneOffset verifies that a near-midnight detection buckets into the
+// calendar date given by the supplied timezone offset, not the database/OS-local zone. A detection
+// at 2024-06-14T23:30:00Z falls on 2024-06-14 at UTC, crosses to 2024-06-15 at UTC+2, and stays on
+// 2024-06-14 at UTC-1. Guards against date bucketing in the engine's local timezone (the deferred
+// half of the hourly fix in TestGetBatchHourlyOccurrences_TimezoneOffset).
+func TestGetDailyAnalytics_TimezoneOffset(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	repo := &detectionRepository{db: db}
+
+	// 2024-06-14T23:30:00Z, 30 minutes before UTC midnight.
+	const nearMidnight = int64(1718407800)
+	createDetectionForLabel(t, db, 10, nearMidnight)
+
+	cases := []struct {
+		name       string
+		offsetSecs int
+		wantDate   string
+	}{
+		{"utc", 0, "2024-06-14"},
+		{"plus two hours crosses midnight", 2 * 3600, "2024-06-15"},
+		{"minus one hour stays previous day", -3600, "2024-06-14"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := repo.GetDailyAnalytics(
+				t.Context(), nearMidnight-86_400, nearMidnight+86_400, tc.offsetSecs, nil, nil)
+			require.NoError(t, err)
+			require.Len(t, got, 1, "exactly one date bucket regardless of offset")
+			assert.Equal(t, tc.wantDate, got[0].Date,
+				"detection must bucket into the offset-adjusted date %s", tc.wantDate)
+			assert.Equal(t, int64(1), got[0].TotalDetections)
+		})
+	}
+}
+
 // ============================================================================
 // Lock Tests
 // ============================================================================

@@ -62,9 +62,7 @@ const (
 	maxHour = 23
 	// saveTransactionTimeout is the maximum duration for a Save transaction.
 	// This prevents indefinite lock holding during slow I/O operations.
-	saveTransactionTimeout  = 30 * time.Second
-	sqliteDetectionDateExpr = "date(d.detected_at, 'unixepoch', 'localtime')"
-	mysqlDetectionDateExpr  = "DATE(FROM_UNIXTIME(d.detected_at))"
+	saveTransactionTimeout = 30 * time.Second
 )
 
 // parseHour validates and parses an hour string to an integer.
@@ -2383,6 +2381,23 @@ func (ds *Datastore) zoneOffsetSeconds(epoch int64) int {
 	return repository.GetTimezoneOffsetAt(ds.timezone, ref)
 }
 
+// detectionDateExpr returns a SQL expression for the wall-clock calendar date (YYYY-MM-DD) of
+// d.detected_at in the configured timezone. offsetSeconds is added to the epoch before the date
+// is taken, so the result buckets by date in ds.timezone and is independent of the database
+// session / OS-local zone (the same offset-arithmetic approach as the hour bucketing). The
+// MySQL form uses DATE_ADD on a literal date with an integer day count so it does not depend on
+// the session time_zone; DATE(FROM_UNIXTIME(...)) would apply that zone on top of the offset and
+// double-count. Integer DIV avoids floating-point rounding at exact day boundaries.
+//
+// SQLite: date(d.detected_at + offset, 'unixepoch')
+// MySQL:  DATE_ADD('1970-01-01', INTERVAL (d.detected_at + offset) DIV 86400 DAY)
+func (ds *Datastore) detectionDateExpr(offsetSeconds int) string {
+	if ds.manager.IsMySQL() {
+		return fmt.Sprintf("DATE_ADD('1970-01-01', INTERVAL (d.detected_at + %d) DIV 86400 DAY)", offsetSeconds)
+	}
+	return fmt.Sprintf("date(d.detected_at + %d, 'unixepoch')", offsetSeconds)
+}
+
 // GetSpeciesSummaryData retrieves species summary data.
 func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
@@ -2484,7 +2499,8 @@ func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetDailyAnalytics(ctx, start, end, labelID, nil)
+	// Bucket dates by the configured timezone, anchored to the range start.
+	v2Data, err := ds.detection.GetDailyAnalytics(ctx, start, end, ds.zoneOffsetSeconds(start), labelID, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2501,7 +2517,8 @@ func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 
 // GetDetectionTrends retrieves detection trends.
 func (ds *Datastore) GetDetectionTrends(ctx context.Context, period string, limit int) ([]datastore.DailyAnalyticsData, error) {
-	v2Data, err := ds.detection.GetDetectionTrends(ctx, period, limit, nil)
+	// Trends cover a trailing window ending now, so anchor the offset to the current time.
+	v2Data, err := ds.detection.GetDetectionTrends(ctx, period, limit, ds.zoneOffsetSeconds(0), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2651,10 +2668,8 @@ func (ds *Datastore) GetSpeciesDetectionDatesInPeriod(ctx context.Context, start
 		limit = 10000
 	}
 
-	dateExpr := sqliteDetectionDateExpr
-	if ds.manager.IsMySQL() {
-		dateExpr = mysqlDetectionDateExpr
-	}
+	// Bucket dates by the configured timezone, anchored to the range start.
+	dateExpr := ds.detectionDateExpr(ds.zoneOffsetSeconds(start))
 
 	type result struct {
 		ScientificName string `gorm:"column:scientific_name"`
@@ -2705,10 +2720,8 @@ func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scie
 		return "", fmt.Errorf("invalid before date format: %w", err)
 	}
 
-	dateExpr := sqliteDetectionDateExpr
-	if ds.manager.IsMySQL() {
-		dateExpr = mysqlDetectionDateExpr
-	}
+	// Bucket dates by the configured timezone, anchored to the before date.
+	dateExpr := ds.detectionDateExpr(ds.zoneOffsetSeconds(before.Unix()))
 
 	var result struct {
 		LastSeenDate string `gorm:"column:last_seen_date"`
@@ -2754,13 +2767,17 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 
 	var results []datastore.DailyAnalyticsData
 
-	// Generate database-agnostic date expression
-	// MySQL: DATE(FROM_UNIXTIME(d.detected_at))
-	// SQLite: date(d.detected_at, 'unixepoch', 'localtime') - localtime for timezone-aware bucketing
-	dateExpr := sqliteDetectionDateExpr
-	if ds.manager.IsMySQL() {
-		dateExpr = mysqlDetectionDateExpr
+	// Bucket dates by the configured timezone, anchored to the start of the requested window
+	// (or the current offset for an open-ended range). The SELECT, GROUP BY, and BETWEEN filter
+	// all reuse this single expression so they stay internally consistent; the user's date
+	// strings are interpreted in the same zone the dates are bucketed in.
+	var refEpoch int64
+	if startDate != "" {
+		if t, perr := time.ParseInLocation(time.DateOnly, startDate, ds.timezone); perr == nil {
+			refEpoch = t.Unix()
+		}
 	}
+	dateExpr := ds.detectionDateExpr(ds.zoneOffsetSeconds(refEpoch))
 
 	// Build query to count distinct species per day, excluding false positives
 	prefix := ds.manager.TablePrefix()

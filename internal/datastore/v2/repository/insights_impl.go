@@ -45,26 +45,40 @@ func (r *insightsRepository) reviewsTable() string {
 	return tableDetectionReviews
 }
 
-// SQL expression helpers — same pattern as detectionRepository.
-func (r *insightsRepository) dateFromUnixExpr(column string) string {
+// SQL expression helpers — same offset-arithmetic pattern as detectionRepository.hourFromUnixExpr.
+// offsetSeconds is the configured timezone's UTC offset; it is added to the epoch before the
+// date/hour/year is extracted, so the result buckets by wall-clock value in that zone and is
+// independent of the database session / OS-local timezone (unlike the older 'localtime' /
+// FROM_UNIXTIME forms). detected_at is always positive and offsets are bounded, so the
+// arithmetic stays non-negative even for west-of-UTC (negative) offsets.
+
+// dateFromUnixExpr returns a SQL expression for the wall-clock calendar date (YYYY-MM-DD).
+// SQLite: date(column + offset, 'unixepoch')
+// MySQL:  DATE_ADD('1970-01-01', INTERVAL (column + offset) DIV 86400 DAY)
+//
+// The MySQL form computes the civil date arithmetically (DATE_ADD on a literal date with an
+// integer day count) so it does not depend on the session time_zone; DATE(FROM_UNIXTIME(...))
+// would apply the session zone on top of the offset and double-count. Integer DIV avoids any
+// floating-point rounding at exact day boundaries.
+func (r *insightsRepository) dateFromUnixExpr(column string, offsetSeconds int) string {
 	if r.isMySQL {
-		return fmt.Sprintf("DATE(FROM_UNIXTIME(%s))", column)
+		return fmt.Sprintf("DATE_ADD('1970-01-01', INTERVAL (%s + %d) DIV 86400 DAY)", column, offsetSeconds)
 	}
-	return fmt.Sprintf("DATE(datetime(%s, 'unixepoch', 'localtime'))", column)
+	return fmt.Sprintf("date(%s + %d, 'unixepoch')", column, offsetSeconds)
 }
 
-func (r *insightsRepository) hourFromUnixExpr(column string) string {
+func (r *insightsRepository) hourFromUnixExpr(column string, offsetSeconds int) string {
 	if r.isMySQL {
-		return fmt.Sprintf("HOUR(FROM_UNIXTIME(%s))", column)
+		return fmt.Sprintf("FLOOR((%s + %d) / 3600) %% 24", column, offsetSeconds)
 	}
-	return fmt.Sprintf("CAST(strftime('%%H', datetime(%s, 'unixepoch', 'localtime')) AS INTEGER)", column)
+	return fmt.Sprintf("CAST((%s + %d) / 3600 AS INTEGER) %% 24", column, offsetSeconds)
 }
 
-func (r *insightsRepository) yearFromUnixExpr(column string) string {
+func (r *insightsRepository) yearFromUnixExpr(column string, offsetSeconds int) string {
 	if r.isMySQL {
-		return fmt.Sprintf("YEAR(FROM_UNIXTIME(%s))", column)
+		return fmt.Sprintf("YEAR(DATE_ADD('1970-01-01', INTERVAL (%s + %d) DIV 86400 DAY))", column, offsetSeconds)
 	}
-	return fmt.Sprintf("CAST(strftime('%%Y', datetime(%s, 'unixepoch', 'localtime')) AS INTEGER)", column)
+	return fmt.Sprintf("CAST(strftime('%%Y', %s + %d, 'unixepoch') AS INTEGER)", column, offsetSeconds)
 }
 
 // falsePositiveExclusion returns the standard LEFT JOIN + WHERE clause
@@ -77,7 +91,7 @@ func (r *insightsRepository) falsePositiveExclusion(detAlias string) (joinClause
 	return joinClause, whereClause
 }
 
-func (r *insightsRepository) GetExpectedSpeciesToday(ctx context.Context, yearRanges []TimeRange, modelID *uint) ([]ExpectedSpecies, error) {
+func (r *insightsRepository) GetExpectedSpeciesToday(ctx context.Context, yearRanges []TimeRange, tzOffsetSeconds int, modelID *uint) ([]ExpectedSpecies, error) {
 	if len(yearRanges) == 0 {
 		return nil, nil
 	}
@@ -85,8 +99,8 @@ func (r *insightsRepository) GetExpectedSpeciesToday(ctx context.Context, yearRa
 	det := r.detectionsTable()
 	lab := r.labelsTable()
 	fpJoin, fpWhere := r.falsePositiveExclusion("d")
-	dateExpr := r.dateFromUnixExpr("d.detected_at")
-	yearExpr := r.yearFromUnixExpr("d.detected_at")
+	dateExpr := r.dateFromUnixExpr("d.detected_at", tzOffsetSeconds)
+	yearExpr := r.yearFromUnixExpr("d.detected_at", tzOffsetSeconds)
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).
@@ -133,7 +147,7 @@ func (r *insightsRepository) GetPhantomSpecies(ctx context.Context, since int64,
 		query = query.Where("d.model_id = ?", *modelID)
 	}
 
-	query = query.Group(lab + ".scientific_name").
+	query = query.Group(lab+".scientific_name").
 		Having("COUNT(*) >= ? AND AVG(d.confidence) < ?", minDetections, maxAvgConfidence).
 		Order("avg_confidence ASC")
 
@@ -144,12 +158,15 @@ func (r *insightsRepository) GetPhantomSpecies(ctx context.Context, since int64,
 	return results, nil
 }
 
-func (r *insightsRepository) GetDawnChorusRaw(ctx context.Context, since int64, startHour, endHour int, modelID *uint) ([]DawnChorusRawEntry, error) {
+func (r *insightsRepository) GetDawnChorusRaw(ctx context.Context, since int64, startHour, endHour, tzOffsetSeconds int, modelID *uint) ([]DawnChorusRawEntry, error) {
 	det := r.detectionsTable()
 	lab := r.labelsTable()
 	fpJoin, fpWhere := r.falsePositiveExclusion("d")
-	hourExpr := r.hourFromUnixExpr("d.detected_at")
-	dateExpr := r.dateFromUnixExpr("d.detected_at")
+	// Hour filter and date grouping MUST share the same offset to keep the query internally
+	// consistent (otherwise a near-midnight detection could be hour-filtered in one zone and
+	// date-grouped in another).
+	hourExpr := r.hourFromUnixExpr("d.detected_at", tzOffsetSeconds)
+	dateExpr := r.dateFromUnixExpr("d.detected_at", tzOffsetSeconds)
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).
@@ -190,7 +207,7 @@ func (r *insightsRepository) GetNewArrivals(ctx context.Context, recentSince int
 		query = query.Where("d.model_id = ?", *modelID)
 	}
 
-	query = query.Group(lab + ".scientific_name").
+	query = query.Group(lab+".scientific_name").
 		Having("MIN(d.detected_at) >= ?", recentSince).
 		Order("first_detected DESC")
 
@@ -217,7 +234,7 @@ func (r *insightsRepository) GetGoneQuiet(ctx context.Context, recentSince int64
 		query = query.Where("d.model_id = ?", *modelID)
 	}
 
-	query = query.Group(lab + ".scientific_name").
+	query = query.Group(lab+".scientific_name").
 		Having("COUNT(*) >= ? AND MAX(d.detected_at) < ?", minTotalDetections, recentSince).
 		Order("last_detected DESC")
 
@@ -228,10 +245,10 @@ func (r *insightsRepository) GetGoneQuiet(ctx context.Context, recentSince int64
 	return results, nil
 }
 
-func (r *insightsRepository) GetDashboardKPIs(ctx context.Context, todaySince int64, modelID *uint) (*DashboardKPIs, error) {
+func (r *insightsRepository) GetDashboardKPIs(ctx context.Context, todaySince int64, tzOffsetSeconds int, modelID *uint) (*DashboardKPIs, error) {
 	det := r.detectionsTable()
 	fpJoin, fpWhere := r.falsePositiveExclusion("d")
-	dateExpr := r.dateFromUnixExpr("d.detected_at")
+	dateExpr := r.dateFromUnixExpr("d.detected_at", tzOffsetSeconds)
 
 	kpis := &DashboardKPIs{}
 
