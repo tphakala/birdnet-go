@@ -1367,6 +1367,69 @@ func clearExcludedSpeciesList(t *testing.T, settings *conf.Settings) {
 	settings.Realtime.Species.Exclude = []string{}
 }
 
+// postSpeciesListToggle posts a common_name body to a species-list toggle handler
+// and returns the response recorder.
+func postSpeciesListToggle(t *testing.T, e *echo.Echo, handler func(echo.Context) error, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/toggle", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, handler(e.NewContext(req, rec)))
+	return rec
+}
+
+// getSpeciesList calls a species-list GET handler and returns the species slice.
+func getSpeciesList(t *testing.T, e *echo.Echo, handler func(echo.Context) error) []string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	require.NoError(t, handler(e.NewContext(httptest.NewRequest(http.MethodGet, "/api/v2/detections/list", http.NoBody), rec)))
+	var listed SpeciesListResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &listed))
+	return listed.Species
+}
+
+// assertSpeciesListToggleRoundTrip exercises add -> verify -> remove -> verify plus
+// the empty-name error path for a managed species list (include or confirmed).
+func assertSpeciesListToggleRoundTrip(t *testing.T, e *echo.Echo, toggle, get func(echo.Context) error) {
+	t.Helper()
+	const speciesName = "American Crow"
+	const body = `{"common_name": "American Crow"}`
+
+	added := postSpeciesListToggle(t, e, toggle, body)
+	assert.Equal(t, http.StatusOK, added.Code)
+	var addResp SpeciesListToggleResponse
+	require.NoError(t, json.Unmarshal(added.Body.Bytes(), &addResp))
+	assert.Equal(t, "added", addResp.Action)
+	assert.True(t, addResp.Present)
+	assert.Contains(t, getSpeciesList(t, e, get), speciesName, "species should be saved after add")
+
+	removed := postSpeciesListToggle(t, e, toggle, body)
+	var removeResp SpeciesListToggleResponse
+	require.NoError(t, json.Unmarshal(removed.Body.Bytes(), &removeResp))
+	assert.Equal(t, "removed", removeResp.Action)
+	assert.False(t, removeResp.Present)
+	assert.NotContains(t, getSpeciesList(t, e, get), speciesName, "species should be removed after second toggle")
+
+	errRec := postSpeciesListToggle(t, e, toggle, `{"common_name": ""}`)
+	assert.Equal(t, http.StatusBadRequest, errRec.Code)
+}
+
+// TestIncludeSpecies tests the always-include toggle endpoint and its read endpoint.
+func TestIncludeSpecies(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	controller.DisableSaveSettings = true // exercise the publish path without disk I/O
+	controller.Settings.Load().Realtime.Species.Include = []string{}
+	assertSpeciesListToggleRoundTrip(t, e, controller.IncludeSpecies, controller.GetIncludedSpecies)
+}
+
+// TestConfirmSpecies tests the confirmed-list toggle endpoint and its read endpoint.
+func TestConfirmSpecies(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	controller.DisableSaveSettings = true // exercise the publish path without disk I/O
+	controller.Settings.Load().Realtime.Species.Confirmed = []string{}
+	assertSpeciesListToggleRoundTrip(t, e, controller.ConfirmSpecies, controller.GetConfirmedSpecies)
+}
+
 // TestIgnoreSpecies tests the IgnoreSpecies endpoint with toggle behavior
 func TestIgnoreSpecies(t *testing.T) {
 	// Test cases for error scenarios

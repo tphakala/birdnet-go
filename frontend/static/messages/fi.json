@@ -1654,6 +1654,7 @@
       "speciesList": "Lajiluettelo",
       "switchToGrid": "Vaihda ruudukkonäkymään",
       "switchToList": "Vaihda listanäkymään",
+      "switchToManage": "Switch to manage view",
       "noSpeciesFound": "Suodattimia vastaavia lajeja ei löytynyt.",
       "headers": {
         "species": "Laji",
@@ -1667,6 +1668,22 @@
         "detections": "Havainnot:",
         "confidence": "Luottamus:",
         "first": "Ensimmäinen:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Excluded",
+          "included": "Included",
+          "reviewRatio": "Review",
+          "rangeProbability": "Range",
+          "confirmed": "Confirmed",
+          "actions": "Actions"
+        },
+        "delete": "Delete all detections for this species",
+        "deleteTitle": "Delete species detections",
+        "deleteConfirm": "Delete",
+        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
+        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
+        "deleteFailed": "Failed to delete detections. Please try again."
       }
     },
     "advanced": {

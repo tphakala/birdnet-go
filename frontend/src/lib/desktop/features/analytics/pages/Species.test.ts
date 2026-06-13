@@ -2,6 +2,8 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../../../test/render-helpers';
 import { setBasePath, resetBasePath } from '$lib/utils/urlHelpers';
+import { settingsActions } from '$lib/stores/settings';
+import { initAuthContext } from '$lib/utils/auth';
 import Species from './Species.svelte';
 
 /** Must match SORT_STORAGE_KEY in Species.svelte. */
@@ -253,5 +255,135 @@ describe('Species (analytics page) — sortable column headers', () => {
     expect(
       container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
     ).toBe('ascending');
+  });
+});
+
+describe('Species (analytics page) — Manage view', () => {
+  const originalFetch = globalThis.fetch;
+
+  // View toggle order: grid(0), list(1), manage(2 — only when authenticated).
+  const MANAGE_VIEW_TOGGLE_INDEX = 2;
+  // Manage table body cell order: name(0), count(1), maxConf(2), lastSeen(3),
+  // excluded(4), included(5), reviewRatio(6), range(7), confirmed(8), delete(9).
+  const REVIEW_CELL_INDEX = 6;
+  const SORT_STORAGE_KEY = 'analytics.species.sortOrder';
+
+  const summary = [
+    {
+      common_name: 'American Robin',
+      scientific_name: 'Turdus migratorius',
+      count: 5,
+      avg_confidence: 0.8,
+      max_confidence: 0.9,
+      first_heard: '2026-04-01',
+      last_heard: '2026-04-20',
+    },
+  ];
+
+  function mockManageFetch(reviewStats: unknown) {
+    globalThis.fetch = mockFetchSequence({
+      '/api/v2/analytics/species/review-stats': () => reviewStats,
+      '/api/v2/analytics/species/summary': () => summary,
+      '/api/v2/analytics/species/thumbnails': () => ({}),
+      '/api/v2/detections/included': () => ({ species: [] }),
+      '/api/v2/detections/confirmed': () => ({ species: [] }),
+      '/api/v2/detections/ignored': () => ({ species: [] }),
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initAuthContext(false); // security disabled => authenticated
+    vi.spyOn(settingsActions, 'loadRangeFilterSpecies').mockResolvedValue({
+      count: 0,
+      species: [],
+    });
+    mockManageFetch([
+      { scientificName: 'Turdus migratorius', total: 10, verified: 7, rejected: 3 },
+    ]);
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetBasePath();
+    globalThis.fetch = originalFetch;
+    window.localStorage.clear();
+    initAuthContext(false);
+    vi.restoreAllMocks();
+  });
+
+  const speciesTest = createComponentTestFactory(Species);
+
+  async function renderManageView() {
+    const { container } = speciesTest.render({});
+    await waitFor(() => {
+      if (container.querySelectorAll('.join button').length < 3)
+        throw new Error('toggle not ready');
+    });
+    await fireEvent.click(container.querySelectorAll('.join button')[MANAGE_VIEW_TOGGLE_INDEX]);
+    await waitFor(
+      () => {
+        if (!container.querySelector('table tbody tr'))
+          throw new Error('manage table not yet rendered');
+      },
+      { timeout: 2000 }
+    );
+    return { container };
+  }
+
+  it('renders the Manage toggle only when authenticated', async () => {
+    const { container } = speciesTest.render({});
+    await waitFor(() => {
+      if (container.querySelectorAll('.join button').length === 0)
+        throw new Error('toggle not ready');
+    });
+    expect(container.querySelectorAll('.join button')).toHaveLength(3);
+    cleanup();
+
+    initAuthContext(true, false); // security enabled, access denied => not authenticated
+    const { container: guest } = speciesTest.render({});
+    await waitFor(() => {
+      if (guest.querySelectorAll('.join button').length === 0) throw new Error('toggle not ready');
+    });
+    expect(guest.querySelectorAll('.join button')).toHaveLength(2);
+  });
+
+  it('hides average confidence and first detected columns', async () => {
+    const { container } = await renderManageView();
+    const headText = container.querySelector('table thead')?.textContent ?? '';
+    expect(headText).not.toContain('avgConfidence');
+    expect(headText).not.toContain('firstDetected');
+    // Sanity: the shared maxConfidence/lastDetected columns remain.
+    expect(headText).toContain('maxConfidence');
+    expect(headText).toContain('lastDetected');
+  });
+
+  it('shows the review ratio as "{verified} / {rejected}"', async () => {
+    const { container } = await renderManageView();
+    await waitFor(() => {
+      const cell = container.querySelectorAll('table tbody tr td')[REVIEW_CELL_INDEX];
+      expect(cell.textContent.trim()).toBe('7 / 3');
+    });
+  });
+
+  it('shows — in the review column when a species has no reviews', async () => {
+    mockManageFetch([{ scientificName: 'Turdus migratorius', total: 5, verified: 0, rejected: 0 }]);
+    const { container } = await renderManageView();
+    await waitFor(() => {
+      const cell = container.querySelectorAll('table tbody tr td')[REVIEW_CELL_INDEX];
+      expect(cell.textContent.trim()).toBe('—');
+    });
+  });
+
+  it('does not persist a Manage-only sort into the grid/list localStorage key', async () => {
+    const { container } = await renderManageView();
+    // fetchData persists the default grid/list sort on mount.
+    const persistedBefore = window.localStorage.getItem(SORT_STORAGE_KEY);
+    // Manage sortable header buttons: name(0), count(1), maxConf(2), lastSeen(3), review(4), range(5).
+    const reviewSortButton = container.querySelectorAll('table thead th button')[4];
+    await fireEvent.click(reviewSortButton);
+    // Sorting by a Manage-only column must not change the grid/list persisted sort.
+    expect(window.localStorage.getItem(SORT_STORAGE_KEY)).toBe(persistedBefore);
   });
 });

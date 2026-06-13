@@ -1654,6 +1654,7 @@
       "speciesList": "Artenliste",
       "switchToGrid": "Zur Gitteransicht wechseln",
       "switchToList": "Zur Listenansicht wechseln",
+      "switchToManage": "Switch to manage view",
       "noSpeciesFound": "Keine Arten gefunden, die Ihren Filtern entsprechen.",
       "headers": {
         "species": "Art",
@@ -1667,6 +1668,22 @@
         "detections": "Erkennungen:",
         "confidence": "Konfidenz:",
         "first": "Erste:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Excluded",
+          "included": "Included",
+          "reviewRatio": "Review",
+          "rangeProbability": "Range",
+          "confirmed": "Confirmed",
+          "actions": "Actions"
+        },
+        "delete": "Delete all detections for this species",
+        "deleteTitle": "Delete species detections",
+        "deleteConfirm": "Delete",
+        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
+        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
+        "deleteFailed": "Failed to delete detections. Please try again."
       }
     },
     "advanced": {

@@ -1654,6 +1654,7 @@
       "speciesList": "Liste des espèces",
       "switchToGrid": "Passer à la vue en grille",
       "switchToList": "Passer à la vue en liste",
+      "switchToManage": "Switch to manage view",
       "noSpeciesFound": "Aucune espèce trouvée correspondant à vos filtres.",
       "headers": {
         "species": "Espèce",
@@ -1667,6 +1668,22 @@
         "detections": "Détections :",
         "confidence": "Confiance :",
         "first": "Première :"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Excluded",
+          "included": "Included",
+          "reviewRatio": "Review",
+          "rangeProbability": "Range",
+          "confirmed": "Confirmed",
+          "actions": "Actions"
+        },
+        "delete": "Delete all detections for this species",
+        "deleteTitle": "Delete species detections",
+        "deleteConfirm": "Delete",
+        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
+        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
+        "deleteFailed": "Failed to delete detections. Please try again."
       }
     },
     "advanced": {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -1494,6 +1495,55 @@ func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end 
 		Scan(&results).Error
 
 	return results, err
+}
+
+// GetSpeciesReviewStats returns per-species detection and review counts across
+// all time. Unlike GetSpeciesSummary it does not exclude false positives, so the
+// rejected count reflects every detection marked as such.
+func (r *detectionRepository) GetSpeciesReviewStats(ctx context.Context) ([]SpeciesReviewStat, error) {
+	var results []SpeciesReviewStat
+
+	detTable := r.tableName()
+	labTable := r.labelsTable()
+	revTable := r.reviewsTable()
+
+	query := r.db.WithContext(ctx).Table(detTable).
+		Select(fmt.Sprintf(`
+			%s.scientific_name,
+			COUNT(DISTINCT %s.id) as total,
+			COUNT(DISTINCT CASE WHEN %s.verified = ? THEN %s.id END) as verified,
+			COUNT(DISTINCT CASE WHEN %s.verified = ? THEN %s.id END) as rejected
+		`, labTable, detTable, revTable, detTable, revTable, detTable),
+			string(entities.VerificationCorrect), string(entities.VerificationFalsePositive)).
+		Joins(fmt.Sprintf("JOIN %s ON %s.id = %s.label_id", labTable, labTable, detTable)).
+		Joins(fmt.Sprintf("LEFT JOIN %s ON %s.id = %s.detection_id", revTable, detTable, revTable)).
+		Group(fmt.Sprintf("%s.scientific_name", labTable))
+
+	err := query.Scan(&results).Error
+	return results, err
+}
+
+// GetDetectionIDsByScientificName returns the IDs of all detections whose label
+// resolves to the given scientific name. Legacy labels stored as
+// "ScientificName_CommonName" are matched on the scientific-name portion.
+func (r *detectionRepository) GetDetectionIDsByScientificName(ctx context.Context, scientificName string) ([]uint, error) {
+	name := scientificName
+	if idx := strings.IndexByte(name, '_'); idx >= 0 {
+		name = name[:idx]
+	}
+	if name == "" {
+		return []uint{}, nil
+	}
+
+	detTable := r.tableName()
+	labTable := r.labelsTable()
+
+	var ids []uint
+	err := r.db.WithContext(ctx).Table(detTable).
+		Joins(fmt.Sprintf("JOIN %s ON %s.id = %s.label_id", labTable, labTable, detTable)).
+		Where(fmt.Sprintf("%s.scientific_name = ? OR %s.scientific_name LIKE ?", labTable, labTable), name, name+"_%").
+		Pluck(fmt.Sprintf("%s.id", detTable), &ids).Error
+	return ids, err
 }
 
 // buildAnalyticsBaseQuery creates a base query with JOIN and WHERE clauses for analytics.

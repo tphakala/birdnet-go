@@ -100,6 +100,123 @@ func TestBatchDeleteDetections(t *testing.T) {
 	}
 }
 
+// TestDeleteSpeciesDetections tests the species-wide delete endpoint, including
+// skip-locked behavior, no-match handling, and the HTTP 501 fallback.
+func TestDeleteSpeciesDetections(t *testing.T) {
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	testCases := []struct {
+		name           string
+		body           any
+		noteIDs        map[string][]string
+		useStub        bool
+		mockSetup      func(*mock.Mock)
+		expectedStatus int
+		checkResult    func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name:    "deletes detections for scientific name",
+			body:    SpeciesDeleteRequest{ScientificName: "Turdus migratorius"},
+			noteIDs: map[string][]string{"Turdus migratorius": {"1", "2"}},
+			useStub: true,
+			mockSetup: func(m *mock.Mock) {
+				m.On("Get", "1").Return(datastore.Note{ID: 1, Locked: false, ClipName: ""}, nil)
+				m.On("Delete", "1").Return(nil)
+				m.On("Get", "2").Return(datastore.Note{ID: 2, Locked: false, ClipName: ""}, nil)
+				m.On("Delete", "2").Return(nil)
+			},
+			expectedStatus: http.StatusOK,
+			checkResult: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result SpeciesDeleteResult
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+				assert.Equal(t, 2, result.Deleted)
+				assert.Equal(t, 0, result.Skipped)
+			},
+		},
+		{
+			name:           "no matching detections",
+			body:           SpeciesDeleteRequest{ScientificName: "Unknown species"},
+			noteIDs:        map[string][]string{},
+			useStub:        true,
+			mockSetup:      func(_ *mock.Mock) {},
+			expectedStatus: http.StatusOK,
+			checkResult: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result SpeciesDeleteResult
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+				assert.Equal(t, 0, result.Deleted)
+				assert.Equal(t, 0, result.Skipped)
+			},
+		},
+		{
+			name:    "skips locked detections",
+			body:    SpeciesDeleteRequest{ScientificName: "Turdus migratorius"},
+			noteIDs: map[string][]string{"Turdus migratorius": {"1", "2"}},
+			useStub: true,
+			mockSetup: func(m *mock.Mock) {
+				m.On("Get", "1").Return(datastore.Note{ID: 1, Locked: false, ClipName: ""}, nil)
+				m.On("Delete", "1").Return(nil)
+				m.On("Get", "2").Return(datastore.Note{ID: 2, Locked: true}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			checkResult: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result SpeciesDeleteResult
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+				assert.Equal(t, 1, result.Deleted)
+				assert.Equal(t, 1, result.Skipped)
+			},
+		},
+		{
+			name:           "missing scientific name returns 400",
+			body:           SpeciesDeleteRequest{ScientificName: ""},
+			useStub:        true,
+			mockSetup:      func(_ *mock.Mock) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "unsupported datastore returns 501",
+			body:           SpeciesDeleteRequest{ScientificName: "Turdus migratorius"},
+			useStub:        false,
+			mockSetup:      func(_ *mock.Mock) {},
+			expectedStatus: http.StatusNotImplemented,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockDS.ExpectedCalls = nil
+			mockDS.Calls = nil
+			tc.mockSetup(&mockDS.Mock)
+
+			if tc.useStub {
+				controller.DS = &managedSpeciesStubDS{MockInterface: mockDS, noteIDs: tc.noteIDs}
+			} else {
+				controller.DS = mockDS
+			}
+
+			bodyBytes, err := json.Marshal(tc.body)
+			require.NoError(t, err)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/species/delete", bytes.NewReader(bodyBytes))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			err = controller.DeleteSpeciesDetections(c)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectedStatus, rec.Code)
+
+			if tc.checkResult != nil {
+				tc.checkResult(t, rec)
+			}
+
+			mockDS.AssertExpectations(t)
+		})
+	}
+}
+
 // TestBatchReviewDetections tests the BatchReviewDetections endpoint.
 func TestBatchReviewDetections(t *testing.T) {
 	e, mockDS, controller := setupTestEnvironment(t)

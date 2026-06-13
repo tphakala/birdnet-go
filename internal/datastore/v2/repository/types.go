@@ -178,6 +178,22 @@ type SpeciesSummaryData struct {
 	MaxConfidence float64
 }
 
+// SpeciesReviewStat contains per-species detection and review counts. Total
+// includes false positives so the verified/rejected ratio is accurate.
+type SpeciesReviewStat struct {
+	// ScientificName is the species scientific name.
+	ScientificName string
+
+	// Total is the count of all detections (including false positives).
+	Total int64
+
+	// Verified is the count of detections reviewed as correct.
+	Verified int64
+
+	// Rejected is the count of detections reviewed as false positive.
+	Rejected int64
+}
+
 // HourlyDistributionData contains detection counts by hour.
 type HourlyDistributionData struct {
 	// Hour is 0-23.

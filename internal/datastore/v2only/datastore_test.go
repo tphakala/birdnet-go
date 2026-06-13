@@ -1062,6 +1062,87 @@ func TestV2OnlyDatastore_ReviewOperations(t *testing.T) {
 	assert.Equal(t, "correct", retrieved.Verified)
 }
 
+// TestV2OnlyDatastore_GetSpeciesReviewStats verifies per-species total/verified/
+// rejected counts bridged from the v2 repository, including false positives.
+func TestV2OnlyDatastore_GetSpeciesReviewStats(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	saveTestNote(t, ds, "2024-01-15", "08:00:00", "Passer domesticus", 0.85) // ID 1
+	saveTestNote(t, ds, "2024-01-15", "09:00:00", "Passer domesticus", 0.90) // ID 2
+	saveTestNote(t, ds, "2024-01-16", "10:00:00", "Turdus merula", 0.80)     // ID 3
+
+	require.NoError(t, ds.SaveNoteReview(&datastore.NoteReview{NoteID: 1, Verified: "correct"}))
+	require.NoError(t, ds.SaveNoteReview(&datastore.NoteReview{NoteID: 3, Verified: "false_positive"}))
+
+	stats, err := ds.GetSpeciesReviewStats(t.Context())
+	require.NoError(t, err)
+
+	byName := make(map[string]datastore.SpeciesReviewStat, len(stats))
+	for _, s := range stats {
+		byName[s.ScientificName] = s
+	}
+
+	assert.Equal(t, 2, byName["Passer domesticus"].Total)
+	assert.Equal(t, 1, byName["Passer domesticus"].Verified)
+	assert.Equal(t, 0, byName["Passer domesticus"].Rejected)
+
+	assert.Equal(t, 1, byName["Turdus merula"].Total)
+	assert.Equal(t, 0, byName["Turdus merula"].Verified)
+	assert.Equal(t, 1, byName["Turdus merula"].Rejected) // false positive counted
+}
+
+// TestV2OnlyDatastore_GetSpeciesNoteIDs verifies note-ID lookup by scientific name.
+func TestV2OnlyDatastore_GetSpeciesNoteIDs(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	saveTestNote(t, ds, "2024-01-15", "08:00:00", "Passer domesticus", 0.85) // ID 1
+	saveTestNote(t, ds, "2024-01-15", "09:00:00", "Passer domesticus", 0.90) // ID 2
+	saveTestNote(t, ds, "2024-01-16", "10:00:00", "Turdus merula", 0.80)     // ID 3
+
+	ids, err := ds.GetSpeciesNoteIDs("Passer domesticus")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"1", "2"}, ids)
+
+	none, err := ds.GetSpeciesNoteIDs("Nonexistent species")
+	require.NoError(t, err)
+	assert.Empty(t, none)
+}
+
+// TestV2OnlyDatastore_GetSpeciesNoteIDs_LegacyLabelFormat is a regression test for
+// labels stored in the legacy "ScientificName_CommonName" form: a lookup by the
+// clean scientific name must still resolve the detection, and review stats must
+// report the extracted scientific name.
+func TestV2OnlyDatastore_GetSpeciesNoteIDs_LegacyLabelFormat(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	ctx := t.Context()
+	// Create a legacy concatenated label and a detection referencing it directly,
+	// bypassing Save's ExtractScientificName normalization so the underscore form
+	// is actually persisted.
+	label, err := ds.label.GetOrCreate(ctx, "Tyto alba_Barn Owl", ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+	det := &entities.Detection{ModelID: ds.defaultModelID, LabelID: label.ID, DetectedAt: time.Now().Unix(), Confidence: 0.9}
+	require.NoError(t, ds.detection.Save(ctx, det))
+
+	ids, err := ds.GetSpeciesNoteIDs("Tyto alba")
+	require.NoError(t, err)
+	assert.Equal(t, []string{fmt.Sprintf("%d", det.ID)}, ids)
+
+	stats, err := ds.GetSpeciesReviewStats(ctx)
+	require.NoError(t, err)
+	found := false
+	for _, s := range stats {
+		if s.ScientificName == "Tyto alba" {
+			found = true
+			assert.Equal(t, 1, s.Total)
+		}
+	}
+	assert.True(t, found, "review stats should report the extracted scientific name")
+}
+
 func TestV2OnlyDatastore_CommentOperations(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()

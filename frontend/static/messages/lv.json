@@ -1654,6 +1654,7 @@
       "speciesList": "Sugu saraksts",
       "switchToGrid": "Pārslēgt uz režģa skatu",
       "switchToList": "Pārslēgt uz saraksta skatu",
+      "switchToManage": "Switch to manage view",
       "noSpeciesFound": "Sugas, kas atbilst jūsu filtriem, nav atrastas.",
       "headers": {
         "species": "Suga",
@@ -1667,6 +1668,22 @@
         "detections": "Atpazīšanas:",
         "confidence": "Ticamība:",
         "first": "Pirmā:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Excluded",
+          "included": "Included",
+          "reviewRatio": "Review",
+          "rangeProbability": "Range",
+          "confirmed": "Confirmed",
+          "actions": "Actions"
+        },
+        "delete": "Delete all detections for this species",
+        "deleteTitle": "Delete species detections",
+        "deleteConfirm": "Delete",
+        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
+        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
+        "deleteFailed": "Failed to delete detections. Please try again."
       }
     },
     "advanced": {

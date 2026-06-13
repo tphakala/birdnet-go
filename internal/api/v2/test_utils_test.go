@@ -3,6 +3,7 @@
 package api
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -17,6 +18,26 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
+
+// managedSpeciesStubDS wraps the generated datastore mock and additionally
+// implements the optional speciesReviewStatsDatastore and speciesNoteIDsDatastore
+// interfaces, so tests can exercise the success paths of the analytics
+// "Manage" view endpoints. The embedded mock still drives Get/Delete behavior.
+type managedSpeciesStubDS struct {
+	*mocks.MockInterface
+	reviewStats []datastore.SpeciesReviewStat
+	noteIDs     map[string][]string
+}
+
+// GetSpeciesReviewStats returns the canned review stats configured on the stub.
+func (d *managedSpeciesStubDS) GetSpeciesReviewStats(_ context.Context) ([]datastore.SpeciesReviewStat, error) {
+	return d.reviewStats, nil
+}
+
+// GetSpeciesNoteIDs returns the canned note IDs for the given scientific name.
+func (d *managedSpeciesStubDS) GetSpeciesNoteIDs(scientificName string) ([]string, error) {
+	return d.noteIDs[scientificName], nil
+}
 
 // Test environment constants
 const (

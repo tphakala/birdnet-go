@@ -233,6 +233,15 @@ type DetectionRepository interface {
 	// modelID is optional; pass nil to include all models.
 	GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint) ([]SpeciesSummaryData, error)
 
+	// GetSpeciesReviewStats returns per-species detection and review counts
+	// across all time, including false positives.
+	GetSpeciesReviewStats(ctx context.Context) ([]SpeciesReviewStat, error)
+
+	// GetDetectionIDsByScientificName returns the IDs of all detections whose
+	// label resolves to the given scientific name. Legacy labels stored as
+	// "ScientificName_CommonName" are matched on the scientific-name portion.
+	GetDetectionIDsByScientificName(ctx context.Context, scientificName string) ([]uint, error)
+
 	// GetHourlyDistribution returns detection counts by hour.
 	// labelID and modelID are optional filters.
 	GetHourlyDistribution(ctx context.Context, start, end int64, labelID, modelID *uint) ([]HourlyDistributionData, error)

@@ -1654,6 +1654,7 @@
       "speciesList": "Zoznam druhov",
       "switchToGrid": "Prepnúť na mriežku",
       "switchToList": "Prepnúť na zoznam",
+      "switchToManage": "Switch to manage view",
       "noSpeciesFound": "Nenašli sa žiadne druhy zodpovedajúce vašim filtrom.",
       "headers": {
         "species": "Druh",
@@ -1667,6 +1668,22 @@
         "detections": "Detekcie:",
         "confidence": "Istota:",
         "first": "Prvýkrát:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Excluded",
+          "included": "Included",
+          "reviewRatio": "Review",
+          "rangeProbability": "Range",
+          "confirmed": "Confirmed",
+          "actions": "Actions"
+        },
+        "delete": "Delete all detections for this species",
+        "deleteTitle": "Delete species detections",
+        "deleteConfirm": "Delete",
+        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
+        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
+        "deleteFailed": "Failed to delete detections. Please try again."
       }
     },
     "advanced": {

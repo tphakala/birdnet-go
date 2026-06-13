@@ -55,6 +55,68 @@ func assertAnalyticsErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, 
 }
 
 // TestGetSpeciesSummary tests the species summary endpoint
+// TestGetSpeciesReviewStats covers the analytics review-stats endpoint: success,
+// empty result, and the HTTP 501 fallback when the datastore lacks support.
+func TestGetSpeciesReviewStats(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+		controller.DS = &managedSpeciesStubDS{
+			MockInterface: mockDS,
+			reviewStats: []datastore.SpeciesReviewStat{
+				{ScientificName: "Turdus migratorius", Total: 3, Verified: 2, Rejected: 1},
+			},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/review-stats", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		require.NoError(t, controller.GetSpeciesReviewStats(c))
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response []map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		require.Len(t, response, 1)
+		assert.Equal(t, "Turdus migratorius", response[0]["scientificName"])
+		assert.InDelta(t, 3, response[0]["total"], 0.01)
+		assert.InDelta(t, 2, response[0]["verified"], 0.01)
+		assert.InDelta(t, 1, response[0]["rejected"], 0.01)
+	})
+
+	t.Run("empty result", func(t *testing.T) {
+		t.Parallel()
+		e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+		controller.DS = &managedSpeciesStubDS{MockInterface: mockDS, reviewStats: []datastore.SpeciesReviewStat{}}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/review-stats", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		require.NoError(t, controller.GetSpeciesReviewStats(c))
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response []map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		assert.Empty(t, response)
+	})
+
+	t.Run("unsupported datastore returns 501", func(t *testing.T) {
+		t.Parallel()
+		// The plain mock does not implement speciesReviewStatsDatastore.
+		e, _, controller := setupAnalyticsTestEnvironment(t)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/review-stats", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		require.NoError(t, controller.GetSpeciesReviewStats(c))
+		assert.Equal(t, http.StatusNotImplemented, rec.Code)
+	})
+}
+
 func TestGetSpeciesSummary(t *testing.T) {
 	t.Parallel()
 	// Go 1.25: Add test metadata for better organization and reporting

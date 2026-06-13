@@ -158,6 +158,11 @@ func (c *Controller) initDetectionRoutes() {
 	detectionGroup.POST("/:id/lock", c.LockDetection)
 	detectionGroup.POST("/ignore", c.IgnoreSpecies)
 	detectionGroup.GET("/ignored", c.GetExcludedSpecies)
+	detectionGroup.POST("/include", c.IncludeSpecies)
+	detectionGroup.GET("/included", c.GetIncludedSpecies)
+	detectionGroup.POST("/confirm", c.ConfirmSpecies)
+	detectionGroup.GET("/confirmed", c.GetConfirmedSpecies)
+	detectionGroup.POST("/species/delete", c.DeleteSpeciesDetections)
 
 	// Batch operation endpoints
 	batchGroup := detectionGroup.Group("/batch")
@@ -1537,6 +1542,31 @@ type ExcludedSpeciesResponse struct {
 	Count   int      `json:"count"`
 }
 
+// Species-list toggle actions returned to clients.
+const (
+	speciesActionAdded   = "added"
+	speciesActionRemoved = "removed"
+)
+
+// SpeciesListRequest represents the request body for toggling a species in a
+// managed species list (always-include or confirmed).
+type SpeciesListRequest struct {
+	CommonName string `json:"common_name"`
+}
+
+// SpeciesListToggleResponse is returned by the include/confirm toggle endpoints.
+type SpeciesListToggleResponse struct {
+	CommonName string `json:"common_name"`
+	Action     string `json:"action"` // "added" or "removed"
+	Present    bool   `json:"present"`
+}
+
+// SpeciesListResponse is returned by the included/confirmed list endpoints.
+type SpeciesListResponse struct {
+	Species []string `json:"species"`
+	Count   int      `json:"count"`
+}
+
 // IgnoreSpecies toggles a species in the ignored list (adds if not present, removes if present)
 func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 	// Parse request body
@@ -1667,6 +1697,121 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 	}
 
 	return nil
+}
+
+// IncludeSpecies toggles a species in the always-include list (adds if absent, removes if present).
+func (c *Controller) IncludeSpecies(ctx echo.Context) error {
+	return c.toggleManagedSpecies(ctx,
+		func(s *conf.Settings) []string { return s.Realtime.Species.Include },
+		func(s *conf.Settings, list []string) { s.Realtime.Species.Include = list },
+		true, "include")
+}
+
+// GetIncludedSpecies returns the always-include species list.
+func (c *Controller) GetIncludedSpecies(ctx echo.Context) error {
+	species := slices.Clone(c.getSettingsOrFallback().Realtime.Species.Include)
+
+	return ctx.JSON(http.StatusOK, SpeciesListResponse{
+		Species: species,
+		Count:   len(species),
+	})
+}
+
+// ConfirmSpecies toggles a species in the confirmed list (adds if absent, removes if present).
+// The confirmed list is analytics-only and does not affect detection processing, so no
+// settings side-effects are triggered.
+func (c *Controller) ConfirmSpecies(ctx echo.Context) error {
+	return c.toggleManagedSpecies(ctx,
+		func(s *conf.Settings) []string { return s.Realtime.Species.Confirmed },
+		func(s *conf.Settings, list []string) { s.Realtime.Species.Confirmed = list },
+		false, "confirm")
+}
+
+// GetConfirmedSpecies returns the confirmed species list.
+func (c *Controller) GetConfirmedSpecies(ctx echo.Context) error {
+	species := slices.Clone(c.getSettingsOrFallback().Realtime.Species.Confirmed)
+
+	return ctx.JSON(http.StatusOK, SpeciesListResponse{
+		Species: species,
+		Count:   len(species),
+	})
+}
+
+// toggleManagedSpecies binds and validates the request, toggles the species in
+// the list selected by listOf/setList, and returns the standard toggle response.
+func (c *Controller) toggleManagedSpecies(ctx echo.Context, listOf func(*conf.Settings) []string, setList func(*conf.Settings, []string), triggerSideEffects bool, opLabel string) error {
+	req := &SpeciesListRequest{}
+	if err := ctx.Bind(req); err != nil {
+		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
+	}
+	if req.CommonName == "" {
+		return c.HandleError(ctx, nil, "Missing species name", http.StatusBadRequest)
+	}
+
+	action, present, err := c.toggleSpeciesInList(req.CommonName, listOf, setList, triggerSideEffects)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to update species list", http.StatusInternalServerError)
+	}
+
+	c.logInfoIfEnabled("Species "+opLabel+" toggled",
+		logger.String("species", req.CommonName),
+		logger.String("action", action),
+		logger.Bool("present", present),
+		logger.String("ip", ctx.RealIP()),
+	)
+
+	return ctx.JSON(http.StatusOK, SpeciesListToggleResponse{
+		CommonName: req.CommonName,
+		Action:     action,
+		Present:    present,
+	})
+}
+
+// toggleSpeciesInList toggles a species in one of the realtime species lists
+// (e.g. include or confirmed) under the settings mutex, persisting the change
+// through the standard publish/save path. listOf reads the current slice and
+// setList writes the updated slice back onto a cloned Settings. When
+// triggerSideEffects is true, settings change side-effects (e.g. range filter
+// rebuild) are triggered after saving. Returns the action ("added"/"removed")
+// and the resulting membership state.
+func (c *Controller) toggleSpeciesInList(species string, listOf func(*conf.Settings) []string, setList func(*conf.Settings, []string), triggerSideEffects bool) (action string, present bool, err error) {
+	if species == "" {
+		return "", false, nil
+	}
+
+	// Serialise this read-modify-write against concurrent settings saves so an
+	// out-of-band StoreSettings cannot interleave between read and publish.
+	c.settingsMutex.Lock()
+	defer c.settingsMutex.Unlock()
+
+	current := c.getSettingsOrFallback()
+	wasPresent := slices.Contains(listOf(current), species)
+
+	updated := conf.CloneSettings(current)
+	if wasPresent {
+		setList(updated, slices.DeleteFunc(listOf(updated), func(s string) bool { return s == species }))
+		action = speciesActionRemoved
+		present = false
+	} else {
+		setList(updated, append(listOf(updated), species))
+		action = speciesActionAdded
+		present = true
+	}
+
+	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		return "", wasPresent, err
+	}
+
+	if triggerSideEffects {
+		if handleErr := c.handleSettingsChanges(current, updated); handleErr != nil {
+			GetLogger().Warn("Failed to trigger settings side-effects after species list change",
+				logger.Error(handleErr),
+				logger.String("species", species),
+				logger.String("action", action))
+		}
+	}
+
+	return action, present, nil
 }
 
 // AddComment creates a comment for a note

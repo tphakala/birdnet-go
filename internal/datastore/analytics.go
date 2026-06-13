@@ -4,6 +4,7 @@ package datastore
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,16 @@ type SpeciesSummaryData struct {
 	LastSeen       time.Time
 	AvgConfidence  float64
 	MaxConfidence  float64
+}
+
+// SpeciesReviewStat holds per-species detection and review counts used by the
+// analytics "Manage" view. Total counts every detection (including false
+// positives) so the verified/rejected ratio reflects all reviews.
+type SpeciesReviewStat struct {
+	ScientificName string `json:"scientificName"`
+	Total          int    `json:"total"`
+	Verified       int    `json:"verified"`
+	Rejected       int    `json:"rejected"`
 }
 
 // HourlyAnalyticsData represents detection counts by hour
@@ -271,6 +282,57 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 	}
 
 	return summaries, nil
+}
+
+// GetSpeciesReviewStats returns per-species detection and review counts across
+// all time. Unlike GetSpeciesSummaryData it intentionally does not exclude false
+// positives, so the rejected count reflects every detection marked as such.
+func (ds *DataStore) GetSpeciesReviewStats(ctx context.Context) ([]SpeciesReviewStat, error) {
+	stats := make([]SpeciesReviewStat, 0, 100)
+
+	query := fmt.Sprintf(`
+		SELECT
+			notes.scientific_name AS scientific_name,
+			COUNT(DISTINCT notes.id) AS total,
+			COUNT(DISTINCT CASE WHEN note_reviews.verified = '%s' THEN notes.id END) AS verified,
+			COUNT(DISTINCT CASE WHEN note_reviews.verified = '%s' THEN notes.id END) AS rejected
+		FROM notes
+		LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
+		GROUP BY notes.scientific_name
+	`, entities.VerificationCorrect, entities.VerificationFalsePositive)
+
+	if err := ds.DB.WithContext(ctx).Raw(query).Scan(&stats).Error; err != nil {
+		return nil, dbError(err, "get_species_review_stats", errors.PriorityMedium,
+			"action", "generate_species_review_stats")
+	}
+
+	return stats, nil
+}
+
+// GetSpeciesNoteIDs returns the string IDs of every note for the given scientific
+// name. Legacy callers may pass a raw BirdNET label ("ScientificName_CommonName");
+// only the scientific-name portion before the first underscore is used.
+func (ds *DataStore) GetSpeciesNoteIDs(scientificName string) ([]string, error) {
+	name := scientificName
+	if idx := strings.IndexByte(name, '_'); idx >= 0 {
+		name = name[:idx]
+	}
+	if name == "" {
+		return []string{}, nil
+	}
+
+	var ids []uint
+	if err := ds.DB.Model(&Note{}).Where("scientific_name = ?", name).Pluck("id", &ids).Error; err != nil {
+		return nil, dbError(err, "get_species_note_ids", errors.PriorityMedium,
+			"action", "lookup_species_note_ids")
+	}
+
+	result := make([]string, 0, len(ids))
+	for _, id := range ids {
+		result = append(result, strconv.FormatUint(uint64(id), 10))
+	}
+
+	return result, nil
 }
 
 // GetHourlyAnalyticsData retrieves detection counts grouped by hour

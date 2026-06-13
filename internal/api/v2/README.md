@@ -86,6 +86,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | ------ | ------------------------------------- | -------------------------- | ---- | ---------------------------------- |
 | GET    | `/analytics/species/daily`            | `GetDailySpeciesSummary`   | ❌   | Daily species detection summary    |
 | GET    | `/analytics/species/summary`          | `GetSpeciesSummary`        | ❌   | Overall species statistics         |
+| GET    | `/analytics/species/review-stats`     | `GetSpeciesReviewStats`    | ✅   | Per-species total/verified/rejected review counts (Manage view; 501 if datastore unsupported) |
 | GET    | `/analytics/species/detections/new`   | `GetNewSpeciesDetections`  | ❌   | Recently detected new species      |
 | GET    | `/analytics/species/thumbnails`       | `GetSpeciesThumbnails`     | ❌   | Species thumbnail images           |
 | GET    | `/analytics/time/hourly`              | `GetHourlyAnalytics`       | ❌   | Hourly detection patterns          |
@@ -125,6 +126,11 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/detections/:id/lock`        | `LockDetection`         | ✅   | Lock detection from changes                |
 | POST   | `/detections/ignore`          | `IgnoreSpecies`         | ✅   | Toggle species in ignore list (add/remove) |
 | GET    | `/detections/ignored`         | `GetExcludedSpecies`    | ✅   | Get list of excluded species               |
+| POST   | `/detections/include`         | `IncludeSpecies`        | ✅   | Toggle species in always-include list (add/remove) |
+| GET    | `/detections/included`        | `GetIncludedSpecies`    | ✅   | Get always-include species list            |
+| POST   | `/detections/confirm`         | `ConfirmSpecies`        | ✅   | Toggle species in confirmed list (analytics-only) |
+| GET    | `/detections/confirmed`       | `GetConfirmedSpecies`   | ✅   | Get confirmed species list                 |
+| POST   | `/detections/species/delete`  | `DeleteSpeciesDetections` | ✅ | Delete all detections for a species (skips locked; 501 if datastore unsupported) |
 | POST   | `/detections/batch/delete`    | `BatchDeleteDetections` | ✅   | Bulk delete detections by ID               |
 | POST   | `/detections/batch/review`    | `BatchReviewDetections` | ✅   | Bulk set verification status               |
 | POST   | `/detections/batch/lock`      | `BatchLockDetections`   | ✅   | Bulk lock or unlock detections             |

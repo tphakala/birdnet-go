@@ -1654,6 +1654,7 @@
       "speciesList": "Lista Gatunków",
       "switchToGrid": "Przełącz na widok siatki",
       "switchToList": "Przełącz na widok listy",
+      "switchToManage": "Switch to manage view",
       "noSpeciesFound": "Nie znaleziono gatunków pasujących do twoich filtrów.",
       "headers": {
         "species": "Gatunek",
@@ -1667,6 +1668,22 @@
         "detections": "Detekcje:",
         "confidence": "Pewność:",
         "first": "Pierwsze:"
+      },
+      "manage": {
+        "headers": {
+          "excluded": "Excluded",
+          "included": "Included",
+          "reviewRatio": "Review",
+          "rangeProbability": "Range",
+          "confirmed": "Confirmed",
+          "actions": "Actions"
+        },
+        "delete": "Delete all detections for this species",
+        "deleteTitle": "Delete species detections",
+        "deleteConfirm": "Delete",
+        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
+        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
+        "deleteFailed": "Failed to delete detections. Please try again."
       }
     },
     "advanced": {
