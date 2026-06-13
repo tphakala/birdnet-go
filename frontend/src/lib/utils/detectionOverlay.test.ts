@@ -168,9 +168,7 @@ describe('buildQueuedLabel', () => {
   const det = {
     species: 'American Robin',
     scientificName: 'Turdus migratorius',
-    sourceID: 'src1',
     firstDetected: 1000,
-    status: 'active' as const,
   };
 
   // Stand-in for localizeSpeciesName: returns a localized name only for the

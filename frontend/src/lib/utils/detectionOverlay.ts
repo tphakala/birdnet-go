@@ -164,7 +164,12 @@ export function nextYSlot(counter: number, maxSlots: number): { slot: number; ne
  * stale by a mid-session locale change clears on its own.
  */
 export function buildQueuedLabel(
-  det: PendingEntry & { scientificName?: string },
+  det: {
+    species: string;
+    firstDetected: number;
+    audioCapturedAt?: number;
+    scientificName?: string;
+  },
   ySlot: number,
   localize: (scientificName: string | undefined, fallbackCommonName: string) => string
 ): QueuedLabel {
