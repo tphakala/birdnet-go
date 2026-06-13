@@ -271,7 +271,8 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 	// Bind the request context so the existence checks and information_schema
 	// queries below abort if the client disconnects, rather than running
 	// unbounded on the request thread.
-	db := dbProvider.GetDB().WithContext(ctx.Request().Context())
+	reqCtx := ctx.Request().Context()
+	db := dbProvider.GetDB().WithContext(reqCtx)
 
 	// Check each legacy table and get its size
 	var totalSize int64
@@ -285,6 +286,13 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 		// Check if table exists
 		exists, err := c.tableExistsMySQL(db, tableName)
 		if err != nil {
+			// Client disconnected: the request context is cancelled and every
+			// remaining table query would fail the same way, so stop quietly
+			// instead of logging a warning per table.
+			if reqCtx.Err() != nil {
+				c.logDebugIfEnabled("Legacy status query cancelled by client", logger.Error(reqCtx.Err()))
+				break
+			}
 			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
 				logger.String("table", tableName),
 				logger.Error(err))
@@ -548,6 +556,11 @@ func (c *Controller) getMySQLLegacySize(ctx context.Context) int64 {
 	for _, tableName := range legacyTables {
 		exists, err := c.tableExistsMySQL(db, tableName)
 		if err != nil {
+			// Client disconnected: stop quietly instead of warning per table.
+			if ctx.Err() != nil {
+				c.logDebugIfEnabled("Legacy size query cancelled by client", logger.Error(ctx.Err()))
+				break
+			}
 			c.logWarnIfEnabled("Legacy cleanup: failed to check table existence",
 				logger.String("table", tableName),
 				logger.Error(err))
