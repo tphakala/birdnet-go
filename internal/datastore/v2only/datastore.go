@@ -2360,16 +2360,27 @@ func unixTimeOrZero(epoch int64, loc *time.Location) time.Time {
 	if epoch <= 0 {
 		return time.Time{}
 	}
+	if loc == nil {
+		loc = time.Local
+	}
 	return time.Unix(epoch, 0).In(loc)
 }
 
 // zoneOffsetSeconds returns the configured timezone's UTC offset in seconds in effect at
 // the given epoch. SQL hour bucketing adds this offset to detected_at so detections group
 // by wall-clock hour in ds.timezone rather than the database/OS-local zone. Anchoring the
-// offset to the queried epoch (rather than "now") keeps it correct for historical days;
-// see repository.GetTimezoneOffsetAt for the single-offset DST limitation on multi-day ranges.
+// offset to the queried epoch (rather than "now") keeps it correct for historical days.
+//
+// For an open-ended range parseDateRange yields start==0; anchoring to the 1970 epoch would
+// pick an arbitrary historical offset, so non-positive epochs fall back to the current offset
+// (the best single choice for an all-time range). The single-offset approach is still a DST
+// approximation on multi-day ranges; see repository.GetTimezoneOffsetAt for that limitation.
 func (ds *Datastore) zoneOffsetSeconds(epoch int64) int {
-	return repository.GetTimezoneOffsetAt(ds.timezone, time.Unix(epoch, 0))
+	ref := time.Unix(epoch, 0)
+	if epoch <= 0 {
+		ref = time.Now()
+	}
+	return repository.GetTimezoneOffsetAt(ds.timezone, ref)
 }
 
 // GetSpeciesSummaryData retrieves species summary data.

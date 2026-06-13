@@ -1780,6 +1780,13 @@ func TestUnixTimeOrZero(t *testing.T) {
 		t.Parallel()
 		assert.True(t, unixTimeOrZero(-1, time.UTC).IsZero())
 	})
+
+	t.Run("nil location does not panic", func(t *testing.T) {
+		t.Parallel()
+		got := unixTimeOrZero(1718000000, nil)
+		require.False(t, got.IsZero())
+		assert.Equal(t, int64(1718000000), got.Unix())
+	})
 }
 
 // TestConvertToNewSpeciesData_ZeroEpoch verifies the new-species path emits an empty
