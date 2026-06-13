@@ -127,14 +127,19 @@ func (r *detectionRepository) dateFromUnixExpr(column string) string {
 	return fmt.Sprintf("DATE(datetime(%s, 'unixepoch', 'localtime'))", column)
 }
 
-// hourFromUnixExpr returns a SQL expression to extract HOUR (0-23) from a Unix timestamp in local time.
-// SQLite: CAST(strftime('%%H', datetime(column, 'unixepoch', 'localtime')) AS INTEGER)
-// MySQL:  HOUR(FROM_UNIXTIME(column))
-func (r *detectionRepository) hourFromUnixExpr(column string) string {
+// hourFromUnixExpr returns a SQL expression that extracts the wall-clock HOUR (0-23) of a
+// Unix timestamp in the configured timezone. offsetSeconds is that zone's UTC offset; it is
+// added to the epoch before bucketing, so the result is independent of the database/OS-local
+// timezone (unlike the older 'localtime'/FROM_UNIXTIME form). This mirrors the IncludedHours
+// search-filter expression. detected_at is always positive, so the integer division and
+// modulo stay non-negative even for negative (west-of-UTC) offsets.
+// SQLite: CAST((column + offset) / 3600 AS INTEGER) % 24
+// MySQL:  FLOOR((column + offset) / 3600) % 24
+func (r *detectionRepository) hourFromUnixExpr(column string, offsetSeconds int) string {
 	if r.isMySQL {
-		return fmt.Sprintf("HOUR(FROM_UNIXTIME(%s))", column)
+		return fmt.Sprintf("FLOOR((%s + %d) / 3600) %% 24", column, offsetSeconds)
 	}
-	return fmt.Sprintf("CAST(strftime('%%H', datetime(%s, 'unixepoch', 'localtime')) AS INTEGER)", column)
+	return fmt.Sprintf("CAST((%s + %d) / 3600 AS INTEGER) %% 24", column, offsetSeconds)
 }
 
 // ============================================================================
@@ -837,7 +842,7 @@ func (r *detectionRepository) GetTopSpecies(ctx context.Context, start, end int6
 // Large label sets are chunked by batchQuerySize to stay within SQL host-parameter limits;
 // per-chunk results are merged before returning. Each label ID appears in exactly one chunk,
 // so no cross-chunk aggregation is needed.
-func (r *detectionRepository) GetBatchHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) (map[uint][24]int, error) {
+func (r *detectionRepository) GetBatchHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, tzOffsetSeconds int, minConfidence float64) (map[uint][24]int, error) {
 	result := make(map[uint][24]int, len(labelIDs))
 
 	// Return empty map for empty input (no query)
@@ -851,8 +856,8 @@ func (r *detectionRepository) GetBatchHourlyOccurrences(ctx context.Context, lab
 		Count   int
 	}
 
-	// Extract hour from Unix timestamp in local timezone; exclude false positives.
-	hourExpr := r.hourFromUnixExpr("d.detected_at")
+	// Bucket by wall-clock hour in the configured timezone (offset-adjusted); exclude false positives.
+	hourExpr := r.hourFromUnixExpr("d.detected_at", tzOffsetSeconds)
 	detTable := r.tableName()
 	revTable := r.reviewsTable()
 
@@ -1517,12 +1522,12 @@ func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start
 }
 
 // GetHourlyDistribution returns detection counts by hour.
-func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, labelID, modelID *uint) ([]HourlyDistributionData, error) {
+func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]HourlyDistributionData, error) {
 	var results []HourlyDistributionData
 
-	// Use hourFromUnixExpr for correct local timezone conversion
+	// Bucket by wall-clock hour in the configured timezone via hourFromUnixExpr.
 	// Exclude detections marked as false_positive
-	hourExpr := r.hourFromUnixExpr("d.detected_at")
+	hourExpr := r.hourFromUnixExpr("d.detected_at", tzOffsetSeconds)
 	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID).
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
 		Group("hour").

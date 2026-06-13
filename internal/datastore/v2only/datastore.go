@@ -1245,7 +1245,7 @@ func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, date string,
 	}
 
 	// Fetch per-label hourly counts in one batched query (chunked internally).
-	hourlyByLabel, err := ds.detection.GetBatchHourlyOccurrences(ctx, flatLabelIDs, startOfDay, endOfDay, minConfidence)
+	hourlyByLabel, err := ds.detection.GetBatchHourlyOccurrences(ctx, flatLabelIDs, startOfDay, endOfDay, ds.zoneOffsetSeconds(startOfDay), minConfidence)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -2352,6 +2352,37 @@ func (ds *Datastore) parseDateRange(startDate, endDate string) (start, end int64
 	return start, end, nil
 }
 
+// unixTimeOrZero converts a Unix epoch (seconds) to a time.Time in loc, returning the
+// zero value for a non-positive epoch. A zero/negative epoch means "no detection time"
+// rather than the 1970 epoch origin, so the API layer (formatTimeIfNotZero) renders it
+// as an empty timestamp instead of 1970-01-01.
+func unixTimeOrZero(epoch int64, loc *time.Location) time.Time {
+	if epoch <= 0 {
+		return time.Time{}
+	}
+	if loc == nil {
+		loc = time.Local
+	}
+	return time.Unix(epoch, 0).In(loc)
+}
+
+// zoneOffsetSeconds returns the configured timezone's UTC offset in seconds in effect at
+// the given epoch. SQL hour bucketing adds this offset to detected_at so detections group
+// by wall-clock hour in ds.timezone rather than the database/OS-local zone. Anchoring the
+// offset to the queried epoch (rather than "now") keeps it correct for historical days.
+//
+// For an open-ended range parseDateRange yields start==0; anchoring to the 1970 epoch would
+// pick an arbitrary historical offset, so non-positive epochs fall back to the current offset
+// (the best single choice for an all-time range). The single-offset approach is still a DST
+// approximation on multi-day ranges; see repository.GetTimezoneOffsetAt for that limitation.
+func (ds *Datastore) zoneOffsetSeconds(epoch int64) int {
+	ref := time.Unix(epoch, 0)
+	if epoch <= 0 {
+		ref = time.Now()
+	}
+	return repository.GetTimezoneOffsetAt(ds.timezone, ref)
+}
+
 // GetSpeciesSummaryData retrieves species summary data.
 func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
@@ -2378,8 +2409,8 @@ func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 			CommonName:     commonName,
 			SpeciesCode:    ds.speciesCodeMap[sciName],
 			Count:          int(d.TotalDetections),
-			FirstSeen:      time.Unix(d.FirstDetection, 0).In(ds.timezone),
-			LastSeen:       time.Unix(d.LastDetection, 0).In(ds.timezone),
+			FirstSeen:      unixTimeOrZero(d.FirstDetection, ds.timezone),
+			LastSeen:       unixTimeOrZero(d.LastDetection, ds.timezone),
 			AvgConfidence:  d.AvgConfidence,
 			MaxConfidence:  d.MaxConfidence,
 		})
@@ -2402,7 +2433,7 @@ func (ds *Datastore) GetHourlyAnalyticsData(ctx context.Context, date, species s
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, labelID, nil)
+	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, ds.zoneOffsetSeconds(start), labelID, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2500,7 +2531,7 @@ func (ds *Datastore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, labelID, nil)
+	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, ds.zoneOffsetSeconds(start), labelID, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2538,7 +2569,12 @@ func (ds *Datastore) convertToNewSpeciesData(_ context.Context, data []speciesFi
 		// Look up common name from pre-built map, fallback to scientific name
 		commonName := ds.resolveCommonName(sciName)
 
-		firstSeenDate := time.Unix(d.FirstDetected, 0).In(ds.timezone).Format(time.DateOnly)
+		// A zero/negative epoch means "no detection date"; emit an empty string instead
+		// of formatting the 1970 epoch origin (mirrors the LastDetected guard below).
+		var firstSeenDate string
+		if d.FirstDetected > 0 {
+			firstSeenDate = time.Unix(d.FirstDetected, 0).In(ds.timezone).Format(time.DateOnly)
+		}
 		var lastSeenDate string
 		if d.LastDetected > 0 {
 			lastSeenDate = time.Unix(d.LastDetected, 0).In(ds.timezone).Format(time.DateOnly)

@@ -110,8 +110,10 @@ type DetectionRepository interface {
 	// for the given label IDs in a single grouped query (per chunk). The result maps
 	// each label ID to its [24]int hourly counts; callers that span one species across
 	// multiple model label IDs sum the per-label arrays themselves. False positives are
-	// excluded and minConfidence filters by minimum confidence threshold.
-	GetBatchHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) (map[uint][24]int, error)
+	// excluded and minConfidence filters by minimum confidence threshold. tzOffsetSeconds is
+	// the configured timezone's UTC offset, applied so detections bucket by wall-clock hour in
+	// that zone rather than the database/OS-local zone.
+	GetBatchHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, tzOffsetSeconds int, minConfidence float64) (map[uint][24]int, error)
 
 	// GetDailyOccurrences returns daily detection counts for a label.
 	GetDailyOccurrences(ctx context.Context, labelID uint, start, end int64) ([]DailyCount, error)
@@ -233,9 +235,10 @@ type DetectionRepository interface {
 	// modelID is optional; pass nil to include all models.
 	GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint) ([]SpeciesSummaryData, error)
 
-	// GetHourlyDistribution returns detection counts by hour.
-	// labelID and modelID are optional filters.
-	GetHourlyDistribution(ctx context.Context, start, end int64, labelID, modelID *uint) ([]HourlyDistributionData, error)
+	// GetHourlyDistribution returns detection counts by hour. tzOffsetSeconds is the
+	// configured timezone's UTC offset, applied so detections bucket by wall-clock hour in
+	// that zone rather than the database/OS-local zone. labelID and modelID are optional filters.
+	GetHourlyDistribution(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]HourlyDistributionData, error)
 
 	// GetDailyAnalytics returns daily statistics.
 	// labelID and modelID are optional filters.

@@ -429,7 +429,7 @@ func (c *Controller) getExpectedTodayImpl(ctx echo.Context) error {
 
 	results, err := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, nil)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to query expected species", http.StatusInternalServerError)
+		return c.handleAnalyticsQueryError(ctx, err, "Expected species", "Failed to query expected species")
 	}
 
 	nameMap := c.loadCommonNameMap()
@@ -494,7 +494,7 @@ func (c *Controller) getExpectedTodayRegionalImpl(ctx echo.Context) error {
 
 	observations, err := c.EBirdClient.GetRecentObservations(reqCtx, lat, lng, 14)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to query eBird observations", http.StatusInternalServerError)
+		return c.handleAnalyticsQueryError(ctx, err, "eBird observations", "Failed to query eBird observations")
 	}
 
 	// Get local species to deduplicate against (best-effort; if this fails, show all eBird results)
@@ -550,7 +550,7 @@ func (c *Controller) getPhantomSpeciesImpl(ctx echo.Context) error {
 
 	results, err := c.insightsRepo.GetPhantomSpecies(reqCtx, since, phantomMinDetections, phantomMaxAvgConfidence, nil)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to query phantom species", http.StatusInternalServerError)
+		return c.handleAnalyticsQueryError(ctx, err, "Phantom species", "Failed to query phantom species")
 	}
 
 	nameMap := c.loadCommonNameMap()
@@ -591,7 +591,7 @@ func (c *Controller) getDawnChorusImpl(ctx echo.Context) error {
 
 	rawEntries, err := c.insightsRepo.GetDawnChorusRaw(reqCtx, since, dawnChorusStartHour, dawnChorusEndHour, nil)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to query dawn chorus", http.StatusInternalServerError)
+		return c.handleAnalyticsQueryError(ctx, err, "Dawn chorus", "Failed to query dawn chorus")
 	}
 
 	// Group by species, compute DST-correct time-of-day averages
@@ -671,12 +671,12 @@ func (c *Controller) getMigrationImpl(ctx echo.Context) error {
 
 	arrivals, err := c.insightsRepo.GetNewArrivals(reqCtx, recentSince, nil)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to query new arrivals", http.StatusInternalServerError)
+		return c.handleAnalyticsQueryError(ctx, err, "New arrivals", "Failed to query new arrivals")
 	}
 
 	quiet, err := c.insightsRepo.GetGoneQuiet(reqCtx, recentSince, migrationMinTotalDetections, nil)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to query gone quiet species", http.StatusInternalServerError)
+		return c.handleAnalyticsQueryError(ctx, err, "Gone quiet species", "Failed to query gone quiet species")
 	}
 
 	nameMap := c.loadCommonNameMap()
@@ -733,7 +733,7 @@ func (c *Controller) getDashboardKPIsImpl(ctx echo.Context) error {
 
 	kpis, err := c.insightsRepo.GetDashboardKPIs(reqCtx, todayStart.Unix(), nil)
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to query dashboard KPIs", http.StatusInternalServerError)
+		return c.handleAnalyticsQueryError(ctx, err, "Dashboard KPIs", "Failed to query dashboard KPIs")
 	}
 
 	today := todayStart.Format(time.DateOnly)
