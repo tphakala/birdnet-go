@@ -349,6 +349,102 @@ func TestExportAudio_RuntimeFailuresAreEnhanced(t *testing.T) {
 	}
 }
 
+// TestExportAudioToBuffer_ErrorsAreEnhanced verifies that every error
+// ExportAudioToBuffer returns carries internal/errors telemetry metadata, the
+// same parity ExportAudio has. None of these cases require a real FFmpeg binary.
+func TestExportAudioToBuffer_ErrorsAreEnhanced(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+	pcm := makePCMSilence(t, 1)
+	// Absolute on every platform and uncontaminated, so ValidateFFmpegPath passes;
+	// never executed in the validation cases.
+	validPath := filepath.Join(outDir, "ffmpeg-never-executed")
+	customArgs := []string{"-c:a", "flac", "-f", "flac"}
+
+	tests := []struct {
+		name          string
+		pcm           []byte
+		ffmpegPath    string
+		customArgs    []string
+		wantComponent string
+		wantCategory  errors.ErrorCategory
+		wantOperation string
+	}{
+		{
+			name: "empty PCM data", pcm: nil, ffmpegPath: validPath, customArgs: customArgs,
+			wantComponent: "audiocore/ffmpeg", wantCategory: errors.CategoryValidation,
+			wantOperation: "export_buffer_validate",
+		},
+		{
+			name: "empty custom args", pcm: pcm, ffmpegPath: validPath, customArgs: nil,
+			wantComponent: "audiocore/ffmpeg", wantCategory: errors.CategoryValidation,
+			wantOperation: "export_buffer_validate",
+		},
+		{
+			// ValidateFFmpegPath already returns a fully enhanced error; returned
+			// directly rather than re-wrapped, to avoid double-reporting.
+			name: "empty FFmpeg path", pcm: pcm, ffmpegPath: "", customArgs: customArgs,
+			wantComponent: "audiocore", wantCategory: errors.CategoryValidation,
+			wantOperation: "validate_ffmpeg_path",
+		},
+		{
+			name: "relative FFmpeg path", pcm: pcm, ffmpegPath: "ffmpeg", customArgs: customArgs,
+			wantComponent: "audiocore", wantCategory: errors.CategoryValidation,
+			wantOperation: "validate_ffmpeg_path",
+		},
+		{
+			name: "nonexistent FFmpeg binary fails process start",
+			pcm:  pcm, ffmpegPath: filepath.Join(outDir, "ffmpeg-does-not-exist"), customArgs: customArgs,
+			wantComponent: "audiocore/ffmpeg", wantCategory: errors.CategoryAudio,
+			wantOperation: "export_buffer_start",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			buf, err := ffmpeg.ExportAudioToBuffer(t.Context(), tt.pcm, tt.ffmpegPath, 48000, 1, 16, tt.customArgs)
+			require.Error(t, err)
+			assert.Nil(t, buf, "no buffer on error")
+
+			var enhanced *errors.EnhancedError
+			require.ErrorAs(t, err, &enhanced, "error must carry internal/errors telemetry metadata")
+			assert.Equal(t, tt.wantComponent, enhanced.GetComponent(), "component tag")
+			assert.Equal(t, tt.wantCategory, enhanced.Category, "category tag")
+			assert.Equal(t, tt.wantOperation, enhanced.GetContext()["operation"], "operation context")
+		})
+	}
+}
+
+// TestExportAudioToBuffer_RuntimeFailuresAreEnhanced covers the FFmpeg-execution
+// error paths using a fake POSIX-shell "FFmpeg" binary so the cmd.Wait()
+// non-zero-exit branch is exercised deterministically. POSIX-only.
+func TestExportAudioToBuffer_RuntimeFailuresAreEnhanced(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell-script FFmpeg binaries are POSIX-only")
+	}
+
+	outDir := t.TempDir()
+	pcm := makePCMSilence(t, 1)
+
+	// Drains stdin, writes nothing to stdout, exits non-zero -> cmd.Wait() error.
+	waitFailBin := filepath.Join(outDir, "wait-fail.sh")
+	require.NoError(t, os.WriteFile(waitFailBin, []byte("#!/bin/sh\ncat > /dev/null\nexit 1\n"), 0o755)) //nolint:gosec // test-only fake binary must be executable
+
+	buf, err := ffmpeg.ExportAudioToBuffer(t.Context(), pcm, waitFailBin, 48000, 1, 16, []string{"-c:a", "flac", "-f", "flac"})
+	require.Error(t, err)
+	assert.Nil(t, buf, "no buffer on error")
+
+	var enhanced *errors.EnhancedError
+	require.ErrorAs(t, err, &enhanced, "runtime failure must carry telemetry metadata")
+	assert.Equal(t, "audiocore/ffmpeg", enhanced.GetComponent(), "component tag")
+	assert.Equal(t, errors.CategoryAudio, enhanced.Category, "category tag")
+	assert.Equal(t, "export_buffer_wait", enhanced.GetContext()["operation"], "operation context")
+	assert.Equal(t, 1, enhanced.GetContext()["exit_code"], "exit code captured from the failed FFmpeg process")
+}
+
 // TestExportAudio_CreatesDirectory verifies that the output directory is created
 // if it does not already exist.
 func TestExportAudio_CreatesDirectory(t *testing.T) {
