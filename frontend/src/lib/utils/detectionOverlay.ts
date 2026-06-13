@@ -23,6 +23,10 @@ export interface OverlayLabel {
 /** Minimal pending detection shape for diffing. */
 interface PendingEntry {
   species: string;
+  // Scientific name carried through so label builders can localize the display
+  // name via localizeSpeciesName. Optional here because the diffing logic itself
+  // never reads it; the real SSE PendingDetection always provides it.
+  scientificName?: string;
   sourceID: string;
   firstDetected: number;
   audioCapturedAt?: number;
