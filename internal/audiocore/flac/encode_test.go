@@ -236,6 +236,50 @@ func TestEncoderReuseAfterAbortedWrite(t *testing.T) {
 		"encoder reused after an aborted write must produce a lossless file")
 }
 
+// TestEncoderReuseAfterClose covers the common pooling path: a fully encoded and
+// Closed encoder (what EncodePCM puts back after a successful export) is reused
+// for a new stream via Reset. This is the path executed on every successful
+// native export, so it must reinitialize cleanly and stay lossless (raised by
+// Sentry on #3483; complements TestEncoderReuseAfterAbortedWrite, which covers
+// the un-Closed/aborted state).
+func TestEncoderReuseAfterClose(t *testing.T) {
+	t.Parallel()
+	cfg := goflac.Config{
+		SampleRate:        testSampleRate,
+		Channels:          testChannels,
+		BitDepth:          testBitDepth,
+		CompressionLevel:  defaultCompressionLevel,
+		SeekTableInterval: testSampleRate,
+	}
+	dir := t.TempDir()
+	enc := new(goflac.Encoder)
+
+	// First stream: full encode AND Close (the normal success path).
+	first := makeTestPCM(8000)
+	firstPath := filepath.Join(dir, "first.flac")
+	f1, err := os.Create(firstPath) //nolint:gosec // test-controlled path
+	require.NoError(t, err)
+	require.NoError(t, enc.Reset(f1, cfg))
+	_, err = enc.Write(first)
+	require.NoError(t, err)
+	require.NoError(t, enc.Close()) // encoder is now closed
+	require.NoError(t, f1.Close())
+	assert.Equal(t, first, decodeFLAC(t, firstPath))
+
+	// Reuse the CLOSED encoder for a second stream: Reset must reinitialize it.
+	second := makeTestPCM(12000)
+	secondPath := filepath.Join(dir, "second.flac")
+	f2, err := os.Create(secondPath) //nolint:gosec // test-controlled path
+	require.NoError(t, err)
+	require.NoError(t, enc.Reset(f2, cfg))
+	_, err = enc.Write(second)
+	require.NoError(t, err)
+	require.NoError(t, enc.Close())
+	require.NoError(t, f2.Close())
+	assert.Equal(t, second, decodeFLAC(t, secondPath),
+		"encoder reused after Close must produce a lossless file")
+}
+
 func TestEncodePCM_NoTempFileLeftOnSuccess(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "clip.flac")
