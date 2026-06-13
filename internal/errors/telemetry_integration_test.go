@@ -116,6 +116,18 @@ func TestShouldReportToSentry_FiltersEBirdTaxonomyNotFound(t *testing.T) {
 	assert.False(t, shouldReportToSentry(ee))
 }
 
+func TestShouldReportToSentry_FiltersDynamicThresholdNotFound(t *testing.T) {
+	t.Parallel()
+	// A user querying the dynamic threshold for a species that has none is a
+	// benign 404, not a code bug. Both the v2only and legacy datastore backends
+	// produce this CategoryNotFound error, so it must not reach Sentry (#1068).
+	ee := New(fmt.Errorf("dynamic threshold not found")).
+		Component("datastore").
+		Category(CategoryNotFound).
+		Build()
+	assert.False(t, shouldReportToSentry(ee))
+}
+
 func TestShouldReportToSentry_AllowsNetworkCategoryCodeBugs(t *testing.T) {
 	t.Parallel()
 	// Network category error that is NOT environmental noise should still report
