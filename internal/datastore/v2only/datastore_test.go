@@ -773,24 +773,32 @@ func TestV2OnlyDatastore_ThresholdEvent(t *testing.T) {
 	assert.Len(t, recent, 1)
 }
 
-// TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry pins #1019: the v2only threshold
-// read methods must wrap genuine DB errors with datastore Component/Category telemetry,
-// while a benign not-found (ErrDynamicThresholdNotFound) must propagate UNWRAPPED so it
-// does not reach Sentry as a database error.
+// TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry pins #1019 and #1068: the v2only
+// threshold read methods must wrap genuine DB errors with datastore Component/Category
+// telemetry, while a benign not-found (ErrDynamicThresholdNotFound) must be wrapped as a
+// CategoryNotFound EnhancedError (never CategoryDatabase) so the API maps it to 404 and it
+// never reaches Sentry as a database error, all while staying reachable via errors.Is.
 func TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry(t *testing.T) {
-	t.Run("NotFoundPassesThroughUnwrapped", func(t *testing.T) {
+	t.Run("NotFoundWrappedAsNotFoundCategory", func(t *testing.T) {
 		ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
 		defer cleanup()
 
 		// Label exists but no threshold was saved, so the repository returns the
 		// ErrDynamicThresholdNotFound sentinel. This is a benign not-found, not a DB fault.
+		// It is wrapped as a CategoryNotFound EnhancedError so the API layer's
+		// handleErrorWithNotFound maps it to HTTP 404 (#1068), while the sentinel stays
+		// reachable via errors.Is (EnhancedError.Unwrap) and the CategoryNotFound
+		// "dynamic threshold not found" message is suppressed from Sentry, so it is never
+		// surfaced as a database error (#1019).
 		_, err := ds.GetDynamicThreshold("Parus major", "")
 		require.Error(t, err)
 		require.ErrorIs(t, err, repository.ErrDynamicThresholdNotFound,
 			"not-found sentinel must propagate so callers can distinguish a benign miss from a genuine DB fault")
 		var ee *errors.EnhancedError
-		assert.False(t, errors.As(err, &ee),
-			"not-found must NOT be wrapped with datastore telemetry (would be Sentry noise)")
+		require.True(t, errors.As(err, &ee),
+			"not-found must be a CategoryNotFound EnhancedError so the API maps it to 404")
+		assert.Equal(t, string(errors.CategoryNotFound), ee.GetCategory(),
+			"not-found must be CategoryNotFound, never CategoryDatabase (which would be Sentry noise)")
 	})
 
 	t.Run("GenuineDBErrorIsWrapped", func(t *testing.T) {

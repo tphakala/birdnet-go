@@ -253,9 +253,13 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 	// Filter out expected not-found conditions that are not code bugs:
 	// - "note not found": transient race between write commit and read, or retention cleanup
 	// - "not found in ebird taxonomy": non-bird species (e.g., Canis latrans) detected by BirdNET
+	// - "dynamic threshold not found": a user queried the dynamic threshold for a species
+	//   that has none; both the v2only and legacy datastore backends produce this benign
+	//   404 (#1068), so it must not reach Sentry
 	if ee.Category == CategoryNotFound {
 		if strings.Contains(errorMsg, "note not found") ||
-			strings.Contains(errorMsg, "not found in ebird taxonomy") {
+			strings.Contains(errorMsg, "not found in ebird taxonomy") ||
+			strings.Contains(errorMsg, "dynamic threshold not found") {
 			return false
 		}
 	}

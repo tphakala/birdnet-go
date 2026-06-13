@@ -2960,11 +2960,20 @@ func (ds *Datastore) GetDynamicThreshold(speciesName, _ string) (*datastore.Dyna
 	// Resolve to scientific name in case caller passes a common name
 	t, err := ds.threshold.GetDynamicThreshold(ctx, ds.resolveToScientificName(speciesName))
 	if err != nil {
-		// Pass not-found through unwrapped: it is a benign result, not a DB fault, and
-		// wrapping it with the datastore builder would surface it to Sentry as a
-		// database error (#1019). Only genuine failures get the telemetry tags.
+		// Not-found is a benign result, not a DB fault. Wrap it as a CategoryNotFound
+		// EnhancedError (never CategoryDatabase, so it is not surfaced to Sentry as a
+		// database error, see #1019) so the API layer's handleErrorWithNotFound maps it
+		// to HTTP 404 instead of 500, matching the legacy backend (#1068). errors.Is
+		// against the sentinel still matches because EnhancedError.Unwrap exposes it, and
+		// shouldReportToSentry suppresses the benign "dynamic threshold not found" message
+		// so building this error produces no Sentry noise. Genuine failures fall through
+		// to the CategoryDatabase telemetry tags below.
 		if errors.Is(err, repository.ErrDynamicThresholdNotFound) {
-			return nil, err
+			return nil, errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryNotFound).
+				Context("operation", "get_dynamic_threshold").
+				Build()
 		}
 		return nil, errors.New(err).
 			Component("datastore").
