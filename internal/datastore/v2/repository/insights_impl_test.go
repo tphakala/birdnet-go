@@ -77,6 +77,15 @@ func seedFalsePositiveReview(t *testing.T, db *gorm.DB, detectionID uint) {
 	require.NoError(t, db.Create(&review).Error)
 }
 
+// localOffsetAt returns time.Local's UTC offset (seconds) at ref. The tests below seed timestamps
+// in time.Local and assert local-zone bucketing, so they pass the matching offset (the same value
+// production derives via GetTimezoneOffsetAt) to the offset-aware insights queries. Dedicated
+// bucketing tests pass explicit offsets and fixed UTC instants instead, so they are independent of
+// the host's zone.
+func localOffsetAt(ref time.Time) int {
+	return GetTimezoneOffsetAt(time.Local, ref)
+}
+
 func TestGetPhantomSpecies(t *testing.T) {
 	db := setupInsightsTestDB(t)
 	repo := NewInsightsRepository(db, false, false)
@@ -123,16 +132,19 @@ func TestGetExpectedSpeciesToday(t *testing.T) {
 	repo := NewInsightsRepository(db, false, false)
 	ctx := t.Context()
 
-	// Species A: detected in two previous years around same DOY
+	// Species A: detected in two previous years around same DOY.
+	// Seed at local noon (not midnight) so the single query-wide offset cannot shift a row onto
+	// the adjacent calendar day on a non-UTC host near a DST boundary; the asserted dates stay
+	// stable for any host offset.
 	labelA := seedLabel(t, db, "Turdus merula")
 
-	// Year 1 (2024): March 8-10 timestamps
-	y1Start := time.Date(2024, 3, 8, 0, 0, 0, 0, time.Local)
+	// Year 1 (2024): March 8-9 (noon)
+	y1Start := time.Date(2024, 3, 8, 12, 0, 0, 0, time.Local)
 	seedDetection(t, db, labelA, y1Start.Unix(), 0.9)
 	seedDetection(t, db, labelA, y1Start.Add(24*time.Hour).Unix(), 0.85)
 
-	// Year 2 (2025): March 7-9 timestamps
-	y2Start := time.Date(2025, 3, 7, 0, 0, 0, 0, time.Local)
+	// Year 2 (2025): March 7 (noon)
+	y2Start := time.Date(2025, 3, 7, 12, 0, 0, 0, time.Local)
 	seedDetection(t, db, labelA, y2Start.Unix(), 0.88)
 
 	// Species B: detected in only one previous year
@@ -155,17 +167,21 @@ func TestGetExpectedSpeciesToday(t *testing.T) {
 		},
 	}
 
-	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, nil)
+	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, localOffsetAt(y2Start), nil)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 
 	// Species A should be first (seen in 2 years)
 	assert.Equal(t, "Turdus merula", results[0].ScientificName)
 	assert.Equal(t, 2, results[0].YearsSeen)
+	// MAX(date) asserts the date expression groups in the configured zone: the latest Turdus
+	// merula detection is 2025-03-07 (00:00 local), so LastSeenDate must be that calendar day.
+	assert.Equal(t, "2025-03-07", results[0].LastSeenDate)
 
 	// Species B seen in 1 year
 	assert.Equal(t, "Parus major", results[1].ScientificName)
 	assert.Equal(t, 1, results[1].YearsSeen)
+	assert.Equal(t, "2024-03-08", results[1].LastSeenDate)
 }
 
 func TestGetDawnChorusRaw(t *testing.T) {
@@ -183,9 +199,10 @@ func TestGetDawnChorusRaw(t *testing.T) {
 	seedDetection(t, db, labelA, day1.Add(5*time.Hour).Unix(), 0.9)
 	seedDetection(t, db, labelA, day1.Add(6*time.Hour+30*time.Minute).Unix(), 0.85)
 
-	// Day 2: detection at 4:15 AM
+	// Day 2: detection at 6:00 AM (kept clear of the 4 AM filter edge so a one-hour offset
+	// difference cannot drop it out of the dawn window)
 	day2 := time.Date(now.Year(), now.Month(), now.Day()-3, 0, 0, 0, 0, time.Local)
-	seedDetection(t, db, labelA, day2.Add(4*time.Hour+15*time.Minute).Unix(), 0.88)
+	seedDetection(t, db, labelA, day2.Add(6*time.Hour).Unix(), 0.88)
 
 	// Detection outside hour range (11:00 AM — should be excluded)
 	seedDetection(t, db, labelA, day1.Add(11*time.Hour).Unix(), 0.92)
@@ -193,7 +210,9 @@ func TestGetDawnChorusRaw(t *testing.T) {
 	// Detection before since (should be excluded)
 	seedDetection(t, db, labelA, now.AddDate(0, 0, -45).Add(5*time.Hour).Unix(), 0.8)
 
-	results, err := repo.GetDawnChorusRaw(ctx, since, 4, 10, nil)
+	// Anchor the offset to the seeded day (not now, which is up to 5 days later) so the hour
+	// bucketing matches the data's DST state regardless of host zone.
+	results, err := repo.GetDawnChorusRaw(ctx, since, 4, 10, localOffsetAt(day1), nil)
 	require.NoError(t, err)
 	require.Len(t, results, 2) // 2 days
 
@@ -289,14 +308,16 @@ func TestGetDashboardKPIs(t *testing.T) {
 	seedDetection(t, db, labelB, today.AddDate(0, 0, -1).Add(6*time.Hour).Unix(), 0.82)
 	seedDetection(t, db, labelB, today.AddDate(0, 0, -2).Add(7*time.Hour).Unix(), 0.80)
 
-	// Species C: 5 detections on a single day (should be best day candidate)
+	// Species C: 5 detections on a single day (should be best day candidate). Seed around midday
+	// (hours 10-14) so the single query-wide offset cannot split the day's count across a calendar
+	// boundary on a non-UTC host.
 	labelC := seedLabel(t, db, "Corvus corax")
 	bestDay := today.AddDate(0, 0, -5)
 	for i := range 5 {
-		seedDetection(t, db, labelC, bestDay.Add(time.Duration(i)*time.Hour).Unix(), 0.9)
+		seedDetection(t, db, labelC, bestDay.Add(time.Duration(i+10)*time.Hour).Unix(), 0.9)
 	}
 
-	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), nil)
+	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), localOffsetAt(today), nil)
 	require.NoError(t, err)
 	require.NotNil(t, kpis)
 
@@ -312,7 +333,7 @@ func TestGetDashboardKPIs_Empty(t *testing.T) {
 	repo := NewInsightsRepository(db, false, false)
 	ctx := t.Context()
 
-	kpis, err := repo.GetDashboardKPIs(ctx, time.Now().Unix(), nil)
+	kpis, err := repo.GetDashboardKPIs(ctx, time.Now().Unix(), localOffsetAt(time.Now()), nil)
 	require.NoError(t, err)
 	require.NotNil(t, kpis)
 	assert.Equal(t, int64(0), kpis.LifetimeSpecies)
@@ -413,7 +434,8 @@ func TestGetDawnChorusRaw_MultiModel(t *testing.T) {
 	seedDetectionForModel(t, db, labelA1, 1, day1.Add(5*time.Hour).Unix(), 0.9)
 	seedDetectionForModel(t, db, labelA2, 2, day1.Add(6*time.Hour).Unix(), 0.85)
 
-	results, err := repo.GetDawnChorusRaw(ctx, since, 4, 10, nil)
+	// Anchor the offset to the seeded day so the asserted earliest hour is exact regardless of host.
+	results, err := repo.GetDawnChorusRaw(ctx, since, 4, 10, localOffsetAt(day1), nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1, "same species on same day from two models should produce one result")
 	assert.Equal(t, "Turdus merula", results[0].ScientificName)
@@ -451,10 +473,12 @@ func TestGetExpectedSpeciesToday_MultiModel(t *testing.T) {
 	labelA1 := seedLabelForModel(t, db, "Turdus merula", 1)
 	labelA2 := seedLabelForModel(t, db, "Turdus merula", 2)
 
-	y1Start := time.Date(2024, 3, 8, 0, 0, 0, 0, time.Local)
+	// Seed at local noon so the single query-wide offset cannot shift a row across a day boundary
+	// on a non-UTC host (keeps the distinct-year count stable regardless of host offset).
+	y1Start := time.Date(2024, 3, 8, 12, 0, 0, 0, time.Local)
 	seedDetectionForModel(t, db, labelA1, 1, y1Start.Unix(), 0.9)
 
-	y2Start := time.Date(2025, 3, 7, 0, 0, 0, 0, time.Local)
+	y2Start := time.Date(2025, 3, 7, 12, 0, 0, 0, time.Local)
 	seedDetectionForModel(t, db, labelA2, 2, y2Start.Unix(), 0.88)
 
 	yearRanges := []TimeRange{
@@ -468,7 +492,7 @@ func TestGetExpectedSpeciesToday_MultiModel(t *testing.T) {
 		},
 	}
 
-	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, nil)
+	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, localOffsetAt(y2Start), nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1, "same species from two models should produce one result")
 	assert.Equal(t, "Turdus merula", results[0].ScientificName)
@@ -492,7 +516,7 @@ func TestGetDashboardKPIs_MultiModel(t *testing.T) {
 	labelB := seedLabelForModel(t, db, "Parus major", 1)
 	seedDetectionForModel(t, db, labelB, 1, today.Add(4*time.Hour).Unix(), 0.8)
 
-	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), nil)
+	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), localOffsetAt(today), nil)
 	require.NoError(t, err)
 	require.NotNil(t, kpis)
 	assert.Equal(t, int64(2), kpis.LifetimeSpecies, "same species from two models should count as one")
@@ -526,7 +550,52 @@ func TestGetExpectedSpeciesToday_EmptyRanges(t *testing.T) {
 	repo := NewInsightsRepository(db, false, false)
 	ctx := t.Context()
 
-	results, err := repo.GetExpectedSpeciesToday(ctx, nil, nil)
+	results, err := repo.GetExpectedSpeciesToday(ctx, nil, 0, nil)
 	require.NoError(t, err)
 	assert.Nil(t, results)
+}
+
+// TestGetExpectedSpeciesToday_TimezoneBucketing verifies the date (MAX) and year
+// (COUNT DISTINCT) expressions bucket by the supplied timezone offset, not the database/OS-local
+// zone. Two near-midnight detections at fixed UTC instants straddle a calendar-day and a
+// calendar-year boundary, so the offset changes both the date and the distinct-year count. Using
+// explicit UTC instants and explicit offsets keeps the test independent of the host's zone.
+func TestGetExpectedSpeciesToday_TimezoneBucketing(t *testing.T) {
+	db := setupInsightsTestDB(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	label := seedLabel(t, db, "Turdus merula")
+
+	// 2023-12-31T23:30:00Z: year 2023 at UTC, but 2024-01-01 (year 2024) at UTC+5.
+	yearBoundary := time.Date(2023, 12, 31, 23, 30, 0, 0, time.UTC).Unix()
+	seedDetection(t, db, label, yearBoundary, 0.9)
+	// 2024-03-08T23:30:00Z: date 2024-03-08 at UTC, but 2024-03-09 at UTC+5.
+	nearMidnight := time.Date(2024, 3, 8, 23, 30, 0, 0, time.UTC).Unix()
+	seedDetection(t, db, label, nearMidnight, 0.9)
+
+	// A single wide range covering both detections; the range filter is on the raw detected_at
+	// epoch, so it is unaffected by the bucketing offset.
+	ranges := []TimeRange{{
+		Start: time.Date(2023, 12, 1, 0, 0, 0, 0, time.UTC).Unix(),
+		End:   time.Date(2024, 4, 1, 0, 0, 0, 0, time.UTC).Unix(),
+	}}
+
+	const offsetEast = 5 * 3600 // UTC+5
+
+	t.Run("utc buckets the two detections as distinct years", func(t *testing.T) {
+		got, err := repo.GetExpectedSpeciesToday(ctx, ranges, 0, nil)
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, 2, got[0].YearsSeen, "2023-12-31 and 2024-03-08 are distinct years at UTC")
+		assert.Equal(t, "2024-03-08", got[0].LastSeenDate)
+	})
+
+	t.Run("east offset rolls both detections into 2024", func(t *testing.T) {
+		got, err := repo.GetExpectedSpeciesToday(ctx, ranges, offsetEast, nil)
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, 1, got[0].YearsSeen, "at UTC+5 the year-boundary detection rolls into 2024")
+		assert.Equal(t, "2024-03-09", got[0].LastSeenDate, "23:30Z + 5h crosses to the next calendar day")
+	})
 }

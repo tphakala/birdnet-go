@@ -1807,3 +1807,41 @@ func TestConvertToNewSpeciesData_ZeroEpoch(t *testing.T) {
 	assert.NotEmpty(t, got[1].FirstSeenDate)
 	assert.NotEmpty(t, got[1].LastSeenDate)
 }
+
+// TestV2OnlyDatastore_GetSpeciesDiversityData_TimezoneBucketing verifies the date grouping in
+// GetSpeciesDiversityData buckets by the configured timezone, not UTC or the OS-local zone. A
+// detection at a fixed UTC instant 30 minutes before midnight must group on the NEXT calendar day
+// when the configured zone is UTC+5. The negative assertion (the UTC date does not match) proves
+// the bucketing is genuinely offset-aware, and exercises the BETWEEN date filter end-to-end.
+func TestV2OnlyDatastore_GetSpeciesDiversityData_TimezoneBucketing(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ctx := t.Context()
+
+	// Force a deterministic non-UTC zone so the assertion does not depend on the test host.
+	ds.timezone = time.FixedZone("UTC+5", 5*3600)
+
+	label, err := ds.label.GetOrCreate(ctx, "Turdus merula", ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+
+	// 2024-06-14T23:30:00Z -> 2024-06-15 04:30 in UTC+5, so the detection belongs to 2024-06-15.
+	nearMidnight := time.Date(2024, 6, 14, 23, 30, 0, 0, time.UTC).Unix()
+	require.NoError(t, ds.detection.Save(ctx, &entities.Detection{
+		ModelID:    ds.defaultModelID,
+		LabelID:    label.ID,
+		DetectedAt: nearMidnight,
+		Confidence: 0.9,
+	}))
+
+	// The configured-zone date matches.
+	data, err := ds.GetSpeciesDiversityData(ctx, "2024-06-15", "2024-06-15")
+	require.NoError(t, err)
+	require.Len(t, data, 1, "near-midnight detection must bucket on the configured-zone date 2024-06-15")
+	assert.Equal(t, "2024-06-15", data[0].Date)
+	assert.Equal(t, 1, data[0].Count)
+
+	// The UTC date must NOT match, proving bucketing is not in UTC.
+	none, err := ds.GetSpeciesDiversityData(ctx, "2024-06-14", "2024-06-14")
+	require.NoError(t, err)
+	assert.Empty(t, none, "detection must not bucket on the UTC date when the configured zone is UTC+5")
+}

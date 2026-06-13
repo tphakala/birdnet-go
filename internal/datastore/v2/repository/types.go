@@ -132,7 +132,8 @@ type SpeciesCount struct {
 // because daily aggregations are timezone-dependent and the string format
 // is more natural for display and grouping purposes.
 type DailyCount struct {
-	// Date in YYYY-MM-DD format (local timezone).
+	// Date in YYYY-MM-DD format, bucketed in the configured timezone (offset-adjusted),
+	// not necessarily the database/OS-local zone.
 	Date string
 
 	// Count is the number of detections on this date.

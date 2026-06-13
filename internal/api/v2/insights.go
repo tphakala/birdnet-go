@@ -273,6 +273,15 @@ func buildThumbnailURL(scientificName string) string {
 	return imageprovider.ProxyImageURL(scientificName)
 }
 
+// analyticsTZOffset returns the server local timezone's UTC offset (seconds) in effect at ref.
+// Insights date/hour/year SQL adds this offset to detected_at so rows bucket by wall-clock value
+// in the same zone the handlers use (time.Now()/time.Local), independent of the DB session /
+// OS-local zone. This mirrors the datastore's ds.timezone (time.Local in production) and reuses
+// repository.GetTimezoneOffsetAt, the same helper the hourly charts use.
+func analyticsTZOffset(ref time.Time) int {
+	return repository.GetTimezoneOffsetAt(time.Local, ref)
+}
+
 // buildYearRanges computes index-friendly Unix timestamp ranges for the
 // +/- windowDays around today's day-of-year in each previous year.
 func buildYearRanges(now time.Time, windowDays int) []repository.TimeRange {
@@ -427,7 +436,7 @@ func (c *Controller) getExpectedTodayImpl(ctx echo.Context) error {
 	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), insightsQueryTimeout)
 	defer cancel()
 
-	results, err := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, nil)
+	results, err := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, analyticsTZOffset(now), nil)
 	if err != nil {
 		return c.handleAnalyticsQueryError(ctx, err, "Expected species", "Failed to query expected species")
 	}
@@ -498,8 +507,9 @@ func (c *Controller) getExpectedTodayRegionalImpl(ctx echo.Context) error {
 	}
 
 	// Get local species to deduplicate against (best-effort; if this fails, show all eBird results)
-	yearRanges := buildYearRanges(time.Now(), expectedTodayWindowDays)
-	localSpecies, localErr := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, nil)
+	now := time.Now()
+	yearRanges := buildYearRanges(now, expectedTodayWindowDays)
+	localSpecies, localErr := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, analyticsTZOffset(now), nil)
 	if localErr != nil {
 		c.logAPIRequest(ctx, logger.LogLevelWarn, "Failed to query local species for deduplication",
 			logger.Error(localErr))
@@ -589,7 +599,7 @@ func (c *Controller) getDawnChorusImpl(ctx echo.Context) error {
 	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), insightsQueryTimeout)
 	defer cancel()
 
-	rawEntries, err := c.insightsRepo.GetDawnChorusRaw(reqCtx, since, dawnChorusStartHour, dawnChorusEndHour, nil)
+	rawEntries, err := c.insightsRepo.GetDawnChorusRaw(reqCtx, since, dawnChorusStartHour, dawnChorusEndHour, analyticsTZOffset(time.Unix(since, 0)), nil)
 	if err != nil {
 		return c.handleAnalyticsQueryError(ctx, err, "Dawn chorus", "Failed to query dawn chorus")
 	}
@@ -731,7 +741,7 @@ func (c *Controller) getDashboardKPIsImpl(ctx echo.Context) error {
 	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), insightsQueryTimeout)
 	defer cancel()
 
-	kpis, err := c.insightsRepo.GetDashboardKPIs(reqCtx, todayStart.Unix(), nil)
+	kpis, err := c.insightsRepo.GetDashboardKPIs(reqCtx, todayStart.Unix(), analyticsTZOffset(now), nil)
 	if err != nil {
 		return c.handleAnalyticsQueryError(ctx, err, "Dashboard KPIs", "Failed to query dashboard KPIs")
 	}
