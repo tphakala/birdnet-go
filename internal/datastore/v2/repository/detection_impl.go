@@ -1543,10 +1543,17 @@ func (r *detectionRepository) GetDetectionIDsByScientificName(ctx context.Contex
 	detTable := r.tableName()
 	labTable := r.labelsTable()
 
+	// Match the clean scientific name exactly, or a legacy concatenated
+	// "ScientificName_CommonName" label. The separator underscore is a LIKE
+	// wildcard, so escape it (and any metacharacters in name) with '/' — chosen
+	// for SQLite/MySQL portability — so e.g. "Motacilla alba" does not also match
+	// "Motacilla alba alba".
+	escaped := strings.NewReplacer("/", "//", "%", "/%", "_", "/_").Replace(name)
+
 	var ids []uint
 	err := r.db.WithContext(ctx).Table(detTable).
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = %s.label_id", labTable, labTable, detTable)).
-		Where(fmt.Sprintf("%s.scientific_name = ? OR %s.scientific_name LIKE ?", labTable, labTable), name, name+"_%").
+		Where(fmt.Sprintf("%s.scientific_name = ? OR %s.scientific_name LIKE ? ESCAPE '/'", labTable, labTable), name, escaped+"/_%").
 		Pluck(fmt.Sprintf("%s.id", detTable), &ids).Error
 	return ids, err
 }

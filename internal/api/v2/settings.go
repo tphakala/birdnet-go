@@ -2106,6 +2106,12 @@ func getBlockedFieldMap() map[string]any {
 		// Realtime section - block runtime fields
 		"Realtime": map[string]any{
 			"Audio": getAudioBlockedFields(),
+			// Species.Confirmed is analytics-only and managed exclusively via
+			// /api/v2/detections/confirm. Block it so a Settings save (which omits
+			// it) cannot clobber the confirmed list.
+			"Species": map[string]any{
+				"Confirmed": true,
+			},
 		},
 
 		// All other fields are allowed by default

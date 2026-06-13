@@ -219,6 +219,20 @@ func TestGetDetectionIDsByScientificName(t *testing.T) {
 		assert.Contains(t, ids, d.ID)
 	})
 
+	t.Run("does not match a longer name sharing the prefix", func(t *testing.T) {
+		// The legacy "_" separator is a LIKE wildcard; "Motacilla alba" must not
+		// match the distinct species "Motacilla alba alba".
+		alba := createTestLabel(t, db, "Motacilla alba", 1)
+		albaAlba := createTestLabel(t, db, "Motacilla alba alba", 1)
+		dAlba := createDetectionForLabel(t, db, alba.ID, 3000)
+		dAlbaAlba := createDetectionForLabel(t, db, albaAlba.ID, 3001)
+
+		ids, err := repo.GetDetectionIDsByScientificName(ctx, "Motacilla alba")
+		require.NoError(t, err)
+		assert.Contains(t, ids, dAlba.ID)
+		assert.NotContains(t, ids, dAlbaAlba.ID, "must not delete a different species sharing the prefix")
+	})
+
 	t.Run("no match", func(t *testing.T) {
 		ids, err := repo.GetDetectionIDsByScientificName(ctx, "Nonexistent species")
 		require.NoError(t, err)

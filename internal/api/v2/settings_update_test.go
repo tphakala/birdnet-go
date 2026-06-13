@@ -526,6 +526,29 @@ func TestEmptyUpdatePreservesEverything(t *testing.T) {
 	assert.JSONEq(t, string(initialJSON), string(updatedJSON))
 }
 
+// TestUpdateAllowedSettings_PreservesConfirmedSpecies verifies that a full-settings
+// update (PUT /api/v2/settings) which omits Realtime.Species.Confirmed — as the
+// frontend does, since it is analytics-only and absent from the settings form —
+// preserves the confirmed list while still applying the other species fields.
+func TestUpdateAllowedSettings_PreservesConfirmedSpecies(t *testing.T) {
+	dest := getTestSettings(t)
+	dest.Realtime.Species.Confirmed = []string{"American Robin"}
+	dest.Realtime.Species.Include = []string{"Blue Jay"}
+
+	// Simulate the frontend payload: include changes, confirmed omitted (nil).
+	src := conf.CloneSettings(dest)
+	src.Realtime.Species.Confirmed = nil
+	src.Realtime.Species.Include = []string{"Northern Cardinal"}
+
+	_, err := updateAllowedSettingsWithTracking(dest, src)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"American Robin"}, dest.Realtime.Species.Confirmed,
+		"confirmed list must be preserved across a settings save")
+	assert.Equal(t, []string{"Northern Cardinal"}, dest.Realtime.Species.Include,
+		"include list must still update normally")
+}
+
 // TestValidationErrors verifies validation rules are enforced
 func TestValidationErrors(t *testing.T) {
 	t.Parallel()
