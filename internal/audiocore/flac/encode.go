@@ -34,10 +34,11 @@ const (
 
 // encoderPool reuses go-flac encoders (and their multi-MB workspaces) across
 // exports. Encoder.Reset is safe on a zero-value encoder, so the pool seeds with
-// new(goflac.Encoder). Reset also fully reinitializes an un-Closed encoder, so
-// the defer Put below safely returns an encoder even when an error path skips
-// Close; the next Get/Reset cleans up its leftover state (do not "fix" this into
-// a Close-before-Put, which would double-write the stream headers).
+// new(goflac.Encoder). An encoder is returned to the pool only after a
+// successful Reset; from that point a later Write/Close error still Puts it back
+// safely, because the next Get/Reset fully reinitializes its leftover state (do
+// not "fix" that into a Close-before-Put, which would double-write the stream
+// headers). An encoder whose Reset failed is dropped, not pooled.
 var encoderPool = sync.Pool{New: func() any { return new(goflac.Encoder) }}
 
 // gainScratchPool reuses gain scratch chunks. Pooling a pointer avoids the
@@ -154,14 +155,19 @@ func EncodePCM(ctx context.Context, opts *Options) (err error) {
 	}
 
 	enc := encoderPool.Get().(*goflac.Encoder)
-	defer encoderPool.Put(enc)
 	if resetErr := enc.Reset(f, cfg); resetErr != nil {
+		// A failed Reset may leave the encoder half-initialized; go-flac's
+		// contract says it must not be reused, so drop it (do not Put it back)
+		// and let the pool allocate a fresh one next time.
 		return errors.New(resetErr).
 			Component("audiocore/flac").
 			Category(errors.CategoryAudio).
 			Context("operation", "flac_encode_reset").
 			Build()
 	}
+	// Reset succeeded: safe to return to the pool even if a later Write/Close
+	// errors, since the next Get/Reset fully reinitializes it.
+	defer encoderPool.Put(enc)
 
 	if writeErr := encodeSamples(ctx, enc, opts); writeErr != nil {
 		return writeErr
