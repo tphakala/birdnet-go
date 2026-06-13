@@ -773,10 +773,11 @@ func TestV2OnlyDatastore_ThresholdEvent(t *testing.T) {
 	assert.Len(t, recent, 1)
 }
 
-// TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry pins #1019: the v2only threshold
-// read methods must wrap genuine DB errors with datastore Component/Category telemetry,
-// while a benign not-found (ErrDynamicThresholdNotFound) must propagate UNWRAPPED so it
-// does not reach Sentry as a database error.
+// TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry pins #1019 and #1068: the v2only
+// threshold read methods must wrap genuine DB errors with datastore Component/Category
+// telemetry, while a benign not-found (ErrDynamicThresholdNotFound) must be wrapped as a
+// CategoryNotFound EnhancedError (never CategoryDatabase) so the API maps it to 404 and it
+// never reaches Sentry as a database error, all while staying reachable via errors.Is.
 func TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry(t *testing.T) {
 	t.Run("NotFoundWrappedAsNotFoundCategory", func(t *testing.T) {
 		ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
