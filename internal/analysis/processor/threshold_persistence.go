@@ -479,6 +479,15 @@ func (p *Processor) StartDynamicThresholds() {
 // in-memory thresholds to the database, and clears the in-memory threshold map.
 // This is called when dynamic thresholds are disabled at runtime via the settings UI.
 // It is safe to call when goroutines are not running.
+//
+// Concurrency contract: StartDynamicThresholds and StopDynamicThresholds are driven
+// exclusively by ControlMonitor's single-goroutine control loop (one settings signal
+// processed at a time), so a re-enable cannot interleave with an in-progress stop
+// flush; the queued enable signal is handled only after this call returns and tears
+// the session down, so the last toggle wins. The TOCTOU guard below (thresholdsCtx ==
+// ctx) and snapshotThresholdsCtx keep the shared fields race-free against the
+// concurrent persistence goroutine and ShutdownWithContext; they are NOT a license to
+// call these lifecycle methods concurrently from multiple goroutines.
 func (p *Processor) StopDynamicThresholds() {
 	// Snapshot the lifecycle context under the lock (never read the field unlocked).
 	// If goroutines were never started, ctx is nil and we skip the flush; the retry
