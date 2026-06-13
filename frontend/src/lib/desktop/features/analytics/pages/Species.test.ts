@@ -387,6 +387,35 @@ describe('Species (analytics page) — Manage view', () => {
     expect(window.localStorage.getItem(SORT_STORAGE_KEY)).toBe(persistedBefore);
   });
 
+  it('surfaces a fully-rejected species that is absent from the period summary', async () => {
+    // Corvus corax has detections but every one was rejected, so the summary
+    // (which excludes false positives) omits it. review-stats still reports it and
+    // now carries the common name, so Manage can render a deletable row for it.
+    mockManageFetch([
+      { scientificName: 'Turdus migratorius', total: 10, verified: 7, rejected: 3 },
+      {
+        scientificName: 'Corvus corax',
+        commonName: 'Common Raven',
+        total: 4,
+        verified: 0,
+        rejected: 4,
+      },
+    ]);
+    const { container } = await renderManageView();
+    await waitFor(() => {
+      if (container.querySelectorAll('table tbody tr').length < 2)
+        throw new Error('synthesized row not yet rendered');
+    });
+    const rows = Array.from(container.querySelectorAll('table tbody tr'));
+    const ravenRow = rows.find(r => r.textContent.includes('Common Raven'));
+    if (!ravenRow) throw new Error('Common Raven row not rendered');
+    const cells = ravenRow.querySelectorAll('td');
+    expect(cells[1].textContent.trim()).toBe('4'); // all-time detection count
+    expect(cells[2].textContent.trim()).toBe('—'); // no max-confidence data survives
+    expect(cells[3].textContent.trim()).toBe('—'); // no last-detected data survives
+    expect(cells[REVIEW_CELL_INDEX].textContent.trim()).toBe('0 / 4');
+  });
+
   it('checks the included toggle when the list stores the scientific-name alias', async () => {
     // The included list holds the scientific name; the row is American Robin /
     // Turdus migratorius, so the alias match must render the checkbox checked.

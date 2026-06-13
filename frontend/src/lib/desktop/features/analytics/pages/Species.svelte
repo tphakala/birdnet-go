@@ -70,6 +70,10 @@
   // Per-species review counts used by the Manage view.
   interface ReviewStat {
     scientificName: string;
+    // commonName lets the Manage view render a row for species that have NO
+    // surviving detections in the period summary (every detection was rejected),
+    // since those species are absent from speciesData and have no name otherwise.
+    commonName?: string;
     total: number;
     verified: number;
     rejected: number;
@@ -329,6 +333,23 @@
     };
   }
 
+  // Shared search predicate over a species' display, common, and scientific names.
+  // displayName (the visitor-localized name) is passed in so callers that already
+  // localized the row don't repeat the dictionary lookup. Used by both the grid/list
+  // (filteredSpecies) and Manage (manageRows) filters so the matching rules stay in
+  // one place.
+  function speciesMatchesSearch(
+    species: SpeciesData,
+    displayName: string,
+    searchLower: string
+  ): boolean {
+    return (
+      displayName.toLowerCase().includes(searchLower) ||
+      species.common_name.toLowerCase().includes(searchLower) ||
+      species.scientific_name.toLowerCase().includes(searchLower)
+    );
+  }
+
   // Filtered + sorted rows for display. Search and name-sort operate on the
   // visitor-localized common name (displayName) so they match what the user
   // sees, while scientific name and the server common name stay searchable too.
@@ -350,11 +371,8 @@
 
     const searchLower = debouncedSearchTerm.trim().toLowerCase();
     const filtered = searchLower
-      ? rows.filter(
-          ({ species, displayName }) =>
-            displayName.toLowerCase().includes(searchLower) ||
-            species.common_name.toLowerCase().includes(searchLower) ||
-            species.scientific_name.toLowerCase().includes(searchLower)
+      ? rows.filter(({ species, displayName }) =>
+          speciesMatchesSearch(species, displayName, searchLower)
         )
       : rows;
 
@@ -406,7 +424,9 @@
   });
 
   function getFilteredCount(): number {
-    return filteredSpecies.length;
+    // Manage view acts on manageRows (summary plus synthesized fully-rejected
+    // species), so the count badge should reflect that superset, not the summary.
+    return viewMode === 'manage' ? manageRows.length : filteredSpecies.length;
   }
 
   function getTotalSpeciesCount(): number {
@@ -685,12 +705,45 @@
     return stat ? stat.verified + stat.rejected : 0;
   }
 
-  // Search-filtered rows (reuses filteredSpecies) re-sorted by the Manage-only key.
+  // The Manage view acts on a SUPERSET of the period summary: a species whose
+  // detections were all rejected is absent from speciesData (the summary excludes
+  // false positives) yet still owns rows the user may want to delete. We synthesize
+  // a row for each such review-stats-only species so it surfaces in Manage. These
+  // carry the all-time detection count and no confidence/date data, since none
+  // survives in the summary; the row exists primarily so the species is reviewable
+  // and deletable.
+  let manageSpecies = $derived.by<SpeciesData[]>(() => {
+    if (viewMode !== 'manage') return speciesData;
+    const present = new Set(speciesData.map(s => s.scientific_name));
+    const extras: SpeciesData[] = [];
+    for (const [sciName, stat] of reviewStats) {
+      if (present.has(sciName)) continue;
+      extras.push({
+        common_name: stat.commonName || sciName,
+        scientific_name: sciName,
+        count: stat.total,
+        avg_confidence: 0,
+        max_confidence: 0,
+        first_heard: '',
+        last_heard: '',
+      });
+    }
+    return extras.length > 0 ? [...speciesData, ...extras] : speciesData;
+  });
+
+  // Search-filtered Manage rows, re-sorted by the Manage-only key. Reuses the shared
+  // speciesMatchesSearch predicate (same rules as filteredSpecies), but runs over
+  // manageSpecies so synthesized fully-rejected species are searchable too.
   let manageRows = $derived.by<SpeciesData[]>(() => {
     if (viewMode !== 'manage') return filteredSpecies;
     const locale = getLocale();
+    const searchLower = debouncedSearchTerm.trim().toLowerCase();
+    const rows = manageSpecies.filter(species => {
+      if (!searchLower) return true;
+      const displayName = localizeSpeciesName(species.scientific_name, species.common_name);
+      return speciesMatchesSearch(species, displayName, searchLower);
+    });
     const dir = manageSortDirection === 'asc' ? 1 : -1;
-    const rows = [...filteredSpecies];
     rows.sort((a, b) => {
       switch (manageSortKey) {
         case 'name':
@@ -1154,7 +1207,14 @@
                     <div class="text-sm opacity-50 italic">{species.scientific_name}</div>
                   </td>
                   <td class="font-semibold">{species.count}</td>
-                  <td>{formatPercentage(species.max_confidence)}</td>
+                  <!-- Synthesized fully-rejected rows carry no confidence data
+                       (max_confidence === 0); a real summary row is always > 0, so
+                       render an em dash instead of a misleading 0.0%. -->
+                  <td
+                    >{species.max_confidence > 0
+                      ? formatPercentage(species.max_confidence)
+                      : '—'}</td
+                  >
                   <td class="text-sm">{formatDateOnly(species.last_heard)}</td>
                   <td>
                     <Checkbox
@@ -1207,8 +1267,10 @@
         </div>
       {/if}
 
-      <!-- Empty State -->
-      {#if !isLoading && filteredSpecies.length === 0}
+      <!-- Empty State. In Manage view the actionable set is manageRows (summary
+           plus synthesized fully-rejected species), so the summary being empty does
+           not mean Manage is empty. -->
+      {#if !isLoading && (viewMode === 'manage' ? manageRows.length === 0 : filteredSpecies.length === 0)}
         <div class="text-center py-8 text-[var(--color-base-content)] opacity-50">
           <svg
             xmlns="http://www.w3.org/2000/svg"

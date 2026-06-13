@@ -312,11 +312,13 @@ func TestGetSpeciesReviewStats(t *testing.T) {
 	}
 
 	robin := byName["Turdus migratorius"]
+	assert.Equal(t, "American Robin", robin.CommonName)
 	assert.Equal(t, 2, robin.Total)
 	assert.Equal(t, 1, robin.Verified)
 	assert.Equal(t, 0, robin.Rejected)
 
 	jay := byName["Cyanocitta cristata"]
+	assert.Equal(t, "Blue Jay", jay.CommonName)
 	assert.Equal(t, 2, jay.Total)
 	assert.Equal(t, 0, jay.Verified)
 	assert.Equal(t, 1, jay.Rejected) // false positive remains counted in review stats

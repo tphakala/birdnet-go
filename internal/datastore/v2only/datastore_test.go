@@ -1086,10 +1086,15 @@ func TestV2OnlyDatastore_GetSpeciesReviewStats(t *testing.T) {
 	assert.Equal(t, 2, byName["Passer domesticus"].Total)
 	assert.Equal(t, 1, byName["Passer domesticus"].Verified)
 	assert.Equal(t, 0, byName["Passer domesticus"].Rejected)
+	// CommonName is resolved via resolveCommonName; with no name maps loaded in the
+	// test it falls back to the scientific name. The fully-rejected-species UI relies
+	// on this field being populated so it can render a row for the deleted species.
+	assert.Equal(t, "Passer domesticus", byName["Passer domesticus"].CommonName)
 
 	assert.Equal(t, 1, byName["Turdus merula"].Total)
 	assert.Equal(t, 0, byName["Turdus merula"].Verified)
 	assert.Equal(t, 1, byName["Turdus merula"].Rejected) // false positive counted
+	assert.Equal(t, "Turdus merula", byName["Turdus merula"].CommonName)
 }
 
 // TestV2OnlyDatastore_GetSpeciesNoteIDs verifies note-ID lookup by scientific name.

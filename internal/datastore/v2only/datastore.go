@@ -2433,6 +2433,7 @@ func (ds *Datastore) GetSpeciesReviewStats(ctx context.Context) ([]datastore.Spe
 		sciName := detection.ExtractScientificName(d.ScientificName)
 		result = append(result, datastore.SpeciesReviewStat{
 			ScientificName: sciName,
+			CommonName:     ds.resolveCommonName(sciName),
 			Total:          int(d.Total),
 			Verified:       int(d.Verified),
 			Rejected:       int(d.Rejected),

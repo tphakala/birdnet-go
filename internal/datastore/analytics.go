@@ -38,6 +38,7 @@ type SpeciesSummaryData struct {
 // positives) so the verified/rejected ratio reflects all reviews.
 type SpeciesReviewStat struct {
 	ScientificName string `json:"scientificName"`
+	CommonName     string `json:"commonName"`
 	Total          int    `json:"total"`
 	Verified       int    `json:"verified"`
 	Rejected       int    `json:"rejected"`
@@ -293,6 +294,7 @@ func (ds *DataStore) GetSpeciesReviewStats(ctx context.Context) ([]SpeciesReview
 	query := fmt.Sprintf(`
 		SELECT
 			notes.scientific_name AS scientific_name,
+			COALESCE(MAX(notes.common_name), '') AS common_name,
 			COUNT(DISTINCT notes.id) AS total,
 			COUNT(DISTINCT CASE WHEN note_reviews.verified = '%s' THEN notes.id END) AS verified,
 			COUNT(DISTINCT CASE WHEN note_reviews.verified = '%s' THEN notes.id END) AS rejected

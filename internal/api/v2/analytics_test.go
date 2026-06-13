@@ -66,7 +66,7 @@ func TestGetSpeciesReviewStats(t *testing.T) {
 		controller.DS = &managedSpeciesStubDS{
 			MockInterface: mockDS,
 			reviewStats: []datastore.SpeciesReviewStat{
-				{ScientificName: "Turdus migratorius", Total: 3, Verified: 2, Rejected: 1},
+				{ScientificName: "Turdus migratorius", CommonName: "American Robin", Total: 3, Verified: 2, Rejected: 1},
 			},
 		}
 
@@ -81,6 +81,9 @@ func TestGetSpeciesReviewStats(t *testing.T) {
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 		require.Len(t, response, 1)
 		assert.Equal(t, "Turdus migratorius", response[0]["scientificName"])
+		// commonName is surfaced so the Manage view can render a row for species
+		// whose detections were all rejected (absent from the period summary).
+		assert.Equal(t, "American Robin", response[0]["commonName"])
 		assert.InDelta(t, 3, response[0]["total"], 0.01)
 		assert.InDelta(t, 2, response[0]["verified"], 0.01)
 		assert.InDelta(t, 1, response[0]["rejected"], 0.01)
