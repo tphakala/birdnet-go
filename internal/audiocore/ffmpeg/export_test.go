@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // makePCMSilence returns a slice of silence PCM bytes (16-bit LE, mono, 48 kHz).
@@ -161,6 +163,186 @@ func TestExportAudio_InvalidInputs(t *testing.T) {
 			t.Parallel()
 			err := ffmpeg.ExportAudio(t.Context(), tt.opts)
 			assert.Error(t, err)
+		})
+	}
+}
+
+// TestExportAudio_ErrorsAreEnhanced verifies that every error ExportAudio
+// returns carries internal/errors telemetry metadata (component + category) so
+// FFmpeg export failures reach Sentry tagged, matching the native WAV and FLAC
+// export paths. None of these cases require a real FFmpeg binary: the validation
+// cases return before exec, and the process-start case uses a bogus path.
+func TestExportAudio_ErrorsAreEnhanced(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+	pcm := makePCMSilence(t, 1)
+	const validPath = "/usr/bin/ffmpeg" // absolute + uncontaminated; never executed in validation cases
+
+	// A plain file used as an output parent directory so os.MkdirAll fails.
+	parentIsFile := filepath.Join(outDir, "not-a-dir")
+	require.NoError(t, os.WriteFile(parentIsFile, []byte("x"), 0o600))
+
+	tests := []struct {
+		name          string
+		opts          *ffmpeg.ExportOptions
+		wantComponent string
+		wantCategory  errors.ErrorCategory
+		wantOperation string
+	}{
+		{
+			name:          "nil options",
+			opts:          nil,
+			wantComponent: "audiocore/ffmpeg",
+			wantCategory:  errors.CategoryValidation,
+			wantOperation: "export_validate",
+		},
+		{
+			name: "empty output path",
+			opts: &ffmpeg.ExportOptions{
+				PCMData: pcm, OutputPath: "", Format: ffmpeg.FormatMP3,
+				SampleRate: 48000, Channels: 1, BitDepth: 16, FFmpegPath: validPath,
+			},
+			wantComponent: "audiocore/ffmpeg",
+			wantCategory:  errors.CategoryValidation,
+			wantOperation: "export_validate",
+		},
+		{
+			name: "empty PCM data",
+			opts: &ffmpeg.ExportOptions{
+				PCMData: nil, OutputPath: filepath.Join(outDir, "out.mp3"), Format: ffmpeg.FormatMP3,
+				SampleRate: 48000, Channels: 1, BitDepth: 16, FFmpegPath: validPath,
+			},
+			wantComponent: "audiocore/ffmpeg",
+			wantCategory:  errors.CategoryValidation,
+			wantOperation: "export_validate",
+		},
+		{
+			// ValidateFFmpegPath is a shared audiocore helper that already returns a
+			// fully enhanced error, so this case (and the relative-path one below)
+			// passed before the fix too; they are regression-locks on ExportAudio
+			// returning that error directly rather than re-wrapping (double-report).
+			name: "empty FFmpeg path",
+			opts: &ffmpeg.ExportOptions{
+				PCMData: pcm, OutputPath: filepath.Join(outDir, "out.mp3"), Format: ffmpeg.FormatMP3,
+				SampleRate: 48000, Channels: 1, BitDepth: 16, FFmpegPath: "",
+			},
+			wantComponent: "audiocore",
+			wantCategory:  errors.CategoryValidation,
+			wantOperation: "validate_ffmpeg_path",
+		},
+		{
+			name: "relative FFmpeg path",
+			opts: &ffmpeg.ExportOptions{
+				PCMData: pcm, OutputPath: filepath.Join(outDir, "out.mp3"), Format: ffmpeg.FormatMP3,
+				SampleRate: 48000, Channels: 1, BitDepth: 16, FFmpegPath: "ffmpeg",
+			},
+			wantComponent: "audiocore",
+			wantCategory:  errors.CategoryValidation,
+			wantOperation: "validate_ffmpeg_path",
+		},
+		{
+			name: "output directory cannot be created",
+			opts: &ffmpeg.ExportOptions{
+				PCMData: pcm, OutputPath: filepath.Join(parentIsFile, "out.mp3"), Format: ffmpeg.FormatMP3,
+				SampleRate: 48000, Channels: 1, BitDepth: 16, FFmpegPath: validPath,
+			},
+			wantComponent: "audiocore/ffmpeg",
+			wantCategory:  errors.CategoryFileIO,
+			wantOperation: "export_create_directory",
+		},
+		{
+			name: "nonexistent FFmpeg binary fails process start",
+			opts: &ffmpeg.ExportOptions{
+				PCMData: pcm, OutputPath: filepath.Join(outDir, "out.mp3"), Format: ffmpeg.FormatMP3,
+				SampleRate: 48000, Channels: 1, BitDepth: 16,
+				FFmpegPath: filepath.Join(outDir, "ffmpeg-does-not-exist"),
+			},
+			wantComponent: "audiocore/ffmpeg",
+			wantCategory:  errors.CategoryAudio,
+			wantOperation: "export_ffmpeg_start",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ffmpeg.ExportAudio(t.Context(), tt.opts)
+			require.Error(t, err)
+
+			var enhanced *errors.EnhancedError
+			require.ErrorAs(t, err, &enhanced, "error must carry internal/errors telemetry metadata")
+			assert.Equal(t, tt.wantComponent, enhanced.GetComponent(), "component tag")
+			assert.Equal(t, tt.wantCategory, enhanced.Category, "category tag")
+			// Pin each error to its origin so a future refactor that returns the
+			// right component/category from the wrong site is caught.
+			assert.Equal(t, tt.wantOperation, enhanced.GetContext()["operation"], "operation context")
+		})
+	}
+}
+
+// TestExportAudio_RuntimeFailuresAreEnhanced covers the FFmpeg-execution and
+// finalization error paths using fake POSIX-shell "FFmpeg" binaries, so the
+// cmd.Wait() non-zero-exit and os.Rename finalize branches are exercised
+// deterministically without a real FFmpeg. POSIX-only; skipped on Windows.
+func TestExportAudio_RuntimeFailuresAreEnhanced(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell-script FFmpeg binaries are POSIX-only")
+	}
+
+	outDir := t.TempDir()
+	pcm := makePCMSilence(t, 1)
+
+	writeFakeBin := func(t *testing.T, name, script string) string {
+		t.Helper()
+		p := filepath.Join(outDir, name)
+		require.NoError(t, os.WriteFile(p, []byte(script), 0o755)) //nolint:gosec // test-only fake binary must be executable
+		return p
+	}
+
+	// Drains stdin then exits non-zero -> cmd.Wait() reports a non-zero exit.
+	waitFailBin := writeFakeBin(t, "wait-fail.sh", "#!/bin/sh\ncat > /dev/null\nexit 1\n")
+	// Exits zero but never writes the temp output file -> os.Rename finalize fails.
+	renameFailBin := writeFakeBin(t, "rename-fail.sh", "#!/bin/sh\ncat > /dev/null\nexit 0\n")
+
+	tests := []struct {
+		name          string
+		ffmpegPath    string
+		wantCategory  errors.ErrorCategory
+		wantOperation string
+	}{
+		{
+			name:          "FFmpeg exits non-zero",
+			ffmpegPath:    waitFailBin,
+			wantCategory:  errors.CategoryAudio,
+			wantOperation: "export_ffmpeg_wait",
+		},
+		{
+			name:          "missing temp output fails finalize rename",
+			ffmpegPath:    renameFailBin,
+			wantCategory:  errors.CategoryFileIO,
+			wantOperation: "export_finalize_rename",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ffmpeg.ExportAudio(t.Context(), &ffmpeg.ExportOptions{
+				PCMData:    pcm,
+				OutputPath: filepath.Join(outDir, strings.ReplaceAll(tt.name, " ", "_")+".mp3"),
+				Format:     ffmpeg.FormatMP3,
+				SampleRate: 48000, Channels: 1, BitDepth: 16,
+				FFmpegPath: tt.ffmpegPath,
+			})
+			require.Error(t, err)
+
+			var enhanced *errors.EnhancedError
+			require.ErrorAs(t, err, &enhanced, "runtime failure must carry telemetry metadata")
+			assert.Equal(t, "audiocore/ffmpeg", enhanced.GetComponent(), "component tag")
+			assert.Equal(t, tt.wantCategory, enhanced.Category, "category tag")
+			assert.Equal(t, tt.wantOperation, enhanced.GetContext()["operation"], "operation context")
 		})
 	}
 }
