@@ -268,7 +268,10 @@ func (c *Controller) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStat
 		response.Reason = "Cannot access database connection"
 		return ctx.JSON(http.StatusOK, response)
 	}
-	db := dbProvider.GetDB()
+	// Bind the request context so the existence checks and information_schema
+	// queries below abort if the client disconnects, rather than running
+	// unbounded on the request thread.
+	db := dbProvider.GetDB().WithContext(ctx.Request().Context())
 
 	// Check each legacy table and get its size
 	var totalSize int64
@@ -364,7 +367,7 @@ func (c *Controller) StartLegacyCleanup(ctx echo.Context) error {
 	// Get size before deletion for reporting
 	var sizeBytes int64
 	if c.isUsingMySQL() {
-		sizeBytes = c.getMySQLLegacySize()
+		sizeBytes = c.getMySQLLegacySize(ctx.Request().Context())
 	} else {
 		sizeBytes = c.getSQLiteLegacySize()
 	}
@@ -531,13 +534,15 @@ func (c *Controller) getSQLiteLegacySize() int64 {
 	return totalSize
 }
 
-// getMySQLLegacySize returns the total size of MySQL legacy tables.
-func (c *Controller) getMySQLLegacySize() int64 {
+// getMySQLLegacySize returns the total size of MySQL legacy tables. ctx (the
+// request context) bounds the information_schema queries so they abort if the
+// caller disconnects instead of running unbounded on the request thread.
+func (c *Controller) getMySQLLegacySize(ctx context.Context) int64 {
 	dbProvider, ok := c.Repo.(gormDBProvider)
 	if !ok {
 		return 0
 	}
-	db := dbProvider.GetDB()
+	db := dbProvider.GetDB().WithContext(ctx)
 
 	var totalSize int64
 	for _, tableName := range legacyTables {
