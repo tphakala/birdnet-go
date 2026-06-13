@@ -23,10 +23,6 @@ export interface OverlayLabel {
 /** Minimal pending detection shape for diffing. */
 interface PendingEntry {
   species: string;
-  // Scientific name carried through so label builders can localize the display
-  // name via localizeSpeciesName. Optional here because the diffing logic itself
-  // never reads it; the real SSE PendingDetection always provides it.
-  scientificName?: string;
   sourceID: string;
   firstDetected: number;
   audioCapturedAt?: number;
@@ -50,12 +46,17 @@ export const LABEL_LEAD_IN_SECONDS = 1.5;
  * Diff two pending snapshots, returning species with new activity for a given source.
  * Returns species that are newly appeared OR have an increased hitCount (new inference hit).
  * Filters by sourceID and ignores rejected status.
+ *
+ * Generic over the element type so the concrete input type is preserved on the way
+ * out: callers passing PendingDetection[] get PendingDetection[] back, keeping fields
+ * like scientificName strictly typed (string, not string | undefined) for the label
+ * builders that localize the display name.
  */
-export function diffPendingSnapshot(
-  prev: PendingEntry[],
-  curr: PendingEntry[],
+export function diffPendingSnapshot<T extends PendingEntry>(
+  prev: T[],
+  curr: T[],
   activeSourceID: string
-): PendingEntry[] {
+): T[] {
   const prevBySpecies = new Map(
     prev.filter(d => d.sourceID === activeSourceID).map(d => [d.species, d])
   );
