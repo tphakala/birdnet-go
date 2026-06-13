@@ -35,8 +35,8 @@
     promoteFromQueue,
     nextYSlot,
     computeWallClockAtPlayhead,
+    buildQueuedLabel,
     STALE_DEDUP_PRUNE_SECONDS,
-    LABEL_LEAD_IN_SECONDS,
   } from '$lib/utils/detectionOverlay';
 
   const logger = loggers.audio;
@@ -478,13 +478,10 @@
           lastSeenSpecies.set(det.species, nowUnix);
           const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
           slotCounter = next;
-          labelQueue.push({
-            // Display the visitor-locale name so overlay labels match the rest of
-            // the dashboard; falls back to the server common name, then scientific.
-            text: localizeSpeciesName(det.scientificName, det.species),
-            firstDetected: (det.audioCapturedAt ?? det.firstDetected) - LABEL_LEAD_IN_SECONDS,
-            ySlot: slot,
-          });
+          // Label text follows per-visitor localization (server-locale fallback),
+          // matching the rest of the dashboard. See buildQueuedLabel for why it is
+          // fixed at queue time rather than reactive to later locale switches.
+          labelQueue.push(buildQueuedLabel(det, slot, localizeSpeciesName));
         }
         prevSnapshot = curr;
       } catch {
