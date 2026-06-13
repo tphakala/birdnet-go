@@ -229,7 +229,10 @@ func (n *Notification) MarkAsAcknowledged() {
 
 // Clone creates a deep copy of the notification, including the Metadata map.
 // This is used to safely broadcast notifications to multiple subscribers
-// without risk of concurrent map access if the original is modified.
+// without risk of concurrent map access if the original is modified, and it
+// backs the InMemoryStore read path (Get/List) and write path (Save/Update).
+// NOTE: every field of Notification must be copied here; a newly added field
+// will be silently dropped from stored and returned copies if omitted.
 func (n *Notification) Clone() *Notification {
 	if n == nil {
 		return nil
@@ -341,9 +344,14 @@ func deepCopyValue(v any) any {
 type NotificationStore interface {
 	// Save persists a notification
 	Save(notification *Notification) error
-	// Get retrieves a notification by ID
+	// Get retrieves a notification by ID. The returned notification is an
+	// independent deep copy; callers may read or mutate it (including its
+	// Metadata/params maps) without affecting stored state or racing other
+	// readers. Implementations MUST honor this so REST/SSE callers can marshal
+	// results concurrently with store mutations.
 	Get(id string) (*Notification, error)
-	// List returns notifications with optional filtering
+	// List returns notifications with optional filtering. Each returned
+	// notification is an independent deep copy (see Get).
 	List(filter *FilterOptions) ([]*Notification, error)
 	// Count returns the number of notifications matching filter. filter.Limit
 	// and filter.Offset are ignored — pagination does not apply to a count.
@@ -432,9 +440,12 @@ func (s *InMemoryStore) Get(id string) (*Notification, error) {
 	defer s.mu.RUnlock()
 
 	if notif, exists := s.notifications[id]; exists {
-		// Return a copy to prevent external modifications from affecting the stored notification
-		notifCopy := *notif
-		return &notifCopy, nil
+		// Return a deep copy so external mutations (including in-place writes to
+		// the Metadata/params maps by callers or concurrent JSON marshaling in
+		// REST handlers) cannot affect the stored notification or race other
+		// readers. A shallow copy (*notif) would alias those maps; Clone copies
+		// them. The clone runs under RLock so the source is stable.
+		return notif.Clone(), nil
 	}
 	return nil, ErrNotificationNotFound
 }
@@ -444,12 +455,15 @@ func (s *InMemoryStore) List(filter *FilterOptions) ([]*Notification, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var results []*Notification
+	// len(s.notifications) is an upper bound on matches; preallocate to avoid
+	// repeated slice growth during the filter loop.
+	results := make([]*Notification, 0, len(s.notifications))
 	for _, notif := range s.notifications {
 		if s.matchesFilter(notif, filter) {
-			// Return copies to prevent external modifications
-			notifCopy := *notif
-			results = append(results, &notifCopy)
+			// Return deep copies so callers (and concurrent JSON marshaling in
+			// REST handlers) never touch the stored Metadata/params maps. A
+			// shallow copy would alias them; see Get for rationale.
+			results = append(results, notif.Clone())
 		}
 	}
 

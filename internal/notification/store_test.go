@@ -1,6 +1,8 @@
 package notification
 
 import (
+	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -315,4 +317,130 @@ func TestInMemoryStore_MarkAllRead(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 0, changed2, "second call should change nothing")
 	})
+}
+
+// TestInMemoryStore_GetReturnsIndependentMetadata verifies that mutating the
+// Metadata map of a notification returned by Get does not leak back into the
+// stored notification. A shallow copy (*notif) aliases the map; the store must
+// hand out a deep copy so REST callers cannot corrupt stored state and so
+// concurrent JSON marshaling cannot race an in-place map write. Regression test
+// for the GetNotification/GetNotifications shared-pointer hazard.
+func TestInMemoryStore_GetReturnsIndependentMetadata(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryStore(100)
+	n := NewNotification(TypeInfo, PriorityMedium, "Test", "msg").
+		WithMetadata("seed", "value")
+	mustStoreSave(t, store, n)
+
+	got1 := mustStoreGet(t, store, n.ID)
+	require.Contains(t, got1.Metadata, "seed")
+	got1.Metadata["injected"] = "leaked"
+
+	got2 := mustStoreGet(t, store, n.ID)
+	assert.NotContains(t, got2.Metadata, "injected",
+		"mutating a returned notification's Metadata must not affect the stored copy")
+}
+
+// TestInMemoryStore_ListReturnsIndependentMetadata is the List counterpart of
+// TestInMemoryStore_GetReturnsIndependentMetadata.
+func TestInMemoryStore_ListReturnsIndependentMetadata(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryStore(100)
+	n := NewNotification(TypeInfo, PriorityMedium, "Test", "msg").
+		WithMetadata("seed", "value")
+	mustStoreSave(t, store, n)
+
+	first, err := store.List(&FilterOptions{})
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+	first[0].Metadata["injected"] = "leaked"
+
+	second, err := store.List(&FilterOptions{})
+	require.NoError(t, err)
+	require.Len(t, second, 1)
+	assert.NotContains(t, second[0].Metadata, "injected",
+		"mutating a listed notification's Metadata must not affect the stored copy")
+}
+
+// TestInMemoryStore_ConcurrentGetMetadataIsRaceFree exercises the real hazard
+// from GetNotification/GetNotifications: many readers JSON-marshal notifications
+// fetched from the store while other callers mutate the Metadata of their own
+// fetched copies. If Get returned a shallow copy aliasing the stored map, the
+// readers' marshal would race the writers' map writes and the runtime's
+// concurrent-map detector (and go test -race) would abort. A deep copy makes
+// every returned notification independent.
+func TestInMemoryStore_ConcurrentGetMetadataIsRaceFree(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryStore(100)
+	n := NewNotification(TypeInfo, PriorityMedium, "Concurrent", "msg").
+		WithMetadata("seed", "value")
+	mustStoreSave(t, store, n)
+	id := n.ID
+
+	const workers = 8
+	const iterations = 200
+	var wg sync.WaitGroup
+
+	for range workers {
+		wg.Go(func() {
+			for range iterations {
+				got, err := store.Get(id)
+				if err != nil {
+					continue
+				}
+				_, _ = json.Marshal(got)
+			}
+		})
+	}
+	for w := range workers {
+		wg.Go(func() {
+			for i := range iterations {
+				got, err := store.Get(id)
+				if err != nil {
+					continue
+				}
+				got.Metadata["w"] = w*iterations + i
+			}
+		})
+	}
+	wg.Wait()
+}
+
+// TestInMemoryStore_GetReturnsIndependentParamsAndExpiry extends the
+// independence guarantee to the other reference-typed fields that Clone copies
+// and REST handlers serialize: the TitleParams/MessageParams maps and the
+// ExpiresAt pointer. A future regression that deep-copied only Metadata would
+// slip past the Metadata-only tests but be caught here.
+func TestInMemoryStore_GetReturnsIndependentParamsAndExpiry(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryStore(100)
+	n := NewNotification(TypeInfo, PriorityMedium, "Test", "msg").
+		WithTitleKey("title.key", map[string]any{"a": "1"}).
+		WithMessageKey("message.key", map[string]any{"b": "2"}).
+		WithExpiry(time.Hour)
+	require.NotNil(t, n.ExpiresAt)
+	originalExpiry := *n.ExpiresAt
+	mustStoreSave(t, store, n)
+
+	got1 := mustStoreGet(t, store, n.ID)
+	require.Contains(t, got1.TitleParams, "a")
+	require.Contains(t, got1.MessageParams, "b")
+	require.NotNil(t, got1.ExpiresAt)
+
+	got1.TitleParams["injected"] = "x"
+	got1.MessageParams["injected"] = "y"
+	*got1.ExpiresAt = got1.ExpiresAt.Add(24 * time.Hour)
+
+	got2 := mustStoreGet(t, store, n.ID)
+	assert.NotContains(t, got2.TitleParams, "injected",
+		"mutating a returned notification's TitleParams must not affect the stored copy")
+	assert.NotContains(t, got2.MessageParams, "injected",
+		"mutating a returned notification's MessageParams must not affect the stored copy")
+	require.NotNil(t, got2.ExpiresAt)
+	assert.True(t, got2.ExpiresAt.Equal(originalExpiry),
+		"mutating a returned notification's ExpiresAt must not affect the stored copy")
 }

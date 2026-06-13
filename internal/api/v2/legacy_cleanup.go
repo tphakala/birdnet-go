@@ -459,7 +459,11 @@ func (c *Controller) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 	if !ok {
 		return legacyTables, fmt.Errorf("cannot access database connection")
 	}
-	db := dbProvider.GetDB()
+	// Bind the cleanup context to the GORM session so both the per-table
+	// existence check (tableExistsMySQL's Raw) and the DROP TABLE Exec below
+	// observe cancellation. Without this, an in-flight DROP cannot abort on
+	// shutdown, stalling graceful shutdown and leaking the cleanup goroutine.
+	db := dbProvider.GetDB().WithContext(ctx)
 
 	var remaining []string
 	var droppedCount int
