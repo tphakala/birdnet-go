@@ -478,15 +478,25 @@ func getMaxBitrate(format, requestedBitrate string) string {
 // the result as an in-memory buffer. Useful for streaming responses.
 func ExportAudioToBuffer(ctx context.Context, pcmData []byte, ffmpegPath string, sampleRate, channels, bitDepth int, customArgs []string) (*bytes.Buffer, error) {
 	if err := ValidateFFmpegPath(ffmpegPath); err != nil {
-		return nil, fmt.Errorf("invalid FFmpeg path: %w", err)
+		// ValidateFFmpegPath already returns a fully enhanced, telemetry-tagged
+		// error; return it directly to avoid double-reporting to Sentry.
+		return nil, err
 	}
 
 	if len(pcmData) == 0 {
-		return nil, fmt.Errorf("empty PCM data provided")
+		return nil, errors.Newf("empty PCM data provided").
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryValidation).
+			Context("operation", "export_buffer_validate").
+			Build()
 	}
 
 	if len(customArgs) == 0 {
-		return nil, fmt.Errorf("empty custom FFmpeg arguments")
+		return nil, errors.Newf("empty custom FFmpeg arguments").
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryValidation).
+			Context("operation", "export_buffer_validate").
+			Build()
 	}
 
 	sampleRateStr, channelsStr, formatStr := GetFFmpegFormat(sampleRate, channels, bitDepth)
@@ -506,19 +516,35 @@ func ExportAudioToBuffer(ctx context.Context, pcmData []byte, ffmpegPath string,
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create stdin pipe: %w", err)
+		return nil, errors.Newf("failed to create stdin pipe: %w", err).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryAudio).
+			Context("operation", "export_buffer_stdin_pipe").
+			Build()
 	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
+		return nil, errors.Newf("failed to create stdout pipe: %w", err).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryAudio).
+			Context("operation", "export_buffer_stdout_pipe").
+			Build()
 	}
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start FFmpeg: %w, stderr: %s", err, stderr.String())
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("export to buffer cancelled: %w", ctx.Err())
+		}
+		return nil, errors.Newf("failed to start FFmpeg: %w", err).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryAudio).
+			Context("operation", "export_buffer_start").
+			Context("error_detail", stderr.String()).
+			Build()
 	}
 
 	// Write PCM data in a goroutine.
@@ -563,17 +589,54 @@ func ExportAudioToBuffer(ctx context.Context, pcmData []byte, ffmpegPath string,
 	}
 
 	if writeErr != nil {
-		return nil, fmt.Errorf("failed to write PCM data: %w", writeErr)
+		// Reap the process so a failed write does not leave a zombie; Kill is a
+		// no-op if FFmpeg already exited (which is what caused the broken pipe).
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		// A write failure caused by context cancellation/timeout is operational;
+		// return it untagged, mirroring the cmd.Wait() guard below.
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("export to buffer cancelled: %w", ctx.Err())
+		}
+		return nil, errors.Newf("failed to write PCM data: %w", writeErr).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryAudio).
+			Context("operation", "export_buffer_write").
+			Context("error_detail", stderr.String()).
+			Build()
 	}
 	if readErr != nil {
-		return nil, fmt.Errorf("failed to read FFmpeg output: %w", readErr)
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("export to buffer cancelled: %w", ctx.Err())
+		}
+		return nil, errors.Newf("failed to read FFmpeg output: %w", readErr).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryAudio).
+			Context("operation", "export_buffer_read").
+			Context("error_detail", stderr.String()).
+			Build()
 	}
 
 	if err := cmd.Wait(); err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("export to buffer cancelled: %w", ctx.Err())
 		}
-		return nil, fmt.Errorf("FFmpeg failed: %w, stderr: %s", err, stderr.String())
+
+		exitCode := -1
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			exitCode = exitErr.ExitCode()
+		}
+
+		return nil, errors.Newf("FFmpeg failed (exit_code=%d): %w", exitCode, err).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryAudio).
+			Context("operation", "export_buffer_wait").
+			Context("exit_code", exitCode).
+			Context("error_detail", stderr.String()).
+			Build()
 	}
 
 	return &outputBuf, nil
