@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -417,12 +418,46 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 
 	exportRate, exportFormat, outputPath := a.resolveExportParams(outputPath)
 
-	if exportFormat == "wav" {
+	exportSettings := &a.Settings.Realtime.Audio.Export
+
+	// Encoder dispatch:
+	//   wav                              -> native Go WAV writer
+	//   flac + native gate + no loudnorm -> native go-flac encoder
+	//   everything else                  -> FFmpeg (incl. flac with normalization)
+	// Gain alone does not force FFmpeg; the native encoder applies it in Go.
+	// EBU R128 normalization is the only feature that requires FFmpeg's loudnorm.
+	encoderUsed := "ffmpeg"
+	switch {
+	case exportFormat == "wav":
+		encoderUsed = "native-wav"
 		if err := convert.SavePCMDataToWAV(outputPath, a.pcmData, exportRate, conf.BitDepth); err != nil {
 			return err
 		}
-	} else {
-		exportSettings := &a.Settings.Realtime.Audio.Export
+
+	case exportFormat == ffmpeg.FormatFLAC &&
+		flac.NativeEncoderEnabled() &&
+		!exportSettings.Normalization.Enabled &&
+		flac.SupportedBitDepth(conf.BitDepth):
+		encoderUsed = "native-flac"
+		if err := flac.EncodePCM(ctx, &flac.Options{
+			PCMData:    a.pcmData,
+			OutputPath: outputPath,
+			SampleRate: exportRate,
+			Channels:   conf.NumChannels,
+			BitDepth:   conf.BitDepth,
+			GainDB:     exportSettings.Gain,
+		}); err != nil {
+			return err
+		}
+
+	default:
+		if exportFormat == ffmpeg.FormatFLAC && flac.NativeEncoderEnabled() {
+			GetLogger().Debug("Native FLAC encoder requested but falling back to FFmpeg",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.String("reason", "normalization_enabled"),
+				logger.String("operation", "audio_export_flac_fallback"))
+		}
 		opts := &ffmpeg.ExportOptions{
 			PCMData:    a.pcmData,
 			OutputPath: outputPath,
@@ -468,6 +503,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		logger.String("clip_path", filepath.Base(outputPath)),
 		logger.Int64("file_size_bytes", fileSize),
 		logger.String("format", exportFormat),
+		logger.String("encoder", encoderUsed),
 		logger.Int("sample_rate", exportRate),
 		logger.String("operation", "audio_export_success"))
 
