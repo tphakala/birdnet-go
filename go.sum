@@ -48,8 +48,6 @@ github.com/docker/go-connections v0.7.0 h1:6SsRfJddP22WMrCkj19x9WKjEDTB+ahsdiGYf
 github.com/docker/go-connections v0.7.0/go.mod h1:no1qkHdjq7kLMGUXYAduOhYPSJxxvgWBh7ogVvptn3Q=
 github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4=
 github.com/docker/go-units v0.5.0/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
-github.com/eaburns/bit v0.0.0-20131029213740-7bd5cd37375d h1:HB5J9+f1xpkYLgWQ/RqEcbp3SEufyOIMYLoyKNKiG7E=
-github.com/eaburns/bit v0.0.0-20131029213740-7bd5cd37375d/go.mod h1:CHkHWWZ4kbGY6jEy1+qlitDaCtRgNvCOQdakj/1Yl/Q=
 github.com/ebitengine/purego v0.10.0 h1:QIw4xfpWT6GWTzaW5XEKy3HXoqrJGx1ijYHzTF0/ISU=
 github.com/ebitengine/purego v0.10.0/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
 github.com/eclipse/paho.golang v0.23.0 h1:KHgl2wz6EJo7cMBmkuhpt7C576vP+kpPv7jjvSyR6Mk=
@@ -289,8 +287,6 @@ github.com/tklauser/go-sysconf v0.3.16 h1:frioLaCQSsF5Cy1jgRBrzr6t502KIIwQ0MArYI
 github.com/tklauser/go-sysconf v0.3.16/go.mod h1:/qNL9xxDhc7tx3HSRsLWNnuzbVfh3e7gh/BmM179nYI=
 github.com/tklauser/numcpus v0.11.0 h1:nSTwhKH5e1dMNsCdVBukSZrURJRoHbSEQjdEbY+9RXw=
 github.com/tklauser/numcpus v0.11.0/go.mod h1:z+LwcLq54uWZTX0u/bGobaV34u6V7KNlTZejzM6/3MQ=
-github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3 h1:hD7Uw+Js4mZXlfLYnMoxRnHSczcq8JZWvb1nJn9ZZLY=
-github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3/go.mod h1:YEoLmuRHr0LG0zHpCWVkdGi4EqeiULta/nNCFntKMuc=
 github.com/tphakala/go-audio-resampler v1.4.0 h1:Iv71vuUVzH2apR9tw4TrWDRvjNOc1e8Qr58TKl6IaLo=
 github.com/tphakala/go-audio-resampler v1.4.0/go.mod h1:mDVvtgIkzupYeqTcxRIJeEED53yrCTu2BP3mAYpiYj0=
 github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7 h1:fJtEs8rODoFDk8HDRwvNxIYEgsUUrEAvqPdllxF0cmg=

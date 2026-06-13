@@ -33,7 +33,6 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.42.0
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.42.0
-	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
 	github.com/tphakala/go-audio-resampler v1.4.0
 	github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7
 	github.com/tphakala/simd v1.1.0
@@ -67,7 +66,6 @@ require (
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/eaburns/bit v0.0.0-20131029213740-7bd5cd37375d // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/eclipse/paho.golang v0.23.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
