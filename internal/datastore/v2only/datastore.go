@@ -1743,6 +1743,9 @@ func (ds *Datastore) GetAllHourlyWeather() ([]datastore.HourlyWeather, error) {
 
 // SaveHourlyWeather saves hourly weather data.
 func (ds *Datastore) SaveHourlyWeather(hourlyWeather *datastore.HourlyWeather) error {
+	if hourlyWeather == nil {
+		return fmt.Errorf("hourly weather cannot be nil")
+	}
 	if ds.weather == nil {
 		return fmt.Errorf("weather repository not configured")
 	}

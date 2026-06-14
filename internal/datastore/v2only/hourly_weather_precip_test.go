@@ -60,3 +60,15 @@ func TestV2OnlyDatastore_HourlyWeather_PrecipitationRoundTrip(t *testing.T) {
 		assert.Equal(t, "Snow", got.WeatherMain)
 	})
 }
+
+// TestV2OnlyDatastore_SaveHourlyWeather_NilInput verifies SaveHourlyWeather
+// rejects a nil record instead of panicking, matching the legacy datastore's
+// nil guard.
+func TestV2OnlyDatastore_SaveHourlyWeather_NilInput(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	err := ds.SaveHourlyWeather(nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot be nil")
+}
