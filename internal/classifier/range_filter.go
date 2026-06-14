@@ -576,7 +576,12 @@ func newExcludeMatcher(excludeList []string, locale string) excludeMatcher {
 	// Reverse-resolve localized common-name entries to a flat set of lower-cased
 	// scientific names via the shared helper, which centralizes the lower-casing and
 	// locale handling (matches() also lower-cases the label's scientific name).
-	m.reverseSci = openfauna.ReverseResolveToScientificSet(excludeList, locale)
+	// Leave reverseSci nil when nothing resolves so matches() keeps its nil-guard
+	// fast path and skips the per-label ToLower + map lookup on the hot rebuild loop
+	// (matches() runs per geomodel score during a range-filter rebuild).
+	if sciSet := openfauna.ReverseResolveToScientificSet(excludeList, locale); len(sciSet) > 0 {
+		m.reverseSci = sciSet
+	}
 	return m
 }
 
