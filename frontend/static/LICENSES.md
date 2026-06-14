@@ -419,7 +419,7 @@ Source: MIT
 
 ### github.com/tphakala/simd
 
-License: https://github.com/tphakala/simd/blob/v1.3.0/LICENSE
+License: https://github.com/tphakala/simd/blob/v1.4.0-rc.2/LICENSE
 Source: MIT
 
 ### github.com/valyala/bytebufferpool
