@@ -428,6 +428,14 @@ func mapWundergroundResponse(wuResp *wundergroundResponse, log logger.Logger) *W
 		measurements.temp, precipMMH, float64(obs.Humidity), obs.SolarRadiation, measurements.windGust,
 	)
 
+	// Wunderground reports a precipitation rate (mm/h); for an hourly
+	// observation this stands in for the amount. The type has no native field,
+	// so derive it from the inferred icon when precipitation is present.
+	precipType := ""
+	if precipMMH > 0 {
+		precipType = precipTypeFromIconCode(iconCode)
+	}
+
 	return &WeatherData{
 		Time: obsTime,
 		Location: Location{
@@ -447,8 +455,13 @@ func mapWundergroundResponse(wuResp *wundergroundResponse, log logger.Logger) *W
 			Deg:   obs.Winddir,
 			Gust:  measurements.windGust,
 		},
+		Precipitation: Precipitation{
+			Amount: precipMMH,
+			Type:   precipType,
+		},
 		Pressure:    int(math.Round(measurements.pressure)),
 		Humidity:    int(math.Round(obs.Humidity)),
+		WeatherMain: weatherMainFromIconCode(iconCode),
 		Description: GetIconDescription(iconCode),
 		Icon:        string(iconCode),
 	}

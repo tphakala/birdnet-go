@@ -132,6 +132,14 @@ type HourlyWeather struct {
 	WeatherMain   string
 	WeatherDesc   string
 	WeatherIcon   string
+
+	// Precipitation and PrecipitationType are transport-only fields carried
+	// across the datastore.Interface boundary into the v2only datastore, which
+	// persists them on the v2 hourly_weathers schema. They are tagged gorm:"-"
+	// so the deprecated legacy datastore schema stays untouched: the legacy
+	// GORM model neither migrates nor reads/writes these columns.
+	Precipitation     float64 `gorm:"-"` // Precipitation amount in mm
+	PrecipitationType string  `gorm:"-"` // "rain", "snow", "sleet", or ""
 }
 
 // ImageCache represents cached image metadata for species

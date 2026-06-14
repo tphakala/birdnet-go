@@ -250,6 +250,7 @@ type WeatherData struct {
 	Visibility    int
 	Pressure      int
 	Humidity      int
+	WeatherMain   string // high-level condition category, e.g. "Rain", "Clouds", "Clear"
 	Description   string
 	Icon          string
 }
@@ -436,21 +437,24 @@ func (s *Service) saveWeatherData(data *WeatherData) error {
 
 	// Create hourly weather data
 	hourlyWeather := &datastore.HourlyWeather{
-		DailyEventsID: dailyEvents.ID,
-		Time:          utcTime,
-		Temperature:   data.Temperature.Current,
-		FeelsLike:     data.Temperature.FeelsLike,
-		TempMin:       data.Temperature.Min,
-		TempMax:       data.Temperature.Max,
-		Pressure:      data.Pressure,
-		Humidity:      data.Humidity,
-		Visibility:    data.Visibility,
-		WindSpeed:     data.Wind.Speed,
-		WindDeg:       data.Wind.Deg,
-		WindGust:      data.Wind.Gust,
-		Clouds:        data.Clouds,
-		WeatherDesc:   data.Description,
-		WeatherIcon:   data.Icon,
+		DailyEventsID:     dailyEvents.ID,
+		Time:              utcTime,
+		Temperature:       data.Temperature.Current,
+		FeelsLike:         data.Temperature.FeelsLike,
+		TempMin:           data.Temperature.Min,
+		TempMax:           data.Temperature.Max,
+		Pressure:          data.Pressure,
+		Humidity:          data.Humidity,
+		Visibility:        data.Visibility,
+		WindSpeed:         data.Wind.Speed,
+		WindDeg:           data.Wind.Deg,
+		WindGust:          data.Wind.Gust,
+		Clouds:            data.Clouds,
+		Precipitation:     data.Precipitation.Amount,
+		PrecipitationType: data.Precipitation.Type,
+		WeatherMain:       data.WeatherMain,
+		WeatherDesc:       data.Description,
+		WeatherIcon:       data.Icon,
 	}
 
 	// Basic validation

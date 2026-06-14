@@ -1743,27 +1743,32 @@ func (ds *Datastore) GetAllHourlyWeather() ([]datastore.HourlyWeather, error) {
 
 // SaveHourlyWeather saves hourly weather data.
 func (ds *Datastore) SaveHourlyWeather(hourlyWeather *datastore.HourlyWeather) error {
+	if hourlyWeather == nil {
+		return fmt.Errorf("hourly weather cannot be nil")
+	}
 	if ds.weather == nil {
 		return fmt.Errorf("weather repository not configured")
 	}
 	ctx := context.Background()
 	v2Weather := &entities.HourlyWeather{
-		DailyEventsID: hourlyWeather.DailyEventsID,
-		Time:          hourlyWeather.Time,
-		Temperature:   hourlyWeather.Temperature,
-		FeelsLike:     hourlyWeather.FeelsLike,
-		TempMin:       hourlyWeather.TempMin,
-		TempMax:       hourlyWeather.TempMax,
-		Pressure:      hourlyWeather.Pressure,
-		Humidity:      hourlyWeather.Humidity,
-		Visibility:    hourlyWeather.Visibility,
-		WindSpeed:     hourlyWeather.WindSpeed,
-		WindDeg:       hourlyWeather.WindDeg,
-		WindGust:      hourlyWeather.WindGust,
-		Clouds:        hourlyWeather.Clouds,
-		WeatherMain:   hourlyWeather.WeatherMain,
-		WeatherDesc:   hourlyWeather.WeatherDesc,
-		WeatherIcon:   hourlyWeather.WeatherIcon,
+		DailyEventsID:     hourlyWeather.DailyEventsID,
+		Time:              hourlyWeather.Time,
+		Temperature:       hourlyWeather.Temperature,
+		FeelsLike:         hourlyWeather.FeelsLike,
+		TempMin:           hourlyWeather.TempMin,
+		TempMax:           hourlyWeather.TempMax,
+		Pressure:          hourlyWeather.Pressure,
+		Humidity:          hourlyWeather.Humidity,
+		Visibility:        hourlyWeather.Visibility,
+		WindSpeed:         hourlyWeather.WindSpeed,
+		WindDeg:           hourlyWeather.WindDeg,
+		WindGust:          hourlyWeather.WindGust,
+		Clouds:            hourlyWeather.Clouds,
+		Precipitation:     hourlyWeather.Precipitation,
+		PrecipitationType: hourlyWeather.PrecipitationType,
+		WeatherMain:       hourlyWeather.WeatherMain,
+		WeatherDesc:       hourlyWeather.WeatherDesc,
+		WeatherIcon:       hourlyWeather.WeatherIcon,
 	}
 	return ds.weather.SaveHourlyWeather(ctx, v2Weather)
 }
@@ -1782,23 +1787,25 @@ func (ds *Datastore) GetHourlyWeather(date string) ([]datastore.HourlyWeather, e
 	for i := range v2Weather {
 		w := &v2Weather[i]
 		result = append(result, datastore.HourlyWeather{
-			ID:            w.ID,
-			DailyEventsID: w.DailyEventsID,
-			Time:          w.Time,
-			Temperature:   w.Temperature,
-			FeelsLike:     w.FeelsLike,
-			TempMin:       w.TempMin,
-			TempMax:       w.TempMax,
-			Pressure:      w.Pressure,
-			Humidity:      w.Humidity,
-			Visibility:    w.Visibility,
-			WindSpeed:     w.WindSpeed,
-			WindDeg:       w.WindDeg,
-			WindGust:      w.WindGust,
-			Clouds:        w.Clouds,
-			WeatherMain:   w.WeatherMain,
-			WeatherDesc:   w.WeatherDesc,
-			WeatherIcon:   w.WeatherIcon,
+			ID:                w.ID,
+			DailyEventsID:     w.DailyEventsID,
+			Time:              w.Time,
+			Temperature:       w.Temperature,
+			FeelsLike:         w.FeelsLike,
+			TempMin:           w.TempMin,
+			TempMax:           w.TempMax,
+			Pressure:          w.Pressure,
+			Humidity:          w.Humidity,
+			Visibility:        w.Visibility,
+			WindSpeed:         w.WindSpeed,
+			WindDeg:           w.WindDeg,
+			WindGust:          w.WindGust,
+			Clouds:            w.Clouds,
+			Precipitation:     w.Precipitation,
+			PrecipitationType: w.PrecipitationType,
+			WeatherMain:       w.WeatherMain,
+			WeatherDesc:       w.WeatherDesc,
+			WeatherIcon:       w.WeatherIcon,
 		})
 	}
 	return result, nil
@@ -1815,23 +1822,25 @@ func (ds *Datastore) LatestHourlyWeather() (*datastore.HourlyWeather, error) {
 		return nil, err
 	}
 	return &datastore.HourlyWeather{
-		ID:            w.ID,
-		DailyEventsID: w.DailyEventsID,
-		Time:          w.Time,
-		Temperature:   w.Temperature,
-		FeelsLike:     w.FeelsLike,
-		TempMin:       w.TempMin,
-		TempMax:       w.TempMax,
-		Pressure:      w.Pressure,
-		Humidity:      w.Humidity,
-		Visibility:    w.Visibility,
-		WindSpeed:     w.WindSpeed,
-		WindDeg:       w.WindDeg,
-		WindGust:      w.WindGust,
-		Clouds:        w.Clouds,
-		WeatherMain:   w.WeatherMain,
-		WeatherDesc:   w.WeatherDesc,
-		WeatherIcon:   w.WeatherIcon,
+		ID:                w.ID,
+		DailyEventsID:     w.DailyEventsID,
+		Time:              w.Time,
+		Temperature:       w.Temperature,
+		FeelsLike:         w.FeelsLike,
+		TempMin:           w.TempMin,
+		TempMax:           w.TempMax,
+		Pressure:          w.Pressure,
+		Humidity:          w.Humidity,
+		Visibility:        w.Visibility,
+		WindSpeed:         w.WindSpeed,
+		WindDeg:           w.WindDeg,
+		WindGust:          w.WindGust,
+		Clouds:            w.Clouds,
+		Precipitation:     w.Precipitation,
+		PrecipitationType: w.PrecipitationType,
+		WeatherMain:       w.WeatherMain,
+		WeatherDesc:       w.WeatherDesc,
+		WeatherIcon:       w.WeatherIcon,
 	}, nil
 }
 
