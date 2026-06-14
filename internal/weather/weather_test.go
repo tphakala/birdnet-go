@@ -138,182 +138,51 @@ func TestAbsoluteZeroCelsiusConstant(t *testing.T) {
 	assert.InDelta(t, -273.15, absoluteZeroCelsius, 0.01)
 }
 
-// TestTimezoneConversionForWeatherStorage tests the behavior of timezone conversion
-// when storing weather data. This demonstrates the expected behavior and can reveal
-// timezone-related bugs.
-func TestTimezoneConversionForWeatherStorage(t *testing.T) {
-	// This test documents the timezone handling behavior in saveWeatherData.
-	// The UTC time from weather providers is converted to local time for storage.
-	// This is critical for correct date-based queries.
+// TestSaveWeatherData_StoresUTCAndLocalDate drives saveWeatherData and asserts the
+// timezone contract that the old "bug demonstration" tests only documented with
+// t.Logf: the hourly record's Time is normalized to UTC, while the daily events
+// Date is the local calendar date. Using a non-UTC provider timestamp makes the
+// UTC normalization an actual conversion rather than a no-op.
+func TestSaveWeatherData_StoresUTCAndLocalDate(t *testing.T) {
+	mockDB := mocks.NewMockInterface(t)
+	settings := createTestSettings(t, "yrno")
+	service := &Service{
+		provider: NewYrNoProvider(nil),
+		db:       mockDB,
+		settings: settings,
+	}
 
-	t.Run("utc_to_local_conversion", func(t *testing.T) {
-		// Simulate weather data received at midnight UTC on Jan 13, 2026
-		utcTime := time.Date(2026, 1, 13, 0, 0, 0, 0, time.UTC)
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+	// 01:30 +02:00 on Jan 13 is 23:30 UTC on Jan 12.
+	providerTime := time.Date(2026, 1, 13, 1, 30, 0, 0, helsinki)
+	wantUTC := providerTime.UTC()
+	wantLocalDate := wantUTC.In(time.Local).Format(time.DateOnly)
 
-		// In Finland (UTC+2), this should be 02:00 on Jan 13
-		// The date should still be Jan 13
-		localTime := utcTime.In(time.Local)
-
-		// This test will behave differently based on the system timezone
-		// The key assertion is that the date conversion happens correctly
-		assert.False(t, localTime.IsZero(), "Local time should not be zero")
-		assert.Equal(t, utcTime.Unix(), localTime.Unix(), "Unix timestamps should be equal")
+	data := createTestWeatherData(t, func(d *WeatherData) {
+		d.Time = providerTime
 	})
 
-	t.Run("late_night_utc_conversion", func(t *testing.T) {
-		// Weather data at 22:00 UTC on Jan 12, 2026
-		utcTime := time.Date(2026, 1, 12, 22, 0, 0, 0, time.UTC)
+	mockDB.On("SaveDailyEvents", mock.MatchedBy(func(de *datastore.DailyEvents) bool {
+		return de.Date == wantLocalDate
+	})).Run(func(args mock.Arguments) {
+		args.Get(0).(*datastore.DailyEvents).ID = 7
+	}).Return(nil).Once()
 
-		// In Finland (UTC+2), this would be 00:00 on Jan 13
-		// This is where the timezone bug can cause issues
-		localTime := utcTime.In(time.Local)
+	var savedHW *datastore.HourlyWeather
+	mockDB.On("SaveHourlyWeather", mock.Anything).Run(func(args mock.Arguments) {
+		savedHW = args.Get(0).(*datastore.HourlyWeather)
+	}).Return(nil).Once()
 
-		// Document the expected behavior
-		t.Logf("UTC time: %v", utcTime.Format(time.RFC3339))
-		t.Logf("Local time: %v", localTime.Format(time.RFC3339))
-		t.Logf("UTC date: %s", utcTime.Format(time.DateOnly))
-		t.Logf("Local date: %s", localTime.Format(time.DateOnly))
-	})
-}
+	require.NoError(t, service.saveWeatherData(data))
+	require.NotNil(t, savedHW, "HourlyWeather should have been saved")
 
-// TestWeatherDataDateFormatting tests the date formatting used for storage.
-// This is critical for the daily events feature to work correctly.
-func TestWeatherDataDateFormatting(t *testing.T) {
-	t.Run("date_format_consistency", func(t *testing.T) {
-		testTime := time.Date(2026, 1, 13, 14, 30, 0, 0, time.UTC)
-		localTime := testTime.In(time.Local)
+	// Time is persisted as the same instant in UTC.
+	assert.True(t, savedHW.Time.Equal(wantUTC), "hourly Time should equal the UTC instant")
+	assert.Equal(t, "UTC", savedHW.Time.Location().String(), "hourly Time should be stored in UTC")
+	assert.Equal(t, uint(7), savedHW.DailyEventsID)
 
-		expectedFormat := "2006-01-02"
-		formattedDate := localTime.Format(expectedFormat)
-
-		assert.Regexp(t, `^\d{4}-\d{2}-\d{2}$`, formattedDate, "Date should be in YYYY-MM-DD format")
-	})
-}
-
-// TIMEZONE BUG DEMONSTRATION TESTS
-// These tests document the timezone bug that causes weather data for hours 00-01
-// in UTC+2 (Finland) to be missing from daily weather queries.
-//
-// THE BUG: SQLite's date() function converts timezone-aware timestamps to UTC
-// before extracting the date, causing local midnight (00:00+02:00) to be
-// associated with the previous UTC date (2026-01-12 instead of 2026-01-13).
-//
-// EXPECTED BEHAVIOR: Querying weather for "2026-01-13" should return all weather
-// data where the LOCAL date is 2026-01-13.
-//
-// ACTUAL BEHAVIOR: Weather data stored at 00:00+02:00 (midnight local) is not
-// returned because SQLite date() extracts 2026-01-12 from the UTC conversion.
-
-func TestTimezoneAwareWeatherQuery_BugDemonstration(t *testing.T) {
-	// This test demonstrates what the expected behavior should be.
-	// It can be used to verify a fix for the timezone bug.
-
-	t.Run("midnight_local_time_date_extraction", func(t *testing.T) {
-		// Create a time representing midnight local time on Jan 13, 2026
-		// in Finland (UTC+2)
-		loc, err := time.LoadLocation("Europe/Helsinki")
-		if err != nil {
-			t.Skip("Could not load Europe/Helsinki timezone")
-		}
-
-		// Midnight on Jan 13 in Helsinki = 22:00 on Jan 12 in UTC
-		localMidnight := time.Date(2026, 1, 13, 0, 0, 0, 0, loc)
-
-		// The expected date for this weather data should be 2026-01-13
-		expectedDate := "2026-01-13"
-		actualLocalDate := localMidnight.Format(time.DateOnly)
-
-		assert.Equal(t, expectedDate, actualLocalDate,
-			"Local midnight should be associated with local date, not UTC date")
-
-		// Document the UTC equivalent
-		utcTime := localMidnight.UTC()
-		utcDate := utcTime.Format(time.DateOnly)
-
-		t.Logf("Local time: %v (date: %s)", localMidnight.Format(time.RFC3339), actualLocalDate)
-		t.Logf("UTC time: %v (date: %s)", utcTime.Format(time.RFC3339), utcDate)
-		t.Logf("BUG: SQLite date() would use UTC date %s instead of local date %s", utcDate, actualLocalDate)
-
-		// This assertion shows the discrepancy that causes the bug
-		if utcDate != actualLocalDate {
-			t.Log("CONFIRMED: UTC date differs from local date - this causes the timezone bug")
-		}
-	})
-
-	t.Run("early_morning_hours_affected", func(t *testing.T) {
-		loc, err := time.LoadLocation("Europe/Helsinki")
-		if err != nil {
-			t.Skip("Could not load Europe/Helsinki timezone")
-		}
-
-		// Test hours 00:00 and 01:00 local time - these are affected by the bug
-		affectedHours := []int{0, 1}
-
-		for _, hour := range affectedHours {
-			localTime := time.Date(2026, 1, 13, hour, 30, 0, 0, loc)
-			utcTime := localTime.UTC()
-
-			localDate := localTime.Format(time.DateOnly)
-			utcDate := utcTime.Format(time.DateOnly)
-
-			t.Logf("Hour %02d:30 local -> UTC date: %s, Local date: %s",
-				hour, utcDate, localDate)
-
-			// For hours 00-01 in UTC+2, the UTC date will be the previous day
-			if utcDate != localDate {
-				t.Logf("  BUG AFFECTS THIS HOUR: Weather at %02d:30 local time "+
-					"will be queried by UTC date %s instead of local date %s",
-					hour, utcDate, localDate)
-			}
-		}
-	})
-
-	t.Run("hours_not_affected_by_bug", func(t *testing.T) {
-		loc, err := time.LoadLocation("Europe/Helsinki")
-		if err != nil {
-			t.Skip("Could not load Europe/Helsinki timezone")
-		}
-
-		// Hours from 02:00 onwards should not be affected in UTC+2
-		unaffectedHours := []int{2, 3, 12, 18, 23}
-
-		for _, hour := range unaffectedHours {
-			localTime := time.Date(2026, 1, 13, hour, 30, 0, 0, loc)
-			utcTime := localTime.UTC()
-
-			localDate := localTime.Format(time.DateOnly)
-			utcDate := utcTime.Format(time.DateOnly)
-
-			if hour >= 2 { // In UTC+2, hours 02:00+ should have same date
-				assert.Equal(t, localDate, utcDate,
-					"Hour %02d:30 should have same date in UTC and local", hour)
-			}
-		}
-	})
-}
-
-// TestSQLiteDateFunctionBehavior demonstrates the SQLite date() function behavior
-// that causes the timezone bug.
-func TestSQLiteDateFunctionBehavior(t *testing.T) {
-	// This test documents what SQLite's date() function does with timezone info.
-	// SQLite: date('2026-01-13 00:00:00+02:00') returns '2026-01-12'
-	// because it converts to UTC before extracting the date.
-
-	t.Run("documented_sqlite_behavior", func(t *testing.T) {
-		// Input: timestamp with +02:00 timezone
-		input := "2026-01-13 00:00:00+02:00"
-
-		// What SQLite date() returns (converts to UTC first)
-		expectedSQLiteResult := "2026-01-12" // UTC date, not local date
-
-		// What we actually want for local queries
-		expectedLocalResult := "2026-01-13"
-
-		t.Logf("Input timestamp: %s", input)
-		t.Logf("SQLite date() returns: %s (UTC date)", expectedSQLiteResult)
-		t.Logf("Expected for local queries: %s (local date)", expectedLocalResult)
-		t.Log("This mismatch causes weather data to be missing for hours 00-01 in positive UTC offsets")
-	})
+	mockDB.AssertExpectations(t)
 }
 
 // TestWeatherDataCreation tests the creation of WeatherData structures.
