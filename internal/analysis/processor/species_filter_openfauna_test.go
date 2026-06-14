@@ -45,6 +45,24 @@ func TestResolveSpeciesFilter_LocalizedCommonNameViaOpenFauna(t *testing.T) {
 		"localized bat common name must reverse-resolve to scientific via OpenFauna")
 }
 
+// TestResolveSpeciesFilter_ReverseHitNotInLabelsStaysUnresolved verifies that a
+// localized common name OpenFauna reverse-resolves to a species absent from the
+// loaded model labels is NOT resolved: filters must never match a species that no
+// loaded model can emit, and the entry stays unresolved so it is still flagged.
+func TestResolveSpeciesFilter_ReverseHitNotInLabelsStaysUnresolved(t *testing.T) {
+	t.Parallel()
+
+	// "mopsilepakko" reverse-resolves to "Barbastella barbastellus" via OpenFauna,
+	// but that species is not in the loaded labels here (no bat model loaded).
+	labels := []string{"Turdus merula_Eurasian Blackbird"}
+	isAll, resolved := resolveSpeciesFilter(
+		[]string{"mopsilepakko"}, labels, nil, "fi", "test",
+	)
+
+	assert.False(t, isAll)
+	assert.Empty(t, resolved, "a reverse hit absent from the loaded labels must not resolve")
+}
+
 // TestResolveSpeciesFilter_UnknownEntryStaysUnresolved verifies that a genuinely
 // unknown entry does not resolve to anything (and is not silently accepted).
 func TestResolveSpeciesFilter_UnknownEntryStaysUnresolved(t *testing.T) {

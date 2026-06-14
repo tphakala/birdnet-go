@@ -195,13 +195,21 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 		reverse := openfauna.LookupScientificNames(unresolved, locale)
 		stillUnresolved := unresolved[:0]
 		for _, entry := range unresolved {
-			sciNames, ok := reverse[entry]
-			if !ok || len(sciNames) == 0 {
-				stillUnresolved = append(stillUnresolved, entry)
-				continue
+			matched := false
+			for _, sci := range reverse[entry] {
+				sciLower := strings.ToLower(sci)
+				// Only resolve to species a loaded model can actually emit. OpenFauna
+				// may return scientific names for the localized common name that are
+				// not in any loaded model's labels; resolving to those would silently
+				// match a species nothing can detect and skip the unresolved warning.
+				if !scientificNames[sciLower] {
+					continue
+				}
+				resolved[sciLower] = true
+				matched = true
 			}
-			for _, sci := range sciNames {
-				resolved[strings.ToLower(sci)] = true
+			if !matched {
+				stillUnresolved = append(stillUnresolved, entry)
 			}
 		}
 		unresolved = stillUnresolved

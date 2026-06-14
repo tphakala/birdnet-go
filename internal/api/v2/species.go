@@ -271,10 +271,11 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 		}
 	}
 
-	// Secondary-model labels (bats, Perch) are scientific-only, so localize the
-	// common name through the orchestrator's OpenFauna-authoritative resolver,
-	// passing the configured locale explicitly.
-	if matchedLabel != "" && commonName == "" {
+	// Secondary-model labels (bats, Perch) are scientific-only, so ParseSpeciesString
+	// reports CommonName == ScientificName for them. Treat that (and an empty common
+	// name) as "needs localizing" and resolve through the orchestrator's
+	// OpenFauna-authoritative resolver, passing the configured locale explicitly.
+	if matchedLabel != "" && (commonName == "" || strings.EqualFold(commonName, scientificName)) {
 		if resolved := bn.ResolveName(scientificName, c.currentLocale()); resolved != "" {
 			commonName = resolved
 		}
@@ -316,15 +317,29 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 }
 
 // getSpeciesRarityInfo calculates the rarity status for a species
+// speciesHasGeomodelCoverage reports whether the scientific name is in the primary
+// model's label set, i.e. the geomodel's classifiable vocabulary. Secondary-model-only
+// species (e.g. bats) are absent from it and therefore have no geomodel occurrence
+// probability to base a rarity on.
+func speciesHasGeomodelCoverage(bn *classifier.Orchestrator, scientificName string) bool {
+	for _, label := range bn.Labels() {
+		if strings.EqualFold(detection.ExtractScientificName(label), scientificName) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Controller) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (*SpeciesRarityInfo, error) {
 	// Get current date
 	today := time.Now().Truncate(HoursPerDay * time.Hour)
 	settings := bn.CurrentSettings()
 
-	// Get probable species with scores. Use the multi-model union (not just the
-	// primary geomodel) so secondary-model species (bats, Perch) are found and do
-	// not always fall through to "very rare".
-	speciesScores, err := bn.GetAllProbableSpeciesWithSettings(today, 0.0, settings)
+	// Rarity is the geomodel occurrence probability, so use the geomodel-backed
+	// probable-species list, not the multi-model union: the union assigns synthetic
+	// always-active scores (1.0) to secondary-model species (bats, Perch) that have
+	// no real occurrence probability, which would misclassify them as "very common".
+	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
 	if err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryProcessing).
@@ -358,9 +373,16 @@ func (c *Controller) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLa
 		}
 	}
 
-	// If not found in probable species, it's very rare
+	// Not in today's probable list. A species the geomodel can classify but that is
+	// below threshold today is genuinely very rare; a species with no geomodel
+	// coverage at all (secondary-model-only species such as bats) has no occurrence
+	// probability, so report it as unknown rather than a misleading rarity.
 	if !found {
-		rarityInfo.Status = RarityVeryRare
+		if speciesHasGeomodelCoverage(bn, targetSci) {
+			rarityInfo.Status = RarityVeryRare
+		} else {
+			rarityInfo.Status = RarityUnknown
+		}
 		rarityInfo.Score = 0.0
 		return rarityInfo, nil
 	}
