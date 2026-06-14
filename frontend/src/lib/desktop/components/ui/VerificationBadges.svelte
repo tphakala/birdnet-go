@@ -20,6 +20,7 @@
     md: 'size-3.5',
   };
 
+  // eslint-disable-next-line security/detect-object-injection -- iconSizeMap is a typed Record keyed by the size prop union, not user input
   let iconClass = $derived(iconSizeMap[size]);
 
   let verificationVariant = $derived<StatusVariant>(

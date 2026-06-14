@@ -4,6 +4,8 @@ import { createComponentTestFactory } from '../../../../../test/render-helpers';
 import { setBasePath, resetBasePath } from '$lib/utils/urlHelpers';
 import Species from './Species.svelte';
 
+/* eslint-disable security/detect-object-injection -- bracket access in this file is constant numeric indexing into NodeLists (querySelectorAll(...)[CONSTANT]) in assertions, not user-controlled keys. */
+
 /** Must match SORT_STORAGE_KEY in Species.svelte. */
 const SORT_STORAGE_KEY = 'analytics.species.sortOrder';
 

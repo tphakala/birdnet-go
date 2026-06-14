@@ -76,6 +76,7 @@
     for (const m of models) {
       const s = getModelStatus(m);
       if (s == null) continue;
+      // eslint-disable-next-line security/detect-object-injection -- priority is a typed Record<StatusLevel, number>; s and worst are StatusLevel values, not user input
       if (worst == null || priority[s] > priority[worst]) worst = s;
     }
     return worst;
