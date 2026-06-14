@@ -28,15 +28,15 @@
 
   let { sunType, time }: Props = $props();
 
-  // Unique id per instance for aria-describedby. Math.random (not
-  // crypto.randomUUID) because BirdNET-Go commonly runs on plain HTTP, where
-  // the secure-context crypto API is undefined.
-  const tooltipId = `sun-tooltip-${Math.random().toString(36).slice(2, 10)}`;
-
   // Positioning tuning (px).
   const VIEWPORT_MARGIN = 8; // minimum gap kept from viewport edges
   const OFFSET_Y = 6; // gap between the icon and the tooltip
-  const TOOLTIP_HEIGHT_ESTIMATE = 20; // fallback before the tooltip is mounted
+  // Size fallbacks used on the first pass, before the tooltip is mounted and
+  // can be measured. The width estimate matters: with a 0 fallback the
+  // horizontal clamp degenerates (half-width 0) and a near-edge tooltip could
+  // momentarily render past the viewport on the first hover.
+  const TOOLTIP_WIDTH_ESTIMATE = 44; // ~width of "HH:MM"
+  const TOOLTIP_HEIGHT_ESTIMATE = 20;
 
   let show = $state(false);
   let triggerEl: HTMLElement | undefined = $state();
@@ -54,9 +54,20 @@
   function position() {
     if (!triggerEl) return;
     const rect = triggerEl.getBoundingClientRect();
-    const vw = window.innerWidth;
+    // clientWidth excludes a vertical scrollbar, so the horizontal clamp keeps
+    // the tooltip clear of the scrollbar (and the viewport edge), not under it.
+    const vw = document.documentElement.clientWidth || window.innerWidth;
     const vh = window.innerHeight;
-    const width = tooltipEl?.offsetWidth ?? 0;
+
+    // If the icon has scrolled fully out of view (the grid wrapper can be
+    // scrolled while the pointer stays still, so mouseleave may not fire),
+    // close instead of leaving the tooltip orphaned on screen.
+    if (rect.right < 0 || rect.left > vw || rect.bottom < 0 || rect.top > vh) {
+      show = false;
+      return;
+    }
+
+    const width = tooltipEl?.offsetWidth || TOOLTIP_WIDTH_ESTIMATE;
     const height = tooltipEl?.offsetHeight || TOOLTIP_HEIGHT_ESTIMATE;
 
     // Center horizontally over the icon, clamped so the tooltip (drawn with
@@ -111,7 +122,6 @@
   class="sun-icon-wrapper"
   role="img"
   aria-label={label}
-  aria-describedby={show ? tooltipId : undefined}
   onmouseenter={open}
   onmouseleave={close}
 >
@@ -123,11 +133,13 @@
 </div>
 
 {#if show}
+  <!-- Decorative duplicate of the wrapper's aria-label (which carries the full
+       localized "Sunrise at HH:MM"); hidden from assistive tech to avoid a
+       redundant announcement. -->
   <span
     bind:this={tooltipEl}
     use:portal
-    id={tooltipId}
-    role="tooltip"
+    aria-hidden="true"
     class="sun-tooltip sun-tooltip-{sunType}"
     style:z-index={Z_INDEX.PORTAL_TOOLTIP}
     style:left="{tipLeft}px"
