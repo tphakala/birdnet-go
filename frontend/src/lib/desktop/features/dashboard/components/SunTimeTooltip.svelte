@@ -105,12 +105,24 @@
   $effect(() => {
     if (!show) return;
 
-    const reposition = () => position();
-    // Capture phase so scrolls inside nested overflow containers are caught too.
-    window.addEventListener('scroll', reposition, true);
+    // Coalesce bursts of scroll/resize events into one reposition per frame.
+    // position() reads layout (getBoundingClientRect/offsetWidth), so throttling
+    // with rAF avoids layout thrashing during momentum scroll.
+    let frameId: number | null = null;
+    const reposition = () => {
+      if (frameId !== null) return;
+      frameId = globalThis.requestAnimationFrame(() => {
+        frameId = null;
+        position();
+      });
+    };
+    // Capture phase so scrolls inside nested overflow containers are caught too;
+    // passive since this handler never calls preventDefault.
+    window.addEventListener('scroll', reposition, { capture: true, passive: true });
     window.addEventListener('resize', reposition);
 
     return () => {
+      if (frameId !== null) globalThis.cancelAnimationFrame(frameId);
       window.removeEventListener('scroll', reposition, true);
       window.removeEventListener('resize', reposition);
     };
