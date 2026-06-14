@@ -532,6 +532,38 @@ func logUserAgentValidation(appVersion string) {
 		logger.String("go_version", runtime.Version()))
 }
 
+// htmlToText extracts the visible text content from an HTML fragment or
+// document, collapsing all runs of whitespace to single spaces. The contents
+// of <script> and <style> elements are ignored. It replaces the former
+// github.com/k3a/html2text dependency for the small set of attribution and
+// error-page stripping this package needs.
+func htmlToText(htmlStr string) string {
+	doc, err := html.Parse(strings.NewReader(htmlStr))
+	if err != nil {
+		// html.Parse is lenient and effectively never errors on string input;
+		// fall back to whitespace-collapsed raw text if it somehow does.
+		return strings.Join(strings.Fields(htmlStr), " ")
+	}
+
+	var sb strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && (n.Data == "script" || n.Data == "style") {
+			return
+		}
+		if n.Type == html.TextNode {
+			sb.WriteString(n.Data)
+			sb.WriteByte(' ')
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+
+	return strings.Join(strings.Fields(sb.String()), " ")
+}
+
 // parseHTMLErrorMessage extracts meaningful error message from HTML error page
 func parseHTMLErrorMessage(htmlContent []byte) string {
 	// Try to parse HTML to validate it's valid HTML
