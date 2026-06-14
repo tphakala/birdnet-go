@@ -28,7 +28,7 @@ func TestWeatherMainFromIconCode(t *testing.T) {
 		IconRainShowers:  "Rain",
 		IconRain:         "Rain",
 		IconThunderstorm: "Thunderstorm",
-		IconSleet:        "Sleet",
+		IconSleet:        "Snow", // OpenWeather groups sleet under main "Snow"
 		IconSnow:         "Snow",
 		IconFog:          "Fog",
 		IconUnknown:      "",

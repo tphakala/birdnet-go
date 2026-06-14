@@ -249,10 +249,12 @@ func GetStandardIconCode(code, provider string) IconCode {
 
 // weatherMainFromIconCode derives a high-level condition category (the
 // "weather_main" field) from a standardized icon code, using OpenWeather's
-// vocabulary so the value is consistent across providers. yr.no and
-// Wunderground have no native "main" field, so they derive it from the icon
+// weather[0].main vocabulary so the value is consistent across providers. yr.no
+// and Wunderground have no native "main" field, so they derive it from the icon
 // they already compute; OpenWeather uses its native weather[0].main instead.
-// Returns "" for IconUnknown so the API's omitempty hides an absent value.
+// Sleet maps to "Snow" to match how OpenWeather groups sleet (the finer
+// rain/snow/sleet distinction is preserved in precipitation_type). Returns ""
+// for IconUnknown so the API's omitempty hides an absent value.
 func weatherMainFromIconCode(code IconCode) string {
 	switch code {
 	case IconClearSky, IconFair:
@@ -263,9 +265,7 @@ func weatherMainFromIconCode(code IconCode) string {
 		return "Rain"
 	case IconThunderstorm:
 		return "Thunderstorm"
-	case IconSleet:
-		return "Sleet"
-	case IconSnow:
+	case IconSleet, IconSnow:
 		return "Snow"
 	case IconFog:
 		return "Fog"

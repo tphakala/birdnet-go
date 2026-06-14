@@ -169,7 +169,9 @@ func mapYrResponseToWeatherData(response *YrResponse, settings *conf.Settings) *
 
 	// yr.no reports a precipitation amount but no explicit type; derive the type
 	// from the standardized icon, and only when precipitation is actually present.
-	precipAmount := current.Data.Next1Hours.Details.PrecipitationAmount
+	// Clamp a negative amount to zero (defensive against API/sensor anomalies),
+	// matching the Wunderground provider.
+	precipAmount := max(0, current.Data.Next1Hours.Details.PrecipitationAmount)
 	precipType := ""
 	if precipAmount > 0 {
 		precipType = precipTypeFromIconCode(iconCode)
