@@ -231,7 +231,7 @@ func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[strin
 		return nil, err
 	}
 
-	req, err := l.createHTTPRequest(fullURL)
+	req, err := l.createHTTPRequest(ctx, fullURL)
 	if err != nil {
 		return nil, err
 	}
@@ -300,9 +300,10 @@ func (l *wikiMediaProvider) buildRequestURL(params map[string]string) (string, e
 	return u.String(), nil
 }
 
-// createHTTPRequest creates an HTTP request with proper headers.
-func (l *wikiMediaProvider) createHTTPRequest(fullURL string) (*http.Request, error) {
-	req, err := http.NewRequest("GET", fullURL, http.NoBody)
+// createHTTPRequest creates an HTTP request with proper headers. The context is
+// attached so caller cancellation and deadlines are honored by the transport.
+func (l *wikiMediaProvider) createHTTPRequest(ctx context.Context, fullURL string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, http.NoBody)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("imageprovider").
@@ -741,7 +742,7 @@ func (l *wikiMediaProvider) makeRateLimitedRequest(ctx context.Context, requestU
 	}
 
 	// Create and execute request
-	req, err := http.NewRequest("GET", requestURL, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, http.NoBody)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("imageprovider").
@@ -1143,7 +1144,13 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID 
 
 		waitDuration := calculateRetryDelay(attempt)
 		log.Debug("Waiting before retry", logger.Duration("duration", waitDuration))
-		time.Sleep(waitDuration)
+		timer := time.NewTimer(waitDuration)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
 	}
 
 	if isNetworkError(lastErr) {
