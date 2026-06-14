@@ -16,7 +16,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/antonholmquist/jason"
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -207,7 +206,7 @@ func (l *wikiMediaProvider) resetCircuit() {
 // makeAPIRequest performs a direct HTTP GET request to Wikipedia API with proper headers.
 // This replaces the mwclient library to ensure proper User-Agent header handling.
 // The context is used for rate limiting, cancellation, and deadlines.
-func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[string]string) (*jason.Object, error) {
+func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[string]string) (*wikiAPIResponse, error) {
 	if err := l.waitForGlobalRateLimit(ctx); err != nil {
 		return nil, err
 	}
@@ -402,24 +401,14 @@ func (l *wikiMediaProvider) handleForbiddenError(bodyStr string) {
 	}
 }
 
-// parseJSONResponse parses the response body as JSON.
-func (l *wikiMediaProvider) parseJSONResponse(body []byte) (*jason.Object, error) {
-	var jsonData any
-	if err := json.Unmarshal(body, &jsonData); err != nil {
+// parseJSONResponse parses the response body as JSON into the typed response.
+func (l *wikiMediaProvider) parseJSONResponse(body []byte) (*wikiAPIResponse, error) {
+	var resp wikiAPIResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, l.handleJSONParseError(body, err)
 	}
-
-	jasonObj, err := jason.NewObjectFromBytes(body)
-	if err != nil {
-		return nil, errors.New(err).
-			Component("imageprovider").
-			Category(errors.CategoryNetwork).
-			Context("provider", wikiProviderName).
-			Context("operation", "jason_convert").
-			Build()
-	}
-
-	return jasonObj, nil
+	resp.raw = body
+	return &resp, nil
 }
 
 // handleJSONParseError handles JSON parsing errors with context.
@@ -1064,16 +1053,11 @@ func (l *wikiMediaProvider) waitForRateLimiterRetry(ctx context.Context, limiter
 }
 
 // logSuccessfulAPIResponse logs the successful API response details.
-func logSuccessfulAPIResponse(resp *jason.Object) {
-	log := GetLogger().With(logger.String("provider", wikiProviderName))
-	if respObj, errJson := resp.Object(); errJson == nil {
-		responseStr := respObj.String()
-		log.Debug("API request successful - raw response received",
-			logger.String("response_preview", truncateResponseBody(responseStr, responseBodyDebugLimit)),
-			logger.Int("response_size", len(responseStr)))
-	} else {
-		log.Debug("API request successful")
-	}
+func logSuccessfulAPIResponse(resp *wikiAPIResponse) {
+	GetLogger().With(logger.String("provider", wikiProviderName)).
+		Debug("API request successful - raw response received",
+			logger.String("response_preview", truncateResponseBody(string(resp.raw), responseBodyDebugLimit)),
+			logger.Int("response_size", len(resp.raw)))
 }
 
 // handleJSONParsingErrorIfNeeded checks for JSON parsing errors and handles them appropriately.
@@ -1130,7 +1114,7 @@ func isNetworkError(err error) bool {
 
 // queryWithRetryAndLimiter performs a query with retry logic using the specified rate limiter.
 // The context is used for cancellation, deadlines, and rate limiting.
-func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID string, params map[string]string, limiter *rate.Limiter) (*jason.Object, error) {
+func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID string, params map[string]string, limiter *rate.Limiter) (*wikiAPIResponse, error) {
 	log := GetLogger().With(
 		logger.String("provider", wikiProviderName),
 		logger.String("request_id", reqID),
@@ -1198,138 +1182,66 @@ func buildDebugURL(params map[string]string) string {
 }
 
 // logRawResponse logs the raw API response at debug level for troubleshooting.
-func logRawResponse(resp *jason.Object, fullURL string) {
-	log := GetLogger().With(logger.String("provider", wikiProviderName))
-	if respObj, errJson := resp.Object(); errJson == nil {
-		responseStr := respObj.String()
-		log.Debug("Raw Wikipedia API response received",
-			logger.String("response_full", responseStr),
-			logger.Int("response_length", len(responseStr)),
+func logRawResponse(resp *wikiAPIResponse, fullURL string) {
+	GetLogger().With(logger.String("provider", wikiProviderName)).
+		Debug("Raw Wikipedia API response received",
+			logger.String("response_full", string(resp.raw)),
+			logger.Int("response_length", len(resp.raw)),
 			logger.String("request_url", fullURL))
-	} else {
-		log.Debug("Failed to format raw response for logging",
-			logger.Error(errJson),
-			logger.String("request_url", fullURL))
-	}
 }
 
 // logQueryMissingError logs diagnostics when the 'query' field is missing from the response.
-func logQueryMissingError(resp *jason.Object, params map[string]string, fullURL string, queryErr error) {
+func logQueryMissingError(resp *wikiAPIResponse, params map[string]string, fullURL string) {
 	log := GetLogger().With(logger.String("provider", wikiProviderName))
+	log.Debug("Wikipedia response missing 'query' field - full response dump",
+		logger.String("raw_response", string(resp.raw)),
+		logger.String("request_url", fullURL))
 
-	// Log the complete raw response when query field is missing
-	if respObj, errJson := resp.Object(); errJson == nil {
-		log.Debug("Wikipedia response missing 'query' field - full response dump",
-			logger.String("raw_response", respObj.String()),
-			logger.String("request_url", fullURL))
-	}
-
-	log.Debug("Wikipedia response missing 'query' field - analyzing response structure",
-		logger.Error(queryErr),
-		logger.String("request_url", fullURL),
-		logger.String("response_analysis", "checking_for_api_errors"))
-
-	// Check if there's an error field in the response
-	if errorObj, errCheck := resp.GetObject("error"); errCheck == nil {
-		if errorCode, errCode := errorObj.GetString("code"); errCode == nil {
-			if errorInfo, errInfo := errorObj.GetString("info"); errInfo == nil {
-				log.Debug("Wikipedia API returned structured error response - normal for missing pages",
-					logger.String("error_code", errorCode),
-					logger.String("error_info", errorInfo),
-					logger.String("error_type", "api_structured_error_expected"),
-					logger.String("species_query", params["titles"]),
-					logger.String("diagnostic_hint", "wikipedia_api_rejected_request_for_nonexistent_page"))
-			}
-		}
-	} else {
-		// No structured error, likely malformed response
-		log.Debug("Wikipedia response has no 'query' field and no structured 'error' field",
-			logger.String("response_structure_error", queryErr.Error()),
-			logger.String("error_type", "malformed_api_response_expected"),
+	if resp.Error != nil {
+		log.Debug("Wikipedia API returned structured error response - normal for missing pages",
+			logger.String("error_code", resp.Error.Code),
+			logger.String("error_info", resp.Error.Info),
+			logger.String("error_type", "api_structured_error_expected"),
 			logger.String("species_query", params["titles"]),
-			logger.String("diagnostic_hint", "wikipedia_api_returned_unexpected_format_for_missing_page"))
+			logger.String("diagnostic_hint", "wikipedia_api_rejected_request_for_nonexistent_page"))
+		return
 	}
+	log.Debug("Wikipedia response has no 'query' field and no structured 'error' field",
+		logger.String("error_type", "malformed_api_response_expected"),
+		logger.String("species_query", params["titles"]),
+		logger.String("diagnostic_hint", "wikipedia_api_returned_unexpected_format_for_missing_page"))
 }
 
-// logPagesMissingError logs diagnostics when the 'pages' field is missing from the query.
-func logPagesMissingError(query *jason.Object, params map[string]string, fullURL string, pagesErr error) {
-	log := GetLogger().With(logger.String("provider", wikiProviderName))
-
-	// Log the query object structure
-	if queryObj, errJson := query.Object(); errJson == nil {
-		log.Debug("Wikipedia 'query' object structure when 'pages' field missing",
-			logger.String("query_object", queryObj.String()),
-			logger.String("request_url", fullURL))
-	}
-
-	log.Debug("No 'pages' field in Wikipedia query response - analyzing alternative response structures",
-		logger.String("pages_error", pagesErr.Error()),
-		logger.String("species_query", params["titles"]),
-		logger.String("request_url", fullURL),
-		logger.String("response_analysis", "checking_redirects_and_normalized_titles"))
-
-	// Check for redirects
-	if redirects, redirectErr := query.GetObjectArray("redirects"); redirectErr == nil && len(redirects) > 0 {
-		log.Debug("Wikipedia response contains redirects but no pages",
-			logger.Int("redirect_count", len(redirects)),
-			logger.String("error_type", "redirect_without_pages"),
-			logger.String("diagnostic_hint", "wikipedia_redirected_query_but_target_page_missing"))
-	}
-
-	// Check for normalized titles
-	if normalized, normalErr := query.GetObjectArray("normalized"); normalErr == nil && len(normalized) > 0 {
-		log.Debug("Wikipedia response contains normalized titles but no pages",
-			logger.Int("normalized_count", len(normalized)),
-			logger.String("error_type", "normalized_title_without_pages"),
-			logger.String("diagnostic_hint", "wikipedia_normalized_species_name_but_no_page_found"))
-	}
-
-	log.Debug("Wikipedia page structure analysis complete - no pages found",
-		logger.String("error_type", "no_pages_in_response"),
-		logger.String("species_query", params["titles"]),
-		logger.String("diagnostic_hint", "species_likely_has_no_wikipedia_page"))
-}
-
-// logEmptyPagesArray logs diagnostics when the pages array is empty.
-func logEmptyPagesArray(resp *jason.Object, params map[string]string, fullURL string) {
-	log := GetLogger().With(logger.String("provider", wikiProviderName))
-
-	log.Debug("Wikipedia returned empty pages array - normal for species without pages",
-		logger.String("error_type", "empty_pages_array_expected"),
-		logger.String("species_query", params["titles"]),
-		logger.String("request_url", fullURL),
-		logger.Bool("response_has_query_field", true),
-		logger.Int("pages_array_length", 0),
-		logger.String("diagnostic_hint", "wikipedia_query_succeeded_but_species_has_no_page"))
-
-	if respObj, errJson := resp.Object(); errJson == nil {
-		log.Debug("Full Wikipedia response structure analysis (empty pages)",
-			logger.String("response_json", respObj.String()),
+// logNoPages logs diagnostics when the query returned no pages. With typed
+// decoding a missing 'pages' key and an empty 'pages' array are
+// indistinguishable, so the former separate "pages missing" and "pages empty"
+// diagnostics are merged here. The user-facing result (ErrImageNotFound) is
+// unchanged.
+func logNoPages(resp *wikiAPIResponse, params map[string]string, fullURL string) {
+	GetLogger().With(logger.String("provider", wikiProviderName)).
+		Debug("Wikipedia query returned no pages - normal for species without pages",
+			logger.String("error_type", "no_pages_in_response"),
+			logger.String("species_query", params["titles"]),
 			logger.String("request_url", fullURL),
-			logger.String("analysis", "complete_api_response_for_debugging"))
-	} else {
-		log.Debug("Could not serialize response for debugging",
-			logger.Error(errJson),
-			logger.String("request_url", fullURL))
-	}
+			logger.Int("redirect_count", len(resp.Query.Redirects)),
+			logger.Int("normalized_count", len(resp.Query.Normalized)),
+			logger.String("diagnostic_hint", "species_likely_has_no_wikipedia_page"))
 }
 
 // logFirstPageContent logs the first page content at debug level for troubleshooting.
-func logFirstPageContent(pages []*jason.Object, fullURL string) {
-	log := GetLogger().With(logger.String("provider", wikiProviderName))
-	if firstPageObj, errJson := pages[0].Object(); errJson == nil {
-		log.Debug("First page content from API response",
-			logger.String("page_content", firstPageObj.String()),
-			logger.String("request_url", fullURL))
-	} else {
-		log.Debug("Could not format first page for logging",
-			logger.Error(errJson),
-			logger.String("request_url", fullURL))
+func logFirstPageContent(page *wikiPage, fullURL string) {
+	data, err := json.Marshal(page)
+	if err != nil {
+		return
 	}
+	GetLogger().With(logger.String("provider", wikiProviderName)).
+		Debug("First page content from API response",
+			logger.String("page_content", string(data)),
+			logger.String("request_url", fullURL))
 }
 
 // queryAndGetFirstPageWithLimiter queries Wikipedia with given parameters using the specified rate limiter.
-func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context, reqID string, params map[string]string, limiter *rate.Limiter) (*jason.Object, error) {
+func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context, reqID string, params map[string]string, limiter *rate.Limiter) (*wikiPage, error) {
 	log := GetLogger().With(
 		logger.String("provider", wikiProviderName),
 		logger.String("request_id", reqID),
@@ -1347,27 +1259,20 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context,
 	logRawResponse(resp, fullURL)
 	log.Debug("Parsing pages from API response")
 
-	query, err := resp.GetObject("query")
-	if err != nil {
-		logQueryMissingError(resp, params, fullURL, err)
+	if resp.Query == nil {
+		logQueryMissingError(resp, params, fullURL)
 		return nil, imageNotFoundFor(params["titles"], wikiProviderName, "wiki_query_missing")
 	}
 
-	pages, err := query.GetObjectArray("pages")
-	if err != nil {
-		logPagesMissingError(query, params, fullURL, err)
-		return nil, imageNotFoundFor(params["titles"], wikiProviderName, "wiki_pages_missing")
-	}
-
-	if len(pages) == 0 {
-		logEmptyPagesArray(resp, params, fullURL)
+	if len(resp.Query.Pages) == 0 {
+		logNoPages(resp, params, fullURL)
 		return nil, imageNotFoundFor(params["titles"], wikiProviderName, "wiki_pages_empty")
 	}
 
-	logFirstPageContent(pages, fullURL)
+	logFirstPageContent(&resp.Query.Pages[0], fullURL)
 	logAPISuccess(reqID, params["titles"], "get_first_page")
 
-	return pages[0], nil
+	return &resp.Query.Pages[0], nil
 }
 
 // isAllowedToFetch checks if the WikiMedia provider is allowed to make requests
@@ -1583,21 +1488,21 @@ func (l *wikiMediaProvider) queryThumbnail(ctx context.Context, reqID, scientifi
 		return "", "", enhancedErr
 	}
 
-	thumbnailURL, err = page.GetString("thumbnail", "source")
-	if err != nil {
-		log.Debug("No thumbnail URL found in page data", logger.Error(err))
+	if page.Thumbnail == nil || page.Thumbnail.Source == "" {
+		log.Debug("No thumbnail URL found in page data")
 		// This is common for pages without images or with non-free images
 		// Don't create telemetry noise - treat as "not found"
 		return "", "", imageNotFoundFor(scientificName, wikiProviderName, "wiki_no_thumbnail")
 	}
+	thumbnailURL = page.Thumbnail.Source
 
-	fileName, err = page.GetString("pageimage")
-	if err != nil {
-		log.Debug("No pageimage filename found in page data", logger.Error(err))
+	if page.PageImage == "" {
+		log.Debug("No pageimage filename found in page data")
 		// This is common for pages without proper image metadata
 		// Don't create telemetry noise - treat as "not found"
 		return "", "", imageNotFoundFor(scientificName, wikiProviderName, "wiki_no_pageimage")
 	}
+	fileName = page.PageImage
 
 	log.Debug("Successfully retrieved thumbnail URL and filename",
 		logger.String("url", thumbnailURL),
@@ -1653,39 +1558,27 @@ func (l *wikiMediaProvider) queryAuthorInfo(ctx context.Context, reqID, thumbnai
 
 	// Extract metadata
 	log.Debug("Extracting metadata from imageinfo response")
-	imgInfo, err := page.GetObjectArray("imageinfo")
-	if err != nil || len(imgInfo) == 0 {
-		log.Debug("No imageinfo found in file page",
-			logger.Error(err),
-			logger.Int("array_len", len(imgInfo)))
+	if len(page.ImageInfo) == 0 {
+		log.Debug("No imageinfo found in file page")
 		// This is common for files without metadata or processing issues
 		// Don't create telemetry noise - treat as "not found"
 		// Note: thumbnailFileName used as lookup key since scientificName is not in scope here
 		return nil, imageNotFoundFor(thumbnailFileName, wikiProviderName, "wiki_no_imageinfo")
 	}
 
-	extMetadata, err := imgInfo[0].GetObject("extmetadata")
-	if err != nil {
-		log.Debug("No extmetadata found in imageinfo", logger.Error(err))
+	extMetadata := page.ImageInfo[0].ExtMetadata
+	if len(extMetadata) == 0 {
+		log.Debug("No extmetadata found in imageinfo")
 		// This is common for files without extended metadata
 		// Don't create telemetry noise - treat as "not found"
 		return nil, imageNotFoundFor(thumbnailFileName, wikiProviderName, "wiki_no_extmetadata") // thumbnailFileName as lookup key
 	}
 
-	// Extract specific fields (Artist, LicenseShortName, LicenseUrl)
-	// These fields are optional - missing fields are expected and logged at debug level
-	artistHTML, err := extMetadata.GetString("Artist", "value")
-	if err != nil {
-		log.Debug("Artist field not found in extmetadata", logger.Error(err))
-	}
-	licenseName, err := extMetadata.GetString("LicenseShortName", "value")
-	if err != nil {
-		log.Debug("LicenseShortName field not found in extmetadata", logger.Error(err))
-	}
-	licenseURL, err := extMetadata.GetString("LicenseUrl", "value")
-	if err != nil {
-		log.Debug("LicenseUrl field not found in extmetadata", logger.Error(err))
-	}
+	// Extract specific fields (Artist, LicenseShortName, LicenseUrl).
+	// These fields are optional; missing keys decode to empty strings.
+	artistHTML := extMetadata["Artist"].Value
+	licenseName := extMetadata["LicenseShortName"].Value
+	licenseURL := extMetadata["LicenseUrl"].Value
 
 	log.Debug("Extracted raw metadata fields",
 		logger.Int("artist_html_len", len(artistHTML)),
