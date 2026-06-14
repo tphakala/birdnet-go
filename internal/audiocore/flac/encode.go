@@ -84,7 +84,7 @@ func EncodePCM(ctx context.Context, opts *Options) (err error) {
 			Context("operation", "flac_encode_validate").
 			Build()
 	}
-	if err := validateEncodeInput(opts.PCMData, opts.BitDepth); err != nil {
+	if err := validateEncodeInput(opts.PCMData, opts.BitDepth, opts.Channels); err != nil {
 		return err
 	}
 	if opts.OutputPath == "" {
@@ -176,7 +176,7 @@ func EncodePCM(ctx context.Context, opts *Options) (err error) {
 
 // validateEncodeInput checks the PCM data and bit depth shared by the file and
 // buffer encode entry points. It returns an enhanced validation error or nil.
-func validateEncodeInput(pcmData []byte, bitDepth int) error {
+func validateEncodeInput(pcmData []byte, bitDepth, channels int) error {
 	if len(pcmData) == 0 {
 		return errors.Newf("flac encode: empty PCM data").
 			Component("audiocore/flac").
@@ -192,15 +192,24 @@ func validateEncodeInput(pcmData []byte, bitDepth int) error {
 			Context("bit_depth", bitDepth).
 			Build()
 	}
-	// Reject a partial trailing sample early with a clear error rather than
-	// letting it surface as an opaque flush failure deep inside go-flac.
-	if bytesPerSample := bitDepth / 8; len(pcmData)%bytesPerSample != 0 {
-		return errors.Newf("flac encode: PCM length %d is not a multiple of the %d-byte sample size", len(pcmData), bytesPerSample).
+	if channels <= 0 {
+		return errors.Newf("flac encode: channels must be positive, got %d", channels).
+			Component("audiocore/flac").
+			Category(errors.CategoryValidation).
+			Context("operation", "flac_encode_validate").
+			Context("channels", channels).
+			Build()
+	}
+	// Reject a partial trailing frame early with a clear error rather than
+	// letting it surface as an opaque flush failure deep inside go-flac. A full
+	// inter-channel sample (frame) is bytesPerSample*channels.
+	if bytesPerFrame := (bitDepth / 8) * channels; len(pcmData)%bytesPerFrame != 0 {
+		return errors.Newf("flac encode: PCM length %d is not a multiple of the %d-byte frame size (%d-bit x %d ch)", len(pcmData), bytesPerFrame, bitDepth, channels).
 			Component("audiocore/flac").
 			Category(errors.CategoryValidation).
 			Context("operation", "flac_encode_validate").
 			Context("pcm_len", len(pcmData)).
-			Context("bytes_per_sample", bytesPerSample).
+			Context("bytes_per_frame", bytesPerFrame).
 			Build()
 	}
 	return nil
@@ -323,7 +332,7 @@ func EncodePCMToBuffer(ctx context.Context, opts *BufferOptions) (*bytes.Buffer,
 			Context("operation", "flac_encode_validate").
 			Build()
 	}
-	if err := validateEncodeInput(opts.PCMData, opts.BitDepth); err != nil {
+	if err := validateEncodeInput(opts.PCMData, opts.BitDepth, opts.Channels); err != nil {
 		return nil, err
 	}
 	if ctxErr := ctx.Err(); ctxErr != nil {

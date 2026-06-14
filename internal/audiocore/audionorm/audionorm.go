@@ -203,8 +203,12 @@ func (o Options) validate(n int) error {
 		return err
 	}
 	switch {
+	case math.IsNaN(o.TargetLUFS) || math.IsInf(o.TargetLUFS, 0):
+		return fmt.Errorf("audionorm: target loudness must be finite, got %v", o.TargetLUFS)
 	case o.TargetLUFS >= 0 || o.TargetLUFS <= absoluteGateLUFS:
 		return fmt.Errorf("audionorm: target loudness %.2f LUFS out of range (%.0f, 0)", o.TargetLUFS, absoluteGateLUFS)
+	case math.IsNaN(o.TruePeakDBTP) || math.IsInf(o.TruePeakDBTP, 0):
+		return fmt.Errorf("audionorm: true-peak ceiling must be finite, got %v", o.TruePeakDBTP)
 	case o.TruePeakDBTP > 0:
 		return fmt.Errorf("audionorm: true-peak ceiling %.2f dBTP must be <= 0", o.TruePeakDBTP)
 	}

@@ -91,8 +91,11 @@ func ffmpegEBUR128(t *testing.T, samples []float64, sampleRate, channels int) (i
 
 func parseFloatOrInf(t *testing.T, s string) float64 {
 	t.Helper()
-	if s == "-inf" || s == "inf" {
+	switch s {
+	case "-inf":
 		return math.Inf(-1)
+	case "inf":
+		return math.Inf(1)
 	}
 	v, err := strconv.ParseFloat(s, 64)
 	if err != nil {
