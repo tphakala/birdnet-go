@@ -146,9 +146,14 @@
     return t('settings.species.customConfiguration.list.editTitle');
   }
 
-  function deleteTitle(): string {
+  // Delete shares the edit button's single-editor lock so the two stay consistent:
+  // while one species is open in the editor, other rows cannot be deleted either.
+  function deleteTitle(species: string): string {
     if (disabled) {
       return t('settings.species.customConfiguration.table.actionsDisabledBusy');
+    }
+    if (editorOpen && editingSpecies !== species) {
+      return t('settings.species.customConfiguration.table.editDisabledReason');
     }
     return t('settings.species.customConfiguration.list.removeTitle');
   }
@@ -252,9 +257,9 @@
         <button
           type="button"
           class="inline-flex items-center justify-center size-7 rounded-md text-[var(--color-base-content)]/70 hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          title={deleteTitle()}
-          aria-label={deleteTitle()}
-          {disabled}
+          title={deleteTitle(item.species)}
+          aria-label={deleteTitle(item.species)}
+          disabled={editDisabled(item.species)}
           onclick={() => onDelete(item.species)}
         >
           <Trash2 class="size-3.5" />

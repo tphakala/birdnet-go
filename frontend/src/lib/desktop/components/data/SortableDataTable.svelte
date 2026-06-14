@@ -147,8 +147,10 @@
 
   let displayCount = $derived(count ?? filteredData.length);
 
-  function rowKey(item: T, index: number): string | number {
-    return keyFn ? keyFn(item, index) : index;
+  // Fall back to the item reference (not the array index) so that re-sorting or
+  // filtering reorders existing rows by identity instead of recreating DOM nodes.
+  function rowKey(item: T, index: number): string | number | T {
+    return keyFn ? keyFn(item, index) : item;
   }
 
   function cellValue(column: Column<T>, item: T, index: number): string | number {

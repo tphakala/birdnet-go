@@ -152,18 +152,21 @@ describe('SpeciesConfigTable', () => {
     // Add button is hidden while editing.
     expect(screen.queryByTestId('add-configuration-button')).not.toBeInTheDocument();
 
-    // The other row's edit button is disabled with an explanatory label.
+    // The other row's edit AND delete buttons are both disabled (single-editor lock)
+    // with an explanatory label.
     const ravenRow = screen.getByText('Raven').closest('tr') as HTMLElement;
-    const ravenEdit = within(ravenRow).getAllByRole('button')[0];
-    expect(ravenEdit).toBeDisabled();
-    expect(ravenEdit.getAttribute('aria-label')).toBe(
-      'settings.species.customConfiguration.table.editDisabledReason'
-    );
+    const ravenButtons = within(ravenRow).getAllByRole('button');
+    const reason = 'settings.species.customConfiguration.table.editDisabledReason';
+    for (const btn of ravenButtons) {
+      expect(btn).toBeDisabled();
+      expect(btn.getAttribute('aria-label')).toBe(reason);
+    }
 
-    // The edited row keeps its edit button enabled.
+    // The edited row keeps its own buttons enabled.
     const blackbirdRow = screen.getByText('Blackbird').closest('tr') as HTMLElement;
-    const blackbirdEdit = within(blackbirdRow).getAllByRole('button')[0];
-    expect(blackbirdEdit).not.toBeDisabled();
+    for (const btn of within(blackbirdRow).getAllByRole('button')) {
+      expect(btn).not.toBeDisabled();
+    }
   });
 
   it('disables edit and delete with a busy reason while the page is loading or saving', () => {
