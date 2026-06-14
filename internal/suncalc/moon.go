@@ -42,10 +42,10 @@ type MoonData struct {
 
 // phaseInfo maps a phase range to its name, icon, and emoji.
 type phaseInfo struct {
-	maxPhase  float64
-	phaseName string
-	iconName  string
-	emoji     string
+	maxPhase  float64 // Exclusive upper bound of the phase value for this sub-phase
+	phaseName string  // Human-readable phase name (one of the Phase* constants)
+	iconName  string  // Basmilius weather-icons icon name (one of the IconName* constants)
+	emoji     string  // Unicode emoji representing this phase
 }
 
 // phases defines the 8 standard lunar phases with their upper bounds.
