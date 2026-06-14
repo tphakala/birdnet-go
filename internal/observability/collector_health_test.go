@@ -178,11 +178,14 @@ func TestCollector_SeedsKeysOnFirstTick(t *testing.T) {
 		MetricPrefixAudioDrops+"src1")
 	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixAudioOverruns),
 		MetricPrefixAudioOverruns+"src1")
+	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixResultsQueueDrops),
+		MetricPrefixResultsQueueDrops+"src1")
 	assert.Contains(t, healthStore.KeysWithPrefix(MetricPrefixStreamRestarts),
 		MetricPrefixStreamRestarts+"stream1")
 
 	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixAudioDrops+"src1"))
 	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixAudioOverruns+"src1"))
+	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixResultsQueueDrops+"src1"))
 	assert.Equal(t, int64(0), healthStore.LifetimeTotal(MetricPrefixStreamRestarts+"stream1"))
 }
 

@@ -17,6 +17,11 @@ const (
 	MetricPrefixAudioDrops     = "audio.drops."
 	MetricPrefixAudioOverruns  = "audio.overruns."
 	MetricPrefixStreamRestarts = "stream.restarts."
+	// MetricPrefixResultsQueueDrops counts detection results dropped because the
+	// classifier results queue was full. The trailing segment ("queue_drops")
+	// is the metric type used for event-buffer filtering; it must stay distinct
+	// from the other prefixes so events do not cross-match.
+	MetricPrefixResultsQueueDrops = "results.queue_drops."
 )
 
 // HourlyBucket holds the aggregated event count for a single hour.

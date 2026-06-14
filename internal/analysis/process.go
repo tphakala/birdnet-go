@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -121,6 +122,57 @@ var lastQueueOverflowReport atomic.Int64
 // telemetry extras so users can tell whether they are losing detections and by
 // how much.
 var droppedDetectionsTotal atomic.Int64
+
+// resultsQueueDropSink bridges results-queue detection drops into the
+// observability health metrics store and event buffer so the loss surfaces on
+// the System Health page. The diagnostics subsystem (owned by the API
+// controller) creates the store; the ResultsQueueDropCheck reads from it. Using
+// the store as the bridge keeps the dependency direction clean: internal/api/v2
+// must not import internal/analysis (import cycle), so drops are pushed here
+// rather than pulled by a provider closure.
+type resultsQueueDropSink struct {
+	store  *observability.HealthMetricsStore
+	events *observability.HealthEventBuffer
+}
+
+// resultsQueueDropHealthSink holds the active health sink, or nil before the
+// diagnostics subsystem is wired (or after it is cleared). Read on the drop
+// path; set at startup.
+var resultsQueueDropHealthSink atomic.Pointer[resultsQueueDropSink]
+
+// SetResultsQueueDropHealthSink wires the diagnostics health store and event
+// buffer so results-queue detection drops surface on the System Health page.
+// A nil store clears the sink, in which case drops are still logged and
+// reported to telemetry. Safe to call from startup wiring; the latest call
+// wins, so a restarted API server repoints drops at its new store.
+func SetResultsQueueDropHealthSink(store *observability.HealthMetricsStore, events *observability.HealthEventBuffer) {
+	if store == nil {
+		resultsQueueDropHealthSink.Store(nil)
+		return
+	}
+	resultsQueueDropHealthSink.Store(&resultsQueueDropSink{store: store, events: events})
+}
+
+// recordResultsQueueDropHealth records a single dropped detection into the
+// diagnostics health store and event buffer when the sink is wired. The
+// "queue_drops" metric label must match the trailing segment of
+// observability.MetricPrefixResultsQueueDrops so ResultsQueueDropCheck's
+// event-buffer filter matches, mirroring how the collector tags audio drops.
+func recordResultsQueueDropHealth(source string) {
+	sink := resultsQueueDropHealthSink.Load()
+	if sink == nil {
+		return
+	}
+	sink.store.Record(observability.MetricPrefixResultsQueueDrops+source, 1)
+	if sink.events != nil {
+		sink.events.Add(observability.HealthEvent{
+			Time:   time.Now(),
+			Source: source,
+			Delta:  1,
+			Metric: "queue_drops",
+		})
+	}
+}
 
 // recordBufferOverrun records a buffer overrun event and reports to Sentry
 // when the tumbling window expires with enough accumulated overruns.
@@ -387,6 +439,9 @@ func recordResultsQueueDrop(source, modelID string, pm *metrics.MyAudioMetrics) 
 	if pm != nil {
 		pm.RecordAudioQueueOperation(source, "enqueue", "dropped")
 	}
+	// Surface the drop on the System Health page (when diagnostics are wired)
+	// so users on constrained hardware can see they are losing detections.
+	recordResultsQueueDropHealth(source)
 	// Rate-limit queue overflow telemetry to prevent Sentry floods under sustained backpressure.
 	now := time.Now().Unix()
 	last := lastQueueOverflowReport.Load()
