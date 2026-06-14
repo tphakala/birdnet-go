@@ -18,7 +18,6 @@ import (
 
 	"github.com/antonholmquist/jason"
 	"github.com/google/uuid"
-	"github.com/k3a/html2text"
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -579,8 +578,8 @@ func parseHTMLErrorMessage(htmlContent []byte) string {
 		return "HTML error page (unable to parse)"
 	}
 
-	// Extract text content using html2text for valid HTML
-	return html2text.HTML2Text(string(htmlContent))
+	// Extract text content for valid HTML
+	return htmlToText(string(htmlContent))
 }
 
 // detectErrorType analyzes response to determine error type and appropriate action
@@ -1679,7 +1678,7 @@ func parseAuthorFromHTML(artistHTML string) (authorName, authorURL string) {
 	authorURL, authorName, err := extractArtistInfo(artistHTML)
 	if err != nil {
 		// Fallback to plain text version if parsing failed
-		authorName = html2text.HTML2Text(artistHTML)
+		authorName = htmlToText(artistHTML)
 	}
 
 	// If author name is still empty after all attempts, use unknownMetadataValue
@@ -1732,7 +1731,7 @@ func extractArtistInfo(htmlStr string) (href, text string, err error) {
 	}
 
 	// Fallback: No links found, return plain text
-	text = html2text.HTML2Text(htmlStr)
+	text = htmlToText(htmlStr)
 	log.Debug("No links found in artist HTML, returning plain text",
 		logger.String("text", text))
 	return "", text, nil // No error if no link, just return text
@@ -1796,7 +1795,7 @@ func extractText(link *html.Node) string {
 		if err != nil {
 			return ""
 		}
-		return html2text.HTML2Text(b.String())
+		return htmlToText(b.String())
 	}
 	return ""
 }
