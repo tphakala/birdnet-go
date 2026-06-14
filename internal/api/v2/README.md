@@ -179,11 +179,11 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | Method | Route                   | Handler                       | Auth | Description                                                 |
 | ------ | ----------------------- | ----------------------------- | ---- | ----------------------------------------------------------- |
 | GET    | `/range/status`         | `GetRangeFilterStatus`        | ❌   | Per-classifier geomodel coverage, auto-selection, threshold |
-| GET    | `/range/species/scores` | `GetRangeFilterSpeciesScores` | ❌   | All species with raw geomodel scores (no threshold cutoff)  |
+| GET    | `/range/species/scores` | `GetRangeFilterSpeciesScores` | ❌   | Raw geomodel scores, primary model only; excludes always-active secondary models (e.g. bats) by design |
 | GET    | `/range/species/count`  | `GetRangeFilterSpeciesCount`  | ❌   | Species count with range filter                             |
 | GET    | `/range/species/list`   | `GetRangeFilterSpeciesList`   | ❌   | Species list with taxonomy groups                           |
-| GET    | `/range/species/csv`    | `GetRangeFilterSpeciesCSV`    | ❌   | Export species list as CSV download                         |
-| POST   | `/range/species/test`   | `TestRangeFilter`             | ❌   | Test range filter configuration                             |
+| GET    | `/range/species/csv`    | `GetRangeFilterSpeciesCSV`    | ❌   | Export species as CSV; with custom params includes always-active secondary models (matches the test endpoint); no-param export returns the persisted filter |
+| POST   | `/range/species/test`   | `TestRangeFilter`             | ❌   | Test range filter; returns the active set (range-filtered birds plus always-active secondary models) |
 | POST   | `/range/rebuild`        | `RebuildRangeFilter`          | ❌   | Rebuild range filter data                                   |
 
 ### Search (`search.go`)

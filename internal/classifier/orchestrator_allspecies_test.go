@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -344,6 +345,63 @@ func TestGetAllProbableSpecies_BatModelAlwaysActive(t *testing.T) {
 
 	assert.False(t, hasScientificName(scores, "Pipistrellus pipistrellus"),
 		"excluded bat species must not be added")
+}
+
+// TestGetAllProbableSpecies_SortedByScoreDescending verifies that always-active
+// secondary-model species (score 1.0), which are appended after the primary's
+// pre-sorted range-filtered scores, are re-sorted into the merged result so the
+// full list stays ordered by score descending. Without the final re-sort a 1.0
+// bat species trails behind a low-probability bird, which the CSV export and the
+// range-filter test preview render in raw (unsorted) order.
+func TestGetAllProbableSpecies_SortedByScoreDescending(t *testing.T) {
+	settings := universalSettings(t)
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = false
+
+	// Primary returns a single low-probability bird; the bat is appended at 1.0
+	// after the primary's descending sort, so an unsorted merge would place it last.
+	rf := &fakeUniversalRangeFilter{
+		geoLabels: []string{"Turdus merula_Common Blackbird"},
+		scores: []SpeciesScore{
+			{Score: 0.02, Label: "Turdus merula_Common Blackbird"},
+		},
+		rawScores: []float32{0.02},
+	}
+
+	const primaryID = "BirdNET_V3"
+	bn := &BirdNET{
+		Settings:     settings,
+		speciesCache: make(map[string]*speciesCacheEntry),
+	}
+	bn.ModelInfo.ID = primaryID
+	bn.rangeFilter = rf
+
+	batModel := &mockModelInstance{
+		id:     RegistryIDBat,
+		labels: []string{"Myotis daubentonii"},
+	}
+
+	o := &Orchestrator{
+		Settings:  settings,
+		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
+		primary:   bn,
+		models: map[string]*modelEntry{
+			primaryID:     {instance: bn},
+			RegistryIDBat: {instance: batModel},
+		},
+	}
+
+	scores, err := o.GetAllProbableSpeciesWithSettings(time.Now(), 0, settings)
+	require.NoError(t, err)
+	require.Len(t, scores, 2)
+
+	// The always-active bat (1.0) must sort ahead of the low-probability bird (0.02).
+	assert.Equal(t, "Myotis daubentonii", scores[0].Label,
+		"always-active 1.0 species must sort before lower-scored birds")
+	assert.InDelta(t, 1.0, scores[0].Score, 0.0001)
+
+	// The merged list as a whole must be ordered by score descending.
+	assert.True(t, sort.IsSorted(ByScore(scores)),
+		"merged species list must be sorted by score descending")
 }
 
 // TestGetAllProbableSpecies_BatModelDedupedByScientificName verifies that a bat
