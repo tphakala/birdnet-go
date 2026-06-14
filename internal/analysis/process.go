@@ -114,6 +114,14 @@ func RemoveOverrunTrackers(sourceID string) {
 // lastQueueOverflowReport tracks the last time a queue overflow was reported to Sentry.
 var lastQueueOverflowReport atomic.Int64
 
+// droppedDetectionsTotal counts how many detection results have been dropped
+// because the results queue was full, over the lifetime of the process. The
+// drop itself is unavoidable backpressure on a slow consumer, but the count
+// makes the otherwise-silent data loss quantifiable in the drop log line and
+// telemetry extras so users can tell whether they are losing detections and by
+// how much.
+var droppedDetectionsTotal atomic.Int64
+
 // recordBufferOverrun records a buffer overrun event and reports to Sentry
 // when the tumbling window expires with enough accumulated overruns.
 func recordBufferOverrun(tracker *bufferOverrunTracker, elapsed, bufferLen time.Duration) {
@@ -352,29 +360,53 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 			pm.RecordAudioQueueOperation(source, "enqueue", "success")
 		}
 	default:
-		log.Error("results queue is full",
-			logger.String("source", source))
-		if pm != nil {
-			pm.RecordAudioQueueOperation(source, "enqueue", "dropped")
-		}
-		// Rate-limit queue overflow telemetry to prevent Sentry floods under sustained backpressure.
-		now := time.Now().Unix()
-		last := lastQueueOverflowReport.Load()
-		if telemetry.IsTelemetryEnabled() && (now-last >= int64(bufferOverrunReportCooldown.Seconds())) {
-			if lastQueueOverflowReport.CompareAndSwap(last, now) {
-				telemetry.FastCaptureMessageWithExtras(
-					"results queue full, detections dropped",
-					sentry.LevelWarning,
-					"analysis",
-					map[string]any{
-						"source":     source,
-						"queue_size": len(classifier.ResultsQueue),
-					},
-				)
-			}
-		}
+		// The consumer is too far behind to accept this result, so it is
+		// dropped. recordResultsQueueDrop makes the loss visible (cumulative
+		// counter + log + rate-limited telemetry) instead of discarding it
+		// silently.
+		recordResultsQueueDrop(source, modelID, pm)
 	}
 	return nil
+}
+
+// recordResultsQueueDrop accounts for a single detection result that could not
+// be enqueued because the results queue was full. It increments the cumulative
+// drop counter, logs the loss with context, records the queue drop metric, and
+// emits rate-limited overflow telemetry. It returns the new cumulative total.
+//
+// Dropping is unavoidable backpressure when the detection consumer cannot keep
+// up, but the loss must not be silent: every drop is a species that was heard
+// and never recorded.
+func recordResultsQueueDrop(source, modelID string, pm *metrics.MyAudioMetrics) int64 {
+	totalDropped := droppedDetectionsTotal.Add(1)
+	GetLogger().Error("results queue is full, detection dropped",
+		logger.String("source", source),
+		logger.String("model_id", modelID),
+		logger.Int("queue_capacity", cap(classifier.ResultsQueue)),
+		logger.Int64("dropped_total", totalDropped))
+	if pm != nil {
+		pm.RecordAudioQueueOperation(source, "enqueue", "dropped")
+	}
+	// Rate-limit queue overflow telemetry to prevent Sentry floods under sustained backpressure.
+	now := time.Now().Unix()
+	last := lastQueueOverflowReport.Load()
+	if telemetry.IsTelemetryEnabled() && (now-last >= int64(bufferOverrunReportCooldown.Seconds())) {
+		if lastQueueOverflowReport.CompareAndSwap(last, now) {
+			telemetry.FastCaptureMessageWithExtras(
+				"results queue full, detections dropped",
+				sentry.LevelWarning,
+				"analysis",
+				map[string]any{
+					"source":         source,
+					"model_id":       modelID,
+					"queue_size":     len(classifier.ResultsQueue),
+					"queue_capacity": cap(classifier.ResultsQueue),
+					"dropped_total":  totalDropped,
+				},
+			)
+		}
+	}
+	return totalDropped
 }
 
 func convertToFloat32WithPool(bufMgr *buffer.Manager, sample []byte, bitDepth int) ([][]float32, error) {
