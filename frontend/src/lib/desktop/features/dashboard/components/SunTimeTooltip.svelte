@@ -163,13 +163,16 @@
 {/if}
 
 <style>
-  /* Centers the sunrise/sunset icon within its daylight-row grid cell. */
+  /* Centers the sunrise/sunset icon within its daylight-row grid cell.
+     cursor: help (not pointer) cues the hover tooltip without implying the icon
+     is clickable, which it is not. */
   .sun-icon-wrapper {
     display: flex;
     align-items: center;
     justify-content: center;
     width: 100%;
     height: 1.25rem; /* 20px - matches grid-daylight-height */
+    cursor: help;
   }
 
   /* Portaled to <body>; positioned via fixed coordinates set inline above.
