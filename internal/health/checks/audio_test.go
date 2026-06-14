@@ -47,7 +47,7 @@ func TestBufferDropsCheck_HealthyWithHistory(t *testing.T) {
 
 	now := time.Now()
 	store.RecordAt("audio.drops.src1", 50, now.Add(-3*time.Hour))
-	buf.Add(observability.HealthEvent{Time: now.Add(-3 * time.Hour), Source: "src1", Delta: 50, Metric: "drops"})
+	buf.Add(observability.HealthEvent{Time: now.Add(-3 * time.Hour), Source: "src1", Delta: 50, Metric: observability.MetricTypeAudioDrops})
 	store.RecordAt("audio.drops.src1", 0, now)
 
 	check := NewBufferDropsCheck(store, eventGetter(buf))

@@ -11,19 +11,27 @@ import (
 // defaultBucketCount is 168 hourly buckets covering 7 days of retention.
 const defaultBucketCount = 168
 
-// Metric key prefixes for health counters. Used by both the collector
-// (recording) and health checks (querying) to ensure consistency.
+// Metric-type tokens are the trailing segment of each health-counter prefix and
+// double as the HealthEvent.Metric label used for event-buffer filtering. The
+// recorder tags each event with the token; the checks filter recent events by
+// extractMetricType(prefix). Building the prefixes from these tokens keeps the
+// two sides from drifting apart. Tokens must stay distinct from one another so
+// events do not cross-match between checks.
 const (
-	MetricPrefixAudioDrops     = "audio.drops."
-	MetricPrefixAudioOverruns  = "audio.overruns."
-	MetricPrefixStreamRestarts = "stream.restarts."
-	// MetricTypeResultsQueueDrops is the metric-type token shared by the producer
-	// (the analysis pipeline tags each drop HealthEvent with this label) and the
-	// consumer (ResultsQueueDropCheck filters recent events by this type). It is
-	// the trailing segment of MetricPrefixResultsQueueDrops; building the prefix
-	// from it guarantees the producer and consumer cannot drift apart. It must
-	// stay distinct from the other prefixes' segments so events do not cross-match.
+	MetricTypeAudioDrops        = "drops"
+	MetricTypeAudioOverruns     = "overruns"
+	MetricTypeStreamRestarts    = "restarts"
 	MetricTypeResultsQueueDrops = "queue_drops"
+)
+
+// Metric key prefixes for health counters. Used by both the collector
+// (recording) and health checks (querying) to ensure consistency. Each is
+// derived from its metric-type token above so the prefix and the recorded
+// event label cannot drift.
+const (
+	MetricPrefixAudioDrops     = "audio." + MetricTypeAudioDrops + "."
+	MetricPrefixAudioOverruns  = "audio." + MetricTypeAudioOverruns + "."
+	MetricPrefixStreamRestarts = "stream." + MetricTypeStreamRestarts + "."
 	// MetricPrefixResultsQueueDrops counts detection results dropped because the
 	// classifier results queue was full.
 	MetricPrefixResultsQueueDrops = "results." + MetricTypeResultsQueueDrops + "."

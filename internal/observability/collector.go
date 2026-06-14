@@ -440,8 +440,8 @@ func (c *Collector) collectAudioHealthCounters(now time.Time) {
 			c.healthStore.RecordAt(MetricPrefixResultsQueueDrops+id, 0, now)
 			continue
 		}
-		c.recordHealthDelta(MetricPrefixAudioDrops+id, cur.Drops, prev.Drops, id, "drops", now)
-		c.recordHealthDelta(MetricPrefixAudioOverruns+id, cur.Errors, prev.Errors, id, "overruns", now)
+		c.recordHealthDelta(MetricPrefixAudioDrops+id, cur.Drops, prev.Drops, id, MetricTypeAudioDrops, now)
+		c.recordHealthDelta(MetricPrefixAudioOverruns+id, cur.Errors, prev.Errors, id, MetricTypeAudioOverruns, now)
 	}
 
 	c.prevAudioSnaps = current
@@ -465,7 +465,7 @@ func (c *Collector) collectStreamHealthCounters(now time.Time) {
 			c.healthStore.RecordAt(MetricPrefixStreamRestarts+sourceID, 0, now)
 			continue
 		}
-		c.recordHealthDelta(MetricPrefixStreamRestarts+sourceID, int64(cur.RestartCount), int64(prev.RestartCount), sourceID, "restarts", now)
+		c.recordHealthDelta(MetricPrefixStreamRestarts+sourceID, int64(cur.RestartCount), int64(prev.RestartCount), sourceID, MetricTypeStreamRestarts, now)
 	}
 
 	c.prevStreamSnaps = current

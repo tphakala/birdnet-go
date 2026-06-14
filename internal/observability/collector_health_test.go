@@ -42,7 +42,7 @@ func TestCollector_AudioHealthDelta(t *testing.T) {
 	assert.Equal(t, int64(5), healthStore.LifetimeTotal("audio.drops.src1"))
 	assert.Equal(t, int64(3), healthStore.LifetimeTotal("audio.overruns.src1"))
 
-	events := healthEvents.Recent("drops", 10)
+	events := healthEvents.Recent(MetricTypeAudioDrops, 10)
 	require.Len(t, events, 1)
 	assert.Equal(t, int64(5), events[0].Delta)
 }
@@ -105,7 +105,7 @@ func TestCollector_StreamHealthDelta(t *testing.T) {
 
 	assert.Equal(t, int64(3), healthStore.LifetimeTotal("stream.restarts.stream_abc123"))
 
-	events := healthEvents.Recent("restarts", 10)
+	events := healthEvents.Recent(MetricTypeStreamRestarts, 10)
 	require.Len(t, events, 1)
 	assert.Equal(t, int64(3), events[0].Delta)
 }
