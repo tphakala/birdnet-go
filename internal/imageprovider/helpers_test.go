@@ -589,6 +589,12 @@ func TestParseAuthorFromHTML(t *testing.T) {
 			wantAuthorURL:  "http://example.com",
 		},
 		{
+			name:           "anchor with text split across child nodes keeps full name",
+			artistHTML:     `<a href="http://example.com">John <b>Doe</b></a>`,
+			wantAuthorName: "John Doe",
+			wantAuthorURL:  "http://example.com",
+		},
+		{
 			name:           "HTML with only text node",
 			artistHTML:     `<span>Plain Author</span>`,
 			wantAuthorName: "Plain Author",

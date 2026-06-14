@@ -4,7 +4,6 @@ go 1.26.1
 
 require (
 	github.com/UserExistsError/conpty v0.1.4
-	github.com/antonholmquist/jason v1.0.0
 	github.com/creack/pty v1.1.24
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/gen2brain/malgo v0.11.25
@@ -15,7 +14,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jarcoal/httpmock v1.4.1
 	github.com/jlaffaye/ftp v0.2.1
-	github.com/k3a/html2text v1.4.0
 	github.com/klauspost/cpuid/v2 v2.3.0
 	github.com/labstack/echo/v4 v4.15.2
 	github.com/nicholas-fedor/shoutrrr v0.16.1
