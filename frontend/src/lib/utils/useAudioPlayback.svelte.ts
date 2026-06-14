@@ -139,6 +139,10 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   let canplayTimeoutId: ReturnType<typeof setTimeout> | undefined;
   let audioRetryCount = 0;
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  // True when the user pressed play during an active load retry; consumed by the
+  // 'canplay' handler to resume playback once the reloaded clip is ready, so the
+  // play intent is not lost when the transient error is suppressed.
+  let playRequestedAfterRetry = false;
   let eventListeners: Array<{
     element: HTMLElement | HTMLAudioElement | Document | Window | null;
     event: string;
@@ -265,6 +269,14 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       try {
         await audioElement.play();
       } catch (err) {
+        // The media 'error' handler can run before play() rejects and may have
+        // queued a transient retry. Don't clobber that with an error message: the
+        // retry can still succeed. Remember the play intent so 'canplay' resumes
+        // playback once the reloaded clip is ready, instead of leaving it paused.
+        if (audioRetryCount > 0) {
+          playRequestedAfterRetry = true;
+          return;
+        }
         logger.error('Playback failed', err as Error);
         error = t('media.audio.playError');
       }
@@ -300,6 +312,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
         duration = 0;
         error = null;
         audioRetryCount = 0;
+        playRequestedAfterRetry = false;
         if (audioRetryTimer) {
           clearTimeout(audioRetryTimer);
           audioRetryTimer = undefined;
@@ -378,6 +391,15 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
         clearTimeout(audioRetryTimer);
         audioRetryTimer = undefined;
       }
+      // If the user pressed play while the clip was still loading/encoding and we
+      // suppressed the transient error, resume playback now that it can play.
+      if (playRequestedAfterRetry) {
+        playRequestedAfterRetry = false;
+        void audio.play().catch(err => {
+          logger.error('Playback failed after retry', err as Error);
+          error = t('media.audio.playError');
+        });
+      }
     });
 
     addTrackedEventListener(audio, 'error', () => {
@@ -386,7 +408,11 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
         canplayTimeoutId = undefined;
       }
 
-      // Retry on 503 (audio still encoding by FFmpeg)
+      // Retry on load failure (audio still encoding by FFmpeg, served as 503/404).
+      // A media element reports such HTTP errors as MediaError.code 4
+      // (MEDIA_ERR_SRC_NOT_SUPPORTED), indistinguishable from a genuinely
+      // unsupported format, so we cannot skip retrying on code 4 without breaking
+      // the still-encoding path. Retrying is bounded by MAX_AUDIO_LOAD_RETRIES.
       if (audioRetryCount < MAX_AUDIO_LOAD_RETRIES) {
         if (audioRetryTimer) {
           clearTimeout(audioRetryTimer);
@@ -405,6 +431,9 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
 
       error = t('media.audio.error');
       isLoading = false;
+      // Retries are exhausted; drop any pending play intent so a late 'canplay'
+      // can't resume a clip that has permanently failed.
+      playRequestedAfterRetry = false;
     });
 
     if (!audio.paused) {

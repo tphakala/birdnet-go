@@ -103,6 +103,10 @@
   let touched = $state(false);
   let inputElement: HTMLInputElement;
   let portalDropdown: HTMLDivElement | null = null;
+  // Tracks an explicit dismissal (click/touch outside). The portal $effect reads
+  // this so a dismissed dropdown stays closed while the input still holds text,
+  // instead of lingering on document.body until the next input change.
+  let manuallyDismissed = $state(false);
 
   // Generate unique ID for this instance using timestamp and counter
   // This ensures no collisions even with multiple instances created simultaneously
@@ -158,19 +162,27 @@
 
   // Update predictions visibility and manage portal dropdown
   $effect(() => {
-    const shouldShow = filteredPredictions.length > 0;
+    const hasPredictions = filteredPredictions.length > 0;
 
-    if (shouldShow && !portalDropdown && inputElement) {
-      createPortalDropdown();
-    } else if (!shouldShow && portalDropdown) {
-      destroyPortalDropdown();
+    if (!hasPredictions) {
+      // No predictions — always close and reset the dismissed flag.
+      if (portalDropdown) destroyPortalDropdown();
+      showPredictions = false;
+      manuallyDismissed = false;
+      return;
     }
 
-    if (shouldShow && portalDropdown) {
+    // Has predictions but the user dismissed the dropdown by clicking outside —
+    // stay closed until the next input change (which resets manuallyDismissed).
+    if (manuallyDismissed) return;
+
+    if (!portalDropdown && inputElement) {
+      createPortalDropdown();
+    }
+    if (portalDropdown) {
       updatePortalDropdown();
     }
-
-    showPredictions = shouldShow;
+    showPredictions = true;
   });
 
   // Event delegation handlers
@@ -337,6 +349,7 @@
     const target = event.target as HTMLInputElement;
     value = target.value;
     touched = false; // Reset touched state on input
+    manuallyDismissed = false; // Re-show suggestions on new input
     onInput?.(target.value);
   }
 
@@ -355,6 +368,7 @@
     } else if (event.key === 'Escape') {
       event.preventDefault();
       showPredictions = false;
+      manuallyDismissed = true;
       // Immediately destroy portal dropdown for testing consistency
       destroyPortalDropdown();
       inputElement?.blur();
@@ -420,6 +434,7 @@
     } else if (event.key === 'Escape') {
       event.preventDefault();
       showPredictions = false;
+      manuallyDismissed = true;
       // Immediately destroy portal dropdown for testing consistency
       destroyPortalDropdown();
       inputElement?.focus();
@@ -431,6 +446,8 @@
     const target = event.target as globalThis.Element;
     if (!target.closest('.form-control') && !target.closest(`#${instanceId}`)) {
       showPredictions = false;
+      manuallyDismissed = true;
+      destroyPortalDropdown();
     }
   }
 
@@ -499,10 +516,20 @@
         onblur={handleBlur}
         oninvalid={handleInvalid}
         onfocus={() => {
-          if (filteredPredictions.length > 0) {
+          // Don't auto-reopen a dropdown the user explicitly dismissed (Escape or
+          // click-outside); typing resets manuallyDismissed. Recreate the portal
+          // directly rather than relying on the $effect, which won't re-run when
+          // neither filteredPredictions nor manuallyDismissed changed (otherwise
+          // showPredictions/aria-expanded would be true with no visible listbox).
+          if (filteredPredictions.length > 0 && !manuallyDismissed) {
             showPredictions = true;
             if (portalDropdown) {
               updatePortalPosition();
+            } else {
+              createPortalDropdown();
+              // createPortalDropdown only appends an empty container; populate it
+              // now since the portal $effect won't re-run (no dependency changed).
+              updatePortalDropdown();
             }
           }
         }}

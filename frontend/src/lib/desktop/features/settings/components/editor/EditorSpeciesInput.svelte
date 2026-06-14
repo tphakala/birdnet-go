@@ -261,6 +261,7 @@
     if (event.key === 'Escape') {
       event.preventDefault();
       showPredictions = false;
+      manuallyDismissed = true;
       destroyPortalDropdown();
       inputElement?.blur();
     } else if (event.key === 'ArrowDown' && showPredictions && portalDropdown) {
@@ -308,6 +309,7 @@
     } else if (event.key === 'Escape') {
       event.preventDefault();
       showPredictions = false;
+      manuallyDismissed = true;
       destroyPortalDropdown();
       inputElement?.focus();
     }
@@ -358,10 +360,19 @@
       oninput={handleInput}
       onkeydown={handleKeydown}
       onfocus={() => {
-        if (filteredPredictions.length > 0) {
+        // Don't auto-reopen a dropdown the user explicitly dismissed (Escape or
+        // click-outside); typing resets manuallyDismissed. Recreate the portal
+        // directly rather than relying on the $effect, which won't re-run when
+        // neither filteredPredictions nor manuallyDismissed changed.
+        if (filteredPredictions.length > 0 && !manuallyDismissed) {
           showPredictions = true;
           if (portalDropdown) {
             updatePortalPosition();
+          } else {
+            createPortalDropdown();
+            // createPortalDropdown only appends an empty container; populate it now
+            // since the portal $effect won't re-run (no dependency changed).
+            updatePortalDropdown();
           }
         }
       }}

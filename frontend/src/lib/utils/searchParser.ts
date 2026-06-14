@@ -587,8 +587,10 @@ export function formatFiltersForAPI(filters: SearchFilter[]): Record<string, str
         break;
 
       case 'daterange':
-        params.startDate = filter.value.toString();
-        params.endDate = filter.value2 ?? '';
+        // Backend GET /api/v2/detections reads snake_case start_date/end_date
+        // (see parseDetectionQueryParams). camelCase keys were silently ignored.
+        params.start_date = filter.value.toString();
+        params.end_date = filter.value2 ?? '';
         break;
 
       case 'verified':
@@ -599,10 +601,13 @@ export function formatFiltersForAPI(filters: SearchFilter[]): Record<string, str
         params.species = filter.value.toString();
         break;
 
+      // location and source are aliases for the same backend dimension: both map
+      // to the notes.source_node column (datastore AdvancedSearchFilters.Location),
+      // which the GET /api/v2/detections endpoint reads from the `location` query
+      // param. There is no separate `source` param on that endpoint, so source:
+      // intentionally serializes to params.location too. A query that sets both
+      // keys collides on this single param (last one wins) by design.
       case 'location':
-        params.location = filter.value.toString();
-        break;
-
       case 'source':
         params.location = filter.value.toString();
         break;
@@ -653,23 +658,16 @@ export function getFilterSuggestions(partialInput: string): string[] {
         break;
     }
   } else {
-    // Suggest filter types
-    const filterTypes = [
-      'confidence:',
-      'time:',
-      'date:',
-      'hour:',
-      'verified:',
-      'species:',
-      'source:',
-      'location:',
-      'locked:',
-    ];
-    filterTypes.forEach(type => {
-      if (type.startsWith(partialInput.toLowerCase())) {
-        suggestions.push(type);
+    // Suggest filter types. Derived from FILTER_KEYS so every recognized key
+    // (including daterange:) is offered and the list can never drift from the
+    // parser's accepted keys.
+    const lowerInput = partialInput.toLowerCase();
+    for (const key of FILTER_KEYS) {
+      const suggestion = `${key}:`;
+      if (suggestion.startsWith(lowerInput)) {
+        suggestions.push(suggestion);
       }
-    });
+    }
   }
 
   return suggestions;

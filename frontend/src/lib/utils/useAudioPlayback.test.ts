@@ -318,6 +318,51 @@ describe('useAudioPlayback', () => {
   });
 
   // ---------------------------------------------------------------
+  // 7b. togglePlayPause() must not clobber a queued transient retry
+  //     with a play error (regression for #954)
+  // ---------------------------------------------------------------
+  it('does not surface a play error while a transient retry is queued', async () => {
+    await renderAndWait();
+
+    // A transient load error (no permanent MediaError code) queues a retry.
+    fireAudioEvent('error');
+    expect(getState().error).toBeNull();
+
+    // play() rejects (browsers reject play() once the media has errored), but a
+    // retry is already pending, so the rejection must stay silent.
+    mockPlay.mockRejectedValueOnce(new DOMException('not supported', 'NotSupportedError'));
+
+    await getState().togglePlayPause();
+
+    expect(getState().error).toBeNull();
+  });
+
+  // ---------------------------------------------------------------
+  // 7c. A play press during a transient retry resumes once 'canplay' fires,
+  //     so the play intent is not lost (regression for #954)
+  // ---------------------------------------------------------------
+  it('resumes playback on canplay after a play press during a transient retry', async () => {
+    await renderAndWait();
+
+    // A transient load error queues a retry.
+    fireAudioEvent('error');
+
+    // User presses play during the retry; play() rejects and the intent is held.
+    mockPlay.mockRejectedValueOnce(new DOMException('not supported', 'NotSupportedError'));
+    await getState().togglePlayPause();
+    expect(getState().error).toBeNull();
+
+    const callsBefore = mockPlay.mock.calls.length;
+
+    // Once the reloaded clip can play, playback resumes automatically.
+    fireAudioEvent('canplay');
+    await waitFor(() => {
+      expect(mockPlay.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+    expect(getState().error).toBeNull();
+  });
+
+  // ---------------------------------------------------------------
   // 8. seek() clamps to [0, duration]
   // ---------------------------------------------------------------
   it('seek() clamps time to [0, duration]', async () => {
