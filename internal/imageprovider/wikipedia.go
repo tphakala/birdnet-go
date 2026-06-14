@@ -759,7 +759,7 @@ func (l *wikiMediaProvider) makeRateLimitedRequest(ctx context.Context, requestU
 
 // handleJSONParsingError handles JSON parsing errors by making a rate-limited diagnostic request
 // Always performs diagnostics to identify rate limiting and other error types
-func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, origErr error, attempt int) error {
+func (l *wikiMediaProvider) handleJSONParsingError(ctx context.Context, reqID, fullURL string, origErr error, attempt int) error {
 	log := GetLogger().With(
 		logger.String("provider", wikiProviderName),
 		logger.String("request_id", reqID),
@@ -770,7 +770,7 @@ func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, origEr
 	// This is important to detect rate limiting and blocking
 	// Use rate-limited request to ensure all requests respect the global limiter
 
-	debugResp, debugErr := l.makeRateLimitedRequest(context.Background(), fullURL)
+	debugResp, debugErr := l.makeRateLimitedRequest(ctx, fullURL)
 	if debugErr != nil {
 		log.Debug("Unable to diagnose API error",
 			logger.String("diagnostic_error", debugErr.Error()),
@@ -1047,12 +1047,12 @@ func logSuccessfulAPIResponse(resp *wikiAPIResponse) {
 }
 
 // handleJSONParsingErrorIfNeeded checks for JSON parsing errors and handles them appropriately.
-func (l *wikiMediaProvider) handleJSONParsingErrorIfNeeded(err error, reqID, fullURL string, attempt int) error {
+func (l *wikiMediaProvider) handleJSONParsingErrorIfNeeded(ctx context.Context, err error, reqID, fullURL string, attempt int) error {
 	if !strings.Contains(err.Error(), "invalid character") || !strings.Contains(err.Error(), "looking for beginning of value") {
 		return nil
 	}
 
-	if policyErr := l.handleJSONParsingError(reqID, fullURL, err, attempt); policyErr != nil {
+	if policyErr := l.handleJSONParsingError(ctx, reqID, fullURL, err, attempt); policyErr != nil {
 		return policyErr
 	}
 	return nil
@@ -1131,7 +1131,7 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID 
 		}
 
 		fullURL := buildDebugURL(params)
-		if policyErr := l.handleJSONParsingErrorIfNeeded(err, reqID, fullURL, attempt); policyErr != nil {
+		if policyErr := l.handleJSONParsingErrorIfNeeded(ctx, err, reqID, fullURL, attempt); policyErr != nil {
 			return nil, policyErr
 		}
 
