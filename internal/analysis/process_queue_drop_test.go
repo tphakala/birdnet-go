@@ -16,6 +16,7 @@ import (
 func TestRecordResultsQueueDrop_CountsDrops(t *testing.T) {
 	// Not parallel: mutates the package-global droppedDetectionsTotal counter.
 	before := droppedDetectionsTotal.Load()
+	t.Cleanup(func() { droppedDetectionsTotal.Store(before) })
 
 	got := recordResultsQueueDrop("test-source", "test-model", nil)
 	assert.Equal(t, before+1, got, "first drop should return previous total + 1")
@@ -32,6 +33,7 @@ func TestRecordResultsQueueDrop_CountsDrops(t *testing.T) {
 func TestDroppedDetectionsTotal_MonotonicUnderConcurrency(t *testing.T) {
 	// Not parallel: mutates the package-global counter.
 	before := droppedDetectionsTotal.Load()
+	t.Cleanup(func() { droppedDetectionsTotal.Store(before) })
 
 	const goroutines = 16
 	const dropsEach = 64
