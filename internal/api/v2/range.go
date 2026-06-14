@@ -249,9 +249,17 @@ func (c *Controller) GetRangeFilterStatus(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, birdnetInstance.RangeFilterStatus())
 }
 
-// GetRangeFilterSpeciesScores returns all species with their raw geomodel probability scores
+// GetRangeFilterSpeciesScores returns all species with their raw geomodel probability scores.
+//
+// This is a geomodel diagnostic endpoint: it intentionally uses the primary-only
+// GetProbableSpeciesWithSettings, NOT the multi-model union. Always-active
+// secondary-model species (bats/Perch) are excluded by design because they have
+// no geomodel and therefore no probability score; representing them with the
+// always-active 1.0 sentinel here would misrepresent it as a genuine 100%
+// geomodel confidence. Endpoints that report the active species set (POST
+// /range/species/test and the CSV export) do include secondary-model species.
 // @Summary Get range filter species scores
-// @Description Returns all species with raw geomodel scores, using current or custom location and week
+// @Description Returns all species with raw geomodel scores (primary model only), using current or custom location and week. Always-active secondary-model species (e.g. bats) are excluded by design as they have no geomodel score.
 // @Tags range
 // @Produce json
 // @Param lat query number false "Custom latitude (uses current settings if not provided)"
@@ -312,10 +320,12 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 		week = float32(parsed)
 	}
 
-	// Build test settings with zero threshold to get ALL species with scores
+	// Build test settings with zero threshold to get ALL geomodel species with scores
 	testSettings := c.buildTestSettings(lat, lon, 0)
 
-	// Get all species with their raw scores
+	// Primary-only by design: this endpoint reports raw geomodel scores, so
+	// always-active secondary-model species (bats/Perch) that have no geomodel
+	// score are intentionally not included here. See the function doc comment.
 	speciesScores, err := birdnetInstance.GetProbableSpeciesWithSettings(now, week, testSettings)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get species scores", http.StatusInternalServerError)
@@ -604,6 +614,12 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 			return c.HandleError(ctx, err, "Failed to get species list", http.StatusInternalServerError)
 		}
 	} else {
+		// No custom parameters: export the currently persisted range filter
+		// species (the applied filter, consistent with /range/species/list and
+		// /range/species/count). The custom-parameter branch above recomputes the
+		// full active set via getTestSpeciesList, which also includes always-active
+		// secondary-model species. The settings UI always sends parameters, so it
+		// hits that branch; this branch is the no-argument fallback.
 		settings := c.currentSettings()
 
 		birdnetInstance, _ := c.getBirdNETInstance()
@@ -636,7 +652,15 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 	return ctx.Blob(http.StatusOK, "text/csv; charset=utf-8", csvBytes)
 }
 
-// getTestSpeciesList gets species list with test parameters (helper for CSV export)
+// getTestSpeciesList gets species list with test parameters (helper for CSV export).
+//
+// It uses GetAllProbableSpeciesWithSettings (the multi-model union) rather than
+// the primary-only GetProbableSpeciesWithSettings so the CSV export matches what
+// the user sees in the Active Species view for the same coordinates and
+// threshold: range-filtered bird species plus always-active secondary-model
+// species (bats/Perch). This is the path the settings UI's CSV download takes
+// (it always sends parameters), so a user who sees bats in the Active Species
+// preview gets the same bats when exporting those parameters to CSV.
 func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilterSpecies, Location, float32, error) {
 	// Check if BirdNET is available
 	birdnetInstance, err := c.getBirdNETInstance()
@@ -650,8 +674,10 @@ func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilt
 	testDate := time.Now()
 	week := calculateWeek(testDate)
 
-	// Get probable species for the test parameters
-	speciesScores, err := birdnetInstance.GetProbableSpeciesWithSettings(testDate, week, testSettings)
+	// Get probable species for the test parameters, including always-active
+	// secondary-model species so the export stays consistent with the Active
+	// Species view (POST /range/species/test uses the same union method).
+	speciesScores, err := birdnetInstance.GetAllProbableSpeciesWithSettings(testDate, week, testSettings)
 	if err != nil {
 		return nil, Location{}, 0, err
 	}

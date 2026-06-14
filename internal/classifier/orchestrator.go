@@ -678,6 +678,15 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		}
 	}
 
+	// The primary's range-filtered scores arrive pre-sorted descending, but the
+	// secondary-model and bat species above are appended after that sort with a
+	// flat always-active score of 1.0. Re-sort the merged slice so the full set
+	// is ordered by score descending, matching the primary path's contract:
+	// otherwise always-active species (the maximum 1.0) would trail behind
+	// low-probability birds in consumers that do not re-sort (the CSV export and
+	// the range-filter test preview).
+	sort.Sort(ByScore(scores))
+
 	return scores, nil
 }
 
