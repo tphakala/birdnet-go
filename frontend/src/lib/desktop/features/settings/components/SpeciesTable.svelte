@@ -1,9 +1,9 @@
 <!--
   SpeciesTable.svelte
 
-  Purpose: Sortable table for displaying species data with score bars, badges,
-  search, and CSV download. Follows the system page design language from
-  SystemProcessTable/MetricStrip (surface tokens, icon pills, text-muted).
+  Purpose: Sortable table for displaying active species data with score bars,
+  status badges, search, and CSV download. A thin wrapper over the shared
+  SortableDataTable; the public props are unchanged.
 
   Props:
   - species: ActiveSpecies[] - Species data to display
@@ -17,8 +17,9 @@
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import { ChevronUp, ChevronDown, ChevronsUpDown, Search, Download, Bird } from '@lucide/svelte';
-  import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
+  import { Download, Bird } from '@lucide/svelte';
+  import SortableDataTable from '$lib/desktop/components/data/SortableDataTable.svelte';
+  import type { Column } from '$lib/desktop/components/data/DataTable.types';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   interface ActiveSpeciesItem {
@@ -50,12 +51,6 @@
     description,
   }: Props = $props();
 
-  type SortColumn = 'commonName' | 'scientificName' | 'score';
-
-  let sortColumn = $state<SortColumn>('score');
-  let sortDirection = $state<'asc' | 'desc'>('desc');
-  let searchQuery = $state('');
-
   // Pair each row with its visitor-locale display name. localizeSpeciesName reads
   // the dictionary store, so this re-runs on dictionary load and locale switch.
   let localizedSpecies = $derived.by((): LocalizedSpeciesItem[] =>
@@ -65,220 +60,117 @@
     }))
   );
 
-  let filteredSpecies = $derived.by(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return localizedSpecies;
-    // Match the localized name the visitor sees, plus the server common name and
-    // scientific name so search keeps working regardless of locale.
-    return localizedSpecies.filter(
-      s =>
-        s.displayName.toLowerCase().includes(query) ||
-        s.commonName.toLowerCase().includes(query) ||
-        s.scientificName.toLowerCase().includes(query)
-    );
-  });
+  // Derived so column headers re-evaluate t() on locale switch.
+  let columns = $derived.by((): Column<LocalizedSpeciesItem>[] => [
+    {
+      key: 'commonName',
+      header: t('settings.species.activeSpecies.columns.commonName'),
+      sortable: true,
+      sortValue: item => item.displayName,
+      defaultDirection: 'asc',
+    },
+    {
+      key: 'scientificName',
+      header: t('settings.species.activeSpecies.columns.scientificName'),
+      sortable: true,
+      sortValue: item => item.scientificName,
+      defaultDirection: 'asc',
+    },
+    {
+      key: 'score',
+      header: t('settings.species.activeSpecies.columns.score'),
+      sortable: true,
+      sortValue: item => item.score,
+      defaultDirection: 'desc',
+    },
+    {
+      key: 'status',
+      header: t('settings.species.activeSpecies.columns.status'),
+      align: 'right',
+      width: '12rem',
+    },
+  ]);
 
-  let sortedSpecies = $derived.by(() => {
-    return [...filteredSpecies].sort((a, b) => {
-      let cmp = 0;
-      switch (sortColumn) {
-        case 'commonName':
-          // Sort by the localized name shown in the column.
-          cmp = a.displayName.localeCompare(b.displayName);
-          break;
-        case 'scientificName':
-          cmp = a.scientificName.localeCompare(b.scientificName);
-          break;
-        case 'score':
-          cmp = a.score - b.score;
-          break;
-      }
-      return sortDirection === 'asc' ? cmp : -cmp;
-    });
-  });
-
-  function toggleSort(col: SortColumn): void {
-    if (sortColumn === col) {
-      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-      sortColumn = col;
-      sortDirection = col === 'score' ? 'desc' : 'asc';
-    }
+  // Match the localized name the visitor sees, plus the server common name and
+  // scientific name so search keeps working regardless of locale.
+  function searchAccessor(item: LocalizedSpeciesItem): string {
+    return `${item.displayName} ${item.commonName} ${item.scientificName}`;
   }
-
-  const columns: { key: SortColumn; label: string }[] = [
-    { key: 'commonName', label: 'settings.species.activeSpecies.columns.commonName' },
-    { key: 'scientificName', label: 'settings.species.activeSpecies.columns.scientificName' },
-    { key: 'score', label: 'settings.species.activeSpecies.columns.score' },
-  ];
 </script>
 
-<div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm">
-  <!-- Header -->
-  <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-100)]">
-    <div class="flex items-center gap-3">
-      {#if title}
-        <div class="flex items-center gap-2">
-          <div
-            class="p-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]"
-          >
-            <Bird class="w-4 h-4 text-[var(--color-success)]" />
-          </div>
-          <div>
-            <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">{title}</h3>
-            {#if description}
-              <p class="text-xs text-muted mt-0.5">{description}</p>
-            {/if}
-          </div>
-        </div>
-      {/if}
-      <span
-        class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted"
+<SortableDataTable
+  {columns}
+  data={localizedSpecies}
+  {loading}
+  {title}
+  {description}
+  {searchable}
+  searchPlaceholder={t('settings.species.activeSpecies.search.placeholder')}
+  searchAccessor={searchable ? searchAccessor : undefined}
+  defaultSortKey="score"
+  emptyTitle={t('settings.species.activeSpecies.empty.title')}
+  emptyDescription={t('settings.species.activeSpecies.empty.description')}
+  noResultsMessage={t('settings.species.activeSpecies.noResults')}
+  keyFn={(item, index) => `${item.scientificName}_${item.commonName}_${index}`}
+>
+  {#snippet icon()}
+    <div class="p-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]">
+      <Bird class="w-4 h-4 text-[var(--color-success)]" />
+    </div>
+  {/snippet}
+
+  {#snippet emptyIcon()}
+    <Bird class="size-12 mx-auto mb-3 opacity-30" />
+  {/snippet}
+
+  {#snippet headerActions()}
+    {#if onDownloadCsv}
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer hover:bg-black/[0.05] dark:hover:bg-white/[0.05] text-muted disabled:opacity-50 disabled:cursor-not-allowed"
+        onclick={onDownloadCsv}
+        disabled={species.length === 0}
+        title={t('settings.species.activeSpecies.downloadCsv')}
+        aria-label={t('settings.species.activeSpecies.downloadCsv')}
       >
-        {filteredSpecies.length}
-      </span>
-    </div>
+        <Download class="w-3.5 h-3.5" aria-hidden="true" />
+        <span>CSV</span>
+      </button>
+    {/if}
+  {/snippet}
 
-    <div class="flex items-center gap-2">
-      {#if searchable}
-        <div class="relative">
-          <Search
-            class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted"
-            aria-hidden="true"
-          />
-          <input
-            type="text"
-            bind:value={searchQuery}
-            placeholder={t('settings.species.activeSpecies.search.placeholder')}
-            aria-label={t('settings.species.activeSpecies.search.placeholder')}
-            autocomplete="off"
-            data-1p-ignore
-            data-lpignore="true"
-            data-form-type="other"
-            class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-          />
+  {#snippet renderCell({ column, item })}
+    {#if column.key === 'commonName'}
+      <span class="font-medium text-sm">{item.displayName}</span>
+    {:else if column.key === 'scientificName'}
+      <span class="text-xs text-muted italic">{item.scientificName}</span>
+    {:else if column.key === 'score'}
+      <div class="flex items-center gap-2">
+        <div class="w-16 h-1.5 rounded-full overflow-hidden bg-[var(--surface-300)]">
+          <div
+            class="h-full rounded-full bg-primary transition-[width] duration-600 ease-out"
+            style:width="{item.score * 100}%"
+          ></div>
         </div>
-      {/if}
-
-      {#if onDownloadCsv}
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer hover:bg-black/[0.05] dark:hover:bg-white/[0.05] text-muted disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={onDownloadCsv}
-          disabled={species.length === 0}
-          title={t('settings.species.activeSpecies.downloadCsv') || 'Download CSV'}
-          aria-label={t('settings.species.activeSpecies.downloadCsv') || 'Download CSV'}
-        >
-          <Download class="w-3.5 h-3.5" aria-hidden="true" />
-          <span>CSV</span>
-        </button>
-      {/if}
-    </div>
-  </div>
-
-  <!-- Table -->
-  {#if loading}
-    <div class="flex items-center justify-center py-12">
-      <div
-        class="inline-block w-8 h-8 border-4 border-[var(--surface-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-      ></div>
-    </div>
-  {:else if sortedSpecies.length > 0}
-    <ResizableContainer defaultHeight={512} minHeight={200} maxHeight={800}>
-      <table class="w-full text-sm">
-        <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
-          <tr class="border-b border-[var(--border-100)]">
-            {#each columns as col (col.key)}
-              <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-                role="columnheader"
-                tabindex="0"
-                aria-sort={sortColumn === col.key
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none'}
-                onclick={() => toggleSort(col.key)}
-                onkeydown={(e: KeyboardEvent) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    toggleSort(col.key);
-                  }
-                }}
-              >
-                <div class="flex items-center gap-1">
-                  {t(col.label)}
-                  {#if sortColumn === col.key}
-                    {#if sortDirection === 'asc'}
-                      <ChevronUp class="w-3 h-3" />
-                    {:else}
-                      <ChevronDown class="w-3 h-3" />
-                    {/if}
-                  {:else}
-                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                  {/if}
-                </div>
-              </th>
-            {/each}
-            <th class="text-right py-2 px-3 text-xs font-medium text-muted w-48">
-              {t('settings.species.activeSpecies.columns.status')}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each sortedSpecies as item, index (`${item.scientificName}_${item.commonName}_${index}`)}
-            <tr
-              class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
-            >
-              <td class="py-2 px-3">
-                <span class="font-medium text-sm">{item.displayName}</span>
-              </td>
-              <td class="py-2 px-3">
-                <span class="text-xs text-muted italic">{item.scientificName}</span>
-              </td>
-              <td class="py-2 px-3">
-                <div class="flex items-center gap-2">
-                  <div class="w-16 h-1.5 rounded-full overflow-hidden bg-[var(--surface-300)]">
-                    <div
-                      class="h-full rounded-full bg-primary transition-[width] duration-600 ease-out"
-                      style:width="{item.score * 100}%"
-                    ></div>
-                  </div>
-                  <span class="font-mono tabular-nums text-xs">{item.score.toFixed(2)}</span>
-                </div>
-              </td>
-              <td class="py-2 px-3">
-                <div class="flex items-center gap-1.5 justify-end flex-nowrap">
-                  {#if item.isManuallyIncluded}
-                    <span
-                      class="inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium badge-status-success"
-                    >
-                      + {t('settings.species.activeSpecies.badges.included')}
-                    </span>
-                  {/if}
-                  {#if item.hasCustomConfig}
-                    <span
-                      class="inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium bg-teal-500/15 text-teal-600 dark:text-teal-400"
-                    >
-                      &#9733; {t('settings.species.activeSpecies.badges.configured')}
-                    </span>
-                  {/if}
-                </div>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </ResizableContainer>
-  {:else if searchQuery}
-    <div class="text-center py-8 text-muted">
-      <p class="text-sm">{t('settings.species.activeSpecies.noResults')}</p>
-    </div>
-  {:else}
-    <div class="text-center py-8 text-muted">
-      <Bird class="size-12 mx-auto mb-3 opacity-30" />
-      <p class="text-sm font-medium">{t('settings.species.activeSpecies.empty.title')}</p>
-      <p class="text-xs mt-1">{t('settings.species.activeSpecies.empty.description')}</p>
-    </div>
-  {/if}
-</div>
+        <span class="font-mono tabular-nums text-xs">{item.score.toFixed(2)}</span>
+      </div>
+    {:else if column.key === 'status'}
+      <div class="flex items-center gap-1.5 justify-end flex-nowrap">
+        {#if item.isManuallyIncluded}
+          <span
+            class="inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium badge-status-success"
+          >
+            + {t('settings.species.activeSpecies.badges.included')}
+          </span>
+        {/if}
+        {#if item.hasCustomConfig}
+          <span
+            class="inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium bg-teal-500/15 text-teal-600 dark:text-teal-400"
+          >
+            &#9733; {t('settings.species.activeSpecies.badges.configured')}
+          </span>
+        {/if}
+      </div>
+    {/if}
+  {/snippet}
+</SortableDataTable>

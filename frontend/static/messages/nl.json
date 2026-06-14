@@ -3694,6 +3694,15 @@
         "emptyState": {
           "title": "Nog geen configuraties.",
           "description": "Klik op \"Configuratie Toevoegen\" om soorten detectie instellingen aan te passen."
+        },
+        "table": {
+          "columnScientificName": "Scientific Name",
+          "intervalDefault": "Default",
+          "intervalDefaultTooltip": "0 = use the global default interval",
+          "noActions": "None",
+          "searchPlaceholder": "Search species...",
+          "noResults": "No matching configurations",
+          "editDisabledReason": "Save or close the current editor before editing another species"
         }
       },
       "synonyms": {

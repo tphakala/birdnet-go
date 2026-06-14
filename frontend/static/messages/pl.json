@@ -3694,6 +3694,15 @@
         "emptyState": {
           "title": "Brak konfiguracji.",
           "description": "Kliknij \"Dodaj Konfigurację\" aby dostosować ustawienia wykrywania gatunków."
+        },
+        "table": {
+          "columnScientificName": "Scientific Name",
+          "intervalDefault": "Default",
+          "intervalDefaultTooltip": "0 = use the global default interval",
+          "noActions": "None",
+          "searchPlaceholder": "Search species...",
+          "noResults": "No matching configurations",
+          "editDisabledReason": "Save or close the current editor before editing another species"
         }
       },
       "synonyms": {
