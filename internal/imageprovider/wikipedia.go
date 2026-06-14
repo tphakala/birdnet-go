@@ -154,9 +154,20 @@ type wikiImageInfo struct {
 }
 
 // wikiExtMetaValue models a single extmetadata field, which wraps its payload
-// in a "value" key.
+// in a "value" key. Value is typed any because MediaWiki extmetadata mixes
+// value types: most fields are strings, but some (e.g. CommonsMetadataExtension)
+// carry a JSON number. A string-typed field would make encoding/json reject the
+// entire response. Read string fields via extMetaString.
 type wikiExtMetaValue struct {
-	Value string `json:"value"`
+	Value any `json:"value"`
+}
+
+// extMetaString returns the named extmetadata field's value as a string, or ""
+// if the key is absent or its value is not a string. This mirrors the tolerant
+// behavior of the previous jason-based lookups.
+func extMetaString(ext map[string]wikiExtMetaValue, key string) string {
+	s, _ := ext[key].Value.(string)
+	return s
 }
 
 // isCircuitOpen checks if the circuit breaker is open (blocking requests)
@@ -908,14 +919,8 @@ func (l *wikiMediaProvider) logNetworkError(category apiErrorCategory, reqID, sp
 // getTroubleshootingHint provides actionable troubleshooting advice based on error category
 func getTroubleshootingHint(category apiErrorCategory) string {
 	switch category.Type {
-	case "json_parsing_failure":
-		return "This usually means the species has no Wikipedia page. Check if scientific name is correct or if alternative names exist."
 	case "network_failure":
 		return "Check network connectivity and Wikipedia API status. Consider implementing backoff or fallback providers."
-	case "api_structured_error":
-		return "Wikipedia API rejected the request. Check API parameters, rate limits, or API changes."
-	case "malformed_response":
-		return "Wikipedia API response format unexpected. May indicate API changes or temporary service issues."
 	default:
 		return "Review error details and consider checking Wikipedia API documentation for changes."
 	}
@@ -1210,14 +1215,17 @@ func logNoPages(resp *wikiAPIResponse, params map[string]string, fullURL string)
 
 // logFirstPageContent logs the first page content at debug level for troubleshooting.
 func logFirstPageContent(page *wikiPage, fullURL string) {
+	log := GetLogger().With(logger.String("provider", wikiProviderName))
 	data, err := json.Marshal(page)
 	if err != nil {
+		log.Debug("Could not format first page for logging",
+			logger.Error(err),
+			logger.String("request_url", fullURL))
 		return
 	}
-	GetLogger().With(logger.String("provider", wikiProviderName)).
-		Debug("First page content from API response",
-			logger.String("page_content", string(data)),
-			logger.String("request_url", fullURL))
+	log.Debug("First page content from API response",
+		logger.String("page_content", string(data)),
+		logger.String("request_url", fullURL))
 }
 
 // queryAndGetFirstPageWithLimiter queries Wikipedia with given parameters using the specified rate limiter.
@@ -1555,10 +1563,10 @@ func (l *wikiMediaProvider) queryAuthorInfo(ctx context.Context, reqID, thumbnai
 	}
 
 	// Extract specific fields (Artist, LicenseShortName, LicenseUrl).
-	// These fields are optional; missing keys decode to empty strings.
-	artistHTML := extMetadata["Artist"].Value
-	licenseName := extMetadata["LicenseShortName"].Value
-	licenseURL := extMetadata["LicenseUrl"].Value
+	// These fields are optional; missing or non-string values yield "".
+	artistHTML := extMetaString(extMetadata, "Artist")
+	licenseName := extMetaString(extMetadata, "LicenseShortName")
+	licenseURL := extMetaString(extMetadata, "LicenseUrl")
 
 	log.Debug("Extracted raw metadata fields",
 		logger.Int("artist_html_len", len(artistHTML)),
@@ -1709,15 +1717,14 @@ func extractHref(link *html.Node) string {
 	return ""
 }
 
-// extractText extracts the inner text from an anchor tag.
+// extractText extracts the inner visible text from an anchor tag, including text
+// split across multiple child nodes (e.g. "<a>John <b>Doe</b></a>"). Rendering
+// the whole node and stripping tags via htmlToText avoids the previous bug where
+// only the first child node was read, truncating multi-part author names.
 func extractText(link *html.Node) string {
-	if link.FirstChild != nil {
-		var b bytes.Buffer
-		err := html.Render(&b, link.FirstChild)
-		if err != nil {
-			return ""
-		}
-		return htmlToText(b.String())
+	var b bytes.Buffer
+	if err := html.Render(&b, link); err != nil {
+		return ""
 	}
-	return ""
+	return htmlToText(b.String())
 }

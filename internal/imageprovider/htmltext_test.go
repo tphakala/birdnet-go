@@ -24,6 +24,7 @@ func TestHTMLToText(t *testing.T) {
 		{"skips style", "<style>.c{color:red}</style><p>Text</p>", "Text"},
 		{"empty input", "", ""},
 		{"separates block text", "<p>rate</p><p>limit</p>", "rate limit"},
+		{"separates adjacent inline", "<b>foo</b><b>bar</b>", "foo bar"},
 	}
 
 	for _, tt := range tests {
