@@ -3684,16 +3684,22 @@
         "configureActions": "Configure Actions",
         "actionsConfigured": "Configured",
         "list": {
-          "threshold": "Threshold:",
-          "interval": "Interval:",
-          "intervalNone": "None",
-          "actionBadge": "Action",
           "editTitle": "Edit configuration",
           "removeTitle": "Remove configuration"
         },
         "emptyState": {
           "title": "No configurations yet.",
           "description": "Click \"Add Configuration\" to customize species detection settings."
+        },
+        "table": {
+          "columnScientificName": "Scientific Name",
+          "intervalDefault": "Default",
+          "intervalDefaultTooltip": "0 = use the global default interval",
+          "noActions": "None",
+          "searchPlaceholder": "Search species...",
+          "noResults": "No matching configurations",
+          "editDisabledReason": "Save or close the current editor before editing another species",
+          "actionsDisabledBusy": "Please wait for the current operation to finish"
         }
       },
       "synonyms": {

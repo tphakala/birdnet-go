@@ -50,7 +50,7 @@
   import SpeciesTable from '$lib/desktop/features/settings/components/SpeciesTable.svelte';
   import SpeciesListCard from '$lib/desktop/features/settings/components/SpeciesListCard.svelte';
   import SpeciesConfigEditor from '$lib/desktop/features/settings/components/SpeciesConfigEditor.svelte';
-  import SpeciesConfigList from '$lib/desktop/features/settings/components/SpeciesConfigList.svelte';
+  import SpeciesConfigTable from '$lib/desktop/features/settings/components/SpeciesConfigTable.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
@@ -291,7 +291,7 @@
   }
 
   function extractScientificName(prediction: string): string {
-    // Format: "ScientificName (CommonName)" — extract before the first opening paren
+    // Format: "ScientificName (CommonName)": extract before the first opening paren
     // Use indexOf (not lastIndexOf) since scientific names never contain parentheses
     // but common names can, e.g., "Herring Gull (European)"
     const parenIndex = prediction.indexOf(' (');
@@ -1354,39 +1354,6 @@
 <!-- Custom Configuration Tab Content -->
 {#snippet configTabContent()}
   <div class="space-y-4">
-    <!-- Header with Add button -->
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <div class="p-1.5 rounded-lg bg-teal-500/10">
-          <Settings2 class="w-4 h-4 text-teal-500" />
-        </div>
-        <h3
-          class="text-xs font-semibold uppercase tracking-wider text-[var(--color-base-content)]/60"
-        >
-          {t('settings.species.customConfiguration.title')}
-        </h3>
-        {#if Object.keys(settings.config).length > 0}
-          <span
-            class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-[var(--color-base-content)]/60"
-          >
-            {Object.keys(settings.config).length}
-          </span>
-        {/if}
-      </div>
-      {#if !editorOpen}
-        <button
-          type="button"
-          class="inline-flex items-center justify-center gap-2 h-8 px-3 text-xs font-medium rounded-lg bg-teal-500 text-white hover:bg-teal-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          data-testid="add-configuration-button"
-          onclick={() => openEditor()}
-          disabled={store.isLoading || store.isSaving}
-        >
-          <Plus class="size-3.5" />
-          {t('settings.species.customConfiguration.addConfiguration')}
-        </button>
-      {/if}
-    </div>
-
     <!-- Editor panel (conditional, keyed to reset state on species change) -->
     {#if editorOpen}
       <div bind:this={editorElement}>
@@ -1413,12 +1380,13 @@
       </div>
     {/if}
 
-    <!-- Config list -->
-    <SpeciesConfigList
+    <!-- Config table (owns its header, count badge, search, and Add button) -->
+    <SpeciesConfigTable
       configs={settings.config}
       scientificNameMap={speciesNameMaps.commonToScientific}
       {editingSpecies}
       disabled={store.isLoading || store.isSaving}
+      onAdd={() => openEditor()}
       onEdit={openEditor}
       onDelete={species => {
         removeConfig(species);

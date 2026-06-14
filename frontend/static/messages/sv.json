@@ -3684,16 +3684,22 @@
         "configureActions": "Konfigurera åtgärder",
         "actionsConfigured": "Konfigurerade",
         "list": {
-          "threshold": "Tröskelvärde:",
-          "interval": "Intervall:",
-          "intervalNone": "Inget",
-          "actionBadge": "Åtgärd",
           "editTitle": "Redigera konfiguration",
           "removeTitle": "Ta bort konfiguration"
         },
         "emptyState": {
           "title": "Inga konfigurationer ännu.",
           "description": "Klicka på \"Lägg till konfiguration\" för att anpassa artdetekteringsinställningar."
+        },
+        "table": {
+          "columnScientificName": "Vetenskapligt namn",
+          "intervalDefault": "Standard",
+          "intervalDefaultTooltip": "0 = använd det globala standardintervallet",
+          "noActions": "Inget",
+          "searchPlaceholder": "Sök arter...",
+          "noResults": "Inga matchande konfigurationer",
+          "editDisabledReason": "Spara eller stäng den aktuella redigeraren innan du redigerar en annan art",
+          "actionsDisabledBusy": "Vänligen vänta tills den aktuella åtgärden är slutförd"
         }
       },
       "synonyms": {

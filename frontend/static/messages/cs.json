@@ -3684,16 +3684,22 @@
         "configureActions": "Nakonfigurovat akce",
         "actionsConfigured": "Nakonfigurováno",
         "list": {
-          "threshold": "Práh:",
-          "interval": "Interval:",
-          "intervalNone": "Žádný",
-          "actionBadge": "Akce",
           "editTitle": "Upravit konfiguraci",
           "removeTitle": "Odstranit konfiguraci"
         },
         "emptyState": {
           "title": "Zatím žádné konfigurace.",
           "description": "Klikněte na \"Přidat konfiguraci\" pro přizpůsobení nastavení detekce druhů."
+        },
+        "table": {
+          "columnScientificName": "Vědecký název",
+          "intervalDefault": "Výchozí",
+          "intervalDefaultTooltip": "0 = použít globální výchozí interval",
+          "noActions": "Žádný",
+          "searchPlaceholder": "Hledat druhy...",
+          "noResults": "Žádné odpovídající konfigurace",
+          "editDisabledReason": "Před úpravou jiného druhu uložte nebo zavřete aktuální editor",
+          "actionsDisabledBusy": "Počkejte prosím na dokončení aktuální operace"
         }
       },
       "synonyms": {

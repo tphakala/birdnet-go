@@ -3684,16 +3684,22 @@
         "configureActions": "Konfiguruj Akcje",
         "actionsConfigured": "Skonfigurowane",
         "list": {
-          "threshold": "Próg:",
-          "interval": "Interwał:",
-          "intervalNone": "Brak",
-          "actionBadge": "Akcja",
           "editTitle": "Edytuj konfigurację",
           "removeTitle": "Usuń konfigurację"
         },
         "emptyState": {
           "title": "Brak konfiguracji.",
           "description": "Kliknij \"Dodaj Konfigurację\" aby dostosować ustawienia wykrywania gatunków."
+        },
+        "table": {
+          "columnScientificName": "Nazwa naukowa",
+          "intervalDefault": "Domyślne",
+          "intervalDefaultTooltip": "0 = użyj globalnego domyślnego interwału",
+          "noActions": "Brak",
+          "searchPlaceholder": "Szukaj gatunków...",
+          "noResults": "Brak pasujących konfiguracji",
+          "editDisabledReason": "Zapisz lub zamknij obecny edytor przed edycją innego gatunku",
+          "actionsDisabledBusy": "Proszę czekać na zakończenie obecnej operacji"
         }
       },
       "synonyms": {

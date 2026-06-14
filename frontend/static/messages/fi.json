@@ -3684,16 +3684,22 @@
         "configureActions": "Määritä toiminnot",
         "actionsConfigured": "Määritetty",
         "list": {
-          "threshold": "Kynnysarvo:",
-          "interval": "Väli:",
-          "intervalNone": "Ei mitään",
-          "actionBadge": "Toiminto",
           "editTitle": "Muokkaa määritystä",
           "removeTitle": "Poista määritys"
         },
         "emptyState": {
           "title": "Määrityksiä ei vielä ole.",
           "description": "Napsauta \"Lisää määritys\" mukauttaaksesi lajintunnistusasetuksia."
+        },
+        "table": {
+          "columnScientificName": "Tieteellinen nimi",
+          "intervalDefault": "Oletus",
+          "intervalDefaultTooltip": "0 = käytä globaalia oletusväliä",
+          "noActions": "Ei mitään",
+          "searchPlaceholder": "Etsi lajeja...",
+          "noResults": "Ei vastaavia asetuksia",
+          "editDisabledReason": "Tallenna tai sulje nykyinen muokkain ennen toisen lajin muokkaamista",
+          "actionsDisabledBusy": "Odota, että nykyinen toiminto on valmis"
         }
       },
       "synonyms": {

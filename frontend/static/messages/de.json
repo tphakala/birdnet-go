@@ -3684,16 +3684,22 @@
         "configureActions": "Aktionen konfigurieren",
         "actionsConfigured": "Konfiguriert",
         "list": {
-          "threshold": "Schwellenwert:",
-          "interval": "Intervall:",
-          "intervalNone": "Keines",
-          "actionBadge": "Aktion",
           "editTitle": "Konfiguration bearbeiten",
           "removeTitle": "Konfiguration entfernen"
         },
         "emptyState": {
           "title": "Noch keine Konfigurationen.",
           "description": "Klicken Sie auf \"Konfiguration hinzufügen\", um die Artenerkennungseinstellungen anzupassen."
+        },
+        "table": {
+          "columnScientificName": "Wissenschaftlicher Name",
+          "intervalDefault": "Standard",
+          "intervalDefaultTooltip": "0 = globales Standardintervall verwenden",
+          "noActions": "Keines",
+          "searchPlaceholder": "Arten suchen...",
+          "noResults": "Keine passenden Konfigurationen",
+          "editDisabledReason": "Speichern oder schließen Sie den aktuellen Editor, bevor Sie eine andere Art bearbeiten",
+          "actionsDisabledBusy": "Bitte warten Sie, bis der aktuelle Vorgang abgeschlossen ist"
         }
       },
       "synonyms": {

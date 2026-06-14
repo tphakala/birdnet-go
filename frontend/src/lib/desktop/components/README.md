@@ -23,7 +23,8 @@ This folder contains **shared components** used across the application. Feature-
 ## Data
 
 - `ConfidenceCircle.svelte` - Circular confidence indicator with progress ring
-- `DataTable.svelte` - Generic data table with sorting and pagination
+- `DataTable.svelte` - Generic data table with controlled (parent-driven) sorting
+- `SortableDataTable.svelte` - Card-wrapped table with built-in client-side sorting and search, header bar (icon/title/count/search/actions), and loading/empty/no-results states; composes SortableHeader, ResizableContainer, and EmptyState
 - `StatsCard.svelte` - Statistical information card
 - `StatusBadges.svelte` - Status indicators (verified, locked, etc.)
 - `WeatherDetails.svelte` - Detailed weather display for modals (vertical layout, icons always visible)

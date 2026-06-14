@@ -3474,7 +3474,7 @@
       },
       "privateMode": {
         "label": "Bejelentkezés megkövetelése az összes felhasználói felület oldalhoz (privát mód)",
-        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül \u2013 bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
+        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül – bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
       },
       "publicAccess": {
         "title": "Nyilvános hozzáférés",
@@ -3684,16 +3684,22 @@
         "configureActions": "Műveletek konfigurálása",
         "actionsConfigured": "Konfigurálva",
         "list": {
-          "threshold": "Küszöbérték:",
-          "interval": "Intervallum:",
-          "intervalNone": "Nincs",
-          "actionBadge": "Művelet",
           "editTitle": "Konfiguráció szerkesztése",
           "removeTitle": "Konfiguráció eltávolítása"
         },
         "emptyState": {
           "title": "Még nincs konfiguráció.",
           "description": "Kattintson a \"Konfiguráció hozzáadása\" gombra a faj detektálási beállítások testreszabásához."
+        },
+        "table": {
+          "columnScientificName": "Tudományos név",
+          "intervalDefault": "Alapértelmezett",
+          "intervalDefaultTooltip": "0 = globális alapértelmezett intervallum használata",
+          "noActions": "Nincs",
+          "searchPlaceholder": "Fajok keresése...",
+          "noResults": "Nincs megfelelő konfiguráció",
+          "editDisabledReason": "Mentse el vagy zárja be a jelenlegi szerkesztőt egy másik faj szerkesztése előtt",
+          "actionsDisabledBusy": "Kérjük, várja meg a jelenlegi művelet befejezését"
         }
       },
       "synonyms": {
