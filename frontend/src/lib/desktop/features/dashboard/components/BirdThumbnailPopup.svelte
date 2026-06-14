@@ -59,6 +59,16 @@
   const POPUP_WIDTH = 320;
   const POPUP_HEIGHT_ESTIMATE = 320;
 
+  // Positioning tuning constants (px).
+  const POPUP_VIEWPORT_MARGIN = 10; // minimum gap kept from the viewport edges
+  const POPUP_OFFSET_X = 10; // horizontal gap from the trigger
+  const POPUP_OFFSET_Y = 10; // vertical gap from the trigger when below
+  const POPUP_OFFSET_Y_ABOVE = 20; // larger vertical gap when above, for separation
+  const POPUP_ARROW_SIZE = 12; // arrow square size, matches the w-3/h-3 classes
+  // Flip to the 'above' placement once free space below drops under the popup
+  // height plus this buffer, so it flips before the trigger reaches the edge.
+  const POPUP_EARLY_FLIP_BUFFER = 200;
+
   // State for popup visibility and positioning
   let showPopup = $state(false);
   let popupX = $state(0);
@@ -102,8 +112,10 @@
       const response = await fetch(url);
       if (response.ok) {
         imageAttribution = (await response.json()) as ImageAttribution;
-      } else {
-        // Allow a later hover to retry a transient non-OK response.
+      } else if (response.status >= 500) {
+        // Transient server error: allow a later hover to retry. A 4xx (e.g. a
+        // 404 when a species has no attribution) is permanent, so keep the
+        // dedupe key to avoid re-querying the API on every subsequent hover.
         lastFetchedScientificName = '';
       }
     } catch (error) {
@@ -166,11 +178,10 @@
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     const popupWidth = POPUP_WIDTH;
-    const popupHeight = popupElement?.offsetHeight ?? POPUP_HEIGHT_ESTIMATE;
-    const viewportMargin = 10; // Keep the popup this far from the viewport edges
-    const offsetX = 10; // Horizontal offset from trigger
-    const offsetY = 10; // Vertical offset from trigger when below
-    const offsetYAbove = 20; // Larger vertical offset when above for better separation
+    // offsetHeight is 0 before the first layout pass (or while hidden); fall
+    // back to the estimate then instead of positioning against a 0 height.
+    const measuredHeight = popupElement?.offsetHeight ?? 0;
+    const popupHeight = measuredHeight > 0 ? measuredHeight : POPUP_HEIGHT_ESTIMATE;
 
     // Calculate available space in each direction
     const spaceAbove = triggerRect.top;
@@ -180,52 +191,55 @@
 
     // Determine horizontal position
     let x: number;
-    if (spaceRight >= popupWidth + offsetX) {
+    if (spaceRight >= popupWidth + POPUP_OFFSET_X) {
       // Position to the right of trigger
-      x = triggerRect.right + offsetX;
-    } else if (spaceLeft >= popupWidth + offsetX) {
+      x = triggerRect.right + POPUP_OFFSET_X;
+    } else if (spaceLeft >= popupWidth + POPUP_OFFSET_X) {
       // Position to the left of trigger
-      x = triggerRect.left - popupWidth - offsetX;
+      x = triggerRect.left - popupWidth - POPUP_OFFSET_X;
     } else {
       // Center horizontally if not enough space on sides
       x = Math.max(
-        viewportMargin,
-        Math.min(viewportWidth / 2 - popupWidth / 2, viewportWidth - popupWidth - viewportMargin)
+        POPUP_VIEWPORT_MARGIN,
+        Math.min(
+          viewportWidth / 2 - popupWidth / 2,
+          viewportWidth - popupWidth - POPUP_VIEWPORT_MARGIN
+        )
       );
     }
     // Ensure popup stays within viewport bounds horizontally
-    popupX = Math.max(viewportMargin, Math.min(x, viewportWidth - popupWidth - viewportMargin));
-
-    // Point the arrow at the trigger's horizontal center, clamped so it stays
-    // within the popup body.
-    const arrowSize = 12; // matches w-3/h-3
-    const triggerCenterX = triggerRect.left + triggerRect.width / 2;
-    popupArrowX = Math.max(
-      arrowSize,
-      Math.min(triggerCenterX - popupX, popupWidth - arrowSize * 2)
+    popupX = Math.max(
+      POPUP_VIEWPORT_MARGIN,
+      Math.min(x, viewportWidth - popupWidth - POPUP_VIEWPORT_MARGIN)
     );
 
-    // Determine vertical position. Add an extra buffer so the popup flips to
-    // the 'above' placement earlier (before the trigger reaches the very edge).
-    const earlyTriggerBuffer = 200;
+    // Align the arrow's midpoint (not its left edge) with the trigger center,
+    // clamped so the arrow stays within the popup body and clear of its corners.
+    const triggerCenterX = triggerRect.left + triggerRect.width / 2;
+    popupArrowX = Math.max(
+      POPUP_ARROW_SIZE,
+      Math.min(triggerCenterX - popupX - POPUP_ARROW_SIZE / 2, popupWidth - POPUP_ARROW_SIZE * 2)
+    );
 
-    if (spaceBelow >= popupHeight + offsetY + earlyTriggerBuffer) {
+    // Determine vertical position. Flip to 'above' early via the buffer (before
+    // the trigger reaches the very edge of the viewport).
+    if (spaceBelow >= popupHeight + POPUP_OFFSET_Y + POPUP_EARLY_FLIP_BUFFER) {
       // Below: anchor the popup's TOP edge just under the trigger row. Height
       // independent, which is why the 'below' case never misaligned.
       popupPosition = 'below';
-      popupTop = triggerRect.bottom + offsetY;
+      popupTop = triggerRect.bottom + POPUP_OFFSET_Y;
       popupBottom = null;
-    } else if (spaceAbove >= popupHeight + offsetYAbove) {
+    } else if (spaceAbove >= popupHeight + POPUP_OFFSET_Y_ABOVE) {
       // Above: anchor the popup's BOTTOM edge just above the trigger row by
       // pinning `bottom` to the viewport. Aligning the bottom edge means the
       // exact height is irrelevant and the popup grows upward from the row.
       popupPosition = 'above';
-      popupBottom = viewportHeight - triggerRect.top + offsetYAbove;
+      popupBottom = viewportHeight - triggerRect.top + POPUP_OFFSET_Y_ABOVE;
       popupTop = null;
     } else {
       // Not enough room either way: pin near the top of the viewport.
       popupPosition = 'below';
-      popupTop = viewportMargin;
+      popupTop = POPUP_VIEWPORT_MARGIN;
       popupBottom = null;
     }
   }
