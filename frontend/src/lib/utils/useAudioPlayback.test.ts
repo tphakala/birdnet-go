@@ -338,6 +338,31 @@ describe('useAudioPlayback', () => {
   });
 
   // ---------------------------------------------------------------
+  // 7c. A play press during a transient retry resumes once 'canplay' fires,
+  //     so the play intent is not lost (regression for #954)
+  // ---------------------------------------------------------------
+  it('resumes playback on canplay after a play press during a transient retry', async () => {
+    await renderAndWait();
+
+    // A transient load error queues a retry.
+    fireAudioEvent('error');
+
+    // User presses play during the retry; play() rejects and the intent is held.
+    mockPlay.mockRejectedValueOnce(new DOMException('not supported', 'NotSupportedError'));
+    await getState().togglePlayPause();
+    expect(getState().error).toBeNull();
+
+    const callsBefore = mockPlay.mock.calls.length;
+
+    // Once the reloaded clip can play, playback resumes automatically.
+    fireAudioEvent('canplay');
+    await waitFor(() => {
+      expect(mockPlay.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+    expect(getState().error).toBeNull();
+  });
+
+  // ---------------------------------------------------------------
   // 8. seek() clamps to [0, duration]
   // ---------------------------------------------------------------
   it('seek() clamps time to [0, duration]', async () => {

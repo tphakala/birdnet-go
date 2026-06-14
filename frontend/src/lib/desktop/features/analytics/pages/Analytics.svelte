@@ -4,7 +4,6 @@
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { formatNumber, formatDateTime } from '$lib/utils/formatters';
   import { getLogger } from '$lib/utils/logger';
-  import { safeArrayAccess } from '$lib/utils/security';
   import { XCircle } from '@lucide/svelte';
   import { onMount, type Snippet } from 'svelte';
   import FilterForm from '../components/forms/FilterForm.svelte';
@@ -298,8 +297,10 @@
         calculatedRange: startDate && endDate ? `${startDate} to ${endDate}` : 'unlimited',
       });
 
-      // Run all API calls in parallel
-      const results = await Promise.allSettled([
+      // Run all API calls in parallel. Each fetcher logs and swallows its own
+      // errors and guards its own commit with the fetch-sequence token, so
+      // allSettled always fulfills and there is nothing to inspect afterwards.
+      await Promise.allSettled([
         fetchSummaryData(seq, startDate || '', endDate || ''),
         fetchSpeciesSummary(seq, startDate || '', endDate || ''),
         fetchRecentDetections(seq),
@@ -307,26 +308,6 @@
         fetchTrendData(seq, startDate || '', endDate || ''),
         fetchNewSpeciesData(seq, startDate || '', endDate || ''),
       ]);
-
-      // A newer fetchData() superseded this run; leave its state and loading flag alone.
-      if (seq !== analyticsFetchSeq) return;
-
-      // Log any failed API calls (these show up in both dev and prod)
-      const apiNames = ['Summary', 'Species', 'Recent', 'TimeOfDay', 'Trend', 'NewSpecies'];
-      const failures = results
-        .map((result, index) => ({ result, name: safeArrayAccess(apiNames, index) ?? 'Unknown' }))
-        .filter(({ result }) => result.status === 'rejected');
-
-      if (failures.length > 0) {
-        failures.forEach(({ result, name }) => {
-          const reason = result.status === 'rejected' ? result.reason : 'Unknown error';
-          logger.error(`${name} API call failed during filter operation`, reason, {
-            timePeriod: filters.timePeriod,
-            startDate,
-            endDate,
-          });
-        });
-      }
     } catch (err) {
       if (seq !== analyticsFetchSeq) return;
       logger.error('General error fetching analytics data:', err);

@@ -139,6 +139,10 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   let canplayTimeoutId: ReturnType<typeof setTimeout> | undefined;
   let audioRetryCount = 0;
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  // True when the user pressed play during an active load retry; consumed by the
+  // 'canplay' handler to resume playback once the reloaded clip is ready, so the
+  // play intent is not lost when the transient error is suppressed.
+  let playRequestedAfterRetry = false;
   let eventListeners: Array<{
     element: HTMLElement | HTMLAudioElement | Document | Window | null;
     event: string;
@@ -267,8 +271,12 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       } catch (err) {
         // The media 'error' handler can run before play() rejects and may have
         // queued a transient retry. Don't clobber that with an error message: the
-        // retry can still succeed, and 'canplay' clears the error on success.
-        if (audioRetryCount > 0) return;
+        // retry can still succeed. Remember the play intent so 'canplay' resumes
+        // playback once the reloaded clip is ready, instead of leaving it paused.
+        if (audioRetryCount > 0) {
+          playRequestedAfterRetry = true;
+          return;
+        }
         logger.error('Playback failed', err as Error);
         error = t('media.audio.playError');
       }
@@ -304,6 +312,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
         duration = 0;
         error = null;
         audioRetryCount = 0;
+        playRequestedAfterRetry = false;
         if (audioRetryTimer) {
           clearTimeout(audioRetryTimer);
           audioRetryTimer = undefined;
@@ -381,6 +390,15 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       if (audioRetryTimer) {
         clearTimeout(audioRetryTimer);
         audioRetryTimer = undefined;
+      }
+      // If the user pressed play while the clip was still loading/encoding and we
+      // suppressed the transient error, resume playback now that it can play.
+      if (playRequestedAfterRetry) {
+        playRequestedAfterRetry = false;
+        void audio.play().catch(err => {
+          logger.error('Playback failed after retry', err as Error);
+          error = t('media.audio.playError');
+        });
       }
     });
 
