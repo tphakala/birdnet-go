@@ -81,11 +81,11 @@ func TestRecordResultsQueueDrop_SurfacesOnHealthStore(t *testing.T) {
 	key := observability.MetricPrefixResultsQueueDrops + source
 	assert.Equal(t, int64(1), store.Sum(key, time.Hour), "drop must be recorded into the health store")
 
-	events := buf.Recent("queue_drops", 10)
+	events := buf.Recent(observability.MetricTypeResultsQueueDrops, 10)
 	require.Len(t, events, 1, "drop must be recorded as a single health event")
 	assert.Equal(t, source, events[0].Source)
 	assert.Equal(t, int64(1), events[0].Delta)
-	assert.Equal(t, "queue_drops", events[0].Metric)
+	assert.Equal(t, observability.MetricTypeResultsQueueDrops, events[0].Metric)
 
 	// Clearing the sink must stop further recording without panicking.
 	SetResultsQueueDropHealthSink(nil, nil)

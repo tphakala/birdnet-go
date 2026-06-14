@@ -17,11 +17,16 @@ const (
 	MetricPrefixAudioDrops     = "audio.drops."
 	MetricPrefixAudioOverruns  = "audio.overruns."
 	MetricPrefixStreamRestarts = "stream.restarts."
+	// MetricTypeResultsQueueDrops is the metric-type token shared by the producer
+	// (the analysis pipeline tags each drop HealthEvent with this label) and the
+	// consumer (ResultsQueueDropCheck filters recent events by this type). It is
+	// the trailing segment of MetricPrefixResultsQueueDrops; building the prefix
+	// from it guarantees the producer and consumer cannot drift apart. It must
+	// stay distinct from the other prefixes' segments so events do not cross-match.
+	MetricTypeResultsQueueDrops = "queue_drops"
 	// MetricPrefixResultsQueueDrops counts detection results dropped because the
-	// classifier results queue was full. The trailing segment ("queue_drops")
-	// is the metric type used for event-buffer filtering; it must stay distinct
-	// from the other prefixes so events do not cross-match.
-	MetricPrefixResultsQueueDrops = "results.queue_drops."
+	// classifier results queue was full.
+	MetricPrefixResultsQueueDrops = "results." + MetricTypeResultsQueueDrops + "."
 )
 
 // HourlyBucket holds the aggregated event count for a single hour.

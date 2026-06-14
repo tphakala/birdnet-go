@@ -154,10 +154,10 @@ func SetResultsQueueDropHealthSink(store *observability.HealthMetricsStore, even
 }
 
 // recordResultsQueueDropHealth records a single dropped detection into the
-// diagnostics health store and event buffer when the sink is wired. The
-// "queue_drops" metric label must match the trailing segment of
-// observability.MetricPrefixResultsQueueDrops so ResultsQueueDropCheck's
-// event-buffer filter matches, mirroring how the collector tags audio drops.
+// diagnostics health store and event buffer when the sink is wired. The event
+// Metric label and the store key prefix share observability.MetricTypeResultsQueueDrops
+// so ResultsQueueDropCheck's event-buffer filter matches, mirroring how the
+// collector tags audio drops.
 func recordResultsQueueDropHealth(source string) {
 	sink := resultsQueueDropHealthSink.Load()
 	if sink == nil {
@@ -169,7 +169,7 @@ func recordResultsQueueDropHealth(source string) {
 			Time:   time.Now(),
 			Source: source,
 			Delta:  1,
-			Metric: "queue_drops",
+			Metric: observability.MetricTypeResultsQueueDrops,
 		})
 	}
 }

@@ -297,7 +297,7 @@ func TestResultsQueueDropCheck_HealthyWithHistory(t *testing.T) {
 
 	now := time.Now()
 	store.RecordAt(resultsQueueDropKey, 50, now.Add(-3*time.Hour))
-	buf.Add(observability.HealthEvent{Time: now.Add(-3 * time.Hour), Source: "src1", Delta: 50, Metric: "queue_drops"})
+	buf.Add(observability.HealthEvent{Time: now.Add(-3 * time.Hour), Source: "src1", Delta: 50, Metric: observability.MetricTypeResultsQueueDrops})
 	store.RecordAt(resultsQueueDropKey, 0, now)
 
 	check := NewResultsQueueDropCheck(store, eventGetter(buf))
@@ -361,9 +361,9 @@ func TestResultsQueueDropCheck_SparklineInDetails(t *testing.T) {
 
 	now := time.Now()
 	store.RecordAt(resultsQueueDropKey, 10, now.Add(-2*time.Hour))
-	buf.Add(observability.HealthEvent{Time: now.Add(-2 * time.Hour), Source: "src1", Delta: 10, Metric: "queue_drops"})
+	buf.Add(observability.HealthEvent{Time: now.Add(-2 * time.Hour), Source: "src1", Delta: 10, Metric: observability.MetricTypeResultsQueueDrops})
 	store.RecordAt(resultsQueueDropKey, 5, now)
-	buf.Add(observability.HealthEvent{Time: now, Source: "src1", Delta: 5, Metric: "queue_drops"})
+	buf.Add(observability.HealthEvent{Time: now, Source: "src1", Delta: 5, Metric: observability.MetricTypeResultsQueueDrops})
 
 	check := NewResultsQueueDropCheck(store, eventGetter(buf))
 	result := check.Run(t.Context())
