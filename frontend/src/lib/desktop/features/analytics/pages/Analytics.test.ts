@@ -19,14 +19,19 @@ vi.mock('$lib/desktop/features/dashboard/components/SourceBadge.svelte');
 
 const analyticsTest = createComponentTestFactory(Analytics);
 
+// Sentinel scientific names referenced by both the mock data and the assertions,
+// so a typo cannot silently desync the two.
+const FRESH_SCIENTIFIC = 'Fresh-sci';
+const STALE_SCIENTIFIC = 'Stale-sci';
+
 describe('Analytics fetch-sequence race (#978)', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.mocked(api.get).mockReset();
   });
 
   afterEach(() => {
     cleanup();
-    vi.clearAllMocks();
   });
 
   // Regression: a slower earlier fetchData() run must not overwrite a newer run's
@@ -49,7 +54,7 @@ describe('Analytics fetch-sequence race (#978)', () => {
             id: 'fresh',
             timestamp: '2024-01-02T08:00:00',
             commonName: 'Fresh Bird',
-            scientificName: 'Fresh-sci',
+            scientificName: FRESH_SCIENTIFIC,
             confidence: 0.9,
           },
         ]);
@@ -76,7 +81,7 @@ describe('Analytics fetch-sequence race (#978)', () => {
 
     // Run 2 resolves and renders the fresh detection.
     await waitFor(() => {
-      expect(container.textContent).toContain('Fresh-sci');
+      expect(container.textContent).toContain(FRESH_SCIENTIFIC);
     });
 
     // The stale run-1 recent response now arrives; the sequence guard must drop it.
@@ -85,7 +90,7 @@ describe('Analytics fetch-sequence race (#978)', () => {
         id: 'stale',
         timestamp: '2024-01-01T08:00:00',
         commonName: 'Stale Bird',
-        scientificName: 'Stale-sci',
+        scientificName: STALE_SCIENTIFIC,
         confidence: 0.5,
       },
     ]);
@@ -96,7 +101,7 @@ describe('Analytics fetch-sequence race (#978)', () => {
     await staleRecent;
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    expect(container.textContent).toContain('Fresh-sci');
-    expect(container.textContent).not.toContain('Stale-sci');
+    expect(container.textContent).toContain(FRESH_SCIENTIFIC);
+    expect(container.textContent).not.toContain(STALE_SCIENTIFIC);
   });
 });

@@ -32,15 +32,23 @@ function makeDetection(overrides: Partial<Detection>): Detection {
   };
 }
 
+// Sentinel scientific names referenced by both the fixtures and the assertions,
+// so a typo cannot silently desync the two.
+const FRESH_SCIENTIFIC = 'Fresh-sci-B';
+const STALE_SCIENTIFIC = 'Stale-sci-A';
+
 /** Minimal fetch Response stub carrying a JSON body. */
 function jsonResponse(body: unknown): Response {
+  // Pre-serialize so text() never throws synchronously (e.g. circular refs);
+  // a Promise-returning method must reject, not throw.
+  const serialized = JSON.stringify(body);
   return {
     ok: true,
     status: 200,
     statusText: 'OK',
     headers: new Headers({ 'content-type': 'application/json' }),
     json: () => Promise.resolve(body),
-    text: () => Promise.resolve(JSON.stringify(body)),
+    text: () => Promise.resolve(serialized),
   } as unknown as Response;
 }
 
@@ -48,13 +56,13 @@ describe('DetectionDetail stale-response race (#978)', () => {
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     originalFetch = globalThis.fetch;
   });
 
   afterEach(() => {
     cleanup();
     globalThis.fetch = originalFetch;
-    vi.clearAllMocks();
   });
 
   // Regression: navigating from detection A to B while A's request is still in
@@ -77,7 +85,7 @@ describe('DetectionDetail stale-response race (#978)', () => {
       if (url.includes('/api/v2/detections/det-b')) {
         return Promise.resolve(
           jsonResponse(
-            makeDetection({ id: 2, scientificName: 'Fresh-sci-B', commonName: 'Fresh B' })
+            makeDetection({ id: 2, scientificName: FRESH_SCIENTIFIC, commonName: 'Fresh B' })
           )
         );
       }
@@ -90,12 +98,14 @@ describe('DetectionDetail stale-response race (#978)', () => {
     // Switch to detection B before A resolves.
     await rerender({ detectionId: 'det-b' });
     await waitFor(() => {
-      expect(container.textContent).toContain('Fresh-sci-B');
+      expect(container.textContent).toContain(FRESH_SCIENTIFIC);
     });
 
     // A's response now arrives late; the captured-signal guard must drop it.
     resolveStale(
-      jsonResponse(makeDetection({ id: 1, scientificName: 'Stale-sci-A', commonName: 'Stale A' }))
+      jsonResponse(
+        makeDetection({ id: 1, scientificName: STALE_SCIENTIFIC, commonName: 'Stale A' })
+      )
     );
     // Flush the production stale-handling path: await the promise it awaits, then
     // a macrotask so every microtask hop (response.json, the captured-signal
@@ -104,7 +114,7 @@ describe('DetectionDetail stale-response race (#978)', () => {
     await staleResponse;
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    expect(container.textContent).toContain('Fresh-sci-B');
-    expect(container.textContent).not.toContain('Stale-sci-A');
+    expect(container.textContent).toContain(FRESH_SCIENTIFIC);
+    expect(container.textContent).not.toContain(STALE_SCIENTIFIC);
   });
 });
