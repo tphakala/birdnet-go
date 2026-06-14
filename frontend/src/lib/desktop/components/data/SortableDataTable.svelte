@@ -74,7 +74,7 @@
   }
 
   let {
-    columns,
+    columns = [],
     data = [],
     loading = false,
     title,
@@ -256,6 +256,7 @@
                   direction={sortDirection}
                   onSort={handleSort}
                   className={cn(headerCellClass, alignClass(column.align), column.className)}
+                  width={column.width}
                 />
               {:else}
                 <th
@@ -281,9 +282,6 @@
                 <td class={cn('py-2 px-3', alignClass(column.align), column.className)}>
                   {#if renderCell}
                     {@render renderCell({ column, item, index })}
-                  {:else if column.renderHtml}
-                    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                    {@html column.renderHtml(item, index)}
                   {:else}
                     {cellValue(column, item, index)}
                   {/if}

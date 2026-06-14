@@ -3684,10 +3684,6 @@
         "configureActions": "Configure Actions",
         "actionsConfigured": "Configured",
         "list": {
-          "threshold": "Threshold:",
-          "interval": "Interval:",
-          "intervalNone": "None",
-          "actionBadge": "Action",
           "editTitle": "Edit configuration",
           "removeTitle": "Remove configuration"
         },
@@ -3702,7 +3698,8 @@
           "noActions": "None",
           "searchPlaceholder": "Search species...",
           "noResults": "No matching configurations",
-          "editDisabledReason": "Save or close the current editor before editing another species"
+          "editDisabledReason": "Save or close the current editor before editing another species",
+          "actionsDisabledBusy": "Please wait for the current operation to finish"
         }
       },
       "synonyms": {

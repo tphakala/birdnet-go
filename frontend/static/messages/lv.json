@@ -3684,10 +3684,6 @@
         "configureActions": "Konfigurēt darbības",
         "actionsConfigured": "Konfigurētas",
         "list": {
-          "threshold": "Slieksnis:",
-          "interval": "Intervāls:",
-          "intervalNone": "Nav",
-          "actionBadge": "Darbība",
           "editTitle": "Rediģēt konfigurāciju",
           "removeTitle": "Noņemt konfigurāciju"
         },
@@ -3696,13 +3692,14 @@
           "description": "Noklikšķiniet \"Pievienot konfigurāciju\", lai pielāgotu sugu noteikšanas iestatījumus."
         },
         "table": {
-          "columnScientificName": "Scientific Name",
-          "intervalDefault": "Default",
-          "intervalDefaultTooltip": "0 = use the global default interval",
-          "noActions": "None",
-          "searchPlaceholder": "Search species...",
-          "noResults": "No matching configurations",
-          "editDisabledReason": "Save or close the current editor before editing another species"
+          "columnScientificName": "Zinātniskais nosaukums",
+          "intervalDefault": "Noklusējuma",
+          "intervalDefaultTooltip": "0 = izmantot globālo noklusējuma intervālu",
+          "noActions": "Nav",
+          "searchPlaceholder": "Meklēt sugas...",
+          "noResults": "Nav atbilstošu konfigurāciju",
+          "editDisabledReason": "Pirms citas sugas rediģēšanas saglabājiet vai aizveriet pašreizējo redaktoru",
+          "actionsDisabledBusy": "Lūdzu, uzgaidiet, līdz beidzas pašreizējā darbība"
         }
       },
       "synonyms": {

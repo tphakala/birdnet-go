@@ -3684,10 +3684,6 @@
         "configureActions": "Konfigurovať akcie",
         "actionsConfigured": "Nakonfigurované",
         "list": {
-          "threshold": "Prah:",
-          "interval": "Interval:",
-          "intervalNone": "Žiadny",
-          "actionBadge": "Akcia",
           "editTitle": "Upraviť konfiguráciu",
           "removeTitle": "Odstrániť konfiguráciu"
         },
@@ -3696,13 +3692,14 @@
           "description": "Kliknite na \"Pridať konfiguráciu\" pre prispôsobenie nastavení detekcie druhov."
         },
         "table": {
-          "columnScientificName": "Scientific Name",
-          "intervalDefault": "Default",
-          "intervalDefaultTooltip": "0 = use the global default interval",
-          "noActions": "None",
-          "searchPlaceholder": "Search species...",
-          "noResults": "No matching configurations",
-          "editDisabledReason": "Save or close the current editor before editing another species"
+          "columnScientificName": "Vedecký názov",
+          "intervalDefault": "Predvolené",
+          "intervalDefaultTooltip": "0 = použiť globálny predvolený interval",
+          "noActions": "Žiadny",
+          "searchPlaceholder": "Hľadať druhy...",
+          "noResults": "Žiadne zodpovedajúce konfigurácie",
+          "editDisabledReason": "Pred úpravou iného druhu uložte alebo zatvorte aktuálny editor",
+          "actionsDisabledBusy": "Počkajte prosím na dokončenie aktuálnej operácie"
         }
       },
       "synonyms": {

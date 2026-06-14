@@ -43,7 +43,7 @@
   }
 
   let {
-    species,
+    species = [],
     loading = false,
     searchable = true,
     onDownloadCsv,
@@ -111,7 +111,7 @@
   emptyTitle={t('settings.species.activeSpecies.empty.title')}
   emptyDescription={t('settings.species.activeSpecies.empty.description')}
   noResultsMessage={t('settings.species.activeSpecies.noResults')}
-  keyFn={(item, index) => `${item.scientificName}_${item.commonName}_${index}`}
+  keyFn={item => `${item.scientificName}_${item.commonName}`}
 >
   {#snippet icon()}
     <div class="p-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]">

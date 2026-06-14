@@ -11,8 +11,10 @@ export interface Column<T> {
   renderHtml?: (_item: T, _index: number) => string;
   /**
    * Value used for client-side sorting of this column. Strings are compared with
-   * localeCompare, numbers by subtraction. Used by SortableDataTable, which sorts
-   * internally; the controlled DataTable ignores this.
+   * localeCompare, numbers by subtraction. Return the SAME type for every row of a
+   * given column: mixing string and number across rows falls back to string
+   * comparison and yields undefined ordering. Used by SortableDataTable, which
+   * sorts internally; the controlled DataTable ignores this.
    */
   sortValue?: (_item: T) => string | number;
   /**

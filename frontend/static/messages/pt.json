@@ -3684,10 +3684,6 @@
         "configureActions": "Configurar Ações",
         "actionsConfigured": "Configurado",
         "list": {
-          "threshold": "Limiar:",
-          "interval": "Intervalo:",
-          "intervalNone": "Nenhum",
-          "actionBadge": "Ação",
           "editTitle": "Editar configuração",
           "removeTitle": "Remover configuração"
         },
@@ -3696,13 +3692,14 @@
           "description": "Clique em \"Adicionar Configuração\" para personalizar as configurações de detecção de espécies."
         },
         "table": {
-          "columnScientificName": "Scientific Name",
-          "intervalDefault": "Default",
-          "intervalDefaultTooltip": "0 = use the global default interval",
-          "noActions": "None",
-          "searchPlaceholder": "Search species...",
-          "noResults": "No matching configurations",
-          "editDisabledReason": "Save or close the current editor before editing another species"
+          "columnScientificName": "Nome científico",
+          "intervalDefault": "Padrão",
+          "intervalDefaultTooltip": "0 = usar o intervalo padrão global",
+          "noActions": "Nenhum",
+          "searchPlaceholder": "Pesquisar espécies...",
+          "noResults": "Nenhuma configuração correspondente",
+          "editDisabledReason": "Salve ou feche o editor atual antes de editar outra espécie",
+          "actionsDisabledBusy": "Por favor, aguarde o término da operação atual"
         }
       },
       "synonyms": {

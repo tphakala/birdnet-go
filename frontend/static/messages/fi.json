@@ -3684,10 +3684,6 @@
         "configureActions": "Määritä toiminnot",
         "actionsConfigured": "Määritetty",
         "list": {
-          "threshold": "Kynnysarvo:",
-          "interval": "Väli:",
-          "intervalNone": "Ei mitään",
-          "actionBadge": "Toiminto",
           "editTitle": "Muokkaa määritystä",
           "removeTitle": "Poista määritys"
         },
@@ -3696,13 +3692,14 @@
           "description": "Napsauta \"Lisää määritys\" mukauttaaksesi lajintunnistusasetuksia."
         },
         "table": {
-          "columnScientificName": "Scientific Name",
-          "intervalDefault": "Default",
-          "intervalDefaultTooltip": "0 = use the global default interval",
-          "noActions": "None",
-          "searchPlaceholder": "Search species...",
-          "noResults": "No matching configurations",
-          "editDisabledReason": "Save or close the current editor before editing another species"
+          "columnScientificName": "Tieteellinen nimi",
+          "intervalDefault": "Oletus",
+          "intervalDefaultTooltip": "0 = käytä globaalia oletusväliä",
+          "noActions": "Ei mitään",
+          "searchPlaceholder": "Etsi lajeja...",
+          "noResults": "Ei vastaavia asetuksia",
+          "editDisabledReason": "Tallenna tai sulje nykyinen muokkain ennen toisen lajin muokkaamista",
+          "actionsDisabledBusy": "Odota, että nykyinen toiminto on valmis"
         }
       },
       "synonyms": {

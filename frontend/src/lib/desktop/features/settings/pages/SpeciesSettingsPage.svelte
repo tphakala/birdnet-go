@@ -291,7 +291,7 @@
   }
 
   function extractScientificName(prediction: string): string {
-    // Format: "ScientificName (CommonName)" — extract before the first opening paren
+    // Format: "ScientificName (CommonName)": extract before the first opening paren
     // Use indexOf (not lastIndexOf) since scientific names never contain parentheses
     // but common names can, e.g., "Herring Gull (European)"
     const parenIndex = prediction.indexOf(' (');

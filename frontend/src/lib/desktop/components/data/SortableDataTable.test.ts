@@ -126,4 +126,26 @@ describe('SortableDataTable', () => {
     expect(body && within(body as HTMLElement).getByText('alpha')).toBeTruthy();
     expect(document.querySelectorAll('tbody tr')).toHaveLength(3);
   });
+
+  it('applies the column width to sortable header cells', () => {
+    const widthColumns: Column<Row>[] = [
+      { key: 'name', header: 'Name', sortable: true, sortValue: r => r.name, width: '7rem' },
+      { key: 'score', header: 'Score', sortable: true, sortValue: r => r.score },
+    ];
+    const { container } = renderTable({ columns: widthColumns });
+    const nameHeader = container.querySelector('th');
+    expect(nameHeader?.getAttribute('style')).toContain('width: 7rem');
+  });
+
+  it('shows a loading spinner and no table while loading', () => {
+    renderTable({ loading: true });
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(document.querySelector('table')).not.toBeInTheDocument();
+  });
+
+  it('uses the count prop for the badge when provided, overriding the row count', () => {
+    const { container } = renderTable({ count: 99 });
+    const badge = container.querySelector('span.rounded-full');
+    expect((badge?.textContent ?? '').trim()).toBe('99');
+  });
 });

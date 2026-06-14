@@ -3684,10 +3684,6 @@
         "configureActions": "Acties Configureren",
         "actionsConfigured": "Geconfigureerd",
         "list": {
-          "threshold": "Drempelwaarde:",
-          "interval": "Interval:",
-          "intervalNone": "Geen",
-          "actionBadge": "Actie",
           "editTitle": "Configuratie bewerken",
           "removeTitle": "Configuratie verwijderen"
         },
@@ -3696,13 +3692,14 @@
           "description": "Klik op \"Configuratie Toevoegen\" om soorten detectie instellingen aan te passen."
         },
         "table": {
-          "columnScientificName": "Scientific Name",
-          "intervalDefault": "Default",
-          "intervalDefaultTooltip": "0 = use the global default interval",
-          "noActions": "None",
-          "searchPlaceholder": "Search species...",
-          "noResults": "No matching configurations",
-          "editDisabledReason": "Save or close the current editor before editing another species"
+          "columnScientificName": "Wetenschappelijke naam",
+          "intervalDefault": "Standaard",
+          "intervalDefaultTooltip": "0 = gebruik het globale standaardinterval",
+          "noActions": "Geen",
+          "searchPlaceholder": "Zoek soorten...",
+          "noResults": "Geen overeenkomende configuraties",
+          "editDisabledReason": "Sla de huidige editor op of sluit deze voordat u een andere soort bewerkt",
+          "actionsDisabledBusy": "Een moment geduld tot de huidige bewerking is voltooid"
         }
       },
       "synonyms": {

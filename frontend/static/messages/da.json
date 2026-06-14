@@ -3684,10 +3684,6 @@
         "configureActions": "Konfigurer handlinger",
         "actionsConfigured": "Konfigureret",
         "list": {
-          "threshold": "Tærskel:",
-          "interval": "Interval:",
-          "intervalNone": "Ingen",
-          "actionBadge": "Handling",
           "editTitle": "Rediger konfiguration",
           "removeTitle": "Fjern konfiguration"
         },
@@ -3696,13 +3692,14 @@
           "description": "Klik på \"Tilføj konfiguration\" for at tilpasse artsregistreringsindstillinger."
         },
         "table": {
-          "columnScientificName": "Scientific Name",
-          "intervalDefault": "Default",
-          "intervalDefaultTooltip": "0 = use the global default interval",
-          "noActions": "None",
-          "searchPlaceholder": "Search species...",
-          "noResults": "No matching configurations",
-          "editDisabledReason": "Save or close the current editor before editing another species"
+          "columnScientificName": "Videnskabeligt navn",
+          "intervalDefault": "Standard",
+          "intervalDefaultTooltip": "0 = brug det globale standardinterval",
+          "noActions": "Ingen",
+          "searchPlaceholder": "Søg arter...",
+          "noResults": "Ingen matchende konfigurationer",
+          "editDisabledReason": "Gem eller luk den aktuelle editor, før du redigerer en anden art",
+          "actionsDisabledBusy": "Vent venligst, mens den aktuelle handling fuldføres"
         }
       },
       "synonyms": {

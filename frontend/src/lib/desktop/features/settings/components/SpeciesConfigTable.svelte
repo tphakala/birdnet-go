@@ -33,8 +33,8 @@
   }
 
   let {
-    configs,
-    scientificNameMap,
+    configs = {},
+    scientificNameMap = new Map<string, string>(),
     editingSpecies = null,
     disabled = false,
     onAdd,
@@ -134,11 +134,23 @@
     return disabled || (editorOpen && editingSpecies !== species);
   }
 
+  // Every disabled state must explain itself: page-busy takes precedence over the
+  // single-editor lock, which takes precedence over the normal edit label.
   function editTitle(species: string): string {
+    if (disabled) {
+      return t('settings.species.customConfiguration.table.actionsDisabledBusy');
+    }
     if (editorOpen && editingSpecies !== species) {
       return t('settings.species.customConfiguration.table.editDisabledReason');
     }
     return t('settings.species.customConfiguration.list.editTitle');
+  }
+
+  function deleteTitle(): string {
+    if (disabled) {
+      return t('settings.species.customConfiguration.table.actionsDisabledBusy');
+    }
+    return t('settings.species.customConfiguration.list.removeTitle');
   }
 </script>
 
@@ -240,8 +252,8 @@
         <button
           type="button"
           class="inline-flex items-center justify-center size-7 rounded-md text-[var(--color-base-content)]/70 hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          title={t('settings.species.customConfiguration.list.removeTitle')}
-          aria-label={t('settings.species.customConfiguration.list.removeTitle')}
+          title={deleteTitle()}
+          aria-label={deleteTitle()}
           {disabled}
           onclick={() => onDelete(item.species)}
         >
