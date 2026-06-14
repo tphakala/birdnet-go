@@ -672,6 +672,14 @@ func TestEnqueueMultipleTasks(t *testing.T) {
 
 // TestIntegrationWithJobQueue tests the integration between Processor.EnqueueTask and a real job queue
 func TestIntegrationWithJobQueue(t *testing.T) {
+	// Bounds for the polling assertions below: wait up to eventuallyTimeout,
+	// re-checking every eventuallyPollInterval, for the worker goroutine to
+	// reach the expected state.
+	const (
+		eventuallyTimeout      = 2 * time.Second
+		eventuallyPollInterval = 10 * time.Millisecond
+	)
+
 	// Remove t.Parallel() to avoid race conditions with testRetryConfigOverride
 	// Set up the test retry config override to ensure consistent behavior
 	testRetryConfigOverride = nil
@@ -750,9 +758,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	// instead of racing a fixed timeout.
 	require.Eventually(t, func() bool {
 		return realQueue.GetStats().SuccessfulJobs == 1
-	}, 2*time.Second, 10*time.Millisecond, "Expected 1 successful job")
-	stats := realQueue.GetStats()
-	assert.Equal(t, 1, stats.SuccessfulJobs, "Expected 1 successful job")
+	}, eventuallyTimeout, eventuallyPollInterval, "Expected 1 successful job")
 
 	// Test with a failing action
 	failingAction := &MockAction{
@@ -789,13 +795,13 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	// (reading the field directly here is a data race with the worker).
 	require.Eventually(t, func() bool {
 		return failingAction.GetExecuteCount() == 1
-	}, 2*time.Second, 10*time.Millisecond, "Expected failing action to be executed once")
+	}, eventuallyTimeout, eventuallyPollInterval, "Expected failing action to be executed once")
 
 	// Poll until the job queue records the failed job.
 	require.Eventually(t, func() bool {
 		return realQueue.GetStats().FailedJobs >= 1
-	}, 2*time.Second, 10*time.Millisecond, "Expected at least 1 failed job")
-	stats = realQueue.GetStats()
+	}, eventuallyTimeout, eventuallyPollInterval, "Expected at least 1 failed job")
+	stats := realQueue.GetStats()
 
 	// Log final statistics
 	t.Logf("Job queue stats: Total=%d, Successful=%d, Failed=%d",
