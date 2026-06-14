@@ -55,6 +55,15 @@ type OpenWeatherResponse struct {
 	Clouds struct {
 		All int `json:"all"`
 	} `json:"clouds"`
+	// Rain and Snow carry the precipitation volume for the last hour ("1h").
+	// OpenWeather omits each object entirely when there is no precipitation of
+	// that type, so a zero value means "none".
+	Rain struct {
+		OneHour float64 `json:"1h"`
+	} `json:"rain"`
+	Snow struct {
+		OneHour float64 `json:"1h"`
+	} `json:"snow"`
 	Dt  int64 `json:"dt"`
 	Sys struct {
 		Country string `json:"country"`
@@ -203,6 +212,11 @@ func mapOpenWeatherResponse(data *OpenWeatherResponse, settings *conf.Settings) 
 		settings.Realtime.Weather.OpenWeather.Units,
 	)
 
+	// OpenWeather reports rain and snow volume separately. Snow takes precedence
+	// when both are present in the same hour so the persisted type matches the
+	// dominant winter condition.
+	precipAmount, precipType := openWeatherPrecipitation(data)
+
 	return &WeatherData{
 		Time: time.Unix(data.Dt, 0),
 		Location: Location{
@@ -222,12 +236,31 @@ func mapOpenWeatherResponse(data *OpenWeatherResponse, settings *conf.Settings) 
 			Deg:   data.Wind.Deg,
 			Gust:  data.Wind.Gust,
 		},
+		Precipitation: Precipitation{
+			Amount: precipAmount,
+			Type:   precipType,
+		},
 		Clouds:      data.Clouds.All,
 		Visibility:  data.Visibility,
 		Pressure:    data.Main.Pressure,
 		Humidity:    data.Main.Humidity,
+		WeatherMain: data.Weather[0].Main,
 		Description: data.Weather[0].Description,
 		Icon:        string(GetStandardIconCode(data.Weather[0].Icon, openWeatherProviderName)),
+	}
+}
+
+// openWeatherPrecipitation extracts the precipitation amount (mm in the last
+// hour) and type from an OpenWeather response. Snow is preferred over rain when
+// both are reported in the same hour.
+func openWeatherPrecipitation(data *OpenWeatherResponse) (amount float64, precipType string) {
+	switch {
+	case data.Snow.OneHour > 0:
+		return data.Snow.OneHour, "snow"
+	case data.Rain.OneHour > 0:
+		return data.Rain.OneHour, "rain"
+	default:
+		return 0, ""
 	}
 }
 

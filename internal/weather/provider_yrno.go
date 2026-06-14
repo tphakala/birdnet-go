@@ -167,6 +167,14 @@ func mapYrResponseToWeatherData(response *YrResponse, settings *conf.Settings) *
 	current := response.Properties.Timeseries[0]
 	iconCode := GetStandardIconCode(current.Data.Next1Hours.Summary.SymbolCode, yrNoProviderName)
 
+	// yr.no reports a precipitation amount but no explicit type; derive the type
+	// from the standardized icon, and only when precipitation is actually present.
+	precipAmount := current.Data.Next1Hours.Details.PrecipitationAmount
+	precipType := ""
+	if precipAmount > 0 {
+		precipType = precipTypeFromIconCode(iconCode)
+	}
+
 	return &WeatherData{
 		Time: current.Time,
 		Location: Location{
@@ -182,11 +190,13 @@ func mapYrResponseToWeatherData(response *YrResponse, settings *conf.Settings) *
 			Gust:  current.Data.Instant.Details.WindGust,
 		},
 		Precipitation: Precipitation{
-			Amount: current.Data.Next1Hours.Details.PrecipitationAmount,
+			Amount: precipAmount,
+			Type:   precipType,
 		},
 		Clouds:      int(current.Data.Instant.Details.CloudArea),
 		Pressure:    int(current.Data.Instant.Details.AirPressure),
 		Humidity:    int(current.Data.Instant.Details.RelHumidity),
+		WeatherMain: weatherMainFromIconCode(iconCode),
 		Description: current.Data.Next1Hours.Summary.SymbolCode,
 		Icon:        string(iconCode),
 	}

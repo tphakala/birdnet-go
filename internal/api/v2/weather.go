@@ -33,21 +33,23 @@ type DailyWeatherResponse struct {
 
 // HourlyWeatherResponse represents the API response for hourly weather data
 type HourlyWeatherResponse struct {
-	Time        string  `json:"time"`
-	Temperature float64 `json:"temperature"`
-	FeelsLike   float64 `json:"feels_like"`
-	TempMin     float64 `json:"temp_min,omitempty"`
-	TempMax     float64 `json:"temp_max,omitempty"`
-	Pressure    int     `json:"pressure,omitempty"`
-	Humidity    int     `json:"humidity,omitempty"`
-	Visibility  int     `json:"visibility,omitempty"`
-	WindSpeed   float64 `json:"wind_speed,omitempty"`
-	WindDeg     int     `json:"wind_deg,omitempty"`
-	WindGust    float64 `json:"wind_gust,omitempty"`
-	Clouds      int     `json:"clouds,omitempty"`
-	WeatherMain string  `json:"weather_main,omitempty"`
-	WeatherDesc string  `json:"weather_desc,omitempty"`
-	WeatherIcon string  `json:"weather_icon,omitempty"`
+	Time              string  `json:"time"`
+	Temperature       float64 `json:"temperature"`
+	FeelsLike         float64 `json:"feels_like"`
+	TempMin           float64 `json:"temp_min,omitempty"`
+	TempMax           float64 `json:"temp_max,omitempty"`
+	Pressure          int     `json:"pressure,omitempty"`
+	Humidity          int     `json:"humidity,omitempty"`
+	Visibility        int     `json:"visibility,omitempty"`
+	WindSpeed         float64 `json:"wind_speed,omitempty"`
+	WindDeg           int     `json:"wind_deg,omitempty"`
+	WindGust          float64 `json:"wind_gust,omitempty"`
+	Clouds            int     `json:"clouds,omitempty"`
+	Precipitation     float64 `json:"precipitation,omitempty"`
+	PrecipitationType string  `json:"precipitation_type,omitempty"`
+	WeatherMain       string  `json:"weather_main,omitempty"`
+	WeatherDesc       string  `json:"weather_desc,omitempty"`
+	WeatherIcon       string  `json:"weather_icon,omitempty"`
 }
 
 // DetectionWeatherResponse represents weather data associated with a detection
@@ -446,21 +448,23 @@ func (c *Controller) findClosestHourlyWeather(detectionTime time.Time, hourlyWea
 // buildHourlyWeatherResponse creates an HourlyWeatherResponse from an HourlyWeather struct
 func (c *Controller) buildHourlyWeatherResponse(hw *datastore.HourlyWeather) HourlyWeatherResponse {
 	return HourlyWeatherResponse{
-		Time:        hw.Time.In(time.Local).Format(time.TimeOnly),
-		Temperature: hw.Temperature,
-		FeelsLike:   hw.FeelsLike,
-		TempMin:     hw.TempMin,
-		TempMax:     hw.TempMax,
-		Pressure:    hw.Pressure,
-		Humidity:    hw.Humidity,
-		Visibility:  hw.Visibility,
-		WindSpeed:   hw.WindSpeed,
-		WindDeg:     hw.WindDeg,
-		WindGust:    hw.WindGust,
-		Clouds:      hw.Clouds,
-		WeatherMain: hw.WeatherMain,
-		WeatherDesc: hw.WeatherDesc,
-		WeatherIcon: hw.WeatherIcon,
+		Time:              hw.Time.In(time.Local).Format(time.TimeOnly),
+		Temperature:       hw.Temperature,
+		FeelsLike:         hw.FeelsLike,
+		TempMin:           hw.TempMin,
+		TempMax:           hw.TempMax,
+		Pressure:          hw.Pressure,
+		Humidity:          hw.Humidity,
+		Visibility:        hw.Visibility,
+		WindSpeed:         hw.WindSpeed,
+		WindDeg:           hw.WindDeg,
+		WindGust:          hw.WindGust,
+		Clouds:            hw.Clouds,
+		Precipitation:     hw.Precipitation,
+		PrecipitationType: hw.PrecipitationType,
+		WeatherMain:       hw.WeatherMain,
+		WeatherDesc:       hw.WeatherDesc,
+		WeatherIcon:       hw.WeatherIcon,
 	}
 }
 
