@@ -65,8 +65,15 @@ type ControlMonitor struct {
 	// settings. Provided by APIServerService because it owns the monitor lifecycle.
 	reconfigureMonitoringFn func()
 
-	// Sound level manager for lifecycle management
-	soundLevelManager *SoundLevelManager
+	// Sound level manager for lifecycle management.
+	// soundLevelManagerMu guards every access to soundLevelManager. The field is
+	// written by the monitor goroutine (handleReconfigureSoundLevel) and
+	// read/written by Stop(), which runs on the pipeline shutdown goroutine while
+	// the monitor goroutine may still be processing an in-flight
+	// reconfigure_sound_level signal. Without this lock that is a -race-detectable
+	// data race.
+	soundLevelManagerMu sync.Mutex
+	soundLevelManager   *SoundLevelManager
 
 	// Track telemetry endpoint
 	telemetryEndpoint      *observability.Endpoint
@@ -198,9 +205,15 @@ func (cm *ControlMonitor) Start() {
 func (cm *ControlMonitor) Stop() {
 	GetLogger().Info("stopping control monitor")
 
-	// Stop sound level monitoring if running
-	if cm.soundLevelManager != nil {
-		cm.soundLevelManager.Stop()
+	// Stop sound level monitoring if running. Read the pointer under the lock
+	// (the monitor goroutine may still be reassigning it via
+	// handleReconfigureSoundLevel) but call Stop() outside the lock so a blocking
+	// shutdown never holds the mutex.
+	cm.soundLevelManagerMu.Lock()
+	slm := cm.soundLevelManager
+	cm.soundLevelManagerMu.Unlock()
+	if slm != nil {
+		slm.Stop()
 	}
 
 	// Stop telemetry endpoint if running
@@ -222,12 +235,15 @@ func (cm *ControlMonitor) initializeSoundLevelIfEnabled() {
 	settings := conf.Setting()
 	if settings.Realtime.Audio.SoundLevel.Enabled {
 		// Initialize the sound level manager
+		cm.soundLevelManagerMu.Lock()
 		if cm.soundLevelManager == nil {
 			cm.soundLevelManager = NewSoundLevelManager(cm.soundLevelChan, cm.proc, cm.apiController, cm.metrics)
 		}
+		slm := cm.soundLevelManager
+		cm.soundLevelManagerMu.Unlock()
 
 		// Start sound level monitoring
-		if err := cm.soundLevelManager.Start(); err != nil {
+		if err := slm.Start(); err != nil {
 			GetLogger().Warn("Failed to start sound level monitoring", logger.Error(err))
 		}
 	}
@@ -363,7 +379,14 @@ func (cm *ControlMonitor) handleReconfigureLiveStream() {
 
 // handleRebuildRangeFilter rebuilds the range filter
 func (cm *ControlMonitor) handleRebuildRangeFilter() {
-	if err := classifier.BuildRangeFilter(cm.bn); err != nil {
+	// Guard the orchestrator dereference for consistency with NewControlMonitor,
+	// which only wires bn-dependent surfaces when cm.bn != nil. In realtime
+	// analysis cm.bn is always set; the guard is defensive. Use if/else rather
+	// than an early return so the opportunistic maintenance
+	// cleanup below still runs even when the rebuild itself is skipped.
+	if cm.bn == nil {
+		GetLogger().Warn("Cannot rebuild range filter: BirdNET orchestrator not initialized")
+	} else if err := classifier.BuildRangeFilter(cm.bn); err != nil {
 		GetLogger().Error("Failed to rebuild range filter", logger.Error(err))
 		cm.notifyError("Failed to rebuild range filter", err)
 	} else {
@@ -386,6 +409,14 @@ func (cm *ControlMonitor) handleRebuildRangeFilter() {
 
 // handleReloadBirdnet reloads the BirdNET model
 func (cm *ControlMonitor) handleReloadBirdnet() {
+	// Guard the orchestrator dereference for consistency with NewControlMonitor
+	// (see handleRebuildRangeFilter). Defensive: cm.bn is always set in realtime
+	// analysis, but this avoids a panic if the handler is ever reached without an
+	// orchestrator.
+	if cm.bn == nil {
+		GetLogger().Warn("Cannot reload BirdNET model: orchestrator not initialized")
+		return
+	}
 	if err := cm.bn.ReloadModel(); err != nil {
 		GetLogger().Error("Failed to reload BirdNET model", logger.Error(err))
 		cm.notifyError("Failed to reload BirdNET model", err)
@@ -616,12 +647,15 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 	}
 
 	// Initialize the sound level manager if not already created
+	cm.soundLevelManagerMu.Lock()
 	if cm.soundLevelManager == nil {
 		cm.soundLevelManager = NewSoundLevelManager(cm.soundLevelChan, cm.proc, cm.apiController, cm.metrics)
 	}
+	slm := cm.soundLevelManager
+	cm.soundLevelManagerMu.Unlock()
 
 	// Restart sound level monitoring with new settings
-	if err := cm.soundLevelManager.Restart(); err != nil {
+	if err := slm.Restart(); err != nil {
 		GetLogger().Error("Failed to reconfigure sound level monitoring", logger.Error(err))
 		cm.notifyError("Failed to reconfigure sound level monitoring", err)
 		return
