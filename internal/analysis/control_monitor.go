@@ -74,6 +74,13 @@ type ControlMonitor struct {
 	// data race.
 	soundLevelManagerMu sync.Mutex
 	soundLevelManager   *SoundLevelManager
+	// soundLevelStopped is set once Stop() has run. The monitor goroutine may
+	// process a reconfigure_sound_level signal after Stop() (Stop runs before the
+	// monitor's quitChan is closed during shutdown); the flag prevents that late
+	// reconfigure from constructing and starting a fresh SoundLevelManager, which
+	// would leak its publisher goroutines past shutdown. Guarded by
+	// soundLevelManagerMu.
+	soundLevelStopped bool
 
 	// Track telemetry endpoint
 	telemetryEndpoint      *observability.Endpoint
@@ -210,6 +217,7 @@ func (cm *ControlMonitor) Stop() {
 	// handleReconfigureSoundLevel) but call Stop() outside the lock so a blocking
 	// shutdown never holds the mutex.
 	cm.soundLevelManagerMu.Lock()
+	cm.soundLevelStopped = true
 	slm := cm.soundLevelManager
 	cm.soundLevelManagerMu.Unlock()
 	if slm != nil {
@@ -646,8 +654,15 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 		cm.reconfigureSoundLevelFn()
 	}
 
-	// Initialize the sound level manager if not already created
+	// Initialize the sound level manager if not already created. Bail if Stop()
+	// has already run so a reconfigure signal in flight during shutdown cannot
+	// resurrect the publisher (leaking its goroutines past teardown).
 	cm.soundLevelManagerMu.Lock()
+	if cm.soundLevelStopped {
+		cm.soundLevelManagerMu.Unlock()
+		GetLogger().Debug("Ignoring sound level reconfigure after control monitor shutdown")
+		return
+	}
 	if cm.soundLevelManager == nil {
 		cm.soundLevelManager = NewSoundLevelManager(cm.soundLevelChan, cm.proc, cm.apiController, cm.metrics)
 	}

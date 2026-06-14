@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
@@ -51,4 +52,34 @@ func TestControlMonitor_StopRacesReconfigureSoundLevel(t *testing.T) {
 		}()
 		wg.Wait()
 	}
+}
+
+// TestControlMonitor_ReconfigureAfterStopDoesNotResurrect verifies the lifecycle
+// gate: once Stop() has run, a reconfigure_sound_level signal still in flight on
+// the monitor goroutine must not construct (and start) a new SoundLevelManager,
+// which would leak its publisher goroutines past shutdown. Unlike the -race test
+// above this is deterministic: it asserts the observable effect (no manager
+// created after Stop). SoundLevel.Enabled is false so that, if the gate ever
+// regresses, the un-gated path still spawns nothing (Restart early-returns) and
+// the test fails cleanly on the nil assertion rather than leaking goroutines.
+func TestControlMonitor_ReconfigureAfterStopDoesNotResurrect(t *testing.T) {
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.SoundLevel.Enabled = false
+	conftest.SetTestSettings(settings)
+
+	cm := &ControlMonitor{
+		soundLevelChan: make(chan soundlevel.SoundLevelData, 1),
+	}
+
+	cm.Stop() // marks soundLevelStopped; no manager was ever created
+
+	cm.handleReconfigureSoundLevel() // must be a no-op after shutdown
+
+	cm.soundLevelManagerMu.Lock()
+	mgr := cm.soundLevelManager
+	cm.soundLevelManagerMu.Unlock()
+	assert.Nil(t, mgr, "reconfigure after Stop must not create a sound level manager")
 }
