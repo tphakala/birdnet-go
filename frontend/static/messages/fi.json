@@ -1673,7 +1673,7 @@
         "headers": {
           "excluded": "Poissuljettu",
           "included": "Sisällytetty",
-          "reviewRatio": "Tarkistus",
+          "reviewRatio": "Oikein",
           "rangeProbability": "Alue",
           "confirmed": "Vahvistettu",
           "actions": "Toiminnot"

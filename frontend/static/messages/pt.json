@@ -1673,7 +1673,7 @@
         "headers": {
           "excluded": "Excluída",
           "included": "Incluída",
-          "reviewRatio": "Revisão",
+          "reviewRatio": "Corretas",
           "rangeProbability": "Alcance",
           "confirmed": "Confirmada",
           "actions": "Ações"

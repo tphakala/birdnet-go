@@ -1673,7 +1673,7 @@
         "headers": {
           "excluded": "Vyloučeno",
           "included": "Zahrnuto",
-          "reviewRatio": "Kontrola",
+          "reviewRatio": "Správně",
           "rangeProbability": "Výskyt",
           "confirmed": "Potvrzeno",
           "actions": "Akce"

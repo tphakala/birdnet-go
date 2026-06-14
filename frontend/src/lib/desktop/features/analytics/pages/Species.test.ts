@@ -264,8 +264,8 @@ describe('Species (analytics page) — Manage view', () => {
   // View toggle order: grid(0), list(1), manage(2 — only when authenticated).
   const MANAGE_VIEW_TOGGLE_INDEX = 2;
   // Manage table body cell order: name(0), count(1), maxConf(2), lastSeen(3),
-  // excluded(4), included(5), reviewRatio(6), range(7), confirmed(8), delete(9).
-  const REVIEW_CELL_INDEX = 6;
+  // excluded(4), included(5), correct(6), range(7), confirmed(8), delete(9).
+  const CORRECT_CELL_INDEX = 6;
   const SORT_STORAGE_KEY = 'analytics.species.sortOrder';
 
   const summary = [
@@ -359,32 +359,70 @@ describe('Species (analytics page) — Manage view', () => {
     expect(headText).toContain('lastDetected');
   });
 
-  it('shows the review ratio as "{verified} / {rejected}"', async () => {
+  it('shows the correct rate as an integer percentage', async () => {
+    // verified 7 of 10 reviewed -> round(7 / (7 + 3) * 100) = 70%.
     const { container } = await renderManageView();
     await waitFor(() => {
-      const cell = container.querySelectorAll('table tbody tr td')[REVIEW_CELL_INDEX];
-      expect(cell.textContent.trim()).toBe('7 / 3');
+      const cell = container.querySelectorAll('table tbody tr td')[CORRECT_CELL_INDEX];
+      expect(cell.textContent.trim()).toBe('70%');
     });
   });
 
-  it('shows — in the review column when a species has no reviews', async () => {
+  it('shows — in the correct column when a species has no reviews', async () => {
     mockManageFetch([{ scientificName: 'Turdus migratorius', total: 5, verified: 0, rejected: 0 }]);
     const { container } = await renderManageView();
     await waitFor(() => {
-      const cell = container.querySelectorAll('table tbody tr td')[REVIEW_CELL_INDEX];
+      const cell = container.querySelectorAll('table tbody tr td')[CORRECT_CELL_INDEX];
       expect(cell.textContent.trim()).toBe('—');
     });
   });
 
-  it('does not persist a Manage-only sort into the grid/list localStorage key', async () => {
+  it('makes the membership columns sortable and does not persist a Manage-only sort', async () => {
     const { container } = await renderManageView();
+    // Manage sortable header buttons: name(0), count(1), maxConf(2), lastSeen(3),
+    // excluded(4), included(5), correct(6), range(7), confirmed(8). The excluded,
+    // included, and confirmed columns are now SortableHeaders (9 buttons total).
+    const sortButtons = container.querySelectorAll('table thead th button');
+    expect(sortButtons).toHaveLength(9);
     // fetchData persists the default grid/list sort on mount.
     const persistedBefore = window.localStorage.getItem(SORT_STORAGE_KEY);
-    // Manage sortable header buttons: name(0), count(1), maxConf(2), lastSeen(3), review(4), range(5).
-    const reviewSortButton = container.querySelectorAll('table thead th button')[4];
-    await fireEvent.click(reviewSortButton);
+    await fireEvent.click(sortButtons[4]); // excluded — a Manage-only column
     // Sorting by a Manage-only column must not change the grid/list persisted sort.
     expect(window.localStorage.getItem(SORT_STORAGE_KEY)).toBe(persistedBefore);
+  });
+
+  it('sorts by the Included column, grouping included species first', async () => {
+    // Two rows: Turdus (summary) and Corvus (review-stats only). Only Corvus is on
+    // the included list, so sorting Included (default desc) must put it first.
+    globalThis.fetch = mockFetchSequence({
+      '/api/v2/analytics/species/review-stats': () => [
+        { scientificName: 'Turdus migratorius', total: 10, verified: 7, rejected: 3 },
+        {
+          scientificName: 'Corvus corax',
+          commonName: 'Common Raven',
+          total: 4,
+          verified: 0,
+          rejected: 4,
+        },
+      ],
+      '/api/v2/analytics/species/summary': () => summary,
+      '/api/v2/analytics/species/thumbnails': () => ({}),
+      '/api/v2/detections/included': () => ({ species: ['Corvus corax'] }),
+      '/api/v2/detections/confirmed': () => ({ species: [] }),
+      '/api/v2/detections/ignored': () => ({ species: [] }),
+    });
+    const { container } = await renderManageView();
+    await waitFor(() => {
+      if (container.querySelectorAll('table tbody tr').length < 2)
+        throw new Error('both rows not yet rendered');
+    });
+    // Included is the 6th sortable header (index 5).
+    const sortButtons = container.querySelectorAll('table thead th button');
+    await fireEvent.click(sortButtons[5]);
+    await waitFor(() => {
+      const rows = container.querySelectorAll('table tbody tr');
+      expect(rows[0].textContent).toContain('Common Raven');
+    });
   });
 
   it('surfaces a fully-rejected species that is absent from the period summary', async () => {
@@ -413,7 +451,7 @@ describe('Species (analytics page) — Manage view', () => {
     expect(cells[1].textContent.trim()).toBe('4'); // all-time detection count
     expect(cells[2].textContent.trim()).toBe('—'); // no max-confidence data survives
     expect(cells[3].textContent.trim()).toBe('—'); // no last-detected data survives
-    expect(cells[REVIEW_CELL_INDEX].textContent.trim()).toBe('0 / 4');
+    expect(cells[CORRECT_CELL_INDEX].textContent.trim()).toBe('0%'); // 0 of 4 reviewed correct
   });
 
   it('checks the included toggle when the list stores the scientific-name alias', async () => {

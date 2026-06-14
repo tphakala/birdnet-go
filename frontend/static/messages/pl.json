@@ -1673,7 +1673,7 @@
         "headers": {
           "excluded": "Wykluczony",
           "included": "Uwzględniony",
-          "reviewRatio": "Przegląd",
+          "reviewRatio": "Poprawne",
           "rangeProbability": "Zasięg",
           "confirmed": "Potwierdzony",
           "actions": "Akcje"

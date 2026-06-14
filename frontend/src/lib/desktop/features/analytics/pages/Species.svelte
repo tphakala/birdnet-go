@@ -81,7 +81,16 @@
 
   // Manage-only sort keys. Kept separate from SortOrder (and never persisted to
   // localStorage) so a Manage-only column never leaks into grid/list sorting.
-  type ManageSortKey = 'name' | 'count' | 'max_confidence' | 'last_seen' | 'review' | 'range';
+  type ManageSortKey =
+    | 'name'
+    | 'count'
+    | 'max_confidence'
+    | 'last_seen'
+    | 'excluded'
+    | 'included'
+    | 'correct'
+    | 'range'
+    | 'confirmed';
 
   // A species row paired with the visitor-localized common name, used inside
   // filteredSpecies for search + name-sort so they match what the user sees.
@@ -626,8 +635,11 @@
     { field: 'count', defaultAsc: false },
     { field: 'max_confidence', defaultAsc: false },
     { field: 'last_seen', defaultAsc: false },
-    { field: 'review', defaultAsc: false },
+    { field: 'excluded', defaultAsc: false },
+    { field: 'included', defaultAsc: false },
+    { field: 'correct', defaultAsc: false },
     { field: 'range', defaultAsc: false },
+    { field: 'confirmed', defaultAsc: false },
   ];
 
   function showManageView() {
@@ -699,10 +711,21 @@
     }
   }
 
-  // Review activity total used for the "review" sort (most-reviewed first).
-  function reviewActivity(species: SpeciesData): number {
+  // Share of reviewed detections marked correct (verified), as a 0-100 percentage.
+  // Returns -1 when the species has no reviews so those rows sort to the bottom and
+  // render an em dash, matching the range column's missing-data convention.
+  function correctRate(species: SpeciesData): number {
     const stat = reviewStats.get(species.scientific_name);
-    return stat ? stat.verified + stat.rejected : 0;
+    if (!stat) return -1;
+    const reviewed = stat.verified + stat.rejected;
+    if (reviewed === 0) return -1;
+    return (stat.verified / reviewed) * 100;
+  }
+
+  // True when the species is in the given membership list (excluded / included /
+  // confirmed). Used by both the row checkboxes and the membership column sorts.
+  function isMember(set: SvelteSet<string>, species: SpeciesData): boolean {
+    return listEntryFor(set, species) !== undefined;
   }
 
   // The Manage view acts on a SUPERSET of the period summary: a species whose
@@ -766,8 +789,14 @@
           if (!db) return -1;
           return dir * (da.getTime() - db.getTime());
         }
-        case 'review':
-          return dir * (reviewActivity(a) - reviewActivity(b));
+        case 'excluded':
+          return dir * (Number(isMember(excludedSet, a)) - Number(isMember(excludedSet, b)));
+        case 'included':
+          return dir * (Number(isMember(includedSet, a)) - Number(isMember(includedSet, b)));
+        case 'confirmed':
+          return dir * (Number(isMember(confirmedSet, a)) - Number(isMember(confirmedSet, b)));
+        case 'correct':
+          return dir * (correctRate(a) - correctRate(b));
         case 'range':
           return (
             dir *
@@ -790,10 +819,10 @@
     return parsed ? getLocalDateString(parsed) : '—';
   }
 
-  function reviewRatioText(species: SpeciesData): string {
-    const stat = reviewStats.get(species.scientific_name);
-    if (!stat || (stat.verified === 0 && stat.rejected === 0)) return '—';
-    return `${stat.verified} / ${stat.rejected}`;
+  // Correctness rate as a 0-100 integer percentage; em dash when unreviewed.
+  function correctRateText(species: SpeciesData): string {
+    const rate = correctRate(species);
+    return rate < 0 ? '—' : `${Math.round(rate)}%`;
   }
 
   // Returns the exact list entry matching this species by common OR scientific
@@ -1171,11 +1200,25 @@
                   direction={manageSortDirection}
                   onSort={handleManageSort}
                 />
-                <th>{t('analytics.species.manage.headers.excluded')}</th>
-                <th>{t('analytics.species.manage.headers.included')}</th>
+                <SortableHeader
+                  label={t('analytics.species.manage.headers.excluded')}
+                  field="excluded"
+                  activeField={manageSortKey}
+                  direction={manageSortDirection}
+                  onSort={handleManageSort}
+                />
+                <SortableHeader
+                  label={t('analytics.species.manage.headers.included')}
+                  field="included"
+                  activeField={manageSortKey}
+                  direction={manageSortDirection}
+                  onSort={handleManageSort}
+                />
+                <!-- Label key is historically named reviewRatio; the column now shows
+                     the correctness rate (verified / reviewed), sorted by `correct`. -->
                 <SortableHeader
                   label={t('analytics.species.manage.headers.reviewRatio')}
-                  field="review"
+                  field="correct"
                   activeField={manageSortKey}
                   direction={manageSortDirection}
                   onSort={handleManageSort}
@@ -1187,7 +1230,13 @@
                   direction={manageSortDirection}
                   onSort={handleManageSort}
                 />
-                <th>{t('analytics.species.manage.headers.confirmed')}</th>
+                <SortableHeader
+                  label={t('analytics.species.manage.headers.confirmed')}
+                  field="confirmed"
+                  activeField={manageSortKey}
+                  direction={manageSortDirection}
+                  onSort={handleManageSort}
+                />
                 <th>{t('analytics.species.manage.headers.actions')}</th>
               </tr>
             </thead>
@@ -1218,19 +1267,19 @@
                   <td class="text-sm">{formatDateOnly(species.last_heard)}</td>
                   <td>
                     <Checkbox
-                      checked={listEntryFor(excludedSet, species) !== undefined}
+                      checked={isMember(excludedSet, species)}
                       disabled={togglingExcluded.has(species.scientific_name)}
                       onchange={() => toggleMembership('excluded', species)}
                     />
                   </td>
                   <td>
                     <Checkbox
-                      checked={listEntryFor(includedSet, species) !== undefined}
+                      checked={isMember(includedSet, species)}
                       disabled={togglingIncluded.has(species.scientific_name)}
                       onchange={() => toggleMembership('included', species)}
                     />
                   </td>
-                  <td class="text-sm">{reviewRatioText(species)}</td>
+                  <td class="text-sm">{correctRateText(species)}</td>
                   <td class="text-sm">
                     {#if rangeLoading && !rangeScores.has(species.scientific_name)}
                       <span
@@ -1245,7 +1294,7 @@
                   </td>
                   <td>
                     <Checkbox
-                      checked={listEntryFor(confirmedSet, species) !== undefined}
+                      checked={isMember(confirmedSet, species)}
                       disabled={togglingConfirmed.has(species.scientific_name)}
                       onchange={() => toggleMembership('confirmed', species)}
                     />

@@ -1673,7 +1673,7 @@
         "headers": {
           "excluded": "Uitgesloten",
           "included": "Opgenomen",
-          "reviewRatio": "Beoordeling",
+          "reviewRatio": "Correct",
           "rangeProbability": "Bereik",
           "confirmed": "Bevestigd",
           "actions": "Acties"

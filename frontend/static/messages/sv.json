@@ -1673,7 +1673,7 @@
         "headers": {
           "excluded": "Exkluderad",
           "included": "Inkluderad",
-          "reviewRatio": "Granskning",
+          "reviewRatio": "Korrekt",
           "rangeProbability": "Område",
           "confirmed": "Bekräftad",
           "actions": "Åtgärder"
