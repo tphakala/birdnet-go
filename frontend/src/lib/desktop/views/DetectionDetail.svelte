@@ -185,21 +185,26 @@
     }
 
     detectionController?.abort();
-    detectionController = new AbortController();
+    const controller = new AbortController();
+    detectionController = controller;
+    const { signal } = controller;
 
     isLoadingDetection = true;
     detectionError = null;
 
     try {
       const response = await fetch(buildAppUrl(`/api/v2/detections/${resolvedDetectionId}`), {
-        signal: detectionController.signal,
+        signal,
       });
 
-      if (detectionController?.signal.aborted) return;
+      // Check the captured signal, not the shared controller: a newer request may
+      // have replaced detectionController with a fresh, non-aborted instance, and
+      // checking that would let this stale response overwrite newer data.
+      if (signal.aborted) return;
 
       if (response.ok) {
         const data = (await response.json()) as Detection;
-        if (detectionController?.signal.aborted) return;
+        if (signal.aborted) return;
         detection = data;
       } else {
         let errorMessage: string;
@@ -230,15 +235,19 @@
         fetchImageAttribution();
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
         return;
       }
       detectionError =
         error instanceof Error ? error.message : t('detections.errors.loadFailed', { status: '' });
       logger.error('Error fetching detection:', error);
     } finally {
-      isLoadingDetection = false;
-      detectionController = null;
+      // Only the request that still owns the controller may reset shared state; a
+      // superseded request must not clear a newer request's loading flag/controller.
+      if (detectionController === controller) {
+        isLoadingDetection = false;
+        detectionController = null;
+      }
     }
   }
 
@@ -247,24 +256,28 @@
     if (!detection?.scientificName?.trim()) return;
 
     attributionController?.abort();
-    attributionController = new AbortController();
+    const controller = new AbortController();
+    attributionController = controller;
+    const { signal } = controller;
 
     try {
       const url = buildAppUrl(
         `/api/v2/media/species-image/info?name=${encodeURIComponent(detection.scientificName)}`
       );
-      const response = await fetch(url, { signal: attributionController?.signal });
-      if (attributionController?.signal.aborted) return;
+      const response = await fetch(url, { signal });
+      if (signal.aborted) return;
       if (response.ok) {
         const data = await response.json();
-        if (attributionController?.signal.aborted) return;
+        if (signal.aborted) return;
         imageAttribution = data as ImageAttribution;
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') return;
+      if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;
       // Attribution is non-critical - fail silently
     } finally {
-      attributionController = null;
+      if (attributionController === controller) {
+        attributionController = null;
+      }
     }
   }
 
@@ -273,28 +286,32 @@
     if (!detection?.scientificName?.trim()) return;
 
     speciesController?.abort();
-    speciesController = new AbortController();
+    const controller = new AbortController();
+    speciesController = controller;
+    const { signal } = controller;
 
     try {
       const response = await fetch(
         buildAppUrl(
           `/api/v2/species?scientific_name=${encodeURIComponent(detection.scientificName)}`
         ),
-        { signal: speciesController?.signal }
+        { signal }
       );
-      if (speciesController?.signal.aborted) return;
+      if (signal.aborted) return;
       if (response.ok) {
         const data = await response.json();
-        if (speciesController?.signal.aborted) return;
+        if (signal.aborted) return;
         speciesInfo = data;
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
         return;
       }
       logger.error('Error fetching species info:', error);
     } finally {
-      speciesController = null;
+      if (speciesController === controller) {
+        speciesController = null;
+      }
     }
   }
 
@@ -303,7 +320,9 @@
     if (!detection?.scientificName?.trim()) return;
 
     taxonomyController?.abort();
-    taxonomyController = new AbortController();
+    const controller = new AbortController();
+    taxonomyController = controller;
+    const { signal } = controller;
 
     isLoadingTaxonomy = true;
     try {
@@ -311,22 +330,24 @@
         buildAppUrl(
           `/api/v2/species/taxonomy?scientific_name=${encodeURIComponent(detection.scientificName)}`
         ),
-        { signal: taxonomyController?.signal }
+        { signal }
       );
-      if (taxonomyController?.signal.aborted) return;
+      if (signal.aborted) return;
       if (response.ok) {
         const data = await response.json();
-        if (taxonomyController?.signal.aborted) return;
+        if (signal.aborted) return;
         taxonomyInfo = data;
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
         return;
       }
       logger.error('Error fetching taxonomy info:', error);
     } finally {
-      isLoadingTaxonomy = false;
-      taxonomyController = null;
+      if (taxonomyController === controller) {
+        isLoadingTaxonomy = false;
+        taxonomyController = null;
+      }
     }
   }
 

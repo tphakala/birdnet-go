@@ -136,6 +136,12 @@
     newSpecies: [],
   });
 
+  // Monotonic token guarding against stale-response races. Each fetchData() run
+  // captures the latest value; a fetcher only commits its result when its captured
+  // token still matches, so a slower earlier request can no longer overwrite the
+  // data from a newer one after rapid filter changes. Non-reactive on purpose.
+  let analyticsFetchSeq = 0;
+
   // Derived chart inputs built from the reactive chartData via pure transforms.
   // Species distribution: sorted desc by count, mapped to labelled bars with
   // per-species colors from the D3 theme palette (applied inside BarChart).
@@ -238,6 +244,7 @@
 
   // Fetch all data
   async function fetchData() {
+    const seq = ++analyticsFetchSeq;
     isLoading = true;
     error = null;
 
@@ -293,13 +300,16 @@
 
       // Run all API calls in parallel
       const results = await Promise.allSettled([
-        fetchSummaryData(startDate || '', endDate || ''),
-        fetchSpeciesSummary(startDate || '', endDate || ''),
-        fetchRecentDetections(),
-        fetchTimeOfDayData(startDate || '', endDate || ''),
-        fetchTrendData(startDate || '', endDate || ''),
-        fetchNewSpeciesData(startDate || '', endDate || ''),
+        fetchSummaryData(seq, startDate || '', endDate || ''),
+        fetchSpeciesSummary(seq, startDate || '', endDate || ''),
+        fetchRecentDetections(seq),
+        fetchTimeOfDayData(seq, startDate || '', endDate || ''),
+        fetchTrendData(seq, startDate || '', endDate || ''),
+        fetchNewSpeciesData(seq, startDate || '', endDate || ''),
       ]);
+
+      // A newer fetchData() superseded this run; leave its state and loading flag alone.
+      if (seq !== analyticsFetchSeq) return;
 
       // Log any failed API calls (these show up in both dev and prod)
       const apiNames = ['Summary', 'Species', 'Recent', 'TimeOfDay', 'Trend', 'NewSpecies'];
@@ -318,17 +328,21 @@
         });
       }
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return;
       logger.error('General error fetching analytics data:', err);
       error = t('analytics.loadingError');
     }
 
     // The D3 chart components render reactively from the derived chart inputs,
-    // so there is nothing to imperatively create here.
-    isLoading = false;
+    // so there is nothing to imperatively create here. Only the most recent run
+    // clears the loading flag; a superseded run leaves it for the active fetch.
+    if (seq === analyticsFetchSeq) {
+      isLoading = false;
+    }
   }
 
   // Fetch summary metrics
-  async function fetchSummaryData(startDate: string, endDate: string) {
+  async function fetchSummaryData(seq: number, startDate: string, endDate: string) {
     try {
       const params = new URLSearchParams();
       if (startDate) params.set('start_date', startDate);
@@ -338,6 +352,7 @@
       logger.debug('Fetching summary data:', { url, startDate, endDate });
 
       const speciesData = await api.get<SpeciesData[]>(url);
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       const speciesArray = Array.isArray(speciesData) ? speciesData : [];
 
       logger.debug('Summary API response:', {
@@ -377,12 +392,13 @@
         mostCommonCount,
       };
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching summary data:', err);
     }
   }
 
   // Fetch species summary for chart
-  async function fetchSpeciesSummary(startDate: string, endDate: string) {
+  async function fetchSpeciesSummary(seq: number, startDate: string, endDate: string) {
     try {
       const params = new URLSearchParams({ limit: '10' });
       if (startDate) params.set('start_date', startDate);
@@ -392,6 +408,7 @@
       logger.debug('Fetching species chart data:', { url, startDate, endDate });
 
       const speciesData = await api.get<SpeciesData[]>(url);
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       chartData.species = Array.isArray(speciesData) ? speciesData : [];
 
       logger.debug('Species chart API response:', {
@@ -401,15 +418,17 @@
         length: chartData.species.length,
       });
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching species summary:', err);
       chartData.species = [];
     }
   }
 
   // Fetch recent detections
-  async function fetchRecentDetections() {
+  async function fetchRecentDetections(seq: number) {
     try {
       const data = await api.get<ApiDetection[]>('/api/v2/detections/recent?limit=10');
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       const detections = Array.isArray(data) ? data : [];
 
       recentDetections = detections.map(detection => {
@@ -430,6 +449,7 @@
         };
       });
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching recent detections:', err);
       recentDetections = [];
     }
@@ -447,7 +467,7 @@
   }
 
   // Fetch time of day data
-  async function fetchTimeOfDayData(startDate: string, endDate: string) {
+  async function fetchTimeOfDayData(seq: number, startDate: string, endDate: string) {
     try {
       const params = new URLSearchParams();
       if (startDate) params.set('start_date', startDate);
@@ -457,6 +477,7 @@
       logger.debug('Fetching time of day data:', { url, startDate, endDate });
 
       const timeData = await api.get<TimeOfDayData[]>(url);
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       chartData.timeOfDay = Array.isArray(timeData) ? timeData : [];
 
       logger.debug('Time of day API response:', {
@@ -466,13 +487,14 @@
         length: Array.isArray(timeData) ? timeData.length : 0,
       });
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching time of day data:', err);
       chartData.timeOfDay = [];
     }
   }
 
   // Fetch trend data
-  async function fetchTrendData(startDate: string, endDate: string) {
+  async function fetchTrendData(seq: number, startDate: string, endDate: string) {
     try {
       const params = new URLSearchParams();
 
@@ -493,6 +515,7 @@
       logger.debug('Fetching trend data:', { url, startDate, endDate });
 
       const trendData = await api.get<TrendData>(url);
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       chartData.trend = trendData ?? { data: [] };
 
       logger.debug('Trend API response:', {
@@ -501,13 +524,14 @@
         dataLength: trendData?.data?.length || 0,
       });
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching trend data:', err);
       chartData.trend = { data: [] };
     }
   }
 
   // Fetch new species data
-  async function fetchNewSpeciesData(startDate: string, endDate: string) {
+  async function fetchNewSpeciesData(seq: number, startDate: string, endDate: string) {
     try {
       const params = new URLSearchParams();
       if (startDate) params.set('start_date', startDate);
@@ -517,6 +541,7 @@
       logger.debug('Fetching new species data:', { url, startDate, endDate });
 
       const data = await api.get<NewSpeciesData[]>(url);
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       newSpeciesData = Array.isArray(data) ? data : [];
       chartData.newSpecies = newSpeciesData;
 
@@ -527,6 +552,7 @@
         length: newSpeciesData.length,
       });
     } catch (err) {
+      if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching new species data:', err);
       newSpeciesData = [];
       chartData.newSpecies = [];

@@ -388,6 +388,67 @@ describe('SpeciesInput', () => {
       expect(portal?.parentElement).toBe(document.body);
     });
 
+    // Regression for #1030: clicking outside must remove the portal node from
+    // document.body even while the input still holds text. Previously the portal
+    // lingered because handleDocumentClick only set showPredictions = false and
+    // the $effect never observed it.
+    it('destroys the portal dropdown when clicking outside while text remains', async () => {
+      render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      const input = screen.getByRole('combobox');
+      await fireEvent.focus(input);
+
+      // Portal exists after focus.
+      await waitFor(() => {
+        expect(document.body.querySelector('[id^="species-predictions-"]')).toBeTruthy();
+      });
+
+      // Click outside the input and the portal.
+      await fireEvent.click(document.body);
+
+      // Portal is removed even though the input value ('rob') is unchanged.
+      await waitFor(() => {
+        expect(document.body.querySelector('[id^="species-predictions-"]')).toBeNull();
+      });
+    });
+
+    // After an explicit dismissal (click-outside), typing must reopen the dropdown
+    // (handleInput resets manuallyDismissed). This proves the dismiss -> type ->
+    // reopen cycle works and the dropdown isn't stuck closed.
+    it('reopens the portal dropdown on typing after a click-outside dismissal', async () => {
+      render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      const input = screen.getByRole('combobox');
+      await fireEvent.focus(input);
+      await waitFor(() => {
+        expect(document.body.querySelector('[id^="species-predictions-"]')).toBeTruthy();
+      });
+
+      // Dismiss by clicking outside.
+      await fireEvent.click(document.body);
+      await waitFor(() => {
+        expect(document.body.querySelector('[id^="species-predictions-"]')).toBeNull();
+      });
+
+      // Typing clears the dismissal and recreates the dropdown.
+      await fireEvent.input(input, { target: { value: 'robi' } });
+      await waitFor(() => {
+        expect(document.body.querySelector('[id^="species-predictions-"]')).toBeTruthy();
+      });
+    });
+
     it('positions dropdown below input when space is available', async () => {
       // Mock getBoundingClientRect for input element
       const mockRect = {
