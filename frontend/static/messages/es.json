@@ -1654,7 +1654,7 @@
       "speciesList": "Lista de especies",
       "switchToGrid": "Cambiar a vista de cuadrícula",
       "switchToList": "Cambiar a vista de lista",
-      "switchToManage": "Switch to manage view",
+      "switchToManage": "Cambiar a vista de gestión",
       "noSpeciesFound": "No se encontraron especies que coincidan con tus filtros.",
       "headers": {
         "species": "Especie",
@@ -1671,19 +1671,19 @@
       },
       "manage": {
         "headers": {
-          "excluded": "Excluded",
-          "included": "Included",
-          "reviewRatio": "Review",
-          "rangeProbability": "Range",
-          "confirmed": "Confirmed",
-          "actions": "Actions"
+          "excluded": "Excluida",
+          "included": "Incluida",
+          "reviewRatio": "Revisión",
+          "rangeProbability": "Rango",
+          "confirmed": "Confirmada",
+          "actions": "Acciones"
         },
-        "delete": "Delete all detections for this species",
-        "deleteTitle": "Delete species detections",
-        "deleteConfirm": "Delete",
-        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
-        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
-        "deleteFailed": "Failed to delete detections. Please try again."
+        "delete": "Eliminar todas las detecciones de esta especie",
+        "deleteTitle": "Eliminar detecciones de especie",
+        "deleteConfirm": "Eliminar",
+        "deleteMessage": "¿Eliminar las {count} detecciones de {species}? Las detecciones bloqueadas se conservan.",
+        "deleteWarning": "Esto elimina permanentemente las detecciones y sus clips de audio y no se puede deshacer.",
+        "deleteFailed": "No se pudieron eliminar las detecciones. Inténtalo de nuevo."
       }
     },
     "advanced": {

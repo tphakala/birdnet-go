@@ -1654,7 +1654,7 @@
       "speciesList": "Artlista",
       "switchToGrid": "Byt till rutnätsvy",
       "switchToList": "Byt till listvy",
-      "switchToManage": "Switch to manage view",
+      "switchToManage": "Växla till hanteringsvy",
       "noSpeciesFound": "Inga arter hittades som matchar dina filter.",
       "headers": {
         "species": "Art",
@@ -1671,19 +1671,19 @@
       },
       "manage": {
         "headers": {
-          "excluded": "Excluded",
-          "included": "Included",
-          "reviewRatio": "Review",
-          "rangeProbability": "Range",
-          "confirmed": "Confirmed",
-          "actions": "Actions"
+          "excluded": "Exkluderad",
+          "included": "Inkluderad",
+          "reviewRatio": "Granskning",
+          "rangeProbability": "Område",
+          "confirmed": "Bekräftad",
+          "actions": "Åtgärder"
         },
-        "delete": "Delete all detections for this species",
-        "deleteTitle": "Delete species detections",
-        "deleteConfirm": "Delete",
-        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
-        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
-        "deleteFailed": "Failed to delete detections. Please try again."
+        "delete": "Radera alla detektioner för denna art",
+        "deleteTitle": "Radera artdetektioner",
+        "deleteConfirm": "Radera",
+        "deleteMessage": "Radera alla {count} detektioner för {species}? Låsta detektioner behålls.",
+        "deleteWarning": "Detta tar bort detektionerna och deras ljudklipp permanent och kan inte ångras.",
+        "deleteFailed": "Det gick inte att radera detektionerna. Försök igen."
       }
     },
     "advanced": {

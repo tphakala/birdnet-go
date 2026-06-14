@@ -1654,7 +1654,7 @@
       "speciesList": "Artenliste",
       "switchToGrid": "Zur Gitteransicht wechseln",
       "switchToList": "Zur Listenansicht wechseln",
-      "switchToManage": "Switch to manage view",
+      "switchToManage": "Zur Verwaltungsansicht wechseln",
       "noSpeciesFound": "Keine Arten gefunden, die Ihren Filtern entsprechen.",
       "headers": {
         "species": "Art",
@@ -1671,19 +1671,19 @@
       },
       "manage": {
         "headers": {
-          "excluded": "Excluded",
-          "included": "Included",
-          "reviewRatio": "Review",
-          "rangeProbability": "Range",
-          "confirmed": "Confirmed",
-          "actions": "Actions"
+          "excluded": "Ausgeschlossen",
+          "included": "Eingeschlossen",
+          "reviewRatio": "Prüfung",
+          "rangeProbability": "Reichweite",
+          "confirmed": "Bestätigt",
+          "actions": "Aktionen"
         },
-        "delete": "Delete all detections for this species",
-        "deleteTitle": "Delete species detections",
-        "deleteConfirm": "Delete",
-        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
-        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
-        "deleteFailed": "Failed to delete detections. Please try again."
+        "delete": "Alle Erkennungen dieser Art löschen",
+        "deleteTitle": "Arterkennungen löschen",
+        "deleteConfirm": "Löschen",
+        "deleteMessage": "Alle {count} Erkennungen für {species} löschen? Gesperrte Erkennungen bleiben erhalten.",
+        "deleteWarning": "Dadurch werden die Erkennungen und ihre Audioclips dauerhaft entfernt und können nicht rückgängig gemacht werden.",
+        "deleteFailed": "Erkennungen konnten nicht gelöscht werden. Bitte versuchen Sie es erneut."
       }
     },
     "advanced": {

@@ -1654,7 +1654,7 @@
       "speciesList": "Lajiluettelo",
       "switchToGrid": "Vaihda ruudukkonäkymään",
       "switchToList": "Vaihda listanäkymään",
-      "switchToManage": "Switch to manage view",
+      "switchToManage": "Vaihda hallintanäkymään",
       "noSpeciesFound": "Suodattimia vastaavia lajeja ei löytynyt.",
       "headers": {
         "species": "Laji",
@@ -1671,19 +1671,19 @@
       },
       "manage": {
         "headers": {
-          "excluded": "Excluded",
-          "included": "Included",
-          "reviewRatio": "Review",
-          "rangeProbability": "Range",
-          "confirmed": "Confirmed",
-          "actions": "Actions"
+          "excluded": "Poissuljettu",
+          "included": "Sisällytetty",
+          "reviewRatio": "Tarkistus",
+          "rangeProbability": "Alue",
+          "confirmed": "Vahvistettu",
+          "actions": "Toiminnot"
         },
-        "delete": "Delete all detections for this species",
-        "deleteTitle": "Delete species detections",
-        "deleteConfirm": "Delete",
-        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
-        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
-        "deleteFailed": "Failed to delete detections. Please try again."
+        "delete": "Poista kaikki tämän lajin havainnot",
+        "deleteTitle": "Poista lajin havainnot",
+        "deleteConfirm": "Poista",
+        "deleteMessage": "Poistetaanko kaikki {count} havaintoa lajille {species}? Lukitut havainnot säilytetään.",
+        "deleteWarning": "Tämä poistaa havainnot ja niiden äänileikkeet pysyvästi, eikä toimintoa voi kumota.",
+        "deleteFailed": "Havaintojen poistaminen epäonnistui. Yritä uudelleen."
       }
     },
     "advanced": {

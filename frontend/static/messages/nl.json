@@ -1654,7 +1654,7 @@
       "speciesList": "Soorten lijst",
       "switchToGrid": "Wissel naar tegel overzicht",
       "switchToList": "Wissel naar lijst overzicht",
-      "switchToManage": "Switch to manage view",
+      "switchToManage": "Naar beheerweergave schakelen",
       "noSpeciesFound": "Geen soorten gevonden voor jouw filters.",
       "headers": {
         "species": "Soort",
@@ -1671,19 +1671,19 @@
       },
       "manage": {
         "headers": {
-          "excluded": "Excluded",
-          "included": "Included",
-          "reviewRatio": "Review",
-          "rangeProbability": "Range",
-          "confirmed": "Confirmed",
-          "actions": "Actions"
+          "excluded": "Uitgesloten",
+          "included": "Opgenomen",
+          "reviewRatio": "Beoordeling",
+          "rangeProbability": "Bereik",
+          "confirmed": "Bevestigd",
+          "actions": "Acties"
         },
-        "delete": "Delete all detections for this species",
-        "deleteTitle": "Delete species detections",
-        "deleteConfirm": "Delete",
-        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
-        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
-        "deleteFailed": "Failed to delete detections. Please try again."
+        "delete": "Alle detecties van deze soort verwijderen",
+        "deleteTitle": "Soortdetecties verwijderen",
+        "deleteConfirm": "Verwijderen",
+        "deleteMessage": "Alle {count} detecties van {species} verwijderen? Vergrendelde detecties blijven behouden.",
+        "deleteWarning": "Hiermee worden de detecties en hun audiofragmenten permanent verwijderd en dit kan niet ongedaan worden gemaakt.",
+        "deleteFailed": "Kan detecties niet verwijderen. Probeer het opnieuw."
       }
     },
     "advanced": {

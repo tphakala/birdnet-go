@@ -1654,7 +1654,7 @@
       "speciesList": "Sugu saraksts",
       "switchToGrid": "Pārslēgt uz režģa skatu",
       "switchToList": "Pārslēgt uz saraksta skatu",
-      "switchToManage": "Switch to manage view",
+      "switchToManage": "Pārslēgties uz pārvaldības skatu",
       "noSpeciesFound": "Sugas, kas atbilst jūsu filtriem, nav atrastas.",
       "headers": {
         "species": "Suga",
@@ -1671,19 +1671,19 @@
       },
       "manage": {
         "headers": {
-          "excluded": "Excluded",
-          "included": "Included",
-          "reviewRatio": "Review",
-          "rangeProbability": "Range",
-          "confirmed": "Confirmed",
-          "actions": "Actions"
+          "excluded": "Izslēgta",
+          "included": "Iekļauta",
+          "reviewRatio": "Pārbaude",
+          "rangeProbability": "Areāls",
+          "confirmed": "Apstiprināta",
+          "actions": "Darbības"
         },
-        "delete": "Delete all detections for this species",
-        "deleteTitle": "Delete species detections",
-        "deleteConfirm": "Delete",
-        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
-        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
-        "deleteFailed": "Failed to delete detections. Please try again."
+        "delete": "Dzēst visas šīs sugas atpazīšanas",
+        "deleteTitle": "Dzēst sugas atpazīšanas",
+        "deleteConfirm": "Dzēst",
+        "deleteMessage": "Dzēst visas {count} sugas {species} atpazīšanas? Bloķētās atpazīšanas tiek saglabātas.",
+        "deleteWarning": "Tādējādi neatgriezeniski tiek noņemtas atpazīšanas un to audioklipi, un šo darbību nevar atsaukt.",
+        "deleteFailed": "Neizdevās dzēst atpazīšanas. Lūdzu, mēģiniet vēlreiz."
       }
     },
     "advanced": {

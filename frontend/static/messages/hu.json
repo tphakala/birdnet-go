@@ -1654,7 +1654,7 @@
       "speciesList": "Fajlista",
       "switchToGrid": "Rács nézetre váltás",
       "switchToList": "Lista nézetre váltás",
-      "switchToManage": "Switch to manage view",
+      "switchToManage": "Váltás kezelő nézetre",
       "noSpeciesFound": "A szűrőknek megfelelő faj nem található.",
       "headers": {
         "species": "Faj",
@@ -1671,19 +1671,19 @@
       },
       "manage": {
         "headers": {
-          "excluded": "Excluded",
-          "included": "Included",
-          "reviewRatio": "Review",
-          "rangeProbability": "Range",
-          "confirmed": "Confirmed",
-          "actions": "Actions"
+          "excluded": "Kizárva",
+          "included": "Beleértve",
+          "reviewRatio": "Ellenőrzés",
+          "rangeProbability": "Tartomány",
+          "confirmed": "Megerősítve",
+          "actions": "Műveletek"
         },
-        "delete": "Delete all detections for this species",
-        "deleteTitle": "Delete species detections",
-        "deleteConfirm": "Delete",
-        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
-        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
-        "deleteFailed": "Failed to delete detections. Please try again."
+        "delete": "A faj összes detektálásának törlése",
+        "deleteTitle": "Faj detektálásainak törlése",
+        "deleteConfirm": "Törlés",
+        "deleteMessage": "Törli a(z) {species} faj mind a(z) {count} detektálását? A zárolt detektálások megmaradnak.",
+        "deleteWarning": "Ez véglegesen eltávolítja a detektálásokat és azok hangklipjeit, és nem vonható vissza.",
+        "deleteFailed": "A detektálások törlése nem sikerült. Kérjük, próbálja újra."
       }
     },
     "advanced": {

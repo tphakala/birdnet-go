@@ -1654,7 +1654,7 @@
       "speciesList": "Seznam druhů",
       "switchToGrid": "Přepnout na mřížku",
       "switchToList": "Přepnout na seznam",
-      "switchToManage": "Switch to manage view",
+      "switchToManage": "Přepnout na správu",
       "noSpeciesFound": "Nebyly nalezeny žádné druhy odpovídající vašim filtrům.",
       "headers": {
         "species": "Druh",
@@ -1671,19 +1671,19 @@
       },
       "manage": {
         "headers": {
-          "excluded": "Excluded",
-          "included": "Included",
-          "reviewRatio": "Review",
-          "rangeProbability": "Range",
-          "confirmed": "Confirmed",
-          "actions": "Actions"
+          "excluded": "Vyloučeno",
+          "included": "Zahrnuto",
+          "reviewRatio": "Kontrola",
+          "rangeProbability": "Výskyt",
+          "confirmed": "Potvrzeno",
+          "actions": "Akce"
         },
-        "delete": "Delete all detections for this species",
-        "deleteTitle": "Delete species detections",
-        "deleteConfirm": "Delete",
-        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
-        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
-        "deleteFailed": "Failed to delete detections. Please try again."
+        "delete": "Smazat všechny detekce tohoto druhu",
+        "deleteTitle": "Smazat detekce druhu",
+        "deleteConfirm": "Smazat",
+        "deleteMessage": "Smazat všech {count} detekcí druhu {species}? Uzamčené detekce zůstanou zachovány.",
+        "deleteWarning": "Tímto trvale odstraníte detekce i jejich zvukové nahrávky a tuto akci nelze vrátit zpět.",
+        "deleteFailed": "Smazání detekcí se nezdařilo. Zkuste to prosím znovu."
       }
     },
     "advanced": {

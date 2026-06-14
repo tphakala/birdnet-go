@@ -1654,7 +1654,7 @@
       "speciesList": "Elenco Specie",
       "switchToGrid": "Passa alla vista griglia",
       "switchToList": "Passa alla vista elenco",
-      "switchToManage": "Switch to manage view",
+      "switchToManage": "Passa alla vista di gestione",
       "noSpeciesFound": "Nessuna specie trovata corrispondente ai tuoi filtri.",
       "headers": {
         "species": "Specie",
@@ -1671,19 +1671,19 @@
       },
       "manage": {
         "headers": {
-          "excluded": "Excluded",
-          "included": "Included",
-          "reviewRatio": "Review",
-          "rangeProbability": "Range",
-          "confirmed": "Confirmed",
-          "actions": "Actions"
+          "excluded": "Escluso",
+          "included": "Incluso",
+          "reviewRatio": "Revisione",
+          "rangeProbability": "Intervallo",
+          "confirmed": "Confermato",
+          "actions": "Azioni"
         },
-        "delete": "Delete all detections for this species",
-        "deleteTitle": "Delete species detections",
-        "deleteConfirm": "Delete",
-        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
-        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
-        "deleteFailed": "Failed to delete detections. Please try again."
+        "delete": "Elimina tutti i rilevamenti di questa specie",
+        "deleteTitle": "Elimina rilevamenti della specie",
+        "deleteConfirm": "Elimina",
+        "deleteMessage": "Eliminare tutti i {count} rilevamenti di {species}? I rilevamenti bloccati vengono mantenuti.",
+        "deleteWarning": "Questa operazione rimuove definitivamente i rilevamenti e le loro clip audio e non può essere annullata.",
+        "deleteFailed": "Eliminazione dei rilevamenti non riuscita. Riprova."
       }
     },
     "advanced": {

@@ -1654,7 +1654,7 @@
       "speciesList": "Artsliste",
       "switchToGrid": "Skift til gittervisning",
       "switchToList": "Skift til listevisning",
-      "switchToManage": "Switch to manage view",
+      "switchToManage": "Skift til administrationsvisning",
       "noSpeciesFound": "Ingen arter fundet der matcher dine filtre.",
       "headers": {
         "species": "Art",
@@ -1671,19 +1671,19 @@
       },
       "manage": {
         "headers": {
-          "excluded": "Excluded",
-          "included": "Included",
-          "reviewRatio": "Review",
-          "rangeProbability": "Range",
-          "confirmed": "Confirmed",
-          "actions": "Actions"
+          "excluded": "Ekskluderet",
+          "included": "Inkluderet",
+          "reviewRatio": "Gennemgang",
+          "rangeProbability": "Område",
+          "confirmed": "Bekræftet",
+          "actions": "Handlinger"
         },
-        "delete": "Delete all detections for this species",
-        "deleteTitle": "Delete species detections",
-        "deleteConfirm": "Delete",
-        "deleteMessage": "Delete all {count} detections for {species}? Locked detections are kept.",
-        "deleteWarning": "This permanently removes the detections and their audio clips and cannot be undone.",
-        "deleteFailed": "Failed to delete detections. Please try again."
+        "delete": "Slet alle registreringer for denne art",
+        "deleteTitle": "Slet artsregistreringer",
+        "deleteConfirm": "Slet",
+        "deleteMessage": "Slet alle {count} registreringer for {species}? Låste registreringer bevares.",
+        "deleteWarning": "Dette fjerner permanent registreringerne og deres lydklip og kan ikke fortrydes.",
+        "deleteFailed": "Kunne ikke slette registreringer. Prøv igen."
       }
     },
     "advanced": {
