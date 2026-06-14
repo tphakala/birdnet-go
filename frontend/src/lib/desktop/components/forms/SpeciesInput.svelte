@@ -120,6 +120,9 @@
     idCounter = ++win.__speciesInputCounter;
   }
   const instanceId = `species-predictions-${Date.now()}-${idCounter}`;
+  // Distinct prefix from instanceId so it is never matched by the portal's
+  // `[id^="species-predictions-"]` lookups.
+  const wrapperId = instanceId.replace('species-predictions-', 'species-input-wrapper-');
 
   // Auto-derive button size from input size if not specified
   let effectiveButtonSize = $derived(buttonSize ?? size);
@@ -281,12 +284,27 @@
     updatePortalPosition();
   }
 
+  // Fallback dropdown-height estimate (px), used only before the dropdown has
+  // been laid out and its real offsetHeight can be measured.
+  const DROPDOWN_MAX_HEIGHT_ESTIMATE = 240;
+  const DROPDOWN_ITEM_HEIGHT_ESTIMATE = 40;
+
   // Update portal dropdown position with smart positioning
   function updatePortalPosition() {
     if (!portalDropdown || !inputElement) return;
 
     const rect = inputElement.getBoundingClientRect();
-    const dropdownHeight = Math.min(240, filteredPredictions.length * 40); // Estimate height
+    // Use the real rendered height (the dropdown is already populated when this
+    // runs) so the 'above' flip aligns the dropdown's bottom edge to the input.
+    // Fall back to an item-count estimate only before the first layout.
+    const measuredHeight = portalDropdown.offsetHeight;
+    const dropdownHeight =
+      measuredHeight > 0
+        ? measuredHeight
+        : Math.min(
+            DROPDOWN_MAX_HEIGHT_ESTIMATE,
+            filteredPredictions.length * DROPDOWN_ITEM_HEIGHT_ESTIMATE
+          );
     const viewportHeight = window.innerHeight;
     const spaceBelow = viewportHeight - rect.bottom;
     const spaceAbove = rect.top;
@@ -441,27 +459,34 @@
     }
   }
 
-  // Close predictions when clicking/touching outside
+  // Close predictions when clicking/touching outside this input's wrapper or its
+  // portaled dropdown. Scope to the per-instance wrapper id rather than the
+  // global `.form-control` class, which matches every other form field on the
+  // page and would otherwise keep the dropdown open on unrelated clicks.
   function handleDocumentClick(event: MouseEvent | TouchEvent) {
     const target = event.target as globalThis.Element;
-    if (!target.closest('.form-control') && !target.closest(`#${instanceId}`)) {
+    if (!target.closest(`#${wrapperId}`) && !target.closest(`#${instanceId}`)) {
       showPredictions = false;
       manuallyDismissed = true;
       destroyPortalDropdown();
     }
   }
 
-  // Add document click and touch listeners for mobile support, plus scroll/resize for positioning
+  // Register outside-click/touch and scroll/resize listeners only while the
+  // dropdown is open, so closed inputs do not keep global listeners that thrash
+  // layout on every scroll. Capture phase catches scrolls in nested containers.
   $effect(() => {
+    if (!showPredictions) return;
+
     document.addEventListener('click', handleDocumentClick);
     document.addEventListener('touchstart', handleDocumentClick);
-    window.addEventListener('scroll', updatePortalPosition, { passive: true });
+    window.addEventListener('scroll', updatePortalPosition, { passive: true, capture: true });
     window.addEventListener('resize', updatePortalPosition);
 
     return () => {
       document.removeEventListener('click', handleDocumentClick);
       document.removeEventListener('touchstart', handleDocumentClick);
-      window.removeEventListener('scroll', updatePortalPosition);
+      window.removeEventListener('scroll', updatePortalPosition, { capture: true });
       window.removeEventListener('resize', updatePortalPosition);
       // Clean up any remaining portal dropdown
       destroyPortalDropdown();
@@ -469,7 +494,11 @@
   });
 </script>
 
-<div class={cn('form-control relative min-w-0 species-input-container', className)} {...rest}>
+<div
+  id={wrapperId}
+  class={cn('form-control relative min-w-0 species-input-container', className)}
+  {...rest}
+>
   {#if label}
     <label class="label justify-start" for={id}>
       <span class="label-text capitalize">
