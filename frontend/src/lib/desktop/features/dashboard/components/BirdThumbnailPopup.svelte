@@ -104,23 +104,33 @@
   async function fetchImageAttribution() {
     const name = scientificName?.trim();
     if (!name || lastFetchedScientificName === name) return;
-    // Mark as fetched up front so concurrent/repeat hovers do not re-request.
+    // Mark as fetched up front so concurrent/repeat hovers do not re-request,
+    // and clear any prior attribution so a reused row cannot show it as stale.
     lastFetchedScientificName = name;
+    imageAttribution = null;
 
     try {
       const url = buildAppUrl(`/api/v2/media/species-image/info?name=${encodeURIComponent(name)}`);
       const response = await fetch(url);
       if (response.ok) {
-        imageAttribution = (await response.json()) as ImageAttribution;
-      } else if (response.status >= 500) {
+        const data = (await response.json()) as ImageAttribution;
+        // Only apply if this row still represents the requested species (it may
+        // have been reused for a different one while the request was in flight).
+        if (lastFetchedScientificName === name) {
+          imageAttribution = data;
+        }
+      } else if (response.status >= 500 && lastFetchedScientificName === name) {
         // Transient server error: allow a later hover to retry. A 4xx (e.g. a
         // 404 when a species has no attribution) is permanent, so keep the
         // dedupe key to avoid re-querying the API on every subsequent hover.
         lastFetchedScientificName = '';
       }
     } catch (error) {
-      // Clear the dedupe key so a later hover can retry after a network error.
-      lastFetchedScientificName = '';
+      // Clear the dedupe key so a later hover can retry after a network error,
+      // unless a newer request for a different species has superseded this one.
+      if (lastFetchedScientificName === name) {
+        lastFetchedScientificName = '';
+      }
       logger.debug('Failed to fetch bird image attribution', { error, species: name });
     }
   }
@@ -295,8 +305,8 @@
       bind:this={popupElement}
       use:portal
       id="bird-popup"
-      in:dropdown={{ y: popupPosition === 'above' ? 8 : -8 }}
-      out:dropdown={{ duration: 100, y: popupPosition === 'above' ? 8 : -8 }}
+      in:dropdown
+      out:dropdown={{ duration: 100 }}
       class="fixed z-50 bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-lg shadow-xl p-4"
       style:left="{popupX}px"
       style:top={popupTop !== null ? `${popupTop}px` : undefined}
