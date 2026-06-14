@@ -9,10 +9,13 @@ import (
 // encoder. The value "native" enables the go-flac path; any other value (or
 // unset) keeps the FFmpeg exporter.
 //
-// This is a temporary opt-in gate. When the native encoder is trusted, the gate
-// is removed and FLAC always routes to the native path (normalization still
-// falls back to FFmpeg). Keep the read confined to NativeEncoderEnabled so the
-// gate is a single deletion site.
+// This is a temporary opt-in gate shared by every native FLAC path: the
+// detection save path (EncodePCM) and the BirdWeather soundscape upload path
+// (EncodePCMToBuffer + audionorm normalization). When the native encoder is
+// trusted, the gate is removed and FLAC always routes to the native path. The
+// detection save path still falls back to FFmpeg when EBU R128 normalization is
+// enabled; the BirdWeather path normalizes natively via audionorm. Keep the read
+// confined to NativeEncoderEnabled so the gate is a single deletion site.
 const envFlacEncoder = "BIRDNET_FLAC_ENCODER"
 
 // nativeEncoderValue is the only env value that enables the native encoder.

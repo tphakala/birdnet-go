@@ -1,7 +1,9 @@
 package flac
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -82,20 +84,8 @@ func EncodePCM(ctx context.Context, opts *Options) (err error) {
 			Context("operation", "flac_encode_validate").
 			Build()
 	}
-	if len(opts.PCMData) == 0 {
-		return errors.Newf("flac encode: empty PCM data").
-			Component("audiocore/flac").
-			Category(errors.CategoryValidation).
-			Context("operation", "flac_encode_validate").
-			Build()
-	}
-	if !SupportedBitDepth(opts.BitDepth) {
-		return errors.Newf("flac encode: unsupported bit depth %d", opts.BitDepth).
-			Component("audiocore/flac").
-			Category(errors.CategoryValidation).
-			Context("operation", "flac_encode_validate").
-			Context("bit_depth", opts.BitDepth).
-			Build()
+	if err := validateEncodeInput(opts.PCMData, opts.BitDepth); err != nil {
+		return err
 	}
 	if opts.OutputPath == "" {
 		return errors.Newf("flac encode: empty output path").
@@ -154,31 +144,8 @@ func EncodePCM(ctx context.Context, opts *Options) (err error) {
 		SeekTableInterval: opts.SampleRate,
 	}
 
-	enc := encoderPool.Get().(*goflac.Encoder)
-	if resetErr := enc.Reset(f, cfg); resetErr != nil {
-		// A failed Reset may leave the encoder half-initialized; go-flac's
-		// contract says it must not be reused, so drop it (do not Put it back)
-		// and let the pool allocate a fresh one next time.
-		return errors.New(resetErr).
-			Component("audiocore/flac").
-			Category(errors.CategoryAudio).
-			Context("operation", "flac_encode_reset").
-			Build()
-	}
-	// Reset succeeded: safe to return to the pool even if a later Write/Close
-	// errors, since the next Get/Reset fully reinitializes it.
-	defer encoderPool.Put(enc)
-
-	if writeErr := encodeSamples(ctx, enc, opts); writeErr != nil {
-		return writeErr
-	}
-
-	if closeErr := enc.Close(); closeErr != nil {
-		return errors.New(closeErr).
-			Component("audiocore/flac").
-			Category(errors.CategoryAudio).
-			Context("operation", "flac_encode_close").
-			Build()
+	if encErr := encodeToWriter(ctx, f, cfg, opts.PCMData, opts.GainDB); encErr != nil {
+		return encErr
 	}
 
 	if syncErr := f.Sync(); syncErr != nil {
@@ -207,32 +174,107 @@ func EncodePCM(ctx context.Context, opts *Options) (err error) {
 	return nil
 }
 
-// encodeSamples writes opts.PCMData to enc, applying gain when requested. With no
-// gain it is a single zero-copy Write; with gain it streams fixed-size chunks
-// through a pooled scratch buffer so the source is never copied wholesale or
-// mutated.
-func encodeSamples(ctx context.Context, enc *goflac.Encoder, opts *Options) error {
-	if opts.GainDB == 0 {
-		if _, err := enc.Write(opts.PCMData); err != nil {
+// validateEncodeInput checks the PCM data and bit depth shared by the file and
+// buffer encode entry points. It returns an enhanced validation error or nil.
+func validateEncodeInput(pcmData []byte, bitDepth int) error {
+	if len(pcmData) == 0 {
+		return errors.Newf("flac encode: empty PCM data").
+			Component("audiocore/flac").
+			Category(errors.CategoryValidation).
+			Context("operation", "flac_encode_validate").
+			Build()
+	}
+	if !SupportedBitDepth(bitDepth) {
+		return errors.Newf("flac encode: unsupported bit depth %d", bitDepth).
+			Component("audiocore/flac").
+			Category(errors.CategoryValidation).
+			Context("operation", "flac_encode_validate").
+			Context("bit_depth", bitDepth).
+			Build()
+	}
+	// Reject a partial trailing sample early with a clear error rather than
+	// letting it surface as an opaque flush failure deep inside go-flac.
+	if bytesPerSample := bitDepth / 8; len(pcmData)%bytesPerSample != 0 {
+		return errors.Newf("flac encode: PCM length %d is not a multiple of the %d-byte sample size", len(pcmData), bytesPerSample).
+			Component("audiocore/flac").
+			Category(errors.CategoryValidation).
+			Context("operation", "flac_encode_validate").
+			Context("pcm_len", len(pcmData)).
+			Context("bytes_per_sample", bytesPerSample).
+			Build()
+	}
+	return nil
+}
+
+// encodeToWriter encodes pcmData (applying gainDB when non-zero) to w using a
+// pooled go-flac encoder configured by cfg. It resets the encoder, writes the
+// samples, and closes the encoder (which patches STREAMINFO/SEEKTABLE when w is
+// an io.WriteSeeker), but does not close w itself. Used by both the file and
+// in-memory buffer entry points.
+func encodeToWriter(ctx context.Context, w io.Writer, cfg goflac.Config, pcmData []byte, gainDB float64) error {
+	enc := encoderPool.Get().(*goflac.Encoder)
+	if resetErr := enc.Reset(w, cfg); resetErr != nil {
+		// A failed Reset may leave the encoder half-initialized; go-flac's
+		// contract says it must not be reused, so drop it (do not Put it back)
+		// and let the pool allocate a fresh one next time.
+		return errors.New(resetErr).
+			Component("audiocore/flac").
+			Category(errors.CategoryAudio).
+			Context("operation", "flac_encode_reset").
+			Build()
+	}
+	// Reset succeeded, so the encoder may be pooled even if a later Write/Close
+	// errors. Before pooling, re-Reset onto io.Discard to drop the reference to
+	// w: for the buffer path w is the *bytes.Buffer holding the entire encoded
+	// clip, and a pooled encoder would otherwise pin that memory until its next
+	// use. go-flac exposes no writer setter, so re-Reset is the only way to
+	// release it; SeekTableInterval is zeroed so a non-seekable sink is accepted.
+	// This also re-primes the encoder, so it is pooled only if the re-Reset
+	// succeeds (a failed one drops the encoder, matching the failed-Reset path).
+	defer func() {
+		depinCfg := cfg
+		depinCfg.SeekTableInterval = 0
+		if enc.Reset(io.Discard, depinCfg) == nil {
+			encoderPool.Put(enc)
+		}
+	}()
+
+	if writeErr := encodeSamples(ctx, enc, pcmData, gainDB); writeErr != nil {
+		return writeErr
+	}
+
+	if closeErr := enc.Close(); closeErr != nil {
+		return errors.New(closeErr).
+			Component("audiocore/flac").
+			Category(errors.CategoryAudio).
+			Context("operation", "flac_encode_close").
+			Build()
+	}
+	return nil
+}
+
+// encodeSamples writes pcmData to enc, applying gain when requested. With no gain
+// it is a single zero-copy Write; with gain it streams fixed-size chunks through
+// a pooled scratch buffer so the source is never copied wholesale or mutated.
+func encodeSamples(ctx context.Context, enc *goflac.Encoder, pcmData []byte, gainDB float64) error {
+	if gainDB == 0 {
+		if _, err := enc.Write(pcmData); err != nil {
 			return wrapWriteErr(err)
 		}
 		return nil
 	}
 
-	factor := math.Pow(10, opts.GainDB/20)
+	factor := math.Pow(10, gainDB/20)
 	scratchPtr := gainScratchPool.Get().(*[]byte)
 	scratch := *scratchPtr
 	defer gainScratchPool.Put(scratchPtr)
 
-	src := opts.PCMData
+	src := pcmData
 	for off := 0; off < len(src); {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		end := off + len(scratch)
-		if end > len(src) {
-			end = len(src)
-		}
+		end := min(off+len(scratch), len(src))
 		chunk := scratch[:end-off]
 		applyGainInt16(chunk, src[off:end], factor)
 		if _, err := enc.Write(chunk); err != nil {
@@ -249,4 +291,58 @@ func wrapWriteErr(err error) error {
 		Category(errors.CategoryAudio).
 		Context("operation", "flac_encode_write").
 		Build()
+}
+
+// BufferOptions configures a native FLAC export of an in-memory PCM buffer to an
+// in-memory FLAC buffer. It mirrors Options without OutputPath.
+type BufferOptions struct {
+	// PCMData is interleaved little-endian PCM (the capture buffer format).
+	PCMData []byte
+	// SampleRate is the PCM sample rate in Hz.
+	SampleRate int
+	// Channels is the number of interleaved channels.
+	Channels int
+	// BitDepth is the PCM bit depth; only 16 is supported.
+	BitDepth int
+	// GainDB is the volume adjustment in dB (0 = no change).
+	GainDB float64
+}
+
+// EncodePCMToBuffer encodes opts.PCMData to a FLAC stream and returns it as an
+// in-memory buffer. Unlike EncodePCM it writes to a non-seekable bytes.Buffer,
+// so no SEEKTABLE is emitted and the STREAMINFO total-samples/MD5 fields are
+// left at their spec-legal "unknown" sentinels (the same result as FFmpeg
+// encoding to a pipe). A non-zero GainDB is applied in Go before encoding;
+// opts.PCMData itself is never modified. Intended for upload paths (e.g.
+// BirdWeather) that need FLAC bytes in memory rather than a file.
+func EncodePCMToBuffer(ctx context.Context, opts *BufferOptions) (*bytes.Buffer, error) {
+	if opts == nil {
+		return nil, errors.Newf("flac encode: nil options").
+			Component("audiocore/flac").
+			Category(errors.CategoryValidation).
+			Context("operation", "flac_encode_validate").
+			Build()
+	}
+	if err := validateEncodeInput(opts.PCMData, opts.BitDepth); err != nil {
+		return nil, err
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
+
+	cfg := goflac.Config{
+		SampleRate:       opts.SampleRate,
+		BitDepth:         opts.BitDepth,
+		Channels:         opts.Channels,
+		CompressionLevel: defaultCompressionLevel,
+		// No SeekTableInterval: a bytes.Buffer is not an io.WriteSeeker, and
+		// go-flac rejects a seektable on a non-seekable sink. Short upload clips
+		// do not need one.
+	}
+
+	buf := new(bytes.Buffer)
+	if encErr := encodeToWriter(ctx, buf, cfg, opts.PCMData, opts.GainDB); encErr != nil {
+		return nil, encErr
+	}
+	return buf, nil
 }

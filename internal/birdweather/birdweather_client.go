@@ -21,6 +21,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -1095,10 +1096,21 @@ type audioEncodingResult struct {
 	ext    string
 }
 
-// encodeAudioForUpload handles the PCM to FLAC encoding using FFmpeg
-// FFmpeg is required as BirdWeather only accepts FLAC format
+// encodeAudioForUpload encodes the PCM soundscape to FLAC for upload. With the
+// BIRDNET_FLAC_ENCODER=native gate on it uses the native go-flac + audionorm
+// path (no FFmpeg dependency); otherwise it falls back to the FFmpeg encoder,
+// which BirdWeather has always required for its FLAC-only API.
 func (b *BwClient) encodeAudioForUpload(settings *conf.Settings, pcmData []byte, timestamp string) (*audioEncodingResult, error) {
 	log := GetLogger()
+
+	// Native path first: gated by the same flag as the detection save path. This
+	// must be checked BEFORE the FFmpeg-availability guard so a host without
+	// FFmpeg can still upload natively.
+	if flac.NativeEncoderEnabled() && flac.SupportedBitDepth(conf.BitDepth) {
+		log.Debug("Using native go-flac encoder for BirdWeather upload",
+			logger.String("timestamp", timestamp))
+		return b.encodeWithNativeFLAC(pcmData, timestamp)
+	}
 
 	// Use the validated FFmpeg path from settings (validated at startup)
 	// This avoids redundant exec.LookPath calls on every upload
