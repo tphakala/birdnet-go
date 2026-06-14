@@ -370,6 +370,9 @@
             updatePortalPosition();
           } else {
             createPortalDropdown();
+            // createPortalDropdown only appends an empty container; populate it now
+            // since the portal $effect won't re-run (no dependency changed).
+            updatePortalDropdown();
           }
         }
       }}

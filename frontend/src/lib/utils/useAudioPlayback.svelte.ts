@@ -431,6 +431,9 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
 
       error = t('media.audio.error');
       isLoading = false;
+      // Retries are exhausted; drop any pending play intent so a late 'canplay'
+      // can't resume a clip that has permanently failed.
+      playRequestedAfterRetry = false;
     });
 
     if (!audio.paused) {

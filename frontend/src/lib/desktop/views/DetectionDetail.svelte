@@ -191,6 +191,13 @@
 
     isLoadingDetection = true;
     detectionError = null;
+    // Reset the detail and its dependent data so a newer detection never briefly
+    // shows the previously viewed one's species/taxonomy/attribution while the
+    // secondary fetches are still in flight.
+    detection = null;
+    speciesInfo = null;
+    taxonomyInfo = null;
+    imageAttribution = null;
 
     try {
       const response = await fetch(buildAppUrl(`/api/v2/detections/${resolvedDetectionId}`), {
