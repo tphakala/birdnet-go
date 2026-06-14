@@ -1,6 +1,7 @@
 package flac
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -325,4 +326,112 @@ func TestSupportedBitDepth(t *testing.T) {
 	assert.True(t, SupportedBitDepth(16))
 	assert.False(t, SupportedBitDepth(24))
 	assert.False(t, SupportedBitDepth(0))
+}
+
+// decodeFLACBytes reads a FLAC byte stream back to interleaved little-endian PCM.
+func decodeFLACBytes(t *testing.T, data []byte) []byte {
+	t.Helper()
+	dec, err := goflac.NewDecoder(bytes.NewReader(data))
+	require.NoError(t, err)
+	out, err := io.ReadAll(dec)
+	require.NoError(t, err)
+	return out
+}
+
+func bufferBaseOpts(pcm []byte) *BufferOptions {
+	return &BufferOptions{
+		PCMData:    pcm,
+		SampleRate: testSampleRate,
+		Channels:   testChannels,
+		BitDepth:   testBitDepth,
+	}
+}
+
+func TestEncodePCMToBuffer_RoundTripLossless(t *testing.T) {
+	t.Parallel()
+	pcm := makeTestPCM(10000)
+	buf, err := EncodePCMToBuffer(t.Context(), bufferBaseOpts(pcm))
+	require.NoError(t, err)
+	require.NotNil(t, buf)
+	assert.Equal(t, pcm, decodeFLACBytes(t, buf.Bytes()), "decoded PCM must equal input (lossless)")
+}
+
+// TestEncodePCMToBuffer_GainRoundTrip uses PCM larger than two gain scratch
+// chunks (with a non-aligned tail) so the shared chunked gain loop is exercised
+// through the buffer path too.
+func TestEncodePCMToBuffer_GainRoundTrip(t *testing.T) {
+	t.Parallel()
+	pcm := makeTestPCM(2*gainScratchBytes + 777)
+	opts := bufferBaseOpts(pcm)
+	opts.GainDB = 6.0 // roughly 2x
+	buf, err := EncodePCMToBuffer(t.Context(), opts)
+	require.NoError(t, err)
+
+	want := make([]byte, len(pcm))
+	applyGainInt16(want, pcm, math.Pow(10, opts.GainDB/20))
+	assert.Equal(t, want, decodeFLACBytes(t, buf.Bytes()),
+		"decoded PCM must equal the gained input (gain applied, stored losslessly)")
+}
+
+func TestEncodePCMToBuffer_StereoRoundTrip(t *testing.T) {
+	t.Parallel()
+	pcm := makeTestPCMStereo(10000)
+	opts := bufferBaseOpts(pcm)
+	opts.Channels = 2
+	buf, err := EncodePCMToBuffer(t.Context(), opts)
+	require.NoError(t, err)
+	assert.Equal(t, pcm, decodeFLACBytes(t, buf.Bytes()), "stereo decode must be lossless")
+}
+
+// TestEncodePCMToBuffer_NoSeekTable documents the intentional difference from the
+// file path: a bytes.Buffer is not seekable, so no SEEKTABLE is emitted, yet the
+// stream stays valid and decodable.
+func TestEncodePCMToBuffer_NoSeekTable(t *testing.T) {
+	t.Parallel()
+	pcm := makeTestPCM(60000)
+	buf, err := EncodePCMToBuffer(t.Context(), bufferBaseOpts(pcm))
+	require.NoError(t, err)
+	assert.False(t, hasSeekTable(buf.Bytes()), "buffer path must not emit a SEEKTABLE (non-seekable sink)")
+	assert.Equal(t, pcm, decodeFLACBytes(t, buf.Bytes()), "stream must still decode losslessly")
+}
+
+func TestEncodePCMToBuffer_Validation(t *testing.T) {
+	t.Parallel()
+	t.Run("nil options", func(t *testing.T) {
+		t.Parallel()
+		_, err := EncodePCMToBuffer(t.Context(), nil)
+		require.Error(t, err)
+	})
+	t.Run("empty pcm", func(t *testing.T) {
+		t.Parallel()
+		_, err := EncodePCMToBuffer(t.Context(), bufferBaseOpts(nil))
+		require.Error(t, err)
+	})
+	t.Run("unsupported bit depth", func(t *testing.T) {
+		t.Parallel()
+		opts := bufferBaseOpts(makeTestPCM(100))
+		opts.BitDepth = 24
+		_, err := EncodePCMToBuffer(t.Context(), opts)
+		require.Error(t, err)
+	})
+}
+
+func TestEncodePCMToBuffer_CancelledBeforeStart(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := EncodePCMToBuffer(ctx, bufferBaseOpts(makeTestPCM(10000)))
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+// TestEncodePCMToBuffer_CancelledDuringEncode exercises the per-chunk ctx check
+// inside the shared gain loop via the buffer path (the entry guard consumes one
+// Err() call, so after=1 cancels at the first gain-loop iteration).
+func TestEncodePCMToBuffer_CancelledDuringEncode(t *testing.T) {
+	t.Parallel()
+	opts := bufferBaseOpts(makeTestPCM(2*gainScratchBytes + 777))
+	opts.GainDB = 3.0 // gain path runs the per-chunk ctx check
+	ctx := &errAfterCtx{Context: t.Context(), after: 1}
+	_, err := EncodePCMToBuffer(ctx, opts)
+	require.ErrorIs(t, err, context.Canceled)
 }
