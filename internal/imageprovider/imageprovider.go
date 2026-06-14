@@ -1210,11 +1210,13 @@ func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, 
 	muInterface, _ := c.Initializing.LoadOrStore(scientificName, &sync.Mutex{})
 	mu := muInterface.(*sync.Mutex)
 	mu.Lock()
-	defer func() {
-		mu.Unlock()
-		c.Initializing.Delete(scientificName)
-		log.Debug("Unlocked and cleaned up mutex")
-	}()
+	// Do not delete the mutex from the map on unlock. A goroutine that has already
+	// run LoadOrStore but not yet acquired the lock holds a reference to this
+	// mutex; deleting it lets a later goroutine LoadOrStore a fresh mutex and fetch
+	// concurrently with that waiter, defeating the single-initialization guarantee.
+	// The map is bounded by the number of distinct species ever queried, so the
+	// retained mutexes are a negligible, fixed cost.
+	defer mu.Unlock()
 
 	log.Debug("Acquired initialization lock")
 
