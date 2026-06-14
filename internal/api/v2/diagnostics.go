@@ -54,6 +54,21 @@ func (c *Controller) initDiagnosticsRoutes() {
 	diagnosticsGroup.GET("/errors", c.GetRecentErrors)
 }
 
+// HealthMetricsStore returns the diagnostics health metrics store, or nil if
+// the diagnostics subsystem has not been initialized. It lets other subsystems
+// (e.g. the analysis pipeline) record health counters into the same store the
+// health checks read, avoiding an import cycle on internal/api/v2.
+func (c *Controller) HealthMetricsStore() *observability.HealthMetricsStore {
+	return c.healthMetricsStore
+}
+
+// HealthEventBuffer returns the diagnostics health event buffer, or nil if the
+// diagnostics subsystem has not been initialized. Paired with HealthMetricsStore
+// so recorded counters can also surface as recent events on the System Health page.
+func (c *Controller) HealthEventBuffer() *observability.HealthEventBuffer {
+	return c.healthEvents
+}
+
 // registerHealthChecks registers all health checks with dependency injection closures.
 func (c *Controller) registerHealthChecks() {
 	snapshotProvider := func() []audiocore.SourceHealthSnapshot {
@@ -114,6 +129,7 @@ func (c *Controller) registerHealthChecks() {
 			q := classifier.ResultsQueue
 			return len(q), cap(q)
 		}),
+		checks.NewResultsQueueDropCheck(c.healthMetricsStore, c.healthEvents.Recent),
 		checks.NewORTAvailabilityCheck(func() (available, initialized bool, version, libraryPath, errMsg string) {
 			status := inference.CheckORTAvailability(c.currentSettings().BirdNET.ONNXRuntimePath)
 			return status.Available, status.Initialized, status.Version, status.LibraryPath, status.Error

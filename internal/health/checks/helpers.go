@@ -339,6 +339,8 @@ func checkNameLabel(name string) string {
 		return "drops"
 	case "buffer_overrun":
 		return "overruns"
+	case "results_queue_drops":
+		return "detections dropped"
 	case "stream_error_rate":
 		return "restarts"
 	default:

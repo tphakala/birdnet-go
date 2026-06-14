@@ -2,10 +2,12 @@ package checks
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/health"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // --- ModelsLoadedCheck tests ---
@@ -265,4 +267,111 @@ func TestSanitizeID(t *testing.T) {
 	for _, tt := range tests {
 		assert.Equal(t, tt.expected, sanitizeID(tt.input), "sanitizeID(%q)", tt.input)
 	}
+}
+
+// --- ResultsQueueDropCheck tests ---
+
+const resultsQueueDropKey = observability.MetricPrefixResultsQueueDrops + "src1"
+
+func TestResultsQueueDropCheck_NilStore(t *testing.T) {
+	t.Parallel()
+	check := NewResultsQueueDropCheck(nil, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
+	assert.Equal(t, "results_queue_drops", result.Name)
+	assert.Equal(t, health.CategoryAnalysis, result.Category)
+}
+
+func TestResultsQueueDropCheck_NoData(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	check := NewResultsQueueDropCheck(store, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusSkipped, result.Status)
+}
+
+func TestResultsQueueDropCheck_HealthyWithHistory(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	buf := newTestEventBuffer(t)
+
+	now := time.Now()
+	store.RecordAt(resultsQueueDropKey, 50, now.Add(-3*time.Hour))
+	buf.Add(observability.HealthEvent{Time: now.Add(-3 * time.Hour), Source: "src1", Delta: 50, Metric: observability.MetricTypeResultsQueueDrops})
+	store.RecordAt(resultsQueueDropKey, 0, now)
+
+	check := NewResultsQueueDropCheck(store, eventGetter(buf))
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusHealthy, result.Status)
+	assert.Contains(t, result.Message, "No detections dropped in last 1h")
+	assert.Contains(t, result.Message, "50 lifetime")
+}
+
+func TestResultsQueueDropCheck_WarningOnAnyDrop(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+
+	// A single dropped detection within the window must surface as a warning:
+	// every drop is a species that was heard and never recorded.
+	store.RecordAt(resultsQueueDropKey, 1, time.Now())
+
+	check := NewResultsQueueDropCheck(store, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusWarning, result.Status)
+	assert.Contains(t, result.Message, "1 detections dropped in 1h")
+}
+
+func TestResultsQueueDropCheck_Critical(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+
+	store.RecordAt(resultsQueueDropKey, 50, time.Now())
+
+	check := NewResultsQueueDropCheck(store, nil)
+	result := check.Run(t.Context())
+	assert.Equal(t, health.StatusCritical, result.Status)
+	assert.Contains(t, result.Message, "50", "critical message should report the drop count")
+}
+
+func TestResultsQueueDropCheck_WithWindow(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	now := time.Now()
+
+	store.RecordAt(resultsQueueDropKey, 20, now.Add(-3*time.Hour))
+	store.RecordAt(resultsQueueDropKey, 0, now)
+
+	check := NewResultsQueueDropCheck(store, nil)
+
+	// The historical spike is outside a 1h window, so the check is healthy.
+	narrowed := check.WithWindow(1 * time.Hour)
+	result := narrowed.Run(t.Context())
+	assert.Equal(t, health.StatusHealthy, result.Status)
+
+	// Widening the window to 6h pulls the spike back into view.
+	wide := check.WithWindow(6 * time.Hour)
+	result = wide.Run(t.Context())
+	assert.Equal(t, health.StatusWarning, result.Status)
+}
+
+func TestResultsQueueDropCheck_SparklineInDetails(t *testing.T) {
+	t.Parallel()
+	store := newTestHealthStore(t)
+	buf := newTestEventBuffer(t)
+
+	now := time.Now()
+	store.RecordAt(resultsQueueDropKey, 10, now.Add(-2*time.Hour))
+	buf.Add(observability.HealthEvent{Time: now.Add(-2 * time.Hour), Source: "src1", Delta: 10, Metric: observability.MetricTypeResultsQueueDrops})
+	store.RecordAt(resultsQueueDropKey, 5, now)
+	buf.Add(observability.HealthEvent{Time: now, Source: "src1", Delta: 5, Metric: observability.MetricTypeResultsQueueDrops})
+
+	check := NewResultsQueueDropCheck(store, eventGetter(buf))
+	result := check.Run(t.Context())
+
+	require.NotNil(t, result.Details)
+	assert.NotNil(t, result.Details["sparkline"])
+	assert.Equal(t, "1h", result.Details["window"])
+	// Recent events are filtered by the "queue_drops" metric type and must
+	// surface so the System Health page can show a trend view.
+	assert.NotNil(t, result.Details["recent_events"])
 }

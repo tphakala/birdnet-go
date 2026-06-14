@@ -433,6 +433,11 @@ func (c *Collector) collectAudioHealthCounters(now time.Time) {
 			// show "Healthy" instead of "Skipped" even with zero drops.
 			c.healthStore.RecordAt(MetricPrefixAudioDrops+id, 0, now)
 			c.healthStore.RecordAt(MetricPrefixAudioOverruns+id, 0, now)
+			// Results-queue detection drops are recorded by the analysis pipeline
+			// (push), not by this collector, but they are keyed by the same source
+			// IDs. Seed a zero here so ResultsQueueDropCheck reads "Healthy" from
+			// startup instead of "Skipped", consistent with the audio drop checks.
+			c.healthStore.RecordAt(MetricPrefixResultsQueueDrops+id, 0, now)
 			continue
 		}
 		c.recordHealthDelta(MetricPrefixAudioDrops+id, cur.Drops, prev.Drops, id, "drops", now)

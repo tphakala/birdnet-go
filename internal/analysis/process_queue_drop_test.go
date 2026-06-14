@@ -6,8 +6,11 @@ package analysis
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // TestRecordResultsQueueDrop_CountsDrops confirms that each drop increments the
@@ -53,4 +56,61 @@ func TestDroppedDetectionsTotal_MonotonicUnderConcurrency(t *testing.T) {
 
 	assert.Equal(t, before+int64(goroutines*dropsEach), droppedDetectionsTotal.Load(),
 		"every concurrent drop must be counted with no lost updates")
+}
+
+// TestRecordResultsQueueDrop_SurfacesOnHealthStore verifies that, once the
+// diagnostics health sink is wired, each drop is recorded into the health
+// metrics store and event buffer with the "queue_drops" metric label that
+// ResultsQueueDropCheck filters on. Clearing the sink stops further recording.
+func TestRecordResultsQueueDrop_SurfacesOnHealthStore(t *testing.T) {
+	// Not parallel: mutates package-global drop counter and health sink.
+	beforeCount := droppedDetectionsTotal.Load()
+	prevSink := resultsQueueDropHealthSink.Load()
+	t.Cleanup(func() {
+		droppedDetectionsTotal.Store(beforeCount)
+		resultsQueueDropHealthSink.Store(prevSink)
+	})
+
+	store := observability.NewHealthMetricsStore()
+	buf := observability.NewHealthEventBuffer(observability.DefaultEventBufferCapacity)
+	SetResultsQueueDropHealthSink(store, buf)
+
+	const source = "sink-source"
+	recordResultsQueueDrop(source, "sink-model", nil)
+
+	key := observability.MetricPrefixResultsQueueDrops + source
+	assert.Equal(t, int64(1), store.Sum(key, time.Hour), "drop must be recorded into the health store")
+
+	events := buf.Recent(observability.MetricTypeResultsQueueDrops, 10)
+	require.Len(t, events, 1, "drop must be recorded as a single health event")
+	assert.Equal(t, source, events[0].Source)
+	assert.Equal(t, int64(1), events[0].Delta)
+	assert.Equal(t, observability.MetricTypeResultsQueueDrops, events[0].Metric)
+
+	// Clearing the sink must stop further recording without panicking.
+	SetResultsQueueDropHealthSink(nil, nil)
+	recordResultsQueueDrop(source, "sink-model", nil)
+	assert.Equal(t, int64(1), store.Sum(key, time.Hour), "no further drops should be recorded after the sink is cleared")
+}
+
+// TestRecordResultsQueueDrop_NilEventsBufferTolerated verifies that a sink wired
+// with a store but no event buffer still records windowed counts and does not
+// panic on the drop path.
+func TestRecordResultsQueueDrop_NilEventsBufferTolerated(t *testing.T) {
+	// Not parallel: mutates package-global drop counter and health sink.
+	beforeCount := droppedDetectionsTotal.Load()
+	prevSink := resultsQueueDropHealthSink.Load()
+	t.Cleanup(func() {
+		droppedDetectionsTotal.Store(beforeCount)
+		resultsQueueDropHealthSink.Store(prevSink)
+	})
+
+	store := observability.NewHealthMetricsStore()
+	SetResultsQueueDropHealthSink(store, nil)
+
+	const source = "nil-buf-source"
+	require.NotPanics(t, func() {
+		recordResultsQueueDrop(source, "sink-model", nil)
+	})
+	assert.Equal(t, int64(1), store.Sum(observability.MetricPrefixResultsQueueDrops+source, time.Hour))
 }

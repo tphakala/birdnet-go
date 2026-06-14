@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/health"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 const (
@@ -410,4 +411,67 @@ func (c *ORTAvailabilityCheck) Run(_ context.Context) health.Result {
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
 	}
+}
+
+// Threshold constants for the results-queue detection-drop check. Each dropped
+// detection is a species that was heard but never recorded, so even a single
+// drop within the window is worth a warning; a high or sustained rate (the
+// detection consumer falling persistently behind) is critical.
+const (
+	resultsQueueDropBaseWarnThreshold = 1
+	resultsQueueDropBaseCritThreshold = 50
+)
+
+// ResultsQueueDropCheck monitors detections dropped because the classifier
+// results queue was full, using time-windowed evaluation over the health
+// metrics store. The analysis pipeline records each drop into the same store
+// this check reads (analysis -> observability store -> health check), so no
+// import cycle is introduced and windowed counts, sparkline, and recent events
+// come for free, exactly like the audio buffer-drops path.
+type ResultsQueueDropCheck struct {
+	store     *observability.HealthMetricsStore
+	getEvents func(metric string, n int) []observability.HealthEvent
+	window    time.Duration
+}
+
+// NewResultsQueueDropCheck creates a ResultsQueueDropCheck using the health
+// metrics store and event getter.
+func NewResultsQueueDropCheck(store *observability.HealthMetricsStore, getEvents func(metric string, n int) []observability.HealthEvent) *ResultsQueueDropCheck {
+	return &ResultsQueueDropCheck{
+		store:     store,
+		getEvents: getEvents,
+		window:    DefaultWindow,
+	}
+}
+
+// Name returns the check identifier.
+func (c *ResultsQueueDropCheck) Name() string { return "results_queue_drops" }
+
+// Category returns the analysis category.
+func (c *ResultsQueueDropCheck) Category() health.Category { return health.CategoryAnalysis }
+
+// WithWindow returns a copy of this check configured with the given evaluation
+// window. Returns the receiver unchanged when d equals the current window to
+// avoid an allocation.
+func (c *ResultsQueueDropCheck) WithWindow(d time.Duration) health.Check {
+	if d == c.window {
+		return c
+	}
+	cp := *c
+	cp.window = d
+	return &cp
+}
+
+// Run evaluates results-queue detection-drop statistics within the configured
+// time window.
+func (c *ResultsQueueDropCheck) Run(_ context.Context) health.Result {
+	start := time.Now()
+
+	return evalWindowedStats(c.Name(), c.Category(), c.store, c.getEvents, &windowedStatsConfig{
+		baseWarnThreshold: resultsQueueDropBaseWarnThreshold,
+		baseCritThreshold: resultsQueueDropBaseCritThreshold,
+		sustainedHours:    defaultSustainedHours,
+		metricPrefix:      observability.MetricPrefixResultsQueueDrops,
+		window:            c.window,
+	}, start)
 }
