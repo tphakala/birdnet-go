@@ -10,7 +10,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/classifier"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -130,7 +129,7 @@ func (c *Controller) GetAllSpecies(ctx echo.Context) error {
 		logger.String("path", path),
 	)
 
-	speciesList := buildAllSpeciesList(c.loadCommonNameMap(), c.controllerSettings())
+	speciesList := buildAllSpeciesList(c.loadCommonNameMap(), c.allModelLabels())
 
 	c.logInfoIfEnabled("All species labels retrieved successfully",
 		logger.Int("count", len(speciesList)),
@@ -144,19 +143,21 @@ func (c *Controller) GetAllSpecies(ctx echo.Context) error {
 	})
 }
 
-// buildAllSpeciesList builds the /api/v2/species/all payload from the cached,
-// resolver-localized scientific-to-common map (sciToCommon), which control_monitor
-// populates from the orchestrator's multi-model AllLabels union at startup and on
-// hot-reload. Serving from that map yields every loaded model's species (including
+// buildAllSpeciesList builds the /api/v2/species/all payload for the species
+// include/exclude picker. When the cached, resolver-localized scientific-to-common
+// map (sciToCommon) is populated, the list is built from it: control_monitor seeds
+// that map from the orchestrator's multi-model AllLabels union at startup and on
+// hot-reload, so it already covers every loaded model's species (including
 // secondary-model bats/Perch), localized to the configured BirdNET.Locale and
 // deduplicated (scientific keys are unique). Output is sorted by scientific name for
 // a deterministic response.
 //
 // When sciToCommon is empty (the brief startup window before control_monitor seeds
-// the maps), it falls back to parsing the primary BirdNET.Labels so the endpoint
-// never returns an empty list mid-startup. The fallback reproduces the legacy
-// behavior exactly (original label string, input order preserved).
-func buildAllSpeciesList(sciToCommon map[string]string, settings *conf.Settings) []RangeFilterSpecies {
+// the maps), it falls back to parsing fallbackLabels. The caller passes the
+// orchestrator's AllLabels union there (not just the primary BirdNET labels), so the
+// picker still includes secondary-model species during that window; the fallback
+// preserves input order and the original label string.
+func buildAllSpeciesList(sciToCommon map[string]string, fallbackLabels []string) []RangeFilterSpecies {
 	if len(sciToCommon) > 0 {
 		speciesList := make([]RangeFilterSpecies, 0, len(sciToCommon))
 		for sci, common := range sciToCommon {
@@ -172,13 +173,18 @@ func buildAllSpeciesList(sciToCommon map[string]string, settings *conf.Settings)
 		return speciesList
 	}
 
-	var labels []string
-	if settings != nil {
-		labels = settings.BirdNET.Labels
-	}
-	speciesList := make([]RangeFilterSpecies, 0, len(labels))
-	for _, label := range labels {
+	speciesList := make([]RangeFilterSpecies, 0, len(fallbackLabels))
+	seen := make(map[string]struct{}, len(fallbackLabels))
+	for _, label := range fallbackLabels {
 		sp := detection.ParseSpeciesString(label)
+		// AllLabels unions models that may emit the same species in different label
+		// forms ("Scientific_Common" vs scientific-only), so dedup by scientific name
+		// to avoid duplicate rows; input order and the original label are preserved.
+		key := strings.ToLower(sp.ScientificName)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
 		speciesList = append(speciesList, RangeFilterSpecies{
 			Label:          label,
 			ScientificName: sp.ScientificName,
@@ -186,6 +192,24 @@ func buildAllSpeciesList(sciToCommon map[string]string, settings *conf.Settings)
 		})
 	}
 	return speciesList
+}
+
+// allModelLabels returns the union of every loaded model's labels (primary plus
+// secondary models such as the bat and Perch classifiers) from the orchestrator,
+// falling back to the primary BirdNET labels from settings when the orchestrator is
+// not yet available (e.g. early startup before the audio pipeline builds it).
+func (c *Controller) allModelLabels() []string {
+	if proc := c.Processor; proc != nil {
+		if bn := proc.GetBirdNET(); bn != nil {
+			if labels := bn.AllLabels(); len(labels) > 0 {
+				return labels
+			}
+		}
+	}
+	if s := c.controllerSettings(); s != nil {
+		return s.BirdNET.Labels
+	}
+	return nil
 }
 
 // GetSpeciesInfo retrieves extended information about a bird species
@@ -235,8 +259,10 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 	var matchedLabel string
 	var commonName string
 
-	settings := bn.CurrentSettings()
-	for _, label := range settings.BirdNET.Labels {
+	// Search the full multi-model label union (primary plus secondary models such
+	// as the bat/Perch classifiers) so a secondary-model scientific name resolves
+	// instead of 404ing.
+	for _, label := range bn.AllLabels() {
 		sp := detection.ParseSpeciesString(label)
 		if strings.EqualFold(sp.ScientificName, scientificName) {
 			matchedLabel = label
@@ -245,9 +271,18 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 		}
 	}
 
-	// If species not found in labels, return error
+	// Secondary-model labels (bats, Perch) are scientific-only, so localize the
+	// common name through the orchestrator's OpenFauna-authoritative resolver,
+	// passing the configured locale explicitly.
+	if matchedLabel != "" && commonName == "" {
+		if resolved := bn.ResolveName(scientificName, c.currentLocale()); resolved != "" {
+			commonName = resolved
+		}
+	}
+
+	// If species not found in any loaded model's labels, return error
 	if matchedLabel == "" {
-		return nil, errors.Newf("species '%s' not found in BirdNET labels", scientificName).
+		return nil, errors.Newf("species '%s' not found in loaded model labels", scientificName).
 			Category(errors.CategoryNotFound).
 			Context("scientific_name", scientificName).
 			Component("api-species").
@@ -284,9 +319,12 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 func (c *Controller) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (*SpeciesRarityInfo, error) {
 	// Get current date
 	today := time.Now().Truncate(HoursPerDay * time.Hour)
+	settings := bn.CurrentSettings()
 
-	// Get probable species with scores
-	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
+	// Get probable species with scores. Use the multi-model union (not just the
+	// primary geomodel) so secondary-model species (bats, Perch) are found and do
+	// not always fall through to "very rare".
+	speciesScores, err := bn.GetAllProbableSpeciesWithSettings(today, 0.0, settings)
 	if err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryProcessing).
@@ -296,7 +334,6 @@ func (c *Controller) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLa
 	}
 
 	// Create rarity info
-	settings := bn.CurrentSettings()
 	rarityInfo := &SpeciesRarityInfo{
 		Date:             today.Format(time.DateOnly),
 		LocationBased:    settings.BirdNET.LocationConfigured,
