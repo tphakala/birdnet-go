@@ -29,10 +29,14 @@
   import type { ImageAttribution } from '$lib/types/detection.types';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { validateProtocolURL } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { portal } from '$lib/utils/portal';
   import { dropdown } from '$lib/utils/transitions';
+  import { loggers } from '$lib/utils/logger';
   import { Image } from '@lucide/svelte';
+
+  const logger = loggers.ui;
 
   interface Props {
     thumbnailUrl: string;
@@ -48,10 +52,24 @@
   // the server-provided common name, then the scientific name.
   const displayName = $derived(localizeSpeciesName(scientificName, commonName));
 
+  // The popup width is fixed (also applied via style:width below), so the
+  // constant is the authoritative width. The height is content-driven, so
+  // calculatePosition() measures the mounted element and uses the height
+  // estimate only as the first-pass fallback before the popup is in the DOM.
+  const POPUP_WIDTH = 320;
+  const POPUP_HEIGHT_ESTIMATE = 320;
+
   // State for popup visibility and positioning
   let showPopup = $state(false);
   let popupX = $state(0);
-  let popupY = $state(0);
+  // Vertical anchor. When the popup sits below the trigger we pin its `top`;
+  // when it sits above we pin its `bottom` so the bottom edge aligns to the row
+  // top regardless of the popup's rendered height. Exactly one is non-null.
+  let popupTop = $state<number | null>(0);
+  let popupBottom = $state<number | null>(null);
+  // Horizontal offset (px) of the arrow within the popup, so it points at the
+  // trigger's center instead of a fixed corner.
+  let popupArrowX = $state(20);
   let popupPosition = $state<'above' | 'below'>('below');
   let triggerElement: HTMLElement | undefined = $state();
   let popupElement: HTMLElement | undefined = $state();
@@ -62,30 +80,51 @@
   let imageAttribution = $state<ImageAttribution | null>(null);
   let lastFetchedScientificName = '';
 
-  // Fetch image attribution when popup opens
+  // Only allow http(s) license links. The attribution payload comes from an
+  // external image provider, so a javascript:/data: URL must never reach href.
+  const safeLicenseURL = $derived(
+    imageAttribution?.licenseURL &&
+      validateProtocolURL(imageAttribution.licenseURL, ['http', 'https'])
+      ? imageAttribution.licenseURL
+      : undefined
+  );
+
+  // Fetch image attribution when popup opens. Attribution is non-critical: a
+  // failure only suppresses the credit overlay, it never blocks the popup.
   async function fetchImageAttribution() {
-    if (!scientificName?.trim() || lastFetchedScientificName === scientificName) return;
-    lastFetchedScientificName = scientificName;
+    const name = scientificName?.trim();
+    if (!name || lastFetchedScientificName === name) return;
+    // Mark as fetched up front so concurrent/repeat hovers do not re-request.
+    lastFetchedScientificName = name;
 
     try {
-      const url = buildAppUrl(
-        `/api/v2/media/species-image/info?name=${encodeURIComponent(scientificName)}`
-      );
+      const url = buildAppUrl(`/api/v2/media/species-image/info?name=${encodeURIComponent(name)}`);
       const response = await fetch(url);
       if (response.ok) {
         imageAttribution = (await response.json()) as ImageAttribution;
+      } else {
+        // Allow a later hover to retry a transient non-OK response.
+        lastFetchedScientificName = '';
       }
-    } catch {
-      // Attribution is non-critical — fail silently
+    } catch (error) {
+      // Clear the dedupe key so a later hover can retry after a network error.
+      lastFetchedScientificName = '';
+      logger.debug('Failed to fetch bird image attribution', { error, species: name });
     }
   }
 
   // Show popup and calculate position
-  function handleMouseEnter(event: MouseEvent) {
+  function handleMouseEnter() {
     if (!triggerElement) return;
 
     showPopup = true;
-    calculatePosition(event);
+    // First pass positions the popup with size estimates (it is not in the DOM
+    // yet). Re-measure on the next frame, once mounted, so the 'above' branch
+    // uses the real height. Mirrors ActionMenu/AudioSettingsButton.
+    calculatePosition();
+    globalThis.requestAnimationFrame(() => {
+      if (showPopup) calculatePosition();
+    });
     imageLoaded = false;
     imageError = false;
     fetchImageAttribution();
@@ -96,22 +135,39 @@
     showPopup = false;
   }
 
-  // Update position on mouse move for better UX
-  function handleMouseMove(event: MouseEvent) {
-    if (showPopup) {
-      calculatePosition(event);
-    }
-  }
+  // Keep the popup anchored to its trigger while open. It is portaled to
+  // <body> with position:fixed, so without this it would drift away from the
+  // row on scroll/resize. Placement is trigger-relative (not cursor-relative),
+  // so there is no need to recompute on mousemove.
+  $effect(() => {
+    if (!showPopup) return;
 
-  // Calculate optimal popup position
-  function calculatePosition(_event: MouseEvent) {
+    const reposition = () => calculatePosition();
+    // Capture phase so scrolls inside nested overflow containers are caught too.
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  });
+
+  // Calculate optimal popup position.
+  //
+  // Vertical placement uses the real rendered popup height once it is mounted
+  // (offsetHeight, which ignores the dropdown transition's scale transform);
+  // POPUP_HEIGHT_ESTIMATE is only the fallback for the first synchronous pass,
+  // before the popup exists in the DOM. Width is fixed via POPUP_WIDTH.
+  function calculatePosition() {
     if (!triggerElement) return;
 
     const triggerRect = triggerElement.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const popupWidth = 320; // Popup width
-    const popupHeight = 280; // Popup height
+    const popupWidth = POPUP_WIDTH;
+    const popupHeight = popupElement?.offsetHeight ?? POPUP_HEIGHT_ESTIMATE;
+    const viewportMargin = 10; // Keep the popup this far from the viewport edges
     const offsetX = 10; // Horizontal offset from trigger
     const offsetY = 10; // Vertical offset from trigger when below
     const offsetYAbove = 20; // Larger vertical offset when above for better separation
@@ -133,36 +189,45 @@
     } else {
       // Center horizontally if not enough space on sides
       x = Math.max(
-        10,
-        Math.min(viewportWidth / 2 - popupWidth / 2, viewportWidth - popupWidth - 10)
+        viewportMargin,
+        Math.min(viewportWidth / 2 - popupWidth / 2, viewportWidth - popupWidth - viewportMargin)
       );
     }
+    // Ensure popup stays within viewport bounds horizontally
+    popupX = Math.max(viewportMargin, Math.min(x, viewportWidth - popupWidth - viewportMargin));
 
-    // Determine vertical position
-    // Add extra buffer to trigger earlier (200px buffer)
+    // Point the arrow at the trigger's horizontal center, clamped so it stays
+    // within the popup body.
+    const arrowSize = 12; // matches w-3/h-3
+    const triggerCenterX = triggerRect.left + triggerRect.width / 2;
+    popupArrowX = Math.max(
+      arrowSize,
+      Math.min(triggerCenterX - popupX, popupWidth - arrowSize * 2)
+    );
+
+    // Determine vertical position. Add an extra buffer so the popup flips to
+    // the 'above' placement earlier (before the trigger reaches the very edge).
     const earlyTriggerBuffer = 200;
-    let y: number;
 
     if (spaceBelow >= popupHeight + offsetY + earlyTriggerBuffer) {
-      // Position below trigger
-      y = triggerRect.bottom + offsetY;
+      // Below: anchor the popup's TOP edge just under the trigger row. Height
+      // independent, which is why the 'below' case never misaligned.
       popupPosition = 'below';
+      popupTop = triggerRect.bottom + offsetY;
+      popupBottom = null;
     } else if (spaceAbove >= popupHeight + offsetYAbove) {
-      // Position above trigger with larger offset
-      y = triggerRect.top - popupHeight - offsetYAbove;
+      // Above: anchor the popup's BOTTOM edge just above the trigger row by
+      // pinning `bottom` to the viewport. Aligning the bottom edge means the
+      // exact height is irrelevant and the popup grows upward from the row.
       popupPosition = 'above';
+      popupBottom = viewportHeight - triggerRect.top + offsetYAbove;
+      popupTop = null;
     } else {
-      // Position at the top of viewport if not enough space
-      y = 10;
+      // Not enough room either way: pin near the top of the viewport.
       popupPosition = 'below';
+      popupTop = viewportMargin;
+      popupBottom = null;
     }
-
-    // Ensure popup stays within viewport bounds
-    x = Math.max(10, Math.min(x, viewportWidth - popupWidth - 10));
-    y = Math.max(10, Math.min(y, viewportHeight - popupHeight - 10));
-
-    popupX = x;
-    popupY = y;
   }
 
   // Handle image load success
@@ -178,12 +243,9 @@
     imageError = true;
   }
 
-  // Handle focus events for keyboard users
-  function handleFocus() {
-    // Don't show popup on focus to avoid interference with screen readers
-    // Users can press Enter/Space to navigate
-  }
-
+  // Close the popup if the trigger loses focus. The popup is intentionally not
+  // opened on focus, to avoid interfering with screen readers; keyboard users
+  // press Enter/Space to navigate to the detail page instead.
   function handleBlur() {
     showPopup = false;
   }
@@ -198,8 +260,6 @@
     class="flex {className} relative"
     onmouseenter={handleMouseEnter}
     onmouseleave={handleMouseLeave}
-    onmousemove={handleMouseMove}
-    onfocus={handleFocus}
     onblur={handleBlur}
     aria-label={t('components.birdThumbnail.viewDetections', { name: displayName })}
     aria-describedby={showPopup ? 'bird-popup' : undefined}
@@ -221,12 +281,13 @@
       bind:this={popupElement}
       use:portal
       id="bird-popup"
-      in:dropdown
-      out:dropdown={{ duration: 100 }}
+      in:dropdown={{ y: popupPosition === 'above' ? 8 : -8 }}
+      out:dropdown={{ duration: 100, y: popupPosition === 'above' ? 8 : -8 }}
       class="fixed z-50 bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-lg shadow-xl p-4"
       style:left="{popupX}px"
-      style:top="{popupY}px"
-      style:width="320px"
+      style:top={popupTop !== null ? `${popupTop}px` : undefined}
+      style:bottom={popupBottom !== null ? `${popupBottom}px` : undefined}
+      style:width="{POPUP_WIDTH}px"
       role="tooltip"
       aria-live="polite"
     >
@@ -251,7 +312,11 @@
         >
           {#if !imageLoaded && !imageError}
             <!-- Loading state -->
-            <div class="absolute inset-0 flex items-center justify-center">
+            <div
+              class="absolute inset-0 flex items-center justify-center"
+              role="status"
+              aria-label={t('common.ui.loading')}
+            >
               <div class="loading loading-spinner loading-md"></div>
             </div>
           {/if}
@@ -287,9 +352,9 @@
               <span class="credit-text">{imageAttribution.authorName}</span>
               {#if imageAttribution.licenseName}
                 <span class="credit-separator">·</span>
-                {#if imageAttribution.licenseURL}
+                {#if safeLicenseURL}
                   <a
-                    href={imageAttribution.licenseURL}
+                    href={safeLicenseURL}
                     target="_blank"
                     rel="noopener noreferrer"
                     class="credit-license">{imageAttribution.licenseName}</a
@@ -318,14 +383,14 @@
         <!-- Arrow at top of popup -->
         <div
           class="absolute w-3 h-3 bg-[var(--color-base-100)] border-l border-t border-[var(--color-base-300)] rotate-45 -z-10"
-          style:left="20px"
+          style:left="{popupArrowX}px"
           style:top="-6px"
         ></div>
       {:else}
         <!-- Arrow at bottom of popup -->
         <div
           class="absolute w-3 h-3 bg-[var(--color-base-100)] border-r border-b border-[var(--color-base-300)] rotate-45 -z-10"
-          style:left="20px"
+          style:left="{popupArrowX}px"
           style:bottom="-6px"
         ></div>
       {/if}
