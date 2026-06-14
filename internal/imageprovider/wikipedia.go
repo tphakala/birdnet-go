@@ -862,32 +862,12 @@ type apiErrorCategory struct {
 	Actionable  bool
 }
 
-var (
-	errorCategoryJSONParsing = apiErrorCategory{
-		Type:        "json_parsing_failure",
-		Description: "Wikipedia returned HTML error page instead of JSON",
-		Severity:    "low",
-		Actionable:  false,
-	}
-	errorCategoryNetworkFailure = apiErrorCategory{
-		Type:        "network_failure",
-		Description: "Network connectivity or Wikipedia API unavailable",
-		Severity:    "high",
-		Actionable:  true,
-	}
-	errorCategoryAPIStructuredError = apiErrorCategory{
-		Type:        "api_structured_error",
-		Description: "Wikipedia API returned structured error response",
-		Severity:    "low",
-		Actionable:  true,
-	}
-	errorCategoryMalformedResponse = apiErrorCategory{
-		Type:        "malformed_response",
-		Description: "Wikipedia API response format unexpected",
-		Severity:    "low",
-		Actionable:  true,
-	}
-)
+var errorCategoryNetworkFailure = apiErrorCategory{
+	Type:        "network_failure",
+	Description: "Network connectivity or Wikipedia API unavailable",
+	Severity:    "high",
+	Actionable:  true,
+}
 
 // logAPIError logs API errors with enhanced diagnostics and categorization
 func logAPIError(category apiErrorCategory, reqID, species string, err error) {
