@@ -39,30 +39,32 @@ const STALE_SCIENTIFIC = 'Stale-sci-A';
 
 /** Minimal fetch Response stub carrying a JSON body. */
 function jsonResponse(body: unknown): Response {
-  // Pre-serialize so text() never throws synchronously (e.g. circular refs);
-  // a Promise-returning method must reject, not throw.
-  const serialized = JSON.stringify(body);
   return {
     ok: true,
     status: 200,
     statusText: 'OK',
     headers: new Headers({ 'content-type': 'application/json' }),
     json: () => Promise.resolve(body),
-    text: () => Promise.resolve(serialized),
+    // Serialize lazily and reject (never throw synchronously) so this
+    // Promise-returning method honors its contract even on a non-serializable body.
+    text: () => {
+      try {
+        return Promise.resolve(JSON.stringify(body));
+      } catch (error) {
+        return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
   } as unknown as Response;
 }
 
 describe('DetectionDetail stale-response race (#978)', () => {
-  let originalFetch: typeof globalThis.fetch;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    originalFetch = globalThis.fetch;
   });
 
   afterEach(() => {
     cleanup();
-    globalThis.fetch = originalFetch;
+    vi.unstubAllGlobals();
   });
 
   // Regression: navigating from detection A to B while A's request is still in
@@ -75,23 +77,26 @@ describe('DetectionDetail stale-response race (#978)', () => {
       resolveStale = resolve;
     });
 
-    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-      // Detection A: held in flight until we resolve it manually (after switching to B).
-      if (url.includes('/api/v2/detections/det-a')) {
-        return staleResponse;
-      }
-      // Detection B: resolves immediately and becomes the current detection.
-      if (url.includes('/api/v2/detections/det-b')) {
-        return Promise.resolve(
-          jsonResponse(
-            makeDetection({ id: 2, scientificName: FRESH_SCIENTIFIC, commonName: 'Fresh B' })
-          )
-        );
-      }
-      // Secondary species/taxonomy/attribution endpoints: irrelevant here.
-      return Promise.resolve(jsonResponse({}));
-    }) as unknown as typeof fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        // Detection A: held in flight until we resolve it manually (after switching to B).
+        if (url.includes('/api/v2/detections/det-a')) {
+          return staleResponse;
+        }
+        // Detection B: resolves immediately and becomes the current detection.
+        if (url.includes('/api/v2/detections/det-b')) {
+          return Promise.resolve(
+            jsonResponse(
+              makeDetection({ id: 2, scientificName: FRESH_SCIENTIFIC, commonName: 'Fresh B' })
+            )
+          );
+        }
+        // Secondary species/taxonomy/attribution endpoints: irrelevant here.
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
 
     const { container, rerender } = detailTest.render({ detectionId: 'det-a' });
 
