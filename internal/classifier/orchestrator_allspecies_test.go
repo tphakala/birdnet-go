@@ -290,9 +290,66 @@ func TestGetAllProbableSpecies_NonUniversalPrimary(t *testing.T) {
 		"non-universal primary: excluded species must not be added")
 }
 
-// TestGetAllProbableSpecies_BatModelSkipped verifies the bat model is never
-// iterated when collecting non-primary species.
-func TestGetAllProbableSpecies_BatModelSkipped(t *testing.T) {
+// TestGetAllProbableSpecies_BatModelAlwaysActive verifies that bat-model species
+// are included as always-active (score 1.0) even though the bat model is skipped
+// by the range-filter loop: bats have no geomodel, so they cannot be
+// location-filtered. The exclude list is still honored, and PassUnmappedSpecies
+// is irrelevant to bats (they are not geomodel-mapped at all).
+func TestGetAllProbableSpecies_BatModelAlwaysActive(t *testing.T) {
+	settings := universalSettings(t)
+	// Prove bats are added regardless of the geomodel pass-through gate.
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = false
+	settings.Realtime.Species.Exclude = []string{"Pipistrellus pipistrellus"}
+
+	rf := &fakeUniversalRangeFilter{
+		geoLabels: []string{"Turdus merula_Common Blackbird"},
+		scores: []SpeciesScore{
+			{Score: 0.9, Label: "Turdus merula_Common Blackbird"},
+		},
+		rawScores: []float32{0.9},
+	}
+
+	const primaryID = "BirdNET_V3"
+	bn := &BirdNET{
+		Settings:     settings,
+		speciesCache: make(map[string]*speciesCacheEntry),
+	}
+	bn.ModelInfo.ID = primaryID
+	bn.rangeFilter = rf
+
+	batModel := &mockModelInstance{
+		id: RegistryIDBat,
+		labels: []string{
+			"Myotis daubentonii",        // included at 1.0
+			"Pipistrellus pipistrellus", // excluded, must not appear
+		},
+	}
+
+	o := &Orchestrator{
+		Settings:  settings,
+		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
+		primary:   bn,
+		models: map[string]*modelEntry{
+			primaryID:     {instance: bn},
+			RegistryIDBat: {instance: batModel},
+		},
+	}
+
+	scores, err := o.GetAllProbableSpeciesWithSettings(time.Now(), 0, settings)
+	require.NoError(t, err)
+
+	got, ok := scoreForLabel(scores, "Myotis daubentonii")
+	require.True(t, ok, "bat species must be included as always-active even with PassUnmappedSpecies disabled")
+	assert.InDelta(t, 1.0, got.Score, 0.0001, "bat species must be scored 1.0 (always active)")
+
+	assert.False(t, hasScientificName(scores, "Pipistrellus pipistrellus"),
+		"excluded bat species must not be added")
+}
+
+// TestGetAllProbableSpecies_BatModelDedupedByScientificName verifies that a bat
+// species already represented via another model is not duplicated by the bat
+// always-active pass.
+func TestGetAllProbableSpecies_BatModelDedupedByScientificName(t *testing.T) {
 	settings := universalSettings(t)
 	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
 
@@ -312,10 +369,10 @@ func TestGetAllProbableSpecies_BatModelSkipped(t *testing.T) {
 	bn.ModelInfo.ID = primaryID
 	bn.rangeFilter = rf
 
-	batModel := &mockModelInstance{
-		id:     RegistryIDBat,
-		labels: []string{"Myotis daubentonii"},
-	}
+	// A non-bat secondary model emits the same scientific name (geomodel-unmapped,
+	// so it passes through at 1.0); the bat model must not duplicate it.
+	perch := &mockModelInstance{id: "Perch_V2", labels: []string{"Myotis daubentonii"}}
+	batModel := &mockModelInstance{id: RegistryIDBat, labels: []string{"Myotis daubentonii"}}
 
 	o := &Orchestrator{
 		Settings:  settings,
@@ -323,6 +380,7 @@ func TestGetAllProbableSpecies_BatModelSkipped(t *testing.T) {
 		primary:   bn,
 		models: map[string]*modelEntry{
 			primaryID:     {instance: bn},
+			"Perch_V2":    {instance: perch},
 			RegistryIDBat: {instance: batModel},
 		},
 	}
@@ -330,8 +388,13 @@ func TestGetAllProbableSpecies_BatModelSkipped(t *testing.T) {
 	scores, err := o.GetAllProbableSpeciesWithSettings(time.Now(), 0, settings)
 	require.NoError(t, err)
 
-	assert.False(t, hasScientificName(scores, "Myotis daubentonii"),
-		"bat model species must never be collected")
+	count := 0
+	for _, s := range scores {
+		if detection.ExtractScientificName(s.Label) == "Myotis daubentonii" {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "bat species already represented via another model must not be duplicated")
 }
 
 // TestGetAllProbableSpecies_DeterministicDedupByModelID verifies that when two

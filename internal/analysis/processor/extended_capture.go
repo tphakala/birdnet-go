@@ -6,6 +6,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
 // Extended capture timeout thresholds.
@@ -53,17 +54,23 @@ func (p *Processor) initExtendedCapture() {
 		return
 	}
 
-	// Get BirdNET labels from fresh settings for common name resolution
+	// Resolve config entries against the full multi-model label union (primary plus
+	// secondary models such as bats/Perch) so secondary-model species match. Fall
+	// back to the primary labels if the orchestrator is unavailable.
 	var labels []string
-	if settings != nil {
+	if p.Bn != nil {
+		labels = p.Bn.AllLabels()
+	}
+	if len(labels) == 0 {
 		labels = settings.BirdNET.Labels
 	}
+	locale := settings.BirdNET.Locale
 
 	// Get cached taxonomy database for genus/family/order resolution
 	taxonomyDB := p.getTaxonomyDB()
 
 	isAll, resolved := resolveSpeciesFilter(
-		settings.Realtime.ExtendedCapture.Species, labels, taxonomyDB, "extended_capture",
+		settings.Realtime.ExtendedCapture.Species, labels, taxonomyDB, locale, "extended_capture",
 	)
 
 	p.extendedCaptureMu.Lock()
@@ -104,14 +111,14 @@ func (p *Processor) isExtendedCaptureSpecies(scientificName string) bool {
 // resolveSpeciesFilter resolves the config species list into a set of scientific names.
 // Returns (isAll, resolvedSet) where isAll=true means all species qualify.
 // taxonomyDB may be nil if taxonomy is unavailable.
-func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier.TaxonomyDatabase, operationName string) (isAll bool, resolvedSet map[string]bool) {
+func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier.TaxonomyDatabase, locale, operationName string) (isAll bool, resolvedSet map[string]bool) {
 	if len(configSpecies) == 0 {
 		return true, nil
 	}
 
 	resolved := make(map[string]bool)
 
-	// Build common name -> scientific name lookup from BirdNET labels
+	// Build common name -> scientific name lookup from the model labels.
 	commonToScientific := make(map[string]string)
 	scientificNames := make(map[string]bool)
 	for _, label := range labels {
@@ -120,8 +127,17 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 			commonLower := strings.ToLower(common)
 			commonToScientific[commonLower] = sciLower
 			scientificNames[sciLower] = true
+		} else if sci := strings.ToLower(strings.TrimSpace(label)); sci != "" {
+			// Scientific-only labels (bats, Perch-unique species) have no embedded
+			// common name; index them by scientific name so a scientific-name config
+			// entry still matches them.
+			scientificNames[sci] = true
 		}
 	}
+
+	// Config entries that none of the cheap lookups resolved; reverse-resolved
+	// through OpenFauna in a single batch pass after the loop.
+	var unresolved []string
 
 	for _, entry := range configSpecies {
 		entryLower := strings.ToLower(strings.TrimSpace(entry))
@@ -167,7 +183,40 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 			}
 		}
 
-		// Unknown entry — log warning so users can spot config typos
+		// Defer to the OpenFauna reverse lookup below.
+		unresolved = append(unresolved, entry)
+	}
+
+	// Reverse-resolve any still-unresolved entries through OpenFauna in a single
+	// cold-path pass. This canonicalizes localized common names of secondary-model
+	// species (e.g. Finnish "mopsilepakko" -> "Barbastella barbastellus") that have
+	// no embedded common name in the model labels and are not in the taxonomy DB.
+	if len(unresolved) > 0 {
+		reverse := openfauna.LookupScientificNames(unresolved, locale)
+		stillUnresolved := unresolved[:0]
+		for _, entry := range unresolved {
+			matched := false
+			for _, sci := range reverse[entry] {
+				sciLower := strings.ToLower(sci)
+				// Only resolve to species a loaded model can actually emit. OpenFauna
+				// may return scientific names for the localized common name that are
+				// not in any loaded model's labels; resolving to those would silently
+				// match a species nothing can detect and skip the unresolved warning.
+				if !scientificNames[sciLower] {
+					continue
+				}
+				resolved[sciLower] = true
+				matched = true
+			}
+			if !matched {
+				stillUnresolved = append(stillUnresolved, entry)
+			}
+		}
+		unresolved = stillUnresolved
+	}
+
+	// Anything still unresolved is a likely config typo; warn so users can spot it.
+	for _, entry := range unresolved {
 		GetLogger().Warn("Species filter entry not resolved",
 			logger.String("entry", entry),
 			logger.String("operation", operationName+"_species_filter"))

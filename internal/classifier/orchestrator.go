@@ -522,7 +522,7 @@ func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float
 // scores already contain the full geomodel label set above the configured
 // threshold ("ScientificName_CommonName"), exclude-filtered.
 //
-// Additional models (except bat) emit labels in their own convention (Perch v2
+// Additional non-bat models emit labels in their own convention (Perch v2
 // uses scientific-name-only labels). To decide whether a non-primary species
 // should be added, the geomodel's coverage is consulted by scientific name:
 //
@@ -541,6 +541,12 @@ func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float
 // (exclude honored), preserving prior multi-classifier behavior. Deduplication
 // is by scientific name throughout, never exact label, because the geomodel and
 // Perch use different label conventions for the same species.
+//
+// The bat model is handled separately from the loop above: it has no geomodel,
+// so its species can never be range-filtered. They are all included as
+// always-active (score 1.0), deduped by scientific name and exclude-honored, so
+// a BattyBirdNET setup sees its bat species in the active/probable list instead
+// of a bird-only view.
 func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
 	// Snapshot primary under read lock to avoid racing with Delete().
 	o.mu.RLock()
@@ -644,6 +650,34 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		}
 	}
 
+	// The bat model is intentionally skipped by the range-filter loop above: it
+	// has no geomodel, so its species can never be location-filtered. Include
+	// them all here as always-active (score 1.0), deduped by scientific name and
+	// honoring the exclude list, so multi-model (BattyBirdNET) setups see their
+	// bat species in the active/probable list instead of a bird-only view.
+	o.mu.RLock()
+	batEntry, hasBat := o.models[RegistryIDBat]
+	o.mu.RUnlock()
+	if hasBat {
+		batEntry.mu.Lock()
+		var batLabels []string
+		if batEntry.instance != nil {
+			batLabels = batEntry.instance.Labels()
+		}
+		batEntry.mu.Unlock()
+		if len(batLabels) > 0 {
+			scores = slices.Grow(scores, len(batLabels))
+		}
+		for _, label := range batLabels {
+			sci := strings.ToLower(detection.ExtractScientificName(label))
+			if seenSci[sci] || excluder.matches(label) {
+				continue
+			}
+			scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
+			seenSci[sci] = true
+		}
+	}
+
 	return scores, nil
 }
 
@@ -714,7 +748,7 @@ func unionLabels(sets ...[]string) []string {
 // AllLabels returns the deduplicated union of every loaded model's labels: the
 // primary model plus all secondary models, INCLUDING the bat model. Unlike Labels(),
 // which returns the primary model's labels only, and unlike
-// GetAllProbableSpeciesWithSettings, which range-filters and skips the bat model,
+// GetAllProbableSpeciesWithSettings, which range-filters the bird models,
 // AllLabels is the unfiltered superset. It is the label source for the reverse
 // name-search maps so localized common names of secondary-model species (bats,
 // Perch-unique species) are searchable, matching how the forward display path
