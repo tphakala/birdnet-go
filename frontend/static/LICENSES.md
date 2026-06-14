@@ -27,11 +27,6 @@ Source: Apache-2.0
 License: https://github.com/FiloSottile/edwards25519/blob/v1.2.0/LICENSE
 Source: BSD-3-Clause
 
-### github.com/antonholmquist/jason
-
-License: https://github.com/antonholmquist/jason/blob/v1.0.0/LICENSE
-Source: MIT
-
 ### github.com/beorn7/perks/quantile
 
 License: https://github.com/beorn7/perks/blob/v1.0.1/LICENSE
@@ -181,11 +176,6 @@ Source: MIT
 
 License: https://github.com/jlaffaye/ftp/blob/v0.2.1/LICENSE
 Source: ISC
-
-### github.com/k3a/html2text
-
-License: https://github.com/k3a/html2text/blob/v1.4.0/LICENSE
-Source: MIT
 
 ### github.com/klauspost/cpuid/v2
 
