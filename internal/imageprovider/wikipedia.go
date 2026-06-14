@@ -111,6 +111,55 @@ type wikiMediaAuthor struct {
 	licenseURL  string
 }
 
+// wikiAPIResponse models the subset of the MediaWiki API JSON response that
+// this package consumes (formatversion=2). Unknown fields are ignored by
+// encoding/json. The raw field retains the original response bytes for
+// diagnostic logging and is not populated by unmarshalling.
+type wikiAPIResponse struct {
+	Query *wikiQuery    `json:"query"`
+	Error *wikiAPIError `json:"error"`
+	raw   []byte        `json:"-"`
+}
+
+// wikiAPIError models a MediaWiki structured error object.
+type wikiAPIError struct {
+	Code string `json:"code"`
+	Info string `json:"info"`
+}
+
+// wikiQuery models the "query" object of a MediaWiki response. Redirects and
+// Normalized are retained as raw messages because only their presence/count is
+// used, for diagnostic logging.
+type wikiQuery struct {
+	Pages      []wikiPage        `json:"pages"`
+	Redirects  []json.RawMessage `json:"redirects"`
+	Normalized []json.RawMessage `json:"normalized"`
+}
+
+// wikiPage models a single page entry from a MediaWiki query response.
+type wikiPage struct {
+	Title     string          `json:"title"`
+	Thumbnail *wikiThumbnail  `json:"thumbnail"`
+	PageImage string          `json:"pageimage"`
+	ImageInfo []wikiImageInfo `json:"imageinfo"`
+}
+
+// wikiThumbnail models the pageimages thumbnail object.
+type wikiThumbnail struct {
+	Source string `json:"source"`
+}
+
+// wikiImageInfo models an imageinfo entry carrying extended metadata.
+type wikiImageInfo struct {
+	ExtMetadata map[string]wikiExtMetaValue `json:"extmetadata"`
+}
+
+// wikiExtMetaValue models a single extmetadata field, which wraps its payload
+// in a "value" key.
+type wikiExtMetaValue struct {
+	Value string `json:"value"`
+}
+
 // isCircuitOpen checks if the circuit breaker is open (blocking requests)
 func (l *wikiMediaProvider) isCircuitOpen() (open bool, reason string) {
 	l.circuitMu.RLock()
