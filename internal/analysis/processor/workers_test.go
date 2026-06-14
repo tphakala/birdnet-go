@@ -695,8 +695,10 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 		},
 	}
 
-	// Create a channel to track action execution
-	executionChan := make(chan struct{})
+	// Create a channel to track action execution. Buffered so the worker
+	// goroutine never blocks on the send if the test has already moved on
+	// (e.g. after a timeout), which would otherwise leak the goroutine.
+	executionChan := make(chan struct{}, 1)
 
 	// Create a mock action that signals when executed
 	mockAction := &MockAction{
@@ -740,15 +742,15 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 		require.Fail(t, "Timeout waiting for action to be executed")
 	}
 
-	// Verify that the action was executed exactly once
-	assert.Equal(t, 1, mockAction.ExecuteCount, "Expected action to be executed once")
+	// Verify that the action was executed exactly once. Read the count
+	// through the lock-protected getter to avoid racing the worker goroutine.
+	assert.Equal(t, 1, mockAction.GetExecuteCount(), "Expected action to be executed once")
 
-	// Wait a bit for the job queue to update its statistics
-	waitCtx, waitCancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
-	defer waitCancel()
-	<-waitCtx.Done()
-
-	// Verify that the job queue statistics reflect the completed job
+	// Poll the job queue statistics until the completed job is recorded
+	// instead of racing a fixed timeout.
+	require.Eventually(t, func() bool {
+		return realQueue.GetStats().SuccessfulJobs == 1
+	}, 2*time.Second, 10*time.Millisecond, "Expected 1 successful job")
 	stats := realQueue.GetStats()
 	assert.Equal(t, 1, stats.SuccessfulJobs, "Expected 1 successful job")
 
@@ -782,17 +784,18 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	err = processor.EnqueueTask(failingTask)
 	require.NoError(t, err, "Failed to enqueue failing task")
 
-	// Wait for the job queue to process the failing job
-	processCtx, processCancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
-	defer processCancel()
-	<-processCtx.Done()
+	// The failing action signals no completion channel, so poll the
+	// lock-protected execution count instead of racing a fixed timeout
+	// (reading the field directly here is a data race with the worker).
+	require.Eventually(t, func() bool {
+		return failingAction.GetExecuteCount() == 1
+	}, 2*time.Second, 10*time.Millisecond, "Expected failing action to be executed once")
 
-	// Verify that the failing action was executed
-	assert.Equal(t, 1, failingAction.ExecuteCount, "Expected failing action to be executed once")
-
-	// Verify that the job queue statistics reflect the failed job
+	// Poll until the job queue records the failed job.
+	require.Eventually(t, func() bool {
+		return realQueue.GetStats().FailedJobs >= 1
+	}, 2*time.Second, 10*time.Millisecond, "Expected at least 1 failed job")
 	stats = realQueue.GetStats()
-	assert.GreaterOrEqual(t, stats.FailedJobs, 1, "Expected at least 1 failed job")
 
 	// Log final statistics
 	t.Logf("Job queue stats: Total=%d, Successful=%d, Failed=%d",

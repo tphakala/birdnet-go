@@ -247,6 +247,14 @@ func (m *MockAction) Execute(ctx context.Context, data any) error {
 	return nil
 }
 
+// GetExecuteCount returns the execution count under the mock's lock so tests
+// can read it without racing the job-queue worker goroutine that calls Execute.
+func (m *MockAction) GetExecuteCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.ExecuteCount
+}
+
 // GetDescription implements the Action interface.
 func (m *MockAction) GetDescription() string {
 	return "Mock Action for testing"
