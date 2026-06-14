@@ -44,6 +44,19 @@ func TestExcludeMatcher_Empty(t *testing.T) {
 	assert.False(t, m.matches("Vulpes vulpes"))
 }
 
+// TestExcludeMatcher_NoReverseResolution_LeavesReverseSciNil verifies that when a
+// non-empty exclude list reverse-resolves to nothing (e.g. a scientific-name-only
+// entry that is not a localized common name), reverseSci stays nil. This preserves
+// the matches() nil-guard fast path so it skips the per-label ToLower + map lookup on
+// the hot rebuild loop instead of probing an empty map for every label.
+func TestExcludeMatcher_NoReverseResolution_LeavesReverseSciNil(t *testing.T) {
+	t.Parallel()
+	m := newExcludeMatcher([]string{"Zzz Notaspecies"}, "fi")
+	assert.Nil(t, m.reverseSci, "reverseSci must stay nil when nothing reverse-resolves")
+	// The forward path is unaffected: the unresolved entry simply never matches.
+	assert.False(t, m.matches("Turdus merula_Common Blackbird"))
+}
+
 // TestExcludeMatcher_CaseInsensitive proves matching normalizes case on both paths:
 // EqualFold on the forward (scientific/common) match, and a lower-cased scientific-name
 // set on the reverse match (where the entry is also case-folded by OpenFauna's lookup).

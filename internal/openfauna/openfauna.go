@@ -445,6 +445,47 @@ func LookupScientificNames(commonNames []string, bngLocale string) map[string][]
 	return out
 }
 
+// ReverseResolveToScientificNames reverse-resolves localized common-name entries to their
+// lower-cased scientific name(s) for the given BirdNET locale. It is a thin convenience over
+// LookupScientificNames that applies the lower-casing callers need when matching against
+// lower-cased scientific names, so the lower-casing and locale handling live in one place
+// instead of being duplicated (and able to drift) across call sites.
+//
+// The result is keyed by the caller's original entry strings; entries that resolve to no
+// scientific name are absent. Each entry's scientific names keep the sorted, de-duplicated
+// order from LookupScientificNames and are lower-cased. Returns an empty (non-nil) map when
+// entries is empty or nothing resolves. Like LookupScientificNames this is O(dataset) per
+// call and must not be used on a hot path.
+func ReverseResolveToScientificNames(entries []string, bngLocale string) map[string][]string {
+	resolved := LookupScientificNames(entries, bngLocale)
+	out := make(map[string][]string, len(resolved))
+	for entry, sciNames := range resolved {
+		lowered := make([]string, len(sciNames))
+		for i, sci := range sciNames {
+			lowered[i] = strings.ToLower(sci)
+		}
+		out[entry] = lowered
+	}
+	return out
+}
+
+// ReverseResolveToScientificSet reverse-resolves localized common-name entries to a single
+// flat set of lower-cased scientific names for the given BirdNET locale, flattening the
+// per-entry result of ReverseResolveToScientificNames. It serves callers that only need to
+// test membership of a label's scientific name (e.g. the range-filter exclude matcher) and
+// do not care which entry produced which name. Returns an empty (non-nil) set when entries
+// is empty or nothing resolves. O(dataset) per call; not for hot paths.
+func ReverseResolveToScientificSet(entries []string, bngLocale string) map[string]struct{} {
+	resolved := ReverseResolveToScientificNames(entries, bngLocale)
+	set := make(map[string]struct{}, len(resolved))
+	for _, sciNames := range resolved {
+		for _, sci := range sciNames {
+			set[sci] = struct{}{}
+		}
+	}
+	return set
+}
+
 // LookupCommonNames is the forward, batched companion to LookupScientificNames:
 // for each requested scientific name it returns the localized common name in the
 // locale mapped from bngLocale, resolving every request in a single pass over the

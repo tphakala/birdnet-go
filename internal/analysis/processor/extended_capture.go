@@ -192,20 +192,23 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 	// species (e.g. Finnish "mopsilepakko" -> "Barbastella barbastellus") that have
 	// no embedded common name in the model labels and are not in the taxonomy DB.
 	if len(unresolved) > 0 {
-		reverse := openfauna.LookupScientificNames(unresolved, locale)
+		// The shared helper returns scientific names already lower-cased, keyed per
+		// entry so the per-entry "matched" tracking (and the unresolved warning below)
+		// still works; it centralizes the lower-casing/locale handling shared with the
+		// range-filter exclude matcher.
+		reverse := openfauna.ReverseResolveToScientificNames(unresolved, locale)
 		stillUnresolved := unresolved[:0]
 		for _, entry := range unresolved {
 			matched := false
 			for _, sci := range reverse[entry] {
-				sciLower := strings.ToLower(sci)
 				// Only resolve to species a loaded model can actually emit. OpenFauna
 				// may return scientific names for the localized common name that are
 				// not in any loaded model's labels; resolving to those would silently
 				// match a species nothing can detect and skip the unresolved warning.
-				if !scientificNames[sciLower] {
+				if !scientificNames[sci] {
 					continue
 				}
-				resolved[sciLower] = true
+				resolved[sci] = true
 				matched = true
 			}
 			if !matched {

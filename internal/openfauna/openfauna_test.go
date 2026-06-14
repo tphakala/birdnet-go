@@ -316,3 +316,66 @@ func TestLookupScientificNames_HonorsLocale_Embedded(t *testing.T) {
 	assert.NotContains(t, LookupScientificNames([]string{"Kettu"}, "de")["Kettu"], "Vulpes vulpes",
 		"the reverse lookup must honor the active locale")
 }
+
+func TestReverseResolveToScientificNames_LowerCasesPerEntry_Embedded(t *testing.T) {
+	t.Parallel()
+
+	got := ReverseResolveToScientificNames([]string{"mopsilepakko", "Kettu", "drone"}, "fi")
+	// Scientific names are lower-cased and keyed by the caller's original entry string.
+	assert.Contains(t, got["mopsilepakko"], "barbastella barbastellus", "bat, lower-cased")
+	assert.Contains(t, got["Kettu"], "vulpes vulpes", "fox, lower-cased")
+	// A non-fauna string must be absent from the result, not present as an empty entry.
+	assert.NotContains(t, got, "drone", "an unmatched name must be absent from the result")
+}
+
+func TestReverseResolveToScientificNames_EmptyInput_Embedded(t *testing.T) {
+	t.Parallel()
+
+	got := ReverseResolveToScientificNames(nil, "fi")
+	assert.NotNil(t, got, "must return an empty, non-nil map for empty input")
+	assert.Empty(t, got)
+}
+
+func TestReverseResolveToScientificSet_FlattensAndLowerCases_Embedded(t *testing.T) {
+	t.Parallel()
+
+	got := ReverseResolveToScientificSet([]string{"mopsilepakko", "Kettu", "Ilves"}, "fi")
+	// The per-entry results are flattened into one lower-cased membership set.
+	assert.Contains(t, got, "barbastella barbastellus", "bat")
+	assert.Contains(t, got, "vulpes vulpes", "fox")
+	assert.Contains(t, got, "lynx lynx", "lynx")
+}
+
+func TestReverseResolveToScientificSet_EmptyInput_Embedded(t *testing.T) {
+	t.Parallel()
+
+	got := ReverseResolveToScientificSet(nil, "fi")
+	assert.NotNil(t, got, "must return an empty, non-nil set for empty input")
+	assert.Empty(t, got)
+}
+
+func TestReverseResolveToScientificNames_MultiResolutionAllLowerCased_Embedded(t *testing.T) {
+	t.Parallel()
+
+	// "Hairy Woodpecker" carries two scientific names in the dataset (a genus split),
+	// so this exercises the per-element lower-casing loop on a multi-element slice:
+	// every name must be lower-cased, not just the first.
+	got := ReverseResolveToScientificNames([]string{"Hairy Woodpecker"}, "en")
+	names := got["Hairy Woodpecker"]
+	require.Len(t, names, 2, "this common name must resolve to two scientific names in the dataset")
+	assert.Contains(t, names, "dryobates villosus")
+	assert.Contains(t, names, "leuconotopicus villosus")
+	for _, n := range names {
+		assert.Equal(t, strings.ToLower(n), n, "every resolved scientific name must be lower-cased, not just the first")
+	}
+}
+
+func TestReverseResolveToScientificSet_FlattensMultiResolutionEntry_Embedded(t *testing.T) {
+	t.Parallel()
+
+	// A single entry resolving to multiple scientific names must contribute ALL of them
+	// to the flat set, not just the first, so the inner flatten loop is exercised.
+	got := ReverseResolveToScientificSet([]string{"Hairy Woodpecker"}, "en")
+	assert.Contains(t, got, "dryobates villosus")
+	assert.Contains(t, got, "leuconotopicus villosus")
+}
