@@ -98,8 +98,9 @@ describe('DetectionDetail stale-response race (#978)', () => {
       jsonResponse(makeDetection({ id: 1, scientificName: 'Stale-sci-A', commonName: 'Stale A' }))
     );
     // Flush the production stale-handling path: await the promise it awaits, then
-    // drain microtasks plus one macrotask so the captured-signal guard has run
-    // before asserting. More robust than a bare timer if that path grows an await.
+    // a macrotask so every microtask hop (response.json, the captured-signal
+    // guard) and the Svelte DOM flush complete before asserting. A microtask-only
+    // flush (await tick) under-drains and lets the negative assertion fire early.
     await staleResponse;
     await new Promise(resolve => setTimeout(resolve, 0));
 

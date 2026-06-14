@@ -90,8 +90,9 @@ describe('Analytics fetch-sequence race (#978)', () => {
       },
     ]);
     // Flush the production stale-handling path: await the promise it awaits, then
-    // drain microtasks plus one macrotask so the sequence guard has run before
-    // asserting absence. More robust than a bare timer if that path grows an await.
+    // a macrotask so every microtask hop (the sequence guard, state commit) and
+    // the Svelte DOM flush complete before asserting absence. A microtask-only
+    // flush (await tick) under-drains and lets the negative assertion fire early.
     await staleRecent;
     await new Promise(resolve => setTimeout(resolve, 0));
 
