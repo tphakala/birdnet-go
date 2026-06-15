@@ -31,10 +31,14 @@
     CircleX,
   } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
+  import { computeAnchorPosition, applyAnchorPosition } from '$lib/utils/anchorPosition';
   import { auth } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
 
   let canEdit = $derived(!$auth.security.enabled || $auth.security.accessAllowed);
+
+  // Gap in px between the trigger button and the menu.
+  const MENU_OFFSET = 8;
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     /** The detection object containing data for this action menu */
@@ -95,27 +99,19 @@
   function updateMenuPosition() {
     if (!menuElement || !buttonElement) return;
 
-    const buttonRect = buttonElement.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - buttonRect.bottom;
-    const spaceAbove = buttonRect.top;
-    const menuHeight = menuElement.offsetHeight;
-
-    // Position menu relative to viewport
-    menuElement.style.position = 'fixed';
+    // Align the menu's right edge with the button (clamped into the viewport so a
+    // wide menu near the left edge cannot overflow off-screen), flipping above when
+    // there is not enough room below.
+    const position = computeAnchorPosition({
+      triggerRect: buttonElement.getBoundingClientRect(),
+      floatingHeight: menuElement.offsetHeight,
+      floatingWidth: menuElement.offsetWidth,
+      offset: MENU_OFFSET,
+      align: 'end',
+    });
+    applyAnchorPosition(menuElement, position);
+    // Stacking is owned by the component (kept above overlay content).
     menuElement.style.zIndex = '9999';
-
-    // Determine vertical position
-    if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
-      menuElement.style.bottom = `${window.innerHeight - buttonRect.top + 8}px`;
-      menuElement.style.top = 'auto';
-    } else {
-      menuElement.style.top = `${buttonRect.bottom + 8}px`;
-      menuElement.style.bottom = 'auto';
-    }
-
-    // Always align menu's right edge with button's right edge
-    menuElement.style.left = 'auto';
-    menuElement.style.right = `${window.innerWidth - buttonRect.right}px`;
   }
 
   /** Toggles the menu open/closed state and updates position when opening */
