@@ -11,6 +11,7 @@ import {
   toLocalizedPredictions,
   filterLocalizedPredictions,
   matchTypedToCanonical,
+  rankPredictions,
   type SpeciesPrediction,
 } from './speciesPredictions';
 
@@ -114,6 +115,91 @@ describe('filterLocalizedPredictions', () => {
     const result = filterLocalizedPredictions(predictions, '', { excludeValue: 'Tornipöllö' });
     expect(result.map(p => p.value)).not.toContain('Barn Owl');
     expect(result).toHaveLength(2);
+  });
+});
+
+describe('rankPredictions', () => {
+  // Mirrors the real bug: many global "...peippo" / "...tikka" look-alikes plus the
+  // native species the visitor actually wants. Labels are Finnish (the visitor
+  // locale); values are the canonical scientific names.
+  const predictions: SpeciesPrediction[] = [
+    { value: 'Chloris chloris', label: 'viherpeippo' },
+    { value: 'Fringilla montifringilla', label: 'järripeippo' },
+    { value: 'Amadina fasciata', label: 'viiltopeippo' },
+    { value: 'Fringilla coelebs', label: 'peippo' },
+    { value: 'Dendrocopos major', label: 'käpytikka' },
+    { value: 'Dendrocopos leucotos', label: 'valkoselkätikka' },
+    { value: 'Blythipicus pyrrhotis', label: 'tuliniskatikka' },
+    { value: 'Camarhynchus pallidus', label: 'tikkasirkku' },
+  ];
+  // The species probable at the configured (Finnish) location.
+  const localValues = new Set([
+    'Fringilla coelebs',
+    'Chloris chloris',
+    'Fringilla montifringilla',
+    'Dendrocopos major',
+    'Dendrocopos leucotos',
+  ]);
+  const isLocal = (p: SpeciesPrediction): boolean => localValues.has(p.value);
+
+  it('ranks an exact label match first even when look-alikes sort earlier alphabetically', () => {
+    // The exact "peippo" (Fringilla coelebs) is buried mid-list; it must lead.
+    const result = rankPredictions(predictions, 'peippo', { isLocal });
+    expect(result[0].label).toBe('peippo');
+  });
+
+  it('surfaces native (local) contains-matches above a non-native prefix match', () => {
+    // "tikka" is a compound-word suffix: native woodpeckers (käpytikka,
+    // valkoselkätikka) merely contain it, while the non-native tikkasirkku starts
+    // with it. Locality must outrank prefix so the natives lead.
+    const labels = rankPredictions(predictions, 'tikka', { isLocal }).map(p => p.label);
+    expect(labels[0]).toBe('käpytikka'); // alphabetically first local contains-match
+    expect(labels.indexOf('käpytikka')).toBeLessThan(labels.indexOf('tikkasirkku'));
+    expect(labels.indexOf('valkoselkätikka')).toBeLessThan(labels.indexOf('tikkasirkku'));
+    // Non-local entries (prefix or contains) trail the local ones.
+    expect(labels.indexOf('tikkasirkku')).toBeLessThan(labels.indexOf('tuliniskatikka'));
+  });
+
+  it('ranks a local prefix match above a local contains match', () => {
+    // "peippo" starts the local label "peippo" (exact, tier 0) but is a prefix of
+    // nothing else here; use "peip" so the exact drops out and only prefix/contains
+    // remain. peippo (local prefix) must precede viherpeippo (local contains).
+    const labels = rankPredictions(predictions, 'peip', { isLocal }).map(p => p.label);
+    expect(labels.indexOf('peippo')).toBeLessThan(labels.indexOf('viherpeippo'));
+    expect(labels.indexOf('peippo')).toBeLessThan(labels.indexOf('järripeippo'));
+  });
+
+  it('matches the canonical value, not only the label', () => {
+    const result = rankPredictions(predictions, 'coelebs', { isLocal });
+    expect(result.map(p => p.value)).toEqual(['Fringilla coelebs']);
+  });
+
+  it('drops non-matching predictions', () => {
+    const result = rankPredictions(predictions, 'peippo', { isLocal });
+    expect(result.every(p => p.label.includes('peippo'))).toBe(true);
+  });
+
+  it('caps the result to the limit while keeping the best-ranked entries', () => {
+    const result = rankPredictions(predictions, 'peippo', { isLocal, limit: 2 });
+    expect(result).toHaveLength(2);
+    // The exact match must survive the cap rather than being sliced off.
+    expect(result[0].label).toBe('peippo');
+  });
+
+  it('returns nothing for an empty (or whitespace-only) query', () => {
+    expect(rankPredictions(predictions, '   ', { isLocal })).toEqual([]);
+  });
+
+  it('returns nothing for a zero or negative limit', () => {
+    expect(rankPredictions(predictions, 'peippo', { isLocal, limit: 0 })).toEqual([]);
+    expect(rankPredictions(predictions, 'peippo', { isLocal, limit: -1 })).toEqual([]);
+  });
+
+  it('sorts alphabetically by label within a tier when no locality info is given', () => {
+    const result = rankPredictions(predictions, 'peippo');
+    expect(result[0].label).toBe('peippo'); // exact still leads
+    const rest = result.slice(1).map(p => p.label);
+    expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
   });
 });
 
