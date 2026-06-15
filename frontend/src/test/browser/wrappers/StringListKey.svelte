@@ -1,8 +1,7 @@
 <!--
-  Tests: {#each items as item (item)} pattern
-  Reproduces: SpeciesManager predictions (line 272) and displaySpecies (line 295),
-              SubnetInput subnets (line 179)
-  Bug: When items array contains duplicate strings, Svelte emits each_key_duplicate warning
+  Tests: {#each items as item (item)} pattern (a bare string value used as the key)
+  Reproduces: any keyed list that uses a bare string value as its {#each} key
+  Bug: When the items array contains duplicate strings, Svelte throws an each_key_duplicate error
 -->
 <script lang="ts">
   interface Props {
