@@ -749,12 +749,15 @@
   // range-filter probable-species response, keeping only species at/above the
   // threshold (i.e. actually probable at the configured location).
   function buildLocalSpeciesSet(
-    species: Array<{ scientificName: string; commonName: string; score: number }>,
+    species: Array<{ scientificName?: string; commonName?: string; score?: number }>,
     threshold: number
   ): Set<string> {
     const next = new Set<string>();
     for (const s of species) {
-      if (s.score < threshold) continue;
+      // The range-filter entry fields are all optional; a missing score must NOT
+      // pass the threshold (undefined < threshold is false), or non-probable species
+      // would be marked local and skew ranking.
+      if (typeof s.score !== 'number' || s.score < threshold) continue;
       if (s.commonName) next.add(normalizeForLookup(s.commonName));
       if (s.scientificName) next.add(normalizeForLookup(s.scientificName));
     }

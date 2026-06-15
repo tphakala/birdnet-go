@@ -106,8 +106,20 @@ export function filterLocalizedPredictions(
   return out;
 }
 
-/** Options for {@link rankPredictions}. */
-interface RankOptions {
+// Ranking tiers for rankPredictions, best (lowest) first. Locality outranks prefix
+// so a typed root word surfaces native species that merely contain it ahead of
+// non-native look-alikes that happen to start with it.
+const TIER_EXACT = 0;
+const TIER_LOCAL_PREFIX = 1;
+const TIER_LOCAL_CONTAINS = 2;
+const TIER_PREFIX = 3;
+const TIER_CONTAINS = 4;
+
+/**
+ * Options for {@link rankPredictions}. Generic over the prediction type so a caller
+ * passing a richer type (extending SpeciesPrediction) keeps it through the callbacks.
+ */
+interface RankOptions<T extends SpeciesPrediction = SpeciesPrediction> {
   /** Maximum number of predictions to return. Defaults to unbounded. */
   limit?: number;
   /**
@@ -116,13 +128,13 @@ interface RankOptions {
    * relevant entries rank above other "contains" matches so common local species
    * surface ahead of global look-alikes.
    */
-  isLocal?: (prediction: SpeciesPrediction) => boolean;
+  isLocal?: (prediction: T) => boolean;
   /**
    * Drops a prediction from the results (e.g. species already in the target list).
    * Evaluated only for entries that already matched the query, so an expensive,
    * alias-aware exclusion check runs on the small matched subset, not the full list.
    */
-  exclude?: (prediction: SpeciesPrediction) => boolean;
+  exclude?: (prediction: T) => boolean;
 }
 
 /**
@@ -147,11 +159,11 @@ interface RankOptions {
  * look-alikes (e.g. typing the Finnish "tikka" surfaced only exotic woodpeckers
  * while the native ones were cut off past the cap).
  */
-export function rankPredictions(
-  predictions: SpeciesPrediction[],
+export function rankPredictions<T extends SpeciesPrediction>(
+  predictions: T[],
   query: string,
-  options: RankOptions = {}
-): SpeciesPrediction[] {
+  options: RankOptions<T> = {}
+): T[] {
   const needle = normalizeForLookup(query.trim());
   if (needle.length === 0) return [];
 
@@ -166,7 +178,7 @@ export function rankPredictions(
   const exclude = options.exclude;
 
   interface RankedPrediction {
-    prediction: SpeciesPrediction;
+    prediction: T;
     tier: number;
     local: boolean;
   }
@@ -184,15 +196,15 @@ export function rankPredictions(
     const isPrefix = valueKey.startsWith(needle) || labelKey.startsWith(needle);
     let tier: number;
     if (isExact) {
-      tier = 0;
+      tier = TIER_EXACT;
     } else if (local && isPrefix) {
-      tier = 1;
+      tier = TIER_LOCAL_PREFIX;
     } else if (local) {
-      tier = 2;
+      tier = TIER_LOCAL_CONTAINS;
     } else if (isPrefix) {
-      tier = 3;
+      tier = TIER_PREFIX;
     } else {
-      tier = 4;
+      tier = TIER_CONTAINS;
     }
     ranked.push({ prediction, tier, local });
   }
