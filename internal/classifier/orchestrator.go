@@ -538,9 +538,20 @@ func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float
 // When the primary is not a universal predictor (legacy TFLite range filter
 // with no geomodel) there is no coverage set to consult, so every non-primary
 // label whose scientific name is not already represented is added at score 1.0
-// (exclude honored), preserving prior multi-classifier behavior. Deduplication
-// is by scientific name throughout, never exact label, because the geomodel and
-// Perch use different label conventions for the same species.
+// (exclude honored), preserving prior multi-classifier behavior. Non-primary
+// additions are deduped against the primary by scientific name (never exact
+// label), because the geomodel and Perch use different label conventions for
+// the same species.
+//
+// This does NOT collapse near-duplicates that already exist within the primary
+// scores: a force-included species can appear both at its range-filter score and
+// as the override's score-1.0 entry (the two carry different label strings), and
+// two taxonomic synonyms for one taxon (e.g. "Cnephaeus nilssonii" vs the older
+// "Eptesicus nilssonii") are deliberately kept as distinct scientific names so
+// both pass the scientific-name inclusion gate (conf.Settings.IsSpeciesIncluded)
+// during audio processing. Those near-duplicates are collapsed for the user only
+// at the display boundary (dedupeSpeciesForDisplay in internal/api/v2/range.go),
+// keyed on the resolved common name, so the functional inclusion set stays intact.
 //
 // The bat model is handled separately from the loop above: it has no geomodel,
 // so its species can never be range-filtered. They are all included as

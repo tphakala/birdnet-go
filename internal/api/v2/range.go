@@ -143,6 +143,80 @@ func convertLabels(labels []string, resolver *classifier.Orchestrator, locale st
 	return species
 }
 
+// dedupeSpeciesForDisplay collapses rows that resolve to the same displayed
+// species into a single row, for the user-facing range-filter species lists.
+//
+// Two entries are the same species when their localized common names match
+// (case- and Unicode-NFC-insensitive); entries without a common name fall back
+// to their scientific name so genuinely unresolved labels are not all merged
+// into one bucket. This intentionally collapses both a geomodel-scored species
+// and its force-include override copy (which carry different label strings for
+// the same species) and a pair of taxonomic synonyms that localize to the same
+// common name (e.g. "Cnephaeus nilssonii" and "Eptesicus nilssonii" both
+// resolving to the Finnish "pohjanlepakko").
+//
+// De-duplication happens only here, at the display boundary, never in the
+// functional inclusion set: conf.Settings.IsSpeciesIncluded matches detections
+// on the scientific-name set, so both synonyms must remain in the included
+// species for the engine to detect either name. The key is the same common name
+// already resolved for display, so the survivor row is exactly what the user
+// sees.
+//
+// Because the key is the resolved common name, two genuinely distinct species
+// that happen to share one localized common name would also collapse. That is
+// an accepted trade-off: OpenFauna common names are authoritative for display,
+// the effect is display-only, and both scientific names remain in the inclusion
+// set so detection of the hidden species is unaffected.
+//
+// On collision the higher score wins, so a force-included species at the
+// always-active 1.0 sentinel survives over its lower range-filter probability.
+// The first occurrence's position is preserved (the input arrives sorted by
+// score descending), keeping the output order stable and deterministic.
+func dedupeSpeciesForDisplay(species []RangeFilterSpecies) []RangeFilterSpecies {
+	if len(species) < 2 {
+		return species
+	}
+	indexByKey := make(map[string]int, len(species))
+	deduped := make([]RangeFilterSpecies, 0, len(species))
+	for _, sp := range species {
+		key := normalizeForLookup(sp.CommonName)
+		if key == "" {
+			key = normalizeForLookup(sp.ScientificName)
+		}
+		if key == "" {
+			// No name to key on: keep the row rather than collapsing every
+			// identity-less row into a single bucket.
+			deduped = append(deduped, sp)
+			continue
+		}
+		if idx, ok := indexByKey[key]; ok {
+			if speciesScoreHigher(sp, deduped[idx]) {
+				// Preserve the first occurrence's position, but surface the
+				// higher-scored variant (defensive: the input is already sorted
+				// score-descending, so this rarely triggers).
+				deduped[idx] = sp
+			}
+			continue
+		}
+		indexByKey[key] = len(deduped)
+		deduped = append(deduped, sp)
+	}
+	return deduped
+}
+
+// speciesScoreHigher reports whether a has a strictly higher score than b. A nil
+// score (label-only display rows) sorts below any real score, so a scored entry
+// always wins over an unscored one.
+func speciesScoreHigher(a, b RangeFilterSpecies) bool {
+	if a.Score == nil {
+		return false
+	}
+	if b.Score == nil {
+		return true
+	}
+	return *a.Score > *b.Score
+}
+
 // Location represents geographic coordinates
 type Location struct {
 	Latitude  float64 `json:"latitude"`
@@ -358,10 +432,15 @@ func (c *Controller) GetRangeFilterSpeciesScores(ctx echo.Context) error {
 // @Router /api/v2/range/species/count [get]
 func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
 	settings := c.currentSettings()
-	includedSpecies := settings.GetIncludedSpecies()
+
+	// Count the de-duplicated display list so the count matches what
+	// /range/species/list renders (the same collapse of force-include override
+	// copies and localized taxonomic synonyms).
+	birdnetInstance, _ := c.getBirdNETInstance()
+	speciesList := dedupeSpeciesForDisplay(convertLabels(settings.GetIncludedSpecies(), birdnetInstance, settings.BirdNET.Locale))
 
 	response := RangeFilterSpeciesCount{
-		Count:       len(includedSpecies),
+		Count:       len(speciesList),
 		LastUpdated: settings.BirdNET.RangeFilter.LastUpdated,
 		Threshold:   settings.BirdNET.RangeFilter.Threshold,
 		Location: Location{
@@ -386,7 +465,7 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 	includedSpecies := settings.GetIncludedSpecies()
 
 	birdnetInstance, _ := c.getBirdNETInstance()
-	speciesList := convertLabels(includedSpecies, birdnetInstance, settings.BirdNET.Locale)
+	speciesList := dedupeSpeciesForDisplay(convertLabels(includedSpecies, birdnetInstance, settings.BirdNET.Locale))
 
 	// Extract taxonomy groups from species list via taxonomy DB
 	var genera []string
@@ -515,7 +594,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get probable species", http.StatusInternalServerError)
 	}
 
-	speciesList := convertSpeciesScores(speciesScores, birdnetInstance, c.currentLocale())
+	speciesList := dedupeSpeciesForDisplay(convertSpeciesScores(speciesScores, birdnetInstance, c.currentLocale()))
 
 	response := RangeFilterTestResponse{
 		Species:   speciesList,
@@ -623,7 +702,7 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		settings := c.currentSettings()
 
 		birdnetInstance, _ := c.getBirdNETInstance()
-		speciesList = convertLabels(settings.GetIncludedSpecies(), birdnetInstance, settings.BirdNET.Locale)
+		speciesList = dedupeSpeciesForDisplay(convertLabels(settings.GetIncludedSpecies(), birdnetInstance, settings.BirdNET.Locale))
 		location = Location{
 			Latitude:  settings.BirdNET.Latitude,
 			Longitude: settings.BirdNET.Longitude,
@@ -682,7 +761,7 @@ func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilt
 		return nil, Location{}, 0, err
 	}
 
-	speciesList := convertSpeciesScores(speciesScores, birdnetInstance, c.currentLocale())
+	speciesList := dedupeSpeciesForDisplay(convertSpeciesScores(speciesScores, birdnetInstance, c.currentLocale()))
 
 	location := Location{
 		Latitude:  req.Latitude,

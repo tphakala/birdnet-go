@@ -337,6 +337,15 @@ func resolveOverrideLabels(settings *conf.Settings, geoLabels []string) []string
 // Used by the universal geomodel path in getProbableSpecies. Each entry is
 // canonicalized via resolveOverrideLabels so localized common names enter the
 // set as their canonical model labels rather than the raw user string.
+//
+// Dedup here is by exact label and intentionally narrow: it only avoids
+// re-appending a label already present verbatim. A force-included species that
+// the geomodel also scored can therefore appear twice (its range-filter score
+// plus this score-1.0 entry) when the two carry different label strings; that is
+// expected. The score-1.0 entry must be kept so the species reads as
+// always-active, and same-taxon near-duplicates are collapsed for the user at
+// the display boundary (dedupeSpeciesForDisplay in internal/api/v2/range.go),
+// not here, so the functional inclusion set keeps every scientific name.
 func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, settings *conf.Settings, geoLabels []string) {
 	seen := make(map[string]bool, len(*speciesScores))
 	for _, ss := range *speciesScores {
