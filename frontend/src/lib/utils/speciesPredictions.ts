@@ -106,6 +106,121 @@ export function filterLocalizedPredictions(
   return out;
 }
 
+// Ranking tiers for rankPredictions, best (lowest) first. Locality outranks prefix
+// so a typed root word surfaces native species that merely contain it ahead of
+// non-native look-alikes that happen to start with it.
+const TIER_EXACT = 0;
+const TIER_LOCAL_PREFIX = 1;
+const TIER_LOCAL_CONTAINS = 2;
+const TIER_PREFIX = 3;
+const TIER_CONTAINS = 4;
+
+/**
+ * Options for {@link rankPredictions}. Generic over the prediction type so a caller
+ * passing a richer type (extending SpeciesPrediction) keeps it through the callbacks.
+ */
+interface RankOptions<T extends SpeciesPrediction = SpeciesPrediction> {
+  /** Maximum number of predictions to return. Defaults to unbounded. */
+  limit?: number;
+  /**
+   * Reports whether a prediction is locally relevant (e.g. present in the
+   * range-filtered probable-species set for the configured location). Locally
+   * relevant entries rank above other "contains" matches so common local species
+   * surface ahead of global look-alikes.
+   */
+  isLocal?: (prediction: T) => boolean;
+  /**
+   * Drops a prediction from the results (e.g. species already in the target list).
+   * Evaluated only for entries that already matched the query, so an expensive,
+   * alias-aware exclusion check runs on the small matched subset, not the full list.
+   */
+  exclude?: (prediction: T) => boolean;
+}
+
+/**
+ * Rank predictions for an autocomplete query so the most useful entries surface
+ * first, then cap the result. Matching is against BOTH the localized label and the
+ * canonical value (NFC + case-insensitive). Ranking tiers, best first:
+ *   0. exact match (label or value equals the query)
+ *   1. locally-relevant prefix match (isLocal, label or value starts with the query)
+ *   2. locally-relevant "contains" match (isLocal)
+ *   3. non-local prefix match
+ *   4. any other "contains" match
+ * Locality outranks prefix so that, in compound-word languages, typing a root word
+ * (e.g. Finnish "tikka") surfaces native species that merely contain it ahead of
+ * non-native species that happen to start with it. Within a tier, entries sort
+ * alphabetically by label. Non-matching predictions, and any the optional
+ * `exclude` predicate rejects, are dropped. An empty query returns [] (callers
+ * only predict once the visitor has typed), avoiding a meaningless full-list dump.
+ *
+ * This exists because the settings pickers autocomplete against the full global
+ * multi-model species union (~12k entries): without ranking, a naive filter+slice
+ * buries exact and locally-relevant matches behind alphabetically earlier global
+ * look-alikes (e.g. typing the Finnish "tikka" surfaced only exotic woodpeckers
+ * while the native ones were cut off past the cap).
+ */
+export function rankPredictions<T extends SpeciesPrediction>(
+  predictions: T[],
+  query: string,
+  options: RankOptions<T> = {}
+): T[] {
+  const needle = normalizeForLookup(query.trim());
+  if (needle.length === 0) return [];
+
+  // Clamp the limit to a non-negative integer; short-circuit a zero/invalid bound.
+  const limitRaw = options.limit ?? Number.POSITIVE_INFINITY;
+  const limit = Number.isFinite(limitRaw)
+    ? Math.max(0, Math.floor(limitRaw))
+    : Number.POSITIVE_INFINITY;
+  if (limit === 0) return [];
+
+  const isLocal = options.isLocal;
+  const exclude = options.exclude;
+
+  interface RankedPrediction {
+    prediction: T;
+    tier: number;
+    local: boolean;
+  }
+
+  const ranked: RankedPrediction[] = [];
+  for (const prediction of predictions) {
+    const valueKey = prediction.normalizedValue ?? normalizeForLookup(prediction.value);
+    const labelKey = prediction.normalizedLabel ?? normalizeForLookup(prediction.label);
+    if (!valueKey.includes(needle) && !labelKey.includes(needle)) continue;
+    // Exclusion runs only after the match check, so it never touches non-matches.
+    if (exclude?.(prediction)) continue;
+
+    const local = isLocal?.(prediction) ?? false;
+    const isExact = valueKey === needle || labelKey === needle;
+    const isPrefix = valueKey.startsWith(needle) || labelKey.startsWith(needle);
+    let tier: number;
+    if (isExact) {
+      tier = TIER_EXACT;
+    } else if (local && isPrefix) {
+      tier = TIER_LOCAL_PREFIX;
+    } else if (local) {
+      tier = TIER_LOCAL_CONTAINS;
+    } else if (isPrefix) {
+      tier = TIER_PREFIX;
+    } else {
+      tier = TIER_CONTAINS;
+    }
+    ranked.push({ prediction, tier, local });
+  }
+
+  ranked.sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    // Tier 0 (exact) can mix local/non-local; keep local first there. Other tiers
+    // are locality-homogeneous, so this is a no-op for them.
+    if (a.local !== b.local) return a.local ? -1 : 1;
+    return a.prediction.label.localeCompare(b.prediction.label);
+  });
+
+  const capped = limit === Number.POSITIVE_INFINITY ? ranked : ranked.slice(0, limit);
+  return capped.map(entry => entry.prediction);
+}
+
 /**
  * Resolve typed free text to a canonical value by matching it (NFC +
  * case-insensitive) against a prediction's label OR value, returning the matched
