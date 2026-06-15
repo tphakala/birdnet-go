@@ -409,7 +409,7 @@ Source: LGPL-3.0
 
 ### github.com/tphakala/go-flac
 
-License: https://github.com/tphakala/go-flac/blob/v0.3.0/LICENSE
+License: https://github.com/tphakala/go-flac/blob/v0.3.1/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-tflite
