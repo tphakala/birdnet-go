@@ -978,9 +978,11 @@
               highPassFreq: filterFreq,
               includeCompressor: true,
             });
-            // Reflect whether the EQ/gain graph is actually live, so the audio
-            // settings control isn't enabled-but-inert while suspended.
-            audioContextAvailable = audioNodes !== null;
+            // Reflect whether the EQ/gain graph is actually live: attached AND
+            // the context running. A previously-attached graph on a re-suspended
+            // context that failed to resume is inert, so the audio settings
+            // control must not be enabled in that case.
+            audioContextAvailable = audioNodes !== null && audioContext?.state === 'running';
           } finally {
             isInitializingContext = false;
           }

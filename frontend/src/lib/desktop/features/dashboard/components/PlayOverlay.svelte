@@ -175,9 +175,10 @@
               gainDb: gainValue,
               highPassFreq: filterFreq,
             });
-            // Report availability based on whether the graph actually attached,
-            // so gain/filter controls aren't shown active while suspended.
-            onAudioContextAvailable?.(audioNodes !== null);
+            // Report availability based on whether the graph is attached AND
+            // the context is running, so gain/filter controls aren't shown
+            // active when a re-suspended context failed to resume (inert graph).
+            onAudioContextAvailable?.(audioNodes !== null && audioContext?.state === 'running');
           } finally {
             isInitializingContext = false;
           }

@@ -232,9 +232,11 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
         gainDb: gainValue,
         highPassFreq: filterFreq,
       });
-      // Reflect whether the processing graph is actually live, so gain/filter
-      // controls aren't reported available while the context is still suspended.
-      audioContextAvailable = audioNodes !== null;
+      // Reflect whether the processing graph is actually live: the graph is
+      // attached AND the context is running. A previously-attached graph on a
+      // re-suspended context that failed to resume is inert, so gain/filter
+      // controls must not be reported available in that case.
+      audioContextAvailable = audioNodes !== null && audioContext.state === 'running';
       return true;
     } catch (err) {
       logger.warn('AudioContext initialization failed', err as Error);

@@ -267,6 +267,11 @@ describe('useAudioPlayback', () => {
     // already-attached graph) so getAudioContext() resumes the context again.
     await getState().togglePlayPause();
     expect(vi.mocked(getAudioContext)).toHaveBeenCalledTimes(2);
+
+    // The mock context stays suspended (resume did not take), so availability
+    // reports false even though the graph is still attached: the EQ controls
+    // would be inert, and must not be reported active.
+    expect(getState().audioContextAvailable).toBe(false);
   });
 
   // ---------------------------------------------------------------
