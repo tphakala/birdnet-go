@@ -52,7 +52,7 @@
     releaseAudioContext,
   } from '$lib/utils/audioContextManager';
   import {
-    createAudioNodeChain,
+    attachAudioGraphWhenRunning,
     disconnectAudioNodes,
     type AudioNodeChain,
   } from '$lib/utils/audioNodes';
@@ -965,18 +965,17 @@
           isInitializingContext = true;
           try {
             audioContext = await initializeAudioContext();
-            // Only attach the Web Audio graph once the context is running.
-            // getAudioContext() can return a still-suspended context; on iOS,
-            // createMediaElementSource permanently reroutes the element's
-            // output, so attaching it to a suspended context plays silently.
-            // Until it resumes, play through the element's native output.
-            if (audioContext && !audioNodes && audioContext.state === 'running') {
-              audioNodes = createAudioNodeChain(audioContext, audioElement, {
-                gainDb: gainValue,
-                highPassFreq: filterFreq,
-                includeCompressor: true,
-              });
-            }
+            // Attach the Web Audio graph only when the context is running;
+            // while suspended the element plays through native output and the
+            // graph is deferred to a later play (see attachAudioGraphWhenRunning).
+            audioNodes = attachAudioGraphWhenRunning(audioContext, audioElement, audioNodes, {
+              gainDb: gainValue,
+              highPassFreq: filterFreq,
+              includeCompressor: true,
+            });
+            // Reflect whether the EQ/gain graph is actually live, so the audio
+            // settings control isn't enabled-but-inert while suspended.
+            audioContextAvailable = audioNodes !== null;
           } finally {
             isInitializingContext = false;
           }

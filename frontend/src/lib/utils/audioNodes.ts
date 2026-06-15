@@ -91,6 +91,37 @@ export function createAudioNodeChain(
 }
 
 /**
+ * Attach the Web Audio graph to the element only when the context is running.
+ *
+ * getAudioContext() can return a still-suspended context (it stops awaiting
+ * resume() after a timeout). On iOS, createMediaElementSource permanently
+ * reroutes the element's output away from the default device, so building the
+ * graph on a suspended context plays silently while currentTime still advances.
+ * Callers must therefore let the element play through its native output while
+ * the context is suspended and call this again on a later play once the context
+ * has resumed.
+ *
+ * @param ctx - AudioContext, or null if unavailable
+ * @param audioElement - HTML audio element to route, or null
+ * @param existing - already-attached chain for this element, if any
+ * @param options - node chain configuration
+ * @returns the existing chain if already attached; a freshly built chain when
+ *   the context is running; otherwise null (graph not attached, retry on a later
+ *   play). Returning the existing chain unchanged also upholds the
+ *   once-per-element createMediaElementSource constraint.
+ */
+export function attachAudioGraphWhenRunning(
+  ctx: AudioContext | null,
+  audioElement: HTMLAudioElement | null,
+  existing: AudioNodeChain | null,
+  options: AudioNodeOptions = {}
+): AudioNodeChain | null {
+  if (existing) return existing;
+  if (!ctx || !audioElement || ctx.state !== 'running') return null;
+  return createAudioNodeChain(ctx, audioElement, options);
+}
+
+/**
  * Safely disconnect all nodes in an audio chain.
  * Handles cases where nodes may already be disconnected.
  *

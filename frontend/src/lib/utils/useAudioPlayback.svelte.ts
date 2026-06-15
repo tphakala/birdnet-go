@@ -41,7 +41,7 @@ import {
   releaseAudioContext,
 } from '$lib/utils/audioContextManager';
 import {
-  createAudioNodeChain,
+  attachAudioGraphWhenRunning,
   disconnectAudioNodes,
   type AudioNodeChain,
 } from '$lib/utils/audioNodes';
@@ -221,25 +221,20 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       // creates/resumes the shared singleton; called here from a user gesture
       // (togglePlayPause) so iOS honours the resume.
       audioContext = await getAudioContext();
-      audioContextAvailable = true;
 
-      // Only route the element through the Web Audio graph once the context is
-      // actually running. getAudioContext() can hand back a still-suspended
-      // context (it stops awaiting resume() after a timeout). On iOS,
-      // createMediaElementSource permanently captures the element's native
-      // output, so attaching the graph to a suspended context routes playback
-      // into silence (currentTime advances, no sound). Until the context
-      // resumes we let the element play natively and defer the graph to a
-      // later play interaction.
-      if (audioElement && !audioNodes && audioContext.state === 'running') {
-        // Note: intentionally omits includeCompressor (AudioPlayer uses it for
-        // clipping protection at high gain). Compact players don't expose gain
-        // controls, so the compressor is unnecessary overhead.
-        audioNodes = createAudioNodeChain(audioContext, audioElement, {
-          gainDb: gainValue,
-          highPassFreq: filterFreq,
-        });
-      }
+      // Attach the Web Audio graph only when the context is running; while it
+      // is suspended the element plays through native output and the graph is
+      // deferred to a later play (see attachAudioGraphWhenRunning). Note:
+      // intentionally omits includeCompressor (AudioPlayer uses it for clipping
+      // protection at high gain); compact players don't expose gain controls,
+      // so the compressor is unnecessary overhead.
+      audioNodes = attachAudioGraphWhenRunning(audioContext, audioElement, audioNodes, {
+        gainDb: gainValue,
+        highPassFreq: filterFreq,
+      });
+      // Reflect whether the processing graph is actually live, so gain/filter
+      // controls aren't reported available while the context is still suspended.
+      audioContextAvailable = audioNodes !== null;
       return true;
     } catch (err) {
       logger.warn('AudioContext initialization failed', err as Error);
