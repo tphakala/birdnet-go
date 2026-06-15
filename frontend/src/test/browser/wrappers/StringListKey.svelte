@@ -1,7 +1,6 @@
 <!--
   Tests: {#each items as item (item)} pattern
-  Reproduces: SpeciesManager predictions (line 272) and displaySpecies (line 295),
-              SubnetInput subnets (line 179)
+  Reproduces: SubnetInput subnets (line 179) and similar string-keyed lists
   Bug: When items array contains duplicate strings, Svelte emits each_key_duplicate warning
 -->
 <script lang="ts">
