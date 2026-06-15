@@ -158,10 +158,13 @@
       if (isPlaying) {
         audioElement.pause();
       } else {
-        // Initialize audio context on first play (for gain/filter controls),
-        // retrying until the graph is attached. Guard against rapid clicks that
-        // could create multiple AudioContexts.
-        if (!audioNodes && !isInitializingContext) {
+        // Initialize the audio context on first play, and re-enter whenever the
+        // graph is not attached OR the context has fallen back to suspended
+        // (e.g. tab backgrounding / audio-session interruption) so
+        // getAudioContext() resumes it. Without the state re-check, an
+        // already-attached graph on a re-suspended context plays silently.
+        // Guard against rapid clicks that could create multiple AudioContexts.
+        if ((!audioNodes || audioContext?.state !== 'running') && !isInitializingContext) {
           isInitializingContext = true;
           try {
             audioContext = await initializeAudioContextWrapper();

@@ -245,6 +245,31 @@ describe('useAudioPlayback', () => {
   });
 
   // ---------------------------------------------------------------
+  // 1e. Re-attempts resume when a previously-attached context is later
+  //     suspended (e.g. tab backgrounding), instead of short-circuiting to
+  //     silent playback.
+  // ---------------------------------------------------------------
+  it('re-attempts context resume when a previously-attached context is suspended', async () => {
+    const { getAudioContext } = await import('$lib/utils/audioContextManager');
+
+    await renderAndWait();
+    // First play attaches the graph on a running context.
+    await getState().togglePlayPause();
+    expect(vi.mocked(getAudioContext)).toHaveBeenCalledTimes(1);
+
+    // Simulate the browser suspending the shared context after attachment.
+    const ctx = (await vi.mocked(getAudioContext).mock.results[0]?.value) as AudioContext & {
+      state: AudioContextState;
+    };
+    ctx.state = 'suspended';
+
+    // A subsequent play must re-enter initialization (not short-circuit on the
+    // already-attached graph) so getAudioContext() resumes the context again.
+    await getState().togglePlayPause();
+    expect(vi.mocked(getAudioContext)).toHaveBeenCalledTimes(2);
+  });
+
+  // ---------------------------------------------------------------
   // 2. togglePlayPause() calls audio.pause() when playing
   // ---------------------------------------------------------------
   it('togglePlayPause() calls audio.pause() when playing', async () => {
