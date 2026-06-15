@@ -287,6 +287,11 @@
   // since the pickers live on the Custom/Include/Exclude tabs.
   let localSpeciesSet = $state<Set<string>>(new Set());
   let isLoadingLocalSpecies = false;
+  // Inputs (location + range threshold) the locality set was last loaded for. Lets the
+  // loaders refresh when the user changes location or threshold while skipping a
+  // redundant refetch when those inputs are unchanged. Plain (non-reactive) like the
+  // loading guard; the picker-tab effect reads it via untrack.
+  let localSpeciesKey: string | null = null;
 
   // Input values for species inputs
   let includeInputValue = $state('');
@@ -671,8 +676,9 @@
       // Feed the picker locality set from the same probable list. Refresh it on every
       // active-species reload (e.g. after a location change or retry) so it never goes
       // stale. The Active tab loads first by default, so this also primes the set and
-      // the tab-independent loader below normally never has to refetch the range filter.
+      // stamps the key, so the tab-independent loader below normally never refetches.
       localSpeciesSet = buildLocalSpeciesSet(response.species ?? [], threshold);
+      localSpeciesKey = localSpeciesKeyFor(birdnetData);
 
       // Check if a species (by common or scientific name) is in a name set.
       // Handles users who add species by scientific name to include/config lists.
@@ -747,6 +753,17 @@
   // Build the picker locality set (normalized common + scientific names) from a
   // range-filter probable-species response, keeping only species at/above the
   // threshold (i.e. actually probable at the configured location).
+  // Identifies the inputs the locality set was last loaded for, so both loaders refetch
+  // when the user changes location or the range-filter threshold but not otherwise.
+  function localSpeciesKeyFor(birdnetData: {
+    latitude: number;
+    longitude: number;
+    rangeFilter?: { threshold: number };
+  }): string {
+    const threshold = birdnetData.rangeFilter?.threshold ?? DEFAULT_RANGE_FILTER_THRESHOLD;
+    return `${birdnetData.latitude},${birdnetData.longitude},${threshold}`;
+  }
+
   function buildLocalSpeciesSet(
     species: Array<{ scientificName?: string; commonName?: string; score?: number }>,
     threshold: number
@@ -773,8 +790,10 @@
     locationConfigured?: boolean;
     rangeFilter?: { threshold: number };
   }) {
-    if (isLoadingLocalSpecies || localSpeciesSet.size > 0) return;
     if (!(birdnetData.locationConfigured ?? false)) return;
+    const key = localSpeciesKeyFor(birdnetData);
+    // Skip if already loading, or already loaded for these exact inputs.
+    if (isLoadingLocalSpecies || localSpeciesKey === key) return;
     isLoadingLocalSpecies = true;
     try {
       const response = await api.post<{
@@ -787,6 +806,7 @@
       });
       // Go serializes a nil slice as JSON null, so guard before iterating.
       localSpeciesSet = buildLocalSpeciesSet(response.species ?? [], response.threshold);
+      localSpeciesKey = key;
     } catch (error) {
       logger.error('Failed to load local species set for picker ranking:', error);
     } finally {
@@ -852,9 +872,11 @@
       birdnetData.longitude !== undefined &&
       (birdnetData.locationConfigured ?? false);
     if (!hasRealCoordinates || currentTab === 'active') return;
-    // Read the set size without tracking, so writing the set does not re-trigger
-    // this effect.
-    if (untrack(() => localSpeciesSet.size) > 0) return;
+    // Refetch only when the location/threshold inputs differ from what the set was last
+    // loaded for, so changing location on a picker tab refreshes ranking but an
+    // unrelated birdnet edit or tab switch does not. Read the key untracked so the
+    // loader's own write to it cannot re-trigger this effect.
+    if (untrack(() => localSpeciesKey) === localSpeciesKeyFor(birdnetData)) return;
 
     // Defer out of the effect's synchronous context (same rationale as the active
     // species loader above) to avoid mutating state during the reactive update.
