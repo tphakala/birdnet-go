@@ -385,7 +385,7 @@
   // own option list. Those don't move the trigger and would otherwise recompute
   // the same position on every scroll tick.
   function handleScroll(event: Event) {
-    if (dropdownElement?.contains(event.target as Node)) return;
+    if (event.target instanceof Node && dropdownElement?.contains(event.target)) return;
     updateDropdownPosition();
   }
 

@@ -56,6 +56,8 @@ Accessibility:
   const CALENDAR_OFFSET = 4;
   const CALENDAR_WIDTH_ESTIMATE = 280;
   const CALENDAR_HEIGHT_ESTIMATE = 360;
+  // Stacking order for the portaled-style fixed calendar (above page chrome).
+  const CALENDAR_Z_INDEX = 1100;
 
   type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
@@ -151,7 +153,7 @@ Accessibility:
     });
     const vertical =
       position.top !== null ? `top: ${position.top}px` : `bottom: ${position.bottom}px`;
-    dropdownStyle = `position: fixed; ${vertical}; left: ${position.left}px; z-index: 1100;`;
+    dropdownStyle = `position: fixed; ${vertical}; left: ${position.left}px; z-index: ${CALENDAR_Z_INDEX};`;
   }
 
   // State for keyboard navigation focus
@@ -432,14 +434,13 @@ Accessibility:
   $effect(() => {
     if (showCalendar) {
       updateDropdownPosition();
-      const handleReposition = () => updateDropdownPosition();
       document.addEventListener('click', handleClickOutside);
-      window.addEventListener('scroll', handleReposition, true);
-      window.addEventListener('resize', handleReposition);
+      window.addEventListener('scroll', updateDropdownPosition, true);
+      window.addEventListener('resize', updateDropdownPosition);
       return () => {
         document.removeEventListener('click', handleClickOutside);
-        window.removeEventListener('scroll', handleReposition, true);
-        window.removeEventListener('resize', handleReposition);
+        window.removeEventListener('scroll', updateDropdownPosition, true);
+        window.removeEventListener('resize', updateDropdownPosition);
       };
     }
   });

@@ -136,6 +136,24 @@ describe('computeAnchorPosition', () => {
       expect(pos.bottom).toBe(192);
       expect(pos.top).toBeNull();
     });
+
+    it('keeps the top edge at the margin (bottom overflows) for an element taller than the viewport', () => {
+      // Element (400) taller than the whole viewport (300). The clamp pins the top edge
+      // at viewportMargin and lets the bottom overflow, rather than hiding the top content.
+      const viewport = { width: 1000, height: 300 };
+      const pos = computeAnchorPosition({
+        triggerRect: rect({ top: 150, bottom: 180 }),
+        floatingHeight: 400,
+        floatingWidth: 100,
+        viewport,
+      });
+      expect(pos.placement).toBe('above');
+      // maxBottom = 300 - 400 - 8 = -108 (negative is intended: bottom edge below the viewport)
+      expect(pos.bottom).toBe(-108);
+      // top edge = viewport.height - bottom - height = 300 - (-108) - 400 = 8 == viewportMargin
+      const topEdge = viewport.height - (pos.bottom as number) - 400;
+      expect(topEdge).toBe(8);
+    });
   });
 
   describe('Invariant B: measured height with estimate fallback', () => {

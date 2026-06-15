@@ -148,7 +148,10 @@ export function computeAnchorPosition(input: AnchorPositionInput): AnchorPositio
     // top edge stays at least `viewportMargin` from the viewport top.
     const maxBottom = viewport.height - height - viewportMargin;
     if (bottom > maxBottom) {
-      bottom = Math.max(viewportMargin, maxBottom);
+      // Pin the top edge at the margin so the header / first content stays visible;
+      // an element taller than the available space lets its bottom overflow instead.
+      // (maxBottom can go below viewportMargin for such elements, which is intended.)
+      bottom = maxBottom;
     }
     top = null;
   } else {

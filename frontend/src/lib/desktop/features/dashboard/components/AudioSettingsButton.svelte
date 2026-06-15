@@ -195,6 +195,8 @@
       onkeydown={e => {
         if (e.key === 'Escape') {
           showSettings = false;
+          onMenuClose?.();
+          buttonElement?.focus();
         }
         e.stopPropagation();
       }}
