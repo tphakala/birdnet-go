@@ -668,12 +668,11 @@
       // Cross-reference with include/exclude and config lists (using captured values)
       const threshold = response.threshold;
 
-      // Feed the picker locality set from the same probable list. Populating here
-      // means the Active tab (which loads first by default) primes it, so the
-      // tab-independent loader below never has to refetch the range filter.
-      if (localSpeciesSet.size === 0) {
-        localSpeciesSet = buildLocalSpeciesSet(response.species ?? [], threshold);
-      }
+      // Feed the picker locality set from the same probable list. Refresh it on every
+      // active-species reload (e.g. after a location change or retry) so it never goes
+      // stale. The Active tab loads first by default, so this also primes the set and
+      // the tab-independent loader below normally never has to refetch the range filter.
+      localSpeciesSet = buildLocalSpeciesSet(response.species ?? [], threshold);
 
       // Check if a species (by common or scientific name) is in a name set.
       // Handles users who add species by scientific name to include/config lists.
@@ -951,8 +950,14 @@
   function isLocalPrediction(prediction: SpeciesPrediction): boolean {
     const valueKey = prediction.normalizedValue ?? normalizeForLookup(prediction.value);
     if (localSpeciesSet.has(valueKey)) return true;
+    // Bidirectional alias fallback for range entries that carried only one name form:
+    // resolve a common-name value to its scientific alias, and a scientific-name value
+    // to its common alias, then re-check the set.
     const scientific = speciesNameMaps.commonToScientific.get(valueKey);
-    return scientific !== undefined && localSpeciesSet.has(normalizeForLookup(scientific));
+    if (scientific !== undefined && localSpeciesSet.has(normalizeForLookup(scientific)))
+      return true;
+    const common = speciesNameMaps.scientificToCommon.get(valueKey);
+    return common !== undefined && localSpeciesSet.has(normalizeForLookup(common));
   }
 
   // Build ranked, capped autocomplete predictions for a picker. rankPredictions
