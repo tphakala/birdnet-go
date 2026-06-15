@@ -823,7 +823,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 	// Frequency-dependent effects: resample (bird) or high-pass filter (bat).
 	// Guard: sinc filter requires sample rate > 2*cutoff (Nyquist constraint).
 	if profile.HighPassHz > 0 && effectiveRate > 2*profile.HighPassHz {
-		args = append(args, "sinc", strconv.Itoa(profile.HighPassHz)+"-")
+		args = append(args, "sinc", strconv.Itoa(profile.HighPassHz))
 	} else if profile.ResampleRate > 0 {
 		args = append(args, "rate", strconv.Itoa(profile.ResampleRate))
 	}
@@ -997,7 +997,7 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, settings *conf.Se
 	var args []string
 	switch {
 	case profile.HighPassHz > 0:
-		args = []string{"-n", "sinc", strconv.Itoa(profile.HighPassHz) + "-", "spectrogram", "-x", widthStr, "-y", heightStr}
+		args = []string{"-n", "sinc", strconv.Itoa(profile.HighPassHz), "spectrogram", "-x", widthStr, "-y", heightStr}
 	case profile.ResampleRate > 0:
 		args = []string{"-n", "rate", strconv.Itoa(profile.ResampleRate), "spectrogram", "-x", widthStr, "-y", heightStr}
 	default:
