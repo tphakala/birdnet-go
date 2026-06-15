@@ -129,19 +129,15 @@ Accessibility:
   );
   let calendarRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
-  let wrapperRef: HTMLDivElement | null = $state(null);
   let dropdownStyle = $state('');
-
-  // Generate a unique ID for this datepicker instance
-  const pickerId = $state(Math.random().toString(36).slice(2, 9));
 
   // Calculate dropdown position based on the trigger button's bounding rect.
   // When flipping above, the helper anchors the calendar's bottom edge, so the
   // placement stays aligned regardless of the calendar's (month-dependent) height.
   function updateDropdownPosition() {
-    const trigger =
-      document.querySelector(`[data-datepicker-id="${pickerId}"]`) ||
-      wrapperRef?.querySelector('.datepicker-trigger');
+    // buttonRef is bound to the trigger, so use it directly rather than querying the
+    // DOM on every scroll/resize reposition.
+    const trigger = buttonRef;
     if (!trigger) return;
     const position = computeAnchorPosition({
       triggerRect: trigger.getBoundingClientRect(),
@@ -467,12 +463,11 @@ Accessibility:
   });
 </script>
 
-<div bind:this={wrapperRef} class={cn('relative datepicker-wrapper', className)}>
+<div class={cn('relative datepicker-wrapper', className)}>
   <!-- Date Input Button -->
   <button
     bind:this={buttonRef}
     type="button"
-    data-datepicker-id={pickerId}
     {...restProps}
     class={cn('datepicker-trigger', sizeClass, disabled && 'opacity-50 cursor-not-allowed')}
     onclick={toggleCalendar}
