@@ -941,7 +941,9 @@
         throw new Error('AudioContext not supported');
       }
       audioContext = await getAudioContext();
-      audioContextAvailable = true;
+      // Availability is derived by the caller from whether the graph actually
+      // attached (audioNodes !== null), so it is not reported true while the
+      // context is still suspended.
       return audioContext;
     } catch {
       logger.warn('Web Audio API is not supported in this browser');
