@@ -63,7 +63,11 @@
     type SpeciesNameMaps,
   } from '$lib/utils/speciesNames';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
-  import { rankPredictions, type SpeciesPrediction } from '$lib/utils/speciesPredictions';
+  import {
+    rankPredictions,
+    toLocalizedPredictions,
+    type SpeciesPrediction,
+  } from '$lib/utils/speciesPredictions';
   import {
     ArrowLeftRight,
     ChevronRight,
@@ -269,17 +273,7 @@
   // (localizeSpeciesLabel reads the dictionary store, so this $derived tracks it and
   // refreshes labels on locale switch). Precomputing here keeps ~12k dictionary
   // lookups and NFC normalizations OUT of the per-keystroke filter hot path.
-  let searchableSpecies = $derived<SpeciesPrediction[]>(
-    allSpecies.map(value => {
-      const label = localizeSpeciesLabel(value);
-      return {
-        value,
-        label,
-        normalizedValue: normalizeForLookup(value),
-        normalizedLabel: normalizeForLookup(label),
-      };
-    })
-  );
+  let searchableSpecies = $derived(toLocalizedPredictions(allSpecies, localizeSpeciesLabel));
 
   // Species predictions state
   let includePredictions = $state<string[]>([]);
@@ -668,7 +662,7 @@
       }>('/api/v2/range/species/test', {
         latitude: birdnetData.latitude,
         longitude: birdnetData.longitude,
-        threshold: birdnetData.rangeFilter?.threshold ?? 0.01,
+        threshold: birdnetData.rangeFilter?.threshold ?? DEFAULT_RANGE_FILTER_THRESHOLD,
       });
 
       // Cross-reference with include/exclude and config lists (using captured values)
@@ -678,7 +672,7 @@
       // means the Active tab (which loads first by default) primes it, so the
       // tab-independent loader below never has to refetch the range filter.
       if (localSpeciesSet.size === 0) {
-        localSpeciesSet = buildLocalSpeciesSet(response.species, threshold);
+        localSpeciesSet = buildLocalSpeciesSet(response.species ?? [], threshold);
       }
 
       // Check if a species (by common or scientific name) is in a name set.
@@ -695,7 +689,8 @@
       const configKeys = new Set(Object.keys(currentConfig ?? {}).map(s => normalizeForLookup(s)));
 
       // Filter species that pass the threshold OR are manually included
-      const mappedSpecies: ActiveSpecies[] = response.species
+      // Go serializes a nil slice as JSON null, so guard before iterating.
+      const mappedSpecies: ActiveSpecies[] = (response.species ?? [])
         .filter(
           s => s.score >= threshold || isInNameSet(includeSet, s.commonName, s.scientificName)
         )
@@ -786,9 +781,10 @@
       }>('/api/v2/range/species/test', {
         latitude: birdnetData.latitude,
         longitude: birdnetData.longitude,
-        threshold: birdnetData.rangeFilter?.threshold ?? 0.01,
+        threshold: birdnetData.rangeFilter?.threshold ?? DEFAULT_RANGE_FILTER_THRESHOLD,
       });
-      localSpeciesSet = buildLocalSpeciesSet(response.species, response.threshold);
+      // Go serializes a nil slice as JSON null, so guard before iterating.
+      localSpeciesSet = buildLocalSpeciesSet(response.species ?? [], response.threshold);
     } catch (error) {
       logger.error('Failed to load local species set for picker ranking:', error);
     } finally {
@@ -940,6 +936,11 @@
   // it instead of being cut off by an arbitrary alphabetical slice.
   const PREDICTION_LIMIT = 25;
 
+  // Fallback range-filter threshold used when the user has not configured one, matching
+  // the range-filter test endpoint's own default. Keeps probable-species probes
+  // consistent across the active-species and picker-locality loaders.
+  const DEFAULT_RANGE_FILTER_THRESHOLD = 0.01;
+
   // True when a prediction's canonical value is in the range-filtered probable set
   // for the configured location. The set is keyed by normalized common AND scientific
   // names, so the prediction's pre-normalized canonical value (a common name) hits
@@ -951,23 +952,17 @@
     return scientific !== undefined && localSpeciesSet.has(normalizeForLookup(scientific));
   }
 
-  // Build ranked, capped autocomplete predictions for a picker. Filters the
-  // precomputed searchableSpecies by the typed input (canonical value OR localized
-  // label, so a visitor can search by the name they see), drops species already in
-  // `excludeList`, then ranks exact > local > non-local and caps to PREDICTION_LIMIT.
-  // Returns canonical values; the picker localizes them for display.
+  // Build ranked, capped autocomplete predictions for a picker. rankPredictions
+  // matches the typed input against each species' canonical value OR localized label
+  // (so a visitor can search by the name they see), drops species already in
+  // `excludeList` via the exclude predicate, ranks exact > local > non-local, and
+  // caps to PREDICTION_LIMIT. Returns canonical values; the picker localizes them.
   function computeRankedPredictions(input: string, excludeList: string[]): string[] {
-    const needle = normalizeForLookup(input);
-    const matches = searchableSpecies.filter(prediction => {
-      const valueKey = prediction.normalizedValue ?? '';
-      const labelKey = prediction.normalizedLabel ?? '';
-      if (!valueKey.includes(needle) && !labelKey.includes(needle)) return false;
-      // Alias-aware exclusion runs only on the small matched subset, not all ~12k.
-      return !isSpeciesInList(prediction.value, excludeList, speciesNameMaps);
-    });
-    return rankPredictions(matches, needle, {
+    return rankPredictions(searchableSpecies, input, {
       limit: PREDICTION_LIMIT,
       isLocal: isLocalPrediction,
+      // Alias-aware exclusion; rankPredictions only runs it on matched candidates.
+      exclude: prediction => isSpeciesInList(prediction.value, excludeList, speciesNameMaps),
     }).map(prediction => prediction.value);
   }
 

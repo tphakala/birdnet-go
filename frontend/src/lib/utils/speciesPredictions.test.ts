@@ -201,6 +201,52 @@ describe('rankPredictions', () => {
     const rest = result.slice(1).map(p => p.label);
     expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
   });
+
+  it('without isLocal, a non-local prefix match outranks a plain contains match', () => {
+    // Mirror of the locality test: with no isLocal, nothing is local, so the prefix
+    // match (tikkasirkku) leads and käpytikka is just another contains match. This
+    // proves the isLocal fallback actually flips the ranking, not that it is no-op.
+    const labels = rankPredictions(predictions, 'tikka').map(p => p.label);
+    expect(labels[0]).toBe('tikkasirkku');
+    expect(labels.indexOf('tikkasirkku')).toBeLessThan(labels.indexOf('käpytikka'));
+  });
+
+  it('matches case- and NFC-insensitively in the rank path (uppercase, NFD query)', () => {
+    // The candidate label is the NFC string "valkoselkätikka"; an uppercase query
+    // with a combining diaeresis (NFD form) must still match after normalization.
+    const nfdUpper = 'VALKOSELKA\u0308'; // NFD: base A + U+0308 combining diaeresis
+    expect(nfdUpper.normalize('NFC')).not.toBe(nfdUpper); // guard: query really is NFD
+    const result = rankPredictions(predictions, nfdUpper, { isLocal });
+    expect(result.map(p => p.label)).toContain('valkoselkätikka');
+  });
+
+  it('drops predictions rejected by the exclude predicate', () => {
+    const result = rankPredictions(predictions, 'peippo', {
+      isLocal,
+      exclude: p => p.value === 'Fringilla coelebs',
+    });
+    expect(result.map(p => p.value)).not.toContain('Fringilla coelebs');
+    // Other matches are unaffected.
+    expect(result.map(p => p.label)).toContain('viherpeippo');
+  });
+
+  it('only evaluates exclude on entries that matched the query', () => {
+    // exclude must never see a non-match (it can be expensive); assert it is only
+    // called with predictions whose value or label contains the query.
+    const seen: string[] = [];
+    rankPredictions(predictions, 'tikka', {
+      isLocal,
+      exclude: p => {
+        seen.push(p.value);
+        return false;
+      },
+    });
+    expect(seen.length).toBeGreaterThan(0);
+    // No "...peippo" species should ever be offered to exclude for a "tikka" query;
+    // exclude must run only on already-matched candidates, never the full list.
+    expect(seen).not.toContain('Fringilla coelebs');
+    expect(seen).not.toContain('Chloris chloris');
+  });
 });
 
 describe('matchTypedToCanonical', () => {

@@ -117,6 +117,12 @@ interface RankOptions {
    * surface ahead of global look-alikes.
    */
   isLocal?: (prediction: SpeciesPrediction) => boolean;
+  /**
+   * Drops a prediction from the results (e.g. species already in the target list).
+   * Evaluated only for entries that already matched the query, so an expensive,
+   * alias-aware exclusion check runs on the small matched subset, not the full list.
+   */
+  exclude?: (prediction: SpeciesPrediction) => boolean;
 }
 
 /**
@@ -131,9 +137,9 @@ interface RankOptions {
  * Locality outranks prefix so that, in compound-word languages, typing a root word
  * (e.g. Finnish "tikka") surfaces native species that merely contain it ahead of
  * non-native species that happen to start with it. Within a tier, entries sort
- * alphabetically by label. Non-matching predictions are dropped. An empty query
- * returns [] (callers only predict once the visitor has typed), avoiding a
- * meaningless full-list dump.
+ * alphabetically by label. Non-matching predictions, and any the optional
+ * `exclude` predicate rejects, are dropped. An empty query returns [] (callers
+ * only predict once the visitor has typed), avoiding a meaningless full-list dump.
  *
  * This exists because the settings pickers autocomplete against the full global
  * multi-model species union (~12k entries): without ranking, a naive filter+slice
@@ -157,6 +163,7 @@ export function rankPredictions(
   if (limit === 0) return [];
 
   const isLocal = options.isLocal;
+  const exclude = options.exclude;
 
   interface RankedPrediction {
     prediction: SpeciesPrediction;
@@ -169,6 +176,8 @@ export function rankPredictions(
     const valueKey = prediction.normalizedValue ?? normalizeForLookup(prediction.value);
     const labelKey = prediction.normalizedLabel ?? normalizeForLookup(prediction.label);
     if (!valueKey.includes(needle) && !labelKey.includes(needle)) continue;
+    // Exclusion runs only after the match check, so it never touches non-matches.
+    if (exclude?.(prediction)) continue;
 
     const local = isLocal?.(prediction) ?? false;
     const isExact = valueKey === needle || labelKey === needle;
