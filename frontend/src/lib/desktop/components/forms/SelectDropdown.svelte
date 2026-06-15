@@ -5,6 +5,7 @@
   import { X, ChevronDown, Check } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { portal } from '$lib/utils/portal';
+  import { computeAnchorPosition, type AnchorPosition } from '$lib/utils/anchorPosition';
   import {
     safeGet,
     safeArrayAccess,
@@ -90,8 +91,18 @@
   let inputElement = $state<HTMLInputElement>();
   let buttonElement = $state<HTMLButtonElement>();
 
-  // Position state for fixed dropdown
-  let dropdownPosition = $state({ top: 0, left: 0, width: 0, openAbove: false });
+  // Gap in px between the trigger button and the dropdown menu.
+  const DROPDOWN_OFFSET = 4;
+
+  // Position state for the fixed, portaled dropdown. `width` tracks the trigger
+  // width; the rest comes from the shared anchor/flip helper.
+  let dropdownPosition = $state<AnchorPosition & { width: number }>({
+    placement: 'below',
+    top: 0,
+    bottom: null,
+    left: 0,
+    width: 0,
+  });
 
   // Portal target: nearest dialog ancestor (for focus containment) or body
   let portalTarget = $derived.by(
@@ -209,25 +220,24 @@
     return selectedOptions[0].label;
   });
 
-  // Calculate dropdown position based on button element
-  // Uses viewport coordinates for fixed positioning
+  // Calculate dropdown position based on the button element, using viewport
+  // coordinates for fixed positioning. The flip decision uses the dropdown's real
+  // rendered height once it is in the DOM, falling back to the maxHeight cap before
+  // the first layout (so a short list no longer flips above prematurely).
   function updateDropdownPosition() {
     if (!buttonElement) return;
 
     const rect = buttonElement.getBoundingClientRect();
-    const viewportHeight = globalThis.innerHeight;
-    const gap = 4; // px gap between button and dropdown
-    const spaceBelow = viewportHeight - rect.bottom - gap;
-    const spaceAbove = rect.top - gap;
-    // Open above if not enough space below and more space above
-    const openAbove = spaceBelow < maxHeight && spaceAbove > spaceBelow;
+    const position = computeAnchorPosition({
+      triggerRect: rect,
+      floatingHeight: dropdownElement?.offsetHeight ?? 0,
+      floatingWidth: rect.width,
+      estimatedHeight: maxHeight,
+      offset: DROPDOWN_OFFSET,
+      align: 'start',
+    });
 
-    dropdownPosition = {
-      top: openAbove ? rect.top - gap : rect.bottom + gap,
-      left: rect.left,
-      width: rect.width,
-      openAbove,
-    };
+    dropdownPosition = { ...position, width: rect.width };
   }
 
   // Event handlers
@@ -370,14 +380,26 @@
     }
   }
 
+  // Capture-phase scroll handler: reposition when an outer/ancestor container
+  // scrolls (which moves the trigger), but ignore scrolls inside the dropdown's
+  // own option list. Those don't move the trigger and would otherwise recompute
+  // the same position on every scroll tick.
+  function handleScroll(event: Event) {
+    if (dropdownElement?.contains(event.target as Node)) return;
+    updateDropdownPosition();
+  }
+
   $effect(() => {
     if (isOpen) {
+      // Re-measure now that the dropdown is in the DOM, so the flip decision uses
+      // its real height rather than the pre-layout maxHeight estimate.
+      updateDropdownPosition();
       document.addEventListener('click', handleClickOutside);
-      window.addEventListener('scroll', updateDropdownPosition, true);
+      window.addEventListener('scroll', handleScroll, true);
       window.addEventListener('resize', updateDropdownPosition);
       return () => {
         document.removeEventListener('click', handleClickOutside);
-        window.removeEventListener('scroll', updateDropdownPosition, true);
+        window.removeEventListener('scroll', handleScroll, true);
         window.removeEventListener('resize', updateDropdownPosition);
       };
     }
@@ -467,10 +489,8 @@
           'fixed z-[2100] font-sans bg-[var(--color-base-100)] rounded-md shadow-xl border border-[var(--color-base-content)]/20 overflow-hidden',
           dropdownClassName
         )}
-        style:top={dropdownPosition.openAbove ? 'auto' : `${dropdownPosition.top}px`}
-        style:bottom={dropdownPosition.openAbove
-          ? `${globalThis.innerHeight - dropdownPosition.top}px`
-          : 'auto'}
+        style:top={dropdownPosition.top !== null ? `${dropdownPosition.top}px` : 'auto'}
+        style:bottom={dropdownPosition.bottom !== null ? `${dropdownPosition.bottom}px` : 'auto'}
         style:left="{dropdownPosition.left}px"
         style:width="{dropdownPosition.width}px"
         style:max-height="{maxHeight}px"

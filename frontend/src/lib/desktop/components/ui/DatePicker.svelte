@@ -43,13 +43,19 @@ Accessibility:
 - Focus management and visual indicators
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
   import { Calendar, ChevronLeft, ChevronRight } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
+  import { computeAnchorPosition } from '$lib/utils/anchorPosition';
   import { getLocalDateString } from '$lib/utils/date.js';
   import { t } from '$lib/i18n';
   import type { HTMLAttributes } from 'svelte/elements';
+
+  // Gap in px between the trigger and the calendar, and pre-layout size estimates
+  // used only before the calendar's real dimensions can be measured.
+  const CALENDAR_OFFSET = 4;
+  const CALENDAR_WIDTH_ESTIMATE = 280;
+  const CALENDAR_HEIGHT_ESTIMATE = 360;
 
   type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
@@ -127,20 +133,25 @@ Accessibility:
   // Generate a unique ID for this datepicker instance
   const pickerId = $state(Math.random().toString(36).slice(2, 9));
 
-  // Calculate dropdown position based on trigger button's bounding rect
+  // Calculate dropdown position based on the trigger button's bounding rect.
+  // When flipping above, the helper anchors the calendar's bottom edge, so the
+  // placement stays aligned regardless of the calendar's (month-dependent) height.
   function updateDropdownPosition() {
     const trigger =
       document.querySelector(`[data-datepicker-id="${pickerId}"]`) ||
       wrapperRef?.querySelector('.datepicker-trigger');
     if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const calendarWidth = calendarRef?.offsetWidth ?? 280;
-    const calendarHeight = calendarRef?.offsetHeight ?? 0;
-    const maxLeft = Math.max(8, window.innerWidth - calendarWidth - 8);
-    const left = Math.min(Math.max(rect.left, 8), maxLeft);
-    const fitsBelow = rect.bottom + 4 + calendarHeight <= window.innerHeight - 8;
-    const top = fitsBelow ? rect.bottom + 4 : Math.max(8, rect.top - calendarHeight - 4);
-    dropdownStyle = `position: fixed; top: ${top}px; left: ${left}px; z-index: 1100;`;
+    const position = computeAnchorPosition({
+      triggerRect: trigger.getBoundingClientRect(),
+      floatingHeight: calendarRef?.offsetHeight ?? 0,
+      floatingWidth: calendarRef?.offsetWidth ?? CALENDAR_WIDTH_ESTIMATE,
+      estimatedHeight: CALENDAR_HEIGHT_ESTIMATE,
+      offset: CALENDAR_OFFSET,
+      align: 'start',
+    });
+    const vertical =
+      position.top !== null ? `top: ${position.top}px` : `bottom: ${position.bottom}px`;
+    dropdownStyle = `position: fixed; ${vertical}; left: ${position.left}px; z-index: 1100;`;
   }
 
   // State for keyboard navigation focus
@@ -271,6 +282,11 @@ Accessibility:
       : t('components.datePicker.aria.calendarClosed');
     if (opening) {
       focusedDate = selectedDate || new Date();
+      // Position synchronously so the calendar's first painted frame is already
+      // fixed-positioned (no static-flow flash). The element is not in the DOM yet,
+      // so this uses the height estimate; the open-gated effect re-measures the real
+      // height once it mounts. The "above" anchor is bottom-pinned (Invariant A), so
+      // an estimate that differs from the real height cannot misalign it.
       updateDropdownPosition();
     }
   }
@@ -411,22 +427,17 @@ Accessibility:
     }
   }
 
-  onMount(() => {
-    document.addEventListener('click', handleClickOutside);
-
-    return () => {
-      document.removeEventListener('click', handleClickOutside);
-    };
-  });
-
-  // Reposition or close dropdown on scroll/resize
+  // Reposition on scroll/resize and handle click-outside, but only while the
+  // calendar is open so a closed picker keeps no global listeners.
   $effect(() => {
     if (showCalendar) {
       updateDropdownPosition();
       const handleReposition = () => updateDropdownPosition();
+      document.addEventListener('click', handleClickOutside);
       window.addEventListener('scroll', handleReposition, true);
       window.addEventListener('resize', handleReposition);
       return () => {
+        document.removeEventListener('click', handleClickOutside);
         window.removeEventListener('scroll', handleReposition, true);
         window.removeEventListener('resize', handleReposition);
       };

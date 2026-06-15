@@ -16,6 +16,7 @@
 <script lang="ts">
   import { Volume2 } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
+  import { computeAnchorPosition, applyAnchorPosition } from '$lib/utils/anchorPosition';
   import { t } from '$lib/i18n';
   import { SPEED_OPTIONS, DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
 
@@ -50,6 +51,8 @@
   const GAIN_MIN_DB = -20;
   const FILTER_HP_MIN_FREQ = 20;
   const FILTER_HP_MAX_FREQ = 5000;
+  // Gap in px between the trigger button and the settings menu.
+  const MENU_OFFSET = 8;
 
   // Generate unique ID for this component instance
   const instanceId = Math.random().toString(36).slice(2, 9);
@@ -73,26 +76,19 @@
   function updateMenuPosition() {
     if (!menuElement || !buttonElement) return;
 
-    const buttonRect = buttonElement.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - buttonRect.bottom;
-    const spaceAbove = buttonRect.top;
-    const menuHeight = menuElement.offsetHeight;
-
-    menuElement.style.position = 'fixed';
+    // Align the menu's right edge with the button (clamped into the viewport so a
+    // wide menu near the left edge cannot overflow off-screen), flipping above when
+    // there is not enough room below.
+    const position = computeAnchorPosition({
+      triggerRect: buttonElement.getBoundingClientRect(),
+      floatingHeight: menuElement.offsetHeight,
+      floatingWidth: menuElement.offsetWidth,
+      offset: MENU_OFFSET,
+      align: 'end',
+    });
+    applyAnchorPosition(menuElement, position);
+    // Stacking is owned by the component (kept above overlay content).
     menuElement.style.zIndex = '9999';
-
-    // Position below or above based on available space
-    if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
-      menuElement.style.bottom = `${window.innerHeight - buttonRect.top + 8}px`;
-      menuElement.style.top = 'auto';
-    } else {
-      menuElement.style.top = `${buttonRect.bottom + 8}px`;
-      menuElement.style.bottom = 'auto';
-    }
-
-    // Align to right edge of button
-    menuElement.style.left = 'auto';
-    menuElement.style.right = `${window.innerWidth - buttonRect.right}px`;
   }
 
   function handleToggle(event: MouseEvent) {
@@ -158,11 +154,13 @@
     }
   });
 
-  // Cleanup on unmount
+  // Cleanup on unmount: if the menu is open when the component is destroyed, notify
+  // the parent so its open-menu tracking stays in sync (mirrors ActionMenu). Avoid
+  // mutating $state during teardown.
   $effect(() => {
     return () => {
       if (showSettings) {
-        showSettings = false;
+        onMenuClose?.();
       }
     };
   });
