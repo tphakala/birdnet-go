@@ -905,6 +905,18 @@ func TestProfileForModelType(t *testing.T) {
 	}
 }
 
+// TestProfileSuffix verifies the cache-key token derived from a frequency profile:
+// bat (high-pass) profiles get a "bat" token; bird defaults stay empty for
+// backward compatibility with existing cached spectrogram filenames.
+func TestProfileSuffix(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "bat", ProfileSuffix(BatProfile()), "bat profile should map to the bat token")
+	assert.Empty(t, ProfileSuffix(BirdProfile()), "bird profile should map to an empty token")
+	assert.Equal(t, "bat", ProfileSuffix(ProfileForModelType("bat")))
+	assert.Empty(t, ProfileSuffix(ProfileForModelType("bird")))
+}
+
 // TestGetSoxSpectrogramArgs_UsesProvidedDuration verifies that a non-zero preValidatedDuration
 // is used directly for the -d parameter, skipping the sox --info duration query.
 func TestGetSoxSpectrogramArgs_UsesProvidedDuration(t *testing.T) {

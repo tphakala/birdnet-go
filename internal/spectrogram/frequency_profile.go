@@ -43,3 +43,14 @@ func ProfileForModelType(modelType string) FrequencyProfile {
 	}
 	return BirdProfile()
 }
+
+// ProfileSuffix returns a short, stable token identifying the frequency profile
+// for use in spectrogram cache filenames and queue keys, so renders made with
+// different profiles do not collide on disk. The default bird profile returns ""
+// for backward compatibility with existing cached spectrograms.
+func ProfileSuffix(p FrequencyProfile) string {
+	if p.HighPassHz > 0 {
+		return modelTypeBatStr
+	}
+	return ""
+}
