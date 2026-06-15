@@ -39,7 +39,7 @@ import IndexKeyFixed from './wrappers/IndexKeyFixed.svelte';
 
 // ============================================================================
 // Pattern: String value as key — {#each items as item (item)}
-// Affected: SubnetInput subnets and similar string-keyed lists
+// Affected: any {#each items as item (item)} list that uses a bare string as the key
 // ============================================================================
 
 describe('Duplicate Key: String value as key — (item)', () => {
