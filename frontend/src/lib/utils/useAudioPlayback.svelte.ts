@@ -41,7 +41,7 @@ import {
   releaseAudioContext,
 } from '$lib/utils/audioContextManager';
 import {
-  createAudioNodeChain,
+  attachAudioGraphWhenRunning,
   disconnectAudioNodes,
   type AudioNodeChain,
 } from '$lib/utils/audioNodes';
@@ -207,7 +207,8 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   }
 
   async function initAudioContext(): Promise<boolean> {
-    if (audioContext) return true;
+    // Already fully initialized: context running and the graph attached.
+    if (audioContext?.state === 'running' && audioNodes) return true;
     if (isInitializingContext) return false;
     if (!isAudioContextSupported()) {
       audioContextAvailable = false;
@@ -216,27 +217,33 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
 
     isInitializingContext = true;
     try {
-      // getAudioContext() is async - returns Promise<AudioContext>
-      // It creates/resumes the shared singleton and handles suspended state
+      // getAudioContext() is async - returns Promise<AudioContext>. It
+      // creates/resumes the shared singleton; called here from a user gesture
+      // (togglePlayPause) so iOS honours the resume.
       audioContext = await getAudioContext();
-      audioContextAvailable = true;
 
-      if (audioElement) {
-        // Note: intentionally omits includeCompressor (AudioPlayer uses it for
-        // clipping protection at high gain). Compact players don't expose gain
-        // controls, so the compressor is unnecessary overhead.
-        audioNodes = createAudioNodeChain(audioContext, audioElement, {
-          gainDb: gainValue,
-          highPassFreq: filterFreq,
-        });
-      }
-      isInitializingContext = false;
+      // Attach the Web Audio graph only when the context is running; while it
+      // is suspended the element plays through native output and the graph is
+      // deferred to a later play (see attachAudioGraphWhenRunning). Note:
+      // intentionally omits includeCompressor (AudioPlayer uses it for clipping
+      // protection at high gain); compact players don't expose gain controls,
+      // so the compressor is unnecessary overhead.
+      audioNodes = attachAudioGraphWhenRunning(audioContext, audioElement, audioNodes, {
+        gainDb: gainValue,
+        highPassFreq: filterFreq,
+      });
+      // Reflect whether the processing graph is actually live: the graph is
+      // attached AND the context is running. A previously-attached graph on a
+      // re-suspended context that failed to resume is inert, so gain/filter
+      // controls must not be reported available in that case.
+      audioContextAvailable = audioNodes !== null && audioContext.state === 'running';
       return true;
     } catch (err) {
       logger.warn('AudioContext initialization failed', err as Error);
       audioContextAvailable = false;
-      isInitializingContext = false;
       return false;
+    } finally {
+      isInitializingContext = false;
     }
   }
 

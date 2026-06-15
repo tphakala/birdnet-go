@@ -16,9 +16,12 @@ import { safeGet } from '$lib/utils/security';
 import type { AudioPlaybackState } from './useAudioPlayback.svelte';
 import Wrapper from './UseAudioPlaybackWrapper.test.svelte';
 
-// Mock audioContextManager - must be before import
+// Mock audioContextManager - must be before import.
+// Default to a 'running' context (the resumed/desktop case). Individual tests
+// override with a 'suspended' context to exercise the iOS code path.
 vi.mock('$lib/utils/audioContextManager', () => ({
   getAudioContext: vi.fn().mockResolvedValue({
+    state: 'running',
     createMediaElementSource: vi.fn().mockReturnValue({
       connect: vi.fn(),
       disconnect: vi.fn(),
@@ -40,9 +43,12 @@ vi.mock('$lib/utils/audioContextManager', () => ({
   releaseAudioContext: vi.fn(),
 }));
 
-// Mock audioNodes
+// Mock audioNodes. attachAudioGraphWhenRunning is the composable's direct
+// dependency; its own running/suspended decision is unit-tested separately in
+// audioNodes.test.ts. Here we control its return value to simulate an attached
+// graph (running -> chain) vs a deferred one (suspended -> null).
 vi.mock('$lib/utils/audioNodes', () => ({
-  createAudioNodeChain: vi.fn().mockReturnValue({
+  attachAudioGraphWhenRunning: vi.fn().mockReturnValue({
     source: { connect: vi.fn(), disconnect: vi.fn() },
     gain: { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() },
     highPass: { frequency: { value: 20 }, connect: vi.fn(), disconnect: vi.fn() },
@@ -187,6 +193,85 @@ describe('useAudioPlayback', () => {
 
     await getState().togglePlayPause();
     expect(mockPlay).toHaveBeenCalledTimes(1);
+  });
+
+  // ---------------------------------------------------------------
+  // 1b. iOS: when the graph cannot attach (suspended context -> helper returns
+  //     null), the element still plays and EQ availability reads false instead
+  //     of being enabled-but-inert (regression: silent iOS playback).
+  // ---------------------------------------------------------------
+  it('plays natively and reports no audio graph when the context is suspended (iOS)', async () => {
+    const { attachAudioGraphWhenRunning } = await import('$lib/utils/audioNodes');
+    vi.mocked(attachAudioGraphWhenRunning).mockReturnValueOnce(null);
+
+    await renderAndWait();
+    await getState().togglePlayPause();
+
+    // Element plays through its native output (audible on iOS) ...
+    expect(mockPlay).toHaveBeenCalledTimes(1);
+    // ... and the gain/filter graph is reported unavailable, not active-yet-inert.
+    expect(getState().audioContextAvailable).toBe(false);
+  });
+
+  // ---------------------------------------------------------------
+  // 1c. A running context attaches the graph and reports it available.
+  // ---------------------------------------------------------------
+  it('attaches the Web Audio graph and reports it available when the context is running', async () => {
+    const { attachAudioGraphWhenRunning } = await import('$lib/utils/audioNodes');
+
+    await renderAndWait();
+    await getState().togglePlayPause();
+
+    expect(mockPlay).toHaveBeenCalledTimes(1);
+    expect(attachAudioGraphWhenRunning).toHaveBeenCalledTimes(1);
+    expect(getState().audioContextAvailable).toBe(true);
+  });
+
+  // ---------------------------------------------------------------
+  // 1d. Graph attachment is deferred until the context resumes on a later tap.
+  // ---------------------------------------------------------------
+  it('defers graph attachment until the context resumes on a later interaction', async () => {
+    const { attachAudioGraphWhenRunning } = await import('$lib/utils/audioNodes');
+
+    // First gesture: helper returns null (context still suspended) -> no graph.
+    vi.mocked(attachAudioGraphWhenRunning).mockReturnValueOnce(null);
+    await renderAndWait();
+    await getState().togglePlayPause();
+    expect(getState().audioContextAvailable).toBe(false);
+
+    // Second gesture: default mock returns a chain (context resumed) -> attached.
+    await getState().togglePlayPause();
+    expect(getState().audioContextAvailable).toBe(true);
+  });
+
+  // ---------------------------------------------------------------
+  // 1e. Re-attempts resume when a previously-attached context is later
+  //     suspended (e.g. tab backgrounding), instead of short-circuiting to
+  //     silent playback.
+  // ---------------------------------------------------------------
+  it('re-attempts context resume when a previously-attached context is suspended', async () => {
+    const { getAudioContext } = await import('$lib/utils/audioContextManager');
+
+    await renderAndWait();
+    // First play attaches the graph on a running context.
+    await getState().togglePlayPause();
+    expect(vi.mocked(getAudioContext)).toHaveBeenCalledTimes(1);
+
+    // Simulate the browser suspending the shared context after attachment.
+    const ctx = (await vi.mocked(getAudioContext).mock.results[0]?.value) as AudioContext & {
+      state: AudioContextState;
+    };
+    ctx.state = 'suspended';
+
+    // A subsequent play must re-enter initialization (not short-circuit on the
+    // already-attached graph) so getAudioContext() resumes the context again.
+    await getState().togglePlayPause();
+    expect(vi.mocked(getAudioContext)).toHaveBeenCalledTimes(2);
+
+    // The mock context stays suspended (resume did not take), so availability
+    // reports false even though the graph is still attached: the EQ controls
+    // would be inert, and must not be reported active.
+    expect(getState().audioContextAvailable).toBe(false);
   });
 
   // ---------------------------------------------------------------
