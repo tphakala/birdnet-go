@@ -158,13 +158,19 @@
       if (isPlaying) {
         audioElement.pause();
       } else {
-        // Initialize audio context on first play (for gain/filter controls)
-        // Guard against rapid clicks that could create multiple AudioContexts
-        if (!audioContext && !isInitializingContext) {
+        // Initialize audio context on first play (for gain/filter controls),
+        // retrying until the graph is attached. Guard against rapid clicks that
+        // could create multiple AudioContexts.
+        if (!audioNodes && !isInitializingContext) {
           isInitializingContext = true;
           try {
             audioContext = await initializeAudioContextWrapper();
-            if (audioContext && !audioNodes) {
+            // Only attach the Web Audio graph once the context is running.
+            // getAudioContext() can return a still-suspended context; on iOS,
+            // createMediaElementSource permanently reroutes the element's
+            // output, so attaching it to a suspended context plays silently.
+            // Until it resumes, play through the element's native output.
+            if (audioContext && !audioNodes && audioContext.state === 'running') {
               audioNodes = createAudioNodeChain(audioContext, audioElement, {
                 gainDb: gainValue,
                 highPassFreq: filterFreq,

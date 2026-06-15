@@ -207,7 +207,8 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   }
 
   async function initAudioContext(): Promise<boolean> {
-    if (audioContext) return true;
+    // Already fully initialized: context running and the graph attached.
+    if (audioContext?.state === 'running' && audioNodes) return true;
     if (isInitializingContext) return false;
     if (!isAudioContextSupported()) {
       audioContextAvailable = false;
@@ -216,12 +217,21 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
 
     isInitializingContext = true;
     try {
-      // getAudioContext() is async - returns Promise<AudioContext>
-      // It creates/resumes the shared singleton and handles suspended state
+      // getAudioContext() is async - returns Promise<AudioContext>. It
+      // creates/resumes the shared singleton; called here from a user gesture
+      // (togglePlayPause) so iOS honours the resume.
       audioContext = await getAudioContext();
       audioContextAvailable = true;
 
-      if (audioElement) {
+      // Only route the element through the Web Audio graph once the context is
+      // actually running. getAudioContext() can hand back a still-suspended
+      // context (it stops awaiting resume() after a timeout). On iOS,
+      // createMediaElementSource permanently captures the element's native
+      // output, so attaching the graph to a suspended context routes playback
+      // into silence (currentTime advances, no sound). Until the context
+      // resumes we let the element play natively and defer the graph to a
+      // later play interaction.
+      if (audioElement && !audioNodes && audioContext.state === 'running') {
         // Note: intentionally omits includeCompressor (AudioPlayer uses it for
         // clipping protection at high gain). Compact players don't expose gain
         // controls, so the compressor is unnecessary overhead.
@@ -230,13 +240,13 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
           highPassFreq: filterFreq,
         });
       }
-      isInitializingContext = false;
       return true;
     } catch (err) {
       logger.warn('AudioContext initialization failed', err as Error);
       audioContextAvailable = false;
-      isInitializingContext = false;
       return false;
+    } finally {
+      isInitializingContext = false;
     }
   }
 

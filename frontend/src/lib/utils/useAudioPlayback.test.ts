@@ -16,9 +16,12 @@ import { safeGet } from '$lib/utils/security';
 import type { AudioPlaybackState } from './useAudioPlayback.svelte';
 import Wrapper from './UseAudioPlaybackWrapper.test.svelte';
 
-// Mock audioContextManager - must be before import
+// Mock audioContextManager - must be before import.
+// Default to a 'running' context (the resumed/desktop case). Individual tests
+// override with a 'suspended' context to exercise the iOS code path.
 vi.mock('$lib/utils/audioContextManager', () => ({
   getAudioContext: vi.fn().mockResolvedValue({
+    state: 'running',
     createMediaElementSource: vi.fn().mockReturnValue({
       connect: vi.fn(),
       disconnect: vi.fn(),
@@ -49,6 +52,29 @@ vi.mock('$lib/utils/audioNodes', () => ({
   }),
   disconnectAudioNodes: vi.fn(),
 }));
+
+/**
+ * Build a mock AudioContext with a controllable state, matching the shape the
+ * audioContextManager mock returns. Used to exercise the iOS suspended-context
+ * path, where the Web Audio graph must NOT be attached (createMediaElementSource
+ * on a suspended context silences the element on iOS).
+ */
+function makeMockAudioContext(state: AudioContextState): AudioContext {
+  return {
+    state,
+    createMediaElementSource: vi.fn().mockReturnValue({ connect: vi.fn(), disconnect: vi.fn() }),
+    createGain: vi
+      .fn()
+      .mockReturnValue({ gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() }),
+    createBiquadFilter: vi.fn().mockReturnValue({
+      type: 'highpass',
+      frequency: { value: 20 },
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+    }),
+    destination: {},
+  } as unknown as AudioContext;
+}
 
 describe('useAudioPlayback', () => {
   let mockPlay: ReturnType<typeof vi.fn>;
@@ -187,6 +213,56 @@ describe('useAudioPlayback', () => {
 
     await getState().togglePlayPause();
     expect(mockPlay).toHaveBeenCalledTimes(1);
+  });
+
+  // ---------------------------------------------------------------
+  // 1b. iOS: a suspended AudioContext must NOT attach the Web Audio graph,
+  //     but the element must still play (regression: silent iOS playback).
+  // ---------------------------------------------------------------
+  it('does not attach the Web Audio graph when the AudioContext is suspended, but still plays (iOS)', async () => {
+    const { getAudioContext } = await import('$lib/utils/audioContextManager');
+    const { createAudioNodeChain } = await import('$lib/utils/audioNodes');
+    vi.mocked(getAudioContext).mockResolvedValueOnce(makeMockAudioContext('suspended'));
+
+    await renderAndWait();
+    await getState().togglePlayPause();
+
+    // Element plays through its native output (audible on iOS). Routing it
+    // through a suspended context via createMediaElementSource would silence it.
+    expect(mockPlay).toHaveBeenCalledTimes(1);
+    expect(createAudioNodeChain).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------
+  // 1c. A running AudioContext attaches the Web Audio graph.
+  // ---------------------------------------------------------------
+  it('attaches the Web Audio graph when the AudioContext is running', async () => {
+    const { createAudioNodeChain } = await import('$lib/utils/audioNodes');
+
+    await renderAndWait();
+    await getState().togglePlayPause();
+
+    expect(mockPlay).toHaveBeenCalledTimes(1);
+    expect(createAudioNodeChain).toHaveBeenCalledTimes(1);
+  });
+
+  // ---------------------------------------------------------------
+  // 1d. Graph attachment is deferred until the context resumes on a later tap.
+  // ---------------------------------------------------------------
+  it('defers graph attachment until the context resumes on a later interaction', async () => {
+    const { getAudioContext } = await import('$lib/utils/audioContextManager');
+    const { createAudioNodeChain } = await import('$lib/utils/audioNodes');
+
+    // First gesture: context still suspended -> native playback, no graph.
+    vi.mocked(getAudioContext).mockResolvedValueOnce(makeMockAudioContext('suspended'));
+    await renderAndWait();
+    await getState().togglePlayPause();
+    expect(createAudioNodeChain).not.toHaveBeenCalled();
+
+    // Second gesture: the shared context has resumed (default mock is
+    // 'running') -> the graph attaches now.
+    await getState().togglePlayPause();
+    expect(createAudioNodeChain).toHaveBeenCalledTimes(1);
   });
 
   // ---------------------------------------------------------------
