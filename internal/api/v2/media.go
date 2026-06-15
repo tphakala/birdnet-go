@@ -3020,6 +3020,21 @@ func (c *Controller) generateSpectrogramFromRel(ctx context.Context, relAudioPat
 		logger.Bool("shared", shared),
 		logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
 
+	// A non-default frequency profile (e.g. bat) just wrote a distinct "-<profile>"
+	// filename. Remove the stale default-profile PNG for the same clip/params so the
+	// old bird-profile image (e.g. one cached while the bat gate was disabled) is not
+	// left orphaned alongside the new one. Best-effort: a missing file is fine.
+	if freqSuffix != "" {
+		if _, _, _, birdRelPath := buildSpectrogramPaths(relAudioPath, width, raw, style, dynamicRange, ""); birdRelPath != relSpectrogramPath {
+			absBirdPath := filepath.Join(c.SFS.BaseDir(), birdRelPath)
+			if rmErr := os.Remove(absBirdPath); rmErr != nil && !os.IsNotExist(rmErr) {
+				getSpectrogramLogger().Debug("Failed to remove stale default-profile spectrogram",
+					logger.String("path", birdRelPath),
+					logger.Error(rmErr))
+			}
+		}
+	}
+
 	// Return the relative path of the newly created spectrogram
 	return relSpectrogramPath, nil
 }
