@@ -27,9 +27,11 @@ const (
 )
 
 // schemeImpliesTLS reports whether a broker URL scheme selects a TLS transport.
+// "wss" (WebSocket Secure) is included so a wss broker's TLS config (CA, client
+// cert, InsecureSkipVerify) is applied, consistent with the other TLS schemes.
 func schemeImpliesTLS(scheme string) bool {
 	switch scheme {
-	case "ssl", "tls", "mqtts":
+	case "ssl", "tls", "mqtts", "wss":
 		return true
 	default:
 		return false

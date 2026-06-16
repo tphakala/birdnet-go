@@ -136,6 +136,22 @@ func FuzzParseBroker(f *testing.F) {
 	})
 }
 
+// TestSchemeImpliesTLS pins which broker schemes auto-enable TLS. wss (secure
+// WebSocket) implies TLS; plain ws does not.
+func TestSchemeImpliesTLS(t *testing.T) {
+	t.Parallel()
+
+	tls := []string{"ssl", "tls", "mqtts", "wss"}
+	plain := []string{"tcp", "mqtt", "ws", ""}
+
+	for _, s := range tls {
+		assert.True(t, schemeImpliesTLS(s), "scheme %q should imply TLS", s)
+	}
+	for _, s := range plain {
+		assert.False(t, schemeImpliesTLS(s), "scheme %q should not imply TLS", s)
+	}
+}
+
 // TestBrokerHostPort verifies the host:port form used by the connection-test
 // TCP/TLS dial stage: IPv6 bracketing via net.JoinHostPort and the default-port
 // fallback when the address omitted a port.
