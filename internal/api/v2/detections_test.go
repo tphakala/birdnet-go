@@ -1115,7 +1115,7 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 	// Verify unrelated files were left intact
 	for _, sf := range survivingFiles {
 		_, statErr := os.Stat(filepath.Join(clipDir, sf))
-		assert.NoError(t, statErr, "unrelated file %s must not be removed", sf)
+		require.NoError(t, statErr, "unrelated file %s must not be removed", sf)
 	}
 
 	mockDS.AssertExpectations(t)
