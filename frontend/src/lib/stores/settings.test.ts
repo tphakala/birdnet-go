@@ -571,6 +571,10 @@ describe('Settings Store - UI Locale Preservation (#2756/#2760)', () => {
 });
 
 describe('Settings Store - syncTLSMode preserves unsaved Security edits', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   const baseSecurity = () => ({
     baseUrl: '',
     host: '',
