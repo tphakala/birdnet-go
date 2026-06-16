@@ -1191,6 +1191,51 @@ func (c *Controller) parseSpectrogramParameters(ctx echo.Context) spectrogramPar
 	return params
 }
 
+// resolveSpectrogramMaxFreqHz returns the top of the spectrogram frequency axis
+// in Hz, matching the range the generator renders for the given profile:
+//   - bird (resampled): the Nyquist of the resample rate (fixed; no probe needed)
+//   - bat (native rate): the Nyquist of the clip's actual sample rate, probed
+//     from the file because it varies (192 kHz, 256 kHz, or much lower when the
+//     clip was exported to a lossy format such as MP3)
+//
+// Returns 0 when the rate cannot be determined so the UI can fall back to the
+// default bird range.
+func (c *Controller) resolveSpectrogramMaxFreqHz(ctx context.Context, profile spectrogram.FrequencyProfile, clipPath string) int {
+	if profile.ResampleRate > 0 {
+		return profile.ResampleRate / 2
+	}
+	rate := c.probeClipSampleRate(ctx, clipPath)
+	if rate <= 0 {
+		return 0
+	}
+	return rate / 2
+}
+
+// probeClipSampleRate resolves a detection's clip to an absolute path and probes
+// its native sample rate (Hz) with ffprobe. Returns 0 on any failure. Used only
+// for bat detections on the single-detection endpoint, so a per-request probe is
+// acceptable.
+func (c *Controller) probeClipSampleRate(ctx context.Context, clipPath string) int {
+	if clipPath == "" {
+		return 0
+	}
+	clipsPrefix := c.currentSettings().Realtime.Audio.Export.Path
+	normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
+	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
+	if err != nil {
+		return 0
+	}
+	absolutePath := filepath.Join(c.SFS.BaseDir(), relAudioPath)
+	rate, err := ffmpeg.GetSampleRateViaFFprobe(ctx, absolutePath)
+	if err != nil {
+		c.logDebugIfEnabled("Clip sample-rate probe failed; spectrogram axis falls back to bird range",
+			logger.String("clip_path", clipPath),
+			logger.Error(err))
+		return 0
+	}
+	return rate
+}
+
 // validateNoteIDAndGetClipPath validates the note ID parameter and retrieves the clip path.
 // Returns the noteID and clipPath, or an error if validation fails.
 func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, clipPath string, err error) {

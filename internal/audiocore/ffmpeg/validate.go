@@ -481,6 +481,27 @@ func GetDurationViaFFprobe(ctx context.Context, audioPath string) (float64, erro
 	return result.Duration, nil
 }
 
+// GetSampleRateViaFFprobe returns the audio sample rate in Hz using ffprobe.
+// Like GetDurationViaFFprobe, it works for any FFmpeg-decodable format (WAV,
+// FLAC, MP3, etc.). The reported rate is the file's native rate, so a bat clip
+// exported to a lossy format (e.g. MP3, which is capped at 48 kHz) reports the
+// reduced rate rather than the original ultrasonic capture rate.
+// Returns 0 and an error if the sample rate cannot be determined.
+func GetSampleRateViaFFprobe(ctx context.Context, audioPath string) (int, error) {
+	// Enforce a bounded timeout so the probe doesn't inherit a long parent deadline.
+	probeCtx, cancel := context.WithTimeout(ctx, FFprobeTimeout)
+	defer cancel()
+
+	var result ValidationResult
+	if err := validateWithFFprobe(probeCtx, audioPath, &result); err != nil {
+		return 0, fmt.Errorf("ffprobe sample rate query failed: %w", err)
+	}
+	if result.SampleRate <= 0 {
+		return 0, fmt.Errorf("ffprobe returned no sample rate for %s", filepath.Base(audioPath))
+	}
+	return result.SampleRate, nil
+}
+
 // validateWithFFprobe uses ffprobe to validate audio file format and extract metadata.
 func validateWithFFprobe(ctx context.Context, path string, result *ValidationResult) error {
 	// Apply a per-call timeout if the context has no deadline.

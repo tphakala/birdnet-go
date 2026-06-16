@@ -110,8 +110,8 @@
     enableClipExtraction?: boolean;
     /** Label for clip filenames (e.g. "Eurasian Blue Tit_2026-03-14_14-30-25") */
     clipLabel?: string;
-    /** AI model type (e.g. 'bird', 'bat'); selects the spectrogram frequency axis range */
-    modelType?: string;
+    /** Top of the spectrogram frequency axis in Hz (matches the backend-rendered range); falls back to the bird range when absent */
+    spectrogramMaxFreqHz?: number;
   }
 
   let {
@@ -130,7 +130,7 @@
     debug = false,
     enableClipExtraction = false,
     clipLabel = '',
-    modelType = '',
+    spectrogramMaxFreqHz = 0,
   }: Props = $props();
 
   // Audio and UI elements
@@ -266,17 +266,31 @@
   const FILTER_HP_MIN_FREQ = 20;
   const FILTER_HP_MAX_FREQ = 10000;
 
-  // Frequency scale overlay constants. Bird spectrograms are resampled to 24kHz
-  // (Nyquist = 12kHz); bat spectrograms keep the native 256kHz capture rate
-  // (Nyquist = 128kHz). The axis must match whichever range the backend rendered.
+  // Frequency scale overlay. The spectrogram's vertical axis spans 0..Nyquist of
+  // the rendered audio, which the backend reports as spectrogramMaxFreqHz: bird
+  // detections are resampled to a fixed rate (12 kHz Nyquist), while bat detections
+  // keep the clip's native rate (e.g. 96/128 kHz, or far lower when exported to a
+  // lossy format like MP3). When the backend can't report it, fall back to the
+  // bird range so non-bat views keep their familiar axis.
   const BIRD_NYQUIST_KHZ = 12;
-  const BIRD_TICKS_KHZ = [12, 10, 8, 6, 5, 4, 3, 2, 1];
-  const BAT_NYQUIST_KHZ = 128;
-  const BAT_TICKS_KHZ = [120, 100, 80, 60, 40, 20];
-  const MODEL_TYPE_BAT = 'bat';
-  let isBatSpectrogram = $derived(modelType === MODEL_TYPE_BAT);
-  let freqNyquistKHz = $derived(isBatSpectrogram ? BAT_NYQUIST_KHZ : BIRD_NYQUIST_KHZ);
-  let freqTicksKHz = $derived(isBatSpectrogram ? BAT_TICKS_KHZ : BIRD_TICKS_KHZ);
+  const MAX_FREQ_TICKS = 7; // Target upper bound on axis labels
+  const FREQ_TICK_STEP_KHZ = [1, 2, 5, 10, 20, 25, 50, 100]; // "Nice" tick spacings
+
+  // Build evenly-spaced, round axis ticks up to the Nyquist of the rendered range.
+  function generateFreqTicks(maxKHz: number): number[] {
+    if (!isFinite(maxKHz) || maxKHz <= 0) return [];
+    const step = FREQ_TICK_STEP_KHZ.find(s => maxKHz / s <= MAX_FREQ_TICKS) ?? 100;
+    const ticks: number[] = [];
+    for (let freq = step; freq <= maxKHz + 1e-6; freq += step) {
+      ticks.push(Math.round(freq));
+    }
+    return ticks;
+  }
+
+  let freqNyquistKHz = $derived(
+    spectrogramMaxFreqHz > 0 ? spectrogramMaxFreqHz / 1000 : BIRD_NYQUIST_KHZ
+  );
+  let freqTicksKHz = $derived(generateFreqTicks(freqNyquistKHz));
   // PLAY_END_DELAY_MS imported from $lib/utils/audio
   // Spinner delay is now handled by useDelayedLoading utility
 
@@ -1932,7 +1946,7 @@
     </div>
   {/if}
 
-  <!-- Frequency scale overlay (linear; range follows the detection's model type) -->
+  <!-- Frequency scale overlay (linear; range follows the rendered spectrogram's Nyquist) -->
   {#if showSpectrogram && spectrogramUrl && !spectrogramLoader.error}
     {#each freqTicksKHz as freq (freq)}
       <span class="freq-label" style:bottom="{(freq / freqNyquistKHz) * 100}%" aria-hidden="true"
