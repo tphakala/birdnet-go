@@ -1763,13 +1763,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	// Resolve the detection's frequency profile up front: it feeds both the cache
 	// filename/queue-key token (so a bat render does not collide with a bird PNG)
 	// and the generation options threaded into the async worker below.
-	modelType, mtErr := c.DS.GetNoteModelType(noteID)
-	if mtErr != nil {
-		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
-			logger.String("note_id", noteID),
-			logger.Error(mtErr))
-	}
-	profile := spectrogram.ProfileForModelType(modelType)
+	profile := c.resolveDetectionFrequencyProfile(noteID)
 	freqSuffix := spectrogram.ProfileSuffix(profile)
 
 	// Build the spectrogram path (for the on-disk existence check) and the immutable
@@ -1990,18 +1984,25 @@ func getSpectrogramLogger() logger.Logger {
 	return logger.Global().Module("spectrogram")
 }
 
+// resolveDetectionFrequencyProfile resolves a detection's spectrogram frequency
+// profile from its model type, defaulting to the bird profile when the model
+// type cannot be looked up.
+func (c *Controller) resolveDetectionFrequencyProfile(noteID string) spectrogram.FrequencyProfile {
+	modelType, err := c.DS.GetNoteModelType(noteID)
+	if err != nil {
+		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+			logger.String("note_id", noteID),
+			logger.Error(err))
+	}
+	return spectrogram.ProfileForModelType(modelType)
+}
+
 // spectrogramProfileSuffix resolves the frequency-profile cache token for a
 // detection so by-ID spectrogram paths and queue keys do not collide with the
 // default bird-profile render. Returns "" (bird) when the model type cannot be
 // resolved.
 func (c *Controller) spectrogramProfileSuffix(noteID string) string {
-	modelType, err := c.DS.GetNoteModelType(noteID)
-	if err != nil {
-		c.logDebugIfEnabled("GetNoteModelType failed for spectrogram cache key, defaulting to bird",
-			logger.String("note_id", noteID),
-			logger.Error(err))
-	}
-	return spectrogram.ProfileSuffix(spectrogram.ProfileForModelType(modelType))
+	return spectrogram.ProfileSuffix(c.resolveDetectionFrequencyProfile(noteID))
 }
 
 // buildSpectrogramPaths constructs the spectrogram file paths from the audio path and parameters.
