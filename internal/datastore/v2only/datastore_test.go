@@ -38,13 +38,27 @@ func buildTestConfig(t *testing.T, labels []string) (cfg *Config, cleanup func()
 	err = manager.Initialize()
 	require.NoError(t, err)
 
+	// useV2Prefix=false, isMySQL=false for the SQLite test path.
+	cfg = buildConfigForManager(t, manager, testLogger, false, labels)
+
+	// tempDir is auto-cleaned by t.TempDir(); no additional cleanup needed
+	return cfg, func() {}
+}
+
+// buildConfigForManager wires the repositories, seeds the required lookup-table
+// entries, and assembles a *Config for an already-initialized v2 manager. The
+// isMySQL flag is threaded into every repository constructor so the same wiring
+// drives both the SQLite (in-memory) and MySQL (testcontainer) test paths.
+func buildConfigForManager(t *testing.T, manager v2.Manager, testLogger logger.Logger, isMySQL bool, labels []string) *Config {
+	t.Helper()
+
 	db := manager.DB()
 
 	// Create lookup table entries for tests
 	// The LabelType and TaxonomicClass tables should be created by Initialize()
 	labelTypeRepo := repository.NewLabelTypeRepository(db, nil, false)
 	taxClassRepo := repository.NewTaxonomicClassRepository(db, nil, false)
-	modelRepo := repository.NewModelRepository(db, nil, false, false)
+	modelRepo := repository.NewModelRepository(db, nil, false, isMySQL)
 
 	ctx := t.Context()
 
@@ -62,16 +76,17 @@ func buildTestConfig(t *testing.T, labels []string) (cfg *Config, cleanup func()
 
 	avesClassID := avesClass.ID
 
-	// Create repositories (useV2Prefix = false for SQLite, isMySQL = false)
-	detectionRepo := repository.NewDetectionRepository(db, nil, false, false)
-	labelRepo := repository.NewLabelRepository(db, nil, false, false)
-	sourceRepo := repository.NewAudioSourceRepository(db, nil, false, false)
-	weatherRepo := repository.NewWeatherRepository(db, nil, false, false)
-	imageCacheRepo := repository.NewImageCacheRepository(db, nil, labelRepo, false, false)
-	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, labelRepo, false, false)
-	notificationRepo := repository.NewNotificationHistoryRepository(db, nil, labelRepo, false, false)
+	// Create repositories. useV2Prefix=false (fresh install / clean table names);
+	// isMySQL selects the dialect-specific SQL the repositories generate.
+	detectionRepo := repository.NewDetectionRepository(db, nil, false, isMySQL)
+	labelRepo := repository.NewLabelRepository(db, nil, false, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(db, nil, false, isMySQL)
+	weatherRepo := repository.NewWeatherRepository(db, nil, false, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(db, nil, labelRepo, false, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, labelRepo, false, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(db, nil, labelRepo, false, isMySQL)
 
-	cfg = &Config{
+	return &Config{
 		Manager:            manager,
 		Detection:          detectionRepo,
 		Label:              labelRepo,
@@ -88,9 +103,6 @@ func buildTestConfig(t *testing.T, labels []string) (cfg *Config, cleanup func()
 		AvesClassID:        &avesClassID,
 		Labels:             labels,
 	}
-
-	// tempDir is auto-cleaned by t.TempDir(); no additional cleanup needed
-	return cfg, func() {}
 }
 
 // setupTestDatastore creates a V2OnlyDatastore with an in-memory SQLite database for testing.
@@ -111,6 +123,116 @@ func setupTestDatastoreWithLabels(t *testing.T, labels []string) (ds *Datastore,
 	ds, err := New(cfg)
 	require.NoError(t, err)
 	return ds, func() { _ = ds.Close(); cfgCleanup() }
+}
+
+// seedDetection creates (or reuses) a label for sciName and inserts one detection
+// at the given instant. The label scientific_name is stored verbatim so callers
+// can exercise both bare names and legacy "Scientific_Common" concatenated labels.
+// Shared by the SQLite and MySQL (integration) datastore tests.
+func seedDetection(t *testing.T, ds *Datastore, sciName string, at time.Time) *entities.Detection {
+	t.Helper()
+	ctx := t.Context()
+	label, err := ds.label.GetOrCreate(ctx, sciName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err, "failed to create label %q", sciName)
+	det := &entities.Detection{
+		ModelID:    ds.defaultModelID,
+		LabelID:    label.ID,
+		DetectedAt: at.Unix(),
+		Confidence: 0.9,
+	}
+	require.NoError(t, ds.detection.Save(ctx, det), "failed to save detection for %q", sciName)
+	return det
+}
+
+// TestV2OnlyDatastore_GetSpeciesLastDetectionDateBefore exercises the LIKE ... ESCAPE
+// query on SQLite. It is portable regression coverage for the escaping logic: the
+// MySQL-specific syntax failure is reproduced in the //go:build integration test,
+// while these cases pin the matching semantics (exact match, the latest date before
+// the cutoff, the legacy concatenated-label prefix match, and that %/_ in the queried
+// name are treated as literals rather than LIKE wildcards).
+func TestV2OnlyDatastore_GetSpeciesLastDetectionDateBefore(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ds.timezone = time.UTC
+	ctx := t.Context()
+
+	const cutoff = "2024-06-15"
+	day := func(d int) time.Time { return time.Date(2024, 6, d, 12, 0, 0, 0, time.UTC) }
+
+	t.Run("returns the latest detection date before the cutoff", func(t *testing.T) {
+		seedDetection(t, ds, "Turdus merula", day(10))
+		seedDetection(t, ds, "Turdus merula", day(13))
+		seedDetection(t, ds, "Turdus merula", day(20)) // on/after cutoff: excluded
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Turdus merula", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-13", got)
+	})
+
+	t.Run("returns empty when the only detection is on or after the cutoff", func(t *testing.T) {
+		seedDetection(t, ds, "Erithacus rubecula", day(20))
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Erithacus rubecula", cutoff)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("matches a legacy concatenated label via the LIKE prefix", func(t *testing.T) {
+		seedDetection(t, ds, "Strix aluco_lehtopöllö", day(11))
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Strix aluco", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-11", got)
+	})
+
+	t.Run("treats percent in the queried name as a literal, not a wildcard", func(t *testing.T) {
+		seedDetection(t, ds, "Ab%cd_Name", day(11))
+		seedDetection(t, ds, "AbZZcd_Name", day(13)) // decoy: matched only if % is a wildcard
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Ab%cd", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-11", got)
+	})
+
+	t.Run("treats underscore in the queried name as a literal, not a wildcard", func(t *testing.T) {
+		seedDetection(t, ds, "Ax_cy_Name", day(11))
+		seedDetection(t, ds, "AxXcy_Name", day(13)) // decoy: matched only if _ is a wildcard
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Ax_cy", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-11", got)
+	})
+
+	t.Run("excludes a detection at exactly the cutoff instant", func(t *testing.T) {
+		// before.Unix() is midnight at the start of the cutoff date in ds.timezone,
+		// and the filter is a strict less-than, so a detection at exactly that
+		// instant must be excluded.
+		seedDetection(t, ds, "Cyanistes caeruleus", time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC))
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Cyanistes caeruleus", cutoff)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("excludes detections reviewed as false positive", func(t *testing.T) {
+		det := seedDetection(t, ds, "Fringilla coelebs", day(10))
+		require.NoError(t, ds.manager.DB().Create(&entities.DetectionReview{
+			DetectionID: det.ID,
+			Verified:    entities.VerificationFalsePositive,
+		}).Error)
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Fringilla coelebs", cutoff)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("returns empty for an unknown species", func(t *testing.T) {
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Nonexistent species", cutoff)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
 }
 
 type nilInjectingLabelRepository struct {
