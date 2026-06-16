@@ -206,6 +206,25 @@ func TestApply_RespectsExistingMemLimitOverride(t *testing.T) {
 	assert.True(t, res.ArenaApplied, "arena cap still applies")
 }
 
+func TestApply_RespectsOperatorGoMemLimitEnv(t *testing.T) {
+	t.Parallel()
+	// Operator set GOMEMLIMIT env to a max/off value: the current limit reads as
+	// MaxInt64 (looks unset), but the env signal marks explicit intent we keep.
+	d := Decide(512*mib, testNumCPU, ModeOn)
+	require.True(t, d.Active)
+
+	memCalled := false
+	res := Apply(d, Setters{
+		GoMemLimitEnvSet: func() bool { return true },
+		CurrentMemLimit:  func() int64 { return math.MaxInt64 },
+		SetMemoryLimit:   func(int64) int64 { memCalled = true; return math.MaxInt64 },
+		SetArenaMax:      func(int) bool { return true },
+	})
+	assert.False(t, memCalled, "must not override GOMEMLIMIT when the env var is set, even at a max/off value")
+	assert.False(t, res.MemLimitApplied)
+	assert.True(t, res.ArenaApplied, "arena cap still applies")
+}
+
 func TestApply_ArenaUnsupportedStillSetsMemLimit(t *testing.T) {
 	t.Parallel()
 	// Platform where setArenaMax reports failure (non-glibc / non-cgo / mallopt fail).

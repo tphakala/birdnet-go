@@ -2,6 +2,7 @@ package mempolicy
 
 import (
 	"math"
+	"os"
 	"runtime"
 	"runtime/debug"
 )
@@ -12,6 +13,11 @@ type Setters struct {
 	// CurrentMemLimit returns the currently configured GOMEMLIMIT (math.MaxInt64
 	// when unset), so Apply can avoid overriding an operator-provided limit.
 	CurrentMemLimit func() int64
+	// GoMemLimitEnvSet reports whether the operator set the GOMEMLIMIT env var.
+	// This distinguishes "unset" from "explicitly set to a max/off value", which
+	// both read back as math.MaxInt64 from the runtime; either way an explicit
+	// env value is operator intent we must not override.
+	GoMemLimitEnvSet func() bool
 	// SetMemoryLimit sets the soft Go memory limit (debug.SetMemoryLimit).
 	SetMemoryLimit func(int64) int64
 	// SetArenaMax caps glibc malloc arenas (mallopt). Returns true on success.
@@ -42,12 +48,15 @@ func Apply(d Decision, s Setters) Applied {
 	}
 
 	if d.GoMemLimitBytes > 0 && s.SetMemoryLimit != nil {
+		operatorSet := s.GoMemLimitEnvSet != nil && s.GoMemLimitEnvSet()
 		current := int64(math.MaxInt64)
 		if s.CurrentMemLimit != nil {
 			current = s.CurrentMemLimit()
 		}
-		// Only set when no explicit limit is already in effect (e.g. GOMEMLIMIT env).
-		if current == math.MaxInt64 {
+		// Respect an operator-set GOMEMLIMIT: skip when the env var is set (any
+		// value, including a max/off value, both of which read back as MaxInt64)
+		// or when a limit is already in effect.
+		if !operatorSet && current == math.MaxInt64 {
 			s.SetMemoryLimit(d.GoMemLimitBytes)
 			a.MemLimitApplied = true
 			a.GoMemLimitBytes = d.GoMemLimitBytes
@@ -70,9 +79,10 @@ func Configure(mode string) Result {
 	total := DetectTotalMemory()
 	d := Decide(total, runtime.NumCPU(), mode)
 	a := Apply(d, Setters{
-		CurrentMemLimit: func() int64 { return debug.SetMemoryLimit(-1) },
-		SetMemoryLimit:  debug.SetMemoryLimit,
-		SetArenaMax:     setArenaMax,
+		CurrentMemLimit:  func() int64 { return debug.SetMemoryLimit(-1) },
+		GoMemLimitEnvSet: func() bool { _, ok := os.LookupEnv("GOMEMLIMIT"); return ok },
+		SetMemoryLimit:   debug.SetMemoryLimit,
+		SetArenaMax:      setArenaMax,
 	})
 	return Result{Decision: d, Applied: a}
 }

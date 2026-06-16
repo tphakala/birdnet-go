@@ -62,7 +62,7 @@ func setDefaultConfig() {
 	viper.SetDefault("main.timeas24h", true)
 
 	// Low-memory mode: auto-detect constrained systems by default.
-	viper.SetDefault("lowmemory.mode", "auto")
+	viper.SetDefault("lowmemory.mode", LowMemoryModeAuto)
 
 	// BirdNET configuration
 	viper.SetDefault("birdnet.debug", false)

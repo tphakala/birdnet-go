@@ -14,6 +14,13 @@ import (
 const (
 	cgroupV2MaxPath = "sys/fs/cgroup/memory.max"
 	cgroupV1MaxPath = "sys/fs/cgroup/memory/memory.limit_in_bytes"
+
+	// Bases for resolving the process's own cgroup subtree (see detectCgroupLimit).
+	cgroupV2Base    = "sys/fs/cgroup"        // unified (v2) mount
+	cgroupV1MemBase = "sys/fs/cgroup/memory" // v1 memory controller mount
+	cgroupV2File    = "memory.max"
+	cgroupV1File    = "memory.limit_in_bytes"
+	procSelfCgroup  = "proc/self/cgroup"
 )
 
 // cgroupV1UnlimitedThreshold guards against the cgroup v1 "unlimited" sentinel,
@@ -59,20 +66,84 @@ func effectiveTotal(host, cgroup int64) int64 {
 // detectCgroupLimit reads the cgroup memory limit under root, preferring cgroup
 // v2 (memory.max) and falling back to v1 (memory.limit_in_bytes). Returns 0 when
 // there is no limit or no cgroup files (root is parameterized for testability).
+//
+// It resolves the process's own cgroup subtree from /proc/self/cgroup and reads
+// the limit there before falling back to the cgroup mount root. The subtree path
+// matters when the container does not have a private cgroup namespace (e.g.
+// Docker --cgroupns=host, or cgroup v1), where the mount root holds the host's
+// unlimited value and the real per-container cap lives in a subtree.
 func detectCgroupLimit(root string) int64 {
-	if data, err := os.ReadFile(filepath.Join(root, cgroupV2MaxPath)); err == nil {
-		// v2 present: "max" means unlimited, a number is the cap.
-		if v, ok := parseCgroupV2Max(string(data)); ok {
-			return v
+	v2Sub, v1Sub := cgroupSubPaths(root)
+
+	// cgroup v2 (unified): process subtree first, then the cgroup mount root.
+	for _, rel := range distinctPaths(
+		filepath.Join(cgroupV2Base, v2Sub, cgroupV2File),
+		cgroupV2MaxPath,
+	) {
+		if data, err := os.ReadFile(filepath.Join(root, rel)); err == nil {
+			// v2 present: "max" means unlimited, a number is the cap.
+			if v, ok := parseCgroupV2Max(string(data)); ok {
+				return v
+			}
+			return 0
 		}
-		return 0
 	}
-	if data, err := os.ReadFile(filepath.Join(root, cgroupV1MaxPath)); err == nil {
-		if v, ok := parseCgroupV1Limit(string(data)); ok {
-			return v
+
+	// cgroup v1: the memory controller subtree first, then the mount root.
+	for _, rel := range distinctPaths(
+		filepath.Join(cgroupV1MemBase, v1Sub, cgroupV1File),
+		cgroupV1MaxPath,
+	) {
+		if data, err := os.ReadFile(filepath.Join(root, rel)); err == nil {
+			if v, ok := parseCgroupV1Limit(string(data)); ok {
+				return v
+			}
 		}
 	}
 	return 0
+}
+
+// cgroupSubPaths parses /proc/self/cgroup for the process's cgroup path under the
+// v2 unified hierarchy and the v1 memory controller. Either is "" when absent (a
+// namespaced container reports "/", which resolves back to the mount root).
+func cgroupSubPaths(root string) (v2Sub, v1Sub string) {
+	data, err := os.ReadFile(filepath.Join(root, procSelfCgroup))
+	if err != nil {
+		return "", ""
+	}
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
+		// Format: hierarchy-ID:controller-list:cgroup-path
+		parts := strings.SplitN(line, ":", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		controllers, path := parts[1], parts[2]
+		if parts[0] == "0" && controllers == "" {
+			v2Sub = path // unified v2 line: "0::<path>"
+			continue
+		}
+		for c := range strings.SplitSeq(controllers, ",") {
+			if c == "memory" {
+				v1Sub = path
+			}
+		}
+	}
+	return v2Sub, v1Sub
+}
+
+// distinctPaths returns the inputs with duplicates removed, preserving order. A
+// subtree path of "/" or "" cleans to the same path as the mount root, so this
+// avoids reading the same file twice.
+func distinctPaths(paths ...string) []string {
+	out := make([]string, 0, len(paths))
+	seen := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // parseCgroupV2Max parses memory.max: a byte count, or "max" for unlimited.

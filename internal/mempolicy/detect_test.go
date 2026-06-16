@@ -114,6 +114,34 @@ func TestDetectCgroupLimit(t *testing.T) {
 		got := detectCgroupLimit(root)
 		assert.Zero(t, got)
 	})
+
+	t.Run("cgroup v2 reads process subtree (host cgroupns)", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeFile(t, filepath.Join(root, procSelfCgroup), "0::/docker/abc123\n")
+		// Only the subtree holds the cap; the mount root would be the host's.
+		writeFile(t, filepath.Join(root, cgroupV2Base, "docker", "abc123", cgroupV2File), "536870912\n")
+		got := detectCgroupLimit(root)
+		assert.Equal(t, int64(536870912), got)
+	})
+
+	t.Run("cgroup v2 falls back to mount root when subtree file absent", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeFile(t, filepath.Join(root, procSelfCgroup), "0::/docker/abc123\n")
+		writeFile(t, filepath.Join(root, cgroupV2MaxPath), "268435456\n")
+		got := detectCgroupLimit(root)
+		assert.Equal(t, int64(268435456), got)
+	})
+
+	t.Run("cgroup v1 reads memory controller subtree", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeFile(t, filepath.Join(root, procSelfCgroup), "7:memory:/docker/abc123\n3:cpu,cpuacct:/docker/abc123\n")
+		writeFile(t, filepath.Join(root, cgroupV1MemBase, "docker", "abc123", cgroupV1File), "134217728\n")
+		got := detectCgroupLimit(root)
+		assert.Equal(t, int64(134217728), got)
+	})
 }
 
 func TestEffectiveTotal(t *testing.T) {

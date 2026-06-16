@@ -11,6 +11,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
+// bytesPerMiB converts byte counts to MiB for human-readable startup logging.
+const bytesPerMiB int64 = 1024 * 1024
+
 // ApplyMemoryPolicy detects the effective system memory (host RAM or cgroup cap)
 // and applies the runtime memory policy for constrained systems: a soft
 // GOMEMLIMIT backstop on the Go heap and a glibc malloc arena cap. It is gated by
@@ -34,9 +37,9 @@ func ApplyMemoryPolicy(settings *conf.Settings) {
 	log.Info("memory policy: low-memory controls active",
 		logger.String("mode", mode),
 		logger.String("reason", d.Reason),
-		logger.Int64("detected_ram_mb", d.TotalRAMBytes/(1024*1024)),
+		logger.Int64("detected_ram_mb", d.TotalRAMBytes/bytesPerMiB),
 		logger.Bool("gomemlimit_applied", res.Applied.MemLimitApplied),
-		logger.Int64("gomemlimit_mb", res.Applied.GoMemLimitBytes/(1024*1024)),
+		logger.Int64("gomemlimit_mb", res.Applied.GoMemLimitBytes/bytesPerMiB),
 		logger.Bool("arena_cap_applied", res.Applied.ArenaApplied),
 		logger.Int("arena_max", res.Applied.ArenaMax))
 }
