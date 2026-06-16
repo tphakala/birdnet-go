@@ -855,7 +855,7 @@ func TestGetSoxSpectrogramArgs_BatProfile(t *testing.T) {
 
 	// Bat profile: sinc high-pass filter, no rate resampling
 	assert.Contains(t, args, "sinc", "bat profile should use sinc high-pass filter")
-	assert.Contains(t, args, "18000", "bat profile should filter at 18 kHz")
+	assert.Contains(t, args, "15000", "bat profile should filter at 15 kHz")
 	assert.NotContains(t, args, "rate", "bat profile should not resample")
 }
 
@@ -879,7 +879,7 @@ func TestGetSoxSpectrogramArgs_BirdProfile(t *testing.T) {
 }
 
 // TestProfileForModelType verifies model type to frequency profile mapping.
-// Bat models resolve to the bat profile (no resample, 18 kHz high-pass);
+// Bat models resolve to the bat profile (no resample, 15 kHz high-pass);
 // every other model type falls back to bird defaults.
 func TestProfileForModelType(t *testing.T) {
 	t.Parallel()
@@ -891,7 +891,7 @@ func TestProfileForModelType(t *testing.T) {
 		wantHighPass int
 	}{
 		{"bird model", "bird", 24000, 0},
-		{"bat model uses bat profile", "bat", 0, 18000},
+		{"bat model uses bat profile", "bat", 0, 15000},
 		{"multi model defaults to bird", "multi", 24000, 0},
 		{"empty defaults to bird", "", 24000, 0},
 	}

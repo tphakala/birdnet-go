@@ -2,7 +2,7 @@ package spectrogram
 
 // FrequencyProfile controls spectrogram frequency range and resampling
 // per detection. The gate is the detection's model type: bat models get bat
-// settings (no resample, high-pass at 18 kHz) and everything else gets bird
+// settings (no resample, high-pass at 15 kHz) and everything else gets bird
 // defaults (resample to 24 kHz, full range).
 type FrequencyProfile struct {
 	ResampleRate int // Target sample rate in Hz; 0 means keep native rate
@@ -10,7 +10,10 @@ type FrequencyProfile struct {
 }
 
 const (
-	batHighPassHz   = 18000
+	// batHighPassHz removes content below the bat echolocation floor. Set to
+	// 15 kHz (rather than ~18 kHz) so the low-frequency calls of Noctule bats
+	// (Nyctalus noctula, ~16-20 kHz) are retained in the spectrogram.
+	batHighPassHz   = 15000
 	birdResampleHz  = 24000
 	modelTypeBatStr = "bat"
 )
@@ -25,7 +28,7 @@ func BirdProfile() FrequencyProfile {
 
 // BatProfile returns the frequency profile for bat detections captured
 // at 256 kHz. No resampling is applied (keeps native rate), and a
-// high-pass filter at 18 kHz removes content below the bat echolocation
+// high-pass filter at 15 kHz removes content below the bat echolocation
 // floor.
 func BatProfile() FrequencyProfile {
 	return FrequencyProfile{
