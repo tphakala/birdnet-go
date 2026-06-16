@@ -14,7 +14,10 @@ runs:
       uses: actions/cache@v5
       with:
         path: .cache/tensorflow
-        key: ${{ runner.os }}-tensorflow-${{ inputs.tflite-version }}
+        # Key bumped to "tensorflow-cache" so the new project-local path gets a
+        # fresh cache entry. Reusing the old key would restore the headers to the
+        # previous ~/src/tensorflow location and never re-save under the new path.
+        key: ${{ runner.os }}-tensorflow-cache-${{ inputs.tflite-version }}
 
     - name: Install Task
       uses: arduino/setup-task@v2

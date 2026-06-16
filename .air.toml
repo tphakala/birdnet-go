@@ -12,7 +12,9 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
   cmd = """
     # Enable CGO for TensorFlow Lite integration
     export CGO_ENABLED=1
-    export CGO_CFLAGS="-I${HOME}/src/tensorflow"
+    # Headers live in the project-local cache populated by `task check-tensorflow`.
+    # air runs this build command from the project root, so $(pwd) resolves there.
+    export CGO_CFLAGS="-I$(pwd)/.cache/tensorflow"
 
     # Set library paths based on OS
     if [ "$(uname)" = "Darwin" ]; then
