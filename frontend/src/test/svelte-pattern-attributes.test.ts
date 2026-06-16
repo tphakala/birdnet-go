@@ -42,9 +42,10 @@ function collectSvelteFiles(dir: string): string[] {
 // the closing quote to the opening one and yields the value in a single group.
 // The negative lookbehind excludes hyphenated/word-prefixed attributes such as
 // data-pattern= or aria-pattern=, which are not HTML form-control patterns and
-// are never compiled by the browser. Dynamic bindings (pattern={expr}) cannot
-// be evaluated statically and are intentionally skipped.
-const PATTERN_ATTR = /(?<![\w-])pattern=(["'])(.*?)\1/g;
+// are never compiled by the browser. Optional whitespace around `=` tolerates
+// hand-formatted markup. Dynamic bindings (pattern={expr}) cannot be evaluated
+// statically and are intentionally skipped.
+const PATTERN_ATTR = /(?<![\w-])pattern\s*=\s*(["'])(.*?)\1/g;
 
 interface FoundPattern {
   file: string;
@@ -54,7 +55,12 @@ interface FoundPattern {
 function extractPatterns(): FoundPattern[] {
   const results: FoundPattern[] = [];
   for (const file of collectSvelteFiles(SRC_DIR)) {
-    const text = readFileSync(file, 'utf8');
+    // Strip <script> and <style> blocks so a JS/TS variable or CSS token named
+    // `pattern` cannot be mistaken for an HTML form-control pattern attribute
+    // (only the markup region carries real pattern="" attributes).
+    const text = readFileSync(file, 'utf8')
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '');
     for (const m of text.matchAll(PATTERN_ATTR)) {
       results.push({ file: relative(SRC_DIR, file), value: m[2] });
     }
