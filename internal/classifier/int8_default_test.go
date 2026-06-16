@@ -156,34 +156,34 @@ func TestRemapV24ForONNXOnly(t *testing.T) {
 
 	t.Run("tflite available: unchanged", func(t *testing.T) {
 		t.Parallel()
-		got := remapV24ForONNXOnly(v24, true, findHit)
+		got := remapV24ForONNXOnly(&v24, true, findHit)
 		assert.Equal(t, DefaultModelVersion, got.ID)
 		assert.Equal(t, BackendTFLite, got.Backend)
 	})
 	t.Run("onnx-only + int8 present: remapped to INT8 ONNX", func(t *testing.T) {
 		t.Parallel()
-		got := remapV24ForONNXOnly(v24, false, findHit)
+		got := remapV24ForONNXOnly(&v24, false, findHit)
 		assert.Equal(t, RegistryIDBirdNETV24INT8, got.ID)
 		assert.Equal(t, BackendONNX, got.Backend)
 		assert.Equal(t, "/models/"+DefaultBirdNETINT8ONNXModelName, got.CustomPath)
 	})
 	t.Run("onnx-only but int8 absent: unchanged (fails clearly downstream)", func(t *testing.T) {
 		t.Parallel()
-		got := remapV24ForONNXOnly(v24, false, findMiss)
+		got := remapV24ForONNXOnly(&v24, false, findMiss)
 		assert.Equal(t, DefaultModelVersion, got.ID)
 	})
 	t.Run("explicit custom .tflite path: not remapped", func(t *testing.T) {
 		t.Parallel()
 		custom := v24
 		custom.CustomPath = "/data/model/my.tflite"
-		got := remapV24ForONNXOnly(custom, false, findHit)
+		got := remapV24ForONNXOnly(&custom, false, findHit)
 		assert.Equal(t, DefaultModelVersion, got.ID)
 		assert.Equal(t, "/data/model/my.tflite", got.CustomPath)
 	})
 	t.Run("non-v2.4 entry: unchanged", func(t *testing.T) {
 		t.Parallel()
 		perch := ModelRegistry[RegistryIDPerchV2]
-		got := remapV24ForONNXOnly(perch, false, findHit)
+		got := remapV24ForONNXOnly(&perch, false, findHit)
 		assert.Equal(t, RegistryIDPerchV2, got.ID)
 	})
 }

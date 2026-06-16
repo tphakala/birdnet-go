@@ -182,19 +182,19 @@ func labelModelID(id string) string {
 // working on ONNX-only images instead of failing to start on the missing TFLite
 // backend. An explicit model path (CustomPath set) is left untouched so a
 // user-supplied model is never silently swapped.
-func remapV24ForONNXOnly(info ModelInfo, tfliteAvailable bool, find func(name string) (path string, ok bool)) ModelInfo {
+func remapV24ForONNXOnly(info *ModelInfo, tfliteAvailable bool, find func(name string) (path string, ok bool)) ModelInfo {
 	if tfliteAvailable || info.CustomPath != "" {
-		return info
+		return *info
 	}
 	if info.Backend != BackendTFLite || info.ID != DefaultModelVersion {
-		return info
+		return *info
 	}
 	if path, ok := find(DefaultBirdNETINT8ONNXModelName); ok {
 		onnx := ModelRegistry[RegistryIDBirdNETV24INT8]
 		onnx.CustomPath = path
 		return onnx
 	}
-	return info
+	return *info
 }
 
 // defaultClassifierModelInfo resolves the classifier used when no model is
@@ -319,7 +319,12 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 		// (e.g. the int8 marker) wins over its prefix.
 		bestToken, bestID := "", ""
 		consider := func(token, registryID string) {
-			if len(token) > len(bestToken) && strings.Contains(lowerBase, strings.ToLower(token)) {
+			if !strings.Contains(lowerBase, strings.ToLower(token)) {
+				return
+			}
+			// Longest token wins; on equal length break ties lexically so resolution stays
+			// deterministic regardless of the randomized map iteration order above.
+			if len(token) > len(bestToken) || (len(token) == len(bestToken) && token < bestToken) {
 				bestToken, bestID = token, registryID
 			}
 		}
