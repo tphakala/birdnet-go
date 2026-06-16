@@ -78,6 +78,16 @@ else
     # Running in rootless mode (already running as target user)
     echo "Running in rootless mode (current UID: $CURRENT_UID)"
 
+    # Arbitrary-UID containers (K8s runAsNonRoot, no /etc/passwd entry) inherit
+    # HOME=/ (or empty), which is not writable. Config resolution then does
+    # `mkdir /.config` and the app aborts. Point HOME at the writable /config
+    # mount so config resolution and the symlink below work without the operator
+    # having to set HOME explicitly.
+    if [ -z "$HOME" ] || [ ! -w "$HOME" ]; then
+        export HOME=/config
+        echo "Adjusted HOME to /config for rootless config access"
+    fi
+
     # Just ensure directories exist (permissions already set in Dockerfile)
     mkdir -p /config /data/clips /data/models 2>/dev/null || true
 
