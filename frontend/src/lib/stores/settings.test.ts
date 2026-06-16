@@ -569,3 +569,142 @@ describe('Settings Store - UI Locale Preservation (#2756/#2760)', () => {
     expect(setLocale).not.toHaveBeenCalled();
   });
 });
+
+describe('Settings Store - syncTLSMode preserves unsaved Security edits', () => {
+  const baseSecurity = () => ({
+    baseUrl: '',
+    host: '',
+    autoTls: false,
+    tlsMode: '',
+    tlsPort: '8443',
+    selfSignedValidity: '1825d',
+    redirectToHttps: false,
+    basicAuth: { enabled: false, username: '', password: '' },
+    oauthProviders: [],
+    allowSubnetBypass: { enabled: false, subnet: '' },
+  });
+
+  const seed = (
+    formSecurity: ReturnType<typeof baseSecurity>,
+    originalSecurity: ReturnType<typeof baseSecurity>
+  ) => {
+    settingsStore.set({
+      formData: {
+        main: { name: 'TestNode' },
+        birdnet: {} as BirdNetSettings,
+        security: formSecurity,
+      } as SettingsFormData,
+      originalData: {
+        main: { name: 'TestNode' },
+        birdnet: {} as BirdNetSettings,
+        security: originalSecurity,
+      } as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'security',
+      error: null,
+      dataLoaded: true,
+    });
+  };
+
+  it('syncs tlsMode/autoTls into both formData and originalData (no spurious diff)', () => {
+    seed(baseSecurity(), baseSecurity());
+
+    settingsActions.syncTLSMode('selfsigned');
+
+    const s = get(settingsStore);
+    // Synced into both copies, so change detection sees no pending edit.
+    expect(s.formData.security?.tlsMode).toBe('selfsigned');
+    expect(s.originalData.security?.tlsMode).toBe('selfsigned');
+    expect(s.formData.security?.autoTls).toBe(false);
+    expect(s.originalData.security?.autoTls).toBe(false);
+  });
+
+  it('preserves unsaved edits in other Security fields', () => {
+    // The user typed a new Basic Auth password but has NOT saved it yet.
+    const form = {
+      ...baseSecurity(),
+      tlsMode: 'manual',
+      basicAuth: { enabled: true, username: '', password: 'unsaved-secret' },
+    };
+    const original = {
+      ...baseSecurity(),
+      tlsMode: '',
+      basicAuth: { enabled: false, username: '', password: '' },
+    };
+    seed(form, original);
+
+    settingsActions.syncTLSMode('manual');
+
+    const s = get(settingsStore);
+    // TLS mode is synced in both copies.
+    expect(s.formData.security?.tlsMode).toBe('manual');
+    expect(s.originalData.security?.tlsMode).toBe('manual');
+
+    // The unsaved password edit survives in formData...
+    expect(s.formData.security?.basicAuth.password).toBe('unsaved-secret');
+    expect(s.formData.security?.basicAuth.enabled).toBe(true);
+    // ...and is NOT promoted into the originalData baseline (still unsaved).
+    expect(s.originalData.security?.basicAuth.password).toBe('');
+    expect(s.originalData.security?.basicAuth.enabled).toBe(false);
+
+    // Other top-level fields must not vanish from either copy.
+    expect(s.formData.security?.tlsPort).toBe('8443');
+    expect(s.formData.security?.selfSignedValidity).toBe('1825d');
+    expect(s.originalData.security?.tlsPort).toBe('8443');
+  });
+
+  it('sets autoTls true for the autotls mode (both copies)', () => {
+    seed(baseSecurity(), baseSecurity());
+
+    settingsActions.syncTLSMode('autotls');
+
+    const s = get(settingsStore);
+    expect(s.formData.security?.tlsMode).toBe('autotls');
+    expect(s.originalData.security?.tlsMode).toBe('autotls');
+    expect(s.formData.security?.autoTls).toBe(true);
+    expect(s.originalData.security?.autoTls).toBe(true);
+  });
+
+  it('resets to none mode (empty string) on delete (both copies)', () => {
+    seed(
+      { ...baseSecurity(), tlsMode: 'selfsigned', autoTls: false },
+      { ...baseSecurity(), tlsMode: 'selfsigned', autoTls: false }
+    );
+
+    settingsActions.syncTLSMode('');
+
+    const s = get(settingsStore);
+    expect(s.formData.security?.tlsMode).toBe('');
+    expect(s.originalData.security?.tlsMode).toBe('');
+    expect(s.formData.security?.autoTls).toBe(false);
+    expect(s.originalData.security?.autoTls).toBe(false);
+  });
+
+  it('falls back to default security fields when the section is absent', () => {
+    // Defensive branch: a store seeded before the security section loaded.
+    // The sync must still yield a complete security object, not a bare
+    // { tlsMode, autoTls } that strips required fields.
+    settingsStore.set({
+      formData: { main: { name: 'TestNode' }, birdnet: {} as BirdNetSettings } as SettingsFormData,
+      originalData: {} as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'security',
+      error: null,
+      dataLoaded: true,
+    });
+
+    settingsActions.syncTLSMode('manual');
+
+    const s = get(settingsStore);
+    expect(s.formData.security?.tlsMode).toBe('manual');
+    expect(s.formData.security?.autoTls).toBe(false);
+    // Required fields are present (sourced from createEmptySettings defaults),
+    // not missing as they would be with a bare {} fallback.
+    expect(s.formData.security?.tlsPort).toBe('8443');
+    expect(s.formData.security?.basicAuth).toBeDefined();
+    expect(s.originalData.security?.tlsMode).toBe('manual');
+    expect(s.originalData.security?.basicAuth).toBeDefined();
+  });
+});
