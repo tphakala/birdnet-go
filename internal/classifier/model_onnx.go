@@ -11,11 +11,31 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+// onnxModelPath resolves the ONNX classifier model file: the explicit config
+// model path when set, otherwise ModelInfo.CustomPath (set by the arm64 default
+// resolver, defaultClassifierModelInfo). Returns "" when neither is set. Keeping
+// the default in CustomPath avoids mutating settings.BirdNET.ModelPath, which
+// would make the default indistinguishable from a user override.
+func (bn *BirdNET) onnxModelPath() string {
+	if bn.Settings.BirdNET.ModelPath != "" {
+		return bn.Settings.BirdNET.ModelPath
+	}
+	return bn.ModelInfo.CustomPath
+}
+
 // initializeONNXModel loads and initializes an ONNX model as the classifier backend.
 func (bn *BirdNET) initializeONNXModel() error {
 	start := time.Now()
 	log := GetLogger()
 	settings := bn.Settings
+
+	modelPath := bn.onnxModelPath()
+	if modelPath == "" {
+		return errors.Newf("ONNX classifier model path is empty").
+			Category(errors.CategoryModelInit).
+			Context("model_id", bn.ModelInfo.ID).
+			Build()
+	}
 
 	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, "ONNX classifier", "onnx_classifier", ""); err != nil {
 		return err
@@ -30,14 +50,14 @@ func (bn *BirdNET) initializeONNXModel() error {
 			Build()
 	}
 
-	classifier, err := inference.NewONNXClassifier(settings.BirdNET.ModelPath, inference.ONNXClassifierOptions{
+	classifier, err := inference.NewONNXClassifier(modelPath, inference.ONNXClassifierOptions{
 		Labels:  settings.BirdNET.Labels,
 		Threads: settings.BirdNET.Threads,
 	})
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
-			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(modelPath, bn.ModelInfo.ID).
 			Timing("onnx-model-init", time.Since(start)).
 			Build()
 	}
@@ -45,7 +65,7 @@ func (bn *BirdNET) initializeONNXModel() error {
 	bn.classifier = classifier
 
 	log.Info("ONNX model initialized",
-		logger.String("model", settings.BirdNET.ModelPath),
+		logger.String("model", modelPath),
 		logger.Int("species", classifier.NumSpecies()))
 
 	return nil

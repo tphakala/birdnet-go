@@ -138,15 +138,11 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 				Build()
 		}
 	default:
-		// Tier 4: default embedded model
-		info, ok := ModelRegistry[DefaultModelVersion]
-		if !ok {
-			return nil, errors.Newf("default model version %s not found in registry", DefaultModelVersion).
-				Component("birdnet").
-				Category(errors.CategoryModelInit).
-				Build()
-		}
-		bn.ModelInfo = info
+		// Tier 4: default classifier. On arm64 (container images ship the
+		// INT8-ARM ONNX model alongside the binary) this resolves to the
+		// reduced-memory ONNX model when present in the standard model paths;
+		// otherwise it falls back to the embedded BirdNET v2.4 TFLite model.
+		bn.ModelInfo = defaultClassifierModelInfo(runtime.GOARCH, findModelPathInStandardPaths)
 	}
 
 	// Load taxonomy data
@@ -223,11 +219,19 @@ func isONNXModel(path string) bool {
 	return strings.HasSuffix(strings.ToLower(expanded), ".onnx")
 }
 
+// usesONNXBackend reports whether the primary classifier should use the ONNX
+// backend. True when the configured model path is an .onnx file (explicit
+// selection) or when the resolved ModelInfo declares the ONNX backend (the
+// arm64 INT8 default, whose model path is empty and whose file is carried in
+// ModelInfo.CustomPath).
+func (bn *BirdNET) usesONNXBackend() bool {
+	return isONNXModel(bn.Settings.BirdNET.ModelPath) || bn.ModelInfo.Backend == BackendONNX
+}
+
 // initializeModel loads and initializes the primary BirdNET model.
-// Dispatches to ONNX or TFLite backend based on the model file extension.
+// Dispatches to the ONNX or TFLite backend (see usesONNXBackend).
 func (bn *BirdNET) initializeModel() error {
-	// If model path ends with .onnx, use the ONNX backend
-	if isONNXModel(bn.Settings.BirdNET.ModelPath) {
+	if bn.usesONNXBackend() {
 		return bn.initializeONNXModel()
 	}
 
@@ -459,6 +463,22 @@ func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
 		log.Info("Auto-selected v3.0 geomodel for compatible classifier",
 			logger.String("classifier", bn.ModelInfo.ID),
 			logger.String("models_dir", bn.modelsDir))
+	}
+
+	// On arm64 (container images ship the ONNX range filter instead of the TFLite
+	// MData models), prefer the ONNX MData range filter when no range filter is
+	// configured and the v3 geomodel was not auto-selected above. Routed locally
+	// only; settings are not published. The strict ONNX path is used (no labels
+	// file), so the model output dimension must match the classifier label count.
+	if rf.Model == "" && rf.ModelPath == "" {
+		if path, ok := defaultRangeFilterONNXPath(runtime.GOARCH, findModelPathInStandardPaths); ok {
+			localSettings := conf.CloneSettings(settings)
+			localSettings.BirdNET.RangeFilter.ModelPath = path
+			settings = localSettings
+			rf = settings.BirdNET.RangeFilter
+			log.Info("Selected ONNX range filter (arm64 default)",
+				logger.String("model_path", path))
+		}
 	}
 
 	switch resolveRangeFilterBackend(&rf) {
@@ -836,6 +856,16 @@ func (bn *BirdNET) ReloadRangeFilter() error {
 // This filename is used when searching standard paths for external model files in noembed builds.
 const DefaultBirdNETModelName = "BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
 
+// DefaultBirdNETINT8ONNXModelName is the expected filesystem basename for the INT8-ARM ONNX
+// classifier model. Shipped only in arm64 container images, where it becomes the default
+// classifier (see defaultClassifierModelInfo) to cut peak RSS versus the FP32 TFLite model.
+const DefaultBirdNETINT8ONNXModelName = "BirdNET_INT8_ARM.onnx"
+
+// DefaultRangeFilterV2ONNXModelName is the expected filesystem basename for the ONNX-converted
+// v2 range filter (MData) model. Shipped only in arm64 container images so the range filter can
+// run on ONNX when the TFLite range filter models are dropped from the image.
+const DefaultRangeFilterV2ONNXModelName = "BirdNET_MData_V2.onnx"
+
 // DefaultRangeFilterV1ModelName is the expected filesystem basename for the legacy (v1) range filter model file.
 // This filename is used when RangeFilter.Model is set to "legacy" in noembed builds.
 const DefaultRangeFilterV1ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite"
@@ -923,8 +953,10 @@ func getOSSpecificSystemPaths(modelName string) []string {
 // tryLoadModelFromStandardPaths attempts to load a model from standard locations.
 // It returns the model data, path, and an error if not found.
 // The error includes all attempted paths for debugging.
-func tryLoadModelFromStandardPaths(modelName, modelType string) (data []byte, path string, err error) {
-	// Build candidate paths using filepath.Join for all constructions
+// modelCandidatePaths returns the ordered list of standard locations to search
+// for a model file named modelName: working-directory-relative, OS-specific
+// system paths, and executable-relative paths.
+func modelCandidatePaths(modelName string) []string {
 	var candidatePaths []string
 
 	// Relative paths (resolved against current working directory)
@@ -945,6 +977,25 @@ func tryLoadModelFromStandardPaths(modelName, modelType string) (data []byte, pa
 			filepath.Join(exeDir, "..", "share", "birdnet-go", DefaultModelDirectory, modelName), // <exe-dir>/../share/birdnet-go/model/<name>
 		)
 	}
+
+	return candidatePaths
+}
+
+// findModelPathInStandardPaths returns the first standard-search-path location
+// where modelName exists on disk, without reading the file. Used to decide the
+// arm64 ONNX default (defaultClassifierModelInfo / range filter) where only the
+// path is needed and the file may be large.
+func findModelPathInStandardPaths(modelName string) (string, bool) {
+	for _, candidatePath := range modelCandidatePaths(modelName) {
+		if info, statErr := os.Stat(candidatePath); statErr == nil && !info.IsDir() {
+			return candidatePath, true
+		}
+	}
+	return "", false
+}
+
+func tryLoadModelFromStandardPaths(modelName, modelType string) (data []byte, path string, err error) {
+	candidatePaths := modelCandidatePaths(modelName)
 
 	// Attempt to read from each candidate path directly (no os.Stat to avoid TOCTOU)
 	for _, candidatePath := range candidatePaths {

@@ -30,11 +30,16 @@ const (
 
 // Registry ID constants for model identification across packages.
 const (
-	RegistryIDBirdNETV3 = "BirdNET_V3.0"
-	RegistryIDBSG       = "BSG"
-	RegistryIDBat       = "Bat"
-	RegistryIDPerchV2   = "Perch_V2"
+	RegistryIDBirdNETV3      = "BirdNET_V3.0"
+	RegistryIDBSG            = "BSG"
+	RegistryIDBat            = "Bat"
+	RegistryIDPerchV2        = "Perch_V2"
+	RegistryIDBirdNETV24INT8 = "BirdNET_V2.4_INT8"
 )
+
+// defaultBirdNETClassifierARM64Arch is the GOARCH for which container images
+// ship the INT8-ARM ONNX classifier as the memory-saving default classifier.
+const defaultBirdNETClassifierARM64Arch = "arm64"
 
 // DetectionNamePerch is the detection model name for Perch classifiers,
 // matching the DetectionName field in the ModelRegistry.
@@ -129,6 +134,54 @@ var ModelRegistry = map[string]ModelInfo{
 	},
 }
 
+// registerINT8Variant derives the INT8-ARM ONNX classifier entry from the
+// BirdNET v2.4 TFLite entry so the two stay in lockstep: identical species,
+// labels, locales, audio spec, and detection name/version (detections must be
+// attributed to "BirdNET 2.4" regardless of backend). Only the registry ID and
+// inference backend differ. It is deliberately not user-selectable by config ID
+// (ConfigAliases is cleared so it cannot collide with the "birdnet" alias); the
+// entry is reached only via the arm64 container default or an explicit ONNX
+// model path. Run as init() because it copies the v2.4 map entry.
+func init() {
+	base := ModelRegistry[DefaultModelVersion]
+	base.ID = RegistryIDBirdNETV24INT8
+	base.Backend = BackendONNX
+	base.ConfigAliases = nil
+	base.CustomPath = ""
+	base.Description = "BirdNET v2.4 INT8-ARM quantized (ONNX); reduced-memory default for arm64 containers"
+	ModelRegistry[RegistryIDBirdNETV24INT8] = base
+}
+
+// defaultClassifierModelInfo resolves the classifier used when no model is
+// selected via config (the Tier 4 default). On arm64, if the INT8-ARM ONNX
+// classifier is present in the standard model paths (shipped only in arm64
+// container images), it is preferred to cut peak RSS; otherwise the embedded
+// TFLite BirdNET v2.4 model is used. find reports the resolved on-disk path of a
+// model filename within the standard search paths.
+func defaultClassifierModelInfo(goarch string, find func(name string) (path string, ok bool)) ModelInfo {
+	if goarch == defaultBirdNETClassifierARM64Arch {
+		if path, ok := find(DefaultBirdNETINT8ONNXModelName); ok {
+			info := ModelRegistry[RegistryIDBirdNETV24INT8]
+			info.CustomPath = path
+			return info
+		}
+	}
+	return ModelRegistry[DefaultModelVersion]
+}
+
+// defaultRangeFilterONNXPath resolves the ONNX range filter (MData) model used
+// when no range filter is configured. On arm64 (container images ship the ONNX
+// range filter instead of the TFLite MData models) it returns the on-disk path
+// when present; on other architectures it returns false so the TFLite range
+// filter is used. find reports the resolved path of a model filename within the
+// standard search paths.
+func defaultRangeFilterONNXPath(goarch string, find func(name string) (path string, ok bool)) (string, bool) {
+	if goarch != defaultBirdNETClassifierARM64Arch {
+		return "", false
+	}
+	return find(DefaultRangeFilterV2ONNXModelName)
+}
+
 // birdnetVersionToRegistryID maps user-facing BirdNET version strings to registry IDs.
 var birdnetVersionToRegistryID = map[string]string{
 	"2.4": "BirdNET_V2.4",
@@ -186,6 +239,8 @@ var filenamePatterns = map[string]string{
 	"birdnet_v2.4":           "BirdNET_V2.4",
 	"birdnet-v2.4":           "BirdNET_V2.4",
 	"birdnet-go_classifier":  "BirdNET_V2.4", // custom-named classifier builds
+	"int8_arm":               RegistryIDBirdNETV24INT8, // INT8-ARM ONNX classifier (arm64 container default)
+	"int8-arm":               RegistryIDBirdNETV24INT8,
 	"birdnet_global_v3.0":    RegistryIDBirdNETV3,
 	"birdnet-v30":            RegistryIDBirdNETV3,
 	"birdnet_v3.0":           RegistryIDBirdNETV3,
