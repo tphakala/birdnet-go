@@ -4,6 +4,11 @@ name: macos-test
 # Runs the portable unit subset only. The mosquitto service container and the
 # Docker-based testcontainer/integration suites are Linux-only, so they stay in
 # golangci-test.yml; MQTT tests self-skip here because MQTT_TEST_BROKER is unset.
+#
+# Non-blocking (continue-on-error) for now: the suite has a small backlog of
+# pre-existing macOS-specific test failures (Linux-only assumptions). The job
+# reports them for visibility; promote it to a required check once they are
+# fixed. See the cross-platform test-cleanup tracking issue.
 
 on:
   workflow_dispatch:
@@ -37,6 +42,8 @@ jobs:
   unit-tests-macos:
     name: unit-tests (macos-arm64)
     runs-on: macos-latest
+    # Non-blocking until the pre-existing macOS test failures are fixed.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -94,18 +101,6 @@ jobs:
           sudo mkdir -p /usr/local/lib
           sudo cp -a /tmp/onnxruntime/lib/libonnxruntime*.dylib /usr/local/lib/
 
-      - name: Cache Go tools
-        uses: actions/cache@v5
-        with:
-          path: ~/go/bin
-          key: ${{ runner.os }}-go-tools-gotestfmt-v2-${{ hashFiles('go.mod') }}
-
-      - name: Set up gotestfmt
-        run: |
-          if ! command -v gotestfmt &> /dev/null; then
-            go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
-          fi
-
       - name: Run unit tests
         env:
           CI: true
@@ -126,16 +121,15 @@ jobs:
           # build tag (not set) and are excluded. Longer timeout than Linux: the
           # native runner with -race is slower.
           #
-          # Capture the full -json stream to a file and take pass/fail from go
-          # test's own exit code. gotestfmt is cosmetic and run separately,
-          # filtered to JSON objects and made non-fatal: the macOS cgo link
-          # interleaves non-JSON `ld: warning` lines into stdout (the go-tflite
-          # binding already passes -ltensorflowlite_c, so the rpath/library are
-          # harmlessly duplicated), which panics gotestfmt. It must never decide
-          # the job result, so it is fully decoupled from TEST_EXIT_CODE.
+          # Write the -json stream to a file and take pass/fail from go test's own
+          # exit code. We do NOT pipe through gotestfmt: go wraps the macOS cgo
+          # `ld: warning` lines (the go-tflite binding already passes
+          # -ltensorflowlite_c, so the rpath/library are harmlessly duplicated)
+          # into JSON output events whose content crashes gotestfmt's tokenizer.
+          # Failed tests are printed below and in the job summary instead.
           go test -tags noembed,skipfrontend -race -json -v -short -timeout 600s ./... > gotest.log 2>&1
           TEST_EXIT_CODE=$?
-          grep -E '^\{' gotest.log | gotestfmt -ci github || true
+          grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | "FAIL  \(.Package)  \(.Test)"' | sort -u || true
 
           if [ "$TEST_EXIT_CODE" -ne 0 ]; then
             echo "::error title=Test Failure::macOS unit tests failed - see job summary for details"

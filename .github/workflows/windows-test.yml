@@ -1,10 +1,13 @@
 name: windows-test
 
 # Tier 2 of cross-platform validation: native Windows (amd64) unit tests.
-# Marked continue-on-error (non-blocking) until the native toolchain path is
-# proven stable, then it can be promoted to a required check. Runs the portable
-# unit subset only: the mosquitto service container and Docker testcontainer
-# suites are not available here, and MQTT tests self-skip (MQTT_TEST_BROKER unset).
+# Marked continue-on-error (non-blocking): the toolchain/DLL path is new AND the
+# suite has a large backlog of pre-existing Windows-specific test failures
+# (path separators, error categories, file handling). The job reports them for
+# visibility; promote it to a required check once they are fixed. See the
+# cross-platform test-cleanup tracking issue. Runs the portable unit subset only:
+# the mosquitto service container and Docker testcontainer suites are not
+# available here, and MQTT tests self-skip (MQTT_TEST_BROKER unset).
 
 on:
   workflow_dispatch:
@@ -136,30 +139,23 @@ jobs:
           cygpath -w "$GITHUB_WORKSPACE/tflite_lib" >> "$GITHUB_PATH"
           cygpath -w "$GITHUB_WORKSPACE/onnxruntime/lib" >> "$GITHUB_PATH"
 
-      - name: Set up gotestfmt
-        run: |
-          if ! command -v gotestfmt &> /dev/null; then
-            go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
-          fi
-
       - name: Run unit tests
         env:
           CI: true
         run: |
-          # GitHub runs steps as `bash -eo pipefail`, so a failing `go test`
-          # pipeline would abort here before PIPESTATUS is captured and the failure
-          # summary never renders. Turn errexit OFF explicitly (set +e); pipefail
-          # stays on, and the explicit `exit "$TEST_EXIT_CODE"` still fails the step.
+          # GitHub runs steps as `bash -eo pipefail`; turn errexit OFF (set +e) so
+          # a failing test run does not abort before the summary renders. The
+          # explicit `exit "$TEST_EXIT_CODE"` still fails the step.
           set +e
 
-          # Capture the full -json stream to a file and take pass/fail from go
-          # test's own exit code. gotestfmt is cosmetic and run separately,
-          # filtered to JSON objects and made non-fatal, so non-JSON build output
-          # interleaved into the stream can never panic it into the result.
-          # Longer timeout than Linux: the native runner with -race is much slower.
+          # Write the -json stream to a file and take pass/fail from go test's own
+          # exit code (no gotestfmt: go can wrap non-JSON build output into JSON
+          # events whose content crashes its tokenizer). Failed tests are printed
+          # below and in the job summary. Longer timeout than Linux: the native
+          # runner with -race is much slower.
           go test -tags noembed,skipfrontend -race -json -v -short -timeout 600s ./... > gotest.log 2>&1
           TEST_EXIT_CODE=$?
-          grep -E '^\{' gotest.log | gotestfmt -ci github || true
+          grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | "FAIL  \(.Package)  \(.Test)"' | sort -u || true
 
           if [ "$TEST_EXIT_CODE" -ne 0 ]; then
             echo "::error title=Test Failure::Windows unit tests failed - see job summary for details"
