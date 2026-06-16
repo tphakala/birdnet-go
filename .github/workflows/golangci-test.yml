@@ -194,6 +194,7 @@ jobs:
           go test -tags=integration -race -timeout 300s -v \
             ./internal/datastore/v2 \
             ./internal/datastore/v2/repository/... \
+            ./internal/datastore/v2only \
             ./internal/mqtt/... \
             ./internal/spectrogram/... \
             ./internal/testutil/containers/... \
