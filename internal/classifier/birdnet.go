@@ -431,7 +431,8 @@ func resolveRangeFilterBackend(rf *conf.RangeFilterSettings) rangeFilterBackend 
 // Perch v2 and BirdNET v3.0 rely solely on the geomodel, and any other classifier
 // must surface as unhealthy rather than silently filtering against the v2.4 labels.
 func (bn *BirdNET) hasNativeRangeFilter() bool {
-	return isBirdNETV24Family(bn.ModelInfo.ID)
+	// ONNX-only builds (notflite) have no embedded TFLite range filter to fall back to.
+	return tfliteBackendAvailable && isBirdNETV24Family(bn.ModelInfo.ID)
 }
 
 func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
