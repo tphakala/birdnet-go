@@ -43,9 +43,10 @@ function collectSvelteFiles(dir: string): string[] {
 // The negative lookbehind excludes hyphenated/word-prefixed attributes such as
 // data-pattern= or aria-pattern=, which are not HTML form-control patterns and
 // are never compiled by the browser. Optional whitespace around `=` tolerates
-// hand-formatted markup. Dynamic bindings (pattern={expr}) cannot be evaluated
-// statically and are intentionally skipped.
-const PATTERN_ATTR = /(?<![\w-])pattern\s*=\s*(["'])(.*?)\1/g;
+// hand-formatted markup, and the `s` flag lets a value span multiple lines so
+// such an attribute is validated rather than silently skipped. Dynamic bindings
+// (pattern={expr}) cannot be evaluated statically and are intentionally skipped.
+const PATTERN_ATTR = /(?<![\w-])pattern\s*=\s*(["'])(.*?)\1/gs;
 
 interface FoundPattern {
   file: string;
