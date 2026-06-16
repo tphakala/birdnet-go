@@ -47,6 +47,7 @@ frontend/blob-report/
 frontend/tests/.auth/
 frontend/coverage/
 frontend/playwright-report*.zip
+frontend/report/
 REFACTOR_CHANGELOG.md
 .worktrees/
 .leann/
