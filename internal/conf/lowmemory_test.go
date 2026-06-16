@@ -20,6 +20,9 @@ func TestLowMemoryConfigGetMode(t *testing.T) {
 		{"on", "on", LowMemoryModeOn},
 		{"off", "off", LowMemoryModeOff},
 		{"unknown defaults to auto", "lowmem", LowMemoryModeAuto},
+		{"uppercase ON", "ON", LowMemoryModeOn},
+		{"mixed-case Off with whitespace", " Off ", LowMemoryModeOff},
+		{"mixed-case Auto", "Auto", LowMemoryModeAuto},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"iter"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -1297,9 +1298,14 @@ type LowMemoryConfig struct {
 // GetMode returns the effective low-memory mode, defaulting to "auto" for empty
 // or unrecognized values. Mirrors SpectrogramPreRender.GetMode.
 func (c *LowMemoryConfig) GetMode() string {
-	switch c.Mode {
-	case LowMemoryModeOn, LowMemoryModeOff, LowMemoryModeAuto:
-		return c.Mode
+	// Case-insensitive and whitespace-tolerant so the mode is robust even on a
+	// LowMemoryConfig that has not been through ValidateSettings (e.g. tests).
+	mode := strings.TrimSpace(c.Mode)
+	switch {
+	case strings.EqualFold(mode, LowMemoryModeOn):
+		return LowMemoryModeOn
+	case strings.EqualFold(mode, LowMemoryModeOff):
+		return LowMemoryModeOff
 	default:
 		return LowMemoryModeAuto
 	}
