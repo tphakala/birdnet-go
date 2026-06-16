@@ -1276,6 +1276,35 @@ type ModelsConfig struct {
 	Installed []string `yaml:"installed,omitempty" json:"installed,omitempty"` // list of installed model IDs managed by the model gallery
 }
 
+// Low-memory mode constants for the manual override.
+const (
+	LowMemoryModeAuto = "auto" // detect from system memory (default)
+	LowMemoryModeOn   = "on"   // force low-memory controls on
+	LowMemoryModeOff  = "off"  // force low-memory controls off
+)
+
+// LowMemoryConfig is the manual override for the runtime memory policy. The
+// policy (memory detection, GOMEMLIMIT, glibc arena cap, and future feature
+// gating) lives in internal/mempolicy; this only carries the operator's choice.
+//
+// This setting is applied once at startup (the arena cap must precede inference
+// threads), so changing it requires a restart; it is intentionally not exposed
+// as a hot-reloadable section.
+type LowMemoryConfig struct {
+	Mode string `yaml:"mode" json:"mode" mapstructure:"mode"` // "auto" (default), "on", "off"
+}
+
+// GetMode returns the effective low-memory mode, defaulting to "auto" for empty
+// or unrecognized values. Mirrors SpectrogramPreRender.GetMode.
+func (c *LowMemoryConfig) GetMode() string {
+	switch c.Mode {
+	case LowMemoryModeOn, LowMemoryModeOff, LowMemoryModeAuto:
+		return c.Mode
+	default:
+		return LowMemoryModeAuto
+	}
+}
+
 // BasicAuth holds settings for the password authentication
 type BasicAuth struct {
 	Enabled        bool          `yaml:"enabled" json:"enabled"`               // true to enable password authentication
@@ -1620,6 +1649,8 @@ type Settings struct {
 	Bat     BatConfig     `yaml:"bat" json:"bat"`         // Bat detection configuration
 	BSG     BSGConfig     `yaml:"bsg" json:"bsg"`         // BSG regional bird model configuration
 	Models  ModelsConfig  `yaml:"models" json:"models"`   // Global model enablement and management
+
+	LowMemory LowMemoryConfig `yaml:"lowmemory" json:"lowMemory" mapstructure:"lowmemory"` // Low-memory mode override (auto/on/off) for constrained systems
 
 	TaxonomySynonyms map[string]string `yaml:"taxonomySynonyms" json:"taxonomySynonyms" mapstructure:"taxonomySynonyms"` // Optional scientific-name synonym overrides merged with built-ins
 
