@@ -716,7 +716,7 @@
         label={t('settings.security.baseUrlLabel')}
         placeholder={t('settings.security.placeholders.baseUrl')}
         helpText={t('settings.security.baseUrlHelp')}
-        pattern="^https?://[^/:]+.*$"
+        pattern="^https?://[^\/:]+.*$"
         validationMessage={t('settings.security.baseUrlValidation')}
         disabled={store.isLoading || store.isSaving}
         onchange={updateBaseUrl}
