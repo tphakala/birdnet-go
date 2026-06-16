@@ -1351,23 +1351,30 @@ func (c *Controller) removeDetectionFiles(clipName string) {
 			logger.String("path", absClipPath))
 	}
 
-	// Remove all associated spectrogram files.
-	// Spectrograms follow the naming pattern: <basename>_<width>px.png
-	// and <basename>_<width>px-legend.png for each valid width.
+	// Remove all associated spectrogram files. Filenames follow
+	// buildSpectrogramPaths: <basename>_<width>px<profile><legend>.png, where the
+	// profile token is empty for the default bird render and "-bat" for the bat
+	// frequency profile, and the legend token is "" (raw) or "-legend". Enumerate
+	// every width x profile x variant so non-default (bat) spectrograms are not
+	// left orphaned on disk when their detection is deleted.
 	ext := filepath.Ext(normalized)
 	basePath := strings.TrimSuffix(absClipPath, ext)
 
+	profileTokens := []string{"", "-" + spectrogram.ProfileSuffix(spectrogram.BatProfile())}
+	legendTokens := []string{"", "-legend"}
+
 	removed := 0
-	suffixes := []string{"%s_%dpx.png", "%s_%dpx-legend.png"}
 	for _, width := range spectrogramWidths {
-		for _, sfx := range suffixes {
-			path := fmt.Sprintf(sfx, basePath, width)
-			if err := os.Remove(path); err == nil {
-				removed++
-			} else if !os.IsNotExist(err) {
-				log.Warn("Failed to remove spectrogram file",
-					logger.String("path", path),
-					logger.Error(err))
+		for _, profile := range profileTokens {
+			for _, legend := range legendTokens {
+				path := fmt.Sprintf("%s_%dpx%s%s.png", basePath, width, profile, legend)
+				if err := os.Remove(path); err == nil {
+					removed++
+				} else if !os.IsNotExist(err) {
+					log.Warn("Failed to remove spectrogram file",
+						logger.String("path", path),
+						logger.Error(err))
+				}
 			}
 		}
 	}

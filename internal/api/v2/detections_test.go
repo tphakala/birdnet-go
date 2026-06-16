@@ -1056,6 +1056,10 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 		baseName + "_258px.png",
 		baseName + "_1026px.png",
 		baseName + "_1026px-legend.png",
+		// Bat frequency-profile renders carry a "-bat" token; they must be removed
+		// too (regression test for orphaned bat spectrograms on detection delete).
+		baseName + "_1026px-bat.png",
+		baseName + "_1026px-bat-legend.png",
 	}
 	for _, sf := range spectrogramFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(clipDir, sf), []byte("fake-png"), 0o600))
