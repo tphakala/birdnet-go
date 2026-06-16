@@ -8,7 +8,6 @@ import (
 	stderrors "errors"
 	"io"
 	"net"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -77,8 +76,8 @@ func NewClient(settings *conf.Settings, observabilityMetrics *observability.Metr
 	config.TLS.ClientCert = settings.Realtime.MQTT.TLS.ClientCert
 	config.TLS.ClientKey = settings.Realtime.MQTT.TLS.ClientKey
 
-	// Auto-detect TLS from broker URL scheme
-	if strings.HasPrefix(config.Broker, "ssl://") || strings.HasPrefix(config.Broker, "tls://") || strings.HasPrefix(config.Broker, "mqtts://") {
+	// Auto-detect TLS from the broker URL scheme
+	if parts, err := parseBroker(config.Broker); err == nil && schemeImpliesTLS(parts.scheme) {
 		config.TLS.Enabled = true
 		log.Info("TLS enabled based on broker URL scheme")
 	}
@@ -661,8 +660,8 @@ func (c *client) configureClientOptions(log logger.Logger) (*mqtt.ClientOptions,
 
 // performDNSResolution resolves the broker hostname if it's not an IP address
 func (c *client) performDNSResolution(ctx context.Context, log logger.Logger) error {
-	// Parse the broker URL
-	u, err := url.Parse(c.config.Broker)
+	// Parse the broker address (tolerates scheme-less "host:port" addresses)
+	parts, err := parseBroker(c.config.Broker)
 	if err != nil {
 		log.Error("Invalid broker URL",
 			logger.Error(err))
@@ -678,7 +677,7 @@ func (c *client) performDNSResolution(ctx context.Context, log logger.Logger) er
 	// Perform DNS resolution (potentially blocking network I/O)
 	dnsCtx, dnsCancel := context.WithTimeout(ctx, DNSLookupTimeout)
 	defer dnsCancel()
-	host := u.Hostname()
+	host := parts.host
 	if net.ParseIP(host) == nil {
 		log.Debug("Resolving broker hostname",
 			logger.String("host", host))
@@ -1172,9 +1171,11 @@ func (c *client) createTLSConfig() (*tls.Config, error) {
 	return tlsConfig, nil
 }
 
-// extractBrokerHostname extracts the hostname from the broker URL
+// extractBrokerHostname extracts the hostname from the broker address for use
+// as the TLS ServerName. It routes through parseBroker so scheme-less and IPv6
+// broker addresses are handled consistently with the rest of the package.
 func (c *client) extractBrokerHostname() (string, error) {
-	u, err := url.Parse(c.config.Broker)
+	parts, err := parseBroker(c.config.Broker)
 	if err != nil {
 		return "", errors.Newf("failed to parse broker URL for TLS config: %v", err).
 			Component("mqtt").
@@ -1182,7 +1183,7 @@ func (c *client) extractBrokerHostname() (string, error) {
 			Context("broker", c.config.Broker).
 			Build()
 	}
-	return u.Hostname(), nil
+	return parts.host, nil
 }
 
 // loadCACertificate loads the CA certificate into the TLS config

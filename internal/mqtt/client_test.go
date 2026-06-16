@@ -638,50 +638,43 @@ func createTestClient(t *testing.T, broker string) (Client, *observability.Metri
 	return client, metrics
 }
 
-// TestIsIPAddress verifies the IP address detection function
-func TestIsIPAddress(t *testing.T) {
+// TestExtractBrokerHostname verifies the TLS ServerName hostname extraction
+// across scheme-less and scheme-prefixed broker addresses. Scheme-less
+// host:port addresses previously failed url.Parse with "first path segment in
+// URL cannot contain colon" (or silently yielded an empty hostname).
+func TestExtractBrokerHostname(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		name     string
-		input    string
-		expected bool
+		name         string
+		broker       string
+		wantHostname string
+		wantErr      bool
 	}{
-		// IPv4 addresses
-		{"Simple IPv4", "192.168.1.1", true},
-		{"IPv4 with tcp protocol", "tcp://192.168.1.1:1883", true},
-		{"IPv4 with mqtt protocol", "mqtt://10.0.0.1:1883", true},
-		{"IPv4 localhost", "127.0.0.1", true},
-		{"IPv4 with port", "127.0.0.1:1883", true},
-
-		// IPv6 addresses
-		{"Simple IPv6", "::1", true},
-		{"IPv6 localhost with brackets", "[::1]", true},
-		{"IPv6 with port", "[::1]:1883", true},
-		{"IPv6 with tcp protocol", "tcp://[2001:db8::1]:1883", true},
-		{"IPv6 with mqtt protocol", "mqtt://[2001:db8::1]:1883", true},
-		{"IPv6 address only", "2001:db8::1", true},
-		{"IPv6 with brackets", "[2001:db8::1]", true},
-
-		// Hostnames (should return false)
-		{"Simple hostname", "localhost", false},
-		{"Hostname with protocol", "mqtt://localhost:1883", false},
-		{"FQDN", "broker.hivemq.com", false},
-		{"FQDN with port", "test.mosquitto.org:1883", false},
-		{"Subdomain", "mqtt.example.com", false},
-
-		// Invalid inputs (should return false)
-		{"Empty string", "", false},
-		{"Invalid hostname", "not-an-ip", false},
-		{"Invalid IPv4", "256.256.256.256", false},
-		{"Invalid IPv6", "2001:zz::1", false},
-		{"Invalid protocol", "invalid://192.168.1.1", false},
-		{"Malformed IPv6 brackets", "[2001:db8::1", false},
-		{"IPv6 without closing bracket", "[2001:db8::1:1883", false},
+		{"Scheme-less hostname with port", "mybroker:1883", "mybroker", false},
+		{"Scheme-less IPv4 with port", "192.168.1.5:1883", "192.168.1.5", false},
+		{"Scheme-less IPv6 with port", "[::1]:1883", "::1", false},
+		{"Scheme-less bare hostname", "mybroker", "mybroker", false},
+		{"tcp scheme with port", "tcp://mybroker:1883", "mybroker", false},
+		{"ssl scheme with port", "ssl://host:8883", "host", false},
+		{"mqtts scheme with IPv6", "mqtts://[2001:db8::1]:8883", "2001:db8::1", false},
+		{"Malformed bracketed host", "tcp://[malformed", "", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isIPAddress(tt.input)
-			assert.Equal(t, tt.expected, result, "isIPAddress(%q) result mismatch", tt.input)
+			t.Parallel()
+
+			c := &client{config: Config{Broker: tt.broker}}
+			hostname, err := c.extractBrokerHostname()
+			if tt.wantErr {
+				require.Error(t, err, "extractBrokerHostname for %q expected an error", tt.broker)
+				assert.Contains(t, err.Error(), "failed to parse broker URL for TLS config",
+					"error message should describe the TLS parse failure")
+				return
+			}
+			require.NoError(t, err, "extractBrokerHostname for %q unexpected error", tt.broker)
+			assert.Equal(t, tt.wantHostname, hostname, "extractBrokerHostname for %q hostname mismatch", tt.broker)
 		})
 	}
 }
@@ -890,6 +883,19 @@ func TestPerformDNSResolution(t *testing.T) {
 		{
 			name:        "IPv6 address (no DNS needed)",
 			broker:      "tcp://[::1]:1883",
+			expectError: false,
+		},
+		{
+			// Regression: scheme-less IPv4 previously failed url.Parse with
+			// "first path segment in URL cannot contain colon".
+			name:        "Scheme-less IPv4 (no DNS needed)",
+			broker:      "8.8.8.8:1883",
+			expectError: false,
+		},
+		{
+			// Regression: scheme-less IPv6 literal previously failed url.Parse.
+			name:        "Scheme-less IPv6 (no DNS needed)",
+			broker:      "[::1]:1883",
 			expectError: false,
 		},
 		{
