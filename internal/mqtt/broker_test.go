@@ -47,6 +47,10 @@ func TestParseBroker(t *testing.T) {
 		{"tcp scheme with bracketed IPv6", "tcp://[2001:db8::1]:1883", "tcp", "2001:db8::1", "1883", false},
 		{"ssl scheme with IPv4", "ssl://192.168.1.5:8883", "ssl", "192.168.1.5", "8883", false},
 		{"uppercase scheme normalized to lowercase", "MQTTS://host:8883", "mqtts", "host", "8883", false},
+		// Scheme-full URLs with a path are parsed via url.Parse (the path must
+		// not leak into the host/port).
+		{"ws scheme with path", "ws://mybroker/mqtt", "ws", "mybroker", "", false},
+		{"wss scheme with port and path", "wss://mybroker:8883/mqtt", "wss", "mybroker", "8883", false},
 
 		// Malformed addresses.
 		{"unterminated IPv6 bracket", "[malformed", "", "", "", true},

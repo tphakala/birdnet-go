@@ -12,6 +12,7 @@ package mqtt
 
 import (
 	"net"
+	"net/url"
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -52,26 +53,34 @@ func (b brokerParts) hostPort() string {
 	return net.JoinHostPort(b.host, port)
 }
 
-// parseBroker splits an MQTT broker address into its scheme, host, and port. It
-// tolerates the scheme-less "host:port" form and is IPv6-safe, accepting both
-// bracketed "[2001:db8::1]:1883" and bare "2001:db8::1" literals. A genuinely
-// malformed address (such as an unterminated IPv6 bracket) returns an error.
+// parseBroker splits an MQTT broker address into its scheme, host, and port.
+//
+// An address that carries a scheme is a full URL: url.Parse handles it
+// correctly, including paths (ws://host/mqtt), userinfo, and IPv6 brackets, and
+// matches how the paho client parses the same string. Scheme-less "host:port"
+// addresses, which url.Parse mishandles, fall back to splitBrokerHostPort
+// (IPv6-safe, accepting both bracketed and bare literals). A genuinely malformed
+// address (such as an unterminated IPv6 bracket) returns an error. Schemes are
+// normalized to lowercase since they are case-insensitive (RFC 3986).
 func parseBroker(broker string) (brokerParts, error) {
 	s := strings.TrimSpace(broker)
 
-	var scheme string
-	if before, after, found := strings.Cut(s, "://"); found {
-		// Schemes are case-insensitive (RFC 3986); normalize so TLS inference
-		// matches regardless of the casing the user typed.
-		scheme = strings.ToLower(before)
-		s = after
+	if strings.Contains(s, "://") {
+		u, err := url.Parse(s)
+		if err != nil {
+			return brokerParts{}, errors.Newf("failed to parse broker address %q: %v", broker, err).
+				Component("mqtt").
+				Category(errors.CategoryConfiguration).
+				Build()
+		}
+		return brokerParts{scheme: strings.ToLower(u.Scheme), host: u.Hostname(), port: u.Port()}, nil
 	}
 
 	host, port, err := splitBrokerHostPort(s)
 	if err != nil {
 		return brokerParts{}, err
 	}
-	return brokerParts{scheme: scheme, host: host, port: port}, nil
+	return brokerParts{scheme: "", host: host, port: port}, nil
 }
 
 // splitBrokerHostPort splits a scheme-less "host:port" into host and port. It is

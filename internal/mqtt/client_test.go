@@ -658,6 +658,8 @@ func TestExtractBrokerHostname(t *testing.T) {
 		{"tcp scheme with port", "tcp://mybroker:1883", "mybroker", false},
 		{"ssl scheme with port", "ssl://host:8883", "host", false},
 		{"mqtts scheme with IPv6", "mqtts://[2001:db8::1]:8883", "2001:db8::1", false},
+		{"ws scheme with path", "ws://mybroker/mqtt", "mybroker", false},
+		{"wss scheme with port and path", "wss://mybroker:8883/mqtt", "mybroker", false},
 		{"Malformed bracketed host", "tcp://[malformed", "", true},
 	}
 
