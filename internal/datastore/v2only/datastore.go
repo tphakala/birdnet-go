@@ -2741,6 +2741,19 @@ func (ds *Datastore) GetSpeciesDetectionDatesInPeriod(ctx context.Context, start
 	return results, nil
 }
 
+// scientificNameLikeEscaper escapes the LIKE metacharacters %, _, and the escape
+// character itself in a user-supplied scientific name, using '!' as the escape
+// character. '!' is not special in any SQL dialect's string literals, so the
+// generated SQL is identical and valid on MySQL, SQLite, and Postgres. A backslash
+// escape ('\') must NOT be used: MySQL's default sql_mode treats a lone backslash
+// in a string literal as an escape character, so "ESCAPE '\'" swallows the closing
+// quote and raises a syntax error (Error 1064). SQLite does not treat backslash as
+// special, which is why that only broke MySQL.
+//
+// It is a package-level value because strings.Replacer precomputes its matcher and
+// is safe for concurrent use, so there is no need to rebuild it on every call.
+var scientificNameLikeEscaper = strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `!_`)
+
 // GetSpeciesLastDetectionDateBefore returns the last detection date before the given date.
 func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scientificName, beforeDate string) (string, error) {
 	before, err := time.ParseInLocation(time.DateOnly, beforeDate, ds.timezone)
@@ -2755,14 +2768,8 @@ func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scie
 		LastSeenDate string `gorm:"column:last_seen_date"`
 	}
 
-	// Escape LIKE metacharacters using '!' as the escape character. '!' is not
-	// special in any SQL dialect's string literals, so the generated SQL is
-	// identical and valid on MySQL, SQLite, and Postgres. A backslash escape
-	// ('\') must NOT be used here: MySQL's default sql_mode treats a lone
-	// backslash in a string literal as an escape character, so "ESCAPE '\'"
-	// swallows the closing quote and raises a syntax error (Error 1064). SQLite
-	// does not treat backslash as special, which is why this only broke MySQL.
-	escapedScientificName := strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `!_`).Replace(scientificName)
+	// Escape LIKE metacharacters with '!' (see scientificNameLikeEscaper).
+	escapedScientificName := scientificNameLikeEscaper.Replace(scientificName)
 	prefix := ds.manager.TablePrefix()
 	query := ds.manager.DB().WithContext(ctx).
 		Table(prefix+"detections d").
