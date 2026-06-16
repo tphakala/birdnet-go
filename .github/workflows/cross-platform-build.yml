@@ -1,0 +1,142 @@
+name: cross-platform-build
+
+# Tier 0 of cross-platform validation: cheap compile-only smoke on Ubuntu.
+# Cross-compiles the real release binary (non-test code) AND cross type-checks
+# every package including *_test.go files via `go vet`, for the platforms that
+# can be CGO-cross-compiled from Linux (windows/amd64 via mingw, linux/arm64).
+# darwin/arm64 cannot CGO-cross-compile from Linux without an osxcross
+# toolchain; its compile coverage comes from the native macos-test workflow.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/cross-platform-build.yml'
+      - '.github/actions/**'
+  pull_request:
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/cross-platform-build.yml'
+      - '.github/actions/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-platform-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cross-build:
+    name: cross-build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            cc: x86_64-w64-mingw32-gcc
+            libdir: /usr/x86_64-w64-mingw32/lib
+            tflite_asset: windows_amd64.zip
+          - goos: linux
+            goarch: arm64
+            cc: aarch64-linux-gnu-gcc
+            libdir: /usr/aarch64-linux-gnu/lib
+            tflite_asset: linux_arm64.tar.gz
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - run: go version
+
+      - name: Resolve tool versions from Taskfile
+        run: |
+          # Single source of truth: read TFLITE_VERSION from the Taskfile so this
+          # smoke never validates against a stale version after a Taskfile bump.
+          tflite=$(grep -E '^[[:space:]]*TFLITE_VERSION:' Taskfile.yml | head -1 | tr -d ' ' | cut -d: -f2 | tr -d "'\"")
+          if [ -z "$tflite" ]; then echo "::error::could not read TFLITE_VERSION from Taskfile.yml"; exit 1; fi
+          echo "TFLITE_VERSION=${tflite}" >> "$GITHUB_ENV"
+
+      - name: Install cross toolchains
+        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f # v1.6.1
+        with:
+          packages: build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
+          version: 1.0
+
+      - name: Fix cross-compiler symlinks
+        run: |
+          # cache-apt-pkgs-action restores debs but skips post-install triggers,
+          # so create the symlinks that update-alternatives would normally manage
+          sudo ln -sf /usr/bin/x86_64-w64-mingw32-gcc-posix /usr/bin/x86_64-w64-mingw32-gcc
+          sudo ln -sf /usr/bin/x86_64-w64-mingw32-g++-posix /usr/bin/x86_64-w64-mingw32-g++
+          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc-13 /usr/bin/aarch64-linux-gnu-gcc
+
+      - name: Provision TensorFlow headers
+        run: |
+          # Sparse-checkout the TFLite C API headers (same as the check-tensorflow
+          # task) for CGO_CFLAGS. Scripted inline to keep this a Go-only compile
+          # smoke: `task <target>` would drag in the frontend-build (npm) chain,
+          # which is platform-independent and adds no cross-platform signal.
+          if [ ! -f .cache/tensorflow/tensorflow/lite/c/c_api.h ]; then
+            git clone --branch "${TFLITE_VERSION}" --filter=blob:none --no-checkout --depth 1 \
+              https://github.com/tensorflow/tensorflow.git .cache/tensorflow
+            git -C .cache/tensorflow sparse-checkout set --no-cone '**/*.h'
+            git -C .cache/tensorflow checkout
+          fi
+
+      - name: Provision TensorFlow Lite library
+        run: |
+          # CGO links -ltensorflowlite_c, so the target lib must exist at link
+          # time. Place it in the cross sysroot lib dir under the symlink name the
+          # linker resolves (mirrors the download-tflite task). ONNX Runtime is
+          # dlopen'd at runtime, not linked, so it is intentionally not provisioned.
+          ver="${TFLITE_VERSION#v}"
+          curl -fsSL -o tflite.archive \
+            "https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_${{ matrix.tflite_asset }}"
+          sudo mkdir -p "${{ matrix.libdir }}"
+          case "${{ matrix.tflite_asset }}" in
+            *.zip)
+              unzip -o tflite.archive
+              sudo mv "tensorflowlite_c-${ver}.dll" "${{ matrix.libdir }}/"
+              (cd "${{ matrix.libdir }}" && sudo ln -sf "tensorflowlite_c-${ver}.dll" tensorflowlite_c.dll)
+              ;;
+            *)
+              tar -xzf tflite.archive
+              sudo mv "libtensorflowlite_c.so.${ver}" "${{ matrix.libdir }}/"
+              (cd "${{ matrix.libdir }}" && sudo ln -sf "libtensorflowlite_c.so.${ver}" libtensorflowlite_c.so)
+              ;;
+          esac
+          rm -f tflite.archive
+
+      - name: Build smoke (cross-compile, non-test code)
+        run: |
+          # Compile + link every non-test package for the target GOOS. noembed and
+          # skipfrontend skip model/frontend embedding, so no dist/models are
+          # required and the frontend build is not pulled in.
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+          CGO_ENABLED=1 CC=${{ matrix.cc }} \
+          CGO_CFLAGS="-I${{ github.workspace }}/.cache/tensorflow" \
+          CGO_LDFLAGS="-L${{ matrix.libdir }} -ltensorflowlite_c" \
+          go build -tags noembed,skipfrontend ./...
+
+      - name: Vet (type-checks test files too, no link, no run)
+        run: |
+          # `go build` ignores *_test.go, so a platform-specific mistake in a test
+          # helper would slip through. `go vet` compiles every package including
+          # its test files for the target GOOS without linking or running, catching
+          # those regressions cheaply.
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+          CGO_ENABLED=1 CC=${{ matrix.cc }} \
+          CGO_CFLAGS="-I${{ github.workspace }}/.cache/tensorflow" \
+          CGO_LDFLAGS="-L${{ matrix.libdir }} -ltensorflowlite_c" \
+          go vet -tags noembed,skipfrontend ./...

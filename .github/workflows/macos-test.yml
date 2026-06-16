@@ -1,0 +1,151 @@
+name: macos-test
+
+# Tier 1 of cross-platform validation: native macOS (Apple Silicon) unit tests.
+# Runs the portable unit subset only. The mosquitto service container and the
+# Docker-based testcontainer/integration suites are Linux-only, so they stay in
+# golangci-test.yml; MQTT tests self-skip here because MQTT_TEST_BROKER is unset.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/macos-test.yml'
+      - '.github/actions/**'
+  pull_request:
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/macos-test.yml'
+      - '.github/actions/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests-macos:
+    name: unit-tests (macos-arm64)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - run: go version
+
+      - name: Resolve tool versions from Taskfile
+        run: |
+          # Single source of truth: read TFLITE_VERSION from the Taskfile so the
+          # inline dylib download stays in lockstep with the headers that
+          # `task check-tensorflow` provisions (both use the Taskfile version).
+          tflite=$(grep -E '^[[:space:]]*TFLITE_VERSION:' Taskfile.yml | head -1 | tr -d ' ' | cut -d: -f2 | tr -d "'\"")
+          if [ -z "$tflite" ]; then echo "::error::could not read TFLITE_VERSION from Taskfile.yml"; exit 1; fi
+          echo "TFLITE_VERSION=${tflite}" >> "$GITHUB_ENV"
+
+      - name: Install FFmpeg and SoX
+        run: brew install ffmpeg sox
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup TensorFlow headers
+        run: task check-tensorflow
+
+      - name: Setup TensorFlow Lite library
+        run: |
+          # Provision the native arm64 TFLite dylib into /opt/homebrew/lib, the
+          # same location the darwin_arm64 build task uses. Mirrors the symlink
+          # naming (libtensorflowlite_c.dylib -> versioned dylib) that lets the
+          # linker resolve -ltensorflowlite_c.
+          curl -fsSL -o tflite.tgz \
+            "https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_darwin_arm64.tar.gz"
+          tar -xzf tflite.tgz
+          rm -f tflite.tgz
+          sudo mkdir -p /opt/homebrew/lib
+          sudo mv "libtensorflowlite_c.${TFLITE_VERSION#v}.dylib" /opt/homebrew/lib/
+          (cd /opt/homebrew/lib && sudo ln -sf "libtensorflowlite_c.${TFLITE_VERSION#v}.dylib" libtensorflowlite_c.dylib)
+
+      - name: Setup ONNX Runtime
+        uses: ./.github/actions/setup-onnxruntime
+        with:
+          target-platform: darwin-arm64
+
+      - name: Install ONNX Runtime to default loader path
+        run: |
+          # ONNX Runtime is dlopen'd at runtime via purego, not linked. Copy it
+          # to /usr/local/lib, which dyld searches by default even on Apple
+          # Silicon, so DYLD_* env vars (stripped by SIP from child test binaries)
+          # are not needed.
+          sudo mkdir -p /usr/local/lib
+          sudo cp -a /tmp/onnxruntime/lib/libonnxruntime*.dylib /usr/local/lib/
+
+      - name: Cache Go tools
+        uses: actions/cache@v5
+        with:
+          path: ~/go/bin
+          key: ${{ runner.os }}-go-tools-gotestfmt-v2-${{ hashFiles('go.mod') }}
+
+      - name: Set up gotestfmt
+        run: |
+          if ! command -v gotestfmt &> /dev/null; then
+            go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
+          fi
+
+      - name: Run unit tests
+        env:
+          CI: true
+          CGO_ENABLED: 1
+          CGO_CFLAGS: -I${{ github.workspace }}/.cache/tensorflow
+          # rpath is baked into the test binaries so dyld finds libtensorflowlite_c
+          # even though SIP strips DYLD_* from the child processes `go test` spawns.
+          CGO_LDFLAGS: -L/opt/homebrew/lib -ltensorflowlite_c -Wl,-rpath,/opt/homebrew/lib
+        run: |
+          # GitHub runs steps as `bash -eo pipefail`, so a failing `go test`
+          # pipeline would abort here before PIPESTATUS is captured and the failure
+          # summary never renders. Turn errexit OFF explicitly (set +e); pipefail
+          # stays on, and the explicit `exit "$TEST_EXIT_CODE"` still fails the step.
+          set +e
+
+          # noembed,skipfrontend skip model/frontend embedding. -short skips the
+          # heavy suites; testcontainer/integration tests need the `integration`
+          # build tag (not set) and are excluded.
+          go test -tags noembed,skipfrontend -race -json -v -short -timeout 300s ./... 2>&1 | tee gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
+
+          if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+            echo "::error title=Test Failure::macOS unit tests failed - see job summary for details"
+            {
+              echo "## :x: macOS Test Run Failed"
+              echo ""
+              echo "Exit code: $TEST_EXIT_CODE"
+              echo ""
+              echo "### Quick Preview of Failures"
+              echo '```'
+              grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | (.Package + " " + .Test)' | head -20 || echo "Failed to parse test failures"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$TEST_EXIT_CODE"
+          fi
+
+          echo "## :white_check_mark: All macOS Tests Passed" >> "$GITHUB_STEP_SUMMARY"
+        timeout-minutes: 15
+
+      - name: Upload test log
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-log-macos
+          path: gotest.log
+          if-no-files-found: error
