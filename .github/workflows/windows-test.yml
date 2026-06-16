@@ -15,6 +15,7 @@ on:
       - '**/*.go'
       - 'go.mod'
       - 'go.sum'
+      - 'Taskfile.yml'
       - '.github/workflows/windows-test.yml'
       - '.github/actions/**'
   pull_request:
@@ -22,6 +23,7 @@ on:
       - '**/*.go'
       - 'go.mod'
       - 'go.sum'
+      - 'Taskfile.yml'
       - '.github/workflows/windows-test.yml'
       - '.github/actions/**'
 
@@ -150,16 +152,14 @@ jobs:
           # stays on, and the explicit `exit "$TEST_EXIT_CODE"` still fails the step.
           set +e
 
-          # Redirect build/linker stderr to a file (NOT 2>&1) so non-JSON build
-          # output never reaches gotestfmt and panics it; keep the pipe pure
-          # test2json so PIPESTATUS reflects go test's real result.
-          go test -tags noembed,skipfrontend -race -json -v -short -timeout 300s ./... 2>gotest.err | tee gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
-
-          if [ -s gotest.err ]; then
-            echo "::group::go test build/linker stderr"
-            cat gotest.err
-            echo "::endgroup::"
-          fi
+          # Capture the full -json stream to a file and take pass/fail from go
+          # test's own exit code. gotestfmt is cosmetic and run separately,
+          # filtered to JSON objects and made non-fatal, so non-JSON build output
+          # interleaved into the stream can never panic it into the result.
+          # Longer timeout than Linux: the native runner with -race is much slower.
+          go test -tags noembed,skipfrontend -race -json -v -short -timeout 600s ./... > gotest.log 2>&1
+          TEST_EXIT_CODE=$?
+          grep -E '^\{' gotest.log | gotestfmt -ci github || true
 
           if [ "$TEST_EXIT_CODE" -ne 0 ]; then
             echo "::error title=Test Failure::Windows unit tests failed - see job summary for details"
@@ -177,14 +177,12 @@ jobs:
           fi
 
           echo "## :white_check_mark: All Windows Tests Passed" >> "$GITHUB_STEP_SUMMARY"
-        timeout-minutes: 20
+        timeout-minutes: 25
 
       - name: Upload test log
         uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-log-windows
-          path: |
-            gotest.log
-            gotest.err
+          path: gotest.log
           if-no-files-found: warn
