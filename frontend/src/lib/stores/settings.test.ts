@@ -67,7 +67,6 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
       isSaving: false,
       activeSection: 'main',
       error: null,
-      restartRequired: false,
       dataLoaded: false,
     });
   });
@@ -289,7 +288,6 @@ describe('Settings Store - Model/Label Path Null Conversion', () => {
       isSaving: false,
       activeSection: 'main',
       error: null,
-      restartRequired: false,
       dataLoaded: false,
     });
   });
@@ -517,7 +515,6 @@ describe('Settings Store - UI Locale Preservation (#2756/#2760)', () => {
       isSaving: false,
       activeSection: 'main',
       error: null,
-      restartRequired: false,
       dataLoaded: false,
     });
   };

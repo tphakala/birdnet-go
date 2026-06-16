@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"gopkg.in/yaml.v3"
@@ -335,8 +336,10 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]any{
-		"message":       "Settings updated successfully",
-		"skippedFields": skippedFields,
+		"message":          "Settings updated successfully",
+		"skippedFields":    skippedFields,
+		"restart_required": restart.IsRestartRequired(),
+		"restart_reasons":  restart.GetRestartReasons(),
 	})
 }
 
@@ -741,8 +744,10 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
 	return ctx.JSON(http.StatusOK, map[string]any{
-		"message":       fmt.Sprintf("%s settings updated successfully", section),
-		"skippedFields": skippedFields,
+		"message":          fmt.Sprintf("%s settings updated successfully", section),
+		"skippedFields":    skippedFields,
+		"restart_required": restart.IsRestartRequired(),
+		"restart_reasons":  restart.GetRestartReasons(),
 	})
 }
 
@@ -2123,6 +2128,16 @@ type settingsChangeCheck struct {
 	duration int                                    // Toast duration in milliseconds
 }
 
+// Restart-reason i18n keys recorded via restart.MarkRestartRequired when a
+// restart-requiring setting changes. The frontend RestartBanner resolves these
+// via t(). Named constants to avoid magic strings.
+const (
+	reasonWebserverRestart = "restart.reasons.webserver"
+	reasonDatabaseRestart  = "restart.reasons.database"
+	reasonLoggingRestart   = "restart.reasons.logging"
+	reasonTLSCertRestart   = "restart.reasons.tlsCertificate"
+)
+
 // settingsChangeChecks defines all settings change detectors in order of execution.
 // Each check has a detection function, action to trigger, and toast notification.
 var settingsChangeChecks = []settingsChangeCheck{
@@ -2139,15 +2154,30 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, "info", toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", "info", toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, "warning", toastDurationExtended},
+	{"Database", "", outputSettingsChanged, "Database settings changed. Restart required to apply.", notification.MsgSettingsDatabaseRestart, "warning", toastDurationExtended},
+	{"Logging", "", loggingSettingsChanged, "Logging settings changed. Restart required to apply.", notification.MsgSettingsLoggingRestart, "warning", toastDurationExtended},
 	{"Log deduplication", "reconfigure_log_deduplication", logDeduplicationSettingsChanged, "Reconfiguring log deduplication...", "", "info", toastDurationShort},
 	{"RTSP health", "reconfigure_rtsp_health", rtspHealthSettingsChanged, "Reconfiguring RTSP health monitoring...", "", "info", toastDurationShort},
 	{"Monitoring", "reconfigure_monitoring", monitoringSettingsChanged, "Reconfiguring system monitoring...", "", "info", toastDurationShort},
 	{"Live stream", "reconfigure_livestream", liveStreamSettingsChanged, "Reconfiguring live stream settings...", "", "info", toastDurationShort},
 }
 
+// restartRequiringChecks maps a settingsChangeChecks entry (by name) to the i18n
+// reason key recorded via restart.MarkRestartRequired when that check fires.
+// These settings configure resources bound once at startup (HTTP listener, DB
+// connection, log sinks) and cannot hot-reload. Names MUST match table entries
+// above; settings_restart_test.go cross-validates these keys against the table
+// names and against the hot-reload registry's `restart` category.
+var restartRequiringChecks = map[string]string{
+	"Web server": reasonWebserverRestart,
+	"Database":   reasonDatabaseRestart,
+	"Logging":    reasonLoggingRestart,
+}
+
 // handleSettingsChanges checks if important settings have changed and triggers appropriate actions
 func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Settings) error {
 	var reconfigActions []string
+	var restartReasons []string
 
 	// Process all settings change checks using table-driven approach
 	for _, check := range settingsChangeChecks {
@@ -2159,15 +2189,30 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 			if check.toast != "" || check.toastKey != "" {
 				_ = c.SendToastWithKey(check.toast, check.toastTyp, check.duration, check.toastKey, nil)
 			}
+			// Defer the actual restart-required mark until all fallible work below
+			// has succeeded (see below); only collect the reason here.
+			if reasonKey, ok := restartRequiringChecks[check.name]; ok {
+				restartReasons = append(restartReasons, reasonKey)
+			}
 		}
 	}
 
 	// Handle audio settings changes (separate due to error return)
 	audioActions, err := c.handleAudioSettingsChanges(oldSettings, currentSettings)
 	if err != nil {
+		// Audio reconfig failed; the caller rolls back the settings snapshot, so
+		// the change is not applied. Do NOT mark restart-required, otherwise the
+		// banner would nag for a change that never persisted.
 		return err
 	}
 	reconfigActions = append(reconfigActions, audioActions...)
+
+	// Mark restart-required now that the fallible detection above has succeeded.
+	// The restart flag is process-global and sticky, so marking it before a
+	// possible error/rollback would leave a stuck banner.
+	for _, reason := range restartReasons {
+		restart.MarkRestartRequired(reason)
+	}
 
 	// Trigger reconfigurations asynchronously.
 	// Capture debug flag from the settings snapshot so the goroutine never
@@ -2490,10 +2535,13 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	oldWS := oldSettings.WebServer
 	newWS := currentSettings.WebServer
 
-	// Check web server core settings
+	// Check web server core settings that require a restart to apply. Debug is
+	// intentionally excluded: it hot-reloads (registry category `fresh`), so it
+	// must not trigger the restart-required toast/banner.
 	if oldWS.Port != newWS.Port ||
 		oldWS.Enabled != newWS.Enabled ||
-		oldWS.Debug != newWS.Debug {
+		oldWS.BasePath != newWS.BasePath ||
+		oldWS.EnableTerminal != newWS.EnableTerminal {
 		return true
 	}
 
@@ -2509,6 +2557,37 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	}
 
 	return false
+}
+
+// outputSettingsChanged reports whether database output settings changed in a
+// way that requires a restart. The database connection pool is opened once at
+// startup, so switching backend, path, or connection parameters needs a restart.
+func outputSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldOut := oldSettings.Output
+	newOut := currentSettings.Output
+
+	if oldOut.SQLite.Enabled != newOut.SQLite.Enabled ||
+		oldOut.SQLite.Path != newOut.SQLite.Path {
+		return true
+	}
+
+	if oldOut.MySQL.Enabled != newOut.MySQL.Enabled ||
+		oldOut.MySQL.Username != newOut.MySQL.Username ||
+		oldOut.MySQL.Password != newOut.MySQL.Password ||
+		oldOut.MySQL.Database != newOut.MySQL.Database ||
+		oldOut.MySQL.Host != newOut.MySQL.Host ||
+		oldOut.MySQL.Port != newOut.MySQL.Port {
+		return true
+	}
+
+	return false
+}
+
+// loggingSettingsChanged reports whether the logging configuration changed. Log
+// sinks and rotation are configured once at startup, so any change needs a
+// restart to take effect.
+func loggingSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return !reflect.DeepEqual(oldSettings.Logging, currentSettings.Logging)
 }
 
 // logDeduplicationSettingsChanged checks if log deduplication settings have changed.

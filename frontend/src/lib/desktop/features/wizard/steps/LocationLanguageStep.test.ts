@@ -67,7 +67,6 @@ vi.mock('$lib/stores/settings', async () => {
     isLoading: false,
     isSaving: false,
     error: null,
-    restartRequired: false,
     dataLoaded: false,
     activeSection: 'main',
     originalData: JSON.parse(JSON.stringify(initialFormData)) as SettingsFormData,
@@ -119,7 +118,6 @@ describe('LocationLanguageStep - UI locale persistence on unmount', () => {
       isLoading: false,
       isSaving: false,
       error: null,
-      restartRequired: false,
       dataLoaded: false,
       activeSection: 'main',
       originalData: {

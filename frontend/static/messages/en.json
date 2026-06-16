@@ -405,6 +405,8 @@
         "recalculatingThresholds": "Recalculating dynamic thresholds for new base value",
         "reconfiguringDynamicThresholds": "Reconfiguring dynamic thresholds...",
         "webserverRestartRequired": "Web server settings changed. Restart required.",
+        "databaseRestartRequired": "Database settings changed. Restart required.",
+        "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Updating sound level monitoring...",
         "reconfiguringAudioSources": "Reconfiguring audio sources...",
         "rebuildingExtendedCapture": "Rebuilding extended capture filter...",
@@ -4879,7 +4881,13 @@
     "bannerTitle": "Restart Required",
     "bannerMessage": "Configuration changes require a restart to take effect:",
     "bannerAction": "Restart Now",
-    "restartFailed": "Failed to initiate restart"
+    "restartFailed": "Failed to initiate restart",
+    "reasons": {
+      "webserver": "Web server / network settings",
+      "database": "Database settings",
+      "logging": "Logging settings",
+      "tlsCertificate": "TLS certificate"
+    }
   },
   "help": {
     "title": "Help & Support",

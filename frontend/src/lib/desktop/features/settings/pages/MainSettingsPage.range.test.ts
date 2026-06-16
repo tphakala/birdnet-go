@@ -72,7 +72,6 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
       isSaving: false,
       activeSection: 'main',
       error: null,
-      restartRequired: false,
       dataLoaded: false,
     });
   });
@@ -335,7 +334,6 @@ describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
       isSaving: false,
       activeSection: 'main',
       error: null,
-      restartRequired: false,
       dataLoaded: false,
     });
   });

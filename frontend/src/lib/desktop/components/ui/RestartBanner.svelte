@@ -24,9 +24,9 @@
     <AlertTriangle class="h-5 w-5 shrink-0 text-[var(--color-warning)]" />
     <div class="flex-1">
       <span class="font-medium">{t('restart.bannerTitle')}:</span>
-      {restartState.restart_reasons.join(', ')}
+      {(restartState.restart_reasons ?? []).map(reason => t(reason)).join(', ')}
     </div>
-    <button class="btn btn-sm btn-warning" onclick={() => (showConfirm = true)}>
+    <button type="button" class="btn btn-sm btn-warning" onclick={() => (showConfirm = true)}>
       {t('restart.bannerAction')}
     </button>
   </div>

@@ -405,6 +405,8 @@
         "recalculatingThresholds": "Přepočítávám dynamické prahy pro novou základní hodnotu",
         "reconfiguringDynamicThresholds": "Překonfiguruji dynamické prahy…",
         "webserverRestartRequired": "Nastavení webového serveru byla změněna. Je vyžadován restart.",
+        "databaseRestartRequired": "Database settings changed. Restart required.",
+        "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Aktualizuji monitorování hladiny zvuku…",
         "reconfiguringAudioSources": "Překonfiguruji zdroje zvuku…",
         "rebuildingExtendedCapture": "Přestavuji filtr rozšířeného nahrávání…",
@@ -4879,7 +4881,13 @@
     "bannerTitle": "Vyžadován restart",
     "bannerMessage": "Změny konfigurace vyžadují restart, aby se projevily:",
     "bannerAction": "Restartovat nyní",
-    "restartFailed": "Restart se nepodařilo spustit"
+    "restartFailed": "Restart se nepodařilo spustit",
+    "reasons": {
+      "webserver": "Web server / network settings",
+      "database": "Database settings",
+      "logging": "Logging settings",
+      "tlsCertificate": "TLS certificate"
+    }
   },
   "help": {
     "title": "Nápověda a podpora",

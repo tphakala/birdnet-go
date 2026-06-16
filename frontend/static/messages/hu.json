@@ -405,6 +405,8 @@
         "recalculatingThresholds": "Dinamikus küszöbértékek újraszámítása az új alapértékhez",
         "reconfiguringDynamicThresholds": "Dinamikus küszöbértékek újrakonfigurálása...",
         "webserverRestartRequired": "Webszerver beállítások megváltoztak. Újraindítás szükséges.",
+        "databaseRestartRequired": "Database settings changed. Restart required.",
+        "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Hangszint monitorozás frissítése...",
         "reconfiguringAudioSources": "Hangforrások újrakonfigurálása...",
         "rebuildingExtendedCapture": "Kiterjesztett rögzítési szűrő újraépítése...",
@@ -598,6 +600,18 @@
       "empty": "Csend van — most nincs észlelhető madárhang"
     },
     "rejected": "Elutasítva",
+    "newSpeciesHighlights": {
+      "title": "Új és visszatérő fajok",
+      "subtitle": "Első alkalommal és nemrég visszatért észlelések",
+      "trackingDisabled": "Kérjük, aktiválja az \"Fajkövetés engedélyezése\" funkciót ennek a funkciónak a használatához.",
+      "categoryLifetime": "Új fajok",
+      "categoryYear": "Idén új",
+      "categorySeason": "Ebben az évszakban új",
+      "categorySeasonNamed": "Ebben a(z) {season} évszakban új",
+      "maxConfidenceShort": "Max {confidence}%",
+      "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
+      "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}"
+    },
     "dailySummary": {
       "title": "Napi aktivitás",
       "subtitle": "Faj detektálások óránként",
@@ -761,26 +775,14 @@
       "resetConfirm": "Visszaállítja az irányítópultot az alapértelmezett elrendezésre? Ez eltávolítja az összes testreszabást.",
       "resetting": "Visszaállítás..."
     },
-    "newSpeciesHighlights": {
-      "title": "Új és visszatérő fajok",
-      "subtitle": "Első alkalommal és nemrég visszatért észlelések",
-      "trackingDisabled": "Kérjük, aktiválja az \"Fajkövetés engedélyezése\" funkciót ennek a funkciónak a használatához.",
-      "categoryLifetime": "Új fajok",
-      "categoryYear": "Idén új",
-      "categorySeason": "Ebben az évszakban új",
-      "categorySeasonNamed": "Ebben a(z) {season} évszakban új",
-      "maxConfidenceShort": "Max {confidence}%",
-      "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
-      "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}"
-    },
     "elements": {
       "banner": "Irányítópult banner",
       "dailySummary": "Napi összefoglaló",
+      "newSpeciesHighlights": "Új fajok kiemelése",
       "currentlyHearing": "Jelenleg hallható",
       "detectionsGrid": "Legutóbbi észlelések",
       "liveSpectrogram": "Élő spektrogram",
-      "videoEmbed": "Videó beágyazás",
-      "newSpeciesHighlights": "Új fajok kiemelése"
+      "videoEmbed": "Videó beágyazás"
     }
   },
   "detections": {
@@ -3378,8 +3380,6 @@
         "redirectUriNotConfigured": "Nincs konfigurálva - állítsa be a hosztcímet vagy a Base URL-t a Szerverkonfiguráció fülön",
         "noProviders": "Nincs OAuth szolgáltató konfigurálva",
         "noProvidersDescription": "Adjon hozzá egy szolgáltatót a bejelentkezés engedélyezéséhez Google, GitHub, Microsoft, LINE, Kakao vagy egyedi OIDC szolgáltatóval.",
-        "allowedUsersEmptyWarning": "Ennek a szolgáltatónak nincsenek engedélyezett felhasználói, ezért minden bejelentkezési kísérlet el lesz utasítva. Adjon hozzá legalább egy e-mail-t vagy felhasználói azonosítót a hozzáférés engedélyezéséhez.",
-        "allowedUsersMissingBadge": "Nincs engedélyezett felhasználó beállítva – a bejelentkezés sikertelen lesz",
         "enableProviderLabel": "Engedélyezze ezt a szolgáltatót",
         "getCredentialsLabel": "Szerezze be a hitelesítési adatait a {provider}-tól",
         "redirectUriTitle": "Átirányítási URI:",
@@ -3389,6 +3389,8 @@
         "clientSecretHelpText": "Az OAuth 2.0 Client Secret a szolgáltató fejlesztői konzoljáról",
         "userIdLabel": "Felhasználói ID (opcionális)",
         "userIdHelpText": "Korlátozza a hozzáférést egy adott felhasználói fiókhoz e-mail vagy ID szerint",
+        "allowedUsersEmptyWarning": "Ennek a szolgáltatónak nincsenek engedélyezett felhasználói, ezért minden bejelentkezési kísérlet el lesz utasítva. Adjon hozzá legalább egy e-mail-t vagy felhasználói azonosítót a hozzáférés engedélyezéséhez.",
+        "allowedUsersMissingBadge": "Nincs engedélyezett felhasználó beállítva – a bejelentkezés sikertelen lesz",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Google OAuth2 bejelentkezés engedélyezése",
@@ -3472,16 +3474,16 @@
       "exceptions": {
         "title": "Kivételek"
       },
-      "privateMode": {
-        "label": "Bejelentkezés megkövetelése az összes felhasználói felület oldalhoz (privát mód)",
-        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül – bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
-      },
       "publicAccess": {
         "title": "Nyilvános hozzáférés",
         "description": "Specifikus funkciók hozzáférhetőségének engedélyezése hitelesítés nélkül.",
         "liveAudioLabel": "Élő hang lejátszás engedélyezése",
         "liveAudioHelp": "Ha engedélyezve van, bárki hallgathatja az élő hang streameket bejelentkezés nélkül. A beállítások és törlés továbbra is hitelesítést igényel.",
         "warningText": "A nyilvános hozzáférési funkciók engedélyezése kiteszi azokat bárkinek, aki elérheti ezt a szervert. Csak akkor engedélyezze, ha megbízik a hálózati környezetében."
+      },
+      "privateMode": {
+        "label": "Bejelentkezés megkövetelése az összes felhasználói felület oldalhoz (privát mód)",
+        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül – bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
@@ -4879,7 +4881,13 @@
     "bannerTitle": "Újraindítás szükséges",
     "bannerMessage": "A konfigurációs változtatásokhoz újraindítás szükséges:",
     "bannerAction": "Újraindítás most",
-    "restartFailed": "Az újraindítás kezdeményezése sikertelen"
+    "restartFailed": "Az újraindítás kezdeményezése sikertelen",
+    "reasons": {
+      "webserver": "Web server / network settings",
+      "database": "Database settings",
+      "logging": "Logging settings",
+      "tlsCertificate": "TLS certificate"
+    }
   },
   "help": {
     "title": "Súgó és támogatás",
