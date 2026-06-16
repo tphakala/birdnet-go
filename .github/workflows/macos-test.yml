@@ -54,12 +54,17 @@ jobs:
 
       - name: Resolve tool versions from Taskfile
         run: |
-          # Single source of truth: read TFLITE_VERSION from the Taskfile so the
-          # inline dylib download stays in lockstep with the headers that
-          # `task check-tensorflow` provisions (both use the Taskfile version).
+          # Single source of truth: read versions from the Taskfile so the inline
+          # TFLite dylib download and the setup-onnxruntime action both stay in
+          # lockstep with it (and with the headers `task check-tensorflow`
+          # provisions), instead of drifting to the action's hardcoded defaults.
           tflite=$(grep -E '^[[:space:]]*TFLITE_VERSION:' Taskfile.yml | head -1 | tr -d ' ' | cut -d: -f2 | tr -d "'\"")
-          if [ -z "$tflite" ]; then echo "::error::could not read TFLITE_VERSION from Taskfile.yml"; exit 1; fi
-          echo "TFLITE_VERSION=${tflite}" >> "$GITHUB_ENV"
+          onnx=$(grep -E '^[[:space:]]*ONNXRUNTIME_VERSION:' Taskfile.yml | head -1 | tr -d ' ' | cut -d: -f2 | tr -d "'\"")
+          if [ -z "$tflite" ] || [ -z "$onnx" ]; then echo "::error::could not read tool versions from Taskfile.yml"; exit 1; fi
+          {
+            echo "TFLITE_VERSION=${tflite}"
+            echo "ONNXRUNTIME_VERSION=${onnx}"
+          } >> "$GITHUB_ENV"
 
       - name: Install FFmpeg and SoX
         run: brew install ffmpeg sox
@@ -91,6 +96,7 @@ jobs:
         uses: ./.github/actions/setup-onnxruntime
         with:
           target-platform: darwin-arm64
+          onnxruntime-version: ${{ env.ONNXRUNTIME_VERSION }}
 
       - name: Install ONNX Runtime to default loader path
         run: |
