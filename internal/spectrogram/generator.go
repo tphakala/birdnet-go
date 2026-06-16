@@ -90,10 +90,8 @@ func WithDuration(seconds float64) GenerateOption {
 }
 
 // WithFrequencyProfile sets the frequency profile for spectrogram generation.
-// BatProfile() applies no resample and a high-pass at 15 kHz; BirdProfile()
-// resamples to 24 kHz. When not set, defaults to BirdProfile(). Note that the
-// automatic bat gating in ProfileForModelType is temporarily disabled, so all
-// detections currently resolve to BirdProfile().
+// BatProfile() keeps the native sample rate with no resampling or high-pass;
+// BirdProfile() resamples to 24 kHz. When not set, defaults to BirdProfile().
 func WithFrequencyProfile(fp FrequencyProfile) GenerateOption {
 	return func(o *generateOptions) {
 		o.freqProfile = &fp
@@ -292,7 +290,7 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 		logger.Int("width", width),
 		logger.Bool("raw", raw),
 		logger.Float64("pre_validated_duration", options.preValidatedDuration),
-		logger.Bool("bat_profile", profile.HighPassHz > 0))
+		logger.Bool("bat_profile", ProfileSuffix(profile) != ""))
 
 	// Validate inputs before filesystem operations
 	if outputPath == "" {
@@ -440,7 +438,7 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 		logger.Int("pcm_bytes", len(pcmData)),
 		logger.Int("width", width),
 		logger.Bool("raw", raw),
-		logger.Bool("bat_profile", profile.HighPassHz > 0))
+		logger.Bool("bat_profile", ProfileSuffix(profile) != ""))
 
 	// Validate inputs before filesystem operations
 	if outputPath == "" {

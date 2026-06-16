@@ -1,19 +1,17 @@
 package spectrogram
 
-// FrequencyProfile controls spectrogram frequency range and resampling
-// per detection. The gate is the detection's model type: bat models get bat
-// settings (no resample, high-pass at 15 kHz) and everything else gets bird
-// defaults (resample to 24 kHz, full range).
+// FrequencyProfile controls spectrogram frequency range and resampling per
+// detection. The gate is the detection's model type: bat models keep the native
+// sample rate with no resampling and no filtering, so the entire recorded
+// frequency range is rendered; everything else gets bird defaults (resample to
+// 24 kHz).
 type FrequencyProfile struct {
-	ResampleRate int // Target sample rate in Hz; 0 means keep native rate
-	HighPassHz   int // High-pass filter cutoff in Hz; 0 means no filter
+	ResampleRate int    // Target sample rate in Hz; 0 means keep native rate
+	HighPassHz   int    // High-pass filter cutoff in Hz; 0 means no filter
+	suffix       string // Cache-filename token identifying the profile; "" for the default bird render
 }
 
 const (
-	// batHighPassHz removes content below the bat echolocation floor. Set to
-	// 15 kHz (rather than ~18 kHz) so the low-frequency calls of Noctule bats
-	// (Nyctalus noctula, ~16-20 kHz) are retained in the spectrogram.
-	batHighPassHz   = 15000
 	birdResampleHz  = 24000
 	modelTypeBatStr = "bat"
 )
@@ -22,23 +20,21 @@ const (
 func BirdProfile() FrequencyProfile {
 	return FrequencyProfile{
 		ResampleRate: birdResampleHz,
-		HighPassHz:   0,
 	}
 }
 
-// BatProfile returns the frequency profile for bat detections captured
-// at 256 kHz. No resampling is applied (keeps native rate), and a
-// high-pass filter at 15 kHz removes content below the bat echolocation
-// floor.
+// BatProfile returns the frequency profile for bat detections. Bat audio is
+// captured at a high native sample rate; the spectrogram keeps that rate (no
+// resampling) and applies no high-pass filter, so the entire recorded band -
+// including low-frequency bat calls - is rendered.
 func BatProfile() FrequencyProfile {
 	return FrequencyProfile{
-		ResampleRate: 0,
-		HighPassHz:   batHighPassHz,
+		suffix: modelTypeBatStr,
 	}
 }
 
-// ProfileForModelType selects the appropriate frequency profile based on
-// the AI model's type string (as stored in ai_models.model_type).
+// ProfileForModelType selects the appropriate frequency profile based on the
+// AI model's type string (as stored in ai_models.model_type).
 // Bat models use the bat profile; everything else uses bird defaults.
 func ProfileForModelType(modelType string) FrequencyProfile {
 	if modelType == modelTypeBatStr {
@@ -52,8 +48,5 @@ func ProfileForModelType(modelType string) FrequencyProfile {
 // different profiles do not collide on disk. The default bird profile returns ""
 // for backward compatibility with existing cached spectrograms.
 func ProfileSuffix(p FrequencyProfile) string {
-	if p.HighPassHz > 0 {
-		return modelTypeBatStr
-	}
-	return ""
+	return p.suffix
 }
