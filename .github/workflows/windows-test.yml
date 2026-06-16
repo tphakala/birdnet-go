@@ -1,0 +1,184 @@
+name: windows-test
+
+# Tier 2 of cross-platform validation: native Windows (amd64) unit tests.
+# Marked continue-on-error (non-blocking): the toolchain/DLL path is new AND the
+# suite has a large backlog of pre-existing Windows-specific test failures
+# (path separators, error categories, file handling). The job reports them for
+# visibility; promote it to a required check once they are fixed. See the
+# cross-platform test-cleanup tracking issue. Runs the portable unit subset only:
+# the mosquitto service container and Docker testcontainer suites are not
+# available here, and MQTT tests self-skip (MQTT_TEST_BROKER unset).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Taskfile.yml'
+      - '.github/workflows/windows-test.yml'
+      - '.github/actions/**'
+  pull_request:
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Taskfile.yml'
+      - '.github/workflows/windows-test.yml'
+      - '.github/actions/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests-windows:
+    name: unit-tests (windows-amd64)
+    runs-on: windows-latest
+    # Non-blocking until the native Windows CGO/DLL path is proven stable.
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - run: go version
+
+      - name: Resolve tool versions from Taskfile
+        run: |
+          # Single source of truth: read versions from the Taskfile so these checks
+          # never validate against a stale TFLite/ONNX version after a Taskfile bump.
+          tflite=$(grep -E '^[[:space:]]*TFLITE_VERSION:' Taskfile.yml | head -1 | tr -d ' ' | cut -d: -f2 | tr -d "'\"")
+          onnx=$(grep -E '^[[:space:]]*ONNXRUNTIME_VERSION:' Taskfile.yml | head -1 | tr -d ' ' | cut -d: -f2 | tr -d "'\"")
+          if [ -z "$tflite" ] || [ -z "$onnx" ]; then echo "::error::could not read tool versions from Taskfile.yml"; exit 1; fi
+          {
+            echo "TFLITE_VERSION=${tflite}"
+            echo "ONNXRUNTIME_VERSION=${onnx}"
+          } >> "$GITHUB_ENV"
+
+      - name: Add mingw gcc to PATH
+        run: |
+          # -race needs CGO + a C compiler; windows-latest ships MSYS2 mingw but
+          # not on the default PATH. Prepend it so `gcc` resolves to mingw-w64.
+          # printf keeps the backslashes literal without echo escape ambiguity.
+          printf '%s\n' 'C:\msys64\mingw64\bin' >> "$GITHUB_PATH"
+
+      - name: Verify gcc
+        run: gcc --version
+
+      - name: Install FFmpeg
+        run: |
+          # Only ffmpeg: sox is not reliably packaged on Chocolatey, and the
+          # sox-dependent tests skip when it is absent (exec.LookPath("sox")),
+          # so it is not needed to run the suite.
+          choco install -y --no-progress ffmpeg
+
+      - name: Setup TensorFlow headers
+        run: |
+          # Scripted directly rather than via Task: the Taskfile has no MSYS
+          # branch (UNAME_S is MINGW64_NT...). Same sparse-checkout the
+          # check-tensorflow task performs.
+          if [ ! -f .cache/tensorflow/tensorflow/lite/c/c_api.h ]; then
+            git clone --branch "${TFLITE_VERSION}" --filter=blob:none --no-checkout --depth 1 \
+              https://github.com/tensorflow/tensorflow.git .cache/tensorflow
+            git -C .cache/tensorflow sparse-checkout set --no-cone '**/*.h'
+            git -C .cache/tensorflow checkout
+          fi
+
+      - name: Setup TensorFlow Lite library
+        run: |
+          # Download the native Windows TFLite DLL and copy it to the name mingw
+          # ld resolves for -ltensorflowlite_c (the release cross-build links the
+          # same way via the tensorflowlite_c.dll symlink). Native NTFS lacks the
+          # symlink privilege, so use a copy.
+          curl -fsSL -o tflite.zip \
+            "https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_windows_amd64.zip"
+          mkdir -p tflite_lib tflite_unzip
+          unzip -o tflite.zip -d tflite_unzip
+          cp "tflite_unzip/tensorflowlite_c-${TFLITE_VERSION#v}.dll" tflite_lib/tensorflowlite_c.dll
+          rm -rf tflite.zip tflite_unzip
+
+      - name: Setup ONNX Runtime
+        run: |
+          # Inlined instead of the setup-onnxruntime composite action: that action
+          # caches to /tmp/onnxruntime, and on Windows actions/cache (Node) and Git
+          # Bash interpret /tmp as different directories, so a cache hit restores
+          # the libs where the bash verify step cannot see them. Download into the
+          # workspace, where Node and bash agree. (No caching; the zip is small.)
+          curl -fsSL -o onnxruntime.zip \
+            "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-win-x64-${ONNXRUNTIME_VERSION}.zip"
+          tmp="$(mktemp -d)"
+          unzip -q onnxruntime.zip -d "$tmp"
+          mkdir -p onnxruntime
+          cp -r "$tmp"/onnxruntime-*/* onnxruntime/
+          rm -rf "$tmp" onnxruntime.zip
+          ls -la onnxruntime/lib
+
+      - name: Configure CGO and DLL search path
+        run: |
+          # Native Go/mingw need Windows-style paths. cygpath -m yields a
+          # forward-slash Windows path the mingw linker accepts; cygpath -w yields
+          # a backslash path for the runtime DLL search ($GITHUB_PATH) that the
+          # native test binary's LoadLibrary uses for the TFLite and ONNX DLLs.
+          WS_MIXED="$(cygpath -m "$GITHUB_WORKSPACE")"
+          {
+            echo "CGO_ENABLED=1"
+            echo "CGO_CFLAGS=-I${WS_MIXED}/.cache/tensorflow"
+            echo "CGO_LDFLAGS=-L${WS_MIXED}/tflite_lib -ltensorflowlite_c"
+          } >> "$GITHUB_ENV"
+          cygpath -w "$GITHUB_WORKSPACE/tflite_lib" >> "$GITHUB_PATH"
+          cygpath -w "$GITHUB_WORKSPACE/onnxruntime/lib" >> "$GITHUB_PATH"
+
+      - name: Run unit tests
+        env:
+          CI: true
+        run: |
+          # GitHub runs steps as `bash -eo pipefail`; turn errexit OFF (set +e) so
+          # a failing test run does not abort before the summary renders. The
+          # explicit `exit "$TEST_EXIT_CODE"` still fails the step.
+          set +e
+
+          # Write the -json stream to a file and take pass/fail from go test's own
+          # exit code (no gotestfmt: go can wrap non-JSON build output into JSON
+          # events whose content crashes its tokenizer). Failed tests are printed
+          # below and in the job summary. Longer timeout than Linux: the native
+          # runner with -race is much slower.
+          go test -tags noembed,skipfrontend -race -json -v -short -timeout 600s ./... > gotest.log 2>&1
+          TEST_EXIT_CODE=$?
+          grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | "FAIL  \(.Package)  \(.Test)"' | sort -u || true
+
+          if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+            echo "::error title=Test Failure::Windows unit tests failed - see job summary for details"
+            {
+              echo "## :x: Windows Test Run Failed"
+              echo ""
+              echo "Exit code: $TEST_EXIT_CODE"
+              echo ""
+              echo "### Quick Preview of Failures"
+              echo '```'
+              grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | (.Package + " " + .Test)' | head -20 || echo "Failed to parse test failures"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$TEST_EXIT_CODE"
+          fi
+
+          echo "## :white_check_mark: All Windows Tests Passed" >> "$GITHUB_STEP_SUMMARY"
+        timeout-minutes: 25
+
+      - name: Upload test log
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-log-windows
+          path: gotest.log
+          if-no-files-found: warn
