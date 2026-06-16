@@ -424,18 +424,14 @@ func resolveRangeFilterBackend(rf *conf.RangeFilterSettings) rangeFilterBackend 
 	return rangeFilterBackendTFLite
 }
 
-// hasNativeRangeFilter reports whether the active classifier ships with an embedded
-// native range filter to fall back to when an ONNX geomodel cannot be loaded. Only
-// BirdNET v2.4 (TFLite backend) carries the embedded MData range filter; Perch v2 and
-// BirdNET v3.0 (ONNX backends) rely solely on the geomodel.
-// hasNativeRangeFilter reports whether the active classifier ships with an embedded
-// native range filter to fall back to when an ONNX geomodel cannot be loaded. The
-// embedded MData range filter is BirdNET v2.4 specific, so only that classifier qualifies.
-// Perch v2 and BirdNET v3.0 (ONNX backends) rely solely on the geomodel, and any other
-// TFLite-backed (custom or future) classifier must surface as unhealthy rather than
-// silently filtering against the v2.4 labels.
+// hasNativeRangeFilter reports whether the active classifier can fall back to the
+// embedded MData range filter when an ONNX geomodel cannot be loaded. The MData
+// range filter is BirdNET v2.4 specific, so the v2.4 family qualifies: both the
+// TFLite default and the INT8-ARM ONNX entry, which carry the same v2.4 labels.
+// Perch v2 and BirdNET v3.0 rely solely on the geomodel, and any other classifier
+// must surface as unhealthy rather than silently filtering against the v2.4 labels.
 func (bn *BirdNET) hasNativeRangeFilter() bool {
-	return bn.ModelInfo.Backend == BackendTFLite && bn.ModelInfo.ID == DefaultModelVersion
+	return isBirdNETV24Family(bn.ModelInfo.ID)
 }
 
 func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
@@ -467,10 +463,12 @@ func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
 
 	// On arm64 (container images ship the ONNX range filter instead of the TFLite
 	// MData models), prefer the ONNX MData range filter when no range filter is
-	// configured and the v3 geomodel was not auto-selected above. Routed locally
-	// only; settings are not published. The strict ONNX path is used (no labels
-	// file), so the model output dimension must match the classifier label count.
-	if rf.Model == "" && rf.ModelPath == "" {
+	// configured and the v3 geomodel was not auto-selected above. Gated to the
+	// BirdNET v2.4 family: the MData V2 model outputs the v2.4 species set, and the
+	// strict ONNX path (no labels file) requires the model output dimension to
+	// equal the classifier label count, so it only fits a v2.4-family classifier.
+	// Routed locally only; settings are not published.
+	if rf.Model == "" && rf.ModelPath == "" && isBirdNETV24Family(bn.ModelInfo.ID) {
 		if path, ok := defaultRangeFilterONNXPath(runtime.GOARCH, findModelPathInStandardPaths); ok {
 			localSettings := conf.CloneSettings(settings)
 			localSettings.BirdNET.RangeFilter.ModelPath = path
@@ -584,8 +582,9 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 	// Get the appropriate locale code for the model version
 	localeCode := bn.Settings.BirdNET.Locale
 
-	// Use the new detailed loading function
-	result := GetLabelFileDataWithResult(bn.ModelInfo.ID, localeCode, bn)
+	// Use the new detailed loading function. Map the model ID to its label family
+	// (the INT8-ARM ONNX entry shares BirdNET v2.4's embedded labels).
+	result := GetLabelFileDataWithResult(labelModelID(bn.ModelInfo.ID), localeCode, bn)
 	if result.Error != nil {
 		// Create enhanced error for telemetry reporting
 		return errors.New(result.Error).

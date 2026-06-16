@@ -4,6 +4,7 @@ package classifier
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -134,22 +135,44 @@ var ModelRegistry = map[string]ModelInfo{
 	},
 }
 
-// registerINT8Variant derives the INT8-ARM ONNX classifier entry from the
-// BirdNET v2.4 TFLite entry so the two stay in lockstep: identical species,
-// labels, locales, audio spec, and detection name/version (detections must be
-// attributed to "BirdNET 2.4" regardless of backend). Only the registry ID and
-// inference backend differ. It is deliberately not user-selectable by config ID
-// (ConfigAliases is cleared so it cannot collide with the "birdnet" alias); the
-// entry is reached only via the arm64 container default or an explicit ONNX
-// model path. Run as init() because it copies the v2.4 map entry.
+// The INT8-ARM ONNX classifier entry is derived from the BirdNET v2.4 TFLite
+// entry so the two stay in lockstep: identical species, labels, locales, audio
+// spec, and detection name/version (detections must be attributed to "BirdNET
+// 2.4" regardless of backend). Only the registry ID and inference backend
+// differ. It is deliberately not user-selectable by config ID (ConfigAliases is
+// cleared so it cannot collide with the "birdnet" alias); the entry is reached
+// only via the arm64 container default or an explicit ONNX model path. This runs
+// as init() because it copies the v2.4 map entry after the map literal is built.
 func init() {
 	base := ModelRegistry[DefaultModelVersion]
 	base.ID = RegistryIDBirdNETV24INT8
 	base.Backend = BackendONNX
 	base.ConfigAliases = nil
 	base.CustomPath = ""
+	// Clone so the derived entry never aliases the v2.4 entry's slice backing array.
+	base.SupportedLocales = slices.Clone(base.SupportedLocales)
 	base.Description = "BirdNET v2.4 INT8-ARM quantized (ONNX); reduced-memory default for arm64 containers"
 	ModelRegistry[RegistryIDBirdNETV24INT8] = base
+}
+
+// isBirdNETV24Family reports whether id is the BirdNET v2.4 classifier in either
+// backend form: the default TFLite model or the INT8-ARM ONNX model. Both carry
+// the identical v2.4 species set, labels, and MData range filter, so code that
+// special-cases v2.4 (the native range-filter fallback and the MData
+// range-filter default) must treat the two as one family.
+func isBirdNETV24Family(id string) bool {
+	return id == DefaultModelVersion || id == RegistryIDBirdNETV24INT8
+}
+
+// labelModelID maps a classifier registry ID to the ID whose embedded label
+// files should be loaded. The INT8-ARM ONNX entry shares BirdNET v2.4's labels,
+// so it resolves to the base v2.4 ID (getModelFileSystem and conf.GetLabelFilename
+// only know the base v2.4 ID).
+func labelModelID(id string) string {
+	if id == RegistryIDBirdNETV24INT8 {
+		return DefaultModelVersion
+	}
+	return id
 }
 
 // defaultClassifierModelInfo resolves the classifier used when no model is
@@ -266,22 +289,28 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 		baseName := filepath.Base(modelPathOrID)
 		lowerBase := strings.ToLower(baseName)
 
-		// Check against registry IDs in the filename
-		for id := range ModelRegistry {
-			if strings.Contains(lowerBase, strings.ToLower(id)) {
-				customInfo := ModelRegistry[id]
-				customInfo.CustomPath = modelPathOrID
-				return customInfo, nil
+		// Resolve by the LONGEST matching token so resolution is deterministic.
+		// Both ModelRegistry and filenamePatterns are maps with randomized
+		// iteration order, and some IDs/patterns are substrings of others (e.g.
+		// "birdnet_v2.4" vs "birdnet_v2.4_int8"). Longest-match prevents a filename
+		// from resolving to a different entry run-to-run; the more specific token
+		// (e.g. the int8 marker) wins over its prefix.
+		bestToken, bestID := "", ""
+		consider := func(token, registryID string) {
+			if len(token) > len(bestToken) && strings.Contains(lowerBase, strings.ToLower(token)) {
+				bestToken, bestID = token, registryID
 			}
 		}
-
-		// Check known filename patterns (ONNX conventions, legacy names, etc.)
+		for id := range ModelRegistry {
+			consider(id, id)
+		}
 		for pattern, registryID := range filenamePatterns {
-			if strings.Contains(lowerBase, pattern) {
-				info := ModelRegistry[registryID]
-				info.CustomPath = modelPathOrID
-				return info, nil
-			}
+			consider(pattern, registryID)
+		}
+		if bestID != "" {
+			info := ModelRegistry[bestID]
+			info.CustomPath = modelPathOrID
+			return info, nil
 		}
 
 		// Unrecognized model file — return Custom, let runtime figure it out

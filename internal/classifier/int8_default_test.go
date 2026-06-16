@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // TestINT8RegistryEntry verifies the dedicated INT8-ARM ONNX entry mirrors the
@@ -24,11 +26,70 @@ func TestINT8RegistryEntry(t *testing.T) {
 	assert.Equal(t, v24.NumSpecies, info.NumSpecies)
 	assert.Equal(t, v24.SupportedLocales, info.SupportedLocales)
 	assert.Equal(t, v24.DefaultLocale, info.DefaultLocale)
-	// Distinct backend suffix in the display name.
+	// Audio spec must match or the analysis framing breaks.
+	assert.Equal(t, v24.Spec, info.Spec)
+	// Backend, display name, and description intentionally differ.
+	assert.Equal(t, BackendONNX, info.Backend)
 	assert.Equal(t, "BirdNET v2.4 (ONNX)", info.DisplayName())
+	assert.NotEqual(t, v24.Description, info.Description)
 	// No config alias: it is selected via the arch-aware default or an explicit
 	// model path, never a user-facing config ID (would collide with "birdnet").
 	assert.Empty(t, info.ConfigAliases)
+}
+
+// TestLabelModelID verifies the INT8 entry resolves to BirdNET v2.4's label
+// family (regression guard for the INT8 default failing to load labels).
+func TestLabelModelID(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, DefaultModelVersion, labelModelID(RegistryIDBirdNETV24INT8))
+	assert.Equal(t, DefaultModelVersion, labelModelID(DefaultModelVersion))
+	assert.Equal(t, RegistryIDPerchV2, labelModelID(RegistryIDPerchV2))
+}
+
+// TestINT8EntryHasEmbeddedLabels is the regression guard for the gate-caught
+// blocker: the INT8 registry ID must resolve to v2.4's embedded label filesystem
+// and a valid label filename, or NewBirdNET fails to start on the arm64 default.
+func TestINT8EntryHasEmbeddedLabels(t *testing.T) {
+	t.Parallel()
+	fsys, err := getModelFileSystem(labelModelID(RegistryIDBirdNETV24INT8))
+	require.NoError(t, err)
+	require.NotNil(t, fsys)
+
+	fn, err := conf.GetLabelFilename(labelModelID(RegistryIDBirdNETV24INT8), "en-uk")
+	require.NoError(t, err)
+	assert.NotEmpty(t, fn)
+}
+
+// TestDetermineModelInfo_V24TFLiteStaysTFLite is the reverse guard: a v2.4 TFLite
+// filename must resolve to the TFLite v2.4 entry, never the INT8 ONNX entry.
+func TestDetermineModelInfo_V24TFLiteStaysTFLite(t *testing.T) {
+	t.Parallel()
+	info, err := DetermineModelInfo("/models/" + DefaultBirdNETModelName)
+	require.NoError(t, err)
+	assert.Equal(t, DefaultModelVersion, info.ID)
+	assert.Equal(t, BackendTFLite, info.Backend)
+}
+
+// TestDetermineModelInfo_Deterministic guards against the map-iteration
+// nondeterminism: each filename must resolve to the same entry on every call,
+// and the more specific int8 token must win over its v2.4 prefix.
+func TestDetermineModelInfo_Deterministic(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ name, wantID string }{
+		{"/models/" + DefaultBirdNETINT8ONNXModelName, RegistryIDBirdNETV24INT8},
+		{"/models/" + DefaultBirdNETModelName, DefaultModelVersion},
+		{"/models/BirdNET_V2.4_INT8.onnx", RegistryIDBirdNETV24INT8},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			for i := range 50 {
+				info, err := DetermineModelInfo(c.name)
+				require.NoError(t, err)
+				require.Equalf(t, c.wantID, info.ID, "iteration %d", i)
+			}
+		})
+	}
 }
 
 // TestDefaultClassifierModelInfo_ARM64PrefersINT8WhenPresent verifies that on

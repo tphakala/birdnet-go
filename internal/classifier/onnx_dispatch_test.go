@@ -37,6 +37,22 @@ func TestUsesONNXBackend(t *testing.T) {
 	}
 }
 
+// TestUsesONNXBackend_PathNormalization verifies isONNXModel's env-var expansion
+// and case-folding are exercised through usesONNXBackend (not parallel: t.Setenv).
+func TestUsesONNXBackend_PathNormalization(t *testing.T) {
+	t.Run("uppercase extension", func(t *testing.T) {
+		bn := &BirdNET{Settings: &conf.Settings{}, ModelInfo: ModelInfo{Backend: BackendTFLite}}
+		bn.Settings.BirdNET.ModelPath = "/models/X.ONNX"
+		assert.True(t, bn.usesONNXBackend())
+	})
+	t.Run("env var expansion", func(t *testing.T) {
+		t.Setenv("TEST_MODELS_DIR", "/models")
+		bn := &BirdNET{Settings: &conf.Settings{}, ModelInfo: ModelInfo{Backend: BackendTFLite}}
+		bn.Settings.BirdNET.ModelPath = "$TEST_MODELS_DIR/x.onnx"
+		assert.True(t, bn.usesONNXBackend())
+	})
+}
+
 // TestONNXModelPath verifies the ONNX model file resolves from the explicit
 // config model path when set, and otherwise from ModelInfo.CustomPath (set by
 // the arm64 default resolver). This keeps the default from having to mutate
