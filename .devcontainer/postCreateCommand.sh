@@ -12,31 +12,11 @@ sudo apt-get install -y ca-certificates libasound2 ffmpeg sox alsa-utils
 # Install development tools (git is already included)
 sudo apt-get install -y nano vim curl wget git dialog build-essential fish socat
 
-# Clone TensorFlow source for compilation (headers needed for CGO)
-echo "Setting up TensorFlow source..."
-TFLITE_VERSION="v2.17.1"
-TENSORFLOW_DIR="/home/dev-user/src/tensorflow"
-
-if [ ! -f "$TENSORFLOW_DIR/tensorflow/lite/c/c_api.h" ]; then
-    echo "Cloning TensorFlow $TFLITE_VERSION source (sparse checkout for headers only)..."
-    mkdir -p /home/dev-user/src
-    
-    # Clone with filter to minimize download size
-    git clone --branch $TFLITE_VERSION --filter=blob:none --no-checkout --depth 1 https://github.com/tensorflow/tensorflow.git $TENSORFLOW_DIR
-    
-    # Setup sparse checkout to only get header files
-    git -C $TENSORFLOW_DIR sparse-checkout set --no-cone '**/*.h'
-    
-    # Apply sparse checkout
-    git -C $TENSORFLOW_DIR checkout
-    
-    echo "✓ TensorFlow headers installed at $TENSORFLOW_DIR"
-else
-    echo "✓ TensorFlow headers already exist at $TENSORFLOW_DIR"
-fi
-
-# Ensure correct ownership
-sudo chown -R dev-user:dev-user /home/dev-user/src
+# Clone TensorFlow source for compilation (headers needed for CGO).
+# Delegate to `task check-tensorflow` so the clone location (.cache/tensorflow/)
+# stays in sync with Taskfile.yml automatically.
+echo "Setting up TensorFlow headers via task..."
+task check-tensorflow
 
 # Download and install TensorFlow Lite C library
 echo "Setting up TensorFlow Lite C library..."
@@ -221,7 +201,7 @@ echo "Oh My Posh version: $(oh-my-posh version)"
 # Verify TensorFlow setup
 echo ""
 echo "=== TensorFlow Setup ==="
-if [ -f "/home/dev-user/src/tensorflow/tensorflow/lite/c/c_api.h" ]; then
+if [ -f ".cache/tensorflow/tensorflow/lite/c/c_api.h" ]; then
     echo "✓ TensorFlow headers: Available"
 else
     echo "✗ TensorFlow headers: Missing"

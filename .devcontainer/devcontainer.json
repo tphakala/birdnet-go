@@ -19,7 +19,7 @@
 	"containerEnv": {
 		"ALSA_CARD": "0",
 		"CGO_ENABLED": "1",
-		"CGO_CFLAGS": "-I /home/dev-user/src/tensorflow",
+		"CGO_CFLAGS": "-I/workspaces/birdnet-go/.cache/tensorflow",
 		"NODE_ENV": "development",
 		"VITE_DEV_PORT": "5173"
 	},
