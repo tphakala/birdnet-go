@@ -76,8 +76,13 @@ func NewClient(settings *conf.Settings, observabilityMetrics *observability.Metr
 	config.TLS.ClientCert = settings.Realtime.MQTT.TLS.ClientCert
 	config.TLS.ClientKey = settings.Realtime.MQTT.TLS.ClientKey
 
-	// Auto-detect TLS from the broker URL scheme
-	if parts, err := parseBroker(config.Broker); err == nil && schemeImpliesTLS(parts.scheme) {
+	// Validate the broker address up front (fail fast on a malformed address)
+	// and auto-detect TLS from its scheme.
+	parts, err := parseBroker(config.Broker)
+	if err != nil {
+		return nil, err
+	}
+	if schemeImpliesTLS(parts.scheme) {
 		config.TLS.Enabled = true
 		log.Info("TLS enabled based on broker URL scheme")
 	}

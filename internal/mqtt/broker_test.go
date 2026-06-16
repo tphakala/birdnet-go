@@ -46,6 +46,7 @@ func TestParseBroker(t *testing.T) {
 		{"mqtts scheme", "mqtts://host:8883", "mqtts", "host", "8883", false},
 		{"tcp scheme with bracketed IPv6", "tcp://[2001:db8::1]:1883", "tcp", "2001:db8::1", "1883", false},
 		{"ssl scheme with IPv4", "ssl://192.168.1.5:8883", "ssl", "192.168.1.5", "8883", false},
+		{"uppercase scheme normalized to lowercase", "MQTTS://host:8883", "mqtts", "host", "8883", false},
 
 		// Malformed addresses.
 		{"unterminated IPv6 bracket", "[malformed", "", "", "", true},

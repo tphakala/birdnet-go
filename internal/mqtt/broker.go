@@ -61,7 +61,9 @@ func parseBroker(broker string) (brokerParts, error) {
 
 	var scheme string
 	if before, after, found := strings.Cut(s, "://"); found {
-		scheme = before
+		// Schemes are case-insensitive (RFC 3986); normalize so TLS inference
+		// matches regardless of the casing the user typed.
+		scheme = strings.ToLower(before)
 		s = after
 	}
 
