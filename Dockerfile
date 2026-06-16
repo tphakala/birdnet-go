@@ -157,21 +157,6 @@ RUN if [ "$TARGETPLATFORM" != "linux/arm64" ]; then \
     rm -rf /tmp/tflite-lib && \
     ldconfig
 
-# ONNX Runtime 1.25.1 is built against GCC 15 and needs GLIBCXX_3.4.34, newer than
-# the libstdc++ shipped in debian:trixie. Bundle the newer libstdc++ for arm64 so
-# the ONNX Runtime loader resolves the required symbols (arm64 is ONNX-only).
-# Install into /usr/local/lib (searched ahead of the multiarch dir via ld.so's
-# default libc.conf and prioritized by ldconfig) instead of overwriting the
-# dpkg-managed libstdc++ in /usr/lib/aarch64-linux-gnu/, which would break package
-# integrity and could be clobbered by future apt upgrades.
-COPY Docker/lib/arm64/libstdc++.so.6.0.34 /tmp/libstdcxx/
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
-        cp /tmp/libstdcxx/libstdc++.so.6.0.34 /usr/local/lib/ && \
-        ln -sf libstdc++.so.6.0.34 /usr/local/lib/libstdc++.so.6 && \
-        ldconfig; \
-    fi && \
-    rm -rf /tmp/libstdcxx
-
 # Include reset_auth tool from build stage
 COPY --from=build /home/dev-user/src/BirdNET-Go/reset_auth.sh /usr/bin/
 RUN chmod +x /usr/bin/reset_auth.sh
