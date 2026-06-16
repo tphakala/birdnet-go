@@ -68,10 +68,7 @@ func parseBroker(broker string) (brokerParts, error) {
 	if strings.Contains(s, "://") {
 		u, err := url.Parse(s)
 		if err != nil {
-			return brokerParts{}, errors.Newf("failed to parse broker address %q: %v", broker, err).
-				Component("mqtt").
-				Category(errors.CategoryConfiguration).
-				Build()
+			return brokerParts{}, malformedBrokerError(broker, err.Error())
 		}
 		return brokerParts{scheme: strings.ToLower(u.Scheme), host: u.Hostname(), port: u.Port()}, nil
 	}
@@ -100,12 +97,26 @@ func splitBrokerHostPort(s string) (host, port string, err error) {
 	// literal. A value opened with "[" must also close with "]".
 	if strings.HasPrefix(s, "[") {
 		if !strings.HasSuffix(s, "]") {
-			return "", "", errors.Newf("failed to parse broker address %q: unterminated IPv6 bracket", s).
-				Component("mqtt").
-				Category(errors.CategoryConfiguration).
-				Build()
+			return "", "", malformedBrokerError(s, "unterminated IPv6 bracket")
 		}
-		return s[1 : len(s)-1], "", nil
+		host = s[1 : len(s)-1]
+	} else {
+		host = s
 	}
-	return s, "", nil
+	// A returned host must never contain a bracket character. Brackets are only
+	// valid as a matched IPv6 delimiter pair (stripped above); a leftover "[" or
+	// "]" is malformed and would otherwise yield a non-dial-able host:port.
+	if strings.ContainsAny(host, "[]") {
+		return "", "", malformedBrokerError(s, "stray bracket in host")
+	}
+	return host, "", nil
+}
+
+// malformedBrokerError builds a consistent configuration error for a broker
+// address that cannot be parsed into a usable host.
+func malformedBrokerError(addr, reason string) error {
+	return errors.Newf("failed to parse broker address %q: %s", addr, reason).
+		Component("mqtt").
+		Category(errors.CategoryConfiguration).
+		Build()
 }

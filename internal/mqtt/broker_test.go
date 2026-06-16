@@ -4,6 +4,7 @@ package mqtt
 
 import (
 	"net"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,6 +57,8 @@ func TestParseBroker(t *testing.T) {
 		{"unterminated IPv6 bracket", "[malformed", "", "", "", true},
 		{"unterminated IPv6 bracket with scheme", "tcp://[malformed", "", "", "", true},
 		{"unterminated IPv6 bracket with port", "[2001:db8::1:1883", "", "", "", true},
+		{"stray closing bracket", "]", "", "", "", true},
+		{"stray bracket inside brackets", "[]]", "", "", "", true},
 	}
 
 	for _, tt := range tests {
@@ -73,6 +76,64 @@ func TestParseBroker(t *testing.T) {
 			assert.Equal(t, tt.wantPort, parts.port, "parseBroker(%q) port mismatch", tt.broker)
 		})
 	}
+}
+
+// TestParseBrokerMatchesURLParse is a differential/characterization test: for
+// every scheme-full broker address across the dimensions paho accepts (scheme x
+// host-type x port x path), parseBroker must extract the same host and port as
+// net/url.Parse, the reference the paho client itself uses. This pins the
+// engine-swap equivalence that a path-less, hand-picked corpus missed: it fails
+// on any parser that lets a URL path or userinfo leak into the host or port.
+func TestParseBrokerMatchesURLParse(t *testing.T) {
+	t.Parallel()
+
+	schemes := []string{"tcp", "ssl", "tls", "mqtts", "ws", "wss"}
+	hosts := []string{"mybroker", "broker.example.com", "192.168.1.5", "[2001:db8::1]", "[::1]"}
+	ports := []string{"", ":1883", ":8883"}
+	paths := []string{"", "/mqtt", "/path/to/mqtt"}
+
+	for _, sc := range schemes {
+		for _, h := range hosts {
+			for _, p := range ports {
+				for _, pa := range paths {
+					addr := sc + "://" + h + p + pa
+					t.Run(addr, func(t *testing.T) {
+						t.Parallel()
+						u, err := url.Parse(addr)
+						require.NoError(t, err, "url.Parse(%q)", addr)
+						parts, err := parseBroker(addr)
+						require.NoError(t, err, "parseBroker(%q)", addr)
+						assert.Equal(t, u.Hostname(), parts.host, "host for %q", addr)
+						assert.Equal(t, u.Port(), parts.port, "port for %q", addr)
+					})
+				}
+			}
+		}
+	}
+}
+
+// FuzzParseBroker asserts parseBroker never panics on arbitrary input and that
+// a successfully-parsed non-empty host always yields a dial-safe host:port.
+func FuzzParseBroker(f *testing.F) {
+	for _, s := range []string{
+		"tcp://h:1883", "mybroker:1883", "[::1]:1883", "ws://h/mqtt",
+		"wss://h:8883/mqtt", "", ":1883", "[malformed", "::1", "MQTTS://h:8883",
+	} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, broker string) {
+		parts, err := parseBroker(broker) // must never panic
+		if err != nil {
+			return
+		}
+		if parts.host == "" {
+			return
+		}
+		hp := parts.hostPort()
+		if _, _, splitErr := net.SplitHostPort(hp); splitErr != nil {
+			t.Errorf("parseBroker(%q).hostPort()=%q is not a valid host:port: %v", broker, hp, splitErr)
+		}
+	})
 }
 
 // TestBrokerHostPort verifies the host:port form used by the connection-test
