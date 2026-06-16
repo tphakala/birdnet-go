@@ -163,6 +163,7 @@ func TestHotReloadRestartFieldsCovered(t *testing.T) {
 		"Perch":                   "perch model path; not wired",
 		"BSG":                     "BSG model path; not wired",
 		"Realtime.Audio.Watchdog": "no UI controls (project decision)",
+		"LowMemory":               "startup-only memory policy; not exposed via the live settings API",
 	}
 
 	for path, entry := range hotReloadRegistry {

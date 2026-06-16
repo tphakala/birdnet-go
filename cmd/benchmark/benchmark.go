@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/tphakala/birdnet-go/internal/analysis"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -15,6 +16,9 @@ func Command(settings *conf.Settings) *cobra.Command {
 		Use:   "benchmark",
 		Short: "Run BirdNET inference benchmark",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Apply the runtime memory policy before loading the model, so the
+			// benchmark reflects the same configuration serve runs under.
+			analysis.ApplyMemoryPolicy(settings)
 			return runBenchmark(settings)
 		},
 	}

@@ -7,8 +7,42 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/mempolicy"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
+
+// bytesPerMiB converts byte counts to MiB for human-readable startup logging.
+const bytesPerMiB int64 = 1024 * 1024
+
+// ApplyMemoryPolicy detects the effective system memory (host RAM or cgroup cap)
+// and applies the runtime memory policy for constrained systems: a soft
+// GOMEMLIMIT backstop on the Go heap and a glibc malloc arena cap. It is gated by
+// the lowmemory.mode override (auto/on/off) and must run before inference threads
+// start so the arena cap takes effect. These are cheap backstops; profiling shows
+// the dominant memory cost is loaded model weights, which is addressed separately
+// by model gating and quantization (the RAM-reduction epic).
+func ApplyMemoryPolicy(settings *conf.Settings) {
+	log := GetLogger()
+	mode := settings.LowMemory.GetMode()
+	res := mempolicy.Configure(mode)
+	d := res.Decision
+
+	if !d.Active {
+		log.Info("memory policy: low-memory controls inactive",
+			logger.String("mode", mode),
+			logger.String("reason", d.Reason))
+		return
+	}
+
+	log.Info("memory policy: low-memory controls active",
+		logger.String("mode", mode),
+		logger.String("reason", d.Reason),
+		logger.Int64("detected_ram_mb", d.TotalRAMBytes/bytesPerMiB),
+		logger.Bool("gomemlimit_applied", res.Applied.MemLimitApplied),
+		logger.Int64("gomemlimit_mb", res.Applied.GoMemLimitBytes/bytesPerMiB),
+		logger.Bool("arena_cap_applied", res.Applied.ArenaApplied),
+		logger.Int("arena_max", res.Applied.ArenaMax))
+}
 
 // InitializeMetrics initializes the Prometheus metrics manager.
 func InitializeMetrics() (*observability.Metrics, error) {
