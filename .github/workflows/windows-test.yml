@@ -71,8 +71,12 @@ jobs:
       - name: Verify gcc
         run: gcc --version
 
-      - name: Install FFmpeg and SoX
-        run: choco install -y --no-progress ffmpeg sox
+      - name: Install FFmpeg
+        run: |
+          # Only ffmpeg: sox is not reliably packaged on Chocolatey, and the
+          # sox-dependent tests skip when it is absent (exec.LookPath("sox")),
+          # so it is not needed to run the suite.
+          choco install -y --no-progress ffmpeg
 
       - name: Setup TensorFlow headers
         run: |
@@ -146,7 +150,16 @@ jobs:
           # stays on, and the explicit `exit "$TEST_EXIT_CODE"` still fails the step.
           set +e
 
-          go test -tags noembed,skipfrontend -race -json -v -short -timeout 300s ./... 2>&1 | tee gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
+          # Redirect build/linker stderr to a file (NOT 2>&1) so non-JSON build
+          # output never reaches gotestfmt and panics it; keep the pipe pure
+          # test2json so PIPESTATUS reflects go test's real result.
+          go test -tags noembed,skipfrontend -race -json -v -short -timeout 300s ./... 2>gotest.err | tee gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
+
+          if [ -s gotest.err ]; then
+            echo "::group::go test build/linker stderr"
+            cat gotest.err
+            echo "::endgroup::"
+          fi
 
           if [ "$TEST_EXIT_CODE" -ne 0 ]; then
             echo "::error title=Test Failure::Windows unit tests failed - see job summary for details"
@@ -171,5 +184,7 @@ jobs:
         if: always()
         with:
           name: test-log-windows
-          path: gotest.log
-          if-no-files-found: error
+          path: |
+            gotest.log
+            gotest.err
+          if-no-files-found: warn

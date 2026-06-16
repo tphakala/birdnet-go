@@ -122,7 +122,19 @@ jobs:
           # noembed,skipfrontend skip model/frontend embedding. -short skips the
           # heavy suites; testcontainer/integration tests need the `integration`
           # build tag (not set) and are excluded.
-          go test -tags noembed,skipfrontend -race -json -v -short -timeout 300s ./... 2>&1 | tee gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
+          #
+          # Redirect build/linker stderr to a file (NOT 2>&1): the macOS cgo link
+          # emits harmless `ld: warning: duplicate -rpath / duplicate libraries`
+          # lines (the go-tflite binding already passes -ltensorflowlite_c), and
+          # merging that non-JSON text into the -json stream makes gotestfmt panic.
+          # Keep the pipe pure test2json.
+          go test -tags noembed,skipfrontend -race -json -v -short -timeout 300s ./... 2>gotest.err | tee gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
+
+          if [ -s gotest.err ]; then
+            echo "::group::go test build/linker stderr"
+            cat gotest.err
+            echo "::endgroup::"
+          fi
 
           if [ "$TEST_EXIT_CODE" -ne 0 ]; then
             echo "::error title=Test Failure::macOS unit tests failed - see job summary for details"
@@ -147,5 +159,7 @@ jobs:
         if: always()
         with:
           name: test-log-macos
-          path: gotest.log
-          if-no-files-found: error
+          path: |
+            gotest.log
+            gotest.err
+          if-no-files-found: warn
