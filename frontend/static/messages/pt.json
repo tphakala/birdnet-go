@@ -405,6 +405,8 @@
         "recalculatingThresholds": "Recalculando limiares dinâmicos para novo valor base",
         "reconfiguringDynamicThresholds": "A reconfigurar limiares dinâmicos...",
         "webserverRestartRequired": "Definições do servidor web alteradas. Reinício necessário.",
+        "databaseRestartRequired": "Database settings changed. Restart required.",
+        "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "A atualizar monitorização do nível de som...",
         "reconfiguringAudioSources": "A reconfigurar fontes de áudio...",
         "rebuildingExtendedCapture": "A reconstruir filtro de captura estendida...",
@@ -4879,7 +4881,13 @@
     "bannerTitle": "Reinicialização necessária",
     "bannerMessage": "As alterações de configuração requerem uma reinicialização:",
     "bannerAction": "Reiniciar agora",
-    "restartFailed": "Falha ao iniciar a reinicialização"
+    "restartFailed": "Falha ao iniciar a reinicialização",
+    "reasons": {
+      "webserver": "Web server / network settings",
+      "database": "Database settings",
+      "logging": "Logging settings",
+      "tlsCertificate": "TLS certificate"
+    }
   },
   "help": {
     "title": "Ajuda e suporte",

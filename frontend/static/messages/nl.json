@@ -405,6 +405,8 @@
         "recalculatingThresholds": "Dynamische drempels worden herberekend voor nieuwe basiswaarde",
         "reconfiguringDynamicThresholds": "Dynamische drempels worden opnieuw geconfigureerd...",
         "webserverRestartRequired": "Webserverinstellingen gewijzigd. Herstart vereist.",
+        "databaseRestartRequired": "Database settings changed. Restart required.",
+        "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Geluidsniveaubewaking wordt bijgewerkt...",
         "reconfiguringAudioSources": "Audiobronnen worden opnieuw geconfigureerd...",
         "rebuildingExtendedCapture": "Filter voor uitgebreide opname wordt opnieuw opgebouwd...",
@@ -4879,7 +4881,13 @@
     "bannerTitle": "Herstart vereist",
     "bannerMessage": "Configuratiewijzigingen vereisen een herstart:",
     "bannerAction": "Nu herstarten",
-    "restartFailed": "Kan herstart niet starten"
+    "restartFailed": "Kan herstart niet starten",
+    "reasons": {
+      "webserver": "Web server / network settings",
+      "database": "Database settings",
+      "logging": "Logging settings",
+      "tlsCertificate": "TLS certificate"
+    }
   },
   "help": {
     "title": "Help en ondersteuning",

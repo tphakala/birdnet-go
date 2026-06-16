@@ -43,6 +43,7 @@
     securitySettings,
     type OAuthProviderConfig,
   } from '$lib/stores/settings';
+  import { fetchRestartStatus } from '$lib/stores/restart.svelte';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { settingsAPI, type TLSCertificateInfo } from '$lib/utils/settingsApi';
   import { toastActions } from '$lib/stores/toast';
@@ -193,7 +194,9 @@
       });
       // Reload settings to sync frontend with backend TLSMode change
       await settingsActions.loadSettings();
-      settingsStore.update(state => ({ ...state, restartRequired: true }));
+      // The backend marks restart-required for TLS cert operations; refresh the
+      // shared restart state so the global RestartBanner reflects it.
+      await fetchRestartStatus();
       toastActions.success(t('settings.security.tls.generateSuccess'));
     } catch (err) {
       toastActions.error(
@@ -215,7 +218,9 @@
       });
       // Reload settings to sync frontend with backend TLSMode change
       await settingsActions.loadSettings();
-      settingsStore.update(state => ({ ...state, restartRequired: true }));
+      // The backend marks restart-required for TLS cert operations; refresh the
+      // shared restart state so the global RestartBanner reflects it.
+      await fetchRestartStatus();
       toastActions.success(t('settings.security.tls.uploadSuccess'));
       // Clear upload form on success
       uploadCert = '';
@@ -240,7 +245,9 @@
       certInfo = null;
       // Reload settings to sync frontend with backend TLSMode reset to none
       await settingsActions.loadSettings();
-      settingsStore.update(state => ({ ...state, restartRequired: true }));
+      // The backend marks restart-required for TLS cert operations; refresh the
+      // shared restart state so the global RestartBanner reflects it.
+      await fetchRestartStatus();
       toastActions.success(t('settings.security.tls.deleteSuccess'));
     } catch (err) {
       toastActions.error(
