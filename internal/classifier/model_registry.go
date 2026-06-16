@@ -175,6 +175,28 @@ func labelModelID(id string) string {
 	return id
 }
 
+// remapV24ForONNXOnly remaps a registry-resolved BirdNET v2.4 TFLite model to the
+// INT8-ARM ONNX entry when this build has no TFLite backend (notflite, i.e. the
+// ONNX-only arm64 image) and the ONNX model is present in the standard paths.
+// This keeps arm64 configs that select v2.4 via `version: "2.4"` or the default
+// working on ONNX-only images instead of failing to start on the missing TFLite
+// backend. An explicit model path (CustomPath set) is left untouched so a
+// user-supplied model is never silently swapped.
+func remapV24ForONNXOnly(info ModelInfo, tfliteAvailable bool, find func(name string) (path string, ok bool)) ModelInfo {
+	if tfliteAvailable || info.CustomPath != "" {
+		return info
+	}
+	if info.Backend != BackendTFLite || info.ID != DefaultModelVersion {
+		return info
+	}
+	if path, ok := find(DefaultBirdNETINT8ONNXModelName); ok {
+		onnx := ModelRegistry[RegistryIDBirdNETV24INT8]
+		onnx.CustomPath = path
+		return onnx
+	}
+	return info
+}
+
 // defaultClassifierModelInfo resolves the classifier used when no model is
 // selected via config (the Tier 4 default). On arm64, if the INT8-ARM ONNX
 // classifier is present in the standard model paths (shipped only in arm64
@@ -261,7 +283,7 @@ var filenamePatterns = map[string]string{
 	"birdnet-v24":            "BirdNET_V2.4",
 	"birdnet_v2.4":           "BirdNET_V2.4",
 	"birdnet-v2.4":           "BirdNET_V2.4",
-	"birdnet-go_classifier":  "BirdNET_V2.4", // custom-named classifier builds
+	"birdnet-go_classifier":  "BirdNET_V2.4",           // custom-named classifier builds
 	"int8_arm":               RegistryIDBirdNETV24INT8, // INT8-ARM ONNX classifier (arm64 container default)
 	"int8-arm":               RegistryIDBirdNETV24INT8,
 	"birdnet_global_v3.0":    RegistryIDBirdNETV3,

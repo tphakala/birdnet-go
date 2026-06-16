@@ -145,6 +145,11 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 		bn.ModelInfo = defaultClassifierModelInfo(runtime.GOARCH, findModelPathInStandardPaths)
 	}
 
+	// On ONNX-only builds (notflite, the arm64 image), transparently remap a
+	// resolved v2.4 TFLite model (from version:"2.4" or the default) to the INT8
+	// ONNX entry so existing arm64 configs keep starting without a TFLite backend.
+	bn.ModelInfo = remapV24ForONNXOnly(bn.ModelInfo, tfliteBackendAvailable, findModelPathInStandardPaths)
+
 	// Load taxonomy data
 	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
 	if err != nil {
