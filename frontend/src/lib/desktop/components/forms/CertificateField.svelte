@@ -65,8 +65,7 @@
       {placeholder}
       {required}
       {disabled}
-      oninput={e => onchange((e.target as HTMLTextAreaElement).value)}
-    ></textarea>
+      oninput={e => onchange((e.target as HTMLTextAreaElement).value)}></textarea>
     <button
       type="button"
       class="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--color-base-200)] border border-[var(--color-base-300)] transition-all self-start disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:bg-[var(--color-base-300)]"

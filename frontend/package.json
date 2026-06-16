@@ -115,7 +115,7 @@
     "playwright": "^1.56.1",
     "postcss-html": "^1.8.1",
     "prettier": "^3.8.4",
-    "prettier-plugin-svelte": "^4.1.0",
+    "prettier-plugin-svelte": "^4.1.1",
     "stylelint": "^17.13.0",
     "stylelint-config-standard": "^40.0.0",
     "svelte": "^5.56.3",
@@ -138,7 +138,7 @@
     "d3-time-format": "^4.1.0",
     "hls.js": "^1.6.16",
     "maplibre-gl": "^5.23.0",
-    "svelte-dnd-action": "^0.9.69"
+    "svelte-dnd-action": "^0.9.70"
   },
   "bundleDependencies": [
     "svelte"

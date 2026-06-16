@@ -287,8 +287,7 @@
         oninput={handleInput}
         onblur={handleBlur}
         onfocus={handleFocus}
-        {onkeydown}
-      ></textarea>
+        {onkeydown}></textarea>
     {:else if type === 'select'}
       {#if multiple}
         <select
