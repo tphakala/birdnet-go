@@ -37,6 +37,19 @@ func (bn *BirdNET) initializeONNXModel() error {
 			Build()
 	}
 
+	// Expand environment variables and the ~ prefix so dispatch and loading agree:
+	// usesONNXBackend env-expands the path before checking the .onnx extension, so a
+	// configured $VAR/~ ONNX path would dispatch here yet fail to open if left raw.
+	rawPath := modelPath
+	modelPath = os.ExpandEnv(modelPath)
+	modelPath, err := conf.ExpandTildePath(modelPath)
+	if err != nil {
+		return errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("path", rawPath).
+			Build()
+	}
+
 	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, "ONNX classifier", "onnx_classifier", ""); err != nil {
 		return err
 	}
