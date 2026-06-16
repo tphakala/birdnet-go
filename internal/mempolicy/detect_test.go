@@ -142,6 +142,17 @@ func TestDetectCgroupLimit(t *testing.T) {
 		got := detectCgroupLimit(root)
 		assert.Equal(t, int64(134217728), got)
 	})
+
+	t.Run("cgroup v2 takes ancestor limit when leaf is max", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeFile(t, filepath.Join(root, procSelfCgroup), "0::/pod/container\n")
+		// The process's own cgroup is unlimited, but the parent pod cgroup caps it.
+		writeFile(t, filepath.Join(root, cgroupV2Base, "pod", "container", cgroupV2File), "max\n")
+		writeFile(t, filepath.Join(root, cgroupV2Base, "pod", cgroupV2File), "268435456\n")
+		got := detectCgroupLimit(root)
+		assert.Equal(t, int64(268435456), got)
+	})
 }
 
 func TestEffectiveTotal(t *testing.T) {

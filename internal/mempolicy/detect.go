@@ -3,6 +3,7 @@ package mempolicy
 import (
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -74,24 +75,44 @@ func effectiveTotal(host, cgroup int64) int64 {
 // unlimited value and the real per-container cap lives in a subtree.
 func detectCgroupLimit(root string) int64 {
 	v2Sub, v1Sub := cgroupSubPaths(root)
-
-	// cgroup v2 (unified): process subtree first, then the cgroup mount root.
-	for _, rel := range distinctPaths(
-		filepath.Join(cgroupV2Base, v2Sub, cgroupV2File),
-		cgroupV2MaxPath,
-	) {
-		if data, err := os.ReadFile(filepath.Join(root, rel)); err == nil {
-			// v2 present: "max" means unlimited, a number is the cap.
-			if v, ok := parseCgroupV2Max(string(data)); ok {
-				return v
-			}
-			return 0
-		}
+	if limit, found := cgroupV2Limit(root, v2Sub); found {
+		return limit
 	}
+	return cgroupV1Limit(root, v1Sub)
+}
 
-	// cgroup v1: the memory controller subtree first, then the mount root.
+// cgroupV2Limit returns the effective cgroup v2 memory limit by taking the
+// minimum memory.max from the process's cgroup up through its ancestors to the
+// unified mount root: a cgroup's effective limit is bounded by every ancestor, so
+// a "max" leaf can still be capped by a parent (e.g. a Kubernetes pod cgroup).
+// found is true when any memory.max file exists (v2 is the active hierarchy); a
+// returned limit of 0 then means no limit is set at any level.
+func cgroupV2Limit(root, sub string) (limit int64, found bool) {
+	if sub == "" {
+		sub = "/"
+	}
+	for {
+		if data, err := os.ReadFile(filepath.Join(root, cgroupV2Base, sub, cgroupV2File)); err == nil {
+			found = true
+			// "max" means unlimited at this level; a number caps the subtree.
+			if v, ok := parseCgroupV2Max(string(data)); ok && (limit == 0 || v < limit) {
+				limit = v
+			}
+		}
+		if sub == "/" {
+			break
+		}
+		sub = path.Dir(sub) // cgroup paths are always slash-separated
+	}
+	return limit, found
+}
+
+// cgroupV1Limit reads the cgroup v1 memory limit from the process's memory
+// controller subtree, falling back to the controller mount root. Returns 0 when
+// no limit is found (also the path for non-v1 systems, where the files are absent).
+func cgroupV1Limit(root, sub string) int64 {
 	for _, rel := range distinctPaths(
-		filepath.Join(cgroupV1MemBase, v1Sub, cgroupV1File),
+		filepath.Join(cgroupV1MemBase, sub, cgroupV1File),
 		cgroupV1MaxPath,
 	) {
 		if data, err := os.ReadFile(filepath.Join(root, rel)); err == nil {
@@ -117,14 +138,14 @@ func cgroupSubPaths(root string) (v2Sub, v1Sub string) {
 		if len(parts) != 3 {
 			continue
 		}
-		controllers, path := parts[1], parts[2]
+		controllers, cgPath := parts[1], parts[2]
 		if parts[0] == "0" && controllers == "" {
-			v2Sub = path // unified v2 line: "0::<path>"
+			v2Sub = cgPath // unified v2 line: "0::<path>"
 			continue
 		}
 		for c := range strings.SplitSeq(controllers, ",") {
 			if c == "memory" {
-				v1Sub = path
+				v1Sub = cgPath
 			}
 		}
 	}
