@@ -188,6 +188,7 @@ type DetectionResponse struct {
 	ScientificName     string            `json:"scientificName"`
 	CommonName         string            `json:"commonName"`
 	Confidence         float64           `json:"confidence"`
+	ModelType          string            `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 	Verified           string            `json:"verified"`
 	Locked             bool              `json:"locked"`
 	Unlikely           bool              `json:"unlikely,omitempty"`
@@ -1225,6 +1226,13 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 	// For single detection, include weather data by default
 	weatherCache := make(map[string][]datastore.HourlyWeather)
 	detection := c.noteToDetectionResponse(&note, true, weatherCache)
+	// Resolve the model type so the UI can render the correct spectrogram frequency
+	// range (bat detections span a much wider band than birds). Best-effort: an error
+	// leaves it empty and the UI falls back to the default bird range. Done only here
+	// (single-detection) to avoid a per-row lookup on list endpoints.
+	if modelType, mtErr := c.DS.GetNoteModelType(id); mtErr == nil {
+		detection.ModelType = modelType
+	}
 	if !c.isClientAuthenticated(ctx) {
 		detection.Source = nil
 	}

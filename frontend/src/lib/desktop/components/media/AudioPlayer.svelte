@@ -110,6 +110,8 @@
     enableClipExtraction?: boolean;
     /** Label for clip filenames (e.g. "Eurasian Blue Tit_2026-03-14_14-30-25") */
     clipLabel?: string;
+    /** AI model type (e.g. 'bird', 'bat'); selects the spectrogram frequency axis range */
+    modelType?: string;
   }
 
   let {
@@ -128,6 +130,7 @@
     debug = false,
     enableClipExtraction = false,
     clipLabel = '',
+    modelType = '',
   }: Props = $props();
 
   // Audio and UI elements
@@ -263,9 +266,17 @@
   const FILTER_HP_MIN_FREQ = 20;
   const FILTER_HP_MAX_FREQ = 10000;
 
-  // Frequency scale overlay constants (sox resamples to 24kHz, Nyquist = 12kHz)
-  const FREQ_NYQUIST_KHZ = 12;
-  const FREQ_TICKS_KHZ = [12, 10, 8, 6, 5, 4, 3, 2, 1];
+  // Frequency scale overlay constants. Bird spectrograms are resampled to 24kHz
+  // (Nyquist = 12kHz); bat spectrograms keep the native 256kHz capture rate
+  // (Nyquist = 128kHz). The axis must match whichever range the backend rendered.
+  const BIRD_NYQUIST_KHZ = 12;
+  const BIRD_TICKS_KHZ = [12, 10, 8, 6, 5, 4, 3, 2, 1];
+  const BAT_NYQUIST_KHZ = 128;
+  const BAT_TICKS_KHZ = [120, 100, 80, 60, 40, 20];
+  const MODEL_TYPE_BAT = 'bat';
+  let isBatSpectrogram = $derived(modelType === MODEL_TYPE_BAT);
+  let freqNyquistKHz = $derived(isBatSpectrogram ? BAT_NYQUIST_KHZ : BIRD_NYQUIST_KHZ);
+  let freqTicksKHz = $derived(isBatSpectrogram ? BAT_TICKS_KHZ : BIRD_TICKS_KHZ);
   // PLAY_END_DELAY_MS imported from $lib/utils/audio
   // Spinner delay is now handled by useDelayedLoading utility
 
@@ -1921,15 +1932,15 @@
     </div>
   {/if}
 
-  <!-- Frequency scale overlay (linear 0-12kHz, sox resamples to 24kHz) -->
+  <!-- Frequency scale overlay (linear; range follows the detection's model type) -->
   {#if showSpectrogram && spectrogramUrl && !spectrogramLoader.error}
-    {#each FREQ_TICKS_KHZ as freq (freq)}
-      <span class="freq-label" style:bottom="{(freq / FREQ_NYQUIST_KHZ) * 100}%" aria-hidden="true"
+    {#each freqTicksKHz as freq (freq)}
+      <span class="freq-label" style:bottom="{(freq / freqNyquistKHz) * 100}%" aria-hidden="true"
         >{freq}k</span
       >
       <div
         class="freq-line"
-        style:bottom="{(freq / FREQ_NYQUIST_KHZ) * 100}%"
+        style:bottom="{(freq / freqNyquistKHz) * 100}%"
         aria-hidden="true"
       ></div>
     {/each}
