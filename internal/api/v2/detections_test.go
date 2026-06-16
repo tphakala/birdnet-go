@@ -1060,8 +1060,23 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 		// too (regression test for orphaned bat spectrograms on detection delete).
 		baseName + "_1026px-bat.png",
 		baseName + "_1026px-bat-legend.png",
+		// Non-default visual style / dynamic-range / combined suffixes must also be
+		// removed (regression test for orphaned styled spectrograms on delete).
+		baseName + "_1026px-scientific_dark.png",
+		baseName + "_1026px-high_contrast_dark-bat-legend.png",
 	}
 	for _, sf := range spectrogramFiles {
+		require.NoError(t, os.WriteFile(filepath.Join(clipDir, sf), []byte("fake-png"), 0o600))
+	}
+
+	// Files that must survive deletion: a different clip's spectrogram in the same
+	// directory, and a name that shares this clip's "<base>_<width>px" prefix but
+	// with a "_" separator (not a render of this clip) - guards the deletion anchor.
+	survivingFiles := []string{
+		"Some_Other_Bird_50p_20250115T100001Z_1026px.png",
+		baseName + "_1026px_1026px.png",
+	}
+	for _, sf := range survivingFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(clipDir, sf), []byte("fake-png"), 0o600))
 	}
 
@@ -1095,6 +1110,12 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 	for _, sf := range spectrogramFiles {
 		_, statErr := os.Stat(filepath.Join(clipDir, sf))
 		assert.True(t, os.IsNotExist(statErr), "spectrogram file %s should have been removed", sf)
+	}
+
+	// Verify unrelated files were left intact
+	for _, sf := range survivingFiles {
+		_, statErr := os.Stat(filepath.Join(clipDir, sf))
+		assert.NoError(t, statErr, "unrelated file %s must not be removed", sf)
 	}
 
 	mockDS.AssertExpectations(t)
