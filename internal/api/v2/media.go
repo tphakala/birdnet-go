@@ -1080,7 +1080,7 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 	// Resolve frequency profile from detection's model type
 	modelType, mtErr := c.DS.GetNoteModelType(noteID)
 	if mtErr != nil {
-		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+		c.logWarnIfEnabled("GetNoteModelType failed, defaulting to bird profile",
 			logger.String("note_id", noteID),
 			logger.Error(mtErr))
 	}
@@ -1505,7 +1505,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	// token (freqSuffix) so a bat render never collides with a bird-profile PNG.
 	modelType, err := c.DS.GetNoteModelType(noteID)
 	if err != nil {
-		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+		c.logWarnIfEnabled("GetNoteModelType failed, defaulting to bird profile",
 			logger.String("note_id", noteID),
 			logger.Error(err))
 	}
@@ -2035,7 +2035,7 @@ func getSpectrogramLogger() logger.Logger {
 func (c *Controller) resolveDetectionFrequencyProfile(noteID string) spectrogram.FrequencyProfile {
 	modelType, err := c.DS.GetNoteModelType(noteID)
 	if err != nil {
-		c.logDebugIfEnabled("GetNoteModelType failed, defaulting to bird",
+		c.logWarnIfEnabled("GetNoteModelType failed, defaulting to bird profile",
 			logger.String("note_id", noteID),
 			logger.Error(err))
 	}
