@@ -446,14 +446,12 @@ func (c *GuideCache) triggerAsyncRefresh(name, locale string) {
 	if c.closed.Load() {
 		return
 	}
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	c.wg.Go(func() {
 		if c.shouldQuit() {
 			return
 		}
 		_, _ = c.fetchAndStore(c.ctx, name, locale)
-	}()
+	})
 }
 
 // PreFetch fires a single fire-and-forget warm for a species (e.g. on a new
@@ -466,9 +464,7 @@ func (c *GuideCache) PreFetch(ctx context.Context, scientificName string) {
 	if name == "" {
 		return
 	}
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	c.wg.Go(func() {
 		if c.shouldQuit() {
 			return
 		}
@@ -478,7 +474,7 @@ func (c *GuideCache) PreFetch(ctx context.Context, scientificName string) {
 			fetchCtx = c.ctx
 		}
 		_, _ = c.Get(fetchCtx, name, FetchOptions{})
-	}()
+	})
 }
 
 // WarmForSpecies warms the cache for the given species in the background.
@@ -495,9 +491,7 @@ func (c *GuideCache) WarmForSpecies(speciesNames []string) {
 	if len(names) == 0 {
 		return
 	}
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	c.wg.Go(func() {
 		for _, n := range names {
 			if c.shouldQuit() {
 				return
@@ -505,7 +499,7 @@ func (c *GuideCache) WarmForSpecies(speciesNames []string) {
 			_, _ = c.Get(c.ctx, n, FetchOptions{})
 		}
 		c.updateCachePopulationRatio()
-	}()
+	})
 }
 
 // startCacheRefresh runs the periodic stale-entry refresh loop until Close.
@@ -619,7 +613,7 @@ func entryQuality(g *SpeciesGuide) string {
 	case g.IsNegativeEntry():
 		return qualityNegative
 	case g.Partial || len(g.Description) < 200:
-		if len(g.Description) == 0 {
+		if g.Description == "" {
 			return qualityStub
 		}
 		return qualityIntroOnly

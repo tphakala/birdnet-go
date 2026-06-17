@@ -2,7 +2,6 @@
 package datastore
 
 import (
-	"context"
 	"strconv"
 	"strings"
 	"testing"
@@ -26,7 +25,7 @@ func setupSpeciesNoteTestDB(t *testing.T) *DataStore {
 func TestSpeciesNote_SaveGetUpdateDelete(t *testing.T) {
 	t.Parallel()
 	ds := setupSpeciesNoteTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	note := &SpeciesNote{ScientificName: "Turdus merula", Entry: "Heard singing at dawn."}
 	require.NoError(t, ds.SaveSpeciesNote(ctx, note))
@@ -54,7 +53,7 @@ func TestSpeciesNote_SaveGetUpdateDelete(t *testing.T) {
 func TestSpeciesNote_ScientificNameNormalization(t *testing.T) {
 	t.Parallel()
 	ds := setupSpeciesNoteTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, ds.SaveSpeciesNote(ctx, &SpeciesNote{
 		ScientificName: "  Turdus merula  ", Entry: "note",
@@ -69,7 +68,7 @@ func TestSpeciesNote_ScientificNameNormalization(t *testing.T) {
 func TestSpeciesNote_TooLongRejected(t *testing.T) {
 	t.Parallel()
 	ds := setupSpeciesNoteTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	long := strings.Repeat("x", SpeciesNoteMaxLength+1)
 	err := ds.SaveSpeciesNote(ctx, &SpeciesNote{ScientificName: "Turdus merula", Entry: long})
@@ -80,7 +79,7 @@ func TestSpeciesNote_TooLongRejected(t *testing.T) {
 func TestSpeciesNote_EmptyEntryRejected(t *testing.T) {
 	t.Parallel()
 	ds := setupSpeciesNoteTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	err := ds.SaveSpeciesNote(ctx, &SpeciesNote{ScientificName: "Turdus merula", Entry: "   "})
 	require.Error(t, err)
@@ -89,7 +88,7 @@ func TestSpeciesNote_EmptyEntryRejected(t *testing.T) {
 func TestSpeciesNote_UpdateDeleteNotFound(t *testing.T) {
 	t.Parallel()
 	ds := setupSpeciesNoteTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	assert.True(t, errors.Is(ds.UpdateSpeciesNote(ctx, "999", "x"), ErrSpeciesNoteNotFound))
 	assert.True(t, errors.Is(ds.DeleteSpeciesNote(ctx, "999"), ErrSpeciesNoteNotFound))
@@ -98,7 +97,7 @@ func TestSpeciesNote_UpdateDeleteNotFound(t *testing.T) {
 func TestSpeciesNote_InvalidID(t *testing.T) {
 	t.Parallel()
 	ds := setupSpeciesNoteTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.Error(t, ds.UpdateSpeciesNote(ctx, "abc", "x"))
 	require.Error(t, ds.DeleteSpeciesNote(ctx, "0"))

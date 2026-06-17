@@ -126,7 +126,7 @@ func TestGuideCache_FetchAndMemoryHit(t *testing.T) {
 	}
 	c := newTestCache(t, store, prov)
 
-	g, err := c.Get(context.Background(), "Turdus merula", FetchOptions{})
+	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, g)
 	assert.Equal(t, "Common Blackbird", g.CommonName)
@@ -136,7 +136,7 @@ func TestGuideCache_FetchAndMemoryHit(t *testing.T) {
 	assert.Equal(t, 1, store.count())
 
 	// Second call: memory hit, provider not called again.
-	g2, err := c.Get(context.Background(), "Turdus merula", FetchOptions{})
+	g2, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "Common Blackbird", g2.CommonName)
 	assert.Equal(t, 1, prov.callCount())
@@ -148,7 +148,7 @@ func TestGuideCache_NegativeEntryPersisted(t *testing.T) {
 	prov := &fakeProvider{name: WikipediaProviderName, err: ErrGuideNotFound}
 	c := newTestCache(t, store, prov)
 
-	g, err := c.Get(context.Background(), "Nonexistent species", FetchOptions{})
+	g, err := c.Get(t.Context(), "Nonexistent species", FetchOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, g)
 	assert.True(t, g.IsNegativeEntry())
@@ -158,10 +158,10 @@ func TestGuideCache_NegativeEntryPersisted(t *testing.T) {
 func TestGuideCache_TransientErrorNotPersisted(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
-	prov := &fakeProvider{name: WikipediaProviderName, err: NewTransientError(assertErr("boom"))}
+	prov := &fakeProvider{name: WikipediaProviderName, err: NewTransientError(stubError("boom"))}
 	c := newTestCache(t, store, prov)
 
-	g, err := c.Get(context.Background(), "Turdus merula", FetchOptions{})
+	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
 	require.Error(t, err)
 	assert.Nil(t, g)
 	assert.Equal(t, 0, store.count(), "transient failure must not persist a negative entry")
@@ -171,7 +171,7 @@ func TestGuideCache_StaleWhileRevalidate(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
 	// Seed a stale positive entry directly in the store.
-	require.NoError(t, store.Save(context.Background(), &GuideCacheEntry{
+	require.NoError(t, store.Save(t.Context(), &GuideCacheEntry{
 		ScientificName: "Turdus merula",
 		Locale:         "en",
 		Provider:       WikipediaProviderName,
@@ -186,13 +186,13 @@ func TestGuideCache_StaleWhileRevalidate(t *testing.T) {
 	c := newTestCache(t, store, prov)
 
 	// Stale DB hit returns immediately with the old data...
-	g, err := c.Get(context.Background(), "Turdus merula", FetchOptions{})
+	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "Old Name", g.CommonName)
 
 	// ...and triggers a background refresh that eventually updates the store.
 	require.Eventually(t, func() bool {
-		e, gErr := store.Get(context.Background(), "Turdus merula", "en", WikipediaProviderName)
+		e, gErr := store.Get(t.Context(), "Turdus merula", "en", WikipediaProviderName)
 		return gErr == nil && e.CommonName == "Fresh Name"
 	}, 3*time.Second, 20*time.Millisecond)
 }
@@ -208,13 +208,13 @@ func TestGuideCache_GetAfterCloseStillReads(t *testing.T) {
 	c.RegisterProvider(prov.Name(), prov)
 	c.Start()
 
-	_, err := c.Get(context.Background(), "Turdus merula", FetchOptions{})
+	_, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
 	require.NoError(t, err)
 
 	c.Close()
 
 	// Reads must still succeed from memory after Close.
-	g, err := c.Get(context.Background(), "Turdus merula", FetchOptions{})
+	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "Blackbird", g.CommonName)
 }
@@ -234,7 +234,7 @@ func TestGuideCache_FallbackMergesProviders(t *testing.T) {
 	})
 	t.Cleanup(c.Close)
 
-	g, err := c.Get(context.Background(), "Turdus merula", FetchOptions{})
+	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "Wikipedia prose.", g.Description, "primary wins")
 	assert.Equal(t, "Turdus", g.Genus, "secondary fills gap")
@@ -309,10 +309,10 @@ func TestNormalizeHelpers(t *testing.T) {
 	assert.Equal(t, "de", locale)
 }
 
-// assertErr is a tiny error helper for tests.
-type assertErr string
+// stubError is a tiny error helper for tests.
+type stubError string
 
-func (e assertErr) Error() string { return string(e) }
+func (e stubError) Error() string { return string(e) }
 
 func utf8ValidString(s string) bool {
 	for _, r := range s {

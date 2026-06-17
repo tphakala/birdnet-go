@@ -98,7 +98,7 @@ func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName strin
 		// Network-level failures are transient.
 		return nil, NewTransientError(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	switch {
 	case resp.StatusCode == http.StatusNotFound:

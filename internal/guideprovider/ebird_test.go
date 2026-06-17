@@ -37,7 +37,7 @@ func TestEBirdProvider_FetchEnrichment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, EBirdProviderName, p.Name())
 
-	g, err := p.Fetch(context.Background(), "Turdus merula", FetchOptions{})
+	g, err := p.Fetch(t.Context(), "Turdus merula", FetchOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "Turdus", g.Genus)
 	assert.Equal(t, "Turdidae", g.Family)
@@ -55,6 +55,6 @@ func TestEBirdProvider_NotFoundMapsToGuideNotFound(t *testing.T) {
 	p, err := NewEBirdGuideProviderWithMetrics(client, noopMetrics{})
 	require.NoError(t, err)
 
-	_, err = p.Fetch(context.Background(), "Nope", FetchOptions{})
+	_, err = p.Fetch(t.Context(), "Nope", FetchOptions{})
 	assert.True(t, errors.Is(err, ErrGuideNotFound))
 }

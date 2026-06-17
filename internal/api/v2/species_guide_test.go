@@ -92,7 +92,7 @@ func TestSplitGuideSections(t *testing.T) {
 	sections := splitGuideSections(desc)
 	require := assert.New(t)
 	require.Len(sections, 3)
-	require.Equal("", sections[0].heading)
+	require.Empty(sections[0].heading)
 	require.Equal("Intro paragraph.", sections[0].body)
 	require.Equal("Voice", sections[1].heading)
 	require.Equal("Sings.", sections[1].body)

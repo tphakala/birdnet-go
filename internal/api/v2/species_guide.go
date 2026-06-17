@@ -626,18 +626,20 @@ func buildExternalLinks(commonName, scientificName string) []GuideExternalLink {
 	links := make([]GuideExternalLink, 0, 3)
 	if scientificName != "" {
 		wikiTitle := strings.ReplaceAll(scientificName, " ", "_")
-		links = append(links, GuideExternalLink{
-			Name: "Wikipedia",
-			URL:  "https://en.wikipedia.org/wiki/" + url.PathEscape(wikiTitle),
-		})
-		links = append(links, GuideExternalLink{
-			Name: "eBird",
-			URL:  "https://ebird.org/search?q=" + url.QueryEscape(scientificName),
-		})
-		links = append(links, GuideExternalLink{
-			Name: "Xeno-canto",
-			URL:  "https://xeno-canto.org/explore?query=" + url.QueryEscape(scientificName),
-		})
+		links = append(links,
+			GuideExternalLink{
+				Name: "Wikipedia",
+				URL:  "https://en.wikipedia.org/wiki/" + url.PathEscape(wikiTitle),
+			},
+			GuideExternalLink{
+				Name: "eBird",
+				URL:  "https://ebird.org/search?q=" + url.QueryEscape(scientificName),
+			},
+			GuideExternalLink{
+				Name: "Xeno-canto",
+				URL:  "https://xeno-canto.org/explore?query=" + url.QueryEscape(scientificName),
+			},
+		)
 	}
 	return links
 }

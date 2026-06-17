@@ -1,7 +1,6 @@
 package guideprovider
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -71,7 +70,7 @@ func TestWikipediaProvider_FetchSuccess(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	p := newWikipediaTestProvider(t, srv)
-	g, err := p.Fetch(context.Background(), "Turdus merula", FetchOptions{Locale: "en"})
+	g, err := p.Fetch(t.Context(), "Turdus merula", FetchOptions{Locale: "en"})
 	require.NoError(t, err)
 	require.NotNil(t, g)
 	assert.Equal(t, "Common Blackbird", g.CommonName)
@@ -92,7 +91,7 @@ func TestWikipediaProvider_NotFound(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	p := newWikipediaTestProvider(t, srv)
-	_, err := p.Fetch(context.Background(), "Nope", FetchOptions{Locale: "en"})
+	_, err := p.Fetch(t.Context(), "Nope", FetchOptions{Locale: "en"})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrGuideNotFound))
 	assert.False(t, IsTransient(err))
@@ -106,7 +105,7 @@ func TestWikipediaProvider_MissingPage(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	p := newWikipediaTestProvider(t, srv)
-	_, err := p.Fetch(context.Background(), "Nope", FetchOptions{Locale: "en"})
+	_, err := p.Fetch(t.Context(), "Nope", FetchOptions{Locale: "en"})
 	assert.True(t, errors.Is(err, ErrGuideNotFound))
 }
 
@@ -118,7 +117,7 @@ func TestWikipediaProvider_ServerErrorIsTransient(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	p := newWikipediaTestProvider(t, srv)
-	_, err := p.Fetch(context.Background(), "Turdus merula", FetchOptions{Locale: "en"})
+	_, err := p.Fetch(t.Context(), "Turdus merula", FetchOptions{Locale: "en"})
 	require.Error(t, err)
 	assert.True(t, IsTransient(err), "5xx must be transient so no negative entry is cached")
 }

@@ -1,7 +1,6 @@
 package guideprovider
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -25,7 +24,7 @@ func newTestStore(t *testing.T) *GORMGuideStore {
 func TestGORMGuideStore_SaveGetDelete(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	entry := &GuideCacheEntry{
 		ScientificName: "Turdus merula",
@@ -54,7 +53,7 @@ func TestGORMGuideStore_SaveGetDelete(t *testing.T) {
 func TestGORMGuideStore_SaveUpsert(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	base := &GuideCacheEntry{
 		ScientificName: "Turdus merula", Locale: "en", Provider: WikipediaProviderName,
@@ -76,7 +75,7 @@ func TestGORMGuideStore_SaveUpsert(t *testing.T) {
 func TestGORMGuideStore_LocaleProviderIsolation(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, store.Save(ctx, &GuideCacheEntry{
 		ScientificName: "Turdus merula", Locale: "en", Provider: WikipediaProviderName,
@@ -95,7 +94,7 @@ func TestGORMGuideStore_LocaleProviderIsolation(t *testing.T) {
 func TestGORMGuideStore_Cleanup(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, store.Save(ctx, &GuideCacheEntry{
 		ScientificName: "Old species", Locale: "en", Provider: WikipediaProviderName,
