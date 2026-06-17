@@ -441,7 +441,8 @@ func TestToDetectionModelInfoVariant(t *testing.T) {
 		require.NotNil(t, det.ClassifierPath)
 	})
 	t.Run("embedded FP32 default attributes as default", func(t *testing.T) {
-		m := ModelRegistry[DefaultModelVersion] // CustomPath == ""
+		m := ModelRegistry[DefaultModelVersion]
+		require.Empty(t, m.CustomPath, "precondition: registry entry must not have a custom path")
 		assert.Equal(t, "default", m.ToDetectionModelInfo().Variant)
 	})
 	t.Run("user/gallery model with path attributes as custom", func(t *testing.T) {

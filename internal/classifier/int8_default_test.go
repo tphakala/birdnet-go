@@ -17,8 +17,9 @@ func TestBirdNETV24EmbeddedLabelsResolve(t *testing.T) {
 	fs, err := getModelFileSystem(DefaultModelVersion)
 	require.NoError(t, err)
 	require.NotNil(t, fs)
-	_, err = conf.GetLabelFilename(DefaultModelVersion, "en-uk")
+	fn, err := conf.GetLabelFilename(DefaultModelVersion, "en-uk")
 	require.NoError(t, err)
+	assert.NotEmpty(t, fn, "label filename must not be empty")
 }
 
 // TestIsBirdNETV24Family verifies that isBirdNETV24Family returns true only for
