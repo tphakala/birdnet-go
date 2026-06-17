@@ -2292,13 +2292,12 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		return true
 	}
 
-	// Check for changes in BirdNET inference backend preference
+	// Check for changes in BirdNET inference backend preference. OpenVINOPath is
+	// intentionally NOT checked here: it is restart-required (the OpenVINO core
+	// loads the library once via InitOpenVINO and libopenvino_c cannot be safely
+	// unloaded), so a runtime path change is declared hotReloadRestart, matching
+	// ONNXRuntimePath.
 	if oldSettings.BirdNET.Backend != currentSettings.BirdNET.Backend {
-		return true
-	}
-
-	// Check for changes in OpenVINO shared library path
-	if oldSettings.BirdNET.OpenVINOPath != currentSettings.BirdNET.OpenVINOPath {
 		return true
 	}
 

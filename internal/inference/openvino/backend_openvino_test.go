@@ -7,7 +7,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,7 +34,7 @@ func TestOpenVINORoundTrip(t *testing.T) {
 
 	out, err := c.PredictRaw(make([]float32, birdNETInputSamples))
 	require.NoError(t, err)
-	assert.Len(t, out, birdNETOutputClasses)
+	require.Len(t, out, birdNETOutputClasses)
 
 	// Outputs are raw pre-activation logits (often negative), so do not assert a
 	// [0,1] range; just sanity-check that the first few are finite (not NaN/Inf).
