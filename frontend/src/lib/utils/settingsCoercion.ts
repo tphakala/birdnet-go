@@ -776,6 +776,39 @@ export function coerceNotificationSettings(
 /**
  * Main coercion function for all settings
  */
+/**
+ * coerceSpeciesGuideSettings normalizes the species guide config. The show*
+ * flags default to true to match the backend's *bool "unset means on" semantics.
+ */
+function coerceSpeciesGuideSettings(value: unknown): UnknownSettings {
+  const sg: Record<string, unknown> =
+    value != null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  return {
+    enabled: coerceBoolean(sg.enabled, false),
+    provider: coerceString(sg.provider, 'wikipedia'),
+    fallbackPolicy: coerceString(sg.fallbackPolicy, 'all'),
+    warmTopN: coerceNumber(sg.warmTopN, 0, 10000, 50),
+    preFetchEnabled: coerceBoolean(sg.preFetchEnabled, true),
+    showNotes: coerceBoolean(sg.showNotes, true),
+    showEnrichments: coerceBoolean(sg.showEnrichments, true),
+    showSimilarSpecies: coerceBoolean(sg.showSimilarSpecies, true),
+  };
+}
+
+/** coerceDashboardSettings passes dashboard through, coercing known sub-sections. */
+function coerceDashboardSettings(value: unknown): UnknownSettings {
+  const dash: Record<string, unknown> =
+    value != null && typeof value === 'object' && !Array.isArray(value)
+      ? { ...(value as Record<string, unknown>) }
+      : {};
+  if (Object.prototype.hasOwnProperty.call(dash, 'speciesGuide')) {
+    dash.speciesGuide = coerceSpeciesGuideSettings(dash.speciesGuide);
+  }
+  return dash;
+}
+
 export function coerceSettings(section: string, data: UnknownSettings): UnknownSettings {
   switch (section) {
     case 'birdnet':
@@ -800,6 +833,10 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
 
       if (Object.prototype.hasOwnProperty.call(data, 'rtsp')) {
         coercedRealtime.rtsp = coerceRTSPSettings(data.rtsp);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(data, 'dashboard')) {
+        coercedRealtime.dashboard = coerceDashboardSettings(data.dashboard);
       }
 
       if (Object.prototype.hasOwnProperty.call(data, 'falsePositiveFilter')) {

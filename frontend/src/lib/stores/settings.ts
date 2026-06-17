@@ -579,6 +579,20 @@ export interface Dashboard {
   logoStyle?: string; // Logo display style: "gradient" or "solid"
   layout?: DashboardLayout; // Configurable dashboard element layout
   defaultAudioGain?: number; // Default playback gain in dB (0-24)
+  speciesGuide?: SpeciesGuideSettings; // Species guide provider settings
+}
+
+// Species guide provider settings (Wikipedia/eBird enrichment).
+// The three show* flags default to true when absent (matches backend *bool semantics).
+export interface SpeciesGuideSettings {
+  enabled: boolean;
+  provider: string; // "wikipedia" | "ebird" | "auto"
+  fallbackPolicy: string; // "all" | "none"
+  warmTopN?: number;
+  preFetchEnabled?: boolean;
+  showNotes?: boolean;
+  showEnrichments?: boolean;
+  showSimilarSpecies?: boolean;
 }
 
 // Dashboard layout configuration
@@ -1015,6 +1029,16 @@ function createEmptySettings(): SettingsFormData {
           ],
         },
         defaultAudioGain: 0,
+        speciesGuide: {
+          enabled: false,
+          provider: 'wikipedia',
+          fallbackPolicy: 'all',
+          warmTopN: 50,
+          preFetchEnabled: true,
+          showNotes: true,
+          showEnrichments: true,
+          showSimilarSpecies: true,
+        },
       },
     },
     webServer: {},

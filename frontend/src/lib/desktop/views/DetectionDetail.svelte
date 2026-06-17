@@ -29,6 +29,8 @@
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
+  import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
+  import { dashboardSettings } from '$lib/stores/settings';
   import {
     Download,
     Camera,
@@ -98,6 +100,11 @@
 
   // State
   let activeTab = $state<TabType>('overview');
+
+  // Species guide panel (gated on settings; collapsible inline panel).
+  let guidePanelOpen = $state(true);
+  let guideEnabled = $derived($dashboardSettings?.speciesGuide?.enabled ?? false);
+  let showSimilarSpecies = $derived($dashboardSettings?.speciesGuide?.showSimilarSpecies ?? true);
 
   // Dynamic review component loading
   let ReviewCard: ReviewCardComponent | null = $state(null);
@@ -883,6 +890,22 @@
         </div>
       </div>
     </section>
+
+    <!-- Species Guide panel (opt-in; gated on settings) -->
+    {#if guideEnabled && showSimilarSpecies && guidePanelOpen}
+      <section class="surface-card" aria-labelledby="species-guide-heading">
+        <div class="p-5 md:p-6">
+          <h2 id="species-guide-heading" class="sr-only">
+            {t('analytics.species.guide.title')}
+          </h2>
+          <SpeciesComparison
+            scientificName={detection.scientificName}
+            commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
+            onclose={() => (guidePanelOpen = false)}
+          />
+        </div>
+      </section>
+    {/if}
 
     <!-- Tabbed Content -->
     <section class="surface-card" aria-labelledby="tabs-heading">

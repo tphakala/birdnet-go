@@ -1669,7 +1669,51 @@
         "detections": "Detektálások:",
         "confidence": "Megbízhatóság:",
         "first": "Első:"
-      }
+      },
+      "guide": {
+        "title": "Guide",
+        "similar": "Similar species",
+        "noSimilar": "No similar species found",
+        "loading": "Loading guide…",
+        "expectedness": {
+          "expected": "Expected here",
+          "uncommon": "Uncommon here",
+          "rare": "Rare here",
+          "unexpected": "Unexpected here"
+        },
+        "season": {
+          "spring": "Spring",
+          "summer": "Summer",
+          "autumn": "Autumn",
+          "winter": "Winter",
+          "wet1": "Wet season",
+          "dry1": "Dry season",
+          "wet2": "Wet season",
+          "dry2": "Dry season"
+        },
+        "description": "Description",
+        "songsAndCalls": "Songs & Calls"
+      },
+      "notes": {
+        "title": "Notes",
+        "placeholder": "Add a note about this species…",
+        "editLabel": "Edit note",
+        "save": "Save note",
+        "empty": "No notes yet.",
+        "deleteConfirm": "Delete this note?",
+        "deleteFailed": "Failed to delete note.",
+        "saveFailed": "Failed to save note.",
+        "tooLong": "Note is too long (maximum {max} characters)."
+      },
+      "similar": {
+        "title": "Similar species",
+        "compare": "Compare",
+        "loading": "Loading similar species…",
+        "empty": "No similar species found.",
+        "similar": "Similar",
+        "speciesGuide": "Species guide"
+      },
+      "viewGuide": "View guide for {species}"
     },
     "advanced": {
       "title": "Speciális analitika",
@@ -4132,7 +4176,8 @@
         "appearance": "Megjelenés",
         "language": "Nyelv és terület",
         "visualContent": "Vizuális tartalom",
-        "audioPlayback": "Hang lejátszás"
+        "audioPlayback": "Hang lejátszás",
+        "speciesGuide": "Species Guide"
       },
       "appearance": {
         "title": "Megjelenés",
@@ -4152,6 +4197,41 @@
         "defaultGain": "Alapértelmezett hangerő növelés",
         "defaultGainHelpText": "Kezdeti erősítés a felvételek lejátszásakor. A madár hangok gyakran halkak, ezért 6-12 dB erősítés ajánlott.",
         "defaultGainUnit": "dB"
+      },
+      "speciesGuide": {
+        "title": "Species Guide",
+        "description": "Enrich detection details with descriptions, notes, and similar species from Wikipedia and eBird.",
+        "enabled": {
+          "label": "Enable species guide",
+          "helpText": "Show contextual guide information on detection details and the species modal."
+        },
+        "provider": {
+          "label": "Provider",
+          "helpText": "Wikipedia provides descriptions; auto also enriches taxonomy from eBird when an API key is configured.",
+          "options": {
+            "wikipedia": "Wikipedia",
+            "ebird": "eBird"
+          }
+        },
+        "fallbackPolicy": {
+          "label": "Fallback policy",
+          "helpText": "All merges every available provider; none uses only the primary provider."
+        },
+        "sections": {
+          "title": "Guide Sections"
+        },
+        "showNotes": {
+          "label": "Show notes",
+          "helpText": "Allow per-species user notes."
+        },
+        "showEnrichments": {
+          "label": "Show enrichments",
+          "helpText": "Show quality, expectedness, and season badges."
+        },
+        "showSimilarSpecies": {
+          "label": "Show similar species",
+          "helpText": "Show the similar-species comparison panel."
+        }
       }
     },
     "restartRequired": "Néhány változtatáshoz szerver újraindítás szükséges. Kérjük, indítsa újra a BirdNET-Go-t."
