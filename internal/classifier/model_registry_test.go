@@ -432,3 +432,22 @@ func TestModelInfo_ToDetectionModelInfo_EmptyDetectionName(t *testing.T) {
 	got := info.ToDetectionModelInfo()
 	assert.Equal(t, detection.DefaultModelInfo(), got)
 }
+
+func TestToDetectionModelInfoVariant(t *testing.T) {
+	t.Run("stock INT8 default attributes as default", func(t *testing.T) {
+		m := birdNETV24ONNXVariant("/models/BirdNET_INT8_ARM.onnx", QuantizationINT8)
+		det := m.ToDetectionModelInfo()
+		assert.Equal(t, "default", det.Variant)
+		require.NotNil(t, det.ClassifierPath)
+	})
+	t.Run("embedded FP32 default attributes as default", func(t *testing.T) {
+		m := ModelRegistry[DefaultModelVersion] // CustomPath == ""
+		assert.Equal(t, "default", m.ToDetectionModelInfo().Variant)
+	})
+	t.Run("user/gallery model with path attributes as custom", func(t *testing.T) {
+		m := ModelRegistry[DefaultModelVersion]
+		m.CustomPath = "/home/user/my_birdnet.tflite"
+		m.IsStock = false
+		assert.Equal(t, "custom", m.ToDetectionModelInfo().Variant)
+	})
+}

@@ -408,7 +408,9 @@ func (m *ModelInfo) ToDetectionModelInfo() detection.ModelInfo {
 	var classifierPath *string
 	if m.CustomPath != "" {
 		classifierPath = &m.CustomPath
-		variant = "custom"
+		if !m.IsStock {
+			variant = "custom"
+		}
 	}
 	return detection.ModelInfo{
 		Name:           m.DetectionName,
