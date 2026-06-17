@@ -91,7 +91,6 @@ export interface SpeciesGuideData {
   scientific_name: string;
   common_name: string;
   description: string;
-  conservation_status: string;
   quality: GuideQuality;
   expectedness?: Expectedness;
   current_season?: string;

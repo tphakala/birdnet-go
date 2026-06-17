@@ -2,6 +2,7 @@ package guideprovider
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -307,6 +308,56 @@ func TestNormalizeHelpers(t *testing.T) {
 	name, locale := splitCacheKey(cacheKey("Turdus merula", "de"))
 	assert.Equal(t, "Turdus merula", name)
 	assert.Equal(t, "de", locale)
+}
+
+func TestNormalizeLocale_Validation(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		in, want string
+	}{
+		{"en", "en"},
+		{"de", "de"},
+		{" PT-BR ", "pt-br"},   // trimmed + lowercased
+		{"zh-hans", "zh-hans"}, // 4-letter subtag allowed
+		{"", "en"},             // empty -> default
+		{"english", "en"},      // too long -> default
+		{"en_US", "en"},        // underscore not allowed -> default
+		{"../etc", "en"},       // path traversal attempt -> default
+		{"@evil.com", "en"},    // host-injection attempt -> default
+		{"en.wikipedia", "en"}, // dotted -> default
+		{"a", "en"},            // too short -> default
+	}
+	for _, tt := range tests {
+		assert.Equalf(t, tt.want, normalizeLocale(tt.in), "normalizeLocale(%q)", tt.in)
+	}
+}
+
+func TestStoreMemory_Caps(t *testing.T) {
+	t.Parallel()
+	c := NewGuideCache(newFakeStore(), noopMetrics{})
+	t.Cleanup(c.Close)
+
+	// Store well past the cap with distinct keys.
+	for i := range maxMemoryEntries + 500 {
+		c.storeMemory(cacheKey("species", strconvI(i)), &SpeciesGuide{CommonName: "x"})
+	}
+	count := 0
+	c.memory.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+	assert.LessOrEqual(t, count, maxMemoryEntries, "memory tier must not exceed the cap")
+
+	// Updating an existing key must not change the count or be rejected.
+	c.storeMemory(cacheKey("species", strconvI(0)), &SpeciesGuide{CommonName: "updated"})
+	v, ok := c.memory.Load(cacheKey("species", strconvI(0)))
+	assert.True(t, ok)
+	g, _ := v.(*SpeciesGuide)
+	assert.Equal(t, "updated", g.CommonName)
+}
+
+func strconvI(i int) string {
+	return strconv.Itoa(i)
 }
 
 // stubError is a tiny error helper for tests.

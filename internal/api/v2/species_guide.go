@@ -13,8 +13,10 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/guideprovider"
 )
@@ -83,18 +85,17 @@ type GuideExternalLink struct {
 
 // SpeciesGuideData is the response body for GET /species/:name/guide.
 type SpeciesGuideData struct {
-	ScientificName     string              `json:"scientific_name"`
-	CommonName         string              `json:"common_name"`
-	Description        string              `json:"description"`
-	ConservationStatus string              `json:"conservation_status"`
-	Quality            string              `json:"quality"`
-	Expectedness       string              `json:"expectedness,omitempty"`
-	CurrentSeason      string              `json:"current_season,omitempty"`
-	ExternalLinks      []GuideExternalLink `json:"external_links,omitempty"`
-	Features           GuideFeatureFlags   `json:"features"`
-	Source             GuideSource         `json:"source"`
-	Partial            bool                `json:"partial"`
-	CachedAt           string              `json:"cached_at"`
+	ScientificName string              `json:"scientific_name"`
+	CommonName     string              `json:"common_name"`
+	Description    string              `json:"description"`
+	Quality        string              `json:"quality"`
+	Expectedness   string              `json:"expectedness,omitempty"`
+	CurrentSeason  string              `json:"current_season,omitempty"`
+	ExternalLinks  []GuideExternalLink `json:"external_links,omitempty"`
+	Features       GuideFeatureFlags   `json:"features"`
+	Source         GuideSource         `json:"source"`
+	Partial        bool                `json:"partial"`
+	CachedAt       string              `json:"cached_at"`
 }
 
 // SimilarSpeciesSections holds parsed guide sections for a similar species.
@@ -285,13 +286,12 @@ func (c *Controller) GetSpeciesGuide(ctx echo.Context) error {
 	}
 
 	data := SpeciesGuideData{
-		ScientificName:     guide.ScientificName,
-		CommonName:         guide.CommonName,
-		Description:        guide.Description,
-		ConservationStatus: guide.ConservationStatus,
-		Quality:            classifyGuideQuality(guide.Description, guide.Partial),
-		CurrentSeason:      computeCurrentSeason(settings.BirdNET.Latitude, time.Now()),
-		ExternalLinks:      buildExternalLinks(guide.CommonName, guide.ScientificName),
+		ScientificName: guide.ScientificName,
+		CommonName:     guide.CommonName,
+		Description:    guide.Description,
+		Quality:        classifyGuideQuality(guide.Description, guide.Partial),
+		CurrentSeason:  computeCurrentSeason(settings.BirdNET.Latitude, time.Now()),
+		ExternalLinks:  buildExternalLinks(guide.CommonName, guide.ScientificName),
 		Features: GuideFeatureFlags{
 			Notes:          cfg.IsShowNotes(),
 			Enrichments:    cfg.IsShowEnrichments(),
@@ -553,18 +553,60 @@ func classifyGuideQuality(description string, partial bool) string {
 	}
 }
 
+// guideRarityTTL bounds how long the cached probable-species score map is reused.
+// The geomodel prediction behind it is the per-request cost we're avoiding; 60s
+// of staleness after a location/settings change is acceptable for a badge.
+const guideRarityTTL = 60 * time.Second
+
 // guideExpectedness returns the expectedness classification for a species, or ""
-// when the rarity model is unavailable or has no coverage for the species.
+// when the rarity model is unavailable or has no coverage for the species. It
+// uses a short-lived cache of the probable-species scores so a rate-limited
+// burst of guide requests doesn't re-run the geomodel prediction per call.
 func (c *Controller) guideExpectedness(scientificName string) string {
 	proc := c.Processor
 	if proc == nil || proc.Bn == nil {
 		return ""
 	}
-	info, err := c.getSpeciesRarityInfo(proc.Bn, scientificName)
-	if err != nil || info == nil || info.Status == RarityUnknown {
+	scores := c.probableSpeciesScores(proc.Bn)
+	if scores == nil {
 		return ""
 	}
-	return scoreToExpectedness(info.Score)
+	key := strings.ToLower(detection.ExtractScientificName(scientificName))
+	if score, ok := scores[key]; ok {
+		return scoreToExpectedness(score)
+	}
+	// Not in today's probable list: rare if the geomodel covers it at all,
+	// otherwise unknown (omit). Mirrors getSpeciesRarityInfo's semantics.
+	if speciesHasGeomodelCoverage(proc.Bn, scientificName) {
+		return scoreToExpectedness(0)
+	}
+	return ""
+}
+
+// probableSpeciesScores returns a cached map of normalized scientific name ->
+// geomodel occurrence score, rebuilding it when the TTL expires. Returns nil
+// when the prediction is unavailable (caller omits expectedness).
+func (c *Controller) probableSpeciesScores(bn *classifier.Orchestrator) map[string]float64 {
+	c.guideRarityMu.Lock()
+	defer c.guideRarityMu.Unlock()
+
+	if c.guideRarityScores != nil && time.Now().Before(c.guideRarityExpiry) {
+		return c.guideRarityScores
+	}
+
+	today := time.Now().Truncate(HoursPerDay * time.Hour)
+	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
+	if err != nil {
+		return nil
+	}
+
+	scores := make(map[string]float64, len(speciesScores))
+	for _, ss := range speciesScores {
+		scores[strings.ToLower(detection.ExtractScientificName(ss.Label))] = ss.Score
+	}
+	c.guideRarityScores = scores
+	c.guideRarityExpiry = time.Now().Add(guideRarityTTL)
+	return scores
 }
 
 // scoreToExpectedness maps a geomodel occurrence score to an expectedness label.

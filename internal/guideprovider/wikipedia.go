@@ -91,7 +91,8 @@ func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName strin
 			Build()
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "BirdNET-Go/species-guide")
+	// Wikipedia API policy asks for a descriptive User-Agent with contact info.
+	req.Header.Set("User-Agent", "BirdNET-Go/1.0 (species-guide; +https://github.com/tphakala/birdnet-go)")
 
 	resp, err := p.client.Do(req)
 	if err != nil {

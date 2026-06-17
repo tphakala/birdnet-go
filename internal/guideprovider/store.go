@@ -17,23 +17,22 @@ import (
 // GuideCacheEntry is the GORM row for the DB cache tier. The composite unique
 // key is (scientific_name, locale, provider).
 type GuideCacheEntry struct {
-	ID                 uint   `gorm:"primaryKey"`
-	ScientificName     string `gorm:"uniqueIndex:idx_guide_cache_key;not null"`
-	Locale             string `gorm:"uniqueIndex:idx_guide_cache_key;not null"`
-	Provider           string `gorm:"uniqueIndex:idx_guide_cache_key;not null"`
-	CommonName         string
-	Description        string `gorm:"type:text"`
-	ConservationStatus string
-	Genus              string
-	Family             string
-	SourceURL          string
-	License            string
-	LicenseURL         string
-	SimilarSpecies     string `gorm:"type:text"` // JSON-encoded []SimilarSpecies
-	Negative           bool
-	Partial            bool
-	CachedAt           time.Time `gorm:"index"`
-	UpdatedAt          time.Time `gorm:"autoUpdateTime"`
+	ID             uint   `gorm:"primaryKey"`
+	ScientificName string `gorm:"uniqueIndex:idx_guide_cache_key;not null"`
+	Locale         string `gorm:"uniqueIndex:idx_guide_cache_key;not null"`
+	Provider       string `gorm:"uniqueIndex:idx_guide_cache_key;not null"`
+	CommonName     string
+	Description    string `gorm:"type:text"`
+	Genus          string
+	Family         string
+	SourceURL      string
+	License        string
+	LicenseURL     string
+	SimilarSpecies string `gorm:"type:text"` // JSON-encoded []SimilarSpecies
+	Negative       bool
+	Partial        bool
+	CachedAt       time.Time `gorm:"index"`
+	UpdatedAt      time.Time `gorm:"autoUpdateTime"`
 }
 
 // TableName sets the table name for GuideCacheEntry.
@@ -87,41 +86,39 @@ func decodeSimilarSpecies(encoded string) []SimilarSpecies {
 // entryToGuide maps a DB row to the domain model.
 func entryToGuide(e *GuideCacheEntry) *SpeciesGuide {
 	return &SpeciesGuide{
-		ScientificName:     e.ScientificName,
-		CommonName:         e.CommonName,
-		Description:        e.Description,
-		ConservationStatus: e.ConservationStatus,
-		Genus:              e.Genus,
-		Family:             e.Family,
-		SourceProvider:     e.Provider,
-		SourceURL:          e.SourceURL,
-		License:            e.License,
-		LicenseURL:         e.LicenseURL,
-		SimilarSpecies:     decodeSimilarSpecies(e.SimilarSpecies),
-		CachedAt:           e.CachedAt,
-		Partial:            e.Partial,
-		Negative:           e.Negative,
+		ScientificName: e.ScientificName,
+		CommonName:     e.CommonName,
+		Description:    e.Description,
+		Genus:          e.Genus,
+		Family:         e.Family,
+		SourceProvider: e.Provider,
+		SourceURL:      e.SourceURL,
+		License:        e.License,
+		LicenseURL:     e.LicenseURL,
+		SimilarSpecies: decodeSimilarSpecies(e.SimilarSpecies),
+		CachedAt:       e.CachedAt,
+		Partial:        e.Partial,
+		Negative:       e.Negative,
 	}
 }
 
 // guideToEntry maps the domain model to a DB row keyed by (name, locale, provider).
 func guideToEntry(name, locale, provider string, g *SpeciesGuide) *GuideCacheEntry {
 	return &GuideCacheEntry{
-		ScientificName:     name,
-		Locale:             locale,
-		Provider:           provider,
-		CommonName:         g.CommonName,
-		Description:        g.Description,
-		ConservationStatus: g.ConservationStatus,
-		Genus:              g.Genus,
-		Family:             g.Family,
-		SourceURL:          g.SourceURL,
-		License:            g.License,
-		LicenseURL:         g.LicenseURL,
-		SimilarSpecies:     encodeSimilarSpecies(g.SimilarSpecies),
-		Negative:           g.Negative,
-		Partial:            g.Partial,
-		CachedAt:           g.CachedAt,
+		ScientificName: name,
+		Locale:         locale,
+		Provider:       provider,
+		CommonName:     g.CommonName,
+		Description:    g.Description,
+		Genus:          g.Genus,
+		Family:         g.Family,
+		SourceURL:      g.SourceURL,
+		License:        g.License,
+		LicenseURL:     g.LicenseURL,
+		SimilarSpecies: encodeSimilarSpecies(g.SimilarSpecies),
+		Negative:       g.Negative,
+		Partial:        g.Partial,
+		CachedAt:       g.CachedAt,
 	}
 }
 

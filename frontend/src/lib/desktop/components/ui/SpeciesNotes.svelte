@@ -34,6 +34,7 @@
 
   let editingId = $state<number | null>(null);
   let editDraft = $state('');
+  let confirmingDeleteId = $state<number | null>(null);
 
   let canSave = $derived(draft.trim().length > 0 && !saving);
 
@@ -106,7 +107,7 @@
   }
 
   async function deleteNote(id: number): Promise<void> {
-    if (!window.confirm(t('analytics.species.notes.deleteConfirm'))) return;
+    confirmingDeleteId = null;
     try {
       await api.delete(`/api/v2/species/notes/${id}`);
       notes = notes.filter(n => n.id !== id);
@@ -197,24 +198,46 @@
             <div class="mt-1 flex items-center justify-between gap-2">
               <span class="text-xs text-base-content/50">{formatDate(note.updated_at)}</span>
               {#if $isAuthenticated}
-                <div class="flex gap-1">
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs"
-                    aria-label={t('analytics.species.notes.editLabel')}
-                    onclick={() => startEdit(note)}
-                  >
-                    <Pencil class="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs text-error"
-                    aria-label={t('analytics.species.notes.deleteConfirm')}
-                    onclick={() => deleteNote(note.id)}
-                  >
-                    <Trash2 class="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                {#if confirmingDeleteId === note.id}
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-base-content/70">
+                      {t('analytics.species.notes.deleteConfirm')}
+                    </span>
+                    <button
+                      type="button"
+                      class="btn btn-error btn-xs"
+                      onclick={() => deleteNote(note.id)}
+                    >
+                      {t('common.delete')}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      onclick={() => (confirmingDeleteId = null)}
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                {:else}
+                  <div class="flex gap-1">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      aria-label={t('analytics.species.notes.editLabel')}
+                      onclick={() => startEdit(note)}
+                    >
+                      <Pencil class="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs text-error"
+                      aria-label={t('analytics.species.notes.deleteConfirm')}
+                      onclick={() => (confirmingDeleteId = note.id)}
+                    >
+                      <Trash2 class="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                {/if}
               {/if}
             </div>
           {/if}

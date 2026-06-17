@@ -22,7 +22,6 @@ function makeGuide(overrides: Partial<SpeciesGuideData> = {}): SpeciesGuideData 
     scientific_name: 'Turdus merula',
     common_name: 'Common Blackbird',
     description: 'An introduction.\n\n## Voice\nThe male sings.',
-    conservation_status: '',
     quality: 'full',
     features: { notes: true, enrichments: true, similar_species: true },
     source: { provider: 'wikipedia', url: '', license: '', license_url: '' },

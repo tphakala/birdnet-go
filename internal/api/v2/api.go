@@ -75,8 +75,14 @@ type Controller struct {
 	// guideCache is the species guide cache. The controller is its canonical
 	// owner (hot-reload swaps it in), guarded by guideCacheMu. May be nil when
 	// the feature is disabled.
-	guideCache        *guideprovider.GuideCache
-	guideCacheMu      sync.RWMutex
+	guideCache   *guideprovider.GuideCache
+	guideCacheMu sync.RWMutex
+	// guideRarity* memoize the daily probable-species score map (normalized
+	// scientific name -> score) for the guide expectedness badge, so a burst of
+	// guide requests doesn't re-run the geomodel prediction per call.
+	guideRarityMu     sync.Mutex
+	guideRarityExpiry time.Time
+	guideRarityScores map[string]float64
 	controlChan       chan string
 	shutdownRequester ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
 	shutdownMu        sync.RWMutex      // protects shutdownRequester

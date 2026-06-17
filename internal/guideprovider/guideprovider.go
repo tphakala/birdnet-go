@@ -6,6 +6,7 @@ package guideprovider
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -38,9 +39,18 @@ const (
 	refreshInterval = 2 * time.Hour
 	// maxDescriptionLength caps stored descriptions (trimmed on a UTF-8 boundary).
 	maxDescriptionLength = 10_000
-	// defaultLocale is used when FetchOptions.Locale is empty.
+	// defaultLocale is used when FetchOptions.Locale is empty or invalid.
 	defaultLocale = "en"
+	// maxMemoryEntries bounds the in-memory tier so an attacker passing many
+	// distinct keys cannot grow it without limit. Once reached, new entries are
+	// served from (and persisted to) the DB tier but not added to memory.
+	maxMemoryEntries = 5000
 )
+
+// localePattern restricts locale codes to BCP-47-ish forms (e.g. "en", "pt-br").
+// It bounds the cache key space and prevents arbitrary input from selecting a
+// Wikipedia subdomain or inflating the cache. Invalid values fall back to "en".
+var localePattern = regexp.MustCompile(`^[a-z]{2,3}(-[a-z]{2,4})?$`)
 
 // Cache tier labels for metrics.
 const (
@@ -99,20 +109,19 @@ type SimilarSpecies struct {
 
 // SpeciesGuide is the domain model returned to callers.
 type SpeciesGuide struct {
-	ScientificName     string           `json:"scientific_name"`
-	CommonName         string           `json:"common_name"`
-	Description        string           `json:"description"` // may contain "## Section" markdown
-	ConservationStatus string           `json:"conservation_status"`
-	Genus              string           `json:"genus"`
-	Family             string           `json:"family"`
-	SourceProvider     string           `json:"source_provider"`
-	SourceURL          string           `json:"source_url"`
-	License            string           `json:"license"`
-	LicenseURL         string           `json:"license_url"`
-	SimilarSpecies     []SimilarSpecies `json:"similar_species,omitempty"`
-	CachedAt           time.Time        `json:"cached_at"`
-	Partial            bool             `json:"partial"`  // some providers failed; data may be incomplete
-	Negative           bool             `json:"negative"` // provider found nothing
+	ScientificName string           `json:"scientific_name"`
+	CommonName     string           `json:"common_name"`
+	Description    string           `json:"description"` // may contain "## Section" markdown
+	Genus          string           `json:"genus"`
+	Family         string           `json:"family"`
+	SourceProvider string           `json:"source_provider"`
+	SourceURL      string           `json:"source_url"`
+	License        string           `json:"license"`
+	LicenseURL     string           `json:"license_url"`
+	SimilarSpecies []SimilarSpecies `json:"similar_species,omitempty"`
+	CachedAt       time.Time        `json:"cached_at"`
+	Partial        bool             `json:"partial"`  // some providers failed; data may be incomplete
+	Negative       bool             `json:"negative"` // provider found nothing
 }
 
 // IsNegativeEntry reports whether this guide is a negative (not-found) marker.
@@ -156,7 +165,8 @@ type registeredProvider struct {
 
 // GuideCache orchestrates the two-tier cache and provider fallback.
 type GuideCache struct {
-	memory    sync.Map // key "scientificName|locale" -> *SpeciesGuide
+	memory    sync.Map     // key "scientificName|locale" -> *SpeciesGuide
+	memCount  atomic.Int64 // approximate count of memory entries (soft cap guard)
 	store     GuideStore
 	metrics   GuideCacheMetrics
 	providers []registeredProvider
@@ -190,6 +200,10 @@ func NewGuideCache(store GuideStore, metrics GuideCacheMetrics) *GuideCache {
 
 // RegisterProvider adds a provider. The first registered provider is the primary
 // (used as the DB composite-key provider and the merge base).
+//
+// Configuration methods (RegisterProvider, SetFallbackPolicy, SetWarmTopN) are
+// NOT concurrency-safe and must all be called during setup, before Start() and
+// before any Get(); they mutate state that concurrent reads do not lock.
 func (c *GuideCache) RegisterProvider(name string, provider GuideProvider) {
 	if c == nil || provider == nil || name == "" {
 		return
@@ -198,6 +212,7 @@ func (c *GuideCache) RegisterProvider(name string, provider GuideProvider) {
 }
 
 // SetFallbackPolicy sets the provider fallback policy (all|none).
+// Call before Start(); see RegisterProvider for the concurrency contract.
 func (c *GuideCache) SetFallbackPolicy(policy string) {
 	if c == nil || policy == "" {
 		return
@@ -206,11 +221,31 @@ func (c *GuideCache) SetFallbackPolicy(policy string) {
 }
 
 // SetWarmTopN records the configured warm target used for the population ratio.
+// Call before Start(); see RegisterProvider for the concurrency contract.
 func (c *GuideCache) SetWarmTopN(n int) {
 	if c == nil {
 		return
 	}
 	c.warmTopN = n
+}
+
+// storeMemory writes an entry to the memory tier with a soft size cap. Existing
+// keys are always updated; new keys are only added while under maxMemoryEntries,
+// so a flood of distinct keys cannot grow memory without bound (those entries
+// still live in the DB tier).
+func (c *GuideCache) storeMemory(key string, g *SpeciesGuide) {
+	if _, loaded := c.memory.Load(key); loaded {
+		c.memory.Store(key, g)
+		return
+	}
+	if c.memCount.Load() >= maxMemoryEntries {
+		return
+	}
+	if _, loaded := c.memory.LoadOrStore(key, g); loaded {
+		c.memory.Store(key, g)
+	} else {
+		c.memCount.Add(1)
+	}
 }
 
 // Start loads existing DB entries into memory and launches the refresh loop.
@@ -260,7 +295,7 @@ func (c *GuideCache) loadFromDB() {
 	}
 	for i := range entries {
 		g := entryToGuide(&entries[i])
-		c.memory.Store(cacheKey(g.ScientificName, entries[i].Locale), g)
+		c.storeMemory(cacheKey(g.ScientificName, entries[i].Locale), g)
 	}
 	c.updateCachePopulationRatio()
 	GetLogger().Debug("Loaded guide cache from DB", logger.Int("entries", len(entries)))
@@ -299,7 +334,7 @@ func (c *GuideCache) Get(ctx context.Context, scientificName string, opts FetchO
 	switch {
 	case err == nil && entry != nil:
 		g := entryToGuide(entry)
-		c.memory.Store(key, g)
+		c.storeMemory(key, g)
 		c.metrics.RecordCacheHit(tierDB, entryQuality(g))
 		if c.isCacheEntryStale(g) {
 			c.triggerAsyncRefresh(name, locale)
@@ -337,14 +372,14 @@ func (c *GuideCache) fetchAndStore(ctx context.Context, name, locale string) (*S
 			}
 			c.metrics.RecordNegativeEntry()
 			c.saveGuide(ctx, name, locale, neg)
-			c.memory.Store(cacheKey(name, locale), neg)
+			c.storeMemory(cacheKey(name, locale), neg)
 			return neg, nil
 		}
 		// Transient/other errors: do not persist; surface to caller.
 		return nil, err
 	}
 	c.saveGuide(ctx, name, locale, g)
-	c.memory.Store(cacheKey(name, locale), g)
+	c.storeMemory(cacheKey(name, locale), g)
 	return g, nil
 }
 
@@ -598,10 +633,12 @@ func normalizeScientificName(name string) string {
 	return strings.TrimSpace(name)
 }
 
-// normalizeLocale returns a usable locale, defaulting to English.
+// normalizeLocale returns a validated, lowercased locale, defaulting to English
+// for empty or non-conforming input. Validation bounds the cache key space and
+// prevents arbitrary input from selecting a Wikipedia subdomain.
 func normalizeLocale(locale string) string {
-	l := strings.TrimSpace(locale)
-	if l == "" {
+	l := strings.ToLower(strings.TrimSpace(locale))
+	if l == "" || !localePattern.MatchString(l) {
 		return defaultLocale
 	}
 	return l
@@ -636,9 +673,6 @@ func mergeGuides(primary, secondary *SpeciesGuide) *SpeciesGuide {
 	}
 	if primary.Description == "" {
 		primary.Description = secondary.Description
-	}
-	if primary.ConservationStatus == "" {
-		primary.ConservationStatus = secondary.ConservationStatus
 	}
 	if primary.Genus == "" {
 		primary.Genus = secondary.Genus
