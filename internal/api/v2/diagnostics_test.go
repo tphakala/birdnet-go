@@ -39,7 +39,7 @@ func TestMapInferenceSnapshotsKeepsUnmappedModel(t *testing.T) {
 
 	// Unmapped model uses raw modelID as name and has zero window.
 	assert.Equal(t, "Ghost_Model", byID["Ghost_Model"].ModelName)
-	assert.Equal(t, float64(0), byID["Ghost_Model"].WindowMS)
+	assert.InDelta(t, float64(0), byID["Ghost_Model"].WindowMS, 0.0, "unmapped model has zero window")
 
 	// Mapped model uses DisplayName ("Google Perch v2 (TFLite)").
 	assert.Equal(t, "Google Perch v2 (TFLite)", byID["Perch_V2"].ModelName)
