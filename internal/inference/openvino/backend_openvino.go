@@ -367,7 +367,10 @@ static ov_status_e ovbind_output_class_count(const ov_compiled_model_t* compiled
     int64_t count = 1;
     for (int64_t i = 0; i < shape.rank; i++) {
         int64_t d = shape.dims[i];
-        if (d <= 0) {
+        // Reject non-positive dims and guard the running product against signed
+        // int64 overflow (CWE-190): a malformed or huge shape must fail safe and
+        // fall back to ORT, not wrap into undefined behavior.
+        if (d <= 0 || count > INT64_MAX / d) {
             OVB.shape_free(&shape);
             return OVBIND_ERR_BAD_OUTPUT;
         }

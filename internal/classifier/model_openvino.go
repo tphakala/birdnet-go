@@ -90,6 +90,11 @@ func openVINOCPUAllowed(devicePref string) bool {
 // is idempotent and fast on repeat); a load failure means no usable OV at all.
 func openVINOGPUAvailable(libraryPath string) bool {
 	if err := inference.InitOpenVINO(libraryPath); err != nil {
+		// Surface the load failure: without this, an explicit openvino/gpu opt-in
+		// with a bad OpenVINOPath would silently fall back to ORT carrying only a
+		// generic "not eligible" message, hiding the real library-load cause.
+		GetLogger().Warn("OpenVINO library load failed during device planning; treating GPU as unavailable",
+			logger.Error(err))
 		return false
 	}
 	return inference.OpenVINOHasDevice(inference.OVDeviceGPU)
