@@ -53,30 +53,36 @@ const (
 // ship the INT8-ARM ONNX classifier as the memory-saving default classifier.
 const defaultBirdNETClassifierARM64Arch = "arm64"
 
-// quantTokenReCache caches compiled regex patterns for quantization token detection.
-var quantTokenReCache = map[string]*regexp.Regexp{
-	"int8": regexp.MustCompile(`(?i)(^|[_\-.])int8([_\-.]|$)`),
-	"fp16": regexp.MustCompile(`(?i)(^|[_\-.])fp16([_\-.]|$)`),
-	"fp32": regexp.MustCompile(`(?i)(^|[_\-.])fp32([_\-.]|$)`),
-}
+// Package-level compiled regexps for quantization token detection. Each pattern
+// requires the token to be surrounded by a delimiter (start, end, or [_\-.]) so
+// names like "sprint8" or "point8" do not false-positive.
+var (
+	reQuantINT8 = regexp.MustCompile(`(?i)(^|[_\-.])int8([_\-.]|$)`)
+	reQuantFP16 = regexp.MustCompile(`(?i)(^|[_\-.])fp16([_\-.]|$)`)
+	reQuantFP32 = regexp.MustCompile(`(?i)(^|[_\-.])fp32([_\-.]|$)`)
+)
 
-func quantTokenRe(token string) *regexp.Regexp { return quantTokenReCache[token] }
-
-// detectQuantization infers weight precision from a model filename. It matches
-// delimiter-anchored tokens so unrelated names (sprint8, point8) do not
-// false-positive. Returns QuantizationUnknown when no marker is present.
+// detectQuantization infers weight precision from a model filename, matching
+// delimiter-anchored tokens against filepath.Base(name) so unrelated names
+// (sprint8, point8) do not false-positive. The extension's leading dot acts as
+// a trailing delimiter. A name carrying more than one distinct precision token
+// is ambiguous and returns QuantizationUnknown.
 func detectQuantization(name string) Quantization {
-	lower := strings.ToLower(filepath.Base(name))
-	switch {
-	case quantTokenRe(`int8`).MatchString(lower):
-		return QuantizationINT8
-	case quantTokenRe(`fp16`).MatchString(lower):
-		return QuantizationFP16
-	case quantTokenRe(`fp32`).MatchString(lower):
-		return QuantizationFP32
-	default:
-		return QuantizationUnknown
+	base := filepath.Base(name)
+	matches := []Quantization{}
+	if reQuantINT8.MatchString(base) {
+		matches = append(matches, QuantizationINT8)
 	}
+	if reQuantFP16.MatchString(base) {
+		matches = append(matches, QuantizationFP16)
+	}
+	if reQuantFP32.MatchString(base) {
+		matches = append(matches, QuantizationFP32)
+	}
+	if len(matches) == 1 {
+		return matches[0]
+	}
+	return QuantizationUnknown
 }
 
 // DetectionNamePerch is the detection model name for Perch classifiers,
@@ -202,22 +208,26 @@ func remapV24ForONNXOnly(info *ModelInfo, tfliteAvailable bool, find func(name s
 		return *info
 	}
 	if path, ok := find(DefaultBirdNETINT8ONNXModelName); ok {
-		return birdNETV24ONNXVariant(path, QuantizationINT8)
+		return stockBirdNETV24ONNXVariant(path, QuantizationINT8)
 	}
 	return *info
 }
 
-// birdNETV24ONNXVariant returns the canonical BirdNET_V2.4 entry adapted to load
-// the given ONNX file at the given precision. The ID is unchanged (BirdNET_V2.4)
-// so identity, metrics, labels, and attribution stay consistent across backends.
-// IsStock is true: this is the auto-resolved built-in default.
-func birdNETV24ONNXVariant(path string, q Quantization) ModelInfo {
+// stockBirdNETV24ONNXVariant returns the canonical BirdNET_V2.4 entry adapted to
+// load the given ONNX file at the given precision. The ID is unchanged
+// (BirdNET_V2.4) so identity, metrics, labels, and attribution stay consistent
+// across backends. IsStock is unconditionally set to true, so callers MUST only
+// pass paths resolved from the standard model search paths
+// (findModelPathInStandardPaths). It must NOT be called with a user-supplied
+// birdnet.modelpath or gallery paths, which keep IsStock=false at their call site.
+func stockBirdNETV24ONNXVariant(path string, q Quantization) ModelInfo {
 	info := ModelRegistry[DefaultModelVersion]
 	info.Backend = BackendONNX
 	info.Quantization = q
 	info.CustomPath = path
 	info.IsStock = true
 	info.SupportedLocales = slices.Clone(info.SupportedLocales)
+	info.ConfigAliases = slices.Clone(info.ConfigAliases)
 	return info
 }
 
@@ -230,7 +240,7 @@ func birdNETV24ONNXVariant(path string, q Quantization) ModelInfo {
 func defaultClassifierModelInfo(goarch string, find func(name string) (path string, ok bool)) ModelInfo {
 	if goarch == defaultBirdNETClassifierARM64Arch {
 		if path, ok := find(DefaultBirdNETINT8ONNXModelName); ok {
-			return birdNETV24ONNXVariant(path, QuantizationINT8)
+			return stockBirdNETV24ONNXVariant(path, QuantizationINT8)
 		}
 	}
 	return ModelRegistry[DefaultModelVersion]
@@ -359,8 +369,11 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 		if bestID != "" {
 			info := ModelRegistry[bestID]
 			info.CustomPath = modelPathOrID
-			if ext == ".onnx" {
+			switch ext {
+			case ".onnx":
 				info.Backend = BackendONNX
+			case ".tflite":
+				info.Backend = BackendTFLite
 			}
 			if q := detectQuantization(modelPathOrID); q != QuantizationUnknown {
 				info.Quantization = q
