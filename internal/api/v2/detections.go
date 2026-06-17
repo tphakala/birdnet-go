@@ -21,7 +21,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
-	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -178,30 +177,26 @@ type CommentResponse struct {
 
 // DetectionResponse represents a detection in the API response
 type DetectionResponse struct {
-	ID             uint        `json:"id"`
-	Date           string      `json:"date"`
-	Time           string      `json:"time"`
-	Timestamp      string      `json:"timestamp,omitempty"` // ISO8601/RFC3339 with timezone
-	Source         *SourceInfo `json:"source,omitempty"`
-	BeginTime      string      `json:"beginTime"`
-	EndTime        string      `json:"endTime"`
-	SpeciesCode    string      `json:"speciesCode"`
-	ScientificName string      `json:"scientificName"`
-	CommonName     string      `json:"commonName"`
-	Confidence     float64     `json:"confidence"`
-	// SpectrogramMaxFreqHz is the top of the spectrogram frequency axis in Hz,
-	// matching the range the generator actually rendered (bird resample Nyquist,
-	// or the bat clip's native Nyquist). 0 means unknown; the UI then falls back
-	// to the default bird range.
-	SpectrogramMaxFreqHz int               `json:"spectrogramMaxFreqHz,omitempty"`
-	Verified             string            `json:"verified"`
-	Locked               bool              `json:"locked"`
-	Unlikely             bool              `json:"unlikely,omitempty"`
-	Comments             []CommentResponse `json:"comments,omitempty"`
-	Weather              *WeatherInfo      `json:"weather,omitempty"`
-	TimeOfDay            string            `json:"timeOfDay,omitempty"`
-	IsNewSpecies         bool              `json:"isNewSpecies,omitempty"`       // First seen within tracking window
-	DaysSinceFirstSeen   int               `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
+	ID                 uint              `json:"id"`
+	Date               string            `json:"date"`
+	Time               string            `json:"time"`
+	Timestamp          string            `json:"timestamp,omitempty"` // ISO8601/RFC3339 with timezone
+	Source             *SourceInfo       `json:"source,omitempty"`
+	BeginTime          string            `json:"beginTime"`
+	EndTime            string            `json:"endTime"`
+	SpeciesCode        string            `json:"speciesCode"`
+	ScientificName     string            `json:"scientificName"`
+	CommonName         string            `json:"commonName"`
+	Confidence         float64           `json:"confidence"`
+	ModelType          string            `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
+	Verified           string            `json:"verified"`
+	Locked             bool              `json:"locked"`
+	Unlikely           bool              `json:"unlikely,omitempty"`
+	Comments           []CommentResponse `json:"comments,omitempty"`
+	Weather            *WeatherInfo      `json:"weather,omitempty"`
+	TimeOfDay          string            `json:"timeOfDay,omitempty"`
+	IsNewSpecies       bool              `json:"isNewSpecies,omitempty"`       // First seen within tracking window
+	DaysSinceFirstSeen int               `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
 
 	// Multi-period tracking metadata
 	IsNewThisYear   bool   `json:"isNewThisYear,omitempty"`   // First time this year
@@ -1231,15 +1226,12 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 	// For single detection, include weather data by default
 	weatherCache := make(map[string][]datastore.HourlyWeather)
 	detection := c.noteToDetectionResponse(&note, true, weatherCache)
-	// Resolve the spectrogram's top frequency so the UI axis matches what the
-	// generator actually rendered. Bird detections are resampled to a fixed rate;
-	// bat detections keep the clip's native rate, which varies (192/256 kHz, or far
-	// lower when exported to a lossy format such as MP3), so the file is probed.
-	// Best-effort: 0 leaves the axis at the bird default. Done only here
-	// (single-detection) to avoid a per-row probe on list endpoints.
+	// Resolve the model type so the UI can render the correct spectrogram frequency
+	// range (bat detections span a much wider band than birds). Best-effort: an error
+	// leaves it empty and the UI falls back to the default bird range. Done only here
+	// (single-detection) to avoid a per-row lookup on list endpoints.
 	if modelType, mtErr := c.DS.GetNoteModelType(id); mtErr == nil {
-		profile := spectrogram.ProfileForModelType(modelType)
-		detection.SpectrogramMaxFreqHz = c.resolveSpectrogramMaxFreqHz(ctx.Request().Context(), profile, note.ClipName)
+		detection.ModelType = modelType
 	}
 	if !c.isClientAuthenticated(ctx) {
 		detection.Source = nil

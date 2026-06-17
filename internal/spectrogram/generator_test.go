@@ -841,7 +841,7 @@ func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 }
 
 // TestGetSoxSpectrogramArgs_BatProfile verifies that the bat frequency profile
-// produces a high-pass sinc filter instead of rate resampling.
+// keeps the native sample rate: no resampling and no high-pass filter.
 func TestGetSoxSpectrogramArgs_BatProfile(t *testing.T) {
 	env := setupTestEnv(t)
 	env.Settings.Realtime.Audio.Export.Length = 15
@@ -878,7 +878,7 @@ func TestGetSoxSpectrogramArgs_BirdProfile(t *testing.T) {
 }
 
 // TestProfileForModelType verifies model type to frequency profile mapping.
-// Bat models resolve to the bat profile (native rate: no resample, no high-pass);
+// Bat models resolve to the bat profile (native rate: no resample);
 // every other model type falls back to bird defaults.
 func TestProfileForModelType(t *testing.T) {
 	t.Parallel()
@@ -887,26 +887,26 @@ func TestProfileForModelType(t *testing.T) {
 		name         string
 		modelType    string
 		wantResample int
-		wantHighPass int
+		wantSuffix   string
 	}{
-		{"bird model", "bird", 24000, 0},
-		{"bat model uses bat profile", "bat", 0, 0},
-		{"multi model defaults to bird", "multi", 24000, 0},
-		{"empty defaults to bird", "", 24000, 0},
+		{"bird model", "bird", 24000, ""},
+		{"bat model uses bat profile", "bat", 0, "bat"},
+		{"multi model defaults to bird", "multi", 24000, ""},
+		{"empty defaults to bird", "", 24000, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			p := ProfileForModelType(tt.modelType)
 			assert.Equal(t, tt.wantResample, p.ResampleRate)
-			assert.Equal(t, tt.wantHighPass, p.HighPassHz)
+			assert.Equal(t, tt.wantSuffix, ProfileSuffix(p))
 		})
 	}
 }
 
 // TestProfileSuffix verifies the cache-key token derived from a frequency profile:
-// bat (high-pass) profiles get a "bat" token; bird defaults stay empty for
-// backward compatibility with existing cached spectrogram filenames.
+// bat profiles get a "bat" token; bird defaults stay empty for backward
+// compatibility with existing cached spectrogram filenames.
 func TestProfileSuffix(t *testing.T) {
 	t.Parallel()
 

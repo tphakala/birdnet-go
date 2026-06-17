@@ -23,7 +23,7 @@ export interface Detection {
   scientificName: string;
   commonName: string;
   confidence: number;
-  spectrogramMaxFreqHz?: number; // Top of the spectrogram frequency axis in Hz (matches the rendered range); 0/absent falls back to the bird range
+  modelType?: string; // AI model type (e.g. 'bird', 'bat'); drives the spectrogram frequency range
   verified: 'correct' | 'false_positive' | 'unverified';
   locked: boolean;
   unlikely?: boolean;

@@ -7,7 +7,6 @@ package spectrogram
 // 24 kHz).
 type FrequencyProfile struct {
 	ResampleRate int    // Target sample rate in Hz; 0 means keep native rate
-	HighPassHz   int    // High-pass filter cutoff in Hz; 0 means no filter
 	suffix       string // Cache-filename token identifying the profile; "" for the default bird render
 }
 

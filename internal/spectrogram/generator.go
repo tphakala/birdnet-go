@@ -818,11 +818,10 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 		"-n", // No audio output (null output)
 	}
 
-	// Frequency-dependent effects: resample (bird) or high-pass filter (bat).
-	// Guard: sinc filter requires sample rate > 2*cutoff (Nyquist constraint).
-	if profile.HighPassHz > 0 && effectiveRate > 2*profile.HighPassHz {
-		args = append(args, "sinc", strconv.Itoa(profile.HighPassHz))
-	} else if profile.ResampleRate > 0 {
+	// Frequency-dependent effects: resample for bird detections. Bat detections
+	// keep the native sample rate with no resampling so the full recorded band is
+	// rendered.
+	if profile.ResampleRate > 0 {
 		args = append(args, "rate", strconv.Itoa(profile.ResampleRate))
 	}
 
@@ -917,11 +916,6 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, settings *conf.Setti
 	filterStr := fmt.Sprintf("showspectrumpic=s=%dx%d:legend=%d:gain=%s:drange=%s:color=%s",
 		width, height, legendFlag, ffmpegGain, ffmpegDrange, colorMode)
 
-	// Bat profile: prepend high-pass filter to remove sub-ultrasonic content
-	if profile.HighPassHz > 0 {
-		filterStr = fmt.Sprintf("highpass=f=%d,%s", profile.HighPassHz, filterStr)
-	}
-
 	ffmpegArgs := []string{
 		"-hide_banner",
 		"-y",
@@ -991,14 +985,12 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, settings *conf.Se
 	heightStr := strconv.Itoa(fftFriendlyHeight(width))
 	widthStr := strconv.Itoa(width)
 
-	// Build base args: either resample (bird) or high-pass filter (bat)
+	// Build base args: resample for bird detections. Bat detections keep the native
+	// sample rate (no resampling) so the full recorded band is rendered.
 	var args []string
-	switch {
-	case profile.HighPassHz > 0:
-		args = []string{"-n", "sinc", strconv.Itoa(profile.HighPassHz), "spectrogram", "-x", widthStr, "-y", heightStr}
-	case profile.ResampleRate > 0:
+	if profile.ResampleRate > 0 {
 		args = []string{"-n", "rate", strconv.Itoa(profile.ResampleRate), "spectrogram", "-x", widthStr, "-y", heightStr}
-	default:
+	} else {
 		args = []string{"-n", "spectrogram", "-x", widthStr, "-y", heightStr}
 	}
 
