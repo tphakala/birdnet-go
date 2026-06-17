@@ -11,6 +11,11 @@ func NewClassifier(_ string, _ Options) (Classifier, error) {
 	return nil, ErrOpenVINOUnavailable
 }
 
+// AvailableDevices always fails without the openvino build tag.
+func AvailableDevices() ([]string, error) {
+	return nil, ErrOpenVINOUnavailable
+}
+
 // InitOV always fails without the openvino build tag.
 func InitOV(_ string) error { return ErrOpenVINOUnavailable }
 

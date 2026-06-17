@@ -49,6 +49,11 @@ typedef ov_status_e (*fn_infer_request_infer)(ov_infer_request_t*);
 typedef ov_status_e (*fn_infer_request_get_output_tensor_by_index)(const ov_infer_request_t*, const size_t, ov_tensor_t**);
 typedef void        (*fn_infer_request_free)(ov_infer_request_t*);
 typedef const char* (*fn_get_last_err_msg)(void);
+typedef ov_status_e (*fn_compiled_model_outputs_size)(const ov_compiled_model_t*, size_t*);
+typedef ov_status_e (*fn_compiled_model_output_by_index)(const ov_compiled_model_t*, const size_t, ov_output_const_port_t**);
+typedef ov_status_e (*fn_const_port_get_shape)(const ov_output_const_port_t*, ov_shape_t*);
+typedef ov_status_e (*fn_core_get_available_devices)(const ov_core_t*, ov_available_devices_t*);
+typedef void        (*fn_available_devices_free)(ov_available_devices_t*);
 
 // ovbind_t is the process-global table of resolved OpenVINO symbols, filled by
 // ovbind_load(path).
@@ -78,6 +83,11 @@ typedef struct {
     fn_infer_request_get_output_tensor_by_index infer_request_get_output_tensor_by_index;
     fn_infer_request_free                       infer_request_free;
     fn_get_last_err_msg                         get_last_err_msg;
+    fn_compiled_model_outputs_size              compiled_model_outputs_size;
+    fn_compiled_model_output_by_index           compiled_model_output_by_index;
+    fn_const_port_get_shape                     const_port_get_shape;
+    fn_core_get_available_devices               core_get_available_devices;
+    fn_available_devices_free                   available_devices_free;
 } ovbind_t;
 
 static ovbind_t OVB; // process-global resolved symbol table
@@ -154,6 +164,11 @@ static const char* ovbind_load(const char* path) {
     OVBIND_RESOLVE(infer_request_get_output_tensor_by_index, fn_infer_request_get_output_tensor_by_index, "ov_infer_request_get_output_tensor_by_index");
     OVBIND_RESOLVE(infer_request_free,                       fn_infer_request_free,                       "ov_infer_request_free");
     OVBIND_RESOLVE(get_last_err_msg,                         fn_get_last_err_msg,                         "ov_get_last_err_msg");
+    OVBIND_RESOLVE(compiled_model_outputs_size,              fn_compiled_model_outputs_size,              "ov_compiled_model_outputs_size");
+    OVBIND_RESOLVE(compiled_model_output_by_index,           fn_compiled_model_output_by_index,           "ov_compiled_model_output_by_index");
+    OVBIND_RESOLVE(const_port_get_shape,                     fn_const_port_get_shape,                     "ov_const_port_get_shape");
+    OVBIND_RESOLVE(core_get_available_devices,               fn_core_get_available_devices,               "ov_core_get_available_devices");
+    OVBIND_RESOLVE(available_devices_free,                   fn_available_devices_free,                   "ov_available_devices_free");
     return NULL;
 }
 
@@ -310,6 +325,88 @@ static void ovbind_infer_request_free(ov_infer_request_t* req) {
 static const char* ovbind_get_last_err_msg(void) {
     return OVB.get_last_err_msg();
 }
+
+// OVBIND_ERR_BAD_OUTPUT is returned when the requested output index is out of
+// range or the selected output port has a non-positive (dynamic/unresolved)
+// element count. Like OVBIND_ERR_BAD_INPUT_SHAPE it sits far outside the
+// ov_status_e range so the Go caller can tell it apart from a real OpenVINO
+// status, report a clear error, and fall back to ORT.
+#define OVBIND_ERR_BAD_OUTPUT (-1001)
+
+// ovbind_output_class_count computes the number of classes in the compiled
+// model's output at index `idx` by multiplying its post-compile static shape
+// dimensions, writing the result to *out_count. The model was reshaped to a
+// static batch of 1 before compile, so every output dimension is static and the
+// product over all dims equals batch(1) * classes = classes. All
+// ov_output_const_port_t / ov_shape_t handling stays in C so cgo never touches
+// the dynamically allocated dims array. The output port is freed on every path,
+// and the shape only after a successful get_shape, so no handle leaks on error.
+static ov_status_e ovbind_output_class_count(const ov_compiled_model_t* compiled, size_t idx, int64_t* out_count) {
+    size_t nout = 0;
+    ov_status_e st = OVB.compiled_model_outputs_size(compiled, &nout);
+    if (st != OK) {
+        return st;
+    }
+    if (idx >= nout) {
+        return OVBIND_ERR_BAD_OUTPUT;
+    }
+
+    ov_output_const_port_t* port = NULL;
+    st = OVB.compiled_model_output_by_index(compiled, idx, &port);
+    if (st != OK) {
+        return st;
+    }
+
+    ov_shape_t shape;
+    st = OVB.const_port_get_shape(port, &shape);
+    OVB.output_const_port_free(port);
+    if (st != OK) {
+        return st;
+    }
+
+    int64_t count = 1;
+    for (int64_t i = 0; i < shape.rank; i++) {
+        int64_t d = shape.dims[i];
+        if (d <= 0) {
+            OVB.shape_free(&shape);
+            return OVBIND_ERR_BAD_OUTPUT;
+        }
+        count *= d;
+    }
+    OVB.shape_free(&shape);
+
+    if (count <= 0) {
+        return OVBIND_ERR_BAD_OUTPUT;
+    }
+    *out_count = count;
+    return OK;
+}
+
+// ovbind_get_available_devices fills *devices with the device names the loaded
+// core can see (e.g. "CPU", "GPU"). The caller must free it with
+// ovbind_free_available_devices. ovbind_devices_count / ovbind_devices_at read
+// the list without cgo pointer arithmetic over the char** array.
+static ov_status_e ovbind_get_available_devices(const ov_core_t* core, ov_available_devices_t* devices) {
+    return OVB.core_get_available_devices(core, devices);
+}
+
+static void ovbind_free_available_devices(ov_available_devices_t* devices) {
+    OVB.available_devices_free(devices);
+}
+
+static size_t ovbind_devices_count(const ov_available_devices_t* devices) {
+    // Guard against a NULL array with a nonzero size. The OpenVINO C API does not
+    // promise this combination when the status is OK, but treat it as "no devices"
+    // rather than dereference NULL in ovbind_devices_at.
+    if (devices->devices == NULL) {
+        return 0;
+    }
+    return devices->size;
+}
+
+static const char* ovbind_devices_at(const ov_available_devices_t* devices, size_t i) {
+    return devices->devices[i];
+}
 */
 import "C" //nolint:gocritic // dupImport: cgo import "C" must be separate from regular imports
 
@@ -325,13 +422,8 @@ import (
 )
 
 const (
-	// deviceCPU is the OpenVINO device name the backend targets. ARMv8.2 f16
-	// acceleration runs on the CPU plugin.
-	deviceCPU = "CPU"
 	// inputPortIndex is the index of the single audio input tensor.
 	inputPortIndex = 0
-	// outputPortIndex is the index of the single logits output tensor.
-	outputPortIndex = 0
 	// expectedInputRank is the rank of the model input shape, [batch, samples].
 	expectedInputRank = 2
 	// float32Bytes is the size in bytes of one float32 element.
@@ -437,10 +529,12 @@ func DestroyOV() error {
 // callers serialize access. The process-global core is shared and is not owned
 // here.
 type classifier struct {
-	compiled *C.ov_compiled_model_t
-	req      *C.ov_infer_request_t
-	inBuf    unsafe.Pointer
-	samples  int
+	compiled    *C.ov_compiled_model_t
+	req         *C.ov_infer_request_t
+	inBuf       unsafe.Pointer
+	samples     int
+	outputIndex int
+	numClasses  int
 }
 
 // reshapeToStaticBatch1 reshapes the model's single input to a static
@@ -467,9 +561,11 @@ func reshapeToStaticBatch1(model *C.ov_model_t, modelPath string) (int, error) {
 	return 0, lastErr("ov_model_reshape_single_input", st, modelPath)
 }
 
-// NewClassifier reads modelPath, compiles it for the CPU device at
-// opts.PrecisionHint, creates one infer request, and binds a C-owned input
-// tensor sized to the model's input shape. InitOV must have succeeded first;
+// NewClassifier reads modelPath, compiles it for opts.Device (CPU or GPU) at
+// opts.PrecisionHint, creates one infer request, binds a C-owned input tensor
+// sized to the model's input shape, and reads the element count of the selected
+// output port (opts.OutputIndex) from the compiled model so NumClasses reflects
+// the model rather than a label list. InitOV must have succeeded first;
 // otherwise it returns ErrOpenVINOUnavailable. The returned Classifier is not
 // goroutine-safe.
 func NewClassifier(modelPath string, opts Options) (Classifier, error) {
@@ -492,8 +588,24 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	if precision == "" {
 		precision = DefaultPrecisionHint
 	}
+
+	device := opts.Device
+	if device == "" {
+		device = DeviceCPU
+	}
+	if device != DeviceCPU && device != DeviceGPU {
+		return nil, errors.Newf("openvino: unsupported device %q (want %q or %q)", device, DeviceCPU, DeviceGPU).
+			Category(errors.CategoryModelInit).Build()
+	}
+	if opts.OutputIndex < 0 {
+		return nil, errors.Newf("openvino: negative output index %d", opts.OutputIndex).
+			Category(errors.CategoryModelInit).Build()
+	}
+
 	threads := ""
-	if opts.Threads > 0 {
+	// INFERENCE_NUM_THREADS is a CPU-plugin property; the GPU plugin rejects it,
+	// so only pass a thread count when compiling for the CPU device.
+	if device == DeviceCPU && opts.Threads > 0 {
 		threads = strconv.Itoa(opts.Threads)
 	}
 
@@ -513,7 +625,7 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 		return nil, err
 	}
 
-	cDev := C.CString(deviceCPU)
+	cDev := C.CString(device)
 	defer C.free(unsafe.Pointer(cDev))
 	cPrec := C.CString(precision)
 	defer C.free(unsafe.Pointer(cPrec))
@@ -530,6 +642,20 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	// below operates on the compiled model, not the read model).
 	C.ovbind_model_free(model)
 	model = nil
+
+	// Read the real element count of the selected output port from the compiled
+	// model (static after the batch-1 reshape). NumClasses reflects the model,
+	// not the label list, so the caller can validate the label count against it
+	// (issue #1112) and a wrong OutputIndex is rejected before any inference.
+	var classCount C.int64_t
+	if st := C.ovbind_output_class_count(compiled, C.size_t(opts.OutputIndex), &classCount); !ovOK(st) {
+		C.ovbind_compiled_model_free(compiled)
+		if int(st) == int(C.OVBIND_ERR_BAD_OUTPUT) {
+			return nil, errors.Newf("openvino: output index %d is out of range or has a non-static shape", opts.OutputIndex).
+				Category(errors.CategoryModelInit).Build()
+		}
+		return nil, lastErr("ov_compiled_model_output shape", st, modelPath)
+	}
 
 	var req *C.ov_infer_request_t
 	if st := C.ovbind_compiled_model_create_infer_request(compiled, &req); !ovOK(st) {
@@ -577,10 +703,12 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	C.ovbind_tensor_free(inTensor)
 
 	return &classifier{
-		compiled: compiled,
-		req:      req,
-		inBuf:    inBuf,
-		samples:  samples,
+		compiled:    compiled,
+		req:         req,
+		inBuf:       inBuf,
+		samples:     samples,
+		outputIndex: opts.OutputIndex,
+		numClasses:  int(classCount),
 	}, nil
 }
 
@@ -609,7 +737,7 @@ func (c *classifier) PredictRaw(samples []float32) ([]float32, error) {
 	}
 
 	var outTensor *C.ov_tensor_t
-	if st := C.ovbind_get_output_tensor(c.req, outputPortIndex, &outTensor); !ovOK(st) {
+	if st := C.ovbind_get_output_tensor(c.req, C.size_t(c.outputIndex), &outTensor); !ovOK(st) {
 		return nil, lastErr("ov_infer_request_get_output_tensor_by_index", st)
 	}
 	defer C.ovbind_tensor_free(outTensor)
@@ -635,6 +763,10 @@ func (c *classifier) PredictRaw(samples []float32) ([]float32, error) {
 	return out, nil
 }
 
+// NumClasses returns the element count of the selected output port, read from
+// the compiled model in NewClassifier.
+func (c *classifier) NumClasses() int { return c.numClasses }
+
 // Close frees the infer request, compiled model, and the C input buffer, in
 // that order. The read model was already freed right after compile in
 // NewClassifier. Close does not touch the process-global core. Close is
@@ -653,4 +785,41 @@ func (c *classifier) Close() error {
 		c.inBuf = nil
 	}
 	return nil
+}
+
+// AvailableDevices returns the OpenVINO device names visible to the loaded core
+// (e.g. "CPU", "GPU"). "GPU" appears only when the Intel GPU plugin and a
+// supported iGPU/dGPU are present. InitOV must have succeeded first; otherwise
+// it returns ErrOpenVINOUnavailable. Used to gate the GPU path on Intel GPU
+// presence before falling back to the CPU device or ORT.
+func AvailableDevices() ([]string, error) {
+	// Pin to one OS thread so the query and any ov_get_last_err_msg fetch
+	// (C thread-local storage) run on the same thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	// Hold ovMu for the whole core-using section so a concurrent DestroyOV cannot
+	// free ovCore mid-query. AvailableDevices takes no other ovMu-guarded path.
+	ovMu.Lock()
+	defer ovMu.Unlock()
+	if !ovLoaded || ovCore == nil {
+		return nil, ErrOpenVINOUnavailable
+	}
+
+	var list C.ov_available_devices_t
+	if st := C.ovbind_get_available_devices(ovCore, &list); !ovOK(st) {
+		return nil, lastErr("ov_core_get_available_devices", st)
+	}
+	defer C.ovbind_free_available_devices(&list)
+
+	n := int(C.ovbind_devices_count(&list))
+	devices := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		cName := C.ovbind_devices_at(&list, C.size_t(i))
+		if cName == nil {
+			continue
+		}
+		devices = append(devices, C.GoString(cName))
+	}
+	return devices, nil
 }

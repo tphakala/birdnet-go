@@ -2301,6 +2301,17 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		return true
 	}
 
+	// Check for changes in the OpenVINO device preference. Switching CPU<->GPU
+	// recompiles the model on the new device, so a reload is needed; the OpenVINO
+	// core itself stays loaded (only the compiled model and infer request are
+	// rebuilt), so this is hot-reloadable, not restart-required. NOTE: this reload
+	// rebuilds the primary BirdNET classifier; secondary models (e.g. Perch) that
+	// also honor this device preference are rebuilt only on restart (the reload
+	// path reloads the primary model, not the secondary instances).
+	if oldSettings.BirdNET.OpenVINODevice != currentSettings.BirdNET.OpenVINODevice {
+		return true
+	}
+
 	return false
 }
 

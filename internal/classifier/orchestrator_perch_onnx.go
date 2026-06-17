@@ -39,9 +39,12 @@ func (o *Orchestrator) loadPerch(threads int) error {
 		LabelPath:       labelPath,
 		ONNXRuntimePath: o.Settings.BirdNET.ONNXRuntimePath,
 		Threads:         threads,
+		Backend:         o.Settings.BirdNET.Backend,
+		OpenVINOPath:    o.Settings.BirdNET.OpenVINOPath,
+		OpenVINODevice:  o.Settings.BirdNET.OpenVINODevice,
 	}
 
-	perch, err := NewPerch(cfg)
+	perch, err := NewPerch(&cfg)
 	if err != nil {
 		return errors.New(err).
 			Component("classifier.orchestrator").
